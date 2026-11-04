@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The space shuttle ([#1494](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1494))
+
+On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks --airports <its airports.json>`), offline, at Geneva.
+
+- [ ] Walk up to the shuttle on Geneva's cargo apron (and Zurich's) → it stands there, E gets in; the intro card names the drive's key.
+- [ ] Take off at full rockets (Shift / RT), climb steep, gear up → the roar and the plumes, past 60 km the HUD reads ORBIT; Z (D-pad ↑) starts the drive, the hum; the levers set its speed; the stick flies it like a plane; Z again → a circular orbit, quiet.
+- [ ] Come home: drive down over Switzerland slowly (lever low), out of the drive below 50 km, glide in on the outer glideslope with the speedbrake, flare at ~200 kt → lands on the runway; does the brick's glide feel right?
+- [ ] From orbit, nose back and a short burn → re-entry: the plasma round the belly and nose, the roar, HEAT on the HUD; no damage.
+- [ ] Pad: the whole flight on a pad (triggers the rockets, D-pad ↑ the drive). VR: grip the guarded switch on the centre console, right of the commander's knee, and throw it forward → the drive switches (and the R stick ↑ does too).
+- [ ] Online, a second client watching → the plumes, the drive glow, the plasma and the sounds on the other's copy.
+
 ## `/movespeed` ([#1487](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1487))
 
 On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), offline, then on a server as an admin with a second client watching.

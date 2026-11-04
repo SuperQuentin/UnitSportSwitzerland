@@ -1211,6 +1211,13 @@ src/Core/Orbit                 quick  --orbitcheck --world flat
 src/Core/Atmosphere            quick  --orbitcheck --world flat
 src/Player/Ufo                 quick  --orbitcheck --world flat
 src/Player/OrbitCheck          quick  --orbitcheck --world flat
+src/Player/SpaceOrbit          quick  --orbitcheck --world flat
+src/Player/SpaceOrbit          quick  --shuttlecheck --world flat
+src/Player/ShuttleFlight       quick  --shuttlecheck --world flat
+src/Player/ShuttleCheck        quick  --shuttlecheck --world flat
+src/Player/Airliner            quick  --shuttlecheck --world flat
+src/Player/AirlinerFlight      quick  --shuttlecheck --world flat
+src/Avatar/Shuttle             quick  --cockpitcheck --world flat
 src/Core/OriginShifter         quick  --orbitcheck --world flat
 src/Core/WorldOrigin           quick  --orbitcheck --world flat
 src/Player/Ufo                 net    tools/orbitnetcheck.sh

@@ -28,6 +28,12 @@ public struct AirlinerLook
     public int Warning;
     /// <summary>Fuel aboard, share of the tanks.</summary>
     public float Fuel;
+
+    // the shuttle (#1492)
+    /// <summary>Re-entry's glow, 0 none .. 1 white hot: the plasma round the belly and the nose.</summary>
+    public float Heat;
+    /// <summary>The cruise drive on: its glow instead of the rockets' plumes.</summary>
+    public bool Drive;
 }
 
 [System.Flags]
@@ -63,6 +69,19 @@ public partial class AirlinerRig : Node3D
     private float _kneelDrop;
     private Vector3 _noseDown;
     private readonly List<(int Door, Node3D Node, Vector3 Axis, float Angle, float Kneel)> _kneelParts = new();
+
+    // the shuttle (#1492): elevons, the split rudder as the speedbrake, the body flap, the legs swinging
+    // forward under doors, the rockets' plumes, the drive's glow, re-entry's plasma
+    private bool _shuttle;
+    private Node3D? _brakeL, _brakeR, _bodyFlap, _driveGlow, _driveToggle;
+    private readonly List<(Node3D Node, float Angle)> _gearDoors = new();
+    private MeshInstance3D?[] _plumes = System.Array.Empty<MeshInstance3D?>();
+    private MeshInstance3D? _plasma;
+    private ShaderMaterial? _plumeMat, _plasmaMat;
+    /// <summary>What the effects show now: changed (and their shader parameter set) only when the look moves past a step.</summary>
+    private float _plumeShown = -1f, _heatShown = -1f, _gearDoorsShown = -1f;
+    private int _driveShown = -1;
+    private static readonly StringName PowerParam = "power", HeatParam = "heat";
 
     // where the parts are now, eased toward the look
     private float _gear = 1f, _flaps, _spoilers, _fanSpin, _clock;
@@ -163,6 +182,96 @@ public partial class AirlinerRig : Node3D
         return rig;
     }
 
+    /// <summary>
+    /// The space shuttle orbiter (#1492): elevons (inboard <c>Elevator</c>, outboard <c>Aileron</c>, each
+    /// pitching and rolling), the split rudder that splays open as the speedbrake, the body flap trailing
+    /// the elevons, the legs swinging forward into the belly under their doors, the side hatch; the main
+    /// engines' plumes by the spool, the drive's glow when it is on (no plumes then), re-entry's plasma by
+    /// the heat.
+    /// </summary>
+    public static AirlinerRig CreateShuttle()
+    {
+        var rig = new AirlinerRig { Name = "Shuttle", _spec = AirlinerCatalog.Shuttle, _shuttle = true };
+        var model = ShuttleMeshBuilder.Build();
+        model.Name = "Model";
+        rig.AddChild(model);
+        rig.Find(model, 0);
+        rig._stowL = rig._stowR = ShuttleLayout.MainStow;
+        rig._stowNose = ShuttleLayout.NoseStow;
+        rig._brakeL = model.GetNodeOrNull<Node3D>("Rudder/SpoilerL");
+        rig._brakeR = model.GetNodeOrNull<Node3D>("Rudder/SpoilerR");
+        rig._bodyFlap = model.GetNodeOrNull<Node3D>("BodyFlap");
+        rig._driveGlow = model.GetNodeOrNull<Node3D>("DriveGlow");
+        rig._driveToggle = model.GetNodeOrNull<Node3D>("DriveSwitch/Toggle");
+        foreach (var (name, angle) in ShuttleMeshBuilder.GearDoors)
+            if (model.GetNodeOrNull<Node3D>(name) is { } door) rig._gearDoors.Add((door, angle));
+        rig._plumes = new MeshInstance3D?[ShuttleLayout.Engines.Length];
+        for (int i = 0; i < rig._plumes.Length; i++) rig._plumes[i] = model.GetNodeOrNull<MeshInstance3D>($"Plume{i}");
+        rig._plumeMat = rig._plumes[0]?.MaterialOverride as ShaderMaterial;
+        rig._plasma = model.GetNodeOrNull<MeshInstance3D>("Plasma");
+        rig._plasmaMat = rig._plasma?.MaterialOverride as ShaderMaterial;
+        rig.SetEye(ShuttleLayout.CommanderHip);
+        rig.AddCockpit(model, CockpitLayout.Shuttle);
+        if (model.GetNodeOrNull<Node3D>("Door0") is { } hatch)
+            rig._doorParts.Add((0, hatch, Vector3.Back, ShuttleMeshBuilder.HatchOpenAngle, ShuttleMeshBuilder.HatchOpenAngle));
+        return rig;
+    }
+
+    /// <summary>The shuttle's own parts: the elevons, the speedbrake, the body flap, the gear doors, the effects.</summary>
+    private void ShowShuttle(in AirlinerLook look)
+    {
+        // elevons: together for pitch, apart for roll (the outboard pair more); the body flap trims after them
+        float pitch = -_stick.Y * 18f * Deg, roll = _stick.X * 10f * Deg;
+        Hinge(_elevatorL, pitch + roll); Hinge(_elevatorR, pitch - roll);
+        Hinge(_aileronL, pitch + roll * 1.6f); Hinge(_aileronR, pitch - roll * 1.6f);
+        Hinge(_bodyFlap, pitch * 0.6f);
+        // the speedbrake: the rudder's two halves splay apart about its hinge, each its own way
+        float splay = _spoilers * ShuttleMeshBuilder.SpeedbrakeAngle;
+        if (_brakeL != null) _brakeL.Basis = new Basis(Vector3.Up, -splay);
+        if (_brakeR != null) _brakeR.Basis = new Basis(Vector3.Up, splay);
+
+        // the gear doors open first and stay open while the gear is down
+        float doors = Mathf.Clamp(_gear * 4f, 0f, 1f);
+        if (doors != _gearDoorsShown)
+        {
+            _gearDoorsShown = doors;
+            foreach (var (node, angle) in _gearDoors) node.Basis = new Basis(Vector3.Back, doors * angle);
+        }
+
+        // the main engines' plumes by the spool, none with the drive on; the drive's glow and its switch
+        float spool = look.Drive ? 0f : Mathf.Clamp((look.Spool - 0.08f) / 0.92f, 0f, 1f);
+        if (Mathf.Abs(spool - _plumeShown) > 0.004f || spool == 0f != (_plumeShown == 0f))
+        {
+            _plumeShown = spool;
+            bool on = spool > 0f;
+            var scale = new Vector3(ShuttleMeshBuilder.PlumeWidth(spool), ShuttleMeshBuilder.PlumeWidth(spool), ShuttleMeshBuilder.PlumeLength(spool));
+            foreach (var plume in _plumes)
+                if (plume != null)
+                {
+                    plume.Visible = on;
+                    plume.Scale = scale;
+                }
+            _plumeMat?.SetShaderParameter(PowerParam, 0.35f + 0.65f * spool);
+        }
+        int drive = look.Drive ? 1 : 0;
+        if (drive != _driveShown)
+        {
+            _driveShown = drive;
+            if (_driveGlow != null) _driveGlow.Visible = look.Drive;
+            // thrown forward (node −Z) when on, back when off
+            if (_driveToggle != null) _driveToggle.Basis = new Basis(Vector3.Right, look.Drive ? -0.45f : 0.45f);
+        }
+
+        // re-entry: the plasma fades in with the heat, nothing at all without it
+        float heat = Mathf.Clamp(look.Heat, 0f, 1f);
+        if (Mathf.Abs(heat - _heatShown) > 0.005f || heat < 0.01f != _heatShown < 0.01f)
+        {
+            _heatShown = heat;
+            if (_plasma != null) _plasma.Visible = heat >= 0.01f;
+            _plasmaMat?.SetShaderParameter(HeatParam, heat);
+        }
+    }
+
     private void Find(Node3D model, int fans)
     {
         Node3D? N(string name) => model.GetNodeOrNull<Node3D>(name);
@@ -210,17 +319,27 @@ public partial class AirlinerRig : Node3D
         }
         _stick = _stick.MoveToward(look.Stick, 3f * dt);
 
-        float flap = FlapAngle(_flaps);
-        Hinge(_flapInL, flap); Hinge(_flapInR, flap); Hinge(_flapOutL, flap); Hinge(_flapOutR, flap);
-        // a right roll: the right aileron's trailing edge up, the left's down
-        Hinge(_aileronL, _stick.X * 20f * Deg); Hinge(_aileronR, -_stick.X * 20f * Deg);
-        Hinge(_elevatorL, -_stick.Y * 25f * Deg); Hinge(_elevatorR, -_stick.Y * 25f * Deg);
-        Hinge(_spoilerL, -_spoilers * 45f * Deg); Hinge(_spoilerR, -_spoilers * 45f * Deg);
+        if (_shuttle) ShowShuttle(look);
+        else
+        {
+            float flap = FlapAngle(_flaps);
+            Hinge(_flapInL, flap); Hinge(_flapInR, flap); Hinge(_flapOutL, flap); Hinge(_flapOutR, flap);
+            // a right roll: the right aileron's trailing edge up, the left's down
+            Hinge(_aileronL, _stick.X * 20f * Deg); Hinge(_aileronR, -_stick.X * 20f * Deg);
+            Hinge(_elevatorL, -_stick.Y * 25f * Deg); Hinge(_elevatorR, -_stick.Y * 25f * Deg);
+            Hinge(_spoilerL, -_spoilers * 45f * Deg); Hinge(_spoilerR, -_spoilers * 45f * Deg);
+        }
         if (_rudder != null) _rudder.Basis = RestOf(_rudder) * new Basis(Vector3.Up, _stick.X * 12f * Deg);   // about the fin's own hinge line (#755)
 
         float stow = 1f - _gear;
         float kneelAt = _kneelDoor >= 0 ? _doorAt[_kneelDoor] : 0f, kneel = kneelAt * _kneelDrop;
-        if (_gearLift > 0f)
+        if (_shuttle)
+        {
+            // the orbiter's mains swing forward into the wing's wells, like its nose leg
+            if (_gearL != null) _gearL.Rotation = new Vector3(stow * _stowL, 0, 0);
+            if (_gearR != null) _gearR.Rotation = new Vector3(stow * _stowR, 0, 0);
+        }
+        else if (_gearLift > 0f)
         {
             if (_gearL != null) _gearL.Position = _gearLDown + Vector3.Up * (stow * _gearLift + kneel);
             if (_gearR != null) _gearR.Position = _gearRDown + Vector3.Up * (stow * _gearLift + kneel);

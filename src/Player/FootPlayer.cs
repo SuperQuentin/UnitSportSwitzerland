@@ -1985,7 +1985,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         var craft = ride as Flyer;
-        bool wanted = craft is { HasEngine: true } && DisplayServer.GetName() != "headless";
+        // the shuttle (#1492): its rockets, drive and plasma, from what its pose carries
+        bool shuttle = craft is Airliner { Spec.Rocket: true } && DisplayServer.GetName() != "headless";
+        RemoteShuttleAudio(shuttle ? Airliner.ShuttleLook(Airliner.LookOf(Anim)) : null);
+        bool wanted = craft is { HasEngine: true } && !shuttle && DisplayServer.GetName() != "headless";
         if (!wanted)
         {
             _remoteEngine?.QueueFree();
@@ -4671,6 +4674,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (flyer is Pigeon) PigeonStep(input, dt);
         if (flyer is Ufo saucer) UfoStep(saucer);
+        if (flyer is ISpacecraft { Space: { } space }) SpaceStep(space);
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing || !keys ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         if (flyer is Airliner padded) AirlinerPadHold(dt, padded);

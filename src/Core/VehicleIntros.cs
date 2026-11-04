@@ -11,6 +11,8 @@ public enum VehicleIntroKind
     /// <summary>The flying saucer (#861).</summary>
     Ufo,
     Snowboard,
+    /// <summary>The space shuttle (#1492).</summary>
+    Shuttle,
 }
 
 /// <summary>
@@ -167,6 +169,15 @@ public static class VehicleIntros
             new("Flaps a notch down / up: {flaps_down} / {flaps_up}", new[] { "flaps_down", "flaps_up" }),
             new("Gear up once flying: {car_door}", new[] { "car_door" }),
         }, "Rotate at about 260 km/h · {help} lists every cockpit switch"),
+
+        new(VehicleIntroKind.Shuttle, "Space shuttle", new IntroRow[]
+        {
+            new("Rockets up / down: {sprint} / {crouch_slide}", new[] { "sprint", "crouch_slide", "trigger_right", "trigger_left" },
+                Pad: "Rockets up / down: {throttle} / {brake}"),
+            new("Pull back to climb, sideways to roll: " + Wasd, Stick, Pad: "Pull back to climb, sideways to roll: {move_forward}"),
+            new("Gear up once flying: {car_door}", new[] { "car_door" }),
+            new("Above 60 km, the cruise drive on / off: {engine_toggle}", new[] { "engine_toggle" }),
+        }, "In the drive the levers set its speed; off, it stays in orbit · glide home and land at 200 kt"),
 
         new(VehicleIntroKind.Forklift, "Forklift", new IntroRow[]
         {

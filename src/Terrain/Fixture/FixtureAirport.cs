@@ -11,7 +11,7 @@ namespace UnitSport.Terrain.Fixture;
 /// <item>a parallel taxiway along Y = 150;</item>
 /// <item>the terminal apron, X 0..380 and Y -250..130: six stands every 50 m from X 30, their lead-in
 /// lines from the taxiway's edge (Y 120) south to the nose's stop (Y 40): A320s face south;</item>
-/// <item>the cargo apron, X 400..700: two stands (C1 at X 470, C2 at X 610), nose stop at Y 0;</item>
+/// <item>the cargo apron, X 400..700: three stands (C1 at X 470, C2 at X 610, C3 at X 680 for the shuttle, #1492), nose stop at Y 0;</item>
 /// <item>a landside road along Y -300 (every course has a road; the ground follows it, flat).</item>
 /// </list>
 /// </summary>
@@ -43,6 +43,7 @@ public static class FixtureAirport
             yield return ($"{i + 1}", new[] { (30.0 + 50 * i, 120.0), (30.0 + 50 * i, 40.0) }, "Terminal apron");
         yield return ("C1", new[] { (470.0, 120.0), (470.0, 0.0) }, "Cargo apron");
         yield return ("C2", new[] { (610.0, 120.0), (610.0, 0.0) }, "Cargo apron");
+        yield return ("C3", new[] { (680.0, 120.0), (680.0, 0.0) }, "Cargo apron");
     }
 
     /// <summary>The fixture airport planned at a start in LV95, as the preprocessor plans a real one.</summary>

@@ -32,6 +32,10 @@ Plan: `docs/plans/ellipsoid-handover.md` section 5. The geodesy under it: `core/
 
 ## The UFO in space (`Ufo.SpaceFly`, `UfoFlight.SpaceStep`)
 
+The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`) flies it too: an
+`ISpacecraft` has a `SpaceOrbit`, its body sets its `Place` before each step (`FootPlayer.SpaceStep`,
+`VehicleBody.StepFlyer`), and `SpaceOrbit.Step` returns the body's velocity and the orbit's track.
+
 - **Above the Space handover** (60 km climbing, out below 50 km: `Curvature.SpaceRegime`, on the
   craft's own altitude) the saucer's state is an `OrbitState`. Each physics step:
   - the body's place comes in as `Ufo.Place` (`SpacePlace`: frame, world point, altitude, sim time), set

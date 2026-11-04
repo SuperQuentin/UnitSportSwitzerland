@@ -13,6 +13,8 @@ public enum StandUse
     Heavy,
     /// <summary>The military cargo plane (#420) on the cargo apron.</summary>
     Military,
+    /// <summary>The space shuttle (#1492) on the cargo apron, beside the freighter.</summary>
+    Space,
 }
 
 /// <summary>

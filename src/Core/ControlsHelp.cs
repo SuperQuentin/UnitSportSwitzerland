@@ -388,6 +388,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Cockpit view, without your body, chase camera", PlayerInput.CameraToggle),
             new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
+        ("Space shuttle", new Row[]
+        {
+            new("Rockets up / down (they never run out)", Keys: "{sprint} / {crouch_slide}", Pad: "{throttle} / {brake}"),
+            new("Pitch and roll (in space: the reaction jets; hands off, it holds its attitude)", Keys: "{move_forward}{move_left}{move_back}{move_right}", Pad: "{move_forward}"),
+            new("Above 60 km: the cruise drive on / off (on: the levers set its speed; off: a circular orbit)", PlayerInput.EngineToggle),
+            new("Gear up / down, wheel brakes, speedbrake, parking brake: as an airliner's", Keys: "{car_door} {jump} {speedbrake} {parking_brake}", Pad: "{car_door} {jump} {speedbrake}"),
+            new("Orbit 400 km up at once (offline, or an admin)", Keys: "/orbit 400", Pad: "—"),
+        }),
         ("UFO", new Row[]
         {
             new("Fly where you look (strafe sideways)", Keys: Wasd, Pad: "{move_forward}"),
@@ -510,7 +518,7 @@ public partial class ControlsHelp : CanvasLayer
     }
 
     /// <summary>The groups whose controls are used mounted: their VR names are the mounted ones.</summary>
-    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "UFO", "Flying" };
+    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "Space shuttle", "UFO", "Flying" };
 
     private static readonly Color KeyColor = new(1f, 0.84f, 0.42f);
     private static readonly Color PadColor = new(0.6f, 0.8f, 1f);

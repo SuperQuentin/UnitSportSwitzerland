@@ -204,7 +204,7 @@ public static class AirlinerFlight
 
     private const float BankHold = 0.576f;     // 33°: hands-off the law keeps the bank up to here
     private const float BankLimit = 1.17f;     // 67°
-    private const float PitchUp = 0.52f, PitchDown = -0.26f;   // +30° / −15°
+    private const float PitchDown = -0.26f;   // −15° (up: the type's PitchLimit, +30° an airliner's)
     private const float PathGain = 1.0f, PathDamping = 1.4f;
 
     public static Event Step(AirlinerSpec spec, ref State s, in Controls c, in Env env, float dt)
@@ -264,13 +264,14 @@ public static class AirlinerFlight
         float cl = LiftCoefficient(spec, cl0, clMax, alpha) - spec.SpoilerCl * s.Spoilers;
         float cd = spec.Cd0 + spec.InducedK * cl * cl + cdFlaps + spec.GearCd * s.Gear + spec.SpoilerCd * s.Spoilers;
 
-        float lapse = Mathf.Max(0.35f, 1f - spec.ThrustLapse * speed) * Mathf.Pow(rho / SeaLevelDensity, 0.7f);
+        // a rocket's thrust neither lapses with the speed nor thins with the air (#1492)
+        float lapse = spec.Rocket ? 1f : Mathf.Max(0.35f, 1f - spec.ThrustLapse * speed) * Mathf.Pow(rho / SeaLevelDensity, 0.7f);
         // only the engines running push (one still starting does not yet)
         float lit = sim ? Mathf.Floor(s.Lit + 0.001f) : spec.Engines;
         float thrust = lit * spec.StaticThrust * ThrustShare(spec, s.Spool) * lapse
             * Mathf.Lerp(1f, -spec.ReverseShare, s.Reverse);
         s.Thrust = thrust;
-        if (sim) Burn(spec, ref s, thrust, lit, env, speed, dt);
+        if (sim && !spec.Rocket) Burn(spec, ref s, thrust, lit, env, speed, dt);
 
         var flow = speed > 0.5f ? v / speed : -att.Z;
         var liftDir = att.Y - flow * att.Y.Dot(flow);
@@ -322,7 +323,8 @@ public static class AirlinerFlight
             s.Starting = !s.Starting;
             if (s.Starting) s.Battery = true;
         }
-        bool fuel = s.Fuel > 0f;
+        // a rocket's propellant never runs out (#1492)
+        bool fuel = s.Fuel > 0f || spec.Rocket;
         if (s.Starting && fuel)
         {
             // the APU first, then its bleed air spins up each engine in turn; all running, it is not needed
@@ -510,12 +512,22 @@ public static class AirlinerFlight
         float gammaRate = (gamma - s.LastGamma) / Mathf.Max(dt, 1e-4f);
         s.LastGamma = gamma;
         float pitch = PitchOf(att), bank = BankOf(att);
+        float pitchUp = spec.PitchLimit;
         float qRef = 0.5f * SeaLevelDensity * Mathf.Pow(spec.StallSpeed(s.Mass, 0), 2f) * 0.6f;
         float authority = Mathf.Clamp(q / qRef, 0.15f, 1f);
         // the airflow's own moments (static stability, a stalled wing, the fin) need air over the
         // surfaces: dropped onto its wheels with no way on, the "alpha" of falling is 90° and they
         // pitched and banked a cold heavy in Sim until its 24 m nose box met the ground (#491)
         float airflow = Mathf.Clamp((v.Length() - AirflowFrom) / AirflowFull, 0f, 1f);
+        // a spacecraft in thin air (#1492): its reaction jets turn it, at the stick's rates whatever the air,
+        // and hands-off it holds its attitude; the law, the protections and the fin fade out with the air
+        float jets = spec.Spacecraft ? ShuttleFlight.JetShare(q) : 0f;
+        if (jets > 0f)
+        {
+            authority = Mathf.Max(authority, jets);
+            airflow *= 1f - jets;
+            protect = protect && jets < 0.5f;
+        }
 
         // pitch: the stick moves the flight path; let go, the path is held. Turning takes more lift,
         // which in a bank is pitching about the wings (the feed-forward: ω·sin φ, ω = g·tan φ / V).
@@ -540,17 +552,24 @@ public static class AirlinerFlight
         {
             float alphaProt = s.AlphaStall - 0.035f;
             if (alpha > alphaProt) qCmd = Mathf.Min(qCmd, -(alpha - alphaProt) * 3f);
-            if (pitch > PitchUp) qCmd = Mathf.Min(qCmd, (PitchUp - pitch) * 2f);
+            if (pitch > pitchUp) qCmd = Mathf.Min(qCmd, (pitchUp - pitch) * 2f);
             if (pitch < PitchDown) qCmd = Mathf.Max(qCmd, (PitchDown - pitch) * 2f);
             // high speed: the nose comes up on its own past VMO
             float over = s.Ias - spec.Vmo * 1.02f;
             if (over > 0f) qCmd = Mathf.Max(qCmd, over * 0.01f);
             // alpha floor: near the stall the thrust goes to full whatever the levers say; not with
             // no airflow to speak of (dropped onto its wheels, the "alpha" of falling straight down is 90°)
-            if (alpha > alphaProt - 0.01f && speed > spec.StallSpeed(s.Mass, 0) * 0.5f) s.Lever = 1f;
-            if (alpha > alphaProt || pitch > PitchUp || pitch < PitchDown) s.PathTarget = gamma;
+            // (not a rocket's: a shuttle flares on its brick's glide, no blast at the runway's threshold)
+            if (!spec.Rocket && alpha > alphaProt - 0.01f && speed > spec.StallSpeed(s.Mass, 0) * 0.5f) s.Lever = 1f;
+            if (alpha > alphaProt || pitch > pitchUp || pitch < PitchDown) s.PathTarget = gamma;
         }
         qCmd = Mathf.Clamp(qCmd, -spec.MaxPitchRate * 1.5f, spec.MaxPitchRate * 1.5f);
+        if (jets > 0f)
+        {
+            // the jets' rate command: the stick's rate, hands-off none (the attitude held, the path followed)
+            qCmd = Mathf.Lerp(qCmd, stick.Y * ShuttleFlight.JetPitchRate, jets);
+            s.PathTarget = Mathf.Lerp(s.PathTarget, gamma, jets);
+        }
 
         // roll: the stick asks a roll rate; let go, arcade rolls level, the law holds the bank to 33°
         float pCmd;
@@ -560,6 +579,7 @@ public static class AirlinerFlight
         else if (protect && Mathf.Abs(bank) > BankHold) pCmd = -(bank - Mathf.Sign(bank) * BankHold) * 0.6f;
         else pCmd = 0f;
         if (protect && Mathf.Abs(bank) > BankLimit) pCmd = Mathf.Sign(bank) > 0 ? Mathf.Min(pCmd, -0.05f) : Mathf.Max(pCmd, 0.05f);
+        if (jets > 0f) pCmd = Mathf.Lerp(pCmd, stick.X * ShuttleFlight.JetRollRate, jets);
 
         s.PitchRate += (qCmd - s.PitchRate) * MathX.Damp(2.2f * authority, dt);
         s.RollRate += (pCmd - s.RollRate) * MathX.Damp(2.5f * authority, dt);
