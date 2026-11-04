@@ -99,7 +99,7 @@ public partial class VersteckisManager
         if (e!.DecoyUsed) return "One decoy a round.";
         if (PositionOf(peer) is not { } at || BodyOf(peer) is not { } body) return "Nowhere to put it.";
         e.DecoyUsed = true;
-        var d = new VsDecoy { Id = g!.NextDecoy++, Owner = peer, Prop = e.Prop, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = body.NetYaw, Until = Now + VsRules.DecoySeconds };
+        var d = new VsDecoy { Id = g!.NextDecoy++, Owner = peer, Prop = e.Prop, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = body.GlobalYaw, Until = Now + VsRules.DecoySeconds };
         g.S.Decoys.Add(d);
         GD.Print(FormattableString.Invariant($"[vs] {e.Name} left a decoy ({VsProps.A(d.Prop)}) at {d.E:F1}/{d.N:F1}"));
         Push();
@@ -173,7 +173,7 @@ public partial class VersteckisManager
         {
             if (!h.Hiding || PositionOf(h.Peer) is not { } at || BodyOf(h.Peer) is not { } body) continue;
             var prop = h.Disguised ? h.Prop : VsProp.MilkCan;   // undisguised (on an objective): a body's own footprint
-            if (!VsRules.TagHits(prop, at, body.NetYaw, e, n)) continue;
+            if (!VsRules.TagHits(prop, at, body.GlobalYaw, e, n)) continue;
             double d = at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt));
             if (d < best) { best = d; hit = h; }
         }

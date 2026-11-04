@@ -30,14 +30,24 @@ public readonly record struct RadioState(
     float Voice = 1f,
     float Music = 1f)
 {
-    public Godot.Collections.Dictionary ToDict()
+    /// <summary>
+    /// The state on the wire (a spawn, an RPC): ECEF, true north and the local ENU (#1503); in memory the heading and
+    /// velocity are in GlobalPos's offset axes at <see cref="Position"/>, as <see cref="ToSavedDict"/> keeps them.
+    /// </summary>
+    public Godot.Collections.Dictionary ToDict() => Dict(saved: false);
+
+    /// <summary>The state as the object containers keep it on disk: LV95 and grid north until G2 A2b migrates them.</summary>
+    public Godot.Collections.Dictionary ToSavedDict() => Dict(saved: true);
+
+    private Godot.Collections.Dictionary Dict(bool saved)
     {
+        var enu = saved ? default : Position.Enu;
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
         ["owner"] = Owner,
-        ["yaw"] = Yaw,
-        ["vel"] = Velocity,
+        ["yaw"] = saved ? Yaw : enu.TrueYaw(Yaw),
+        ["vel"] = saved ? Velocity : enu.ToEnu(Velocity),
         ["cd"] = CdId,
         ["at"] = StartedAt,
         ["playing"] = Playing,
@@ -47,11 +57,21 @@ public readonly record struct RadioState(
         };
         if (Oid != 0) d["oid"] = Oid;
         if (Voice != 1f || Music != 1f) { d["voice"] = Voice; d["music"] = Music; }
-        Position.Write(d);
+        if (saved) Position.WriteSaved(d);
+        else Position.Write(d);
         return d;
     }
 
-    public static RadioState FromDict(Godot.Collections.Dictionary d) => new(
+    /// <summary>A state from <see cref="ToDict"/> (the wire) or <see cref="ToSavedDict"/> (a saved record), told apart by their keys.</summary>
+    public static RadioState FromDict(Godot.Collections.Dictionary d)
+    {
+        var s = Read(d);
+        if (!GlobalPos.IsWire(d)) return s;
+        var enu = s.Position.Enu;
+        return s with { Yaw = enu.Yaw(s.Yaw), Velocity = enu.FromEnu(s.Velocity) };
+    }
+
+    private static RadioState Read(Godot.Collections.Dictionary d) => new(
         d["name"].AsString(),
         d["owner"].AsInt64(),
         GlobalPos.Read(d),

@@ -162,7 +162,7 @@ public partial class Sleepers : Node
             alt = ground;
         }
 
-        var s = _book.Lay(new Sleeper(0, key, name, at.E, at.N, alt, body.NetYaw, (int)peer,
+        var s = _book.Lay(new Sleeper(0, key, name, at.E, at.N, alt, body.GlobalYaw, (int)peer,
             body.OutfitBits, body.AppearanceBits, body.HeadwearId), out var replaced);
         if (replaced != null) Unshow(replaced.Id);
         Show(s);

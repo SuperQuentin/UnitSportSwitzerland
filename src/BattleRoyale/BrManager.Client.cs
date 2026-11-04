@@ -121,7 +121,7 @@ public partial class BrManager
         if (Origin == null) yield break;
         foreach (var m in _state.MatesOf(Me))
             if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(m.Peer)) is { } body)
-                yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+                yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.WorldYaw), Mathf.Cos(body.WorldYaw)));
     }
 
     // ------------------------------------------------------------------------------------
@@ -564,7 +564,7 @@ public partial class BrManager
     {
         if (Origin == null) return null;
         if (Watching != 0 && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Watching)) is { } other)
-            return (ZonePoint(other.GlobalPosition), new Vector2(-Mathf.Sin(other.NetYaw), Mathf.Cos(other.NetYaw)));
+            return (ZonePoint(other.GlobalPosition), new Vector2(-Mathf.Sin(other.WorldYaw), Mathf.Cos(other.WorldYaw)));
         if (LocalPlayer() is not { } me) return null;
         var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
         var heading = new Vector2(fwd.X, -fwd.Z);
