@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The space shuttle's mission at Geneva, filmed (#1497, src/Player/ShuttleFilm): a window (silent, the mouse left
-# free; it takes the screen for the run), Geneva's tiles and the globe on D:. Five clips (taxi and take-off, the
-# drive up, orbit and retro burn, re-entry, the landing) cut into one MP4 with a caption on each: OUT/shuttle-film.mp4.
+# free; it takes the screen for the run), Geneva's tiles and the globe on D:. Four clips (taxi, take-off and the
+# way into space; orbit and retro burn; re-entry; the way down to the landing) cut into one MP4, captioned (also at
+# the frames the film marks: the drive's start, the landing's): OUT/shuttle-film.mp4.
 # The chase camera (--view third; the cockpit sees nothing in space), a summer morning (DATE, HOUR: no snow).
 # The sound: Godot's movie mode (--write-movie) mixes the audio in step with each frame, so the run's whole AVI
 # (MOVIE, a few GB of MJPEG, deleted after unless KEEP=1) holds it in time; each clip gets its slice, from the
@@ -21,12 +22,16 @@ if [ "${1:-}" != --cut-only ]; then
       > "$d/shuttle-film.log" 2>&1 || echo "exit $?"
   grep -h "\[shuttlefilm\]\|\[clip\]" "$d/shuttle-film.log" || true
 fi
+# a caption at each clip's start, and one at its mark (the way into space, the landing) where it has one
 # (no colons: drawtext reads one as the end of its text)
-captions=("Taxi and take-off, Geneva runway 04" "The cruise drive, up to 400 km" "In orbit, then the retro burn" "Re-entry" "Home to runway 22, in over the lake")
+caption=("Taxi and take-off, Geneva runway 04" "In orbit, then the retro burn" "Re-entry" "Down from space, home to Geneva")
+later=("Into space, the cruise drive up to 400 km" "" "" "Runway 22, in over the lake")
+mark=(drive "" "" landing)
 font="C\:/Windows/Fonts/segoeuib.ttf"
 [ -f /c/Windows/Fonts/segoeuib.ttf ] || font="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+log="$d/shuttle-film.log"
 
-# cut <file> <width> <skip...> -- <speed...> -- <encoder args...>: the five clips, each from <skip> s of it at <speed>x
+# cut <file> <width> <skip...> -- <speed...> -- <encoder args...>: the four clips, each from <skip> s of it at <speed>x
 # (the sound kept at its pitch), captioned, faded, in one MP4
 cut() {
   local file=$1 width=$2; shift 2
@@ -34,22 +39,30 @@ cut() {
   while [ "$1" != -- ]; do skip+=("$1"); shift; done; shift
   while [ "$1" != -- ]; do speed+=("$1"); shift; done; shift
   local inputs=() filter="" n=0 i=0 sound=0
-  for k in 1 2 3 4 5; do
+  for k in 1 2 3 4; do
     local f="$d/shuttle-$k.mp4" ss=${skip[$((k - 1))]} sp=${speed[$((k - 1))]}
     [ -s "$f" ] || { echo "no $f"; continue; }
-    local dur len end tempo="" left
+    local dur len end tempo="" left first at text
     dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")
     len=$(awk "BEGIN { print ($dur - $ss) / $sp }")
     end=$(awk "BEGIN { print ($len > 1.2 ? $len - 0.5 : 0) }")
     # atempo takes at most 2x a step
     left=$sp; while awk "BEGIN { exit !($left > 2) }"; do tempo+="atempo=2,"; left=$(awk "BEGIN { print $left / 2 }"); done
     tempo+="atempo=$left"
+    # the clip's first frame (ClipRecorder's log): where its sound and its marks are counted from
+    first=$(grep -ho "shuttle-$k.gif ([0-9]* KB, [0-9]* frames from frame [0-9]*" "$log" 2>/dev/null | tail -1 | grep -o "[0-9]*$" || true)
+    text="drawtext=fontfile='$font':text='${caption[$((k - 1))]}':x=w/32:y=h-h/9:fontsize=h/21:fontcolor=white:borderw=3:bordercolor=black@0.6:enable='lt(t,3.5)'"
+    if [ -n "${mark[$((k - 1))]}" ] && [ -n "$first" ]; then
+      at=$(grep -ho "mark ${mark[$((k - 1))]} at frame [0-9]*" "$log" | tail -1 | grep -o "[0-9]*$" || true)
+      if [ -n "$at" ]; then
+        at=$(awk "BEGIN { t = (($at - $first) / 30 - $ss) / $sp; print (t > 0 ? t : 0) }")
+        text+=",drawtext=fontfile='$font':text='${later[$((k - 1))]}':x=w/32:y=h-h/9:fontsize=h/21:fontcolor=white:borderw=3:bordercolor=black@0.6:enable='between(t,$at,$at+3.5)'"
+      fi
+    fi
     inputs+=(-i "$f")
-    filter+="[$i:v]trim=start=$ss,setpts=(PTS-STARTPTS)/$sp,scale=$width:-2,fps=30,setsar=1,drawtext=fontfile='$font':text='${captions[$((k - 1))]}':x=w/32:y=h-h/9:fontsize=h/21:fontcolor=white:borderw=3:bordercolor=black@0.6:enable='lt(t,3.5)',fade=t=in:st=0:d=0.5,fade=t=out:st=$end:d=0.5[v$n];"
+    filter+="[$i:v]trim=start=$ss,setpts=(PTS-STARTPTS)/$sp,scale=$width:-2,fps=30,setsar=1,$text,fade=t=in:st=0:d=0.5,fade=t=out:st=$end:d=0.5[v$n];"
     i=$((i + 1))
     # the clip's sound: the movie's audio from the frame its first picture shows (the frame before the one it was read in)
-    local first
-    first=$(grep -ho "shuttle-$k.gif ([0-9]* KB, [0-9]* frames from frame [0-9]*" "$d/shuttle-film.log" 2>/dev/null | tail -1 | grep -o "[0-9]*$" || true)
     if [ -n "$first" ] && [ -s "$movie" ]; then
       inputs+=(-ss "$(awk "BEGIN { print ($first - 1) / 30 }")" -t "$dur" -i "$movie"); sound=1
     else
@@ -70,12 +83,12 @@ cut() {
 }
 
 # the whole film
-cut "$out/shuttle-film.mp4" 1280 0 0 0 0 0 -- 1 1 1 1 1 -- -c:v libx264 -crf 20 -preset slow -c:a aac -b:a 160k
+cut "$out/shuttle-film.mp4" 1280 0 0 0 0 -- 1 1 1 1 -- -c:v libx264 -crf 20 -preset slow -c:a aac -b:a 160k
 # a short one (SHORT_MB, 8 by default): the taxi skipped, sped up, two passes to the size
 mb=${SHORT_MB:-8}
-skip=(18 0 0 0 50) speed=(2.5 1 3 2 2)
+skip=(${SHORT_SKIP:-18 0 0 0}) speed=(${SHORT_SPEED:-2.5 3 2 2.5})
 total=0
-for k in 1 2 3 4 5; do
+for k in 1 2 3 4; do
   [ -s "$d/shuttle-$k.mp4" ] || continue
   total=$(awk "BEGIN { print $total + ($(ffprobe -v error -show_entries format=duration -of csv=p=0 "$d/shuttle-$k.mp4") - ${skip[$((k - 1))]}) / ${speed[$((k - 1))]} }")
 done
