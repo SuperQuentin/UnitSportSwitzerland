@@ -181,9 +181,11 @@ public partial class Globe : Node
     private bool FarFromReal(Vector3 camera)
     {
         var g = Origin!.ToGlobal(camera);
-        double de = Math.Max(Math.Max(_maskMinE * 1000.0 - g.E, g.E - (_maskMaxE + 1) * 1000.0), 0);
-        double dn = Math.Max(Math.Max(_maskMinN * 1000.0 - g.N, g.N - (_maskMaxN + 1) * 1000.0), 0);
-        return de * de + dn * dn > FillFarM * FillFarM;
+        // the box's nearest point to the camera, in the real tiles' LV95 notation (#1443: no distance by hand)
+        var (e, n) = (g.Lv95.E, g.Lv95.N);
+        var nearest = GlobalPos.FromLv95(Math.Clamp(e, _maskMinE * 1000.0, (_maskMaxE + 1) * 1000.0),
+            Math.Clamp(n, _maskMinN * 1000.0, (_maskMaxN + 1) * 1000.0), g.Alt);
+        return g.HorizontalDistanceSquaredTo(nearest) > FillFarM * FillFarM;
     }
 
     /// <summary>The mask is sampled by world XZ: its NW corner and grid axes, again after a shift.</summary>
