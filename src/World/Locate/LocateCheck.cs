@@ -57,7 +57,7 @@ public partial class LocateCheck : Node
         GD.Print($"[locatecheck] index: {locate.Buildings!.Count} buildings ({locate.Buildings.Progress.Done} of {locate.Buildings.Progress.Total} tiles), {(Time.GetTicksMsec() - _began)} ms after boot");
         string? asked = CmdArgs.Value("--locatecheck", notFlag: true);
         var queries = asked != null ? asked.Split('|', StringSplitOptions.RemoveEmptyEntries) : Default;
-        var from = new GlobalPos(_from.E, _from.N, 0);
+        var from = GlobalPos.FromLv95(_from.E, _from.N, 0);
         foreach (string q in queries)
         {
             var started = System.Diagnostics.Stopwatch.StartNew();

@@ -37,7 +37,7 @@ public partial class FilmPuppet : Node
             GD.PrintErr($"[puppet] not a ride and E,N,alt,heading,speed[,climb]: {spec}");
             return null;
         }
-        var film = new FilmPuppet { Name = "FilmPuppet", _kind = kind, _from = new GlobalPos(v[0], v[1], v[2]), _heading = v[3], _speed = v[4], _climb = v[5] };
+        var film = new FilmPuppet { Name = "FilmPuppet", _kind = kind, _from = GlobalPos.FromLv95(v[0], v[1], v[2]), _heading = v[3], _speed = v[4], _climb = v[5] };
         // under the studio's names, so neither meets a peer's nor the other's
         int id = MovieStage.PuppetBase - 1 - _count++;
         film._puppet = new FootPlayer { Name = id.ToString(), Origin = origin, Puppet = true };

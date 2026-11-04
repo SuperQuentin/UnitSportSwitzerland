@@ -106,7 +106,7 @@ public static class ActorIo
             Array.Copy(f, Channels.Pose, buffer, 0, len);
             p.NetPose = buffer;
         }
-        p.NetGlobal = new GlobalPos(s.E, s.N, s.Alt);
+        p.NetGlobal = GlobalPos.FromLv95(s.E, s.N, s.Alt);
         p.NetTime = stamp;
     }
 }

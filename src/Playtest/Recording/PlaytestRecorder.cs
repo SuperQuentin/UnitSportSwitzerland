@@ -613,7 +613,7 @@ public partial class PlaytestRecorder : Node
         TraceFrame? best = null;
         for (int i = 0; i < Ring.Count; i++)
             if (Ring[i].TryGet(me, out _) && (best == null || Math.Abs(Ring[i].T - t) < Math.Abs(best.T - t))) best = Ring[i];
-        return best != null && best.TryGet(me, out var s) ? new GlobalPos(s.E, s.N, s.Alt) : null;
+        return best != null && best.TryGet(me, out var s) ? GlobalPos.FromLv95(s.E, s.N, s.Alt) : null;
     }
 
     /// <summary>A note's top view: the ring's 10 s either side of it, centred on it, as a PNG beside its screenshot.</summary>

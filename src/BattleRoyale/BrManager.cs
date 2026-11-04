@@ -743,7 +743,7 @@ public partial class BrManager : Node
             if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
         // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
-        if (!me.Bot) _humanPings[me.Team] = (new GlobalPos(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
         return true;
     }
 

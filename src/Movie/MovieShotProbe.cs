@@ -73,7 +73,7 @@ public partial class MovieShotProbe : Node
         Vector3 At(int cam)
         {
             _project!.ShotPose(cam, t, _stage.Mount, out var pose, out _);
-            return _origin.ToWorld(new GlobalPos(pose.E, pose.N, pose.Alt));
+            return _origin.ToWorld(GlobalPos.FromLv95(pose.E, pose.N, pose.Alt));
         }
         var lead = At(0) - feet;
         var chase = At(1) - feet;

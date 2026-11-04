@@ -416,7 +416,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// there cannot drift apart.
     /// </summary>
     private static VehicleState StateOf(VehicleSlot s) =>
-        new(KindFor(s), new GlobalPos(s.E, s.N, s.Height), s.Yaw,
+        new(KindFor(s), GlobalPos.FromLv95(s.E, s.N, s.Height), s.Yaw,
             Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
             Train: s.Train, Load: s.Load);
 

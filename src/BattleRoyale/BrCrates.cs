@@ -235,7 +235,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     {
         // in Earth positions (#1456): the body may be in another server region's frame than this world
         if (at.HorizontalDistanceSquaredTo(c.At) > reach * reach) return false;
-        return c.Alt == Ground || System.Math.Abs(at.Alt - c.Alt) < 4f;
+        return c.Alt == Ground || System.Math.Abs(c.At.OffsetTo(at).Up) < 4f;
     }
 
     // ------------------------------------------------------------------------------------

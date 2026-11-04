@@ -95,8 +95,8 @@ public partial class RegionCheck : Node
     {
         _out = ProjectSettings.GlobalizePath(CmdArgs.Value("--regionout") ?? "res://test_output/regions");
         Directory.CreateDirectory(_out);
-        var spawn = SpawnPoint.ParseLv95("--regionat") is var (ae, an) ? new GlobalPos(ae, an, 0)
-            : new GlobalPos(SpawnPoint.DefaultLv95E + 250, SpawnPoint.DefaultLv95N + 250, 0);
+        var spawn = SpawnPoint.ParseLv95("--regionat") is var (ae, an) ? GlobalPos.FromLv95(ae, an, 0)
+            : GlobalPos.FromLv95(SpawnPoint.DefaultLv95E + 250, SpawnPoint.DefaultLv95N + 250, 0);
         var far = SpawnPoint.ParseLv95("--regionfar") is var (be, bn) ? GlobalPos.FromLv95(be, bn, 0) : spawn.Moved(FarM, 0);
         _wander = CmdArgs.Int("--regionwander") ?? 0;
         if (_run is "both" or "a") _sites.Add(new Site("a", spawn));
@@ -228,7 +228,7 @@ public partial class RegionCheck : Node
             return true;
         }
         if (++_hopped < HopTicks) return true;
-        double drop = hopper.Global.Alt - home.Global.Alt;
+        double drop = home.Global.OffsetTo(hopper.Global).Up;
         bool stands = hopper.IsOnFloor() && System.Math.Abs(drop) < 3;
         _hopOk &= stands && hopper.Region == home.Region;
         GD.Print(string.Create(CultureInfo.InvariantCulture,
