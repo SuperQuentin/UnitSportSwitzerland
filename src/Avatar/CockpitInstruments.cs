@@ -41,9 +41,13 @@ public static class CockpitInstruments
 {
     public const float Knot = 0.514444f, Foot = 0.3048f;
 
-    /// <summary>ISA density over sea level's at <paramref name="altitude"/> metres (troposphere).</summary>
-    public static float Sigma(float altitude) =>
-        MathF.Pow(Math.Clamp(1f - 2.25577e-5f * altitude, 0.2f, 1.2f), 4.2559f);
+    /// <summary>
+    /// Density over sea level's at <paramref name="altitude"/> metres: the ISA troposphere's formula to
+    /// 11 km, the US Standard Atmosphere 1976 above (#1430 H5, <see cref="Core.Atmosphere"/>).
+    /// </summary>
+    public static float Sigma(float altitude) => altitude <= 11_000f
+        ? MathF.Pow(Math.Clamp(1f - 2.25577e-5f * altitude, 0.2f, 1.2f), 4.2559f)
+        : (float)Core.Atmosphere.Sigma(altitude);
 
     /// <summary>Indicated airspeed from the true one at an altitude, no wind, m/s.</summary>
     public static float Ias(float tas, float altitude) => tas * MathF.Sqrt(Sigma(altitude));

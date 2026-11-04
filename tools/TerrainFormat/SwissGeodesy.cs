@@ -69,13 +69,48 @@ public static class SwissGeodesy
         return (lat, lon);
     }
 
+    /// <summary>
+    /// A longitude's angle from Bern's meridian, radians, wrapped to ±π (#1480): unwrapped, a longitude from
+    /// 172.6° W to 180° came out as −187° to −180° and its LV95 point was up to 31 km off on the way back.
+    /// Inside ±π it is the plain difference, to the bit.
+    /// </summary>
+    private static double FromCentre(double lon)
+    {
+        double d = lon - Lambda0;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        else if (d < -Math.PI) d += 2 * Math.PI;
+        return d;
+    }
+
+    /// <summary>
+    /// The widest angle from Bern's meridian, radians, that LV95 round-trips (#1480): the Gauss sphere's
+    /// longitude is α times the ellipsoid's (α ≈ 1.00072), so it covers 2πα and the last 0.13° on either
+    /// side of Bern's antimeridian (172.56° W, 15 km wide at the equator) overlap: there an LV95 point goes
+    /// back to ECEF up to 31 km off. Everywhere else round trips hold to a tenth of a millimetre.
+    /// </summary>
+    public static readonly double MaxFromCentre = Math.PI / Alpha;
+
+    /// <summary>Whether an ECEF point is where LV95 round-trips (#1480): everywhere but a 0.26° sliver on Bern's antimeridian.</summary>
+    public static bool InDomain(EcefPos p)
+    {
+        var q = p - DatumShift;
+        return Math.Abs(FromCentre(Math.Atan2(q.Y, q.X))) < MaxFromCentre;
+    }
+
+    /// <summary>
+    /// Called by <see cref="FromEcef"/> with a point outside <see cref="InDomain"/> (#1480): that LV95 place is
+    /// wrong, by up to 31 km. The game logs it (a far-side position must never land off quietly); the
+    /// conversion still answers, as nearest it can.
+    /// </summary>
+    public static Action<EcefPos>? OutsideDomain;
+
     /// <summary>Latitude and longitude on Bessel 1841 (radians) to LV95.</summary>
     public static (double E, double N) FromBessel(double lat, double lon)
     {
         double es = E * Math.Sin(lat);
         double s = Alpha * Math.Log(Math.Tan(Math.PI / 4 + lat / 2)) - Alpha * E / 2 * Math.Log((1 + es) / (1 - es)) + K;
         double b = 2 * (Math.Atan(Math.Exp(s)) - Math.PI / 4);
-        double l = Alpha * (lon - Lambda0);
+        double l = Alpha * FromCentre(lon);
         double lBar = Math.Atan2(Math.Sin(l), Math.Sin(B0) * Math.Tan(b) + Math.Cos(B0) * Math.Cos(l));
         double bBar = Math.Asin(Math.Cos(B0) * Math.Sin(b) - Math.Sin(B0) * Math.Cos(b) * Math.Cos(l));
         double y = R * lBar;
@@ -136,8 +171,21 @@ public static class SwissGeodesy
     public static (double E, double N, double H) FromEcef(EcefPos p)
     {
         var g = Bessel.ToGeodetic(p - DatumShift);
+        if (Math.Abs(FromCentre(Rad(g.LonDeg))) >= MaxFromCentre) OutsideDomain?.Invoke(p);
         var (e, n) = FromBessel(Rad(g.LatDeg), Rad(g.LonDeg));
         return (e, n, g.H - BesselGeoid(e, n));
+    }
+
+    /// <summary>
+    /// The LHN95 height of an ECEF point alone (#1480): <see cref="FromEcef"/>'s H, to the bit, but asked
+    /// anywhere: a height needs no projection, so the sliver on Bern's antimeridian is no error here
+    /// (its geoid is the grid's edge value, as for every far point).
+    /// </summary>
+    public static double Lhn95Height(EcefPos p)
+    {
+        var g = Bessel.ToGeodetic(p - DatumShift);
+        var (e, n) = FromBessel(Rad(g.LatDeg), Rad(g.LonDeg));
+        return g.H - BesselGeoid(e, n);
     }
 
     /// <summary>LV95 and an LHN95 height to latitude, longitude and ellipsoidal height on WGS84.</summary>

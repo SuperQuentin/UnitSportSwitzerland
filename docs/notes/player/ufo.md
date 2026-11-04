@@ -10,6 +10,8 @@
   under Aircraft (the Rides set). Left where you get out, as a `VehicleBody`. Its state is
   `Ufo.State`, a `UfoFlight.State` (like an airliner's `State`). Its motion is `Player/UfoFlight.cs`,
   pure maths linked into the tier-0 tests (`UfoFlightTests`). Keep it free of nodes.
+- **Above 60 km it flies an orbit** (#1480): real gravity, the space drive on the same keys, `/orbit <km>`,
+  back to the hover below 50 km. `player/orbits`.
 - **Arcade hover, no aerodynamics.** There is no gravity and no stall in flight.
   - Letting go of the climb keys holds the height.
   - The stick wishes for a horizontal velocity in the heading frame, forward and sideways alike:

@@ -500,6 +500,9 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
         // brake); in the air the lever stays where the pilot left it
         var input = new FlightInput(Vector2.Zero, 0f, 0f, 0f, onFloor ? 1f : 0f, false, false, _flight.Yaw,
             Engine: EngineOn && Ride is not Helicopter, Piloted: false);
+        // a saucer left in orbit keeps flying it on the server (#1480): in doubles, its body only following
+        if (flyer is Ufo saucer)
+            saucer.Place = new Ufo.SpacePlace(Origin.Frame, GlobalPosition, Origin.AltitudeOf(GlobalPosition), Net.ClockSync.SimNow, Contacts: false);
         flyer.Fly(input, new FlightEnv(onFloor, clearance), dt, ref _flight);
         Rotation = new Vector3(0, _flight.Yaw, 0);
 

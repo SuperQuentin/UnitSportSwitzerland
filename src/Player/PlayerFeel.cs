@@ -883,6 +883,20 @@ public partial class PlayerFeel : Node3D
     /// An airliner's HUD line (#414) until the cockpit's screens show it (#421): speed in knots, altitude
     /// and vertical speed in feet, the levers' N1, the flaps, the gear, the brakes.
     /// </summary>
+    /// <summary>
+    /// A saucer in Space (#1430 H5): its speed in space, its height, and the orbit's lowest and highest
+    /// points over the ground under it (the periapsis under the ground: it is falling back).
+    /// </summary>
+    private static void AppendOrbit(System.Text.StringBuilder sb, OrbitState orbit)
+    {
+        var earth = Planet.Earth;
+        double h = earth.Shape.ToGeodetic(orbit.R.AsEcef).H;
+        double ground = orbit.R.Length - h;
+        var (peri, apo, _) = Orbit.Apsides(earth, orbit);
+        sb.Append(System.FormattableString.Invariant($"ORBIT {orbit.V.Length / 1000:0.00} km/s    {h / 1000:0.0} km    Pe {(peri - ground) / 1000:0} km"));
+        sb.Append(double.IsFinite(apo) ? System.FormattableString.Invariant($"    Ap {(apo - ground) / 1000:0} km") : "    ESCAPE");
+    }
+
     private void AppendAirliner(System.Text.StringBuilder sb, Airliner a)
     {
         var s = a.State;
@@ -984,6 +998,8 @@ public partial class PlayerFeel : Node3D
             }
             else if (_player.Vehicle is Airliner jetliner)
                 AppendAirliner(sb, jetliner);
+            else if (_player.Vehicle is Ufo { Orbit: { } orbit })
+                AppendOrbit(sb, orbit);
             else if (_player.IsFlying)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");

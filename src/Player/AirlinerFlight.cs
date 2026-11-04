@@ -28,9 +28,17 @@ public static class AirlinerFlight
 {
     public const float G = 9.81f, SeaLevelDensity = 1.225f;
 
-    /// <summary>ISA air density at an altitude above sea level, kg/m³.</summary>
-    public static float Density(float altitude) =>
-        SeaLevelDensity * Mathf.Pow(Mathf.Max(1f - 2.25577e-5f * altitude, 0.05f), 4.2559f);
+    /// <summary>
+    /// Air density at an altitude above sea level, kg/m³: the ISA troposphere's formula to 11 km, as it
+    /// always flew, and the US Standard Atmosphere 1976 above it (#1430 H5, <see cref="Core.Atmosphere"/>),
+    /// thinning out to nothing at 150 km (0.24 % thicker just above 11 km: geometric against geopotential).
+    /// </summary>
+    public static float Density(float altitude) => altitude <= TroposphereTop
+        ? SeaLevelDensity * Mathf.Pow(Mathf.Max(1f - 2.25577e-5f * altitude, 0.05f), 4.2559f)
+        : (float)Core.Atmosphere.Density(altitude);
+
+    /// <summary>Where the troposphere's formula hands over to the standard's layers, m.</summary>
+    public const float TroposphereTop = 11_000f;
 
     /// <summary>What the pilot does this step. Edges (<c>…Toggle</c>, <see cref="FlapsDelta"/>) are presses, not holds.</summary>
     /// <param name="Stick">x right, y back (pull, nose up), up to length 1.</param>

@@ -75,6 +75,9 @@ public partial class ChatManager : Node
     public Func<Items.ItemStack, int>? GiveOrDrop { get; set; }
     public PlaceSearchUi? PlaceSearch { get; set; }
 
+    /// <summary>Client-side: <c>/orbit &lt;km&gt;</c> for the own player's saucer (#1430 H5); the line to show.</summary>
+    public Func<double, string>? PutInOrbit { get; set; }
+
     /// <summary>Client-side: where this player is, for the nearest venue offline (<c>/stadium</c>).</summary>
     public Func<GlobalPos?>? Here { get; set; }
 
@@ -538,6 +541,10 @@ public partial class ChatManager : Node
                 else Show("Nothing to teleport here.", ChatKind.Error);
                 return;
 
+            case "orbit":
+                Show(OrbitLine(rest), ChatKind.Admin);
+                return;
+
             case "spawn":
                 if (Items.ItemLookup.TryParse(rest, out var def, out int count, out string error)) Show(Give(def, count), ChatKind.Admin);
                 else Show(error, ChatKind.Error);
@@ -803,6 +810,22 @@ public partial class ChatManager : Node
 
         Teleporter.TeleportTo(lv95E, lv95N, label);
         LineReceived?.Invoke($"Teleported to {label}", ChatKind.System);
+    }
+
+    /// <summary>Client side: an admin's <c>/orbit</c> (#1430 H5), for the saucer this client flies.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void OrbitForced(double km) => LineReceived?.Invoke(OrbitLine(km.ToString(System.Globalization.CultureInfo.InvariantCulture)), ChatKind.Admin);
+
+    /// <summary>
+    /// <c>/orbit &lt;km&gt;</c> on this client (#1430 H5): the own saucer onto a circular orbit. Offline free,
+    /// online an admin's (the server checks, then sends <see cref="OrbitForced"/>).
+    /// </summary>
+    private string OrbitLine(string arg)
+    {
+        if (!double.TryParse(arg, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double km))
+            return "Usage: /orbit <km>, e.g. /orbit 400";
+        return PutInOrbit?.Invoke(km) ?? "No player to put in orbit.";
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -1164,6 +1187,13 @@ public partial class ChatManager : Node
             case "tp": if (RequiresAvatar(sender, verb)) CommandTeleportToPlayer(sender, rest); return;
             case "bring": if (RequiresAvatar(sender, verb)) CommandBring(sender, rest); return;
             case "tpall": CommandTeleportEveryone(sender, rest); return;
+            // the pilot's client flies its saucer (#1430 H5): the orbit is put there
+            case "orbit":
+                if (!RequiresAvatar(sender, verb)) return;
+                if (!double.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double orbitKm))
+                    ReplyTo(sender, "Usage: /orbit <km>, e.g. /orbit 400", ChatKind.Error);
+                else RpcId(sender, MethodName.OrbitForced, orbitKm);
+                return;
             case "kick": CommandKick(sender, parts); return;
             case "update": CommandUpdate(sender); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;

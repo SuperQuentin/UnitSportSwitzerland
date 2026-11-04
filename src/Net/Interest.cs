@@ -53,6 +53,8 @@ public static class Interest
         RideKind.A320 => 37f,
         RideKind.Freighter => 40f,
         RideKind.An124 => 75f,
+        // the saucer, 9.2 m across (#861); it fell to the walker's 2.1 m below and vanished a kilometre off, in orbit too (#1480)
+        RideKind.Ufo => 9.2f,
         _ when CarCatalog.IsCar(kind) => 4.4f,
         RideKind.Jetski => 3.4f,
         RideKind.Speedboat => 7f,

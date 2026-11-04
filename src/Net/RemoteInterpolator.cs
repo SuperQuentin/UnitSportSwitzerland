@@ -41,6 +41,32 @@ public sealed class RemoteInterpolator
     /// <summary>A jump beyond this is a teleport: snap, do not ease.</summary>
     public const float TeleportMetres = 25f;
 
+    /// <summary>Faster than this (an orbit, #1430 H5: 7.7 km/s, 256 m between two states at 30 Hz) the teleport distance grows with the speed, m/s.</summary>
+    public const float FastSpeed = 340f;
+
+    /// <summary>
+    /// How far a state may be from the one before it without being a teleport: <see cref="TeleportMetres"/>,
+    /// plus twice the way it flew in the gap for a body faster than <see cref="FastSpeed"/> (nothing on the
+    /// ground or in an airliner goes that fast, so they keep the fixed 25 m).
+    /// </summary>
+    /// <summary>
+    /// What eases rather than snaps for this body now: <see cref="TeleportAfter"/> its newest state over one
+    /// interval, or over <see cref="FastAhead"/> for a fast one (a sender's hitch at 7.7 km/s is hundreds of metres).
+    /// </summary>
+    private double Snap => _count > 0 ? TeleportAfter(_buf[_head].V, Math.Max(_interval, FastAhead)) : TeleportMetres;
+
+    /// <summary>
+    /// How long a body faster than <see cref="FastSpeed"/> is carried on its last velocity, s: an orbit is a coast,
+    /// 4 m off its curve after a second, and at 0.25 s a hitch of the sender froze it and then jumped it 800 m.
+    /// </summary>
+    public const float FastAhead = 1f;
+
+    public static double TeleportAfter(Vector3 velocity, double gap)
+    {
+        float speed = velocity.Length();
+        return speed > FastSpeed ? TeleportMetres + 2 * speed * Math.Min(gap, 1.0) : TeleportMetres;
+    }
+
     private double _offset = double.NaN;   // local clock − sender clock, as low as it has been seen
     private double _interval = 1.0 / 30.0;
     private Vector3 _error;                 // rendered − true, eased to zero after a correction
@@ -63,7 +89,7 @@ public sealed class RemoteInterpolator
             if (senderTime <= newest.T) return;            // duplicate or out of order: unreliable channel
             double gap = senderTime - newest.T;
             if (gap < 1.0) _interval += (gap - _interval) * 0.1;
-            if (position.DistanceTo(newest.P) > TeleportMetres) Clear();
+            if (position.DistanceTo(newest.P) > TeleportAfter(newest.V, gap)) Clear();
         }
         // The lowest (local − sender) seen is the path with no queueing on it; letting it creep up
         // slowly follows a clock that drifts, or a route that got permanently slower.
@@ -105,7 +131,7 @@ public sealed class RemoteInterpolator
         if (_count == 0) return (_lastOut, _lastYaw);
         double t = RenderTime(localTime, dt);
         var (p, yaw) = Raw(t);
-        if (_rebase && _lastOut.DistanceTo(p) < TeleportMetres)
+        if (_rebase && _lastOut.DistanceTo(p) < Snap)
         {
             _error = _lastOut - p;
             _yawError = Mathf.AngleDifference(yaw, _lastYaw);
@@ -144,7 +170,7 @@ public sealed class RemoteInterpolator
         _pending = false;
         var (after, yawAfter) = Raw(_pendingT);
         var jump = _pendingP - after;
-        if (jump.Length() < TeleportMetres)
+        if (jump.Length() < Snap)
         {
             _error += jump;
             _yawError += Mathf.AngleDifference(yawAfter, _pendingYaw);
@@ -175,6 +201,8 @@ public sealed class RemoteInterpolator
         ref var newest = ref _buf[_head];
         if (t >= newest.T)
         {
+            if (newest.V.LengthSquared() > FastSpeed * FastSpeed)
+                return (newest.P + newest.V * (float)Math.Min(t - newest.T, Math.Max(MaxAhead, FastAhead)), newest.Yaw);
             float ahead = (float)Math.Min(t - newest.T, MaxAhead);
             // a long carry (a race NPC waiting for its handoff) eases off like a lift, to half its speed by the
             // end of it, instead of rolling on flat out and then stopping dead (#159)

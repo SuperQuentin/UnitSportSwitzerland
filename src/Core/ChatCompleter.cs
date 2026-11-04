@@ -71,6 +71,7 @@ public sealed class ChatCompleter
         ("tp", true, true, "<player> | <E> <N>", "Travel", "go to a player or an LV95 point"),
         ("bring", true, false, "<player>", "Travel", "bring a player to you"),
         ("tpall", true, false, "<town>", "Travel", "send everyone to a town"),
+        ("orbit", true, true, "<km>", "Travel", "your UFO onto a circular orbit, 100 km up and more"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>", "World", "the time of day"),
         ("speed", false, true, "[<0.05 .. 8> | normal]", "World", "how fast the simulation runs"),
         ("movespeed", true, true, "[<factor> | normal] [player]", "Admin", "how fast you (or a player, a bot) move: any factor, 1 = normal"),

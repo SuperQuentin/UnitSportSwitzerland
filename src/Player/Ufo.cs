@@ -1,4 +1,6 @@
+using System;
 using Godot;
+using UnitSport.Terrain.Format;
 using UnitSport.Avatar;
 
 namespace UnitSport.Player;
@@ -117,9 +119,9 @@ public sealed class Ufo : Flyer
         else
             // nobody aboard: an empty saucer sinks gently onto its legs and stays there, beam off
             c = new UfoFlight.Controls(Vector2.Zero, 0f, env.OnFloor ? 0f : 0.3f, false, m.Yaw);
-        State = UfoFlight.Step(State, c, new UfoFlight.Env(env.OnFloor, below), dt);
-        // no higher than the round world is drawn for, until the Space regime exists (#1430 H3)
-        if (env.Altitude >= Core.Curvature.CeilingM && State.Velocity.Y > 0f) State.Velocity = State.Velocity with { Y = 0f };
+        // above the Space handover it flies its orbit (#1430 H5); below, the arcade hover
+        if (!SpaceFly(input.Piloted ? c : c with { Up = 0f, Down = 0f }, dt, ref m))
+            State = UfoFlight.Step(State, c, new UfoFlight.Env(env.OnFloor, below), dt);
         if (!input.Piloted) State.Beam = false;
 
         m.Velocity = State.Velocity;
@@ -130,6 +132,115 @@ public sealed class Ufo : Flyer
         // a parked one goes quiet (and its vehicle body to sleep)
         m.Spool = input.Piloted ? State.Hum : State.Landed ? 0f : State.Hum;
         return FlightEvent.None;
+    }
+
+    // ---- in Space: an orbit in doubles (#1430 H5) --------------------------------------------------
+
+    /// <summary>
+    /// Where the craft is, set by its body before each step: its world's frame, its world point, its altitude
+    /// and the sim time. <paramref name="Contacts"/> false: the orbit is the only truth, never restarted from
+    /// the body (an empty saucer on the server, whose frame's floats coarsen far from its origin).
+    /// </summary>
+    public readonly record struct SpacePlace(Core.OriginFrame Frame, Vector3 At, double Altitude, double SimTime, bool Contacts = true);
+
+    /// <summary>The body's place before this step (null where there is no origin: the flat test world, so no Space).</summary>
+    public SpacePlace? Place { get; set; }
+
+    /// <summary>Its orbit, in doubles in the inertial frame (<see cref="Core.Orbit"/>), while in the Space regime; null below it.</summary>
+    public Core.OrbitState? Orbit { get; private set; }
+
+    /// <summary>
+    /// Where the orbit sent the body last step, in that step's world: found elsewhere, a contact moved it.
+    /// Compared in world space, through the shift since (<see cref="Core.OriginFrame.Since"/>), not in ECEF:
+    /// the handover from the flat ground frame is a rigid move that puts a point 400 km up 10 m off its
+    /// true place (the LV95 and WGS84 verticals are not parallel), and that is no contact.
+    /// </summary>
+    private Vector3 _expected;
+    private Core.OriginFrame? _expectedIn;
+
+    /// <summary>Times a contact moved the body off its orbit and the orbit restarted from it (the orbit check wants none in free flight).</summary>
+    public int Contacts { get; private set; }
+
+    /// <summary>How far the body may be from its orbit before a contact is taken as the truth, m (floats hold 3 cm at 400 km).</summary>
+    public const double ContactSlack = 1.0;
+
+    /// <summary>
+    /// Mass over drag area (m / Cd·A), kg/m²: a 15 t saucer 9.2 m across. In the thin air at the top of the
+    /// Space regime it slows: 11 m/s² at 7 km/s and 60 km, nothing above 150 km.
+    /// </summary>
+    public const double BallisticCoefficient = 230;
+
+    /// <summary>Seconds the orbit has been stepped, summed in doubles (the orbit check times its period by it).</summary>
+    public double OrbitSeconds { get; private set; }
+
+    /// <summary>Puts the craft on <paramref name="state"/> (an inertial orbit) from its next step: <c>/orbit</c>, a probe, a bot.</summary>
+    public void SetOrbit(Core.OrbitState state)
+    {
+        Orbit = state;
+        _jump = true;
+    }
+
+    /// <summary>The next step goes straight to the orbit's place, however far: a set orbit, not a contact.</summary>
+    private bool _jump;
+
+    /// <summary>
+    /// One step in the Space regime (entered above 60 km, left below 50 km, the craft's own altitude): the
+    /// orbit is stepped in doubles under GM/r², the pilot's thrust and the air's drag, and the body is sent to
+    /// where it says, so Jolt only has the contacts. A body found away from where the orbit put it (it hit
+    /// something) is taken as the truth and the orbit restarted from it. False below the regime.
+    /// </summary>
+    private bool SpaceFly(in UfoFlight.Controls c, float dt, ref FlightMotion m)
+    {
+        if (Place is not { } place || dt <= 0f) return false;
+        bool space = Core.Curvature.SpaceRegime(Orbit != null || _jump, place.Altitude);
+        if (!space)
+        {
+            _expectedIn = null;
+            if (Orbit != null) GD.Print(FormattableString.Invariant($"[ufo] out of orbit at {place.Altitude / 1000:F1} km"));
+            Orbit = null;
+            return false;
+        }
+        var earth = Core.Planet.Earth;
+        double angle = Core.Orbit.RotationAngle(earth, place.SimTime);
+        var here = place.Frame.ToEcef(place.At);
+        float off = _expectedIn == null ? float.MaxValue
+            : place.At.DistanceTo(place.Frame.SameFrame(_expectedIn) ? _expected : place.Frame.Since(_expectedIn).Point(_expected));
+        Core.OrbitState s;
+        if (Orbit is { } o && (_jump || !place.Contacts || off <= ContactSlack)) s = o;
+        else
+        {
+            if (Orbit == null) GD.Print(FormattableString.Invariant($"[ufo] into orbit at {place.Altitude / 1000:F1} km"));
+            else
+            {
+                Contacts++;
+                GD.Print(FormattableString.Invariant($"[ufo] a contact: the body is {off:F2} m off its orbit at {place.Altitude / 1000:F1} km, the orbit restarts from it"));
+            }
+            // into Space, or a contact moved the body: its place and velocity are the truth
+            s = Core.Orbit.FromEcef(earth, here, place.Frame.EcefDirection(place.At, m.Velocity), angle);
+        }
+        _jump = false;
+
+        var thrustWorld = UfoFlight.SpaceThrust(c, State.Yaw, Vector3.Up);
+        var thrust = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, thrustWorld), angle);
+        // the air turns with the Earth: drag against the ground-relative velocity
+        double rho = Core.Atmosphere.Density(place.Altitude);
+        if (rho > 0)
+        {
+            var (_, air) = Core.Orbit.ToEcef(earth, s, angle);
+            thrust += Core.Orbit.ToEci(air * (-0.5 * rho * air.Length / BallisticCoefficient), angle);
+        }
+        s = Core.Orbit.Step(earth, s, thrust, dt);
+        OrbitSeconds += dt;
+        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.RotationRate * dt);
+        Orbit = s;
+
+        var target = place.Frame.FromEcef(r.AsEcef);
+        _expected = target;
+        _expectedIn = place.Frame;
+        State = UfoFlight.SpaceStep(State, c, thrustWorld, place.Frame.WorldDirection(place.At, v.AsEcef), dt);
+        // the body goes where the orbit says; what stops it on the way is a contact
+        State.Velocity = (target - place.At) / dt;
+        return true;
     }
 
     // ---- switches set directly: scripts (the trailer director), bots, the server ------------------

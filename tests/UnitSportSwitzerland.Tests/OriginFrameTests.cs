@@ -193,4 +193,35 @@ public class OriginFrameTests
     [InlineData(true, 49_000, false)]
     public void The_Space_regime_has_hysteresis(bool inSpace, double altitude, bool expected) =>
         Assert.Equal(expected, Curvature.SpaceRegime(inSpace, altitude));
+
+    [Fact]
+    public void A_Space_anchor_follows_an_orbit_round_the_Earth_without_LV95()
+    {
+        // a polar orbit from Bern, 400 km up: over both of LV95's singular points, every 20 km
+        var axes = FrameAxes.GroundAt(BernE, BernN, 0);
+        var start = UnitSport.Terrain.Format.SwissGeodesy.ToEcef(BernE, BernN, 400_000);
+        double r = start.Length;
+        var u = new UnitSport.Terrain.Format.EcefPos(start.X / r, start.Y / r, start.Z / r);
+        var north = new UnitSport.Terrain.Format.EcefPos(-u.Z * u.X, -u.Z * u.Y, 1 - u.Z * u.Z);
+        double nl = north.Length;
+        north = new UnitSport.Terrain.Format.EcefPos(north.X / nl, north.Y / nl, north.Z / nl);
+        int steps = (int)(2 * Math.PI * r / 20_000);
+        for (int i = 1; i <= steps; i++)
+        {
+            double a = 2 * Math.PI * i / steps;
+            var at = new UnitSport.Terrain.Format.EcefPos(r * (u.X * Math.Cos(a) + north.X * Math.Sin(a)),
+                r * (u.Y * Math.Cos(a) + north.Y * Math.Sin(a)), r * (u.Z * Math.Cos(a) + north.Z * Math.Sin(a)));
+            var next = FrameAxes.Tangent(at, 400_000, axes);
+            // orthonormal, and the camera straight above the origin, 400 km up
+            Assert.Equal(1, next.X.Length, 12);
+            Assert.Equal(0, FrameAxes.Dot(next.X, next.Y), 12);
+            Assert.Equal(0, FrameAxes.Dot(next.X, next.Z), 12);
+            var (x, y, z) = next.FromEcef(at);
+            Assert.True(Math.Abs(x) < 1e-6 && Math.Abs(z) < 1e-6, $"camera {x:F3}/{z:F3} off the origin's normal at step {i}");
+            Assert.Equal(400_000, y, 6);
+            // the least rotation: X turns about as much as the up does (0.17° for 20 km), never spins
+            Assert.True(FrameAxes.Dot(next.X, axes.X) > Math.Cos(0.01), $"X turned {Math.Acos(FrameAxes.Dot(next.X, axes.X)) * 180 / Math.PI:F3}° at step {i}");
+            axes = next;
+        }
+    }
 }
