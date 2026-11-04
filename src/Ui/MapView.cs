@@ -112,15 +112,16 @@ public sealed class MapView
         for (int eKm = CountryData.MinE; eKm <= CountryData.MaxE; eKm++)
             for (int nKm = CountryData.MinN; nKm <= CountryData.MaxN; nKm++)
             {
-                var here = country.CantonAt(new TileId(eKm, nKm));
+                var tile = new TileId(eKm, nKm);
+                var here = country.CantonAt(tile);
                 if (here == null) continue;
                 // a border is where the canton east or north differs: each boundary drawn once
-                if (country.CantonAt(new TileId(eKm + 1, nKm))?.Id != here.Id)
+                if (country.CantonAt(tile.Neighbour(1, 0))?.Id != here.Id)
                 {
                     points.Add(new Vector2((eKm + 1) * 1000f, nKm * 1000f));
                     points.Add(new Vector2((eKm + 1) * 1000f, (nKm + 1) * 1000f));
                 }
-                if (country.CantonAt(new TileId(eKm, nKm + 1))?.Id != here.Id)
+                if (country.CantonAt(tile.Neighbour(0, -1))?.Id != here.Id)
                 {
                     points.Add(new Vector2(eKm * 1000f, (nKm + 1) * 1000f));
                     points.Add(new Vector2((eKm + 1) * 1000f, (nKm + 1) * 1000f));

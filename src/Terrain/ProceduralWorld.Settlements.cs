@@ -500,10 +500,10 @@ public sealed partial class ProceduralWorld
         CheckBlend(id, blend);
         blend?.PrepareLattice();
         var site = new Site(LatticeFor(id, fine: false), blend);
-        double maxE = id.MinE + ChunkFormat.TileSizeM;
+        var (west, south, east, north) = id.Lv95Box;
         var segments = new List<RoadSegment>();
         var keys = new List<RoadKey>();
-        foreach (var drawn in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
+        foreach (var drawn in LinesNear(west, south, east, north))
         {
             var (points, cls, key, fromM) = (drawn.Points, drawn.Class, drawn.Key, drawn.FromM);
             var bridge = drawn.Street is { } st ? (st.Flags & RoadFlags.Bridge) != 0 ? st : st.Bridge : null;
@@ -521,7 +521,7 @@ public sealed partial class ProceduralWorld
                     delta = deck - Ground(site, meet.E, meet.N);
                 }
             }
-            foreach (var (piece, at) in Clip(points, id.MinE, id.MinN, maxE, id.MaxN))
+            foreach (var (piece, at) in Clip(points, west, south, east, north))
             {
                 var xyz = new float[piece.Count * 3];
                 for (int i = 0; i < piece.Count; i++)
@@ -531,9 +531,10 @@ public sealed partial class ProceduralWorld
                     if (bridge is not null)
                         y = bridge == drawn.Street ? deck
                             : y + delta * (1 - SmoothStep(0, ApproachM, Math.Sqrt(Sq(e - meet.E) + Sq(n - meet.N))));
-                    xyz[i * 3] = (float)(e - id.MinE);
+                    var (x, z) = id.Local(e, n);
+                    xyz[i * 3] = (float)x;
                     xyz[i * 3 + 1] = (float)y;
-                    xyz[i * 3 + 2] = (float)(id.MaxN - n);
+                    xyz[i * 3 + 2] = (float)z;
                 }
                 segments.Add(new RoadSegment
                 {
@@ -642,7 +643,8 @@ public sealed partial class ProceduralWorld
         blend?.PrepareLattice();
         var site = new Site(LatticeFor(id, fine: false), blend);
         var buildings = new List<Building>();
-        foreach (var plan in PlansNear(site, id.MinE, id.MinN, id.MinE + ChunkFormat.TileSizeM, id.MaxN))
+        var (west, south, east, north) = id.Lv95Box;
+        foreach (var plan in PlansNear(site, west, south, east, north))
             if (Solid(plan, id, site) is { } b) buildings.Add(b);
         return buildings.Count == 0 ? null : new BuildingTile { Id = id, Buildings = buildings };
     }
@@ -687,9 +689,9 @@ public sealed partial class ProceduralWorld
             (double E, double N) c, double cy, double faceE, double faceY, double faceN)
         {
             // tile frame: X east, Y up, Z south
-            double ax = a.E - tile.MinE, az = tile.MaxN - a.N;
-            double bx = b.E - tile.MinE, bz = tile.MaxN - b.N;
-            double cx = c.E - tile.MinE, cz = tile.MaxN - c.N;
+            var (ax, az) = tile.Local(a.E, a.N);
+            var (bx, bz) = tile.Local(b.E, b.N);
+            var (cx, cz) = tile.Local(c.E, c.N);
             double ux = bx - ax, uy = by - ay, uz = bz - az;
             double wx = cx - ax, wy = cy - ay, wz = cz - az;
             double nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
@@ -782,22 +784,24 @@ public sealed partial class ProceduralWorld
     {
         const int size = CoverFormat.Size;
         var blocked = new bool[size * size];
-        double maxE = id.MinE + ChunkFormat.TileSizeM;
+        var (west, south, east, north) = id.Lv95Box;
         const double margin = 20;
 
         void Stamp(double e, double n, double radius)
         {
-            int c0 = (int)Math.Floor(e - id.MinE - radius), c1 = (int)Math.Ceiling(e - id.MinE + radius);
-            int r0 = (int)Math.Floor(id.MaxN - n - radius), r1 = (int)Math.Ceiling(id.MaxN - n + radius);
+            var (x, z) = id.Local(e, n);
+            int c0 = (int)Math.Floor(x - radius), c1 = (int)Math.Ceiling(x + radius);
+            int r0 = (int)Math.Floor(z - radius), r1 = (int)Math.Ceiling(z + radius);
             for (int r = Math.Max(r0, 0); r <= Math.Min(r1, size - 1); r++)
                 for (int c = Math.Max(c0, 0); c <= Math.Min(c1, size - 1); c++)
                 {
-                    double de = id.MinE + c - e, dn = id.MaxN - r - n;
+                    var (ce, cn) = id.Global(c, r);
+                    double de = ce - e, dn = cn - n;
                     if (de * de + dn * dn <= radius * radius) blocked[r * size + c] = true;
                 }
         }
 
-        foreach (var drawn in LinesNear(id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
+        foreach (var drawn in LinesNear(west - margin, south - margin, east + margin, north + margin))
         {
             var (points, cls) = (drawn.Points, drawn.Class);
             // a town's streets have sidewalks and bike paths, reaching ~6 m past the carriageway edge
@@ -806,8 +810,8 @@ public sealed partial class ProceduralWorld
             {
                 var a = points[i];
                 var b = points[i + 1];
-                if (Math.Max(a.E, b.E) < id.MinE - radius || Math.Min(a.E, b.E) > maxE + radius
-                    || Math.Max(a.N, b.N) < id.MinN - radius || Math.Min(a.N, b.N) > id.MaxN + radius) continue;
+                if (Math.Max(a.E, b.E) < west - radius || Math.Min(a.E, b.E) > east + radius
+                    || Math.Max(a.N, b.N) < south - radius || Math.Min(a.N, b.N) > north + radius) continue;
                 double len = Math.Sqrt((b.E - a.E) * (b.E - a.E) + (b.N - a.N) * (b.N - a.N));
                 int steps = Math.Max(1, (int)Math.Ceiling(len));
                 for (int s = 0; s <= steps; s++)
@@ -815,16 +819,18 @@ public sealed partial class ProceduralWorld
             }
         }
 
-        foreach (var p in PlansNear(site, id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
+        foreach (var p in PlansNear(site, west - margin, south - margin, east + margin, north + margin))
         {
             var f = p.Rect;
             double reach = Math.Sqrt(f.HalfLength * f.HalfLength + f.HalfWidth * f.HalfWidth) + 3;
-            int c0 = (int)Math.Floor(f.E - id.MinE - reach), c1 = (int)Math.Ceiling(f.E - id.MinE + reach);
-            int r0 = (int)Math.Floor(id.MaxN - f.N - reach), r1 = (int)Math.Ceiling(id.MaxN - f.N + reach);
+            var (fx, fz) = id.Local(f.E, f.N);
+            int c0 = (int)Math.Floor(fx - reach), c1 = (int)Math.Ceiling(fx + reach);
+            int r0 = (int)Math.Floor(fz - reach), r1 = (int)Math.Ceiling(fz + reach);
             for (int r = Math.Max(r0, 0); r <= Math.Min(r1, size - 1); r++)
                 for (int c = Math.Max(c0, 0); c <= Math.Min(c1, size - 1); c++)
                 {
-                    double de = id.MinE + c - f.E, dn = id.MaxN - r - f.N;
+                    var (ce, cn) = id.Global(c, r);
+                    double de = ce - f.E, dn = cn - f.N;
                     double a = de * f.UE + dn * f.UN, b = -de * f.UN + dn * f.UE;
                     if (Math.Abs(a) <= f.HalfLength + 3 && Math.Abs(b) <= f.HalfWidth + 3)
                         blocked[r * size + c] = true;

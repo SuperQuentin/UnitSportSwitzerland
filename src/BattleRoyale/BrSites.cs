@@ -70,13 +70,7 @@ public static class BrSites
         double H(double e, double n) => BrMapImage.Height(t.Horizon, e, n);
         Vector2 Gradient(double e, double n) => new(
             (float)((H(e + 30, n) - H(e - 30, n)) / 60), (float)((H(e, n + 30) - H(e, n - 30)) / 60));
-        CoverClass Cover(double e, double n)
-        {
-            var id = TileId.FromLv95(e, n);
-            return t.Cover.TryGetValue(id, out var c)
-                ? (CoverClass)c[Math.Clamp((int)(id.MaxN - n), 0, CoverFormat.Size - 1) * CoverFormat.Size + Math.Clamp((int)(e - id.MinE), 0, CoverFormat.Size - 1)]
-                : CoverClass.Open;
-        }
+        CoverClass Cover(double e, double n) => BrMapImage.CoverAt(t.Cover, e, n);
         bool Open(CoverClass c) => c is CoverClass.Open or CoverClass.Vineyard;
         bool Wooded(CoverClass c) => c is CoverClass.Forest or CoverClass.OpenForest;
 
@@ -191,7 +185,7 @@ public static class BrSites
                 if (!path && !river) continue;
                 for (int i = 0; i + 1 < s.PointCount; i++)
                 {
-                    double e = id.MinE + s.Points[i * 3], n = id.MaxN - s.Points[i * 3 + 2];
+                    var (e, n) = id.Global(s.Points[i * 3], s.Points[i * 3 + 2]);
                     if (!area.Contains(e, n)) continue;
                     if (path && s.Points[i * 3 + 1] > SacAltitude) paths.Add((e, n, s.Points[i * 3 + 1]));
                     if (river)
@@ -250,6 +244,7 @@ public static class BrSites
             minZ = Math.Min(minZ, tri[i + 2]); maxZ = Math.Max(maxZ, tri[i + 2]);
         }
         float cx = (minX + maxX) * 0.5f, cz = (minZ + maxZ) * 0.5f;
-        return (id.MinE + cx, id.MaxN - cz, Math.Max(maxX - minX, maxZ - minZ) * 0.5f);
+        var (e, n) = id.Global(cx, cz);
+        return (e, n, Math.Max(maxX - minX, maxZ - minZ) * 0.5f);
     }
 }

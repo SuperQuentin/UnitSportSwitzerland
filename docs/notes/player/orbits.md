@@ -55,7 +55,7 @@ Plan: `docs/plans/ellipsoid-handover.md` section 5. The geodesy under it: `core/
 - **The HUD** shows `ORBIT km/s, height, Pe, Ap` (over the ground under it) instead of speed and
   clearance (`PlayerFeel.AppendOrbit`).
 - **`/orbit <km>`** (100 to 100,000 km): offline free, online an admin's: the server checks
-  (`ChatManager`), then `ForceOrbit` (protocol 91) on the pilot's client, which runs
+  (`ChatManager`), then `OrbitForced` (protocol 92; named to sort after `NotifyKicked`, whose number old clients are kicked by) on the pilot's client, which runs
   `FootPlayer.PutInOrbit` (circular, over where it is, the way it heads). A bot's body runs it on the
   server.
 

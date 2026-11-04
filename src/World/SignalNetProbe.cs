@@ -67,11 +67,13 @@ public partial class SignalNetProbe : Node
             string dir = TerrainPaths.FindChunkDir();
             var tile = await new LocalChunkSource(dir).LoadRoadsAsync(id);
             if (!IsInsideTree()) return;
-            float x = (float)(e - id.MinE), z = (float)(id.MaxN - n);
+            var (lx, lz) = id.Local(e, n);
+            float x = (float)lx, z = (float)lz;
             var signal = tile?.Signals.MinBy(s => (s.X - x) * (s.X - x) + (s.Z - z) * (s.Z - z));
             if (signal == null) { Finish(false, $"no signal record in tile {id} of {dir}"); return; }
             _plan = signal.Plan;
-            where = string.Create(inv, $"LV95 {id.MinE + signal.X:F0},{id.MaxN - signal.Z:F0}");
+            var (se, sn) = id.Global(signal.X, signal.Z);
+            where = string.Create(inv, $"LV95 {se:F0},{sn:F0}");
         }
         else
         {

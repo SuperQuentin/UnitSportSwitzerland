@@ -29,7 +29,7 @@ pictures.
 
 The coverage map found far rendering, GPX and the origin under load with no check at all:
 
-- `--horizoncheck` (`src/Terrain/HorizonCheck.cs`, `--systems terrain,generated`): every horizon
+- `--horizoncheck` (`src/Terrain/HorizonCheck.cs`, `--horizon 20 --systems terrain,generated`; the test profile has no horizon, #1411): every horizon
   block at its LV95 corner to the millimetre, none twice, none past the unload slack, the
   coverage texture's corner right, before and after three origin shifts (whole km, a fraction of a
   metre, back).

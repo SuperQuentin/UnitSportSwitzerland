@@ -74,6 +74,7 @@ public sealed class ChatCompleter
         ("orbit", true, true, "<km>", "Travel", "your UFO onto a circular orbit, 100 km up and more"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>", "World", "the time of day"),
         ("speed", false, true, "[<0.05 .. 8> | normal]", "World", "how fast the simulation runs"),
+        ("movespeed", true, true, "[<factor> | normal] [player]", "Admin", "how fast you (or a player, a bot) move: any factor, 1 = normal"),
         ("weather", false, true, "[snow <cm> | fall <cm> | temp <°C> | clear | cloudy | reroll | hold | auto]", "World", "the weather and snow"),
         ("games", false, true, "[list | play <piece> | bot | act <action> [numbers] | leave]", "Concerts & media", "the pool tables, dartboards and arcade games of the venue you are in: step up to one, add a bot, play by numbers"),
         ("pinball", false, true, "[list | play <machine> | start | robot | view]", "Concerts & media", "the pinball machines of the venue you are in: step up to one, a robot at the flippers, the top view"),
@@ -264,6 +265,16 @@ public sealed class ChatCompleter
 
             case "inertia":
                 options = argIndex == 0 ? ["steady", "sway", "full"] : [];
+                break;
+
+            // #1485: a factor, then whose (online)
+            case "movespeed":
+                options = argIndex switch
+                {
+                    0 => ["normal", "2", "5", "10"],
+                    1 => PlayerNames().Prepend("me"),
+                    _ => [],
+                };
                 break;
 
             case "spawn":

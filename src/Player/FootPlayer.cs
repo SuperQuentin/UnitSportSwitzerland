@@ -37,10 +37,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>
     /// Walking and running pace for the active profile. Game runs at ~21 km/h: a game crosses a
     /// valley, and a realistic jog makes that a chore. The scale argument above still holds,
-    /// because 5.8 m/s is a sprint a person recognises, not the 14 m/s giant of old.
+    /// because 5.8 m/s is a sprint a person recognises, not the 14 m/s giant of old. Both times an
+    /// admin's <see cref="SpeedFactor"/> (#1485).
     /// </summary>
-    public float WalkSpeed => Rideable.Arcade ? 1.9f : SimWalkSpeed;
-    public float RunSpeed => Rideable.Arcade ? 5.8f : SimRunSpeed;
+    public float WalkSpeed => (Rideable.Arcade ? 1.9f : SimWalkSpeed) * SpeedFactor;
+    public float RunSpeed => (Rideable.Arcade ? 5.8f : SimRunSpeed) * SpeedFactor;
     [Export] public float JumpVelocity { get; set; } = 4.2f;
 
     /// <summary>Speed a slide is entered at, if you were not already going faster.</summary>
@@ -4259,8 +4260,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // --- ordinary walking / running ----------------------------------------------
         if (!_sliding)
         {
-            float speed = Downed ? CrawlSpeed * moveAmount
-                : propWalk is float cap ? cap * moveAmount
+            // an admin's /movespeed (#1485) is in RunSpeed and WalkSpeed already
+            float speed = Downed ? CrawlSpeed * SpeedFactor * moveAmount
+                : propWalk is float cap ? cap * SpeedFactor * moveAmount
                 : (running ? RunSpeed : WalkSpeed) * moveAmount * WadePace(running);   // wading (#380)
 
             // climbing costs speed: scale by how much of the move is uphill
@@ -4301,7 +4303,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             else
             {
                 // ease into the target velocity rather than snapping, so starts and stops read
-                float accel = onFloor ? 12f : 2.5f;
+                // a faster /movespeed (#1485) gets there as quickly as a normal start
+                float accel = (onFloor ? 12f : 2.5f) * Mathf.Max(1f, SpeedFactor);
                 velocity.X = Mathf.MoveToward(velocity.X, direction.X * speed, accel * dt);
                 velocity.Z = Mathf.MoveToward(velocity.Z, direction.Z * speed, accel * dt);
             }

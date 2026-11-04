@@ -399,6 +399,9 @@ src/Net/AdminArgs        net    tools/econcheck.sh
 src/Items/DroppedItems   net    tools/econcheck.sh
 src/Vehicles/VehicleManager net tools/econcheck.sh
 src/Core/Chat            net    tools/econcheck.sh
+src/Player/FootPlayer.MoveSpeed net tools/movespeednetcheck.sh
+src/Player/MoveSpeed     net    tools/movespeednetcheck.sh
+src/Net/ChatManager      net    tools/movespeednetcheck.sh
 src/Net/                 net    @netsmoke
 src/Net/Sleeper          net    tools/sleepercheck.sh
 src/Net/PlayerKey        net    tools/sleepercheck.sh
@@ -1174,10 +1177,10 @@ tools/montreuxnetcheck.sh    net    tools/montreuxnetcheck.sh
 
 # #1429: the regression net before a coordinate or rendering change (docs/notes/general/regression-net.md)
 # the far horizon at its LV95 corners across origin shifts; a GPX course drawn and run across shifts
-src/Terrain/HorizonLayer     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
-src/Terrain/HorizonCheck     quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
-src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --systems terrain,generated
-src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --systems terrain,generated
+src/Terrain/HorizonLayer     quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Terrain/HorizonCheck     quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
+src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
 src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
 src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
 # probes that existed without a row

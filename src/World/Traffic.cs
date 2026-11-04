@@ -309,12 +309,12 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         Task.Run(async () =>
         {
             var tiles = new List<RoadTile>();
-            for (int de = -3; de <= 3; de++)
-                for (int dn = -3; dn <= 3; dn++)
+            for (int dx = -3; dx <= 3; dx++)
+                for (int dz = 3; dz >= -3; dz--)
                 {
                     try
                     {
-                        if (await source.LoadRoadsAsync(new TileId(here.E + de, here.N + dn)) is { } t) tiles.Add(t);
+                        if (await source.LoadRoadsAsync(here.Neighbour(dx, dz)) is { } t) tiles.Add(t);
                     }
                     catch (Exception) { /* no roads there */ }
                 }

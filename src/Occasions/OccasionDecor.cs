@@ -223,7 +223,7 @@ public partial class OccasionDecor : Node
             .Where(a => a.Has(OccasionFacets.Decorations) || a.Has(OccasionFacets.Hunt)).ToList();
         if (running is not { Count: > 0 }) return;
 
-        var tileOrigin = _origin.ToWorld(id.MinE, id.MaxN, 0);
+        var tileOrigin = _origin.TileTransform(id).Origin;
         var ctx = new TileContext
         {
             Id = id,
@@ -234,7 +234,7 @@ public partial class OccasionDecor : Node
             Roads = tile.Roads,
             HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
-            Towns = OccasionTowns.Near(id.MinE + 500, id.MaxN - 500, 3000).ToList(),
+            Towns = OccasionTowns.Near(id.Centre.E, id.Centre.N, 3000).ToList(),
         };
         var into = new DecorBuilder { IsClaimed = IsClaimed };
         foreach (var a in running)
@@ -337,10 +337,10 @@ public partial class OccasionDecor : Node
     {
         var id = _origin.TileAt(world);
         var found = new List<(HuntSpot, Vector3, float)>();
-        for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                if (!_tiles.TryGetValue(new TileId(id.E + de, id.N + dn), out var tile) || !IsInstanceValid(tile.Node)) continue;
+                if (!_tiles.TryGetValue(id.Neighbour(dx, dz), out var tile) || !IsInstanceValid(tile.Node)) continue;
                 var o = tile.Node.GlobalPosition;
                 foreach (var s in tile.Spots)
                 {

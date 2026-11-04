@@ -482,9 +482,11 @@ public partial class BoatCheck : Node
         if (parked == null) { Expect(false, "parked: it is left in the world"); return; }
         float lo = 1e9f, hi = -1e9f, off = 0f, away = 0f, moved = 0f, turned = 0f;
         var boat = (Boat)parked.Ride;
-        var mooring = parked.MooringSpot;
+        // spot and start held in LV95: the origin shifts under them in the minute (--originstress)
+        var origin = parked.Origin;
+        GlobalPos? mooring = parked.MooringSpot is { } spotNow ? origin.ToGlobal(spotNow) : null;
         float yaw = parked.Rotation.Y;
-        var from = parked.GlobalPosition;
+        var from = origin.ToGlobal(parked.GlobalPosition);
         // a minute moored in the swell (#378): it rides it, and stays on its spot and heading
         for (int i = 0; i < 600; i++)
         {
@@ -495,8 +497,9 @@ public partial class BoatCheck : Node
             hi = Mathf.Max(hi, y);
             if (boat.TrySurface(parked.GlobalPosition, parked.Rotation.Y, WaterField.Now, out float surface))
                 off = Mathf.Max(off, Mathf.Abs(surface - y - 0.25f));
-            if (mooring is { } at) away = Mathf.Max(away, MathX.FlatDistance(at, parked.GlobalPosition));
-            moved = Mathf.Max(moved, MathX.FlatDistance(from, parked.GlobalPosition));
+            var here = origin.ToGlobal(parked.GlobalPosition);
+            if (mooring is { } at) away = Mathf.Max(away, (float)at.HorizontalDistanceTo(here));
+            moved = Mathf.Max(moved, (float)from.HorizontalDistanceTo(here));
             turned = Mathf.Max(turned, Mathf.Abs(Mathf.RadToDeg(Mathf.AngleDifference(yaw, parked.Rotation.Y))));
         }
         if (!IsInstanceValid(parked)) { Expect(false, "parked: it is still there"); return; }

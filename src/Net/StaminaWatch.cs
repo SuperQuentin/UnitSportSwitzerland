@@ -82,7 +82,9 @@ public partial class StaminaWatch : Node
             }
             if (!_climbs.TryGetValue(peer, out var climb)) { _climbs[peer] = (y, false); continue; }
             if (climb.Told) continue;
-            int steps = adventure.Progress(peer)?.Get(Adventure.StaminaUpgrades.Section).Steps ?? 0;
+            // an admin's /movespeed (#1485) climbs further on a ring: the server set it, so it is no cheat
+            if (p.SpeedFactor > 1f) continue;
+            int steps =adventure.Progress(peer)?.Get(Adventure.StaminaUpgrades.Section).Steps ?? 0;
             float max = Stamina.Base + Stamina.StepPoints * steps + Stamina.FedBonus;
             float gained = y - climb.From;
             if (gained <= Stamina.PlausibleClimbM(max)) continue;

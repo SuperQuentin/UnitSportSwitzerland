@@ -165,7 +165,8 @@ public static class GroundCheck
             // a stoop's steps close the drop by their rise each
             float drop = sill - low - d.Steps * d.Rise;
             if (d.Steps > 0) stoops++;
-            string where = $"--at {bt.Id.MinE + d.Position.X:F0},{bt.Id.MaxN - d.Position.Z:F0} slot {d.Slot} sill {sill:F2} front {low:F2}..{high:F2} steps {d.Steps}";
+            var doorAt = bt.Id.Global(d.Position.X, d.Position.Z);
+            string where = $"--at {doorAt.E:F0},{doorAt.N:F0} slot {d.Slot} sill {sill:F2} front {low:F2}..{high:F2} steps {d.Steps}";
             if (high - sill > 0.1f) { buried++; worst.Add((high - sill, "buried " + where)); }
             else if (drop > 0.15f) { floating++; worst.Add((drop, "floating " + where)); }
             else level++;

@@ -140,7 +140,8 @@ public partial class ConcertDirector : Node
     /// <summary>The stadium frame on the tile's node: the centre spot on the ground, turned to the pitch's azimuth (u, y, v).</summary>
     private Transform3D? Frame(TileId id, ChunkNode node, StadiumSpec s)
     {
-        var local = new Vector3((float)(s.E - id.MinE), 0, (float)(id.MaxN - s.N));
+        var (lx, lz) = id.Local(s.E, s.N);
+        var local = new Vector3((float)lx, 0, (float)lz);
         var world = node.ToGlobal(local);
         if (!_chunks.TryGetSurface(world, out float ground)) return null;
         local.Y = node.ToLocal(world with { Y = ground }).Y;

@@ -129,7 +129,8 @@ public partial class AfricaTwinEgg : Node
 
         // tile-local metres, X east and Z south from the NW corner, like every tile file.
         // ponytail: one tile only; a point within 60 m of a tile edge would need its neighbours
-        int px = (int)(e - id.MinE), pz = (int)(id.MaxN - n);
+        var (lx, lz) = id.Local(e, n);
+        int px = (int)lx, pz = (int)lz;
         int x0 = Math.Max(0, px - Window), x1 = Math.Min(ChunkFormat.GridSize - 2, px + Window);
         int z0 = Math.Max(0, pz - Window), z1 = Math.Min(ChunkFormat.GridSize - 2, pz + Window);
         int w = x1 - x0 + 1, h = z1 - z0 + 1;
@@ -211,9 +212,10 @@ public partial class AfricaTwinEgg : Node
         var slots = new List<Slot>();
         void Add(float fx, float fz, float faceX, float faceZ, bool parking)
         {
-            if (slots.Any(o => Dist(o.E, o.N, id.MinE + fx, id.MaxN - fz) < BaySpacing - 0.1f)) return;
+            var (se, sn) = id.Global(fx, fz);
+            if (slots.Any(o => Dist(o.E, o.N, se, sn) < BaySpacing - 0.1f)) return;
             // forward is the body's -Z turned by the yaw
-            slots.Add(new Slot(id.MinE + fx, id.MaxN - fz, grid.SampleMeshHeight(id.MinE + fx, id.MaxN - fz),
+            slots.Add(new Slot(se, sn, grid.SampleMeshHeight(se, sn),
                 Mathf.Atan2(-faceX, -faceZ), parking));
         }
 

@@ -9,7 +9,7 @@ namespace UnitSport.Player;
 
 /// <summary>
 /// <c>--orbitnetcheck A|B</c> with <c>--connect</c> (driven by <c>tools/orbitnetcheck.sh</c>, #1430 H5): two
-/// saucers put on orbit 400 km up by an admin's <c>/orbit</c> (the server's check, then <c>ForceOrbit</c> to
+/// saucers put on orbit 400 km up by an admin's <c>/orbit</c> (the server's check, then <c>OrbitForced</c> to
 /// each pilot's client), side by side, everything checked on the remote peer.
 /// <list type="bullet">
 /// <item>both take a saucer on the ground, 16 m apart, and ask for <c>/orbit 400</c> together;</item>

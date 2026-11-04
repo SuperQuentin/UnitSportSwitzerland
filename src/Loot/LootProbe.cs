@@ -48,9 +48,9 @@ public partial class LootProbe : Node
         var centre = TileId.FromLv95(e, n);
         var layouts = new List<InteriorLayout>();
         for (int dx = -1; dx <= 1; dx++)
-            for (int dy = -1; dy <= 1; dy++)
+            for (int dz = 1; dz >= -1; dz--)
             {
-                var id = new TileId(centre.E + dx, centre.N + dy);
+                var id = centre.Neighbour(dx, dz);
                 var tile = await _source.LoadBuildingsAsync(id);
                 if (tile == null) continue;
                 var roads = await _source.LoadRoadsAsync(id);

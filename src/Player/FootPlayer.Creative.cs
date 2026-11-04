@@ -85,7 +85,7 @@ public partial class FootPlayer
         if (WalkControls?.Invoke() is { } walk) flat = walk.Wish with { Y = 0 };
         if (flat.LengthSquared() > 1f) flat = flat.Normalized();
         float climb = (jumpDown ? 1f : 0f) - (down ? 1f : 0f);
-        var wish = flat * CreativeFlySpeed * boost + Vector3.Up * climb * CreativeFlyClimb * boost;
+        var wish = (flat * CreativeFlySpeed * boost + Vector3.Up * climb * CreativeFlyClimb * boost) * SpeedFactor;   // #1485
 
         // a little inertia, as Minecraft's: it eases into speed and glides to a stop
         var velocity = Velocity.Lerp(wish, MathX.Damp(8f, dt));

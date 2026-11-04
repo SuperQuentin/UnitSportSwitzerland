@@ -121,11 +121,11 @@ public partial class ParkingProbe : Node
         var bay = _bays[_bays.Count / 2];
         foreach (var b in _bays)
         {
-            var at = _origin.ToWorld(_tile.MinE + b.X, _tile.MaxN - b.Z, b.Y);
+            var at = _origin.TileToWorld(_tile, new Vector3(b.X, b.Y, b.Z));
             if (DormantVehicles.Instance?.Nearest(at) == null) { bay = b; break; }
         }
         _padY = bay.Y;
-        var over = _origin.ToWorld(_tile.MinE + bay.X, _tile.MaxN - bay.Z, bay.Y);
+        var over = _origin.TileToWorld(_tile, new Vector3(bay.X, bay.Y, bay.Z));
         _floorAt = over + Vector3.Up * 0.2f;
 
         if (_player == null)
@@ -182,7 +182,7 @@ public partial class ParkingProbe : Node
         // the nearest dormant car to any bay of the lot
         foreach (var b in _bays)
         {
-            var at = _origin.ToWorld(_tile.MinE + b.X, _tile.MaxN - b.Z, b.Y);
+            var at = _origin.TileToWorld(_tile, new Vector3(b.X, b.Y, b.Z));
             if (dormant.Nearest(at) is { } s) { _slot = s; break; }
         }
         if (_slot is not { } slot)
@@ -243,8 +243,8 @@ public partial class ParkingProbe : Node
 
         if (_camera == null)
         {
-            double e = _bays.Average(b => (double)_tile.MinE + b.X);
-            double n = _bays.Average(b => (double)_tile.MaxN - b.Z);
+            double e = _bays.Average(b => _tile.Global(b.X, b.Z).E);
+            double n = _bays.Average(b => _tile.Global(b.X, b.Z).N);
             _camera = new Camera3D { Fov = 55, Position = _origin.ToWorld(e, n, _padY + 110) };
             AddChild(_camera);
             _camera.LookAt(_origin.ToWorld(e, n, _padY), Vector3.Forward);
@@ -308,7 +308,7 @@ public partial class ParkingProbe : Node
                  [PointPropType.TicketBarrier, PointPropType.TicketKiosk, PointPropType.ParkingSign])
             foreach (var p in tile.PointProps)
                 if (p.Type == want)
-                    return _origin.ToWorld(_tile.MinE + p.X, _tile.MaxN - p.Z, p.Y);
+                    return _origin.TileToWorld(_tile, new Vector3(p.X, p.Y, p.Z));
         return null;
     }
 
