@@ -27,14 +27,10 @@ public class WorkFrameTests
         ("cube corner", CubeKey.FromFace(0, 0.999, 0.999, WorkFrame.Level)),
     };
 
-    private static IWorkPlane[] Planes(CubeKey cell)
-    {
-        var c = cell.Centre;
-        return new IWorkPlane[] { new OrthographicPlane(cell.Anchor), new StereographicPlane(c.LatDeg, c.LonDeg), new LatticePlane(cell) };
-    }
+    private static WorkPlane[] Planes(CubeKey cell) => new[] { new WorkPlane(cell.Anchor) };
 
     /// <summary>Plane points over the cell and a 2 km margin round it, on a 21 × 21 grid.</summary>
-    private static (double X, double Y)[] Grid(CubeKey cell, IWorkPlane plane)
+    private static (double X, double Y)[] Grid(CubeKey cell, WorkPlane plane)
     {
         // the cell's extent on the plane from its corners, then the margin
         double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
@@ -52,7 +48,7 @@ public class WorkFrameTests
         return points;
     }
 
-    private static EcefPos Ground(IWorkPlane plane, double x, double y)
+    private static EcefPos Ground(WorkPlane plane, double x, double y)
     {
         var (lat, lon) = plane.FromPlane(x, y);
         return Ellipsoid.Wgs84.ToEcef(lat * Math.PI / 180, lon * Math.PI / 180, 0);
@@ -68,7 +64,7 @@ public class WorkFrameTests
                     var (lat, lon) = plane.FromPlane(x, y);
                     var (bx, by) = plane.ToPlane(lat, lon);
                     double off = Math.Sqrt((bx - x) * (bx - x) + (by - y) * (by - y));
-                    Assert.True(off < 1e-4, $"{plane.Name} at {name} ({x:F0}, {y:F0}) comes back {off * 1000:F3} mm off");
+                    Assert.True(off < 1e-4, $"plane at {name} ({x:F0}, {y:F0}) comes back {off * 1000:F3} mm off");
                 }
     }
 
@@ -85,11 +81,9 @@ public class WorkFrameTests
                 var east = anchor.ToLocal(Ground(plane, o.X + 1, o.Y));
                 var north = anchor.ToLocal(Ground(plane, o.X, o.Y + 1));
                 var at = anchor.ToLocal(Ground(plane, o.X, o.Y));
-                // the lattice plane is the Jacobian at the cell's (u, v) centre: a hair off the centre's geodetic
-                // point and its scale, so it gets a looser bound
-                double tol = plane is LatticePlane ? 1e-3 : 1e-6;
-                Assert.True(Math.Abs(east.X - at.X - 1) < tol && Math.Abs(east.Z - at.Z) < tol, $"{plane.Name} at {name}: east is ({east.X - at.X}, {at.Z - east.Z})");
-                Assert.True(Math.Abs(at.Z - north.Z - 1) < tol && Math.Abs(north.X - at.X) < tol, $"{plane.Name} at {name}: north is ({north.X - at.X}, {at.Z - north.Z})");
+                const double tol = 1e-6;
+                Assert.True(Math.Abs(east.X - at.X - 1) < tol && Math.Abs(east.Z - at.Z) < tol, $"plane at {name}: east is ({east.X - at.X}, {at.Z - east.Z})");
+                Assert.True(Math.Abs(at.Z - north.Z - 1) < tol && Math.Abs(north.X - at.X) < tol, $"plane at {name}: north is ({north.X - at.X}, {at.Z - north.Z})");
             }
     }
 
@@ -97,7 +91,7 @@ public class WorkFrameTests
     public void A_work_frame_takes_an_ECEF_point_and_its_height_above_sea_level_there_and_back()
     {
         var cell = Cells[0].Cell;
-        var frame = new WorkFrame(cell, new OrthographicPlane(cell.Anchor), SwissSeaLevel.Instance);
+        var frame = new WorkFrame(cell, SwissSeaLevel.Instance);
         foreach (var (e, n, h) in new[] { (2_600_000.0, 1_200_000.0, 540.0), (2_612_345.6, 1_189_876.5, 1_234.5), (2_590_000.0, 1_210_000.0, 4_000.0) })
         {
             var p = SwissGeodesy.ToEcef(e, n, h);
@@ -147,16 +141,16 @@ public class WorkFrameTests
     }
 
     /// <summary>
-    /// The comparison the user asked for (B2): over each cell and a 2 km margin, the worst scale error, the
-    /// worst angle error (how far a right angle on the plane is from one on the ground), how far the leaves'
-    /// lattice is from a regular grid on the plane, and the cost of a conversion. Prints a table; asserts only
-    /// the bounds every candidate must meet.
+    /// What the plane costs a stage, over each cell and a 2 km margin: the scale within 3.5 ppm (7 cm over
+    /// 20 km) and a right angle within 1.5″ (the comparison of #1523 measured 3.04 ppm and 1.24″ at Brest, the
+    /// worst). Prints the table, with how far the leaves' corners lie from a regular grid on the plane (what the
+    /// leaf writer resamples) and the cost of a conversion each way.
     /// </summary>
     [Fact]
-    public void The_three_planes_compared()
+    public void The_plane_is_true_to_scale_and_angle_over_every_cell()
     {
-        _out.WriteLine("| cell | plane | scale error, ppm | angle error, arcsec | lattice off a regular grid, m | to plane / from plane, ns |");
-        _out.WriteLine("|---|---|---|---|---|---|");
+        _out.WriteLine("| cell | scale error, ppm | angle error, arcsec | lattice off a regular grid, m | to plane / from plane, ns |");
+        _out.WriteLine("|---|---|---|---|---|");
         foreach (var (name, cell) in Cells)
             foreach (var plane in Planes(cell))
             {
@@ -171,14 +165,15 @@ public class WorkFrameTests
                     double cos = (e.X * n.X + e.Y * n.Y + e.Z * n.Z) / (ke * kn);
                     worstAngle = Math.Max(worstAngle, Math.Abs(Math.Asin(Math.Clamp(cos, -1, 1))));
                 }
-                // the two map projections stay within 10 ppm; the lattice's own drift is what the table shows
-                if (plane is not LatticePlane) Assert.True(worstScale < 10e-6, $"{plane.Name} at {name}: scale {worstScale * 1e6:F1} ppm");
-                _out.WriteLine($"| {name} | {plane.Name} | {worstScale * 1e6:F2} | {worstAngle * 180 / Math.PI * 3600:F3} | {LatticeOff(cell, plane):F4} | {Cost(cell, plane)} |");
+                double arcsec = worstAngle * 180 / Math.PI * 3600;
+                _out.WriteLine($"| {name} | {worstScale * 1e6:F2} | {arcsec:F3} | {LatticeOff(cell, plane):F4} | {Cost(cell, plane)} |");
+                Assert.True(worstScale < 3.5e-6, $"at {name}: scale {worstScale * 1e6:F2} ppm");
+                Assert.True(arcsec < 1.5, $"at {name}: a right angle off by {arcsec:F2}″");
             }
     }
 
     /// <summary>The leaves' corners over the cell (33 × 33) against the bilinear grid of the cell's own corners on the plane.</summary>
-    private static double LatticeOff(CubeKey cell, IWorkPlane plane)
+    private static double LatticeOff(CubeKey cell, WorkPlane plane)
     {
         (double X, double Y) At(int i, int j)
         {
@@ -199,7 +194,7 @@ public class WorkFrameTests
         return worst;
     }
 
-    private static string Cost(CubeKey cell, IWorkPlane plane)
+    private static string Cost(CubeKey cell, WorkPlane plane)
     {
         var c = cell.Centre;
         const int n = 200_000;

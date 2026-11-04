@@ -1,27 +1,17 @@
 namespace UnitSport.Terrain.Format;
 
 /// <summary>
-/// How a work frame lays the curved Earth flat (#1443 G2, B2 #1506): a place's latitude and longitude to
-/// metres east (X) and north (Y) on a plane, and back. Its axes are east and true north at the frame's
-/// centre. Three are built so they can be compared (<c>WorkPlaneComparisonTests</c>); the user picks one.
+/// How a work frame lays the curved Earth flat (#1443 G2, B2 #1506): the ellipsoid seen straight down onto
+/// the tangent plane at the frame's centre. A place's plane point is its point on the ellipsoid,
+/// (s − O)·east and (s − O)·north, so it is the place's position in the centre's east-north-up frame seen
+/// from above; the inverse is closed form (the line along the centre's up meets the ellipsoid). Over a cell
+/// and a 2 km margin the scale is within 3 ppm and a right angle within 1.3″ (<c>WorkFrameTests</c>).
+/// Chosen with the user over the oblique stereographic (exact angles, an iterated inverse, the same scale
+/// error) and the cube lattice itself (rasters on the plane's grid, but its scale drifts by 2-3 m a km near
+/// face edges and corners); PR #1523 has the comparison.
 /// </summary>
-public interface IWorkPlane
+public sealed class WorkPlane(EnuFrame centre)
 {
-    string Name { get; }
-
-    (double X, double Y) ToPlane(double latDeg, double lonDeg);
-
-    (double LatDeg, double LonDeg) FromPlane(double x, double y);
-}
-
-/// <summary>
-/// The ellipsoid seen straight down onto the tangent plane at the centre: a place's plane point is its
-/// point on the ellipsoid, (s − O)·east and (s − O)·north. The inverse is closed form (the line along the
-/// centre's up meets the ellipsoid). Not conformal: the scale falls off radially by d²/2R².
-/// </summary>
-public sealed class OrthographicPlane(EnuFrame centre) : IWorkPlane
-{
-    public string Name => "orthographic";
 
     public (double X, double Y) ToPlane(double latDeg, double lonDeg)
     {
@@ -50,144 +40,8 @@ public sealed class OrthographicPlane(EnuFrame centre) : IWorkPlane
 }
 
 /// <summary>
-/// The oblique stereographic projection of the ellipsoid (EPSG method 9809, the "double" stereographic:
-/// Gauss's conformal sphere, then stereographic), centred on the frame, scale 1 at the centre. Conformal:
-/// angles are exact, the scale falls by d²/4R². Written with vectors on the conformal sphere rather than
-/// EPSG's angle formulas, which divide by zero for a frame on a pole, and with no 1 − sin near the poles.
-/// </summary>
-public sealed class StereographicPlane : IWorkPlane
-{
-    private readonly double _e, _r, _n, _c, _lam0;
-    // the centre on the conformal sphere and its east and north, its longitude taken as 0
-    private readonly double _cx, _cz, _nx, _nz;
-
-    public StereographicPlane(double latDeg, double lonDeg)
-    {
-        var ell = Ellipsoid.Wgs84;
-        double e2 = ell.E2;
-        _e = Math.Sqrt(e2);
-        double phi0 = latDeg * Math.PI / 180, s0 = Math.Sin(phi0), c0 = Math.Cos(phi0);
-        double rho0 = ell.A * (1 - e2) / Math.Pow(1 - e2 * s0 * s0, 1.5);
-        double nu0 = ell.A / Math.Sqrt(1 - e2 * s0 * s0);
-        _r = Math.Sqrt(rho0 * nu0);
-        _n = Math.Sqrt(1 + e2 * Math.Pow(c0, 4) / (1 - e2));
-        double w1 = Isometric(phi0, _n);
-        double sinChi00 = (w1 - 1) / (w1 + 1);
-        _c = (_n + s0) * (1 - sinChi00) / ((_n - s0) * (1 + sinChi00));
-        if (!double.IsFinite(_c)) _c = 1;   // on a pole the sphere's latitude is the pole's too
-        (double sinChi0, double cosChi0) = Conformal(phi0);
-        (_cx, _cz) = (cosChi0, sinChi0);
-        (_nx, _nz) = (-sinChi0, cosChi0);
-        _lam0 = lonDeg * Math.PI / 180;
-    }
-
-    public string Name => "stereographic";
-
-    /// <summary>((1 + sin φ)/(1 − sin φ) · ((1 − e sin φ)/(1 + e sin φ))^e)^n, written with cos φ (no 1 − sin φ).</summary>
-    private double Isometric(double phi, double n)
-    {
-        double s = Math.Sin(phi), c = Math.Cos(phi);
-        double sa = (1 + s) / c;
-        return Math.Pow(sa * sa * Math.Pow((1 - _e * s) / (1 + _e * s), _e), n);
-    }
-
-    /// <summary>The conformal sphere's sine and cosine of latitude for a geodetic latitude.</summary>
-    private (double Sin, double Cos) Conformal(double phi)
-    {
-        if (Math.Abs(phi) >= Math.PI / 2) return (Math.Sign(phi), 0);
-        double w = _c * Isometric(phi, _n);
-        if (double.IsInfinity(w)) return (1, 0);
-        return ((w - 1) / (w + 1), 2 * Math.Sqrt(w) / (w + 1));
-    }
-
-    public (double X, double Y) ToPlane(double latDeg, double lonDeg)
-    {
-        var (sc, cc) = Conformal(latDeg * Math.PI / 180);
-        double dl = _n * Wrap(lonDeg * Math.PI / 180 - _lam0);
-        double vx = cc * Math.Cos(dl), vy = cc * Math.Sin(dl), vz = sc;
-        double b = 1 + vx * _cx + vz * _cz;
-        return (2 * _r * vy / b, 2 * _r * (vx * _nx + vz * _nz) / b);
-    }
-
-    public (double LatDeg, double LonDeg) FromPlane(double x, double y)
-    {
-        double a = x / (2 * _r), b = y / (2 * _r), q = a * a + b * b;
-        double vx = ((1 - q) * _cx + 2 * b * _nx) / (1 + q);
-        double vy = 2 * a / (1 + q);
-        double vz = ((1 - q) * _cz + 2 * b * _nz) / (1 + q);
-        double cc = Math.Sqrt(vx * vx + vy * vy);
-        double lam = Math.Atan2(vy, vx) / _n + _lam0;
-        // ψ = ln(tan(π/4 + χ/2)) / n on the sphere, written with cos χ; then the ellipsoid's latitude for it
-        double psi = Math.Log((1 + vz) / cc / Math.Sqrt(_c)) / _n;
-        if (!double.IsFinite(psi)) return (Math.Sign(vz) * 90, Wrap(lam) * 180 / Math.PI);
-        double phi = 2 * Math.Atan(Math.Exp(psi)) - Math.PI / 2;
-        double e2 = _e * _e;
-        for (int k = 0; k < 30; k++)
-        {
-            double s = Math.Sin(phi), c = Math.Cos(phi);
-            double psiI = Math.Log((1 + s) / c * Math.Pow((1 - _e * s) / (1 + _e * s), _e / 2));
-            double next = phi - (psiI - psi) * c * (1 - e2 * s * s) / (1 - e2);
-            if (Math.Abs(next - phi) < 1e-14) { phi = next; break; }
-            phi = next;
-        }
-        return (phi * 180 / Math.PI, Wrap(lam) * 180 / Math.PI);
-    }
-
-    private static double Wrap(double a) => Math.IEEERemainder(a, 2 * Math.PI);
-}
-
-/// <summary>
-/// The cube's own lattice as the plane: a face's (u, v) turned into metres by the surface's Jacobian at the
-/// cell's centre (east, north there). The leaves' rasters fall on it exactly, but the lattice is skewed near
-/// the cube's corners (up to 30°) and its scale drifts with the gnomonic warp across the frame.
-/// </summary>
-public sealed class LatticePlane : IWorkPlane
-{
-    private readonly int _face;
-    private readonly double _u0, _v0, _a, _b, _c, _d, _ia, _ib, _ic, _id;
-
-    public LatticePlane(CubeKey cell)
-    {
-        _face = cell.Face;
-        _u0 = cell.U0 + cell.Size / 2;
-        _v0 = cell.V0 + cell.Size / 2;
-        var anchor = new EnuFrame(CubeSphere.ToGeodetic(_face, _u0, _v0));
-        double step = cell.Size * 1e-4;
-        (double E, double N) Along(double du, double dv)
-        {
-            var p = CubeSphere.ToEcef(_face, _u0 + du, _v0 + dv, 0);
-            var m = CubeSphere.ToEcef(_face, _u0 - du, _v0 - dv, 0);
-            var d = new EcefPos((p.X - m.X) / (2 * step), (p.Y - m.Y) / (2 * step), (p.Z - m.Z) / (2 * step));
-            var (x, _, z) = anchor.DirectionToLocal(d);
-            return (x, -z);
-        }
-        (_a, _c) = Along(step, 0);
-        (_b, _d) = Along(0, step);
-        double det = _a * _d - _b * _c;
-        (_ia, _ib, _ic, _id) = (_d / det, -_b / det, -_c / det, _a / det);
-    }
-
-    public string Name => "lattice";
-
-    public (double X, double Y) ToPlane(double latDeg, double lonDeg)
-    {
-        var n = CubeSphere.NormalAt(latDeg, lonDeg);
-        var (u, v) = CubeSphere.OnFace(_face, n);
-        double du = u - _u0, dv = v - _v0;
-        return (_a * du + _b * dv, _c * du + _d * dv);
-    }
-
-    public (double LatDeg, double LonDeg) FromPlane(double x, double y)
-    {
-        double u = _u0 + _ia * x + _ib * y, v = _v0 + _ic * x + _id * y;
-        var g = CubeSphere.ToGeodetic(_face, u, v);
-        return (g.LatDeg, g.LonDeg);
-    }
-}
-
-/// <summary>
 /// The flat frame a build stage works in (#1443 G2, B2 #1506): one level-9 cube cell (~20 km), metres east
-/// and north on its <see cref="IWorkPlane"/>, heights above its <see cref="ISeaLevel"/>. Every source enters
+/// and north on its <see cref="WorkPlane"/>, heights above its <see cref="ISeaLevel"/>. Every source enters
 /// through <see cref="FromSource"/>, and every result leaves through <see cref="ToEcef"/> into the leaves.
 /// </summary>
 public sealed class WorkFrame
@@ -197,14 +51,15 @@ public sealed class WorkFrame
 
     public CubeKey Cell { get; }
 
-    public IWorkPlane Plane { get; }
+    public WorkPlane Plane { get; }
 
     public ISeaLevel SeaLevel { get; }
 
-    public WorkFrame(CubeKey cell, IWorkPlane plane, ISeaLevel seaLevel)
+    /// <summary>The frame of a level-<see cref="Level"/> cell, its plane tangent at the cell's centre.</summary>
+    public WorkFrame(CubeKey cell, ISeaLevel seaLevel)
     {
         Cell = cell;
-        Plane = plane;
+        Plane = new WorkPlane(cell.Anchor);
         SeaLevel = seaLevel;
     }
 
