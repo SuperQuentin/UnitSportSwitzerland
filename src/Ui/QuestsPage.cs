@@ -278,7 +278,7 @@ public partial class QuestsPage : VBoxContainer
         if ((_service.Pack?.CountPlain(d.Item) ?? 0) < 1) return $"You have no {d.Item} in your pack.";
         if (_service.Quests.Locate(d.At) is { } at && _service.PositionOf?.Invoke(AdventureService.LocalPeer) is { } me)
         {
-            double far = Math.Sqrt((me.E - at.E) * (me.E - at.E) + (me.N - at.N) * (me.N - at.N));
+            double far = me.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, 0));
             if (far > at.RadiusM) return $"Hand it over at {(d.At is AreaTarget a ? a.Name : d.At.Id)} ({Math.Round(far - at.RadiusM):0} m away).";
         }
         return null;
