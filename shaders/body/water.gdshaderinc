@@ -55,6 +55,15 @@ uniform vec3 toon_abyss : source_color = vec3(0.07, 0.25, 0.48);
 uniform vec3 toon_foam : source_color = vec3(0.97, 0.98, 1.0);
 uniform vec3 toon_underside : source_color = vec3(0.78, 0.96, 0.96);
 uniform float foam_shore_m = 0.035;
+// far off (from, to: metres from the eye) the bands give way to the lake as the ground and the horizon
+// blocks draw it (shaders/body/terrain.gdshaderinc: Terrain/CoverPalette's water, made linear by
+// TerrainMeshBuilder as source_color does here; the style's grade and painted patches), opaque: a climb
+// outruns the streaming, and the loaded tiles' bands and shallows stood out as a square on the lake
+// round them (#1430). So does the eye climbing (from, to: metres above the surface): the water under a
+// climb is near, but the tiles round it are not loaded yet
+uniform vec2 far_lake_m = vec2(1000.0, 2500.0);
+uniform vec2 far_lake_above_m = vec2(300.0, 900.0);
+uniform vec3 far_lake : source_color = vec3(0.20, 0.32, 0.42);
 #endif
 #ifdef STYLE_REAL
 uniform sampler2D water_screen_texture : hint_screen_texture, filter_linear_mipmap;
@@ -264,10 +273,14 @@ void fragment() {
     float crest = step(0.15, amp) * step(0.8 * amp, wave_lift + det.x * 0.18 * amp);
     float foam = max(shore, crest) * (FRONT_FACING ? 1.0 : 0.0);
     col = FRONT_FACING ? col : toon_underside;
-    ALBEDO = style_grade(occasion_mist(mix(col, toon_foam, foam), mist_at, dist));
-    ROUGHNESS = 0.6;
+    float far_off = FRONT_FACING ? max(smoothstep(far_lake_m.x, far_lake_m.y, dist),
+        smoothstep(far_lake_above_m.x, far_lake_above_m.y, CAMERA_POSITION_WORLD.y - world_pos.y)) : 0.0;
+    vec3 lake = style_grade(occasion_mist(far_lake, mist_at, dist))
+        * mix(0.9, 1.1, style_paint_noise(ground / 38.0) * 0.6 + style_paint_noise(ground / 9.0) * 0.4);
+    ALBEDO = mix(style_grade(occasion_mist(mix(col, toon_foam, foam), mist_at, dist)), lake, far_off);
+    ROUGHNESS = mix(0.6, 1.0, far_off);
 #ifndef NO_SCENE_DEPTH
-    ALPHA = FRONT_FACING ? max(mix(0.35, 0.97, smoothstep(0.0, 4.0, depth)), foam) : 0.88;
+    ALPHA = mix(FRONT_FACING ? max(mix(0.35, 0.97, smoothstep(0.0, 4.0, depth)), foam) : 0.88, 1.0, far_off);
 #endif
 #endif
 
