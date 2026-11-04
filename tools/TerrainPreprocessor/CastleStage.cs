@@ -75,7 +75,7 @@ public static class CastleStage
     {
         var sw = Stopwatch.StartNew();
         var candidates = new List<Candidate>();
-        candidates.AddRange(FromOsm(pbf, jobs));
+        candidates.AddRange(FromOsm(pbf, jobs, GeoInput.Over(chunkDir)));
         int osm = candidates.Count;
         candidates.AddRange(FromGwr(gwrPath));
         Console.WriteLine($"castles: {osm} OSM + {candidates.Count - osm} GWR candidates ({sw.Elapsed.TotalSeconds:F0} s)");
@@ -128,7 +128,7 @@ public static class CastleStage
         return 0;
     }
 
-    internal static IEnumerable<Candidate> FromOsm(string pbf, int jobs)
+    internal static IEnumerable<Candidate> FromOsm(string pbf, int jobs, GeoInput geo)
     {
         var keys = new HashSet<string> { "historic", "name", "castle_type", "ruins" };
         static bool IsCastle(Dictionary<string, string> t) => t.GetValueOrDefault("historic") == "castle";
@@ -149,13 +149,13 @@ public static class CastleStage
             if (w.Refs.Length < 4 || w.Refs[0] != w.Refs[^1]) continue; // only closed outlines
             var ring = new List<(double E, double N)>();
             foreach (var r in w.Refs)
-                if (nodes.TryGetValue(r, out var ll)) ring.Add(SwissProjection.ToLv95(ll.Lat, ll.Lon));
+                if (nodes.TryGetValue(r, out var ll)) ring.Add(geo.ToLv95(ll.Lat, ll.Lon));
             if (ring.Count < 4) continue;
             yield return new Candidate(NameOf(w.Tags), $"way/{w.Id}", ring.Average(p => p.E), ring.Average(p => p.N), ring, KindOf(w.Tags, NameOf(w.Tags)));
         }
         foreach (var n in first.TaggedNodes)
         {
-            var (e, nn) = SwissProjection.ToLv95(n.Lat, n.Lon);
+            var (e, nn) = geo.ToLv95(n.Lat, n.Lon);
             yield return new Candidate(NameOf(n.Tags), $"node/{n.Id}", e, nn, null, KindOf(n.Tags, NameOf(n.Tags)));
         }
     }

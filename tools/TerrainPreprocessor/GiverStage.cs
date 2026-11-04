@@ -42,6 +42,7 @@ public static class GiverStage
         }).Nodes;
         Console.WriteLine($"givers: {first.TaggedNodes.Count} points, {first.Ways.Count} outlines read ({sw.Elapsed.TotalSeconds:F0} s)");
 
+        var geo = GeoInput.Over(chunkDir);
         var candidates = new List<GiverPick.Candidate>();
         void Add(string source, Dictionary<string, string> tags, double e, double n)
         {
@@ -50,7 +51,7 @@ public static class GiverStage
         }
         foreach (var n in first.TaggedNodes)
         {
-            var (e, nn) = SwissProjection.ToLv95(n.Lat, n.Lon);
+            var (e, nn) = geo.ToLv95(n.Lat, n.Lon);
             Add($"osm:n{n.Id}", n.Tags, e, nn);
         }
         foreach (var w in first.Ways)
@@ -58,7 +59,7 @@ public static class GiverStage
             if (w.Refs.Length < 4 || w.Refs[0] != w.Refs[^1]) continue;
             var ring = new List<(double E, double N)>();
             foreach (long r in w.Refs)
-                if (nodes.TryGetValue(r, out var ll)) ring.Add(SwissProjection.ToLv95(ll.Lat, ll.Lon));
+                if (nodes.TryGetValue(r, out var ll)) ring.Add(geo.ToLv95(ll.Lat, ll.Lon));
             if (ring.Count < 3) continue;
             var (e, n) = VenueStage.PointIn(ring);
             Add($"osm:w{w.Id}", w.Tags, e, n);
