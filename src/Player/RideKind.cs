@@ -62,5 +62,7 @@ public enum RideKind
     EBike = 203,
     /// <summary>The same e-bike with a low frame (#1159): <c>BicycleCatalog.MoustacheSamediOpen</c>.</summary>
     EBikeOpen = 204,
-    // The next other mount is 205.
+    /// <summary>The space shuttle (#1492, #1430 C2): an <c>Airliner</c> with rockets, the orbit above the Space handover and the cruise drive.</summary>
+    Shuttle = 205,
+    // The next other mount is 206.
 }

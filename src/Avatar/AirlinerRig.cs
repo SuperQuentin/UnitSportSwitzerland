@@ -28,6 +28,12 @@ public struct AirlinerLook
     public int Warning;
     /// <summary>Fuel aboard, share of the tanks.</summary>
     public float Fuel;
+
+    // the shuttle (#1492)
+    /// <summary>Re-entry's glow, 0 none .. 1 white hot: the plasma round the belly and the nose.</summary>
+    public float Heat;
+    /// <summary>The cruise drive on: its glow instead of the rockets' plumes.</summary>
+    public bool Drive;
 }
 
 [System.Flags]

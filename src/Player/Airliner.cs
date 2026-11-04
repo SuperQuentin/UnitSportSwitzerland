@@ -13,7 +13,7 @@ public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake
 /// fuselage box, <see cref="HullBoxes"/>), keeps its flaps, gear and brakes when parked
 /// (<see cref="PackFlags"/>) and shows them on every peer (<see cref="WritePose"/>).
 /// </summary>
-public sealed class Airliner : Flyer
+public sealed partial class Airliner : Flyer
 {
     public AirlinerSpec Spec { get; }
     private readonly RideKind _kind;
@@ -49,13 +49,14 @@ public sealed class Airliner : Flyer
         RideKind.A320 => new Airliner(kind, AirlinerCatalog.A320),
         RideKind.Freighter => new Airliner(kind, AirlinerCatalog.Freighter),
         RideKind.An124 => new Airliner(kind, AirlinerCatalog.An124),
+        RideKind.Shuttle => new Airliner(kind, AirlinerCatalog.Shuttle),
         _ => null,
     };
 
-    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter or RideKind.An124;
+    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter or RideKind.An124 or RideKind.Shuttle;
 
     /// <summary>Every airliner kind, in the picker's order.</summary>
-    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter, RideKind.An124 };
+    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter, RideKind.An124, RideKind.Shuttle };
 
     public override RideKind Kind => _kind;
     public override string Label => Spec.Name;
