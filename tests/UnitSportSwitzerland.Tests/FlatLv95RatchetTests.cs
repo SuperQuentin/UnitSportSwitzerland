@@ -39,6 +39,11 @@ public class FlatLv95RatchetTests
         new("LV95 tile neighbour arithmetic",
             new(@"new\s+TileId\(\s*[\w.]+\s*[+-]", RegexOptions.Compiled),
             Baseline: 1, Instead: "a neighbour lookup on the tile key (G0c)"),
+        // an LV95 easting or northing read off anything (GlobalPos, TileId, a frame, a record): G2 removes them
+        // all (#1500, A1 #1502); a person's LV95 goes through GlobalPos.Lv95 / FromLv95, which still count
+        new("LV95 coordinate member",
+            new(@"\w\)?\.(E|N)\b(?!\s*\()", RegexOptions.Compiled),
+            Baseline: 4897, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);

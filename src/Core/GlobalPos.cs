@@ -16,9 +16,43 @@ namespace UnitSport.Core;
 /// <see cref="N"/> and <see cref="Alt"/> as three doubles. A list of points travels as float
 /// offsets from one <see cref="OriginFrame.Anchor"/>.
 /// </para>
+///
+/// <para>
+/// <b>Becoming an Earth position</b> (#1443 G2, A1 #1502, <c>docs/plans/global-tiling-g2.md</c>): it will hold
+/// ECEF doubles inside, and <see cref="E"/> / <see cref="N"/> go. Code reads it through what stays true on the
+/// whole Earth: the distances, <see cref="OffsetTo"/> and <see cref="Moved"/> (metres east, north and up at the
+/// place), <see cref="WithAlt"/>, <see cref="BearingTo"/>, <see cref="Tile"/>; LV95 only as notation, for a
+/// person or a Swiss source: <see cref="FromLv95"/> in, <see cref="Lv95"/> out. LV95 is still inside until
+/// A1's last step, so moving a site onto these is bit-identical.
+/// </para>
 /// </summary>
 public readonly record struct GlobalPos(double E, double N, double Alt)
 {
+    /// <summary>A place given in LV95 notation (a Swiss source, a literal, a typed coordinate), its height LHN95.</summary>
+    public static GlobalPos FromLv95(double e, double n, double alt) => new(e, n, alt);
+
+    /// <summary>This place in LV95 notation, for a person or a Swiss file: never for arithmetic between places.</summary>
+    public Lv95Coord Lv95 => new(E, N, Alt);
+
+    /// <summary>
+    /// Where <paramref name="other"/> is from here, in metres east, north and up of the local horizon at this
+    /// place. Today the LV95 grid's differences; once inside is ECEF, the local east-north-up offset, the same to
+    /// the millimetre within a few km (and grid against true north by the meridian convergence, 0.9° at Geneva).
+    /// </summary>
+    public (double East, double North, double Up) OffsetTo(GlobalPos other) => (other.E - E, other.N - N, other.Alt - Alt);
+
+    /// <summary>This place moved by metres east, north and up of its local horizon (see <see cref="OffsetTo"/>).</summary>
+    public GlobalPos Moved(double east, double north, double up = 0) => new(E + east, N + north, Alt + up);
+
+    /// <summary>This place at another altitude (above sea level), straight up or down.</summary>
+    public GlobalPos WithAlt(double alt) => this with { Alt = alt };
+
+    /// <summary>The compass bearing to <paramref name="other"/>, radians clockwise from north (grid north until G2's A3).</summary>
+    public double BearingTo(GlobalPos other) => System.Math.Atan2(other.E - E, other.N - N);
+
+    /// <summary>The terrain tile under this place (the LV95 kilometre today, the cube leaf in G2).</summary>
+    public TileId Tile => TileId.FromLv95(E, N);
+
     public double HorizontalDistanceTo(GlobalPos other)
     {
         double de = E - other.E, dn = N - other.N;
@@ -93,4 +127,10 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
         new(d[key + "_e"].AsDouble(), d[key + "_n"].AsDouble(), d[key + "_alt"].AsDouble());
 
     public override string ToString() => $"LV95 {E:F2}/{N:F2} alt {Alt:F2}";
+}
+
+/// <summary>A place in LV95 notation (#1443 G2): metres east and north on the Swiss grid and an LHN95 height. For a person or a Swiss source only.</summary>
+public readonly record struct Lv95Coord(double E, double N, double H)
+{
+    public override string ToString() => System.FormattableString.Invariant($"{E:F1}/{N:F1}");
 }
