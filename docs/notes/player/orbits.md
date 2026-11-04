@@ -83,6 +83,10 @@ The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`
 - **Gap below 250 km far from Switzerland**: the flat Space frame is LV95, stretched by the projection's
   scale (it grows toward the oblique cylinder's poles, 43° N 172.6° W and 43° S 7.4° E), so a low orbit
   there is drawn at the wrong speed against the globe. Orbits live higher (400 km); round tiles (G2) end it.
+- **The generated fill far from Switzerland** follows a player anywhere (`terrain/generated-fill`'s 40-tile box)
+  and comes back under 80 km (`Globe.FillGoneM`): re-entering 1,600 km out it was a black disc under the shuttle
+  from 68 km. Farther than 100 km from the real tiles' box (`Globe.FillFarM`) it stays hidden wherever the
+  globe shows (above 15 km, gone over the 5 km above that), #1497.
 - No vertical origin yet: world Y is still ~altitude in Space anchors (3 cm floats at 400 km).
   **The camera's near plane follows it** (#1497, `Styles/CameraGlobal.NearOfDistance`): at least the camera's
   distance from the world's origin / 200,000 (1.5 m at 300 km, 2 m at 400 km). With the player's 0.08 m near

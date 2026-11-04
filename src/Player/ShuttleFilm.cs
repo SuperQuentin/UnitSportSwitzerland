@@ -9,11 +9,12 @@ namespace UnitSport.Player;
 /// <summary>
 /// <c>godot --resolution 1280x720 --fixed-fps 30 --path . -- --shuttlefilm --chunks &lt;Geneva's tiles&gt; --at 2496345,1120665
 /// --clip-hq --nocapture</c> (#1497, <c>tools/shuttlefilm.sh</c>): the space shuttle's mission at Geneva, flown by
-/// <see cref="ShuttlePilot"/> and filmed by <see cref="ClipRecorder"/> from the chase camera in five clips: the taxi
-/// onto runway 04 and the take-off, the drive up to 400 km, the orbit and the retro burn, re-entry, and the
-/// approach and landing on 22 over the lake. Kept over Europe (the user's choice): the drive goes 2,000 km out along
-/// the take-off's heading and back, so the orbit, the burn and re-entry pass over Switzerland. Between the clips the
-/// flight runs at SimClock's fastest. Writes <c>test_output/clips/shuttle-1..5.mp4</c>; the script cuts them into one.
+/// <see cref="ShuttlePilot"/> and filmed by <see cref="ClipRecorder"/> from the chase camera in four clips: the taxi
+/// onto runway 04, the take-off and the way into space up to 400 km on the drive; the orbit and the retro burn;
+/// re-entry; and the way down from space to the landing on 22 over the lake. Kept over Europe (the user's choice): the
+/// drive goes 2,000 km out along the take-off's heading and back, so the orbit, the burn and re-entry pass over
+/// Switzerland. Between the clips the flight runs at SimClock's fastest. Writes <c>test_output/clips/shuttle-1..4.mp4</c>;
+/// the script cuts them into one.
 /// </summary>
 public partial class ShuttleFilm : Node
 {
@@ -64,9 +65,14 @@ public partial class ShuttleFilm : Node
         if (_pilot.Now == ShuttlePilot.Stage.Failed) { End(1, _pilot.Failure ?? "the pilot failed"); return; }
         if (_pilot.Now == ShuttlePilot.Stage.Stopped) _stoppedFor += delta;
         // the landing, once begun, is filmed to the end: the height over tiles still streaming in flickers
-        _landing |= _pilot.Now == ShuttlePilot.Stage.Glide && agl < 1_500;
+        if (!_landing && _pilot.Now == ShuttlePilot.Stage.Glide && agl < 1_500)
+        {
+            _landing = true;
+            Mark("landing");
+        }
+        if (_driveShot && _pilot.Now == ShuttlePilot.Stage.DriveUp && alt > _shotKm * 1000) { DriveShot(alt); return; }
         Engine.TimeScale = Scale(_pilot.Now, alt, agl, jet.Heat);
-        Film(Clip(_pilot.Now, alt, agl, jet.Heat));
+        if (!_driveShot) Film(Clip(_pilot.Now, alt, agl, jet.Heat));
         if (_stoppedFor > 4 && _filming == null && !ClipRecorder.Busy) End(0, "ok");
     }
 
@@ -79,25 +85,32 @@ public partial class ShuttleFilm : Node
         ShuttlePilot.Stage.Orbit => 2,
         ShuttlePilot.Stage.Entry => heat > 0.03f || alt < 120_000 ? 2 : ShuttlePilot.Fast,
         ShuttlePilot.Stage.Air => 2,
-        ShuttlePilot.Stage.Glide => _landing ? 1 : ShuttlePilot.Fast,
+        // down from space: the sky turning blue again, then the long glide faster
+        ShuttlePilot.Stage.Fall => 4,
+        ShuttlePilot.Stage.Glide => _landing ? 1 : agl > 10_000 ? 8 : 4,
         ShuttlePilot.Stage.Rollout or ShuttlePilot.Stage.Stopped => 1,
         _ => ShuttlePilot.Fast,
     };
 
-    /// <summary>The clip this moment belongs in, or none.</summary>
+    /// <summary>
+    /// The clip this moment belongs in, or none. The way into space and the way out of it are each one clip, so
+    /// the sky turns black and blue again on film (a new clip waits for the last one's encoding: a cut there lost
+    /// the climb from 20 to 60 km); the script captions their halves from the <c>mark</c> lines.
+    /// </summary>
     private string? Clip(ShuttlePilot.Stage stage, double alt, float agl, float heat) => stage switch
     {
-        ShuttlePilot.Stage.Taxi or ShuttlePilot.Stage.LineUp or ShuttlePilot.Stage.Roll => "shuttle-1",
-        ShuttlePilot.Stage.Climb when alt < 20_000 => "shuttle-1",
-        ShuttlePilot.Stage.DriveUp => "shuttle-2",
-        ShuttlePilot.Stage.Orbit or ShuttlePilot.Stage.Retro => "shuttle-3",
-        ShuttlePilot.Stage.Entry when heat > 0.03f || alt < 120_000 => "shuttle-4",
-        ShuttlePilot.Stage.Air => "shuttle-4",
-        ShuttlePilot.Stage.Glide when _landing => "shuttle-5",
-        ShuttlePilot.Stage.Rollout => "shuttle-5",
-        ShuttlePilot.Stage.Stopped when _stoppedFor < 4 => "shuttle-5",
+        ShuttlePilot.Stage.Taxi or ShuttlePilot.Stage.LineUp or ShuttlePilot.Stage.Roll
+            or ShuttlePilot.Stage.Climb or ShuttlePilot.Stage.DriveUp => "shuttle-1",
+        ShuttlePilot.Stage.Orbit or ShuttlePilot.Stage.Retro => "shuttle-2",
+        ShuttlePilot.Stage.Entry when heat > 0.03f || alt < 120_000 => "shuttle-3",
+        ShuttlePilot.Stage.Air => "shuttle-3",
+        ShuttlePilot.Stage.Fall or ShuttlePilot.Stage.Glide or ShuttlePilot.Stage.Rollout => "shuttle-4",
+        ShuttlePilot.Stage.Stopped when _stoppedFor < 4 => "shuttle-4",
         _ => null,
     };
+
+    /// <summary>A moment the script captions inside a clip: the frame drawn now (ClipRecorder logs each clip's first).</summary>
+    private static void Mark(string what) => GD.Print($"[shuttlefilm] mark {what} at frame {Engine.GetFramesDrawn()}");
 
     /// <summary>Starts or cuts the clips: each filmed once, the next as soon as the last one has encoded.</summary>
     private void Film(string? want)
@@ -154,11 +167,80 @@ public partial class ShuttleFilm : Node
         _pilot = new ShuttlePilot(new ShuttlePilot.Mission(from, to, Start: (se, sn, Heading04 - Mathf.Pi / 2),
             RoundTheEarth: false, CoastSeconds: 60, PerigeeKm: -3500, AirSeconds: 20, TurnOutKm: 2000))
         {
-            Changed = (a, b) => GD.Print($"[shuttlefilm] {a} -> {b}"),
+            Changed = (a, b) =>
+            {
+                GD.Print($"[shuttlefilm] {a} -> {b}");
+                if (b == ShuttlePilot.Stage.DriveUp) Mark("drive");
+            },
             Log = line => GD.Print("[shuttlefilm] " + line),
         };
         GD.Print(FormattableString.Invariant($"[shuttlefilm] 04 at {sw:F0} m, 22 at {ne:F0} m, heading {Mathf.RadToDeg(Heading04):F1}°: rolling"));
     }
+
+    // ---- a picture on the drive up: --shuttlefilm drive[,hide=<type>...] ----
+
+    private readonly bool _driveShot = CmdArgs.Value("--shuttlefilm", notFlag: true) is { } m && m.StartsWith("drive");
+
+    /// <summary>
+    /// <c>--shuttlefilm drive[,hide=&lt;type&gt;...]</c>: the mission flown to 80 km on the drive up, then one picture
+    /// (<c>test_output/clips/shuttle-drive[-&lt;types&gt;].png</c>) with those kinds of node hidden: what drew over the
+    /// stars round the shuttle there (#1518)?
+    /// </summary>
+    private void DriveShot(double alt)
+    {
+        Engine.TimeScale = 1;
+        if (_shotAt < 0)
+        {
+            var hidden = new List<string>();
+            foreach (var a in CmdArgs.Value("--shuttlefilm", notFlag: true)!.Split(','))
+                if (a.StartsWith("hide="))
+                {
+                    hidden.Add(a[5..]);
+                    foreach (var n in GetTree().Root.FindChildren(a[5..], "", true, false))
+                        if (n is Node3D n3) n3.Visible = false;
+                        else if (n is CanvasItem c) c.Visible = false;
+                }
+            var args = CmdArgs.Value("--shuttlefilm", notFlag: true)!.Split(',');
+            // ,sky: the space sky magenta (the atmosphere stopped, or it dims it back to black): a black thing or hidden stars?
+            if (Array.IndexOf(args, "sky") >= 0 && GetViewport().FindWorld3D()?.Environment is { } env)
+            {
+                foreach (var n in GetTree().Root.FindChildren("Atmosphere", "", true, false)) n.ProcessMode = ProcessModeEnum.Disabled;
+                env.BackgroundMode = Godot.Environment.BGMode.Color;
+                env.BackgroundColor = new Color(0.45f, 0f, 0.45f);
+                hidden.Add("sky");
+            }
+            // ,stardist=<share>: the stars nearer than usual (cropped by the far plane or the depth's precision?)
+            if (Array.Find(args, a => a.StartsWith("stardist=")) is { } sd)
+            {
+                World.StarField.DistanceScale = float.Parse(sd[9..], System.Globalization.CultureInfo.InvariantCulture);
+                hidden.Add(sd.Replace("=", ""));
+            }
+            // ,far: the camera's planes and the stars' distance in the log
+            var lens = GetViewport().GetCamera3D();
+            GD.Print(FormattableString.Invariant($"[shuttlefilm] camera near {lens?.Near}, far {lens?.Far}, at {lens?.GlobalPosition}"));
+            // ,bigstars: every star 40 times its size, so whatever crops them shows its edge
+            if (Array.IndexOf(args, "bigstars") >= 0)
+            {
+                foreach (var n in GetTree().Root.FindChildren("*", "", true, false))
+                    if (n is World.StarField { MaterialOverride: ShaderMaterial stars }) stars.SetShaderParameter("size_scale", 40f);
+                hidden.Add("bigstars");
+            }
+            _shotName = FormattableString.Invariant($"shuttle-drive-{_shotKm:F0}") + (hidden.Count == 0 ? "" : "-" + string.Join("-", hidden).Replace("*", ""));
+            _shotAt = _wait;
+            return;
+        }
+        if (_wait - _shotAt < 0.2) return;
+        GD.Print(FormattableString.Invariant($"[shuttlefilm] {alt / 1000:F1} km on the drive: {_shotName}.png"));
+        GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://test_output/clips/{_shotName}.png"));
+        End(0, "drive");
+    }
+
+    private double _shotAt = -1;
+
+    /// <summary>,at=&lt;km&gt;: the picture's height on the drive up (80 by default).</summary>
+    private readonly double _shotKm = Array.Find(CmdArgs.Value("--shuttlefilm", notFlag: true)?.Split(',') ?? Array.Empty<string>(), a => a.StartsWith("at=")) is { } at
+        && double.TryParse(at[3..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double km) ? km : 80;
+    private string _shotName = "";
 
     // ---- a picture in orbit: --shuttlefilm orbit[,km] ----
 
@@ -182,10 +264,28 @@ public partial class ShuttleFilm : Node
             return;
         }
         if (_wait - _debugAt < 4) return;
+        // ,heat: a copy of the plasma, white hot, for the picture
+        if (Array.IndexOf(CmdArgs.Value("--shuttlefilm", notFlag: true)!.Split(','), "heat") >= 0
+            && _player!.FindChild("Plasma", true, false) is MeshInstance3D plasma && plasma.GetParent().GetNodeOrNull("PlasmaDbg") == null)
+        {
+            var copy = (MeshInstance3D)plasma.Duplicate();
+            copy.Name = "PlasmaDbg";
+            copy.Visible = true;
+            var mat = (ShaderMaterial)plasma.MaterialOverride.Duplicate();
+            mat.SetShaderParameter("heat", 1f);
+            copy.MaterialOverride = mat;
+            plasma.GetParent().AddChild(copy);
+            _debugAt = _wait - 3;
+            return;
+        }
+        // ,hide=<type>: that kind of node hidden for the picture (what draws over the stars?)
+        if (Array.Find(CmdArgs.Value("--shuttlefilm", notFlag: true)!.Split(','), a => a.StartsWith("hide=")) is { } hide)
+            foreach (var n in GetTree().Root.FindChildren("*", hide[5..], true, false))
+                if (n is Node3D n3) n3.Visible = false;
         var cam = GetViewport().GetCamera3D();
         int alt = (int)(_origin.Frame.AltitudeOf(p.GlobalPosition) / 1000);
         GD.Print(FormattableString.Invariant($"[shuttlefilm] {alt} km: body {p.GlobalPosition}, camera at {cam?.GlobalPosition}, near {cam?.Near}, far {cam?.Far}, anchor frame {_origin.Frame.IsAnchor}"));
-        GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://test_output/clips/shuttle-orbit-{alt}.png"));
+        GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://test_output/clips/shuttle-orbit-{alt}{(CmdArgs.Value("--shuttlefilm", notFlag: true)!.Contains("hide=") ? "-hidden" : "")}.png"));
         End(0, "orbit");
     }
 

@@ -110,6 +110,9 @@ public partial class StarField : MeshInstance3D
 
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Place;
 
+    /// <summary>A debugging aid (<c>--shuttlefilm drive,stardist=0.5</c>): the stars' distance, as a share of the usual.</summary>
+    public static float DistanceScale = 1f;
+
     private void Place()
     {
         if (Count == 0 || DayNight.Instance is not { Sky: { } sky } || GetViewport()?.GetCamera3D() is not { } cam)
@@ -119,7 +122,7 @@ public partial class StarField : MeshInstance3D
         }
         Visible = true;
         _material.SetShaderParameter(Sky, sky.Stars);
-        float distance = cam.Far * 0.95f;
+        float distance = cam.Far * 0.95f * DistanceScale;
         if (distance != _distance)
         {
             _distance = distance;

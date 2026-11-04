@@ -250,8 +250,9 @@ public partial class SkyBodies : Node3D
                 e.PointMaterial.SetShaderParameter(PDistance, (float)(e.Distance * scale));
                 e.PointMaterial.SetShaderParameter(PColor, e.Tint with { A = alpha });
                 e.PointMaterial.SetShaderParameter(PSize, px);
-                // Venus shows by day, the brightest others at dusk
-                e.PointMaterial.SetShaderParameter(PDaylight, e.Magnitude < -3.5f ? 0.7f : e.Magnitude < -1.5f ? 0.2f : 0f);
+                // Venus shows by day, the others with the stars (by eye nothing else shows in a blue sky: Jupiter and
+                // Mercury dotted the shuttle's climb at noon, #1497)
+                e.PointMaterial.SetShaderParameter(PDaylight, e.Magnitude < -3.5f ? 0.7f : 0f);
             }
         }
     }
