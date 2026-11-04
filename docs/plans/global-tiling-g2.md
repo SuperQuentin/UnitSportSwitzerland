@@ -100,11 +100,17 @@ flat world; track B builds data the game does not read yet; C wires the two toge
   cold and warm read per leaf, what a server reads. The user picks; the other is deleted.
 - Check: codec round trips per kind (unit), the measurement table in the PR.
 
-**B2 Work frames and source projections** (one PR)
+**B2 Work frames and source projections** (one PR; **built**, PR #1523)
 - `WorkFrame`: the ENU plane of a level-9 cell, a leaf ↔ work-frame mapping, rigorous at control
   points; `ISourceProjection`: LV95 (swisstopo), Lambert-93 (IGN), geographic (OSM, Copernicus,
   Natural Earth), each through ECEF. In `tools/TerrainFormat`, Godot-free.
 - Check: unit tests (round trips under 0.1 mm, the 10 ppm bound, a work frame on a face edge).
+- **Decided with the user**: heights **above sea level** in the stages (`ISeaLevel`, LHN95 through
+  `SwissGeodesy` for now: a lake is one number), the leaf writer converts to ellipsoidal; the plane is
+  **orthographic** onto the cell's tangent plane (`WorkPlane`: a point's plane position is its ENU
+  position from above, closed form, within 3 ppm and 1.3″ over a cell and a 2 km margin), chosen over
+  the oblique stereographic (exact angles, same scale error, an iterated inverse) and the cube lattice
+  (its scale drifts 2-3 m a km near face edges and corners); the comparison is in #1523.
 
 **B3 The tools cube-native** (one PR per stage, each compared with the LV95 build of the same area:
 counts equal, positions within 2 cm after projection)
