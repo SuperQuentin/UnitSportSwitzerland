@@ -152,6 +152,21 @@ public static class CubeSphere
         return (best, Clamp1(Unwarp(r.S * c[r.I] / along)), Clamp1(Unwarp(w.S * c[w.I] / along)));
     }
 
+    /// <summary>
+    /// A normal's (u, v) on a given face, not clamped: a little past the face's edges it continues the face's
+    /// own warp (a work frame's margin, #1443 G2). Meaningless more than 90° from the face's axis.
+    /// </summary>
+    public static (double U, double V) OnFace(int face, EcefPos n)
+    {
+        double x = M[0] * n.X + M[3] * n.Y + M[6] * n.Z;
+        double y = M[1] * n.X + M[4] * n.Y + M[7] * n.Z;
+        double z = M[2] * n.X + M[5] * n.Y + M[8] * n.Z;
+        Span<double> c = stackalloc double[] { x, y, z };
+        var (ax, r, w) = (Frame[face, 0], Frame[face, 1], Frame[face, 2]);
+        double along = ax.S * c[ax.I];
+        return (Unwarp(r.S * c[r.I] / along), Unwarp(w.S * c[w.I] / along));
+    }
+
     /// <summary>The face and (u, v) under an ECEF point, and its ellipsoidal height.</summary>
     public static (int Face, double U, double V, double H) FromEcef(EcefPos p)
     {
