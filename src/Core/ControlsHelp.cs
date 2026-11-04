@@ -70,7 +70,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Bowling: hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
             new("Telescope: E at a set-up telescope looks through it; E or Esc steps back", PlayerInput.InteractMount),
             new("Telescope: zoom", Keys: "wheel / + -", Pad: "D-pad ↑ ↓"),
-            new("Telescope: lock on the moon, or let go", PlayerInput.UseItem),
+            new("Telescope: lock on what is in the middle, or let go", PlayerInput.UseItem),
+            new("Telescope: slew to the previous / next sky object (moon, planets, big moons) and track it", Keys: "{telescope_prev} / {telescope_next}", Pad: "X / {telescope_next}"),
+            new("Telescope: show or hide the target's info (magnitude, distance, size, phase, height)", PlayerInput.TelescopeInfo),
             new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]

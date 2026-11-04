@@ -112,6 +112,15 @@ public partial class TelescopeProbe : Node
         await Seconds(8.0);   // the sky turns 2° in 8 s at the default day length
         float off = World.DayNight.Instance?.Sky is { } later ? Mathf.RadToDeg(view.Direction.AngleTo(later.Moon)) : 99f;
         Expect(off < 0.02f, $"the moon stays in the middle ({off:0.0000}° off after 8 s)");
+        // 3b. the target menu (#1530): next from the moon is Mercury, the menu slews and tracks Jupiter, the sun is not in it
+        Expect(view.StepTarget(1) && view.Target == SkyBody.Mercury && view.Locked, "next target after the moon: Mercury, locked");
+        Expect(view.SelectTarget(SkyBody.Jupiter) && view.Target == SkyBody.Jupiter, "the menu slews to Jupiter");
+        await Seconds(1.0);
+        float jupiterOff = World.SkyBodies.Instance?.DirectionOf(SkyBody.Jupiter) is { } jd ? Mathf.RadToDeg(view.Direction.AngleTo(jd)) : 99f;
+        Expect(jupiterOff < 0.02f, $"Jupiter stays in the middle ({jupiterOff:0.0000}° off)");
+        Expect(!System.Array.Exists(TelescopeTargets.Menu, b => b == SkyBody.Sun), "the sun is not a target");
+        view.SelectTarget(SkyBody.Moon);
+        await Seconds(0.3);
         var lookAt = -cam!.GlobalBasis.Z;
         Expect(lookAt.AngleTo(view.Direction) < 0.001f, "the camera rides the tube");
         if (DisplayServer.GetName() != "headless")

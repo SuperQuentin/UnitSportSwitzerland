@@ -109,6 +109,7 @@
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\TelescopeTargets.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the Adventure layer's progress store, events and quests (#1223) -->
     <Compile Include="..\..\src\Adventure\SectionKey.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\PlayerProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
@@ -236,6 +237,10 @@
     <Compile Include="..\..\src\Terrain\SignalGlyphs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the water pass's exact distance transform (#298); the rest of the preprocessor is not linked -->
     <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
+    <!-- the cube comparer's pure half (#1507): statistics, matching, bars -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\CubeCompareCore.cs" Link="Tools\%(Filename)%(Extension)" />
+    <!-- and the LV95 build's rigorous way in for latitudes and longitudes -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\GeoInput.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
     <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />

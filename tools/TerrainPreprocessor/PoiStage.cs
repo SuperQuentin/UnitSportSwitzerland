@@ -54,7 +54,7 @@ public static class PoiStage
             var cableStops = Stops(conn, all);
             CableCars(conn, all, cableStops);
         }
-        if (o.OsmPbf != null) Castles(o.OsmPbf, o.GwrPath, o.Jobs, all);
+        if (o.OsmPbf != null) Castles(o.OsmPbf, o.GwrPath, o.Jobs, GeoInput.Over(outDir), all);
         Console.WriteLine($"POIs: {all.Count} candidates nationwide ({sw.Elapsed.TotalSeconds:F0} s): " + string.Join(", ",
             all.GroupBy(c => c.Kind).OrderBy(g => g.Key).Select(g => $"{PoiId.Tag(g.Key)} {g.Count()}")));
 
@@ -472,14 +472,14 @@ public static class PoiStage
     /// when <c>--gwr</c> is given; one per name within a kilometre, OSM first; unnamed ones dropped.
     /// Identity <c>osm:way/123</c>, <c>osm:node/123</c>, <c>egid:123</c>.
     /// </summary>
-    private static void Castles(string pbf, string? gwr, int jobs, List<Candidate> all)
+    private static void Castles(string pbf, string? gwr, int jobs, GeoInput geo, List<Candidate> all)
     {
         if (!File.Exists(pbf))
         {
             Console.Error.WriteLine($"  OSM extract not found: {pbf}; no castles");
             return;
         }
-        var raw = CastleStage.FromOsm(pbf, jobs).Select(c => (c, "osm:" + c.Source)).ToList();
+        var raw = CastleStage.FromOsm(pbf, jobs, geo).Select(c => (c, "osm:" + c.Source)).ToList();
         if (gwr != null && File.Exists(gwr))
             raw.AddRange(CastleStage.FromGwr(gwr).Select(c => (c, "egid:" + c.Source["egid/".Length..])));
         var kept = new List<Candidate>();

@@ -56,7 +56,7 @@ public static class FranceStage
             {
                 double lat = minLat + (maxLat - minLat) * i / 24.0;
                 double lon = minLon + (maxLon - minLon) * j / 24.0;
-                var (e, n) = SwissProjection.ToLv95(lat, lon);
+                var (e, n) = SwissGeodesy.ToLv95(lat, lon);
                 var tile = TileId.FromLv95(e, n);
                 if (available.Contains(tile)) wanted.Add(tile);
             }
@@ -89,6 +89,8 @@ public static class FranceStage
         Console.WriteLine($"France: fetched {footprints.Count} building footprints");
 
         var buildingStats = new FranceBuildings.Stats();
+        var geo = GeoInput.Over(outDir);
+        foreach (var f in footprints) f.OntoGround(geo);
         var buildingsByTile = FranceBuildings.Build(footprints, wanted, heightAt, buildingStats);
 
         foreach (var (tile, built) in buildingsByTile) MergeBuildings(outDir, tile, built);
@@ -103,6 +105,7 @@ public static class FranceStage
         Console.WriteLine($"France: fetched {lines.Count} road sections");
 
         var roadStats = new FranceRoads.Stats();
+        foreach (var f in lines) f.OntoGround(geo);
         var roadsByTile = FranceRoads.Build(lines, wanted, heightAt, roadStats);
 
         foreach (var (tile, segments) in roadsByTile) MergeRoads(outDir, tile, segments);
