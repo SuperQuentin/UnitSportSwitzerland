@@ -76,8 +76,7 @@ public partial class BrManager
         if (!_server || !RecallOpen || Origin == null) return false;
         if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
             || BodyOf(peer) is not { } body) return false;
-        var (be, bn) = (body.Global.E, body.Global.N);
-        var here = new Vector2((float)(be - _state.AreaE), (float)(bn - _state.AreaN));
+        var here = _state.ZonePointOf(body.Global);
         var stop = Stops().OrderBy(s => s.At.DistanceTo(here)).FirstOrDefault();
         if (stop.At.DistanceTo(here) > RecallReach + 4f) return false;
         // a player still connected, or a bot still run here

@@ -24,6 +24,8 @@ public sealed class Crate
     public double E { get; set; }
     public double N { get; set; }
     public float Alt { get; set; } = BrCrates.Ground;
+    /// <summary>Where it stands (<see cref="E"/>/<see cref="N"/> are the catalogue's LV95 literals).</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public GlobalPos At => GlobalPos.FromLv95(E, N, Alt);
     /// <summary>Server clock at which it is on the ground and can be opened (an airdrop falls first).</summary>
     public double LandsAt { get; set; }
     public string Label { get; set; } = "";
@@ -232,7 +234,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     private static bool Near(Crate c, GlobalPos at, float reach)
     {
         // in Earth positions (#1456): the body may be in another server region's frame than this world
-        if (GlobalPos.HorizontalDistanceSquared(at.E, at.N, c.E, c.N) > reach * reach) return false;
+        if (at.HorizontalDistanceSquaredTo(c.At) > reach * reach) return false;
         return c.Alt == Ground || System.Math.Abs(at.Alt - c.Alt) < 4f;
     }
 
