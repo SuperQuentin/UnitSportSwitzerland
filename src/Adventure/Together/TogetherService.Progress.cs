@@ -28,7 +28,7 @@ public partial class TogetherService
 
     private double _nextSecond;
     private readonly Dictionary<long, double> _touchDue = new();
-    private readonly Dictionary<long, (double E, double N, double Metres)> _rides = new();
+    private readonly Dictionary<long, (GlobalPos At, double Metres)> _rides = new();
     private readonly List<long> _peerScratch = new();
 
     partial void ReadyProgress()
@@ -173,16 +173,16 @@ public partial class TogetherService
             _rides.Remove(peer);
             return;
         }
-        var r = _rides.GetValueOrDefault(peer, (at.E, at.N, 0));
-        double step = Math.Sqrt((at.E - r.E) * (at.E - r.E) + (at.N - r.N) * (at.N - r.N));
+        var r = _rides.GetValueOrDefault(peer, (at, 0));
+        double step = at.HorizontalDistanceTo(r.At);
         double metres = r.Metres + (step < 150 ? step : 0);
         if (r.Metres < MentorRules.RideMetres && metres >= MentorRules.RideMetres)
             _adventure.Events.Raise(new RideStarted(peer, p.Key, body.RideKindId));
-        _rides[peer] = (at.E, at.N, metres);
+        _rides[peer] = (at, metres);
     }
 
     // a roped pair's metres on glacier cover, per follower
-    private readonly Dictionary<long, (double E, double N, double Metres)> _glacier = new();
+    private readonly Dictionary<long, (GlobalPos At, double Metres)> _glacier = new();
 
     /// <summary>The links' 4 Hz tick: a roped pair on glacier cover adds its metres; at 200 m both crossed a glacier.</summary>
     partial void TickGlacierCrossing(float dt)
@@ -194,8 +194,8 @@ public partial class TogetherService
                 _glacier.Remove(l.Follower);
                 continue;
             }
-            var g = _glacier.GetValueOrDefault(l.Follower, (a.E, a.N, 0));
-            double step = Math.Sqrt((a.E - g.E) * (a.E - g.E) + (a.N - g.N) * (a.N - g.N));
+            var g = _glacier.GetValueOrDefault(l.Follower, (a, 0));
+            double step = a.HorizontalDistanceTo(g.At);
             double metres = g.Metres + (step < 40 ? step : 0);
             if (g.Metres < MentorRules.GlacierMetres && metres >= MentorRules.GlacierMetres)
             {
@@ -203,7 +203,7 @@ public partial class TogetherService
                 foreach (long peer in new[] { l.Follower, l.Leader })
                     if (_adventure.Progress(peer) is { } p) _adventure.Events.Raise(new GlacierCrossed(peer, p.Key));
             }
-            _glacier[l.Follower] = (a.E, a.N, metres);
+            _glacier[l.Follower] = (a, metres);
         }
     }
 
