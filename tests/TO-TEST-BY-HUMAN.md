@@ -15,6 +15,18 @@ A server on the real map (`tools/wt.ps1 1456 net`, or `--server --chunks D:/Unit
 - [ ] A Battle Royale on the real map with bots (`/br bots 6`) → the bots land, loot crates, fight and use the Postauto stops as before; none falls through the ground or freezes after the landing.
 - [ ] Two players, one at Geneva and one at Riddes, with bots round each → each sees its bots walk smoothly; `/bot list` on both; nothing jumps when a player teleports to the other (`/city`).
 
+## Orbits ([#1480](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1480))
+
+In a window with the globe (`--cube-global` on D:, or the shipped levels), offline in a UFO (R, Mounts).
+
+- [ ] `/orbit 400` heading east → the saucer is 400 km up, the HUD reads `ORBIT 7.67 km/s 400 km Pe 400 Ap 400`; the Earth turns under you, a full turn in 92 min; no shake of the saucer or the globe, nothing jumps every 2.6 s when the world re-anchors.
+- [ ] `/orbit 400` heading north and stay ~15 min (or `/speed 8`) → over the pole and down the far side: the globe stays right, the saucer steady (the Space frame is built without LV95 there).
+- [ ] Climb the spectator or the UFO slowly from 60 to 260 km over Switzerland, looking down → the flat tiles dissolve without a swing or a seam; at 250 km the frame starts to turn (log: `the Space frame turns`) and nothing on screen moves; coming down, nothing moves at 240 km either.
+- [ ] The space drive: the stick and Space / Ctrl push gently, boost hard (three g); Pe and Ap move as expected; boost retrograde until Pe is under the ground → down through the air (it slows), the hover takes over at 50 km without a jolt, and it flies home.
+- [ ] The same on a pad (L stick, RT / LT, L3 boost) and in VR (the same through the pad mapping: triggers, L stick, stick click).
+- [ ] Climbing in the hover past 60 km (Space held for a while) → it keeps climbing slowly on its 12 m/s² against gravity; let go and it falls back, the hover catching it below 50 km.
+- [ ] Two players online, both admins, `/orbit 400` together → each sees the other's saucer beside it; crossing the meridian 172.56° W the other may jump up to 31 km for a second or two (known, #1443 G2's wire).
+
 ## The globe and the air from above ([#1478](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1478))
 
 With the `--cube-global` region on D: (`D:/UnitSportSwitzerland/cube_global`, or `--globe <dir>`), spectator or UFO, real sky (play, not a shot run).

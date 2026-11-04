@@ -35,5 +35,17 @@
     (273 calls in a few seconds) and paste the centimetres into `GeoidCm`.
 - **The projection sphere's radius is 6,378,815.904 m** (`SwissGeodesy.R`): the same R the
   render-space curvature of #187 uses near Bern.
+- **The valid domain** (#1480): LV95 round-trips to a tenth of a millimetre over the whole Earth **but a
+  sliver within ~0.13° of Bern's antimeridian** (172.56° W; ~15 km wide at the equator, narrower toward the
+  poles). The Gauss conformal sphere's longitude is α ≈ 1.00072 times the ellipsoid's, so it covers 2πα and
+  overlaps there; points in the sliver come back up to 31 km off. `SwissGeodesy.InDomain(ecef)`,
+  `MaxFromCentre` (π/α). `FromEcef` calls `SwissGeodesy.OutsideDomain` for a point in it, and the game logs a
+  `[geodesy]` warning with the stack (`Core/Main`, at most every 10 s): never quietly. Heights alone
+  (`Lhn95Height`, `OriginFrame.AltitudeOf` in an anchor frame) need no projection and are fine there.
+  - Until #1480 the longitude's angle from Bern was not wrapped (`FromCentre`): from 172.6° W to 180° it
+    came out as −187° to −180° and that whole 7.4° band was up to 31 km off (a polar orbit from Bern flies
+    down its edge). Inside ±π the wrap changes nothing, to the bit.
+  - Anything that must hold everywhere goes through ECEF, never `GlobalPos`: the Space anchors
+    (`FrameAxes.Tangent`), the orbit. The wire and the server still carry LV95 (G2 of #1443 moves them).
 - Tests: `tests/UnitSportSwitzerland.Tests/SwissGeodesyTests.cs` (REFRAME points, geoid between
   nodes, round trips, the equator and poles, out to the moon's distance) and `PlanetTests`.

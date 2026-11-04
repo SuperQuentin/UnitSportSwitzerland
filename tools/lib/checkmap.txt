@@ -1202,3 +1202,25 @@ src/Core/OriginShifter       quick  --ride car,15 --world flat --originstress 20
 src/Core/OriginShift         quick  --ride car,15 --world flat --originstress 20 --originyaw 2
 src/Core/OriginShifter       quick  --flycheck a320 --world flat --originstress 20 --originyaw 2
 src/Core/OriginShifter       quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4 --originstress 200 --originyaw 2
+# #1480 (#1430 H5): a polar 400 km orbit at x8 closes after one period through turned Space anchors, then down into
+# the hover (offline); two saucers in orbit side by side through the server's /orbit, each watching the other's copy
+src/Core/Orbit                 quick  --orbitcheck --world flat
+src/Core/Atmosphere            quick  --orbitcheck --world flat
+src/Player/Ufo                 quick  --orbitcheck --world flat
+src/Player/OrbitCheck          quick  --orbitcheck --world flat
+src/Core/OriginShifter         quick  --orbitcheck --world flat
+src/Core/WorldOrigin           quick  --orbitcheck --world flat
+src/Player/Ufo                 net    tools/orbitnetcheck.sh
+src/Player/OrbitNetProbe       net    tools/orbitnetcheck.sh
+src/Net/RemoteInterpolator     net    tools/orbitnetcheck.sh
+src/Net/InterestService        net    tools/orbitnetcheck.sh
+# #1480: the Space band where flat tiles are still drawn (60-250 km): the frame stays flat there, every tile and horizon
+# block where its frame's tile transform puts it through 30 shifts, the frame turning only above 250 km
+src/Core/OriginShifter         quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Core/WorldOrigin           quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Core/Curvature             quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Terrain/SpaceBandCheck     quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
+tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
+src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh

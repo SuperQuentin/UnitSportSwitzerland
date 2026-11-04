@@ -177,7 +177,7 @@ public sealed class OriginFrame
     /// The altitude (LV95 heights: above sea level) of a world point (#1430 H3): its Y in the ground
     /// frame, its place's height in an anchor frame, where Y is height over the anchor's tangent plane.
     /// </summary>
-    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y + Alt0 : ToGlobal(world).Alt;
+    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y + Alt0 : SwissGeodesy.Lhn95Height(Axes.ToEcef(world.X, world.Y, world.Z));
 
     /// <summary>The way up at a world point, in world axes (#1430 H3): +Y in the ground frame, the ellipsoid's up in an anchor frame.</summary>
     public Vector3 UpAt(Vector3 world)
@@ -233,6 +233,23 @@ public sealed class OriginFrame
         return new(axes.X.X * dir.X + axes.Y.X * dir.Y + axes.Z.X * dir.Z,
             axes.X.Y * dir.X + axes.Y.Y * dir.Y + axes.Z.Y * dir.Z,
             axes.X.Z * dir.X + axes.Y.Z * dir.Y + axes.Z.Z * dir.Z);
+    }
+
+    /// <summary>
+    /// A world velocity at a world point as the rate its LV95 place changes, in GlobalPos's axes (east, up,
+    /// south; what positions on the wire are interpolated with, #1430 H5): the same vector in the ground
+    /// frame; in an anchor frame turned, and shrunk with the height (400 km up, a metre east moves E by 0.94 m).
+    /// </summary>
+    public Vector3 GridVelocity(Vector3 at, Vector3 velocity)
+    {
+        if (Axes == null) return velocity;
+        // over a hundredth of a second, in doubles: the place's curve is a millimetre off the line there
+        const double h = 0.01;
+        var p0 = ToEcef(at);
+        var d = EcefDirection(at, velocity);
+        var (e0, n0, a0) = SwissGeodesy.FromEcef(p0);
+        var (e1, n1, a1) = SwissGeodesy.FromEcef(new EcefPos(p0.X + d.X * h, p0.Y + d.Y * h, p0.Z + d.Z * h));
+        return new Vector3((float)((e1 - e0) / h), (float)((a1 - a0) / h), (float)(-(n1 - n0) / h));
     }
 
     /// <summary>An Earth-fixed direction in world axes at a world point (#1430 H5), the inverse of <see cref="EcefDirection"/>.</summary>

@@ -214,6 +214,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 | UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
 | UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |
+| UFO space drive, above 60 km (#1480) | the hover's own: WASD / L stick along the heading, Space Ctrl / RT LT up and down, boost for three g | ok: the same as the hover (no new action) | keep |
 | UFO tractor beam (#861) | H / D-pad ← (`tractor_beam`) | ok: R stick ← | gap: a beam switch to grip on the dome's console (`XrCabControls` "ufo") |
 | UFO ramp (landed) / legs (flying) (#861) | G / X (`car_door`) | ok: X | gap: a lever on the console, as the airliner's gear |
 | UFO rim lights (#861) | L / D-pad → | ok: R stick → | keep |

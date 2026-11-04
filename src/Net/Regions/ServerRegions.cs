@@ -55,6 +55,8 @@ public partial class ServerRegions : Node
     private readonly List<RegionPlanner.Body> _bodies = new();
     private readonly List<RegionPlanner.Region> _known = new();
     private readonly List<FootPlayer> _scratch = new();
+    /// <summary>The bodies above the Space handover (hysteresis: in above 60 km, out below 50), kept out of the planner (#1480).</summary>
+    private readonly HashSet<FootPlayer> _inSpace = new();
     private readonly RegionMirrors _mirrors = new();
     private readonly List<GlobalPos> _botsAt = new();
     private List<FootPlayer> _decided = new();
@@ -100,7 +102,7 @@ public partial class ServerRegions : Node
     {
         if (Off || at.HorizontalDistanceTo(Main.Anchor) <= RegionPlanner.HomeM) return Main;
         foreach (var body in Bodies())
-            if (body.Region is { } r && Global(body).HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
+            if (body.Region is { } r && !_inSpace.Contains(body) && Global(body).HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
         return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }));
     }
 
@@ -184,7 +186,21 @@ public partial class ServerRegions : Node
     {
         _bodies.Clear();
         var bodies = new List<FootPlayer>(Bodies());
+        // above the Space handover (#1480): out of the planner, parked in the main region. An orbit moves
+        // 7.7 km a second: in a region of its own it re-anchored every second, and linked by its LV95 place
+        // to bodies on the ground under it, it would drag their region round the Earth. Nothing up there
+        // to bump into on the server; what it publishes is its truth.
+        var planned = new List<FootPlayer>(bodies.Count);
         foreach (var body in bodies)
+        {
+            bool space = Core.Curvature.SpaceRegime(_inSpace.Contains(body), Global(body).Alt);
+            if (space) _inSpace.Add(body); else _inSpace.Remove(body);
+            if (!space) { planned.Add(body); continue; }
+            var at = _pending.TryGetValue(body, out var ph) ? ph.Target : body.Region ?? Main;
+            if (at != Main) Start(body, Main);
+        }
+        _inSpace.RemoveWhere(b => !GodotObject.IsInstanceValid(b) || !b.IsInsideTree());
+        foreach (var body in planned)
         {
             int region = _pending.TryGetValue(body, out var h) ? h.Target.Id : (body.Region ?? Main).Id;
             _bodies.Add(new RegionPlanner.Body((long)body.GetInstanceId(), Global(body), region));
@@ -195,7 +211,7 @@ public partial class ServerRegions : Node
         foreach (var made in plan.Create) Create(made.Anchor, made.Id);
 
         int i = 0;
-        foreach (var body in bodies)
+        foreach (var body in planned)
         {
             var want = _regions[plan.RegionOf[_bodies[i++].Id]];
             var now = _pending.TryGetValue(body, out var h) ? h.Target : body.Region ?? Main;

@@ -1773,7 +1773,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
             if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
             if (!Npc) DeviceKind = XR.XrSession.Active ? DeviceVr : Core.Platform.IsMobile ? DeviceMobile : DeviceDesktop;
-            NetVel = Velocity;
+            // in a turned Space frame (#1430 H5) the world's axes are not the grid's every receiver reads it in
+            NetVel = Origin is { Frame: { IsAnchor: true } frame } ? frame.GridVelocity(Position, Velocity) : Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;

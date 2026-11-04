@@ -248,7 +248,9 @@ public partial class InterestService : Node
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
                 bool near = _together.Contains((viewer, target))
-                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius;
+                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius
+                    // an orbit (#1430 H5): 1.3 km between two 6 Hz states is no picture
+                    || targetNode.NetVel.LengthSquared() > RemoteInterpolator.FastSpeed * RemoteInterpolator.FastSpeed;
                 (near ? _near : _far).Add(viewer);
             }
             if (lastNear != null && _farOf.TryGetValue(target, out var lastFar)

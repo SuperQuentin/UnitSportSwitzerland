@@ -88,6 +88,18 @@ From a full sweep of `src/`, `tools/`, `tests/` (regex counts, approximate):
   sit tilted in it and floats lose centimetres. **G2 needs physics in several local frames on the
   server**, one per region with players or bots in it (Godot physics spaces per region), and
   measuring done there in Earth positions. A G2 prerequisite of its own (G2a below).
+- **LV95 has a seam on Bern's antimeridian** (found by #1430 H5, #1480, 2026-11-04): along a polar 400 km
+  orbit from Bern, 100,001 of 200,000 samples came back from LV95 → ECEF more than 1 cm off, worst 31 km,
+  all past the pole. Two causes in `SwissGeodesy.FromBessel`'s `Alpha·(lon − Λ0)`:
+  - the angle was not wrapped: from 172.6° W to 180° it read −187° to −180°, so that whole 7.4° band was
+    wrong (the orbit flew down its edge). **Fixed in #1480** (`FromCentre`), bit-identical inside ±π;
+  - the Gauss conformal sphere's longitude is α ≈ 1.00072 times the ellipsoid's, so it covers 2πα: within
+    ~0.13° either side of 172.56° W (~15 km wide at the equator) two places share one LV95 point. This is the
+    projection itself. `SwissGeodesy.InDomain` names the sliver, and `FromEcef` reports a point in it
+    (`OutsideDomain`, logged by the game) instead of landing it 31 km off quietly.
+  - **Consequence for G2**: `GlobalPos` cannot stay LV95 inside, for the whole Earth. It must become ECEF
+    or cube-keyed; the wire, interest and the region planner with it. Until then a body crossing the
+    sliver is misplaced for its peers for a second or two (an orbit), and the log says so.
 
 ## G1 results (2026-11-03, #1452, PR #1455)
 

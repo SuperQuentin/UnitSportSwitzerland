@@ -136,8 +136,12 @@ public sealed class Ufo : Flyer
 
     // ---- in Space: an orbit in doubles (#1430 H5) --------------------------------------------------
 
-    /// <summary>Where the craft is, set by its body before each step: its world's frame, its world point, its altitude and the sim time.</summary>
-    public readonly record struct SpacePlace(Core.OriginFrame Frame, Vector3 At, double Altitude, double SimTime);
+    /// <summary>
+    /// Where the craft is, set by its body before each step: its world's frame, its world point, its altitude
+    /// and the sim time. <paramref name="Contacts"/> false: the orbit is the only truth, never restarted from
+    /// the body (an empty saucer on the server, whose frame's floats coarsen far from its origin).
+    /// </summary>
+    public readonly record struct SpacePlace(Core.OriginFrame Frame, Vector3 At, double Altitude, double SimTime, bool Contacts = true);
 
     /// <summary>The body's place before this step (null where there is no origin: the flat test world, so no Space).</summary>
     public SpacePlace? Place { get; set; }
@@ -166,10 +170,10 @@ public sealed class Ufo : Flyer
     /// </summary>
     public const double BallisticCoefficient = 230;
 
-    /// <summary>Puts the craft on <paramref name="state"/> (an inertial orbit) from its next step: <c>/orbit</c>, a probe, a bot.</summary>
     /// <summary>Seconds the orbit has been stepped, summed in doubles (the orbit check times its period by it).</summary>
     public double OrbitSeconds { get; private set; }
 
+    /// <summary>Puts the craft on <paramref name="state"/> (an inertial orbit) from its next step: <c>/orbit</c>, a probe, a bot.</summary>
     public void SetOrbit(Core.OrbitState state)
     {
         Orbit = state;
@@ -202,7 +206,7 @@ public sealed class Ufo : Flyer
         float off = _expectedIn == null ? float.MaxValue
             : place.At.DistanceTo(place.Frame.SameFrame(_expectedIn) ? _expected : place.Frame.Since(_expectedIn).Point(_expected));
         Core.OrbitState s;
-        if (Orbit is { } o && (_jump || off <= ContactSlack)) s = o;
+        if (Orbit is { } o && (_jump || !place.Contacts || off <= ContactSlack)) s = o;
         else
         {
             if (Orbit == null) GD.Print(FormattableString.Invariant($"[ufo] into orbit at {place.Altitude / 1000:F1} km"));

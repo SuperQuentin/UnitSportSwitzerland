@@ -199,6 +199,45 @@ public class SwissGeodesyTests
         Assert.True(Math.Abs(dLat) < 1e-6 * Math.Max(1, h / 1e6) && Math.Abs(dLon) < 1e-6 * Math.Max(1, h / 1e6) && Math.Abs(g.H - h) < 1e-5 * Math.Max(1, h / 1e6),
             $"drift {dLat:E2} m north, {dLon:E2} m east, {g.H - h:E2} m up");
     }
+
+    [Fact]
+    public void LV95_round_trips_over_the_whole_Earth_but_a_sliver_on_Berns_antimeridian()
+    {
+        // #1480: 172.6° W to 180° came back up to 31 km off before the longitude was wrapped
+        double worst = 0;
+        int outside = 0;
+        for (double lat = -89; lat <= 89; lat += 2)
+            for (double lon = -180; lon < 180; lon += 0.5)
+            {
+                var p = Ellipsoid.Wgs84.ToEcef(new Geodetic(lat, lon, 400_000));
+                if (!SwissGeodesy.InDomain(p)) { outside++; continue; }
+                var (e, n, h) = SwissGeodesy.FromEcef(p);
+                worst = Math.Max(worst, SwissGeodesy.ToEcef(e, n, h).DistanceTo(p));
+            }
+        Assert.True(worst < 1e-3, $"{worst:E2} m off");
+        // only the sliver within ~0.13° of Bern's antimeridian is outside: one column of the grid (172.5° W)
+        Assert.Equal(90, outside);
+        double anti = 7.4396 - 180;
+        Assert.False(SwissGeodesy.InDomain(Ellipsoid.Wgs84.ToEcef(new Geodetic(10, anti + 0.05, 0))));
+        Assert.True(SwissGeodesy.InDomain(Ellipsoid.Wgs84.ToEcef(new Geodetic(10, anti + 0.2, 0))));
+    }
+
+    [Fact]
+    public void A_point_in_the_sliver_is_reported_not_quietly_converted()
+    {
+        EcefPos? seen = null;
+        SwissGeodesy.OutsideDomain = p => seen = p;
+        try
+        {
+            var p = Ellipsoid.Wgs84.ToEcef(new Geodetic(10, 7.4396 - 180 + 0.05, 400_000));
+            SwissGeodesy.FromEcef(p);
+            Assert.Equal(p, seen);
+            seen = null;
+            SwissGeodesy.FromEcef(SwissGeodesy.ToEcef(2_600_000, 1_200_000, 500));
+            Assert.Null(seen);
+        }
+        finally { SwissGeodesy.OutsideDomain = null; }
+    }
 }
 
 /// <summary>The Earth as a body (#1430, src/Core/Planet.cs).</summary>

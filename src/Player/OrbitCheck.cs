@@ -8,9 +8,9 @@ namespace UnitSport.Player;
 /// <c>godot --headless --fixed-fps 60 --path . -- --orbitcheck [km] --world flat</c> (#1430 H5): the UFO put on
 /// a circular orbit by <c>/orbit</c> (400 km by default) coasts one period at eight times speed, the floating
 /// origin following it in turned Space frames (<see cref="OriginShifter.SpaceMode"/>), then thrusts down out of
-/// the Space regime into the arcade hover. Passes when the orbit closes within 10 m, its energy drifts less
+/// the Space regime into the arcade hover, and lands. Passes when the orbit closes within 10 m, its energy drifts less
 /// than 10⁻⁶, no contact ever moved the body off it, the world stayed small round the camera, and the craft
-/// comes down out of orbit into a hover.
+/// comes down out of orbit into a hover, in a ground frame again (no turn, a whole-km corner), and lands.
 /// </summary>
 public partial class OrbitCheck : Node
 {
@@ -87,6 +87,9 @@ public partial class OrbitCheck : Node
             case 4:
                 Deorbit(delta);
                 return;
+            case 5:
+                Land(delta);
+                return;
         }
     }
 
@@ -145,6 +148,34 @@ public partial class OrbitCheck : Node
         if (alt < 0) { Fail("below the ground"); return; }
         if (Mathf.Abs(sink) > 0.5f) return;
         GD.Print(FormattableString.Invariant($"[orbitcheck] out of orbit and hovering at {alt / 1000:F1} km after {_t:F0} s"));
+        // back below the handover the world is a flat ground frame again, exactly: no turn, a whole-km
+        // corner, altitude 0 at world Y 0 (#1480, the coordinator's condition)
+        var f = _origin.Frame;
+        if (f.IsAnchor || f.Alt0 != 0 || f.E % 1000 != 0 || f.N % 1000 != 0)
+        {
+            Fail(FormattableString.Invariant($"not back in a ground frame: anchor {f.IsAnchor}, alt0 {f.Alt0}, corner {f.E}/{f.N}"));
+            return;
+        }
+        // down onto the ground: the flat world is everywhere, so its plane is put under the craft
+        p.FlyControls = () => new FlightInput(Vector2.Zero, 0f, 1f, 0f, 0f, false, false, 0f, Boost: true);
+        _t = 0;
+        _stage = 5;
+    }
+
+    /// <summary>Down from the hover onto the flat world's plane, on its legs.</summary>
+    private void Land(double delta)
+    {
+        var p = _player!;
+        _t += delta;
+        double alt = _origin.Frame.AltitudeOf(p.GlobalPosition);
+        if (_t > 3600) { Fail(FormattableString.Invariant($"still at {alt:F0} m after an hour down")); return; }
+        if (alt < 2_000 && GetParent().GetNodeOrNull<Node3D>("Ground") is { } ground
+            && new Vector2(ground.GlobalPosition.X - p.GlobalPosition.X, ground.GlobalPosition.Z - p.GlobalPosition.Z).Length() > 1_000)
+            ground.GlobalPosition = new Vector3(p.GlobalPosition.X, TestWorld.GroundY - 0.5f, p.GlobalPosition.Z);
+        if (alt < 20) p.FlyControls = () => new FlightInput(Vector2.Zero, 0f, 1f, 0f, 0f, false, false, 0f);
+        if (!_ufo!.State.Landed) return;
+        var g = _origin.Frame.ToGlobal(p.GlobalPosition);
+        GD.Print(FormattableString.Invariant($"[orbitcheck] landed after the orbit at LV95 {g.E:F0}/{g.N:F0}, {_t:F0} s from the hover; frame {_origin.Frame.E:F0}/{_origin.Frame.N:F0}, no turn"));
         Finish(0, "ok");
     }
 

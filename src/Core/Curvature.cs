@@ -58,15 +58,9 @@ public static class Curvature
     public const double SphereFromM = 20_000, SphereAtM = 50_000;
 
     /// <summary>
-    /// How high the spectator and the UFO may climb, metres: past the Space regime (60 km, #1430 H3) to
-    /// the plan's 100 km climb, until orbits (H5) and the globe (H4) make higher worth reaching.
-    /// </summary>
-    public const double CeilingM = 120_000;
-
-    /// <summary>
     /// The spectator's own ceiling, metres: far enough to see the whole Earth (#1430 H4: the globe, the
     /// air and the stars draw there; the flat tiles are gone above 250 km). A camera, no physics, so its
-    /// float position (4 m steps out there) jitters nothing; the UFO keeps <see cref="CeilingM"/>.
+    /// float position (4 m steps out there) jitters nothing. The UFO has no ceiling: above 60 km it flies an orbit (#1480).
     /// </summary>
     public const double SpectatorCeilingM = 50_000_000;
 
@@ -75,6 +69,16 @@ public static class Curvature
 
     /// <summary>The regime for a camera at <paramref name="altitude"/>, coming from <paramref name="inSpace"/>: <c>OriginShifter</c> follows it.</summary>
     public static bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
+
+    /// <summary>
+    /// The Space frames turn above this camera altitude and stop below <see cref="TurnExitM"/> (#1480), metres:
+    /// where every flat tile has dissolved (<c>World.Globe.FlatGoneM</c>, #1430 H4). Lower, the flat world is
+    /// still drawn and the curvature shader wraps it round the camera as one plane, which a turned frame breaks.
+    /// </summary>
+    public const double TurnEnterM = 250_000, TurnExitM = 240_000;
+
+    /// <summary>Whether the Space frame turns for a camera at <paramref name="altitude"/>, coming from <paramref name="turned"/>.</summary>
+    public static bool TurnRegime(bool turned, double altitude) => turned ? altitude >= TurnExitM : altitude > TurnEnterM;
 
     /// <summary>A smooth 0 → 1 from <paramref name="a"/> to <paramref name="b"/>.</summary>
     private static double SmoothStep(double a, double b, double x)

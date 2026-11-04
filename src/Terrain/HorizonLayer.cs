@@ -356,8 +356,8 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
             // ground: never a sun-shadow caster (lit styles)
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             ExtraCullMargin = CullMargin(),
-            // NW corner of the block, like a tile
-            Position = _origin!.ToWorld(key.E * ChunkFormat.TileSizeM, (key.N + BlockTiles) * ChunkFormat.TileSizeM, 0),
+            // NW corner of the block, like a tile: the frame of the tile there, turned in a Space frame (#1480)
+            Transform = _origin!.TileTransform(new TileId(key.E, key.N + BlockTiles - 1)),
         };
         AddChild(instance);
         _blocks[key] = instance;

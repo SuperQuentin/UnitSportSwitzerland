@@ -57,17 +57,21 @@ public partial class OriginShifter : Node
     public readonly record struct ReanchorMode(double ThresholdM, bool Vertical, bool Rotates);
 
     /// <summary>
-    /// The Space regime's mode: every 20 km, turned to the ellipsoid under the camera (#1430 H5: an orbit
-    /// goes round the whole Earth, where the flat LV95 plane would stretch and break; the ground keeps its
-    /// flat frame until round tiles, #1443 G2). No rise yet: at 400 km a float still holds 3 cm at the
-    /// camera, and world Y below about -2 km is the interiors' band (<c>InteriorManager.InteriorBaseY</c>),
-    /// which a risen origin puts the camera in on the way down. The vertical origin
-    /// (<see cref="OriginFrame.Alt0"/>) waits until the interiors' band is told apart by altitude rather than by raw Y.
+    /// The Space regime's mode: every 20 km, turned to the ellipsoid under the camera above 250 km (#1480:
+    /// an orbit goes round the whole Earth, where the flat LV95 plane stretches; below, the flat tiles are
+    /// still drawn as one plane, so the frame stays flat there; the ground keeps its flat frame until round
+    /// tiles, #1443 G2). No rise yet: at 400 km a float still holds 3 cm at the camera, and world Y below
+    /// about -2 km is the interiors' band (<c>InteriorManager.InteriorBaseY</c>), which a risen origin puts
+    /// the camera in on the way down. The vertical origin (<see cref="OriginFrame.Alt0"/>) waits until the
+    /// interiors' band is told apart by altitude rather than by raw Y.
     /// </summary>
     public static ReanchorMode SpaceMode { get; set; } = new(20_000, Vertical: false, Rotates: true);
 
     /// <summary>Whether the origin follows the camera in Space (above 60 km climbing, until below 50 km).</summary>
     public bool InSpace { get; private set; }
+
+    /// <summary>Whether the Space frame turns now (#1480: above 250 km, until below 240, where no flat tile is drawn).</summary>
+    public bool Turned { get; private set; }
 
 
     /// <summary>The world's origin, for whatever reads an altitude through it (the spectator's ceiling).</summary>
@@ -156,16 +160,30 @@ public partial class OriginShifter : Node
             var (se, sn) = _origin.ToLv95(at);
             GD.Print(string.Create(CultureInfo.InvariantCulture, $"[origin] {(space ? "into" : "out of")} the Space regime at {altitude / 1000:F1} km"));
             double enterAlt0 = SpaceMode.Vertical ? altitude : 0;
-            if (space) ShiftTo(se, sn, exact: true, alt0: enterAlt0, axes: SpaceMode.Rotates ? SpaceAnchor(at, enterAlt0) : null);
+            // in at 60 km the frame is flat (it turns from 250 km); out at 50 km it is the ground frame again, flat
+            // and on a whole-km corner, whatever it was
+            Turned = false;
+            if (space) ShiftTo(se, sn, exact: true, alt0: enterAlt0);
             else ShiftTo(se, sn);
             return;
         }
         if (InSpace)
         {
+            double alt0 = SpaceMode.Vertical ? altitude : _origin.Alt0;
+            // the frame turns only where no flat tile is drawn any more (#1480, above 250 km, back below 240):
+            // a change is one rigid move, as the handovers are, to a turned anchor or to the flat frame there
+            bool turn = SpaceMode.Rotates && Curvature.TurnRegime(Turned, altitude);
+            if (turn != Turned)
+            {
+                Turned = turn;
+                var (te, tn) = _origin.ToLv95(at);
+                GD.Print(string.Create(CultureInfo.InvariantCulture, $"[origin] the Space frame {(turn ? "turns" : "stops turning")} at {altitude / 1000:F1} km"));
+                ShiftTo(te, tn, exact: true, alt0: alt0, axes: turn ? SpaceAnchor(at, alt0) : null);
+                return;
+            }
             if (SpaceMode.Vertical ? at.Length() <= SpaceMode.ThresholdM : new Vector2(at.X, at.Z).Length() <= SpaceMode.ThresholdM) return;
             var (pe, pn) = _origin.ToLv95(at);
-            double alt0 = SpaceMode.Vertical ? altitude : _origin.Alt0;
-            ShiftTo(pe, pn, exact: true, alt0: alt0, axes: SpaceMode.Rotates ? SpaceAnchor(at, alt0) : null);
+            ShiftTo(pe, pn, exact: true, alt0: alt0, axes: Turned ? SpaceAnchor(at, alt0) : null);
             return;
         }
         if (new Vector2(at.X, at.Z).Length() <= ThresholdM) return;
@@ -192,7 +210,7 @@ public partial class OriginShifter : Node
         var shift = _stressYaw != 0 ? _origin.MoveTo(StressAxes(newE, newN))
             : axes != null ? _origin.MoveTo(axes)
             // a turning re-anchor (round tiles, #1443 G2): the ellipsoid's own axes at the camera
-            : InSpace && SpaceMode.Rotates ? _origin.MoveTo(FrameAxes.GroundAt(newE, newN, alt0))
+            : InSpace && Turned ? _origin.MoveTo(FrameAxes.GroundAt(newE, newN, alt0))
             : _origin.MoveTo(newE, newN, alt0);
         var pass = new Pass(shift) { Owner = this };
         Visit(GetTree().Root, pass, childrenAreGlobal: true);

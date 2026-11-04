@@ -1763,7 +1763,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             state.Node = new ChunkNode
             {
                 Name = $"Chunk_{id}",
-                Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
+                // its NW corner, turned with the world in a Space frame (#1480): a tile streamed after a turning
+                // shift lies as the ones the shift turned (the plain corner in a ground frame, to the bit)
+                Transform = _origin!.TileTransform(id),
             };
             ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);

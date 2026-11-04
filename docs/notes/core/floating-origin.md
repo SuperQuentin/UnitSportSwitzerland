@@ -83,6 +83,12 @@
     its velocity, spin and attitude; its position is read back from the body);
   - a shader sampling by world XZ gets the axes too (`HorizonLayer`'s `cover_axes`);
   - a check steering by compass heading turns it by the grid's yaw in the world (`BoatCheck.GridYaw`).
+  - **In Space the shifts turn above 250 km** (#1480, `SpaceMode.Rotates`, `Curvature.TurnRegime`,
+    `OriginShifter.Turned`), where no flat tile is drawn any more: every 20 km the anchor is
+    `FrameAxes.Tangent` under the camera, built in ECEF (the previous axes turned by the least rotation, no
+    LV95). From 60 to 250 km the Space frame stays flat: the flat tiles are still drawn there, and the
+    curvature shader wraps them as one plane. The ground keeps its flat frame until #1443 G2.
+    `--orbitcheck` flies a polar orbit through ~2,080 turned shifts; `--spacebandcheck` the band.
   `--originstress <m> --originyaw <deg>` sends every shift to an anchor frame at altitude 0 turned
   ±deg about up, so every handler meets a rotation: the car ride, the A320 and the hairpin drive
   pass at 2° (check map). Known gap: the speedboat's beach landing (`--boatcheck`) stops 3 m
