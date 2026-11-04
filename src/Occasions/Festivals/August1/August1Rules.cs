@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-august1.md).
 
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Occasions.Festivals.August1;
@@ -218,9 +219,11 @@ public static class August1Rules
 
     public static double Dist(double e, double n, (double E, double N) at) => Math.Sqrt((e - at.E) * (e - at.E) + (n - at.N) * (n - at.N));
 
-    public static bool NearLampionStand(ResolvedSite site, double e, double n) => Dist(e, n, LampionStandAt(site)) <= StandReach;
+    public static double Dist(GlobalPos pos, (double E, double N) at) => pos.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, pos.Alt));
 
-    public static bool NearFireworkStand(ResolvedSite site, double e, double n) => Dist(e, n, FireworkStandAt(site)) <= StandReach;
+    public static bool NearLampionStand(ResolvedSite site, GlobalPos at) => Dist(at, LampionStandAt(site)) <= StandReach;
 
-    public static bool NearPost(ResolvedSite site, double e, double n) => Dist(e, n, PostAt(site)) <= PostReach;
+    public static bool NearFireworkStand(ResolvedSite site, GlobalPos at) => Dist(at, FireworkStandAt(site)) <= StandReach;
+
+    public static bool NearPost(ResolvedSite site, GlobalPos at) => Dist(at, PostAt(site)) <= PostReach;
 }

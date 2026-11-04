@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-christmas.md).
 
+using UnitSport.Core;
 using UnitSport.Items;
 
 namespace UnitSport.Occasions.Festivals.Christmas;
@@ -66,22 +67,22 @@ public static class ChristmasRules
     public static (double E, double N) TreeAt(ResolvedSite site) => (site.E - TreeOffset, site.N);
 
     /// <summary>The nearest stall within <see cref="StallReach"/> of a body, or -1.</summary>
-    public static int NearestStall(ResolvedSite site, double e, double n)
+    public static int NearestStall(ResolvedSite site, GlobalPos at)
     {
         int best = -1;
         double bestD = StallReach * StallReach;
         foreach (var s in Layout(site))
         {
-            double d = (s.E - e) * (s.E - e) + (s.N - n) * (s.N - n);
+            double d = at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt));
             if (d <= bestD) { bestD = d; best = s.Index; }
         }
         return best;
     }
 
-    public static bool NearSamichlaus(ResolvedSite site, double e, double n)
+    public static bool NearSamichlaus(ResolvedSite site, GlobalPos at)
     {
         var (se, sn) = SamichlausAt(site);
-        return (se - e) * (se - e) + (sn - n) * (sn - n) <= SamichlausReach * SamichlausReach;
+        return at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(se, sn, at.Alt)) <= SamichlausReach * SamichlausReach;
     }
 
     // ---- the wares -------------------------------------------------------------------------------------------

@@ -224,14 +224,14 @@ public partial class AuraManager : Node
     {
         var ga = Body(a)!.Global;
         var gb = Body(b)!.Global;
-        double de = gb.E - ga.E, dn = gb.N - ga.N;
+        var (de, dn, _) = ga.OffsetTo(gb);
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
         float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,
             Rules = new AuraMatch(a, b, ClockSync.ServerNow),
-            Centre = new GlobalPos((ga.E + gb.E) * 0.5, (ga.N + gb.N) * 0.5, (ga.Alt + gb.Alt) * 0.5),
+            Centre = FightManager.Midpoint(ga, gb),
             Yaw = yaw,
             BodyA = Body(a),
             BodyB = Body(b),

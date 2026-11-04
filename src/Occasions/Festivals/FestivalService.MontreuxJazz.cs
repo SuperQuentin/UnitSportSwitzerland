@@ -95,13 +95,13 @@ public partial class FestivalService
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) return Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Go to the quay.");
-        if (kind == MontreuxMark) return ServeJazzMark(peer, p, run, site, e, at.E, at.N);
-        return ServeJazzClap(peer, run, site, e, at.E, at.N, stamp);
+        if (kind == MontreuxMark) return ServeJazzMark(peer, p, run, site, e, at);
+        return ServeJazzClap(peer, run, site, e, at, stamp);
     }
 
-    private string? ServeJazzMark(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, ConcertEvent e, double east, double north)
+    private string? ServeJazzMark(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, ConcertEvent e, GlobalPos at)
     {
-        if (!MontreuxJazzRules.AtRail(site, east, north, MontreuxJazzRules.ServerSlack)) return Tell(peer, "Go to the rail in front of the stage.");
+        if (!MontreuxJazzRules.AtRail(site, at, MontreuxJazzRules.ServerSlack)) return Tell(peer, "Go to the rail in front of the stage.");
         if (!MontreuxShowOn(e)) return Tell(peer, "Nothing is playing now: the band plays in the evening, 20:30 to 23:30.");
         _jazzMarked.Add(peer);
         var inst = p.Get(FestivalBook.Section).Of(run.Instance, run.Id);
@@ -118,9 +118,9 @@ public partial class FestivalService
         return null;
     }
 
-    private string? ServeJazzClap(long peer, RunningFestival run, ResolvedSite site, ConcertEvent e, double east, double north, double stamp)
+    private string? ServeJazzClap(long peer, RunningFestival run, ResolvedSite site, ConcertEvent e, GlobalPos at, double stamp)
     {
-        if (!MontreuxJazzRules.InZone(site, east, north, MontreuxJazzRules.ServerSlack)) return "Too far from the stage.";
+        if (!MontreuxJazzRules.InZone(site, at, MontreuxJazzRules.ServerSlack)) return "Too far from the stage.";
         if (!MontreuxShowOn(e)) return "No set is on.";
         double now = Net.ClockSync.ServerNow;
         // the client's own reading of the shared clock, when it is near the server's: its press, not the packet's arrival, is what is judged
@@ -171,7 +171,7 @@ public partial class FestivalService
         if (meter.Total == _jazzMeterSent) return;
         _jazzMeterSent = meter.Total;
         foreach (long other in _adventure.Peers.ToArray())
-            if (other > 0 && _adventure.Active(other) && _adventure.PositionOf?.Invoke(other) is { } at && MontreuxJazzRules.InZone(site, at.E, at.N, MontreuxJazzRules.ServerSlack))
+            if (other > 0 && _adventure.Active(other) && _adventure.PositionOf?.Invoke(other) is { } at && MontreuxJazzRules.InZone(site, at, MontreuxJazzRules.ServerSlack))
                 NoteMontreux(other, JazzEvent.Sync, run.Day, meter.Total, "");
     }
 
@@ -179,13 +179,13 @@ public partial class FestivalService
     /// The party members who are with <paramref name="peer"/> now (adventuring, in the zone, within the together radius): what the group yield counts. A stranger
     /// never does, so a lone player or a crowd of strangers is paid the base alone.
     /// </summary>
-    private int JazzFriends(long peer, ResolvedSite site, double e, double n)
+    private int JazzFriends(long peer, ResolvedSite site, GlobalPos centre)
     {
         if (PartyOf?.Invoke(peer) is not { } members) return 0;
         int count = 0;
         foreach (long other in members)
             if (other != peer && other > 0 && _adventure.Active(other) && _adventure.PositionOf?.Invoke(other) is { } at
-                && MontreuxJazzRules.InZone(site, at.E, at.N) && MontreuxJazzRules.Dist(at.E, at.N, (e, n)) <= TogetherRules.Radius)
+                && MontreuxJazzRules.InZone(site, at) && at.HorizontalDistanceTo(centre) <= TogetherRules.Radius)
                 count++;
         return Math.Min(count, TogetherRules.MaxCounted);
     }
@@ -221,7 +221,7 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !_adventure.Active(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            if (!MontreuxJazzRules.InZone(site, at.E, at.N))
+            if (!MontreuxJazzRules.InZone(site, at))
             {
                 if (_jazzMarked.Remove(peer)) NoteMontreux(peer, JazzEvent.Left, 0, 0, "You left the audience: stand near the stage and press the interact key at the rail again.");
                 _jazzTally.Remove(peer);
@@ -254,9 +254,9 @@ public partial class FestivalService
             if (tally.Set != set || tally.Song != song) continue;
             _jazzTally.Remove(peer);
             if (!MontreuxJazzRules.Counts(tally.Seconds, length) || !_adventure.Active(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            if (!MontreuxJazzRules.InZone(site, at.E, at.N, MontreuxJazzRules.ServerSlack)) continue;
+            if (!MontreuxJazzRules.InZone(site, at, MontreuxJazzRules.ServerSlack)) continue;
             if (PlaysToday(peer, run.Id, MontreuxJazzRules.ListenGame) >= MontreuxJazzRules.MaxSongsPerNight) continue;
-            int friends = JazzFriends(peer, site, at.E, at.N);
+            int friends = JazzFriends(peer, site, at);
             int batzen = TogetherRules.Yield(MontreuxJazzRules.SongPay(run.Day), friends, Random.Shared.NextDouble());
             int granted = Award(peer, run.Id, batzen, "listened to a song", MontreuxJazzRules.ListenGame, MontreuxJazzRules.SongPoints);
             MontreuxSongsPaid++;
@@ -283,7 +283,7 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !_adventure.Active(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            bool near = MontreuxJazzRules.InZone(site, at.E, at.N, MontreuxJazzRules.ServerSlack);
+            bool near = MontreuxJazzRules.InZone(site, at, MontreuxJazzRules.ServerSlack);
             int own = meter.Own(peer);
             if (!near && own == 0) continue;
             if (!reached) { NoteMontreux(peer, JazzEvent.NoBis, run.Day, meter.Total, line); continue; }
@@ -292,7 +292,7 @@ public partial class FestivalService
                 NoteMontreux(peer, JazzEvent.Bis, run.Day, meter.Total, own == 0 ? line : $"{line} Only {own} of your claps counted: clap along next time.");
                 continue;
             }
-            int friends = JazzFriends(peer, site, at.E, at.N);
+            int friends = JazzFriends(peer, site, at);
             int batzen = TogetherRules.Yield(MontreuxJazzRules.EncorePay(run.Day), friends, Random.Shared.NextDouble());
             int granted = Award(peer, run.Id, batzen, "the bis", MontreuxJazzRules.EncoreGame, MontreuxJazzRules.EncorePoints);
             MontreuxBisPaid++;

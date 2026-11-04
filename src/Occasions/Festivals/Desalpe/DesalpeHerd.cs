@@ -96,13 +96,13 @@ public partial class DesalpeHerd : Node3D
     public (double E, double N)? CowAt(int cow) => _site == null || cow < 0 || cow >= _x.Length ? null : (_site.E + _x[cow], _site.N + _y[cow]);
 
     /// <summary>The cow nearest to an LV95 point and how far it is, or (-1, +inf).</summary>
-    public (int Cow, double Distance) Nearest(double e, double n)
+    public (int Cow, double Distance) Nearest(GlobalPos at)
     {
         int best = -1;
         double bestD = double.MaxValue;
         for (int i = 0; i < _x.Length; i++)
         {
-            double d = GlobalPos.HorizontalDistance(_site!.E + _x[i], _site.N + _y[i], e, n);
+            double d = at.HorizontalDistanceTo(GlobalPos.FromLv95(_site!.E + _x[i], _site.N + _y[i], at.Alt));
             if (d < bestD) { bestD = d; best = i; }
         }
         return (best, bestD);

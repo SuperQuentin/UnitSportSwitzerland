@@ -198,7 +198,7 @@ public partial class SteinGame : Node3D, IOriginContainer
 
     /// <summary>Is the body at the stone: within reach on the ground's plane.</summary>
     private bool AtStone(FootPlayer p) =>
-        _ground is { } g && g.DistanceTo(p.Global.E, p.Global.N) <= StoneReach;
+        _ground is { } g && g.DistanceTo(p.Global) <= StoneReach;
 
     private int PutsLeft()
     {

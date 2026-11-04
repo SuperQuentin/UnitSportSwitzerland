@@ -99,7 +99,7 @@ public partial class DesalpeGame : CanvasLayer
         int phase = _svc?.DesalpeNow?.Phase ?? -1;
         // the drive starts: the herder's call from where this player stands
         if (_lastPhase == (int)DesalpePhase.Grazing && phase == (int)DesalpePhase.Driving && _local() is { } p && DesalpeHerd.Instance is { } herd && p.Origin is { } o)
-            herd.Call(o.ToWorld(p.Global.E, p.Global.N, p.Global.Alt + 1.4f));
+            herd.Call(o.ToWorld(p.Global.Moved(0, 0, 1.4f)));
         _lastPhase = phase;
         _driveKey = -1;
         _clockAtView = GameClock.Now;
@@ -138,7 +138,7 @@ public partial class DesalpeGame : CanvasLayer
 
     private bool NearHerdOrSign(FootPlayer p) => _cow >= 0 || _atSign;
 
-    private bool InRing(FootPlayer p) => Run?.Site is { } site && site.DistanceTo(p.Global.E, p.Global.N) <= RingReach;
+    private bool InRing(FootPlayer p) => Run?.Site is { } site && site.DistanceTo(p.Global) <= RingReach;
 
     private DesalpeRoute? Route => _svc?.DesalpeRouteNow();
 
@@ -159,11 +159,11 @@ public partial class DesalpeGame : CanvasLayer
         bool grazing = view.Phase == (int)DesalpePhase.Grazing;
         if (grazing && DesalpeHerd.Instance is { Count: > 0 } herd)
         {
-            var (cow, d) = herd.Nearest(g.E, g.N);
+            var (cow, d) = herd.Nearest(g);
             if (cow >= 0 && d <= CowReach && Open(DesalpeRules.DressGame)) { _cow = cow; _dressing = true; }
         }
         var (se, sn) = DesalpeGround.Sign(site, route);
-        _atSign = grazing && Open(DesalpeRules.DriveGame) && !_dressing && Math.Sqrt((g.E - se) * (g.E - se) + (g.N - sn) * (g.N - sn)) <= SignReach;
+        _atSign = grazing && Open(DesalpeRules.DriveGame) && !_dressing && g.HorizontalDistanceTo(GlobalPos.FromLv95(se, sn, g.Alt)) <= SignReach;
         _voting = !_dressing && !_atSign && Open(DesalpeRules.VoteGame) && view.Ring.Length > 0 && _votedInstance != view.Instance && InRing(p);
 
         bool use = (_dressing || _voting) && UseHeld();
@@ -324,7 +324,7 @@ public partial class DesalpeGame : CanvasLayer
         private static bool NearHerd(DesalpeGame g, DesalpeHerd herd)
         {
             if (g._local() is not { } p || g.Run?.Site is not { } site || herd.CowAt(0) is not { } at) return false;
-            return GlobalPos.HorizontalDistanceSquared(p.Global.E, p.Global.N, at.E, at.N) <= 300 * 300;
+            return p.Global.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(at.E, at.N, p.Global.Alt)) <= 300 * 300;
         }
 
         private void DrawDrive(DesalpeGame g, DesalpeView view, DesalpeHerd herd, Vector2 c)

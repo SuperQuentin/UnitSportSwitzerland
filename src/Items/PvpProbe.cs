@@ -53,7 +53,7 @@ public partial class PvpProbe : ChatProbe
         me.LookYaw = 0f;
         // LV95: B's world space is not this one (every peer has its own origin, #185)
         var at = me.Global;
-        string pos = Fmt($"posA {at.E:F2} {at.N:F2} {at.Alt:F2}");
+        string pos = Fmt($"posA {at.Lv95.E:F2} {at.Lv95.N:F2} {at.Alt:F2}");
         for (int tries = 0; tries < 60 && !Said("B", "ready"); tries++)
         {
             Say(pos);

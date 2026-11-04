@@ -153,7 +153,7 @@ public partial class PhoneController : Node
     public override void _Ready()
     {
         AddChild(_screens);
-        _screens.Here = () => _player() is { } pl ? (pl.Global.E, pl.Global.N) : null;
+        _screens.Here = () => _player() is { } pl ? pl.Global : null;
         _screens.BackPressed += () => { if (_stage is Stage.Open or Stage.Opening) Back(); };
         _screens.TravelPicked += place => Travel(place.E, place.N, place.Name);
         _screens.CommandPicked += cmd =>

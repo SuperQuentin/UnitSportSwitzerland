@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.Zibelemaerit;
@@ -53,8 +54,8 @@ public class ZibeleTests
         for (int i = 1; i < layout.Length; i++) Assert.True(ZibeleRules.Dist(layout[i].E, layout[i].N, layout[i - 1].E, layout[i - 1].N) > 3.4);   // a booth is 3.3 m wide
         // standing in front of a stall finds that stall, standing far off finds none
         var s0 = layout[0];
-        Assert.Equal(0, ZibeleRules.NearestStall(Site(), s0.E, s0.N - 2));
-        Assert.Equal(-1, ZibeleRules.NearestStall(Site(), s0.E + 100, s0.N + 100));
+        Assert.Equal(0, ZibeleRules.NearestStall(Site(), GlobalPos.FromLv95(s0.E, s0.N - 2, 0)));
+        Assert.Equal(-1, ZibeleRules.NearestStall(Site(), GlobalPos.FromLv95(s0.E + 100, s0.N + 100, 0)));
     }
 
     [Fact]
@@ -112,8 +113,8 @@ public class ZibeleTests
     public void The_square_is_where_throws_count()
     {
         var site = Site();
-        Assert.True(ZibeleRules.NearSite(site, site.E + 100, site.N));
-        Assert.False(ZibeleRules.NearSite(site, site.E + 150, site.N));
-        Assert.True(ZibeleRules.NearSite(site, site.E + 150, site.N, ZibeleRules.ServerSlack * 6));
+        Assert.True(ZibeleRules.NearSite(site, GlobalPos.FromLv95(site.E + 100, site.N, 0)));
+        Assert.False(ZibeleRules.NearSite(site, GlobalPos.FromLv95(site.E + 150, site.N, 0)));
+        Assert.True(ZibeleRules.NearSite(site, GlobalPos.FromLv95(site.E + 150, site.N, 0), ZibeleRules.ServerSlack * 6));
     }
 }

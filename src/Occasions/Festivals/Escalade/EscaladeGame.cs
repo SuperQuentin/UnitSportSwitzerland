@@ -139,9 +139,9 @@ public partial class EscaladeGame : CanvasLayer
         if (_svc?.EscaladeNow() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            target = EscaladeRules.NearMarmite(m.Site, g.E, g.N) ? FestivalService.EscaladeMarmite
-                : EscaladeRules.NearPot(m.Site, g.E, g.N) ? FestivalService.EscaladePot
-                : EscaladeRules.NearStart(m.Site, g.E, g.N) ? FestivalService.EscaladeStart : -1;
+            target = EscaladeRules.NearMarmite(m.Site, g) ? FestivalService.EscaladeMarmite
+                : EscaladeRules.NearPot(m.Site, g) ? FestivalService.EscaladePot
+                : EscaladeRules.NearStart(m.Site, g) ? FestivalService.EscaladeStart : -1;
         }
         else if (_running) _running = false;   // the festival ended, or this body is gone
         bool shown = target >= 0 || _running || GameClock.Now - _messageAt < 4;
@@ -187,7 +187,7 @@ public partial class EscaladeGame : CanvasLayer
         var path = EscaladeRules.Path(site);
         var g = p.Global;
         var to = path[Math.Clamp(_next, 0, EscaladeRules.Gates)];
-        double dx = to.E - g.E, dn = to.N - g.N;
+        var (dx, dn, _) = g.OffsetTo(GlobalPos.FromLv95(to.E, to.N, g.Alt));
         int dist = (int)(Math.Sqrt(dx * dx + dn * dn) / 5) * 5;
         int bearing = (int)Math.Round(Math.Atan2(dx, dn) / (Math.PI / 4));   // 0 = north, clockwise
         int secs = (int)(GameClock.Now - _runStart);

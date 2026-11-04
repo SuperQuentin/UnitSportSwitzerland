@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Interiors;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Construction;
@@ -23,10 +24,10 @@ internal sealed class YardIndex
     private TileId _here;
     private bool _haveHere;
 
-    /// <summary>Plans the tiles round <paramref name="e"/>, <paramref name="n"/> not yet planned, and takes in those that are done.</summary>
-    public void Around(IChunkSource source, double e, double n)
+    /// <summary>Plans the tiles round <paramref name="at"/> not yet planned, and takes in those that are done.</summary>
+    public void Around(IChunkSource source, GlobalPos at)
     {
-        var here = TileId.FromLv95(e, n);
+        var here = at.Tile;
         if (!_haveHere || here != _here)
         {
             _here = here;
@@ -42,7 +43,7 @@ internal sealed class YardIndex
                 var id = here.Neighbour(tx, tz);
                 if (_tiles.ContainsKey(id) || _loading.ContainsKey(id)) continue;
                 // how far the player is outside the tile, in its own frame (#1443)
-                var (x, z) = id.Local(e, n);
+                var (x, z) = id.Local(at.E, at.N);
                 double dx = Math.Max(0, Math.Max(-x, x - ChunkFormat.TileSizeM));
                 double dz = Math.Max(0, Math.Max(-z, z - ChunkFormat.TileSizeM));
                 if (dx * dx + dz * dz > TileReach * TileReach) continue;

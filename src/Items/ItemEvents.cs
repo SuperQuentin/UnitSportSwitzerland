@@ -267,8 +267,8 @@ public partial class ItemEvents : Node
         if (!bot && !Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
         var eye = shooter.Global;
         if (!weapon.Melee && GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName)?.Ground is { } ground
-            && !Combat.HitGuard.TerrainClear((eye.E, eye.N, eye.Alt + 1.6), (position.E, position.N, position.Alt),
-                (e, n) => ground(new Core.GlobalPos(e, n, 0))))
+            && !Combat.HitGuard.TerrainClear(eye.Moved(0, 0, 1.6), position,
+                p => ground(p.WithAlt(0))))
         {
             GD.Print(FormattableString.Invariant($"[pvp] refused peer {sender} on peer {hit.Victim}: through the ground ({hit.Weapon})"));
             return;
