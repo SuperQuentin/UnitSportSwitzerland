@@ -26,7 +26,7 @@ sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`
   phase fitted to Horizons on 2026-01-01 (`Satellites` table in `Ephemeris.Planets.cs`): within 3.3 %
   of their orbit at the ten test dates.
 - **Drawing them** (`World/SkyBodies`, `shaders/planet.gdshader`, `planet_rings.gdshader`): by eye a
-  point sized by magnitude (Venus shows by day); once more than about a pixel wide (zoomed), the body:
+  point sized by magnitude (Venus alone shows by day: Jupiter and Mercury dotted a noon sky, #1497); once more than about a pixel wide (zoomed), the body:
   a unit sphere whose basis is the body's own axes, squashed along the pole (Jupiter, Saturn), its map
   read from the vertex, lit from **its own direction to the sun** (not the Earth's), limb-darkened for
   the giants. Saturn's rings are an annulus in its equator; the rings' far side and a moon behind its

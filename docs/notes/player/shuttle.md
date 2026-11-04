@@ -91,11 +91,17 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
 
 ## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
 
-- At Geneva on the real map (D:'s tiles and globe), windowed, silent (`--audio-driver Dummy`), frame-exact
-  (`--fixed-fps 30 --clip-hq`): `ShuttlePilot` flies the Europe mission (taxi onto 04, out 2,000 km NE in the
+- At Geneva on the real map (D:'s tiles and globe), windowed, frame-exact (`--fixed-fps 30 --clip-hq`) in
+  Godot's movie mode: `ShuttlePilot` flies the Europe mission (taxi onto 04, out 2,000 km NE in the
   drive and back over home, a minute of orbit, a retro burn to a -3,500 km perigee, re-entry ~1,600 km SW, back up
   and the drive home, the approach to 22 over the lake), `ClipRecorder.Film`/`Cut` film five clips, faster
-  between them; the script cuts them into `shuttle-film.mp4` with captions (ffmpeg's `drawtext`).
+  between them; the script cuts them into `shuttle-film.mp4` with captions (ffmpeg's `drawtext`), and
+  `shuttle-film-short.mp4` (the taxi skipped, sped up 1-3x, two passes to `SHORT_MB`, 8: about 85 s).
+- **The sound**: `--write-movie` mixes the audio in step with each drawn frame (the dummy driver, so silent while it
+  runs), so the run's AVI (MJPEG, a few GB, `MOVIE`, deleted after unless `KEEP=1`) holds the sound in time. Each
+  clip takes its slice from the frame ClipRecorder logs its first picture on (`frames from frame N`), sped up
+  with `atempo` (the pitch kept). Real-time capture (`AudioEffectCapture`) cannot do it: the mixer runs on the
+  wall clock while the frames do not.
 - The same mission headless on the flat world: `--shuttlecheck europe`.
 
 ## Checks

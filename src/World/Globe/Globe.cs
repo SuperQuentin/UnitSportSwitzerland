@@ -74,10 +74,17 @@ public partial class Globe : Node
     /// <summary>Every flat tile dissolves from here to <see cref="FlatGoneM"/>: the globe alone above.</summary>
     public const double FlatFromM = 150_000, FlatGoneM = 250_000;
 
+    /// <summary>
+    /// Farther than this from the real tiles' box, metres, the fill is the generator shaping ground past the country
+    /// it knows (#1497: re-entry 1,600 km out drew it as a black disc under the shuttle from 68 km): there it is
+    /// hidden wherever the globe shows, gone over the 5 km above <see cref="ShowAboveM"/>.
+    /// </summary>
+    public const double FillFarM = 100_000;
+
     private static readonly StringName FillHide = "world_fill_hide", FlatHide = "world_flat_hide", RealMask = "world_real_mask",
         RealOrigin = "world_real_origin", RealExtent = "world_real_extent", RealAxes = "world_real_axes";
 
-    private int _realCount = -1, _maskMinE, _maskMaxN;
+    private int _realCount = -1, _maskMinE, _maskMaxE, _maskMinN, _maskMaxN;
     private float _fill = -1, _flat = -1;
     private ImageTexture? _mask;
 
@@ -137,7 +144,7 @@ public partial class Globe : Node
     /// <see cref="FlatFromM"/> (terrain.gdshaderinc's <c>flat_hidden</c>); the real tiles' mask rebuilt
     /// when the real set grows. Written on change only.
     /// </summary>
-    private void Hide(double altitude)
+    private void Hide(double altitude, Vector3 camera)
     {
         if (RealTiles?.Invoke() is { Count: > 0 } real && real.Count != _realCount)
         {
@@ -151,13 +158,15 @@ public partial class Globe : Node
             var image = Image.CreateEmpty(maxE - minE + 1, maxN - minN + 1, false, Image.Format.R8);
             image.Fill(Colors.Black);
             foreach (var t in real) image.SetPixel(t.E - minE, maxN - t.N, Colors.White);
-            (_maskMinE, _maskMaxN) = (minE, maxN);
+            (_maskMinE, _maskMaxE, _maskMinN, _maskMaxN) = (minE, maxE, minN, maxN);
             _mask = ImageTexture.CreateFromImage(image);
             RenderingServer.GlobalShaderParameterSet(RealMask, _mask.GetRid());
             RenderingServer.GlobalShaderParameterSet(RealExtent, new Vector2(image.GetWidth() * 1000f, image.GetHeight() * 1000f));
             PushMaskCorner();
         }
         float fill = _mask == null ? 0 : (float)Mathf.SmoothStep(FillFromM, FillGoneM, altitude);
+        if (_mask != null && fill < 1f && altitude > ShowAboveM && FarFromReal(camera))
+            fill = Math.Max(fill, (float)Mathf.SmoothStep(ShowAboveM, ShowAboveM + 5_000, altitude));
         float flat = (float)Mathf.SmoothStep(FlatFromM, FlatGoneM, altitude);
         if (fill != _fill) RenderingServer.GlobalShaderParameterSet(FillHide, _fill = fill);
         if (flat != _flat)
@@ -166,6 +175,15 @@ public partial class Globe : Node
             // all dissolved: not drawn at all (34 M triangles discarded a pixel at a time at 3,000 km)
             if (FlatWorld != null && IsInstanceValid(FlatWorld)) FlatWorld.Visible = flat < 1f;
         }
+    }
+
+    /// <summary>Whether the camera is more than <see cref="FillFarM"/> outside the real tiles' box.</summary>
+    private bool FarFromReal(Vector3 camera)
+    {
+        var g = Origin!.ToGlobal(camera);
+        double de = Math.Max(Math.Max(_maskMinE * 1000.0 - g.E, g.E - (_maskMaxE + 1) * 1000.0), 0);
+        double dn = Math.Max(Math.Max(_maskMinN * 1000.0 - g.N, g.N - (_maskMaxN + 1) * 1000.0), 0);
+        return de * de + dn * dn > FillFarM * FillFarM;
     }
 
     /// <summary>The mask is sampled by world XZ: its NW corner and grid axes, again after a shift.</summary>
@@ -189,7 +207,7 @@ public partial class Globe : Node
             if (r.Month == _month && !_patches.ContainsKey(r.Key)) Commit(r.Key, r.Arrays, r.Colour);
 
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
-        Hide(altitude);
+        Hide(altitude, cam.GlobalPosition);
         bool show = altitude > ShowAboveM;
         if (show != _shown)
         {

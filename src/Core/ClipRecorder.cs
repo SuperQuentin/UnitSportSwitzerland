@@ -60,6 +60,9 @@ public partial class ClipRecorder : Node
     private double _delay, _seconds, _elapsed, _sinceFrame;
     private bool _recording, _encoding, _quitAfter;
     private int _frames;
+
+    /// <summary>The frame the clip's first picture was drawn in (<c>Engine.GetFramesDrawn</c>): where its sound starts in a <c>--write-movie</c> track (#1497).</summary>
+    private int _firstFrame;
     private Vector2I _size;
     private System.Action<string>? _reply;
 
@@ -190,6 +193,7 @@ public partial class ClipRecorder : Node
         if (_size == default)
         {
             // even sides: yuv420p (the MP4) needs them
+            _firstFrame = Engine.GetFramesDrawn();
             int w = HighQuality ? image.GetWidth() / 2 * 2 : Width;
             int h = (int)System.Math.Round(w * image.GetHeight() / (double)image.GetWidth() / 2) * 2;
             _size = new Vector2I(w, h);
@@ -305,6 +309,7 @@ public partial class ClipRecorder : Node
         var writer = _writer!;
         int frames = _frames;
         double seconds = _elapsed;
+        int first = _firstFrame;
         System.Threading.Tasks.Task.Run(async () =>
         {
             await writer.ConfigureAwait(false);
@@ -314,11 +319,11 @@ public partial class ClipRecorder : Node
             string log;
             lock (_log) log = _log.ToString().Trim();
             ffmpeg.Dispose();
-            Callable.From(() => Finished(ok, frames, seconds, log)).CallDeferred();
+            Callable.From(() => Finished(ok, frames, first, seconds, log)).CallDeferred();
         });
     }
 
-    private void Finished(bool ok, int frames, double seconds, string log)
+    private void Finished(bool ok, int frames, int first, double seconds, string log)
     {
         _encoding = false;
         _ffmpeg = null;
@@ -328,7 +333,7 @@ public partial class ClipRecorder : Node
         {
             long kb = new FileInfo(_gifPath).Length / 1024;
             string also = _hasX264 == true ? $" and {Path.GetFileName(_mp4Path)}" : "";
-            Say(string.Create(CultureInfo.InvariantCulture, $"wrote {_gifPath} ({kb} KB, {frames} frames over {seconds:F1} s){also}"), failed: false);
+            Say(string.Create(CultureInfo.InvariantCulture, $"wrote {_gifPath} ({kb} KB, {frames} frames from frame {first} over {seconds:F1} s){also}"), failed: false);
         }
         else Say($"{_name}: ffmpeg failed. {_pipeError} {log}", failed: true);
     }
