@@ -961,6 +961,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
                 runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
                 runner.RunCommand = line => _chat?.Send(line);
+                runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;
             }),
         };

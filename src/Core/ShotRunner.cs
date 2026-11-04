@@ -35,6 +35,8 @@ namespace UnitSport.Core;
 /// "fov 6.87" sets the camera's vertical field of view, degrees, for the shots after it (#1433: a lens's
 /// zoom, 6.87 is the camera item's 200 mm; the level of detail follows <see cref="Styles.LodScale"/>); below 1° it is a
 /// frustum of that angle (<see cref="CameraLens"/>, the telescope's, #1440).
+/// "puppet a320 E,N,alt,heading,speed[,climb]" (#1430) sends a machine across the shots after it, in a straight
+/// line (<see cref="SpawnPuppet"/>: <c>Movie/FilmPuppet</c>, the street-to-Earth film's airliner and saucer).
 /// "shift dE,dN" moves the floating origin by that many metres with the camera still (#185), then
 /// logs the CPU and GPU time of the frames after it against the frames before: what a shift costs
 /// the renderer (SDFGI relights, <c>docs/notes/core/floating-origin.md</c>). Shots before and
@@ -50,7 +52,7 @@ public partial class ShotRunner : Node
 {
     private readonly record struct Shot(Vector3 Position, float PitchDeg, float YawDeg, double SettleSeconds, string OutPath,
         float? AboveGround = null, string? Command = null, float? Inside = null, Vector2? ShiftBy = null, string? Door = null,
-        bool Local = false, float? Fov = null);
+        bool Local = false, float? Fov = null, string? Puppet = null);
 
     /// <summary>How far from an "i" shot's point its door may be, m.</summary>
     private const float InsideDoorReach = 50f;
@@ -72,6 +74,9 @@ public partial class ShotRunner : Node
 
     /// <summary>Runs a queued chat line ("/style cartoon"); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
+
+    /// <summary>Sends a queued "puppet" line's machine across the shots (<c>Movie/FilmPuppet</c>); the client world spawns it.</summary>
+    public System.Action<string>? SpawnPuppet { get; set; }
 
     /// <summary>
     /// Whether the ground round a point is complete (the director's <c>ChunkManager.CompleteNear</c>,
@@ -399,6 +404,11 @@ public partial class ShotRunner : Node
             ShiftOrigin(by);
             return false;
         }
+        if (next is { Puppet: { } puppet })
+        {
+            SpawnPuppet?.Invoke(puppet);
+            return false;
+        }
         if (next is { Fov: { } fov })
         {
             GD.Print(string.Create(CultureInfo.InvariantCulture, $"[shot-queue] fov {fov}"));
@@ -440,6 +450,7 @@ public partial class ShotRunner : Node
             else if (line.StartsWith('/')) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Command: line));
             else if (line.StartsWith("fov ") && float.TryParse(line[4..], NumberStyles.Float, CultureInfo.InvariantCulture, out float fov))
                 _pending.Enqueue(new Shot(default, 0, 0, 0, "", Fov: fov));
+            else if (line.StartsWith("puppet ")) _pending.Enqueue(new Shot(default, 0, 0, 0, "", Puppet: line[7..]));
             else if (TryParseShift(line, out var by))
             {
                 _pending.Enqueue(new Shot(default, 0, 0, 0, "", ShiftBy: by));
