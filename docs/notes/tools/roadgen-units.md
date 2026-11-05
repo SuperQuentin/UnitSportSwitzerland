@@ -108,6 +108,19 @@ LV95 references: main's `RoadGen --rewrite` of the same raw input (`test_b3/road
   **centrelines p99 0.07 cm, max 0.53 cm** (smoothing per raw piece, cut where each build cuts). The stage's maths
   depend on its tiling; the frame machinery itself is exact. Follow-up #1546 (smooth each line whole; walls without a
   tile-aligned raster).
+- **Why the tail is inherent to the comparison** (#1546, decided Nov 5 2026): `AlignmentBuilder.FromPolyline` smooths
+  each raw piece alone. `Polyline.Simplify` (0.6 m) keeps the piece's two ends, the cuts, and keeps the vertices whose
+  distance to chords from those ends passes the tolerance; each corner's radius is capped by `LegShare` (0.45) of its
+  shorter leg, the first and last legs measured from the cuts. A cut moved from a km line to a leaf edge changes which
+  vertices stay and how tight the curves next to it are, all along the piece: each build's centreline stays within
+  the tolerance and its corner offsets of the same raw line (stage 2: 0.02 cm), but not of the other's. Two builds cut
+  differently cannot agree to 2 cm while the stage smooths per piece, and the LV95 build cannot change (its bytes are
+  the reference until D). **The row-4b centreline bar (2 cm) is held on the frame machinery**: both builds with no
+  buildings and `--no-smooth`, p99 0.07 cm, max 0.53 cm. As built the tail is reported, not barred (centrelines p99
+  ~30 cm, junction centres p95 17-110 cm). The fix that removes it (one smoothing per TLM line, cut back at the tile
+  edges; facade rays against the walls themselves) changes both builds and goes with D, when the LV95 instance is
+  deleted (#1546 stays open for it). A frame-only fix now would not reach 2 cm either: the LV95 reference keeps its
+  km-line cuts.
 - Heights above ground differ p99 5-7 cm (the leaf mesh against the 1 m `.terr` under the town lowering; decided:
   features drape on the leaf mesh).
 - The LV95 instance stays byte-identical: the 41-tile check (above) again on this branch.
