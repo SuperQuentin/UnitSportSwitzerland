@@ -7,7 +7,7 @@
 - **Placed objects** (`PlacedKind` 5-10, the `item-net-events` note): server-owned, saved, snapshot on join,
   only the owner takes one back (Aim + Use with the same item in hand, within 4 m; the item comes back).
   A kind's own rules: `Gadgets.Check`, called by `PlacedObjects.ServePlace` (and by the ghost).
-  - Zipline: placed at its **low** post, payload = the high post "E;N;alt" (invariant). 8-150 m, at least 2 m
+  - Zipline: placed at its **low** post, payload = the high post "E;N;alt" (invariant) in memory; saved and sent as ECEF "x;y;z" mm (`EarthSaves.ZipToEarth`, #1503). 8-150 m, at least 2 m
     downhill, at most 45°. Two Uses: the top post, then the bottom one (the ghost shows both posts and the cable).
   - Rope ladder: placed at its top, payload = length (1.5-8 m, measured by a ray down beside the edge aimed at).
   - Others: on flat ground (normal.Y >= 0.75), facing the player (local +Z toward them).
