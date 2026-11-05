@@ -477,13 +477,13 @@ public static class CubeCompare
         var h = new Tally();
         var v = new Tally();
         var seat = new Tally();
-        var onGround = new Tally();
+        var onSeat = new Tally();
         long lvTotal = 0, cubeTotal = 0, byId = 0, byNearest = 0, lvAlone = 0, cubeAlone = 0, lvWithId = 0, lvIdFound = 0;
         foreach (var bundle in c.Cube.Bundles)
         {
             var frame = bundle.Anchor;
             var cube = new ConcurrentBag<(Feature F, double[] Pts)>();
-            var lv = new ConcurrentBag<(Feature F, double[] Pts, bool Owned)>();
+            var lv = new ConcurrentBag<(Feature F, double[] Pts, bool Owned, (double E, double N)[] Seat)>();
             Parallel.ForEach(c.Cube.LeavesIn(bundle), c.Par, key =>
             {
                 if (c.Cube.Section(key, LeafKind.Buildings) is not { } sec) return;
@@ -497,7 +497,7 @@ public static class CubeCompare
                 if (c.Lv.Buildings(id) is not { } tile) return;
                 foreach (var b in tile.Buildings)
                     if (BuildingIn(b, frame, i => Lv95Point(id, b.Triangles[i], b.Triangles[i + 1], b.Triangles[i + 2])) is { } x)
-                        lv.Add((x.F, x.Pts, c.Cube.Owns(bundle, frame.ToEcef(x.F.X, x.F.Y, x.F.Z))));
+                        lv.Add((x.F, x.Pts, c.Cube.Owns(bundle, frame.ToEcef(x.F.X, x.F.Y, x.F.Z)), SeatSamples(id, b)));
             });
             var lvList = lv.ToList();
             var cubeList = cube.ToList();
@@ -507,14 +507,15 @@ public static class CubeCompare
             {
                 if (!lvList[a].Owned) continue;
                 if (id) byId++; else byNearest++;
-                // each build seats a building on its own ground (#1507): the grounds' difference under its centre,
-                // and the vertices' vertical offset less it (what the stage itself moved)
-                var f = lvList[a].F;
-                var centre = frame.ToEcef(f.X, f.Y, f.Z);
-                double dg = c.Lv.AboveGround(centre) - c.Cube.AboveGround(centre);
-                if (double.IsNaN(dg)) dg = 0;
-                else seat.Add(dg);
-                VertexOffsets(lvList[a].Pts, cubeList[b].Pts, h, v, onGround, dg);
+                // each build seats a building on its own ground (#1507): the difference of the two seats (the
+                // median ground at the 3 x 3 re-seat samples), and the vertices' vertical offset less it
+                double dg = SeatDifference(c, lvList[a].Seat);
+                if (double.IsNaN(dg)) VertexOffsets(lvList[a].Pts, cubeList[b].Pts, h, v);
+                else
+                {
+                    seat.Add(dg);
+                    VertexOffsets(lvList[a].Pts, cubeList[b].Pts, h, v, onSeat, dg);
+                }
             }
             for (int a = 0; a < lvList.Count; a++)
             {
@@ -531,10 +532,69 @@ public static class CubeCompare
         r.AtLeast($"LV95 buildings with an EGID found by it ({lvWithId})", lvWithId == 0 ? 1 : lvIdFound / (double)lvWithId, CompareBars.ClassAgreement);
         r.AtMost("buildings alone", (lvAlone + cubeAlone) / (double)Math.Max(1, Math.Max(lvTotal, cubeTotal)), 1 - CompareBars.ClassAgreement, "P2");
         r.Check("vertex plan distance", h.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
-        r.Check("vertex vertical", v.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
-        r.Check("the grounds under them (leaf mesh less .terr at each centre)", seat.Spread(), true);
-        r.Check("vertex vertical less that ground difference", onGround.Spread(), true);
+        // decided with the user (#1507): a building sits on its own build's ground, and the grounds differ by the
+        // heights stage's own differences, so the 2 cm holds on each vertex's height above its seat; the absolute
+        // height is held to the heights' bars
+        r.Check("vertex vertical", v.Spread(), true, new Bar(Stat.Mean, CompareBars.HeightBias), new Bar(Stat.P50, CompareBars.HeightMedian));
+        r.Check("the seats (median ground at the re-seat samples, leaf mesh less .terr)", seat.Spread(), true);
+        r.Check("vertex vertical above each build's seat", onSeat.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         return r;
+    }
+
+    /// <summary>
+    /// Where the stage sampled an LV95 building's seat: a Swiss one at the 3 x 3 grid over its footprint box
+    /// (<c>BuildingExtractor</c>, the box of its vertices: its ring corners), a French one (<c>YearBuilt</c> 1,
+    /// <c>FranceStage.FrenchMarker</c>) at its footprint's corners (its lowest vertices) and their mean
+    /// (<c>FranceBuildings</c>).
+    /// </summary>
+    private static (double E, double N)[] SeatSamples(TileId id, Building b)
+    {
+        double minE = double.MaxValue, minN = double.MaxValue, maxE = double.MinValue, maxN = double.MinValue, low = double.MaxValue;
+        for (int i = 0; i + 2 < b.Triangles.Length; i += 3)
+        {
+            double e = id.MinE + b.Triangles[i], n = id.MaxN - b.Triangles[i + 2];
+            minE = Math.Min(minE, e); maxE = Math.Max(maxE, e);
+            minN = Math.Min(minN, n); maxN = Math.Max(maxN, n);
+            low = Math.Min(low, b.Triangles[i + 1]);
+        }
+        if (b.YearBuilt == 1)
+        {
+            var ring = new HashSet<(double, double)>();
+            for (int i = 0; i + 2 < b.Triangles.Length; i += 3)
+                if (b.Triangles[i + 1] == low) ring.Add((id.MinE + b.Triangles[i], id.MaxN - b.Triangles[i + 2]));
+            var list = ring.ToList();
+            list.Add((list.Average(p => p.Item1), list.Average(p => p.Item2)));
+            return list.ToArray();
+        }
+        var grid = new (double, double)[9];
+        for (int gy = 0; gy <= 2; gy++)
+            for (int gx = 0; gx <= 2; gx++)
+                grid[gy * 3 + gx] = (minE + (maxE - minE) * gx / 2.0, minN + (maxN - minN) * gy / 2.0);
+        return grid;
+    }
+
+    /// <summary>
+    /// The leaf seat less the LV95 one, each the median of its own ground (heights above sea level) at the samples
+    /// where it has one, as each build took it; NaN where either has none.
+    /// </summary>
+    private static double SeatDifference(Ctx c, (double E, double N)[] samples)
+    {
+        var lv = new List<double>(samples.Length);
+        var cube = new List<double>(samples.Length);
+        foreach (var (e, n) in samples)
+        {
+            double g = c.Lv.Ground(e, n);
+            if (!double.IsNaN(g)) lv.Add(g);
+            // the leaf mesh below the point as a height above sea level: a point H above sea level is H less
+            // its height above the mesh above it
+            const double H = 1000;
+            double above = c.Cube.AboveGround(SwissGeodesy.ToEcef(e, n, H));
+            if (!double.IsNaN(above)) cube.Add(H - above);
+        }
+        if (lv.Count == 0 || cube.Count == 0) return double.NaN;
+        lv.Sort();
+        cube.Sort();
+        return cube[cube.Count / 2] - lv[lv.Count / 2];
     }
 
     /// <summary>A building in the frame: its centroid as a feature (EGID as the id, kind as the class) and every vertex.</summary>
