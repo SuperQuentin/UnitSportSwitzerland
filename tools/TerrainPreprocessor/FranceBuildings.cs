@@ -108,8 +108,9 @@ public static class FranceBuildings
                 Egid = 0,                       // no EGID in France; the RNB id is a string
                 YearBuilt = 0,                  // BD TOPO carries no construction year
                 Floors = (byte)Math.Clamp((int)Math.Round(wallHeight / 2.9), 0, 255),
-                MinY = (float)baseZ,
-                MaxY = (float)ridgeZ,
+                // the base and ridge heights at the centroid, in the tile's frame (LV95: the altitudes themselves)
+                MinY = place(centroidE, centroidN, baseZ).Y,
+                MaxY = place(centroidE, centroidN, ridgeZ).Y,
                 Triangles = triangles.ToArray(),
             });
             stats.Built++;

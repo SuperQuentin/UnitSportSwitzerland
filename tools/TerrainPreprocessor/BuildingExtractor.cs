@@ -277,14 +277,12 @@ public sealed class BuildingExtractor
         int triCount = 0;
         var placed = new double[rings.Count][];
 
-        for (int r = 0; r < rings.Count; r++)
+        foreach (var ring in rings)
         {
-            var ring = rings[r];
             // a closed ring of n points describes n-1 distinct corners
             int corners = ring.Count - 1;
             if (corners < 3) continue;
             triCount += corners - 2;
-            var p = placed[r] = new double[ring.Count * 3];
             for (int i = 0; i < ring.Count; i++)
             {
                 double e = ring.Xyz[i * 3], n = ring.Xyz[i * 3 + 1];
@@ -292,7 +290,21 @@ public sealed class BuildingExtractor
                 if (e > maxE) maxE = e;
                 if (n < minN) minN = n;
                 if (n > maxN) maxN = n;
-                var (x, y, z) = space.FromSource(Lv95Source.Instance, e, n, ring.Xyz[i * 3 + 2]);
+            }
+        }
+        if (triCount == 0) return;
+        // the owner holds the centre, and the region holds the owner: a solid centred outside it is another run's,
+        // known before its every vertex is projected (a frame's query box is its whole 20 km cell)
+        if (_region != null && !_region.Touches((minE + maxE) * 0.5, (minN + maxN) * 0.5)) return;
+
+        for (int r = 0; r < rings.Count; r++)
+        {
+            var ring = rings[r];
+            if (ring.Count - 1 < 3) continue;
+            var p = placed[r] = new double[ring.Count * 3];
+            for (int i = 0; i < ring.Count; i++)
+            {
+                var (x, y, z) = space.FromSource(Lv95Source.Instance, ring.Xyz[i * 3], ring.Xyz[i * 3 + 1], ring.Xyz[i * 3 + 2]);
                 p[i * 3] = x; p[i * 3 + 1] = y; p[i * 3 + 2] = z;
                 if (x < minX) minX = x;
                 if (x > maxX) maxX = x;
@@ -301,7 +313,6 @@ public sealed class BuildingExtractor
                 if (z < minZ) minZ = z;
             }
         }
-        if (triCount == 0) return;
 
         // a building belongs to the tile containing its centre; it is never split, so it
         // stays whole when neighbouring tiles stream in and out
