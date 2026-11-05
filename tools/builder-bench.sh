@@ -4,8 +4,9 @@
 #
 #   tools/builder-bench.sh prepare                      copy the benchmark's source tiles and lake bed
 #   tools/builder-bench.sh publish <label> [worktree]   dotnet publish -c Release -> <bench>/bin/<label>
-#   tools/builder-bench.sh run <label> <bin-dir|label> [--jobs N] [--tiles FILE]
+#   tools/builder-bench.sh run <label> <bin-dir|label> [--jobs N] [--tiles FILE [--src DIR]]
 #                                                       the whole `rebuild-map.sh all` pipeline, fresh output
+#                                                       (--src: a kept copy of FILE's sources, so runs compare)
 #   tools/builder-bench.sh compare <labelA> <labelB>    differing files (exit 1) + per-stage table
 #
 # Region (docs/notes/tools/builder-bench.md): Geneva and the lake, km tiles E 2498-2503 x N 1116-1121 (36),
@@ -78,11 +79,12 @@ publish)
 run)
   label=${2:?label}; bin=${3:?binary dir or published label}; shift 3
   [ -d "$bin" ] || bin=$bench/bin/$bin
-  jobs=(); tiles=$bench/tiles.txt
+  jobs=(); tiles=$bench/tiles.txt; shared=
   while [ $# -gt 0 ]; do
     case $1 in
       --jobs) jobs=(--jobs "$2"); shift 2 ;;
       --tiles) tiles=$2; shift 2 ;;
+      --src) shared=$2; shift 2 ;;
       *) echo "unknown option $1" >&2; exit 2 ;;
     esac
   done
@@ -91,7 +93,8 @@ run)
   [ ! -e "$run" ] || { echo "$run exists; pick a new label or delete it" >&2; exit 2; }
   mkdir -p "$run"
   src=$bench/src
-  if [ "$tiles" != "$bench/tiles.txt" ]; then src=$run/src; copy_sources "$tiles" "$src"; fi
+  if [ -n "$shared" ]; then src=$shared; copy_sources "$tiles" "$src"
+  elif [ "$tiles" != "$bench/tiles.txt" ]; then src=$run/src; copy_sources "$tiles" "$src"; fi
   chunks=$run/chunks
   tlm=$(ls -t "$data"/tlm3d/*.gpkg | head -1)
   pbf=$(ls -t "$data"/osm/switzerland-*.osm.pbf | head -1)
