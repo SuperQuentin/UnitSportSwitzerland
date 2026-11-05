@@ -69,10 +69,10 @@ public class TrueNorthTests
     [Fact]
     public void The_wire_s_offset_yaw_from_G2_A2_agrees_with_true_north_s()
     {
-        // #1503's GlobalPos.OffsetYaw/TrueYaw (the wire's turn) and #1504's must be one turn
+        // the records' grid turn (#1502's Lv95Grid, the wire's edge) and #1504's must be one turn
         var geneva = GlobalPos.FromLv95(GenevaE, GenevaN, 372);
-        Assert.Equal(TrueNorth.OffsetYaw(geneva, 1.234f), geneva.OffsetYaw(1.234f), 4);
-        Assert.Equal(TrueNorth.TrueYawOfOffset(geneva, 1.234f), geneva.TrueYaw(1.234f), 4);
+        Assert.Equal(TrueNorth.OffsetYaw(geneva, 1.234f), Lv95Grid.GridYaw(geneva, 1.234f), 4);
+        Assert.Equal(TrueNorth.TrueYawOfOffset(geneva, 1.234f), Lv95Grid.TrueYaw(geneva, 1.234f), 4);
     }
 
     [Fact]
