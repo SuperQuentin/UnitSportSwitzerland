@@ -1016,9 +1016,10 @@ public partial class BrManager : Node
         try
         {
             if (!Godot.FileAccess.FileExists(HistoryFile)) return new();
-            using var f = Godot.FileAccess.Open(HistoryFile, Godot.FileAccess.ModeFlags.Read);
-            var list = JsonSerializer.Deserialize<List<double[]>>(f.GetAsText()) ?? new();
-            return list.Where(p => p.Length == 2).Select(p => (p[0], p[1])).ToList();
+            var places = Core.SavedPlace.ReadPlaces(Godot.FileAccess.GetFileAsString(HistoryFile), out bool old);
+            // a file from before G2 A2b (LV95 pairs): converted in place (#1503)
+            if (old) WriteHistory(places);
+            return places.Select(p => { var (e, n, _) = p.Lv95; return (e, n); }).ToList();
         }
         catch (Exception ex)
         {
@@ -1032,7 +1033,16 @@ public partial class BrManager : Node
         var list = LoadHistory();
         list.Add((_state.AreaE, _state.AreaN));
         if (list.Count > 5) list.RemoveRange(0, list.Count - 5);
-        try { Core.JsonStore.Save(HistoryFile, list.Select(p => new[] { p.E, p.N }).ToList()); }
+        WriteHistory(list.Select(p => GlobalPos.FromLv95(p.E, p.N, 0)));
+    }
+
+    /// <summary>
+    /// The last areas played, as Earth places on the ground (<see cref="Core.SavedPlace.PlacesNode"/>, #1503): an area's
+    /// centre is a place (a town's, jittered: <see cref="BrRegion.Pick"/>), not an id in a catalogue.
+    /// </summary>
+    private static void WriteHistory(IEnumerable<GlobalPos> places)
+    {
+        try { Core.JsonStore.Save(HistoryFile, Core.SavedPlace.PlacesNode(places)); }
         catch (Exception e) { GD.PushWarning($"[br] history: {e.Message}"); }
     }
 }

@@ -75,8 +75,11 @@ public partial class Sleepers : Node
         string path = ProjectSettings.GlobalizePath(StorePath);
         try
         {
-            if (File.Exists(path)) _book = SleeperBook.FromJson(File.ReadAllText(path));
-            GD.Print($"[sleepers] {_book.All.Count} asleep, from {path}");
+            bool migrated = false;
+            if (File.Exists(path)) _book = SleeperBook.FromJson(File.ReadAllText(path), out migrated);
+            GD.Print($"[sleepers] {_book.All.Count} asleep, from {path}{(migrated ? " (LV95: written back in Earth places)" : "")}");
+            // a file from before G2 A2b (#1503): converted in place
+            if (migrated) Save();
         }
         catch (Exception ex) { GD.PushWarning($"[sleepers] {path}: {ex.Message}"); }
     }
@@ -97,8 +100,8 @@ public partial class Sleepers : Node
             list.Select(s => s.Id).ToArray(),
             list.Select(s => s.NameShown(PlayerIds.Server)).ToArray(),
             // ECEF and headings from true north (#1503); the book keeps LV95 and grid north until A2b
-            list.SelectMany(s => { var (x, y, z) = Where(s).ToWire(); return new[] { x, y, z }; }).ToArray(),
-            list.Select(s => Where(s).TrueYaw(s.Yaw)).ToArray(),
+            list.SelectMany(s => { var (x, y, z) = s.At.ToWire(); return new[] { x, y, z }; }).ToArray(),
+            list.Select(s => s.At.TrueYaw(s.Yaw)).ToArray(),
             list.Select(s => s.Rider).ToArray(),
             list.Select(s => s.Outfit).ToArray(),
             list.Select(s => s.Appearance).ToArray(),
@@ -137,21 +140,17 @@ public partial class Sleepers : Node
         if (_book.Wake(key) is not { } s) return;
         Unshow(s.Id);
         Save();
-        GD.Print($"[sleepers] {s.Name} wakes at {s.E:F1}/{s.N:F1}/{s.Alt:F1}");
-        var (x, y, z) = Where(s).ToWire();
-        RpcId(peer, MethodName.WakeAt, x, y, z, Where(s).TrueYaw(s.Yaw));
+        GD.Print($"[sleepers] {s.Name} wakes at {s.At}");
+        var (x, y, z) = s.At.ToWire();
+        RpcId(peer, MethodName.WakeAt, x, y, z, s.At.TrueYaw(s.Yaw));
     }
-
-    /// <summary>A sleeper's place (the book keeps it in LV95 notation until G2 A2b).</summary>
-    private static GlobalPos Where(Sleeper s) => GlobalPos.FromLv95(s.E, s.N, s.Alt);
 
     /// <summary>A sleeper from the wire (#1503): ECEF and a heading from true north, kept as the book has them.</summary>
     private static Sleeper FromWire(long id, string name, double x, double y, double z, float trueYaw, int rider, long outfit,
         int appearance, int hat)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        var l = at.Lv95;
-        return new Sleeper(id, "", name, l.E, l.N, at.Alt, at.OffsetYaw(trueYaw), rider, outfit, appearance, hat);
+        return new Sleeper(id, "", name, at, at.OffsetYaw(trueYaw), rider, outfit, appearance, hat);
     }
 
     /// <summary>
@@ -176,20 +175,20 @@ public partial class Sleepers : Node
             alt = ground;
         }
 
-        var s = _book.Lay(new Sleeper(0, key, name, at.E, at.N, alt, body.GlobalYaw, (int)peer,
+        var s = _book.Lay(new Sleeper(0, key, name, at.WithAlt(alt), body.GlobalYaw, (int)peer,
             body.OutfitBits, body.AppearanceBits, body.HeadwearId), out var replaced);
         if (replaced != null) Unshow(replaced.Id);
         Show(s);
         Save();
-        GD.Print($"[sleepers] {name} falls asleep at {s.E:F1}/{s.N:F1}/{s.Alt:F1}");
+        GD.Print($"[sleepers] {name} falls asleep at {s.At}");
     }
 
     private void Show(Sleeper s)
     {
         foreach (int p in Multiplayer.GetPeers())
         {
-            var (x, y, z) = Where(s).ToWire();
-            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), x, y, z, Where(s).TrueYaw(s.Yaw), s.Rider, s.Outfit, s.Appearance, s.Headwear);
+            var (x, y, z) = s.At.ToWire();
+            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), x, y, z, s.At.TrueYaw(s.Yaw), s.Rider, s.Outfit, s.Appearance, s.Headwear);
         }
     }
 
@@ -268,8 +267,8 @@ public partial class Sleepers : Node
         Drop(s.Id);
         _shown[s.Id] = s;
         var node = Draw(s);
-        node.Position = _origin.ToWorld(s.E, s.N, s.Alt);
-        node.Rotation = new Vector3(0, _origin.Frame.WorldYawOf(Where(s), s.Yaw), 0);
+        node.Position = _origin.ToWorld(s.At);
+        node.Rotation = new Vector3(0, _origin.Frame.WorldYawOf(s.At, s.Yaw), 0);
         AddChild(node);
         _visuals[s.Id] = node;
     }

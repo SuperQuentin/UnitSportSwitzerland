@@ -74,6 +74,10 @@
     <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1503 G2 A2b: GlobalPos's JSON shape in the saves (on the type) and the stores' in-place migrations -->
+    <Compile Include="..\..\src\Core\SavedPlace.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\TrueNorth.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />
@@ -445,7 +449,7 @@
     <!-- the cube-native build's frames, leaf regions and leaf writer with its seam pass (#1507): pure, over TerrainFormat -->
     <Compile Include="..\..\tools\TerrainPreprocessor\FrameDriver.cs;..\..\tools\TerrainPreprocessor\LeafWriter.cs;..\..\tools\TerrainPreprocessor\TerrainSampler.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the road stage's spaces (#1507): the LV95 and work-frame tile loops, and the reader whose polylines they cut -->
-    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs;..\..\tools\TerrainPreprocessor\CoverExtractor.cs;..\..\tools\TerrainPreprocessor\FrameCoverSpace.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- OSM maxspeed to km/h for the overlay (#711): pure -->
     <Compile Include="..\..\tools\TerrainPreprocessor\OsmSpeed.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the neighbours' terrain (#965): their grids from LV95, and the gap fill: pure -->

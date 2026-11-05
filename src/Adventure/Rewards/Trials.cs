@@ -308,8 +308,9 @@ public sealed class TrialRuns
 /// records and uploads it after a personal best; the server keeps the top 3 (on disk, as uploaded); a retry races it.
 /// In memory a <see cref="Sample"/> is LV95, the altitude and a heading on the grid (GlobalPos's offset axes). The
 /// bytes are <c>GSH2</c> since protocol 93 (#1503): an ECEF origin (the first sample) and per sample a float offset
-/// in the local east-up-south there and a heading from true north at the sample; a stored <c>GSH1</c> (LV95 offsets
-/// from the first point, grid headings) still decodes.
+/// in the local east-up-south there and a heading from true north at the sample. A <c>GSH1</c> the server stored before
+/// (LV95 offsets from the first point, grid headings) is rewritten as <c>GSH2</c> the first time it is read
+/// (<see cref="Upgrade"/>, G2 A2b): only that migration reads the old form, never the wire.
 /// </summary>
 public static class GhostTrack
 {
@@ -345,14 +346,24 @@ public static class GhostTrack
         return ms.ToArray();
     }
 
-    /// <summary>The samples, or null for bytes that are not a ghost (a forged upload).</summary>
+    /// <summary>
+    /// A stored ghost from before G2 A2b (<c>GSH1</c>) as <c>GSH2</c>, the same run: what the server writes back over it
+    /// (#1503). Null for bytes that are already <c>GSH2</c>, or not a ghost.
+    /// </summary>
+    public static byte[]? Upgrade(byte[] stored)
+    {
+        if (stored.Length < Header1 || stored.Length > MaxBytes) return null;
+        using var r = new BinaryReader(new MemoryStream(stored));
+        return r.ReadUInt32() == Magic1 && Decode1(r, stored.Length) is { } samples ? Encode(samples) : null;
+    }
+
+    /// <summary>The samples, or null for bytes that are not a <c>GSH2</c> ghost (a forged upload, an old file not upgraded).</summary>
     public static List<Sample>? Decode(byte[] bytes)
     {
-        if (bytes.Length < Header1 || bytes.Length > MaxBytes) return null;
+        if (bytes.Length < Header || bytes.Length > MaxBytes) return null;
         using var r = new BinaryReader(new MemoryStream(bytes));
         uint magic = r.ReadUInt32();
-        if (magic == Magic1) return Decode1(r, bytes.Length);
-        if (magic != Magic || bytes.Length < Header) return null;
+        if (magic != Magic) return null;
         int n = r.ReadInt32();
         if (n < 0 || Header + n * (long)PerSample != bytes.Length) return null;
         var origin = new EcefPos(r.ReadDouble(), r.ReadDouble(), r.ReadDouble());
@@ -370,7 +381,7 @@ public static class GhostTrack
         return list;
     }
 
-    /// <summary>A ghost stored before protocol 93: LV95 offsets from its first point, grid headings.</summary>
+    /// <summary>A ghost stored before protocol 93: LV95 offsets from its first point, grid headings (read by <see cref="Upgrade"/> only).</summary>
     private static List<Sample>? Decode1(BinaryReader r, int length)
     {
         int n = r.ReadInt32();

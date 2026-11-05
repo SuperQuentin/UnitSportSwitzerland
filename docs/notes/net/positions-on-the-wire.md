@@ -21,13 +21,13 @@ Since protocol 93 (#1503, G2 A2 of `docs/plans/global-tiling-g2.md`). Before it:
   frame's axes are): `g.EnuFromOffset` / `OffsetFromEnu`, `g.TrueYaw` / `OffsetYaw` convert at the edge without a
   frame; `frame.WorldYawOf(g, y)`, `WorldOfOffset`, `WorldTurnOf` and their inverses turn them into a world, free in
   a flat frame. The server's frames are always flat, so there a world yaw is a record's. A state that is saved too
-  (`VehicleState`, `DropState`, `RadioState` in the object containers) has `ToDict` for the wire and `ToSavedDict`
-  for disk; `FromDict` reads both (the keys tell). Saves move in A2b.
+  (`VehicleState`, `DropState`, `RadioState` in the object containers) saves its wire form, `ToDict`; `FromDict` also
+  reads a container record saved before A2b (the keys tell). Saves: `core/saves-in-earth-positions`.
 - **A list of points**: an ECEF origin near them and float offsets in the ENU there
   (`OriginFrame.AnchorAt(origin)`, the same axes on every peer): the sender maps with `frame.ToAnchor(origin)`, the
   receiver with `origin.SinceAnchor(ecef)`; between two flat frames the pair is their exact translation. Race roads
   and gates (`RaceManager.Setup`, `NpcArrive`), bird snapshots (per bird the yaw turned by the shift's `Yaw`), trial
-  ghosts (`GhostTrack` `GSH2`; a stored `GSH1` still decodes).
+  ghosts (`GhostTrack` `GSH2`; a `GSH1` the server stored is rewritten as `GSH2` when read, never sent).
 - **Synchronized bodies**: `FootPlayer` replicates `NetX/NetY/NetZ` (`NetGlobal`, read whole when `NetZ` arrives),
   `NetVel` (ENU) and `NetYaw` (true north). Read `GlobalYaw` / `GlobalVelocity` for LV95 maths and records,
   `WorldYaw` / `WorldVelocity` for this peer's world; `SetNetState` publishes from a record. Copies interpolate in

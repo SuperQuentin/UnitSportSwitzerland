@@ -72,6 +72,16 @@
   Free space is checked first (new minus replaced bytes plus `SPACE_MARGIN_MB`). Copy is `rsync` when both ends have it,
   else a `tar | ssh tar` stream (keeps mtimes, so the next run is a no-op); `manifest.json` goes last. Server-only files are
   kept unless `--prune`. Lists land in `test_output/deploy/`. Listing 246k files from Git Bash takes minutes.
+- **French border tiles on a second disk** (Nov 2026): the game and Caddy read one flat directory and `/home` is full, so 42,744 French tiles
+  (terrain only, every ring out to 76 km from the served set, from the NAS's `terrain_chunks_france`) live on an ext4 SSD at
+  `/srv/unitsport-tiles/france` (`.terr`, `.terrc` and their `.gz`, mode 644: the NAS's 750 would make Caddy refuse them) and are symlinked into
+  `DEPLOY_CHUNKS_DIR`. Listings use `-type f`, so `--chunks`, `--prune` and `gzip-tiles.sh` ignore the links. **But `manifest.json` and `horizon.bin` there are
+  merged**: a `--chunks` deploy replaces them from the source and the French tiles drop out of the game. Merge again afterwards with
+  `/srv/unitsport-tiles/index/merge_border.py <dir> 76` (`<dir>`: `swiss_manifest.json`, `swiss_horizon.bin` from the new source, `france_manifest.json`,
+  `france_horizon.bin` from the NAS; it writes `merged_manifest.json`, `merged_horizon.bin`, `file_list.txt`), install both with fresh `.gz` copies, restart. The tiles the
+  source already has win, so rebuild the links if it gained some. Pre-merge files: `index/before/`. The SSD is an old OCZ Vertex 2 (`smartctl -A /dev/sda`);
+  it mounts `nofail`, so losing it costs the French tiles, not the boot; undo = restore `index/before/` and delete the symlinks (`find -type l`).
+  These tiles were not aligned to the Swiss heights (dz 0, not -0.28 m; `tools/france-nas-run`).
 - **SMTP check** (#1287, `net/house-layouts`): `tools/deploy-linux.sh --smtp-check you@example.ch` is a step of its own (no build, no other step): over SSH it loads `layouts/layouts.env` and runs `app/LayoutService --smtp-check`, which mails a test message (MailKit: port 465 implicit TLS, 587 or other ports STARTTLS) and prints the exact failure; the password never leaves the host.
 - **Gotchas seen on the first real deploy (Debian 13):** the root partition was 19 GB, so the space check refused the tiles until
   `DEPLOY_CHUNKS_DIR` pointed at `/home` (check `df -h` on the host first). `/etc/os-release` defines `VERSION`, so the setup

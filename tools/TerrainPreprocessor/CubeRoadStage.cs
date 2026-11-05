@@ -182,7 +182,8 @@ public static class CubeRoadStage
         return new LeafParkingLot(lot.Cover, lot.Source, pts);
     }
 
-    private static bool InBox(CubeKey k, (double MinE, double MinN, double MaxE, double MaxN) b)
+    /// <summary>A leaf whose centre lies in an LV95 box (the stages' --cube-box).</summary>
+    public static bool InBox(CubeKey k, (double MinE, double MinN, double MaxE, double MaxN) b)
     {
         var c = k.Centre;
         var (e, n) = SwissGeodesy.ToLv95(c.LatDeg, c.LonDeg);

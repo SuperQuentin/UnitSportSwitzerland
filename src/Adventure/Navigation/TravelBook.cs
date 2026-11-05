@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Navigation;
 
@@ -13,7 +17,14 @@ namespace UnitSport.Adventure.Navigation;
 /// </summary>
 public sealed class TravelBook
 {
-    public static readonly SectionKey<TravelBook> Section = new("travel", Version: 1);
+    /// <summary>Version 2 (#1503, G2 A2b): the flag's place is an Earth one (<c>at</c>); version 1's LV95 <c>e</c>, <c>n</c>, <c>alt</c> migrate.</summary>
+    public static readonly SectionKey<TravelBook> Section = new("travel", Version: 2, Migrate);
+
+    private static TravelBook? Migrate(JsonNode data, int version)
+    {
+        if (data["flag"] is JsonObject flag) SavedPlace.ToEarth(flag, "e", "n", "alt");
+        return data.Deserialize<TravelBook>(AdventureJson.Options);
+    }
 
     /// <summary>Canonical POI ids of the travel points unlocked.</summary>
     public HashSet<string> Unlocked { get; set; } = new(StringComparer.Ordinal);
@@ -32,5 +43,11 @@ public sealed class TravelBook
     public bool Has(string poiId) => Unlocked.Contains(poiId);
 }
 
-/// <summary>Where a player planted its portable travel flag (LV95 m), and when (Unix seconds).</summary>
-public sealed record PortableFlag(double E, double N, float Alt, long Placed);
+/// <summary>Where a player planted its portable travel flag (saved and synced as ECEF, #1503), and when (Unix seconds).</summary>
+public sealed record PortableFlag(GlobalPos At, long Placed)
+{
+    /// <summary>LV95 notation of <see cref="At"/>.</summary>
+    [JsonIgnore] public double E => At.E;
+    [JsonIgnore] public double N => At.N;
+    [JsonIgnore] public float Alt => (float)At.Alt;
+}
