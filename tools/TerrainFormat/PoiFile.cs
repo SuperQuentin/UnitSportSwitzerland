@@ -63,6 +63,10 @@ public sealed class PoiRecord
     public long LineKey;
     /// <summary>A lake's outline as E, N pairs (LV95 m, decimetres), or null.</summary>
     public double[]? Outline;
+    /// <summary>The place on the Earth (#1507: a cube region's copy, version 2; null in the LV95 build's v1 file).</summary>
+    public GeoPoint? Geo;
+    /// <summary>The outline on the Earth as latitude, longitude pairs (#1507, version 2), when <see cref="Outline"/> is set.</summary>
+    public double[]? GeoOutline;
 
     public string Id => PoiId.Make(Kind, Name, Hash);
 }
@@ -157,13 +161,16 @@ public static class PoiId
 /// elevation (i16 m), name index (i32), line key (i64), outline index (i32, -1 none);</item>
 /// <item>outlines: point count (i32), the first point (u32 decimetres as a record's), then i32 decimetre
 /// offsets from it.</item>
+/// <item>version 2 (#1507, a cube region's copy) then the places on the Earth: per record latitude, longitude (f64)
+/// and ellipsoidal height (f32), then per outline its points' latitude and longitude (f64 pairs). Written only when
+/// every record has <see cref="PoiRecord.Geo"/>; the LV95 build writes version 1, as before.</item>
 /// </list>
 /// </summary>
 public static class PoiFile
 {
     /// <summary>"POI1" read as little-endian uint32.</summary>
     public const uint Magic = 0x31494F50;
-    public const ushort Version = 1;
+    public const ushort Version = 2;
     public const string FileName = "pois.bin";
     public const int HeaderSize = 24;
     public const int RecordSize = 37;
@@ -188,8 +195,9 @@ public static class PoiFile
         using var ms = new MemoryStream();
         var w = new BinaryWriter(ms);   // little-endian, as BinaryPrimitives below
         int outlines = data.Pois.Count(p => p.Outline is { Length: >= 2 });
+        bool geo = data.Pois.Count > 0 && data.Pois.All(p => p.Geo != null);
         w.Write(Magic);
-        w.Write(Version);
+        w.Write(geo ? Version : (ushort)1);
         w.Write((ushort)0);
         w.Write(strings.Count);
         w.Write(data.Cantons.Count);
@@ -245,6 +253,22 @@ public static class PoiFile
             {
                 w.Write((int)((long)Dm(o[i * 2], OriginE) - e0));
                 w.Write((int)((long)Dm(o[i * 2 + 1], OriginN) - n0));
+            }
+        }
+        if (geo)
+        {
+            foreach (var p in data.Pois)
+            {
+                w.Write(p.Geo!.Value.Lat);
+                w.Write(p.Geo.Value.Lon);
+                w.Write((float)p.Geo.Value.H);
+            }
+            foreach (var p in data.Pois)
+            {
+                if (p.Outline is not { Length: >= 2 } o) continue;
+                var g = p.GeoOutline ?? throw new InvalidDataException($"POI {p.Name}: an outline without its Earth points");
+                if (g.Length != o.Length) throw new InvalidDataException($"POI {p.Name}: {g.Length / 2} Earth outline points for {o.Length / 2}");
+                foreach (double v in g) w.Write(v);
             }
         }
         w.Flush();
@@ -331,6 +355,23 @@ public static class PoiFile
         for (int i = 0; i < nPois; i++)
             if (outlineOf[i] >= 0)
                 data.Pois[i].Outline = outlineOf[i] < nOutlines ? outlines[outlineOf[i]] : throw new InvalidDataException("pois.bin outline index");
+        if (version >= 2)
+        {
+            for (int i = 0; i < nPois; i++)
+            {
+                var g = Take(b, ref at, 20);
+                data.Pois[i].Geo = new GeoPoint(BinaryPrimitives.ReadDoubleLittleEndian(g), BinaryPrimitives.ReadDoubleLittleEndian(g[8..]),
+                    BinaryPrimitives.ReadSingleLittleEndian(g[16..]));
+            }
+            foreach (var p in data.Pois)
+            {
+                if (p.Outline is not { } o) continue;
+                var raw = Take(b, ref at, o.Length * 8);
+                var pts = new double[o.Length];
+                for (int k = 0; k < pts.Length; k++) pts[k] = BinaryPrimitives.ReadDoubleLittleEndian(raw[(k * 8)..]);
+                p.GeoOutline = pts;
+            }
+        }
         return data;
     }
 }
