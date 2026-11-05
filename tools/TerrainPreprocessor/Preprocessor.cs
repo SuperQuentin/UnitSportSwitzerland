@@ -132,7 +132,7 @@ public static partial class Preprocessor
         var buildingsGdb = new List<string>();
         int? batchSizeArg = null;
         bool verify = false;
-        bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
+        bool roadsOnly = false, noNetwork = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
         // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
         // to a built country does not re-extract every road in it
         string? tilesFile = null;
@@ -215,6 +215,8 @@ public static partial class Preprocessor
                 case "--places-only": doPlaces = placesOnly = true; featuresOnly = true; break;
                 case "--tiles-file": tilesFile = args[++i]; break;
                 case "--roads-only": roadsOnly = true; break;
+                // the raw roads alone, no network stage: the reference a cube road stage is compared with (#1507)
+                case "--no-network": noNetwork = true; break;
                 case "--features-only": featuresOnly = true; break;
                 case "--coarse": coarseOnly = true; break;
                 case "--horizon": horizonOnly = true; break;
@@ -921,6 +923,7 @@ public static partial class Preprocessor
                         if (rc != 0) return rc;
                     }
                 }
+                if (noNetwork) { Console.WriteLine("--no-network: the raw roads are written, the network stage is skipped"); return 0; }
                 int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
                 if (nrc != 0) return nrc;
             }

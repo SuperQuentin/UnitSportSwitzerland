@@ -350,7 +350,19 @@ public sealed class LineIndex
             double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
             if (keep == null) { sum += len; continue; }
             bool ka = keep(ax, ay, az), kb = keep(bx, by, bz);
-            if (ka && kb) sum += len;
+            if (len > 4.5)
+            {
+                // a long edge (a cable's span) may leave the kept ground and come back: in metre steps, each cut where it changes
+                int n = (int)Math.Ceiling(len);
+                for (int q = 0; q < n; q++)
+                {
+                    double t0 = (double)q / n, t1 = (double)(q + 1) / n;
+                    bool k0 = q == 0 ? ka : keep(ax + (bx - ax) * t0, ay + (by - ay) * t0, az + (bz - az) * t0);
+                    bool k1 = q == n - 1 ? kb : keep(ax + (bx - ax) * t1, ay + (by - ay) * t1, az + (bz - az) * t1);
+                    sum += len / n * KeptFraction(k0, k1, t => keep(ax + (bx - ax) * (t0 + (t1 - t0) * t), ay + (by - ay) * (t0 + (t1 - t0) * t), az + (bz - az) * (t0 + (t1 - t0) * t)));
+                }
+            }
+            else if (ka && kb) sum += len;
             else if (ka != kb)
             {
                 // an edge across the filter's boundary: cut where it changes (bisection), so the part kept counts and no more
@@ -365,6 +377,20 @@ public sealed class LineIndex
             }
         }
         return sum;
+    }
+
+    /// <summary>The kept share of an edge whose ends are kept or not: 1, 0, or where it changes (bisection).</summary>
+    private static double KeptFraction(bool ka, bool kb, Func<double, bool> keepAt)
+    {
+        if (ka == kb) return ka ? 1 : 0;
+        double lo = 0, hi = 1;
+        for (int it = 0; it < 30; it++)
+        {
+            double t = 0.5 * (lo + hi);
+            if (keepAt(t) == ka) lo = t; else hi = t;
+        }
+        double cut = 0.5 * (lo + hi);
+        return ka ? cut : 1 - cut;
     }
 }
 

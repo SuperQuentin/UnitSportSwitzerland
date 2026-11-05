@@ -237,13 +237,9 @@ public sealed class FrameRoadSpace : IRoadSpace<CubeKey>
             double t0 = 0;
             for (int guard = 0; current.Tile != end && guard < 64; guard++)
             {
-                double t = Leaves(current.Tile, a.E, a.N, b.E, b.N, t0);
+                var (t, next) = Leaves(current.Tile, a.E, a.N, b.E, b.N, t0);
                 var c = (a.E + (b.E - a.E) * t, a.N + (b.N - a.N) * t, a.Z + (b.Z - a.Z) * t);
                 current.Points.Add(c);
-                // past the cut, which leaf the line goes on in
-                double tn = Math.Min(1, t + 1e-9);
-                var next = TileAt(a.E + (b.E - a.E) * tn, a.N + (b.N - a.N) * tn);
-                if (next == current.Tile) next = end;
                 current = new RoadPiece<CubeKey>(next, new() { c });
                 pieces.Add(current);
                 t0 = t;
@@ -268,10 +264,27 @@ public sealed class FrameRoadSpace : IRoadSpace<CubeKey>
     }
 
     /// <summary>
-    /// Where the segment a–b, past <paramref name="t0"/>, first leaves <paramref name="leaf"/>: the smallest t of the
-    /// leaf's four edges it crosses (secant on the face index), or by bisection where the far end is on another face.
+    /// Where the segment a–b, past <paramref name="t0"/>, first leaves <paramref name="leaf"/>, and the leaf it goes on
+    /// in: the smallest t of the leaf's four edges it crosses (secant on the face index; by bisection where the far end
+    /// is on another face), then bracketed on the leaf itself so the cut is the first point past the edge, on the next leaf.
     /// </summary>
-    private double Leaves(CubeKey leaf, double ax, double ay, double bx, double by, double t0)
+    private (double T, CubeKey Next) Leaves(CubeKey leaf, double ax, double ay, double bx, double by, double t0)
+    {
+        double guess = Guess(leaf, ax, ay, bx, by, t0);
+        bool In(double t) => TileAt(ax + (bx - ax) * t, ay + (by - ay) * t) == leaf;
+        // a bracket round the guess with the leaf at its start and another at its end, then bisection to the last bit
+        double lo = Math.Max(t0, guess - 1e-6), hi = Math.Min(1, guess + 1e-6);
+        if (!In(lo)) lo = t0;
+        if (In(hi)) hi = 1;
+        for (int it = 0; it < 64 && hi - lo > 1e-15; it++)
+        {
+            double m = 0.5 * (lo + hi);
+            if (In(m)) lo = m; else hi = m;
+        }
+        return (hi, TileAt(ax + (bx - ax) * hi, ay + (by - ay) * hi));
+    }
+
+    private double Guess(CubeKey leaf, double ax, double ay, double bx, double by, double t0)
     {
         var ib = Index(bx, by);
         if (ib.Face == leaf.Face)

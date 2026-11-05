@@ -145,6 +145,8 @@ public static class CubeRoadStage
             }
             rawWriter.WriteFrame(plan.Cell, raw);
             holesWriter.WriteFrame(plan.Cell, holes);
+            // the bundle was rewritten: its entries moved, so the next frames' grounds read it by its new index
+            heights.Reload(plan.Cell);
             Console.WriteLine($"  frame {plan.Cell.Describe()}: {plan.Core.Count} leaves, {raw.Values.Count(l => l.Count > 0)} with raw roads, "
                 + $"{holeQuadsOf.Where(e => space.Writes(e.Key)).Sum(e => e.Value.Count)} hole quads, {fs.Elapsed.TotalSeconds:F1} s, "
                 + $"working set {Process.GetCurrentProcess().WorkingSet64 / 1e9:F1} GB; {sw.Elapsed.TotalSeconds:F0} s");
@@ -238,6 +240,15 @@ public sealed class RegionHeights
         }
         Leaves = leaves;
         FrameLevel = frameLevel;
+    }
+
+    /// <summary>Reads a frame's bundle index again, after a stage rewrote the bundle (its entries move).</summary>
+    public void Reload(CubeKey frame)
+    {
+        string path = Path.Combine(_dir, CubeBundle.LeafFileName(frame));
+        if (!File.Exists(path)) { _index.TryRemove(frame, out _); return; }
+        using var fs = File.OpenRead(path);
+        _index[frame] = CubeBundle.ReadIndex(fs, CubeBundle.LeafMagic);
     }
 
     /// <summary>A leaf's heights, or null when the region has none for it.</summary>

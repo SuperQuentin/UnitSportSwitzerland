@@ -269,6 +269,7 @@ public static class CubeCompare
         long lvCount = 0, cubeCount = 0, lvAlone = 0, cubeAlone = 0;
         var hd = new Tally();
         long lvHoles = 0, cubeHoles = 0, holesMatched = 0, holesAlone = 0;
+        var holesAt = new List<string>();
         foreach (var bundle in c.Cube.Bundles)
         {
             var frame = bundle.Anchor;
@@ -318,17 +319,31 @@ public static class CubeCompare
             var lh = Clusters(lvQuads.Where(q => q.Owned).Select(q => q.F).ToList(), HoleLinkM);
             var ch = Clusters(cubeAll, HoleLinkM);
             var hm = FeatureMatch.Match(lh, ch, 5, false);
-            foreach (var (a, b, _) in hm.Pairs) hd.Add(FeatureMatch.Offset(lh[a], ch[b]).H);
+            foreach (var (a, b, _) in hm.Pairs)
+            {
+                double dh = FeatureMatch.Offset(lh[a], ch[b]).H;
+                hd.Add(dh);
+                if (dh > CompareBars.Quad && holesAt.Count < 8) holesAt.Add("far " + Lv95Text(frame.ToEcef(lh[a].X, lh[a].Y, lh[a].Z)));
+            }
+            foreach (int a in hm.OnlyA) if (holesAt.Count < 8) holesAt.Add("LV95 alone " + Lv95Text(frame.ToEcef(lh[a].X, lh[a].Y, lh[a].Z)));
+            foreach (int b in hm.OnlyB) if (holesAt.Count < 8) holesAt.Add("leaf alone " + Lv95Text(frame.ToEcef(ch[b].X, ch[b].Y, ch[b].Z)));
             (lvHoles, cubeHoles, holesMatched, holesAlone) = (lvHoles + lh.Count, cubeHoles + ch.Count, holesMatched + hm.Pairs.Count, holesAlone + hm.OnlyA.Count + hm.OnlyB.Count);
         }
         r.Note($"hole quads: {lvCount} LV95 (1 m), {cubeCount} leaves; {lvAlone} LV95 and {cubeAlone} leaf quads with none of the other build's within 5 m");
-        r.Note($"holes (clusters of quads, one a portal): {lvHoles} LV95, {cubeHoles} leaves, {holesMatched} matched within 5 m, {holesAlone} alone");
+        r.Note($"holes (clusters of quads, one a portal): {lvHoles} LV95, {cubeHoles} leaves, {holesMatched} matched within 5 m, {holesAlone} alone"
+            + (holesAt.Count > 0 ? $" ({string.Join("; ", holesAt)})" : ""));
         if (holesMatched > 0) r.Check("hole centre, LV95 to leaf", hd.Spread(), false, new Bar(Stat.Max, CompareBars.Quad));
         r.AtMost("holes alone", holesAlone, 0, "F0");
         r.Check("leaf quad to the nearest LV95 one", toLv.Spread(), false, new Bar(Stat.Max, CompareBars.Quad));
         r.Check("LV95 quad to the nearest leaf one", toCube.Spread(), false, new Bar(Stat.Max, CompareBars.Quad));
         r.AtMost("quads alone", lvAlone + cubeAlone, 0, "F0");
         return r;
+    }
+
+    private static string Lv95Text(EcefPos p)
+    {
+        var (e, n, _) = SwissGeodesy.FromEcef(p);
+        return string.Create(CultureInfo.InvariantCulture, $"{e:F0},{n:F0}");
     }
 
     /// <summary>Quads closer than this (centre to centre) are one hole: a diagonal neighbour on the leaves' ~1.2 m lattice.</summary>
@@ -378,6 +393,7 @@ public static class CubeCompare
         var lvToCube = new Tally();
         var aboveCube = new Tally();
         var surveyed = new Tally();
+        var dbg = new Dictionary<(string, string), double>();
         long noGround = 0;   // draped leaf vertices over no leaf heights (the leaf mesh NaN there): not held to the height bars
         var lenLv = new Dictionary<int, double>();
         var lenCube = new Dictionary<int, double>();
@@ -455,6 +471,7 @@ public static class CubeCompare
                     else { cubeAlone++; Alone(ecef, line.Class); }
                 }
                 Accumulate(lenCube, line, (x, y, z) => frame.ToEcef(x, y, z) is var m && c.Cube.Owner(m) == leaf && c.Lv.Covers(m));
+                if (Debug && line.Class == (int)RoadClass.Motorway) lock (dbg) dbg[(bundle.ToString(), "cube")] = dbg.GetValueOrDefault((bundle.ToString(), "cube")) + LineIndex.Length(line, (x, y, z) => frame.ToEcef(x, y, z) is var m && c.Cube.Owner(m) == leaf && c.Lv.Covers(m));
             }
             foreach (var (line, owned, id) in lvLines)
             {
@@ -465,6 +482,12 @@ public static class CubeCompare
                     if (cubeIndex.Nearest(p[k * 3], p[k * 3 + 1], p[k * 3 + 2], line.Above![k], line.Class, 5, out double h, out _, out _)) lvToCube.Add(h);
                     else { lvAlone++; Alone(frame.ToEcef(p[k * 3], p[k * 3 + 1], p[k * 3 + 2]), line.Class); }
                 }
+                if (Debug && line.Class == (int)RoadClass.Motorway) lock (dbg) dbg[(bundle.ToString(), "lv")] = dbg.GetValueOrDefault((bundle.ToString(), "lv")) + LineIndex.Length(line, (x, y, z) =>
+                {
+                    var m = frame.ToEcef(x, y, z);
+                    var (e, n, _) = SwissGeodesy.FromEcef(m);
+                    return TileId.FromLv95(e, n) == id && c.Cube.Owns(bundle, m);
+                });
                 Accumulate(lenLv, line, (x, y, z) =>
                 {
                     var m = frame.ToEcef(x, y, z);
@@ -489,6 +512,7 @@ public static class CubeCompare
             if (a > 1000) r.AtMost(what, Density.Relative((long)Math.Round(a), (long)Math.Round(b)), CompareBars.PerDistance + 1e-4, "P3");
             else r.Note(string.Create(CultureInfo.InvariantCulture, $"length {(RoadClass)k}: {a:F0} m LV95, {b:F0} m leaves (too short for the bar)"));
         }
+        foreach (var g in dbg.GroupBy(d => d.Key.Item1)) if (Debug) Console.WriteLine($"DBG {g.Key}: " + string.Join(" ", g.Select(x => $"{x.Key.Item2}={x.Value:F1}")));
         MatchPoints(r, "junction", junctions.Lv, junctions.Cube, 5, true);
         MatchPoints(r, "signal", signals.Lv, signals.Cube, 5, false);
         if (c.Cube.KindsPresent.Contains(LeafKind.RoadKeys)) LineLengths(c, r);
@@ -506,6 +530,7 @@ public static class CubeCompare
         var lv = new ConcurrentDictionary<(string, int), ConcurrentBag<EcefPos[]>>();
         var cube = new ConcurrentDictionary<(string, int), ConcurrentBag<EcefPos[]>>();
         var spoiled = new ConcurrentDictionary<(string, int), byte>();
+        var pieces = new ConcurrentDictionary<(string, int), ConcurrentBag<(double FromM, EcefPos[] Pts, CubeKey Leaf)>>();
         Parallel.ForEach(c.Cube.Leaves, c.Par, key =>
         {
             if (c.Cube.Section(key, LeafKind.Roads) is not { } sec || c.Cube.Section(key, LeafKind.RoadKeys) is not { } ks) return;
@@ -520,6 +545,7 @@ public static class CubeCompare
                 for (int i = 0; i < pts.Length; i++) pts[i] = anchor.ToEcef(s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
                 if (pts.Any(p => !c.Lv.Covers(p))) spoiled[(id.Uuid, id.Part)] = 0;
                 cube.GetOrAdd((id.Uuid, id.Part), _ => new()).Add(pts);
+                pieces.GetOrAdd((id.Uuid, id.Part), _ => new()).Add((id.FromM, pts, key));
             }
         });
         Parallel.ForEach(c.Lv.TilesNear(c.Cube.Lv95BoxAll()), c.Par, id =>
@@ -557,6 +583,55 @@ public static class CubeCompare
         r.Check("raw length per TLM line, |leaf − LV95|", diff.Spread(), false, new Bar(Stat.P99, CompareBars.Vertex));
         r.AtMost("lines over 2 cm + 2e-4 of their length", broken, 0, "F0");
         r.AtMost("whole lines in one build only", onlyOne, 0, "F0");
+        Continuity(c, r, pieces);
+    }
+
+    /// <summary>
+    /// Where a TLM line passes from one leaf to the next, its two pieces end and start at one point (the cut is shared):
+    /// consecutive pieces by their distance along the line (contiguous where the next starts where this one ends, within
+    /// 5 cm and the planes' 3 ppm), the gap between them in ECEF, within a frame and across a frame edge (two frames cut
+    /// the line, each on its own plane).
+    /// </summary>
+    private static void Continuity(Ctx c, KindReport r, ConcurrentDictionary<(string, int), ConcurrentBag<(double FromM, EcefPos[] Pts, CubeKey Leaf)>> pieces)
+    {
+        var within = new Tally();
+        var across = new Tally();
+        var withinV = new Tally();
+        var acrossV = new Tally();
+        var far = new List<string>();
+        long noGround = 0;
+        foreach (var list in pieces.Values)
+        {
+            var sorted = list.OrderBy(p => p.FromM).ToList();
+            for (int k = 0; k + 1 < sorted.Count; k++)
+            {
+                var (a, b) = (sorted[k], sorted[k + 1]);
+                // b continues a: it starts where a ends along the line (a's plan length, the planes' few ppm, 5 cm)
+                double len = PlanLength(CubeKey.FromEcef(a.Pts[0], WorkFrame.Level).Anchor, a.Pts);
+                if (Math.Abs(b.FromM - (a.FromM + len)) > 0.05 + 1e-5 * b.FromM) continue;
+                // in plan (the cut both pieces share) and in height (the drape on either side), where there is ground under the cut
+                // the local vertical at the cut: a frame's tilt would turn a step in height (over no ground: 61 m) into centimetres in plan
+                var local = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(a.Pts[^1]));
+                var (x0, y0, z0) = local.ToLocal(a.Pts[^1]);
+                var (x1, y1, z1) = local.ToLocal(b.Pts[0]);
+                double plan = Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
+                bool sameFrame = a.Leaf.AncestorAt(WorkFrame.Level) == b.Leaf.AncestorAt(WorkFrame.Level);
+                (sameFrame ? within : across).Add(plan);
+                bool ground = !double.IsNaN(c.Cube.AboveGround(a.Pts[^1])) && !double.IsNaN(c.Cube.AboveGround(b.Pts[0]));
+                if ((plan > CompareBars.Vertex || (ground && Math.Abs(y1 - y0) > CompareBars.Vertex)) && far.Count < 6)
+                    far.Add(string.Create(CultureInfo.InvariantCulture, $"{plan:F3} m, {y1 - y0:F3} m up at {Lv95Text(a.Pts[^1])} ({a.Leaf} to {b.Leaf}, {a.Pts.Length} and {b.Pts.Length} points)"));
+                if (!ground) { noGround++; continue; }
+                (sameFrame ? withinV : acrossV).Add(Math.Abs(y1 - y0));
+            }
+        }
+        r.Note($"pieces meeting at a leaf edge: {within.Count:N0} within a frame, {across.Count:N0} across a frame edge, {noGround} of them over no leaf heights (height not held)"
+            + (far.Count > 0 ? $" (apart: {string.Join("; ", far)})" : ""));
+        if (within.Count > 0) r.Check("cut between consecutive pieces in plan, within a frame", within.Spread(), true, new Bar(Stat.Max, CompareBars.Vertex));
+        if (across.Count > 0) r.Check("cut between consecutive pieces in plan, across a frame edge", across.Spread(), true, new Bar(Stat.Max, CompareBars.Vertex));
+        // in height p99: RoadExtractor ramps a draped piece to a structure over at most half its own length, so a piece of a
+        // few decimetres at a bridge end steps at its cut, as the LV95 build's do at a tile edge (the maths is the same)
+        if (withinV.Count > 0) r.Check("height step between consecutive pieces, within a frame", withinV.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
+        if (acrossV.Count > 0) r.Check("height step between consecutive pieces, across a frame edge", acrossV.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
     }
 
     private static double PlanLength(EnuFrame frame, EcefPos[] pts)
@@ -582,6 +657,8 @@ public static class CubeCompare
         var known = above.Where(a => !double.IsNaN(a)).Order().ToList();
         return known.Count > 0 && known[known.Count / 2] is < 0 or > 1.0;
     }
+
+    private static readonly bool Debug = Environment.GetEnvironmentVariable("CMP_DEBUG") == "1";
 
     private static void Accumulate(Dictionary<int, double> len, Line line, Func<double, double, double, bool> keep)
     {
