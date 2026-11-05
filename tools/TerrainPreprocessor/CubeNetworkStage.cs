@@ -41,6 +41,7 @@ public static class CubeNetworkStage
         string? region = null, temp = null, chunks = null, osm = null;
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         int block = DefaultBlock, halo = DefaultHalo;
+        bool lv95Ground = false, planOnly = false;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -53,6 +54,10 @@ public static class CubeNetworkStage
                 case "--block": block = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--halo": halo = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--jobs": i++; break;   // one frame at a time
+                // a diagnostic (#1507): drape on the LV95 build's .terr moved onto the plane instead of the leaf mesh
+                case "--lv95-ground": lv95Ground = true; break;
+                // the frames a box makes, with their leaves' LV95 extent, and nothing built (where to put a box across a frame edge)
+                case "--plan-only": planOnly = true; break;
                 case "--cube-box":
                     var v = args[++i].Split(',').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
                     if (v.Length != 4) { Console.Error.WriteLine("--cube-box minE,minN,maxE,maxN (LV95 m)"); return 2; }
@@ -74,6 +79,16 @@ public static class CubeNetworkStage
         if (wanted.Count == 0) { Console.Error.WriteLine($"--cube-network: no leaf with heights in {region}" + (box != null ? " inside the box" : "")); return 2; }
         var driver = new FrameDriver(wanted, MarginM, SwissSeaLevel.Instance, heights.FrameLevel);
 
+        if (planOnly)
+        {
+            foreach (var plan in driver.Frames)
+            {
+                var c = plan.Core.Select(k => SwissGeodesy.ToLv95(k.Centre.LatDeg, k.Centre.LonDeg)).ToList();
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"  frame {plan.Cell}: {plan.Core.Count} leaves, centres E {c.Min(p => p.E):F0}-{c.Max(p => p.E):F0}, N {c.Min(p => p.N):F0}-{c.Max(p => p.N):F0}"));
+            }
+            return 0;
+        }
         string Beside(string name) => Path.Combine(osm, name);
         var options = new TileRewriter.Options(
             Halo: halo, OsmOverlay: Beside("osm_overlay.tsv"), TramStops: Beside("tram_stops.tsv"),
@@ -87,7 +102,7 @@ public static class CubeNetworkStage
         foreach (var plan in driver.Frames)
         {
             var fs = Stopwatch.StartNew();
-            var loop = new FrameTileLoop(plan, driver.LeafLevel, heights, raw, chunks, data, gantries, options, block, totals);
+            var loop = new FrameTileLoop(plan, driver.LeafLevel, heights, raw, chunks, data, gantries, options, block, totals, lv95Ground);
             var stats = TileRewriter.Run(loop, options, _ => { });
             writer.WriteFrame(plan.Cell, loop.Sections);
             heights.Reload(plan.Cell);
@@ -143,14 +158,14 @@ public sealed class FrameTileLoop : ITileLoop
     public Counts Frame { get; } = new();
 
     public FrameTileLoop(FramePlan plan, int leafLevel, RegionHeights heights, RegionHeights raw, string lv95Chunks,
-        RegionData data, GantryContext? gantries, TileRewriter.Options options, int block, Counts totals)
+        RegionData data, GantryContext? gantries, TileRewriter.Options options, int block, Counts totals, bool lv95Ground = false)
     {
         Plan = plan;
         _totals = totals;
         _units = new FrameUnits(plan.Frame, plan.Transform, leafLevel);
         var units = _units;
         var frame = plan.Frame;
-        var ground = new FrameGround(frame, heights.Read, leafLevel);
+        IGround ground = lv95Ground ? new Lv95OnPlane(frame, lv95Chunks) : new FrameGround(frame, heights.Read, leafLevel);
 
         foreach (var leaf in plan.Core) Sections[leaf] = new List<LeafSection>();
         Wanted = plan.Core.Select(units.Tile).ToHashSet();
@@ -311,5 +326,24 @@ public sealed class FrameBuildings(string lv95Chunks, WorkFrame frame, FrameUnit
             }
         _lv95[lv95] = list;
         return list;
+    }
+}
+
+/// <summary>
+/// A diagnostic ground (#1507, <c>--lv95-ground</c>): the LV95 build's <c>.terr</c> at a plane point taken to LV95 (its
+/// latitude and longitude), so a frame run's differences from the LV95 build can be split into the ground's share
+/// (the leaf mesh against the 1 m grid) and the rest. Heights above sea level in both.
+/// </summary>
+public sealed class Lv95OnPlane(WorkFrame frame, string lv95Chunks) : IGround
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<TileId, ChunkGrid?> _grids = new();
+
+    public double? Sample(double x, double y)
+    {
+        var (lat, lon) = frame.Plane.FromPlane(x, y);
+        var (e, n) = SwissGeodesy.ToLv95(lat, lon);
+        var id = TileId.FromLv95(e, n);
+        var grid = _grids.GetOrAdd(id, k => TileRewriter.LoadGrid(lv95Chunks, k));
+        return grid?.SampleHeight(e, n);
     }
 }

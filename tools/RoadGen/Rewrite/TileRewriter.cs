@@ -1635,7 +1635,7 @@ public static partial class TileRewriter
     /// <summary>The ground's height above sea level at a plane point, NaN where it has none.</summary>
     private static double SampleGround(IGround ground, double e, double n) => ground.Sample(e, n) ?? double.NaN;
 
-    internal static ChunkGrid? LoadGrid(string chunkDir, TileId id)
+    public static ChunkGrid? LoadGrid(string chunkDir, TileId id)
     {
         string path = Path.Combine(chunkDir, ChunkFormat.ChunkFileName(id));
         if (!File.Exists(path)) return null;
