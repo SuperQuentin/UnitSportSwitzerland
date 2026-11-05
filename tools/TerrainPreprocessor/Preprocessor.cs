@@ -119,6 +119,8 @@ public static partial class Preprocessor
         // the cover on work frames (#1507, G2 B3 PR 5a), over a --cube region's heights
         // the cover passes after the network stage (#1507, G2 B3 PR 5c); before --cube-cover, whose flag it contains
         if (CubeCoverNetworkStage.Wants(args)) return CubeCoverNetworkStage.Run(args, ct);
+        // trees on work frames (#1507, G2 B3 PR 5b), over a region's cover and roads
+        if (CubeTreesStage.Wants(args)) return CubeTreesStage.Run(args, ct);
         if (CubeCoverStage.Wants(args)) return CubeCoverStage.Run(args, ct);
         // the farm fields on work frames (#1507, G2 B3 row 7)
         if (CubeFieldStage.Wants(args)) return CubeFieldStage.Run(args);

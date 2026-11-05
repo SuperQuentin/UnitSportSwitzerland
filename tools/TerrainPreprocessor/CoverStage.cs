@@ -60,6 +60,25 @@ public static class CoverStage
     /// <summary>Clearance kept either side of a carriageway edge, in metres.</summary>
     private const double RoadClearance = 2.5;
 
+    /// <summary>
+    /// How far from a segment's centreline no tree grows: half its width, its sidewalk and verge (#119) and bike paths
+    /// and their shift off a turn lane (#120), the clearance, and 4 m more at tunnels and bridges, whose portals and
+    /// abutments are exactly where a stray tree ruins the shot.
+    /// </summary>
+    public static double TreeClearance(RoadSegment seg)
+    {
+        var a = seg.Attributes;
+        double side = Math.Max(a.Left.Reach, a.Right.Reach);
+        return seg.Width * 0.5 + side + RoadClearance + ((seg.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0 ? 4.0 : 0.0);
+    }
+
+    /// <summary>A planter's tree (#499): a planted broadleaf, 4.5 to 7 m, hashed off its LV95 position so a rebuild grows the same one.</summary>
+    public static float PlanterHeight(double e, double n)
+    {
+        ulong h = ParkingPlanner.Key((e, n));
+        return 4.5f + (h & 0xFF) / 255f * 2.5f;
+    }
+
     /// <summary>Marks every lattice cell lying within a road corridor of any of <paramref name="tiles"/>.</summary>
     private static bool[] BuildRoadMask(IEnumerable<RoadTile> tiles)
     {
@@ -71,10 +90,7 @@ public static class CoverStage
             // tunnels and bridges need the widest clearance: their portals and abutments
             // are exactly where a stray tree ruins the shot
             // a street's sidewalk and verge (#119) are part of the corridor
-            var a = seg.Attributes;
-            double side = Math.Max(a.Left.Reach, a.Right.Reach);   // bike paths and their shift off a turn lane (#120) included
-            double radius = seg.Width * 0.5 + side + RoadClearance
-                + ((seg.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0 ? 4.0 : 0.0);
+            double radius = TreeClearance(seg);
             int cells = (int)Math.Ceiling(radius / spacing);
 
             for (int i = 0; i < seg.PointCount - 1; i++)
@@ -331,8 +347,7 @@ public static class CoverStage
             {
                 // a car park tree is a planted broadleaf, 4.5 to 7 m, hashed off its position so a
                 // rebuild grows the same one
-                ulong h = ParkingPlanner.Key((id.MinE + cx, id.MaxN - cz));
-                float height = 4.5f + (h & 0xFF) / 255f * 2.5f;
+                float height = PlanterHeight(id.MinE + cx, id.MaxN - cz);
                 extractor.AddTree(id, new CoverExtractor.TreeInstance((float)cx, (float)cy, (float)cz, height, 3));
             });
             lotCells += lc;
