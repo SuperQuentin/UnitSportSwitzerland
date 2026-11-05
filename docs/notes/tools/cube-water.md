@@ -28,18 +28,26 @@ TerrainPreprocessor --cube-water --cube-out REGION [--bathy DIR] [--cube-temp DI
    (`LeafTransform.UndulationAt`); **vertices with no heights are unknown**, neither land nor water, as a missing
    LV95 tile (the region's data stops in the middle of Léman: taken as land, they put a shore there and the
    middle of the Grand Lac came out 30 m deep instead of 300). A 4-connected flood fill per leaf.
-2. **B**: one union-find over the region along every shared leaf edge on a face (east and north), bodies by
-   their root: area (each owned vertex the leaf's area over its cells), most common level, maximum depth.
+2. **B**: one union-find over the region along every shared leaf edge on a face (east and north), and across face
+   edges on the shared edge vertices (the same bits from either side; `CubeWaterLattice.AcrossFaces`, through
+   `LeafSeam.Holders`), bodies by their root: area (each owned vertex the leaf's area over its cells), most common
+   level, maximum depth.
 3. **C**: frame by frame in the driver's order, each leaf with water (or with water before) in a window of
    itself and 600 m of its face's lattice round it (the 3 × 3 leaves at level 14; more where the lattice is
-   finer), shared vertices written by the same leaf in every window; the survey (swissBATHY3D) at each cell's
+   finer), shared vertices written by the same leaf in every window; past a face edge the window's cells fold onto
+   the next face's leaves (`CubeSphere.Fold`, `CubeWaterLattice.Past`: turned and mirrored as the faces meet), past a
+   cube corner they stay unknown; the survey (swissBATHY3D) at each cell's
    LV95 position (rigorous every 8 cells, bilinear between). The bed is the surface less the depth
    (ellipsoidal, `Heights`); the level and fetch on every second vertex (`Water`); both through the
    `LeafWriter`'s heights and water seams. The other leaves of a bundle keep their heights as they are.
 - **Rerunnable**: the heights a leaf had before its first pass are kept in `<temp>/water_surface/` (a
   temporary `.cubl`, `LeafStore`); a rerun cuts from them again, as the LV95 pass reads its old `.water`.
-- **Not yet**: across face edges a neighbour on another face is unknown (its lattice is turned; the D: region is
-  on one face); nationwide, phase A's leaves want a disk cache as the LV95 pass has (#747): here they are held,
+- **Across face edges** (#1552): the folded window is the true lattice, so its distances carry the cube's own
+  geometry there: the grid's skew mirrors at the edge (its lines are great circles that bend; about ±12° half way
+  along face 0's edge, more towards a corner) and a cell's length steps by the flattening (~0.1 %). The survey's
+  LV95 positions past the edge are rigorous, cell by cell. Tests: `CubeWaterEdgeTests` (a lake on an edge and on a
+  cube corner is one body; the fold is the neighbour key's, the same distance in).
+- **Not yet**: nationwide, phase A's leaves want a disk cache as the LV95 pass has (#747): here they are held,
   which with the survey (Léman's 693 km of grid) peaked at 9.6 GB.
 
 ## Checks (Nov 5 2026)

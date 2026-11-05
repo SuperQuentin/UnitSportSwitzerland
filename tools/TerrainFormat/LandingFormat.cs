@@ -30,6 +30,10 @@ public sealed class PierRibbon
     /// <summary>The centreline: [LV95 E, LV95 N, deck top height (LN02)] per point, at least two.</summary>
     public List<double[]> Points { get; set; } = new();
 
+    /// <summary>The same points on the Earth, the deck top's ellipsoidal height (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<GeoPoint>? GeoPoints { get; set; }
+
     /// <summary>The middle of the centreline's extent, which decides the one tile that builds the ribbon.</summary>
     [JsonIgnore]
     public (double E, double N) Middle
@@ -63,6 +67,14 @@ public sealed class LandingBerth
     /// <summary>The bow's heading from true north (#1504): <see cref="Heading"/> less the grid's meridian convergence at the berth.</summary>
     [JsonIgnore]
     public double TrueHeading => Heading - SwissGeodesy.GridConvergenceDeg(E, N);
+
+    /// <summary>The keel origin on the Earth, at still water (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo { get; set; }
+
+    /// <summary>The heading from true north, degrees clockwise, as written (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? GeoHeading { get; set; }
 
     /// <summary>The ship's side against the pier: 0 port, 1 starboard (the steamer's gangway door index).</summary>
     public int Side { get; set; }
@@ -100,6 +112,14 @@ public sealed class Landing
 
     /// <summary>Bollards on the head's face: [E, N, deck height].</summary>
     public List<double[]> Bollards { get; set; } = new();
+
+    /// <summary>The landing's point on the Earth, at the berth's still water (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo { get; set; }
+
+    /// <summary>The bollards on the Earth (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<GeoPoint>? GeoBollards { get; set; }
 }
 
 /// <summary>
