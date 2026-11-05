@@ -157,8 +157,11 @@ internal sealed partial class XrWatch : Node3D
     {
         if (!IsInsideTree()) return;
         var b = GlobalBasis.Orthonormalized();
-        // the world's north in the dial's plane (the dial faces local +Z; the ring's N tick is its local +Y)
-        var north = b.Inverse() * new Vector3(0, 0, -1);
+        // true north in the dial's plane (the dial faces local +Z; the ring's N tick is its local +Y): the world's -Z
+        // is grid north, which the frame turns to the true one (0.95 degrees at Geneva)
+        var trueNorth = new Vector3(0, 0, -1);
+        if (player?.Origin is { } origin) trueNorth = origin.WorldOfEnu(player.GlobalPosition, trueNorth);
+        var north = b.Inverse() * trueNorth;
         float angle = Mathf.Atan2(-north.X, north.Y);
         _bezel.Rotation = new Vector3(0, 0, angle);
         if (player != null && Adventure.Navigation.NavTarget.Current is { } t)
