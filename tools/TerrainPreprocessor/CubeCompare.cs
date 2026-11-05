@@ -264,10 +264,13 @@ public static class CubeCompare
     {
         if (Missing(c, "pistes", LeafKind.Pistes, "pistes_") is { } skip) return skip;
         var r = new KindReport("pistes");
+        // as the cover: held where the LV95 raster resolves the slope type (its 3 x 3 vertices round the nearest one all of
+        // it), reported at its edges, where a leaf vertex up to 0.7 m from the nearest 1 m vertex can fall either side (#1507)
         var agree = new Agreement();
+        var edge = new Agreement();
         var lvIds = new ConcurrentDictionary<ulong, byte>();
         var cubeIds = new ConcurrentDictionary<ulong, byte>();
-        Parallel.ForEach(c.Cube.Ordered(), c.Par, () => new Agreement(), (key, _, acc) =>
+        Parallel.ForEach(c.Cube.Ordered(), c.Par, () => (A: new Agreement(), E: new Agreement()), (key, _, acc) =>
         {
             if (c.Cube.Heights(key) is not { } tile) return acc;
             var p = c.Cube.Section(key, LeafKind.Pistes) is { } sec ? LeafPistes.Decode(sec) : null;
@@ -281,10 +284,17 @@ public static class CubeCompare
                     var lvRec = c.Lv.PisteAt(e, nn, lvIds);
                     int slot = p?.Slot[j * n + i] ?? 0;
                     var cubeRec = slot > 0 ? p!.Records[slot - 1] : null;
-                    acc.Add(lvRec == null ? 0 : (int)lvRec.Type, cubeRec == null ? 0 : (int)cubeRec.Type);
+                    int lvType = lvRec == null ? 0 : (int)lvRec.Type;
+                    bool uniform = true;
+                    for (int dn = -1; dn <= 1 && uniform; dn++)
+                        for (int de = -1; de <= 1 && uniform; de++)
+                            if ((c.Lv.PisteAt(Math.Round(e) + de, Math.Round(nn) + dn, lvIds) is { } q ? (int)q.Type : 0) != lvType) uniform = false;
+                    (uniform ? acc.A : acc.E).Add(lvType, cubeRec == null ? 0 : (int)cubeRec.Type);
                 }
             return acc;
-        }, acc => { lock (agree) agree.Merge(acc); });
+        }, acc => { lock (agree) { agree.Merge(acc.A); edge.Merge(acc.E); } });
+        r.Note($"at the LV95 raster's slope edges (held to no bar): {edge.Count} vertices, agreement {edge.Overall:P3}; "
+            + string.Join(", ", edge.PerClass().Where(x => x.Count >= CompareBars.MinClassSamples).Select(x => string.Create(CultureInfo.InvariantCulture, $"{(x.Class == 0 ? "no slope" : ((PisteType)x.Class).ToString())} {x.Share:P1}"))));
         CategoryLines(r, agree, k => k == 0 ? "no slope" : ((PisteType)k).ToString());
         long both = lvIds.Keys.Count(cubeIds.ContainsKey);
         r.Note($"slopes by OSM id: {lvIds.Count} LV95, {cubeIds.Count} leaves, {both} in both");
