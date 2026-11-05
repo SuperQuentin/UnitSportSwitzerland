@@ -114,7 +114,8 @@ public partial class TrailerDirector : Node
         _camera = camera;
         _chunks = chunks;
         _origin = origin;
-        _shots = CmdArgs.Value("--trailer-scout") is { } scout ? Scout(scout) : Select(CmdArgs.Value("--trailer") ?? "all");
+        _shots = (CmdArgs.Value("--trailer-scout") is { } scout ? Scout(scout) : Select(CmdArgs.Value("--trailer") ?? "all"))
+            .Select(TrueNorthOf).ToList();
         _size = CmdArgs.Value("--trailer-size")?.Split('x') is [var w, var h] && int.TryParse(w, out int sw) && int.TryParse(h, out int sh)
             ? new Vector2I(sw, sh) : new Vector2I(1920, 1080);
         // the trailer drives itself: no tutorial cards, no hints
@@ -363,7 +364,10 @@ public partial class TrailerDirector : Node
         SetPoint = SetPoint,
         Road = (key, at) => _routes.Point(key, at, _chunks),
         Seat = i => i >= 0 && i < _actors.Count ? _actors[i].Seat : null,
+        North = p => _cameraNorth.World(_origin.Frame, p),
     };
+
+    private TrueNorth.Near _cameraNorth;
 
     /// <summary>A point of the shot's set in this frame's world space (null: no set).</summary>
     private Vector3? SetPoint(Vector3 local) => _set != null && IsInstanceValid(_set) ? _set.GlobalTransform * local : null;
@@ -377,6 +381,29 @@ public partial class TrailerDirector : Node
         foreach (var k in shot.Keys) if (k.Look.World is { } s) return s;
         return new Spot(2600000, 1200000, 500);
     }
+
+    /// <summary>
+    /// A script's shot with its bearings turned to true north at their spot (#1504): the scripts write them from grid
+    /// north, as their LV95 spots; everything after this reads true north and sets it down through the frame. A
+    /// bearing relative to something (aboard a machine, in a set, along a road or an actor) stays as it is.
+    /// </summary>
+    private static Shot TrueNorthOf(Shot shot)
+    {
+        static float Conv(Spot at) => at.ConvergenceDeg;
+        float focus = Conv(Focus(shot));
+        return shot with
+        {
+            Cast = shot.Cast.Select(c => c.Aboard >= 0 || c.InSet != null ? c : c with { Heading = c.Heading - Conv(c.At) }).ToList(),
+            Props = shot.Props.Select(p => p.Actor >= 0 || p.Route != null || p.InSet != null ? p : p with { Bearing = p.Bearing - Conv(p.At) }).ToList(),
+            Ufos = shot.Ufos.Select(u => u with { Heading = u.Heading - Conv(u.At) }).ToList(),
+            Craft = shot.Craft.Select(c => c with { Heading = c.Heading - Conv(c.At) }).ToList(),
+            Keys = shot.Keys.Select(k => k with { Eye = k.Eye.TurnedBy(focus), Look = k.Look.TurnedBy(focus) }).ToList(),
+        };
+    }
+
+    /// <summary>A bearing from true north at a world point as a world bearing in this frame, degrees (#1504).</summary>
+    private float WorldBearing(Vector3 at, float trueBearing) =>
+        -Mathf.RadToDeg(TrueNorth.WorldYaw(_origin.Frame, at, -Mathf.DegToRad(trueBearing)));
 
     // ---- UFO sightings and herds (#863) ------------------------------------------------------
 
@@ -395,9 +422,11 @@ public partial class TrailerDirector : Node
     private void StageUfo(Saucers u)
     {
         if (Occasions.UfoSightings.Instance is not { } sightings) { GD.PrintErr("[trailer] no UFO sightings in this world: left out"); return; }
-        float ground = _chunks.Ground.TryGetSurface(_origin.ToWorld(u.At.E, u.At.N, 0), out float g) ? g : 0f;
+        var where = _origin.ToWorld(u.At.E, u.At.N, 0);
+        float ground = _chunks.Ground.TryGetSurface(where, out float g) ? g : 0f;
         float anchor = u.At.Agl ? ground + u.At.H : u.At.H;
-        _stagedUfos.Add(sightings.Stage(u.Kind, u.At.E, u.At.N, anchor, Mathf.DegToRad(u.Heading), u.Count, -u.From, u.Seed));
+        // a sighting's heading is a world bearing: the shot's true one set down at its anchor (#1504)
+        _stagedUfos.Add(sightings.Stage(u.Kind, u.At.E, u.At.N, anchor, Mathf.DegToRad(WorldBearing(where, u.Heading)), u.Count, -u.From, u.Seed));
     }
 
     private void Unstage()
@@ -456,6 +485,8 @@ public partial class TrailerDirector : Node
         }
         // a spot on the ground: what the props below stand on (a set's point and an actor's are placed already)
         bool onGround = prop.Actor < 0 && prop.Route == null && prop.InSet == null;
+        // its bearing from true north (the shot was loaded so) set down in this frame
+        if (onGround) bearing = WorldBearing(at, bearing);
         if (prop.Seated is { } sitter)
         {
             // on the ground under its spot, its hip H over it (the figure's origin was left at sea level, #882)
@@ -508,7 +539,9 @@ public partial class TrailerDirector : Node
             if (Vehicles.VehicleManager.Instance is not { } vehicles || Rideable.Create(prop.Vehicle) is not { } ride) return;
             var lv95 = _origin.ToGlobal(at with { Y = (FloorAt(at) ?? at.Y) + 0.6f });
             string name = $"film_{_shot?.Number ?? 0}_{_props.Count}";
-            var state = new Vehicles.VehicleState(prop.Vehicle, lv95, Mathf.DegToRad(-bearing), Vector3.Zero, ride.MaxHealth,
+            // the state keeps its yaw in GlobalPos's offset axes
+            float stateYaw = TrueNorth.OffsetYaw(lv95, TrueNorth.TrueYaw(_origin.Frame, at, Mathf.DegToRad(-bearing)));
+            var state = new Vehicles.VehicleState(prop.Vehicle, lv95, stateYaw, Vector3.Zero, ride.MaxHealth,
                 EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0, Setup: prop.Setup);
             if (vehicles.Place(state, name) == null || vehicles.GetNodeOrNull<Node3D>(name) is not { } parked)
             {
@@ -978,7 +1011,7 @@ public partial class TrailerDirector : Node
         AddChild(prop);
         var at = _origin.ToWorld(craft.At.E, craft.At.N, 0);
         float ground = _chunks.Ground.TryGetSurface(at, out float g) ? g : 0f;
-        prop.Put(at, ground);
+        prop.Put(at, ground, WorldBearing(at, craft.Heading));
         _craft.Add(prop);
         _props.Add(prop);
     }

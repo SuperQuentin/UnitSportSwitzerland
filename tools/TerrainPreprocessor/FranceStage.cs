@@ -79,6 +79,7 @@ public static class FranceStage
             grids[tile] = ChunkCodec.Decode(fs);
         }
         var heightAt = TerrainSampler.For(grids);
+        var space = new Lv95RoadSpace(wanted.ToList(), new Lv95Ground(grids), GeoInput.Over(outDir));
 
         var sw = Stopwatch.StartNew();
         using var client = new BdTopoClient();
@@ -90,8 +91,8 @@ public static class FranceStage
 
         var buildingStats = new FranceBuildings.Stats();
         var geo = GeoInput.Over(outDir);
-        foreach (var f in footprints) f.OntoGround(geo);
-        var buildingsByTile = FranceBuildings.Build(footprints, wanted, heightAt, buildingStats);
+        // the space takes each latitude and longitude onto the tiles' ground (GeoInput), as BdFeature.OntoGround does
+        var buildingsByTile = FranceBuildings.Build(footprints, new Lv95FeatureSpace(wanted, new Lv95Ground(grids), geo), buildingStats);
 
         foreach (var (tile, built) in buildingsByTile) MergeBuildings(outDir, tile, built);
 
@@ -105,8 +106,8 @@ public static class FranceStage
         Console.WriteLine($"France: fetched {lines.Count} road sections");
 
         var roadStats = new FranceRoads.Stats();
-        foreach (var f in lines) f.OntoGround(geo);
-        var roadsByTile = FranceRoads.Build(lines, wanted, heightAt, roadStats);
+        // on the built ground from their latitudes and longitudes (the space's GeoInput), as the buildings above
+        var roadsByTile = FranceRoads.Build(lines, space, roadStats);
 
         foreach (var (tile, segments) in roadsByTile) MergeRoads(outDir, tile, segments);
 

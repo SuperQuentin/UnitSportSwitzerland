@@ -34,6 +34,12 @@ public enum Layers
     /// <see cref="Osm"/>: the files are an ODbL derived database.
     /// </summary>
     Pistes = 256,
+    /// <summary>
+    /// The same map as cube-sphere leaves in true Earth positions (#1507, G2), into <see cref="Paths.CubeRegion"/> beside
+    /// the LV95 build, which stays until the flip: every cube stage over the selection's box, the region-wide files in
+    /// latitude and longitude, and the pyramid where a global region is built. Off unless picked by name.
+    /// </summary>
+    Cube = 512,
 }
 
 /// <summary>What MapSetup remembers between runs, in terrain_chunks_temp/mapsetup.json.</summary>
@@ -114,6 +120,66 @@ public static partial class Planner
     private static string NationwideBuildingsGpkg(Paths p) => Path.Combine(p.BuildingsDir, "buildings_ch.gpkg");
     private static string NationwideBuildingsZip(Paths p) => Path.Combine(p.BuildingsDir, "swissbuildings3d_3_0_2026_2056_5728.gdb.zip");
 
+    /// <summary>
+    /// The cube region's steps (#1507, G2 B3 row 8), after the LV95 build they read (its chunk grids, buildings and
+    /// region files): every cube stage over the selection's LV95 box, in their order, each a <c>TerrainPreprocessor</c>
+    /// switch (docs/notes/tools/cube-region-files.md). The leaves' photos are a Godot tool mode (<c>--cubephotos</c>), run apart.
+    /// </summary>
+    private static void AddCubeSteps(SetupContext c, List<Step> steps, bool wantFields, bool wantPistes, bool wantBuildings,
+        Func<List<string>> buildingSources)
+    {
+        var p = c.Paths;
+        string region = p.CubeRegion;
+        string? skip = !c.Layers.HasFlag(Layers.Cube) ? "cube layer off" : c.Selection.Bounds() == null ? "nothing selected" : null;
+        string Box()
+        {
+            var (e0, n0, e1, n1) = c.Selection.Bounds()!.Value;
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{e0:F0},{n0:F0},{e1:F0},{n1:F0}");
+        }
+        int tiles = c.Selection.Tiles.Count;
+        void Add(string title, string detail, double seconds, string? why, Func<List<string>?> args) => steps.Add(new Step
+        {
+            Title = title, Detail = detail, Seconds = seconds, Skip = skip ?? why,
+            Run = r => args() is { } a ? r.Tool("TerrainPreprocessor", a, LineProgress.None) : Task.FromResult(false),
+        });
+        string? tlm = p.TlmGpkg;
+        Add("Cube heights", $"level-14 leaves of the selection into {region} (.cubl, one bundle per level-9 frame)", 10 + tiles * 0.2, null,
+            () => ["--cube", "--cube-out", region, "--in", p.AltiDir, "--cube-box", Box(), "--cube-cache", Path.Combine(p.Temp, "cube_cache")]);
+        Add("Cube roads", "raw roads, tunnel holes and car parks per leaf (swissTLM3D)", 10 + tiles * 0.06, tlm == null ? "no swissTLM3D" : null,
+            () => ["--cube-roads", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
+        // frames side by side (#1508): RoadGen is one thread a frame, a frame wants up to ~5 GB; as many as the free memory
+        // holds after 6 GB kept for the rest of the machine, 1-4 (the memory in use, not the total: the total says nothing of other work)
+        var gc = GC.GetGCMemoryInfo();
+        long free = gc.TotalAvailableMemoryBytes - gc.MemoryLoadBytes;
+        int frames = (int)Math.Clamp((free - (6L << 30)) / (5L << 30), 1, 4);
+        Add("Cube buildings", "swissBUILDINGS3D with the GWR on the leaves", 20 + tiles * 0.2, !wantBuildings ? "buildings layer off" : null,
+            () => ["--cube-buildings", "--cube-out", region, .. buildingSources(), "--cube-box", Box()]);
+        Add("Cube road network", $"RoadGen's network stage on the work frames, {frames} at a time", 30 + tiles * 15.0 / frames, tlm == null ? "no swissTLM3D" : null,
+            () => ["--cube-network", "--cube-out", region, "--chunks", p.Chunks, "--osm", p.Temp, "--cube-box", Box(), "--frames-parallel", frames.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+        Add("Cube land cover", "the cover classes at every leaf vertex", 10 + tiles * 0.03, tlm == null ? "no swissTLM3D" : null,
+            () => ["--cube-cover", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
+        Add("Cube water", "lakes and rivers, beds and still levels on the leaves", 20 + tiles * 0.1, null,
+            () => Directory.Exists(p.BathyDir) ? ["--cube-water", "--cube-out", region, "--bathy", p.BathyDir] : ["--cube-water", "--cube-out", region]);
+        Add("Cube cover from the network", "street paving, tunnel roofs and laid-out car parks", 10 + tiles * 0.05, null,
+            () => ["--cube-cover-network", "--cube-out", region, "--facades", p.Chunks, "--cube-box", Box()]);
+        Add("Cube trees", "surveyed trees and the scatter, seeded from the global lattice", 10 + tiles * 0.05, tlm == null ? "no swissTLM3D" : null,
+            () => ["--cube-trees", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
+        Add("Cube farm fields", "the fields whole into every leaf they touch", 30 + tiles * 0.01, !wantFields ? "fields layer off" : null,
+            () =>
+            {
+                var a = new List<string> { "--cube-fields", "--cube-out", region, "--fields", p.LwbDir, "--cube-box", Box() };
+                if (p.OsmPbf is { } pbf && File.Exists(p.GwrSqlite)) a.AddRange(["--osm-pbf", pbf, "--gwr", p.GwrSqlite]);
+                return a;
+            });
+        Add("Cube ski slopes", "the slopes at every leaf vertex (OSM, ODbL)", 20 + tiles * 0.01, !wantPistes ? "pistes layer off" : p.OsmPbf == null ? "no OpenStreetMap extract" : null,
+            () => ["--cube-pistes", "--cube-out", region, "--osm-pbf", p.OsmPbf!, "--cube-box", Box()]);
+        Add("Cube region files", "places, POIs, landings, airports, lifts in latitude, longitude and ellipsoidal height", 5, null,
+            () => ["--cube-region-files", "--chunks", p.Chunks, "--cube-out", region]);
+        bool global = Directory.Exists(p.CubeGlobal) && Directory.Exists(p.EtopoDir);
+        Add("Cube pyramid", "levels 5-13 from the leaves into the global region", 60 + tiles * 0.3, global ? null : "no global region or ETOPO",
+            () => ["--cube-swiss", "--cube-leaves", region, "--etopo", p.EtopoDir, "--cube-out", p.CubeGlobal]);
+    }
+
     public static List<Step> Build(SetupContext c)
     {
         var p = c.Paths;
@@ -170,6 +236,29 @@ public static partial class Planner
 
         // ---- buildings sheets -----------------------------------------------------------------
         var sheets = c.Country.Sheets.Where(s => sel.Any(s.Touches)).ToList();
+        // the buildings' sources for a stage (the LV95 features pass, the cube's buildings, #1508)
+        List<string> BuildingSources()
+        {
+            var args = new List<string>();
+            // A GeoPackage left by an older run (or the nationwide one) is still read; a
+            // fresh region goes straight from the published sheet zips (#537).
+            string gpkg = File.Exists(NationwideBuildingsGpkg(p)) ? NationwideBuildingsGpkg(p) : BuildingsOut(p);
+            if (File.Exists(gpkg)) args.AddRange(["--buildings", gpkg]);
+            else
+                foreach (var sheet in sheets)
+                {
+                    // The newest flight of the sheet, not whichever the filesystem lists
+                    // first: a folder holds two years of a sheet once it has been re-flown
+                    // and re-downloaded (#597).
+                    string zip = Directory.Exists(p.BuildingsDir)
+                        ? SwissStacUtil.NewestSheetFile(
+                            Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{sheet.Key}_*.gdb.zip")) ?? ""
+                        : "";
+                    if (zip.Length > 0) args.AddRange(["--buildings-gdb", zip]);
+                }
+            if (File.Exists(p.GwrSqlite)) args.AddRange(["--gwr", p.GwrSqlite]);
+            return args;
+        }
         bool haveNationwideZip = File.Exists(NationwideBuildingsZip(p));
         var sheetsToGet = sheets.Where(s => !c.Local.BuildingSheets.Contains(s.Key)).ToList();
         bool needSheets = wantBuildings && featureTiles.Count > 0 && !haveNationwideGpkg && !haveNationwideZip;
@@ -379,26 +468,7 @@ public static partial class Planner
                     // the cover pass ends with the lake and river beds (#298): surveyed where the zips are
                     if (Directory.Exists(p.BathyDir)) args.AddRange(["--bathy", p.BathyDir]);
                 }
-                if (wantBuildings)
-                {
-                    // A GeoPackage left by an older run (or the nationwide one) is still read; a
-                    // fresh region goes straight from the published sheet zips (#537).
-                    string gpkg = File.Exists(NationwideBuildingsGpkg(p)) ? NationwideBuildingsGpkg(p) : BuildingsOut(p);
-                    if (File.Exists(gpkg)) args.AddRange(["--buildings", gpkg]);
-                    else
-                        foreach (var sheet in sheets)
-                        {
-                            // The newest flight of the sheet, not whichever the filesystem lists
-                            // first: a folder holds two years of a sheet once it has been re-flown
-                            // and re-downloaded (#597).
-                            string zip = Directory.Exists(p.BuildingsDir)
-                                ? SwissStacUtil.NewestSheetFile(
-                                    Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{sheet.Key}_*.gdb.zip")) ?? ""
-                                : "";
-                            if (zip.Length > 0) args.AddRange(["--buildings-gdb", zip]);
-                        }
-                    if (File.Exists(p.GwrSqlite)) args.AddRange(["--gwr", p.GwrSqlite]);
-                }
+                if (wantBuildings) args.AddRange(BuildingSources());
                 var clock = Stopwatch.StartNew();
                 bool ok = await r.Tool("TerrainPreprocessor", args, LineProgress.Batch);
                 if (!ok) return false;
@@ -492,6 +562,8 @@ public static partial class Planner
                 return r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--pistes", "--osm-pbf", pbf], LineProgress.None);
             },
         });
+
+        AddCubeSteps(c, steps, wantFields, wantPistes, wantBuildings, BuildingSources);
 
         // last: every preprocessor pass refreshes the tiles' content hashes itself, but RoadGen's
         // rewrite runs on its own; incremental (a file is read again only when its size or time

@@ -131,9 +131,11 @@ public partial class ObjectContainers : Node
     {
         try
         {
-            return System.IO.File.Exists(AwakePath)
-                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AwakeSlot>>(System.IO.File.ReadAllText(AwakePath)) ?? new()
-                : new();
+            if (!System.IO.File.Exists(AwakePath)) return new();
+            var awake = AwakeSlots.FromJson(System.IO.File.ReadAllText(AwakePath), out bool old);
+            // a file from before G2 A2b (LV95, grid north): written back in Earth places (#1503)
+            if (old) SaveAwake(awake);
+            return awake;
         }
         catch (Exception e)
         {
@@ -148,7 +150,7 @@ public partial class ObjectContainers : Node
     /// </summary>
     public void SaveAwake(IReadOnlyDictionary<string, AwakeSlot> awake)
     {
-        try { SaveQueue.WriteAtomic(AwakePath, System.Text.Json.JsonSerializer.Serialize(awake)); }
+        try { SaveQueue.WriteAtomic(AwakePath, AwakeSlots.ToJson(awake)); }
         catch (Exception e) { GD.PushError($"[containers] could not write {AwakePath}: {e.Message}"); }
     }
 
@@ -233,20 +235,20 @@ public partial class ObjectContainers : Node
             case VehicleBody v when _vehicles.Keeps?.Invoke(v) == true:
             {
                 var state = v.Capture() with { Velocity = Vector3.Zero, SpawnedAt = 0 };
-                return new ContainerRecord(v.Oid, 0, ContainerRecord.Vehicle, v.Name, state.Position.E, state.Position.N, Now,
+                return new ContainerRecord(v.Oid, 0, ContainerRecord.Vehicle, v.Name, state.Position.Lv95.E, state.Position.Lv95.N, Now,
                     GD.VarToStr(state.ToDict()));
             }
             case DroppedItem i when _items.Keeps?.Invoke(i) == true:
             {
                 var state = i.Capture();
-                return new ContainerRecord(i.Oid, 0, ContainerRecord.Item, i.Name, state.Position.E, state.Position.N, Now,
+                return new ContainerRecord(i.Oid, 0, ContainerRecord.Item, i.Name, state.Position.Lv95.E, state.Position.Lv95.N, Now,
                     GD.VarToStr(state.ToDict()));
             }
             case RadioBody r when _radios?.Keeps?.Invoke(r) == true:
             {
                 // asleep silent: nobody is there to hear it, and the clock it played by is this run's
                 var state = r.Capture() with { Playing = false, StartedAt = 0 };
-                return new ContainerRecord(r.Oid, 0, ContainerRecord.Radio, r.Name, state.Position.E, state.Position.N, Now,
+                return new ContainerRecord(r.Oid, 0, ContainerRecord.Radio, r.Name, state.Position.Lv95.E, state.Position.Lv95.N, Now,
                     GD.VarToStr(state.ToDict()));
             }
             default:

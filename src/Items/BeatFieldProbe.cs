@@ -70,7 +70,8 @@ public partial class BeatFieldProbe : Node
         var fwd = (-cam.GlobalBasis.Z with { Y = 0 }).Normalized();
         var side = fwd.Cross(Vector3.Up);
         var ground = me.GlobalPosition;
-        radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(ground + fwd * 3f), Mathf.Atan2(fwd.X, fwd.Z), Vector3.Zero, Settled: true));
+        radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(ground + fwd * 3f),
+            radios.Origin.Frame.GridYawOf(ground + fwd * 3f, Mathf.Atan2(fwd.X, fwd.Z)), Vector3.Zero, Settled: true));
         dropped.Drop(new ItemStack(ItemId.Hammer, 1), ground + fwd * 3f + side * 1.2f + Vector3.Up * 0.5f, Vector3.Zero, Vector3.Zero, Vector3.Zero);
         // a registered mesh near the radio, and one 20 m off
         var near = Box(ground + fwd * 3f - side * 1.4f + Vector3.Up * 0.25f);

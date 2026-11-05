@@ -97,7 +97,7 @@ public partial class VersteckisBotProbe : ChatProbe
             var (de, dn, _) = g.OffsetTo(to);
             double d = g.HorizontalDistanceTo(to);
             if (d < 1) break;
-            me.GlobalPosition += new Vector3((float)(de / d), 0.1f, (float)(-dn / d));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d), 0.1f, (float)(-dn / d)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }

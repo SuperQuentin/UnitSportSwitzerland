@@ -30,7 +30,11 @@ public partial class VersteckisManager
     private void RequestDisguise(int kind) => Reply(ServeDisguise(Multiplayer.GetRemoteSenderId(), kind));
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestTag(double e, double n, float alt) => Reply(ServeTag(Multiplayer.GetRemoteSenderId(), e, n, alt));
+    private void RequestTag(double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);   // (#1503) the wire is ECEF
+        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, (float)at.Alt));
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestSniff() => Reply(ServeSniff(Multiplayer.GetRemoteSenderId()));
@@ -99,7 +103,7 @@ public partial class VersteckisManager
         if (e!.DecoyUsed) return "One decoy a round.";
         if (PositionOf(peer) is not { } at || BodyOf(peer) is not { } body) return "Nowhere to put it.";
         e.DecoyUsed = true;
-        var d = new VsDecoy { Id = g!.NextDecoy++, Owner = peer, Prop = e.Prop, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = body.NetYaw, Until = Now + VsRules.DecoySeconds };
+        var d = new VsDecoy { Id = g!.NextDecoy++, Owner = peer, Prop = e.Prop, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = body.GlobalYaw, Until = Now + VsRules.DecoySeconds };
         g.S.Decoys.Add(d);
         GD.Print(FormattableString.Invariant($"[vs] {e.Name} left a decoy ({VsProps.A(d.Prop)}) at {d.E:F1}/{d.N:F1}"));
         Push();
@@ -173,7 +177,7 @@ public partial class VersteckisManager
         {
             if (!h.Hiding || PositionOf(h.Peer) is not { } at || BodyOf(h.Peer) is not { } body) continue;
             var prop = h.Disguised ? h.Prop : VsProp.MilkCan;   // undisguised (on an objective): a body's own footprint
-            if (!VsRules.TagHits(prop, at, body.NetYaw, e, n)) continue;
+            if (!VsRules.TagHits(prop, at, body.GlobalYaw, e, n)) continue;
             double d = at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt));
             if (d < best) { best = d; hit = h; }
         }
@@ -234,6 +238,7 @@ public partial class VersteckisManager
         if (seeker.SniffBackAt <= 0) seeker.SniffBackAt = Now + VsRules.SniffRecharge;
         var es = new List<double>();
         var ns = new List<double>();
+        var xyz = new List<double>();   // (#1503) the same puffs as ECEF for the wire, three per puff
         foreach (var h in s.Entrants)
         {
             if (!h.Hiding || PositionOf(h.Peer) is not { } at) continue;
@@ -242,9 +247,14 @@ public partial class VersteckisManager
             var puff = at.Moved(Math.Cos(a) * r, Math.Sin(a) * r);
             es.Add(puff.Lv95.E);
             ns.Add(puff.Lv95.N);
+            if (seeker.Bot) continue;
+            var (x, y, z) = puff.ToWire();
+            xyz.Add(x);
+            xyz.Add(y);
+            xyz.Add(z);
         }
         if (seeker.Bot) BotSniffed(peer, es, ns);
-        else if (Connected(peer)) RpcId(peer, MethodName.Sniffed, es.ToArray(), ns.ToArray());
+        else if (Connected(peer)) RpcId(peer, MethodName.Sniffed, xyz.ToArray());
         GD.Print($"[vs] {seeker.Name} sniffed: {es.Count} puffs");
         Push();
         return null;
@@ -365,11 +375,12 @@ public partial class VersteckisManager
     private void SoundAt(Game g, double e, double n, long from, VsVoice voice, bool everyone = false)
     {
         const double reach = 80;
+        var (x, y, z) = GlobalPos.FromLv95(e, n, g.S.Ground).ToWire();   // (#1503) the wire is ECEF
         foreach (long p in Multiplayer.GetPeers())
         {
             bool inGame = g.S.Find(p) is { Left: false };
             bool near = PositionOf(p) is { } at && at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt)) <= reach * reach;
-            if (near || everyone && inGame) RpcId(p, MethodName.Sounded, from, (int)voice, e, n);
+            if (near || everyone && inGame) RpcId(p, MethodName.Sounded, from, (int)voice, x, y, z);
         }
         BotHeard(g, e, n, voice);
     }
@@ -423,7 +434,7 @@ public partial class VersteckisManager
             if (now < run.SpeedBadUntil) { ok = false; fault = "speed"; }
             if (!VsRules.Inside(s.E, s.N, s.Radius, at)) { ok = false; fault ??= "bounds"; }
             // inside a building: through a door (an interior is far under the world) or through a wall
-            bool indoors = Interiors.InteriorManager.SurfacePoint(at) != at;
+            bool indoors = Interiors.InteriorManager.SurfacePoint(at).DistanceTo(at) > 0.01;   // (not ==: the doubles of a moved place differ, #1502)
             if (indoors || g.Site?.InBuilding(at.Lv95.E, at.Lv95.N) == true) { ok = false; fault ??= "building"; }
             else if (!VsRules.GroundOk((float)at.Alt, g.Site?.GroundAt(at.Lv95.E, at.Lv95.N))) { ok = false; fault ??= "ground"; }
             if (ok)

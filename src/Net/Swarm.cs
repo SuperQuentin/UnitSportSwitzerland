@@ -373,13 +373,14 @@ public partial class Swarm : Node
 
     /// <summary>
     /// What a real owner's FootPlayer._Process writes for the synchronizer: the transform travels
-    /// as NetGlobal/NetVel/NetYaw stamped with NetTime (last), not as position/rotation.
+    /// as NetGlobal/NetVel/NetYaw stamped with NetTime (last), not as position/rotation; the velocity
+    /// and heading in the local ENU and from true north (#1503), from this frame's axes at the bot.
     /// </summary>
     private void PublishNet(FootPlayer me, Vector3 before, float dt)
     {
-        me.NetGlobal = _origin.ToGlobal(me.Position);
-        me.NetVel = dt > 0 ? (me.Position - before) / dt : Vector3.Zero;
-        me.NetYaw = me.Rotation.Y;
+        var frame = _origin.Frame;
+        var vel = dt > 0 ? (me.Position - before) / dt : Vector3.Zero;
+        me.SetNetState(frame.ToGlobal(me.Position), frame.GridOfWorld(me.Position, vel), frame.GridYawOf(me.Position, me.Rotation.Y));
         me.NetTime = Time.GetTicksUsec() / 1e6;
     }
 

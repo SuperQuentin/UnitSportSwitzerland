@@ -171,7 +171,7 @@ public partial class PhoneVrProbe : Node
         // ---- phase 3: travel behind the phone at the eyes, or a blink ----
         var at = me.Global;
         double asked = GameClock.Now;
-        Teleporter.Instance?.TeleportTo(at.E + 250, at.N, "probe vr eyes");
+        Teleporter.Instance?.TeleportTo(at.Moved(250, 0), "probe vr eyes");
         await Wait(0.6);
         AtEyes();
         for (int i = 0; i < 40 && Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) > 5; i++) await Wait(0.05);
@@ -187,7 +187,7 @@ public partial class PhoneVrProbe : Node
         await Wait(0.8);
         at = me.Global;
         asked = GameClock.Now;
-        Teleporter.Instance?.TeleportTo(at.E + 250, at.N, "probe vr blink");
+        Teleporter.Instance?.TeleportTo(at.Moved(250, 0), "probe vr blink");
         for (int i = 0; i < 100 && Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) > 5; i++) await Wait(0.1);
         took = GameClock.Now - asked;
         Check(Math.Abs(at.Moved(250, 0).OffsetTo(me.Global).East) < 5 && took >= 1.2, $"not raised, it goes behind a blink after the wait ({took:F1} s)");

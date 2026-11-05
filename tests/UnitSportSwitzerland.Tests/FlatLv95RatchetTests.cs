@@ -43,7 +43,11 @@ public class FlatLv95RatchetTests
         // all (#1500, A1 #1502); a person's LV95 goes through GlobalPos.Lv95 / FromLv95, which still count
         new("LV95 coordinate member",
             new(@"\w\)?\.(E|N)\b(?!\s*\()", RegexOptions.Compiled),
-            Baseline: 4150, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+            // 4150 on main before G2 A2 (#1503), 4162 after the wire's step (the records' E/N read at the RPC edge); 4134
+            // after A2b: the saves keep Earth places, and records whose file moved hold a GlobalPos (sleepers) or give one
+            // (placed objects, structures, pins, the travel flag), which the RPC edges now read; 4091 after A1's last step
+            // (#1502): GlobalPos has no E/N, what is left reads its LV95 notation (`.Lv95.E`) or a record's LV95 fields
+            Baseline: 4091, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
         // the flat world's escape hatches out of IWorldGround (#1532, G2 C1): an LV95 tile key read off a
         // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; counted
         // after #1532, lowered as the IChunkSource users move (C1's leaf half, C5) and to 0 by D

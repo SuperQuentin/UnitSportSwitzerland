@@ -30,14 +30,19 @@ public readonly record struct RadioState(
     float Voice = 1f,
     float Music = 1f)
 {
+    /// <summary>
+    /// The state on the wire (a spawn, an RPC): ECEF, true north and the local ENU (#1503); in memory the heading and
+    /// velocity are in the LV95 grid's axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
+    /// </summary>
     public Godot.Collections.Dictionary ToDict()
     {
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
         ["owner"] = Owner,
-        ["yaw"] = Yaw,
-        ["vel"] = Velocity,
+        ["yaw"] = enu.TrueYaw(Yaw),
+        ["vel"] = enu.ToEnu(Velocity),
         ["cd"] = CdId,
         ["at"] = StartedAt,
         ["playing"] = Playing,
@@ -51,7 +56,16 @@ public readonly record struct RadioState(
         return d;
     }
 
-    public static RadioState FromDict(Godot.Collections.Dictionary d) => new(
+    /// <summary>A state from <see cref="ToDict"/> (the wire, and the object containers since G2 A2b) or a container record saved before it (LV95 and grid north: its migration), told apart by their keys.</summary>
+    public static RadioState FromDict(Godot.Collections.Dictionary d)
+    {
+        var s = Read(d);
+        if (!GlobalPos.IsWire(d)) return s;
+        var enu = Lv95Grid.Axes(s.Position);
+        return s with { Yaw = enu.Yaw(s.Yaw), Velocity = enu.FromEnu(s.Velocity) };
+    }
+
+    private static RadioState Read(Godot.Collections.Dictionary d) => new(
         d["name"].AsString(),
         d["owner"].AsInt64(),
         GlobalPos.Read(d),

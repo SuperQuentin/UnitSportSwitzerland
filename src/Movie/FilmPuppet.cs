@@ -19,6 +19,7 @@ public partial class FilmPuppet : Node
     private FootPlayer _puppet = null!;
     private RideKind _kind;
     private GlobalPos _from;
+    private double _fromE, _fromN, _fromAlt;   // the same place in LV95, which the heading and velocity are on
     private double _heading, _speed, _climb, _t, _stamp;
     private static int _count;
 
@@ -37,7 +38,7 @@ public partial class FilmPuppet : Node
             GD.PrintErr($"[puppet] not a ride and E,N,alt,heading,speed[,climb]: {spec}");
             return null;
         }
-        var film = new FilmPuppet { Name = "FilmPuppet", _kind = kind, _from = GlobalPos.FromLv95(v[0], v[1], v[2]), _heading = v[3], _speed = v[4], _climb = v[5] };
+        var film = new FilmPuppet { Name = "FilmPuppet", _kind = kind, _from = GlobalPos.FromLv95(v[0], v[1], v[2]), _fromE = v[0], _fromN = v[1], _fromAlt = v[2], _heading = v[3], _speed = v[4], _climb = v[5] };
         // under the studio's names, so neither meets a peer's nor the other's
         int id = MovieStage.PuppetBase - 1 - _count++;
         film._puppet = new FootPlayer { Name = id.ToString(), Origin = origin, Puppet = true };
@@ -62,10 +63,9 @@ public partial class FilmPuppet : Node
         double h = Mathf.DegToRad(_heading);
         double e = Math.Sin(h) * _speed, n = Math.Cos(h) * _speed;
         _puppet.RideKindId = (int)_kind;
-        // a body's yaw turns its forward (-Z) from north toward east the other way round
-        _puppet.NetYaw = (float)-h;
-        _puppet.NetVel = new Vector3((float)e, (float)_climb, (float)-n);
-        _puppet.NetGlobal = _from.Moved(e * _t, n * _t, _climb * _t);
+        // a body's yaw turns its forward (-Z) from north toward east the other way round; a heading on
+        // the LV95 grid, given in GlobalPos's axes (the wire's ENU and true north are worked out from them)
+        _puppet.SetNetState(GlobalPos.FromLv95(_fromE + e * _t, _fromN + n * _t, _fromAlt + _climb * _t), new Vector3((float)e, (float)_climb, (float)-n), (float)-h);
         // last: its setter applies the state
         _puppet.NetTime = ++_stamp;
         // every 2 s: where it is from the camera, to frame a shot by

@@ -99,7 +99,7 @@ public partial class ChatManager
             if (enet?.GetPeer((int)p.PeerId) is { } link) ping = (int)link.GetStatistic(ENetPacketPeer.PeerStatistic.RoundTripTime);
             double? e = null, n = null;
             if (!p.Bodiless && _players?.GetNodeOrNull<Player.FootPlayer>(p.PeerId.ToString()) is { } body)
-                (e, n) = (body.Global.E, body.Global.N);
+                (e, n) = (body.Global.Lv95.E, body.Global.Lv95.N);
             list.Add(new AdminPlayer(p.PeerId, p.Name, account(p.PeerId), p.IsAdmin, p.Bodiless, ping, e, n));
         }
         return list;

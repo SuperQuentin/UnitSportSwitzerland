@@ -37,8 +37,20 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     [Export] public bool Wrecked { get; set; }
     [Export] public float Health { get; set; }
     [Export] public bool EngineOn { get; set; }
-    /// <summary>The craft's attitude, for a remote copy that only receives position and yaw.</summary>
+    /// <summary>The craft's attitude, for a remote copy that only receives position and yaw: in this peer's world axes.</summary>
     [Export] public Quaternion Tilt { get; set; } = Quaternion.Identity;
+
+    /// <summary>
+    /// <see cref="Tilt"/> on the wire (#1503): in the local east-up-south at the body, so a peer whose axes turn from
+    /// the sender's (a turned frame, the meridian convergence) draws the same attitude. Replicated after the place.
+    /// </summary>
+    [Export]
+    public Quaternion NetTilt
+    {
+        get => _tiltEnu.At(Origin.Frame, Position).ToEnu(Tilt);
+        set => Tilt = _tiltEnu.At(Origin.Frame, Position).FromEnu(value);
+    }
+    private Core.EnuNear _tiltEnu;
     /// <summary>Rotor / prop spool as the authority simulates it; a remote copy used to guess it from <see cref="EngineOn"/>.</summary>
     [Export] public float Spool { get; set; }
     /// <summary>A car's open doors, one bit each (<see cref="CarRig.DoorLeft"/>..): left open for show, or by whoever just got out.</summary>
@@ -198,13 +210,18 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
         AddToGroup(Group);
         // parked across an open doorway, it is seen on both sides of it
         AddToGroup(Interiors.DoorwayGhosts.Group);
-        var s = _initial;
+        // the record's heading and velocity are in GlobalPos's axes at its place: this world's here (#1503)
+        var s = _initial with
+        {
+            Yaw = Origin.Frame.WorldYawOfGrid(_initial.Position, _initial.Yaw),
+            Velocity = Origin.Frame.WorldOfGrid(_initial.Position, _initial.Velocity),
+        };
         // A hand's breadth up. The terrain collision is a one-sided heightfield, and a box whose
         // bottom starts exactly on it — a vehicle parked from where the rider stood — begins a
         // hair inside it and falls straight through the world (measured: a parked bike 125 m
         // under the mountain five seconds later). From just above, it settles onto it.
         Position = Origin.ToWorld(s.Position) + Vector3.Up * 0.15f;
-        AddChild(_place = new Net.NetPlace(Origin, s.Position));
+        AddChild(_place = new Net.NetPlace(Origin, s.Position, _initial.Yaw, _initial.Velocity));
         Rotation = new Vector3(0, s.Yaw, 0);
         // a flyer's drawn attitude (replicated): its heading until its own flight model poses it. A
         // server-placed aircraft (#422) is never flown there, and its copies drew it facing north
@@ -242,7 +259,8 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles", ".:Heave", ".:BedLoad" }))
+        // the place, then its turn and velocity in the ENU there (#1503: never this world's rotation or velocity)
+        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { Net.NetPlace.Turn, Net.NetPlace.Velocity, ".:Wrecked", ".:Health", ".:EngineOn", ".:NetTilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles", ".:Heave", ".:BedLoad" }))
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
@@ -380,7 +398,8 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     /// never simulated, so their flight state there is whatever they were parked with.
     /// </remarks>
     public VehicleState Capture() => new(Kind, Global,
-        Rotation.Y, _inHold ? Vector3.Zero : Velocity, Health, EngineOn, Wrecked,
+        // in GlobalPos's axes at its place, as a record keeps them (#1503)
+        Origin.Frame.GridYawOf(Position, Rotation.Y), _inHold ? Vector3.Zero : Origin.Frame.GridOfWorld(Position, Velocity), Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)

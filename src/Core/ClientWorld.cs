@@ -1906,6 +1906,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Adventure.Navigation.AdventureCompass.Me = () => _onFoot && LocalPlayer is { } me ? me.Global : null;
         Adventure.Navigation.AdventureCompass.PeerAt = peer => _players?.GetNodeOrNull<FootPlayer>(peer.ToString()) is { } body ? body.Global : null;
         Adventure.Navigation.TargetMarker.Origin = () => _worldOrigin;
+        Avatar.AircraftCockpit.Origin = () => _worldOrigin;
         Adventure.Navigation.GuidingWind.Body = () => _onFoot ? LocalPlayer : null;
         Adventure.Navigation.GuidingWind.Hint = Toast;
         Adventure.Navigation.DepartureBoard.BodyState = () => LocalPlayer is { } me

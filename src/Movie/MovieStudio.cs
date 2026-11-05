@@ -749,7 +749,7 @@ public partial class MovieStudio : Screen
         var p = MovieSession.Project;
         int i = _timeline.PickedCamera;
         var at = _origin.ToGlobal(_camera.GlobalPosition);
-        var key = p.FrameFromView(i, _stage.Time, _stage.Mount, at.E, at.N, at.Alt, _camera.GlobalTransform.Basis.GetRotationQuaternion(), _camera.Lens, add);
+        var key = p.FrameFromView(i, _stage.Time, _stage.Mount, at.Lv95.E, at.Lv95.N, at.Alt, _camera.GlobalTransform.Basis.GetRotationQuaternion(), _camera.Lens, add);
         if (key == null)
         {
             Modal.Inform(this, "Nothing to follow here", "The actor this shot follows has no clip at this time.");
@@ -1273,7 +1273,7 @@ public partial class MovieStudio : Screen
         var q = _camera.GlobalTransform.Basis.GetRotationQuaternion();
         var key = Picked.Set(new CameraKey
         {
-            T = _stage.Time, E = at.E, N = at.N, Alt = at.Alt, Qx = q.X, Qy = q.Y, Qz = q.Z, Qw = q.W, Lens = _camera.Lens,
+            T = _stage.Time, E = at.Lv95.E, N = at.Lv95.N, Alt = at.Alt, Qx = q.X, Qy = q.Y, Qz = q.Z, Qw = q.W, Lens = _camera.Lens,
         }, 1 / Channels.Rate);
         _timeline.SelectKey(key);
         ShowKeyOptions();

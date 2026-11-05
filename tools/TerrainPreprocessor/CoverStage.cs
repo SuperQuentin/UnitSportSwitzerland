@@ -5,10 +5,79 @@ using UnitSport.Tools.RoadGen.Rewrite;
 
 namespace UnitSport.Tools.Preprocessor;
 
+/// <summary>
+/// A tile's cover lattice as the passes after the network stage see it (#1507, G2 B3 PR 5c): its cells, each one's
+/// position (x, z) and ground height (y) in the frame the tile's road records are in, the cells near a box there, and the
+/// urban density at a cell. The LV95 tile's 1 m grid in tile-local metres (<see cref="Lv95CoverLattice"/>), or a leaf's
+/// lattice in its anchor frame (<c>LeafCoverLattice</c>).
+/// </summary>
+public interface ICoverLattice
+{
+    int Count { get; }
+
+    (double X, double Z) At(int cell);
+
+    double Height(int cell);
+
+    /// <summary>The cells in a box of the records' frame (a superset: the caller tests each one's position).</summary>
+    IEnumerable<int> Near(double x0, double z0, double x1, double z1);
+
+    /// <summary>The cells whose position is in a box of the records' frame (the LV95 grid: its own rounding of the box).</summary>
+    IEnumerable<int> InBox(double x0, double z0, double x1, double z1);
+
+    double UrbanDensity(int cell);
+}
+
+/// <summary>The LV95 tile's lattice: cell (c, r) at (c, r) metres from its north-west corner, its <c>.terr</c> height.</summary>
+public sealed class Lv95CoverLattice(TileId id, ChunkGrid? grid, UrbanField field) : ICoverLattice
+{
+    private const int N = CoverFormat.Size;
+
+    public int Count => N * N;
+
+    public (double X, double Z) At(int cell) => ((cell % N) * ChunkFormat.SpacingM, (cell / N) * ChunkFormat.SpacingM);
+
+    public double Height(int cell) => grid!.HeightMetersAt(cell % N, cell / N);
+
+    public IEnumerable<int> Near(double x0, double z0, double x1, double z1)
+    {
+        double spacing = ChunkFormat.SpacingM;
+        int c0 = Math.Max(0, (int)(x0 / spacing)), c1 = Math.Min(N - 1, (int)(x1 / spacing) + 1);
+        int r0 = Math.Max(0, (int)(z0 / spacing)), r1 = Math.Min(N - 1, (int)(z1 / spacing) + 1);
+        for (int r = r0; r <= r1; r++)
+            for (int c = c0; c <= c1; c++)
+                yield return r * N + c;
+    }
+
+    public IEnumerable<int> InBox(double x0, double z0, double x1, double z1) => Near(x0, z0, x1, z1);
+
+    public double UrbanDensity(int cell) =>
+        field.Density(id.MinE + (cell % N) * ChunkFormat.SpacingM, id.MaxN - (cell / N) * ChunkFormat.SpacingM);
+}
+
 public static class CoverStage
 {
     /// <summary>Clearance kept either side of a carriageway edge, in metres.</summary>
     private const double RoadClearance = 2.5;
+
+    /// <summary>
+    /// How far from a segment's centreline no tree grows: half its width, its sidewalk and verge (#119) and bike paths
+    /// and their shift off a turn lane (#120), the clearance, and 4 m more at tunnels and bridges, whose portals and
+    /// abutments are exactly where a stray tree ruins the shot.
+    /// </summary>
+    public static double TreeClearance(RoadSegment seg)
+    {
+        var a = seg.Attributes;
+        double side = Math.Max(a.Left.Reach, a.Right.Reach);
+        return seg.Width * 0.5 + side + RoadClearance + ((seg.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0 ? 4.0 : 0.0);
+    }
+
+    /// <summary>A planter's tree (#499): a planted broadleaf, 4.5 to 7 m, hashed off its LV95 position so a rebuild grows the same one.</summary>
+    public static float PlanterHeight(double e, double n)
+    {
+        ulong h = ParkingPlanner.Key((e, n));
+        return 4.5f + (h & 0xFF) / 255f * 2.5f;
+    }
 
     /// <summary>Marks every lattice cell lying within a road corridor of any of <paramref name="tiles"/>.</summary>
     private static bool[] BuildRoadMask(IEnumerable<RoadTile> tiles)
@@ -21,10 +90,7 @@ public static class CoverStage
             // tunnels and bridges need the widest clearance: their portals and abutments
             // are exactly where a stray tree ruins the shot
             // a street's sidewalk and verge (#119) are part of the corridor
-            var a = seg.Attributes;
-            double side = Math.Max(a.Left.Reach, a.Right.Reach);   // bike paths and their shift off a turn lane (#120) included
-            double radius = seg.Width * 0.5 + side + RoadClearance
-                + ((seg.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0 ? 4.0 : 0.0);
+            double radius = TreeClearance(seg);
             int cells = (int)Math.Ceiling(radius / spacing);
 
             for (int i = 0; i < seg.PointCount - 1; i++)
@@ -65,32 +131,26 @@ public static class CoverStage
     /// islands, bridgeheads and the strips between parallel carriageways are stone and concrete,
     /// and TLM maps none of it; parks, gardens and other mapped cover stay as they are.
     /// </summary>
-    private static long PaveStreets(TileId id, RoadTile tile, byte[] cells, UrbanField field)
+    public static long PaveStreets(RoadTile tile, byte[] cells, ICoverLattice lattice)
     {
-        int n = CoverFormat.Size;
-        double spacing = ChunkFormat.SpacingM;
-        var near = new bool[n * n];
+        var near = new bool[lattice.Count];
         foreach (var seg in tile.Segments)
         {
             if (seg.PointCount < 2 || !seg.Attributes.Has(RoadAttrFlags.Urban)) continue;
             if ((seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0 || seg.Class > RoadClass.Square) continue;
             var a = seg.Attributes;
             double radius = seg.Width * 0.5 + Math.Max(a.Left.Reach, a.Right.Reach) + PaveReach;
-            int cr = (int)Math.Ceiling(radius / spacing);
             for (int i = 0; i < seg.PointCount - 1; i++)
             {
                 double ax = seg.Points[i * 3], az = seg.Points[i * 3 + 2], bx = seg.Points[i * 3 + 3], bz = seg.Points[i * 3 + 5];
                 double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
-                int c0 = Math.Max(0, (int)((Math.Min(ax, bx) - radius) / spacing)), c1 = Math.Min(n - 1, (int)((Math.Max(ax, bx) + radius) / spacing) + 1);
-                int r0 = Math.Max(0, (int)((Math.Min(az, bz) - radius) / spacing)), r1 = Math.Min(n - 1, (int)((Math.Max(az, bz) + radius) / spacing) + 1);
-                for (int r = r0; r <= r1; r++)
-                    for (int c = c0; c <= c1; c++)
-                    {
-                        double x = c * spacing, z = r * spacing;
-                        double t = len < 1e-9 ? 0 : Math.Clamp(((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (len * len), 0, 1);
-                        double dx = ax + (bx - ax) * t - x, dz = az + (bz - az) * t - z;
-                        if (dx * dx + dz * dz <= radius * radius) near[r * n + c] = true;
-                    }
+                foreach (int k in lattice.Near(Math.Min(ax, bx) - radius, Math.Min(az, bz) - radius, Math.Max(ax, bx) + radius, Math.Max(az, bz) + radius))
+                {
+                    var (x, z) = lattice.At(k);
+                    double t = len < 1e-9 ? 0 : Math.Clamp(((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (len * len), 0, 1);
+                    double dx = ax + (bx - ax) * t - x, dz = az + (bz - az) * t - z;
+                    if (dx * dx + dz * dz <= radius * radius) near[k] = true;
+                }
             }
         }
         // the junction caps themselves, and a reach round them
@@ -104,17 +164,14 @@ public static class CoverStage
                 minX = Math.Min(minX, v[k * 3]); maxX = Math.Max(maxX, v[k * 3]);
                 minZ = Math.Min(minZ, v[k * 3 + 2]); maxZ = Math.Max(maxZ, v[k * 3 + 2]);
             }
-            for (int r = Math.Max(0, (int)((minZ - PaveReach) / spacing)); r <= Math.Min(n - 1, (int)((maxZ + PaveReach) / spacing) + 1); r++)
-                for (int c = Math.Max(0, (int)((minX - PaveReach) / spacing)); c <= Math.Min(n - 1, (int)((maxX + PaveReach) / spacing) + 1); c++)
-                    near[r * n + c] = true;
+            foreach (int k in lattice.InBox(minX - PaveReach, minZ - PaveReach, maxX + PaveReach, maxZ + PaveReach)) near[k] = true;
         }
 
         long paved = 0;
         for (int i = 0; i < near.Length; i++)
         {
             if (!near[i] || cells[i] != (byte)CoverClass.Open) continue;
-            double e = id.MinE + (i % n) * spacing, nn = id.MaxN - (i / n) * spacing;
-            if (field.Density(e, nn) < UrbanField.UrbanAt) continue;
+            if (lattice.UrbanDensity(i) < UrbanField.UrbanAt) continue;
             cells[i] = (byte)CoverClass.TownPaving;
             paved++;
         }
@@ -131,10 +188,8 @@ public static class CoverStage
     /// only carved at the portals now (<c>TunnelCarver.PortalReach</c>), so a cut-and-cover tunnel
     /// under a town keeps its cover; this is what that cover is made of.
     /// </summary>
-    private static long RoofTunnels(RoadTile tile, byte[] cells, ChunkGrid grid)
+    public static long RoofTunnels(RoadTile tile, byte[] cells, ICoverLattice lattice)
     {
-        int n = CoverFormat.Size;
-        double spacing = ChunkFormat.SpacingM;
         long roofed = 0;
         foreach (var seg in tile.Segments)
         {
@@ -146,28 +201,23 @@ public static class CoverStage
                 double ax = seg.Points[i * 3], ay = seg.Points[i * 3 + 1], az = seg.Points[i * 3 + 2];
                 double bx = seg.Points[i * 3 + 3], by = seg.Points[i * 3 + 4], bz = seg.Points[i * 3 + 5];
                 double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
-                int c0 = Math.Max(0, (int)((Math.Min(ax, bx) - half) / spacing)), c1 = Math.Min(n - 1, (int)((Math.Max(ax, bx) + half) / spacing) + 1);
-                int r0 = Math.Max(0, (int)((Math.Min(az, bz) - half) / spacing)), r1 = Math.Min(n - 1, (int)((Math.Max(az, bz) + half) / spacing) + 1);
-                for (int r = r0; r <= r1; r++)
-                    for (int c = c0; c <= c1; c++)
-                    {
-                        double x = c * spacing, z = r * spacing;
-                        double t = len < 1e-9 ? 0 : Math.Clamp(((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (len * len), 0, 1);
-                        double dx = ax + (bx - ax) * t - x, dz = az + (bz - az) * t - z;
-                        if (dx * dx + dz * dz > half * half) continue;
-                        int k = r * n + c;
-                        var cover = (CoverClass)cells[k];
-                        if (cover is not (CoverClass.Open or CoverClass.TownPaving)) continue;
-                        double over = grid.HeightMetersAt(c, r) - (ay + (by - ay) * t + roof);
-                        if (over > ThinCover) continue;
-                        cells[k] = (byte)CoverClass.TunnelRoof;
-                        roofed++;
-                    }
+                foreach (int k in lattice.Near(Math.Min(ax, bx) - half, Math.Min(az, bz) - half, Math.Max(ax, bx) + half, Math.Max(az, bz) + half))
+                {
+                    var (x, z) = lattice.At(k);
+                    double t = len < 1e-9 ? 0 : Math.Clamp(((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (len * len), 0, 1);
+                    double dx = ax + (bx - ax) * t - x, dz = az + (bz - az) * t - z;
+                    if (dx * dx + dz * dz > half * half) continue;
+                    var cover = (CoverClass)cells[k];
+                    if (cover is not (CoverClass.Open or CoverClass.TownPaving)) continue;
+                    double over = lattice.Height(k) - (ay + (by - ay) * t + roof);
+                    if (over > ThinCover) continue;
+                    cells[k] = (byte)CoverClass.TunnelRoof;
+                    roofed++;
+                }
             }
         }
         return roofed;
     }
-
 
     /// <summary>
     /// A laid-out car park (#499), after the network stage has written it. Two jobs, both of which
@@ -187,11 +237,9 @@ public static class CoverStage
     /// every other tree in the game (`perf-lod-trees`, `trees-solid`).
     /// </para>
     /// </summary>
-    private static (long Cells, int Trees) LaidOutLots(
-        TileId id, RoadTile tile, byte[] cells, CoverExtractor extractor)
+    /// <param name="plant">Plants a planter's tree at (x, y, z) in the records' frame; null: the planters are counted, not planted.</param>
+    public static (long Cells, int Trees) LaidOutLots(RoadTile tile, byte[] cells, ICoverLattice lattice, Action<double, double, double>? plant)
     {
-        int n = CoverFormat.Size;
-        double spacing = ChunkFormat.SpacingM;
         long repainted = 0;
         int planted = 0;
 
@@ -209,13 +257,7 @@ public static class CoverStage
                     cz += area.Vertices[v * 3 + 2];
                 }
                 cx /= count; cy /= count; cz /= count;
-
-                // a car park tree is a planted broadleaf, 4.5 to 7 m, hashed off its position so a
-                // rebuild grows the same one
-                ulong h = ParkingPlanner.Key((id.MinE + cx, id.MaxN - cz));
-                float height = 4.5f + (h & 0xFF) / 255f * 2.5f;
-                extractor.AddTree(id, new CoverExtractor.TreeInstance(
-                    (float)cx, (float)(cy + area.Height), (float)cz, height, 3));
+                plant?.Invoke(cx, cy + area.Height, cz);
                 planted++;
                 continue;
             }
@@ -228,23 +270,16 @@ public static class CoverStage
                 var (bx, bz) = (area.Vertices[area.Indices[t + 1] * 3], area.Vertices[area.Indices[t + 1] * 3 + 2]);
                 var (cx2, cz2) = (area.Vertices[area.Indices[t + 2] * 3], area.Vertices[area.Indices[t + 2] * 3 + 2]);
 
-                int c0 = Math.Max(0, (int)(Math.Min(ax, Math.Min(bx, cx2)) / spacing));
-                int c1 = Math.Min(n - 1, (int)(Math.Max(ax, Math.Max(bx, cx2)) / spacing) + 1);
-                int r0 = Math.Max(0, (int)(Math.Min(az, Math.Min(bz, cz2)) / spacing));
-                int r1 = Math.Min(n - 1, (int)(Math.Max(az, Math.Max(bz, cz2)) / spacing) + 1);
-
-                for (int r = r0; r <= r1; r++)
-                    for (int c = c0; c <= c1; c++)
-                    {
-                        double x = c * spacing, z = r * spacing;
-                        if (!InTriangle(x, z, ax, az, bx, bz, cx2, cz2)) continue;
-                        int k = r * n + c;
-                        // only a car park loses its pattern; paving, a square or open ground stay
-                        if ((CoverClass)cells[k] is not (CoverClass.ParkingPublic
-                            or CoverClass.ParkingPrivate or CoverClass.RestArea)) continue;
-                        cells[k] = (byte)CoverClass.ParkingPaved;
-                        repainted++;
-                    }
+                foreach (int k in lattice.Near(Math.Min(ax, Math.Min(bx, cx2)), Math.Min(az, Math.Min(bz, cz2)), Math.Max(ax, Math.Max(bx, cx2)), Math.Max(az, Math.Max(bz, cz2))))
+                {
+                    var (x, z) = lattice.At(k);
+                    if (!InTriangle(x, z, ax, az, bx, bz, cx2, cz2)) continue;
+                    // only a car park loses its pattern; paving, a square or open ground stay
+                    if ((CoverClass)cells[k] is not (CoverClass.ParkingPublic
+                        or CoverClass.ParkingPrivate or CoverClass.RestArea)) continue;
+                    cells[k] = (byte)CoverClass.ParkingPaved;
+                    repainted++;
+                }
             }
         }
         return (repainted, planted);
@@ -304,9 +339,17 @@ public static class CoverStage
             if (!File.Exists(road)) continue;
             RoadTile tile;
             using (var fs = File.OpenRead(road)) tile = RoadCodec.Decode(fs);
-            paved += PaveStreets(id, tile, cells, field);
-            if (grids.TryGetValue(id, out var grid)) roofs += RoofTunnels(tile, cells, grid);
-            var (lc, lt) = LaidOutLots(id, tile, cells, extractor);   // #499
+            grids.TryGetValue(id, out var grid);
+            var lattice = new Lv95CoverLattice(id, grid, field);
+            paved += PaveStreets(tile, cells, lattice);
+            if (grid != null) roofs += RoofTunnels(tile, cells, lattice);
+            var (lc, lt) = LaidOutLots(tile, cells, lattice, (cx, cy, cz) =>   // #499
+            {
+                // a car park tree is a planted broadleaf, 4.5 to 7 m, hashed off its position so a
+                // rebuild grows the same one
+                float height = PlanterHeight(id.MinE + cx, id.MaxN - cz);
+                extractor.AddTree(id, new CoverExtractor.TreeInstance((float)cx, (float)cy, (float)cz, height, 3));
+            });
             lotCells += lc;
             lotTrees += lt;
         }

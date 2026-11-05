@@ -23,8 +23,13 @@ public readonly record struct DropState(
     // which item this is to the object containers (#689): given by the server; 0 = not persisted
     long Oid = 0)
 {
+    /// <summary>
+    /// The state on the wire (a spawn, an RPC): ECEF, and its tumble, velocity and spin in the local ENU (#1503); in
+    /// memory they are in the LV95 grid's axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
+    /// </summary>
     public Godot.Collections.Dictionary ToDict()
     {
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
@@ -32,9 +37,9 @@ public readonly record struct DropState(
         ["id"] = (int)Stack.Id,
         ["count"] = Stack.Count,
         ["data"] = Stack.Data ?? "",
-        ["rot"] = Rotation,
-        ["vel"] = Velocity,
-        ["spin"] = Spin,
+        ["rot"] = enu.ToEnu(Quaternion.FromEuler(Rotation)).GetEuler(),
+        ["vel"] = enu.ToEnu(Velocity),
+        ["spin"] = enu.ToEnu(Spin),
         ["settled"] = Settled,
         ["token"] = Token,
         };
@@ -43,7 +48,21 @@ public readonly record struct DropState(
         return d;
     }
 
+    /// <summary>A state from <see cref="ToDict"/> (the wire, and the object containers since G2 A2b) or a container record saved before it (LV95 and grid north: its migration), told apart by their keys.</summary>
     public static DropState FromDict(Godot.Collections.Dictionary d)
+    {
+        var s = Read(d);
+        if (!GlobalPos.IsWire(d)) return s;
+        var enu = Lv95Grid.Axes(s.Position);
+        return s with
+        {
+            Rotation = enu.FromEnu(Quaternion.FromEuler(s.Rotation)).GetEuler(),
+            Velocity = enu.FromEnu(s.Velocity),
+            Spin = enu.FromEnu(s.Spin),
+        };
+    }
+
+    private static DropState Read(Godot.Collections.Dictionary d)
     {
         string data = d["data"].AsString();
         return new DropState(
@@ -146,8 +165,10 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
         CollisionMask |= World.TreeColliders.Layer;
         var s = _initial;
         Position = _origin.ToWorld(s.Position);
-        AddChild(_place = new NetPlace(_origin, s.Position));
-        Rotation = s.Rotation;
+        // the record's tumble is in GlobalPos's axes at its place: this world's here (#1503)
+        var turn = Quaternion.FromEuler(s.Rotation);
+        AddChild(_place = new NetPlace(_origin, s.Position, turn));
+        Quaternion = _origin.Frame.WorldTurnOfGrid(s.Position, turn);
 
         // the collider is the drawn item's box (thin cards and bars get a minimum, or they sink)
         var mesh = ItemDefs.HandMesh(s.Stack.Id);
@@ -169,7 +190,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
         }
 
         var fall = new SceneReplicationConfig();
-        foreach (var prop in NetPlace.Properties.Append(".:rotation").Append(".:Settled")) fall.AddProperty(prop);
+        // the place, then its turn in the ENU there (#1503: never this world's rotation)
+        foreach (var prop in NetPlace.Properties.Append(NetPlace.Turn).Append(".:Settled")) fall.AddProperty(prop);
         fall.PropertySetReplicationMode(".:Settled", SceneReplicationConfig.ReplicationMode.OnChange);
         _sync = new MultiplayerSynchronizer
         {
@@ -202,10 +224,11 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
 
     private void Simulate(DropState s)
     {
-        LinearVelocity = s.Velocity;
-        AngularVelocity = s.Spin;
+        // in GlobalPos's axes at its place, as the record keeps them: this world's here (#1503)
+        LinearVelocity = _origin.Frame.WorldOfGrid(s.Position, s.Velocity);
+        AngularVelocity = _origin.Frame.WorldOfGrid(s.Position, s.Spin);
         _lastPos = _origin.ToWorld(s.Position);
-        _lastVel = s.Velocity;
+        _lastVel = LinearVelocity;
     }
 
     /// <summary>The origin moved (#185): the last step of the flight, kept for hitting someone on the way, moves with it.</summary>
@@ -313,6 +336,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
 
     private void Settle()
     {
+        // where and how it came to rest, published once more: nothing is published once it is settled
+        if (!Proxy && !_predicting && IsMultiplayerAuthority()) _place.Publish(Position);
         Settled = true;
         Freeze = true;
         FreezeMode = FreezeModeEnum.Static;
@@ -350,7 +375,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>
-    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled, Oid: _initial.Oid);
+    public DropState Capture() => new(Name, Owner, Stack, _place.Global, _origin.Frame.GridTurnOf(Position, Quaternion).GetEuler(),
+        Vector3.Zero, Vector3.Zero, Settled, Oid: _initial.Oid);
 
     /// <summary>Which item this is to the object containers (#689); 0 = not persisted.</summary>
     public long Oid => _initial.Oid;

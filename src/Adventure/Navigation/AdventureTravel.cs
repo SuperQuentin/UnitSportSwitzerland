@@ -279,8 +279,12 @@ public partial class AdventureTravel : Node
         s.HasLast = false;
         s.Tracker.Last = null;
         GD.Print(FormattableString.Invariant($"[travel] {Short(p.Key)} travels to {to!.Id} from {(sign?.Id ?? "anywhere")} for CHF {fare.Chf} ({fare.Basis}, {fare.Km:F1} km)"));
-        if (Connected(peer)) RpcId(peer, MethodName.Depart, to.Id, fare.Chf, e, n);
-        else if (!_networked && peer == AdventureService.LocalPeer) Depart(to.Id, fare.Chf, e, n);
+        if (Connected(peer))
+        {
+            var (x, y, z) = GlobalPos.FromLv95(e, n, 0).ToWire();   // (#1503) the wire is ECEF
+            RpcId(peer, MethodName.Depart, to.Id, fare.Chf, x, y, z);
+        }
+        else if (!_networked && peer == AdventureService.LocalPeer) DepartAt(to.Id, fare.Chf, e, n);
         return null;
     }
 
@@ -334,10 +338,10 @@ public partial class AdventureTravel : Node
     }
 
     /// <summary>The rewards plan's portable flag (5.6): a travel point "Your flag" for that player.</summary>
-    public void SetPortable(long peer, double e, double n, float alt)
+    public void SetPortable(long peer, GlobalPos at)
     {
         if (_adventure.Progress(peer) is not { } p) return;
-        p.Get(TravelBook.Section).Flag = new PortableFlag(e, n, alt, Now);
+        p.Get(TravelBook.Section).Flag = new PortableFlag(at, Now);
         p.Touch(TravelBook.Section);
     }
 
@@ -424,8 +428,7 @@ public partial class AdventureTravel : Node
         var owners = new List<long>();
         var names = new List<string>();
         var ids = new List<int>();
-        var es = new List<double>();
-        var ns = new List<double>();
+        var xyz = new List<double>();   // (#1503) ECEF, three per pin
         var icons = new List<byte>();
         var notes = new List<string>();
         if (Net.Parties.Server?.Of(peer) is { } party)
@@ -438,13 +441,15 @@ public partial class AdventureTravel : Node
                     owners.Add(m);
                     names.Add(_adventure.NameOf?.Invoke(m) ?? $"Rider{m}");
                     ids.Add(pin.Id);
-                    es.Add(pin.E);
-                    ns.Add(pin.N);
+                    var (x, y, z) = pin.At.ToWire();
+                    xyz.Add(x);
+                    xyz.Add(y);
+                    xyz.Add(z);
                     icons.Add(pin.Icon);
                     notes.Add(pin.Note);
                 }
             }
-        RpcId(peer, MethodName.PartyPinsState, owners.ToArray(), names.ToArray(), ids.ToArray(), es.ToArray(), ns.ToArray(), icons.ToArray(), notes.ToArray());
+        RpcId(peer, MethodName.PartyPinsState, owners.ToArray(), names.ToArray(), ids.ToArray(), xyz.ToArray(), icons.ToArray(), notes.ToArray());
     }
 
     // ---- the owner's requests -------------------------------------------------------------------------
@@ -467,7 +472,11 @@ public partial class AdventureTravel : Node
     public void AskPinAdd(double e, double n, byte icon, string note, bool shared)
     {
         if (Authority) PinAdd(AdventureService.LocalPeer, e, n, icon, note, shared);
-        else RpcId(1, MethodName.RequestPinAdd, e, n, icon, note, shared);
+        else
+        {
+            var (x, y, z) = GlobalPos.FromLv95(e, n, 0).ToWire();   // (#1503) the wire is ECEF
+            RpcId(1, MethodName.RequestPinAdd, x, y, z, icon, note, shared);
+        }
     }
 
     public void AskPinEdit(int id, byte icon, string note, bool shared)
@@ -519,7 +528,12 @@ public partial class AdventureTravel : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPinAdd(double e, double n, byte icon, string note, bool shared) { if (_server) PinAdd(Multiplayer.GetRemoteSenderId(), e, n, icon, note, shared); }
+    private void RequestPinAdd(double x, double y, double z, byte icon, string note, bool shared)
+    {
+        if (!_server) return;
+        var at = GlobalPos.FromWire(x, y, z);
+        PinAdd(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, icon, note, shared);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestPinEdit(int id, byte icon, string note, bool shared) { if (_server) PinEdit(Multiplayer.GetRemoteSenderId(), id, icon, note, shared); }
@@ -555,7 +569,13 @@ public partial class AdventureTravel : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Depart(string poiId, int fare, double e, double n)
+    private void Depart(string poiId, int fare, double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        DepartAt(poiId, fare, at.Lv95.E, at.Lv95.N);
+    }
+
+    private void DepartAt(string poiId, int fare, double e, double n)
     {
         if (Catalogue.Resolve(poiId) is not { } poi) return;
         GD.Print(FormattableString.Invariant($"[travel] departing for {poi.Name} (CHF {fare}) -> {e:F0}/{n:F0}"));
@@ -566,14 +586,15 @@ public partial class AdventureTravel : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void PartyPinsState(long[] owners, string[] names, int[] ids, double[] es, double[] ns, byte[] icons, string[] notes)
+    private void PartyPinsState(long[] owners, string[] names, int[] ids, double[] xyz, byte[] icons, string[] notes)
     {
         PartyPins.Clear();
-        int count = Math.Min(owners.Length, Math.Min(Math.Min(names.Length, ids.Length), Math.Min(Math.Min(es.Length, ns.Length), Math.Min(icons.Length, notes.Length))));
+        int count = Math.Min(owners.Length, Math.Min(Math.Min(names.Length, ids.Length), Math.Min(xyz.Length / 3, Math.Min(icons.Length, notes.Length))));
         for (int i = 0; i < count; i++)
         {
             if (!PartyPins.TryGetValue(owners[i], out var entry)) PartyPins[owners[i]] = entry = (names[i], new List<Pin>());
-            entry.Pins.Add(new Pin { Id = ids[i], E = es[i], N = ns[i], Icon = Math.Min(icons[i], (byte)(PinBook.Icons - 1)), Note = PinBook.Sanitize(notes[i]), Shared = true });
+            var at = GlobalPos.FromWire(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]);
+            entry.Pins.Add(new Pin { Id = ids[i], At = at, Icon = Math.Min(icons[i], (byte)(PinBook.Icons - 1)), Note = PinBook.Sanitize(notes[i]), Shared = true });
         }
         PartyPinsVersion++;
         GD.Print($"[nav] party pins: {count} from {PartyPins.Count} member(s)");

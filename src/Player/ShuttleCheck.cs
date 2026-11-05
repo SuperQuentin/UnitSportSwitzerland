@@ -99,7 +99,7 @@ public partial class ShuttleCheck : Node
         var plan = _mode == "europe"
             // the film's mission (#1497): a taxi from 80 m east of the line facing west, the drive back over home,
             // a steep retro burn, a short while in the air before back up
-            ? new ShuttlePilot.Mission(runway, runway, Start: (g.Moved(80, 60).Lv95.E, g.Moved(80, 60).Lv95.N, 1.5f * Mathf.Pi), RoundTheEarth: false,
+            ? new ShuttlePilot.Mission(runway, runway, Start: (g.Lv95.E + 80, g.Lv95.N + 60, 1.5f * Mathf.Pi), RoundTheEarth: false,
                 CoastSeconds: 60, PerigeeKm: -3500, AirSeconds: 20, TurnOutKm: 2000)
             : new ShuttlePilot.Mission(runway, runway);
         _pilot = new ShuttlePilot(plan)
@@ -120,7 +120,7 @@ public partial class ShuttleCheck : Node
         if (_mode == "glide")
         {
             // the landing alone: where the drive leaves it, 80 km out on the runway's line, 52 km up, 300 m/s north
-            var at = _origin.Frame.ToWorld(g.Moved(0, -plan.EntryOut).WithAlt(52_000));
+            var at = _origin.Frame.ToWorld(g.Lv95.E, g.Lv95.N - plan.EntryOut, 52_000);
             _player.DebugLaunch(at, new Vector3(0, -30f, -300f));
             _shuttle.State.Lever = _shuttle.State.Spool = 0f;
             _pilot.SkipToLanding();

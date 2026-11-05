@@ -99,9 +99,9 @@ public static class CatenaryPlanner
                 {
                     var (at, dir, height) = At(rail.Plan, arc, rail.Height, total * i / samples);
                     var p = at + new Vec2(dir.Y, -dir.X) * off;
-                    pts[i * 3] = (float)(p.X - tile.MinE);
+                    pts[i * 3] = (float)(p.X - Plane.West(tile));
                     pts[i * 3 + 1] = height + wire;
-                    pts[i * 3 + 2] = (float)(tile.MaxN - p.Y);
+                    pts[i * 3 + 2] = (float)(Plane.North(tile) - p.Y);
                 }
                 Get(wires, tile).Add(new CatenaryWire { Line = line, Points = pts });
                 stats.WireKm += total / 1000;
@@ -144,13 +144,13 @@ public static class CatenaryPlanner
                     for (int i = 0; i < 2; i++)
                     {
                         var p = at + n * arms[i];
-                        over[i * 2] = (float)(p.X - tile.MinE);
-                        over[i * 2 + 1] = (float)(tile.MaxN - p.Y);
+                        over[i * 2] = (float)(p.X - Plane.West(tile));
+                        over[i * 2 + 1] = (float)(Plane.North(tile) - p.Y);
                     }
                     Get(supports, tile).Add(new CatenarySupport
                     {
                         Kind = CatenarySupportKind.CentreMast, Line = line,
-                        AX = (float)(mid.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - mid.Y),
+                        AX = (float)(mid.X - Plane.West(tile)), AY = y, AZ = (float)(Plane.North(tile) - mid.Y),
                         BX = over[0], BY = y, BZ = over[1], WireY = wireY, Over = over,
                     });
                     if (twin != 0) paired.Add((at + n * twin, Get(supports, tile)[^1]));
@@ -175,9 +175,9 @@ public static class CatenaryPlanner
                         Get(supports, tile).Add(new CatenarySupport
                         {
                             Kind = CatenarySupportKind.Cantilever, Line = line,
-                            AX = (float)(mast.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - mast.Y),
-                            BX = (float)(over.X - tile.MinE), BY = y, BZ = (float)(tile.MaxN - over.Y),
-                            WireY = wireY, Over = [(float)(over.X - tile.MinE), (float)(tile.MaxN - over.Y)],
+                            AX = (float)(mast.X - Plane.West(tile)), AY = y, AZ = (float)(Plane.North(tile) - mast.Y),
+                            BX = (float)(over.X - Plane.West(tile)), BY = y, BZ = (float)(Plane.North(tile) - over.Y),
+                            WireY = wireY, Over = [(float)(over.X - Plane.West(tile)), (float)(Plane.North(tile) - over.Y)],
                         });
                         stats.Cantilevers++;
                         placed = true;
@@ -214,7 +214,7 @@ public static class CatenaryPlanner
             foreach (float off in offsets)
             {
                 var q = cross + n * off;
-                float qx = (float)(q.X - home.MinE), qz = (float)(home.MaxN - q.Y);
+                float qx = (float)(q.X - Plane.West(home)), qz = (float)(Plane.North(home) - q.Y);
                 bool known = false;
                 for (int i = 0; i + 1 < hung.Count; i += 2)
                     if ((hung[i] - qx) * (hung[i] - qx) + (hung[i + 1] - qz) * (hung[i + 1] - qz) < 1f) known = true;
@@ -238,14 +238,14 @@ public static class CatenaryPlanner
         for (int i = 0; i < offsets.Length; i++)
         {
             var p = at + n * offsets[i];
-            over[i * 2] = (float)(p.X - tile.MinE);
-            over[i * 2 + 1] = (float)(tile.MaxN - p.Y);
+            over[i * 2] = (float)(p.X - Plane.West(tile));
+            over[i * 2 + 1] = (float)(Plane.North(tile) - p.Y);
         }
         var span = new CatenarySupport
         {
             Kind = CatenarySupportKind.Span, Line = line,
-            AX = (float)(a.X - tile.MinE), AY = y, AZ = (float)(tile.MaxN - a.Y), AWall = aWall,
-            BX = (float)(b.X - tile.MinE), BY = y, BZ = (float)(tile.MaxN - b.Y), BWall = bWall,
+            AX = (float)(a.X - Plane.West(tile)), AY = y, AZ = (float)(Plane.North(tile) - a.Y), AWall = aWall,
+            BX = (float)(b.X - Plane.West(tile)), BY = y, BZ = (float)(Plane.North(tile) - b.Y), BWall = bWall,
             WireY = wireY, Over = over,
         };
         Get(supports, tile).Add(span);

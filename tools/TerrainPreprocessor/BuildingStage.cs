@@ -47,30 +47,24 @@ public static class BuildingStage
     {
         var sw = Stopwatch.StartNew();
 
-        double? HeightOf(double e, double n)
-        {
-            var id = TileId.FromLv95(e, n);
-            return grids.TryGetValue(id, out var g) ? g.SampleHeight(e, n) : null;
-        }
-
-        var result = extractor.Extract(grids.Keys.ToList(), HeightOf);
+        var result = extractor.Extract(new Lv95FeatureSpace(grids.Keys.ToList(), new OwnTileGround(grids)));
 
         long totalTris = 0;
         var byKind = new SortedDictionary<BuildingKind, int>();
         int withYear = 0, withFloors = 0, count = 0;
 
-        foreach (var (id, tile) in result)
+        foreach (var (id, buildings) in result)
         {
             string path = Path.Combine(outDir, BuildingFormat.FileName(id));
-            if (tile.Buildings.Count == 0)
+            if (buildings.Count == 0)
             {
                 if (File.Exists(path)) File.Delete(path);
                 continue;
             }
             using (var fs = File.Create(path))
-                BuildingCodec.Encode(tile, fs);
+                BuildingCodec.Encode(new BuildingTile { Id = id, Buildings = buildings }, fs);
 
-            foreach (var b in tile.Buildings)
+            foreach (var b in buildings)
             {
                 count++;
                 totalTris += b.TriangleCount;
@@ -81,7 +75,7 @@ public static class BuildingStage
         }
 
         double pct = extractor.Total == 0 ? 0 : 100.0 * extractor.Matched / extractor.Total;
-        Console.WriteLine($"Buildings written: {count} across {result.Count(kv => kv.Value.Buildings.Count > 0)} tiles, " +
+        Console.WriteLine($"Buildings written: {count} across {result.Count(kv => kv.Value.Count > 0)} tiles, " +
                           $"{totalTris:N0} triangles in {sw.Elapsed.TotalSeconds:F1}s");
         Console.WriteLine($"  cadastre matched: {extractor.Matched}/{extractor.Total} ({pct:F0}%), " +
                           $"year known {withYear}, floors known {withFloors}");
@@ -90,5 +84,16 @@ public static class BuildingStage
             Console.WriteLine($"  stray faces dropped: {extractor.StrayFaces} from {extractor.StrayBuildings} buildings");
         Console.WriteLine("  by kind: " + string.Join(", ", byKind.Select(kv => $"{kv.Key}={kv.Value}")));
         return 0;
+    }
+
+    /// <summary>
+    /// The batch's ground as the buildings have always sampled it: the tile <see cref="TileId.FromLv95"/> names, none
+    /// on a boundary whose tile is not loaded (unlike <see cref="Lv95Ground"/>, which tries the neighbours; kept so the
+    /// LV95 build stays byte-identical until it is deleted, D).
+    /// </summary>
+    private sealed class OwnTileGround(Dictionary<TileId, ChunkGrid> grids) : IGround
+    {
+        public double? Sample(double e, double n) =>
+            grids.TryGetValue(TileId.FromLv95(e, n), out var g) ? g.SampleHeight(e, n) : null;
     }
 }

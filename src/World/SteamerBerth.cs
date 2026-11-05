@@ -133,7 +133,7 @@ public partial class SteamerBerth : Node
         var keel = Landings.KeelWorld(pier, origin, FloatDraught);
         if (!chunks.TryGetWater(keel, out float still, out _)) return null;
         keel.Y = still - FloatDraught;
-        return new Berth(keel, Landings.Yaw(pier), (float)pier.Depth, 0f);
+        return new Berth(keel, Landings.Yaw(pier, origin), (float)pier.Depth, 0f);
     }
 
     /// <summary>For the log when no berth is found: how much of the search area has water loaded, and the deepest.</summary>

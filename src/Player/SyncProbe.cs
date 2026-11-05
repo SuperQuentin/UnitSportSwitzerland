@@ -215,9 +215,9 @@ public partial class SyncProbe : Node
             var prop = path.GetConcatenatedSubNames();
             var value = prop switch
             {
-                "NetE" => shown.E,
-                "NetN" => shown.N,
-                "NetAlt" => shown.Alt,
+                "NetX" => shown.ToWire().X,
+                "NetY" => shown.ToWire().Y,
+                "NetZ" => shown.ToWire().Z,
                 _ => _owner.Get(prop),
             };
             _mirror!.Set(prop, value);

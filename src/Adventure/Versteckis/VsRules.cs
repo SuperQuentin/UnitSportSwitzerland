@@ -143,6 +143,7 @@ public static class VsRules
     {
         var info = VsProps.Of(prop);
         var (dx, dn, _) = hider.OffsetTo(GlobalPos.FromLv95(e, n, hider.Alt));
+        yaw = Lv95Grid.TrueYaw(hider, yaw);   // callers keep the hider's grid yaw (a body's GlobalYaw, a decoy's); the offset is true east/north (#1502)
         // the box's axes: forward (−Z in Godot) is north turned by yaw; right is east turned by yaw
         double c = Math.Cos(yaw), s = Math.Sin(yaw);
         double right = dx * c + dn * s;     // along the body's right (east at yaw 0)

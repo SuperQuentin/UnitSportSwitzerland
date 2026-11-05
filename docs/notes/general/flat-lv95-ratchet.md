@@ -9,8 +9,8 @@
   plane, and fails if a count goes **up**:
   - **hand-written LV95 distances** (`de * de + dn * dn`): use `GlobalPos.HorizontalDistanceTo` /
     `DistanceTo` / `HorizontalDistanceSquaredTo`, or for places held as raw doubles the static
-    `GlobalPos.HorizontalDistance(e1, n1, e2, n2)` / `HorizontalDistanceSquared` (all become Earth
-    distances inside `GlobalPos`; same formula, so moving a site is bit-identical). G0b moved 49 of 61;
+    `GlobalPos.HorizontalDistance(e1, n1, e2, n2)` / `HorizontalDistanceSquared` (the instance ones are Earth
+    distances since A1, #1502; the static raw-double ones stay the grid's, for LV95 sources). G0b moved 49 of 61;
     the 12 left are not distances between two LV95 places (grid offsets, velocities, km tile rings,
     directions, float maths, the point-to-lake-box test) or sit in `ProceduralWorld*.cs`, which the
     Godot-free `tools/BlendCheck` and `tools/GeneratedRoadsSpike` link without `GlobalPos`;
@@ -33,6 +33,8 @@
   `MapRelief`: the swisstopo source tiles) and Adventure's LV95 records, the fog-of-war lattice
   (`FogMask`) and the lakes' boxes (`PoiCatalogue`), which G2 converts with the saves. They are all
   that is left of the tile corners (26) and neighbours (1) in `src/`.
+- **The LV95 coordinate member** count (`.E` / `.N` read off anything): 4091 after A1's last step (#1502), where
+  `GlobalPos` lost `E`/`N`; what is left reads `.Lv95.E` (notation) or a record's own LV95 fields.
 - **Flat ground escape hatches** (#1532, G2 C1): gameplay asks the ground through `IWorldGround`
   (`terrain/world-ground`), whose tiles are opaque `GroundTile`s. `GroundTile.FromLv95(id)`, `tile.Lv95Tile`
   and `ChunkManager.Of(ground)` cross back to the LV95 tile or the streamer's `IChunkSource`; counted (32),

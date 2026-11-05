@@ -263,7 +263,9 @@ public partial class RewardHud : CanvasLayer
             if (d < best) (best, be, bn) = (d, se, sn);
         }
         if (best == double.MaxValue || Math.Sqrt(best) > Detector.RangeM) return null;
-        return (new Vector3((float)be, 0, (float)-bn).Normalized(), (float)Math.Sqrt(best));
+        // the way is true east/north; the arrow is turned against the camera's world axes (#1502)
+        var enu = new Vector3((float)be, 0, (float)-bn);
+        return ((me.Origin is { } o ? o.WorldOfEnu(me.GlobalPosition, enu) : enu).Normalized(), (float)Math.Sqrt(best));
     }
 
     public override void _Process(double delta)

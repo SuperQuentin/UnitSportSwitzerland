@@ -597,7 +597,41 @@ public partial class FestivalService : Node
     private void SendFestivals(long peer)
     {
         if (!Connected(peer)) return;
-        RpcId(peer, MethodName.TellFestivals, JsonSerializer.Serialize(Running, _json));
+        RpcId(peer, MethodName.TellFestivals, FestivalsWire(JsonSerializer.Serialize(Running, _json), toWire: true));
+    }
+
+    /// <summary>
+    /// (#1503) The running list's sites cross the wire as ECEF <c>x</c>, <c>y</c>, <c>z</c> (the middle, on the ground) in place
+    /// of LV95 <c>e</c>, <c>n</c> and the derived <c>pos</c>; the record keeps its LV95.
+    /// </summary>
+    internal static string FestivalsWire(string json, bool toWire)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json);
+        if (root is not System.Text.Json.Nodes.JsonArray list) return json;
+        foreach (var item in list)
+        {
+            if (item?["site"] is not System.Text.Json.Nodes.JsonObject site) continue;
+            if (toWire && site["e"] != null && site["n"] != null)
+            {
+                var (x, y, z) = GlobalPos.FromLv95(site["e"]!.GetValue<double>(), site["n"]!.GetValue<double>(), 0).ToWire();
+                site.Remove("e");
+                site.Remove("n");
+                site.Remove("pos");
+                site["x"] = x;
+                site["y"] = y;
+                site["z"] = z;
+            }
+            else if (!toWire && site["x"] != null && site["y"] != null && site["z"] != null)
+            {
+                var at = GlobalPos.FromWire(site["x"]!.GetValue<double>(), site["y"]!.GetValue<double>(), site["z"]!.GetValue<double>());
+                site.Remove("x");
+                site.Remove("y");
+                site.Remove("z");
+                site["e"] = at.Lv95.E;
+                site["n"] = at.Lv95.N;
+            }
+        }
+        return list.ToJsonString();
     }
 
     private void SendBoard(long peer, RunningFestival run)

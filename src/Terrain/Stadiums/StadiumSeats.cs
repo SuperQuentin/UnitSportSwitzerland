@@ -27,7 +27,7 @@ public static class StadiumSeats
         {
             float de = (float)(e - s.E), dn = (float)(n - s.N);
             if (de * de + dn * dn > 200f * 200f) continue;
-            float a = Mathf.DegToRad(s.AzimuthDeg);
+            float a = Mathf.DegToRad(s.LocalAzimuthDeg);
             // LV95 offsets as tile axes (x east, z south), then into the stadium frame
             float x = de, z = -dn;
             var uv = new Vector2(x * MathF.Cos(a) + z * MathF.Sin(a), -x * MathF.Sin(a) + z * MathF.Cos(a));

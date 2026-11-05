@@ -56,11 +56,19 @@ public static class CollisionReach
     /// is true when both the body and its look-ahead point are more than <see cref="AirGapM"/>
     /// above the ground.
     /// </summary>
-    public static bool Wants(TileId tile, double e, double n, double aheadE, double aheadN, bool airborne, bool holding = false)
+    public static bool Wants(TileId tile, double e, double n, double aheadE, double aheadN, bool airborne, bool holding = false) =>
+        Wants(DistanceToTile(tile, e, n), DistanceToTile(tile, aheadE, aheadN), airborne, holding);
+
+    /// <summary>
+    /// The rule in metres, whatever holds the collision (#1511: a tile, or a collision patch on the Earth): wanted within
+    /// <see cref="RadiusM"/> of the body or of its look-ahead point, held until both are past <see cref="ReleaseM"/>,
+    /// nothing for an airborne body.
+    /// </summary>
+    public static bool Wants(double distanceM, double aheadDistanceM, bool airborne, bool holding = false)
     {
         if (airborne) return false;
         double r = holding ? ReleaseM : RadiusM;
-        return DistanceToTile(tile, e, n) <= r || DistanceToTile(tile, aheadE, aheadN) <= r;
+        return distanceM <= r || aheadDistanceM <= r;
     }
 
     /// <summary>The 250 m cell a point is in, packed: the ring key changes only when this does.</summary>

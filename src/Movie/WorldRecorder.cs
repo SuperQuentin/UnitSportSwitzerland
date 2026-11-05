@@ -311,7 +311,7 @@ public sealed class WorldRecorder
         {
             xf = e.Node.GlobalTransform;
             var g = origin.ToGlobal(xf.Origin);
-            return Pose(xf.Basis, g.E, g.N, g.Alt);
+            return Pose(xf.Basis, g.Lv95.E, g.Lv95.N, g.Alt);
         }
         xf = e.Node.GetParent() == e.Group.Node
             ? e.Node.Transform

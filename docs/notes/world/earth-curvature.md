@@ -37,7 +37,8 @@
   takes the drop's old path (blend 0: one branch). Also by height: the far plane reaches
   √(2Rh + h²) + 200 km above 5 km; the style's haze (`Environment.FogDensity`) thins above 3 km,
   exp(−(h − 3 km)/10 km), kept at a sixth so the edge of the terrain data stays hazy until the globe
-  (H4); the horizon blocks' cull margin uses the unrefracted drop. The spectator stops at
+  (H4); with the globe drawn (from 5 km, #1528) exp(−(h − 3 km)/2 km), near the aerosols' 1.2 km scale height,
+  and the flat world's edges dissolve into it (`player/orbits`); the horizon blocks' cull margin uses the unrefracted drop. The spectator stops at
   `Curvature.SpectatorCeilingM` (50,000 km); the UFO flies an orbit above 60 km (`player/orbits`, #1480). Normals are not turned (only `POSITION`
   curves, as before): the lit styles shade far ground as flat. The server's rules keep the ground k.
 - **The global** `world_curvature` (1/2R per m², 0 flat) is pushed by `Styles/CameraGlobal` when it

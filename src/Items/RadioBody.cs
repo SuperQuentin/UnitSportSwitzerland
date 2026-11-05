@@ -107,8 +107,9 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
         CollisionMask |= World.TreeColliders.Layer;
         var s = _initial;
         Position = _origin.ToWorld(s.Position);
-        AddChild(_place = new NetPlace(_origin, s.Position));
-        Rotation = new Vector3(0, s.Yaw, 0);
+        AddChild(_place = new NetPlace(_origin, s.Position, s.Yaw));
+        // the record's heading is in GlobalPos's axes at its place: this world's here (#1503)
+        Rotation = new Vector3(0, _origin.Frame.WorldYawOfGrid(s.Position, s.Yaw), 0);
         // a heavy boombox (#725): it lands with a thud and stays, rather than skittering off
         Mass = 7f;
         PhysicsMaterialOverride = new PhysicsMaterial { Bounce = 0.05f, Friction = 1f, Rough = true };
@@ -116,7 +117,8 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
 
         // the fall: whoever threw it simulates, the others move the box where they are told
         var fall = new SceneReplicationConfig();
-        foreach (var prop in NetPlace.Properties.Append(".:rotation").Append(".:Settled")) fall.AddProperty(prop);
+        // the place, then its turn in the ENU there (#1503: never this world's rotation)
+        foreach (var prop in NetPlace.Properties.Append(NetPlace.Turn).Append(".:Settled")) fall.AddProperty(prop);
         fall.PropertySetReplicationMode(".:Settled", SceneReplicationConfig.ReplicationMode.OnChange);
         _sync = new MultiplayerSynchronizer
         {
@@ -147,12 +149,13 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
         }
         else
         {
-            LinearVelocity = s.Velocity;
+            // in GlobalPos's axes at its place, as the record keeps it: this world's here (#1503)
+            LinearVelocity = _origin.Frame.WorldOfGrid(s.Position, s.Velocity);
             AngularVelocity = new Vector3(GD.Randf() * 3f - 1.5f, GD.Randf() * 1f - 0.5f, GD.Randf() * 3f - 1.5f);
             ContactMonitor = false;
             ContinuousCd = true;
             _lastPos = _origin.ToWorld(s.Position);
-            _lastVel = s.Velocity;
+            _lastVel = LinearVelocity;
         }
 
         if (!Headless && !NetworkManager.DedicatedServer)
@@ -251,7 +254,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume, _initial.Oid, Mix.X, Mix.Y);
+    public RadioState Capture() => new(Name, Owner, _place.Global, _origin.Frame.GridYawOf(Position, Rotation.Y), Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume, _initial.Oid, Mix.X, Mix.Y);
 
     /// <summary>Its own volume, 0..1 (#734): the server's word, on the State synchronizer.</summary>
     [Export] public float Volume { get; set; } = RadioLoudness.Default;

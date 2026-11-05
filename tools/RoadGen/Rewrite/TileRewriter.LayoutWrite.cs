@@ -338,7 +338,7 @@ public static partial class TileRewriter
         var placed = transitions.Where(t => held.Contains(t.Segment)).ToList();
         stats.Orphaned += transitions.Count - placed.Count;
         foreach (var t in transitions.Where(t => !held.Contains(t.Segment)))
-            stats.OrphanedAt.Add(new Vec2(id.MinE + t.Segment.Points[0], id.MaxN - t.Segment.Points[2]));
+            stats.OrphanedAt.Add(new Vec2(Plane.West(id) + t.Segment.Points[0], Plane.North(id) - t.Segment.Points[2]));
         return placed;
     }
 
@@ -429,7 +429,7 @@ public static partial class TileRewriter
             {
                 var a = jp.Arms.First(x => x.Arm == arm);
                 var p = a.Axis!.PointAt(core.Mouths.First(m => m.Arm == arm).Station);
-                return new JunctionPathEnd((float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y), (float)offset);
+                return new JunctionPathEnd((float)(p.X - Plane.West(home)), CapHeightAt(cap, home, p), (float)(Plane.North(home) - p.Y), (float)offset);
             }
             foreach (var c in connectors)
             {
@@ -465,9 +465,9 @@ public static partial class TileRewriter
             var vertices = new float[ring.Count * 3];
             for (int i = 0; i < ring.Count; i++)
             {
-                vertices[i * 3] = (float)(ring[i].X - home.MinE);
+                vertices[i * 3] = (float)(ring[i].X - Plane.West(home));
                 vertices[i * 3 + 1] = (float)core.Heights[keep[i]];
-                vertices[i * 3 + 2] = (float)(home.MaxN - ring[i].Y);
+                vertices[i * 3 + 2] = (float)(Plane.North(home) - ring[i].Y);
             }
             stats.CoreVertices += core.Outline.Count;
             stats.CapVertices += ring.Count;
@@ -490,7 +490,7 @@ public static partial class TileRewriter
                 Get(areas, home).Add(new RoadAreaProp
                 {
                     Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = RoundaboutShaper.IslandKerb,
-                    Vertices = splitter.SelectMany(p => new[] { (float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y) }).ToArray(),
+                    Vertices = splitter.SelectMany(p => new[] { (float)(p.X - Plane.West(home)), CapHeightAt(cap, home, p), (float)(Plane.North(home) - p.Y) }).ToArray(),
                     Indices = tris.Select(i => (ushort)i).ToArray(),
                 });
                 stats.Refuges++;
@@ -498,10 +498,10 @@ public static partial class TileRewriter
             if (jp.Merged?.Ring is { } shaped)
             {
                 stats.RingsAt.Add(shaped.Centre);
-                var at = TileId.FromLv95(shaped.Centre.X, shaped.Centre.Y);
+                var at = Plane.TileAt(shaped.Centre.X, shaped.Centre.Y);
                 if (areas.TryGetValue(at, out var props))
                     props.RemoveAll(x => x.Type == AreaPropType.Island && x.Variant is 0 or 1 && x.Vertices.Length >= 3
-                        && Math.Abs(x.Vertices[0] + at.MinE - shaped.Centre.X) < 1.5 && Math.Abs(at.MaxN - x.Vertices[2] - shaped.Centre.Y) < 1.5);
+                        && Math.Abs(x.Vertices[0] + Plane.West(at) - shaped.Centre.X) < 1.5 && Math.Abs(Plane.North(at) - x.Vertices[2] - shaped.Centre.Y) < 1.5);
                 if (RoundaboutShaper.Island(shaped with { Width = RoundaboutCore.RingWidth(shaped.Width) }, at) is { } centre) Get(areas, at).Add(centre);
             }
             if (JunctionList is { } listFile)
@@ -519,7 +519,7 @@ public static partial class TileRewriter
             for (double s = to; s < from - 0.05; s += 1)
             {
                 var q = a.Axis!.PointAt(s);
-                extra.Add((float)(q.X - sp.Tile.MinE)); extra.Add(source.SampleHeight(q)); extra.Add((float)(sp.Tile.MaxN - q.Y));
+                extra.Add((float)(q.X - Plane.West(sp.Tile))); extra.Add(source.SampleHeight(q)); extra.Add((float)(Plane.North(sp.Tile) - q.Y));
             }
             // the junction end first, outward: drawn toward the junction they go after the piece's points, reversed
             if (!sp.TowardJunction) return [.. extra, .. p];
@@ -538,7 +538,7 @@ public static partial class TileRewriter
                 var first = street[0];
                 var p = first.Piece.Points;
                 int endAt = first.TowardJunction ? p.Length - 3 : 0;
-                var end = new Vec2(first.Tile.MinE + p[endAt], first.Tile.MaxN - p[endAt + 2]);
+                var end = new Vec2(Plane.West(first.Tile) + p[endAt], Plane.North(first.Tile) - p[endAt + 2]);
                 double delta = mouth - a.Axis!.StationPast(end);
                 touched.Add(a.LinkId);
                 if (delta > 0.01)
@@ -550,7 +550,7 @@ public static partial class TileRewriter
                     {
                         var v = sp.Piece.Points;
                         int nearAt = sp.TowardJunction ? v.Length - 3 : 0;
-                        double sNear = a.Axis.StationPast(new Vec2(sp.Tile.MinE + v[nearAt], sp.Tile.MaxN - v[nearAt + 2]));
+                        double sNear = a.Axis.StationPast(new Vec2(Plane.West(sp.Tile) + v[nearAt], Plane.North(sp.Tile) - v[nearAt + 2]));
                         var pieces = byWhole.TryGetValue(sp.Whole, out var got) ? got : byWhole[sp.Whole] = PiecesOf(sp.Whole).ToList();
                         int at = pieces.FindIndex(x => ReferenceEquals(x, sp.Piece));
                         if (sNear >= mouth - 0.01)
@@ -746,7 +746,7 @@ public static partial class TileRewriter
                     j++;
                 }
                 if (points.Count >= 6)
-                    PaintEmitter.Emit(Copy(so.Painted, points.ToArray()), ps.Station + runFrom, into, i == 0 && ps.Start, j == pieces.Count && ps.End, bikeLanes: false);
+                    PaintEmitter.Emit(Copy(so.Painted, points.ToArray()), ps.Station + runFrom, into, i == 0 && ps.Start, j == pieces.Count && ps.End, bikeLanes: false, tile: so.Tile);
                 i = j;
             }
         }
@@ -761,7 +761,7 @@ public static partial class TileRewriter
             var anchors = new List<(Vec2 At, float Height)>();
             foreach (var m in core.Mouths)
                 if (net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source s) anchors.Add(((m.Left + m.Right) * 0.5, s.SampleHeight((m.Left + m.Right) * 0.5)));
-            Vec2 Local2(Vec2 p) => new(p.X - home.MinE, p.Y - home.MaxN);
+            Vec2 Local2(Vec2 p) => new(p.X - Plane.West(home), p.Y - Plane.North(home));
             Vec2? EndOf(ArmPlan a)
             {
                 var street = Street(a);
@@ -809,7 +809,7 @@ public static partial class TileRewriter
             var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear, buildings is null ? null : buildings.Contains,
                 tramWays.Count > 0 ? TramArms(jp, tramWays) : null, gantries, areas) : null;
             short signalIndex = plan is null || !capOfPlan.TryGetValue(jp, out var hs) ? (short)-1 : (short)(Get(signals, hs.Home).Count - 1);
-            if (plan is not null && tramWays.Count > 0) TramLanes(jp, tramWays, Get(approaches, TileId.FromLv95(jp.Centre.X, jp.Centre.Y)), signalIndex, stats, paint);
+            if (plan is not null && tramWays.Count > 0) TramLanes(jp, tramWays, Get(approaches, Plane.TileAt(jp.Centre.X, jp.Centre.Y)), signalIndex, stats, paint);
             var tramLines = plan is not null && tramWays.Count > 0 ? TramLines(jp, plan, tramWays) : null;
             if (capHere is not null && capOfPlan.TryGetValue(jp, out var hp))
             {
@@ -929,7 +929,7 @@ public static partial class TileRewriter
                 || !byCap3.TryGetValue(hc3.Cap, out var inputs)) continue;
             for (int k = 0; k < inputs.Count; k++)
             {
-                var line = inputs[k].Arc.Line.Select(q => new Vec2(q.P.X + hc3.Home.MinE, q.P.Y + hc3.Home.MaxN)).ToList();
+                var line = inputs[k].Arc.Line.Select(q => new Vec2(q.P.X + Plane.West(hc3.Home), q.P.Y + Plane.North(hc3.Home))).ToList();
                 if (landings.Any(p => DistanceToPolyline(line, p) < LandingReach)) { inputs[k] = inputs[k] with { Landing = true }; stats.CornersLanded++; }
             }
         }

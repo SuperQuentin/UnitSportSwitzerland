@@ -402,7 +402,18 @@ public partial class Herds : Node3D, IOriginContainer
         _over[cow.Key] = down;
         GD.Print($"[herds] cow {plan.Tile}/{plan.Index}/{cow.Index} set down at LV95 {o.E:F1}/{o.N:F1}, {down.Distance:F0} m from its herd");
         if (!plan.Staged && NetLink.Online(this) && Multiplayer.IsServer())
-            Rpc(MethodName.CowDown, cow.Key, o.E, o.N, o.Alt, o.Yaw, now, down.Distance);
+        {
+            var (x, y, z, trueYaw) = WireOf(o);
+            Rpc(MethodName.CowDown, cow.Key, x, y, z, trueYaw, now, down.Distance);
+        }
+    }
+
+    /// <summary>A cow's override on the wire (#1503): ECEF and a heading from true north at the place (the record's yaw is grid north).</summary>
+    private static (double X, double Y, double Z, float Yaw) WireOf(Override o)
+    {
+        var at = GlobalPos.FromLv95(o.E, o.N, o.Alt);
+        var (x, y, z) = at.ToWire();
+        return (x, y, z, Lv95Grid.TrueYaw(at, o.Yaw));
     }
 
     public override void _PhysicsProcess(double delta)
@@ -428,7 +439,8 @@ public partial class Herds : Node3D, IOriginContainer
             var o = _over[key];
             o.Dirty = false;
             _over[key] = o;
-            Rpc(MethodName.CowAir, key, o.E, o.N, o.Alt, o.Yaw);
+            var (x, y, z, trueYaw) = WireOf(o);
+            Rpc(MethodName.CowAir, key, x, y, z, trueYaw);
         }
     }
 
@@ -439,31 +451,36 @@ public partial class Herds : Node3D, IOriginContainer
     {
         if (!NetLink.Online(this) || !Multiplayer.IsServer()) return;
         foreach (var (key, o) in _over)
+        {
             if (key < 0) continue;
-            else if (o.Air) RpcId(peer, MethodName.CowAirSync, key, o.E, o.N, o.Alt, o.Yaw);
-            else RpcId(peer, MethodName.CowDown, key, o.E, o.N, o.Alt, o.Yaw, o.Since, o.Distance);
+            var (x, y, z, trueYaw) = WireOf(o);
+            if (o.Air) RpcId(peer, MethodName.CowAirSync, key, x, y, z, trueYaw);
+            else RpcId(peer, MethodName.CowDown, key, x, y, z, trueYaw, o.Since, o.Distance);
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
-    private void CowAir(long key, double e, double n, float alt, float yaw) => TakeAir(key, e, n, alt, yaw);
+    private void CowAir(long key, double x, double y, double z, float trueYaw) => TakeAir(key, x, y, z, trueYaw);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void CowAirSync(long key, double e, double n, float alt, float yaw) => TakeAir(key, e, n, alt, yaw);
+    private void CowAirSync(long key, double x, double y, double z, float trueYaw) => TakeAir(key, x, y, z, trueYaw);
 
-    private void TakeAir(long key, double e, double n, float alt, float yaw)
+    private void TakeAir(long key, double x, double y, double z, float trueYaw)
     {
         if (Authority) return;
+        var at = GlobalPos.FromWire(x, y, z);
         _over.TryGetValue(key, out var o);
         if (!o.Air) GD.Print($"[herds] server: cow {key:X} in a beam");
-        _over[key] = new Override { Air = true, E = e, N = n, Alt = alt, Yaw = yaw, Since = o.Air ? o.Since : Now };
+        _over[key] = new Override { Air = true, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = Lv95Grid.GridYaw(at, trueYaw), Since = o.Air ? o.Since : Now };
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void CowDown(long key, double e, double n, float alt, float yaw, double since, float distance)
+    private void CowDown(long key, double x, double y, double z, float trueYaw, double since, float distance)
     {
         if (Authority) return;
-        GD.Print($"[herds] server: cow {key:X} set down at LV95 {e:F1}/{n:F1}");
-        _over[key] = new Override { Air = false, E = e, N = n, Alt = alt, Yaw = yaw, Since = since, Distance = distance };
+        var at = GlobalPos.FromWire(x, y, z);
+        GD.Print($"[herds] server: cow {key:X} set down at LV95 {at.Lv95.E:F1}/{at.Lv95.N:F1}");
+        _over[key] = new Override { Air = false, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = Lv95Grid.GridYaw(at, trueYaw), Since = since, Distance = distance };
     }
 
     // ---- probes ------------------------------------------------------------------------------------

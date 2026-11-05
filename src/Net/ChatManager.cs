@@ -796,10 +796,19 @@ public partial class ChatManager : Node
     private void Deliver(string line, int kind) =>
         LineReceived?.Invoke(line, (ChatKind)kind);
 
+    /// <summary>Server: sends <paramref name="peer"/> to a ground point given in LV95 notation, on the wire as ECEF (#1503).</summary>
+    private void SendTeleport(long peer, double lv95E, double lv95N, string label)
+    {
+        var (x, y, z) = GlobalPos.FromLv95(lv95E, lv95N, 0).ToWire();
+        RpcId(peer, MethodName.ForceTeleport, x, y, z, label);
+    }
+
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ForceTeleport(double lv95E, double lv95N, string label)
+    private void ForceTeleport(double x, double y, double z, string label)
     {
+        // a ground point, as ECEF at sea level (#1503): the teleport finds the ground there
+        var (lv95E, lv95N, _) = GlobalPos.FromWire(x, y, z).Lv95;
         // Client side: run the same teleport the Tab search uses, so the ground-settling and
         // the walking-versus-flying arrival height are handled identically.
         if (Teleporter is null)
@@ -1448,7 +1457,7 @@ public partial class ChatManager : Node
 
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        RpcId(sender, MethodName.ForceTeleport, place.E, place.N, place.Name);
+        SendTeleport(sender, place.E, place.N, place.Name);
     }
 
     /// <summary>
@@ -1479,7 +1488,7 @@ public partial class ChatManager : Node
             return;
         }
         if (!MayTeleport(sender)) return;
-        RpcId(sender, MethodName.ForceTeleport, e, n, World.Locate.LocateCoords.Format(e, n));
+        SendTeleport(sender, e, n, World.Locate.LocateCoords.Format(e, n));
     }
 
     /// <summary>
@@ -1491,7 +1500,7 @@ public partial class ChatManager : Node
         var (lines, venue, failed) = StadiumReply(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
         foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
         if (venue is null || !RequiresAvatar(sender, "stadium") || !MayTeleport(sender)) return;
-        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+        SendTeleport(sender, venue.E, venue.N, venue.Name);
     }
 
     private static bool IsConcertJoin(string rest) => rest.Trim().Equals("join", StringComparison.OrdinalIgnoreCase);
@@ -1505,7 +1514,7 @@ public partial class ChatManager : Node
         var (line, venue) = ConcertJoinReply(Concerts?.HostedVenues(_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global));
         ReplyTo(sender, line, venue is null ? ChatKind.Error : ChatKind.Private);
         if (venue is null || !RequiresAvatar(sender, "concert join") || !MayTeleport(sender)) return;
-        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+        SendTeleport(sender, venue.E, venue.N, venue.Name);
     }
 
     /// <summary><c>/concert join</c>'s answer, the same on a server and offline: the line to show and the venue to go to (null: none).</summary>
@@ -1533,7 +1542,7 @@ public partial class ChatManager : Node
         if (words.Length == 0)
         {
             if (at is not { } here) return ([.. StadiumLookup.List(), "/stadium <name | town | #n> to go to one."], null, false);
-            var (near, metres) = StadiumLookup.Nearest(here.E, here.N);
+            var (near, metres) = StadiumLookup.Nearest(here.Lv95.E, here.Lv95.N);
             return ([$"Nearest venue: #{StadiumLookup.Number(near)} {StadiumLookup.Label(near)}, {StadiumLookup.Distance(metres)} away; "
                 + $"{Concert.ConcertService.ShowAt(near)}.", "/stadium list for all of them, /stadium <name | town | #n> to go to one."], null, false);
         }
@@ -1553,7 +1562,7 @@ public partial class ChatManager : Node
 
         // a Battle Royale is left alone (#425), and every other round (#1268): its entrants stay where the game has them
         foreach (int peer in Multiplayer.GetPeers())
-            if (!Core.Rounds.Playing(peer)) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
+            if (!Core.Rounds.Playing(peer)) SendTeleport(peer, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 
@@ -1587,7 +1596,7 @@ public partial class ChatManager : Node
         }
 
         // what the player published, exact: not the server's own world, far from its origin (#185)
-        (e, n) = (node.Global.E, node.Global.N);
+        (e, n) = (node.Global.Lv95.E, node.Global.Lv95.N);
         return true;
     }
 
@@ -1603,7 +1612,7 @@ public partial class ChatManager : Node
         if (AdminArgs.TryLv95(name, out double toE, out double toN))
         {
             if (RefusedInMatch(sender, sender)) return;
-            RpcId(sender, MethodName.ForceTeleport, toE, toN, $"{toE:F0} {toN:F0}");
+            SendTeleport(sender, toE, toN, $"{toE:F0} {toN:F0}");
             return;
         }
 
@@ -1615,7 +1624,7 @@ public partial class ChatManager : Node
             return;
         }
 
-        RpcId(sender, MethodName.ForceTeleport, e, n, target.Name);
+        SendTeleport(sender, e, n, target.Name);
         ReplyTo(target.PeerId, $"{NameOf(sender)} teleported to you", ChatKind.System);
     }
 
@@ -1637,7 +1646,7 @@ public partial class ChatManager : Node
 
         if (!TryLocate(sender, me.Name, out _, out double e, out double n)) return;
 
-        RpcId(target.PeerId, MethodName.ForceTeleport, e, n, me.Name);
+        SendTeleport(target.PeerId, e, n, me.Name);
         Broadcast($"{me.Name} brought {target.Name} to them", ChatKind.Admin);
     }
 

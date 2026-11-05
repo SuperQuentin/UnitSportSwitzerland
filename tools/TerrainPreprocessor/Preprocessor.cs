@@ -112,7 +112,27 @@ public static partial class Preprocessor
     {
         // a cube region against the LV95 build of the same ground (#1507); before --cube, which it also takes
         if (CubeCompare.Wants(args)) return CubeCompare.Run(args, ct);
+        // the road stage on work frames (#1507, G2 B3 PR 2), over a --cube region's heights; before --cube
+        if (CubeRoadStage.Wants(args)) return await CubeRoadStage.RunAsync(args, ct);
+        // RoadGen's network stage on work frames (#1507, G2 B3 4b), over the road stage's raw kinds
+        if (CubeNetworkStage.Wants(args)) return CubeNetworkStage.Run(args);
+        // the cover on work frames (#1507, G2 B3 PR 5a), over a --cube region's heights
+        // the cover passes after the network stage (#1507, G2 B3 PR 5c); before --cube-cover, whose flag it contains
+        if (CubeCoverNetworkStage.Wants(args)) return CubeCoverNetworkStage.Run(args, ct);
+        // trees on work frames (#1507, G2 B3 PR 5b), over a region's cover and roads
+        if (CubeTreesStage.Wants(args)) return CubeTreesStage.Run(args, ct);
+        if (CubeCoverStage.Wants(args)) return CubeCoverStage.Run(args, ct);
+        // the farm fields on work frames (#1507, G2 B3 row 7)
+        if (CubeFieldStage.Wants(args)) return CubeFieldStage.Run(args);
+        // the ski slopes on work frames (#1507, G2 B3 row 7)
+        if (CubePisteStage.Wants(args)) return CubePisteStage.Run(args);
+        // the region-wide files in Earth positions (#1507, G2 B3 row 8)
+        if (CubeRegionFiles.Wants(args)) return CubeRegionFiles.Run(args);
+        // lake and river beds on work frames (#1507, G2 B3 PR 6), over a --cube region's heights and cover
+        if (CubeWaterStage.Wants(args)) return CubeWaterStage.Run(args, ct);
         // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
+        if (CubeBuildingStage.Wants(args)) return await CubeBuildingStage.RunAsync(args, ct);
+
         if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
         // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format
         if (CubeGlobal.Wants(args)) return CubeGlobal.Run(args, ct);
@@ -130,7 +150,7 @@ public static partial class Preprocessor
         var buildingsGdb = new List<string>();
         int? batchSizeArg = null;
         bool verify = false;
-        bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
+        bool roadsOnly = false, noNetwork = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
         // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
         // to a built country does not re-extract every road in it
         string? tilesFile = null;
@@ -213,6 +233,8 @@ public static partial class Preprocessor
                 case "--places-only": doPlaces = placesOnly = true; featuresOnly = true; break;
                 case "--tiles-file": tilesFile = args[++i]; break;
                 case "--roads-only": roadsOnly = true; break;
+                // the raw roads alone, no network stage: the reference a cube road stage is compared with (#1507)
+                case "--no-network": noNetwork = true; break;
                 case "--features-only": featuresOnly = true; break;
                 case "--coarse": coarseOnly = true; break;
                 case "--horizon": horizonOnly = true; break;
@@ -919,6 +941,7 @@ public static partial class Preprocessor
                         if (rc != 0) return rc;
                     }
                 }
+                if (noNetwork) { Console.WriteLine("--no-network: the raw roads are written, the network stage is skipped"); return 0; }
                 int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
                 if (nrc != 0) return nrc;
             }

@@ -152,7 +152,7 @@ public static partial class TileRewriter
     /// the path starts or ends (a junction, or a stretch without it).
     /// </summary>
     private static void EmitTrackPaint(List<RoadSegment> pieces, bool startsAtJunction, bool endsAtJunction,
-        List<RoadPaint> into)
+        List<RoadPaint> into, TileId tile)
     {
         static bool Track(RoadSegment s, bool right) => (right ? s.Attributes.Right : s.Attributes.Left).HasTrack;
         for (int i = 0; i < pieces.Count; i++)
@@ -169,7 +169,7 @@ public static partial class TileRewriter
                 float sign = right ? 1f : -1f, half = p.Width * 0.5f + side.ShiftStartCm / 100f;
                 if (dashed)
                     PaintEmitter.AddDashed(p, sign * (half + (side.VergeDm + side.BikeDm) / 10f), 0, into,
-                        PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
+                        PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap, tile);
                 bool atStart = i == 0 ? startsAtJunction : !Track(pieces[i - 1], right);
                 bool atEnd = i == pieces.Count - 1 ? endsAtJunction : !Track(pieces[i + 1], right);
                 PaintEmitter.Symbols(p, sign * (half + RoadStreetSection.TrackCentre(side)), right, into, atStart, atEnd);
@@ -210,7 +210,7 @@ public static partial class TileRewriter
             var tile = so.Tile;
             return p =>
             {
-                var q = new Vec2(p.X - tile.MinE, p.Y - tile.MaxN);
+                var q = new Vec2(p.X - Plane.West(tile), p.Y - Plane.North(tile));
                 double best = double.MaxValue;
                 float y = 0;
                 foreach (var piece in pieces)
@@ -248,7 +248,7 @@ public static partial class TileRewriter
         foreach (var (junction, plan) in priority.Plans)
         {
             if (plan.Arms.Count != junction.Arms.Count) continue;
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             var anchors = Anchors(junction, net);
             if (anchors.Count == 0) continue;
@@ -457,7 +457,7 @@ public static partial class TileRewriter
                             foreach (var (pathEnd, c, d, u, w, inset) in new[] { (toKerb.Ends[0], ca, da, ua, sa.OuterDm / 10.0 + xa, endInset.GetValueOrDefault((ia, k == 0))),
                                          (toKerb.Ends[1], cb, db, ub, sb.OuterDm / 10.0 + xb, endInset.GetValueOrDefault((ib, k != 0))) })
                             {
-                                var under = SideUnder(junction, plan, joined, new Vec2(pathEnd.At.X + home.MinE, pathEnd.At.Y + home.MaxN), c + d * w, u, segmentOf, finalPieces);
+                                var under = SideUnder(junction, plan, joined, new Vec2(pathEnd.At.X + Plane.West(home), pathEnd.At.Y + Plane.North(home)), c + d * w, u, segmentOf, finalPieces);
                                 if (under is { Length: > 0 }) cutBacks.Add(under);   // the corner owns that ground either way
                                 if (under is { Path: true } && inset < 1 && pathEnd.Start.DistanceTo(pathEnd.At) < TurnReach)
                                 {
@@ -471,7 +471,7 @@ public static partial class TileRewriter
                                 }
                                 else carriedSides.Add((home, sideBands[sideIndex]));
                                 if (Environment.GetEnvironmentVariable("PAIRDBG") is { } pd2 && junction.Centre.DistanceTo(new Vec2(double.Parse(pd2.Split(',')[0], CultureInfo.InvariantCulture), double.Parse(pd2.Split(',')[1], CultureInfo.InvariantCulture))) < 20)
-                                    Console.WriteLine($"[pair]   side {sideIndex} kerb at {pathEnd.At.X + home.MinE:F1},{pathEnd.At.Y + home.MaxN:F1}: {(under is null ? "meets no joining side" : under.Path ? "joining side has a path" : "carried")}, inset {inset:F1}, stretch {pathEnd.Start.DistanceTo(pathEnd.At):F1}");
+                                    Console.WriteLine($"[pair]   side {sideIndex} kerb at {pathEnd.At.X + Plane.West(home):F1},{pathEnd.At.Y + Plane.North(home):F1}: {(under is null ? "meets no joining side" : under.Path ? "joining side has a path" : "carried")}, inset {inset:F1}, stretch {pathEnd.Start.DistanceTo(pathEnd.At):F1}");
                                 sideIndex++;
                             }
                             var (kerbA, kerbB) = (toKerb.KerbA, toKerb.KerbB);
@@ -877,7 +877,7 @@ public static partial class TileRewriter
             int n = v.Length / 3;
             double x = 0, z = 0;
             for (int i = 0; i < n; i++) { x += v[i * 3]; z += v[i * 3 + 2]; }
-            var centre = new Vec2(id.MinE + x / Math.Max(n, 1), id.MaxN - z / Math.Max(n, 1));
+            var centre = new Vec2(Plane.West(id) + x / Math.Max(n, 1), Plane.North(id) - z / Math.Max(n, 1));
             if (n > 0 && !CornerPlanner.IsClearOfBands(corner) && bridges.Any(b => PriorityPlanner.Inside(b.Ring, centre))) { stats.CornersReplaced++; continue; }
             yield return corner;
         }
@@ -1040,7 +1040,7 @@ public static partial class TileRewriter
             ring.AddRange(Enumerable.Reverse(foot));
             bands.Add((new RoadAreaProp { Type = AreaPropType.Kerb, Flags = PropFlags.Solid, Height = 0f, Vertices = [.. verts], Indices = [.. idx] }, ring));
         }
-        Vec2 Local(Vec2 p) => new(p.X - home.MinE, p.Y - home.MaxN);
+        Vec2 Local(Vec2 p) => new(p.X - Plane.West(home), p.Y - Plane.North(home));
         var ends = new List<CornerPlanner.PathEnd>
         {
             new(Local(ca + da * wa - ua * outA), ua, Local(ca + da * wa)),
@@ -1101,7 +1101,7 @@ public static partial class TileRewriter
     /// </summary>
     private static Func<Vec2, bool> Carriageway(Junction junction, TileId home, List<RoadAreaProp>? pavement, List<int> joined)
     {
-        double cx = junction.Centre.X - home.MinE, cz = home.MaxN - junction.Centre.Y;
+        double cx = junction.Centre.X - Plane.West(home), cz = Plane.North(home) - junction.Centre.Y;
         var near = (pavement ?? []).Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length >= 9 && Enumerable.Range(0, a.Vertices.Length / 3)
             .Any(i => Math.Abs(a.Vertices[i * 3] - cx) < 60 && Math.Abs(a.Vertices[i * 3 + 2] - cz) < 60)).ToList();
         var arms = joined.Select(i => junction.Arms[i])
@@ -1114,7 +1114,7 @@ public static partial class TileRewriter
                 var q = p - mid;
                 if (q.Dot(u) is var along && along > -0.3 && along < 40 && Math.Abs(q.Cross(u)) < half) return true;
             }
-            double x = p.X - home.MinE, z = home.MaxN - p.Y;
+            double x = p.X - Plane.West(home), z = Plane.North(home) - p.Y;
             foreach (var a in near)
             {
                 var v = a.Vertices;
@@ -1146,10 +1146,10 @@ public static partial class TileRewriter
                 var v = (float[])row.Vertices.Clone();
                 for (int i = 0; i + 2 < v.Length; i += 3)
                 {
-                    var p = new Vec2(tile.MinE + v[i] + u.X * shift, tile.MaxN - v[i + 2] + u.Y * shift);
-                    v[i] = (float)(p.X - tile.MinE);
-                    v[i + 2] = (float)(tile.MaxN - p.Y);
-                    v[i + 1] = source.SampleHeight(p) + (row.Vertices[i + 1] - source.SampleHeight(new Vec2(tile.MinE + row.Vertices[i], tile.MaxN - row.Vertices[i + 2])));
+                    var p = new Vec2(Plane.West(tile) + v[i] + u.X * shift, Plane.North(tile) - v[i + 2] + u.Y * shift);
+                    v[i] = (float)(p.X - Plane.West(tile));
+                    v[i + 2] = (float)(Plane.North(tile) - p.Y);
+                    v[i + 1] = source.SampleHeight(p) + (row.Vertices[i + 1] - source.SampleHeight(new Vec2(Plane.West(tile) + row.Vertices[i], Plane.North(tile) - row.Vertices[i + 2])));
                 }
                 var moved = new RoadPaint
                 {
