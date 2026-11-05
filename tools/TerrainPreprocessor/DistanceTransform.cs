@@ -18,20 +18,27 @@ public static class DistanceTransform
         // pass 1, columns: squared distance to the nearest site in the same column, and its row
         var colD = new float[w * h];
         var colRow = new int[w * h];
-        for (int x = 0; x < w; x++)
+        // (a row at a time, the columns side by side: a column at a time misses the cache on every cell)
+        var lastSite = new int[w];
+        Array.Fill(lastSite, -1);
+        for (int y = 0; y < h; y++)
         {
-            int last = -1;
-            for (int y = 0; y < h; y++)
+            int row = y * w;
+            for (int x = 0; x < w; x++)
             {
-                if (isSite[y * w + x]) last = y;
-                colRow[y * w + x] = last;
+                if (isSite[row + x]) lastSite[x] = y;
+                colRow[row + x] = lastSite[x];
             }
-            last = -1;
-            for (int y = h - 1; y >= 0; y--)
+        }
+        Array.Fill(lastSite, -1);
+        for (int y = h - 1; y >= 0; y--)
+        {
+            int row = y * w;
+            for (int x = 0; x < w; x++)
             {
-                int i = y * w + x;
-                if (isSite[i]) last = y;
-                int up = colRow[i];
+                int i = row + x;
+                if (isSite[i]) lastSite[x] = y;
+                int last = lastSite[x], up = colRow[i];
                 int best = up < 0 ? last : last < 0 ? up : (y - up <= last - y ? up : last);
                 colRow[i] = best;
                 colD[i] = best < 0 ? Inf : (float)(y - best) * (y - best);

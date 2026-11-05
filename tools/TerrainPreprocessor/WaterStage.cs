@@ -68,19 +68,34 @@ public static class WaterStage
 
     private static void RefineWet(byte[] state, ushort[] surfaceQ, int w)
     {
-        // separable min of the wet surface over a (2·BankProbe+1)² square, in quanta (exact)
+        // separable min of the wet surface over a (2·BankProbe+1)² square, in quanta (exact): along a
+        // row in constant time per cell (van Herk: the running min from a block's start and from its
+        // end meet in every window), on a row padded with "no water" either side
+        const int Block = 2 * BankProbe + 1;
+        int padded = w + 2 * BankProbe;
         var rowMin = new ushort[w * w];
+        var row = new ushort[padded];
+        var fromStart = new ushort[padded];
+        var fromEnd = new ushort[padded];
+        Array.Fill(row, ushort.MaxValue);
         for (int y = 0; y < w; y++)
+        {
+            bool any = false;
             for (int x = 0; x < w; x++)
             {
-                ushort m = ushort.MaxValue;
-                for (int dx = Math.Max(0, x - BankProbe); dx <= Math.Min(w - 1, x + BankProbe); dx++)
-                {
-                    int i = y * w + dx;
-                    if (state[i] == 1 && surfaceQ[i] < m) m = surfaceQ[i];
-                }
-                rowMin[y * w + x] = m;
+                int i = y * w + x;
+                if (state[i] == 1) { row[x + BankProbe] = surfaceQ[i]; any = true; }
+                else row[x + BankProbe] = ushort.MaxValue;
             }
+            var mins = rowMin.AsSpan(y * w, w);
+            if (!any) { mins.Fill(ushort.MaxValue); continue; }
+            for (int k = 0; k < padded; k++)
+                fromStart[k] = k % Block == 0 ? row[k] : Math.Min(fromStart[k - 1], row[k]);
+            for (int k = padded - 1; k >= 0; k--)
+                fromEnd[k] = k == padded - 1 || (k + 1) % Block == 0 ? row[k] : Math.Min(fromEnd[k + 1], row[k]);
+            for (int x = 0; x < w; x++)
+                mins[x] = Math.Min(fromEnd[x], fromStart[x + 2 * BankProbe]);
+        }
         var dry = new List<int>();
         for (int y = 0; y < w; y++)
             for (int x = 0; x < w; x++)
@@ -112,6 +127,9 @@ public static class WaterStage
 
     /// <summary>Max depth per metre from the shore (1:1): a quay in the survey becomes a 45° bank.</summary>
     private const double MaxBankSlope = 1.0;
+
+    /// <summary>What one tile's bed computation holds at its peak: its 2201² window's arrays, about 250 MB, with room for the GC.</summary>
+    private const long BedWindowBytes = 500L << 20;
 
     private const int S = ChunkFormat.GridSize;   // 1001
     private const int Q = S - 1;                  // 1000 vertices a tile owns per side
@@ -255,21 +273,38 @@ public static class WaterStage
             foreach (var td in loaded)
             {
                 var id = td.Id;
+                Body? b = null;
+                int lastLabel = 0;
+                ushort lastLevel = 0;
+                long run = 0;
                 for (int r = 1; r < S; r++)          // a tile owns rows 1..1000 and columns 0..999
                     for (int c = 0; c < Q; c++)
                     {
                         int l = td.Labels[r * S + c];
                         if (l == 0) continue;
-                        int root = Find(parent, td.LabelBase + l);
-                        if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body();
-                        b.Count++;
-                        b.LevelCounts[td.Surface[r * S + c]] = b.LevelCounts.GetValueOrDefault(td.Surface[r * S + c]) + 1;
+                        // neighbours mostly share a body and a level: dictionaries only when one changes
+                        ushort q = td.Surface[r * S + c];
+                        if (l != lastLabel || q != lastLevel)
+                        {
+                            if (run > 0) b!.LevelCounts[lastLevel] = b.LevelCounts.GetValueOrDefault(lastLevel) + run;
+                            run = 0;
+                            lastLevel = q;
+                        }
+                        if (l != lastLabel)
+                        {
+                            int root = Find(parent, td.LabelBase + l);
+                            if (!bodies.TryGetValue(root, out b)) bodies[root] = b = new Body();
+                            lastLabel = l;
+                        }
+                        run++;
+                        b!.Count++;
                         int e = id.E * 1000 + c, nn = (id.N + 1) * 1000 - r;
                         if (e < b.MinE) b.MinE = e;
                         if (e > b.MaxE) b.MaxE = e;
                         if (nn < b.MinN) b.MinN = nn;
                         if (nn > b.MaxN) b.MaxN = nn;
                     }
+                if (run > 0) b!.LevelCounts[lastLevel] = b.LevelCounts.GetValueOrDefault(lastLevel) + run;
             }
         }
         foreach (var b in bodies.Values)
@@ -301,7 +336,9 @@ public static class WaterStage
         // ---- C: bed and level per tile ----------------------------------------------------------
         // Column by column, west to east: a tile's window reads the columns either side of it, so
         // only three columns of cached input are held at a time. Every read comes from the cache,
-        // never from the files this phase is rewriting.
+        // never from the files this phase is rewriting, so tiles run in any order: short columns
+        // go together until they fill the workers (a few tiles' input, nothing to bound), and a
+        // tile's window takes BedWindowBytes, so a heap limit lowers the workers.
         StageClock.Sub("water/C-beds");
         var changed = new ConcurrentBag<ManifestTile>();
         var joinSteps = new ConcurrentBag<float>();
@@ -314,12 +351,21 @@ public static class WaterStage
             ? held.GetOrAdd(id, k => new Lazy<TileData>(() => ReadCache(cacheDir, k, lb))).Value
             : null;
         var toWrite = o.Only == null ? ordered : ordered.Where(o.Only.Contains).ToList();
+        var memory = GC.GetGCMemoryInfo();
+        int bedJobs = (int)Math.Clamp((memory.TotalAvailableMemoryBytes - memory.HeapSizeBytes) / BedWindowBytes, 1, o.Jobs);
+        var groups = new List<List<TileId>>();
         foreach (var column in toWrite.GroupBy(t => t.E))
         {
+            if (groups.Count == 0 || groups[^1].Count >= 2 * bedJobs) groups.Add(new List<TileId>());
+            groups[^1].AddRange(column);
+        }
+        foreach (var group in groups)
+        {
+            int west = group[0].E;
             foreach (var key in held.Keys)
-                if (key.E < column.Key - 1) held.TryRemove(key, out _);
-            bathy?.ReleaseBefore(column.Key - 1);   // survey kilometres: the same three columns
-            Parallel.ForEach(column, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
+                if (key.E < west - 1) held.TryRemove(key, out _);
+            bathy?.ReleaseBefore(west - 1);   // survey kilometres: the same three columns
+            Parallel.ForEach(group, new ParallelOptions { MaxDegreeOfParallelism = bedJobs, CancellationToken = ct }, id =>
             {
                 var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
 
