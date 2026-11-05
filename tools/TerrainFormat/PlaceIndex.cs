@@ -28,6 +28,10 @@ public sealed class Place
     /// <summary>Metres above sea level. Zero for towns, whose height comes from the terrain.</summary>
     public int Elevation { get; set; }
 
+    /// <summary>The place on the Earth, on its ground (#1507: a cube region's copy; null in the LV95 build's file).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo { get; set; }
+
     /// <summary>
     /// What search ranks by, so a peak is ordered among peaks by height and a town among towns
     /// by size. Without this every summit would sort below the smallest hamlet, since a mountain

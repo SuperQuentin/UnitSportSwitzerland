@@ -51,6 +51,12 @@ public sealed class Paths
     /// </summary>
     public string Temp => Chunks.TrimEnd('/', '\\') + "_temp";
     public string StateFile => Path.Combine(Temp, "mapsetup.json");
+    /// <summary>The cube region beside the LV95 build (#1507, G2): &lt;chunks&gt;_cube.</summary>
+    public string CubeRegion => Chunks.TrimEnd('/', '\\') + "_cube";
+    /// <summary>The global cube region (the pyramid, <c>--cube-global</c>) beside the chunk directory.</summary>
+    public string CubeGlobal => Path.Combine(Path.GetDirectoryName(Chunks.TrimEnd('/', '\\')) ?? ".", "cube_global");
+    /// <summary>ETOPO 2022 (the pyramid's fill where no leaf reaches).</summary>
+    public string EtopoDir => Path.Combine(Data, "global", "etopo2022");
     public string StatsFile => Path.Combine(Temp, "mapsetup_stats.json");
     public string LogsDir => Path.Combine(Temp, "mapsetup_logs");
 

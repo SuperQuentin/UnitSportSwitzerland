@@ -12,7 +12,12 @@ namespace UnitSport.Terrain.Format;
 /// <param name="Seats"><c>aerialway:occupancy</c>; 0 when not mapped.</param>
 /// <param name="Detachable"><c>aerialway:detachable</c>: null when not mapped (a chairlift is taken as detachable).</param>
 public sealed record RopewayInfo(double E0, double N0, double E1, double N1, string Type, float Minutes, int Seats,
-    bool? Detachable, string Name);
+    bool? Detachable, string Name)
+{
+    /// <summary>The two ends on the Earth, on the ground (#1507: a cube region's copy; null in LV95).</summary>
+    public GeoPoint? Geo0 { get; init; }
+    public GeoPoint? Geo1 { get; init; }
+}
 
 /// <summary>
 /// <c>ropeways.json</c>, the region's OSM aerialways (#915): written with the ski slopes
