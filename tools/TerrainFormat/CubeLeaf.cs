@@ -34,6 +34,13 @@ public enum LeafKind : ushort
     Parking = 12,
 }
 
+/// <summary>What a kind is for (#1507).</summary>
+public static class LeafKinds
+{
+    /// <summary>A stage's intermediate (the road stage's raw kinds, in a temporary <c>.cubl</c>): never in a region's leaves, nor in <see cref="CubeLeafContent"/>.</summary>
+    public static bool IsRaw(LeafKind kind) => kind is LeafKind.RoadKeys or LeafKind.Parking;
+}
+
 /// <summary>
 /// One section of a leaf entry: its kind, the version and flags of the section's own codec, and the
 /// payload as that codec wrote it (compressed or not, as the codec chose). Opaque to the container.
