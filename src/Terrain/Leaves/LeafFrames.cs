@@ -20,17 +20,24 @@ public sealed class LeafFrames(ISeaLevel seaLevel)
     public static readonly LeafFrames Swiss = new(SwissSeaLevel.Instance);
 
     private readonly ConcurrentDictionary<CubeKey, WorkFrame> _frames = new();
-    private readonly ConcurrentDictionary<CubeKey, Lazy<LeafTransform>> _transforms = new();
+    private readonly ConcurrentDictionary<(CubeKey Frame, CubeKey Leaf), Lazy<LeafTransform>> _transforms = new();
 
     public ISeaLevel SeaLevel { get; } = seaLevel;
 
     public WorkFrame FrameOf(CubeKey leaf) =>
         _frames.GetOrAdd(leaf.AncestorAt(WorkFrame.Level), cell => new WorkFrame(cell, SeaLevel));
 
-    public LeafTransform TransformOf(CubeKey leaf)
+    /// <summary>A leaf's transform in its own frame.</summary>
+    public LeafTransform TransformOf(CubeKey leaf) => TransformIn(FrameOf(leaf), leaf);
+
+    /// <summary>
+    /// A leaf's transform in another leaf's frame: a stage working on one frame reads its margin's leaves on that
+    /// frame's plane (RoadGen's halo, <c>FrameUnits</c>).
+    /// </summary>
+    public LeafTransform TransformIn(WorkFrame frame, CubeKey leaf)
     {
         if (_transforms.Count > Kept) _transforms.Clear();
-        return _transforms.GetOrAdd(leaf, k => new Lazy<LeafTransform>(() => new LeafTransform(FrameOf(k), k))).Value;
+        return _transforms.GetOrAdd((frame.Cell, leaf), k => new Lazy<LeafTransform>(() => new LeafTransform(frame, k.Leaf))).Value;
     }
 
     /// <summary>The leaf a latitude and longitude lie in (its normal's cube cell, whatever the height).</summary>

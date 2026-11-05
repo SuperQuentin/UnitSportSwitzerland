@@ -41,7 +41,8 @@ public sealed class FixtureLeaves
     /// <summary>The course of <paramref name="tiles"/> placed where its LV95 start is (a notation for that latitude and longitude).</summary>
     public static FixtureLeaves At(FixtureChunkSource tiles, LeafFrames? frames = null)
     {
-        var (lat, lon) = Lv95Source.Instance.ToLatLon(tiles.Start.E, tiles.Start.N);
+        var (e, n) = tiles.Start;
+        var (lat, lon) = Lv95Source.Instance.ToLatLon(e, n);
         return new FixtureLeaves(tiles, lat, lon, frames);
     }
 
@@ -146,15 +147,10 @@ public sealed class FixtureLeaves
 
         var roads = new RoadTile { Segments = segments };
         var buildings = new BuildingTile { Buildings = new() };
-        var (start, (minA, minB, maxA, maxB)) = (_tiles.Start, on.Box());
-        var lo = TileId.FromLv95(start.E + minA, start.N + minB);
-        var hi = TileId.FromLv95(start.E + maxA, start.N + maxB);
-        for (int e = lo.E; e <= hi.E; e++)
-            for (int n = lo.N; n <= hi.N; n++)
+        var (minA, minB, maxA, maxB) = on.Box();
+        foreach (var id in _tiles.TilesUnder(minA, minB, maxA, maxB))
             {
-                var id = new TileId(e, n);
-                if (!_tiles.Tiles.Contains(id)) continue;
-                var map = new SourceTileToLeaf(on, id.MinE - start.E, id.MaxN - start.N);
+                var map = new SourceTileToLeaf(on, _tiles.CourseOf(id));
                 if (_tiles.LoadRoadsAsync(id).Result is { } tile)
                 {
                     // the leaf's records, a copy (the move is in place, and the tile source keeps its own)

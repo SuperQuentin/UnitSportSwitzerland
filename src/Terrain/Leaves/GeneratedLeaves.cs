@@ -61,7 +61,7 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
         foreach (var id in TilesUnder(on))
         {
             var products = Tile(id);
-            var map = new SourceTileToLeaf(on, id.MinE, id.MaxN);
+            var map = new SourceTileToLeaf(on, id.Global);
             foreach (var tree in products.Trees)
                 if (map.Holds(tree.X, tree.Z)) content.Trees.Add(map.Move(tree));
             if (products.Buildings is { } bt)
@@ -78,11 +78,7 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
     public static IEnumerable<TileId> TilesUnder(SourceOnLeaf on)
     {
         var (minE, minN, maxE, maxN) = on.Box();
-        var lo = TileId.FromLv95(minE, minN);
-        var hi = TileId.FromLv95(maxE, maxN);
-        for (int e = lo.E; e <= hi.E; e++)
-            for (int n = lo.N; n <= hi.N; n++)
-                yield return new TileId(e, n);
+        return TileRect.Covering(minE, minN, maxE, maxN).Tiles();
     }
 
     private CoverClass CoverAt(double e, double n)

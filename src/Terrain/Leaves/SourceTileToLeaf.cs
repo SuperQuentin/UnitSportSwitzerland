@@ -4,34 +4,42 @@ using UnitSport.Tools.RoadGen.Rewrite;
 namespace UnitSport.Terrain.Leaves;
 
 /// <summary>
-/// Records a producer made in a tile of its own coordinates (tile-local x east of <c>west</c>, z south of <c>north</c>,
-/// y the height above sea level: an LV95 tile's frame, or a course tile's) moved into a leaf's anchor frame (#1509,
+/// Records a producer made in a tile of its own coordinates (tile-local x east, z south, y the height above sea level:
+/// an LV95 tile's frame, or a course tile's; <c>toSource</c> gives a tile-local point's source position) moved into a
+/// leaf's anchor frame (#1509,
 /// G2 B5): road records through <see cref="LeafRecords.Map"/>, building triangles and trees point by point. Positions
 /// rigorously (<see cref="SourceOnLeaf.Local"/>), headings by the source's step and the leaf's Jacobian.
 /// </summary>
-public sealed class SourceTileToLeaf(SourceOnLeaf on, double west, double north) : LeafRecords.IMap
+public sealed class SourceTileToLeaf(SourceOnLeaf on, Func<double, double, (double A, double B)> toSource) : LeafRecords.IMap
 {
     /// <summary>A tile-local point's source position.</summary>
-    public (double A, double B) SourceOf(double x, double z) => (west + x, north - z);
+    public (double A, double B) SourceOf(double x, double z) => toSource(x, z);
 
     /// <summary>Whether a tile-local point lies in the leaf.</summary>
-    public bool Holds(double x, double z) => on.Holds(west + x, north - z);
+    public bool Holds(double x, double z)
+    {
+        var (a, b) = toSource(x, z);
+        return on.Holds(a, b);
+    }
 
     public (float X, float Y, float Z) Point(float x, float y, float z)
     {
-        var (lx, ly, lz) = on.Local(west + x, north - z, y);
+        var (a, b) = toSource(x, z);
+        var (lx, ly, lz) = on.Local(a, b, y);
         return ((float)lx, (float)ly, (float)lz);
     }
 
     public float Godot(float heading, float x, float y, float z)
     {
-        var (dx, dz) = on.DirectionToLocal(west + x, north - z, -System.Math.Sin(heading), System.Math.Cos(heading), y);
+        var (a, b) = toSource(x, z);
+        var (dx, dz) = on.DirectionToLocal(a, b, -System.Math.Sin(heading), System.Math.Cos(heading), y);
         return (float)System.Math.Atan2(-dx, -dz);
     }
 
     public float Math(float angle, float x, float y, float z)
     {
-        var (dx, dz) = on.DirectionToLocal(west + x, north - z, System.Math.Cos(angle), System.Math.Sin(angle), y);
+        var (a, b) = toSource(x, z);
+        var (dx, dz) = on.DirectionToLocal(a, b, System.Math.Cos(angle), System.Math.Sin(angle), y);
         return (float)System.Math.Atan2(-dz, dx);
     }
 
