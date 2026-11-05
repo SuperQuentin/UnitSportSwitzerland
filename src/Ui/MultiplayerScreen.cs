@@ -380,8 +380,7 @@ public partial class MultiplayerScreen : Screen
             _hostReopen = true;
             Shell.Push(MapScreen.CreateServerSpawn(HostSpawn(), at =>
             {
-                settings.HostSpawnE = at.E;
-                settings.HostSpawnN = at.N;
+                settings.HostSpawn = Core.GlobalPos.FromLv95(at.E, at.N, 0);
                 settings.Save();
                 Shell.Back();
             }));
@@ -392,7 +391,7 @@ public partial class MultiplayerScreen : Screen
     private static (double E, double N) HostSpawn()
     {
         var s = GameSettings.Current;
-        return s.HostSpawnE != 0 || s.HostSpawnN != 0 ? (s.HostSpawnE, s.HostSpawnN)
+        return s.HostSpawn is { Lv95: var (spawnE, spawnN, _) } ? (spawnE, spawnN)
             : (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
     }
 

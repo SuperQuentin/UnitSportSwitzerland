@@ -144,14 +144,30 @@ public static class MovieSession
         }
     }
 
+    /// <summary>A loaded project written back over its file, whole and at once (the old file or the new one, never half).</summary>
+    private static void Rewrite(MovieProject p, string path)
+    {
+        string tmp = $"{path}.{Guid.NewGuid():N}.part";
+        try
+        {
+            using (var file = File.Create(tmp)) MovieFile.Write(p, file);
+            File.Move(tmp, path, overwrite: true);
+            GD.Print($"[movie] {path}: written back in this build's format");
+        }
+        catch (Exception e) { GD.PushWarning($"[movie] could not write {path} back: {e.Message}"); }
+        finally { if (File.Exists(tmp)) File.Delete(tmp); }
+    }
+
     /// <summary>Opens a saved project in place of the current one; an error message, or null.</summary>
     public static string? Load(string name)
     {
         try
         {
             string path = ProjectSettings.GlobalizePath(PathOf(name));
-            using var file = File.OpenRead(path);
-            _project = MovieFile.Read(file, ActorIo.Names);
+            bool old;
+            using (var file = File.OpenRead(path)) _project = MovieFile.Read(file, ActorIo.Names, out old);
+            // a file from an older build (before G2 A2b: LV95 places) is written back in this build's form, in place (#1503)
+            if (old) Rewrite(_project, path);
             if (WorldLookStore.Resolve(_project) is > 0 and var missing)
                 GD.PushWarning($"[movie] {missing} meshes of the recorded world are missing from {WorldLookStore.Folder}");
             ReplayRecorder.Instance?.ForgetGrabs();

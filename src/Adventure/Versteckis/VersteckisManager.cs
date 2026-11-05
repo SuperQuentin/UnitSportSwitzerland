@@ -593,9 +593,10 @@ public partial class VersteckisManager : Node
         try
         {
             if (!Godot.FileAccess.FileExists(HistoryFile)) return new();
-            using var f = Godot.FileAccess.Open(HistoryFile, Godot.FileAccess.ModeFlags.Read);
-            var list = JsonSerializer.Deserialize<List<double[]>>(f.GetAsText()) ?? new();
-            return list.Where(p => p.Length == 2).Select(p => (p[0], p[1])).ToList();
+            var places = SavedPlace.ReadPlaces(Godot.FileAccess.GetFileAsString(HistoryFile), out bool old);
+            // a file from before G2 A2b (LV95 pairs): converted in place (#1503)
+            if (old) WriteHistory(places);
+            return places.Select(p => { var (e, n, _) = p.Lv95; return (e, n); }).ToList();
         }
         catch (Exception ex)
         {
@@ -607,6 +608,10 @@ public partial class VersteckisManager : Node
     private static void SaveHistory(double e, double n)
     {
         var list = VsArea.Remember(LoadHistory(), e, n);
-        JsonStore.SaveAsync(HistoryFile, list.Select(p => new[] { p.E, p.N }).ToList(), JsonStore.Indented, ex => GD.PushWarning($"[vs] history: {ex.Message}"));
+        WriteHistory(list.Select(p => GlobalPos.FromLv95(p.E, p.N, 0)));
     }
+
+    /// <summary>The villages played last, as Earth places on the ground (<see cref="SavedPlace.PlacesNode"/>, #1503).</summary>
+    private static void WriteHistory(IEnumerable<GlobalPos> places) =>
+        JsonStore.SaveAsync(HistoryFile, SavedPlace.PlacesNode(places), JsonStore.Indented, ex => GD.PushWarning($"[vs] history: {ex.Message}"));
 }

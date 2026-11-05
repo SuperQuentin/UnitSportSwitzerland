@@ -12,7 +12,7 @@ namespace UnitSport.Vehicles;
 /// long as the vehicle stands there. Its <see cref="Yaw"/>, <see cref="Velocity"/> and a boat's or an
 /// airliner's attitude (<see cref="Angles"/>) are in GlobalPos's offset axes at that place (grid north
 /// until G2 A1, a flat world's axes): <see cref="ToDict"/> sends them in ECEF, local ENU and true north
-/// (#1503, protocol 93), <see cref="ToSavedDict"/> keeps them as the object containers have them.
+/// (#1503, protocol 93), the object containers save that form too (G2 A2b).
 /// </summary>
 public readonly record struct VehicleState(
     RideKind Kind,
@@ -98,19 +98,14 @@ public readonly record struct VehicleState(
     private bool AnglesAreAttitude => Boat.IsBoat(Kind) || Airliner.IsAirliner(Kind);
 
     /// <summary>The state on the wire (a spawn, an RPC): ECEF, the local ENU and true north (#1503).</summary>
-    public Godot.Collections.Dictionary ToDict() => Dict(saved: false);
-
-    /// <summary>The state as the object containers keep it on disk: LV95 and grid north until G2 A2b migrates them.</summary>
-    public Godot.Collections.Dictionary ToSavedDict() => Dict(saved: true);
-
-    private Godot.Collections.Dictionary Dict(bool saved)
+    public Godot.Collections.Dictionary ToDict()
     {
-        var enu = saved ? default : Position.Enu;
+        var enu = Position.Enu;
         var d = new Godot.Collections.Dictionary
         {
         ["kind"] = (int)Kind,
-        ["yaw"] = saved ? Yaw : enu.TrueYaw(Yaw),
-        ["vel"] = saved ? Velocity : enu.ToEnu(Velocity),
+        ["yaw"] = enu.TrueYaw(Yaw),
+        ["vel"] = enu.ToEnu(Velocity),
         ["hp"] = Health,
         ["engine"] = EngineOn,
         ["wrecked"] = Wrecked,
@@ -124,7 +119,7 @@ public readonly record struct VehicleState(
         ["doors"] = DoorsOpen,
         ["setup"] = Setup,
         ["train"] = Train,
-        ["angles"] = saved || !AnglesAreAttitude || Angles == default ? Angles : enu.ToEnu(Quaternion.FromEuler(Angles)).GetEuler(),
+        ["angles"] = !AnglesAreAttitude || Angles == default ? Angles : enu.ToEnu(Quaternion.FromEuler(Angles)).GetEuler(),
         ["flags"] = Flags,
         ["load"] = Load,
         ["radio"] = Radio,
@@ -138,12 +133,11 @@ public readonly record struct VehicleState(
             d["cpos"] = CarrierPos;
             d["cyaw"] = CarrierYaw;
         }
-        if (saved) Position.WriteSaved(d);
-        else Position.Write(d);
+        Position.Write(d);
         return d;
     }
 
-    /// <summary>A state from <see cref="ToDict"/> (the wire) or <see cref="ToSavedDict"/> (a saved record), told apart by their keys.</summary>
+    /// <summary>A state from <see cref="ToDict"/> (the wire, and the object containers since G2 A2b) or a container record saved before it (LV95 and grid north: its migration), told apart by their keys.</summary>
     public static VehicleState FromDict(Godot.Collections.Dictionary d)
     {
         var s = Read(d);

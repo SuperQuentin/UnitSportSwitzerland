@@ -309,14 +309,16 @@ public class PinBookTests
         travel.Unlocked.Add("station:x.1234567890");
         travel.HasGa = true;
         travel.Trips = 3;
-        travel.Flag = new PortableFlag(2600000, 1200000, 500, 7);
+        travel.Flag = new PortableFlag(UnitSport.Core.GlobalPos.FromLv95(2600000, 1200000, 500), 7);
         p.Touch(TravelBook.Section);
         p.Get(PinBook.Section).Add(1, 2, 3, "note", true, 9, out _);
         p.Touch(PinBook.Section);
         var back = AdventureBook.FromJson(AdventureBook.ToNode(p).ToJsonString());
         var t = back.Get(TravelBook.Section);
         Assert.True(t.Has("station:x.1234567890") && t.HasGa && !t.HasHalfFare && t.Trips == 3);
-        Assert.Equal(2600000, t.Flag!.E);
+        // saved as ECEF (#1503): back to the place within a tenth of a millimetre
+        Assert.Equal(2600000, t.Flag!.E, 1e-4);
+        Assert.Equal(500, t.Flag.Alt, 1e-4);
         var pins = back.Get(PinBook.Section);
         Assert.Equal(2, pins.NextId);
         Assert.Equal("note", pins.Pins[0].Note);

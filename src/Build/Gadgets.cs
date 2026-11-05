@@ -49,21 +49,6 @@ public static class Gadgets
             ? (e, n, a) : null;
     }
 
-    /// <summary>
-    /// A zipline's saved payload (its start as LV95 and the altitude) as the network carries it (#1503): the start in ECEF
-    /// millimetres. Other text comes back unchanged.
-    /// </summary>
-    public static string ZipToWire(string saved)
-    {
-        if (ZipStart(saved) is not { } s) return saved;
-        var (x, y, z) = new GlobalPos(s.E, s.N, s.Alt).ToWire();
-        return string.Create(CultureInfo.InvariantCulture, $"{x:F3};{y:F3};{z:F3}");
-    }
-
-    /// <summary>The inverse of <see cref="ZipToWire"/>: the saved payload of a start that arrived in ECEF.</summary>
-    public static string ZipFromWire(string wire) =>
-        ZipStart(wire) is { } s ? ZipPayload(GlobalPos.FromWire(s.E, s.N, s.Alt)) : wire;
-
     public static string LadderPayload(float length) => length.ToString("F2", CultureInfo.InvariantCulture);
 
     public static float? LadderLength(string payload) =>

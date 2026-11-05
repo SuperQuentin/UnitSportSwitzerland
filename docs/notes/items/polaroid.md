@@ -19,8 +19,8 @@ walls or the ground that other players see.
   then `PhotoStore.Save` makes the print: centre square of the frame, 224 px, on a 256 x 304 white
   card (Polaroid 88 x 107 mm proportions; image area = `PhotoStore.ImageRect` in UV), JPEG q 0.85
   (5-10 KB). **Photo id = first 16 hex chars of the JPEG's SHA-256** (`IdOf`, `IsValidId`).
-- Folders: `user://photos/polaroid/<id>.jpg` + `<id>.json` sidecar (`PhotoMeta`: LV95 E/N,
-  altitude, local ISO date-time, focal mm, source png; System.Text.Json = culture-invariant) is the
+- Folders: `user://photos/polaroid/<id>.jpg` + `<id>.json` sidecar (`PhotoMeta`: the place as
+  an Earth position, `at` ECEF since #1503 (`core/saves-in-earth-positions`), local ISO date-time, focal mm, source png; System.Text.Json = culture-invariant) is the
   archive of photos taken here; `user://photo_cache/<id>.jpg` holds prints fetched from the server
   (no sidecar); the server keeps uploads in `user://placed/photos/<id>.jpg`.
   `--photo-dir <abs>` moves the first two (loopback clients must not share a disk).
