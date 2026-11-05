@@ -1034,10 +1034,17 @@ public static class CubeCompare
                 if (!cube.ContainsKey(f.Id))
                     cube.TryAdd(f.Id, f.Rings.Select(ring => Ring(ring, (x, z) =>
                     {
-                        // the plan point on the leaf's ground: its height above the ellipsoid is the anchor's y there to ~1 cm
-                        var p0 = anchor.ToEcef(x, 0, z);
-                        double g = -c.Cube.AboveGround(p0);
-                        return anchor.ToEcef(x, double.IsNaN(g) ? 0 : g, z);
+                        // the point on the leaf's ground along the anchor's vertical through (x, z): a step of the height
+                        // above ground at a time (one step lands 1-4 cm off at altitude: the anchor's up leans from the local one)
+                        double y = 0;
+                        for (int it = 0; it < 4; it++)
+                        {
+                            double above = c.Cube.AboveGround(anchor.ToEcef(x, y, z));
+                            if (double.IsNaN(above)) return anchor.ToEcef(x, it == 0 ? 0 : y, z);
+                            y -= above;
+                            if (Math.Abs(above) < 1e-4) break;
+                        }
+                        return anchor.ToEcef(x, y, z);
                     })).ToArray());
         });
         Parallel.ForEach(c.Lv.TilesNear(c.Cube.Lv95BoxAll()), c.Par, id =>
@@ -1047,7 +1054,8 @@ public static class CubeCompare
                     lv.TryAdd(f.Id, f.Rings.Select(ring => Ring(ring, (x, n) =>
                         SwissGeodesy.ToEcef(id.MinE + x, id.MinN + n, c.Lv.Ground(id.MinE + x, id.MinN + n) is var g && double.IsNaN(g) ? 0 : g))).ToArray());
         });
-        long both = 0;
+        long both = 0, noGround = 0;
+        var worst = new List<(double D, EcefPos P, uint Id)>();
         foreach (var (id, rings) in cube)
         {
             if (!lv.TryGetValue(id, out var lvRings) || rings.Length == 0 || rings[0].Length == 0) continue;
@@ -1057,11 +1065,18 @@ public static class CubeCompare
             foreach (var ring in rings)
                 foreach (var p in ring)
                 {
+                    // a field spilling past the built ground (the region's edge): neither build knows its height there
+                    if (!c.Lv.Covers(p) || double.IsNaN(c.Cube.AboveGround(p))) { noGround++; continue; }
                     var (x, y, z) = frame.ToLocal(p);
-                    if (index.Nearest(x, y, z, double.NaN, 0, 50, out double d, out _, out _)) h.Add(d);
+                    if (!index.Nearest(x, y, z, double.NaN, 0, 50, out double d, out _, out _)) continue;
+                    h.Add(d);
+                    if (d > CompareBars.Vertex) worst.Add((d, p, id));
                 }
         }
-        r.Note($"fields by id: {lv.Count} LV95 (over the leaves' box), {cube.Count} leaves, {both} in both");
+        r.Note($"fields by id: {lv.Count} LV95 (over the leaves' box), {cube.Count} leaves, {both} in both; {noGround} leaf vertices past either build's ground left out");
+        if (worst.Count > 0)
+            r.Note($"  worst vertices ({worst.Count} over the bar, {worst.Select(w => w.Id).Distinct().Count()} fields): " + string.Join("; ", worst.OrderByDescending(w => w.D).Take(6)
+                .Select(w => { var (e, n, hh) = SwissGeodesy.FromEcef(w.P); return string.Create(CultureInfo.InvariantCulture, $"{e:F1},{n:F1} h {hh:F0} {w.D * 100:F1} cm (field {w.Id})"); })));
         r.Check("leaf ring vertex to the LV95 outline", h.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         return r;
     }
