@@ -167,7 +167,9 @@ heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); 
   with BD TOPO; the Geneva French sample. `--cube-check` on each: shared edges exact, features on the
   ground.
 
-**B5 In-game producers** (one PR)
+**B5 In-game producers** (one PR; **built**, PR #1549, `docs/notes/terrain/producers-on-leaves.md`: fixture courses at a
+latitude and longitude, their metres true at their height; the generated world, its roads through RoadGen on a work
+frame; the fill domain as discs; the blend against real leaves left to C1, which knows which leaves are real)
 - The generated world (`ProceduralWorld`, its road network), the fill (its domain in cube cells) and
   the fixture courses (placed at a latitude and longitude) build leaves in memory through a work
   frame, sampling their sources as today.
