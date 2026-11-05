@@ -100,6 +100,14 @@ public sealed class SleeperBook
 
     public static SleeperBook FromJson(string json) => FromJson(json, out _);
 
+    /// <summary>
+    /// A place no peer ever stood at (#1547): the default of a body that left before its first state, LV95
+    /// 0/0 before G2 (A2b migrated those faithfully, to the sea off Madeira, where waking put the player 3,000 km
+    /// from any ground) and the Earth's centre since. Such a sleeper is dropped on load.
+    /// </summary>
+    public static bool Placeholder(GlobalPos at) =>
+        !at.IsFinite || at.Ecef.Length < 1_000_000 || at.HorizontalDistanceTo(GlobalPos.FromLv95(0, 0, at.Alt)) < 1_000;
+
     /// <summary>The book a file holds; <paramref name="migrated"/> when it was the form before G2 A2b (the caller writes it back).</summary>
     public static SleeperBook FromJson(string json, out bool migrated)
     {
@@ -119,7 +127,7 @@ public sealed class SleeperBook
             (next, sleepers) = (store.Next, store.Sleepers.Select(s => s.ToSleeper()));
         }
         foreach (var s in sleepers)
-            if (!string.IsNullOrEmpty(s.Key)) book._byKey[s.Key] = s;
+            if (!string.IsNullOrEmpty(s.Key) && !Placeholder(s.At)) book._byKey[s.Key] = s;
         book._nextId = Math.Max(next, book._byKey.Count > 0 ? book._byKey.Values.Max(s => s.Id) + 1 : 1);
         return book;
     }

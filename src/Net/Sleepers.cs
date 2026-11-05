@@ -162,6 +162,12 @@ public partial class Sleepers : Node
         _nonces.Remove(peer);
         if (!_keyOf.Remove(peer, out var key) || body is null || body.Npc) return;
 
+        // a body that never sent a state has no place: its default is no ground anywhere (#1547)
+        if (body.NetTime <= 0 || SleeperBook.Placeholder(body.NetGlobal))
+        {
+            GD.Print($"[sleepers] {name}: left before its first state, no sleeper");
+            return;
+        }
         var at = body.NetGlobal;
         double alt = at.Alt;
         // riding (a vehicle goes on without it) or inside (interiors are far below): on the ground there
