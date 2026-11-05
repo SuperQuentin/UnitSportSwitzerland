@@ -122,11 +122,13 @@ public static class CubeCompare
         var fit = new ShiftFit();
         long noData = 0, outside = 0;
         var perLeaf = new ConcurrentBag<(CubeKey Key, double Mean, double Max)>();
+        var perLeafWet = new ConcurrentBag<(CubeKey Key, double Mean, double Max)>();
         Parallel.ForEach(c.Cube.Ordered(), c.Par, () => (T: new Tally(), W: new Tally(), F: new ShiftFit(), N: 0L, O: 0L), (key, _, acc) =>
         {
             var tile = c.Cube.Heights(key);
             if (tile == null) return acc;
             var leaf = new Tally();
+            var leafWet = new Tally();
             int n = tile.Side;
             for (int j = 0; j < n; j += c.Stride)
                 for (int i = 0; i < n; i += c.Stride)
@@ -138,7 +140,7 @@ public static class CubeCompare
                     if (double.IsNaN(g)) { acc.O++; continue; }
                     double dh = hl - g;
                     // under water the LV95 heights are the bed (#298): apart, until leaves carry beds too (B3 PR 6)
-                    if (c.Lv.UnderWater(e, nn)) { acc.W.Add(dh); continue; }
+                    if (c.Lv.UnderWater(e, nn)) { acc.W.Add(dh); leafWet.Add(dh); continue; }
                     leaf.Add(dh);
                     double ge = c.Lv.Ground(e + 0.5, nn) - c.Lv.Ground(e - 0.5, nn), gn = c.Lv.Ground(e, nn + 0.5) - c.Lv.Ground(e, nn - 0.5);
                     // the shift is read off ordinary slopes: not flat (no signal), not cliffs (the grids sample them differently)
@@ -146,6 +148,7 @@ public static class CubeCompare
                     if (slope is > 0.05 and < 1.5 && Math.Abs(dh) < 0.5) acc.F.Add(dh, ge, gn);
                 }
             if (leaf.Count > 0) perLeaf.Add((key, leaf.Spread().Mean, leaf.Spread().Max));
+            if (leafWet.Count > 0) perLeafWet.Add((key, leafWet.Spread().Mean, leafWet.Spread().Max));
             acc.T.Merge(leaf);
             return acc;
         }, acc => { lock (all) { all.Merge(acc.T); wet.Merge(acc.W); fit.Merge(acc.F); noData += acc.N; outside += acc.O; } });
@@ -153,7 +156,10 @@ public static class CubeCompare
         r.Note($"{perLeaf.Count} leaves, vertices every {c.Stride}; {noData} without data, {outside} off the LV95 tiles");
         var s = all.Spread();
         r.Check("leaf − LV95 (LHN95 at the vertex), dry", s, true, new Bar(Stat.Mean, CompareBars.HeightBias), new Bar(Stat.P50, CompareBars.HeightMedian));
-        if (wet.Count > 0) r.Check("leaf − LV95 where the LV95 sample touches water (its bed), not held to a bar", wet.Spread(), true);
+        // the beds: held as the dry ground once the leaves carry them (B3 PR 6), apart before (G1's surface over the LV95 bed)
+        if (wet.Count > 0 && c.Cube.KindsPresent.Contains(LeafKind.Water))
+            r.Check("leaf − LV95 where the LV95 sample touches water (the beds)", wet.Spread(), true, new Bar(Stat.Mean, CompareBars.HeightBias), new Bar(Stat.P50, CompareBars.HeightMedian));
+        else if (wet.Count > 0) r.Check("leaf − LV95 where the LV95 sample touches water (its bed), not held to a bar", wet.Spread(), true);
         var (se, sn, bias) = fit.Solve();
         double shift = Math.Sqrt(se * se + sn * sn);
         r.Note(string.Create(CultureInfo.InvariantCulture,
@@ -161,6 +167,8 @@ public static class CubeCompare
         r.AtMost("fitted horizontal shift (m)", shift, CompareBars.HeightShift, "F4");
         foreach (var w in perLeaf.OrderByDescending(p => Math.Abs(p.Mean)).Take(3))
             r.Note(string.Create(CultureInfo.InvariantCulture, $"largest leaf bias: {w.Key.Describe()} mean {Spread.Signed(w.Mean * 100)} cm, max {w.Max:F2} m"));
+        foreach (var w in perLeafWet.OrderByDescending(p => Math.Abs(p.Mean)).Take(5))
+            r.Note(string.Create(CultureInfo.InvariantCulture, $"largest leaf bias under water: {w.Key.Describe()} {w.Key} mean {Spread.Signed(w.Mean * 100)} cm, max {w.Max:F2} m"));
         return r;
     }
 
@@ -208,6 +216,8 @@ public static class CubeCompare
         var r = new KindReport("water");
         var wet = new Agreement();
         var level = new Tally();
+        var far = new Dictionary<double, long>();   // LV95 levels where the two differ by more than the bar, and how often
+        var farAt = new List<string>();
         Parallel.ForEach(c.Cube.Ordered(), c.Par, () => (A: new Agreement(), T: new Tally()), (key, _, acc) =>
         {
             if (c.Cube.Heights(key) is not { } tile) return acc;
@@ -224,10 +234,19 @@ public static class CubeCompare
                     if (double.IsNaN(lvLevel) || float.IsNaN(cubeLevel)) continue;
                     var (_, _, hl) = SwissGeodesy.FromEcef(key.Vertex(tile.Bits, i, j, cubeLevel));
                     acc.T.Add(hl - lvLevel);
+                    if (Math.Abs(hl - lvLevel) > CompareBars.WaterLevel)
+                        lock (far)
+                        {
+                            far[Math.Round(lvLevel, 1)] = far.GetValueOrDefault(Math.Round(lvLevel, 1)) + 1;
+                            if (farAt.Count < 6) farAt.Add(string.Create(CultureInfo.InvariantCulture, $"{e:F0},{nn:F0} LV95 {lvLevel:F2} leaf {hl:F2}"));
+                        }
                 }
             return acc;
         }, acc => { lock (wet) { wet.Merge(acc.A); level.Merge(acc.T); } });
         CategoryLines(r, wet, k => k == 0 ? "dry" : "wet");
+        if (far.Count > 0)
+            r.Note($"levels apart by more than the bar: {far.Values.Sum()} samples, at LV95 levels " + string.Join(", ", far.OrderByDescending(kv => kv.Value).Take(6).Select(kv => string.Create(CultureInfo.InvariantCulture, $"{kv.Key:F1} m ({kv.Value})")))
+                + $" (at {string.Join("; ", farAt)})");
         r.Check("still level, leaf − LV95 (LHN95)", level.Spread(), true, new Bar(Stat.P99, CompareBars.WaterLevel));
         return r;
     }
