@@ -164,7 +164,7 @@ distance along a line drift ~8 cm a km against LV95 (grid lengths); water seams 
 heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); B5's generated roads need
 4a's interface.
 
-**B4 The data** (no code, results in the G2 issue)
+**B4 The data** (no code, results in the G2 issue; **built**, Nov 5 2026, the table on [#1508](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1508#issuecomment-6656802364): D: region 2,412 leaves through MapSetup's cube layer, the 2 m corridor 5,739, Brest 39, the Geneva French sample 203; shared edges 0 differ everywhere; the lake-bed FAIL rows are the check's, #1568)
 - The D: region (Geneva – Riddes) rebuilt as leaves; the corridor at 2 m; Brest re-tiled at level 14
   with BD TOPO; the Geneva French sample. `--cube-check` on each: shared edges exact, features on the
   ground.
