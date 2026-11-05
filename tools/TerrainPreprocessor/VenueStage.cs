@@ -97,10 +97,11 @@ public static class VenueStage
         }).Nodes;
         Console.WriteLine($"venues: {first.TaggedNodes.Count} points, {first.Ways.Count} outlines read ({sw.Elapsed.TotalSeconds:F0} s)");
 
+        var geo = GeoInput.Over(chunkDir);
         var raw = new List<VenueRecord>();
         foreach (var n in first.TaggedNodes)
         {
-            var (e, nn) = SwissProjection.ToLv95(n.Lat, n.Lon);
+            var (e, nn) = geo.ToLv95(n.Lat, n.Lon);
             raw.Add(Record($"n{n.Id}", n.Tags, e, nn));
         }
         int open = 0;
@@ -108,7 +109,7 @@ public static class VenueStage
         {
             var ring = new List<(double E, double N)>();
             foreach (var r in w.Refs)
-                if (nodes.TryGetValue(r, out var ll)) ring.Add(SwissProjection.ToLv95(ll.Lat, ll.Lon));
+                if (nodes.TryGetValue(r, out var ll)) ring.Add(geo.ToLv95(ll.Lat, ll.Lon));
             if (ring.Count < 3) continue;
             if (w.Refs[0] != w.Refs[^1]) { open++; continue; }   // a line is no place to stand a venue
             var (e, n) = PointIn(ring);

@@ -25,7 +25,7 @@ public static class OsmFields
     public static bool IsField(Dictionary<string, string> tags) =>
         tags.TryGetValue("landuse", out var l) && l is "farmland" or "meadow";
 
-    public static List<Poly> Load(string pbf, int jobs)
+    public static List<Poly> Load(string pbf, int jobs, GeoInput geo)
     {
         // pass 1: the multipolygon relations, to learn which untagged ways are their outlines
         var rels = PbfReader.Read(pbf, jobs, new PbfReader.Filter
@@ -52,7 +52,7 @@ public static class OsmFields
             for (int i = 0; i < ids.Length - 1; i++)
             {
                 if (!nodes.TryGetValue(ids[i], out var ll)) return null;
-                var (e, n) = SwissProjection.ToLv95(ll.Lat, ll.Lon);
+                var (e, n) = geo.ToLv95(ll.Lat, ll.Lon);
                 ring[i * 2] = e; ring[i * 2 + 1] = n;
             }
             return ring;

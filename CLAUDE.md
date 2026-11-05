@@ -26,7 +26,7 @@ occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes
 `regression-net` (before a coordinate or rendering change: `tools/test.sh coords` + `results.csv` + `tools/test-compare.py` against a `main` baseline; reference screenshots on D: with `tools/refshots.sh` and `tools/refshot-diff.py`, noise floor first),
 `fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
 `check-waits` (wait for the event, never a fixed time: `Until`, `LogIn`, `Finish` ends with the peers, 0.2 s polls, `REAL=1` for the flat-world scripts),
-`dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
+`dead-code-and-shared-helpers` (use `Terrain.Format.SwissGeodesy`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
 `no-mesh-rebuild-per-frame` (what moves never rebuilds its mesh: figures skinned, rigid parts as nodes, cloth and patterns in shaders; #1202),

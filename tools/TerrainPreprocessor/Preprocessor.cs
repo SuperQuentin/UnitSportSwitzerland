@@ -110,6 +110,8 @@ public static partial class Preprocessor
 
     private static async Task<int> RunPassAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
     {
+        // a cube region against the LV95 build of the same ground (#1507); before --cube, which it also takes
+        if (CubeCompare.Wants(args)) return CubeCompare.Run(args, ct);
         // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
         if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
         // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format
@@ -403,7 +405,7 @@ public static partial class Preprocessor
                 : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
                 : new HashSet<TileId>();
             SetStage("osm-overlay");
-            return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs);
+            return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs, outDir);
         }
 
         // ---- SWISSIMAGE photos: one aerial JPEG per tile, for the realistic styles' terrain -------------

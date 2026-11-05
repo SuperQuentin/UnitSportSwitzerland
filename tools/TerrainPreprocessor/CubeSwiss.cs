@@ -63,12 +63,8 @@ public static class CubeSwiss
         var leafManifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(leavesDir, CubeManifest.FileName)));
         int leafLevel = leafManifest.LeafLevel;
         if (maxLevel >= leafLevel) { Console.Error.WriteLine($"--cube-levels must stay above the leaves' level {leafLevel}"); return 2; }
-        // the finer level's heights, level by level: the leaves first
-        var finer = new ConcurrentDictionary<CubeKey, CubeTile>();
-        Parallel.ForEach(Directory.GetFiles(leavesDir, "*.cubb"), new ParallelOptions { MaxDegreeOfParallelism = jobs }, file =>
-        {
-            foreach (var t in CubeBundle.ReadAll(file)) finer[t.Key] = t;
-        });
+        // the finer level's heights, level by level: the leaves first, from their .cubl bundles (#1507; G1's .cubb read too)
+        var finer = CubeCheck.ReadLeafHeights(leavesDir, jobs);
         Console.WriteLine($"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s");
         var grid = EtopoGrid.Load(etopo, jobs);
 
