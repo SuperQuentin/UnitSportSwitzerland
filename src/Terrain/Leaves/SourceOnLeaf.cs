@@ -58,12 +58,18 @@ public sealed class SourceOnLeaf
         return (Bilinear(_a, k, u, v), Bilinear(_b, k, u, v));
     }
 
+    /// <summary>
+    /// Bilinear in a control cell, exact on its rows and columns: a vertex on a control line (a leaf's edge among them)
+    /// reads the same values from either side, so neighbouring leaves give a shared edge vertex the same position.
+    /// </summary>
     private double Bilinear(double[] g, int k, double u, double v)
     {
-        double south = g[k] + (g[k + 1] - g[k]) * u;
-        double north = g[k + _side] + (g[k + _side + 1] - g[k + _side]) * u;
-        return south + (north - south) * v;
+        if (v == 0) return Lerp(g[k], g[k + 1], u);
+        if (v == 1) return Lerp(g[k + _side], g[k + _side + 1], u);
+        return Lerp(Lerp(g[k], g[k + 1], u), Lerp(g[k + _side], g[k + _side + 1], u), v);
     }
+
+    private static double Lerp(double a, double b, double t) => t == 0 ? a : t == 1 ? b : a + (b - a) * t;
 
     /// <summary>The corners' source positions: the leaf's box in the source (its edges bow a few mm).</summary>
     public (double MinA, double MinB, double MaxA, double MaxB) Box()

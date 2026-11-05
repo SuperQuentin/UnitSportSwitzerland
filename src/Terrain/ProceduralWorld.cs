@@ -443,6 +443,12 @@ public sealed partial class ProceduralWorld
     /// <summary>Terrain height in metres at an LV95 position.</summary>
     public double Height(double e, double n) => Height(null, e, n);
 
+    /// <summary>
+    /// <see cref="Height(double, double)"/> through <paramref name="tile"/>'s cached lattices, for many points in or round
+    /// it (a cube leaf's vertices, #1509): the same arithmetic on the same corners.
+    /// </summary>
+    public double HeightIn(TileId tile, double e, double n) => Height(LatticeFor(tile, fine: true), e, n);
+
     /// <summary>The height at a 5 m lattice point, its coarse field from a tile's lattice or on the spot.</summary>
     private static double FineHeight(Lattice? lattice, long i, long j) =>
         Combine(SampleCoarse(lattice, i * (double)FineM, j * (double)FineM), FineAt(i, j));

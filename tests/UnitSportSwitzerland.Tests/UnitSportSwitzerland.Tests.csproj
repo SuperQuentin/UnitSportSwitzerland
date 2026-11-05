@@ -113,8 +113,8 @@
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
-    <!-- #1509 G2 B5: the game's producers build cube leaves -->
-    <Compile Include="..\..\src\Terrain\Leaves\*.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's are checked by BlendCheck, which builds ProceduralWorld) -->
+    <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\Generated*.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeTargets.cs" Link="Game\%(Filename)%(Extension)" />
