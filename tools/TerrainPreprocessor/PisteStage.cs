@@ -99,7 +99,12 @@ public static class PisteStage
     /// multipolygon relations are areas; other ways are lines; a <c>route=piste</c> relation lends
     /// its tags to member ways that carry no <c>piste:type</c> of their own.
     /// </summary>
-    public static List<Slope> Load(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box, GeoInput geo)
+    public static List<Slope> Load(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box, GeoInput geo) =>
+        Load(pbf, jobs, box, (lat, lon) => geo.ToLv95(lat, lon));
+
+    /// <summary>The slopes with every node's latitude and longitude through <paramref name="project"/> (#1507: LV95 on the
+    /// built ground for the LV95 build, as they are for a work frame, which moves them onto each frame's plane).</summary>
+    public static List<Slope> Load(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box, Func<double, double, (double, double)> project)
     {
         var rels = PbfReader.Read(pbf, jobs, new PbfReader.Filter
         {
@@ -127,7 +132,7 @@ public static class PisteStage
             for (int i = 0; i < count; i++)
             {
                 if (!nodes.TryGetValue(ids[i], out var ll)) return null;
-                var (e, n) = geo.ToLv95(ll.Lat, ll.Lon);
+                var (e, n) = project(ll.Lat, ll.Lon);
                 pts[i * 2] = e; pts[i * 2 + 1] = n;
             }
             return pts;
@@ -221,16 +226,103 @@ public static class PisteStage
 
     // ---- rasterising -------------------------------------------------------------------------
 
-    /// <summary>The best slope found so far at each grid vertex of one tile.</summary>
-    private sealed class TileBuf
+    /// <summary>The best slope found so far at each grid vertex of one tile or leaf.</summary>
+    private sealed class TileBuf(int size)
     {
-        public readonly int[] Slope = new int[PisteFormat.Size * PisteFormat.Size]; // index into the slope list + 1
-        public readonly float[] Inside = new float[PisteFormat.Size * PisteFormat.Size]; // metres inside the edge
-        public readonly float[] Offset = new float[PisteFormat.Size * PisteFormat.Size]; // across the run, m
-        public readonly bool[] FromLine = new bool[PisteFormat.Size * PisteFormat.Size];
+        public readonly int Size = size;
+        public readonly int[] Slope = new int[size * size]; // index into the slope list + 1
+        public readonly float[] Inside = new float[size * size]; // metres inside the edge
+        public readonly float[] Offset = new float[size * size]; // across the run, m
+        public readonly bool[] FromLine = new bool[size * size];
     }
 
-    private static (double MinE, double MinN, double MaxE, double MaxN) Bounds(Slope s)
+    /// <summary>
+    /// The grid a slope is rasterised on (#1507): an LV95 tile's 1 m vertices (<see cref="Lv95PisteGrid"/>, the
+    /// arithmetic as it was) or a leaf's lattice (<see cref="LeafPisteGrid"/>). Vertex (row, col) is index
+    /// row × <see cref="Size"/> + col; positions are on the slopes' plane (LV95, or a work frame's).
+    /// </summary>
+    public interface IPisteGrid
+    {
+        int Size { get; }
+
+        /// <summary>A vertex's plane position.</summary>
+        (double X, double Y) At(int row, int col);
+
+        /// <summary>The rows and columns that may hold a plane box's vertices, clamped to the grid (empty when r0 &gt; r1).</summary>
+        (int R0, int R1, int C0, int C1) Range(double x0, double y0, double x1, double y1);
+
+        /// <summary>Every vertex inside the rings (on the plane), as row × size + col.</summary>
+        void Fill(List<double[]> rings, List<int> inside);
+
+        /// <summary>The point an area's offset across its long axis is measured from (fixed to the ground, so tiles agree).</summary>
+        (double X, double Y) Origin(Slope s);
+
+        /// <summary>A slope's path as its record holds it.</summary>
+        float[] RecordPath(double[] path);
+    }
+
+    /// <summary>An LV95 tile's 1 m grid, row 0 north: what the stage computed before #1507, to the bit.</summary>
+    public sealed class Lv95PisteGrid(TileId tile) : IPisteGrid
+    {
+        public int Size => PisteFormat.Size;
+
+        public (double X, double Y) At(int row, int col) => (tile.MinE + col, tile.MaxN - row);
+
+        public (int R0, int R1, int C0, int C1) Range(double x0, double y0, double x1, double y1) =>
+            (Math.Max(0, (int)Math.Floor(tile.MaxN - y1)), Math.Min(Size - 1, (int)Math.Ceiling(tile.MaxN - y0)),
+             Math.Max(0, (int)Math.Floor(x0 - tile.MinE)), Math.Min(Size - 1, (int)Math.Ceiling(x1 - tile.MinE)));
+
+        public void Fill(List<double[]> rings, List<int> inside)
+        {
+            double minN = double.MaxValue, maxN = double.MinValue;
+            foreach (var ring in rings)
+                for (int k = 1; k < ring.Length; k += 2) { minN = Math.Min(minN, ring[k]); maxN = Math.Max(maxN, ring[k]); }
+            int r0 = Math.Max(0, (int)Math.Floor(tile.MaxN - maxN)), r1 = Math.Min(Size - 1, (int)Math.Ceiling(tile.MaxN - minN));
+            Scanline(rings, r0, r1, row => tile.MaxN - row, x => (int)Math.Ceiling(x - tile.MinE), x => (int)Math.Floor(x - tile.MinE), Size, inside);
+        }
+
+        public (double X, double Y) Origin(Slope s) => (2_500_000, 1_100_000);
+
+        public float[] RecordPath(double[] path)
+        {
+            var rel = new float[path.Length];
+            for (int i = 0; i < path.Length; i += 2) { rel[i] = (float)(path[i] - tile.MinE); rel[i + 1] = (float)(path[i + 1] - tile.MinN); }
+            return rel;
+        }
+    }
+
+    /// <summary>
+    /// Rows <paramref name="r0"/>..<paramref name="r1"/> crossed by the rings (given in the grid's own coordinates): each
+    /// row's crossings sorted, the vertices between pairs taken. The LV95 tile's scanline, shared with the leaf lattice's.
+    /// </summary>
+    public static void Scanline(List<double[]> rings, int r0, int r1, Func<int, double> rowY, Func<double, int> colFrom, Func<double, int> colTo,
+        int size, List<int> inside)
+    {
+        var xs = new List<double>();
+        for (int row = r0; row <= r1; row++)
+        {
+            double y = rowY(row);
+            xs.Clear();
+            foreach (var ring in rings)
+            {
+                int n = ring.Length / 2;
+                for (int i = 0, j = n - 1; i < n; j = i++)
+                {
+                    double yi = ring[i * 2 + 1], yj = ring[j * 2 + 1];
+                    if ((yi > y) == (yj > y)) continue;
+                    xs.Add(ring[i * 2] + (y - yi) / (yj - yi) * (ring[j * 2] - ring[i * 2]));
+                }
+            }
+            xs.Sort();
+            for (int k = 0; k + 1 < xs.Count; k += 2)
+            {
+                int c0 = Math.Max(0, colFrom(xs[k])), c1 = Math.Min(size - 1, colTo(xs[k + 1]));
+                for (int col = c0; col <= c1; col++) inside.Add(row * size + col);
+            }
+        }
+    }
+
+    public static (double MinE, double MinN, double MaxE, double MaxN) Bounds(Slope s)
     {
         double minE = double.MaxValue, minN = double.MaxValue, maxE = double.MinValue, maxN = double.MinValue;
         void Add(double[] pts)
@@ -262,26 +354,22 @@ public static class PisteStage
         b.Slope[i] = slope + 1; b.Inside[i] = inside; b.Offset[i] = offset; b.FromLine[i] = line;
     }
 
-    private static void RasteriseLine(TileId tile, TileBuf b, int index, Slope s)
+    private static void RasteriseLine(IPisteGrid grid, TileBuf b, int index, Slope s)
     {
         var pts = s.Line!;
         double half = s.WidthM / 2;
-        int size = PisteFormat.Size;
+        int size = b.Size;
         for (int k = 0; k + 3 < pts.Length; k += 2)
         {
             double ax = pts[k], ay = pts[k + 1], bx = pts[k + 2], by = pts[k + 3];
             double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
             double len = Math.Sqrt(len2);
-            int c0 = Math.Max(0, (int)Math.Floor(Math.Min(ax, bx) - half - tile.MinE));
-            int c1 = Math.Min(size - 1, (int)Math.Ceiling(Math.Max(ax, bx) + half - tile.MinE));
-            int r0 = Math.Max(0, (int)Math.Floor(tile.MaxN - (Math.Max(ay, by) + half)));
-            int r1 = Math.Min(size - 1, (int)Math.Ceiling(tile.MaxN - (Math.Min(ay, by) - half)));
+            var (r0, r1, c0, c1) = grid.Range(Math.Min(ax, bx) - half, Math.Min(ay, by) - half, Math.Max(ax, bx) + half, Math.Max(ay, by) + half);
             for (int row = r0; row <= r1; row++)
             {
-                double y = tile.MaxN - row;
                 for (int col = c0; col <= c1; col++)
                 {
-                    double x = tile.MinE + col;
+                    var (x, y) = grid.At(row, col);
                     double t = len2 > 0 ? Math.Clamp(((x - ax) * dx + (y - ay) * dy) / len2, 0, 1) : 0;
                     double ex = x - (ax + t * dx), ey = y - (ay + t * dy);
                     double d = Math.Sqrt(ex * ex + ey * ey);
@@ -294,44 +382,20 @@ public static class PisteStage
         }
     }
 
-    private static void RasteriseArea(TileId tile, TileBuf b, int index, Slope s, float angle)
+    private static void RasteriseArea(IPisteGrid grid, TileBuf b, int index, Slope s, float angle)
     {
         // the offset across the long axis, from a point fixed to the ground so tiles agree
         double nx = -Math.Sin(angle), ny = Math.Cos(angle);
-        RasteriseArea(tile, b, index, s, (x, y) => (float)(x * nx + y * ny));
+        var (ox, oy) = grid.Origin(s);
+        RasteriseArea(grid, b, index, s, (x, y) => (float)((x - ox) * nx + (y - oy) * ny));
     }
 
-    private static void RasteriseArea(TileId tile, TileBuf b, int index, Slope s, Func<double, double, float> offsetAt)
+    private static void RasteriseArea(IPisteGrid grid, TileBuf b, int index, Slope s, Func<double, double, float> offsetAt)
     {
-        int size = PisteFormat.Size;
+        int size = b.Size;
         var rings = s.Rings!;
-        double minN = double.MaxValue, maxN = double.MinValue;
-        foreach (var ring in rings)
-            for (int k = 1; k < ring.Length; k += 2) { minN = Math.Min(minN, ring[k]); maxN = Math.Max(maxN, ring[k]); }
-        int r0 = Math.Max(0, (int)Math.Floor(tile.MaxN - maxN)), r1 = Math.Min(size - 1, (int)Math.Ceiling(tile.MaxN - minN));
-        var xs = new List<double>();
         var inside = new List<int>();
-        for (int row = r0; row <= r1; row++)
-        {
-            double y = tile.MaxN - row;
-            xs.Clear();
-            foreach (var ring in rings)
-            {
-                int n = ring.Length / 2;
-                for (int i = 0, j = n - 1; i < n; j = i++)
-                {
-                    double yi = ring[i * 2 + 1], yj = ring[j * 2 + 1];
-                    if ((yi > y) == (yj > y)) continue;
-                    xs.Add(ring[i * 2] + (y - yi) / (yj - yi) * (ring[j * 2] - ring[i * 2]));
-                }
-            }
-            xs.Sort();
-            for (int k = 0; k + 1 < xs.Count; k += 2)
-            {
-                int c0 = Math.Max(0, (int)Math.Ceiling(xs[k] - tile.MinE)), c1 = Math.Min(size - 1, (int)Math.Floor(xs[k + 1] - tile.MinE));
-                for (int col = c0; col <= c1; col++) inside.Add(row * size + col);
-            }
-        }
+        grid.Fill(rings, inside);
         if (inside.Count == 0) return;
         // distance to the outline, only within the edge ramp: everything deeper is "far inside"
         float ramp = PisteFormat.EdgeRampM;
@@ -344,14 +408,13 @@ public static class PisteStage
             {
                 double ax = ring[j * 2], ay = ring[j * 2 + 1], bx = ring[i * 2], by = ring[i * 2 + 1];
                 double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-                int c0 = Math.Max(0, (int)Math.Floor(Math.Min(ax, bx) - ramp - tile.MinE)), c1 = Math.Min(size - 1, (int)Math.Ceiling(Math.Max(ax, bx) + ramp - tile.MinE));
-                int rr0 = Math.Max(0, (int)Math.Floor(tile.MaxN - (Math.Max(ay, by) + ramp))), rr1 = Math.Min(size - 1, (int)Math.Ceiling(tile.MaxN - (Math.Min(ay, by) - ramp)));
+                var (rr0, rr1, c0, c1) = grid.Range(Math.Min(ax, bx) - ramp, Math.Min(ay, by) - ramp, Math.Max(ax, bx) + ramp, Math.Max(ay, by) + ramp);
                 for (int row = rr0; row <= rr1; row++)
                     for (int col = c0; col <= c1; col++)
                     {
                         int idx = row * size + col;
                         if (!depth.TryGetValue(idx, out float have)) continue;
-                        double x = tile.MinE + col, y = tile.MaxN - row;
+                        var (x, y) = grid.At(row, col);
                         double t = len2 > 0 ? Math.Clamp(((x - ax) * dx + (y - ay) * dy) / len2, 0, 1) : 0;
                         double ex = x - (ax + t * dx), ey = y - (ay + t * dy);
                         float d = (float)Math.Sqrt(ex * ex + ey * ey);
@@ -360,7 +423,10 @@ public static class PisteStage
             }
         }
         foreach (var (i, d) in depth)
-            Offer(b, i, index, d, offsetAt(tile.MinE + i % size - 2_500_000, tile.MaxN - i / size - 1_100_000), false);
+        {
+            var (x, y) = grid.At(i / size, i % size);
+            Offer(b, i, index, d, offsetAt(x, y), false);
+        }
     }
 
     /// <summary>An area's groom direction: its long axis (principal axis of the outline's points).</summary>
@@ -384,15 +450,25 @@ public static class PisteStage
     /// With the tile's heights, each record gets its altitude range, sun exposure and steepness.
     /// </summary>
     public static PisteTile? BuildTile(TileId tile, IReadOnlyList<Slope> slopes, IReadOnlyList<int> touching, out int dropped,
-        ChunkGrid? heights = null)
+        ChunkGrid? heights = null) =>
+        BuildTile(tile, new Lv95PisteGrid(tile), slopes, touching, out dropped,
+            heights != null && heights.Stride == 1 ? owner => Terrain(owner, heights) : null);
+
+    /// <summary>
+    /// Rasterises every slope touching a grid (an LV95 tile's, a leaf's); null when none covers a vertex of it.
+    /// <paramref name="terrain"/>: per slope (by index) its altitude range, sun exposure and steepness, from the vertices
+    /// each one won (the owner per vertex: slope index + 1, 0 none).
+    /// </summary>
+    public static PisteTile? BuildTile(TileId id, IPisteGrid grid, IReadOnlyList<Slope> slopes, IReadOnlyList<int> touching, out int dropped,
+        Func<int[], Dictionary<int, (float, float, float, float)>>? terrain)
     {
         dropped = 0;
-        var b = new TileBuf();
+        var b = new TileBuf(grid.Size);
         foreach (int s in touching)
         {
             var slope = slopes[s];
-            if (slope.IsArea) RasteriseArea(tile, b, s, slope, AxisAngle(slope.Rings![0]));
-            else RasteriseLine(tile, b, s, slope);
+            if (slope.IsArea) RasteriseArea(grid, b, s, slope, AxisAngle(slope.Rings![0]));
+            else RasteriseLine(grid, b, s, slope);
         }
         // the slopes that won at least one vertex, in a stable order (by id), at most 255
         var used = new Dictionary<int, int>();
@@ -401,18 +477,16 @@ public static class PisteStage
         if (used.Count == 0) return null;
         var order = used.Keys.OrderByDescending(k => used[k]).Take(PisteFormat.MaxRecords).OrderBy(k => slopes[k].Id).ThenBy(k => k).ToList();
         dropped = used.Count - order.Count;
-        var terrain = heights != null && heights.Stride == 1 ? Terrain(b, heights) : null;
+        var stats = terrain?.Invoke(b.Slope);
         var local = new Dictionary<int, byte>();
         var records = new List<PisteRecord>(order.Count);
         foreach (int k in order)
         {
             var s = slopes[k];
             var path = s.IsArea ? s.Rings![0] : s.Line!;
-            var rel = new float[path.Length];
-            for (int i = 0; i < path.Length; i += 2) { rel[i] = (float)(path[i] - tile.MinE); rel[i + 1] = (float)(path[i + 1] - tile.MinN); }
             local[k] = (byte)(records.Count + 1);
-            var t = terrain != null && terrain.TryGetValue(k, out var tv) ? tv : (2000f, 2000f, 0.5f, 15f);
-            records.Add(new PisteRecord(s.Id, s.Type, s.Difficulty, s.Grooming, s.IsArea, s.WidthM, s.Name, s.Ref, rel,
+            var t = stats != null && stats.TryGetValue(k, out var tv) ? tv : (2000f, 2000f, 0.5f, 15f);
+            records.Add(new PisteRecord(s.Id, s.Type, s.Difficulty, s.Grooming, s.IsArea, s.WidthM, s.Name, s.Ref, grid.RecordPath(path),
                 t.Item1, t.Item2, t.Item3, t.Item4));
         }
         var slot = new byte[b.Slope.Length];
@@ -423,11 +497,11 @@ public static class PisteStage
             slot[i] = l;
             aux[i] = PisteFormat.PackAux(Math.Min(1f, b.Inside[i] / PisteFormat.EdgeRampM), b.Offset[i]);
         }
-        return new PisteTile(tile, records, slot, aux);
+        return new PisteTile(id, records, slot, aux);
     }
 
     /// <summary>Per slope: altitude 10th and 90th percentiles, sun exposure and mean steepness, from every 4th vertex it owns.</summary>
-    private static Dictionary<int, (float, float, float, float)> Terrain(TileBuf b, ChunkGrid g)
+    private static Dictionary<int, (float, float, float, float)> Terrain(int[] owner, ChunkGrid g)
     {
         int size = PisteFormat.Size;
         var alts = new Dictionary<int, List<float>>();
@@ -435,7 +509,7 @@ public static class PisteStage
         for (int row = 1; row < size - 1; row += 4)
             for (int col = 1; col < size - 1; col += 4)
             {
-                int s = b.Slope[row * size + col] - 1;
+                int s = owner[row * size + col] - 1;
                 if (s < 0) continue;
                 if (!alts.TryGetValue(s, out var list)) alts[s] = list = new List<float>();
                 list.Add((float)g.HeightMetersAt(col, row));
@@ -447,6 +521,12 @@ public static class PisteStage
                 var have = sums.GetValueOrDefault(s);
                 sums[s] = (have.Sun + gn / norm, have.Steep + Math.Atan(Math.Sqrt(ge * ge + gn * gn)) * 180 / Math.PI, have.N + 1);
             }
+        return Summarise(alts, sums);
+    }
+
+    /// <summary>The terrain numbers per slope from its sampled altitudes and gradients (sun: the north component of the slope's normal).</summary>
+    public static Dictionary<int, (float, float, float, float)> Summarise(Dictionary<int, List<float>> alts, Dictionary<int, (double Sun, double Steep, int N)> sums)
+    {
         var result = new Dictionary<int, (float, float, float, float)>();
         foreach (var (s, list) in alts)
         {

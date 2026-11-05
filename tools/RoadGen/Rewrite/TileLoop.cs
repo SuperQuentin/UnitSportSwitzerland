@@ -72,26 +72,15 @@ public sealed class Lv95TileLoop : ITileLoop
                 + "(it keeps the raw input), --skip-rewritten to leave them, or --force if you know better.");
         if (rewritten.Count > 0) log($"  skipping {rewritten.Count} rewritten tiles with no raw input");
 
-        var overlay = options.OsmOverlay is { } overlayPath ? OsmOverlayReader.TryLoad(overlayPath) : null;
-        var cantons = options.Cantons ?? TileRewriter.Cantons.Find();   // pedestrian heads per canton (#348); a test world's zones (#1038)
-        // OSM traffic signals (#347), beside the overlay
-        var osmNodes = options.OsmOverlay is { } nodesBeside
-            ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null;
-        var signalSites = TileRewriter.SignalSites.From(osmNodes);
-        var restrictions = TileRewriter.Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
-        var crossingNodes = TileRewriter.CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
+        var data = RegionData.Load(options, log);
+        var osmNodes = data.Nodes;
         // walkers' crossings over a tram track left without lights (#1176: OSM railway=tram_crossing, crossing=uncontrolled)
-        TileRewriter.UncontrolledTramCrossings = osmNodes is null ? [] : osmNodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing
-            && e.Value == "uncontrolled" && e.Tags.GetValueOrDefault("railway") == "tram_crossing").Select(e => new Vec2(e.E, e.N)).ToList();
-        if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
-        if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
+        TileRewriter.UncontrolledTramCrossings = TileRewriter.UncontrolledCrossings(osmNodes);
 
         Wanted = new HashSet<TileId>(targets);
         Blocks = GroupIntoBlocks(targets, options.BlockSize);
         // gantries of lane signs (#1110): SITG's in canton Geneva, the rule elsewhere
-        _gantries = options.Gantries ? GantryContext.Load(options.SitgSigns, options.Places) : null;
-        if (_gantries is not null) _gantries.Overlay = overlay;
-        if (_gantries?.Sitg is { } sitg) log($"  SITG lane signs (#1110): {sitg.Gantries.Count:N0} gantries from {options.SitgSigns}");
+        _gantries = data.LoadGantries(options, log);
 
         var wanted = Wanted;
         Inputs = new TileRewriter.Inputs
@@ -100,8 +89,10 @@ public sealed class Lv95TileLoop : ITileLoop
             Grid = id => TileRewriter.LoadGrid(chunkDir, id),
             Buildings = id => Facades.Read(chunkDir, id),
             Parking = id => RawParking.Read(parkDir, id),
-            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions, Crossings = crossingNodes,
-            Gantries = _gantries,
+            Overlay = data.Overlay, Cantons = data.Cantons, SignalSites = TileRewriter.SignalSites.From(osmNodes),
+            Restrictions = TileRewriter.Restrictions.From(osmNodes),   // turns forbidden at an approach (#353)
+            Crossings = TileRewriter.CrossingNodes.From(osmNodes),   // pedestrian crossings (#700)
+            Gantries = _gantries, TramStops = data.TramStops,
         };
     }
 

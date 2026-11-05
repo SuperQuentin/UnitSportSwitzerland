@@ -17,6 +17,12 @@ namespace UnitSport.World;
 public sealed record TrafficEndpoint(int Id, double E, double N, float Heading, bool Generates, bool Destination, float PerMinute,
     TrafficShare[]? Shares = null, MoverKind Mode = MoverKind.Car)
 {
+    /// <summary>
+    /// The way it faces from true north, a Godot yaw (0 north, positive turns left; #1504): <see cref="Heading"/>, the file's
+    /// and the wire's LV95 angle from grid east, turned by the grid's meridian convergence there. What the game sets down.
+    /// </summary>
+    public float TrueYaw => TrueNorth.GridYawToTrue(E, N, Heading - Mathf.Pi / 2);
+
     /// <summary><see cref="TrafficShare.To"/> for cars that set off along the heading and pick their way at random.</summary>
     public const int AlongHeading = 0;
     /// <summary><see cref="TrafficShare.To"/> for cars that set off the other way along the road and pick their way at random.</summary>

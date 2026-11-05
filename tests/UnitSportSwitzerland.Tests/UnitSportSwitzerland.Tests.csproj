@@ -77,6 +77,7 @@
     <!-- #1503 G2 A2b: GlobalPos's JSON shape in the saves (on the type) and the stores' in-place migrations -->
     <Compile Include="..\..\src\Core\SavedPlace.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\TrueNorth.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />
@@ -112,6 +113,10 @@
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
+    <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's are checked by BlendCheck, which builds ProceduralWorld) -->
+    <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\Generated*.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1511 G2 C2: the collision patch provider (the patches themselves need the road builders: the harness checks them) -->
+    <Compile Include="..\..\src\Terrain\LeafCollision\CollisionPatches.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeTargets.cs" Link="Game\%(Filename)%(Extension)" />
@@ -448,7 +453,7 @@
     <!-- the cube-native build's frames, leaf regions and leaf writer with its seam pass (#1507): pure, over TerrainFormat -->
     <Compile Include="..\..\tools\TerrainPreprocessor\FrameDriver.cs;..\..\tools\TerrainPreprocessor\LeafWriter.cs;..\..\tools\TerrainPreprocessor\TerrainSampler.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the road stage's spaces (#1507): the LV95 and work-frame tile loops, and the reader whose polylines they cut -->
-    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs;..\..\tools\TerrainPreprocessor\CoverExtractor.cs;..\..\tools\TerrainPreprocessor\FrameCoverSpace.cs;..\..\tools\TerrainPreprocessor\WaterWindow.cs;..\..\tools\TerrainPreprocessor\CubeWaterLattice.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- OSM maxspeed to km/h for the overlay (#711): pure -->
     <Compile Include="..\..\tools\TerrainPreprocessor\OsmSpeed.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the neighbours' terrain (#965): their grids from LV95, and the gap fill: pure -->

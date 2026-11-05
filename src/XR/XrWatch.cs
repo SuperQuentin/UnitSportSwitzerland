@@ -149,25 +149,27 @@ internal sealed partial class XrWatch : Node3D
         else Set(_speed, player != null ? $"{player.Velocity.Length() * 3.6f:0} km/h" : "");
     }
 
+    private Core.TrueNorth.Near _north;
+
     /// <summary>
-    /// Turns the bezel so its N points to the world's north (-Z) as seen on the dial, and its notch toward the tracked
-    /// target. Per frame, a rotation only.
+    /// Turns the bezel so its N points to true north at the player (#1504) as seen on the dial, and its notch toward the
+    /// tracked target. Per frame, a rotation only (true north is looked up again every 100 m, <see cref="Core.TrueNorth.Near"/>).
     /// </summary>
     private void TurnBezel(FootPlayer? player)
     {
         if (!IsInsideTree()) return;
         var b = GlobalBasis.Orthonormalized();
-        // true north in the dial's plane (the dial faces local +Z; the ring's N tick is its local +Y): the world's -Z
-        // is grid north, which the frame turns to the true one (0.95 degrees at Geneva)
-        var trueNorth = new Vector3(0, 0, -1);
-        if (player?.Origin is { } origin) trueNorth = origin.WorldOfEnu(player.GlobalPosition, trueNorth);
-        var north = b.Inverse() * trueNorth;
+        // true north in world axes, then in the dial's plane (the dial faces local +Z; the ring's N tick is its local +Y)
+        var frame = player?.Origin?.Frame;
+        float worldNorth = frame != null ? _north.World(frame, player!.GlobalPosition) : 0f;
+        var north = b.Inverse() * new Vector3(Mathf.Sin(worldNorth), 0, -Mathf.Cos(worldNorth));
         float angle = Mathf.Atan2(-north.X, north.Y);
         _bezel.Rotation = new Vector3(0, 0, angle);
         if (player != null && Adventure.Navigation.NavTarget.Current is { } t)
         {
             var g = player.Global;
             var (toEast, toNorth, _) = g.OffsetTo(Core.GlobalPos.FromLv95(t.E, t.N, 0));
+            // the offset is in true east and north (#1502): its bearing is from true north, as the ring
             float bearing = Ui.CompassStrip.Bearing(new Vector2((float)toEast, (float)toNorth));
             _notch.Rotation = new Vector3(0, 0, -Mathf.DegToRad(bearing));
             _notch.Visible = true;

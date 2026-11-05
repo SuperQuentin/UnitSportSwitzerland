@@ -25,7 +25,13 @@ public static class OsmFields
     public static bool IsField(Dictionary<string, string> tags) =>
         tags.TryGetValue("landuse", out var l) && l is "farmland" or "meadow";
 
-    public static List<Poly> Load(string pbf, int jobs, GeoInput geo)
+    public static List<Poly> Load(string pbf, int jobs, GeoInput geo) => Load(pbf, jobs, (lat, lon) => geo.ToLv95(lat, lon));
+
+    /// <summary>
+    /// The fields with every node's latitude and longitude through <paramref name="project"/> (#1507: the LV95 build
+    /// takes LV95 on its ground, a work frame keeps them as they are and moves them onto each frame's plane).
+    /// </summary>
+    public static List<Poly> Load(string pbf, int jobs, Func<double, double, (double, double)> project)
     {
         // pass 1: the multipolygon relations, to learn which untagged ways are their outlines
         var rels = PbfReader.Read(pbf, jobs, new PbfReader.Filter
@@ -52,7 +58,7 @@ public static class OsmFields
             for (int i = 0; i < ids.Length - 1; i++)
             {
                 if (!nodes.TryGetValue(ids[i], out var ll)) return null;
-                var (e, n) = geo.ToLv95(ll.Lat, ll.Lon);
+                var (e, n) = project(ll.Lat, ll.Lon);
                 ring[i * 2] = e; ring[i * 2 + 1] = n;
             }
             return ring;

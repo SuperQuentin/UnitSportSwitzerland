@@ -86,7 +86,7 @@ protocol 94 for the adventure sections' shape; see `docs/notes/core/saves-in-ear
 - Check: `tools/test.sh net` with the feature checked on the remote peer, two clients with
   `--originstress --originyaw` on each, save migration unit tests from real old files.
 
-**A3 True north** (one PR)
+**A3 True north** (one PR; **built**, PR #1533: true north is the one system, every stored heading read into it at load, grid only as a marked local turn in LV95 maths; `docs/notes/core/true-north.md`)
 - Data converted at load by the meridian convergence at its point: berths, givers, traffic
   endpoints, the LV95 literal catalogues (castles, stadiums, festivals, trailer); the compass, HUD,
   cockpit HDG/track, BR viewpoint, adventure compass and `PhotoJudge` read true north from the frame
@@ -153,11 +153,11 @@ game's (C1), not a build stage.
 | 2 | road extraction, holes, parking; raw kinds; French roads | raw length per TLM line; vertices 2 cm; a hole per portal. **Built** (PR #1537, `docs/notes/tools/cube-roads.md`): `IRoadSpace` (LV95 instance byte-identical on 9 Geneva tiles and BD TOPO at Annemasse), `--cube-roads` (holes into the region, raw roads, keys and car parks into a temporary `.cubl`, BD TOPO into the raw roads); D: region in 45 s: 99,639 TLM lines' raw lengths within 1 cm, 2.8 M vertices p99 0.02 cm, cuts across frame edges 0.00 cm, 956 of 956 car parks; holes 767 of 771 matched, 4 explained (LV95 region edge, the portal test on two grounds) |
 | 3 | buildings with GWR; French buildings | count by id; vertices 2 cm |
 | 4a | RoadGen behind `IUnits`/`IGround`, LV95 instance | byte-identical. **Built** (PR #1536, `docs/notes/tools/roadgen-units.md`): `IUnits` (tiles, corners, km caches, headings) through `Plane`, `IGround` (`Lv95TileGround`), `ITileLoop` (`Lv95TileLoop`); 41 Geneva and Valais tiles, all 844 files SHA-256 identical to main |
-| 4b | RoadGen on frames: blocks, km caches, the Jacobian for angles, overlay / nodes / SITG / tram / places in lat/lon | junction and signal counts; centrelines 2 cm; across frame edges |
-| 5 | cover and trees | per class ≥ 99.5 %; surveyed trees exact; scatter density ±1 % |
-| 6 | water and beds (one union-find over the region on leaf labels) | levels per body; bed percentiles; exact shared edges |
-| 7 | pistes and ropeways, fields, photos | areas, outlines 2 cm |
-| 8 | region-wide files in Earth positions (places, POIs, landings, airports, castles/venues/givers/Wikidata inputs, the test region); no `horizon.bin`; MapSetup; the pyramid levels 5-13 from the leaves | counts; positions 2 cm |
+| 4b | RoadGen on frames: blocks, km caches, the Jacobian for angles, overlay / nodes / SITG / tram / places in lat/lon | junction and signal counts; centrelines 2 cm; across frame edges. **Built** (PR #1543, `docs/notes/tools/roadgen-units.md`): `--cube-network`, `FrameUnits`, `LeafRecords`; counts equal across a frame edge (237/237 junctions), signals exact away from cuts, ends across a frame edge 0.17 cm; centrelines p99 ~30 cm where RoadGen smooths per piece and rasters walls per tile (#1546), 0.07 cm without smoothing. **Bar restated** (#1546, Nov 5 2026): the 2 cm centreline bar is held on the frame machinery (both builds `--no-smooth`, no buildings: p99 0.07 cm); as built the two tilings' cuts differ and RoadGen smooths and rasters per cut, so the tail is reported, not barred, until the stage smooths whole lines at D |
+| 5 | cover and trees | per class ≥ 99.5 %; surveyed trees exact; scatter density ±1 % . **5a built** (PR #1542, `docs/notes/tools/cube-cover.md`): the base cover (TLM area layers, overrides) through `ICoverSpace`, LV95 byte-identical; D: region in 57 s, 100.000 % where the LV95 raster resolves the class, 0 seam copies. **5c built** (PR #1550): paving, tunnel roofs and laid-out lots through `ICoverLattice`, LV95 byte-identical; on the LV95 build's own roads 99.90 % (99.99 % caps off), off the cuts; on 4b's roads 99.54 % (its network's own differences, #1546). **5b built** (PR #1551): trees on leaves, seeds from the global lattice vertex, LV95 byte-identical; D: region conifers 0.43 %, fruit rows 0.53 %, surveyed 287,191 matched (max 1.4 cm), the rest at the road mask's threshold |
+| 6 | water and beds (one union-find over the region on leaf labels) | levels per body; bed percentiles; exact shared edges. **Built** (PR #1545, `docs/notes/tools/cube-water.md`): the window maths shared (`WaterWindow`, in metres), LV95 byte-identical (825 tiles, 3,606 files); D: region: Léman's levels, max and mean depths as the LV95 build's (Grand Lac 372.12 / 372.14 m, 310.0 / 310.1 m, mean 226.2 both), beds p50 1.2 cm, p99 5.2 cm, levels p99 3.6 cm, 0 of 6.2 M seam samples copied. Across face edges (#1552): bodies joined on the shared edge vertices, windows folded onto the next face's leaves (unknown past a cube corner) |
+| 7 | pistes and ropeways, fields, photos | areas, outlines 2 cm. **Built** (PR #1548, `docs/notes/tools/cube-fields-pistes-photos.md`): `--cube-fields`, `--cube-pistes` (`IPisteGrid`, LV95 byte-identical), `--cubephotos` (Godot tool mode); fields p99 0.06 cm, slopes 99.9-100 % where resolved, photos seamless; `ropeways.json` is row 8 |
+| 8 | region-wide files in Earth positions (places, POIs, landings, airports, castles/venues/givers/Wikidata inputs, the test region); no `horizon.bin`; MapSetup; the pyramid levels 5-13 from the leaves | counts; positions 2 cm. **Built** (PR #1555, `docs/notes/tools/cube-region-files.md`): `--cube-region-files` (`GeoPoint` beside LV95, POIs v2, LV95 byte-identical), counts equal, every point back within 0.007 cm; MapSetup `cube` layer with the pyramid; castles/venues/givers follow buildings (#1535); Wikidata has no positions |
 
 Risks: per-tile counts differ by construction where features are cut at other edges; things placed by
 distance along a line drift ~8 cm a km against LV95 (grid lengths); water seams across frames; a frame of
@@ -169,7 +169,9 @@ heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); 
   with BD TOPO; the Geneva French sample. `--cube-check` on each: shared edges exact, features on the
   ground.
 
-**B5 In-game producers** (one PR)
+**B5 In-game producers** (one PR; **built**, PR #1549, `docs/notes/terrain/producers-on-leaves.md`: fixture courses at a
+latitude and longitude, their metres true at their height; the generated world, its roads through RoadGen on a work
+frame; the fill domain as discs; the blend against real leaves left to C1, which knows which leaves are real)
 - The generated world (`ProceduralWorld`, its road network), the fill (its domain in cube cells) and
   the fixture courses (placed at a latitude and longitude) build leaves in memory through a work
   frame, sampling their sources as today.
@@ -186,7 +188,9 @@ heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); 
   `flat` and by leaves in `earth`; the 170 `TryGetHeight` callers and the 68 `IChunkSource` users move
   to it.
 
-**C2 Collision patches** (one PR)
+**C2 Collision patches** (one PR; **built**, PR #1556, `docs/notes/terrain/collision-patches.md`: patches as level-16
+cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook up; 42-83 ms and ~1.5 MB a patch, rays
+0.2 mm p99)
 - Trimesh patches (~128 × 128 cells, ~150 m) of a leaf's own triangles plus its road and building
   faces, built on workers round bodies, client and server; `CollisionReach` in metres.
 - Check: `--collidecheck`, `--cubeharness`'s ray test against the mesh (2 cm).

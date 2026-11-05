@@ -308,11 +308,7 @@ public sealed class RailRoadOverlap
         return pieces;
     }
 
-    private static bool OnSeam(Vec2 p)
-    {
-        double fx = p.X / TileSize - Math.Round(p.X / TileSize), fy = p.Y / TileSize - Math.Round(p.Y / TileSize);
-        return Math.Abs(fx) * TileSize < 0.01 || Math.Abs(fy) * TileSize < 0.01;
-    }
+    private static bool OnSeam(Vec2 p) => Plane.OnAnyEdge(p.X, p.Y, 0.01);
 
     /// <summary>
     /// <see cref="PaintType.RailGroove"/> lines for one embedded piece, one per rail, tile-local,

@@ -145,7 +145,7 @@ public partial class ConcertDirector : Node
         var world = node.ToGlobal(local);
         if (!_chunks.TryGetSurface(world, out float ground)) return null;
         local.Y = node.ToLocal(world with { Y = ground }).Y;
-        float a = Mathf.DegToRad(s.AzimuthDeg);
+        float a = Mathf.DegToRad(s.LocalAzimuthDeg);
         var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
         return new Transform3D(basis, local);
     }

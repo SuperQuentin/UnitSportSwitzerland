@@ -130,6 +130,20 @@ public readonly record struct GlobalPos
         return System.Math.Atan2(e, n);
     }
 
+    /// <summary>
+    /// The LV95 grid's meridian convergence here (#1504), radians clockwise: the bearing of true north on the grid, what a
+    /// heading kept in grid north (a Swiss source's, a record's until G2 D: <see cref="Lv95Grid"/>) is turned by. Notation
+    /// (~2 µs); <see cref="GlobalPos"/>'s own maths are from true north and need none.
+    /// </summary>
+    public double GridConvergence
+    {
+        get
+        {
+            var (e, n, h) = SwissGeodesy.FromEcef(Ecef);
+            return SwissGeodesy.GridConvergence(e, n, h);
+        }
+    }
+
     /// <summary>The terrain tile under this place (the LV95 kilometre of its notation until G2 D, the cube leaf then).</summary>
     public TileId Tile
     {

@@ -3,6 +3,16 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
+/// Where the cover's rings are stamped (#1507, G2 B3 PR 5a): a ring of an LV95 source (E, N and its own height,
+/// closed) and its class, onto every lattice vertex it covers, by <see cref="CoverExtractor.Stamped"/>'s rule:
+/// <see cref="CoverExtractor"/>'s LV95 tiles, or a work frame's leaves (<see cref="FrameCoverSpace"/>).
+/// </summary>
+public interface ICoverSpace
+{
+    void Stamp(GeoPackageReader.Ring ring, CoverClass cls);
+}
+
+/// <summary>
 /// Rasterises every swissTLM3D area layer onto each tile's vertex lattice, then populates
 /// it: random scatter in the wooded classes, a planting grid in orchards and nurseries,
 /// and the surveyed positions of TLM's individual trees.
@@ -50,19 +60,7 @@ public sealed class CoverExtractor
         var region = new TileRegion(tiles);
 
         using var conn = GeoPackageReader.Open(_gpkgPath);
-
-        // Layers are rasterised in order of increasing specificity: what a human would
-        // name the ground wins over what grows on it. A car park stays last so it beats
-        // everything, and the pitch polygon beats the sports ground that contains it.
-        PolygonCount = Rasterise(conn, "tlm_bb_bodenbedeckung", CoverFormat.Parse, region);
-        Rasterise(conn, "tlm_areale_nutzungsareal", CoverFormat.ParseLandUse, region);
-        Rasterise(conn, "tlm_areale_freizeitareal", CoverFormat.ParseLeisure, region);
-        Rasterise(conn, "tlm_bauten_sportbaute_ply", CoverFormat.ParseStructureArea, region);
-        Rasterise(conn, "tlm_bauten_verkehrsbaute_ply", CoverFormat.ParseStructureArea, region);
-        TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea, region);
-        // hand-traced ground TLM does not map (docs/data/cover_overrides.json), last so it beats
-        // every TLM layer; before the trees so an orchard it paves over is not planted
-        if (OverridesPath != null) StampOverrides(OverridesPath);
+        RasteriseLayers(conn, new Lv95CoverSpace(this), region);
 
         ScatterTrees(tiles, heightOf);
         PlantRows(tiles, heightOf);
@@ -72,6 +70,40 @@ public sealed class CoverExtractor
         foreach (var id in Trees.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList())
             Trees.Remove(id);
     }
+
+    /// <summary>
+    /// The area layers, then the overrides, through a cover space (#1507: the LV95 tiles' lattice, or a work frame's
+    /// leaves). Layers are rasterised in order of increasing specificity: what a human would name the ground wins over
+    /// what grows on it. A car park stays last so it beats everything, and the pitch polygon beats the sports ground
+    /// that contains it.
+    /// </summary>
+    public void RasteriseLayers(Microsoft.Data.Sqlite.SqliteConnection conn, ICoverSpace space, ISourceRegion region)
+    {
+        PolygonCount = Rasterise(conn, "tlm_bb_bodenbedeckung", CoverFormat.Parse, region, space);
+        Rasterise(conn, "tlm_areale_nutzungsareal", CoverFormat.ParseLandUse, region, space);
+        Rasterise(conn, "tlm_areale_freizeitareal", CoverFormat.ParseLeisure, region, space);
+        Rasterise(conn, "tlm_bauten_sportbaute_ply", CoverFormat.ParseStructureArea, region, space);
+        Rasterise(conn, "tlm_bauten_verkehrsbaute_ply", CoverFormat.ParseStructureArea, region, space);
+        TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea, region, space);
+        // hand-traced ground TLM does not map (docs/data/cover_overrides.json), last so it beats
+        // every TLM layer; before the trees so an orchard it paves over is not planted
+        if (OverridesPath != null) StampOverrides(OverridesPath, space);
+    }
+
+    /// <summary>
+    /// What a vertex holding <paramref name="old"/> becomes when <paramref name="cls"/> is stamped on it: Water is never
+    /// overwritten by a later, more specific layer.
+    ///
+    /// <para>
+    /// The layers are stamped in order of increasing specificity, which is right for land use — an allotment inside a
+    /// park should win. But a land-use polygon is an administrative boundary, not a ground surface, and several of them
+    /// are drawn right across a river: the gravel extraction areas beside the Rhône at Riddes are mapped as Abbauareal
+    /// over the water, which erased the river from the raster and left the Rhône rendering as a gap with a thin channel
+    /// line through it. A quarry does not flow.
+    /// </para>
+    /// </summary>
+    public static byte Stamped(byte old, CoverClass cls) =>
+        (CoverClass)old == CoverClass.Water && cls != CoverClass.Water ? old : (byte)cls;
 
     /// <summary>JSON file of hand-traced cover polygons, or null for none.</summary>
     public string? OverridesPath { get; init; }
@@ -92,7 +124,7 @@ public sealed class CoverExtractor
     /// Stamps the override polygons: <c>{"polygons":[{"cover":"ParkingPrivate","ring":[[E,N],...]}]}</c>
     /// in LV95. Rings off the batch's tiles fall away in <see cref="MarkIn"/>, which also keeps Water.
     /// </summary>
-    private void StampOverrides(string path)
+    private void StampOverrides(string path, ICoverSpace space)
     {
         using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
         int rings = 0;
@@ -104,7 +136,7 @@ public sealed class CoverExtractor
                 xyz.AddRange(new[] { p[0].GetDouble(), p[1].GetDouble(), 0.0 });
             // close it: the scanline walks edges i -> i+1
             if (xyz[0] != xyz[^3] || xyz[1] != xyz[^2]) xyz.AddRange(new[] { xyz[0], xyz[1], 0.0 });
-            Rasterise(new GeoPackageReader.Ring(xyz.ToArray()), cls);
+            space.Stamp(new GeoPackageReader.Ring(xyz.ToArray()), cls);
             rings++;
         }
         LayerRings["cover_overrides"] = rings;
@@ -115,7 +147,7 @@ public sealed class CoverExtractor
     /// classifier. Returns the number of rings drawn.
     /// </summary>
     private int Rasterise(Microsoft.Data.Sqlite.SqliteConnection conn, string layer,
-        Func<string?, CoverClass> classify, TileRegion region)
+        Func<string?, CoverClass> classify, ISourceRegion region, ICoverSpace space)
     {
         int rings = 0;
         foreach (var reader in GeoPackageReader.TileRows(conn, layer, new[] { "objektart" }, region))
@@ -126,12 +158,18 @@ public sealed class CoverExtractor
             foreach (var ring in GeoPackageReader.ParsePolygons((byte[])reader.GetValue(1)))
             {
                 rings++;
-                Rasterise(ring, cls);
+                space.Stamp(ring, cls);
             }
         }
 
         LayerRings[layer] = LayerRings.GetValueOrDefault(layer) + rings;
         return rings;
+    }
+
+    /// <summary>The LV95 tiles' cover space: the scanline below on the 1 m grid, into <see cref="Cover"/>.</summary>
+    private sealed class Lv95CoverSpace(CoverExtractor x) : ICoverSpace
+    {
+        public void Stamp(GeoPackageReader.Ring ring, CoverClass cls) => x.Rasterise(ring, cls);
     }
 
     /// <summary>
@@ -216,18 +254,7 @@ public sealed class CoverExtractor
         if (Math.Abs(fc - col) > 0.01 || Math.Abs(fr - row) > 0.01) return;
 
         int index = row * CoverFormat.Size + col;
-
-        // Water is never overwritten by a later, more specific layer.
-        //
-        // The layers are stamped in order of increasing specificity, which is right for land
-        // use — an allotment inside a park should win. But a land-use polygon is an
-        // administrative boundary, not a ground surface, and several of them are drawn right
-        // across a river: the gravel extraction areas beside the Rhône at Riddes are mapped as
-        // Abbauareal over the water, which erased the river from the raster and left the Rhône
-        // rendering as a gap with a thin channel line through it. A quarry does not flow.
-        if ((CoverClass)cells[index] == CoverClass.Water && cls != CoverClass.Water) return;
-
-        cells[index] = (byte)cls;
+        cells[index] = Stamped(cells[index], cls);
     }
 
     /// <summary>
@@ -251,8 +278,7 @@ public sealed class CoverExtractor
                     if (!CoverFormat.IsWooded(cls)) continue;
                     if (RoadMask.TryGetValue(tile, out var blocked) && blocked[cell]) continue;
 
-                    // each 2 m cell is 0.0004 ha; density is per hectare
-                    float perCell = CoverFormat.TreeDensity(cls) * 0.0004f;
+                    float perCell = ScatterChance(cls, 1);
                     if (rng.NextDouble() > perCell) continue;
 
                     double e = tile.MinE + col * ChunkFormat.SpacingM + (rng.NextDouble() - 0.5) * 2.0;
@@ -260,21 +286,61 @@ public sealed class CoverExtractor
                     double? h = heightOf(e, n);
                     if (h == null) continue;
 
-                    float height = cls switch
-                    {
-                        CoverClass.Forest => 14f + (float)rng.NextDouble() * 10f,
-                        CoverClass.OpenForest => 10f + (float)rng.NextDouble() * 8f,
-                        CoverClass.Woodland => 7f + (float)rng.NextDouble() * 6f,
-                        _ => 2.5f + (float)rng.NextDouble() * 2f,
-                    };
-
+                    var (height, kind) = ScatterTree(cls, rng);
                     list.Add(new TreeInstance(
-                        (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n),
-                        height, cls == CoverClass.Shrub ? KindShrub : KindConifer));
+                        (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n), height, kind));
                     ScatteredTrees++;
                 }
         }
     }
+
+    // ---- the trees' rules, one copy for the LV95 tiles and the cube's leaves (#1507, G2 B3 PR 5b) -------------
+
+    /// <summary>
+    /// The chance a lattice vertex of <paramref name="areaM2"/> square metres holds a scattered tree: the class's density
+    /// per hectare times 0.0004 a square metre, as the LV95 build has always taken it on its 1 m vertices (the factor is
+    /// the 2 m cells of an older grid's; the density the game shows is its result, and the leaves keep it per area).
+    /// </summary>
+    public static float ScatterChance(CoverClass cls, double areaM2) => CoverFormat.TreeDensity(cls) * 0.0004f * (float)areaM2;
+
+    /// <summary>A scattered tree's height and kind, from the generator after its chance and its jitter.</summary>
+    public static (float Height, byte Kind) ScatterTree(CoverClass cls, Random rng)
+    {
+        float height = cls switch
+        {
+            CoverClass.Forest => 14f + (float)rng.NextDouble() * 10f,
+            CoverClass.OpenForest => 10f + (float)rng.NextDouble() * 8f,
+            CoverClass.Woodland => 7f + (float)rng.NextDouble() * 6f,
+            _ => 2.5f + (float)rng.NextDouble() * 2f,
+        };
+        return (height, cls == CoverClass.Shrub ? KindShrub : KindConifer);
+    }
+
+    /// <summary>A scattered tree's jitter, metres either way of its vertex.</summary>
+    public const double ScatterJitterM = 1.0;
+
+    /// <summary>
+    /// A planted row tree: a little wobble, well under the row spacing, so the grid reads as planted rather than as a
+    /// texture (metres, the same east and south), and its height.
+    /// </summary>
+    public static (float Jitter, float Height) RowTree(CoverClass cls, Random rng)
+    {
+        float jitter = (float)((rng.NextDouble() - 0.5) * 0.6);
+        float height = cls == CoverClass.Orchard ? 3.4f + (float)rng.NextDouble() * 1.4f : 2.2f + (float)rng.NextDouble() * 1.0f;
+        return (jitter, height);
+    }
+
+    /// <summary>
+    /// A surveyed tree's height: TLM has none, so it varies deterministically from the LV95 position (the source's own
+    /// coordinates, so both builds grow the same tree) and an avenue is not a row of clones.
+    /// </summary>
+    public static float SurveyedHeight(double e, double n)
+    {
+        var rng = new Random((int)(e * 4) ^ ((int)(n * 4) << 8));
+        return 9f + (float)rng.NextDouble() * 7f;
+    }
+
+    public const byte KindFruitTree = KindFruit, KindSolitaryTree = KindSolitary;
 
     private List<TreeInstance> TreeList(TileId tile)
     {
@@ -316,16 +382,10 @@ public sealed class CoverExtractor
                         double? h = heightOf(e, n);
                         if (h == null) continue;
 
-                        // a little wobble, well under the row spacing, so the grid reads as
-                        // planted rather than as a texture
-                        float jitter = (float)((rng.NextDouble() - 0.5) * 0.6);
+                        var (jitter, height) = RowTree(cls, rng);
                         list.Add(new TreeInstance(
                             (float)(e - tile.MinE) + jitter, (float)h.Value,
-                            (float)(tile.MaxN - n) + jitter,
-                            cls == CoverClass.Orchard
-                                ? 3.4f + (float)rng.NextDouble() * 1.4f
-                                : 2.2f + (float)rng.NextDouble() * 1.0f,
-                            KindFruit));
+                            (float)(tile.MaxN - n) + jitter, height, KindFruit));
                         PlantedTrees++;
                     }
             }
@@ -360,12 +420,8 @@ public sealed class CoverExtractor
                 double? h = heightOf(e, n);
                 if (h == null) continue;
 
-                // no height attribute in TLM; vary deterministically from the position so
-                // an avenue is not a row of clones
-                var rng = new Random((int)(e * 4) ^ ((int)(n * 4) << 8));
                 TreeList(tile).Add(new TreeInstance(
-                    (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n),
-                    9f + (float)rng.NextDouble() * 7f, KindSolitary));
+                    (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n), SurveyedHeight(e, n), KindSolitary));
                 SurveyedTrees++;
             }
         }

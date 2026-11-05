@@ -562,18 +562,33 @@ public partial class BrManager
 
     /// <summary>
     /// Where the map is centred and which way it faces: the player you are watching, or yourself
-    /// with your camera's heading. Zone metres; heading is a direction (east, north).
+    /// with your camera's heading. Zone metres; heading is a direction (east, north) in the zone's axes;
+    /// <c>North</c> is true north's bearing in those axes there, degrees clockwise (#1504: what the compass reads).
     /// </summary>
-    public (Vector2 Position, Vector2 Heading)? ViewPoint()
+    public (Vector2 Position, Vector2 Heading, float North)? ViewPoint()
     {
         if (Origin == null) return null;
+        Vector3 at;
+        Vector2 heading;
         if (Watching != 0 && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Watching)) is { } other)
-            return (ZonePoint(other.GlobalPosition), new Vector2(-Mathf.Sin(other.WorldYaw), Mathf.Cos(other.WorldYaw)));
-        if (LocalPlayer() is not { } me) return null;
-        var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
-        var heading = new Vector2(fwd.X, -fwd.Z);
-        return (ZonePoint(me.GlobalPosition), heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector2.Up);
+        {
+            at = other.GlobalPosition;
+            heading = new Vector2(-Mathf.Sin(other.WorldYaw), Mathf.Cos(other.WorldYaw));
+        }
+        else
+        {
+            if (LocalPlayer() is not { } me) return null;
+            at = me.GlobalPosition;
+            var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
+            heading = new Vector2(fwd.X, -fwd.Z);
+            heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector2.Up;
+        }
+        // the world's axes into the zone's (the LV95 grid's, #1502): the identity on the flat ground, a turn in an anchor frame
+        heading = _viewNorth.WorldToGrid(Origin.Frame, at, heading);
+        return (ZonePoint(at), heading, Mathf.RadToDeg(_viewNorth.Grid(Origin.Frame, at)));
     }
+
+    private TrueNorth.Near _viewNorth;
 
     // ------------------------------------------------------------------------------------
     // every frame
