@@ -889,7 +889,7 @@ public static partial class Preprocessor
             // skip the sheets it cannot possibly contain, so rebuilding it per batch turned a
             // nationwide run from minutes into hours.
             BuildingExtractor? buildings = null;
-            StageClock.Sub("open-sources");
+            SetStage("open-sources");
             if (buildingsGdb.Count > 0)
                 buildings = BuildingStage.OpenGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath);
             else if (buildingsGpkg != null)
