@@ -22,6 +22,9 @@ public interface ICoverLattice
     /// <summary>The cells in a box of the records' frame (a superset: the caller tests each one's position).</summary>
     IEnumerable<int> Near(double x0, double z0, double x1, double z1);
 
+    /// <summary>The cells whose position is in a box of the records' frame (the LV95 grid: its own rounding of the box).</summary>
+    IEnumerable<int> InBox(double x0, double z0, double x1, double z1);
+
     double UrbanDensity(int cell);
 }
 
@@ -45,6 +48,8 @@ public sealed class Lv95CoverLattice(TileId id, ChunkGrid? grid, UrbanField fiel
             for (int c = c0; c <= c1; c++)
                 yield return r * N + c;
     }
+
+    public IEnumerable<int> InBox(double x0, double z0, double x1, double z1) => Near(x0, z0, x1, z1);
 
     public double UrbanDensity(int cell) =>
         field.Density(id.MinE + (cell % N) * ChunkFormat.SpacingM, id.MaxN - (cell / N) * ChunkFormat.SpacingM);
@@ -143,7 +148,7 @@ public static class CoverStage
                 minX = Math.Min(minX, v[k * 3]); maxX = Math.Max(maxX, v[k * 3]);
                 minZ = Math.Min(minZ, v[k * 3 + 2]); maxZ = Math.Max(maxZ, v[k * 3 + 2]);
             }
-            foreach (int k in lattice.Near(minX - PaveReach, minZ - PaveReach, maxX + PaveReach, maxZ + PaveReach)) near[k] = true;
+            foreach (int k in lattice.InBox(minX - PaveReach, minZ - PaveReach, maxX + PaveReach, maxZ + PaveReach)) near[k] = true;
         }
 
         long paved = 0;
