@@ -168,8 +168,11 @@ public static class CubeCompare
     {
         if (Missing(c, "cover", LeafKind.Cover, "cover_") is { } skip) return skip;
         var r = new KindReport("cover");
+        // where the LV95 raster resolves the class (its 3 x 3 vertices round the nearest one all of it), and at its
+        // class edges, where a leaf vertex up to 0.7 m from the nearest 1 m vertex can fall either side (B3 PR 5a)
         var agree = new Agreement();
-        Parallel.ForEach(c.Cube.Ordered(), c.Par, () => new Agreement(), (key, _, acc) =>
+        var edge = new Agreement();
+        Parallel.ForEach(c.Cube.Ordered(), c.Par, () => (A: new Agreement(), E: new Agreement()), (key, _, acc) =>
         {
             if (c.Cube.Section(key, LeafKind.Cover) is not { } sec || c.Cube.Heights(key) is not { } tile) return acc;
             var cells = LeafCover.Decode(sec);
@@ -178,11 +181,13 @@ public static class CubeCompare
                 for (int i = 0; i < n; i += c.Stride)
                 {
                     var (e, nn) = c.Cube.Lv95Of(key, tile, i, j);
-                    int lvClass = c.Lv.CoverAt(e, nn);
-                    if (lvClass >= 0) acc.Add(lvClass, cells[j * n + i]);
+                    var (lvClass, uniform) = c.Lv.CoverAround(e, nn);
+                    if (lvClass >= 0) (uniform ? acc.A : acc.E).Add(lvClass, cells[j * n + i]);
                 }
             return acc;
-        }, acc => { lock (agree) agree.Merge(acc); });
+        }, acc => { lock (agree) { agree.Merge(acc.A); edge.Merge(acc.E); } });
+        r.Note($"at the LV95 raster's class edges (held to no bar): {edge.Count} vertices, agreement {edge.Overall:P3}; "
+            + string.Join(", ", edge.PerClass().Where(x => x.Count >= CompareBars.MinClassSamples).Select(x => string.Create(CultureInfo.InvariantCulture, $"{(CoverClass)x.Class} {x.Share:P1}"))));
         CategoryLines(r, agree, k => ((CoverClass)k).ToString());
         return r;
     }
@@ -1110,6 +1115,20 @@ internal sealed class Lv95Build
         if (!Tiles.Contains(id)) return -1;
         var (i, ok) = Vertex(id, e, n);
         return !ok ? -1 : (_lastCover ??= new()).Get(id, _cover) is { } cells ? cells[i] : 0;
+    }
+
+    /// <summary>
+    /// The cover class of the nearest 1 m vertex (−1 off the tiles), and whether the 3 × 3 vertices round it all hold it:
+    /// the raster resolves the class at the point.
+    /// </summary>
+    public (int Class, bool Uniform) CoverAround(double e, double n)
+    {
+        int k = CoverAt(e, n);
+        if (k < 0) return (k, false);
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                if ((dx != 0 || dy != 0) && CoverAt(e + dx, n + dy) != k) return (k, false);
+        return (k, true);
     }
 
     /// <summary>

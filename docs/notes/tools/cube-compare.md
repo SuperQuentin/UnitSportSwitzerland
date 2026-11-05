@@ -86,6 +86,9 @@ TerrainPreprocessor --cube-compare --chunks <LV95 dir> --lv-roads <LV95 temp>/ro
   heights are left out of both, counted.
 - **holes**: also as holes, single-linkage clusters of quads (centres within 2 m), one a portal, matched by
   centre within 5 m; alone ones listed.
+- **cover** (B3 PR 5a): held where the LV95 raster resolves the class (its 3 × 3 vertices round the nearest
+  one all of it); at its class edges a leaf vertex up to 0.7 m from the nearest 1 m vertex can fall either
+  side (~90 % for every class), reported, no bar.
 - **parking**: lots counted where both builds hold their area centroid (their home rule), matched by the
   vertex mean within 1 m, ring vertices in plan; bars 2 cm p99, none alone, the same vertex count.
 - D: region numbers and what breaks: `cube-roads`.
