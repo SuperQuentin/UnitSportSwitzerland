@@ -27,8 +27,7 @@ TerrainPreprocessor --cube-cover --cube-out REGION --tlm GPKG [--cover-overrides
 
 - Over the region's leaves with heights, frame by frame, rings read with no margin (as the LV95 tiles);
   each leaf's `Cover` through the `LeafWriter`'s cover seam. `docs/data/cover_overrides.json` by default.
-- **Not here yet**: street paving, tunnel roofs and laid-out car parks (they read the network stage's final
-  roads and the buildings' facades: after 4b), and the trees (5b).
+- **After the network stage** (PR 5c): `--cube-cover-network` (below). The trees: 5b.
 
 ## Checks (Nov 5 2026)
 
@@ -41,3 +40,46 @@ TerrainPreprocessor --cube-cover --cube-out REGION --tlm GPKG [--cover-overrides
   vertices, 100.000 %**, every class. At its class edges (0.6 M vertices) 90.6 %, the same for every class:
   a leaf vertex is up to 0.7 m from the nearest 1 m vertex, so near an edge either can fall on either side.
   The comparer holds the bar on the first and reports the second (`cube-compare`).
+
+## After the network stage: paving, tunnel roofs, laid-out lots (PR 5c)
+
+`CoverStage.PaveStreets`, `RoofTunnels` and `LaidOutLots` take an `ICoverLattice`: the cells, each one's position
+(x, z) and ground (y) in the frame the road records are in, the cells near a box (a superset, tested by position),
+the cells in a box (`InBox`, the junction caps' reach) and the urban density at a cell.
+
+- **LV95** (`Lv95CoverLattice`): the 1 m grid in tile-local metres, its loops as they were (byte-identical).
+- **A leaf** (`LeafCoverLattice`): every vertex in the leaf's anchor frame at its own ground (`LatticeToLocal`), where
+  the network stage writes its records (4b); the cells near a box through `LocalToLattice`; the urban density at the
+  vertex's LV95 position (`UrbanField` over the LV95 build's buildings, until stage 3 writes them per leaf).
+
+```
+TerrainPreprocessor --cube-cover-network --cube-out REGION --facades LV95_CHUNKS [--cube-box ...] [--lv95-roads LV95_CHUNKS]
+```
+
+- Each leaf with a `Cover` and the network's `Roads`; the others of a bundle keep their cover. The planters are
+  counted; their trees come with 5b. `--lv95-roads` (a check) runs the passes on the LV95 build's own network
+  roads moved into each leaf, so the passes can be compared apart from the network stage's differences.
+- **By construction**: the LV95 pass paves a tile from its own (clipped) segments only, so a street just across a
+  km line never paves this side; a leaf does the same at its edges. A junction cap paves its axis-aligned box, and a
+  leaf's anchor axes turn against the LV95 grid (by the meridian convergence): the box differs at its corners.
+
+### Checks (Nov 5 2026)
+
+- LV95 byte-identical: `--cover-only` on 4b's 85 Geneva tiles (`test_b3/roadgen4a/main/chunks`, final roads and
+  buildings): 13.8 M vertices paved, 46 k under tunnel roofs, 265 k under lots, 782 planters; all 623 files the same.
+- Cube: 4b's Geneva frame run (18 leaves with network roads, `test_b3/network/region14g`), base cover, then the
+  passes (6 s). `--cube-compare --kinds cover`, 4b's inner box 2499700,1117200,2500800,1118300, against the LV95
+  cover of the same roads:
+
+| Roads the leaves pave along | Seam margin | Overall | Open | TownPaving |
+|---|---|---|---|---|
+| the LV95 build's (`--lv95-roads`), caps off both sides | 10 m | 99.990 % | 99.950 % | 99.999 % |
+| the LV95 build's | 10 m | 99.902 % | 99.882 % | 99.832 % |
+| the LV95 build's | none | 99.763 % | 98.898 % | 99.837 % |
+| 4b's own | 10 m | 99.540 % | 98.571 % | 99.465 % |
+| 4b's own | none | 99.057 % | 97.656 % | 98.742 % |
+
+  The leaf passes are the LV95 ones (99.99 % on the same roads off the cuts). With 4b's own network the paving
+  follows its streets: their urban flags, widths and sidewalk reach differ where its wall raster and smoothing do
+  (#1546). TunnelRoof 251 / 251 vertices; the comparer's cover now honours `--compare-box` and `--seam-margin`.
+

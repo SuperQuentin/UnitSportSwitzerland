@@ -42,6 +42,7 @@ public static class CubeCompare
     {
         string? chunks = null, cubeDir = null, lvRoads = null, cubeRaw = null;
         var kinds = AllKinds.ToList();
+        int coverRing = 1;
         int stride = 1, maxLeaves = int.MaxValue, jobs = Math.Max(1, Environment.ProcessorCount - 2);
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         for (int i = 0; i < args.Count; i++)
@@ -66,6 +67,7 @@ public static class CubeCompare
                     if (v.Length != 4) { Console.Error.WriteLine("--compare-box minE,minN,maxE,maxN (LV95 m)"); return 2; }
                     box = (v[0], v[1], v[2], v[3]);
                     break;
+                case "--cover-ring": coverRing = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 default: Console.Error.WriteLine($"--cube-compare: unknown option {args[i]}"); return 2;
             }
         }
@@ -74,7 +76,7 @@ public static class CubeCompare
 
         var clock = Stopwatch.StartNew();
         Console.OutputEncoding = System.Text.Encoding.UTF8;   // the keys' lat/lon print with a degree sign
-        var lv = new Lv95Build(chunks, lvRoads) { Box = box };
+        var lv = new Lv95Build(chunks, lvRoads) { Box = box, CoverRing = coverRing };
         var cube = new CubeBuild(cubeDir, maxLeaves, cubeRaw) { Box = box };
         Console.WriteLine($"cube-compare: {lv.Tiles.Count} LV95 tiles in {chunks}; {cube.Leaves.Count} leaves at level {CubeBuild.LeafLevel} "
             + $"in {cube.Bundles.Count} bundles in {cubeDir} ({string.Join(", ", cube.KindsPresent.Order())})");
@@ -197,6 +199,8 @@ public static class CubeCompare
             for (int j = 0; j < n; j += c.Stride)
                 for (int i = 0; i < n; i += c.Stride)
                 {
+                    // --seam-margin: away from either build's cuts (a pass that works tile by tile stops at its edges)
+                    if (_seamMargin > 0 && NearSeam(key.Vertex(tile.Bits, i, j, double.IsNaN(tile.HeightAt(i, j)) ? 0 : tile.HeightAt(i, j)))) continue;
                     var (e, nn) = c.Cube.Lv95Of(key, tile, i, j);
                     var (lvClass, uniform) = c.Lv.CoverAround(e, nn);
                     if (lvClass >= 0) (uniform ? acc.A : acc.E).Add(lvClass, cells[j * n + i]);
@@ -264,10 +268,13 @@ public static class CubeCompare
     {
         if (Missing(c, "pistes", LeafKind.Pistes, "pistes_") is { } skip) return skip;
         var r = new KindReport("pistes");
+        // as the cover: held where the LV95 raster resolves the slope type (its 3 x 3 vertices round the nearest one all of
+        // it), reported at its edges, where a leaf vertex up to 0.7 m from the nearest 1 m vertex can fall either side (#1507)
         var agree = new Agreement();
+        var edge = new Agreement();
         var lvIds = new ConcurrentDictionary<ulong, byte>();
         var cubeIds = new ConcurrentDictionary<ulong, byte>();
-        Parallel.ForEach(c.Cube.Ordered(), c.Par, () => new Agreement(), (key, _, acc) =>
+        Parallel.ForEach(c.Cube.Ordered(), c.Par, () => (A: new Agreement(), E: new Agreement()), (key, _, acc) =>
         {
             if (c.Cube.Heights(key) is not { } tile) return acc;
             var p = c.Cube.Section(key, LeafKind.Pistes) is { } sec ? LeafPistes.Decode(sec) : null;
@@ -281,10 +288,17 @@ public static class CubeCompare
                     var lvRec = c.Lv.PisteAt(e, nn, lvIds);
                     int slot = p?.Slot[j * n + i] ?? 0;
                     var cubeRec = slot > 0 ? p!.Records[slot - 1] : null;
-                    acc.Add(lvRec == null ? 0 : (int)lvRec.Type, cubeRec == null ? 0 : (int)cubeRec.Type);
+                    int lvType = lvRec == null ? 0 : (int)lvRec.Type;
+                    bool uniform = true;
+                    for (int dn = -1; dn <= 1 && uniform; dn++)
+                        for (int de = -1; de <= 1 && uniform; de++)
+                            if ((c.Lv.PisteAt(Math.Round(e) + de, Math.Round(nn) + dn, lvIds) is { } q ? (int)q.Type : 0) != lvType) uniform = false;
+                    (uniform ? acc.A : acc.E).Add(lvType, cubeRec == null ? 0 : (int)cubeRec.Type);
                 }
             return acc;
-        }, acc => { lock (agree) agree.Merge(acc); });
+        }, acc => { lock (agree) { agree.Merge(acc.A); edge.Merge(acc.E); } });
+        r.Note($"at the LV95 raster's slope edges (held to no bar): {edge.Count} vertices, agreement {edge.Overall:P3}; "
+            + string.Join(", ", edge.PerClass().Where(x => x.Count >= CompareBars.MinClassSamples).Select(x => string.Create(CultureInfo.InvariantCulture, $"{(x.Class == 0 ? "no slope" : ((PisteType)x.Class).ToString())} {x.Share:P1}"))));
         CategoryLines(r, agree, k => k == 0 ? "no slope" : ((PisteType)k).ToString());
         long both = lvIds.Keys.Count(cubeIds.ContainsKey);
         r.Note($"slopes by OSM id: {lvIds.Count} LV95, {cubeIds.Count} leaves, {both} in both");
@@ -1034,10 +1048,17 @@ public static class CubeCompare
                 if (!cube.ContainsKey(f.Id))
                     cube.TryAdd(f.Id, f.Rings.Select(ring => Ring(ring, (x, z) =>
                     {
-                        // the plan point on the leaf's ground: its height above the ellipsoid is the anchor's y there to ~1 cm
-                        var p0 = anchor.ToEcef(x, 0, z);
-                        double g = -c.Cube.AboveGround(p0);
-                        return anchor.ToEcef(x, double.IsNaN(g) ? 0 : g, z);
+                        // the point on the leaf's ground along the anchor's vertical through (x, z): a step of the height
+                        // above ground at a time (one step lands 1-4 cm off at altitude: the anchor's up leans from the local one)
+                        double y = 0;
+                        for (int it = 0; it < 4; it++)
+                        {
+                            double above = c.Cube.AboveGround(anchor.ToEcef(x, y, z));
+                            if (double.IsNaN(above)) return anchor.ToEcef(x, it == 0 ? 0 : y, z);
+                            y -= above;
+                            if (Math.Abs(above) < 1e-4) break;
+                        }
+                        return anchor.ToEcef(x, y, z);
                     })).ToArray());
         });
         Parallel.ForEach(c.Lv.TilesNear(c.Cube.Lv95BoxAll()), c.Par, id =>
@@ -1047,7 +1068,8 @@ public static class CubeCompare
                     lv.TryAdd(f.Id, f.Rings.Select(ring => Ring(ring, (x, n) =>
                         SwissGeodesy.ToEcef(id.MinE + x, id.MinN + n, c.Lv.Ground(id.MinE + x, id.MinN + n) is var g && double.IsNaN(g) ? 0 : g))).ToArray());
         });
-        long both = 0;
+        long both = 0, noGround = 0;
+        var worst = new List<(double D, EcefPos P, uint Id)>();
         foreach (var (id, rings) in cube)
         {
             if (!lv.TryGetValue(id, out var lvRings) || rings.Length == 0 || rings[0].Length == 0) continue;
@@ -1057,11 +1079,18 @@ public static class CubeCompare
             foreach (var ring in rings)
                 foreach (var p in ring)
                 {
+                    // a field spilling past the built ground (the region's edge): neither build knows its height there
+                    if (!c.Lv.Covers(p) || double.IsNaN(c.Cube.AboveGround(p))) { noGround++; continue; }
                     var (x, y, z) = frame.ToLocal(p);
-                    if (index.Nearest(x, y, z, double.NaN, 0, 50, out double d, out _, out _)) h.Add(d);
+                    if (!index.Nearest(x, y, z, double.NaN, 0, 50, out double d, out _, out _)) continue;
+                    h.Add(d);
+                    if (d > CompareBars.Vertex) worst.Add((d, p, id));
                 }
         }
-        r.Note($"fields by id: {lv.Count} LV95 (over the leaves' box), {cube.Count} leaves, {both} in both");
+        r.Note($"fields by id: {lv.Count} LV95 (over the leaves' box), {cube.Count} leaves, {both} in both; {noGround} leaf vertices past either build's ground left out");
+        if (worst.Count > 0)
+            r.Note($"  worst vertices ({worst.Count} over the bar, {worst.Select(w => w.Id).Distinct().Count()} fields): " + string.Join("; ", worst.OrderByDescending(w => w.D).Take(6)
+                .Select(w => { var (e, n, hh) = SwissGeodesy.FromEcef(w.P); return string.Create(CultureInfo.InvariantCulture, $"{e:F1},{n:F1} h {hh:F0} {w.D * 100:F1} cm (field {w.Id})"); })));
         r.Check("leaf ring vertex to the LV95 outline", h.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         return r;
     }
@@ -1107,7 +1136,7 @@ public static class CubeCompare
         return (lv, 610 * Math.Min(Frac((u + 1) * 0.5 * side), Frac((v + 1) * 0.5 * side)));
     }
 
-    /// <summary><c>--seam-margin</c> (0: off): roads compared away from either build's cuts only.</summary>
+    /// <summary><c>--seam-margin</c> (0: off): roads and cover compared away from either build's cuts only.</summary>
     private static double _seamMargin;
 
     private static bool NearSeam(EcefPos p)
@@ -1208,6 +1237,13 @@ internal sealed class Lv95Build
     /// <summary>The LV95 box the comparison is held to (<c>--compare-box</c>); null: everywhere.</summary>
     public (double MinE, double MinN, double MaxE, double MaxN)? Box { get; init; }
 
+    /// <summary>
+    /// How many LV95 vertices round the nearest one must hold its class for the class to count as resolved there
+    /// (<c>--cover-ring</c>, 1 by default: the 3 × 3); wider tells a boundary moved by a metre or two (an input's own
+    /// difference) from a wrong class.
+    /// </summary>
+    public int CoverRing { get; init; } = 1;
+
     public bool Covers(double e, double n) => Tiles.Contains(TileId.FromLv95(e, n))
         && (Box is not { } b || (e >= b.MinE && e <= b.MaxE && n >= b.MinN && n <= b.MaxN));
 
@@ -1246,10 +1282,11 @@ internal sealed class Lv95Build
     /// </summary>
     public (int Class, bool Uniform) CoverAround(double e, double n)
     {
+        if (Box is { } b && !(e >= b.MinE && e <= b.MaxE && n >= b.MinN && n <= b.MaxN)) return (-1, false);   // --compare-box
         int k = CoverAt(e, n);
         if (k < 0) return (k, false);
-        for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -CoverRing; dy <= CoverRing; dy++)
+            for (int dx = -CoverRing; dx <= CoverRing; dx++)
                 if ((dx != 0 || dy != 0) && CoverAt(e + dx, n + dy) != k) return (k, false);
         return (k, true);
     }
