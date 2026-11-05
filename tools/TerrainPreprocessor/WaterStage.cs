@@ -201,6 +201,7 @@ public static class WaterStage
         // Holding every water tile's arrays at once is 7 MB a tile: 17,180 tiles nationwide, over
         // 120 GB (#747). So each tile is read and labelled once, its input cached to disk, and only
         // its label count and edge labels kept; phases B and C read the cache back as they go.
+        StageClock.Sub("water/A-label");
         string cacheDir = Path.Combine(o.TempDir ?? outDir.TrimEnd('/', '\\') + "_temp", "water_cache");
         Directory.CreateDirectory(cacheDir);
         var edges = new ConcurrentDictionary<TileId, Edges>();
@@ -217,6 +218,7 @@ public static class WaterStage
         if (edges.IsEmpty) return 0;
 
         // ---- B: water bodies across the region (union of per-tile flood fills along the seams) ---
+        StageClock.Sub("water/B-bodies");
         var ordered = edges.Keys.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
         var labelBase = new Dictionary<TileId, int>(ordered.Count);
         int total = 0;
@@ -300,6 +302,7 @@ public static class WaterStage
         // Column by column, west to east: a tile's window reads the columns either side of it, so
         // only three columns of cached input are held at a time. Every read comes from the cache,
         // never from the files this phase is rewriting.
+        StageClock.Sub("water/C-beds");
         var changed = new ConcurrentBag<ManifestTile>();
         var joinSteps = new ConcurrentBag<float>();
         var worstJoin = (Step: 0f, E: 0.0, N: 0.0);
@@ -359,16 +362,19 @@ public static class WaterStage
         // A tile with no water of its own is not rewritten, so where a river crosses into one whose
         // cover does not know it (a foreign tile, #965: the Rhine at Basel) the wet tile's carved edge
         // would meet the old surface. The neighbour takes the shared vertices instead.
+        StageClock.Sub("water/stitch");
         foreach (var st in StitchDryNeighbours(outDir, changed.Select(t => t.Id).ToHashSet(), labelBase.Keys.ToHashSet(), region))
             changed.Add(st);
 
         // ---- D: manifest, horizon, seams ---------------------------------------------------------
+        StageClock.Sub("water/D-horizon");
         var byId = changed.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.Last());
         foreach (var t in manifest.Tiles)
             if (byId.TryGetValue(t.Id, out var c)) { t.Min = c.Min; t.Max = c.Max; }
         AtomicFile.Write(manifestPath, s => { using var w = new StreamWriter(s); w.Write(manifest.ToJson()); });
         if (HorizonStage.Run(outDir, o.Jobs, ct) is var hrc && hrc != 0) return hrc;
 
+        StageClock.Sub("water/seams");
         var seamTiles = new HashSet<TileId>();
         foreach (var id in byId.Keys)
             for (int dy = -1; dy <= 1; dy++)
@@ -376,6 +382,7 @@ public static class WaterStage
                     if (region.Contains(new TileId(id.E + dx, id.N + dy))) seamTiles.Add(new TileId(id.E + dx, id.N + dy));
         int seamErrors = TerrainBuild.VerifySeams(outDir, seamTiles, o.Jobs, ct);
 
+        StageClock.Sub("water/report");
         // ---- report ------------------------------------------------------------------------------
         Console.WriteLine($"Water bodies (area >= 0.02 km²), bed depth below the still level:");
         Console.WriteLine($"  {"body",-28} {"centre E,N",-16} {"km²",7} {"level",8} {"max",7} {"mean",6} {"survey",7} {"fill",6}  published max");

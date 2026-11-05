@@ -274,6 +274,7 @@ public static class CoverStage
         var extractor = new CoverExtractor(tlmGpkg) { OverridesPath = overridesPath };
 
         var heightOf = TerrainSampler.For(grids);
+        StageClock.Sub("cover/roadmask");
 
         // roads are written before this stage, so their corridors can be masked out: the raw
         // extractor lines (they run through the junction areas the network stage trims away) and
@@ -292,7 +293,9 @@ public static class CoverStage
             if (tiles.Count > 0) extractor.RoadMask[id] = BuildRoadMask(tiles);
         }
 
+        StageClock.Sub("cover/extract");
         extractor.Extract(grids.Keys.ToList(), heightOf);
+        StageClock.Sub("cover/pave");
 
         // in town, the ground along the streets is paved (#119)
         var field = new UrbanField(new Facades(outDir));
@@ -311,6 +314,7 @@ public static class CoverStage
             lotTrees += lt;
         }
 
+        StageClock.Sub("cover/write");
         var histogram = new SortedDictionary<CoverClass, long>();
         long coveredCells = 0, totalCells = 0;
         foreach (var (id, cells) in extractor.Cover)
@@ -327,6 +331,7 @@ public static class CoverStage
             }
         }
 
+        StageClock.Sub("cover/trees-write");
         long treeTotal = 0;
         foreach (var (id, list) in extractor.Trees)
         {
