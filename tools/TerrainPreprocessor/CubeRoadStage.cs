@@ -256,7 +256,10 @@ public sealed class RegionHeights
     }
 
     /// <summary>A leaf's heights, or null when the region has none for it.</summary>
-    public CubeTile? Read(CubeKey leaf)
+    public CubeTile? Read(CubeKey leaf) => ReadKind(leaf, LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null;
+
+    /// <summary>A leaf's section of one kind (#1507: the network stage reads the raw kinds this way), or null.</summary>
+    public LeafSection? ReadKind(CubeKey leaf, LeafKind kind)
     {
         var frame = leaf.AncestorAt(FrameLevel);
         if (!_index.TryGetValue(frame, out var index) || !index.TryGetValue(leaf, out var at)) return null;
@@ -264,6 +267,6 @@ public sealed class RegionHeights
         fs.Position = at.Offset;
         var bytes = new byte[at.Length];
         fs.ReadExactly(bytes);
-        return CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null;
+        return CubeLeafCodec.ReadSection(bytes, kind);
     }
 }
