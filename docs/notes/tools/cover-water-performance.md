@@ -30,20 +30,20 @@ Benchmark 52 tiles and rural region (`builder-bench`). Before is the binary afte
 | Run | Stage | Wall | CPU | Cores | GC pause | Peak MB | Identical |
 |---|---|---|---|---|---|---|---|
 | Benchmark, before | whole run | 155.6 s | 278 s | | 4.7 s | 5033 | reference |
-| ... after | | 97.6 s | 229 s | | 4.3 s | 7650 | 557 of 557 |
+| ... after | | 100.3 s | 234 s | | 4.8 s | 7573 | 557 of 557 |
 | ... before | cover | 55.7 s | 57.2 s | 1.03 | 0.15 s | | |
-| ... after | | 1.9 s | 7.2 s | 3.77 | 0.12 s | | |
+| ... after | | 2.3 s | 8.2 s | 3.60 | 0.15 s | | |
 | ... before | water | 6.7 s | 25.7 s | 3.87 | 1.21 s | | |
-| ... after | | 4.0 s | 25.5 s | 6.35 | 1.01 s | | |
+| ... after | | 3.9 s | 26.6 s | 6.77 | 1.05 s | | |
 | Rural, before | whole run | 91.7 s | 307 s | | 3.6 s | 7112 | reference |
-| ... after | | 58.2 s | 285 s | | 3.8 s | 8995 | 1931 of 1931 |
+| ... after | | 58.0 s | 274 s | | 3.7 s | 9283 | 1931 of 1931 |
 | ... before | cover | 35.7 s | 37.4 s | 1.05 | 0.17 s | | |
-| ... after | | 2.5 s | 13.1 s | 5.30 | 0.16 s | | |
+| ... after | | 2.7 s | 15.5 s | 5.72 | 0.13 s | | |
 | ... before | water | 5.8 s | 42.2 s | 7.26 | 0.87 s | | |
-| ... after | | 4.2 s | 29.7 s | 7.03 | 0.81 s | | |
+| ... after | | 4.6 s | 29.5 s | 6.45 | 0.84 s | | |
 
 Same bytes at `--jobs 1` and `--jobs 3`, with `DOTNET_TieredPGO=0` and `DOTNET_TieredCompilation=0`, with a 16 GB and a 6 GB heap limit, and with rings painted every 1,024 coordinates
-(the bound on queued rings forced to flush mid-layer). What is left of a run is the network stage (69 of 98 s, 21 of 58 s), then terrain and the constant three.
+(the bound on queued rings forced to flush mid-layer). What is left of a run is the network stage (69 of 100 s, 20 of 58 s), then terrain and the constant three.
 
 The gains, each proved alone on both regions: per-tile painting (benchmark cover/extract 51 -> 0.65 s, rural 27.8 -> 1.9 s), all cores for the rest of cover, then water.
 
