@@ -11,27 +11,17 @@ public static class PolylineClipper
 {
     public const double TileSize = ChunkFormat.TileSizeM;
 
-    /// <summary>
-    /// A piece of a clipped polyline. <paramref name="AtLineStart"/> / <paramref name="AtLineEnd"/>
-    /// mark the *original* ends, so height blending happens at real abutments and portals
-    /// rather than wherever a tile boundary happened to fall.
-    /// </summary>
-    public sealed record Piece(TileId Tile, List<(double E, double N, double Z)> Points)
+    /// <summary>The LV95 instance of the road stage's tile loop (<see cref="Lv95RoadSpace"/>).</summary>
+    public static List<RoadPiece<TileId>> SplitByTile(GeoPackageReader.Polyline line)
     {
-        public bool AtLineStart { get; set; }
-        public bool AtLineEnd { get; set; }
-    }
-
-    public static List<Piece> SplitByTile(GeoPackageReader.Polyline line)
-    {
-        var pieces = new List<Piece>();
+        var pieces = new List<RoadPiece<TileId>>();
         if (line.Count < 2) return pieces;
 
-        Piece? current = null;
+        RoadPiece<TileId>? current = null;
 
         void Start(TileId tile, (double, double, double) p)
         {
-            current = new Piece(tile, new List<(double, double, double)> { p });
+            current = new RoadPiece<TileId>(tile, new List<(double, double, double)> { p });
             pieces.Add(current);
         }
 

@@ -24,7 +24,9 @@ public static class RoadStage
         var extractor = new RoadExtractor(tlmGpkg, routeKeys);
         Console.WriteLine($"Roads: {extractor.CycleKeyCount} cycle / {extractor.MtbKeyCount} MTB route keys loaded");
 
-        var tiles = extractor.Extract(grids.Keys.ToList(), TerrainSampler.For(grids));
+        var space = new Lv95RoadSpace(grids.Keys.ToList(), new Lv95Ground(grids));
+        var extraction = extractor.Extract(space);
+        var tiles = extraction.Tiles;
 
         int totalSegments = 0;
         var byClass = new SortedDictionary<RoadClass, int>();
@@ -34,7 +36,7 @@ public static class RoadStage
         string rawDir = RawRoads.DirFor(tempDir);
         foreach (var (id, tile) in tiles)
         {
-            RawRoads.Write(rawDir, tile, extractor.SourceKeys.GetValueOrDefault(id));
+            RawRoads.Write(rawDir, tile, extraction.SourceKeys.GetValueOrDefault(id));
 
             totalSegments += tile.Segments.Count;
             foreach (var s in tile.Segments)
@@ -52,7 +54,7 @@ public static class RoadStage
         foreach (var id in grids.Keys)
         {
             string holePath = Path.Combine(outDir, HoleFormat.FileName(id));
-            if (extractor.Holes.TryGetValue(id, out var cells) && cells.Count > 0)
+            if (extraction.Holes.TryGetValue(id, out var cells) && cells.Count > 0)
             {
                 using var fs = File.Create(holePath);
                 HoleFormat.Encode(id, cells, fs);
@@ -62,14 +64,14 @@ public static class RoadStage
                 File.Delete(holePath); // stale from an earlier run
             }
         }
-        int holeTiles = extractor.Holes.Count(kv => kv.Value.Count > 0);
-        int holeCells = extractor.Holes.Sum(kv => kv.Value.Count);
+        int holeTiles = extraction.Holes.Count(kv => kv.Value.Count > 0);
+        int holeCells = extraction.Holes.Sum(kv => kv.Value.Count);
 
         // car park polygons for the network stage to lay out (#499): rings, not a raster, and kept
         // beside the raw roads so --rewrite alone still rebuilds a region byte-identically
-        var parking = new ParkingAreaExtractor(tlmGpkg);
-        parking.Extract(grids.Keys.ToList(), coverOverrides);
-        parking.WriteAll(RawParking.DirFor(tempDir), grids.Keys.ToList());
+        var parking = new ParkingAreaExtractor<TileId>(tlmGpkg, space);
+        parking.Extract(coverOverrides);
+        foreach (var (id, lots) in parking.Written()) RawParking.Write(RawParking.DirFor(tempDir), id, lots);
 
         Console.WriteLine($"Raw roads written for {tiles.Count} tiles: {totalSegments} segments in {sw.Elapsed.TotalSeconds:F1}s");
         Console.WriteLine($"  tunnel portals: {holeCells} carved quads across {holeTiles} tiles");
