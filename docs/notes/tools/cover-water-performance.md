@@ -47,6 +47,12 @@ Same bytes at `--jobs 1` and `--jobs 3`, with `DOTNET_TieredPGO=0` and `DOTNET_T
 
 The gains, each proved alone on both regions: per-tile painting (benchmark cover/extract 51 -> 0.65 s, rural 27.8 -> 1.9 s), all cores for the rest of cover, then water.
 
+## Multi-batch region (Lausanne to the Vaud Alps, 477 tiles, 2 batches, 20 blocks, Nov 2026)
+
+E 2538-2567 x N 1136-1152 (510 listed, 477 with a source), Léman with its survey, Vevey, Montreux, the Alps. Identical bytes (4383 of 4383) against `main` at default jobs, at `--jobs 3` and with the cover, trees and network running across both batches.
+`main`: 404.5 s, 21 GB; this branch: 143.7 s, 24.2 GB (12 blocks at once). **`water/C-beds` is the peak** (8.6 -> 24.2 GB, 12 workers): a worker takes about 1.3 GB here, not the 500 MB `BedWindowBytes` assumes
+(the benchmark's +3.6 GB with 12 workers fits it). A 16 GB heap limit runs out of memory in that stage on this region, `main` included (its `LabelTile`, earlier): the bound lowers the workers but 500 MB is too low for a big lake with a survey. Not changed (#1539).
+
 ## Looked at, not changed
 
 - **SQLite pragmas** (`mmap_size`, `cache_size`, `query_only`, `temp_store`): no gain warm on a GWR scan (2.60 -> 2.53 s) nor on the TLM read pattern. Cold cache not measured (no way to drop the cache here).

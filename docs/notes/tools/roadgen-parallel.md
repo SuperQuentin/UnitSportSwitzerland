@@ -47,6 +47,7 @@ at 6 GB, 7 at 16 GB, 12 on 32 GB (peak 10.5 GB).
 | ... at once, workstation GC, 10 jobs | 12 | 83.4 s | 329.0 s | 3.95 | 17.83 s | 10069 MB | 217 of 217 |
 | ... at once, Server GC, 12 jobs | 12 | 65.5 s | 361.8 s | 5.52 | 4.79 s | 10536 MB | 217 of 217 |
 | ... 16 GB heap limit, 7 jobs | 12 | 70.4 s | 329.3 s | 4.68 | 4.71 s | 11004 MB | 217 of 217 |
+| ... 6 GB heap limit, `--jobs 10` lowered to 2 | 12 | 149.7 s | 323.4 s | 2.16 | not measured | 5520 MB | 217 of 217 |
 
 The serial fixes, each proved alone on the benchmark: `CorePlanner.Outside` parity first (189.5 -> 172.3 s), `RailRoadOverlap.ZoneIndex`
 (-> 144.0 s), `Footprints` array grids and no cache of asked points (-> 85.7 s). `DOTNET_GCgen0size=1 GB` gave 64.4 s against 65.5 s for 2 GB more peak: not kept.
