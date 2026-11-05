@@ -240,15 +240,16 @@ public partial class SwordService : Node
             if (_guard.Invulnerable(id, now)) return false;   // dodged
             to = victim.Global;
         }
-        // east is +x, north is -z, as the world's axes: a yaw is the same in every frame
+        // the blade's geometry is worked in the local east-up-south at the attacker (x east, z south, true north), so the
+        // grid yaws the service keeps (a swing's, a dummy's) are turned to true ones first (#1502)
         var (offE, offN, offUp) = from.OffsetTo(to);
         float dx = (float)offE, dz = (float)-offN;
-        float yaw = _yaw.GetValueOrDefault(who, attacker.GlobalYaw);
+        float yaw = Lv95Grid.TrueYaw(from, _yaw.GetValueOrDefault(who, attacker.GlobalYaw));
         float fx = -Mathf.Sin(yaw), fz = -Mathf.Cos(yaw);
         // the blow lands only where the blade is: its capsule swept over the swing's window around now (the server's clock since the move began,
         // 100 ms either side) against the target's own shape, from the two bodies as the server has them, with 0.30 m of slack for their age
         double since = _guard.SinceAct(who, now, out var announced);
-        if (announced != move || !Reaches(who, move, yaw, dx, (float)offUp, dz, kind == SwordTargetKind.Dummy ? dummy!.Yaw : 0f,
+        if (announced != move || !Reaches(who, move, yaw, dx, (float)offUp, dz, kind == SwordTargetKind.Dummy ? Lv95Grid.TrueYaw(from, dummy!.Yaw) : 0f,
                 kind, since, out var contact))
         {
             if (!quiet) GD.Print(FormattableString.Invariant($"[sword] refused {who}: the {move} blade never reached {kind} {id} ({Mathf.Sqrt(dx * dx + dz * dz):F1} m away, {since:F2} s into it)"));
@@ -262,7 +263,8 @@ public partial class SwordService : Node
         float dist = Mathf.Sqrt(dx * dx + dz * dz);
         var flat = new Vector3(dx, 0, dz);
         var dir = flat.LengthSquared() > 1e-4f ? flat.Normalized() : new Vector3(fx, 0, fz);
-        var knock = dir * SwordRules.KnockAt(move, dist);
+        var knock = dir * SwordRules.KnockAt(move, dist);   // east-up-south at the attacker
+        var knockWorld = _origin.Frame.WorldOfEnu(from, knock);
         float hp = 0f;
         bool down = false;
         if (dummy != null)
@@ -276,13 +278,13 @@ public partial class SwordService : Node
         {
             // a bot is run here: the server is its victim side
             victim.ShotHit(def.Damage, who);
-            victim.SwordKnocked(knock);
+            victim.SwordKnocked(knockWorld);
             hp = victim.Health;
         }
         GD.Print(FormattableString.Invariant($"[sword] {who} hit {kind} {id} for {def.Damage:F0} ({move})"));
         // where the blade touched: a point of the blade, relative to the attacker, put back in the world
         var at = from.Moved(contact.X, -contact.Z, contact.Y);
-        var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, _origin.Frame.WorldOfGrid(from, knock), _origin.ToWorld(at), down);   // the knock was worked in GlobalPos's axes (#1503)
+        var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, knockWorld, _origin.ToWorld(at), down);
         if (victim != null && !victim.Bot) PvpRules.RaiseHit(who, id, def.Damage);
         BroadcastStruck(strike, at, victim != null && !victim.Bot ? id : 0);
         return true;
@@ -357,11 +359,11 @@ public partial class SwordService : Node
         foreach (var d in _dummyData.Values) if (d.Owner == sender) owned++;
         if (_dummyData.Count >= MaxDummies || owned >= MaxDummiesPerPeer)
             return $"[dummy] Enough dummies ({Math.Min(MaxDummiesPerPeer, MaxDummies)} each); /dummy clear takes yours away.";
-        float yaw = body.Rotation.Y;
         var g = body.Global;
+        float yaw = _origin.TrueYaw(body.GlobalPosition, body.Rotation.Y);   // from true north: Moved's axes
         // 2.6 m ahead, facing the one who put it there
         var at = g.Moved(-Mathf.Sin(yaw) * 2.6, Mathf.Cos(yaw) * 2.6);
-        AddDummy(sender, at, yaw + Mathf.Pi);
+        AddDummy(sender, at, Lv95Grid.GridYaw(at, yaw + Mathf.Pi));   // a dummy keeps a grid yaw
         return "[dummy] A training dummy stands in front of you.";
     }
 
@@ -453,7 +455,7 @@ public partial class SwordService : Node
 
     /// <summary>
     /// Whether the <paramref name="move"/>'s blade, swept over the window of the swing around <paramref name="since"/> seconds into it, touches a target
-    /// at (<paramref name="dx"/>, <paramref name="dy"/>, <paramref name="dz"/>) from the attacker (world axes). The attacker is turned as the owner
+    /// at (<paramref name="dx"/>, <paramref name="dy"/>, <paramref name="dz"/>) from the attacker (the local east-up-south there, true north). The attacker is turned as the owner
     /// turns it through the move (the yaw it announced plus the move's own spin). <paramref name="contact"/> is the touching point on the blade.
     /// </summary>
     private bool Reaches(long who, SwordMove move, float yaw, float dx, float dy, float dz, float dummyYaw, SwordTargetKind kind, double since,

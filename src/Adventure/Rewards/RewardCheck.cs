@@ -415,7 +415,7 @@ public partial class RewardCheck : ChatProbe
             double d = g.HorizontalDistanceTo(to);
             if (d < 0.3) break;
             double s = Math.Min(d, step);
-            me.GlobalPosition += new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s)));
             me.Velocity = Vector3.Zero;
             await Seconds(s > step * 0.5 ? 0.5 : 0.3);
         }
@@ -425,17 +425,13 @@ public partial class RewardCheck : ChatProbe
     /// <summary>A world point at an LV95 position and height, from where the body is (the probe's own frame).</summary>
     private Vector3 WorldAt(double e, double n, double alt)
     {
-        var g = Me!.Global;
-        var (east, north, up) = g.OffsetTo(GlobalPos.FromLv95(e, n, alt));
-        return Me.GlobalPosition + new Vector3((float)east, (float)up, -(float)north);
+        return Me!.Origin!.ToWorld(GlobalPos.FromLv95(e, n, alt));
     }
 
     private (double E, double N) Lv95Of(Vector3 w)
     {
-        var g = Me!.Global;
-        var d = w - Me.GlobalPosition;
-        var p = g.Moved(d.X, -d.Z);
-        return (p.Lv95.E, p.Lv95.N);
+        var l = Me!.Origin!.ToGlobal(w).Lv95;
+        return (l.E, l.N);
     }
 
     private async Task Jump(double e, double n)
@@ -443,7 +439,7 @@ public partial class RewardCheck : ChatProbe
         var me = Me!;
         var g = me.Global;
         var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
-        me.GlobalPosition += new Vector3((float)toE, 0.2f, -(float)toN);
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.2f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.3);
     }

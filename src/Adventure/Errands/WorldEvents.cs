@@ -200,7 +200,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
         foreach (var s in PlayerSnapshot.Of(GetTree()))
         {
             var p = s.Player;
-            if (p.Origin == null && p.NetGlobal.Lv95.E == 0) continue;
+            if (p.Origin == null && p.NetGlobal == default) continue;   // never published: the default place is ECEF (0,0,0), whose Lv95 is no zero (#1502)
             var g = p.Global;
             var spot = Spot.At(g);
             _spots.Add(spot);

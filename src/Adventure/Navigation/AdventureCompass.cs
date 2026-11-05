@@ -60,6 +60,8 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
         {
             if (GetViewport()?.GetCamera3D() is not { } cam) return null;
             var f = -cam.GlobalBasis.Z;
+            // the view's way as true east and north: the markers' Toward is (#1502; a flat world's -Z is grid north)
+            if (TargetMarker.Origin?.Invoke() is { } origin) f = origin.EnuOf(cam.GlobalPosition, f);
             return new Vector2(f.X, -f.Z);
         }
     }
