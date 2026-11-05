@@ -268,6 +268,8 @@ public static class WaterStage
         TileData? Input(TileId id) => labelBase.TryGetValue(id, out int lb)
             ? held.GetOrAdd(id, k => new Lazy<TileData>(() => ReadCache(cacheDir, k, lb))).Value
             : null;
+        // the 2201² window arrays, kept between tiles for this phase only (see WaterWindow.Pool)
+        WaterWindow.Pool? arrays = new();
         var toWrite = o.Only == null ? ordered : ordered.Where(o.Only.Contains).ToList();
         var memory = GC.GetGCMemoryInfo();
         int bedJobs = (int)Math.Clamp((memory.TotalAvailableMemoryBytes - memory.HeapSizeBytes) / BedWindowBytes, 1, o.Jobs);
@@ -285,7 +287,7 @@ public static class WaterStage
             bathy?.ReleaseBefore(west - 1);   // survey kilometres: the same three columns
             Parallel.ForEach(group, new ParallelOptions { MaxDegreeOfParallelism = bedJobs, CancellationToken = ct }, id =>
             {
-                var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
+                var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf, arrays!);
 
                 // the level first: a run interrupted between the two files repeats safely
                 string waterPath = Path.Combine(outDir, WaterFormat.FileName(id));
@@ -319,6 +321,7 @@ public static class WaterStage
                 if (k % 25 == 0) Console.WriteLine($"  [{k}/{toWrite.Count}] {clock.Elapsed.TotalSeconds:F0}s");
             });
         }
+        arrays = null;
         held.Clear();
         Directory.Delete(cacheDir, recursive: true);
 
@@ -577,7 +580,7 @@ public static class WaterStage
 
     private static TileResult ComputeTile(string outDir, TileId id, Func<TileId, TileData?> data,
         HashSet<TileId> region, BathySource? bathy, int[] rootOf, double[] maxDepthOf, double[] sqrtAreaOf,
-        double[] surveyLevelOf)
+        double[] surveyLevelOf, WaterWindow.Pool Arrays)
     {
         var td = data(id)!;
         ChunkGrid grid;
@@ -587,9 +590,9 @@ public static class WaterStage
         // Everything at a vertex comes from here, never from td, so two tiles that share a vertex
         // read the same wet flag, level and body for it even if their own files disagreed.
         const int W = S + 2 * Halo;
-        var state = new byte[W * W];
-        var surfaceQ = new int[W * W];
-        var label = new int[W * W];   // global label (not root) of a wet vertex
+        var state = Arrays.Rent<byte>(W * W);
+        var surfaceQ = Arrays.Rent<int>(W * W);
+        var label = Arrays.Rent<int>(W * W);   // global label (not root) of a wet vertex
         Array.Fill(state, (byte)2);
         double wMinE = id.MinE - Halo, wMaxN = id.MaxN + Halo;   // window cell (x, y) is at E = wMinE + x, N = wMaxN - y
 
@@ -621,12 +624,13 @@ public static class WaterStage
                 }
             }
 
-        WaterWindow.RefineWet(state, surfaceQ, W, WaterWindow.Cells(WaterWindow.BankProbeM, 1), BankRiseQ);
+        WaterWindow.RefineWet(state, surfaceQ, W, WaterWindow.Cells(WaterWindow.BankProbeM, 1), BankRiseQ, Arrays);
 
         // distance to the shore (any known dry vertex), capped short of the halo
-        var land = new bool[W * W];
+        var land = Arrays.Rent<bool>(W * W);
         for (int i = 0; i < land.Length; i++) land[i] = state[i] == 0;
-        var ds = WaterWindow.Distances(land, W, 1);
+        var ds = WaterWindow.Distances(land, W, 1, null, Arrays);
+        Arrays.Return(land);
 
         // the survey, as depth below the still level, at every wet vertex of the window
         float[]? survey = null;
@@ -643,8 +647,8 @@ public static class WaterStage
             if (near)
             {
                 lake = bathy.LakeAt(id);
-                survey = new float[W * W];
-                var valid = new bool[W * W];
+                survey = Arrays.Rent<float>(W * W);
+                var valid = Arrays.Rent<bool>(W * W);
                 bool anyValid = false;
                 for (int y = 0; y < W; y++)
                     for (int x = 0; x < W; x++)
@@ -662,11 +666,12 @@ public static class WaterStage
                     }
                 if (anyValid)
                 {
-                    site = new int[W * W];
-                    dv = WaterWindow.Distances(valid, W, 1, site);
-                    edgeDepth = WaterWindow.SmoothEdgeDepth(survey, state, dv, site, W, 1);
+                    site = Arrays.Rent<int>(W * W);
+                    dv = WaterWindow.Distances(valid, W, 1, site, Arrays);
+                    edgeDepth = WaterWindow.SmoothEdgeDepth(survey, state, dv, site, W, 1, Arrays);
                 }
-                else survey = null;
+                else { Arrays.Return(survey); survey = null; }
+                Arrays.Return(valid);
             }
         }
 
@@ -731,6 +736,9 @@ public static class WaterStage
                             if (step > worst.Step) worst = (step, id.MinE + c, id.MaxN - r);
                         }
                 }
+
+        Arrays.Return(state); Arrays.Return(surfaceQ); Arrays.Return(label); Arrays.Return(ds);
+        Arrays.Return(survey); Arrays.Return(site); Arrays.Return(dv); Arrays.Return(edgeDepth);
 
         ushort qMin = ushort.MaxValue, qMax = 0;
         foreach (ushort q in heights) { if (q < qMin) qMin = q; if (q > qMax) qMax = q; }
