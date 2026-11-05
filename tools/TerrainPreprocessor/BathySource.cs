@@ -30,7 +30,7 @@ public sealed class BathySource
 
     private readonly record struct Entry(string Archive, string? EntryName, string Lake);
 
-    private sealed class Grid
+    internal sealed class Grid
     {
         public required string Lake;
         public required int Cols, Rows;
@@ -79,13 +79,40 @@ public sealed class BathySource
     /// <summary>The lake a survey kilometre belongs to (the STAC item's name, e.g. "lacleman"), or null.</summary>
     public string? LakeAt(TileId id) => _index.TryGetValue(id, out var e) ? e.Lake : null;
 
-    private Grid? GetGrid(TileId id) =>
+    /// <summary>
+    /// The kilometre a caller sampled last. A window walks its cells along rows, so the next sample is almost always in the same
+    /// kilometre, and asking the dictionaries again for every cell cost a fifth of the water stage's bed phase (#1566). The caller
+    /// owns it (one per tile, one thread), so nothing outlives the build. A grid is a pure function of its file, so a cursor still
+    /// holding one that <see cref="ReleaseBefore"/> dropped reads the same cells.
+    /// </summary>
+    public struct BedCursor
+    {
+        internal bool Set;
+        internal TileId Id;
+        internal Grid? Grid;
+    }
+
+    private Grid? GetGrid(TileId id, ref BedCursor c)
+    {
+        if (c.Set && c.Id == id) return c.Grid;
+        c = new BedCursor { Set = true, Id = id, Grid = FindGrid(id) };
+        return c.Grid;
+    }
+
+    private Grid? FindGrid(TileId id) =>
         _index.ContainsKey(id) ? _grids.GetOrAdd(id, k => new Lazy<Grid?>(() => Load(_index[k]))).Value : null;
 
     /// <summary>Bed elevation (LN02 metres) at an LV95 point, or NaN off the survey.</summary>
     public double SampleBed(double e, double n)
     {
-        var home = GetGrid(TileId.FromLv95(e, n));
+        var c = new BedCursor();
+        return SampleBed(e, n, ref c);
+    }
+
+    /// <summary>As <see cref="SampleBed(double, double)"/>, remembering the kilometre in <paramref name="c"/> for the next call (one thread per cursor).</summary>
+    public double SampleBed(double e, double n, ref BedCursor c)
+    {
+        var home = GetGrid(TileId.FromLv95(e, n), ref c);
         if (home == null) return double.NaN;
 
         double cs = home.CellSize;
@@ -100,7 +127,8 @@ public sealed class BathySource
             {
                 double wt = (di == 0 ? 1 - fu : fu) * (dj == 0 ? 1 - fv : fv);
                 if (wt <= 1e-9) continue;
-                double z = Cell(home, i0 + di, j0 + dj);
+                int ci = i0 + di, cj = j0 + dj;
+                double z = (uint)ci < (uint)home.Cols && (uint)cj < (uint)home.Rows ? home.Z[cj * home.Cols + ci] : Cell(home, ci, cj);
                 if (double.IsNaN(z)) return double.NaN;
                 sum += z * wt;
                 w += wt;
@@ -113,7 +141,7 @@ public sealed class BathySource
     {
         if ((uint)i < (uint)home.Cols && (uint)j < (uint)home.Rows) return home.Z[j * home.Cols + i];
         double x = home.CellX(i), y = home.CellY(j);
-        var other = GetGrid(TileId.FromLv95(x, y));
+        var other = FindGrid(TileId.FromLv95(x, y));   // not GetGrid: a neighbour must not take the home kilometre's place
         if (other == null || other.CellSize != home.CellSize) return double.NaN;
         int oi = (int)Math.Floor((x - other.XllCorner) / other.CellSize);
         int oj = (int)Math.Floor((other.YllCorner + other.Rows * other.CellSize - y) / other.CellSize);

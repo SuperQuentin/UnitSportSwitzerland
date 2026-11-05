@@ -70,6 +70,60 @@ Fix: a pool of exact-length arrays, rented zeroed (same as `new`), returned when
 Identical bytes (4383 of 4383) at default and at 16, 12, 8, 6 and 4 GB heap limits. Whole run / `water/C-beds` wall / peak working set: 12 GB 111 s / 24.9 s / 9.2 GB; 8 GB 121 s / 24.8 s / 7.8 GB; 6 GB 178 s / 27.0 s / 6.2 GB; 4 GB 188 s / 35.8 s / 4.2 GB
 (the bound leaves 6 then 4 workers). 2 GB runs out of memory in `RoadCodec.ReadFloats`, in the cover stage after the roads: the water stage is not what stops it.
 
+## Water bed phase: where the time goes, and what SIMD did (#1566)
+
+Per-function stopwatches (summed over the 12 workers, a run of the multi-batch region before any change; `C-beds` CPU was 231 s, the stopwatches add up to 257 s because a descheduled thread keeps counting):
+
+| Step of `ComputeTile` | Thread-seconds | Share | Vectorisable exactly? |
+|---|---|---|---|
+| Survey sampling (`BathySource.SampleBed`, 898 million calls) | 88 | 34 % | no: double divisions, floors, branches, grid lookups |
+| `RefineWet` (row minimum 11, column scan 26) | 37 | 14 % | column scan yes (integer min); row minimum is a serial running min |
+| `DistanceTransform` x 2 (columns pass 19, rows pass 26) | 48 | 19 % | columns pass yes (integer select); rows pass no (double parabola envelope, data dependent stack) |
+| `SmoothEdgeDepth` (box tables 17, rest 2) | 19 | 7 % | the tables are prefix sums, mostly memory writes |
+| Vertex loop (`HalfWidth`, `Depth`, quantise; 13 without per-vertex timers) | 13 | 5 % | no: pointer chasing, per-vertex branches |
+| Window fill and array rental | 15 | 6 % | memory bound |
+| `ReadCache`, grid decode, join steps, minmax | 11 | 4 % | no |
+| `ChunkCodec.Encode`, `WaterFormat.Encode`, file writes (zlib inside) | 3 | 1 % | not ours |
+
+So zlib and file I/O are about 1 % of the phase: the phase is arithmetic and memory traffic over windows of 4.8 million cells (20 to 40 MB per array, twelve tiles at once on six cores).
+The share a vector can reach exactly was about 24 % (column scan, columns pass, box tables), so the ceiling for a 4x loop speed-up was 0.75 x 24 = 18 % of the CPU. The measured gain of the vector loops alone is below that, about 8 % of the wall.
+
+What was kept, each measured on its own by switching it off in an otherwise final binary (`--water` alone on the multi-batch chunks, identical output each time, all-final reference 17.4 s wall, 138 s CPU):
+
+| Change | Wall without it | CPU without it | Kind |
+|---|---|---|---|
+| `SampleBed`: the thread's last kilometre kept, cell read straight from the home grid | +2.7 s | +27 s | not SIMD |
+| `Vector<int>`: column minimum in `RefineWet` (`MinOfRows`) and the distance transform's columns pass | +2.0 s | +20 s | SIMD (select, min, widen, int to float of exact squares) |
+| `RefineWet`: no division per cell, no candidate list, in place (with the vector minimum above) | +2.5 s | +23 s | mostly not SIMD |
+| Distance transform rows pass: all-site rows answered at once | +0.7 s | +11 s | not SIMD |
+| `BoxMean`: tables over the rectangle of defined cells only (104 of 236 calls have none, the others 18,000 on average) | +1.0 s | +8 s | not SIMD |
+| Distance transform rows pass: each parabola's value kept, not recomputed | +0.5 s | +6 s | not SIMD |
+| Join steps: no array per pair | +0.3 s | +7 s | not SIMD |
+
+Tried and dropped (no change beyond noise): skipping rows with no water in `RefineWet` (0.1 s), the same in the window fill (-0.1 s).
+Left scalar on purpose: the rows pass of the distance transform and `SampleBed` (floating point with divisions and data dependent branches; a vector version would need gathers and would still be bound by the divisions), the running minimum along a row (serial), the `BoxMean` long to double conversion (no exact vector form on AVX2).
+No FMA, no estimates, no reordering of any sum is used anywhere; the vector loops only select, compare, take minima and widen integers, and convert whole numbers below 2^24 to float.
+
+Multi-batch region, whole pipeline, `sha256` of 4383 files compared with the `main` reference every time. Final binary (the kilometre cursor is owned by `ComputeTile`, see below), three runs, two of them interleaved with the previous `[ThreadStatic]` build to cancel machine drift:
+
+| | Before (#1562) | After (final) | Previous build, interleaved |
+|---|---|---|---|
+| `water/C-beds` wall | 25.1, 24.9, 25.4 s | 16.9, 16.8, 16.9 s | 17.2, 17.4 s |
+| `water/C-beds` CPU | 205, 205, 207 s | 133, 131, 132 s | 137, 138 s |
+| Whole run | 104.3, 103.0, 105.1 s | 97.8, 95.9, 95.2 s | 97.4, 96.7 s |
+| Peak working set of the run | 8497, 8549, 8578 MB | 9164, 8569, 9168 MB | 9286, 8970 MB |
+
+`C-beds` is 33 % faster. Of that, the vectors are about 8 % and plain fixes about 25 %: switching the vector loops off cost 2.0 s of the 7.6 s gained, and with every vector path scalar (`DOTNET_EnableHWIntrinsic=0`: `C-beds` 19.9 s, whole run 101.5 s) the phase is still 21 % faster than before (an upper bound for the vectors: the switch also slows the BCL's own vector code).
+Identical bytes (4383 of 4383) in all of these, with `DOTNET_EnableAVX2=0` (earlier build, `C-beds` 18.6 s) and `DOTNET_EnableHWIntrinsic=0`; benchmark 557 of 557, rural 1931 of 1931. Under a heap limit, final build: 16 GB `C-beds` 17.0 s, whole run 102.9 s, peak 8221 MB; 4 GB 21.6 s, 175.8 s, 4210 MB (before the change: 25.5 s / 110.0 s / 8086 MB and 35.8 s / 187.7 s / 4206 MB), identical. The 16, 8 and 4 GB runs of the intermediate `ThreadLocal` build (8 GB: `C-beds` 19.6 s, 118.7 s, 7974 MB, before 24.8 s / 120.6 s / 7792 MB) were identical too.
+
+The sampling cursor: a first version kept the last kilometre in a `[ThreadStatic]` (it holds the source and a grid on every pool thread for the life of the process, bad for the in-process builders); a `ThreadLocal` instance field fixed that but cost 8 % of `C-beds` at 898 million calls. `BathySource.BedCursor` is a struct the caller passes by `ref` (`SampleBed(e, n, ref cursor)`; `SampleBed(e, n)` makes a fresh one), one per tile, used by the one thread that runs the tile; it was also 2-3 % faster than the thread static.
+
+Peak working set: the run's peak is set by the network stage (8.47-9.16 GB from run to run, not touched here); the water stage itself now sometimes goes above it (8.6-9.2 GB in these runs, where before it stayed under the network peak).
+On its own (`--water` over finished chunks) the stage peaks at 4.4-4.9 GB before and 5.5-6.7 GB after. It is not more live data (the pool allocates the same 2.2 GB) but large object heap garbage that waits longer for a gen 2 collection:
+the stage allocates a quarter of what it did (81 GB before, 21 GB after) and so reaches fewer collections. A cure would be fewer or pooled large arrays per tile (`depth`, `kind`, the output grids), not measured. Under heap limits the collector works as before and the runs complete.
+
+A native rewrite of these loops would meet the same limits: the vector loops that exist gave 2x where the loop only streams (columns pass 19 -> 9 thread-seconds), nothing where it is divisions and branches, and the window arrays are bound by memory bandwidth shared by the cores. The biggest remaining item is algorithmic, not a language one: a window is 2201 x 2201 round a 1000 x 1000 tile, so each lake vertex is sampled by up to nine windows (898 million `SampleBed` calls for 477 tiles). Sampling each kilometre once would cut that third of the phase to a ninth at the price of 8 MB per surveyed kilometre held. Not done: it raises the peak, which this change already did.
+
 ## Looked at, not changed
 
 - **SQLite pragmas** (`mmap_size`, `cache_size`, `query_only`, `temp_store`): no gain warm on a GWR scan (2.60 -> 2.53 s) nor on the TLM read pattern. Cold cache not measured (no way to drop the cache here).
