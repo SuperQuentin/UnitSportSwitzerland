@@ -33,7 +33,11 @@ public static class LeafRecords
     public static (double X, double Y) PlaneOf(FrameUnits units, TileId id, double x, double z) =>
         (units.West(id) + x, units.North(id) - z);
 
-    private interface IMap
+    /// <summary>
+    /// A move of a road tile's records from one frame to another (#1509: the game's producers move tiles made in a
+    /// source's own coordinates, LV95 or a course's, into leaves through it).
+    /// </summary>
+    public interface IMap
     {
         (float X, float Y, float Z) Point(float x, float y, float z);
         /// <summary>A heading about +Y, 0 facing −Z (north), at a point (before the move).</summary>
@@ -86,7 +90,8 @@ public static class LeafRecords
         }
     }
 
-    private static void Map(RoadTile tile, IMap m)
+    /// <summary>Every position and heading of <paramref name="tile"/> through <paramref name="m"/>, in place.</summary>
+    public static void Map(RoadTile tile, IMap m)
     {
         var done = new HashSet<float[]>(ReferenceEqualityComparer.Instance);
         void Triples(float[] a, int stride = 3)

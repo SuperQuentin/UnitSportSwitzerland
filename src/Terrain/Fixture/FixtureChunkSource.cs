@@ -30,6 +30,20 @@ public sealed class FixtureChunkSource : IChunkSource
 
     public FixtureCourse Course => _course;
 
+    /// <summary>Where the course's metres start, in this source's LV95 tiles (the leaves place it by latitude and longitude, #1509).</summary>
+    public (double E, double N) Start => (_startE, _startN);
+
+    /// <summary>A tile's tile-local point (x east, z south) as course metres from the start (#1509).</summary>
+    public Func<double, double, (double X, double Y)> CourseOf(TileId tile) => (x, z) =>
+    {
+        var (e, n) = tile.Global(x, z);
+        return (e - _startE, n - _startN);
+    };
+
+    /// <summary>The course's tiles a box of course metres reaches (#1509).</summary>
+    public IEnumerable<TileId> TilesUnder(double minX, double minY, double maxX, double maxY) =>
+        TileRect.Covering(_startE + minX, _startN + minY, _startE + maxX, _startN + maxY).Tiles().Where(_tiles.Contains);
+
     /// <summary>The course's ground height at an LV95 point, m.</summary>
     public double GroundAt(double e, double n) => _course.Ground(e - _startE, n - _startN);
 

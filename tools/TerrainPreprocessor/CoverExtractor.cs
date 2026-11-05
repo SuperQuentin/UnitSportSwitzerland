@@ -358,8 +358,7 @@ public sealed class CoverExtractor
                     if (!CoverFormat.IsWooded(cls)) continue;
                     if (blocked != null && blocked[cell]) continue;
 
-                    // each 2 m cell is 0.0004 ha; density is per hectare
-                    float perCell = CoverFormat.TreeDensity(cls) * 0.0004f;
+                    float perCell = ScatterChance(cls, 1);
                     if (rng.NextDouble() > perCell) continue;
 
                     double e = tile.MinE + col * ChunkFormat.SpacingM + (rng.NextDouble() - 0.5) * 2.0;
@@ -367,23 +366,63 @@ public sealed class CoverExtractor
                     double? h = heightOf(e, n);
                     if (h == null) continue;
 
-                    float height = cls switch
-                    {
-                        CoverClass.Forest => 14f + (float)rng.NextDouble() * 10f,
-                        CoverClass.OpenForest => 10f + (float)rng.NextDouble() * 8f,
-                        CoverClass.Woodland => 7f + (float)rng.NextDouble() * 6f,
-                        _ => 2.5f + (float)rng.NextDouble() * 2f,
-                    };
-
+                    var (height, kind) = ScatterTree(cls, rng);
                     list.Add(new TreeInstance(
-                        (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n),
-                        height, cls == CoverClass.Shrub ? KindShrub : KindConifer));
+                        (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n), height, kind));
                     planted++;
                 }
             Interlocked.Add(ref scattered, planted);
         });
         ScatteredTrees += scattered;
     }
+
+    // ---- the trees' rules, one copy for the LV95 tiles and the cube's leaves (#1507, G2 B3 PR 5b) -------------
+
+    /// <summary>
+    /// The chance a lattice vertex of <paramref name="areaM2"/> square metres holds a scattered tree: the class's density
+    /// per hectare times 0.0004 a square metre, as the LV95 build has always taken it on its 1 m vertices (the factor is
+    /// the 2 m cells of an older grid's; the density the game shows is its result, and the leaves keep it per area).
+    /// </summary>
+    public static float ScatterChance(CoverClass cls, double areaM2) => CoverFormat.TreeDensity(cls) * 0.0004f * (float)areaM2;
+
+    /// <summary>A scattered tree's height and kind, from the generator after its chance and its jitter.</summary>
+    public static (float Height, byte Kind) ScatterTree(CoverClass cls, Random rng)
+    {
+        float height = cls switch
+        {
+            CoverClass.Forest => 14f + (float)rng.NextDouble() * 10f,
+            CoverClass.OpenForest => 10f + (float)rng.NextDouble() * 8f,
+            CoverClass.Woodland => 7f + (float)rng.NextDouble() * 6f,
+            _ => 2.5f + (float)rng.NextDouble() * 2f,
+        };
+        return (height, cls == CoverClass.Shrub ? KindShrub : KindConifer);
+    }
+
+    /// <summary>A scattered tree's jitter, metres either way of its vertex.</summary>
+    public const double ScatterJitterM = 1.0;
+
+    /// <summary>
+    /// A planted row tree: a little wobble, well under the row spacing, so the grid reads as planted rather than as a
+    /// texture (metres, the same east and south), and its height.
+    /// </summary>
+    public static (float Jitter, float Height) RowTree(CoverClass cls, Random rng)
+    {
+        float jitter = (float)((rng.NextDouble() - 0.5) * 0.6);
+        float height = cls == CoverClass.Orchard ? 3.4f + (float)rng.NextDouble() * 1.4f : 2.2f + (float)rng.NextDouble() * 1.0f;
+        return (jitter, height);
+    }
+
+    /// <summary>
+    /// A surveyed tree's height: TLM has none, so it varies deterministically from the LV95 position (the source's own
+    /// coordinates, so both builds grow the same tree) and an avenue is not a row of clones.
+    /// </summary>
+    public static float SurveyedHeight(double e, double n)
+    {
+        var rng = new Random((int)(e * 4) ^ ((int)(n * 4) << 8));
+        return 9f + (float)rng.NextDouble() * 7f;
+    }
+
+    public const byte KindFruitTree = KindFruit, KindSolitaryTree = KindSolitary;
 
     private List<TreeInstance> TreeList(TileId tile)
     {
@@ -427,16 +466,10 @@ public sealed class CoverExtractor
                         double? h = heightOf(e, n);
                         if (h == null) continue;
 
-                        // a little wobble, well under the row spacing, so the grid reads as
-                        // planted rather than as a texture
-                        float jitter = (float)((rng.NextDouble() - 0.5) * 0.6);
+                        var (jitter, height) = RowTree(cls, rng);
                         list.Add(new TreeInstance(
                             (float)(e - tile.MinE) + jitter, (float)h.Value,
-                            (float)(tile.MaxN - n) + jitter,
-                            cls == CoverClass.Orchard
-                                ? 3.4f + (float)rng.NextDouble() * 1.4f
-                                : 2.2f + (float)rng.NextDouble() * 1.0f,
-                            KindFruit));
+                            (float)(tile.MaxN - n) + jitter, height, KindFruit));
                         planted++;
                     }
             }
@@ -473,12 +506,8 @@ public sealed class CoverExtractor
                 double? h = heightOf(e, n);
                 if (h == null) continue;
 
-                // no height attribute in TLM; vary deterministically from the position so
-                // an avenue is not a row of clones
-                var rng = new Random((int)(e * 4) ^ ((int)(n * 4) << 8));
                 TreeList(tile).Add(new TreeInstance(
-                    (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n),
-                    9f + (float)rng.NextDouble() * 7f, KindSolitary));
+                    (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n), SurveyedHeight(e, n), KindSolitary));
                 SurveyedTrees++;
             }
         }

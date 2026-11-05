@@ -124,3 +124,33 @@ public class FrameCoverTests
         Assert.Empty(FrameCoverSpace.Clip(square, (20, 20, 30, 30)));
     }
 }
+
+/// <summary>Trees on leaves (#1507, G2 B3 PR 5b): a scattered tree is a function of its global lattice vertex, at the LV95 density per area.</summary>
+public class LeafTreeSeedTests
+{
+    [Fact]
+    public void A_vertex_seed_is_its_own_whatever_asks_and_draws_evenly()
+    {
+        Assert.Equal(TreeSeed.Of(0, 4_000_000, 4_100_000), TreeSeed.Of(0, 4_000_000, 4_100_000));
+        Assert.NotEqual(TreeSeed.Of(0, 4_000_000, 4_100_000), TreeSeed.Of(1, 4_000_000, 4_100_000));
+        Assert.NotEqual(TreeSeed.Of(0, 4_000_001, 4_100_000), TreeSeed.Of(0, 4_000_000, 4_100_001));
+        double sum = 0;
+        int n = 200_000, under = 0;
+        for (int k = 0; k < n; k++)
+        {
+            double u = TreeSeed.Unit(TreeSeed.Of(0, 4_000_000 + k % 500, 4_100_000 + k / 500));
+            Assert.InRange(u, 0, 1);
+            sum += u;
+            if (u < 0.01) under++;
+        }
+        Assert.Equal(0.5, sum / n, 2);
+        Assert.InRange(under, n * 0.009, n * 0.011);
+    }
+
+    [Fact]
+    public void The_scatter_chance_is_the_lv95_density_per_square_metre()
+    {
+        Assert.Equal(CoverExtractor.ScatterChance(CoverClass.Forest, 1) * 1.42f, CoverExtractor.ScatterChance(CoverClass.Forest, 1.42), 6);
+        Assert.Equal(CoverFormat.TreeDensity(CoverClass.Forest) * 0.0004f, CoverExtractor.ScatterChance(CoverClass.Forest, 1), 6);
+    }
+}
