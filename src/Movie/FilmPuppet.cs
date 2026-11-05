@@ -62,10 +62,9 @@ public partial class FilmPuppet : Node
         double h = Mathf.DegToRad(_heading);
         double e = Math.Sin(h) * _speed, n = Math.Cos(h) * _speed;
         _puppet.RideKindId = (int)_kind;
-        // a body's yaw turns its forward (-Z) from north toward east the other way round
-        _puppet.NetYaw = (float)-h;
-        _puppet.NetVel = new Vector3((float)e, (float)_climb, (float)-n);
-        _puppet.NetGlobal = _from.Moved(e * _t, n * _t, _climb * _t);
+        // a body's yaw turns its forward (-Z) from north toward east the other way round; a heading on
+        // the LV95 grid, given in GlobalPos's axes (the wire's ENU and true north are worked out from them)
+        _puppet.SetNetState(_from.Moved(e * _t, n * _t, _climb * _t), new Vector3((float)e, (float)_climb, (float)-n), (float)-h);
         // last: its setter applies the state
         _puppet.NetTime = ++_stamp;
         // every 2 s: where it is from the camera, to frame a shot by

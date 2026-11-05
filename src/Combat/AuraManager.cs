@@ -226,7 +226,7 @@ public partial class AuraManager : Node
         var gb = Body(b)!.Global;
         var (de, dn, _) = ga.OffsetTo(gb);
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.GlobalYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,
@@ -257,7 +257,8 @@ public partial class AuraManager : Node
     {
         if (!Connected(to)) return;
         var r = m.Rules;
-        RpcId(to, MethodName.Begin, m.Id, r.A, r.B, Who(r.A), Who(r.B), m.Centre.E, m.Centre.N, m.Centre.Alt, m.Yaw,
+        var (x, y, z) = m.Centre.ToWire();   // ECEF and a heading from true north at the centre (#1503)
+        RpcId(to, MethodName.Begin, m.Id, r.A, r.B, Who(r.A), Who(r.B), x, y, z, m.Centre.TrueYaw(m.Yaw),
             r.Beat, r.Anchor, m.Music);
     }
 
@@ -737,13 +738,17 @@ public partial class AuraManager : Node
     // ---- RPCs: server to client ----------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Begin(int id, long a, long b, string nameA, string nameB, double e, double n, double alt, float yaw,
+    private void Begin(int id, long a, long b, string nameA, string nameB, double x, double y, double z, float trueYaw,
         double beat, double anchor, string music)
     {
         Pending.Clear();
+        var centre = GlobalPos.FromWire(x, y, z);
+        // the view's yaw is a world yaw of this peer: from true north at the centre through the local body's frame (flat: the grid's)
+        var origin = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Multiplayer.GetUniqueId()))?.Origin;
+        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : centre.OffsetYaw(trueYaw);
         Current = new View
         {
-            Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = new GlobalPos(e, n, alt), Yaw = yaw,
+            Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = centre, Yaw = yaw,
             Me = Multiplayer.GetUniqueId(), Performer = a, Beat = beat > 0.05 ? beat : AuraRules.BeatSeconds, Anchor = anchor, Music = music,
         };
         GD.Print($"[aura] #{id} begins: {nameA} vs {nameB} at {60.0 / Current.Beat:0} BPM{(music.Length > 0 ? $" ({music})" : "")}");

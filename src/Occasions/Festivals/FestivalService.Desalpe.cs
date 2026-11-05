@@ -244,7 +244,35 @@ public partial class FestivalService
     {
         if (_ds == null || !Connected(peer)) return;
         RpcId(peer, MethodName.TellDesalpe, JsonSerializer.Serialize(ViewOf(_ds), _json));
-        RpcId(peer, MethodName.TellDesalpeSnap, DesalpeWire.Pack(_ds.Run.Phase, _ds.Run.Flock));
+        var fair = _ds.Site.Pos;
+        var (fx, fy, fz) = fair.ToWire();
+        RpcId(peer, MethodName.TellDesalpeSnap, DesalpeTurn(DesalpeWire.Pack(_ds.Run.Phase, _ds.Run.Flock), fair, toWire: true), fx, fy, fz);
+    }
+
+    /// <summary>
+    /// (#1503) A snapshot's cows are metres east and north of the fair on the grid and a Godot yaw on it; on the wire they are the
+    /// same in the local east-north-up at the fair and from true north (the fair's ECEF travels with the snapshot). A copy.
+    /// </summary>
+    private static byte[] DesalpeTurn(byte[] bytes, GlobalPos fair, bool toWire)
+    {
+        if (bytes.Length < DesalpeWire.Header || bytes.Length != DesalpeWire.Header + bytes[1] * DesalpeWire.PerCow) return bytes;
+        var axes = fair.Enu;
+        var turned = (byte[])bytes.Clone();
+        for (int i = 0; i < bytes[1]; i++)
+        {
+            int at = DesalpeWire.Header + i * DesalpeWire.PerCow;
+            float x = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(at));
+            float y = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(at + 4));
+            var v = new Vector3(x, 0, -y);
+            v = toWire ? axes.ToEnu(v) : axes.FromEnu(v);
+            System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(turned.AsSpan(at), v.X);
+            System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(turned.AsSpan(at + 4), -v.Z);
+            float yaw = bytes[at + 8] / 255f * Mathf.Tau;
+            if (yaw > Mathf.Pi) yaw -= Mathf.Tau;
+            yaw = toWire ? axes.TrueYaw(yaw) : axes.Yaw(yaw);
+            turned[at + 8] = (byte)(((yaw / Mathf.Tau) % 1f + 1f) % 1f * 255f);
+        }
+        return turned;
     }
 
     private void DesalpeSnap(DesalpeSrv s)
@@ -252,16 +280,19 @@ public partial class FestivalService
         var bytes = DesalpeWire.Pack(s.Run.Phase, s.Run.Flock);
         if (!_networked)
         {
-            TellDesalpeSnap(bytes);
+            ApplyDesalpeSnap(bytes);
             return;
         }
+        var fair = s.Site.Pos;
+        var wire = DesalpeTurn(bytes, fair, toWire: true);
+        var (fx, fy, fz) = fair.ToWire();
         var (cx, cy) = s.Run.Flock.Centroid();
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !Connected(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
             var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
             double x = offE - cx, y = offN - cy;
-            if (x * x + y * y <= 500 * 500) RpcId(peer, MethodName.TellDesalpeSnap, bytes);
+            if (x * x + y * y <= 500 * 500) RpcId(peer, MethodName.TellDesalpeSnap, wire, fx, fy, fz);
         }
     }
 
@@ -428,7 +459,10 @@ public partial class FestivalService
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
-    private void TellDesalpeSnap(byte[] bytes)
+    private void TellDesalpeSnap(byte[] bytes, double fx, double fy, double fz) =>
+        ApplyDesalpeSnap(DesalpeTurn(bytes, GlobalPos.FromWire(fx, fy, fz), toWire: false));
+
+    private void ApplyDesalpeSnap(byte[] bytes)
     {
         DesalpeSnapshot = bytes;
         DesalpeSnapped?.Invoke(bytes);

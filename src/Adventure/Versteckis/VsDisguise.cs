@@ -90,7 +90,7 @@ public partial class VsDisguise : Node3D
             ShowBody(false);
         }
         // a lean with the speed, about the axis across the motion, in the body's frame
-        var v = _body.IsMultiplayerAuthority() ? _body.Velocity : _body.NetVel;
+        var v = _body.WorldVelocity;
         var flat = new Vector3(v.X, 0, v.Z);
         float speed = flat.Length();
         Basis want = Basis.Identity;

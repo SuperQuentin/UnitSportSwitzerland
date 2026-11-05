@@ -21,7 +21,10 @@ namespace UnitSport.Net;
 /// States are <see cref="GlobalPos"/>, never world space (#185): every peer has its own origin
 /// and this one's moves while the states sit in the ring, so they are mapped to world space only
 /// on the way out. The arithmetic is on offsets between neighbouring states, which stay small and
-/// precise however far from anything the player is.
+/// precise however far from anything the player is. Velocities and headings are in <see cref="GlobalPos"/>'s
+/// offset axes at each state (the caller turns the wire's ENU and true north into them at <see cref="Push"/>,
+/// #1503), so a <see cref="Sample"/>'s heading is turned into the caller's world by its frame at the drawn
+/// place (<see cref="OriginFrame.WorldYawOf"/>: nothing to do in a flat frame, whose axes those are).
 /// </para>
 /// </summary>
 public sealed class RemoteInterpolator
@@ -80,7 +83,7 @@ public sealed class RemoteInterpolator
 
     public bool HasData => _count > 0;
 
-    /// <summary>Records a state the owner sent, stamped with the owner's clock.</summary>
+    /// <summary>Records a state the owner sent, stamped with the owner's clock: its velocity and yaw in <paramref name="position"/>'s offset axes.</summary>
     public void Push(double senderTime, double localTime, GlobalPos position, Vector3 velocity, float yaw)
     {
         if (_count > 0)
@@ -125,7 +128,7 @@ public sealed class RemoteInterpolator
 
     private bool _rebase;
 
-    /// <summary>The position and yaw to draw at <paramref name="localTime"/>.</summary>
+    /// <summary>The position and yaw (in GlobalPos's offset axes there) to draw at <paramref name="localTime"/>.</summary>
     public (GlobalPos Position, float Yaw) Sample(double localTime, float dt)
     {
         if (_count == 0) return (_lastOut, _lastYaw);

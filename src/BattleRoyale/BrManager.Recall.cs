@@ -90,7 +90,11 @@ public partial class BrManager
         t.Downed = false;
         GD.Print($"[br] recalled: {t.Name}, by {r.Name}");
         if (t.Bot) RecallBot(t.Peer, _state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt);
-        else RpcId(t.Peer, MethodName.Recalled, _state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, (double)stop.Alt);
+        else
+        {
+            var (x, y, z) = GlobalPos.FromLv95(_state.AreaE + stop.At.X, _state.AreaN + stop.At.Y, stop.Alt).ToWire();   // (#1503) the wire is ECEF
+            RpcId(t.Peer, MethodName.Recalled, x, y, z);
+        }
         if (r.Bot && Director?.Get(peer) is { } user)
             for (int i = 0; i < Items.Inventory.Size; i++)
                 if (user.Inventory[i].Id == ItemId.Dogtag) { user.Inventory.TakeOne(i); break; }
@@ -139,12 +143,13 @@ public partial class BrManager
 
     /// <summary>This client is back in (a team-mate recalled it): over the stop, by wingsuit, a knife and two bandages.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Recalled(double e, double n, double alt)
+    private void Recalled(double x, double y, double z)
     {
         if (_server || LocalPlayer() is not { } me || Origin == null) return;
         StopSpectating();
         _follow?.Prefer(0);
-        var at = Origin.ToWorld(e, n, alt + 180);
+        var stop = GlobalPos.FromWire(x, y, z);
+        var at = Origin.ToWorld(stop.E, stop.N, stop.Alt + 180);
         me.Respawn(at);
         me.Leap(at, -me.Camera.GlobalTransform.Basis.Z with { Y = 0 } * 20f, RideKind.Wingsuit);
         if (Inventory() is { } inv)

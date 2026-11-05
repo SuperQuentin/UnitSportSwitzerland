@@ -195,7 +195,7 @@ public partial class FightManager : Node
         var gb = Body(b)!.Global;
         var (de, dn, _) = ga.OffsetTo(gb);
         // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.NetYaw : Mathf.Atan2(-(float)de, (float)dn);
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.GlobalYaw : Mathf.Atan2(-(float)de, (float)dn);
         var match = new Match
         {
             Id = _nextId++,
@@ -208,8 +208,9 @@ public partial class FightManager : Node
         // a challenge either of them still had out, or was sent, is void now
         _chat?.Invites?.WithdrawInvolving(InviteId, a);
         _chat?.Invites?.WithdrawInvolving(InviteId, b);
+        var (cx, cy, cz) = match.Centre.ToWire();
         foreach (long peer in new[] { a, b })
-            RpcId(peer, MethodName.Begin, match.Id, a, b, Who(a), Who(b), match.Centre.E, match.Centre.N, match.Centre.Alt, yaw);
+            RpcId(peer, MethodName.Begin, match.Id, a, b, Who(a), Who(b), cx, cy, cz, match.Centre.TrueYaw(yaw));   // ECEF, heading from true north (#1503)
         SendState(match);
         GD.Print($"[fight] #{match.Id} {a} vs {b}");
     }
@@ -438,13 +439,17 @@ public partial class FightManager : Node
     // ---- RPCs: server to client ----------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Begin(int id, long a, long b, string nameA, string nameB, double e, double n, double alt, float yaw)
+    private void Begin(int id, long a, long b, string nameA, string nameB, double x, double y, double z, float trueYaw)
     {
         Pending.Clear();
+        var centre = GlobalPos.FromWire(x, y, z);
+        // the view's yaw is a world yaw of this peer: from true north at the centre through the local body's frame (flat: the grid's)
+        var origin = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Multiplayer.GetUniqueId()))?.Origin;
+        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : centre.OffsetYaw(trueYaw);
         Outgoing = default;
         Current = new View
         {
-            Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = new GlobalPos(e, n, alt), Yaw = yaw,
+            Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = centre, Yaw = yaw,
             Me = Multiplayer.GetUniqueId(), StateAt = GameClock.Now, PhaseAt = GameClock.Now,
         };
         GD.Print($"[fight] #{id} begins: {nameA} vs {nameB}");
