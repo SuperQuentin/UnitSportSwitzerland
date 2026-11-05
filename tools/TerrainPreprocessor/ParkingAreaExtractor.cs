@@ -14,7 +14,11 @@ namespace UnitSport.Tools.Preprocessor;
 /// too small or too steep for a layout keeps the pattern.
 /// </para>
 /// </summary>
-public sealed class ParkingAreaExtractor<TTile>(string gpkgPath, IRoadSpace<TTile> space) where TTile : struct, IEquatable<TTile>
+/// <param name="readMarginM">
+/// How far round the written tiles rings are read: a lot is kept by its centroid's tile, which a concave ring need not
+/// touch (the LV95 build reads none round its 1 km tiles; a frame's ~600 m leaves want some).
+/// </param>
+public sealed class ParkingAreaExtractor<TTile>(string gpkgPath, IRoadSpace<TTile> space, double readMarginM = 0) where TTile : struct, IEquatable<TTile>
 {
     /// <summary>Lots by the tile holding their centroid, which is the tile that lays them out; rings on the space's plane.</summary>
     public Dictionary<TTile, List<RawParking.Lot>> Lots { get; } = new();
@@ -32,7 +36,7 @@ public sealed class ParkingAreaExtractor<TTile>(string gpkgPath, IRoadSpace<TTil
     {
         if (space.Tiles.Count == 0) return;
         using var conn = GeoPackageReader.Open(gpkgPath);
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_areale_verkehrsareal", new[] { "objektart" }, space.Lv95Region(0)))
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_areale_verkehrsareal", new[] { "objektart" }, space.Lv95Region(readMarginM)))
         {
             string? kind = reader.IsDBNull(0) ? null : reader.GetString(0);
             var cover = CoverFormat.ParseTrafficArea(kind);

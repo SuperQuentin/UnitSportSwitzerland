@@ -29,6 +29,9 @@ public static class CubeRoadStage
     /// <summary>How far round a frame its lines are read: the LV95 build's ring of one tile (<see cref="TileRegion.RingM"/>).</summary>
     public const double MarginM = TileRegion.RingM;
 
+    /// <summary>How far round a frame's leaves car park rings are read: a ring's centroid can lie outside it, on a leaf it does not touch.</summary>
+    public const double ParkingReadM = 500;
+
     public static bool Wants(IReadOnlyList<string> args) => args.Contains("--cube-roads");
 
     /// <summary>Where a region's raw road kinds go: <c>&lt;temp&gt;/roads_raw</c>, one <c>.cubl</c> per frame.</summary>
@@ -36,7 +39,8 @@ public static class CubeRoadStage
 
     public static async Task<int> RunAsync(IReadOnlyList<string> args, CancellationToken ct)
     {
-        string? region = null, temp = null, tlm = null, routeKeys = null, overrides = null;
+        // the hand-traced car parks and cover (#84), as the LV95 build takes them by default
+        string? region = null, temp = null, tlm = null, routeKeys = null, overrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         bool bdtopo = false;
         for (int i = 0; i < args.Count; i++)
@@ -109,7 +113,7 @@ public static class CubeRoadStage
                 frenchSkipped += stats.Skipped;
             }
 
-            var parking = tlm != null ? new ParkingAreaExtractor<CubeKey>(tlm, space) : null;
+            var parking = tlm != null ? new ParkingAreaExtractor<CubeKey>(tlm, space, ParkingReadM) : null;
             parking?.Extract(overrides);
 
             var raw = new Dictionary<CubeKey, List<LeafSection>>();

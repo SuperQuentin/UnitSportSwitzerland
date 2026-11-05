@@ -36,7 +36,7 @@ public static class CubeCompare
 {
     public static bool Wants(IReadOnlyList<string> args) => args.Contains("--cube-compare");
 
-    private static readonly string[] AllKinds = ["heights", "cover", "holes", "water", "roads", "buildings", "trees", "pistes", "fields", "photo"];
+    private static readonly string[] AllKinds = ["heights", "cover", "holes", "water", "roads", "parking", "buildings", "trees", "pistes", "fields", "photo"];
 
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
@@ -87,6 +87,7 @@ public static class CubeCompare
                 "trees" => Trees(ctx),
                 "pistes" => Pistes(ctx),
                 "fields" => Fields(ctx),
+                "parking" => Parking(ctx),
                 _ => new KindReport(kind).Skip("photos are resampled in a Godot tool mode (B3 PR 7) and judged as images, not here"),
             };
             reports.Add(r);
@@ -381,6 +382,99 @@ public static class CubeCompare
             best = Math.Min(best, Math.Sqrt(dx * dx + dz * dz));
         }
         return best <= radius ? best : null;
+    }
+
+    // ---- car parks (raw, B3 PR 2): lots by their centroid, ring vertices in plan ----------------------
+
+    /// <summary>
+    /// The network stage's car park rings: the LV95 build's <c>parking_raw/</c> beside its raw roads (<c>--lv-roads</c>), the
+    /// leaves' <see cref="LeafKind.Parking"/>. A lot counts where both builds hold its centroid (an LV95 tile, a leaf of the
+    /// region); lots are matched by centroid within 1 m, then vertex by vertex, in plan at the lot.
+    /// </summary>
+    private static KindReport Parking(Ctx c)
+    {
+        if (Missing(c, "parking", LeafKind.Parking, "") is { } skip) return skip;
+        var r = new KindReport("parking");
+        if (c.Lv.ParkingDir is not { } dir || !Directory.Exists(dir)) return r.Skip("the LV95 build has no parking_raw/ beside its raw roads (--lv-roads)");
+        var cube = new ConcurrentBag<EcefPos[]>();
+        Parallel.ForEach(c.Cube.Leaves, c.Par, key =>
+        {
+            if (c.Cube.Section(key, LeafKind.Parking) is not { } sec) return;
+            var anchor = key.Anchor;
+            foreach (var lot in LeafParking.Decode(sec))
+            {
+                var pts = new EcefPos[lot.Count];
+                for (int i = 0; i < pts.Length; i++) pts[i] = anchor.ToEcef(lot.Points[i * 3], lot.Points[i * 3 + 1], lot.Points[i * 3 + 2]);
+                var ring = new double[pts.Length * 2];
+                for (int i = 0; i < pts.Length; i++) (ring[i * 2], ring[i * 2 + 1], _) = SwissGeodesy.FromEcef(pts[i]);
+                var (ce, cn) = AreaCentroid(ring);
+                if (c.Lv.Covers(ce, cn)) cube.Add(pts);
+            }
+        });
+        var lv = new ConcurrentBag<EcefPos[]>();
+        Parallel.ForEach(c.Lv.Tiles, c.Par, id =>
+        {
+            foreach (var lot in UnitSport.Tools.RoadGen.Rewrite.RawParking.Read(dir, id))
+            {
+                var pts = new EcefPos[lot.Count];
+                for (int i = 0; i < pts.Length; i++)
+                {
+                    double e = lot.Ring[i * 2], n = lot.Ring[i * 2 + 1], g = c.Lv.Ground(e, n);
+                    pts[i] = SwissGeodesy.ToEcef(e, n, double.IsNaN(g) ? 0 : g);
+                }
+                // the leaf of the lot's home in either build: its area centroid (ParkingAreaExtractor)
+                var (ce, cn) = AreaCentroid(lot.Ring);
+                if (c.Cube.Has(c.Cube.Owner(SwissGeodesy.ToEcef(ce, cn, c.Lv.Ground(ce, cn) is var gc && double.IsNaN(gc) ? 0 : gc)))) lv.Add(pts);
+            }
+        });
+        // one frame for the matching: the region's middle bundle; each lot's vertices then in the ENU at the lot
+        var frame = c.Cube.Bundles[c.Cube.Bundles.Count / 2].Anchor;
+        var lvList = lv.ToList();
+        var cubeList = cube.ToList();
+        Feature At(EcefPos[] pts) { var (x, y, z) = frame.ToLocal(Mean(pts)); return new Feature(x, y, z); }
+        var m = FeatureMatch.Match(lvList.Select(At).ToList(), cubeList.Select(At).ToList(), 1, false);
+        var verts = new Tally();
+        int countDiffers = 0;
+        foreach (var (a, b, _) in m.Pairs)
+        {
+            var (pa, pb) = (lvList[a], cubeList[b]);
+            if (pa.Length != pb.Length) { countDiffers++; continue; }
+            var local = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(pa[0]));
+            for (int i = 0; i < pa.Length; i++)
+            {
+                var (x0, _, z0) = local.ToLocal(pa[i]);
+                var (x1, _, z1) = local.ToLocal(pb[i]);
+                verts.Add(Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0)));
+            }
+        }
+        r.Note($"car parks: {lvList.Count} LV95, {cubeList.Count} leaves held by both builds, {m.Pairs.Count} matched by centroid within 1 m, {m.OnlyA.Count} LV95 and {m.OnlyB.Count} leaf alone, {countDiffers} with another vertex count"
+            + (m.OnlyA.Count + m.OnlyB.Count > 0 ? " (alone at " + string.Join("; ", m.OnlyA.Select(k => "LV95 " + Lv95Text(Mean(lvList[k]))).Concat(m.OnlyB.Select(k => "leaf " + Lv95Text(Mean(cubeList[k])))).Take(6)) + ")" : ""));
+        r.Check("ring vertex in plan, leaf − LV95", verts.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
+        r.AtMost("car parks alone", m.OnlyA.Count + m.OnlyB.Count, 0, "F0");
+        r.AtMost("car parks with another vertex count", countDiffers, 0, "F0");
+        return r;
+    }
+
+    private static (double E, double N) AreaCentroid(double[] ring)
+    {
+        int count = ring.Length / 2;
+        double area = 0, ce = 0, cn = 0;
+        for (int i = 0; i < count; i++)
+        {
+            int j = (i + 1) % count;
+            double cross = ring[i * 2] * ring[j * 2 + 1] - ring[j * 2] * ring[i * 2 + 1];
+            area += cross;
+            ce += (ring[i * 2] + ring[j * 2]) * cross;
+            cn += (ring[i * 2 + 1] + ring[j * 2 + 1]) * cross;
+        }
+        return (ce / (3 * area), cn / (3 * area));
+    }
+
+    private static EcefPos Mean(EcefPos[] pts)
+    {
+        double x = 0, y = 0, z = 0;
+        foreach (var p in pts) (x, y, z) = (x + p.X, y + p.Y, z + p.Z);
+        return new EcefPos(x / pts.Length, y / pts.Length, z / pts.Length);
     }
 
     // ---- roads: centrelines vertex to line both ways, lengths, junctions and signals ----------------
@@ -950,6 +1044,8 @@ internal sealed class Lv95Build
         _dir = dir;
         _roadsDir = roadsDir ?? dir;
         _files = Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Select(Path.GetFileName).OfType<string>().ToHashSet() : new();
+        // the raw car parks sit beside the raw roads (RawParking.DirFor(temp))
+        ParkingDir = roadsDir == null ? null : Path.Combine(Path.GetDirectoryName(roadsDir.TrimEnd('/', '\\')) ?? ".", UnitSport.Tools.RoadGen.Rewrite.RawParking.DirName);
         _roadFiles = roadsDir == null ? _files : Directory.Exists(roadsDir) ? Directory.EnumerateFiles(roadsDir).Select(Path.GetFileName).OfType<string>().ToHashSet() : new();
         Tiles = _files.Where(f => f.StartsWith("chunk_") && f.EndsWith(".terr"))
             .Select(f => f["chunk_".Length..^".terr".Length].Split('_'))
@@ -959,6 +1055,9 @@ internal sealed class Lv95Build
         _water = new(200, id => Read(WaterFormat.FileName(id), s => WaterFormat.Decode(s).Levels));
         _pistes = new(100, id => Read(PisteFormat.FileName(id), PisteFormat.Decode));
     }
+
+    /// <summary>The raw car parks' dir (<c>parking_raw/</c> beside <c>roads_raw/</c>), when the roads read are the raw ones.</summary>
+    public string? ParkingDir { get; }
 
     public bool Has(string prefix) => (prefix == "roads_" ? _roadFiles : _files).Any(f => f.StartsWith(prefix, StringComparison.Ordinal));
 
