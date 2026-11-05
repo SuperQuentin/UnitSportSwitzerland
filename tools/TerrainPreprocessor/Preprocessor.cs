@@ -112,6 +112,8 @@ public static partial class Preprocessor
     {
         // a cube region against the LV95 build of the same ground (#1507); before --cube, which it also takes
         if (CubeCompare.Wants(args)) return CubeCompare.Run(args, ct);
+        // the road stage on work frames (#1507, G2 B3 PR 2), over a --cube region's heights; before --cube
+        if (CubeRoadStage.Wants(args)) return await CubeRoadStage.RunAsync(args, ct);
         // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
         if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
         // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format

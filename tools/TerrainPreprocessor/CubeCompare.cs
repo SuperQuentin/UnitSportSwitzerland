@@ -40,7 +40,7 @@ public static class CubeCompare
 
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
-        string? chunks = null, cubeDir = null;
+        string? chunks = null, cubeDir = null, lvRoads = null, cubeRaw = null;
         var kinds = AllKinds.ToList();
         int stride = 1, maxLeaves = int.MaxValue, jobs = Math.Max(1, Environment.ProcessorCount - 2);
         for (int i = 0; i < args.Count; i++)
@@ -50,6 +50,9 @@ public static class CubeCompare
                 case "--cube-compare": break;
                 case "--chunks": chunks = args[++i]; break;
                 case "--cube": cubeDir = args[++i]; break;
+                // the raw kinds (B3 PR 2): the LV95 build's roads_raw/ for its .road files, a temporary .cubl region for the leaves' sections
+                case "--lv-roads": lvRoads = args[++i]; break;
+                case "--cube-raw": cubeRaw = args[++i]; break;
                 case "--kinds": kinds = args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(); break;
                 case "--compare-stride": stride = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--compare-leaves": maxLeaves = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
@@ -62,8 +65,8 @@ public static class CubeCompare
 
         var clock = Stopwatch.StartNew();
         Console.OutputEncoding = System.Text.Encoding.UTF8;   // the keys' lat/lon print with a degree sign
-        var lv = new Lv95Build(chunks);
-        var cube = new CubeBuild(cubeDir, maxLeaves);
+        var lv = new Lv95Build(chunks, lvRoads);
+        var cube = new CubeBuild(cubeDir, maxLeaves, cubeRaw);
         Console.WriteLine($"cube-compare: {lv.Tiles.Count} LV95 tiles in {chunks}; {cube.Leaves.Count} leaves at level {CubeBuild.LeafLevel} "
             + $"in {cube.Bundles.Count} bundles in {cubeDir} ({string.Join(", ", cube.KindsPresent.Order())})");
         if (lv.Tiles.Count == 0 || cube.Leaves.Count == 0) { Console.Error.WriteLine("cube-compare: nothing to compare"); return 2; }
@@ -264,6 +267,8 @@ public static class CubeCompare
         var toLv = new Tally();
         var toCube = new Tally();
         long lvCount = 0, cubeCount = 0, lvAlone = 0, cubeAlone = 0;
+        var hd = new Tally();
+        long lvHoles = 0, cubeHoles = 0, holesMatched = 0, holesAlone = 0;
         foreach (var bundle in c.Cube.Bundles)
         {
             var frame = bundle.Anchor;
@@ -309,12 +314,40 @@ public static class CubeCompare
                 lvCount++;
                 if (NearestDistance(cubeIndex, cubeAll, f, 5) is { } d) toCube.Add(d); else lvAlone++;
             }
+            // a hole is a connected cluster of quads, one a portal: as many on both builds, each matched by its centre
+            var lh = Clusters(lvQuads.Where(q => q.Owned).Select(q => q.F).ToList(), HoleLinkM);
+            var ch = Clusters(cubeAll, HoleLinkM);
+            var hm = FeatureMatch.Match(lh, ch, 5, false);
+            foreach (var (a, b, _) in hm.Pairs) hd.Add(FeatureMatch.Offset(lh[a], ch[b]).H);
+            (lvHoles, cubeHoles, holesMatched, holesAlone) = (lvHoles + lh.Count, cubeHoles + ch.Count, holesMatched + hm.Pairs.Count, holesAlone + hm.OnlyA.Count + hm.OnlyB.Count);
         }
         r.Note($"hole quads: {lvCount} LV95 (1 m), {cubeCount} leaves; {lvAlone} LV95 and {cubeAlone} leaf quads with none of the other build's within 5 m");
+        r.Note($"holes (clusters of quads, one a portal): {lvHoles} LV95, {cubeHoles} leaves, {holesMatched} matched within 5 m, {holesAlone} alone");
+        if (holesMatched > 0) r.Check("hole centre, LV95 to leaf", hd.Spread(), false, new Bar(Stat.Max, CompareBars.Quad));
+        r.AtMost("holes alone", holesAlone, 0, "F0");
         r.Check("leaf quad to the nearest LV95 one", toLv.Spread(), false, new Bar(Stat.Max, CompareBars.Quad));
         r.Check("LV95 quad to the nearest leaf one", toCube.Spread(), false, new Bar(Stat.Max, CompareBars.Quad));
         r.AtMost("quads alone", lvAlone + cubeAlone, 0, "F0");
         return r;
+    }
+
+    /// <summary>Quads closer than this (centre to centre) are one hole: a diagonal neighbour on the leaves' ~1.2 m lattice.</summary>
+    private const double HoleLinkM = 2.0;
+
+    /// <summary>Single-linkage clusters of points in plan, each as the mean of its points.</summary>
+    private static List<Feature> Clusters(List<Feature> pts, double link)
+    {
+        var index = Index(pts);
+        var parent = Enumerable.Range(0, pts.Count).ToArray();
+        int Find(int a) { while (parent[a] != a) a = parent[a] = parent[parent[a]]; return a; }
+        for (int i = 0; i < pts.Count; i++)
+            foreach (int k in index.Near(pts[i].X, pts[i].Z, link))
+            {
+                double dx = pts[k].X - pts[i].X, dz = pts[k].Z - pts[i].Z;
+                if (k != i && dx * dx + dz * dz <= link * link) parent[Find(k)] = Find(i);
+            }
+        return Enumerable.Range(0, pts.Count).GroupBy(Find)
+            .Select(g => new Feature(g.Average(k => pts[k].X), g.Average(k => pts[k].Y), g.Average(k => pts[k].Z))).ToList();
     }
 
     private static PlaneHash Index(List<Feature> f)
@@ -344,6 +377,7 @@ public static class CubeCompare
         var cubeToLv = new Tally();
         var lvToCube = new Tally();
         var aboveCube = new Tally();
+        var surveyed = new Tally();
         var lenLv = new Dictionary<int, double>();
         var lenCube = new Dictionary<int, double>();
         var junctions = (Lv: new List<Feature>(), Cube: new List<Feature>());
@@ -363,6 +397,7 @@ public static class CubeCompare
                 foreach (var s in tile.Segments)
                 {
                     var (pts, above) = ToFrame(s.Points, 3, i => anchor.ToEcef(s.Points[i], s.Points[i + 1], s.Points[i + 2]), frame, c.Cube.AboveGround);
+                    if (Surveyed(s)) Array.Fill(above, double.NaN);
                     cubeLines.Add((new Line(pts, (int)s.Class, above), key));
                 }
                 foreach (var j in tile.Junctions)
@@ -378,6 +413,7 @@ public static class CubeCompare
                 {
                     var (pts, above) = ToFrame(s.Points, 3, i => Lv95Point(id, s.Points[i], s.Points[i + 1], s.Points[i + 2]), frame,
                         p => c.Lv.AboveGround(p));
+                    if (Surveyed(s)) Array.Fill(above, double.NaN);
                     var owned = new bool[s.PointCount];
                     for (int k = 0; k < owned.Length; k++) owned[k] = c.Cube.Owns(bundle, Lv95Point(id, s.Points[k * 3], s.Points[k * 3 + 1], s.Points[k * 3 + 2]));
                     lvLines.Add((new Line(pts, (int)s.Class, above), owned, id));
@@ -400,10 +436,11 @@ public static class CubeCompare
                 {
                     var ecef = frame.ToEcef(p[k * 3], p[k * 3 + 1], p[k * 3 + 2]);
                     if (!c.Lv.Covers(ecef)) continue;
-                    if (lvIndex.Nearest(p[k * 3], p[k * 3 + 1], p[k * 3 + 2], line.Above![k], line.Class, 5, out double h, out _, out double da))
+                    if (lvIndex.Nearest(p[k * 3], p[k * 3 + 1], p[k * 3 + 2], line.Above![k], line.Class, 5, out double h, out double dy, out double da))
                     {
                         cubeToLv.Add(h);
                         if (!double.IsNaN(da)) aboveCube.Add(da);
+                        else if (double.IsNaN(line.Above[k]) && !double.IsNaN(dy)) surveyed.Add(dy);
                     }
                     else cubeAlone++;
                 }
@@ -429,7 +466,9 @@ public static class CubeCompare
         r.Note($"centreline vertices: {cubeToLv.Count + cubeAlone} leaf, {lvToCube.Count + lvAlone} LV95; alone (no line of their class within 5 m): {cubeAlone} leaf, {lvAlone} LV95");
         r.Check("leaf vertex to the LV95 line", cubeToLv.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         r.Check("LV95 vertex to the leaf line", lvToCube.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
-        r.Check("height above ground, leaf − LV95", aboveCube.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
+        r.Check("height above ground (draped), leaf − LV95", aboveCube.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
+        // bridges, tunnels, cables and walls keep their surveyed Z: absolute, not above a ground the two builds sample differently
+        if (surveyed.Count > 0) r.Check("height of surveyed lines (structures), leaf − LV95", surveyed.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         foreach (int k in lenLv.Keys.Union(lenCube.Keys).Order())
         {
             double a = lenLv.GetValueOrDefault(k), b = lenCube.GetValueOrDefault(k);
@@ -440,8 +479,89 @@ public static class CubeCompare
         }
         MatchPoints(r, "junction", junctions.Lv, junctions.Cube, 5, true);
         MatchPoints(r, "signal", signals.Lv, signals.Cube, 5, false);
+        if (c.Cube.KindsPresent.Contains(LeafKind.RoadKeys)) LineLengths(c, r);
         return r;
     }
+
+    /// <summary>
+    /// The raw roads (B3 PR 2): each TLM line's (uuid, part) length in plan, summed over its segments on both
+    /// builds, every point in true Earth positions (ECEF, then the local horizontal at the line's first point), for
+    /// the lines both builds hold whole (every LV95 point on a leaf of the region, every leaf point on an LV95
+    /// tile). The bar: 2 cm plus the plan's 2×10⁻⁴ of the length (what is placed by distance).
+    /// </summary>
+    private static void LineLengths(Ctx c, KindReport r)
+    {
+        var lv = new ConcurrentDictionary<(string, int), ConcurrentBag<EcefPos[]>>();
+        var cube = new ConcurrentDictionary<(string, int), ConcurrentBag<EcefPos[]>>();
+        var spoiled = new ConcurrentDictionary<(string, int), byte>();
+        Parallel.ForEach(c.Cube.Leaves, c.Par, key =>
+        {
+            if (c.Cube.Section(key, LeafKind.Roads) is not { } sec || c.Cube.Section(key, LeafKind.RoadKeys) is not { } ks) return;
+            var tile = LeafRoads.Decode(sec);
+            var keys = LeafRoadKeys.Decode(ks);
+            var anchor = key.Anchor;
+            for (int k = 0; k < tile.Segments.Count && k < keys.Length; k++)
+            {
+                if (keys[k] is not { } id) continue;
+                var s = tile.Segments[k];
+                var pts = new EcefPos[s.PointCount];
+                for (int i = 0; i < pts.Length; i++) pts[i] = anchor.ToEcef(s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
+                if (pts.Any(p => !c.Lv.Covers(p))) spoiled[(id.Uuid, id.Part)] = 0;
+                cube.GetOrAdd((id.Uuid, id.Part), _ => new()).Add(pts);
+            }
+        });
+        Parallel.ForEach(c.Lv.TilesNear(c.Cube.Lv95BoxAll()), c.Par, id =>
+        {
+            if (c.Lv.Roads(id) is not { } tile || c.Lv.RoadKeys(id, tile.Segments.Count) is not { } keys) return;
+            for (int k = 0; k < tile.Segments.Count; k++)
+            {
+                if (keys[k] is not { } key) continue;
+                var s = tile.Segments[k];
+                var pts = new EcefPos[s.PointCount];
+                for (int i = 0; i < pts.Length; i++) pts[i] = Lv95Point(id, s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
+                if (pts.Any(p => !c.Cube.Has(c.Cube.Owner(p)))) spoiled[(key.Uuid, key.Part)] = 0;
+                lv.GetOrAdd((key.Uuid, key.Part), _ => new()).Add(pts);
+            }
+        });
+        var diff = new Tally();
+        int compared = 0, broken = 0, onlyOne = 0;
+        double total = 0, worstExcess = double.NegativeInfinity;
+        string worst = "";
+        foreach (var (line, a) in lv)
+        {
+            if (spoiled.ContainsKey(line)) continue;
+            if (!cube.TryGetValue(line, out var b)) { onlyOne++; continue; }
+            var frame = CubeKey.FromEcef(a.First()[0], WorkFrame.Level).Anchor;
+            double la = a.Sum(p => PlanLength(frame, p)), lb = b.Sum(p => PlanLength(frame, p));
+            double d = Math.Abs(la - lb), excess = d - (CompareBars.Vertex + CompareBars.PerDistance * la);
+            diff.Add(d);
+            compared++;
+            total += la;
+            if (excess > 0) broken++;
+            if (excess > worstExcess) { worstExcess = excess; worst = string.Create(CultureInfo.InvariantCulture, $"{line.Item1} part {line.Item2}: {la:F3} m LV95, {lb:F3} m leaves"); }
+        }
+        foreach (var line in cube.Keys) if (!spoiled.ContainsKey(line) && !lv.ContainsKey(line)) onlyOne++;
+        r.Note(string.Create(CultureInfo.InvariantCulture, $"raw length per TLM line: {compared:N0} lines held whole by both builds ({total / 1000:F1} km), {spoiled.Count:N0} cut by the edge of either, {onlyOne} in one build only; worst {worst}"));
+        r.Check("raw length per TLM line, |leaf − LV95|", diff.Spread(), false, new Bar(Stat.P99, CompareBars.Vertex));
+        r.AtMost("lines over 2 cm + 2e-4 of their length", broken, 0, "F0");
+        r.AtMost("whole lines in one build only", onlyOne, 0, "F0");
+    }
+
+    private static double PlanLength(EnuFrame frame, EcefPos[] pts)
+    {
+        double len = 0;
+        for (int i = 1; i < pts.Length; i++)
+        {
+            var (x0, _, z0) = frame.ToLocal(pts[i - 1]);
+            var (x1, _, z1) = frame.ToLocal(pts[i]);
+            len += Math.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
+        }
+        return len;
+    }
+
+    /// <summary>A segment that keeps its surveyed Z (RoadExtractor's own-Z rule): bridges, tunnels, aerial ropeways, walls.</summary>
+    private static bool Surveyed(RoadSegment s) =>
+        (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0 || RoadFormat.IsAerial(s.Class) || RoadFormat.IsWall(s.Class);
 
     private static void Accumulate(Dictionary<int, double> len, Line line, Func<double, double, double, bool> keep)
     {
@@ -730,18 +850,21 @@ public static class CubeCompare
 /// <summary>The LV95 build's tiles, decoded on demand and kept in small caches (a region does not fit in memory).</summary>
 internal sealed class Lv95Build
 {
-    private readonly string _dir;
-    private readonly HashSet<string> _files;
+    private readonly string _dir, _roadsDir;
+    private readonly HashSet<string> _files, _roadFiles;
     public HashSet<TileId> Tiles { get; }
     private readonly Lru<TileId, ChunkGrid?> _terr;
     private readonly Lru<TileId, byte[]?> _cover;
     private readonly Lru<TileId, ushort[]?> _water;
     private readonly Lru<TileId, PisteTile?> _pistes;
 
-    public Lv95Build(string dir)
+    /// <param name="roadsDir">Where the <c>.road</c> files are read (the raw ones in <c>roads_raw/</c>, with their <c>.keys</c>), the chunk dir by default.</param>
+    public Lv95Build(string dir, string? roadsDir = null)
     {
         _dir = dir;
+        _roadsDir = roadsDir ?? dir;
         _files = Directory.Exists(dir) ? Directory.EnumerateFiles(dir).Select(Path.GetFileName).OfType<string>().ToHashSet() : new();
+        _roadFiles = roadsDir == null ? _files : Directory.Exists(roadsDir) ? Directory.EnumerateFiles(roadsDir).Select(Path.GetFileName).OfType<string>().ToHashSet() : new();
         Tiles = _files.Where(f => f.StartsWith("chunk_") && f.EndsWith(".terr"))
             .Select(f => f["chunk_".Length..^".terr".Length].Split('_'))
             .Select(p => new TileId(int.Parse(p[0], CultureInfo.InvariantCulture), int.Parse(p[1], CultureInfo.InvariantCulture))).ToHashSet();
@@ -751,7 +874,7 @@ internal sealed class Lv95Build
         _pistes = new(100, id => Read(PisteFormat.FileName(id), PisteFormat.Decode));
     }
 
-    public bool Has(string prefix) => _files.Any(f => f.StartsWith(prefix, StringComparison.Ordinal));
+    public bool Has(string prefix) => (prefix == "roads_" ? _roadFiles : _files).Any(f => f.StartsWith(prefix, StringComparison.Ordinal));
 
     private T? Read<T>(string name, Func<Stream, T> decode) where T : class
     {
@@ -851,7 +974,15 @@ internal sealed class Lv95Build
 
     public HashSet<int> Holes(TileId id) => Read(HoleFormat.FileName(id), HoleFormat.Decode) ?? [];
 
-    public RoadTile? Roads(TileId id) => Read(RoadFormat.FileName(id), RoadCodec.Decode);
+    public RoadTile? Roads(TileId id)
+    {
+        if (!_roadFiles.Contains(RoadFormat.FileName(id))) return null;
+        using var fs = File.OpenRead(Path.Combine(_roadsDir, RoadFormat.FileName(id)));
+        return RoadCodec.Decode(fs);
+    }
+
+    /// <summary>The raw roads' source keys of a tile (<see cref="RawRoads"/>), aligned with its segments; null without a key file.</summary>
+    public UnitSport.Tools.RoadGen.Rewrite.RawRoads.Key?[]? RoadKeys(TileId id, int segments) => UnitSport.Tools.RoadGen.Rewrite.RawRoads.ReadKeys(_roadsDir, id, segments);
 
     public BuildingTile? Buildings(TileId id) => Read(BuildingFormat.FileName(id), BuildingCodec.Decode);
 
@@ -874,8 +1005,18 @@ internal sealed class CubeBuild
     private readonly Lru<CubeKey, CubeTile?> _heights;
     private readonly ConcurrentDictionary<CubeKey, (double, double, double, double)> _boxes = new();
 
-    public CubeBuild(string dir, int maxLeaves)
+    private readonly Dictionary<CubeKey, Entry> _raw = new();
+
+    /// <param name="rawDir">A temporary <c>.cubl</c> region (the raw kinds, B3 PR 2): its sections are read for the leaves of <paramref name="dir"/>, before theirs.</param>
+    public CubeBuild(string dir, int maxLeaves, string? rawDir = null)
     {
+        if (rawDir != null)
+            foreach (var file in Directory.EnumerateFiles(rawDir, "*.cubl").Order())
+            {
+                using var fs = File.OpenRead(file);
+                foreach (var (key, (offset, length)) in CubeBundle.ReadIndex(fs, CubeBundle.LeafMagic))
+                    _raw[key] = new Entry(file, offset, length, true, ReadKinds(fs, offset));
+            }
         // .cubl first: a leaf with content wins over G1's heights-only tile of the same key
         foreach (var file in Directory.EnumerateFiles(dir, "*.cubl").Order().Concat(Directory.EnumerateFiles(dir, "*.cubb").Order()))
         {
@@ -891,6 +1032,7 @@ internal sealed class CubeBuild
         if (_entries.Count > maxLeaves)
             foreach (var k in _entries.Keys.OrderBy(k => k.Face).ThenBy(k => k.Y).ThenBy(k => k.X).Skip(maxLeaves).ToList()) _entries.Remove(k);
         foreach (var e in _entries.Values) KindsPresent.UnionWith(e.Kinds);
+        foreach (var (k, e) in _raw) if (_entries.ContainsKey(k)) KindsPresent.UnionWith(e.Kinds);
         Bundles = _entries.Keys.Select(k => k.AncestorAt(WorkFrame.Level)).Distinct().OrderBy(k => k.Face).ThenBy(k => k.Y).ThenBy(k => k.X).ToList();
         _heights = new(96, k => Read(k) is { } bytes ? HeightsOf(k, bytes) : null);
     }
@@ -907,9 +1049,10 @@ internal sealed class CubeBuild
         return Enumerable.Range(0, count).Select(k => (LeafKind)BitConverter.ToUInt16(table, k * CubeLeafCodec.TableEntryBytes)).ToArray();
     }
 
-    private byte[]? Read(CubeKey key)
+    private byte[]? Read(CubeKey key) => _entries.TryGetValue(key, out var e) ? Read(e) : null;
+
+    private static byte[] Read(Entry e)
     {
-        if (!_entries.TryGetValue(key, out var e)) return null;
         using var fs = File.OpenRead(e.Path);
         fs.Position = e.Offset;
         var bytes = new byte[e.Length];
@@ -931,6 +1074,8 @@ internal sealed class CubeBuild
 
     public LeafSection? Section(CubeKey key, LeafKind kind)
     {
+        if (!_entries.ContainsKey(key)) return null;
+        if (_raw.TryGetValue(key, out var r) && r.Kinds.Contains(kind)) return CubeLeafCodec.ReadSection(Read(r), kind);
         if (!_entries.TryGetValue(key, out var e) || !e.IsLeaf || !e.Kinds.Contains(kind)) return null;
         return Read(key) is { } bytes ? CubeLeafCodec.ReadSection(bytes, kind) : null;
     }

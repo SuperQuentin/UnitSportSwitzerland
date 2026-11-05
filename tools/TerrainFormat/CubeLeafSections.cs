@@ -449,3 +449,91 @@ public sealed class CubeLeafContent
 
     public byte[] Encode() => CubeLeafCodec.Encode(ToLeaf());
 }
+
+/// <summary>One raw segment's source (G2 B3 PR 2): the TLM uuid, the part (LineString index), and the distance along that part, on the work plane, to the segment's first point.</summary>
+public readonly record struct RoadSourceKey(string Uuid, int Part, double FromM);
+
+/// <summary>
+/// The raw roads' keys (a temporary <c>.cubl</c>, #1507), one per raw segment in the order of the leaf's raw
+/// <see cref="LeafKind.Roads"/> section, null for a feature that is not a TLM road line (rail, water, BD TOPO):
+/// what <c>RawRoads.Key</c> is for the LV95 build, with the distance along the line in true metres (the work
+/// plane's) rather than LV95 grid metres. Payload: Brotli of the count, then per segment a byte (0 none,
+/// 1 a key), the uuid (7-bit length, UTF-8), the part (7-bit) and the distance (f64).
+/// </summary>
+public static class LeafRoadKeys
+{
+    public const ushort Version = 1;
+
+    public static LeafSection Encode(IReadOnlyList<RoadSourceKey?> keys) =>
+        new(LeafKind.RoadKeys, Version, 0, LeafPack.Pack(s =>
+        {
+            using var w = new BinaryWriter(s, System.Text.Encoding.UTF8, leaveOpen: true);
+            w.Write7BitEncodedInt(keys.Count);
+            foreach (var k in keys)
+            {
+                if (k is not { } key) { w.Write((byte)0); continue; }
+                w.Write((byte)1);
+                w.Write(key.Uuid);
+                w.Write7BitEncodedInt(key.Part);
+                w.Write(key.FromM);
+            }
+        }));
+
+    public static RoadSourceKey?[] Decode(LeafSection s)
+    {
+        LeafPack.CheckKind(s, LeafKind.RoadKeys, Version);
+        using var r = new BinaryReader(LeafPack.Unpack(s.Payload), System.Text.Encoding.UTF8);
+        var keys = new RoadSourceKey?[r.Read7BitEncodedInt()];
+        for (int i = 0; i < keys.Length; i++)
+            if (r.ReadByte() != 0) keys[i] = new RoadSourceKey(r.ReadString(), r.Read7BitEncodedInt(), r.ReadDouble());
+        return keys;
+    }
+}
+
+/// <summary>A car park ring in a leaf (G2 B3 PR 2): its cover class, where it came from (tlm, override), and its points (x, y, z) in the anchor frame, on the leaf mesh, unclosed.</summary>
+public sealed record LeafParkingLot(CoverClass Cover, string Source, float[] Points)
+{
+    public int Count => Points.Length / 3;
+}
+
+/// <summary>
+/// The car parks the network stage lays out (a temporary <c>.cubl</c>, #1507): <c>RawParking</c>'s lots on the leaf
+/// holding each ring's centroid (on the work plane), once, even where a ring spills into neighbours. Payload:
+/// Brotli of the count, then per lot the cover byte, the source (7-bit length, UTF-8), the point count (7-bit) and
+/// the points as f32 triples.
+/// </summary>
+public static class LeafParking
+{
+    public const ushort Version = 1;
+
+    public static LeafSection Encode(IReadOnlyList<LeafParkingLot> lots) =>
+        new(LeafKind.Parking, Version, 0, LeafPack.Pack(s =>
+        {
+            using var w = new BinaryWriter(s, System.Text.Encoding.UTF8, leaveOpen: true);
+            w.Write7BitEncodedInt(lots.Count);
+            foreach (var lot in lots)
+            {
+                w.Write((byte)lot.Cover);
+                w.Write(lot.Source);
+                w.Write7BitEncodedInt(lot.Count);
+                foreach (float f in lot.Points) w.Write(f);
+            }
+        }));
+
+    public static List<LeafParkingLot> Decode(LeafSection s)
+    {
+        LeafPack.CheckKind(s, LeafKind.Parking, Version);
+        using var r = new BinaryReader(LeafPack.Unpack(s.Payload), System.Text.Encoding.UTF8);
+        int n = r.Read7BitEncodedInt();
+        var lots = new List<LeafParkingLot>(n);
+        for (int i = 0; i < n; i++)
+        {
+            var cover = (CoverClass)r.ReadByte();
+            string source = r.ReadString();
+            var pts = new float[r.Read7BitEncodedInt() * 3];
+            for (int k = 0; k < pts.Length; k++) pts[k] = r.ReadSingle();
+            lots.Add(new LeafParkingLot(cover, source, pts));
+        }
+        return lots;
+    }
+}

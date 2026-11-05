@@ -345,9 +345,24 @@ public sealed class LineIndex
         double sum = 0;
         for (int s = 0; s + 1 < line.Count; s++)
         {
-            double dx = p[s * 3 + 3] - p[s * 3], dy = p[s * 3 + 4] - p[s * 3 + 1], dz = p[s * 3 + 5] - p[s * 3 + 2];
-            if (keep == null || keep((p[s * 3] + p[s * 3 + 3]) / 2, (p[s * 3 + 1] + p[s * 3 + 4]) / 2, (p[s * 3 + 2] + p[s * 3 + 5]) / 2))
-                sum += Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            // in plan (x, z of the frame): the drape's ups and downs follow each build's own ground (B3 PR 2: streams in gullies 0.2 % apart in 3D)
+            double ax = p[s * 3], ay = p[s * 3 + 1], az = p[s * 3 + 2], bx = p[s * 3 + 3], by = p[s * 3 + 4], bz = p[s * 3 + 5];
+            double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
+            if (keep == null) { sum += len; continue; }
+            bool ka = keep(ax, ay, az), kb = keep(bx, by, bz);
+            if (ka && kb) sum += len;
+            else if (ka != kb)
+            {
+                // an edge across the filter's boundary: cut where it changes (bisection), so the part kept counts and no more
+                double lo = 0, hi = 1;
+                for (int it = 0; it < 30; it++)
+                {
+                    double t = 0.5 * (lo + hi);
+                    if (keep(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t) == ka) lo = t; else hi = t;
+                }
+                double cut = 0.5 * (lo + hi);
+                sum += len * (ka ? cut : 1 - cut);
+            }
         }
         return sum;
     }
