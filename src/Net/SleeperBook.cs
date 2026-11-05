@@ -12,7 +12,7 @@ namespace UnitSport.Net;
 /// A player who left, lying asleep where they were (#644). <see cref="Key"/> is their
 /// <see cref="PlayerKey.Fingerprint"/> and never leaves the server; <see cref="Id"/> is what clients
 /// know it by. <see cref="At"/> is where they lie, at the feet; <see cref="Yaw"/> their heading in GlobalPos's
-/// offset axes there (grid north until G2 A1; the file keeps it from true north). <see cref="Rider"/> is the peer id they
+/// the LV95 grid's axes there (grid north until G2 D; the file keeps it from true north). <see cref="Rider"/> is the peer id they
 /// had, which their jersey hue and (if they never chose one) their figure come from.
 /// </summary>
 public sealed record Sleeper(long Id, string Key, string Name, GlobalPos At, float Yaw,
@@ -84,11 +84,11 @@ public sealed class SleeperBook
 
         public static Saved Of(Sleeper s) => new()
         {
-            Id = s.Id, Key = s.Key, Name = s.Name, At = s.At, YawTrue = s.At.TrueYaw(s.Yaw),
+            Id = s.Id, Key = s.Key, Name = s.Name, At = s.At, YawTrue = Lv95Grid.TrueYaw(s.At, s.Yaw),
             Rider = s.Rider, Outfit = s.Outfit, Appearance = s.Appearance, Headwear = s.Headwear,
         };
 
-        public Sleeper ToSleeper() => new(Id, Key, Name, At, At.OffsetYaw(YawTrue), Rider, Outfit, Appearance, Headwear);
+        public Sleeper ToSleeper() => new(Id, Key, Name, At, Lv95Grid.GridYaw(At, YawTrue), Rider, Outfit, Appearance, Headwear);
     }
 
     public static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
@@ -99,6 +99,14 @@ public sealed class SleeperBook
     public string ToJson() => JsonSerializer.Serialize(Snapshot(), Json);
 
     public static SleeperBook FromJson(string json) => FromJson(json, out _);
+
+    /// <summary>
+    /// A place no peer ever stood at (#1547): the default of a body that left before its first state, LV95
+    /// 0/0 before G2 (A2b migrated those faithfully, to the sea off Madeira, where waking put the player 3,000 km
+    /// from any ground) and the Earth's centre since. Such a sleeper is dropped on load.
+    /// </summary>
+    public static bool Placeholder(GlobalPos at) =>
+        !at.IsFinite || at.Ecef.Length < 1_000_000 || at.HorizontalDistanceTo(GlobalPos.FromLv95(0, 0, at.Alt)) < 1_000;
 
     /// <summary>The book a file holds; <paramref name="migrated"/> when it was the form before G2 A2b (the caller writes it back).</summary>
     public static SleeperBook FromJson(string json, out bool migrated)
@@ -119,7 +127,7 @@ public sealed class SleeperBook
             (next, sleepers) = (store.Next, store.Sleepers.Select(s => s.ToSleeper()));
         }
         foreach (var s in sleepers)
-            if (!string.IsNullOrEmpty(s.Key)) book._byKey[s.Key] = s;
+            if (!string.IsNullOrEmpty(s.Key) && !Placeholder(s.At)) book._byKey[s.Key] = s;
         book._nextId = Math.Max(next, book._byKey.Count > 0 ? book._byKey.Values.Max(s => s.Id) + 1 : 1);
         return book;
     }

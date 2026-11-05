@@ -380,7 +380,7 @@ public partial class Swarm : Node
     {
         var frame = _origin.Frame;
         var vel = dt > 0 ? (me.Position - before) / dt : Vector3.Zero;
-        me.SetNetState(frame.ToGlobal(me.Position), frame.OffsetOfWorld(me.Position, vel), frame.OffsetYawOf(me.Position, me.Rotation.Y));
+        me.SetNetState(frame.ToGlobal(me.Position), frame.GridOfWorld(me.Position, vel), frame.GridYawOf(me.Position, me.Rotation.Y));
         me.NetTime = Time.GetTicksUsec() / 1e6;
     }
 

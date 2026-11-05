@@ -227,7 +227,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // slots it keeps awake
         World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _radios, _players);
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
-        AddChild(new World.SteamerBerth(_chunks));
+        AddChild(new World.SteamerBerth(_chunks?.Ground));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
@@ -363,7 +363,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         });
         // Versteckis (#1268): World/Versteckis, hide-and-seek as village props; its Rounds mode after the Battle Royale's
         var vs = _vs = Adventure.Versteckis.VersteckisManager.CreateServer(_chat, _players, origin, () => source, places?.Places ?? new());
-        vs.GroundWorld = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+        vs.GroundWorld = p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null;
         AddChild(vs);
         _chat.Versteckis = vs;
         if (_interest != null)
@@ -393,7 +393,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 for (int i = 0; i < _players!.GetChildCount(); i++)
                     if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
-                        list.Add(new Birds.BirdLife.Observer(origin.ToWorld(p.Global), origin.Frame.WorldOfOffset(p.Global, p.GlobalVelocity), p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                        list.Add(new Birds.BirdLife.Observer(origin.ToWorld(p.Global), origin.Frame.WorldOfGrid(p.Global, p.GlobalVelocity), p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
                             or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
             },
         };
@@ -419,7 +419,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat.Arrival = _arrival;
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
-        _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+        _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.Ground.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
         _sleepers.Proven += (peer, _) => ids.Refresh(peer);
         // the Adventure layer (#1223): progress per proven identity (an account on --accounts required), quests;
         // off for a player in a Battle Royale round
@@ -436,7 +436,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             _sleepers.Proven += adventure.PeerProven;
             // places (#1224): discovery, fog and viewpoints for every adventuring peer, from its proxy's published state
             Player.FootPlayer? PlayerOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
-            Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+            Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.Ground.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
             Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
                 PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
             // rewards (#1227): chests, edelweiss, seals, guides, trials and photos, checked against this server's own placement
@@ -505,7 +505,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             _structures.NameOf = _chat.NameOfPeer;
             _structures.InMatch = Rounds.Playing;
             _structures.MatchRunning = () => br.State.Running;
-            _structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            _structures.GroundAt = p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null;
             // a match piece that comes down leaves a pile of some of its materials (#276)
             var crates = _brCrates;
             _structures.Rubble = (at, stacks) =>
@@ -702,7 +702,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 // the ground this server holds under them: what any server-side check would use
                 var at = _origin!.ToWorld(p.Global);
-                string ground = _chunks != null && _chunks.TryGetHeight(at, out float h)
+                string ground = _chunks != null && _chunks.Ground.TryGetHeight(at, out float h)
                     ? $"ground {h:F1} m" + (_chunks.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
                     : "ground not loaded";
                 GD.Print($"[server] player {p.Name} at {p.Global}, {ground}");

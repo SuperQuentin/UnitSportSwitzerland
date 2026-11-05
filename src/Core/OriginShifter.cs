@@ -249,7 +249,7 @@ public partial class OriginShifter : Node
         if (previous == null)
         {
             var g = frame.ToGlobal(camera);
-            previous = FrameAxes.GroundAt(g.E, g.N, alt0);
+            previous = FrameAxes.GroundAt(g.Lv95.E, g.Lv95.N, alt0);
         }
         return FrameAxes.Tangent(at, drop, previous);
     }

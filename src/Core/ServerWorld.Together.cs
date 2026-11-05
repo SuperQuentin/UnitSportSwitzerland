@@ -17,7 +17,7 @@ public partial class ServerWorld
         together.PlacedSource = () => _placed;
         if (_chat is { } chat) together.NameOf = chat.NameOfPeer;
         // the cover raster is kept near players: enough for the glacier under a roped pair
-        together.GlacierAt = g => _chunks != null && _origin is { } o && _chunks.TryGetCover(o.ToWorld(g), out var cover)
+        together.GlacierAt = g => _chunks != null && _origin is { } o && _chunks.Ground.TryGetCover(o.ToWorld(g), out var cover)
             ? cover is Terrain.Format.CoverClass.Glacier or Terrain.Format.CoverClass.Snowfield : null;
     }
 }

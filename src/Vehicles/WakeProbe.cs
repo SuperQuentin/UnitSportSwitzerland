@@ -83,11 +83,11 @@ public partial class WakeProbe : Node
 
         // a body beside it, so the ground under it has collision as it has for a player walking up
         var beside = at + side * 6f + Vector3.Up * 1.5f;
-        var player = new FootPlayer { Name = "WakeProbeBody", Terrain = _chunks };
+        var player = new FootPlayer { Name = "WakeProbeBody", Terrain = _chunks?.Ground };
         AddChild(player);
         player.DebugLaunch(beside, Vector3.Zero);
         double c0 = Time.GetTicksMsec() / 1000.0;
-        while (!_chunks.HasCollisionAt(at))
+        while (!_chunks.Ground.HasCollisionAt(at))
         {
             player.GlobalPosition = beside;
             player.Velocity = Vector3.Zero;

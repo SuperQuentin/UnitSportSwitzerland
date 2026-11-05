@@ -67,21 +67,21 @@ public partial class IkeaPylon : Node
         };
         _grey = Styles.StyleKit.Figure(new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.56f, 0.58f) });
         if (_chunks == null) return;
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
         if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
     /// <summary>The tile shed its buildings (#553): the pylon stands with its store.</summary>
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
         node.GetNodeOrNull(NodeName)?.QueueFree();
         var root = new Node3D { Name = NodeName };
@@ -100,7 +100,7 @@ public partial class IkeaPylon : Node
             var along = new Vector3(outward.Z, 0, -outward.X);
             var at = d.Position + outward * StandOff + along * AlongFacade;
             var world = node.ToGlobal(at);
-            if (!_chunks.TryGetHeight(world, out float ground)) continue;
+            if (!_chunks.Ground.TryGetHeight(world, out float ground)) continue;
             at = node.ToLocal(world with { Y = ground });
 
             // the slab's faces look back along the door's outward, so it is readable from the road

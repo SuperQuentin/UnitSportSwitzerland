@@ -452,7 +452,7 @@ public static class MovieFile
             at = Core.GlobalPos.FromWire(a, b, c);
             (a, b, c) = at.Lv95;
         }
-        return at.Enu;
+        return Core.Lv95Grid.Axes(at);
     }
 
     private static Godot.Quaternion Turn(Core.EnuAxes enu, Godot.Quaternion q, bool toEarth) =>

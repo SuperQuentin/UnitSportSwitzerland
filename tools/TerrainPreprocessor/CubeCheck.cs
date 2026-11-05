@@ -11,7 +11,9 @@ namespace UnitSport.Tools.Preprocessor;
 /// counts those across frame and face edges), a tangent-plane collision field against the mesh (target
 /// 2 cm), and the features against the terrain they stand on. #1507 adds the frame ground
 /// (<see cref="FrameGround"/>) against the sources, and with <c>--cube-terr DIR</c> against the LV95
-/// build's <c>.terr</c> heights (<see cref="Lv95Ground"/>) at the same places.
+/// build's <c>.terr</c> heights (<see cref="Lv95Ground"/>) at the same places. Once the water stage has
+/// run, the leaves hold lake and river beds where the sources hold the surface (#1568): the rows against
+/// the sources leave out the points under a leaf's water and say how many.
 /// </summary>
 public static class CubeCheck
 {
@@ -38,12 +40,43 @@ public static class CubeCheck
         return tiles;
     }
 
+    /// <summary>The <see cref="LeafKind.Water"/> sections of a region's <c>.cubl</c> bundles: the leaves the water stage wrote beds into.</summary>
+    private static Dictionary<CubeKey, CubeWater> ReadLeafWater(string dir, int jobs)
+    {
+        var water = new ConcurrentDictionary<CubeKey, CubeWater>();
+        Parallel.ForEach(Directory.GetFiles(dir, "*.cubl"), new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        {
+            foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Water) is { } s) water[key] = LeafWater.Decode(s);
+        });
+        return new(water);
+    }
+
+    /// <summary>
+    /// Whether lattice point (i, j), fractional or not, is under the leaf's water: a still level on any of
+    /// the water samples (every second vertex) round it. The shore's dry vertices next to the water are
+    /// left out with it, which costs a few samples and keeps the test free of the bed's own shape.
+    /// </summary>
+    private static bool UnderWater(CubeWater? w, double i, double j)
+    {
+        if (w == null) return false;
+        int side = w.Side, ci = (int)Math.Floor(i / 2), cj = (int)Math.Floor(j / 2);
+        for (int dj = 0; dj <= 1; dj++)
+            for (int di = 0; di <= 1; di++)
+            {
+                int a = Math.Clamp(ci + di, 0, side - 1), b = Math.Clamp(cj + dj, 0, side - 1);
+                if (!float.IsNaN(w.Level[b * side + a])) return true;
+            }
+        return false;
+    }
+
     public static int Run(CubeStage.Options o, CubeHeightSource src)
     {
         var manifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(o.Out!, CubeManifest.FileName)));
         int bits = manifest.Bits, n = (1 << bits) + 1;
         var tiles = new Dictionary<CubeKey, CubeTile>(ReadLeafHeights(o.Out!, o.Jobs));
-        Console.WriteLine($"check: {tiles.Count} tiles decoded");
+        var water = ReadLeafWater(o.Out!, o.Jobs);
+        Console.WriteLine($"check: {tiles.Count} tiles decoded, {water.Count} with water");
         bool ok = true;
 
         // ---- shared edges: every pair of built neighbours, exact --------------------------------
@@ -91,9 +124,11 @@ public static class CubeCheck
         var featTlm = new List<double>();
         var featBd = new List<double>();
         double spacing = 0;
+        int wet = 0;
         foreach (var key in sample)
         {
             var tile = tiles[key];
+            var w = water.GetValueOrDefault(key);
             var cur = new CubeHeightSource.Cursors(src.Dems.Count);
             var fresh = resampler.Heights(key, bits, cur)!;
             var verts = CubeGeometry.Vertices(key, bits, tile.Heights);
@@ -108,12 +143,13 @@ public static class CubeCheck
                 double exact = src.ExactHeight(normal, cur);
                 if (double.IsNaN(exact)) continue;
                 interp.Add(Math.Abs(fresh[j * n + i] - exact));
-                // the mesh vertex against the rigorous point of the ground
-                var (x, y, z) = anchor.ToLocal(CubeSphere.OnEllipsoid(normal, exact));
                 int v = (j * n + i) * 3;
-                total.Add(Math.Sqrt(Sq(verts[v] - x) + Sq(verts[v + 1] - y) + Sq(verts[v + 2] - z)));
                 var (gx, gy, gz) = CubeGeometry.Exact(key, bits, i, j, stored);
                 geom.Add(Math.Sqrt(Sq(verts[v] - gx) + Sq(verts[v + 1] - gy) + Sq(verts[v + 2] - gz)));
+                // the mesh vertex against the rigorous point of the ground: a bed against the sources' lake surface says nothing
+                if (UnderWater(w, i, j)) { wet++; continue; }
+                var (x, y, z) = anchor.ToLocal(CubeSphere.OnEllipsoid(normal, exact));
+                total.Add(Math.Sqrt(Sq(verts[v] - x) + Sq(verts[v + 1] - y) + Sq(verts[v + 2] - z)));
             }
 
             // collision: a tangent-plane field over the middle of the tile, at the mesh's spacing and twice it
@@ -149,14 +185,14 @@ public static class CubeCheck
         Console.WriteLine($"check: {sample.Count} sample tiles: {string.Join(", ", sample.Take(6).Select(k => k.Describe()))}{(sample.Count > 6 ? ", ..." : "")}");
         Report("resampling, control points against exact (height)", interp, 0.001);
         Report("vertex geometry, control grid against rigorous", geom, 0.01);
-        ok &= Report("mesh vertex against the rigorous ground point (target 1 cm)", total, 0.01);
+        ok &= Report($"mesh vertex against the rigorous ground point (target 1 cm; {wet} under water left out)", total, 0.01);
         // informational since G1 (#1452): the height field misses 2 cm against the mesh, so collision is trimesh patches (C2)
         Report($"collision field at the mesh's spacing ({spacing:F2} m) against the mesh (G1: a height field misses, collision is trimesh patches)", coll1, double.NaN);
         Report($"collision field at half the spacing ({spacing / 2:F2} m) against the mesh", collHalf, 0.02);
         Report($"collision field at twice the spacing ({2 * spacing:F2} m) against the mesh", coll2, 0.02);
         Report("swissTLM3D feature points against the mesh below", featTlm, double.NaN);
         Report("BD TOPO feature points against the mesh below", featBd, double.NaN);
-        ok &= GroundCheck(o, src, manifest, tiles, sample);
+        ok &= GroundCheck(o, src, manifest, tiles, water, sample);
         Console.WriteLine(ok ? "check: PASS" : "check: FAIL");
         return ok ? 0 : 1;
     }
@@ -168,7 +204,7 @@ public static class CubeCheck
     /// LV95 position; then points on shared edges across frame edges, sampled from both frames (the same
     /// height to a micrometre: the mesh edge is the same bits and the edges' sea level is rigorous).
     /// </summary>
-    private static bool GroundCheck(CubeStage.Options o, CubeHeightSource src, CubeManifest manifest, Dictionary<CubeKey, CubeTile> tiles, List<CubeKey> sample)
+    private static bool GroundCheck(CubeStage.Options o, CubeHeightSource src, CubeManifest manifest, Dictionary<CubeKey, CubeTile> tiles, Dictionary<CubeKey, CubeWater> water, List<CubeKey> sample)
     {
         int bits = manifest.Bits, cells = 1 << bits;
         var grounds = new Dictionary<CubeKey, FrameGround>();
@@ -183,7 +219,7 @@ public static class CubeCheck
         var lv95 = new Lv95Ground(grids);
         var toSources = new List<double>();
         var toTerr = new List<double>();
-        int beds = 0;
+        int beds = 0, wet = 0;
         int misses = 0, points = 0;
         foreach (var key in sample)
         {
@@ -203,6 +239,7 @@ public static class CubeCheck
             }
             var cur = new CubeHeightSource.Cursors(src.Dems.Count);
             var rng = new Random(key.GetHashCode() ^ 1507);
+            var w = water.GetValueOrDefault(key);
             for (int k = 0; k < 2000; k++)
             {
                 double i = rng.NextDouble() * cells, j = rng.NextDouble() * cells;
@@ -216,21 +253,23 @@ public static class CubeCheck
                     continue;
                 }
                 double exact = src.ExactHeight(t.NormalAt(i, j), cur);
-                if (!double.IsNaN(exact)) toSources.Add(Math.Abs(h - (exact - t.UndulationAt(i, j))));
+                bool underWater = UnderWater(w, i, j);
+                if (underWater) wet++;
+                else if (!double.IsNaN(exact)) toSources.Add(Math.Abs(h - (exact - t.UndulationAt(i, j))));
                 if (o.Terr != null)
                 {
                     var (e, nn, _) = SwissGeodesy.FromEcef(ground.Frame.ToEcef(x, y, h));
                     if (lv95.Sample(e, nn) is { } ht)
                     {
-                        // a lake: the LV95 build holds its bed (#298), the leaves still the surveyed surface
-                        if (h - ht > 1) beds++;
+                        // a lake on a leaf without the water stage: the LV95 build holds its bed (#298), the leaf the surveyed surface
+                        if (!underWater && h - ht > 1) beds++;
                         else toTerr.Add(Math.Abs(h - ht));
                     }
                 }
             }
         }
         Console.WriteLine($"check: frame ground on {sample.Count} sample leaves: {points} points, {misses} found no ground over data (target 0)");
-        Report("frame ground (leaf mesh, quads split as drawn) against the sources' height there", toSources, double.NaN);
+        Report($"frame ground (leaf mesh, quads split as drawn) against the sources' height there ({wet} points under water left out)", toSources, double.NaN);
         if (o.Terr != null)
         {
             Report($"frame ground against the LV95 build's .terr at the same place ({grids.Count} tiles; {beds} points over lake beds left out)", toTerr, double.NaN);

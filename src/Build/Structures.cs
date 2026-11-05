@@ -22,7 +22,7 @@ public sealed class Structure
     public readonly Dictionary<Slot, Placed> Pieces = new();
 
     /// <summary>Where it stands in <paramref name="origin"/>'s world; <see cref="Yaw"/> is a record's (GlobalPos's axes, as saved; the world's in a flat frame).</summary>
-    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(Vector3.Up, origin.Frame.WorldYawOf(At, Yaw)), origin.ToWorld(At));
+    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(Vector3.Up, origin.Frame.WorldYawOfGrid(At, Yaw)), origin.ToWorld(At));
 
     /// <summary>Where its corner is, as a place: what is saved and sent (#1503).</summary>
     public GlobalPos At => GlobalPos.FromLv95(E, N, Altitude);
@@ -168,7 +168,7 @@ public partial class Structures : Node
     public static GlobalPos CentreGlobal(Structure s, Piece p)
     {
         var local = new Basis(Vector3.Up, s.Yaw) * (LocalTransform(p) * new Vector3(0, BuildGrid.Storey * 0.5f, 0));
-        return new GlobalPos(s.E + local.X, s.N - local.Z, s.Altitude + local.Y);   // world Z points south
+        return GlobalPos.FromLv95(s.E + local.X, s.N - local.Z, s.Altitude + local.Y);   // world Z points south
     }
 
     // ---- client API -----------------------------------------------------------------------------
@@ -191,7 +191,7 @@ public partial class Structures : Node
             var (x, y, z) = g.ToWire();
             RpcId(1, MethodName.AskBuild, req, structure, x, y, z, _origin.TrueYaw(newAt.Origin, yaw), packed);
         }
-        else ServeBuild(1, req, structure, g.E, g.N, g.Alt, _origin.Frame.OffsetYawOf(newAt.Origin, yaw), packed);
+        else ServeBuild(1, req, structure, g.Lv95.E, g.Lv95.N, g.Alt, _origin.Frame.GridYawOf(newAt.Origin, yaw), packed);
     }
 
     /// <summary>Asks to take back a piece you built. <paramref name="done"/> gets null when it is yours again.</summary>
@@ -257,7 +257,7 @@ public partial class Structures : Node
     {
         // ECEF and a heading from true north, as the record keeps them (#1503)
         var at = GlobalPos.FromWire(x, y, z);
-        PutStructure(new Structure { Id = id, E = at.E, N = at.N, Altitude = at.Alt, Yaw = at.OffsetYaw(trueYaw), Owner = owner, Match = match });
+        PutStructure(new Structure { Id = id, E = at.Lv95.E, N = at.Lv95.N, Altitude = at.Alt, Yaw = Lv95Grid.GridYaw(at, trueYaw), Owner = owner, Match = match });
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -365,7 +365,7 @@ public partial class Structures : Node
         known.Add(s.Id);
         var corner = s.At;
         var (x, y, z) = corner.ToWire();
-        RpcId(peer, MethodName.AddStructure, s.Id, x, y, z, corner.TrueYaw(s.Yaw), DisplayOwner(s.Owner, s.OwnerName), s.Match);
+        RpcId(peer, MethodName.AddStructure, s.Id, x, y, z, Lv95Grid.TrueYaw(corner, s.Yaw), DisplayOwner(s.Owner, s.OwnerName), s.Match);
         // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
         foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => (p.Owner, p.OwnerName)))
             RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), DisplayOwner(group.Key.Owner, group.Key.OwnerName), group.Min(p => p.BuiltAt));
@@ -468,7 +468,7 @@ public partial class Structures : Node
             return;
         }
         var at = GlobalPos.FromWire(x, y, z);
-        ServeBuild(Multiplayer.GetRemoteSenderId(), req, structure, at.E, at.N, at.Alt, at.OffsetYaw(trueYaw), packed);
+        ServeBuild(Multiplayer.GetRemoteSenderId(), req, structure, at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.GridYaw(at, trueYaw), packed);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -720,7 +720,7 @@ public partial class Structures : Node
             foreach (var ss in store.Structures)
             {
                 var (ce, cn, ch) = ss.At.Lv95;
-                var s = new Structure { Id = ss.Id, E = ce, N = cn, Altitude = ch, Yaw = ss.At.OffsetYaw(ss.YawTrue), Owner = ss.Owner, OwnerName = BackupOf(ss.Owner, ss.OwnerName) };
+                var s = new Structure { Id = ss.Id, E = ce, N = cn, Altitude = ch, Yaw = Lv95Grid.GridYaw(ss.At, ss.YawTrue), Owner = ss.Owner, OwnerName = BackupOf(ss.Owner, ss.OwnerName) };
                 PutStructure(s);
                 foreach (var sp in ss.Pieces)
                 {
@@ -750,7 +750,7 @@ public partial class Structures : Node
                 Next = _nextId,
                 Structures = _structures.Values.Where(s => !s.Match).OrderBy(s => s.Id).Select(s => new SavedStructure
                 {
-                    Id = s.Id, At = s.At, YawTrue = s.At.TrueYaw(s.Yaw),
+                    Id = s.Id, At = s.At, YawTrue = Lv95Grid.TrueYaw(s.At, s.Yaw),
                     Owner = s.Owner, OwnerName = s.OwnerName,
                     Pieces = s.Pieces.Values.Select(p => new SavedPiece
                     {

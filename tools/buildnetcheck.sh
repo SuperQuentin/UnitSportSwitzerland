@@ -4,8 +4,9 @@
 # joins after, must get them from the join snapshot, be refused damaging or taking A's pieces (PvP
 # off), then see A's own wall break (the floor it shared stays) and everything go at the end.
 #   tools/buildnetcheck.sh          (GODOT = the editor executable, docs/notes/general/godot-exe.md)
-# WARNING: the server keeps structures in the real user://structures/server.json of this project
-# (A takes its own down at the end, so it ends as it started).
+# The server and each client run in a fresh user:// of their own (tools/lib/guard.sh guard_test_userdata,
+# #1403): the server's structures never touch the real user://structures/server.json, whose leftovers from
+# earlier runs blocked the ghost's spot once A2b's migration let them load (#1547).
 . "$(dirname "$0")/lib/guard.sh"
 set -u
 GODOT=${GODOT:-godot}
@@ -24,6 +25,7 @@ guard_wait_ram 4 600 || exit 1
 SW=(--world fixture); CW=(--world fixture)
 [ -n "${REAL:-}" ] && { SW=(--generated-world); CW=(); }
 
+guard_test_userdata $OUT/userdata_buildnet_server || exit 1
 "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port $PORT "${SW[@]}" > $OUT/buildnet_server.log 2>&1 < /dev/null &
 SERVER=$!
 guard_watch $SERVER > /dev/null
@@ -32,10 +34,12 @@ for _ in $(seq 1 600); do
   kill -0 "$SERVER" 2>/dev/null || break
   guard_nap 0.2
 done
+guard_test_userdata $OUT/userdata_buildnet_A || exit 1
 guard_run 300 $OUT/buildnet_A.log "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name BuilderA --buildnet A --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS} &
 A=$!
 # B joins only once A has built: what it sees comes from the join snapshot
 for _ in $(seq 1 400); do grep -q "say built" $OUT/buildnet_A.log 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done
+guard_test_userdata $OUT/userdata_buildnet_B || exit 1
 guard_run 240 $OUT/buildnet_B.log "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --connect 127.0.0.1:$PORT ${CW[@]+"${CW[@]}"} --name WatcherB --buildnet B --traffic 0 ${ORIGINSTRESS:+--originstress $ORIGINSTRESS}
 wait $A
 code=0

@@ -63,7 +63,7 @@ public partial class EntityInterest : Node
     private readonly Dictionary<long, HashSet<ulong>> _sets = new();
     /// <summary>Per viewer: entities whose stream stopped and whose node goes at the time given.</summary>
     private readonly Dictionary<(long Viewer, ulong Entity), double> _leaving = new();
-    private readonly Dictionary<long, (double E, double N, double At)> _lastSeen = new();
+    private readonly Dictionary<long, (GlobalPos Pos, double At)> _lastSeen = new();
     private readonly Dictionary<ulong, GlobalPos> _lastAt = new();
 
     // per round, reused (#221: no allocations per round)
@@ -137,7 +137,7 @@ public partial class EntityInterest : Node
         foreach (var (viewer, set) in _sets)
         {
             if (!_lastSeen.TryGetValue(viewer, out var v)) continue;
-            double d = Math.Sqrt((at.E - v.E) * (at.E - v.E) + (at.N - v.N) * (at.N - v.N));
+            double d = at.HorizontalDistanceTo(v.Pos);
             if (EntityInterestRules.Keep(d, entity.InterestRange(ViewOf(viewer)), was: false)) set.Add(id);
         }
     }
@@ -184,7 +184,7 @@ public partial class EntityInterest : Node
                 _entities.Add((id, entity, at));
                 _index[id] = i;
                 if (entity.InterestBig) { _big.Add(i); continue; }
-                var key = ((long)Math.Floor(at.E / CellM), (long)Math.Floor(at.N / CellM));
+                var key = CellOf(at);
                 if (!_cells.TryGetValue(key, out var cell)) _cells[key] = cell = _spare.Count > 0 ? _spare.Pop() : new List<int>();
                 cell.Add(i);
 
@@ -209,10 +209,15 @@ public partial class EntityInterest : Node
         {
             if (child is not FootPlayer p || FootPlayer.NetId(p.Name) is not long viewer || viewer <= 0) continue;
             var at = p.Global;
-            var (aheadE, aheadN) = _lastSeen.TryGetValue(viewer, out var prev)
-                ? EntityInterestRules.Ahead(at.E, at.N, prev.E, prev.N, now - prev.At)
-                : (at.E, at.N);
-            _lastSeen[viewer] = (at.E, at.N, now);
+            var ahead = at;
+            if (_lastSeen.TryGetValue(viewer, out var prev))
+            {
+                // the look-ahead in metres east and north of the viewer, true ones (#1502)
+                var (pe, pn, _) = at.OffsetTo(prev.Pos);
+                var (ae, an) = EntityInterestRules.Ahead(0, 0, pe, pn, now - prev.At);
+                if (ae != 0 || an != 0) ahead = at.Moved(ae, an);
+            }
+            _lastSeen[viewer] = (at, now);
             if (!_sets.TryGetValue(viewer, out var set)) _sets[viewer] = set = new HashSet<ulong>();
             var view = ViewOf(viewer);
 
@@ -221,7 +226,7 @@ public partial class EntityInterest : Node
             _candidates.Clear();
             float reach = EntityInterestRules.VehicleRange(CellSize, view.Far, view.FovDeg) * EntityInterestRules.LeaveFactor;
             int cells = (int)Math.Ceiling(reach / CellM);
-            long ce = (long)Math.Floor(at.E / CellM), cn = (long)Math.Floor(at.N / CellM);
+            var (ce, cn) = CellOf(at);
             for (long de = -cells; de <= cells; de++)
                 for (long dn = -cells; dn <= cells; dn++)
                     if (_cells.TryGetValue((ce + de, cn + dn), out var cell))
@@ -234,7 +239,7 @@ public partial class EntityInterest : Node
             {
                 if (!_seen.Add(i)) return;
                 var (id, entity, where) = _entities[i];
-                double d = Math.Min(Flat(where, at.E, at.N), Flat(where, aheadE, aheadN));
+                double d = Math.Min(where.HorizontalDistanceTo(at), where.HorizontalDistanceTo(ahead));
                 _candidates.Add(new EntityInterestRules.Candidate(i, d, entity.InterestRange(view), set.Contains(id)));
             }
 
@@ -262,7 +267,15 @@ public partial class EntityInterest : Node
         }
     }
 
-    private static double Flat(GlobalPos a, double e, double n) => Math.Sqrt((a.E - e) * (a.E - e) + (a.N - n) * (a.N - n));
+    /// <summary>
+    /// The bucket a place is in: a CellM square of its LV95 notation, only a spatial hash (neighbouring buckets are
+    /// searched with a margin, distances are the Earth's), until G2 D gives the cube key.
+    /// </summary>
+    private static (long E, long N) CellOf(GlobalPos at)
+    {
+        var l = at.Lv95;
+        return ((long)Math.Floor(l.E / CellM), (long)Math.Floor(l.N / CellM));
+    }
 }
 
 /// <summary>

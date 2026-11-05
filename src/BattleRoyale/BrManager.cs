@@ -729,7 +729,7 @@ public partial class BrManager : Node
     {
         // (#1503) ECEF on the wire; a map ping has no height (its z is the ground at sea level)
         var at = GlobalPos.FromWire(x, y, z);
-        ServerPing(Multiplayer.GetRemoteSenderId(), at.E, at.N, onMap ? double.NaN : at.Alt);
+        ServerPing(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, onMap ? double.NaN : at.Alt);
     }
 
     /// <summary>
@@ -1003,8 +1003,8 @@ public partial class BrManager : Node
             o.Remove("AreaX");
             o.Remove("AreaY");
             o.Remove("AreaZ");
-            o["AreaE"] = at.E;
-            o["AreaN"] = at.N;
+            o["AreaE"] = at.Lv95.E;
+            o["AreaN"] = at.Lv95.N;
         }
         return o.ToJsonString();
     }

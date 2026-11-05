@@ -25,7 +25,7 @@ public class OriginFrameTests
         var f = GroundAt(BernE, BernN);
         Assert.False(f.IsAnchor);
         Assert.Equal(new Vector3(120, 540, -340), f.ToWorld(BernE + 120, BernN + 340, 540));
-        Assert.Equal(new GlobalPos(BernE + 120, BernN + 340, 540), f.ToGlobal(new Vector3(120, 540, -340)));
+        Assert.Equal(GlobalPos.FromLv95(BernE + 120, BernN + 340, 540), f.ToGlobal(new Vector3(120, 540, -340)));
         var shift = GroundAt(BernE + 1000, BernN).Since(f);
         Assert.Equal(Basis.Identity, shift.Transform.Basis);
         Assert.Equal(new Vector3(-1000, 0, 0), shift.Transform.Origin);
@@ -60,7 +60,7 @@ public class OriginFrameTests
         var back = f.ToWorld(g);
         Assert.True(back.DistanceTo(w) < 0.004f, $"{w} -> {g} -> {back}");
         // and the other way, an LV95 place near it
-        var p = new GlobalPos(BernE + 7_000, BernN - 4_000, 98_000);
+        var p = GlobalPos.FromLv95(BernE + 7_000, BernN - 4_000, 98_000);
         Assert.True(f.ToGlobal(f.ToWorld(p)).DistanceTo(p) < 0.004, "an LV95 place round-trips");
     }
 
@@ -142,7 +142,7 @@ public class OriginFrameTests
         Assert.Equal(612.5, ground.AltitudeOf(new Vector3(30, 612.5f, -40)), 3);
         Assert.Equal(Vector3.Up, ground.UpAt(new Vector3(30, 612.5f, -40)));
         var anchor = AnchorAt(BernE, BernN, 120_000);
-        var p = new GlobalPos(BernE + 15_000, BernN - 8_000, 118_000);
+        var p = GlobalPos.FromLv95(BernE + 15_000, BernN - 8_000, 118_000);
         Assert.Equal(p.Alt, anchor.AltitudeOf(anchor.ToWorld(p)), 0.01);
         Assert.True(anchor.UpAt(Vector3.Zero).DistanceTo(Vector3.Up) < 1e-5f, "up at the anchor is its Y");
         // 17 km away the ground's up has turned ~0.15° from the anchor's
@@ -171,7 +171,7 @@ public class OriginFrameTests
     {
         var low = GroundAt(BernE, BernN);
         var high = new OriginFrame(BernE + 3_000, BernN, 72_000, 1);
-        var p = new GlobalPos(BernE + 3_200, BernN - 100, 71_500);
+        var p = GlobalPos.FromLv95(BernE + 3_200, BernN - 100, 71_500);
         var w = high.ToWorld(p);
         Assert.Equal(new Vector3(200, -500, 100), w);
         Assert.Equal(p, high.ToGlobal(w));

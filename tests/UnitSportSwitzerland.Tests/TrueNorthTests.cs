@@ -69,10 +69,10 @@ public class TrueNorthTests
     [Fact]
     public void The_wire_s_offset_yaw_from_G2_A2_agrees_with_true_north_s()
     {
-        // #1503's GlobalPos.OffsetYaw/TrueYaw (the wire's turn) and #1504's must be one turn
+        // the records' grid turn (#1502's Lv95Grid, the wire's edge) and #1504's must be one turn
         var geneva = GlobalPos.FromLv95(GenevaE, GenevaN, 372);
-        Assert.Equal(TrueNorth.OffsetYaw(geneva, 1.234f), geneva.OffsetYaw(1.234f), 4);
-        Assert.Equal(TrueNorth.TrueYawOfOffset(geneva, 1.234f), geneva.TrueYaw(1.234f), 4);
+        Assert.Equal(TrueNorth.OffsetYaw(geneva, 1.234f), Lv95Grid.GridYaw(geneva, 1.234f), 4);
+        Assert.Equal(TrueNorth.TrueYawOfOffset(geneva, 1.234f), Lv95Grid.TrueYaw(geneva, 1.234f), 4);
     }
 
     [Fact]
@@ -115,12 +115,13 @@ public class TrueNorthTests
         Assert.Equal(0, TrueNorth.NorthBearing(frame, Vector3.Zero) / Deg, 4);
         // a heading from true north is its own world yaw there
         Assert.Equal(0.6f, TrueNorth.WorldYaw(frame, Vector3.Zero, 0.6f), 4);
-        // a world direction is its own bearing there, and a GlobalPos offset turns by the grid's convergence
+        // a world direction is its own bearing there and in true east and north (#1502); on the grid it turns by the convergence
         var near = new TrueNorth.Near();
         Assert.Equal(0, near.World(frame, Vector3.Zero) / Deg, 4);
         double g = SwissGeodesy.GridConvergenceDeg(GenevaE, GenevaN);
-        Assert.Equal(g, near.Offset(frame, Vector3.Zero) / Deg, 2);
-        var offset = near.WorldToOffset(frame, Vector3.Zero, new Vector2(0, 1));
+        Assert.Equal(g, near.Grid(frame, Vector3.Zero) / Deg, 2);
+        Assert.Equal(new Vector2(0, 1), near.WorldToEnu(frame, Vector3.Zero, new Vector2(0, 1)));
+        var offset = near.WorldToGrid(frame, Vector3.Zero, new Vector2(0, 1));
         Assert.Equal(g, Mathf.Atan2(offset.X, offset.Y) / Deg, 2);
     }
 

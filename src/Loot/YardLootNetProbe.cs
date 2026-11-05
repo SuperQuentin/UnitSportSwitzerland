@@ -55,7 +55,7 @@ public partial class YardLootNetProbe : ChatProbe
         var source = Loot.Source!.Invoke()!;
         var at = me.Global;
         var world = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
-        var sites = world.SitesNear(at.E, at.N, 4000).OrderBy(s => at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt))).Take(6).ToList();
+        var sites = world.SitesNear(at.Lv95.E, at.Lv95.N, 4000).OrderBy(s => at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt))).Take(6).ToList();
         GD.Print($"{Log} {sites.Count} generated sites within 4 km");
         // two stacks or more if the nearest site has such a skip (C then takes the second, after a
         // refused try from afar), else any skip with something in it
@@ -102,7 +102,7 @@ public partial class YardLootNetProbe : ChatProbe
             await Seconds(0.6);
             if (Loot.NearestYard(me, out var faced) && faced.Index == c.Index && faced.Building == c.Building)
             {
-                GD.Print($"{Log} standing {F(SiteLoot.EdgeDistance(c, me.Global.E, me.Global.N))} m from the {SiteLoot.Describe(c.Kind)}, feet {F(me.Global.Alt - c.Bottom)} m over its foot");
+                GD.Print($"{Log} standing {F(SiteLoot.EdgeDistance(c, me.Global.Lv95.E, me.Global.Lv95.N))} m from the {SiteLoot.Describe(c.Kind)}, feet {F(me.Global.Alt - c.Bottom)} m over its foot");
                 return true;
             }
         }
@@ -230,8 +230,8 @@ public partial class YardLootNetProbe : ChatProbe
         int before = askId == ItemId.None ? 0 : CountOf(askId);
         Loot.TakeUnchecked(skip.Building, skip.Index, ask);
         await Seconds(2.0);
-        Expect(SiteLoot.EdgeDistance(skip, me.Global.E, me.Global.N) > 10 && (askId == ItemId.None || CountOf(askId) == before),
-            $"a take of stack {ask} from {F(SiteLoot.EdgeDistance(skip, me.Global.E, me.Global.N))} m away is refused");
+        Expect(SiteLoot.EdgeDistance(skip, me.Global.Lv95.E, me.Global.Lv95.N) > 10 && (askId == ItemId.None || CountOf(askId) == before),
+            $"a take of stack {ask} from {F(SiteLoot.EdgeDistance(skip, me.Global.Lv95.E, me.Global.Lv95.N))} m away is refused");
         if (askId != ItemId.None)
         {
             // back at it: still there, and granted

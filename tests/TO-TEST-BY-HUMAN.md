@@ -13,6 +13,14 @@ On the NAS or the X: drive; a Linux server/NAS run is unverified.
 
 - [ ] A nationwide feature build with the new parallelism (`tools/rebuild-map.sh`, defaults) → watch peak memory and total time (the `[stage]` lines of the log); `.road`, cover, trees and water match an earlier build of the same sources (`tools/builder-bench.sh compare`-style hashes), and a lower `--jobs` or a `DOTNET_GCHeapHardLimit` still finishes with the same bytes.
 
+## GlobalPos holds ECEF ([#1544](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1544))
+
+On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Geneva and at Scuol, where the grid turns 0.95° and −2° from true north: what was laid in metres east and north is now in true ones.
+
+- [ ] Two clients, one at Scuol: walk, drive and fly past each other → the other is drawn where it is and faces its way (no degree's turn, no lag-free jump), a remote car's wheels line up with its road.
+- [ ] At Scuol, a festival or errand site with stalls round it, a Schwingen ring, a sword dummy (`/dummy`) → set out round their centre as before, nothing half a metre into a wall; a sword hit lands where the blade is.
+- [ ] The adventure compass and the VR watch's notch on a tracked target at Scuol → both point at it within a degree.
+
 ## True north ([#1533](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1533))
 
 At Geneva (`--chunks D:/UnitSportSwitzerland/terrain_chunks`, `--tp` to the Jardin Anglais), where true north is 0.9° east of grid north.

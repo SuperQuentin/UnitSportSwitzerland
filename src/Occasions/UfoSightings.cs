@@ -222,7 +222,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
             {
                 var pose = SightingPath.Pose(s, 0, now);
                 var ride = Rideable.Create(RideKind.Ufo)!;
-                var state = new VehicleState(RideKind.Ufo, new GlobalPos(s.E, s.N, s.Ground), pose.Yaw, Vector3.Zero,
+                var state = new VehicleState(RideKind.Ufo, GlobalPos.FromLv95(s.E, s.N, s.Ground), pose.Yaw, Vector3.Zero,
                     ride.MaxHealth, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
                 if (vehicles.Place(state, name, settled: true) != null)
                 {
@@ -324,7 +324,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
                 for (int attempt = 0; attempt < 12; attempt++)
                 {
                     float a = Rand(attempt * 2) * Mathf.Tau, d = 70f + Rand(attempt * 2 + 1) * 180f;
-                    double e = near.E + Mathf.Sin(a) * d, n = near.N + Mathf.Cos(a) * d;
+                    var (e, n, _) = near.Moved(Mathf.Sin(a) * d, Mathf.Cos(a) * d).Lv95;   // d metres on bearing a
                     if (MeadowGround(e, n) is { } g) return new Sighting(id, kind, start, length, e, n, g, heading, 1, seed);
                 }
                 return null;
@@ -332,7 +332,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
             case SightingKind.Mothership:
             {
                 float a = Rand(40) * Mathf.Tau, d = 900f + Rand(41) * 900f;
-                double e = near.E + Mathf.Sin(a) * d, n = near.N + Mathf.Cos(a) * d;
+                var (e, n, _) = near.Moved(Mathf.Sin(a) * d, Mathf.Cos(a) * d).Lv95;   // d metres on bearing a
                 float g = Ground(e, n) is var h && !float.IsNaN(h) ? h : (float)near.Alt;
                 return new Sighting(id, kind, start, length, e, n, g, heading, 1, seed);
             }
@@ -340,7 +340,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
             {
                 // across the sky a few hundred metres from the player
                 float a = Rand(50) * Mathf.Tau, d = 100f + Rand(51) * 300f;
-                double e = near.E + Mathf.Sin(a) * d, n = near.N + Mathf.Cos(a) * d;
+                var (e, n, _) = near.Moved(Mathf.Sin(a) * d, Mathf.Cos(a) * d).Lv95;   // d metres on bearing a
                 float g = Ground(e, n) is var h && !float.IsNaN(h) ? h : (float)near.Alt;
                 return new Sighting(id, SightingKind.Flyover, start, SightingPath.FlyoverLength, e, n, g, heading,
                     kind == SightingKind.Flyover ? count : SightingPlanner.CountOf(SightingKind.Flyover, seed), seed);
@@ -352,7 +352,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
     private float Ground(double e, double n)
     {
         if (_chunks == null) return float.NaN;
-        return _chunks.TryGetHeight(_origin.ToWorld(e, n, 0), out float h) ? h : float.NaN;
+        return _chunks.Ground.TryGetHeight(_origin.ToWorld(e, n, 0), out float h) ? h : float.NaN;
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
             }
             else if (farm.HasFields(TileId.FromLv95(e, n))) return null;   // off the fields where there are fields: a road, a yard
         }
-        if (_chunks != null && _chunks.TryGetCover(_origin.ToWorld(e, n, g), out var cover) && cover != CoverClass.Open) return null;
+        if (_chunks != null && _chunks.Ground.TryGetCover(_origin.ToWorld(e, n, g), out var cover) && cover != CoverClass.Open) return null;
         float lo = g, hi = g;
         for (int i = 0; i < 6; i++)
         {
@@ -408,7 +408,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
     {
         var at = GlobalPos.FromLv95(s.E, s.N, s.Ground);
         var (x, y, z) = at.ToWire();
-        return (x, y, z, at.TrueYaw(-s.Heading));
+        return (x, y, z, Lv95Grid.TrueYaw(at, -s.Heading));
     }
 
     // ---- the director (#866) and probes ----------------------------------------------------------
@@ -455,9 +455,9 @@ public partial class UfoSightings : Node3D, IOriginContainer
     {
         if (Authority) return;
         var at = GlobalPos.FromWire(x, y, z);
-        var s = new Sighting(id, (SightingKind)kind, start, length, at.E, at.N, ground, -at.OffsetYaw(heading), Math.Clamp(count, 1, 8), (uint)seed);
+        var s = new Sighting(id, (SightingKind)kind, start, length, at.Lv95.E, at.Lv95.N, ground, -Lv95Grid.GridYaw(at, heading), Math.Clamp(count, 1, 8), (uint)seed);
         _plans[id] = s;
-        GD.Print($"[sightings] server planned {s.Kind} {id} at LV95 {at.E:F1}/{at.N:F1}, in {start - Now:F1} s");
+        GD.Print($"[sightings] server planned {s.Kind} {id} at LV95 {at.Lv95}, in {start - Now:F1} s");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

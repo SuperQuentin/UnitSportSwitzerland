@@ -17,8 +17,8 @@ public sealed class Pin
     /// <summary>Where it is, at altitude 0 (a pin has no height): saved and synced as ECEF (#1503, G2 A2b).</summary>
     public GlobalPos At { get; set; }
     /// <summary>LV95 notation of <see cref="At"/>, for the map.</summary>
-    [JsonIgnore] public double E => At.E;
-    [JsonIgnore] public double N => At.N;
+    [JsonIgnore] public double E => At.Lv95.E;
+    [JsonIgnore] public double N => At.Lv95.N;
     public byte Icon { get; set; }
     public string Note { get; set; } = "";
     public bool Shared { get; set; }

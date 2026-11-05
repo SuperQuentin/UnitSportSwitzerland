@@ -58,7 +58,7 @@ public partial class HornCheck : ChatProbe
         var (rowE, rowN) = HornGround.SpotOf(site);
         var g0 = Me.Global;
         var (rowDE, rowDN, _) = g0.OffsetTo(GlobalPos.FromLv95(rowE, rowN, g0.Alt));
-        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)rowDE, 0.3f, (float)-rowDN), Me.Rotation.Y);
+        Me.PlaceAt(Me.GlobalPosition + Me.Origin!.Frame.WorldOfEnu(g0, new Vector3((float)rowDE, 0.3f, (float)-rowDN)), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         await Seconds(0.5);
         Expect(HornGround.At(Me) != null && HornGround.InteractionFor(Me) is { } hint && hint.Text.Contains("alphorn"), $"at the row the prompt says so ({HornGround.InteractionFor(Me)?.Text})");
@@ -66,7 +66,7 @@ public partial class HornCheck : ChatProbe
         // bots may sit down: their position is the row's
         var adv = AdventureService.Instance!;
         var position = adv.PositionOf;
-        adv.PositionOf = peer => peer < 0 && peer != -9 ? position?.Invoke(AdventureService.LocalPeer) : peer == -9 ? new GlobalPos(site.E + 4000, site.N, 0) : position?.Invoke(peer);
+        adv.PositionOf = peer => peer < 0 && peer != -9 ? position?.Invoke(AdventureService.LocalPeer) : peer == -9 ? GlobalPos.FromLv95(site.E + 4000, site.N, 0) : position?.Invoke(peer);
         Expect(svc.ServeHornBot(-9, 1, new Random(1)) is { } far && far.Contains("alphorn row"), "a bot too far from the row gets no seat");
 
         Expect(HornGround.TryInteract(Me), "E at the row asks for a seat");

@@ -64,21 +64,21 @@ public partial class BankSigns : Node
     public override void _Ready()
     {
         _plate = Styles.StyleKit.Solid(new StandardMaterial3D { AlbedoColor = BankPlate });
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
         if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
     /// <summary>The tile shed its buildings (#553): their signs go with them.</summary>
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
         node.GetNodeOrNull(NodeName)?.QueueFree();
         // a venue's door carries its neon sign instead (#1232, VenueSigns)

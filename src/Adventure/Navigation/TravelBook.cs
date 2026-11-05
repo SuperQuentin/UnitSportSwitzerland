@@ -47,7 +47,7 @@ public sealed class TravelBook
 public sealed record PortableFlag(GlobalPos At, long Placed)
 {
     /// <summary>LV95 notation of <see cref="At"/>.</summary>
-    [JsonIgnore] public double E => At.E;
-    [JsonIgnore] public double N => At.N;
+    [JsonIgnore] public double E => At.Lv95.E;
+    [JsonIgnore] public double N => At.Lv95.N;
     [JsonIgnore] public float Alt => (float)At.Alt;
 }

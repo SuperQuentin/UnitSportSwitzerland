@@ -49,8 +49,8 @@ public partial class SlopeWalkProbe : Node
         if (_player == null)
         {
             // the player is what the collision is built round
-            if (!_chunks.TryGetHeight(at, out float ground)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!_chunks.Ground.TryGetHeight(at, out float ground)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             _player.Landed += _ => { if (_t > 0.3) _landings++; };
             AddChild(_player);
             _player.GlobalPosition = at with { Y = ground + 1f };
@@ -59,7 +59,7 @@ public partial class SlopeWalkProbe : Node
         if (!_searched)
         {
             // every height read from the full-resolution grid, not a coarse ring's still in place
-            if (!_chunks.HasCollisionAt(at) || !_chunks.SettledNear(at, 1)) return;
+            if (!_chunks.Ground.HasCollisionAt(at) || !_chunks.SettledNear(at, 1)) return;
             Search(at);
             _searched = true;
             if (_cases.Count == 0) { GD.Print("[slopewalk] no slopes found"); Finish(2); return; }
@@ -68,7 +68,7 @@ public partial class SlopeWalkProbe : Node
         }
 
         var c = _cases[_case];
-        if (_t == 0 && !(_chunks.HasCollisionAt(c.Start) && _player.IsOnFloor()))
+        if (_t == 0 && !(_chunks.Ground.HasCollisionAt(c.Start) && _player.IsOnFloor()))
         {
             // settle on the ground first; the walk starts from standing
             _player.LookYaw = Mathf.Atan2(-c.Up.X, -c.Up.Z);
@@ -102,7 +102,7 @@ public partial class SlopeWalkProbe : Node
         }
         _wasFloor = floor;
         if (!floor) _airTime += (float)delta;
-        if (floor && _chunks.TryGetHeight(_player.GlobalPosition, out float g))
+        if (floor && _chunks.Ground.TryGetHeight(_player.GlobalPosition, out float g))
         {
             float gap = _player.GlobalPosition.Y - g;
             _gapMin = Mathf.Min(_gapMin, gap);
@@ -114,7 +114,7 @@ public partial class SlopeWalkProbe : Node
             var p = _player.GlobalPosition;
             string fl = floor ? $"floor {Mathf.RadToDeg(_player.GetFloorNormal().AngleTo(Vector3.Up)),2:0}°" : "air     ";
             string wall = _player.IsOnWall() ? $" wall {Mathf.RadToDeg(_player.GetWallNormal().AngleTo(Vector3.Up)):0}°" : "";
-            float gnd = _chunks.TryGetHeight(p, out float gg) ? gg : float.NaN;
+            float gnd = _chunks.Ground.TryGetHeight(p, out float gg) ? gg : float.NaN;
             GD.Print($"[slopewalk]   t {_t:0.0} y {p.Y:0.00} ground {gnd:0.00} v {_player.Velocity.X:0.00},{_player.Velocity.Y:0.00},{_player.Velocity.Z:0.00} {fl}{wall} slides {_player.GetSlideCollisionCount()}");
         }
         if (_t < RunSeconds) return;
@@ -165,7 +165,7 @@ public partial class SlopeWalkProbe : Node
             else GD.Print($"[slopewalk] no {Bands[b]:0}° slope within {SearchM:0} m");
     }
 
-    private bool Height(Vector3 p, out float h) => _chunks.TryGetHeight(p, out h);
+    private bool Height(Vector3 p, out float h) => _chunks.Ground.TryGetHeight(p, out h);
 
     /// <summary>The ground's slope at <paramref name="p"/> over ±2 m, as the walker judges it (FootPlayer.TooSteep).</summary>
     private float SlopeAt(Vector3 p)
@@ -199,7 +199,7 @@ public partial class SlopeWalkProbe : Node
         GD.Print($"[slopewalk] {c.Angle:0}° start: drawn ground {c.Start.Y:0.00}, collision {(ray.Count > 0 ? ((Vector3)ray["position"]).Y.ToString("0.00") : "none")}");
         // a fresh body per slope: nothing of the last walk (a fall, a placement) carries over
         var old = _player;
-        _player = new FootPlayer { Name = "Probe" + _case, Terrain = _chunks };
+        _player = new FootPlayer { Name = "Probe" + _case, Terrain = _chunks?.Ground };
         _player.Landed += _ => { if (_t > 0.3) _landings++; };
         AddChild(_player);
         _player.GlobalPosition = c.Start + Vector3.Up * 0.3f;

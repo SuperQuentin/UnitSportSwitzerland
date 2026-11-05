@@ -33,9 +33,9 @@ public sealed class ShuttlePilot
         /// <summary>Where a place is: metres along past the threshold, and to the right of the centreline.</summary>
         public (double Along, double Across) Of(GlobalPos p)
         {
-            var (de, dn) = Dir;
-            var (x, y, _) = GlobalPos.FromLv95(E, N, 0).OffsetTo(p);
-            return (x * de + y * dn, x * dn - y * de);
+            // the runway is on the LV95 grid, so is its heading: measure on the grid, not in true east and north
+            var l = p.Lv95;
+            return Of(l.E, l.N);
         }
 
         /// <summary>Where an LV95 place is: metres along past the threshold, and to the right of the centreline.</summary>

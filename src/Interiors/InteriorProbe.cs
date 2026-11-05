@@ -227,7 +227,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var at = _origin.ToWorld(e, n, 0);
                 if (_player == null)
                 {
-                    if (!_chunks.TryGetHeight(at, out float g)) { StopIfStuck($"the ground under {e:F0}/{n:F0} to stream in"); return; }
+                    if (!_chunks.Ground.TryGetHeight(at, out float g)) { StopIfStuck($"the ground under {e:F0}/{n:F0} to stream in"); return; }
                     if (Online)
                     {
                         // the player the server spawned for us: its position is what the server checks
@@ -240,7 +240,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     }
                     else
                     {
-                        _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+                        _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
                         AddChild(_player);
                         _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
                     }
@@ -277,7 +277,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     {
                         var across = new Vector3(-_door.Outward.Z, 0, _door.Outward.X);
                         var from = _door.World + _door.Outward * 7f + across * 6f * side;
-                        if (_chunks.TryGetHeight(from, out float gy)) from.Y = gy + 0.3f;
+                        if (_chunks.Ground.TryGetHeight(from, out float gy)) from.Y = gy + 0.3f;
                         var look = (_door.World - from) with { Y = 0 };
                         _player!.LeaveInterior(from, Mathf.Atan2(-look.X, -look.Z));
                         _player.Velocity = Vector3.Zero;
@@ -503,7 +503,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 Check(interiors.SpaceOf(Me) == "", "the player's space is outside again");
                 // walk away: nobody near it, the door shuts by itself
                 var away = _door.World + _door.Outward * 25f;
-                if (_chunks.TryGetHeight(away, out float g)) away.Y = g + 1f;
+                if (_chunks.Ground.TryGetHeight(away, out float g)) away.Y = g + 1f;
                 _player.LeaveInterior(away, 0);
                 Next();
                 break;
@@ -836,7 +836,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             foreach (float side in new[] { 0f, 2f, -2f, 4f, -4f })
             {
                 var at = mid + n * dist + along * side;
-                if (!_chunks.TryGetHeight(at, out float g)) continue;
+                if (!_chunks.Ground.TryGetHeight(at, out float g)) continue;
                 var eye = new Vector3(at.X, g + 1.7f, at.Z);
                 if ((ta - eye).AngleTo(tb - eye) > Mathf.DegToRad(65)) continue;
                 if (!Blocked(space, eye, ta) && !Blocked(space, eye, tb)) return eye;
@@ -1143,7 +1143,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 var dir = outward.Rotated(Vector3.Up, Mathf.DegToRad(deg));
                 var at = target with { Y = _churchIn.World.Y } + dir * dist;
-                if (!_chunks.TryGetHeight(at, out float g)) continue;
+                if (!_chunks.Ground.TryGetHeight(at, out float g)) continue;
                 var eye = new Vector3(at.X, g + 3f, at.Z);
                 var query = PhysicsRayQueryParameters3D.Create(eye, target);
                 query.Exclude = new Godot.Collections.Array<Rid> { _player.GetRid() };

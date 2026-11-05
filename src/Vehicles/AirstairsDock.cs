@@ -174,7 +174,7 @@ public static class AirstairsDock
             var turn = new Basis(Vector3.Up, plane.Yaw);
             var (origin, yaw, height) = Pose(turn * local.Edge, turn * local.Out, 0f);
             var stairs = new Airstairs { Height = AirstairsLayout.Clamp(height) };
-            return new VehicleState(RideKind.Airstairs, plane.Position + origin, yaw, Vector3.Zero, stairs.MaxHealth,
+            return new VehicleState(RideKind.Airstairs, plane.Position + Lv95Grid.ToEnu(plane.Position, origin), yaw, Vector3.Zero, stairs.MaxHealth,
                 false, false, 0f, VehicleState.Now, Flags: stairs.PackFlags());
         }
         return null;

@@ -1097,7 +1097,7 @@ public partial class ItemController : Node
             var held = play ?? RadioPlay.DecodeAny(stack.Data);
             for (int i = 0; i < stack.Count; i++)
                 RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)),
-                    _origin.Frame.OffsetYawOf(origin, yaw), _origin.Frame.OffsetOfWorld(origin, velocity),   // GlobalPos's axes (#1503)
+                    _origin.Frame.GridYawOf(origin, yaw), _origin.Frame.GridOfWorld(origin, velocity),   // GlobalPos's axes (#1503)
                     held?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, held?.Length ?? 0, player.RadioVolume,
                     Voice: player.RadioMix.X, Music: player.RadioMix.Y));
             return;

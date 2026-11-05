@@ -76,7 +76,7 @@ public partial class NavCheck : ChatProbe
 
         // a target straight ahead of the view, then straight behind
         var cam = GetViewport().GetCamera3D()!;
-        var f = -cam.GlobalBasis.Z;
+        var f = me.Origin!.EnuOf(cam.GlobalPosition, -cam.GlobalBasis.Z);   // true east and north (#1502)
         var fwd = new Vector2(f.X, -f.Z).Normalized();
         var at = me.Global;
         svc.TrackPlace("Ahead", at.Moved(fwd.X * 200, fwd.Y * 200), 0);
