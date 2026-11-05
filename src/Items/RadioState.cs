@@ -36,7 +36,7 @@ public readonly record struct RadioState(
     /// </summary>
     public Godot.Collections.Dictionary ToDict()
     {
-        var enu = Position.Enu;
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
@@ -61,7 +61,7 @@ public readonly record struct RadioState(
     {
         var s = Read(d);
         if (!GlobalPos.IsWire(d)) return s;
-        var enu = s.Position.Enu;
+        var enu = Lv95Grid.Axes(s.Position);
         return s with { Yaw = enu.Yaw(s.Yaw), Velocity = enu.FromEnu(s.Velocity) };
     }
 

@@ -532,7 +532,7 @@ public partial class AdventureTravel : Node
     {
         if (!_server) return;
         var at = GlobalPos.FromWire(x, y, z);
-        PinAdd(Multiplayer.GetRemoteSenderId(), at.E, at.N, icon, note, shared);
+        PinAdd(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, icon, note, shared);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -572,7 +572,7 @@ public partial class AdventureTravel : Node
     private void Depart(string poiId, int fare, double x, double y, double z)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        DepartAt(poiId, fare, at.E, at.N);
+        DepartAt(poiId, fare, at.Lv95.E, at.Lv95.N);
     }
 
     private void DepartAt(string poiId, int fare, double e, double n)

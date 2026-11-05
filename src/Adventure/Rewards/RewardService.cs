@@ -822,7 +822,7 @@ public partial class RewardService : Node
     private static float BearingTrue(GlobalPos at, float bearingDeg, bool toWire)
     {
         float yaw = -Mathf.DegToRad(bearingDeg);   // a compass bearing turns clockwise, a Godot yaw to the left
-        return -Mathf.RadToDeg(toWire ? at.TrueYaw(yaw) : at.OffsetYaw(yaw));
+        return -Mathf.RadToDeg(toWire ? Lv95Grid.TrueYaw(at, yaw) : Lv95Grid.GridYaw(at, yaw));
     }
 
     public void ReportFauna(string name)
@@ -972,7 +972,7 @@ public partial class RewardService : Node
         for (int i = 0; i < list.Length; i++)
         {
             var at = GlobalPos.FromWire(gates[i * 4], gates[i * 4 + 1], gates[i * 4 + 2]);
-            list[i] = new TrialGate(at.E, at.N, (float)at.Alt, (float)gates[i * 4 + 3]);
+            list[i] = new TrialGate(at.Lv95.E, at.Lv95.N, (float)at.Alt, (float)gates[i * 4 + 3]);
         }
         Trial = new ActiveTrial(trialId, list, since, new TrialPar(gold, silver, bronze)) { Next = 0 };
         TrialStarted?.Invoke(Trial);

@@ -92,7 +92,7 @@ public static class SavedPlace
         o[at] = Node(g);
         if (yaw != null)
         {
-            if (o[yaw] is JsonValue) o[yawTrue] = g.TrueYaw((float)Number(o[yaw]));
+            if (o[yaw] is JsonValue) o[yawTrue] = Lv95Grid.TrueYaw(g, (float)Number(o[yaw]));
             o.Remove(yaw);
         }
         return true;
@@ -101,13 +101,13 @@ public static class SavedPlace
     /// <summary>A grid quaternion <c>[x, y, z, w]</c> (GlobalPos's offset axes at <paramref name="at"/>) as the turn in the local east-up-south there.</summary>
     public static JsonArray TurnNode(GlobalPos at, Godot.Quaternion grid)
     {
-        var q = at.Enu.ToEnu(grid);
+        var q = Lv95Grid.Axes(at).ToEnu(grid);
         return new JsonArray(q.X, q.Y, q.Z, q.W);
     }
 
     /// <summary>A turn saved by <see cref="TurnNode"/> back in GlobalPos's offset axes at <paramref name="at"/>; null for one that is not four numbers.</summary>
     public static Godot.Quaternion? GridTurn(GlobalPos at, float[]? turn) =>
-        turn is { Length: 4 } t && t.All(float.IsFinite) ? at.Enu.FromEnu(new Godot.Quaternion(t[0], t[1], t[2], t[3])) : null;
+        turn is { Length: 4 } t && t.All(float.IsFinite) ? Lv95Grid.Axes(at).FromEnu(new Godot.Quaternion(t[0], t[1], t[2], t[3])) : null;
 
     // ---- a list of places (the Versteckis and Battle Royale histories) ------------------------------------------
 

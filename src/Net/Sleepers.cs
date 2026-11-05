@@ -101,7 +101,7 @@ public partial class Sleepers : Node
             list.Select(s => s.NameShown(PlayerIds.Server)).ToArray(),
             // ECEF and headings from true north (#1503); the book keeps LV95 and grid north until A2b
             list.SelectMany(s => { var (x, y, z) = s.At.ToWire(); return new[] { x, y, z }; }).ToArray(),
-            list.Select(s => s.At.TrueYaw(s.Yaw)).ToArray(),
+            list.Select(s => Lv95Grid.TrueYaw(s.At, s.Yaw)).ToArray(),
             list.Select(s => s.Rider).ToArray(),
             list.Select(s => s.Outfit).ToArray(),
             list.Select(s => s.Appearance).ToArray(),
@@ -142,7 +142,7 @@ public partial class Sleepers : Node
         Save();
         GD.Print($"[sleepers] {s.Name} wakes at {s.At}");
         var (x, y, z) = s.At.ToWire();
-        RpcId(peer, MethodName.WakeAt, x, y, z, s.At.TrueYaw(s.Yaw));
+        RpcId(peer, MethodName.WakeAt, x, y, z, Lv95Grid.TrueYaw(s.At, s.Yaw));
     }
 
     /// <summary>A sleeper from the wire (#1503): ECEF and a heading from true north, kept as the book has them.</summary>
@@ -150,7 +150,7 @@ public partial class Sleepers : Node
         int appearance, int hat)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        return new Sleeper(id, "", name, at, at.OffsetYaw(trueYaw), rider, outfit, appearance, hat);
+        return new Sleeper(id, "", name, at, Lv95Grid.GridYaw(at, trueYaw), rider, outfit, appearance, hat);
     }
 
     /// <summary>
@@ -167,9 +167,9 @@ public partial class Sleepers : Node
         // riding (a vehicle goes on without it) or inside (interiors are far below): on the ground there
         if (body.Ride != Player.RideKind.OnFoot || body.Indoors)
         {
-            if (GroundAt?.Invoke(at.E, at.N) is not { } ground)
+            if (GroundAt?.Invoke(at.Lv95.E, at.Lv95.N) is not { } ground)
             {
-                GD.Print($"[sleepers] {name}: no ground known under {at.E:F0}/{at.N:F0}, no sleeper");
+                GD.Print($"[sleepers] {name}: no ground known under {at.Lv95.E:F0}/{at.Lv95.N:F0}, no sleeper");
                 return;
             }
             alt = ground;
@@ -188,7 +188,7 @@ public partial class Sleepers : Node
         foreach (int p in Multiplayer.GetPeers())
         {
             var (x, y, z) = s.At.ToWire();
-            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), x, y, z, s.At.TrueYaw(s.Yaw), s.Rider, s.Outfit, s.Appearance, s.Headwear);
+            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), x, y, z, Lv95Grid.TrueYaw(s.At, s.Yaw), s.Rider, s.Outfit, s.Appearance, s.Headwear);
         }
     }
 
@@ -268,7 +268,7 @@ public partial class Sleepers : Node
         _shown[s.Id] = s;
         var node = Draw(s);
         node.Position = _origin.ToWorld(s.At);
-        node.Rotation = new Vector3(0, _origin.Frame.WorldYawOf(s.At, s.Yaw), 0);
+        node.Rotation = new Vector3(0, _origin.Frame.WorldYawOfGrid(s.At, s.Yaw), 0);
         AddChild(node);
         _visuals[s.Id] = node;
     }

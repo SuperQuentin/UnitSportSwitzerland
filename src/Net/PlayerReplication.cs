@@ -54,7 +54,7 @@ public static class PlayerReplication
     public static Godot.Collections.Array NpcData(long owner, int n, int rideKind, GlobalPos at, float yaw, int setup = 0)
     {
         var (x, y, z) = at.ToWire();
-        return new() { owner, n, rideKind, x, y, z, at.TrueYaw(yaw), setup };
+        return new() { owner, n, rideKind, x, y, z, Lv95Grid.TrueYaw(at, yaw), setup };
     }
 
     // ---- bots (#837) ----
@@ -75,7 +75,7 @@ public static class PlayerReplication
     public static Godot.Collections.Array BotData(int n, GlobalPos at, float yaw, string name)
     {
         var (x, y, z) = at.ToWire();
-        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, at.TrueYaw(yaw), 0, DriverBot, name };
+        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, Lv95Grid.TrueYaw(at, yaw), 0, DriverBot, name };
     }
 
     public static FootPlayer CreateNpc(Godot.Collections.Array d, WorldOrigin origin)

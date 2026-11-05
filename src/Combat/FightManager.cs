@@ -186,8 +186,7 @@ public partial class FightManager : Node
     }
 
     /// <summary>The place halfway between two bodies, the centre of a bout (fight, aura, Schwingen).</summary>
-    internal static GlobalPos Midpoint(GlobalPos a, GlobalPos b) =>
-        new((a.E + b.E) * 0.5, (a.N + b.N) * 0.5, (a.Alt + b.Alt) * 0.5);
+    internal static GlobalPos Midpoint(GlobalPos a, GlobalPos b) => GlobalPos.Midpoint(a, b);
 
     private void Begin(long a, long b)
     {
@@ -210,7 +209,7 @@ public partial class FightManager : Node
         _chat?.Invites?.WithdrawInvolving(InviteId, b);
         var (cx, cy, cz) = match.Centre.ToWire();
         foreach (long peer in new[] { a, b })
-            RpcId(peer, MethodName.Begin, match.Id, a, b, Who(a), Who(b), cx, cy, cz, match.Centre.TrueYaw(yaw));   // ECEF, heading from true north (#1503)
+            RpcId(peer, MethodName.Begin, match.Id, a, b, Who(a), Who(b), cx, cy, cz, Lv95Grid.TrueYaw(match.Centre, yaw));   // ECEF, heading from true north (#1503)
         SendState(match);
         GD.Print($"[fight] #{match.Id} {a} vs {b}");
     }
@@ -445,7 +444,7 @@ public partial class FightManager : Node
         var centre = GlobalPos.FromWire(x, y, z);
         // the view's yaw is a world yaw of this peer: from true north at the centre through the local body's frame (flat: the grid's)
         var origin = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Multiplayer.GetUniqueId()))?.Origin;
-        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : centre.OffsetYaw(trueYaw);
+        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : Lv95Grid.GridYaw(centre, trueYaw);
         Outgoing = default;
         Current = new View
         {

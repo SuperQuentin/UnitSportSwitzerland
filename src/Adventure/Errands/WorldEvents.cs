@@ -652,7 +652,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
     {
         var g = GlobalPos.FromLv95(e, n, ev.Ground);
         var (x, y, z) = g.ToWire();
-        return (x, y, z, g.TrueYaw(YawOf(ev)));
+        return (x, y, z, Lv95Grid.TrueYaw(g, YawOf(ev)));
     }
 
     private void SendMoved(Live ev)
@@ -737,14 +737,16 @@ public partial class WorldEvents : Node3D, IOriginContainer
     private void PlanOut(int id, int kind, double x, double y, double z, float ground, string canton, long seed, string near, string card)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        OnPlan(id, kind, at.E, at.N, ground, canton, (uint)seed, near, card);
+        var l = at.Lv95;
+        OnPlan(id, kind, l.E, l.N, ground, canton, (uint)seed, near, card);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
     private void MovedOut(int id, double x, double y, double z, float yaw, bool walking)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        OnMoved(id, at.E, at.N, at.OffsetYaw(yaw), walking);
+        var l = at.Lv95;
+        OnMoved(id, l.E, l.N, Lv95Grid.GridYaw(at, yaw), walking);   // the events keep LV95 and grid yaws (#1502)
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

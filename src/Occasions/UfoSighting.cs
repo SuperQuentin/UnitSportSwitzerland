@@ -240,7 +240,7 @@ public static class SightingPlanner
 
     /// <summary>The cell of an LV95 point on a grid of <paramref name="size"/> m.</summary>
     public static (long E, long N) Cell(UnitSport.Core.GlobalPos at, double size = CellSize) =>
-        ((long)Math.Floor(at.E / size), (long)Math.Floor(at.N / size));
+        ((long)Math.Floor(at.Lv95.E / size), (long)Math.Floor(at.Lv95.N / size));
 
     /// <summary>A sighting's id: the cell and the slot (and the kind, so the mothership never shares one).</summary>
     public static int Id(long cellE, long cellN, long slot, SightingKind kind) =>

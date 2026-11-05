@@ -185,7 +185,7 @@ public partial class VersteckisManager
     {
         if (_server) return;
         var at = GlobalPos.FromWire(x, y, z);
-        Teleport(at.E, at.N, null);
+        Teleport(at.Lv95.E, at.Lv95.N, null);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -239,7 +239,7 @@ public partial class VersteckisManager
         for (int i = 0; i < es.Length; i++)
         {
             var at = GlobalPos.FromWire(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]);
-            (es[i], ns[i]) = (at.E, at.N);
+            (es[i], ns[i]) = (at.Lv95.E, at.Lv95.N);
         }
         _layer?.Puffs(es, ns, VsRules.SniffSeconds);
         _hud?.Feed(es.Length == 0 ? "Nobody within 30 m" : $"{es.Length} {(es.Length == 1 ? "puff" : "puffs")} of pollen");
@@ -253,7 +253,7 @@ public partial class VersteckisManager
         if (_server) return;
         var v = (VsVoice)voice;
         var heard = GlobalPos.FromWire(x, y, z);
-        var at = _origin.ToWorld(heard.E, heard.N, 0);
+        var at = _origin.ToWorld(heard.Lv95.E, heard.Lv95.N, 0);
         at.Y = GroundAt(at) ?? LocalPlayer()?.GlobalPosition.Y ?? 0;
         if (v == VsVoice.Bell) Effect(VsSounds.Toll, -4f);
         else if (VsSounds.Of(v) is { } bank) Spatial(bank, at + Vector3.Up, v == VsVoice.Thump ? VsRules.SprintHeard : VsRules.MooHeard);

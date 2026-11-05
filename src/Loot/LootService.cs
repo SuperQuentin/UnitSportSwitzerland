@@ -257,7 +257,7 @@ public partial class LootService : Node
         _yards.Around(source, at);
         var look = -p.Camera.GlobalTransform.Basis.Z;
         // the world's x is east and its z south, as a tile's frame
-        return _yards.Nearest(at.E, at.N, (float)at.Alt, new Vector2(look.X, look.Z), MovedYard, out found);
+        return _yards.Nearest(at.Lv95.E, at.Lv95.N, (float)at.Alt, new Vector2(look.X, look.Z), MovedYard, out found);
     }
 
     /// <summary>The prompt line for the yard container the player faces outdoors (#627), or null.</summary>
@@ -460,7 +460,7 @@ public partial class LootService : Node
         if (SiteLoot.IsYard(_open.Value.Furniture))
         {
             if (p == null || !IsInstanceValid(p) || !p.IsViewing || p.Indoors
-                || SiteLoot.EdgeDistance(_openYard, p.Global.E, p.Global.N) > SiteLoot.CloseReach) Close();
+                || SiteLoot.EdgeDistance(_openYard, p.Global.Lv95.E, p.Global.Lv95.N) > SiteLoot.CloseReach) Close();
             return;
         }
         var interior = InteriorManager.Instance;
@@ -753,7 +753,7 @@ public partial class LootService : Node
         if (InteriorManager.Instance is { } interiors && interiors.SpaceOf(peer).Length > 0) return false;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
         var at = body.Global;
-        return SiteLoot.InServerReach(c, at.E, at.N, at.Alt);
+        return SiteLoot.InServerReach(c, at.Lv95.E, at.Lv95.N, at.Alt);
     }
 
     /// <summary>
@@ -810,7 +810,7 @@ public partial class LootService : Node
         // anyone else outdoors near the site may have the same container open: tell them it is gone
         if (!Online) return;
         var interiors = InteriorManager.Instance;
-        var here = new GlobalPos(c.E, c.N, c.Bottom);
+        var here = GlobalPos.FromLv95(c.E, c.N, c.Bottom);
         foreach (int other in Multiplayer.GetPeers())
         {
             if (other == peer || interiors?.SpaceOf(other) is { Length: > 0 }) continue;

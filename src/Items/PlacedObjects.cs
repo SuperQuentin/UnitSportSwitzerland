@@ -53,7 +53,7 @@ public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, double
     /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's, in GlobalPos's offset axes
     /// (what is saved); the world's turn of it is the same in a flat frame (#1503).
     /// </summary>
-    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(origin.Frame.WorldTurnOf(At, Rotation)), origin.ToWorld(At));
+    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(origin.Frame.WorldTurnOfGrid(At, Rotation)), origin.ToWorld(At));
 
     /// <summary>Where it stands, as a place: what is saved and sent (#1503).</summary>
     public GlobalPos At => GlobalPos.FromLv95(E, N, Altitude);
@@ -231,7 +231,7 @@ public partial class PlacedObjects : Node
                 kind == PlacedKind.Zipline ? Core.EarthSaves.ZipToEarth(payload) : payload);
         }
         // a record turns about GlobalPos's axes, as saved
-        else ServePlace(1, req, (int)kind, g.E, g.N, g.Alt, _origin.Frame.OffsetTurnOf(at.Origin, rot), payload);
+        else ServePlace(1, req, (int)kind, g.Lv95.E, g.Lv95.N, g.Alt, _origin.Frame.GridTurnOf(at.Origin, rot), payload);
     }
 
     /// <summary>Asks to remove an object. <paramref name="done"/> gets the removed object, or the reason it stays.</summary>
@@ -263,7 +263,7 @@ public partial class PlacedObjects : Node
     {
         // ECEF and the turn in the local east-up-south, as a record keeps it in GlobalPos's axes (#1503)
         var at = GlobalPos.FromWire(x, y, z);
-        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, at.E, at.N, at.Alt, at.Enu.FromEnu(enuRot),
+        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.Axes(at).FromEnu(enuRot),
             kind == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payload) : payload)));
     }
 
@@ -279,8 +279,8 @@ public partial class PlacedObjects : Node
         {
             // three ECEF doubles and a turn in the local east-up-south each (#1503)
             var at = GlobalPos.FromWire(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
-            Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], at.E, at.N, at.Alt,
-                at.Enu.FromEnu(new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3])),
+            Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], at.Lv95.E, at.Lv95.N, at.Alt,
+                Lv95Grid.Axes(at).FromEnu(new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3])),
                 kinds[i] == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payloads[i]) : payloads[i]));
         }
         GD.Print($"[placed] snapshot: {ids.Length} object(s)");
@@ -377,12 +377,12 @@ public partial class PlacedObjects : Node
         }
         // ECEF and a turn in the local east-up-south -> the record's LV95 and GlobalPos axes (#1503)
         var at = GlobalPos.FromWire(x, y, z);
-        ServePlace(peer, req, kind, at.E, at.N, at.Alt, at.Enu.FromEnu(enuRot),
+        ServePlace(peer, req, kind, at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.Axes(at).FromEnu(enuRot),
             kind == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payload) : payload);
     }
 
     /// <summary>A record's turn in the local east-up-south at its place: what goes on the wire.</summary>
-    private static Quaternion WireTurn(PlacedObject o) => o.At.Enu.ToEnu(o.Rotation);
+    private static Quaternion WireTurn(PlacedObject o) => Lv95Grid.Axes(o.At).ToEnu(o.Rotation);
 
     /// <summary>The turn as saved: <see cref="WireTurn"/>'s, the local east-up-south at the object (#1503, G2 A2b).</summary>
     private static float[] SavedTurn(PlacedObject o)
@@ -548,7 +548,7 @@ public partial class PlacedObjects : Node
         if (!Online) return true;
         if (GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is not { } body) return false;
         // in LV95, from what the player published: the server's origin may be far away (#185)
-        return body.Global.DistanceTo(new GlobalPos(e, n, alt)) <= reach;
+        return body.Global.DistanceTo(GlobalPos.FromLv95(e, n, alt)) <= reach;
     }
 
     // ---- a flare sets a hay hideout alight (#359) --------------------------------------------------

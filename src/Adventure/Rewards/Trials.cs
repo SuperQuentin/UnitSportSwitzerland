@@ -341,7 +341,7 @@ public static class GhostTrack
             w.Write((float)x);
             w.Write((float)y);
             w.Write((float)z);
-            w.Write(at.TrueYaw(samples[i].Yaw));
+            w.Write(Core.Lv95Grid.TrueYaw(at, samples[i].Yaw));
         }
         return ms.ToArray();
     }
@@ -376,7 +376,7 @@ public static class GhostTrack
             if (!float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z) || !float.IsFinite(yaw)) return null;
             var at = Core.GlobalPos.FromEcef(enu.ToEcef(x, y, z));
             var l = at.Lv95;
-            list.Add(new Sample(l.E, l.N, (float)at.Alt, at.OffsetYaw(yaw)));
+            list.Add(new Sample(l.E, l.N, (float)at.Alt, Core.Lv95Grid.GridYaw(at, yaw)));
         }
         return list;
     }

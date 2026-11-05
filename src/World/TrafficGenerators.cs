@@ -95,14 +95,14 @@ public partial class TrafficGenerators : Node
     {
         var at = GlobalPos.FromLv95(e, n, 0);
         var (x, y, z) = at.ToWire();
-        return (x, y, z, at.TrueYaw(lv95Heading - Mathf.Pi / 2));
+        return (x, y, z, Lv95Grid.TrueYaw(at, lv95Heading - Mathf.Pi / 2));
     }
 
     /// <summary>The inverse of <see cref="Wire"/>.</summary>
     private static (double E, double N, float Heading) FromWire(double x, double y, double z, float heading)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        return (at.E, at.N, at.OffsetYaw(heading) + Mathf.Pi / 2);
+        return (at.Lv95.E, at.Lv95.N, Lv95Grid.GridYaw(at, heading) + Mathf.Pi / 2);
     }
 
     /// <summary>The next id <see cref="RequestSet"/> gives a new endpoint offline (the probe wires its shares by it).</summary>

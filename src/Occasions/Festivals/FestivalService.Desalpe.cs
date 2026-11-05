@@ -256,7 +256,7 @@ public partial class FestivalService
     private static byte[] DesalpeTurn(byte[] bytes, GlobalPos fair, bool toWire)
     {
         if (bytes.Length < DesalpeWire.Header || bytes.Length != DesalpeWire.Header + bytes[1] * DesalpeWire.PerCow) return bytes;
-        var axes = fair.Enu;
+        var axes = Lv95Grid.Axes(fair);
         var turned = (byte[])bytes.Clone();
         for (int i = 0; i < bytes[1]; i++)
         {

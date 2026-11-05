@@ -66,7 +66,7 @@ public partial class HornCheck : ChatProbe
         // bots may sit down: their position is the row's
         var adv = AdventureService.Instance!;
         var position = adv.PositionOf;
-        adv.PositionOf = peer => peer < 0 && peer != -9 ? position?.Invoke(AdventureService.LocalPeer) : peer == -9 ? new GlobalPos(site.E + 4000, site.N, 0) : position?.Invoke(peer);
+        adv.PositionOf = peer => peer < 0 && peer != -9 ? position?.Invoke(AdventureService.LocalPeer) : peer == -9 ? GlobalPos.FromLv95(site.E + 4000, site.N, 0) : position?.Invoke(peer);
         Expect(svc.ServeHornBot(-9, 1, new Random(1)) is { } far && far.Contains("alphorn row"), "a bot too far from the row gets no seat");
 
         Expect(HornGround.TryInteract(Me), "E at the row asks for a seat");

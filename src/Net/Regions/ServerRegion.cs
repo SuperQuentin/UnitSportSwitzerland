@@ -36,7 +36,7 @@ public sealed class ServerRegion
     /// <summary>Its physics for queries (rays, shapes): only valid in a physics step, as any space state.</summary>
     public PhysicsDirectSpaceState3D DirectSpace => World.DirectSpaceState;
     /// <summary>The anchor of its frame as an Earth position.</summary>
-    public GlobalPos Anchor => new(Origin.E, Origin.N, 0);
+    public GlobalPos Anchor => GlobalPos.FromLv95(Origin.E, Origin.N, 0);
 
     public override string ToString() => $"region {Id} (LV95 {Origin.E:F0}/{Origin.N:F0})";
 }

@@ -150,7 +150,7 @@ public partial class PvpProbe : ChatProbe
     {
         if (!await Until(() => _heard.Any(l => l.Contains("PV A posA")), 150)) { Fail("A never reported"); return; }
         var parts = _heard.First(l => l.Contains("PV A posA")).Split("posA ")[1].Split(' ');
-        _a = new GlobalPos(Lv95(parts[0]), Lv95(parts[1]), Lv95(parts[2]));
+        _a = GlobalPos.FromLv95(Lv95(parts[0]), Lv95(parts[1]), Lv95(parts[2]));
         _items.Inventory.Select(0);
         me.Died += (killer, cause) => { _killer = killer; GD.Print($"[pvp B] died, killer {killer}, cause {cause}"); };
         await StandAt(me, 10f);

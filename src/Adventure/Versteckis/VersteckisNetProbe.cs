@@ -94,7 +94,7 @@ public partial class VersteckisNetProbe : ChatProbe
         var s = S!;
         var door = (s.DoorE, s.DoorN);
         Me!.GlobalPosition += new Vector3(12, 0.2f, 0);
-        Expect(await Until(() => Me.Global.HorizontalDistanceTo(new GlobalPos(door.DoorE, door.DoorN, 0)) < 4, 15), "A's walk away from the door is put back");
+        Expect(await Until(() => Me.Global.HorizontalDistanceTo(GlobalPos.FromLv95(door.DoorE, door.DoorN, 0)) < 4, 15), "A's walk away from the door is put back");
 
         // Seek: A's copy of B is a milk can
         Expect(await Phase(VsPhase.Seek, 1, 60), "round 1: Seek");

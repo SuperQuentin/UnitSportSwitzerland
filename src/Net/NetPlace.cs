@@ -98,7 +98,7 @@ public partial class NetPlace : Node
         _origin = origin;
         SetGlobal(at);
         if (origin == null) return;
-        var enu = at.Enu;
+        var enu = Lv95Grid.Axes(at);
         _turn = new Quaternion(Vector3.Up, enu.TrueYaw(yaw));
         _vel = enu.ToEnu(velocity);
     }
@@ -106,7 +106,7 @@ public partial class NetPlace : Node
     /// <summary>The same, turned by a whole rotation in GlobalPos's offset axes at <paramref name="at"/> (a thrown item's tumble).</summary>
     public NetPlace(WorldOrigin origin, GlobalPos at, Quaternion turn) : this(origin, at)
     {
-        if (origin != null) _turn = at.Enu.ToEnu(turn);
+        if (origin != null) _turn = Lv95Grid.Axes(at).ToEnu(turn);
     }
 
     private void SetGlobal(GlobalPos at)

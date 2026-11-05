@@ -84,11 +84,11 @@ public sealed class SleeperBook
 
         public static Saved Of(Sleeper s) => new()
         {
-            Id = s.Id, Key = s.Key, Name = s.Name, At = s.At, YawTrue = s.At.TrueYaw(s.Yaw),
+            Id = s.Id, Key = s.Key, Name = s.Name, At = s.At, YawTrue = Lv95Grid.TrueYaw(s.At, s.Yaw),
             Rider = s.Rider, Outfit = s.Outfit, Appearance = s.Appearance, Headwear = s.Headwear,
         };
 
-        public Sleeper ToSleeper() => new(Id, Key, Name, At, At.OffsetYaw(YawTrue), Rider, Outfit, Appearance, Headwear);
+        public Sleeper ToSleeper() => new(Id, Key, Name, At, Lv95Grid.GridYaw(At, YawTrue), Rider, Outfit, Appearance, Headwear);
     }
 
     public static readonly JsonSerializerOptions Json = new() { WriteIndented = true };

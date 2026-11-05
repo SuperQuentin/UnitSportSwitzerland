@@ -142,7 +142,7 @@ public partial class SwordService : Node
     {
         // <paramref name="yaw"/> is this peer's world yaw; the wire carries the heading from true north at the body (#1503)
         var body = BodyOf(Online ? Multiplayer.GetUniqueId() : 1);
-        if (!Online) { ServerAct(1, move, body == null ? yaw : _origin.Frame.OffsetYawOf(body.GlobalPosition, yaw), code); return; }
+        if (!Online) { ServerAct(1, move, body == null ? yaw : _origin.Frame.GridYawOf(body.GlobalPosition, yaw), code); return; }
         RpcId(1, MethodName.Act, (int)move, body == null ? yaw : _origin.TrueYaw(body.GlobalPosition, yaw), code);
     }
 
@@ -152,7 +152,7 @@ public partial class SwordService : Node
         if (!_server || !float.IsFinite(trueYaw) || move is < 0 or > 255) return;
         long who = Multiplayer.GetRemoteSenderId();
         // heading from true north at the body -> the server's GlobalPos axes (#1503)
-        float yaw = BodyOf(who) is { } body ? body.Global.OffsetYaw(trueYaw) : trueYaw;
+        float yaw = BodyOf(who) is { } body ? Lv95Grid.GridYaw(body.Global, trueYaw) : trueYaw;
         ServerAct(who, (SwordMove)move, yaw, code & 0x3F);
     }
 
@@ -175,7 +175,7 @@ public partial class SwordService : Node
         _code[who] = code;
         if (!Online)
             return true;
-        float trueYaw = body.Global.TrueYaw(yaw);
+        float trueYaw = Lv95Grid.TrueYaw(body.Global, yaw);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != who && Sees(peer, who))
                 RpcId(peer, MethodName.Acted, who, (int)move, trueYaw, code);
@@ -282,7 +282,7 @@ public partial class SwordService : Node
         GD.Print(FormattableString.Invariant($"[sword] {who} hit {kind} {id} for {def.Damage:F0} ({move})"));
         // where the blade touched: a point of the blade, relative to the attacker, put back in the world
         var at = from.Moved(contact.X, -contact.Z, contact.Y);
-        var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, _origin.Frame.WorldOfOffset(from, knock), _origin.ToWorld(at), down);   // the knock was worked in GlobalPos's axes (#1503)
+        var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, _origin.Frame.WorldOfGrid(from, knock), _origin.ToWorld(at), down);   // the knock was worked in GlobalPos's axes (#1503)
         if (victim != null && !victim.Bot) PvpRules.RaiseHit(who, id, def.Damage);
         BroadcastStruck(strike, at, victim != null && !victim.Bot ? id : 0);
         return true;
@@ -370,7 +370,7 @@ public partial class SwordService : Node
         int id = _nextDummy++;
         _dummyData[id] = new DummyData { Id = id, Owner = owner, Pos = at, Yaw = yaw, Hp = DummyHp };
         var (x, y, z) = at.ToWire();
-        Broadcast(0, MethodName.DummyAdd, id, x, y, z, at.TrueYaw(yaw), DummyHp);
+        Broadcast(0, MethodName.DummyAdd, id, x, y, z, Lv95Grid.TrueYaw(at, yaw), DummyHp);
     }
 
     private void RemoveDummy(int id)
@@ -402,7 +402,7 @@ public partial class SwordService : Node
         foreach (var d in _dummyData.Values)
         {
             var (x, y, z) = d.Pos.ToWire();
-            RpcId(peer, MethodName.DummyAdd, d.Id, x, y, z, d.Pos.TrueYaw(d.Yaw), d.Hp);
+            RpcId(peer, MethodName.DummyAdd, d.Id, x, y, z, Lv95Grid.TrueYaw(d.Pos, d.Yaw), d.Hp);
         }
     }
 

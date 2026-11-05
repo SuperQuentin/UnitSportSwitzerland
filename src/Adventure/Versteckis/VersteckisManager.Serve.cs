@@ -33,7 +33,7 @@ public partial class VersteckisManager
     private void RequestTag(double x, double y, double z)
     {
         var at = GlobalPos.FromWire(x, y, z);   // (#1503) the wire is ECEF
-        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.E, at.N, (float)at.Alt));
+        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, (float)at.Alt));
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

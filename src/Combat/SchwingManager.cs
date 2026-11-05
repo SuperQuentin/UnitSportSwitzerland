@@ -233,7 +233,7 @@ public partial class SchwingManager : Node
             _chat?.Invites?.WithdrawInvolving(AuraManager.InviteId, who);
         }
         var (cx, cy, cz) = centre.ToWire();   // ECEF, heading from true north at the centre (#1503)
-        float trueYaw = centre.TrueYaw(yaw);
+        float trueYaw = Lv95Grid.TrueYaw(centre, yaw);
         foreach (long who in new[] { a, b })
             if (Connected(who))
                 RpcId(who, MethodName.Begin, match.Id, a, b, Who(a), Who(b), cx, cy, cz, trueYaw, festival, schlussgang);
@@ -583,7 +583,7 @@ public partial class SchwingManager : Node
         var centre = GlobalPos.FromWire(x, y, z);
         // the view's yaw is a world yaw of this peer: from true north at the centre through the local body's frame (flat: the grid's)
         var origin = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Multiplayer.GetUniqueId()))?.Origin;
-        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : centre.OffsetYaw(trueYaw);
+        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : Lv95Grid.GridYaw(centre, trueYaw);
         Current = new View
         {
             Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = centre, Yaw = yaw,
