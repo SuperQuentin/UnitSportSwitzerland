@@ -5,4 +5,4 @@
   therefore (a) leaves the neighbour's edge row unclassified in `.cover`, which opens a 4 m
   gap in the water surface along every seam a river crosses, and (b) returns a null height
   for road vertices at a batch edge. `TerrainSampler` tries all the sharing tiles;
-  `CoverExtractor.MarkIn` stamps all of them.
+  `CoverExtractor.PaintRing` paints all of them.

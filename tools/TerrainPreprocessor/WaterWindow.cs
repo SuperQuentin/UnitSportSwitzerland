@@ -63,19 +63,33 @@ public static class WaterWindow
     /// <summary>The wet cells on a bank (see <see cref="BankProbeM"/>) become dry: <paramref name="riseQ"/> quanta above the lowest wet surface round them.</summary>
     public static void RefineWet(byte[] state, int[] surfaceQ, int w, int probe, int riseQ)
     {
-        // separable min of the wet surface over a (2·probe+1)² square, in quanta (exact)
+        // separable min of the wet surface over a (2·probe+1)² square, in quanta (exact): along a row
+        // in constant time per cell (van Herk: the running min from a block's start and from its end
+        // meet in every window), on a row padded with "no water" either side
+        int block = 2 * probe + 1, padded = w + 2 * probe;
         var rowMin = new int[w * w];
+        var row = new int[padded];
+        var fromStart = new int[padded];
+        var fromEnd = new int[padded];
+        Array.Fill(row, int.MaxValue);
         for (int y = 0; y < w; y++)
+        {
+            bool any = false;
             for (int x = 0; x < w; x++)
             {
-                int m = int.MaxValue;
-                for (int dx = Math.Max(0, x - probe); dx <= Math.Min(w - 1, x + probe); dx++)
-                {
-                    int i = y * w + dx;
-                    if (state[i] == 1 && surfaceQ[i] < m) m = surfaceQ[i];
-                }
-                rowMin[y * w + x] = m;
+                int i = y * w + x;
+                if (state[i] == 1) { row[x + probe] = surfaceQ[i]; any = true; }
+                else row[x + probe] = int.MaxValue;
             }
+            var mins = rowMin.AsSpan(y * w, w);
+            if (!any) { mins.Fill(int.MaxValue); continue; }
+            for (int k = 0; k < padded; k++)
+                fromStart[k] = k % block == 0 ? row[k] : Math.Min(fromStart[k - 1], row[k]);
+            for (int k = padded - 1; k >= 0; k--)
+                fromEnd[k] = k == padded - 1 || (k + 1) % block == 0 ? row[k] : Math.Min(fromEnd[k + 1], row[k]);
+            for (int x = 0; x < w; x++)
+                mins[x] = Math.Min(fromEnd[x], fromStart[x + 2 * probe]);
+        }
         var dry = new List<int>();
         for (int y = 0; y < w; y++)
             for (int x = 0; x < w; x++)

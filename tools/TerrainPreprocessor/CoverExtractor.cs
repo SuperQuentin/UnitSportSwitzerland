@@ -23,6 +23,10 @@ public sealed class CoverExtractor
 
     public CoverExtractor(string gpkgPath) => _gpkgPath = gpkgPath;
 
+    /// <summary>How many tiles are painted and populated at once (<c>--jobs</c>).</summary>
+    public int Jobs { get; init; } = Environment.ProcessorCount;
+    private ParallelOptions Workers => new() { MaxDegreeOfParallelism = Jobs };
+
     public Dictionary<TileId, byte[]> Cover { get; } = new();
     public Dictionary<TileId, List<TreeInstance>> Trees { get; } = new();
     public int PolygonCount { get; private set; }
@@ -61,6 +65,7 @@ public sealed class CoverExtractor
 
         using var conn = GeoPackageReader.Open(_gpkgPath);
         RasteriseLayers(conn, new Lv95CoverSpace(this), region);
+        PaintPending();
 
         ScatterTrees(tiles, heightOf);
         PlantRows(tiles, heightOf);
@@ -122,7 +127,7 @@ public sealed class CoverExtractor
 
     /// <summary>
     /// Stamps the override polygons: <c>{"polygons":[{"cover":"ParkingPrivate","ring":[[E,N],...]}]}</c>
-    /// in LV95. Rings off the batch's tiles fall away in <see cref="MarkIn"/>, which also keeps Water.
+    /// in LV95. Rings off the batch's tiles fall away in <see cref="PaintPending"/>; <see cref="Stamped"/> keeps Water.
     /// </summary>
     private void StampOverrides(string path, ICoverSpace space)
     {
@@ -172,10 +177,16 @@ public sealed class CoverExtractor
         public void Stamp(GeoPackageReader.Ring ring, CoverClass cls) => x.Rasterise(ring, cls);
     }
 
+    // The rings waiting to be painted, in source order, and what they hold: rings are read first and
+    // painted a tile at a time. Bounded so a batch of big polygons cannot grow without end.
+    private readonly record struct PendingRing(double[] Xyz, CoverClass Cls, double MinE, double MaxE, double MinN, double MaxN);
+    private readonly List<PendingRing> _pending = new();
+    private long _pendingCoords;
+    private const long PendingCoordsLimit = 1L << 25;   // 256 MB of doubles
+
     /// <summary>
-    /// Scanline fill of one ring onto every tile lattice it touches. Rings are in map
-    /// coordinates; each sample point is a terrain vertex, so cover and height line up
-    /// index-for-index.
+    /// Queues one ring (map coordinates, closed) for <see cref="PaintPending"/>. Every sample point is a
+    /// terrain vertex, so cover and height line up index-for-index.
     /// </summary>
     private void Rasterise(GeoPackageReader.Ring ring, CoverClass cls)
     {
@@ -192,69 +203,134 @@ public sealed class CoverExtractor
             if (y < minN) minN = y;
             if (y > maxN) maxN = y;
         }
-
-        double spacing = ChunkFormat.SpacingM;
-        var xs = new List<double>(16);
-
-        // walk sample rows (constant north) across the polygon's vertical extent
-        double startN = Math.Floor(minN / spacing) * spacing;
-        for (double sampleN = startN; sampleN <= maxN; sampleN += spacing)
-        {
-            xs.Clear();
-            for (int i = 0; i < n - 1; i++)
-            {
-                double y0 = ring.Xyz[i * 3 + 1], y1 = ring.Xyz[(i + 1) * 3 + 1];
-                if (y0 == y1) continue;
-                // half-open test avoids double-counting shared vertices
-                if (sampleN < Math.Min(y0, y1) || sampleN >= Math.Max(y0, y1)) continue;
-                double x0 = ring.Xyz[i * 3], x1 = ring.Xyz[(i + 1) * 3];
-                xs.Add(x0 + (sampleN - y0) / (y1 - y0) * (x1 - x0));
-            }
-            if (xs.Count < 2) continue;
-            xs.Sort();
-
-            for (int k = 0; k + 1 < xs.Count; k += 2)
-            {
-                double spanStart = Math.Ceiling(xs[k] / spacing) * spacing;
-                for (double sampleE = spanStart; sampleE <= xs[k + 1]; sampleE += spacing)
-                    Mark(sampleE, sampleN, cls);
-            }
-        }
+        _pending.Add(new PendingRing(ring.Xyz, cls, minE, maxE, minN, maxN));
+        _pendingCoords += ring.Xyz.Length;
+        if (_pendingCoords >= PendingCoordsLimit) PaintPending();
     }
 
     /// <summary>
-    /// Stamps one lattice vertex. A vertex on a tile boundary belongs to TWO tiles (four at
-    /// a corner) because the edge row/column is shared, but <see cref="TileId.FromLv95"/>
-    /// can only name one of them. Marking only that one leaves the neighbour's edge row
-    /// unclassified, and since the water surface needs all four corners of a quad to be
-    /// water, every tile seam that a river or lake crosses opens a 4 m gap.
+    /// Paints the queued rings onto the tiles they touch. What a cell ends up as depends only on the
+    /// order of the rings that paint it (<see cref="PaintRing"/>), and a tile's rings keep source
+    /// order, so the tiles do not depend on each other.
     /// </summary>
-    private void Mark(double e, double n, CoverClass cls)
+    private void PaintPending()
     {
-        int te = (int)Math.Floor(e / ChunkFormat.TileSizeM);
-        int tn = (int)Math.Floor(n / ChunkFormat.TileSizeM);
-
-        MarkIn(new TileId(te, tn), e, n, cls);
-        // the west neighbour shares this vertex as its last column, the south neighbour as
-        // its first row (row 0 is the north edge)
-        MarkIn(new TileId(te - 1, tn), e, n, cls);
-        MarkIn(new TileId(te, tn - 1), e, n, cls);
-        MarkIn(new TileId(te - 1, tn - 1), e, n, cls);
+        var rings = new Dictionary<TileId, List<int>>();
+        for (int i = 0; i < _pending.Count; i++)
+        {
+            var p = _pending[i];
+            // a tile holds its edges: its lattice runs from MinE to MinE + TileSizeM, both included
+            int e0 = (int)Math.Ceiling(p.MinE / ChunkFormat.TileSizeM) - 1, e1 = (int)Math.Floor(p.MaxE / ChunkFormat.TileSizeM);
+            int n0 = (int)Math.Ceiling(p.MinN / ChunkFormat.TileSizeM) - 1, n1 = (int)Math.Floor(p.MaxN / ChunkFormat.TileSizeM);
+            for (int e = e0; e <= e1; e++)
+                for (int n = n0; n <= n1; n++)
+                {
+                    var id = new TileId(e, n);
+                    if (!Cover.ContainsKey(id)) continue;
+                    if (!rings.TryGetValue(id, out var list)) rings[id] = list = new List<int>();
+                    list.Add(i);
+                }
+        }
+        Parallel.ForEach(rings, Workers, () => new RingScratch(), (tile, _, scratch) =>
+        {
+            var cells = Cover[tile.Key];
+            foreach (int i in tile.Value) PaintRing(_pending[i], tile.Key, cells, scratch);
+            return scratch;
+        }, _ => { });
+        _pending.Clear();
+        _pendingCoords = 0;
     }
 
-    private void MarkIn(TileId tile, double e, double n, CoverClass cls)
+    /// <summary>One worker's arrays for <see cref="PaintRing"/>.</summary>
+    private sealed class RingScratch
     {
-        if (!Cover.TryGetValue(tile, out var cells)) return;
+        public readonly int[] RowStart = new int[CoverFormat.Size + 2];
+        public int[] Edges = new int[256];
+        public double[] Crossings = new double[1024];
+    }
 
-        double fc = (e - tile.MinE) / ChunkFormat.SpacingM;
-        double fr = (tile.MaxN - n) / ChunkFormat.SpacingM;
-        int col = (int)Math.Round(fc), row = (int)Math.Round(fr);
-        if ((uint)col >= CoverFormat.Size || (uint)row >= CoverFormat.Size) return;
-        // reject positions that only round onto this tile's lattice from outside it
-        if (Math.Abs(fc - col) > 0.01 || Math.Abs(fr - row) > 0.01) return;
+    /// <summary>
+    /// Scanline fill of one ring on one tile's lattice, in whole metres: a sample row is a whole N and a
+    /// sample column a whole E (<see cref="ChunkFormat.SpacingM"/> is 1), and the vertices on a tile's
+    /// edge belong to both tiles, which is what keeps a river's water surface whole across a seam.
+    /// Each edge is taken once, for the rows of this tile it crosses (half-open in N, so a shared
+    /// vertex counts once); the crossings of a row come out of a counting sort by row.
+    /// </summary>
+    private static void PaintRing(in PendingRing ring, TileId tile, byte[] cells, RingScratch sc)
+    {
+        const int Last = CoverFormat.Size - 1;
+        int tileW = tile.E * (int)ChunkFormat.TileSizeM, tileN = (tile.N + 1) * (int)ChunkFormat.TileSizeM, tileS = tileN - Last;
+        var xyz = ring.Xyz;
+        int edgeCount = xyz.Length / 3 - 1;
+        var ends = sc.RowStart;   // row r's crossings end at ends[r + 1]
+        Array.Clear(ends);
 
-        int index = row * CoverFormat.Size + col;
-        cells[index] = Stamped(cells[index], cls);
+        int used = 0, total = 0;
+        for (int i = 0; i < edgeCount; i++)
+        {
+            double y0 = xyz[i * 3 + 1], y1 = xyz[i * 3 + 4];
+            if (y0 == y1) continue;
+            double lo = Math.Min(y0, y1), hi = Math.Max(y0, y1);
+            if (hi <= tileS || lo > tileN) continue;
+            int nLo = Math.Max((int)Math.Ceiling(lo), tileS), nHi = Math.Min((int)Math.Ceiling(hi) - 1, tileN);
+            if (nLo > nHi) continue;
+            if (used == sc.Edges.Length) Array.Resize(ref sc.Edges, used * 2);
+            sc.Edges[used++] = i;
+            ends[tileN - nHi]++;       // row 0 is the north edge
+            ends[tileN - nLo + 1]--;
+            total += nHi - nLo + 1;
+        }
+        if (total < 2) return;
+        if (total > sc.Crossings.Length) sc.Crossings = new double[Math.Max(total, sc.Crossings.Length * 2)];
+        var xs = sc.Crossings;
+
+        // the differences become each row's count, the counts each row's first slot
+        int count = 0, first = 0;
+        for (int r = 0; r <= Last; r++)
+        {
+            count += ends[r];
+            ends[r] = first;
+            first += count;
+        }
+        ends[Last + 1] = first;
+        // filling row r moves ends[r] from its first slot to row r + 1's first slot: its end
+        for (int u = 0; u < used; u++)
+        {
+            int i = sc.Edges[u];
+            double y0 = xyz[i * 3 + 1], y1 = xyz[i * 3 + 4];
+            double x0 = xyz[i * 3], x1 = xyz[i * 3 + 3];
+            double lo = Math.Min(y0, y1), hi = Math.Max(y0, y1);
+            int nLo = Math.Max((int)Math.Ceiling(lo), tileS), nHi = Math.Min((int)Math.Ceiling(hi) - 1, tileN);
+            for (int n = nLo; n <= nHi; n++)
+            {
+                double sampleN = n;
+                xs[ends[tileN - n]++] = x0 + (sampleN - y0) / (y1 - y0) * (x1 - x0);
+            }
+        }
+
+        byte cls = (byte)ring.Cls;
+        bool water = ring.Cls == CoverClass.Water;
+        int from = 0;
+        for (int r = 0; r <= Last; r++)
+        {
+            int to = ends[r];
+            int crossings = to - from;
+            var row = xs.AsSpan(from, crossings);
+            from = to;
+            if (crossings < 2) continue;
+            row.Sort();
+            int rowAt = r * CoverFormat.Size;
+            for (int k = 0; k + 1 < crossings; k += 2)
+            {
+                int c0 = Math.Max((int)Math.Ceiling(row[k]) - tileW, 0);
+                int c1 = Math.Min((int)Math.Floor(row[k + 1]) - tileW, Last);
+                if (c1 < c0) continue;
+                var span = cells.AsSpan(rowAt + c0, c1 - c0 + 1);
+                if (water) span.Fill(cls);
+                else
+                    foreach (ref byte cell in span) cell = Stamped(cell, ring.Cls);
+            }
+        }
     }
 
     /// <summary>
@@ -263,10 +339,14 @@ public sealed class CoverExtractor
     /// </summary>
     private void ScatterTrees(IReadOnlyCollection<TileId> tiles, Func<double, double, double?> heightOf)
     {
-        foreach (var tile in tiles)
+        foreach (var tile in tiles) TreeList(tile);   // a tile's own list and generator, so tiles run at once
+        int scattered = 0;
+        Parallel.ForEach(tiles, Workers, tile =>
         {
             var cells = Cover[tile];
-            var list = TreeList(tile);
+            var list = Trees[tile];
+            RoadMask.TryGetValue(tile, out var blocked);
+            int planted = 0;
             // deterministic per tile so re-runs produce identical output
             var rng = new Random(tile.E * 73856093 ^ tile.N * 19349663);
 
@@ -276,7 +356,7 @@ public sealed class CoverExtractor
                     int cell = row * CoverFormat.Size + col;
                     var cls = (CoverClass)cells[cell];
                     if (!CoverFormat.IsWooded(cls)) continue;
-                    if (RoadMask.TryGetValue(tile, out var blocked) && blocked[cell]) continue;
+                    if (blocked != null && blocked[cell]) continue;
 
                     float perCell = ScatterChance(cls, 1);
                     if (rng.NextDouble() > perCell) continue;
@@ -289,9 +369,11 @@ public sealed class CoverExtractor
                     var (height, kind) = ScatterTree(cls, rng);
                     list.Add(new TreeInstance(
                         (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n), height, kind));
-                    ScatteredTrees++;
+                    planted++;
                 }
-        }
+            Interlocked.Add(ref scattered, planted);
+        });
+        ScatteredTrees += scattered;
     }
 
     // ---- the trees' rules, one copy for the LV95 tiles and the cube's leaves (#1507, G2 B3 PR 5b) -------------
@@ -355,10 +437,12 @@ public sealed class CoverExtractor
     /// </summary>
     private void PlantRows(IReadOnlyCollection<TileId> tiles, Func<double, double, double?> heightOf)
     {
-        foreach (var tile in tiles)
+        int plantedAll = 0;
+        Parallel.ForEach(tiles, Workers, tile =>
         {
             var cells = Cover[tile];
-            var list = TreeList(tile);
+            var list = Trees[tile];
+            int planted = 0;
             var rng = new Random(tile.E * 40503 ^ tile.N * 12289);
             RoadMask.TryGetValue(tile, out var blocked);
 
@@ -386,10 +470,12 @@ public sealed class CoverExtractor
                         list.Add(new TreeInstance(
                             (float)(e - tile.MinE) + jitter, (float)h.Value,
                             (float)(tile.MaxN - n) + jitter, height, KindFruit));
-                        PlantedTrees++;
+                        planted++;
                     }
             }
-        }
+            Interlocked.Add(ref plantedAll, planted);
+        });
+        PlantedTrees += plantedAll;
     }
 
     /// <summary>

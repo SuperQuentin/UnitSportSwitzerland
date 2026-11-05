@@ -9,6 +9,9 @@
     <RootNamespace>UnitSport.Tools.RoadGen</RootNamespace>
     <!-- French locale machine: never let the current culture near a float. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Standalone runs its blocks at once (#1539), like the preprocessor; only this exe's runtimeconfig, never the game's. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>

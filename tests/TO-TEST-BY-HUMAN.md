@@ -7,6 +7,12 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Builder performance ([#1540](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1540))
+
+On the NAS or the X: drive; a Linux server/NAS run is unverified.
+
+- [ ] A nationwide feature build with the new parallelism (`tools/rebuild-map.sh`, defaults) → watch peak memory and total time (the `[stage]` lines of the log); `.road`, cover, trees and water match an earlier build of the same sources (`tools/builder-bench.sh compare`-style hashes), and a lower `--jobs` or a `DOTNET_GCHeapHardLimit` still finishes with the same bytes.
+
 ## GlobalPos holds ECEF ([#1544](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1544))
 
 On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Geneva and at Scuol, where the grid turns 0.95° and −2° from true north: what was laid in metres east and north is now in true ones.

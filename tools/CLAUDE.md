@@ -8,6 +8,8 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 ## Architecture
 
 - `feature-clips` (general) — `tools/record-clip.sh`: one launch films a probe to a GIF (+ MP4); `RELEASE=1` stages it, `release.sh` shows it under Highlights
+- `cover-water-performance` — #1539: cover and water per tile on all cores, byte-identical: paint order per tile, per-block `UrbanField`, the water window's memory bound, what was measured and dismissed
+- `builder-bench` — #1539: `tools/builder-bench.sh prepare|publish|run|compare`: a fixed Geneva + Valais region built by a published binary, `[stage]` timer lines (`StageClock`) to a per-stage table, SHA-256 of every output file; the speed-up proof must also be byte-identical
 - `delta-updates` — per-release `.delta` files (rsync-style binary patches, SHA-256 checked, Brotli) made by `tools/deltas.sh` from the published archives and uploaded by `release.sh`; staging + swap script; measured 8 KB vs 176 MB (#532)
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
 - `shared-format-code` — Shared format code: `tools/TerrainFormat` classlib (TileId, ChunkFormat, ChunkGrid, ChunkCodec, TerrainManifest) —...
@@ -48,7 +50,8 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `vineyards-live-nutzungsareal-bodenbedeckung` — Vineyards live in `nutzungsareal`, not `bodenbedeckung`
 - `trees` — Trees: come from three sources into one `.trees` file, told apart by `Kind`: 0/1 random scatter in the wooded...
 - `roadgen` — RoadGen: (`tools/RoadGen/`, standalone, no Godot): a lab for road *geometry*. Builds a road network graph (endpoint...
-- `roadgen-units` — #1507 G2 B3 4a: the network stage behind `IUnits` (tile lookup, corners, km caches, tile size, headings; `Plane.Use`, per thread), `IGround` (`Lv95TileGround`: the stage's own tile rule) and `ITileLoop` (`Lv95TileLoop`, the files), LV95 byte-identical; 4b: `FrameUnits` (a leaf as a tile, a 1 km plane square), `LeafRecords` (records into the leaf, headings by the Jacobian), `RegionData`, `--cube-network`, the comparer's `--compare-box`/`--seam-margin`, numbers and why the tail stays (#1546)
+- `roadgen-parallel` — #1539: the network stage's blocks at once, byte-identical: a thread and a `Session` per block, numbers added up in block order (`StatsMerge`), the rules for what a block may touch, `--jobs` and the 2 GB a block memory bound, measurements
+- `roadgen-units` — #1507 G2 B3 4a: the network stage behind `IUnits` (tile lookup, corners, km caches, tile size, headings; `Plane.Use`, per thread), `IGround` (`Lv95TileGround`: the stage's own tile rule) and `ITileLoop` (`Lv95TileLoop`, the files), LV95 byte-identical; what stays LV95 until 4b
 - `road-format-v2` — `.road` format v2: adds junction polygons after the segments, counted in the header word v1 left reserved, so every...
 - `road-format-v3` — `.road` format v3 (#115): v2 bytes + FourCC sections (ATTR per-segment one-way/lanes/width/cross-section/priority/layer, PANT paint, PPRP/LPRP/APRP props, SGNL lights, LANE lanes per approach #353); header flags Osm, Network; TRNS transitions over InTransition segments (#818)
 - `farm-fields` — Real farm fields (#494): LWB Nutzungsflächen per canton (geodienste.ch) + OSM fallback for VD/NE/TI/NW/OW -> `fields_E_N.fld`; `swiss_data.py lwb`, `--fields`, `--fields-check`, MapSetup `fields` layer

@@ -21,7 +21,13 @@ public interface ITileLoop
 
     TileRewriter.Inputs Inputs { get; }
 
-    /// <summary>A finished tile and its encoded bytes.</summary>
+    /// <summary>
+    /// Whether no block reads anything another writes (<see cref="Inputs"/>' functions and <see cref="Write"/> then run on several
+    /// threads at once, each block's tiles on its own): false runs them one after another (#1539).
+    /// </summary>
+    bool BlocksIndependent { get; }
+
+    /// <summary>A finished tile and its encoded bytes, on the thread that ran its block.</summary>
     void Write(RoadTile tile, byte[] bytes);
 
     /// <summary>After the last block: what the run writes besides its tiles.</summary>
@@ -42,6 +48,12 @@ public sealed class Lv95TileLoop : ITileLoop
     public IReadOnlyList<HashSet<TileId>> Blocks { get; }
     public HashSet<TileId> Wanted { get; }
     public TileRewriter.Inputs Inputs { get; }
+
+    /// <summary>
+    /// A tile with no raw input is read from the chunk directory that the stage writes (and stashed there first, or, with
+    /// <see cref="TileRewriter.Options.Force"/>, read as a block before it left it): those runs stay one block after another.
+    /// </summary>
+    public bool BlocksIndependent { get; }
 
     public Lv95TileLoop(string chunkDir, IReadOnlyList<TileId> tiles, TileRewriter.Options options, Action<string> log)
     {
@@ -77,6 +89,7 @@ public sealed class Lv95TileLoop : ITileLoop
         // walkers' crossings over a tram track left without lights (#1176: OSM railway=tram_crossing, crossing=uncontrolled)
         TileRewriter.UncontrolledTramCrossings = TileRewriter.UncontrolledCrossings(osmNodes);
 
+        BlocksIndependent = targets.All(id => File.Exists(RawRoads.RoadPath(rawDir, id)));
         Wanted = new HashSet<TileId>(targets);
         Blocks = GroupIntoBlocks(targets, options.BlockSize);
         // gantries of lane signs (#1110): SITG's in canton Geneva, the rule elsewhere

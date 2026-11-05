@@ -27,14 +27,14 @@ public static partial class TileRewriter
         /// <summary>Plans over 120 s with every green at its minimum (#1161): where, cycle, phases.</summary>
         public readonly List<string> CyclesOver = new();
         /// <summary>Junctions whose trams are not in the conflict times (#1057: the cycle past its maximum with them).</summary>
-        public readonly List<Vec2> TramUntimedAt = new();
+        [StatsSample(8)] public readonly List<Vec2> TramUntimedAt = new();
         /// <summary>Junctions with a tram group leading no car group (#1057).</summary>
-        public readonly List<Vec2> TramNoLeadAt = new();
+        [StatsSample(8)] public readonly List<Vec2> TramNoLeadAt = new();
         /// <summary>Written junctions with a transition (LV95), for the seam check and pictures.</summary>
         public readonly List<Vec2> WithTransitions = new();
         public readonly List<Vec2> OrphanedAt = new();
         /// <summary>Where a plan came out invalid (up to five), and its first error.</summary>
-        public readonly List<string> InvalidAt = new();
+        [StatsSample(5)] public readonly List<string> InvalidAt = new();
         /// <summary>The merged cores written (#818 phase 5c) and their node counts.</summary>
         public readonly List<(Vec2 At, int Nodes)> MergedAt = new();
         /// <summary>The roundabouts written whole (#854).</summary>

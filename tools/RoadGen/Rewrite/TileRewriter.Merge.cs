@@ -269,7 +269,7 @@ public static partial class TileRewriter
         public int Merged, Members, HeldApart, Rings, ByMembers, Regrown, ForTrams;
         public readonly Dictionary<string, int> Why = new();
         /// <summary>Pairs joined for a tram between them (#1161), where (the first few).</summary>
-        public readonly List<Vec2> ForTramsAt = new();
+        [StatsSample(30)] public readonly List<Vec2> ForTramsAt = new();
 
         public string Summary() =>
             $"    merged cores (#818 phase 5c): {Merged:N0} of {Members:N0} junctions ({ByMembers:N0} laid member by member, #854; grown again {Regrown:N0} times where a merged core reached another junction; {HeldApart:N0} overlapping ones laid apart, held at half the street between); tight roundabouts laid whole {Rings:N0} (#854); pairs joined for a tram between them {ForTrams:N0} (#1161{(ForTramsAt.Count > 0 ? ": " + string.Join(" ", ForTramsAt.Select(v => FormattableString.Invariant($"{v.X:F0},{v.Y:F0}"))) : "")})"

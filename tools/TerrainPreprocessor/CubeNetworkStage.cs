@@ -168,6 +168,9 @@ public sealed class FrameTileLoop : ITileLoop
     public HashSet<TileId> Wanted { get; }
     public TileRewriter.Inputs Inputs { get; }
 
+    /// <summary>Blocks run one after another on a frame: its reads and writes have not been checked for running at once (#1539).</summary>
+    public bool BlocksIndependent => false;
+
     /// <summary>The core leaves' sections, every one listed (empty: no roads), for <see cref="LeafWriter.WriteFrame"/>.</summary>
     public Dictionary<CubeKey, List<LeafSection>> Sections { get; } = new();
 
