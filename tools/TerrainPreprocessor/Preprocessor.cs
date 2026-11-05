@@ -951,7 +951,7 @@ public static partial class Preprocessor
                 Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
                 if (doCover)
                 {
-                    int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
+                    int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!), jobs);
                     if (rc != 0) return rc;
                 }
                 if ((buildingsGpkg != null || buildingsGdb.Count > 0) && !roads)

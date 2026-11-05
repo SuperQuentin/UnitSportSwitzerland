@@ -13,6 +13,10 @@ public sealed class CoverExtractor
 
     public CoverExtractor(string gpkgPath) => _gpkgPath = gpkgPath;
 
+    /// <summary>How many tiles are painted and populated at once (<c>--jobs</c>).</summary>
+    public int Jobs { get; init; } = Environment.ProcessorCount;
+    private ParallelOptions Workers => new() { MaxDegreeOfParallelism = Jobs };
+
     public Dictionary<TileId, byte[]> Cover { get; } = new();
     public Dictionary<TileId, List<TreeInstance>> Trees { get; } = new();
     public int PolygonCount { get; private set; }
@@ -189,12 +193,12 @@ public sealed class CoverExtractor
                     list.Add(i);
                 }
         }
-        var scratch = new RingScratch();
-        foreach (var (id, list) in rings)
+        Parallel.ForEach(rings, Workers, () => new RingScratch(), (tile, _, scratch) =>
         {
-            var cells = Cover[id];
-            foreach (int i in list) PaintRing(_pending[i], id, cells, scratch);
-        }
+            var cells = Cover[tile.Key];
+            foreach (int i in tile.Value) PaintRing(_pending[i], tile.Key, cells, scratch);
+            return scratch;
+        }, _ => { });
         _pending.Clear();
         _pendingCoords = 0;
     }
@@ -308,10 +312,14 @@ public sealed class CoverExtractor
     /// </summary>
     private void ScatterTrees(IReadOnlyCollection<TileId> tiles, Func<double, double, double?> heightOf)
     {
-        foreach (var tile in tiles)
+        foreach (var tile in tiles) TreeList(tile);   // a tile's own list and generator, so tiles run at once
+        int scattered = 0;
+        Parallel.ForEach(tiles, Workers, tile =>
         {
             var cells = Cover[tile];
-            var list = TreeList(tile);
+            var list = Trees[tile];
+            RoadMask.TryGetValue(tile, out var blocked);
+            int planted = 0;
             // deterministic per tile so re-runs produce identical output
             var rng = new Random(tile.E * 73856093 ^ tile.N * 19349663);
 
@@ -321,7 +329,7 @@ public sealed class CoverExtractor
                     int cell = row * CoverFormat.Size + col;
                     var cls = (CoverClass)cells[cell];
                     if (!CoverFormat.IsWooded(cls)) continue;
-                    if (RoadMask.TryGetValue(tile, out var blocked) && blocked[cell]) continue;
+                    if (blocked != null && blocked[cell]) continue;
 
                     // each 2 m cell is 0.0004 ha; density is per hectare
                     float perCell = CoverFormat.TreeDensity(cls) * 0.0004f;
@@ -343,9 +351,11 @@ public sealed class CoverExtractor
                     list.Add(new TreeInstance(
                         (float)(e - tile.MinE), (float)h.Value, (float)(tile.MaxN - n),
                         height, cls == CoverClass.Shrub ? KindShrub : KindConifer));
-                    ScatteredTrees++;
+                    planted++;
                 }
-        }
+            Interlocked.Add(ref scattered, planted);
+        });
+        ScatteredTrees += scattered;
     }
 
     private List<TreeInstance> TreeList(TileId tile)
@@ -361,10 +371,12 @@ public sealed class CoverExtractor
     /// </summary>
     private void PlantRows(IReadOnlyCollection<TileId> tiles, Func<double, double, double?> heightOf)
     {
-        foreach (var tile in tiles)
+        int plantedAll = 0;
+        Parallel.ForEach(tiles, Workers, tile =>
         {
             var cells = Cover[tile];
-            var list = TreeList(tile);
+            var list = Trees[tile];
+            int planted = 0;
             var rng = new Random(tile.E * 40503 ^ tile.N * 12289);
             RoadMask.TryGetValue(tile, out var blocked);
 
@@ -398,10 +410,12 @@ public sealed class CoverExtractor
                                 ? 3.4f + (float)rng.NextDouble() * 1.4f
                                 : 2.2f + (float)rng.NextDouble() * 1.0f,
                             KindFruit));
-                        PlantedTrees++;
+                        planted++;
                     }
             }
-        }
+            Interlocked.Add(ref plantedAll, planted);
+        });
+        PlantedTrees += plantedAll;
     }
 
     /// <summary>
