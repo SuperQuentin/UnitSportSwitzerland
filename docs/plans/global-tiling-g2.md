@@ -80,7 +80,7 @@ flat world; track B builds data the game does not read yet; C wires the two toge
 - Check: `tools/test.sh net` with the feature checked on the remote peer, two clients with
   `--originstress --originyaw` on each, save migration unit tests from real old files.
 
-**A3 True north** (one PR)
+**A3 True north** (one PR; **built**, PR #1533: true north is the one system, every stored heading read into it at load, grid only as a marked local turn in LV95 maths; `docs/notes/core/true-north.md`)
 - Data converted at load by the meridian convergence at its point: berths, givers, traffic
   endpoints, the LV95 literal catalogues (castles, stadiums, festivals, trailer); the compass, HUD,
   cockpit HDG/track, BR viewpoint, adventure compass and `PhotoJudge` read true north from the frame
