@@ -392,6 +392,52 @@ public sealed class RailRoadOverlap
         return new RoadPaint { Shape = p.Shape, Type = p.Type, Variant = p.Variant, Rgba = p.Rgba, Width = p.Width, Vertices = keep.ToArray(), Indices = indices };
     }
 
+    /// <summary>
+    /// Track zones in <see cref="Cell"/> m cells: each cell the pieces whose box, a zone's half wider, touches it. A point within a
+    /// piece's half lies in that box, so a cell holds every piece that can answer for its points: the same answer as trying them all.
+    /// </summary>
+    private sealed class ZoneIndex
+    {
+        private const double Cell = 16, Pad = 1;
+        private readonly int _x0, _y0, _width, _height;
+        private readonly List<(Vec2 A, Vec2 B, double Half)>?[] _cells = [];
+
+        public ZoneIndex(List<(Vec2[] Line, double Half)> zones)
+        {
+            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+            foreach (var (line, half) in zones)
+                for (int i = 1; i < line.Length; i++)
+                {
+                    minX = Math.Min(minX, Math.Min(line[i - 1].X, line[i].X) - half - Pad); maxX = Math.Max(maxX, Math.Max(line[i - 1].X, line[i].X) + half + Pad);
+                    minY = Math.Min(minY, Math.Min(line[i - 1].Y, line[i].Y) - half - Pad); maxY = Math.Max(maxY, Math.Max(line[i - 1].Y, line[i].Y) + half + Pad);
+                }
+            if (minX > maxX) return;   // lines of one point: no piece
+            _x0 = (int)Math.Floor(minX / Cell);
+            _y0 = (int)Math.Floor(minY / Cell);
+            _width = (int)Math.Floor(maxX / Cell) - _x0 + 1;
+            _height = (int)Math.Floor(maxY / Cell) - _y0 + 1;
+            _cells = new List<(Vec2, Vec2, double)>?[_width * _height];
+            foreach (var (line, half) in zones)
+                for (int i = 1; i < line.Length; i++)
+                {
+                    Vec2 a = line[i - 1], b = line[i];
+                    int x1 = (int)Math.Floor((Math.Max(a.X, b.X) + half + Pad) / Cell) - _x0, y1 = (int)Math.Floor((Math.Max(a.Y, b.Y) + half + Pad) / Cell) - _y0;
+                    for (int y = (int)Math.Floor((Math.Min(a.Y, b.Y) - half - Pad) / Cell) - _y0; y <= y1; y++)
+                        for (int x = (int)Math.Floor((Math.Min(a.X, b.X) - half - Pad) / Cell) - _x0; x <= x1; x++)
+                            (_cells[y * _width + x] ??= []).Add((a, b, half));
+                }
+        }
+
+        public bool Inside(Vec2 p)
+        {
+            int x = (int)Math.Floor(p.X / Cell) - _x0, y = (int)Math.Floor(p.Y / Cell) - _y0;
+            if ((uint)x >= (uint)_width || (uint)y >= (uint)_height || _cells[y * _width + x] is not { } here) return false;
+            foreach (var (a, b, half) in here)
+                if (Polyline.PointSegmentDistance(p, a, b) < half) return true;
+            return false;
+        }
+    }
+
     public void ClearTrackZones(List<RoadPaint> paint, TileId tile, IReadOnlyList<(float X, float Z)>? lights = null)
     {
         if (_zones.Count == 0 || paint.Count == 0) return;
@@ -399,14 +445,10 @@ public sealed class RailRoadOverlap
             p.X > Plane.West(tile) - 50 && p.X < Plane.West(tile) + TileSize + 50 && p.Y > Plane.South(tile) - 50 && p.Y < Plane.North(tile) + 50)).ToList();
         if (near.Count == 0) return;
 
-        bool InZone(float x, float z)
-        {
-            var p = new Vec2(Plane.West(tile) + x, Plane.North(tile) - z);
-            foreach (var (line, half) in near)
-                for (int i = 1; i < line.Length; i++)
-                    if (Polyline.PointSegmentDistance(p, line[i - 1], line[i]) < half) return true;
-            return false;
-        }
+        // every 25 cm of paint asks, and each asked every piece of every line near the tile (#1539)
+        var zones = new ZoneIndex(near);
+        double west = Plane.West(tile), north = Plane.North(tile);
+        bool InZone(float x, float z) => zones.Inside(new Vec2(west + x, north - z));
 
         for (int pi = paint.Count - 1; pi >= 0; pi--)
         {
