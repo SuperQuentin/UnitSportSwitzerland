@@ -371,7 +371,7 @@ public sealed class OriginFrame
 
     /// <summary>
     /// This world's axes at a world point against the local east-up-south there (#1503, x east, y up, z south):
-    /// in the ground frame the grid's axes at the point (<see cref="GlobalPos.Enu"/>: a turn about up by the meridian
+    /// in the ground frame the grid's axes at the point (<see cref="GridAxes"/>: a turn about up by the meridian
     /// convergence and the grid's scale, a flat world's metres being grid metres), in an anchor frame its own axes
     /// (a turn, its metres true ones). A few microseconds (rigorous geodesy): per packet, never per vertex.
     /// </summary>

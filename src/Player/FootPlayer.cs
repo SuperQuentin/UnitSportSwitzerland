@@ -342,7 +342,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>
-    /// Publishes a state given in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> (what LV95 maths and
+    /// Publishes a state given in the LV95 grid's axes at <paramref name="at"/> (what LV95 maths and
     /// records hold: a recording, a scripted puppet, a swarm bot): the wire's ENU velocity and true heading from them.
     /// <c>NetTime</c> is not set: the caller sets it last.
     /// </summary>
@@ -383,14 +383,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private EnuNear _drawEnu;
 
     /// <summary>
-    /// The heading in <see cref="GlobalPos"/>'s offset axes at <see cref="Global"/> (grid north until G2 A1): what
+    /// The heading in the LV95 grid's axes at <see cref="Global"/> (grid north until G2 D, #1502): what
     /// server code doing LV95 maths reads, and what a record keeps. On the owner its body's, else the published one.
     /// </summary>
     public float GlobalYaw => IsMultiplayerAuthority() || _netTime <= 0
         ? (Origin is { } origin ? origin.Frame.GridYawOf(Position, Rotation.Y) : Rotation.Y)
         : NetInGlobal.Yaw;
 
-    /// <summary>The velocity in <see cref="GlobalPos"/>'s offset axes (see <see cref="GlobalYaw"/>).</summary>
+    /// <summary>The velocity in the LV95 grid's axes (see <see cref="GlobalYaw"/>).</summary>
     public Vector3 GlobalVelocity => IsMultiplayerAuthority() || _netTime <= 0
         ? (Origin is { } origin ? origin.Frame.GridOfWorld(Position, Velocity) : Velocity)
         : NetInGlobal.Velocity;

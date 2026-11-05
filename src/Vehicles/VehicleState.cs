@@ -10,7 +10,7 @@ namespace UnitSport.Vehicles;
 /// Godot Dictionary, which is what a MultiplayerSpawner's spawn data and an RPC can carry. Its
 /// position is a <see cref="GlobalPos"/> (#185): it crosses the network, and the server keeps it for as
 /// long as the vehicle stands there. Its <see cref="Yaw"/>, <see cref="Velocity"/> and a boat's or an
-/// airliner's attitude (<see cref="Angles"/>) are in GlobalPos's offset axes at that place (grid north
+/// airliner's attitude (<see cref="Angles"/>) are in the LV95 grid's axes at that place (grid north
 /// until G2 A1, a flat world's axes): <see cref="ToDict"/> sends them in ECEF, local ENU and true north
 /// (#1503, protocol 93), the object containers save that form too (G2 A2b).
 /// </summary>

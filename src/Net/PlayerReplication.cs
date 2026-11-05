@@ -49,7 +49,7 @@ public static class PlayerReplication
 
     /// <summary>
     /// A race NPC's spawn data: its place as ECEF and its heading from true north there (#1503); <paramref name="yaw"/>
-    /// is in GlobalPos's offset axes at <paramref name="at"/> (the server's flat frame: its world yaw).
+    /// is in the LV95 grid's axes at <paramref name="at"/> (the server's flat frame: its world yaw).
     /// </summary>
     public static Godot.Collections.Array NpcData(long owner, int n, int rideKind, GlobalPos at, float yaw, int setup = 0)
     {

@@ -12,7 +12,7 @@ namespace UnitSport.Net;
 /// A player who left, lying asleep where they were (#644). <see cref="Key"/> is their
 /// <see cref="PlayerKey.Fingerprint"/> and never leaves the server; <see cref="Id"/> is what clients
 /// know it by. <see cref="At"/> is where they lie, at the feet; <see cref="Yaw"/> their heading in GlobalPos's
-/// offset axes there (grid north until G2 A1; the file keeps it from true north). <see cref="Rider"/> is the peer id they
+/// the LV95 grid's axes there (grid north until G2 D; the file keeps it from true north). <see cref="Rider"/> is the peer id they
 /// had, which their jersey hue and (if they never chose one) their figure come from.
 /// </summary>
 public sealed record Sleeper(long Id, string Key, string Name, GlobalPos At, float Yaw,

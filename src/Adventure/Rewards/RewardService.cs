@@ -816,7 +816,7 @@ public partial class RewardService : Node
     }
 
     /// <summary>
-    /// (#1503) A photo's compass bearing (degrees, 0 north, 90 east) between this type's offset axes (grid north, what
+    /// (#1503) A photo's compass bearing (degrees, 0 north, 90 east) between the LV95 grid (grid north, what
     /// <see cref="PhotoJudge"/> uses) and a bearing from true north at <paramref name="at"/> (what goes on the wire).
     /// </summary>
     private static float BearingTrue(GlobalPos at, float bearingDeg, bool toWire)

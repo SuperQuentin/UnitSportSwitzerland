@@ -50,7 +50,7 @@ public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, double
     Quaternion Rotation, string Payload)
 {
     /// <summary>
-    /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's, in GlobalPos's offset axes
+    /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's, in the LV95 grid's axes
     /// (what is saved); the world's turn of it is the same in a flat frame (#1503).
     /// </summary>
     public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(origin.Frame.WorldTurnOfGrid(At, Rotation)), origin.ToWorld(At));

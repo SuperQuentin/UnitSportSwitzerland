@@ -90,7 +90,7 @@ public partial class NetPlace : Node
 
     /// <summary>
     /// At <paramref name="at"/>, turned by <paramref name="yaw"/> about up and moving at <paramref name="velocity"/>,
-    /// both in GlobalPos's offset axes there (a record's heading and velocity), until the authority publishes.
+    /// both in the LV95 grid's axes there (a record's heading and velocity), until the authority publishes.
     /// </summary>
     public NetPlace(WorldOrigin origin, GlobalPos at, float yaw = 0f, Vector3 velocity = default)
     {
@@ -103,7 +103,7 @@ public partial class NetPlace : Node
         _vel = enu.ToEnu(velocity);
     }
 
-    /// <summary>The same, turned by a whole rotation in GlobalPos's offset axes at <paramref name="at"/> (a thrown item's tumble).</summary>
+    /// <summary>The same, turned by a whole rotation in the LV95 grid's axes at <paramref name="at"/> (a thrown item's tumble).</summary>
     public NetPlace(WorldOrigin origin, GlobalPos at, Quaternion turn) : this(origin, at)
     {
         if (origin != null) _turn = Lv95Grid.Axes(at).ToEnu(turn);

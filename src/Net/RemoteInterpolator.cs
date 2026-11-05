@@ -83,7 +83,7 @@ public sealed class RemoteInterpolator
 
     public bool HasData => _count > 0;
 
-    /// <summary>Records a state the owner sent, stamped with the owner's clock: its velocity and yaw in <paramref name="position"/>'s offset axes.</summary>
+    /// <summary>Records a state the owner sent, stamped with the owner's clock: its velocity in the local east-up-south there and its yaw from true north (the wire's).</summary>
     public void Push(double senderTime, double localTime, GlobalPos position, Vector3 velocity, float yaw)
     {
         if (_count > 0)

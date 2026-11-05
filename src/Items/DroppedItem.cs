@@ -25,7 +25,7 @@ public readonly record struct DropState(
 {
     /// <summary>
     /// The state on the wire (a spawn, an RPC): ECEF, and its tumble, velocity and spin in the local ENU (#1503); in
-    /// memory they are in GlobalPos's offset axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
+    /// memory they are in the LV95 grid's axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
     /// </summary>
     public Godot.Collections.Dictionary ToDict()
     {
