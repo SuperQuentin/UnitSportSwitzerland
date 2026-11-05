@@ -104,23 +104,25 @@ Tried and dropped (no change beyond noise): skipping rows with no water in `Refi
 Left scalar on purpose: the rows pass of the distance transform and `SampleBed` (floating point with divisions and data dependent branches; a vector version would need gathers and would still be bound by the divisions), the running minimum along a row (serial), the `BoxMean` long to double conversion (no exact vector form on AVX2).
 No FMA, no estimates, no reordering of any sum is used anywhere; the vector loops only select, compare, take minima and widen integers, and convert whole numbers below 2^24 to float.
 
-Multi-batch region, three runs each way (whole pipeline, `sha256` of 4383 files compared with the `main` reference every time):
+Multi-batch region, whole pipeline, `sha256` of 4383 files compared with the `main` reference every time. Final binary (the kilometre cursor is owned by `ComputeTile`, see below), three runs, two of them interleaved with the previous `[ThreadStatic]` build to cancel machine drift:
 
-| | Before (#1562) | After |
-|---|---|---|
-| `water/C-beds` wall | 25.1, 24.9, 25.4 s | 17.5, 17.6, 17.3 s |
-| `water/C-beds` CPU | 205, 205, 207 s | 140, 139, 137 s |
-| Whole run | 104.3, 103.0, 105.1 s | 98.5, 95.3, 103.9 s |
-| Peak working set of the run | 8497, 8549, 8578 MB | 9156, 8491, 8803 MB |
+| | Before (#1562) | After (final) | Previous build, interleaved |
+|---|---|---|---|
+| `water/C-beds` wall | 25.1, 24.9, 25.4 s | 16.9, 16.8, 16.9 s | 17.2, 17.4 s |
+| `water/C-beds` CPU | 205, 205, 207 s | 133, 131, 132 s | 137, 138 s |
+| Whole run | 104.3, 103.0, 105.1 s | 97.8, 95.9, 95.2 s | 97.4, 96.7 s |
+| Peak working set of the run | 8497, 8549, 8578 MB | 9164, 8569, 9168 MB | 9286, 8970 MB |
 
-Identical bytes (4383 of 4383) in all three, and with `DOTNET_EnableAVX2=0` (whole run 103.8 s, `C-beds` 18.6 s) and `DOTNET_EnableHWIntrinsic=0` (the scalar paths, as on a CPU without vectors: 106.3 s, `C-beds` 20.3 s, 163 CPU s); benchmark 557 of 557, rural 1931 of 1931.
-With every vector path scalar the phase is still 19 % faster than before, so the vectors are about 2.8 s of the 7.6 s gained (an upper bound: the switch also slows the BCL's own vector code).
+`C-beds` is 33 % faster. Of that, the vectors are about 8 % and plain fixes about 25 %: switching the vector loops off cost 2.0 s of the 7.6 s gained, and with every vector path scalar (`DOTNET_EnableHWIntrinsic=0`: `C-beds` 19.9 s, whole run 101.5 s) the phase is still 21 % faster than before (an upper bound for the vectors: the switch also slows the BCL's own vector code).
+Identical bytes (4383 of 4383) in all of these, with `DOTNET_EnableAVX2=0` (earlier build, `C-beds` 18.6 s) and `DOTNET_EnableHWIntrinsic=0`; benchmark 557 of 557, rural 1931 of 1931. Under a heap limit, final build: 16 GB `C-beds` 17.0 s, whole run 102.9 s, peak 8221 MB; 4 GB 21.6 s, 175.8 s, 4210 MB (before the change: 25.5 s / 110.0 s / 8086 MB and 35.8 s / 187.7 s / 4206 MB), identical. The 16, 8 and 4 GB runs of the intermediate `ThreadLocal` build (8 GB: `C-beds` 19.6 s, 118.7 s, 7974 MB, before 24.8 s / 120.6 s / 7792 MB) were identical too.
 
-Peak working set: the first run's 9156 MB was set by the network stage, which this change does not touch (8.47-9.16 GB from run to run); the water stage itself now reaches 8.8-9.4 GB in some runs where before it stayed under the network stage's peak.
-On its own (`--water` over finished chunks) the stage peaks at 4.4-4.9 GB before and 5.5-6.7 GB after. It is not live data (the pool allocates the same 2.2 GB) but large object heap garbage that waits longer for a gen 2 collection:
-the stage allocates a quarter of what it did (81 GB before, 21 GB after) and so reaches fewer collections. A cure would be fewer or pooled large arrays per tile (`depth`, `kind`, the output grids), not measured.
+The sampling cursor: a first version kept the last kilometre in a `[ThreadStatic]` (it holds the source and a grid on every pool thread for the life of the process, bad for the in-process builders); a `ThreadLocal` instance field fixed that but cost 8 % of `C-beds` at 898 million calls. `BathySource.BedCursor` is a struct the caller passes by `ref` (`SampleBed(e, n, ref cursor)`; `SampleBed(e, n)` makes a fresh one), one per tile, used by the one thread that runs the tile; it was also 2-3 % faster than the thread static.
 
-A native rewrite of these loops would meet the same limits: the vector loops that exist gave 2x where the loop only streams (columns pass 19 -> 9 thread-seconds), nothing where it is divisions and branches, and the window arrays are bound by memory bandwidth shared by the cores. The biggest remaining item is algorithmic, not a language one: a window is 2201 x 2201 round a 1000 x 1000 tile, so each lake vertex is sampled by up to nine windows (898 million `SampleBed` calls for 477 tiles). Sampling each kilometre once would cut that third of the phase to a ninth at the price of 8 MB per surveyed kilometre held.
+Peak working set: the run's peak is set by the network stage (8.47-9.16 GB from run to run, not touched here); the water stage itself now sometimes goes above it (8.6-9.2 GB in these runs, where before it stayed under the network peak).
+On its own (`--water` over finished chunks) the stage peaks at 4.4-4.9 GB before and 5.5-6.7 GB after. It is not more live data (the pool allocates the same 2.2 GB) but large object heap garbage that waits longer for a gen 2 collection:
+the stage allocates a quarter of what it did (81 GB before, 21 GB after) and so reaches fewer collections. A cure would be fewer or pooled large arrays per tile (`depth`, `kind`, the output grids), not measured. Under heap limits the collector works as before and the runs complete.
+
+A native rewrite of these loops would meet the same limits: the vector loops that exist gave 2x where the loop only streams (columns pass 19 -> 9 thread-seconds), nothing where it is divisions and branches, and the window arrays are bound by memory bandwidth shared by the cores. The biggest remaining item is algorithmic, not a language one: a window is 2201 x 2201 round a 1000 x 1000 tile, so each lake vertex is sampled by up to nine windows (898 million `SampleBed` calls for 477 tiles). Sampling each kilometre once would cut that third of the phase to a ninth at the price of 8 MB per surveyed kilometre held. Not done: it raises the peak, which this change already did.
 
 ## Looked at, not changed
 
