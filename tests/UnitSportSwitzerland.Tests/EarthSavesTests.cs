@@ -240,6 +240,28 @@ public class EarthSavesTests
         Assert.Equal(3, again.Lay(t with { Key = "k2" }, out _).Id);
     }
 
+    /// <summary>
+    /// #1547: a body that left before its first state was laid at LV95 0/0 before G2; A2b migrated that to the sea off
+    /// Madeira, where waking put the player 3,000 km from any ground. Such placeholders are dropped on load, old or new.
+    /// </summary>
+    [Fact]
+    public void Sleepers_laid_before_any_state_are_dropped_on_load()
+    {
+        var old = SleeperBook.FromJson("""
+            {"Next": 4, "Sleepers": [
+              {"Id": 2, "Key": "a", "Name": "Anna", "E": 2500123.25, "N": 1118456.75, "Alt": 402.5, "Yaw": 0},
+              {"Id": 3, "Key": "b", "Name": "Ghost", "E": 0, "N": 0, "Alt": 0, "Yaw": 0}]}
+            """, out _);
+        Assert.Equal("a", Assert.Single(old.All).Key);
+
+        var migrated = new SleeperBook();
+        migrated.Lay(new Sleeper(0, "a", "Anna", GlobalPos.FromLv95(E, N, Alt), 0, 0, 0, 0, 0), out _);
+        migrated.Lay(new Sleeper(0, "b", "Ghost", GlobalPos.FromLv95(0, 0, 0), 0, 0, 0, 0, 0), out _);
+        Assert.Equal("a", Assert.Single(SleeperBook.FromJson(migrated.ToJson()).All).Key);
+        Assert.True(SleeperBook.Placeholder(default));
+        Assert.False(SleeperBook.Placeholder(GlobalPos.FromLv95(E, N, Alt)));
+    }
+
     // <containers>/awake.json before A2b: the bare dictionary of AwakeSlot
     private const string OldAwake = """
         {"12_34|0":{"Since":1761830000.5,"E":2500123.25,"N":1118456.75,"Yaw":1.25,"KindId":70,"Train":0,"Load":0.5},"12_34|1":{"Since":1761830001,"E":null,"N":null,"Yaw":0,"KindId":-1,"Train":0,"Load":0}}
