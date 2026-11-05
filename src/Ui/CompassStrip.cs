@@ -38,8 +38,13 @@ public interface ICompassSource
 {
     /// <summary>The strip is up now.</summary>
     bool Shown { get; }
-    /// <summary>Which way the view looks, (east, north); null hides the strip this frame.</summary>
+    /// <summary>Which way the view looks, (east, north) in the source's axes; null hides the strip this frame.</summary>
     Vector2? Heading { get; }
+    /// <summary>
+    /// The bearing of true north in the axes <see cref="Heading"/> and the markers' <see cref="CompassMarker.Toward"/>
+    /// are given in, degrees clockwise (#1504): the strip reads true north, not the world's −Z (<c>Core.TrueNorth</c>).
+    /// </summary>
+    float North { get; }
     /// <summary>Fills <paramref name="into"/> with the markers, most important first; returns how many.</summary>
     int Fill(CompassMarker[] into);
     /// <summary>Labels drop when two markers crowd each other, at most 8 are drawn (free roam); the BR draws all.</summary>
@@ -73,15 +78,16 @@ public partial class CompassStrip : Control
     private int _count, _previousCount;
     private readonly float[] _xs = new float[MaxMarkers];
     private readonly bool[] _drawn = new bool[MaxMarkers], _labelled = new bool[MaxMarkers];
-    private float _heading = float.NaN, _drawnHeading = float.NaN;
+    /// <summary>The heading and true north's bearing in the source's axes, degrees; the true heading is their difference.</summary>
+    private float _heading = float.NaN, _drawnHeading = float.NaN, _north, _drawnNorth;
     private double _quietSince;
 
     /// <summary>Redraws so far (checks: standing still costs none).</summary>
     public int Redraws { get; private set; }
     /// <summary>The markers drawn last (checks).</summary>
     public ReadOnlySpan<CompassMarker> Markers => _markers.AsSpan(0, _count);
-    /// <summary>The heading drawn last, degrees.</summary>
-    public float DrawnHeading => _drawnHeading;
+    /// <summary>The heading drawn last, degrees from true north.</summary>
+    public float DrawnHeading => Mathf.PosMod(_drawnHeading - _drawnNorth, 360f);
 
     public CompassStrip(ICompassSource source)
     {
@@ -108,7 +114,7 @@ public partial class CompassStrip : Control
         return d;
     }
 
-    /// <summary>A marker's x on the strip at a heading (checks).</summary>
+    /// <summary>A marker's x on the strip at a heading, both in the same axes (checks).</summary>
     public static (float X, bool Pinned) XOf(Vector2 toward, float heading) =>
         CompassMath.Place(CompassMath.Relative(Bearing(toward), heading), Width, HalfSpan);
 
@@ -122,12 +128,14 @@ public partial class CompassStrip : Control
         if (Position != pos) Position = pos;
         if (Size.X != Width) Size = new Vector2(Width, Height + 26);
         _heading = Bearing(_source!.Heading!.Value);
+        _north = _source.North;
 
         (_previous, _markers) = (_markers, _previous);
         _previousCount = _count;
         _count = Math.Min(_source.Fill(_markers), MaxMarkers);
         bool changed = _count != _previousCount || float.IsNaN(_drawnHeading)
-            || Mathf.Abs(Mathf.Wrap(_heading - _drawnHeading, -180f, 180f)) > 0.2f;
+            || Mathf.Abs(Mathf.Wrap(_heading - _drawnHeading, -180f, 180f)) > 0.2f
+            || Mathf.Abs(Mathf.Wrap(_north - _drawnNorth, -180f, 180f)) > 0.2f;
         for (int i = 0; i < _count && !changed; i++)
         {
             ref var a = ref _markers[i];
@@ -146,6 +154,7 @@ public partial class CompassStrip : Control
         }
         if (!changed) return;
         _drawnHeading = _heading;
+        _drawnNorth = _north;
         Redraws++;
         QueueRedraw();
     }
@@ -157,7 +166,8 @@ public partial class CompassStrip : Control
     {
         if (float.IsNaN(_drawnHeading)) return;
         var font = ThemeDB.FallbackFont;
-        float heading = _drawnHeading;
+        // ticks and the bearing under the caret from true north; markers against the heading in their own axes
+        float heading = Mathf.PosMod(_drawnHeading - _drawnNorth, 360f);
         float ppd = Width / (HalfSpan * 2f);
         float mid = Width * 0.5f;
 
@@ -190,11 +200,11 @@ public partial class CompassStrip : Control
 
         // the markers, in the source's order (later ones drawn over earlier ones)
         int n = _count;
-        for (int i = 0; i < n; i++) _xs[i] = XOf(_markers[i].Toward, heading).X;
+        for (int i = 0; i < n; i++) _xs[i] = XOf(_markers[i].Toward, _drawnHeading).X;
         if (_source.Declutter) CompassMath.Declutter(_xs.AsSpan(0, n), _drawn.AsSpan(0, n), _labelled.AsSpan(0, n));
         else for (int i = 0; i < n; i++) _drawn[i] = _labelled[i] = true;
         for (int i = 0; i < n; i++)
-            if (_drawn[i]) Marker(font, heading, in _markers[i], _labelled[i]);
+            if (_drawn[i]) Marker(font, _drawnHeading, in _markers[i], _labelled[i]);
 
         // the centre mark and the exact bearing under it
         DrawColoredPolygon(new[] { new Vector2(mid, Height - 2), new Vector2(mid - 6, Height + 7), new Vector2(mid + 6, Height + 7) }, Colors.White);
