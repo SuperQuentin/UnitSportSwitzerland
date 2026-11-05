@@ -25,6 +25,33 @@ public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
     }
 
     /// <summary>
+    /// The turn from these axes to the local east-up-south of <paramref name="enu"/> (x east, y up, z south, #1503):
+    /// a vector in these axes times it is the same vector in the ENU. Its columns are X, Y and Z seen in the ENU.
+    /// </summary>
+    public Basis InEnu(in EnuFrame enu)
+    {
+        var f = enu;
+        Vector3 Local(EcefPos v)
+        {
+            var (x, y, z) = f.DirectionToLocal(v);
+            return new((float)x, (float)y, (float)z);
+        }
+        return new Basis(Local(X), Local(Y), Local(Z));
+    }
+
+    /// <summary>
+    /// The east-up-south frame at an ECEF point (#1503): its origin there, X east, Y the ellipsoid's up, Z south.
+    /// What a list of points on the wire is given in (<see cref="OriginFrame.AnchorAt"/>): both peers build it from
+    /// the same doubles with the same code, so both get the same axes.
+    /// </summary>
+    public static FrameAxes Enu(EcefPos origin)
+    {
+        var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(origin));
+        var n = enu.North;
+        return new FrameAxes(origin, enu.East, enu.Up, new EcefPos(-n.X, -n.Y, -n.Z));
+    }
+
+    /// <summary>
     /// The LV95 ground frame's own axes at a place, as Earth-fixed unit vectors: grid east, the
     /// ellipsoid's up, grid south (world +X, +Y, +Z there), orthonormal. Grid north turns from true
     /// north by the meridian convergence, so these turn with it. What a ground frame looks like seen
@@ -80,6 +107,78 @@ public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
         var z = new EcefPos(x.Y * up.Z - x.Z * up.Y, x.Z * up.X - x.X * up.Z, x.X * up.Y - x.Y * up.X);
         return new FrameAxes(o, x, up, z);
     }
+}
+
+/// <summary>
+/// A frame's turn to the local east-up-south near a moving body (#1503): <see cref="OriginFrame.EnuBasis"/>, kept
+/// while the body stays within 100 m in one frame (the meridian convergence turns 0.001° in that), for what publishes
+/// a direction every frame. A mutable struct: keep it in a field and call <see cref="At"/> on the field.
+/// </summary>
+public struct EnuNear
+{
+    private OriginFrame? _frame;
+    private Vector3 _at;
+    private EnuAxes _axes;
+
+    public EnuAxes At(OriginFrame frame, Vector3 world)
+    {
+        if (!ReferenceEquals(frame, _frame) || _at.DistanceSquaredTo(world) > 100f * 100f)
+        {
+            _frame = frame;
+            _at = world;
+            _axes = frame.EnuAt(world);
+        }
+        return _axes;
+    }
+}
+
+/// <summary>
+/// Some axes at a place against the local east-up-south there (#1503; x east, y up, z south): the turn
+/// <see cref="Turn"/> (about up, or any for an anchor frame's axes) and <see cref="Scale"/>, the physical metres a
+/// metre along these axes' horizontal is (1 for true metres; the grid's scale for <see cref="GlobalPos"/>'s offset
+/// axes and a flat world's). What directions, velocities, headings and rotations cross the wire through.
+/// </summary>
+public readonly record struct EnuAxes(Basis Turn, float Scale)
+{
+    /// <summary>A velocity or direction in these axes as the local east-up-south.</summary>
+    public Vector3 ToEnu(Vector3 v)
+    {
+        var r = Turn * v;
+        return new(r.X * Scale, r.Y, r.Z * Scale);
+    }
+
+    /// <summary>The inverse of <see cref="ToEnu(Vector3)"/>.</summary>
+    public Vector3 FromEnu(Vector3 enu)
+    {
+        var r = Turn.Transposed() * enu;
+        return new(r.X / Scale, r.Y, r.Z / Scale);
+    }
+
+    /// <summary>The heading of true north in these axes (radians, as <c>Rotation.Y</c>).</summary>
+    public float NorthYaw
+    {
+        get
+        {
+            var north = Turn.Transposed() * new Vector3(0, 0, -1);
+            return Mathf.Atan2(-north.X, -north.Z);
+        }
+    }
+
+    /// <summary>A heading in these axes as one from true north.</summary>
+    public float TrueYaw(float yaw) => Wrap(yaw - NorthYaw);
+
+    /// <summary>A heading from true north in these axes.</summary>
+    public float Yaw(float trueYaw) => Wrap(trueYaw + NorthYaw);
+
+    /// <summary>A rotation (a body's basis) in these axes as one in the local east-up-south.</summary>
+    public Quaternion ToEnu(Quaternion q) => (Turn * new Basis(q.Normalized())).Orthonormalized().GetRotationQuaternion();
+
+    /// <summary>The inverse of <see cref="ToEnu(Quaternion)"/>.</summary>
+    public Quaternion FromEnu(Quaternion enu) =>
+        (Turn.Transposed() * new Basis(enu.Normalized())).Orthonormalized().GetRotationQuaternion();
+
+    /// <summary>An angle in [−π, π).</summary>
+    public static float Wrap(float yaw) => Mathf.Wrap(yaw, -Mathf.Pi, Mathf.Pi);
 }
 
 /// <summary>
@@ -148,6 +247,15 @@ public sealed class OriginFrame
     /// Put near the points, so the floats stay small.
     /// </summary>
     public static OriginFrame Anchor(double e, double n) => new(e, n, -1);
+
+    /// <summary>
+    /// The anchor a list of points travels with on the network since protocol 93 (#1503): world (0, 0, 0) at
+    /// <paramref name="origin"/>, its axes the local east, up and south there (<see cref="FrameAxes.Enu"/>), no LV95
+    /// in it. The sender maps its points into it with <c>AnchorAt(origin).Since(itsFrame)</c>, the receiver out of
+    /// it with <see cref="SinceAnchor(EcefPos)"/>; between two flat frames the pair is exactly their translation,
+    /// so nothing is lost on the way. Put near the points, so the floats stay small.
+    /// </summary>
+    public static OriginFrame AnchorAt(EcefPos origin) => new(FrameAxes.Enu(origin), -1);
 
     /// <summary>An anchor on the whole kilometre nearest <paramref name="p"/>.</summary>
     public static OriginFrame AnchorNear(GlobalPos p) =>
@@ -264,6 +372,68 @@ public sealed class OriginFrame
         return Turn(dir, axes);
     }
 
+    /// <summary>
+    /// This world's axes at a world point against the local east-up-south there (#1503, x east, y up, z south):
+    /// in the ground frame the grid's axes at the point (<see cref="GlobalPos.Enu"/>: a turn about up by the meridian
+    /// convergence and the grid's scale, a flat world's metres being grid metres), in an anchor frame its own axes
+    /// (a turn, its metres true ones). A few microseconds (rigorous geodesy): per packet, never per vertex.
+    /// </summary>
+    public EnuAxes EnuAt(Vector3 at)
+    {
+        if (Axes == null) return ToGlobal(at).Enu;
+        var p = Axes.ToEcef(at.X, at.Y, at.Z);
+        return new EnuAxes(Axes.InEnu(new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(p))), 1f);
+    }
+
+    /// <summary>A world direction or velocity at a world point as the local east-up-south there: what goes on the wire.</summary>
+    public Vector3 EnuOf(Vector3 at, Vector3 worldDir) => EnuAt(at).ToEnu(worldDir);
+
+    /// <summary>The inverse of <see cref="EnuOf"/>: a local east-up-south direction at a world point in world axes.</summary>
+    public Vector3 WorldOfEnu(Vector3 at, Vector3 enu) => EnuAt(at).FromEnu(enu);
+
+    /// <summary>
+    /// A world heading at a world point (radians, as <c>Rotation.Y</c>) as a heading from true north there (#1503):
+    /// the world yaw less the world yaw of true north at the point (<c>WorldOfEnu(at, (0, 0, -1))</c>).
+    /// </summary>
+    public float TrueYaw(Vector3 at, float worldYaw) => EnuAt(at).TrueYaw(worldYaw);
+
+    /// <summary>The inverse of <see cref="TrueYaw"/>: a heading from true north at a world point as a world heading.</summary>
+    public float WorldYaw(Vector3 at, float trueYaw) => EnuAt(at).Yaw(trueYaw);
+
+    /// <summary>A world rotation (a body's) at a world point as a rotation in the local east-up-south there.</summary>
+    public Quaternion EnuTurn(Vector3 at, Quaternion world) => EnuAt(at).ToEnu(world);
+
+    /// <summary>The inverse of <see cref="EnuTurn"/>.</summary>
+    public Quaternion WorldTurn(Vector3 at, Quaternion enu) => EnuAt(at).FromEnu(enu);
+
+    /// <summary>
+    /// A heading in <see cref="GlobalPos"/>'s offset axes (a record's, a saved one's: grid north until A1) at
+    /// <paramref name="at"/> as a world heading here: itself in the ground frame, whose axes are those, turned in an
+    /// anchor frame. Free in the ground frame, so a per-frame caller pays nothing on the ground.
+    /// </summary>
+    public float WorldYawOf(GlobalPos at, float offsetYaw) =>
+        Axes == null ? offsetYaw : WorldYaw(ToWorld(at), at.TrueYaw(offsetYaw));
+
+    /// <summary>The inverse of <see cref="WorldYawOf"/>: a world heading at a world point in <see cref="GlobalPos"/>'s offset axes.</summary>
+    public float OffsetYawOf(Vector3 at, float worldYaw) =>
+        Axes == null ? worldYaw : ToGlobal(at).OffsetYaw(TrueYaw(at, worldYaw));
+
+    /// <summary>A direction in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> in world axes (see <see cref="WorldYawOf"/>).</summary>
+    public Vector3 WorldOfOffset(GlobalPos at, Vector3 offset) =>
+        Axes == null ? offset : WorldOfEnu(ToWorld(at), at.EnuFromOffset(offset));
+
+    /// <summary>A rotation in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> in world axes (see <see cref="WorldYawOf"/>).</summary>
+    public Quaternion WorldTurnOf(GlobalPos at, Quaternion offset) =>
+        Axes == null ? offset : WorldTurn(ToWorld(at), at.Enu.ToEnu(offset));
+
+    /// <summary>The inverse of <see cref="WorldTurnOf"/>.</summary>
+    public Quaternion OffsetTurnOf(Vector3 at, Quaternion world) =>
+        Axes == null ? world : ToGlobal(at).Enu.FromEnu(EnuTurn(at, world));
+
+    /// <summary>The inverse of <see cref="WorldOfOffset"/>.</summary>
+    public Vector3 OffsetOfWorld(Vector3 at, Vector3 world) =>
+        Axes == null ? world : ToGlobal(at).OffsetFromEnu(EnuOf(at, world));
+
     /// <summary>An Earth-fixed direction in this frame's world axes (the ground frame: grid axes at its own origin).</summary>
     public Vector3 DirectionOf(EcefPos ecef)
     {
@@ -349,6 +519,15 @@ public sealed class OriginFrame
     public OriginShift SinceAnchor(double e, double n) => Axes == null
         ? new(new Transform3D(Basis.Identity, new Vector3((float)(e - E), (float)-Alt0, (float)-(n - N))))
         : Since(Anchor(e, n));
+
+    /// <summary>
+    /// What turns a point given in the ENU at an ECEF origin (<see cref="AnchorAt"/>, the wire's point lists since
+    /// protocol 93) into this frame. A few microseconds: once per list, then a transform per point.
+    /// </summary>
+    public OriginShift SinceAnchor(EcefPos origin) => Since(AnchorAt(origin));
+
+    /// <summary>The inverse of <see cref="SinceAnchor(EcefPos)"/>: what a sender maps its points with to send them in the ENU at <paramref name="origin"/>.</summary>
+    public OriginShift ToAnchor(EcefPos origin) => AnchorAt(origin).Since(this);
 }
 
 /// <summary>
@@ -424,8 +603,32 @@ public sealed class WorldOrigin
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into the current one's.</summary>
     public OriginShift Since(OriginFrame earlier) => _frame.Since(earlier);
 
-    /// <summary>What turns a position relative to an LV95 anchor into the current world space (<see cref="OriginFrame.SinceAnchor"/>).</summary>
+    /// <summary>What turns a position relative to an LV95 anchor into the current world space (<see cref="OriginFrame.SinceAnchor(double, double)"/>).</summary>
     public OriginShift SinceAnchor(double e, double n) => _frame.SinceAnchor(e, n);
+
+    /// <summary>What turns a point in the ENU at an ECEF origin (a list on the wire, #1503) into the current world space.</summary>
+    public OriginShift SinceAnchor(EcefPos origin) => _frame.SinceAnchor(origin);
+
+    /// <summary>A world point as ECEF (<see cref="OriginFrame.ToEcef"/>).</summary>
+    public EcefPos ToEcef(Vector3 world) => _frame.ToEcef(world);
+
+    /// <summary>A world direction at a world point as the local east-up-south (<see cref="OriginFrame.EnuOf"/>).</summary>
+    public Vector3 EnuOf(Vector3 at, Vector3 worldDir) => _frame.EnuOf(at, worldDir);
+
+    /// <summary>A local east-up-south direction at a world point in world axes (<see cref="OriginFrame.WorldOfEnu"/>).</summary>
+    public Vector3 WorldOfEnu(Vector3 at, Vector3 enu) => _frame.WorldOfEnu(at, enu);
+
+    /// <summary>A world heading at a world point from true north (<see cref="OriginFrame.TrueYaw"/>).</summary>
+    public float TrueYaw(Vector3 at, float worldYaw) => _frame.TrueYaw(at, worldYaw);
+
+    /// <summary>A heading from true north at a world point as a world heading (<see cref="OriginFrame.WorldYaw"/>).</summary>
+    public float WorldYaw(Vector3 at, float trueYaw) => _frame.WorldYaw(at, trueYaw);
+
+    /// <summary>A world rotation at a world point in the local east-up-south (<see cref="OriginFrame.EnuTurn(Vector3, Quaternion)"/>).</summary>
+    public Quaternion EnuTurn(Vector3 at, Quaternion world) => _frame.EnuTurn(at, world);
+
+    /// <summary>A rotation in the local east-up-south at a world point in world axes.</summary>
+    public Quaternion WorldTurn(Vector3 at, Quaternion enu) => _frame.WorldTurn(at, enu);
 
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude) => _frame.ToWorld(lv95E, lv95N, altitude);
 

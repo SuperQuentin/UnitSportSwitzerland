@@ -490,14 +490,13 @@ public partial class GameShell : Node
         }
 
         var settings = GameSettings.Current;
-        var start = settings.LastLandingE != 0 || settings.LastLandingN != 0
-            ? (settings.LastLandingE, settings.LastLandingN)
+        var start = settings.LastLanding is { Lv95: var (lastE, lastN, _) }
+            ? (lastE, lastN)
             : (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
 
         Push(Ui.MapScreen.CreateLanding(start, landing =>
         {
-            GameSettings.Current.LastLandingE = landing.E;
-            GameSettings.Current.LastLandingN = landing.N;
+            GameSettings.Current.LastLanding = GlobalPos.FromLv95(landing.E, landing.N, 0);
             GameSettings.Current.Save();
             Launch(launch with { Landing = landing });
         }));

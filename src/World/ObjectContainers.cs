@@ -131,9 +131,11 @@ public partial class ObjectContainers : Node
     {
         try
         {
-            return System.IO.File.Exists(AwakePath)
-                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AwakeSlot>>(System.IO.File.ReadAllText(AwakePath)) ?? new()
-                : new();
+            if (!System.IO.File.Exists(AwakePath)) return new();
+            var awake = AwakeSlots.FromJson(System.IO.File.ReadAllText(AwakePath), out bool old);
+            // a file from before G2 A2b (LV95, grid north): written back in Earth places (#1503)
+            if (old) SaveAwake(awake);
+            return awake;
         }
         catch (Exception e)
         {
@@ -148,7 +150,7 @@ public partial class ObjectContainers : Node
     /// </summary>
     public void SaveAwake(IReadOnlyDictionary<string, AwakeSlot> awake)
     {
-        try { SaveQueue.WriteAtomic(AwakePath, System.Text.Json.JsonSerializer.Serialize(awake)); }
+        try { SaveQueue.WriteAtomic(AwakePath, AwakeSlots.ToJson(awake)); }
         catch (Exception e) { GD.PushError($"[containers] could not write {AwakePath}: {e.Message}"); }
     }
 

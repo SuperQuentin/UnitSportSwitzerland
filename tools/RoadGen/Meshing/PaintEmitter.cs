@@ -76,7 +76,7 @@ public static class PaintEmitter
     /// <summary>Edge lines at this fraction of the half width, where the shader drew them.</summary>
     private const float EdgeFraction = 0.87f;
 
-    private const float TileSize = 1000f;
+    private static float TileSize => (float)Plane.TileSizeM;   // tile-local edges (#1507)
 
     /// <summary>Region numbers: primitives and what the game will draw from them.</summary>
     public sealed class Tally

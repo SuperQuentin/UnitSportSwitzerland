@@ -805,3 +805,10 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] On the ground at night (`--sun real`, a clear night), stars over a mountain range 50-70 km away: they still stop at the ridge line (stars now win against ridges within ~2 depth steps of the far plane, past ~62 km of a 70 km view).
 - [ ] At noon only Venus shows by day; Jupiter and Mercury come out with the stars at dusk.
 - [ ] `tools/shuttlefilm.sh` on another machine: the film has the game's sound in step (the take-off's roar with the take-off).
+
+## From space to the ground (PR [#1529](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1529), [#1528](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1528))
+
+- [ ] Climb (or come down from `/orbit 100`) over Switzerland between 5 and 80 km: no patch of tiles with a hard edge against the globe; the flat world's edge dissolves into it.
+- [ ] Land from space at Geneva or Zurich: from 15 km down the ground and the Alps show out to the horizon, no haze-coloured plane with lakes on it.
+- [ ] The same in VR (a standalone headset sinks the faded edge instead of discarding it).
+- [ ] From orbit and on the way down, the atmosphere's haze and limb glow cover the whole view (no clear disc round where you look).

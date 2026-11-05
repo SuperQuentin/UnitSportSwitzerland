@@ -35,7 +35,7 @@ public static partial class TileRewriter
 
     private static List<JunctionPlan> PlanLayouts(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
-        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, IGround? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log,
         CrossingNodes? crossings = null, IReadOnlyDictionary<int, JunctionPlan>? alone = null)
     {
@@ -54,7 +54,7 @@ public static partial class TileRewriter
         // 1. what the data wants at every mouth of the block
         foreach (var (junction, plan) in priority.Plans)
         {
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             // the block's junctions, and those near it (#818: they may reach into it)
             bool beyond = !block.Contains(home) || !wanted.Contains(home);
             if (beyond && !near.Contains(junction.NodeId) || junction.Arms.Count < 3 || plan.Arms.Count != junction.Arms.Count) continue;
@@ -323,7 +323,7 @@ public static partial class TileRewriter
     {
         Interlocked.Increment(ref _plannerFailures);
         Console.Error.WriteLine(FormattableString.Invariant(
-            $"  [WARN] junction planner: {e.GetType().Name}: {e.Message} at LV95 {jp.Centre.X:F1},{jp.Centre.Y:F1} (tile {TileId.FromLv95(jp.Centre.X, jp.Centre.Y)}, node {jp.Node}); fell back to {fellBackTo}"));
+            $"  [WARN] junction planner: {e.GetType().Name}: {e.Message} at LV95 {jp.Centre.X:F1},{jp.Centre.Y:F1} (tile {Plane.TileAt(jp.Centre.X, jp.Centre.Y)}, node {jp.Node}); fell back to {fellBackTo}"));
     }
 
     /// <summary>
@@ -871,7 +871,7 @@ public static partial class TileRewriter
     /// more than <see cref="TurnGroundStep"/> off the road or the tile ends; per station (the transition checks its own width there).
     /// </summary>
     private static ArmRoom MeasureRoom(RoadSegment seg, TileId tile, int self, bool atEnd, double from, double reach, EmbankmentPlanner.LineIndex lines,
-        Dictionary<TileId, ChunkGrid>? grids, Footprints buildings)
+        IGround? grids, Footprints buildings)
     {
         double half = seg.Width * 0.5;
         double length = SegmentLength(seg);
@@ -888,7 +888,7 @@ public static partial class TileRewriter
                 for (double o = half + RoomStep; o <= limit; o += RoomStep)
                 {
                     double px = x + rx * o * side, pz = z + rz * o * side;
-                    var lv95 = new Vec2(tile.MinE + px, tile.MaxN - pz);
+                    var lv95 = new Vec2(Plane.West(tile) + px, Plane.North(tile) - pz);
                     bool blocked = px < 0 || pz < 0 || px > TileSizeM || pz > TileSizeM
                         || buildings.Contains(lv95)
                         || lines.Covering(px, pz, self, x, z, half + 1.0) is not null

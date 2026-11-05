@@ -408,7 +408,7 @@ public static partial class TileRewriter
         foreach (var (junction, plan) in priority.Plans)
         {
             if (plan.Kind != PriorityPlanner.Kind.Signal) continue;
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
 
             var arms = new List<SignalArm>();
@@ -668,7 +668,7 @@ public static partial class TileRewriter
                         if (Math.Abs(Math.IEEERemainder(sign.Heading - pole.CarHeading, 2 * Math.PI)) > 0.5) continue;
                         list[index] = sign with
                         {
-                            X = (float)(pole.X + home.MinE - signTile.MinE), Y = pole.Y, Z = (float)(pole.Z + signTile.MaxN - home.MaxN),
+                            X = (float)(pole.X + Plane.West(home) - Plane.West(signTile)), Y = pole.Y, Z = (float)(pole.Z + Plane.North(signTile) - Plane.North(home)),
                             Height = bikeHead ? (pedHead ? CarHeadsTopAbovePedestrian : CarHeadsTop) + SignAboveHeads + RoadSigns.PlateHeight(sign.Type, sign.Variant)
                                 : SignOnPoleTop,
                             Flags = sign.Flags | PropFlags.OnSignalPole,
@@ -684,7 +684,7 @@ public static partial class TileRewriter
             foreach (var ip in islandPoles)
             {
                 var local = Local(home, [ip.At], _ => ip.Y, 0f);
-                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(ip.Facing), Heading(ip.Across), ip.Arm, SignalPoleFlags.Second));
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(home, ip.At, ip.Facing), Heading(home, ip.At, ip.Across), ip.Arm, SignalPoleFlags.Second));
                 stats.Poles++;
             }
             signalPlan.ArrowPlates = ArrowPlates(canton);
@@ -746,7 +746,7 @@ public static partial class TileRewriter
             float road = wish.Source.SampleHeight(wish.Axis + wish.CarFacing * back + wish.Out * wish.Kerb);
             float foot = side.OuterDm > 0 ? RoadStreetSection.HeightAt(side, (float)off) : 0f;
             var local = Local(home, [at], _ => road + foot, 0f);
-            return new SignalPole(local[0], local[1], local[2], Heading(wish.CarFacing), Heading(wish.PedFacing), wish.Arm, wish.Flags);
+            return new SignalPole(local[0], local[1], local[2], Heading(home, at, wish.CarFacing), Heading(home, at, wish.PedFacing), wish.Arm, wish.Flags);
         }
         return null;
     }
@@ -754,12 +754,15 @@ public static partial class TileRewriter
     /// <summary>Radians about +Y, 0 facing -Z (north), facing along a plan-view direction (as the signs).</summary>
     private static float Heading(Vec2 facing) => (float)Math.Atan2(-facing.X, facing.Y);
 
+    /// <summary><see cref="Heading(Vec2)"/> of a plane direction at <paramref name="at"/>, in tile <paramref name="home"/>'s axes (#1507).</summary>
+    private static float Heading(TileId home, Vec2 at, Vec2 facing) => Heading(Plane.DirectionToTile(home, at, facing));
+
     /// <summary>Whether a point stands on a widening strip (#123/#348) of its tile.</summary>
     private static bool OnPavement(Vec2 p, Dictionary<TileId, List<RoadAreaProp>> areas)
     {
-        var tile = TileId.FromLv95(p.X, p.Y);
+        var tile = Plane.TileAt(p.X, p.Y);
         if (!areas.TryGetValue(tile, out var list)) return false;
-        double x = p.X - tile.MinE, z = tile.MaxN - p.Y;
+        double x = p.X - Plane.West(tile), z = Plane.North(tile) - p.Y;
         foreach (var a in list)
         {
             if (a.Type != AreaPropType.Pavement) continue;

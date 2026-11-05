@@ -123,343 +123,364 @@ public sealed class RoadExtractor
     }
 
     /// <summary>
-    /// Extracts every tile in <paramref name="tiles"/>. <paramref name="heightOf"/> returns
-    /// the terrain altitude for an LV95 position, or null when that tile has no elevation
-    /// data (the road keeps its TLM Z in that case).
+    /// Extracts the space's written tiles (<see cref="IRoadSpace{TTile}.Tiles"/>): the LV95 build's km tiles, or a
+    /// work frame's leaves. Its ground (<see cref="IRoadSpace{TTile}.Ground"/>) returns the terrain altitude at a
+    /// plane position, or null where there is none (the road keeps its TLM Z when a whole piece has none).
     /// </summary>
-    /// <summary>Terrain quads to drop so tunnel portals are open; filled during Extract.</summary>
-    public Dictionary<TileId, HashSet<int>> Holes { get; } = new();
-
-    /// <summary>
-    /// Where each emitted segment came from, aligned with <see cref="RoadTile.Segments"/>: the TLM
-    /// uuid, the part (LineString index) and the 2D distance along that part to the segment's
-    /// first point, in the key format of the OSM overlay (docs/notes/tools/osm-overlay.md).
-    /// Null for features that are not TLM road lines. Read by the road network stage.
-    /// </summary>
-    public Dictionary<TileId, List<RawRoads.Key?>> SourceKeys { get; } = new();
-
-    /// <summary>One TLM line with its resolved attributes, held until the join index is built.</summary>
-    private sealed record PendingLine(GeoPackageReader.Polyline Line, RoadClass Cls,
-        RoadSurface Surface, RoadFlags Flags, float Width, RoadAttributes Attr, string? Uuid, int Part)
+    public Extraction<TTile> Extract<TTile>(IRoadSpace<TTile> space) where TTile : struct, IEquatable<TTile>
     {
-        public bool IsStructure => (Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
+        var pass = new Extraction<TTile>(this, space);
+        pass.Run();
+        return pass;
     }
-
-    private readonly List<PendingLine> _pending = new();
-    private readonly HashSet<(long, long)> _openEnds = new(), _lonelyTunnelEnds = new();
-
-    /// <summary>
-    /// The portals of a tunnel line: its ends that meet a road or a rail, or nothing, where the bore
-    /// meets the surface (<see cref="RoadTunnels.AtSurface"/>: not a gap in an underground line).
-    /// </summary>
-    private List<(double E, double N)> Portals(GeoPackageReader.Polyline line, RoadClass cls,
-        Func<double, double, double?> heightOf)
-    {
-        var portals = new List<(double E, double N)>();
-        foreach (int i in new[] { 0, line.Count - 1 })
-        {
-            var key = JoinKey(line.E[i], line.N[i]);
-            if (!_openEnds.Contains(key) && !_lonelyTunnelEnds.Contains(key)) continue;
-            double ground = heightOf(line.E[i], line.N[i]) ?? double.NaN;
-            if (!RoadTunnels.AtSurface(ground, line.Z[i], RoadFormat.TunnelHeight(cls))) continue;
-            portals.Add((line.E[i], line.N[i]));
-        }
-        return portals;
-    }
-
-    /// <summary>
-    /// Surveyed height at each structure endpoint, so an approach road knows what it has to
-    /// meet. Keyed on the position rounded to <see cref="JoinTolerance"/>.
-    /// </summary>
-    private readonly Dictionary<(long, long), double> _structureEnds = new();
-
-    /// <summary>How many structure endpoints share a position — two means a mid-span join.</summary>
-    private readonly Dictionary<(long, long), int> _structureEndCount = new();
 
     private static (long, long) JoinKey(double e, double n) =>
         ((long)Math.Round(e / JoinTolerance), (long)Math.Round(n / JoinTolerance));
 
-    public Dictionary<TileId, RoadTile> Extract(IReadOnlyCollection<TileId> tiles,
-        Func<double, double, double?> heightOf)
+    /// <summary>One extraction over a space: its tiles, holes and source keys, and the state the lines share while it runs.</summary>
+    public sealed class Extraction<TTile> where TTile : struct, IEquatable<TTile>
     {
-        var result = tiles.ToDictionary(t => t, t => new RoadTile { Id = t, Segments = new() });
-        if (tiles.Count == 0) return result;
+        private readonly RoadExtractor _owner;
+        private readonly IRoadSpace<TTile> _space;
+        private readonly Func<double, double, double?> _heightOf;
 
-        // lines look at their neighbours (bridge ends, tunnel portals), hence the ring
-        var region = new TileRegion(tiles, TileRegion.RingM);
-
-        _pending.Clear();
-        SourceKeys.Clear();
-        foreach (var t in tiles) SourceKeys[t] = new List<RawRoads.Key?>();
-        _structureEnds.Clear();
-        _structureEndCount.Clear();
-
-        using var conn = GeoPackageReader.Open(_gpkgPath);
-        ExtractRoads(conn, region);
-        ExtractRailways(conn, region);
-        ExtractAerial(conn, region);
-        ExtractWatercourses(conn, region);
-        ExtractDefences(conn, region);
-
-        // Where a deck or bore ends, note the height it ends at. The approach road is a
-        // separate TLM feature, so this is the only way it can learn what to ramp up to —
-        // and ramping the approach is what keeps the deck itself dead flat.
-        foreach (var p in _pending)
+        internal Extraction(RoadExtractor owner, IRoadSpace<TTile> space)
         {
-            if (!p.IsStructure) continue;
-            foreach (int i in new[] { 0, p.Line.Count - 1 })
+            _owner = owner;
+            _space = space;
+            _heightOf = space.Ground.Sample;
+        }
+
+        /// <summary>The extracted tiles, every written tile (empty ones too).</summary>
+        public Dictionary<TTile, RoadTile> Tiles { get; private set; } = new();
+
+        /// <summary>Terrain quads to drop so tunnel portals are open, per written tile that has any.</summary>
+        public Dictionary<TTile, HashSet<int>> Holes { get; } = new();
+
+        /// <summary>
+        /// Where each emitted segment came from, aligned with <see cref="RoadTile.Segments"/>: the TLM
+        /// uuid, the part (LineString index) and the 2D distance along that part to the segment's
+        /// first point, in the key format of the OSM overlay (docs/notes/tools/osm-overlay.md).
+        /// Null for features that are not TLM road lines. Read by the road network stage.
+        /// </summary>
+        public Dictionary<TTile, List<RawRoads.Key?>> SourceKeys { get; } = new();
+
+        /// <summary>One TLM line with its resolved attributes, held until the join index is built.</summary>
+        private sealed record PendingLine(GeoPackageReader.Polyline Line, RoadClass Cls,
+            RoadSurface Surface, RoadFlags Flags, float Width, RoadAttributes Attr, string? Uuid, int Part)
+        {
+            public bool IsStructure => (Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0;
+        }
+
+        private readonly List<PendingLine> _pending = new();
+        private readonly HashSet<(long, long)> _openEnds = new(), _lonelyTunnelEnds = new();
+
+        /// <summary>
+        /// The portals of a tunnel line: its ends that meet a road or a rail, or nothing, where the bore
+        /// meets the surface (<see cref="RoadTunnels.AtSurface"/>: not a gap in an underground line).
+        /// </summary>
+        private List<(double E, double N)> Portals(GeoPackageReader.Polyline line, RoadClass cls)
+        {
+            var portals = new List<(double E, double N)>();
+            foreach (int i in new[] { 0, line.Count - 1 })
             {
-                var key = JoinKey(p.Line.E[i], p.Line.N[i]);
-                _structureEnds[key] = p.Line.Z[i];
-                _structureEndCount[key] = _structureEndCount.GetValueOrDefault(key) + 1;
+                var key = JoinKey(line.E[i], line.N[i]);
+                if (!_openEnds.Contains(key) && !_lonelyTunnelEnds.Contains(key)) continue;
+                double ground = _heightOf(line.E[i], line.N[i]) ?? double.NaN;
+                if (!RoadTunnels.AtSurface(ground, line.Z[i], RoadFormat.TunnelHeight(cls))) continue;
+                portals.Add((line.E[i], line.N[i]));
             }
+            return portals;
         }
 
-        // Every end of a non-tunnel line, and how many tunnel lines end at each point: a tunnel
-        // end that meets a road or a rail (or nothing at all) is a portal; one that only meets
-        // the next tunnel feature is not, and no ground is carved there.
-        _openEnds.Clear();
-        var tunnelEnds = new Dictionary<(long, long), int>();
-        foreach (var p in _pending)
-            foreach (int i in new[] { 0, p.Line.Count - 1 })
+        /// <summary>
+        /// Surveyed height at each structure endpoint, so an approach road knows what it has to
+        /// meet. Keyed on the position rounded to <see cref="JoinTolerance"/>.
+        /// </summary>
+        private readonly Dictionary<(long, long), double> _structureEnds = new();
+
+        /// <summary>How many structure endpoints share a position — two means a mid-span join.</summary>
+        private readonly Dictionary<(long, long), int> _structureEndCount = new();
+
+        internal Dictionary<TTile, RoadTile> Run()
+        {
+            var tiles = _space.Tiles;
+            var result = tiles.ToDictionary(t => t, _space.NewTile);
+            Tiles = result;
+            if (tiles.Count == 0) return result;
+
+            // lines look at their neighbours (bridge ends, tunnel portals), hence the ring
+            var region = _space.Lv95Region(TileRegion.RingM);
+
+            _pending.Clear();
+            SourceKeys.Clear();
+            foreach (var t in tiles) SourceKeys[t] = new List<RawRoads.Key?>();
+            _structureEnds.Clear();
+            _structureEndCount.Clear();
+
+            using var conn = GeoPackageReader.Open(_owner._gpkgPath);
+            ExtractRoads(conn, region);
+            ExtractRailways(conn, region);
+            ExtractAerial(conn, region);
+            ExtractWatercourses(conn, region);
+            ExtractDefences(conn, region);
+
+            // Where a deck or bore ends, note the height it ends at. The approach road is a
+            // separate TLM feature, so this is the only way it can learn what to ramp up to —
+            // and ramping the approach is what keeps the deck itself dead flat.
+            foreach (var p in _pending)
             {
-                var key = JoinKey(p.Line.E[i], p.Line.N[i]);
-                if ((p.Flags & RoadFlags.Tunnel) != 0) tunnelEnds[key] = tunnelEnds.GetValueOrDefault(key) + 1;
-                else _openEnds.Add(key);
-            }
-        _lonelyTunnelEnds.Clear();
-        foreach (var (key, count) in tunnelEnds) if (count == 1) _lonelyTunnelEnds.Add(key);
-
-        foreach (var p in _pending)
-            Emit(p, result, heightOf);
-
-        _pending.Clear();
-        return result;
-    }
-
-    private void ExtractRoads(SqliteConnection conn, TileRegion region)
-    {
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_strassen_strasse", "geom", RoadColumns, region))
-        {
-            string? uuid = reader.IsDBNull(0) ? null : reader.GetString(0);
-            if (RoadFormat.IsNotDrivableSurface(Str(reader, 1))) continue;
-            var cls = RoadFormat.ParseClass(Str(reader, 1));
-            var surface = RoadFormat.ParseSurface(Str(reader, 2));
-            var flags = RoadFormat.ParseFlags(Str(reader, 3), Str(reader, 6), Str(reader, 4), Str(reader, 5));
-
-            if (uuid != null)
-            {
-                if (_cycleUuids.Contains(uuid)) flags |= RoadFlags.Cycle;
-                if (_mtbUuids.Contains(uuid)) flags |= RoadFlags.MountainBike;
-            }
-
-            var attr = new RoadAttributes(
-                Flags: RoadFormat.ParseAttrFlags(Str(reader, 7), Str(reader, 9)),
-                Layer: RoadFormat.LayerFor(Str(reader, 10), flags),
-                Priority: RoadFormat.PriorityFor(cls, Str(reader, 8)),
-                WidthCm: RoadFormat.NominalWidthCm(Str(reader, 1)));
-            Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags), attr, uuid);
-        }
-    }
-
-    /// <summary>
-    /// Aerial ropeways. These keep their surveyed Z — see <see cref="RoadFormat.IsAerial"/> —
-    /// so unlike everything else here the height is the answer, not a starting point.
-    /// </summary>
-    private void ExtractAerial(SqliteConnection conn, TileRegion region)
-    {
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_oev_uebrige_bahn", "geom", TypeOnlyColumns, region))
-        {
-            if (RoadFormat.ParseAerial(Str(reader, 0)) is not { } cls) continue;
-            Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
-        }
-    }
-
-    /// <summary>
-    /// Watercourses. Draped like a road, because their surveyed Z sits on the ground anyway —
-    /// measured against our own heightfield, the median offset is −0.14 m.
-    /// </summary>
-    private void ExtractWatercourses(SqliteConnection conn, TileRegion region)
-    {
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_gewaesser_fliessgewaesser", "geom", WaterColumns, region))
-        {
-            if (RoadFormat.ParseWatercourse(Str(reader, 0)) is not { } cls) continue;
-
-            // A culverted channel is in a pipe under the ground. TLM maps them as ordinary
-            // watercourses and they are not a small share: 179 of the 423 around Riddes alone.
-            // Drawing them puts streams down the middle of village streets.
-            if (Str(reader, 1) is { } verlauf
-                && verlauf.StartsWith("Unterirdisch", StringComparison.Ordinal)) continue;
-
-            Collect(reader, cls, RoadSurface.Natural, RoadFlags.None, RoadFormat.DefaultWidth(cls));
-        }
-    }
-
-    /// <summary>
-    /// Protective works and walls. Like ropeways these keep their surveyed Z, because for an
-    /// avalanche barrier that Z is the top of the structure; the mesh builder grows each wall
-    /// from the terrain up to it.
-    /// </summary>
-    private void ExtractDefences(SqliteConnection conn, TileRegion region)
-    {
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bauten_verbauung", "geom", TypeOnlyColumns, region))
-        {
-            if (RoadFormat.ParseDefence(Str(reader, 0)) is not { } cls) continue;
-            Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
-        }
-
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bauten_mauer", "geom", TypeOnlyColumns, region))
-            Collect(reader, RoadClass.Wall, RoadSurface.Unknown, RoadFlags.None,
-                RoadFormat.DefaultWidth(RoadClass.Wall));
-    }
-
-    private void ExtractRailways(SqliteConnection conn, TileRegion region)
-    {
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_oev_eisenbahn", "geom", RailColumns, region))
-        {
-            string? objektart = Str(reader, 0);
-            var flags = RoadFormat.ParseFlags(null, Str(reader, 1), null, null);
-
-            if (objektart != null && objektart.StartsWith("Schmalspur", StringComparison.Ordinal))
-                flags |= RoadFlags.NarrowGauge;
-            if (!reader.IsDBNull(2) && reader.GetInt32(2) >= 2)
-                flags |= RoadFlags.DoubleTrack;
-            if (Str(reader, 3) is "Tram" or "Metro")
-                flags |= RoadFlags.Tramway;
-            if (IsTrue(Str(reader, 4))) flags |= RoadFlags.RackRailway;
-            if (IsTrue(Str(reader, 5))) flags |= RoadFlags.Funicular;
-            if (IsTrue(Str(reader, 6))) flags |= RoadFlags.Disused;
-
-            // formation is wider for double track
-            float width = (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f
-                : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f;
-
-            // auf_strasse: the track runs in a street (#124); the network stage embeds it
-            var attrFlags = IsTrue(Str(reader, 7)) ? RoadAttrFlags.OnStreet : RoadAttrFlags.None;
-            Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width,
-                new RoadAttributes(Flags: attrFlags, Layer: RoadFormat.LayerFor(null, flags)));
-        }
-    }
-
-    private void Collect(GeoPackageReader.Row reader, RoadClass cls, RoadSurface surface,
-        RoadFlags flags, float width, RoadAttributes attr = default, string? uuid = null)
-    {
-        int geomIndex = reader.FieldCount - 1;
-        if (reader.IsDBNull(geomIndex)) return;
-
-        var parts = GeoPackageReader.ParseLines((byte[])reader.GetValue(geomIndex));
-        for (int part = 0; part < parts.Count; part++)
-            if (parts[part].Count >= 2)
-                _pending.Add(new PendingLine(parts[part], cls, surface, flags, width, attr, uuid, part));
-    }
-
-    private void Emit(PendingLine p, Dictionary<TileId, RoadTile> result,
-        Func<double, double, double?> heightOf)
-    {
-        var (line, cls, surface, flags, width) = (p.Line, p.Cls, p.Surface, p.Flags, p.Width);
-        {
-            // 2D distance along the TLM part to the current piece's first point (overlay key)
-            double pieceFrom = 0;
-            foreach (var piece in PolylineClipper.SplitByTile(line))
-            {
-                double from = pieceFrom;
-                for (int i = 1; i < piece.Points.Count; i++)
-                    pieceFrom += Math.Sqrt(
-                        (piece.Points[i].E - piece.Points[i - 1].E) * (piece.Points[i].E - piece.Points[i - 1].E) +
-                        (piece.Points[i].N - piece.Points[i - 1].N) * (piece.Points[i].N - piece.Points[i - 1].N));
-                if (!result.TryGetValue(piece.Tile, out var tile)) continue;
-
-                // bridges, tunnels and aerial ropeways keep their surveyed height; everything
-                // else is draped so it follows the terrain the player actually walks on. For a
-                // cableway the Z *is* the answer — draping one would lay the cable on the ground.
-                bool useOwnZ = (flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0
-                    || RoadFormat.IsAerial(cls) || RoadFormat.IsWall(cls);
-                // structures need densifying too, otherwise the end blend has nowhere to
-                // interpolate across.
-                //
-                // An aerial ropeway is the one thing that must NOT be densified. Densifying
-                // exists to give the drape enough samples to follow the ground, and a cable is
-                // not draped — but the renderer puts a tower under every vertex, so a 4 m
-                // spacing turns a gondola line into a picket fence marching up the mountain.
-                // The surveyed vertices are already exactly where the real pylons are, because
-                // that is where a cable changes direction.
-                var dense = RoadFormat.IsAerial(cls) ? piece.Points : Densify(piece.Points);
-
-                // cumulative distance, used to ease structure heights into the approach
-                var along = new double[dense.Count];
-                for (int i = 1; i < dense.Count; i++)
-                    along[i] = along[i - 1] + Math.Sqrt(
-                        (dense[i].E - dense[i - 1].E) * (dense[i].E - dense[i - 1].E) +
-                        (dense[i].N - dense[i - 1].N) * (dense[i].N - dense[i - 1].N));
-                double total = along[^1];
-
-                if ((flags & RoadFlags.Tunnel) != 0)
-                    TunnelCarver.Carve(piece.Points, RoadFormat.TunnelWidth(cls),
-                        RoadFormat.TunnelHeight(cls), heightOf, Holes, Portals(line, cls, heightOf));
-
-                var draped = DrapeHeights(dense, heightOf, DrapeOffset + ClassLift(cls));
-                LimitGrade(dense, draped, MaxGrade(cls, flags));
-
-                // A DRAPED road that ends where a deck or bore begins ramps up to meet it.
-                // Moving the approach, not the structure, is what keeps the deck flat: it is
-                // the embankment that climbs to a bridge in the real world, and swissALTI3D
-                // does not model that embankment, so the drape sits too low by exactly this
-                // much. Structures themselves get no blend at all.
-                double deltaStart = 0, deltaEnd = 0;
-                if (!useOwnZ)
+                if (!p.IsStructure) continue;
+                foreach (int i in new[] { 0, p.Line.Count - 1 })
                 {
-                    deltaStart = ApproachDelta(piece.AtLineStart, dense[0], draped[0]);
-                    deltaEnd = ApproachDelta(piece.AtLineEnd, dense[^1], draped[^1]);
+                    var key = JoinKey(p.Line.E[i], p.Line.N[i]);
+                    _structureEnds[key] = p.Line.Z[i];
+                    _structureEndCount[key] = _structureEndCount.GetValueOrDefault(key) + 1;
                 }
-                // never let the two ramps meet in the middle of a short piece
-                double blendLen = Math.Min(EndBlendM, Math.Max(total * 0.5, 0.5));
+            }
 
-                // point counts are u16 in the file format; emit in chunks that share a
-                // vertex so the ribbon stays visually continuous across the split
-                for (int start = 0; start < dense.Count - 1; start += MaxPointsPerSegment - 1)
+            // Every end of a non-tunnel line, and how many tunnel lines end at each point: a tunnel
+            // end that meets a road or a rail (or nothing at all) is a portal; one that only meets
+            // the next tunnel feature is not, and no ground is carved there.
+            _openEnds.Clear();
+            var tunnelEnds = new Dictionary<(long, long), int>();
+            foreach (var p in _pending)
+                foreach (int i in new[] { 0, p.Line.Count - 1 })
                 {
-                    int count = Math.Min(MaxPointsPerSegment, dense.Count - start);
-                    var pts = new float[count * 3];
-                    for (int i = 0; i < count; i++)
-                    {
-                        int gi = start + i;
-                        var (e, n, z) = dense[gi];
-                        // A deck or bore is exactly its surveyed height, end to end. The
-                        // approach carries the whole mismatch, fading it out inland.
-                        double y = useOwnZ
-                            ? z
-                            : draped[gi]
-                              + deltaStart * Falloff(along[gi], blendLen)
-                              + deltaEnd * Falloff(total - along[gi], blendLen);
+                    var key = JoinKey(p.Line.E[i], p.Line.N[i]);
+                    if ((p.Flags & RoadFlags.Tunnel) != 0) tunnelEnds[key] = tunnelEnds.GetValueOrDefault(key) + 1;
+                    else _openEnds.Add(key);
+                }
+            _lonelyTunnelEnds.Clear();
+            foreach (var (key, count) in tunnelEnds) if (count == 1) _lonelyTunnelEnds.Add(key);
 
-                        pts[i * 3 + 0] = (float)(e - piece.Tile.MinE);
-                        pts[i * 3 + 1] = (float)y;
-                        pts[i * 3 + 2] = (float)(piece.Tile.MaxN - n);
+            foreach (var p in _pending)
+                Emit(p, result);
+
+            _pending.Clear();
+            return result;
+        }
+
+        private void ExtractRoads(SqliteConnection conn, ISourceRegion region)
+        {
+            foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_strassen_strasse", "geom", RoadColumns, region))
+            {
+                string? uuid = reader.IsDBNull(0) ? null : reader.GetString(0);
+                if (RoadFormat.IsNotDrivableSurface(Str(reader, 1))) continue;
+                var cls = RoadFormat.ParseClass(Str(reader, 1));
+                var surface = RoadFormat.ParseSurface(Str(reader, 2));
+                var flags = RoadFormat.ParseFlags(Str(reader, 3), Str(reader, 6), Str(reader, 4), Str(reader, 5));
+
+                if (uuid != null)
+                {
+                    if (_owner._cycleUuids.Contains(uuid)) flags |= RoadFlags.Cycle;
+                    if (_owner._mtbUuids.Contains(uuid)) flags |= RoadFlags.MountainBike;
+                }
+
+                var attr = new RoadAttributes(
+                    Flags: RoadFormat.ParseAttrFlags(Str(reader, 7), Str(reader, 9)),
+                    Layer: RoadFormat.LayerFor(Str(reader, 10), flags),
+                    Priority: RoadFormat.PriorityFor(cls, Str(reader, 8)),
+                    WidthCm: RoadFormat.NominalWidthCm(Str(reader, 1)));
+                Collect(reader, cls, surface, flags, RoadFormat.WidthFor(cls, flags), attr, uuid);
+            }
+        }
+
+        /// <summary>
+        /// Aerial ropeways. These keep their surveyed Z — see <see cref="RoadFormat.IsAerial"/> —
+        /// so unlike everything else here the height is the answer, not a starting point.
+        /// </summary>
+        private void ExtractAerial(SqliteConnection conn, ISourceRegion region)
+        {
+            foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_oev_uebrige_bahn", "geom", TypeOnlyColumns, region))
+            {
+                if (RoadFormat.ParseAerial(Str(reader, 0)) is not { } cls) continue;
+                Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
+            }
+        }
+
+        /// <summary>
+        /// Watercourses. Draped like a road, because their surveyed Z sits on the ground anyway —
+        /// measured against our own heightfield, the median offset is −0.14 m.
+        /// </summary>
+        private void ExtractWatercourses(SqliteConnection conn, ISourceRegion region)
+        {
+            foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_gewaesser_fliessgewaesser", "geom", WaterColumns, region))
+            {
+                if (RoadFormat.ParseWatercourse(Str(reader, 0)) is not { } cls) continue;
+
+                // A culverted channel is in a pipe under the ground. TLM maps them as ordinary
+                // watercourses and they are not a small share: 179 of the 423 around Riddes alone.
+                // Drawing them puts streams down the middle of village streets.
+                if (Str(reader, 1) is { } verlauf
+                    && verlauf.StartsWith("Unterirdisch", StringComparison.Ordinal)) continue;
+
+                Collect(reader, cls, RoadSurface.Natural, RoadFlags.None, RoadFormat.DefaultWidth(cls));
+            }
+        }
+
+        /// <summary>
+        /// Protective works and walls. Like ropeways these keep their surveyed Z, because for an
+        /// avalanche barrier that Z is the top of the structure; the mesh builder grows each wall
+        /// from the terrain up to it.
+        /// </summary>
+        private void ExtractDefences(SqliteConnection conn, ISourceRegion region)
+        {
+            foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bauten_verbauung", "geom", TypeOnlyColumns, region))
+            {
+                if (RoadFormat.ParseDefence(Str(reader, 0)) is not { } cls) continue;
+                Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
+            }
+
+            foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bauten_mauer", "geom", TypeOnlyColumns, region))
+                Collect(reader, RoadClass.Wall, RoadSurface.Unknown, RoadFlags.None,
+                    RoadFormat.DefaultWidth(RoadClass.Wall));
+        }
+
+        private void ExtractRailways(SqliteConnection conn, ISourceRegion region)
+        {
+            foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_oev_eisenbahn", "geom", RailColumns, region))
+            {
+                string? objektart = Str(reader, 0);
+                var flags = RoadFormat.ParseFlags(null, Str(reader, 1), null, null);
+
+                if (objektart != null && objektart.StartsWith("Schmalspur", StringComparison.Ordinal))
+                    flags |= RoadFlags.NarrowGauge;
+                if (!reader.IsDBNull(2) && reader.GetInt32(2) >= 2)
+                    flags |= RoadFlags.DoubleTrack;
+                if (Str(reader, 3) is "Tram" or "Metro")
+                    flags |= RoadFlags.Tramway;
+                if (IsTrue(Str(reader, 4))) flags |= RoadFlags.RackRailway;
+                if (IsTrue(Str(reader, 5))) flags |= RoadFlags.Funicular;
+                if (IsTrue(Str(reader, 6))) flags |= RoadFlags.Disused;
+
+                // formation is wider for double track
+                float width = (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f
+                    : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f;
+
+                // auf_strasse: the track runs in a street (#124); the network stage embeds it
+                var attrFlags = IsTrue(Str(reader, 7)) ? RoadAttrFlags.OnStreet : RoadAttrFlags.None;
+                Collect(reader, RoadClass.Railway, RoadSurface.Unknown, flags, width,
+                    new RoadAttributes(Flags: attrFlags, Layer: RoadFormat.LayerFor(null, flags)));
+            }
+        }
+
+        private void Collect(GeoPackageReader.Row reader, RoadClass cls, RoadSurface surface,
+            RoadFlags flags, float width, RoadAttributes attr = default, string? uuid = null)
+        {
+            int geomIndex = reader.FieldCount - 1;
+            if (reader.IsDBNull(geomIndex)) return;
+
+            var parts = GeoPackageReader.ParseLines((byte[])reader.GetValue(geomIndex));
+            for (int part = 0; part < parts.Count; part++)
+                if (parts[part].Count >= 2)
+                    _pending.Add(new PendingLine(_space.FromLv95(parts[part]), cls, surface, flags, width, attr, uuid, part));
+        }
+
+        private void Emit(PendingLine p, Dictionary<TTile, RoadTile> result)
+        {
+            var (line, cls, surface, flags, width) = (p.Line, p.Cls, p.Surface, p.Flags, p.Width);
+            {
+                // 2D distance along the TLM part to the current piece's first point (overlay key)
+                double pieceFrom = 0;
+                foreach (var piece in _space.Split(line))
+                {
+                    double from = pieceFrom;
+                    for (int i = 1; i < piece.Points.Count; i++)
+                        pieceFrom += Math.Sqrt(
+                            (piece.Points[i].E - piece.Points[i - 1].E) * (piece.Points[i].E - piece.Points[i - 1].E) +
+                            (piece.Points[i].N - piece.Points[i - 1].N) * (piece.Points[i].N - piece.Points[i - 1].N));
+                    // a portal just off the written tiles still opens their quads within reach (the cube's frames)
+                    if ((flags & RoadFlags.Tunnel) != 0 && _space.Carves(piece.Tile))
+                        TunnelCarver.Carve(piece.Points, RoadFormat.TunnelWidth(cls), _space, Holes, Portals(line, cls));
+                    if (!result.TryGetValue(piece.Tile, out var tile)) continue;
+
+                    // bridges, tunnels and aerial ropeways keep their surveyed height; everything
+                    // else is draped so it follows the terrain the player actually walks on. For a
+                    // cableway the Z *is* the answer — draping one would lay the cable on the ground.
+                    bool useOwnZ = (flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0
+                        || RoadFormat.IsAerial(cls) || RoadFormat.IsWall(cls);
+                    // structures need densifying too, otherwise the end blend has nowhere to
+                    // interpolate across.
+                    //
+                    // An aerial ropeway is the one thing that must NOT be densified. Densifying
+                    // exists to give the drape enough samples to follow the ground, and a cable is
+                    // not draped — but the renderer puts a tower under every vertex, so a 4 m
+                    // spacing turns a gondola line into a picket fence marching up the mountain.
+                    // The surveyed vertices are already exactly where the real pylons are, because
+                    // that is where a cable changes direction.
+                    var dense = RoadFormat.IsAerial(cls) ? piece.Points : Densify(piece.Points);
+
+                    // cumulative distance, used to ease structure heights into the approach
+                    var along = new double[dense.Count];
+                    for (int i = 1; i < dense.Count; i++)
+                        along[i] = along[i - 1] + Math.Sqrt(
+                            (dense[i].E - dense[i - 1].E) * (dense[i].E - dense[i - 1].E) +
+                            (dense[i].N - dense[i - 1].N) * (dense[i].N - dense[i - 1].N));
+                    double total = along[^1];
+
+                    var draped = DrapeHeights(dense, _heightOf, DrapeOffset + ClassLift(cls));
+                    LimitGrade(dense, draped, MaxGrade(cls, flags));
+
+                    // A DRAPED road that ends where a deck or bore begins ramps up to meet it.
+                    // Moving the approach, not the structure, is what keeps the deck flat: it is
+                    // the embankment that climbs to a bridge in the real world, and swissALTI3D
+                    // does not model that embankment, so the drape sits too low by exactly this
+                    // much. Structures themselves get no blend at all.
+                    double deltaStart = 0, deltaEnd = 0;
+                    if (!useOwnZ)
+                    {
+                        deltaStart = ApproachDelta(piece.AtLineStart, dense[0], draped[0]);
+                        deltaEnd = ApproachDelta(piece.AtLineEnd, dense[^1], draped[^1]);
                     }
+                    // never let the two ramps meet in the middle of a short piece
+                    double blendLen = Math.Min(EndBlendM, Math.Max(total * 0.5, 0.5));
 
-                    tile.Segments.Add(new RoadSegment
+                    // point counts are u16 in the file format; emit in chunks that share a
+                    // vertex so the ribbon stays visually continuous across the split
+                    for (int start = 0; start < dense.Count - 1; start += MaxPointsPerSegment - 1)
                     {
-                        Class = cls, Surface = surface, Flags = flags, Width = width, Points = pts,
-                        Attributes = p.Attr,
-                    });
-                    SourceKeys[piece.Tile].Add(p.Uuid is null ? null
-                        : new RawRoads.Key(p.Uuid, p.Part, from + along[start]));
+                        int count = Math.Min(MaxPointsPerSegment, dense.Count - start);
+                        var pts = new float[count * 3];
+                        for (int i = 0; i < count; i++)
+                        {
+                            int gi = start + i;
+                            var (e, n, z) = dense[gi];
+                            // A deck or bore is exactly its surveyed height, end to end. The
+                            // approach carries the whole mismatch, fading it out inland.
+                            double y = useOwnZ
+                                ? z
+                                : draped[gi]
+                                  + deltaStart * Falloff(along[gi], blendLen)
+                                  + deltaEnd * Falloff(total - along[gi], blendLen);
+
+                            (pts[i * 3 + 0], pts[i * 3 + 1], pts[i * 3 + 2]) = _space.ToTile(piece.Tile, e, n, y);
+                        }
+
+                        tile.Segments.Add(new RoadSegment
+                        {
+                            Class = cls, Surface = surface, Flags = flags, Width = width, Points = pts,
+                            Attributes = p.Attr,
+                        });
+                        SourceKeys[piece.Tile].Add(p.Uuid is null ? null
+                            : new RawRoads.Key(p.Uuid, p.Part, from + along[start]));
+                    }
                 }
             }
         }
-    }
 
-    /// <summary>
-    /// How far this end of a draped road has to rise (or fall) to meet the structure that
-    /// continues from it. Zero unless the end really is a true polyline end that coincides
-    /// with a deck or bore endpoint.
-    /// </summary>
-    private double ApproachDelta(bool atTrueEnd, (double E, double N, double Z) end, double draped)
-    {
-        if (!atTrueEnd) return 0;
-        if (!_structureEnds.TryGetValue(JoinKey(end.E, end.N), out double structureZ)) return 0;
-        double delta = structureZ - draped;
-        return Math.Abs(delta) <= MaxApproachStep ? delta : 0;
+        /// <summary>
+        /// How far this end of a draped road has to rise (or fall) to meet the structure that
+        /// continues from it. Zero unless the end really is a true polyline end that coincides
+        /// with a deck or bore endpoint.
+        /// </summary>
+        private double ApproachDelta(bool atTrueEnd, (double E, double N, double Z) end, double draped)
+        {
+            if (!atTrueEnd) return 0;
+            if (!_structureEnds.TryGetValue(JoinKey(end.E, end.N), out double structureZ)) return 0;
+            double delta = structureZ - draped;
+            return Math.Abs(delta) <= MaxApproachStep ? delta : 0;
+        }
     }
 
     /// <summary>

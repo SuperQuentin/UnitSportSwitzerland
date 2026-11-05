@@ -156,9 +156,10 @@ public partial class CameraGlobal : Node
     /// </summary>
     public static float HazeAt(double altitude, bool globe = false) =>
         altitude <= 3_000 ? 1f : globe
-            // with the globe the air's own shell takes over the haze: thinned twice as fast (a climb
-            // through 6-20 km went all but blank)
-            ? Mathf.Exp(-(float)(altitude - 3_000) / 5_000f)
+            // with the globe the air's own shell takes over the haze: thinned by e every 2 km, near the
+            // aerosols' own 1.2 km (atmosphere.gdshader's H_M), as a clear day looks from a few km up. At 5 km
+            // a climb through 6-20 km went all but blank, and a landing from space saw no ground up to 10 km (#1528)
+            ? Mathf.Exp(-(float)(altitude - 3_000) / 2_000f)
             : Mathf.Max(1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
 
     private void ScaleShadows()

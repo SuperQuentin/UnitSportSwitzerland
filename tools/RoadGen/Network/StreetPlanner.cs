@@ -187,14 +187,14 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
             }
             else if (bike.Stats is { } bs) bs.TrackStreets++;
         }
-        if (Debug is { } dbg && stations.Any(st => Math.Abs(id.MinE + st.X - dbg.E) < 3 && Math.Abs(id.MaxN - st.Z - dbg.N) < 3))
+        if (Debug is { } dbg && stations.Any(st => Math.Abs(Plane.West(id) + st.X - dbg.E) < 3 && Math.Abs(Plane.North(id) - st.Z - dbg.N) < 3))
         {
             var c = CultureInfo.InvariantCulture;
             Console.WriteLine(string.Create(c, $"[street] {seg.Class} {seg.Flags} width {seg.Width:F1}, {stations.Count} stations, tile {id.E}_{id.N}"));
             for (int i = 0; i < stations.Count; i++)
             {
                 var st = stations[i];
-                Console.WriteLine(string.Create(c, $"  {i,3} ({id.MinE + st.X:F1},{id.MaxN - st.Z:F1}) density {field.Density(id.MinE + st.X, id.MaxN - st.Z):F2} urban {street[i]} | L facade {l.Facade[i],5:F1} line {l.Line[i],5:F1} -> {left[i].WidthDm / 10.0:F1} | R facade {r.Facade[i],5:F1} line {r.Line[i],5:F1} -> {right[i].WidthDm / 10.0:F1}"));
+                Console.WriteLine(string.Create(c, $"  {i,3} ({Plane.West(id) + st.X:F1},{Plane.North(id) - st.Z:F1}) density {field.Density(Plane.West(id) + st.X, Plane.North(id) - st.Z):F2} urban {street[i]} | L facade {l.Facade[i],5:F1} line {l.Line[i],5:F1} -> {left[i].WidthDm / 10.0:F1} | R facade {r.Facade[i],5:F1} line {r.Line[i],5:F1} -> {right[i].WidthDm / 10.0:F1}"));
             }
         }
 
@@ -245,21 +245,21 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
             for (double d = 0; d <= reach; d += RayStep)
             {
                 double x = st.X + sx * (half + d), z = st.Z + sz * (half + d);
-                double e = id.MinE + x, nn = id.MaxN - z;
+                double e = Plane.West(id) + x, nn = Plane.North(id) - z;
                 if (facades.Occupied(e, nn))
                 {
                     facade[i] = d;
                     free[i] = Math.Min(free[i], d - FacadeClearance);
                     // the ground just in front of the wall
                     double back = Math.Max(0, d - 0.5);
-                    facadeAt[i] = (id.MinE + st.X + sx * (half + back), id.MaxN - (st.Z + sz * (half + back)));
+                    facadeAt[i] = (Plane.West(id) + st.X + sx * (half + back), Plane.North(id) - (st.Z + sz * (half + back)));
                     break;
                 }
                 if (double.IsPositiveInfinity(median[i]) && d <= MedianReach
                     && obstacles.ParallelCarriageway(e, nn, self, st.Fx, -st.Fz))
                     median[i] = d;
                 if (double.IsPositiveInfinity(line[i]) && d <= MaxSidewalk + BikePlanner.LayoutWidth(5) + LineClearance
-                    && obstacles.Covers(e, nn, self, id.MinE + st.X, id.MaxN - st.Z, half + 1.0, st.Fx, -st.Fz))
+                    && obstacles.Covers(e, nn, self, Plane.West(id) + st.X, Plane.North(id) - st.Z, half + 1.0, st.Fx, -st.Fz))
                     line[i] = d;
             }
         }
@@ -278,7 +278,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
         var urban = new bool[stations.Count];
         bool osm = seg.Attributes.Left.SidewalkDm > 0 || seg.Attributes.Right.SidewalkDm > 0;
         for (int i = 0; i < stations.Count; i++)
-            urban[i] = osm || field.Density(id.MinE + stations[i].X, id.MaxN - stations[i].Z) >= UrbanField.UrbanAt;
+            urban[i] = osm || field.Density(Plane.West(id) + stations[i].X, Plane.North(id) - stations[i].Z) >= UrbanField.UrbanAt;
         return urban;
     }
 
@@ -605,7 +605,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
                 if (side.SidewalkDm == 0) continue;
                 double off = 3 + side.SidewalkDm / 10.0, sign = right ? 1 : -1;
                 for (int i = 0; i < p.PointCount; i++)
-                    clear &= !facades.Occupied(tile.MinE + p.Points[i * 3], tile.MaxN - (p.Points[i * 3 + 2] + sign * off));
+                    clear &= !facades.Occupied(Plane.West(tile) + p.Points[i * 3], Plane.North(tile) - (p.Points[i * 3 + 2] + sign * off));
             }
         Check(clear, "no sidewalk edge stands on a wall");
         return ok;
@@ -657,7 +657,7 @@ public sealed class StreetPlanner(Facades facades, UrbanField field, StreetPlann
         {
             var line = new List<Vec2>(seg.PointCount);
             for (int i = 0; i < seg.PointCount; i++)
-                line.Add(new Vec2(id.MinE + seg.Points[i * 3], id.MaxN - seg.Points[i * 3 + 2]));
+                line.Add(new Vec2(Plane.West(id) + seg.Points[i * 3], Plane.North(id) - seg.Points[i * 3 + 2]));
             Add(line, half, owner, street);
         }
 

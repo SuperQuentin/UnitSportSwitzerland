@@ -85,8 +85,30 @@ public partial class TrafficGenerators : Node
     {
         int[] to = (ep.Shares ?? []).Select(x => x.To).ToArray();
         float[] weight = (ep.Shares ?? []).Select(x => x.Weight).ToArray();
-        if (Online) RpcId(1, MethodName.AskSet, ep.Id, ep.E, ep.N, ep.Heading, ep.Generates, ep.Destination, ep.PerMinute, to, weight);
+        if (Online)
+        {
+            var (x, y, z, heading) = Wire(ep.E, ep.N, ep.Heading);
+            RpcId(1, MethodName.AskSet, ep.Id, x, y, z, heading, ep.Generates, ep.Destination, ep.PerMinute, to, weight);
+        }
         else ServeSet(1, ep.Id, ep.E, ep.N, ep.Heading, ep.Generates, ep.Destination, ep.PerMinute, to, weight);
+    }
+
+    /// <summary>
+    /// (#1503) An endpoint's place as ECEF (on the ground at sea level) and its heading (an LV95 maths angle: east 0, north
+    /// π/2) as a Godot-sense heading from true north there, a quarter turn less.
+    /// </summary>
+    private static (double X, double Y, double Z, float Heading) Wire(double e, double n, float lv95Heading)
+    {
+        var at = GlobalPos.FromLv95(e, n, 0);
+        var (x, y, z) = at.ToWire();
+        return (x, y, z, at.TrueYaw(lv95Heading - Mathf.Pi / 2));
+    }
+
+    /// <summary>The inverse of <see cref="Wire"/>.</summary>
+    private static (double E, double N, float Heading) FromWire(double x, double y, double z, float heading)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        return (at.E, at.N, at.OffsetYaw(heading) + Mathf.Pi / 2);
     }
 
     /// <summary>The next id <see cref="RequestSet"/> gives a new endpoint offline (the probe wires its shares by it).</summary>
@@ -102,8 +124,11 @@ public partial class TrafficGenerators : Node
     // ---- server ---------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskSet(int id, double e, double n, float heading, bool generates, bool destination, float perMinute, int[] to, float[] weight) =>
-        ServeSet(Multiplayer.GetRemoteSenderId(), id, e, n, heading, generates, destination, perMinute, to, weight);
+    private void AskSet(int id, double x, double y, double z, float heading, bool generates, bool destination, float perMinute, int[] to, float[] weight)
+    {
+        var (e, n, lv95Heading) = FromWire(x, y, z, heading);
+        ServeSet(Multiplayer.GetRemoteSenderId(), id, e, n, lv95Heading, generates, destination, perMinute, to, weight);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskRemove(int id) => ServeRemove(Multiplayer.GetRemoteSenderId(), id);
@@ -123,9 +148,12 @@ public partial class TrafficGenerators : Node
         }
         else if (!_endpoints.ContainsKey(id)) return;
         if (Online)
+        {
+            var (x, y, z, wire) = Wire(e, n, heading);
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Set, id, e, n, heading, generates, destination, perMinute, to, weight);
-        Set(id, e, n, heading, generates, destination, perMinute, to, weight);
+                RpcId(p, MethodName.Set, id, x, y, z, wire, generates, destination, perMinute, to, weight);
+        }
+        Apply(id, e, n, heading, generates, destination, perMinute, to, weight);
         GD.Print($"[traffic] endpoint #{id} at {e:F0},{n:F0}{(generates ? $" generating {perMinute:0.#}/min" : "")}{(destination ? " destination" : "")}"
             + (to.Length > 0 ? $" shares {string.Join(" ", to.Select((t, k) => $"{(t > 0 ? $"#{t}" : t == 0 ? "along" : "against")}:{weight[k]:0.##}"))}" : ""));
     }
@@ -148,8 +176,12 @@ public partial class TrafficGenerators : Node
         var list = _endpoints.Values.ToList();
         RpcId(peer, MethodName.Snapshot,
             list.Select(x => x.Id).ToArray(),
-            list.SelectMany(x => new[] { x.E, x.N }).ToArray(),
-            list.SelectMany(x => new[] { x.Heading, x.PerMinute }).ToArray(),
+            list.SelectMany(x =>
+            {
+                var (wx, wy, wz, _) = Wire(x.E, x.N, x.Heading);
+                return new[] { wx, wy, wz };
+            }).ToArray(),
+            list.SelectMany(x => new[] { Wire(x.E, x.N, x.Heading).Heading, x.PerMinute }).ToArray(),
             list.Select(x => (x.Generates ? 1 : 0) | (x.Destination ? 2 : 0)).ToArray(),
             list.Select(x => x.Shares?.Length ?? 0).ToArray(),
             list.SelectMany(x => (x.Shares ?? []).Select(s => s.To)).ToArray(),
@@ -159,7 +191,13 @@ public partial class TrafficGenerators : Node
     // ---- every peer -----------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Set(int id, double e, double n, float heading, bool generates, bool destination, float perMinute, int[] to, float[] weight)
+    private void Set(int id, double x, double y, double z, float heading, bool generates, bool destination, float perMinute, int[] to, float[] weight)
+    {
+        var (e, n, lv95Heading) = FromWire(x, y, z, heading);
+        Apply(id, e, n, lv95Heading, generates, destination, perMinute, to, weight);
+    }
+
+    private void Apply(int id, double e, double n, float heading, bool generates, bool destination, float perMinute, int[] to, float[] weight)
     {
         _endpoints[id] = new TrafficEndpoint(id, e, n, heading, generates, destination, perMinute, SharesOf(to, weight));
         _nextId = Math.Max(_nextId, id + 1);
@@ -175,14 +213,15 @@ public partial class TrafficGenerators : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Snapshot(int[] ids, double[] en, float[] headingRate, int[] flags, int[] shareCounts, int[] shareTo, float[] shareWeight)
+    private void Snapshot(int[] ids, double[] xyz, float[] headingRate, int[] flags, int[] shareCounts, int[] shareTo, float[] shareWeight)
     {
         _endpoints.Clear();
         int at = 0;
         for (int i = 0; i < ids.Length; i++)
         {
             int count = shareCounts[i];
-            _endpoints[ids[i]] = new TrafficEndpoint(ids[i], en[2 * i], en[2 * i + 1], headingRate[2 * i], (flags[i] & 1) != 0,
+            var (e, n, heading) = FromWire(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2], headingRate[2 * i]);
+            _endpoints[ids[i]] = new TrafficEndpoint(ids[i], e, n, heading, (flags[i] & 1) != 0,
                 (flags[i] & 2) != 0, headingRate[2 * i + 1], SharesOf(shareTo[at..(at + count)], shareWeight[at..(at + count)]));
             at += count;
             _nextId = Math.Max(_nextId, ids[i] + 1);

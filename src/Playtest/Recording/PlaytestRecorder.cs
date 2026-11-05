@@ -333,7 +333,7 @@ public partial class PlaytestRecorder : Node
             ref var s = ref frame.Add();
             s.Id = id;
             s.E = gl.E; s.N = gl.N; s.Alt = (float)g.Alt;
-            s.Heading = Wrap(-p.NetYaw);
+            s.Heading = Wrap(-p.GlobalYaw);   // on the grid, as E/N are (#1503)
             s.VE = v.X; s.VN = -v.Z; s.VUp = v.Y;
             s.HasPlayer = true;
             s.Ride = (short)p.RideKindId; s.Seat = (sbyte)Math.Clamp(p.SeatIndex, sbyte.MinValue, sbyte.MaxValue);

@@ -12,7 +12,8 @@ Code: `tools/TerrainPreprocessor/CubeCompare.cs` (files, frames, kinds), `CubeCo
 
 ```
 TerrainPreprocessor --cube-compare --chunks <LV95 dir> --cube <cube region dir>
-    [--kinds heights,cover,holes,water,roads,buildings,trees,pistes,fields,photo] [--compare-stride N]
+    [--kinds heights,cover,holes,water,roads,parking,buildings,trees,pistes,fields,photo] [--compare-stride N]
+    [--lv-roads DIR] [--cube-raw DIR]
     [--compare-leaves N] [--jobs N]
 ```
 
@@ -63,6 +64,34 @@ TerrainPreprocessor --cube-compare --chunks <LV95 dir> --cube <cube region dir>
   point moved 5 cm east breaks every vertex bar (5.00 cm). Heights above ground differ by up to 10 cm
   p99 there because the copier keeps the LV95 heights over a leaf mesh of another lattice: a real cube
   stage drapes on the leaf mesh itself.
+
+## The raw kinds (B3 PR 2, `cube-roads`)
+
+```
+TerrainPreprocessor --cube-compare --chunks <LV95 dir> --lv-roads <LV95 temp>/roads_raw --cube <region>
+    --cube-raw <region temp>/roads_raw --kinds roads,holes,parking
+```
+
+- `--lv-roads` reads the LV95 `.road` files (and their `.keys`) from the raw dir, `parking_raw/` beside it;
+  `--cube-raw` reads a temporary `.cubl` region's sections for the leaves of `--cube` (heights from there).
+- **roads**, with keys on both sides: the raw length of each TLM line (uuid, part) held whole by both
+  builds, in plan in the ENU at its first point, bar 2 cm + 2×10⁻⁴ of the length; consecutive pieces of a
+  line (by their distance along it) meet: the cut in plan in the ENU at the cut, the height step where the
+  leaf mesh has heights, within a frame and across a frame edge. **Lengths per class are in plan** and an
+  edge across the coverage boundary is cut where it crosses (bisection; spans over 4.5 m in metre steps):
+  3D lengths follow each build's own ground (streams 0.2 % apart), and whole edges counted by their midpoint
+  missed 0.04 % on paths and 1 % on cableways at the coverage edge. **Surveyed lines** (bridges, tunnels,
+  cables, walls whose middle vertex is not within a metre above their ground: BD TOPO's are draped) are
+  held to their absolute height, the rest to their height above their own ground; vertices over no leaf
+  heights are left out of both, counted.
+- **holes**: also as holes, single-linkage clusters of quads (centres within 2 m), one a portal, matched by
+  centre within 5 m; alone ones listed.
+- **cover** (B3 PR 5a): held where the LV95 raster resolves the class (its 3 × 3 vertices round the nearest
+  one all of it); at its class edges a leaf vertex up to 0.7 m from the nearest 1 m vertex can fall either
+  side (~90 % for every class), reported, no bar.
+- **parking**: lots counted where both builds hold their area centroid (their home rule), matched by the
+  vertex mean within 1 m, ring vertices in plan; bars 2 cm p99, none alone, the same vertex count.
+- D: region numbers and what breaks: `cube-roads`.
 
 ## Rigorous geographic inputs in the LV95 build (`GeoInput`)
 

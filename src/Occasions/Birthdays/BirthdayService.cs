@@ -475,14 +475,20 @@ public partial class BirthdayService : Node
         _lastShow = now;
         var at = me.Global;
         if (Authority) ServeShow(Self, at.E, at.N);
-        else RpcId(1, MethodName.RequestShow, at.E, at.N);
+        else
+        {
+            var (x, y, z) = at.ToWire();   // (#1503) the wire is ECEF
+            RpcId(1, MethodName.RequestShow, x, y, z);
+        }
         return true;
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestShow(double e, double n)
+    private void RequestShow(double x, double y, double z)
     {
-        if (_server) ServeShow(Multiplayer.GetRemoteSenderId(), e, n);
+        if (!_server) return;
+        var at = GlobalPos.FromWire(x, y, z);
+        ServeShow(Multiplayer.GetRemoteSenderId(), at.E, at.N);
     }
 
     /// <summary>The authority: <paramref name="peer"/> lights birthday fireworks at <paramref name="e"/>, <paramref name="n"/>. Null when lit, else why not.</summary>
@@ -508,14 +514,19 @@ public partial class BirthdayService : Node
         GD.Print($"[birthday] {Who(peer)} lit birthday fireworks, seed {seed}");
         if (_server)
         {
-            foreach (int p in Multiplayer.GetPeers()) RpcId(p, MethodName.Show, start, seed, e, n);
+            var (x, y, z) = GlobalPos.FromLv95(e, n, BodyOf?.Invoke(peer)?.Global.Alt ?? 0).ToWire();   // (#1503) the wire is ECEF
+            foreach (int p in Multiplayer.GetPeers()) RpcId(p, MethodName.Show, start, seed, x, y, z);
         }
-        else Show(start, seed, e, n);
+        else Festivals.Fireworks.Instance?.QueueBirthday(start, seed, e, n);
         return null;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Show(double start, int seed, double e, double n) => Festivals.Fireworks.Instance?.QueueBirthday(start, seed, e, n);
+    private void Show(double start, int seed, double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        Festivals.Fireworks.Instance?.QueueBirthday(start, seed, at.E, at.N);
+    }
 
     // ---- /birthday -----------------------------------------------------------------------------------
 

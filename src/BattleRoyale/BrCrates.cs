@@ -116,7 +116,46 @@ public partial class BrCrates : Node3D, IOriginContainer
             _crates[c.Id] = c;
             batch.Add(c);
         }
-        if (batch.Count > 0) Rpc(MethodName.AddMany, JsonSerializer.Serialize(batch, Json));
+        if (batch.Count > 0) Rpc(MethodName.AddMany, CratesWire(JsonSerializer.Serialize(batch, Json), toWire: true));
+    }
+
+    /// <summary>
+    /// (#1503) Crates cross the wire with their place as ECEF <c>X</c>, <c>Y</c>, <c>Z</c> in place of <c>E</c>, <c>N</c> (at the
+    /// crate's height, the ground at sea level; <c>Alt</c> stays, <see cref="Ground"/> included) and their yaw as a heading from
+    /// true north there. The crate itself keeps LV95 and its grid yaw; a NaN yaw ("any way round") is left as the string it is.
+    /// </summary>
+    internal static string CratesWire(string json, bool toWire)
+    {
+        if (System.Text.Json.Nodes.JsonNode.Parse(json) is not System.Text.Json.Nodes.JsonArray list) return json;
+        foreach (var item in list)
+        {
+            if (item is not System.Text.Json.Nodes.JsonObject o) continue;
+            GlobalPos at;
+            if (toWire && o["E"] != null && o["N"] != null)
+            {
+                double alt = o["Alt"]?.GetValue<float>() ?? Ground;
+                at = GlobalPos.FromLv95(o["E"]!.GetValue<double>(), o["N"]!.GetValue<double>(), alt == Ground ? 0 : alt);
+                var (x, y, z) = at.ToWire();
+                o.Remove("E");
+                o.Remove("N");
+                o["X"] = x;
+                o["Y"] = y;
+                o["Z"] = z;
+            }
+            else if (!toWire && o["X"] != null && o["Y"] != null && o["Z"] != null)
+            {
+                at = GlobalPos.FromWire(o["X"]!.GetValue<double>(), o["Y"]!.GetValue<double>(), o["Z"]!.GetValue<double>());
+                o.Remove("X");
+                o.Remove("Y");
+                o.Remove("Z");
+                o["E"] = at.E;
+                o["N"] = at.N;
+            }
+            else continue;
+            if (o["Yaw"] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue(out float yaw) && float.IsFinite(yaw))
+                o["Yaw"] = toWire ? at.TrueYaw(yaw) : at.OffsetYaw(yaw);
+        }
+        return list.ToJsonString();
     }
 
     /// <summary>Server: every crate gone (the match is over).</summary>
@@ -129,7 +168,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     /// <summary>Server: a joining peer gets the crates there are.</summary>
     public void SendTo(long peer)
     {
-        if (_crates.Count > 0) RpcId(peer, MethodName.AddMany, JsonSerializer.Serialize(_crates.Values.ToList(), Json));
+        if (_crates.Count > 0) RpcId(peer, MethodName.AddMany, CratesWire(JsonSerializer.Serialize(_crates.Values.ToList(), Json), toWire: true));
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -247,7 +286,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     {
         if (_server) return;
         List<Crate>? list;
-        try { list = JsonSerializer.Deserialize<List<Crate>>(json, Json); }
+        try { list = JsonSerializer.Deserialize<List<Crate>>(CratesWire(json, toWire: false), Json); }
         catch (JsonException) { return; }
         foreach (var c in list ?? new())
         {

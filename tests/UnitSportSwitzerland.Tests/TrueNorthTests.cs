@@ -67,6 +67,15 @@ public class TrueNorthTests
     }
 
     [Fact]
+    public void The_wire_s_offset_yaw_from_G2_A2_agrees_with_true_north_s()
+    {
+        // #1503's GlobalPos.OffsetYaw/TrueYaw (the wire's turn) and #1504's must be one turn
+        var geneva = GlobalPos.FromLv95(GenevaE, GenevaN, 372);
+        Assert.Equal(TrueNorth.OffsetYaw(geneva, 1.234f), geneva.OffsetYaw(1.234f), 4);
+        Assert.Equal(TrueNorth.TrueYawOfOffset(geneva, 1.234f), geneva.TrueYaw(1.234f), 4);
+    }
+
+    [Fact]
     public void In_the_flat_world_true_north_is_minus_z_turned_by_the_convergence_at_the_point()
     {
         // the flat ground frame's axes are the grid's everywhere: north there is the convergence at the point, not the origin's

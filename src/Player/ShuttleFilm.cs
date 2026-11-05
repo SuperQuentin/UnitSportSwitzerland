@@ -72,7 +72,7 @@ public partial class ShuttleFilm : Node
             _landing = true;
             Mark("landing");
         }
-        if (_driveShot && _pilot.Now == ShuttlePilot.Stage.DriveUp && alt > _shotKm * 1000) { DriveShot(alt); return; }
+        if (_shotStage is { } at && (_shotAt >= 0 || _pilot.Now == at && (Up(at) ? alt > _shotKm * 1000 : alt < _shotKm * 1000))) { DriveShot(alt); return; }
         Engine.TimeScale = Scale(_pilot.Now, alt, agl, jet.Heat);
         if (!_driveShot) Film(Clip(_pilot.Now, alt, agl, jet.Heat));
         if (_stoppedFor > 4 && _filming == null && !ClipRecorder.Busy) End(0, "ok");
@@ -177,11 +177,36 @@ public partial class ShuttleFilm : Node
             Log = line => GD.Print("[shuttlefilm] " + line),
         };
         GD.Print(FormattableString.Invariant($"[shuttlefilm] 04 at {sw:F0} m, 22 at {ne:F0} m, heading {Mathf.RadToDeg(Heading04):F1}°: rolling"));
+        // ,skip (a picture on the way down): straight to where the drive home leaves it, 80 km out on 22's line,
+        // 62 km up, 300 m/s toward the field, as --shuttlecheck glide does: minutes instead of the whole mission
+        if (_shotStage != null && Array.IndexOf(CmdArgs.Value("--shuttlefilm", notFlag: true)!.Split(','), "skip") >= 0)
+        {
+            var (ee, en) = to.At(-_pilot.Plan.EntryOut, 0);
+            float h = to.Heading;
+            var forward = new Vector3(Mathf.Sin(h), 0, -Mathf.Cos(h));
+            _player!.DebugLaunch(_origin.ToWorld(ee, en, 62_000), forward * 300f + Vector3.Down * 30f);
+            _shuttle!.State.Yaw = -h;
+            _shuttle.State.Attitude = new Basis(Vector3.Up, -h);
+            _shuttle.State.Lever = _shuttle.State.Spool = 0f;
+            _shuttle.State.Settle = 0f;
+            _pilot.SkipToLanding();
+        }
     }
 
     // ---- a picture on the drive up: --shuttlefilm drive[,hide=<type>...] ----
 
-    private readonly bool _driveShot = CmdArgs.Value("--shuttlefilm", notFlag: true) is { } m && m.StartsWith("drive");
+    private bool _driveShot => _shotStage != null;
+
+    /// <summary>
+    /// The stage the picture is taken in: <c>drive</c> (the drive up), or <c>shot,&lt;stage&gt;</c> (any of
+    /// <see cref="ShuttlePilot.Stage"/>: past <c>at</c> going up in the climb and the drive up, under it in the others).
+    /// </summary>
+    private readonly ShuttlePilot.Stage? _shotStage = CmdArgs.Value("--shuttlefilm", notFlag: true)?.Split(',') is { } m
+        ? m[0] == "drive" ? ShuttlePilot.Stage.DriveUp
+        : m[0] == "shot" && m.Length > 1 && Enum.TryParse(m[1], true, out ShuttlePilot.Stage s) ? s : null
+        : null;
+
+    private static bool Up(ShuttlePilot.Stage s) => s is ShuttlePilot.Stage.Climb or ShuttlePilot.Stage.DriveUp;
 
     /// <summary>
     /// <c>--shuttlefilm drive[,hide=&lt;type&gt;...]</c>: the mission flown to 80 km on the drive up, then one picture
@@ -219,7 +244,7 @@ public partial class ShuttleFilm : Node
             }
             // ,far: the camera's planes and the stars' distance in the log
             var lens = GetViewport().GetCamera3D();
-            GD.Print(FormattableString.Invariant($"[shuttlefilm] camera near {lens?.Near}, far {lens?.Far}, at {lens?.GlobalPosition}"));
+            GD.Print(FormattableString.Invariant($"[shuttlefilm] camera near {lens?.Near}, far {lens?.Far}, at {lens?.GlobalPosition}, horizon {_chunks?.Horizon?.Progress()}, frame anchor {_origin.Frame.IsAnchor}"));
             // ,bigstars: every star 40 times its size, so whatever crops them shows its edge
             if (Array.IndexOf(args, "bigstars") >= 0)
             {
@@ -227,12 +252,26 @@ public partial class ShuttleFilm : Node
                     if (n is World.StarField { MaterialOverride: ShaderMaterial stars }) stars.SetShaderParameter("size_scale", 40f);
                 hidden.Add("bigstars");
             }
-            _shotName = FormattableString.Invariant($"shuttle-drive-{_shotKm:F0}") + (hidden.Count == 0 ? "" : "-" + string.Join("-", hidden).Replace("*", ""));
+            _shotName = FormattableString.Invariant($"shuttle-{_shotStage!.Value.ToString().ToLowerInvariant()}-{_shotKm:F0}") + (hidden.Count == 0 ? "" : "-" + string.Join("-", hidden).Replace("*", ""));
             _shotAt = _wait;
             return;
         }
         if (_wait - _shotAt < 0.2) return;
-        GD.Print(FormattableString.Invariant($"[shuttlefilm] {alt / 1000:F1} km on the drive: {_shotName}.png"));
+        var lensAt = GetViewport().GetCamera3D()?.GlobalPosition;
+        // where the air's shell thinks the camera is (World/Atmosphere's own sums): its height over the shell's
+        // sphere against the frame's altitude; a misplaced shell clears a disc of air under the camera
+        string air = "";
+        if (lensAt is { } eye)
+        {
+            var axes = World.Globe.Axes ?? _origin.EcefAxes;
+            var (px, py, pz) = axes.FromEcef(new Terrain.Format.EcefPos(0, 0, 0));
+            var g = Terrain.Format.Ellipsoid.Wgs84.ToGeodetic(axes.ToEcef(eye.X, eye.Y, eye.Z));
+            var nadir = Terrain.Format.CubeSphere.OnEllipsoid(Terrain.Format.CubeSphere.NormalAt(g.LatDeg, g.LonDeg), 0);
+            double r = Math.Sqrt(Core.FrameAxes.Dot(nadir, nadir));
+            double d = (eye - new Vector3((float)px, (float)py, (float)pz)).Length();
+            air = FormattableString.Invariant($", air: over the sphere {(d - r) / 1000:F1} km against {_origin.Frame.AltitudeOf(eye) / 1000:F1} km, globe axes {World.Globe.Axes != null}");
+        }
+        GD.Print(FormattableString.Invariant($"[shuttlefilm] {alt / 1000:F1} km in {_pilot!.Now}: {_shotName}.png, horizon {_chunks?.Horizon?.Progress()}, {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame)} draws, {Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1e6:F1} M triangles, fill {RenderingServer.GlobalShaderParameterGet("world_fill_hide")}, flat {RenderingServer.GlobalShaderParameterGet("world_flat_hide")}, edge {RenderingServer.GlobalShaderParameterGet("world_flat_edge")} on {RenderingServer.GlobalShaderParameterGet("world_flat_edge_on")}, camera {lensAt}{air}"));
         GetViewport().GetTexture().GetImage().SavePng(ProjectSettings.GlobalizePath($"res://test_output/clips/{_shotName}.png"));
         End(0, "drive");
     }

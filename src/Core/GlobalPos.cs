@@ -11,10 +11,12 @@ namespace UnitSport.Core;
 ///
 /// <para>
 /// It is also the only form a single position takes on the network: every peer has its own
-/// origin, so a world-space <c>Vector3</c> means nothing to the receiver. <see cref="Write"/> and
-/// <see cref="Read"/> put one in a spawn or RPC dictionary; an RPC passes <see cref="E"/>,
-/// <see cref="N"/> and <see cref="Alt"/> as three doubles. A list of points travels as float
-/// offsets from one <see cref="OriginFrame.Anchor"/>.
+/// origin, so a world-space <c>Vector3</c> means nothing to the receiver. On the wire it is ECEF
+/// (#1503, protocol 93): <see cref="Write"/> and <see cref="Read"/> put one in a spawn or RPC
+/// dictionary; an RPC passes <see cref="ToWire"/>'s three doubles and the receiver reads
+/// <see cref="FromWire"/>. Directions go as the local east-up-south (<see cref="EnuFromOffset"/>),
+/// headings from true north (<see cref="TrueYaw"/>). A list of points travels as float offsets in
+/// the ENU at one ECEF origin (<see cref="OriginFrame.AnchorAt"/>).
 /// </para>
 ///
 /// <para>
@@ -25,7 +27,12 @@ namespace UnitSport.Core;
 /// person or a Swiss source: <see cref="FromLv95"/> in, <see cref="Lv95"/> out. LV95 is still inside until
 /// A1's last step, so moving a site onto these is bit-identical.
 /// </para>
+/// <para>
+/// In a JSON save it is <c>{"x", "y", "z"}</c>, ECEF metres (<see cref="GlobalPosJson"/>, #1503 G2 A2b): saves mean the
+/// same place whatever this type holds inside.
+/// </para>
 /// </summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(GlobalPosJson))]
 public readonly record struct GlobalPos(double E, double N, double Alt)
 {
     /// <summary>A place given in LV95 notation (a Swiss source, a literal, a typed coordinate), its height LHN95.</summary>
@@ -128,17 +135,91 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
         return new(e, n, h);
     }
 
-    /// <summary>Puts this position in a network dictionary under <paramref name="key"/>, as three doubles.</summary>
-    public void Write(Godot.Collections.Dictionary d, string key = "pos")
+    /// <summary>
+    /// This place as it crosses the network (#1503, protocol 93): ECEF metres, WGS84, through <see cref="ToEcef"/>.
+    /// Every peer reads it back with <see cref="FromWire"/>, whatever its origin; the rigorous chain costs ~1 µs, fine
+    /// per packet.
+    /// </summary>
+    public (double X, double Y, double Z) ToWire()
     {
-        d[key + "_e"] = E;
-        d[key + "_n"] = N;
-        d[key + "_alt"] = Alt;
+        var p = ToEcef();
+        return (p.X, p.Y, p.Z);
     }
 
-    /// <summary>The position <see cref="Write"/> put in <paramref name="d"/>.</summary>
-    public static GlobalPos Read(Godot.Collections.Dictionary d, string key = "pos") =>
-        new(d[key + "_e"].AsDouble(), d[key + "_n"].AsDouble(), d[key + "_alt"].AsDouble());
+    /// <summary>The place <see cref="ToWire"/> sent.</summary>
+    public static GlobalPos FromWire(double x, double y, double z) => FromEcef(new EcefPos(x, y, z));
+
+    /// <summary>
+    /// This type's own offset axes (what <c>+ Vector3</c> and <c>-</c> use: today the LV95 grid's east, up and south,
+    /// which are also a flat world's axes) against the local east-up-south at this place (x east, y up, z south, as
+    /// <see cref="EnuFrame.ToLocal"/>; #1503): a turn about up by the meridian convergence (0 at Bern, ~0.9° at
+    /// Geneva), and the grid's scale, the physical metres a grid metre is here (1 to 5·10⁻⁴ on the ground, 1.06
+    /// 400 km up), so a velocity becomes the rate this position changes. The identity once G2 A1 puts ECEF inside.
+    /// A few microseconds: per packet, never per vertex.
+    /// </summary>
+    public EnuAxes Enu
+    {
+        get
+        {
+            // as FrameAxes.GroundAt(E, N, Alt).InEnu(the ENU here), in half the time: grid east is a metre's step
+            // along the grid, laid flat in the ENU (the grid's up is the ellipsoid's); grid south is east × up
+            var o = ToEcef();
+            var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(o));
+            var (x, _, z) = enu.DirectionToLocal(SwissGeodesy.ToEcef(E + 1, N, Alt) - o);
+            double len = System.Math.Sqrt(x * x + z * z);
+            float c = (float)(x / len), s = (float)(z / len);
+            return new EnuAxes(new Basis(new Vector3(c, 0, s), Vector3.Up, new Vector3(-s, 0, c)), (float)len);
+        }
+    }
+
+    /// <summary>A velocity (or direction) in this type's offset axes as the local east-up-south here (see <see cref="Enu"/>).</summary>
+    public Vector3 EnuFromOffset(Vector3 offset) => Enu.ToEnu(offset);
+
+    /// <summary>The inverse of <see cref="EnuFromOffset"/>: a local east-up-south velocity here as the rate this position changes.</summary>
+    public Vector3 OffsetFromEnu(Vector3 enu) => Enu.FromEnu(enu);
+
+    /// <summary>
+    /// The rate this position changes (its offset axes per second) for a velocity in the local east-up-south here:
+    /// <see cref="OffsetFromEnu"/> measured over a hundredth of a second of that velocity, as an interpolator wants it.
+    /// The same on the ground; bounded where the grid's scale runs away (LV95's singular points 90° from Bern, which a
+    /// polar orbit flies over: there the local scale tends to 0 and the linear form to infinity; #1430 H5).
+    /// </summary>
+    public Vector3 RateOfEnu(Vector3 enu)
+    {
+        const double h = 0.01;
+        var f = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(ToEcef()));
+        var moved = FromEcef(f.ToEcef(enu.X * h, enu.Y * h, enu.Z * h));
+        return (moved - this) / (float)h;
+    }
+
+    /// <summary>
+    /// A heading in this type's offset axes (radians, Godot's sense: 0 faces −Z, positive turns left; grid north
+    /// until A1) as a heading from true north here (#1503): what goes on the wire.
+    /// </summary>
+    public float TrueYaw(float offsetYaw) => Enu.TrueYaw(offsetYaw);
+
+    /// <summary>The inverse of <see cref="TrueYaw"/>: a heading from true north here in this type's offset axes.</summary>
+    public float OffsetYaw(float trueYaw) => Enu.Yaw(trueYaw);
+
+    /// <summary>Puts this position in a network dictionary under <paramref name="key"/>, as three ECEF doubles (<see cref="ToWire"/>).</summary>
+    public void Write(Godot.Collections.Dictionary d, string key = "pos")
+    {
+        var (x, y, z) = ToWire();
+        d[key + "_x"] = x;
+        d[key + "_y"] = y;
+        d[key + "_z"] = z;
+    }
+
+    /// <summary>
+    /// The position <see cref="Write"/> put in <paramref name="d"/>. A dictionary without the ECEF keys is a record the
+    /// object containers saved before G2 A2b (LV95 <c>_e</c>, <c>_n</c>, <c>_alt</c>): read for its migration only.
+    /// </summary>
+    public static GlobalPos Read(Godot.Collections.Dictionary d, string key = "pos") => d.ContainsKey(key + "_x")
+        ? FromWire(d[key + "_x"].AsDouble(), d[key + "_y"].AsDouble(), d[key + "_z"].AsDouble())
+        : new(d[key + "_e"].AsDouble(), d[key + "_n"].AsDouble(), d[key + "_alt"].AsDouble());
+
+    /// <summary>Whether <paramref name="d"/> holds a position as <see cref="Write"/> puts it (the wire, and saves since A2b), not an older saved record's.</summary>
+    public static bool IsWire(Godot.Collections.Dictionary d, string key = "pos") => d.ContainsKey(key + "_x");
 
     public override string ToString() => $"LV95 {E:F2}/{N:F2} alt {Alt:F2}";
 }
