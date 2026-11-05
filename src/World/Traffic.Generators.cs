@@ -189,7 +189,9 @@ public partial class Traffic
             var s = new EndpointState { Ep = ep, Graph = GraphOf(ep.Mode), Due = 1.0 };
             if (old.TryGetValue(ep.Id, out var was)) (s.Due, s.Queue) = (was.Due, was.Queue);
             var at = _origin.ToWorld(ep.E, ep.N, 0);
-            var heading = new Vector3(Mathf.Cos(ep.Heading), 0f, -Mathf.Sin(ep.Heading));
+            // its heading from true north, set down in this frame (#1504)
+            float yaw = TrueNorth.WorldYaw(_origin.Frame, at, ep.TrueYaw);
+            var heading = new Vector3(-Mathf.Sin(yaw), 0f, -Mathf.Cos(yaw));
             // its movers start on an edge they may drive along its heading, and leave on one they may drive against it
             if (s.Graph is not null && OnGraph(s.Graph, ep.Mode, at, SnapReach, heading) is var (edge, pos, tangent))
             {
@@ -592,7 +594,8 @@ public partial class Traffic
             var (pos, tangent) = leg.Edge.Sample(s);
             var dir = leg.Forward ? tangent : -tangent;
             var (en, nn) = _origin.ToLv95(pos);
-            ends.Add((en, nn, Mathf.Atan2(-dir.Z, dir.X)));
+            // stored from grid north, as the endpoints file has them (#1504)
+            ends.Add((en, nn, TrueNorth.WorldYawToGrid(_origin.Frame, pos, Mathf.Atan2(-dir.X, -dir.Z)) + Mathf.Pi / 2));
         }
         return ends;
     }

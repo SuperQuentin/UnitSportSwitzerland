@@ -746,7 +746,7 @@ public static partial class TileRewriter
                     j++;
                 }
                 if (points.Count >= 6)
-                    PaintEmitter.Emit(Copy(so.Painted, points.ToArray()), ps.Station + runFrom, into, i == 0 && ps.Start, j == pieces.Count && ps.End, bikeLanes: false);
+                    PaintEmitter.Emit(Copy(so.Painted, points.ToArray()), ps.Station + runFrom, into, i == 0 && ps.Start, j == pieces.Count && ps.End, bikeLanes: false, tile: so.Tile);
                 i = j;
             }
         }

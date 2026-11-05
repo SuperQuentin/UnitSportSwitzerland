@@ -149,3 +149,22 @@ main's and this branch's `--roads-only` and `--cover-only` (9 Geneva tiles) and 
   from LV95 tiles by construction (the comparer, PR 0, matches by id).
 - The water stage's one union-find over the region (PR 6) must see every frame's labels: it cannot
   run frame by frame as written here.
+
+## Holes, as the road stage writes them (B3 PR 2, `cube-roads`)
+
+What the water stage (PR 6) and the game (C1) read:
+
+- **Where**: the region's own `.cubl` (not the temporary one), a `LeafKind.Holes` section on each leaf
+  with a portal, none elsewhere; written by `--cube-roads` after the heights (`LeafWriter`, stage kinds
+  `[Holes]`: a rerun replaces them).
+- **What**: the lattice quads left out of the ground mesh at tunnel portals, `LeafHoles`: quad (i, j) is
+  the one whose south-west vertex is lattice vertex (i, j) (i along u, j along v, 0..2^bits − 1),
+  index `i + (j << bits)`; payload bits u8, then Brotli of the count and the sorted indices as delta varints.
+- **Which**: the quads whose centre (`LatticeToPlane(i + ½, j + ½)`) lies in a portal's strip, the
+  LV95 build's rule in metres (`TunnelCarver`: up to 0.5 m in front of the portal, 1.5 m in, half the
+  bore + 0.3 m either side). A strip near a leaf or frame edge is cut by the leaves that hold its quads,
+  each written by its own frame, so a hole across leaves is whole (each frame carves from its margin).
+- **Not a lattice kind**: a quad belongs to one leaf, so there is no seam; a vertex next to a hole keeps
+  its height (the mesh just drops the quad), as with `.holes`.
+- About ~1.2 m quads against the LV95 build's 1 m: the D: region's 767 portals' holes have centres
+  within 0.9 m (p99) of the LV95 ones, 7,398 leaf quads against 10,447 LV95 ones.

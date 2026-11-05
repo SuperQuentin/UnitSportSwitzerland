@@ -34,10 +34,14 @@ public static class FranceRoads
         public readonly SortedDictionary<RoadClass, int> ByClass = new();
     }
 
-    public static Dictionary<TileId, List<RoadSegment>> Build(IEnumerable<BdFeature> features,
-        IReadOnlySet<TileId> tiles, Func<double, double, double?> heightAt, Stats stats)
+    /// <summary>
+    /// The segments on the space's written tiles. Each vertex enters from its latitude and longitude
+    /// (<see cref="IRoadSpace{TTile}.FromLatLon"/>: the LV95 build on its built ground, a frame exactly).
+    /// </summary>
+    public static Dictionary<TTile, List<RoadSegment>> Build<TTile>(IEnumerable<BdFeature> features,
+        IRoadSpace<TTile> space, Stats stats) where TTile : struct, IEquatable<TTile>
     {
-        var byTile = new Dictionary<TileId, List<RoadSegment>>();
+        var byTile = new Dictionary<TTile, List<RoadSegment>>();
 
         foreach (var feature in features)
         {
@@ -49,18 +53,19 @@ public static class FranceRoads
             float width = Width(feature, cls.Value, flags);
             var attributes = Attributes(feature, cls.Value, flags);
 
-            foreach (var ring in feature.Rings)
+            foreach (var ringLl in feature.LatLonRings)
             {
-                if (ring.Count < 2) continue;
+                if (ringLl.Count < 2) continue;
+                var ring = ringLl.Select(p => space.FromLatLon(p.Lat, p.Lon)).ToList();
 
                 var line = new GeoPackageReader.Polyline(
-                    ring.Select(p => p.E).ToArray(),
-                    ring.Select(p => p.N).ToArray(),
+                    ring.Select(p => p.X).ToArray(),
+                    ring.Select(p => p.Y).ToArray(),
                     new double[ring.Count]);
 
-                foreach (var piece in PolylineClipper.SplitByTile(line))
+                foreach (var piece in space.Split(line))
                 {
-                    if (!tiles.Contains(piece.Tile) || piece.Points.Count < 2) continue;
+                    if (!space.Writes(piece.Tile) || piece.Points.Count < 2) continue;
 
                     var dense = Densify(piece.Points);
                     var points = new float[dense.Count * 3];
@@ -68,14 +73,12 @@ public static class FranceRoads
                     for (int i = 0; i < dense.Count; i++)
                     {
                         var (e, n, _) = dense[i];
-                        double? ground = heightAt(e, n);
+                        double? ground = space.Ground.Sample(e, n);
                         // Nothing under it means the tile edge; the neighbouring drape covers
                         // the join, so a flat fallback here is never seen.
                         double y = (ground ?? 0) + DrapeOffset + ClassLift(cls.Value);
 
-                        points[i * 3] = (float)(e - piece.Tile.MinE);
-                        points[i * 3 + 1] = (float)y;
-                        points[i * 3 + 2] = (float)(piece.Tile.MaxN - n);
+                        (points[i * 3], points[i * 3 + 1], points[i * 3 + 2]) = space.ToTile(piece.Tile, e, n, y);
                     }
 
                     if (!byTile.TryGetValue(piece.Tile, out var list))

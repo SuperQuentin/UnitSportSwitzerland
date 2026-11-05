@@ -129,7 +129,7 @@ public partial class RewardService : Node
     private static void OnServedPlaced(long peer, Items.PlacedObject o, bool planted)
     {
         if (o.Kind != Items.PlacedKind.TravelFlag || Navigation.AdventureTravel.Instance is not { } travel) return;
-        if (planted) travel.SetPortable(peer, o.E, o.N, (float)o.Altitude);
+        if (planted) travel.SetPortable(peer, o.At);
         else travel.ClearPortable(peer);
         GD.Print($"[rewards] peer {peer}'s travel flag {(planted ? "planted: its portable travel point" : "taken up")}");
     }
@@ -705,6 +705,13 @@ public partial class RewardService : Node
             string path = System.IO.Path.Combine(GhostDir, GhostName(trialId, key));
             if (!File.Exists(path)) continue;
             byte[] all = File.ReadAllBytes(path);
+            // a ghost stored before G2 A2b (GSH1, LV95): rewritten in place as GSH2 (#1503)
+            if (GhostTrack.Upgrade(all) is { } upgraded)
+            {
+                all = upgraded;
+                try { File.WriteAllBytes(path, all); }
+                catch (Exception e) { GD.PushWarning($"[rewards] ghost {trialId}: {e.Message}"); }
+            }
             const int Chunk = 8000;
             int parts = (all.Length + Chunk - 1) / Chunk;
             for (int i = 0; i < parts; i++)

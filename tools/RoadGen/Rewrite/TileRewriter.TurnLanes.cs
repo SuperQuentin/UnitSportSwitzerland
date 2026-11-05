@@ -126,7 +126,6 @@ public static partial class TileRewriter
     private const double TurnRejoin = 30, TurnEntry = 15, TurnMinHatch = 5;
 
     private const double TurnStation = 2.5, TurnGroundStep = 1.2;
-    private static double TileSizeM => Plane.TileSizeM;   // a tile's local extent (#1507)
 
     /// <summary>
     /// With a painted bike lane on the widened side (#120), every car lane beside it along the
@@ -1728,7 +1727,7 @@ public static partial class TileRewriter
                 foreach (double o in (ReadOnlySpan<double>)[_half + BaseAt(dist) + w * 0.5, _half + BaseAt(dist) + w + 0.5])
                 {
                     double px = x + sx * o, pz = z + sz * o;
-                    if (px < 0 || pz < 0 || px > TileSizeM || pz > TileSizeM) return "seam";
+                    if (!Plane.Inside(_tile, px, pz)) return "seam";
                     var lv95 = new Vec2(Plane.West(_tile) + px, Plane.North(_tile) - pz);
                     if (buildings.Contains(lv95)) return "building";
                     if (lines.Covering(px, pz, _self, x, z, _half + 1.0) is not null) return "line";

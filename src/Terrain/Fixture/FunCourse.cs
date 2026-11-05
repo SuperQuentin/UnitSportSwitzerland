@@ -86,7 +86,7 @@ public static class FunCourse
     public static StadiumSpec ArenaAt(double startE, double startN) => new()
     {
         Name = "Neon Arena", Town = "Fun world",
-        E = startE + ArenaX, N = startN + ArenaY, AzimuthDeg = 0f,
+        E = startE + ArenaX, N = startN + ArenaY, GridAzimuthDeg = 0f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37f, FrontHalfV = 53f, FrontCorner = 6f,
         Tiers = new[] { new StadiumTier(Rows: 16, RowDepth: 0.8f, Riser: 0.4f, Gap: 0f, Step: 1f) },

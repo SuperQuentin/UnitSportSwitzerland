@@ -51,6 +51,22 @@ public sealed class SitgGantries
         return result;
     }
 
+    /// <summary>
+    /// The same gantries on another plane (#1507: a work frame's, from LV95): positions by <paramref name="toPlane"/>,
+    /// bearings (degrees clockwise from north) by <paramref name="bearing"/> at each LV95 point.
+    /// </summary>
+    public SitgGantries Moved(Func<double, double, (double X, double Y)> toPlane, Func<double, double, double, double> bearing)
+    {
+        SitgSign Sign(SitgSign s) { var (x, y) = toPlane(s.E, s.N); return s with { E = x, N = y, Orientation = bearing(s.E, s.N, s.Orientation) }; }
+        var result = new SitgGantries();
+        foreach (var g in Gantries)
+        {
+            var (x, y) = toPlane(g.E, g.N);
+            result.Gantries.Add(g with { E = x, N = y, Bearing = bearing(g.E, g.N, g.Bearing), Signs = g.Signs.Select(Sign).ToList() });
+        }
+        return result;
+    }
+
     /// <summary>Angle between two bearings (deg, 0-180).</summary>
     public static double TurnBetween(double a, double b) { double d = Math.Abs(((a - b) % 360 + 540) % 360 - 180); return d; }
 

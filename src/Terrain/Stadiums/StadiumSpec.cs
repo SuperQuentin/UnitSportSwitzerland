@@ -1,4 +1,6 @@
 using Godot;
+using UnitSport.Core;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain.Stadiums;
 
@@ -17,7 +19,7 @@ public sealed record StadiumTier(int Rows, float RowDepth, float Riser, float Ga
 /// </summary>
 public enum VenueKind { Stadium, Arena, OpenAir }
 
-/// <summary>Which straight side of the bowl, named as they lie when <see cref="StadiumSpec.AzimuthDeg"/> is 0.</summary>
+/// <summary>Which straight side of the bowl, named as they lie when <see cref="StadiumSpec.GridAzimuthDeg"/> is 0.</summary>
 public enum StadiumSide { North, East, South, West }
 
 /// <summary>
@@ -72,8 +74,23 @@ public sealed record StadiumSpec
     /// <summary>The centre spot, LV95 (from the pitch polygon's centroid).</summary>
     public required double E { get; init; }
     public required double N { get; init; }
-    /// <summary>The pitch's long axis, degrees clockwise from north.</summary>
-    public float AzimuthDeg { get; init; }
+    /// <summary>The pitch's long axis as the catalogue writes it, measured off swissimage: degrees clockwise from grid north. Read <see cref="AzimuthDeg"/>.</summary>
+    public float GridAzimuthDeg { get; init; }
+
+    /// <summary>The pitch's long axis, degrees clockwise from true north (#1504): the catalogue's turned by the meridian convergence at the centre spot.</summary>
+    public float AzimuthDeg => GridAzimuthDeg - (float)SwissGeodesy.GridConvergenceDeg(E, N);
+
+    /// <summary>
+    /// The long axis turned back onto the LV95 grid at the centre spot: the local turn for the maths still done in LV95
+    /// numbers or a tile's grid axes (the bowl's mesh, its seats, the stage frame), until G2 C builds in a leaf's frame.
+    /// </summary>
+    public float LocalAzimuthDeg => AzimuthDeg + (float)SwissGeodesy.GridConvergenceDeg(E, N);
+
+    /// <summary>
+    /// The long axis in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> (what <c>OffsetTo</c> measures in):
+    /// the grid's while those are the grid's, the true one once A1 puts ECEF inside.
+    /// </summary>
+    public float OffsetAzimuthDeg(GlobalPos at) => AzimuthDeg + (float)(at.Convergence * 180 / Math.PI);
 
     /// <summary>The pitch's lines, for the record and the check: 105 x 68 is the UEFA size.</summary>
     public float PitchWidth { get; init; } = 68f;

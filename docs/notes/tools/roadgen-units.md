@@ -45,3 +45,69 @@ sessions' load, below-normal priority, one thread). The RoadGen unit tests (274,
 pass; `UnitSportSwitzerland.csproj`, TerrainPreprocessor, BlendCheck and GeneratedRoadsSpike build.
 `BlendCheck --generated-roads` gives 51/52 on this branch and on main alike (2587,1117 served differs from its
 block: older than #1507).
+
+# On work frames (G2 B3 4b, #1507, PR #1543)
+
+The frame instance of the three seams, and `--cube-network`, which runs the stage over a cube region.
+
+- **`FrameUnits`** (`Geometry/FrameUnits.cs`): the plane is a work frame's. Each level-14 leaf is a tile, named by
+  a `TileId` (E = face × 2^14 + x, N = y), so the stage's dictionaries and caches stay as they are. Its tile-local
+  frame is a **1000 m square on the plane, plane-aligned and centred on the leaf** (the centre snapped to 2 m, so the
+  0.5 m and 2 m rasters line up across leaves; a leaf is ~610 m, turned). `OnEdge`/`Inside`/`OnAnyEdge` use the
+  leaf's own edges through its `LeafTransform`; `Around` walks `CubeKey.Neighbours` (across face edges).
+  `DirectionToTile`/`AngleToTile` are the identity: both instances' tiles are plane-aligned.
+- **`LeafRecords`** (`Rewrite/LeafRecords.cs`): a tile's records between that square (y = height above sea level)
+  and the leaf's anchor frame, every position by `PlaneToLocal`/`LocalToPlane`, every heading by the Jacobian
+  (Godot headings, approach angles, gantry and overhead headings, bays). Arrays are changed in place (paint along a
+  segment, transitions, junction paths and conflict pairs keep their references); init-only positions are set by
+  reflection. Heights kept apart from a point (a structure's lower edge, a wire) go through the point.
+- **`RegionData`** (`Rewrite/RegionData.cs`): the region's files read once (the LV95 loop uses it too); `On(...)`
+  moves the OSM nodes, SITG gantries (bearings too), places and tram stops onto a frame's plane (LV95 → plane at the
+  ground's height, rigorous), and asks the canton lattice through plane → LV95. The OSM overlay's distances along a
+  line stay LV95 grid metres against the raw keys' true metres (within the plan's 2×10⁻⁴).
+- **Seams added for frames**: `IUnits.OnEdge` (`PaintEmitter`'s dash phase now takes the tile), `Inside` (the turn
+  pockets' and junction room tests), `OnAnyEdge` (`RailRoadOverlap`), `Around` (the halo, the footprints' scan).
+- **`--cube-network`** (`tools/TerrainPreprocessor/CubeNetworkStage.cs`):
+
+```
+TerrainPreprocessor --cube-network --cube-out REGION [--cube-temp DIR] --chunks LV95_CHUNKS [--osm DIR]
+    [--cube-box minE,minN,maxE,maxN] [--block 8] [--halo 2] [--plan-only] [--no-smooth] [--lv95-ground]
+```
+
+  Frames in the driver's order; per frame a `FrameTileLoop`: blocks of 8 × 8 core leaves, halo 2 leaves (~1.2 km,
+  read from any frame), the raw kinds of stage 2 (`<temp>/roads_raw`: `Roads`, `RoadKeys`, `Parking`), `FrameGround`
+  over the region's heights, the LV95 build's `.bldg` moved onto the plane (`FrameBuildings`, until stage 3 writes
+  buildings per leaf), the region's OSM files (`--osm`, default the temp dir). It writes `LeafKind.Roads` (the
+  network, Network flag) into the region's `.cubl`. A `--cube-box` run rewrites the Roads of every leaf of the frames
+  it touches (leaves of those frames outside the box lose theirs, as for every stage). `--plan-only` lists the frames
+  a box makes; `--no-smooth` and `--lv95-ground` are diagnostics (below).
+- **`--cube-compare --kinds roads`** gained `--compare-box` (both builds held to one LV95 box), `--seam-margin M`
+  (points within M of an LV95 km line or a leaf edge left out), the worst and alone junctions and signals with their
+  LV95 position and distance to either build's cuts, and the network's ends across leaf, frame and face edges.
+
+## Checks (Nov 5 2026)
+
+LV95 references: main's `RoadGen --rewrite` of the same raw input (`test_b3/roadgen4a/main`, Geneva 2498-2502 ×
+1116-1120; `versoix`, 2498-2501 × 1121-1124). Frame runs under `test_b3/network/`.
+
+- **Geneva**, 18 leaves (box 2499000,1116500,2501500,1119000), 441 s, peak 5.1 GB: 9,326 segments, 1,936 junction
+  records, 151 signals. Compared in the inner box 2499700,1117200,2500800,1118300:
+  - junctions 480 LV95 / 481 leaves, signals 33 / 32; the alone and worst sit at either build's cuts (most within
+    20 m of the km line E 2500000 or of a leaf edge);
+  - points 30 m or more from either build's cuts: **signals 23 / 23, all within 0.01 cm**; junctions 345 / 344,
+    p50 0.04 cm, p95 110 cm; centreline vertices p50 0.01 cm, p95 16.8 cm, p99 32.6 cm.
+- **Across a frame edge** (Versoix, box 2498500,1121500,2501500,1124500: 17 + 7 leaves in frames 249_254 and
+  249_255, 257 s): junctions **237 / 237, all matched**, p50 0.02 cm, p95 17 cm; signals 1 / 1 exact; **154 segment
+  ends at leaf edges, all meet another leaf's end; the 18 across the frame edge within 0.17 cm**, within a frame
+  0.00 cm. Centrelines p50 0.01 cm, p95 10 cm, p99 34 cm.
+- **Across a face edge**: the D: region has none (all face 0); `FrameNetworkTests` holds a leaf on face 0's edge
+  (its square, edges, its halo reaching the next face, its records into the leaf and back within 1 mm and 1e-5 rad).
+- **Where the tail comes from** (Geneva inner box, 60 m from cuts): the frame build draped on the LV95 `.terr`
+  (`--lv95-ground`) gives the same plan numbers (the ground is not it); with no buildings in either build the junction
+  tail falls from p95 50 cm to 6 cm (the wall raster on each build's grid); with no buildings and `--no-smooth` in both,
+  **centrelines p99 0.07 cm, max 0.53 cm** (smoothing per raw piece, cut where each build cuts). The stage's maths
+  depend on its tiling; the frame machinery itself is exact. Follow-up #1546 (smooth each line whole; walls without a
+  tile-aligned raster).
+- Heights above ground differ p99 5-7 cm (the leaf mesh against the 1 m `.terr` under the town lowering; decided:
+  features drape on the leaf mesh).
+- The LV95 instance stays byte-identical: the 41-tile check (above) again on this branch.

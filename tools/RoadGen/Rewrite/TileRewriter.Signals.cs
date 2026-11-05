@@ -835,11 +835,21 @@ public static partial class TileRewriter
 
         private Cantons(IReadOnlyDictionary<(int E, int N), string> tiles) { _ids = []; _codes = []; _tiles = tiles; }
 
+        /// <summary>A plane point to LV95, where the lattice is (#1507: a work frame's plane); null on LV95.</summary>
+        private Func<double, double, (double E, double N)>? _toLv95;
+
+        /// <summary>The same cantons asked on another plane (#1507): each point taken to LV95 first.</summary>
+        public Cantons On(Func<double, double, (double E, double N)> toLv95) =>
+            new(_ids, _codes, _tiles) { _toLv95 = toLv95 };
+
+        private Cantons(byte[] ids, List<string> codes, IReadOnlyDictionary<(int E, int N), string>? tiles) { _ids = ids; _codes = codes; _tiles = tiles; }
+
         /// <summary>A test world's cantons (#1038): the code of each kilometre tile listed, none elsewhere (the default zone).</summary>
         public static Cantons Of(IReadOnlyDictionary<(int E, int N), string> tiles) => new(tiles);
 
         public string? CodeAt(double e, double n)
         {
+            if (_toLv95 is { } f) (e, n) = f(e, n);
             int te = (int)Math.Floor(e / 1000), tn = (int)Math.Floor(n / 1000);
             if (_tiles is not null) return _tiles.GetValueOrDefault((te, tn));
             if (te < MinE || tn < MinN || te >= MinE + Width || tn >= MinN + Height) return null;

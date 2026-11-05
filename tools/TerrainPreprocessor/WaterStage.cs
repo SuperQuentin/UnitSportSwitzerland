@@ -19,7 +19,7 @@ namespace UnitSport.Tools.Preprocessor;
 /// the body's maximum depth (from its area). Survey gaps inside a surveyed lake (swissBATHY3D
 /// covers Léman's French part only below ~5 m) are filled from the shore out to the survey's edge,
 /// <c>depth = Dedge · ds / (ds + dv)</c>, fading to the synthetic profile past
-/// <see cref="FillReachM"/> from the survey. Every depth is at most the distance to the shore
+/// <see cref="WaterWindow.FillReachM"/> from the survey. Every depth is at most the distance to the shore
 /// (1:1), so the bed meets the bank flush.
 /// </para>
 ///
@@ -41,92 +41,10 @@ namespace UnitSport.Tools.Preprocessor;
 /// </summary>
 public static class WaterStage
 {
-    /// <summary>
-    /// Metres of neighbouring tiles each tile is computed with. Everything a core vertex reads must
-    /// be exact inside it: the gap fill reads the smoothed edge depth up to 2·<see cref="EdgeSmoothM"/>
-    /// out, whose nearest survey vertex may be <see cref="FillReachM"/> + 2·EdgeSmoothM further
-    /// (482 m), so 600; the distance to the shore saturates at <see cref="DistanceCapM"/>.
-    /// </summary>
-    public const int Halo = 600;
+    private const int Halo = WaterWindow.Halo;
 
-    /// <summary>
-    /// Distances to the shore saturate here (deep enough for every body's maximum but the biggest
-    /// lakes', which are surveyed), well short of the halo: a window's outermost
-    /// <see cref="BankProbe"/> cells are refined from a truncated neighbourhood, so a shore site
-    /// there must never decide a core vertex's distance.
-    /// </summary>
-    private const int DistanceCapM = 490;
-
-    /// <summary>
-    /// A Water cover vertex whose swissALTI3D surface stands more than <see cref="BankRiseQ"/>
-    /// quanta (0.5 m) above the lowest wet surface within <see cref="BankProbe"/> vertices is on
-    /// the bank, not in the water: the TLM polygon's edge lies on the dyke or beach slope (the
-    /// Rhône at Martigny has 468.2 m on its bank vertex over 466.8 m water), and taking its height
-    /// as the level drew the surface climbing the bank. It stays dry ground.
-    /// </summary>
-    private const int BankProbe = 4, BankRiseQ = 7;
-
-    private static void RefineWet(byte[] state, ushort[] surfaceQ, int w)
-    {
-        // separable min of the wet surface over a (2·BankProbe+1)² square, in quanta (exact): along a
-        // row in constant time per cell (van Herk: the running min from a block's start and from its
-        // end meet in every window), on a row padded with "no water" either side
-        const int Block = 2 * BankProbe + 1;
-        int padded = w + 2 * BankProbe;
-        var rowMin = new ushort[w * w];
-        var row = new ushort[padded];
-        var fromStart = new ushort[padded];
-        var fromEnd = new ushort[padded];
-        Array.Fill(row, ushort.MaxValue);
-        for (int y = 0; y < w; y++)
-        {
-            bool any = false;
-            for (int x = 0; x < w; x++)
-            {
-                int i = y * w + x;
-                if (state[i] == 1) { row[x + BankProbe] = surfaceQ[i]; any = true; }
-                else row[x + BankProbe] = ushort.MaxValue;
-            }
-            var mins = rowMin.AsSpan(y * w, w);
-            if (!any) { mins.Fill(ushort.MaxValue); continue; }
-            for (int k = 0; k < padded; k++)
-                fromStart[k] = k % Block == 0 ? row[k] : Math.Min(fromStart[k - 1], row[k]);
-            for (int k = padded - 1; k >= 0; k--)
-                fromEnd[k] = k == padded - 1 || (k + 1) % Block == 0 ? row[k] : Math.Min(fromEnd[k + 1], row[k]);
-            for (int x = 0; x < w; x++)
-                mins[x] = Math.Min(fromEnd[x], fromStart[x + 2 * BankProbe]);
-        }
-        var dry = new List<int>();
-        for (int y = 0; y < w; y++)
-            for (int x = 0; x < w; x++)
-            {
-                int i = y * w + x;
-                if (state[i] != 1) continue;
-                ushort m = ushort.MaxValue;
-                for (int dy = Math.Max(0, y - BankProbe); dy <= Math.Min(w - 1, y + BankProbe); dy++)
-                    m = Math.Min(m, rowMin[dy * w + x]);
-                if (surfaceQ[i] > m + BankRiseQ) dry.Add(i);
-            }
-        foreach (int i in dry) state[i] = 0;
-    }
-
-    /// <summary>How far from the survey a gap is still filled toward the survey's edge depth.</summary>
-    public const double FillReachM = 400;
-
-    /// <summary>Stop climbing toward the middle of the water past this distance: open water.</summary>
-    private const double WidthProbeM = WaterBed.OpenWidthM / 2 + 10;
-
-    /// <summary>
-    /// The survey only counts in a body this large, at vertices within
-    /// <see cref="SurveyLevelToleranceM"/> of the body's most common level: swissBATHY3D's grid
-    /// reaches up the streams around Nyon, 2-10 m above the lake, where it would dig a 3 m pit in a
-    /// brook. Not the mean: nationwide a lake's body takes in its rivers (Léman the Rhône up the
-    /// Valais), which lifted Léman's mean 4 m off its 372.14 m surface and dropped the whole survey.
-    /// </summary>
-    private const double MinSurveyAreaM2 = 200_000, SurveyLevelToleranceM = 1.0;
-
-    /// <summary>Max depth per metre from the shore (1:1): a quay in the survey becomes a 45° bank.</summary>
-    private const double MaxBankSlope = 1.0;
+    /// <summary>The LV95 bank rise: 7 height quanta (0.5 m), <see cref="WaterWindow.BankProbeM"/> round.</summary>
+    private const int BankRiseQ = 7;
 
     /// <summary>What one tile's bed computation holds at its peak: its 2201² window's arrays, about 250 MB, with room for the GC.</summary>
     private const long BedWindowBytes = 500L << 20;
@@ -326,7 +244,7 @@ public static class WaterStage
             {
                 maxDepthOf[i] = b.MaxDepth;
                 sqrtAreaOf[i] = Math.Sqrt(b.AreaM2);
-                if (b.AreaM2 >= MinSurveyAreaM2) surveyLevelOf[i] = b.SurveyLevel;
+                if (b.AreaM2 >= WaterWindow.MinSurveyAreaM2) surveyLevelOf[i] = b.SurveyLevel;
             }
             else maxDepthOf[i] = WaterBed.MinMaxDepthM;   // a body that only touches seams it does not own
         }
@@ -670,7 +588,7 @@ public static class WaterStage
         // read the same wet flag, level and body for it even if their own files disagreed.
         const int W = S + 2 * Halo;
         var state = new byte[W * W];
-        var surfaceQ = new ushort[W * W];
+        var surfaceQ = new int[W * W];
         var label = new int[W * W];   // global label (not root) of a wet vertex
         Array.Fill(state, (byte)2);
         double wMinE = id.MinE - Halo, wMaxN = id.MaxN + Halo;   // window cell (x, y) is at E = wMinE + x, N = wMaxN - y
@@ -703,13 +621,12 @@ public static class WaterStage
                 }
             }
 
-        RefineWet(state, surfaceQ, W);
+        WaterWindow.RefineWet(state, surfaceQ, W, WaterWindow.Cells(WaterWindow.BankProbeM, 1), BankRiseQ);
 
         // distance to the shore (any known dry vertex), capped short of the halo
         var land = new bool[W * W];
         for (int i = 0; i < land.Length; i++) land[i] = state[i] == 0;
-        var ds = new float[W * W];
-        DistanceTransform.Run(land, W, W, ds);
+        var ds = WaterWindow.Distances(land, W, 1);
 
         // the survey, as depth below the still level, at every wet vertex of the window
         float[]? survey = null;
@@ -736,8 +653,8 @@ public static class WaterStage
                         survey[i] = float.NaN;
                         if (state[i] != 1) continue;
                         double lakeLevel = surveyLevelOf[label[i]];
-                        double surf = ChunkFormat.Dequantize(surfaceQ[i]);
-                        if (!(Math.Abs(surf - lakeLevel) <= SurveyLevelToleranceM)) continue;
+                        double surf = ChunkFormat.Dequantize((ushort)surfaceQ[i]);
+                        if (!(Math.Abs(surf - lakeLevel) <= WaterWindow.SurveyLevelToleranceM)) continue;
                         double bed = bathy.SampleBed(wMinE + x, wMaxN - y);
                         if (double.IsNaN(bed)) continue;
                         survey[i] = (float)Math.Max(0, surf - bed);
@@ -745,10 +662,9 @@ public static class WaterStage
                     }
                 if (anyValid)
                 {
-                    dv = new float[W * W];
                     site = new int[W * W];
-                    DistanceTransform.Run(valid, W, W, dv, site);
-                    edgeDepth = SmoothEdgeDepth(survey, state, dv, site, W);
+                    dv = WaterWindow.Distances(valid, W, 1, site);
+                    edgeDepth = WaterWindow.SmoothEdgeDepth(survey, state, dv, site, W, 1);
                 }
                 else survey = null;
             }
@@ -774,34 +690,15 @@ public static class WaterStage
                     continue;
                 }
                 anyWet = true;
-                double dShore = Math.Min(ds[wi], (float)DistanceCapM);
+                double dShore = Math.Min(ds[wi], (float)WaterWindow.DistanceCapM);
                 int gl = label[wi];
                 double maxDepth = maxDepthOf[gl];
-                double half = HalfWidth(ds, W, x, y);
-                double synthetic = WaterBed.Depth(dShore, half, maxDepth);
+                double half = WaterWindow.HalfWidth(ds, W, x, y);
+                var (d, k) = WaterWindow.Depth(dShore, half, maxDepth, survey, dv, edgeDepth, wi);
 
-                double d;
-                byte k = 0;
-                if (survey != null && !float.IsNaN(survey[wi]))
-                {
-                    d = survey[wi];
-                    k = 1;
-                }
-                else if (dv != null && dv[wi] < FillReachM)
-                {
-                    double dSurvey = dv[wi];
-                    double edge = edgeDepth![wi];
-                    double fill = edge * dShore / (dShore + dSurvey);
-                    double w = 1 - SmoothStep(FillReachM / 2, FillReachM, dSurvey);
-                    d = synthetic + (fill - synthetic) * w;
-                    k = 2;
-                }
-                else d = synthetic;
-                d = Math.Clamp(d, 0, dShore * MaxBankSlope);
-
-                double level = ChunkFormat.Dequantize(surfaceQ[wi]);
+                double level = ChunkFormat.Dequantize((ushort)surfaceQ[wi]);
                 heights[ti] = ChunkFormat.Quantize(level - d);
-                levels[ti] = surfaceQ[wi];
+                levels[ti] = (ushort)surfaceQ[wi];
                 double fetchM = double.IsPositiveInfinity(half) ? sqrtAreaOf[gl] : Math.Min(sqrtAreaOf[gl], 2 * half);
                 fetch[ti] = WaterFormat.QuantizeFetch(fetchM);
                 depth[ti] = (float)d;
@@ -839,114 +736,6 @@ public static class WaterStage
         foreach (ushort q in heights) { if (q < qMin) qMin = q; if (q > qMax) qMax = q; }
         var outGrid = new ChunkGrid(id, heights, (float)ChunkFormat.Dequantize(qMin), (float)ChunkFormat.Dequantize(qMax));
         return new TileResult(outGrid, anyWet ? new WaterGrid(id, levels, fetch) : null, stats, join, worst);
-    }
-
-    /// <summary>
-    /// Half the local width of the water at window cell (x, y): climb the distance-to-shore field to
-    /// the ridge running down the middle and read the distance there. Infinity once the climb passes
-    /// <see cref="WidthProbeM"/>: open water, where the width no longer matters.
-    /// </summary>
-    private static double HalfWidth(float[] ds, int w, int x, int y)
-    {
-        float here = ds[y * w + x];
-        while (here < WidthProbeM)
-        {
-            int bx = x, by = y;
-            float best = here;
-            for (int dy = -1; dy <= 1; dy++)
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    int nx = x + dx, ny = y + dy;
-                    if ((uint)nx >= (uint)w || (uint)ny >= (uint)w) continue;
-                    float v = ds[ny * w + nx];
-                    if (v > best) { best = v; bx = nx; by = ny; }
-                }
-            if (bx == x && by == y) return here;
-            x = bx;
-            y = by;
-            here = best;
-        }
-        return double.PositiveInfinity;
-    }
-
-    /// <summary>Box radius of the edge-depth smoothing, in metres (two passes, so a tent twice as wide).</summary>
-    private const int EdgeSmoothM = 40;
-
-    /// <summary>
-    /// For every gap vertex the fill may reach: the survey's depth at the nearest surveyed vertex,
-    /// smoothed. The nearest vertex alone jumps wherever two parts of the survey's edge are equally
-    /// near (a Voronoi edge), which drew metre-high steps across the fill; two box passes of
-    /// <see cref="EdgeSmoothM"/> over the gap turn those into gentle ramps. Box sums over the window
-    /// only read cells within the halo, so the result stays a function of the region's data.
-    /// </summary>
-    private static float[] SmoothEdgeDepth(float[] survey, byte[] state, float[] dv, int[] site, int w)
-    {
-        var raw = new float[w * w];
-        float reach = (float)(FillReachM + 2 * EdgeSmoothM + 2);
-        for (int i = 0; i < raw.Length; i++)
-        {
-            raw[i] = float.NaN;
-            if (state[i] != 1 || !float.IsNaN(survey[i]) || dv[i] > reach || site[i] < 0) continue;
-            int x0 = site[i] % w, y0 = site[i] / w;
-            double sum = 0;
-            int n = 0;
-            for (int y = Math.Max(0, y0 - 2); y <= Math.Min(w - 1, y0 + 2); y++)
-                for (int x = Math.Max(0, x0 - 2); x <= Math.Min(w - 1, x0 + 2); x++)
-                {
-                    float v = survey[y * w + x];
-                    if (float.IsNaN(v)) continue;
-                    sum += v;
-                    n++;
-                }
-            raw[i] = n > 0 ? (float)(sum / n) : float.NaN;
-        }
-        return BoxMean(BoxMean(raw, w, EdgeSmoothM), w, EdgeSmoothM);
-    }
-
-    /// <summary>
-    /// Mean of the defined (non-NaN) cells in a (2r+1)² box, NaN where the cell itself is NaN. The
-    /// sums are exact integers (tenths of a millimetre): a floating-point summed-area table rounds
-    /// differently from each window's origin, and a shared vertex would then differ by a quantum
-    /// between the two tiles that hold it.
-    /// </summary>
-    private static float[] BoxMean(float[] f, int w, int r)
-    {
-        const double Unit = 1e-4;
-        int sw = w + 1;
-        var sum = new long[sw * sw];
-        var cnt = new int[sw * sw];
-        for (int y = 0; y < w; y++)
-        {
-            long rowSum = 0;
-            int rowCnt = 0;
-            for (int x = 0; x < w; x++)
-            {
-                float v = f[y * w + x];
-                if (!float.IsNaN(v)) { rowSum += (long)Math.Round(v / Unit); rowCnt++; }
-                sum[(y + 1) * sw + x + 1] = sum[y * sw + x + 1] + rowSum;
-                cnt[(y + 1) * sw + x + 1] = cnt[y * sw + x + 1] + rowCnt;
-            }
-        }
-        var o = new float[w * w];
-        for (int y = 0; y < w; y++)
-        {
-            int y0 = Math.Max(0, y - r), y1 = Math.Min(w, y + r + 1);
-            for (int x = 0; x < w; x++)
-            {
-                if (float.IsNaN(f[y * w + x])) { o[y * w + x] = float.NaN; continue; }
-                int x0 = Math.Max(0, x - r), x1 = Math.Min(w, x + r + 1);
-                long s = sum[y1 * sw + x1] - sum[y0 * sw + x1] - sum[y1 * sw + x0] + sum[y0 * sw + x0];
-                int n = cnt[y1 * sw + x1] - cnt[y0 * sw + x1] - cnt[y1 * sw + x0] + cnt[y0 * sw + x0];
-                o[y * w + x] = (float)(s * Unit / n);
-            }
-        }
-        return o;
-    }
-
-    private static double SmoothStep(double e0, double e1, double x)
-    {
-        double t = Math.Clamp((x - e0) / (e1 - e0), 0, 1);
-        return t * t * (3 - 2 * t);
     }
 
     private static string SyntheticName(Body b)

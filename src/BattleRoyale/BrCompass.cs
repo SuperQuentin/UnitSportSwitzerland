@@ -23,6 +23,7 @@ public partial class BrCompass : CompassStrip
 
         public bool Shown => _br.State.Running && _br.InMatch && BrPrefs.Current.Compass;
         public Vector2? Heading => _br.ViewPoint()?.Heading;
+        public float North => _br.ViewPoint()?.North ?? 0f;
         public bool Declutter => false;
         public bool Fades => false;
 

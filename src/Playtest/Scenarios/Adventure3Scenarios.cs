@@ -583,7 +583,7 @@ public static partial class Adventure3Scenarios
             var origin = me.Origin ?? throw new InvalidOperationException("no world origin yet");
             var w = origin.ToWorld(site.E, site.N, 0);
             w = w with { Y = c.Ground(w) };
-            float a = Mathf.DegToRad(venue.AzimuthDeg);
+            float a = Mathf.DegToRad(venue.AzimuthDeg) + TrueNorth.NorthBearing(origin.Frame, w);
             var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
             c.Own(new ConcertRig(e) { Name = "JazzStage", Transform = new Transform3D(basis, w), ForceLive = true });
             c.Own(new JazzStandIn(e) { Name = "JazzStandIn" });

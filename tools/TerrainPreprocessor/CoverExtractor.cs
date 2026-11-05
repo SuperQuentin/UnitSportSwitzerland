@@ -3,6 +3,16 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
+/// Where the cover's rings are stamped (#1507, G2 B3 PR 5a): a ring of an LV95 source (E, N and its own height,
+/// closed) and its class, onto every lattice vertex it covers, by <see cref="CoverExtractor.Stamped"/>'s rule:
+/// <see cref="CoverExtractor"/>'s LV95 tiles, or a work frame's leaves (<see cref="FrameCoverSpace"/>).
+/// </summary>
+public interface ICoverSpace
+{
+    void Stamp(GeoPackageReader.Ring ring, CoverClass cls);
+}
+
+/// <summary>
 /// Rasterises every swissTLM3D area layer onto each tile's vertex lattice, then populates
 /// it: random scatter in the wooded classes, a planting grid in orchards and nurseries,
 /// and the surveyed positions of TLM's individual trees.
@@ -54,19 +64,7 @@ public sealed class CoverExtractor
         var region = new TileRegion(tiles);
 
         using var conn = GeoPackageReader.Open(_gpkgPath);
-
-        // Layers are rasterised in order of increasing specificity: what a human would
-        // name the ground wins over what grows on it. A car park stays last so it beats
-        // everything, and the pitch polygon beats the sports ground that contains it.
-        PolygonCount = Rasterise(conn, "tlm_bb_bodenbedeckung", CoverFormat.Parse, region);
-        Rasterise(conn, "tlm_areale_nutzungsareal", CoverFormat.ParseLandUse, region);
-        Rasterise(conn, "tlm_areale_freizeitareal", CoverFormat.ParseLeisure, region);
-        Rasterise(conn, "tlm_bauten_sportbaute_ply", CoverFormat.ParseStructureArea, region);
-        Rasterise(conn, "tlm_bauten_verkehrsbaute_ply", CoverFormat.ParseStructureArea, region);
-        TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea, region);
-        // hand-traced ground TLM does not map (docs/data/cover_overrides.json), last so it beats
-        // every TLM layer; before the trees so an orchard it paves over is not planted
-        if (OverridesPath != null) StampOverrides(OverridesPath);
+        RasteriseLayers(conn, new Lv95CoverSpace(this), region);
         PaintPending();
 
         ScatterTrees(tiles, heightOf);
@@ -77,6 +75,40 @@ public sealed class CoverExtractor
         foreach (var id in Trees.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList())
             Trees.Remove(id);
     }
+
+    /// <summary>
+    /// The area layers, then the overrides, through a cover space (#1507: the LV95 tiles' lattice, or a work frame's
+    /// leaves). Layers are rasterised in order of increasing specificity: what a human would name the ground wins over
+    /// what grows on it. A car park stays last so it beats everything, and the pitch polygon beats the sports ground
+    /// that contains it.
+    /// </summary>
+    public void RasteriseLayers(Microsoft.Data.Sqlite.SqliteConnection conn, ICoverSpace space, ISourceRegion region)
+    {
+        PolygonCount = Rasterise(conn, "tlm_bb_bodenbedeckung", CoverFormat.Parse, region, space);
+        Rasterise(conn, "tlm_areale_nutzungsareal", CoverFormat.ParseLandUse, region, space);
+        Rasterise(conn, "tlm_areale_freizeitareal", CoverFormat.ParseLeisure, region, space);
+        Rasterise(conn, "tlm_bauten_sportbaute_ply", CoverFormat.ParseStructureArea, region, space);
+        Rasterise(conn, "tlm_bauten_verkehrsbaute_ply", CoverFormat.ParseStructureArea, region, space);
+        TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea, region, space);
+        // hand-traced ground TLM does not map (docs/data/cover_overrides.json), last so it beats
+        // every TLM layer; before the trees so an orchard it paves over is not planted
+        if (OverridesPath != null) StampOverrides(OverridesPath, space);
+    }
+
+    /// <summary>
+    /// What a vertex holding <paramref name="old"/> becomes when <paramref name="cls"/> is stamped on it: Water is never
+    /// overwritten by a later, more specific layer.
+    ///
+    /// <para>
+    /// The layers are stamped in order of increasing specificity, which is right for land use — an allotment inside a
+    /// park should win. But a land-use polygon is an administrative boundary, not a ground surface, and several of them
+    /// are drawn right across a river: the gravel extraction areas beside the Rhône at Riddes are mapped as Abbauareal
+    /// over the water, which erased the river from the raster and left the Rhône rendering as a gap with a thin channel
+    /// line through it. A quarry does not flow.
+    /// </para>
+    /// </summary>
+    public static byte Stamped(byte old, CoverClass cls) =>
+        (CoverClass)old == CoverClass.Water && cls != CoverClass.Water ? old : (byte)cls;
 
     /// <summary>JSON file of hand-traced cover polygons, or null for none.</summary>
     public string? OverridesPath { get; init; }
@@ -95,9 +127,9 @@ public sealed class CoverExtractor
 
     /// <summary>
     /// Stamps the override polygons: <c>{"polygons":[{"cover":"ParkingPrivate","ring":[[E,N],...]}]}</c>
-    /// in LV95. Rings off the batch's tiles fall away in <see cref="PaintPending"/>; <see cref="PaintRing"/> keeps Water.
+    /// in LV95. Rings off the batch's tiles fall away in <see cref="PaintPending"/>; <see cref="Stamped"/> keeps Water.
     /// </summary>
-    private void StampOverrides(string path)
+    private void StampOverrides(string path, ICoverSpace space)
     {
         using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
         int rings = 0;
@@ -109,7 +141,7 @@ public sealed class CoverExtractor
                 xyz.AddRange(new[] { p[0].GetDouble(), p[1].GetDouble(), 0.0 });
             // close it: the scanline walks edges i -> i+1
             if (xyz[0] != xyz[^3] || xyz[1] != xyz[^2]) xyz.AddRange(new[] { xyz[0], xyz[1], 0.0 });
-            Rasterise(new GeoPackageReader.Ring(xyz.ToArray()), cls);
+            space.Stamp(new GeoPackageReader.Ring(xyz.ToArray()), cls);
             rings++;
         }
         LayerRings["cover_overrides"] = rings;
@@ -120,7 +152,7 @@ public sealed class CoverExtractor
     /// classifier. Returns the number of rings drawn.
     /// </summary>
     private int Rasterise(Microsoft.Data.Sqlite.SqliteConnection conn, string layer,
-        Func<string?, CoverClass> classify, TileRegion region)
+        Func<string?, CoverClass> classify, ISourceRegion region, ICoverSpace space)
     {
         int rings = 0;
         foreach (var reader in GeoPackageReader.TileRows(conn, layer, new[] { "objektart" }, region))
@@ -131,12 +163,18 @@ public sealed class CoverExtractor
             foreach (var ring in GeoPackageReader.ParsePolygons((byte[])reader.GetValue(1)))
             {
                 rings++;
-                Rasterise(ring, cls);
+                space.Stamp(ring, cls);
             }
         }
 
         LayerRings[layer] = LayerRings.GetValueOrDefault(layer) + rings;
         return rings;
+    }
+
+    /// <summary>The LV95 tiles' cover space: the scanline below on the 1 m grid, into <see cref="Cover"/>.</summary>
+    private sealed class Lv95CoverSpace(CoverExtractor x) : ICoverSpace
+    {
+        public void Stamp(GeoPackageReader.Ring ring, CoverClass cls) => x.Rasterise(ring, cls);
     }
 
     // The rings waiting to be painted, in source order, and what they hold: rings are read first and
@@ -290,18 +328,7 @@ public sealed class CoverExtractor
                 var span = cells.AsSpan(rowAt + c0, c1 - c0 + 1);
                 if (water) span.Fill(cls);
                 else
-                {
-                    // Water is never overwritten by a later, more specific layer.
-                    //
-                    // The layers are stamped in order of increasing specificity, which is right for land
-                    // use: an allotment inside a park should win. But a land-use polygon is an
-                    // administrative boundary, not a ground surface, and several of them are drawn right
-                    // across a river: the gravel extraction areas beside the Rhone at Riddes are mapped as
-                    // Abbauareal over the water, which erased the river from the raster and left the Rhone
-                    // rendering as a gap with a thin channel line through it. A quarry does not flow.
-                    foreach (ref byte cell in span)
-                        if (cell != (byte)CoverClass.Water) cell = cls;
-                }
+                    foreach (ref byte cell in span) cell = Stamped(cell, ring.Cls);
             }
         }
     }
