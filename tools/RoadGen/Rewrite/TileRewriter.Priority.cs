@@ -210,30 +210,48 @@ public static partial class TileRewriter
     private sealed class Footprints(Func<TileId, BuildingTile?> source)
     {
         private const double Cell = 10;
-        // per cell its roof triangles in plan, each as its box then its corners (10 numbers): a big building's box held a point
-        // that was then tried against every triangle of its roof
-        private readonly Dictionary<TileId, Dictionary<(int X, int Z), List<double>>> _tiles = new();
-        // the same points are asked again and again (a core's corners are laid over and over while its turns are narrowed, each
-        // radius tried along the same bisector): a Geneva block took hours (#1279). Exact points, so the answers are the same
-        private readonly Dictionary<(double X, double Y), bool> _asked = new();
+
+        /// <summary>
+        /// A tile's cells over the box of those it has, each its roof triangles in plan, each as its box then its corners (10 numbers):
+        /// a big building's box held a point that was then tried against every triangle of its roof. An array, not a dictionary:
+        /// every point asks nine tiles, most of them with no cell there (#1539).
+        /// </summary>
+        private sealed class Grid(int x0, int z0, int width, int height, double[]?[] cells)
+        {
+            public static readonly Grid Empty = new(0, 0, 0, 0, []);
+            public readonly int X0 = x0, Z0 = z0, Width = width, Height = height;
+            public readonly double[]?[] Cells = cells;
+        }
+
+        private readonly IUnits _units = Plane.Units;
+        private readonly Dictionary<TileId, Grid> _tiles = new();
+        // the nine tiles round the last point's, whose west and north each point also needs (most points follow one in the same tile)
+        private readonly (Grid Grid, double West, double North)[] _around = new (Grid, double, double)[9];
+        private TileId _aroundOf;
+        private bool _aroundSet;
 
         public bool Contains(Vec2 p)
         {
-            if (_asked.TryGetValue((p.X, p.Y), out var known)) return known;
-            if (_asked.Count > 4_000_000) _asked.Clear();
-            return _asked[(p.X, p.Y)] = Scan(p);
-        }
-
-        private bool Scan(Vec2 p)
-        {
-            var at = Plane.TileAt(p.X, p.Y);
-            for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+            var at = _units.TileAt(p.X, p.Y);
+            if (!_aroundSet || at != _aroundOf)
             {
-                var id = new TileId(at.E + de, at.N + dn);
-                double x = p.X - Plane.West(id), z = Plane.North(id) - p.Y;
-                if (!Load(id).TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var here)) continue;
-                for (int t = 0; t + 9 < here.Count; t += 10)
+                int i = 0;
+                for (int de = -1; de <= 1; de++)
+                for (int dn = -1; dn <= 1; dn++)
+                {
+                    var id = new TileId(at.E + de, at.N + dn);
+                    _around[i++] = (Load(id), _units.West(id), _units.North(id));
+                }
+                _aroundOf = at;
+                _aroundSet = true;
+            }
+            foreach (ref readonly var around in _around.AsSpan())
+            {
+                var grid = around.Grid;
+                double x = p.X - around.West, z = around.North - p.Y;
+                int cx = (int)Math.Floor(x / Cell) - grid.X0, cz = (int)Math.Floor(z / Cell) - grid.Z0;
+                if ((uint)cx >= (uint)grid.Width || (uint)cz >= (uint)grid.Height || grid.Cells[cz * grid.Width + cx] is not { } here) continue;
+                for (int t = 0; t + 9 < here.Length; t += 10)
                 {
                     if (x < here[t] || x > here[t + 2] || z < here[t + 1] || z > here[t + 3]) continue;
                     if (InTriangle(x, z, here[t + 4], here[t + 5], here[t + 6], here[t + 7], here[t + 8], here[t + 9])) return true;
@@ -242,12 +260,12 @@ public static partial class TileRewriter
             return false;
         }
 
-        private Dictionary<(int X, int Z), List<double>> Load(TileId id)
+        private Grid Load(TileId id)
         {
-            if (_tiles.TryGetValue(id, out var cells)) return cells;
-            _tiles[id] = cells = new();
+            if (_tiles.TryGetValue(id, out var grid)) return grid;
+            var cells = new Dictionary<(int X, int Z), List<double>>();
             // a building tile that is missing or will not decode only loses this check
-            if (source(id) is not { } tile) return cells;
+            if (source(id) is not { } tile) return _tiles[id] = Grid.Empty;
             foreach (var b in tile.Buildings)
                 for (int t = 0; t + 8 < b.Triangles.Length; t += 9)
                 {
@@ -258,9 +276,18 @@ public static partial class TileRewriter
                     double minZ = Math.Min(az, Math.Min(bz, cz)), maxZ = Math.Max(az, Math.Max(bz, cz));
                     for (int gx = (int)Math.Floor(minX / Cell); gx <= (int)Math.Floor(maxX / Cell); gx++)
                         for (int gz = (int)Math.Floor(minZ / Cell); gz <= (int)Math.Floor(maxZ / Cell); gz++)
-                            (cells.TryGetValue((gx, gz), out var list) ? list : cells[(gx, gz)] = []).AddRange([minX, minZ, maxX, maxZ, ax, az, bx, bz, cx, cz]);
+                        {
+                            var list = cells.TryGetValue((gx, gz), out var had) ? had : cells[(gx, gz)] = new List<double>();
+                            list.Add(minX); list.Add(minZ); list.Add(maxX); list.Add(maxZ);
+                            list.Add(ax); list.Add(az); list.Add(bx); list.Add(bz); list.Add(cx); list.Add(cz);
+                        }
                 }
-            return cells;
+            if (cells.Count == 0) return _tiles[id] = Grid.Empty;
+            int x0 = cells.Keys.Min(k => k.X), x1 = cells.Keys.Max(k => k.X), z0 = cells.Keys.Min(k => k.Z), z1 = cells.Keys.Max(k => k.Z);
+            int width = x1 - x0 + 1, height = z1 - z0 + 1;
+            var flat = new double[]?[width * height];
+            foreach (var ((x, z), list) in cells) flat[(z - z0) * width + (x - x0)] = list.ToArray();
+            return _tiles[id] = new Grid(x0, z0, width, height, flat);
         }
 
         private static bool InTriangle(double px, double pz, double ax, double az, double bx, double bz, double cx, double cz)
