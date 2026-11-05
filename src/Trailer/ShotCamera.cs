@@ -28,6 +28,9 @@ public sealed class ShotCamera
     /// <summary>The surface under a point, for keeping the eye above it.</summary>
     public required Func<Vector3, float?> Surface { get; init; }
 
+    /// <summary>True north's bearing in world axes at a point, radians (#1504): a key's compass direction turns by it.</summary>
+    public Func<Vector3, float> North { get; init; } = _ => 0f;
+
     /// <summary>The lowest the eye may go over the surface, m.</summary>
     public float Clearance { get; set; } = 0.5f;
 
@@ -108,8 +111,8 @@ public sealed class ShotCamera
         if (p.IsDirection)
         {
             if (eye is not { } from) return null;
-            float b = Mathf.DegToRad(p.Bearing), pitch = Mathf.DegToRad(p.Pitch);
-            // a compass bearing: north is −Z, east +X
+            float b = Mathf.DegToRad(p.Bearing) + North(from), pitch = Mathf.DegToRad(p.Pitch);
+            // a compass bearing from true north, as a world one
             var dir = new Vector3(Mathf.Sin(b) * Mathf.Cos(pitch), Mathf.Sin(pitch), -Mathf.Cos(b) * Mathf.Cos(pitch));
             return from + dir * 2000f;
         }

@@ -195,6 +195,32 @@ public static class SwissGeodesy
     public static (double E, double N, double H) FromWgs84(Geodetic g) => FromEcef(Ellipsoid.Wgs84.ToEcef(g));
 
     /// <summary>
+    /// The meridian convergence at an LV95 place (#1504): the bearing of true (WGS84) north on the LV95 grid there,
+    /// radians clockwise from grid north. 0 on Bern's meridian (to 0.0007°, the datums' normals), ~+0.93° at Geneva,
+    /// ~−2° at Scuol. A heading stored from grid north less this is one from true north.
+    /// A few microseconds: per object at load, never per vertex.
+    /// </summary>
+    public static double GridConvergence(double e, double n, double hLhn95 = 500)
+    {
+        var o = ToEcef(e, n, hLhn95);
+        var g = Ellipsoid.Wgs84.ToGeodetic(o);
+        double lat = Rad(g.LatDeg), lon = Rad(g.LonDeg);
+        var up = new EcefPos(Math.Cos(lat) * Math.Cos(lon), Math.Cos(lat) * Math.Sin(lon), Math.Sin(lat));
+        var north = new EcefPos(-Math.Sin(lat) * Math.Cos(lon), -Math.Sin(lat) * Math.Sin(lon), Math.Cos(lat));
+        // grid east: a metre's step along the grid, laid flat; grid north: up × east
+        var east = ToEcef(e + 1, n, hLhn95) - o;
+        double along = Dot(east, up);
+        east = new EcefPos(east.X - up.X * along, east.Y - up.Y * along, east.Z - up.Z * along);
+        var gridNorth = new EcefPos(up.Y * east.Z - up.Z * east.Y, up.Z * east.X - up.X * east.Z, up.X * east.Y - up.Y * east.X);
+        return Math.Atan2(Dot(north, east), Dot(north, gridNorth));
+    }
+
+    /// <summary><see cref="GridConvergence"/> in degrees: what a stored heading in degrees from grid north is turned by.</summary>
+    public static double GridConvergenceDeg(double e, double n, double hLhn95 = 500) => GridConvergence(e, n, hLhn95) * 180 / Math.PI;
+
+    private static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    /// <summary>
     /// The ellipsoidal height a latitude and longitude with no height of their own are taken at: the
     /// Swiss Plateau's ground (~450 m LHN95 plus ~50 m of geoid). The two datums' normals differ, so
     /// the height moves the LV95 point a little: <see cref="HorizontalPerMetre"/> per metre off.

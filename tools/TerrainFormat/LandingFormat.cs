@@ -57,8 +57,12 @@ public sealed class LandingBerth
     public double E { get; set; }
     public double N { get; set; }
 
-    /// <summary>The bow's heading, degrees clockwise from grid north (LV95), 0..360.</summary>
+    /// <summary>The bow's heading, degrees clockwise from grid north (LV95), 0..360: the file's; the game reads <see cref="TrueHeading"/>.</summary>
     public double Heading { get; set; }
+
+    /// <summary>The bow's heading from true north (#1504): <see cref="Heading"/> less the grid's meridian convergence at the berth.</summary>
+    [JsonIgnore]
+    public double TrueHeading => Heading - SwissGeodesy.GridConvergenceDeg(E, N);
 
     /// <summary>The ship's side against the pier: 0 port, 1 starboard (the steamer's gangway door index).</summary>
     public int Side { get; set; }
@@ -99,8 +103,8 @@ public sealed class Landing
 }
 
 /// <summary>
-/// A boat's place alongside a jetty (#383): LV95 of the boat's keel, its heading (degrees from grid
-/// north), which boat (<see cref="Speedboat"/> or a jetski), the jetty's side (+1 left of its line,
+/// A boat's place alongside a jetty (#383): LV95 of the boat's keel, its heading (degrees from true
+/// north, #1504: the jetty's grid line turned by the convergence there), which boat (<see cref="Speedboat"/> or a jetski), the jetty's side (+1 left of its line,
 /// -1 right) and a name every peer and every restart gives it alike.
 /// </summary>
 public readonly record struct BoatBerth(string Id, double E, double N, double Heading, bool Speedboat, int Side);
@@ -148,7 +152,8 @@ public sealed class Jetty
                 double off = Ribbon.Width * 0.5 + 0.4 + (speedboat ? 1.2 : 0.65);
                 // left of the line: (-un, ue)
                 double e = ce - un * off * side, n = cn + ue * off * side;
-                double heading = Math.Atan2(ue, un) * 180 / Math.PI + ((h >> 3 & 1) == 0 ? 0 : 180);
+                // along the jetty's line on the grid, then from true north at the berth (#1504)
+                double heading = Math.Atan2(ue, un) * 180 / Math.PI + ((h >> 3 & 1) == 0 ? 0 : 180) - SwissGeodesy.GridConvergenceDeg(e, n);
                 slots.Add(new BoatBerth($"m{Hash(Id):x8}_{k}{(side > 0 ? 'l' : 'r')}", Math.Round(e, 3), Math.Round(n, 3),
                     Math.Round((heading + 360) % 360, 2), speedboat, side));
             }

@@ -191,9 +191,9 @@ public partial class AirportStands : Node
         var kind = KindOf(stand.Use);
         if (Airliner.For(kind) is not { } ride) return 0;
         bool stairs = kind == RideKind.A320;   // placed at the next review, once it stands (Review)
-        // the stand's heading is degrees from grid north: true north at the stand (#1504), in the state's offset axes
+        // the stand's heading from true north (#1504), in the state's offset axes
         var place = origin.ToGlobal(at);
-        float yaw = TrueNorth.OffsetYaw(place, TrueNorth.GridYawToTrue(place, -Mathf.DegToRad((float)stand.Heading)));
+        float yaw = TrueNorth.OffsetYaw(place, -Mathf.DegToRad((float)stand.TrueHeading));
         var state = new VehicleState(kind, place, yaw, Vector3.Zero, ride.MaxHealth,
             EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: VehicleState.Now,
             // boarding: L1 and L2 open at the stairs; the rest as a pilot leaves one (gear down)

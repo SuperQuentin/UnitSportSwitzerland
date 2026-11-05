@@ -133,7 +133,7 @@ public static class StadiumCheck
             }
 
             // a seat: on a seat block's row, facing the pitch; none on a tier's first row or in a gate
-            float a = Mathf.DegToRad(s.AzimuthDeg);
+            float a = Mathf.DegToRad(s.LocalAzimuthDeg);
             (double E, double N) Lv95(float u, float v) => (s.E + u * MathF.Cos(a) - v * MathF.Sin(a), s.N - (u * MathF.Sin(a) + v * MathF.Cos(a)));
             // the first place along the west stand's straight that is a seat block's (not an aisle, a vomitory, a gate)
             int rowK = Math.Min(8, s.Tiers[0].Rows - 2);
@@ -146,7 +146,7 @@ public static class StadiumCheck
             }
             var (se, sn) = Lv95(-rowD, seatV);
             var seat = StadiumSeats.At(se, sn);
-            Expect(seat is { Tier: 0 } st && st.Row == rowK && Math.Abs(Mathf.AngleDifference(st.Yaw, Mathf.DegToRad(-90f - s.AzimuthDeg))) < 0.05f
+            Expect(seat is { Tier: 0 } st && st.Row == rowK && Math.Abs(Mathf.AngleDifference(st.Yaw, Mathf.DegToRad(-90f - s.LocalAzimuthDeg))) < 0.05f
                 && Math.Abs(st.Drop - (s.Tiers[0].Riser + 0.05f)) < 0.01f,
                 $"{s.Name}: a seat on the west stand's row {rowK}, facing east ({seat})");
             var (fe, fn) = Lv95(-(s.FrontHalfU + 0.3f), seatV);

@@ -4,13 +4,18 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Core;
 
 /// <summary>
-/// True north against the game's axes (#1504, G2 A3). The flat world's −Z is LV95 grid north, which turns from
-/// true north by the meridian convergence: 0 on Bern's meridian, about 0.9° at Geneva and in the Engadine (the
-/// other way), more further out. What a person reads as a heading (the compass strips, the cockpit's HDG and track,
-/// a photo's bearing) comes from here, never from world −Z; data stored in grid north (berths, givers, traffic
-/// endpoints, the LV95 literal catalogues) is turned to true north at load with <see cref="GridToTrue"/> / <see cref="GridYawToTrue"/> and placed
-/// with <see cref="WorldYaw"/> (in world axes) or <see cref="OffsetYaw"/> (in a record). Correct in the flat world and in an anchor frame alike, so it is not behind
+/// True north against the game's axes (#1504, G2 A3). The flat world's −Z is LV95 grid north, which turns from true
+/// north by the meridian convergence (<see cref="SwissGeodesy.GridConvergence"/>: 0 on Bern's meridian, ~+0.93° at
+/// Geneva, ~−2° at Scuol). True north is the one system: every heading the game holds is from true north. What a
+/// person reads (the compass strips, the cockpit's HDG and track, a photo's bearing) comes from here, never from
+/// world −Z; a heading stored from grid north (a file's, a literal catalogue's) is turned to true north at load
+/// (<see cref="GridToTrue"/>, <see cref="GridYawToTrue"/>) and set down with <see cref="WorldYaw"/> (world axes) or
+/// <see cref="OffsetYaw"/> (a record's). Correct in the flat world and in an anchor frame alike, so not behind
 /// <c>--frame earth</c>.
+/// <para>
+/// Grid is left only as a local turn inside code that still does its maths in LV95 numbers or a tile's grid axes
+/// (<see cref="TrueToGrid"/>: a stadium's mesh, a festival's site), until G2 C and D take LV95 out.
+/// </para>
 /// <para>
 /// Bearings are radians clockwise from north (a compass); yaws are Godot's (0 faces −Z, positive turns left), so a
 /// yaw is minus a bearing. A grid bearing turns to a true one by subtracting the convergence; a grid yaw by adding it.
@@ -19,42 +24,24 @@ namespace UnitSport.Core;
 public static class TrueNorth
 {
     /// <summary>
-    /// The meridian convergence at an LV95 place: the bearing of true north on the LV95 grid there, radians clockwise
-    /// from grid north. 0 on Bern's meridian, positive west of it (Geneva, ~0.9°), negative east of it. A few
-    /// microseconds (rigorous geodesy): per object at load, never per frame or vertex.
+    /// A bearing stored from grid north at LV95 <paramref name="e"/> / <paramref name="n"/> (a file's, a literal's) as one
+    /// from true north, radians clockwise: what such data is turned by at load.
     /// </summary>
-    public static double GridConvergence(double e, double n, double alt = 500)
-    {
-        var axes = FrameAxes.GroundAt(e, n, alt);
-        var north = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(axes.Origin)).North;
-        return System.Math.Atan2(FrameAxes.Dot(north, axes.X), -FrameAxes.Dot(north, axes.Z));
-    }
+    public static double GridToTrue(double e, double n, double gridBearing) => gridBearing - SwissGeodesy.GridConvergence(e, n);
+
+    /// <summary>A Godot yaw stored from grid north (0 faces grid north) as one from true north (see <see cref="GridToTrue"/>).</summary>
+    public static float GridYawToTrue(double e, double n, float gridYaw) => (float)(gridYaw + SwissGeodesy.GridConvergence(e, n));
 
     /// <summary>
-    /// A bearing measured on the LV95 grid at LV95 <paramref name="e"/> / <paramref name="n"/> (a Swiss source's,
-    /// a literal's) as one from true north, radians clockwise: what data stored in grid north is turned by at load.
-    /// Always the grid's own convergence, whatever <see cref="GlobalPos"/> holds inside.
+    /// A bearing from true north as one on the LV95 grid at <paramref name="e"/> / <paramref name="n"/>: the local turn for
+    /// maths still done in LV95 numbers or a tile's grid axes. Goes with that maths (G2 C, D).
     /// </summary>
-    public static double GridToTrue(double e, double n, double gridBearing) => gridBearing - GridConvergence(e, n);
-
-    /// <summary>A Godot yaw on the LV95 grid (0 faces grid north) as one from true north (see <see cref="GridToTrue"/>).</summary>
-    public static float GridYawToTrue(double e, double n, float gridYaw) => (float)(gridYaw + GridConvergence(e, n));
-
-    /// <summary><see cref="GridToTrue(double, double, double)"/> at a place.</summary>
-    public static double GridToTrue(GlobalPos at, double gridBearing) => gridBearing - at.GridConvergence;
-
-    /// <summary><see cref="GridYawToTrue(double, double, float)"/> at a place.</summary>
-    public static float GridYawToTrue(GlobalPos at, float gridYaw) => (float)(gridYaw + at.GridConvergence);
+    public static double TrueToGrid(double e, double n, double trueBearing) => trueBearing + SwissGeodesy.GridConvergence(e, n);
 
     /// <summary>
-    /// A heading stored in grid north (a Godot yaw) at a world point as a world yaw in <paramref name="frame"/>: turned to
-    /// true north at the place, then into the frame (<see cref="WorldYaw"/>). The same yaw on the flat ground (to float
-    /// precision), the right one in an anchor frame.
+    /// A world yaw at a world point as one from grid north: only for writing a store whose format is still grid (the
+    /// traffic endpoints' file and wire angle).
     /// </summary>
-    public static float GridYawToWorld(OriginFrame frame, Vector3 at, float gridYaw) =>
-        WorldYaw(frame, at, GridYawToTrue(frame.ToGlobal(at), gridYaw));
-
-    /// <summary>The inverse of <see cref="GridYawToWorld"/>: a world yaw at a world point as one from grid north, to store.</summary>
     public static float WorldYawToGrid(OriginFrame frame, Vector3 at, float worldYaw) =>
         (float)(TrueYaw(frame, at, worldYaw) - frame.ToGlobal(at).GridConvergence);
 

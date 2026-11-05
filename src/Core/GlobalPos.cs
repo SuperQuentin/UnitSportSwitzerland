@@ -53,16 +53,16 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
     /// <summary>
     /// The bearing of true north in this type's offset axes here (<see cref="OffsetTo"/>, <see cref="Moved"/>,
     /// <c>+ Vector3</c>), radians clockwise: the meridian convergence while they are the LV95 grid's
-    /// (<see cref="TrueNorth.GridConvergence"/>, 0 at Bern, ~0.9° at Geneva), 0 once A1 puts ECEF inside (#1504).
+    /// (<see cref="SwissGeodesy.GridConvergence"/>, 0 at Bern, ~0.9° at Geneva), 0 once A1 puts ECEF inside (#1504).
     /// A few microseconds: per object, never per vertex.
     /// </summary>
-    public double Convergence => TrueNorth.GridConvergence(E, N, Alt);
+    public double Convergence => SwissGeodesy.GridConvergence(E, N, Alt);
 
     /// <summary>
     /// The LV95 grid's meridian convergence here, whatever this type holds inside: what a heading stored in grid north
-    /// (a Swiss source's, a literal catalogue's) is turned by at load (<see cref="TrueNorth.GridYawToTrue(GlobalPos, float)"/>).
+    /// (a Swiss source's, a literal catalogue's) is turned by.
     /// </summary>
-    public double GridConvergence => TrueNorth.GridConvergence(E, N, Alt);
+    public double GridConvergence => SwissGeodesy.GridConvergence(E, N, Alt);
 
     /// <summary>The terrain tile under this place (the LV95 kilometre today, the cube leaf in G2).</summary>
     public TileId Tile => TileId.FromLv95(E, N);

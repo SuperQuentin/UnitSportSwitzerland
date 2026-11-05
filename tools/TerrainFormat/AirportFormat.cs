@@ -29,7 +29,12 @@ public sealed class AirportStand
     public StandUse Use { get; set; }
     public double E { get; set; }
     public double N { get; set; }
+    /// <summary>Degrees clockwise from grid north, the file's; the game reads <see cref="TrueHeading"/>.</summary>
     public double Heading { get; set; }
+
+    /// <summary>The stand's heading from true north (#1504): <see cref="Heading"/> less the grid's meridian convergence there.</summary>
+    [JsonIgnore]
+    public double TrueHeading => Heading - SwissGeodesy.GridConvergenceDeg(E, N);
     /// <summary>The ground there, m (the built tile's height at the stand; NaN unknown).</summary>
     public double Ground { get; set; }
 }

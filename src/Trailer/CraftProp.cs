@@ -43,13 +43,14 @@ public partial class CraftProp : Node3D
     }
 
     /// <summary>
-    /// Stands it at <paramref name="ground"/> (the surface under its spot, world space) facing its
-    /// heading: on its legs, or <see cref="Spot.H"/> above, dug in by <see cref="Craft.Sink"/>, tilted.
+    /// Stands it at <paramref name="ground"/> (the surface under its spot, world space) facing
+    /// <paramref name="bearing"/> (its heading as a world bearing, degrees): on its legs, or <see cref="Spot.H"/> above,
+    /// dug in by <see cref="Craft.Sink"/>, tilted.
     /// </summary>
-    public void Put(Vector3 at, float groundY)
+    public void Put(Vector3 at, float groundY, float bearing)
     {
         _height = Spec.At.Agl ? Spec.At.H : Spec.At.H - groundY;
-        var yaw = new Basis(Vector3.Up, -Mathf.DegToRad(Spec.Heading));
+        var yaw = new Basis(Vector3.Up, -Mathf.DegToRad(bearing));
         // the front (−Z) dips for a positive nose, the right side goes down for a positive bank
         var tilt = new Basis(Vector3.Right, -Mathf.DegToRad(Spec.Nose)) * new Basis(Vector3.Back, -Mathf.DegToRad(Spec.Bank));
         GlobalTransform = new Transform3D(yaw * tilt, at with { Y = (Spec.At.Agl ? groundY + Spec.At.H : Spec.At.H) - Spec.Sink });

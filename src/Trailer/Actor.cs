@@ -117,7 +117,7 @@ public sealed class Actor
                 if (_swimWait > 20.0) Failed = "it could not start swimming there";
                 return;
             }
-            Body.Rotation = new Vector3(0, -Mathf.DegToRad(Spec.Heading), 0);
+            Body.Rotation = new Vector3(0, -Mathf.DegToRad(WorldBearing(into, Spec.Heading)), 0);
             _afloat = true;
         }
         if (!Body.IsOnFloor() && !_launched && !_afloat) return;
@@ -137,8 +137,8 @@ public sealed class Actor
             // got in on the shore: now on the water at its spot
             var at = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
             if (!World.WaterField.TryLevelAt(at, out float level)) return;
-            Body.PlaceBoat(at with { Y = level - Spec.Draught }, -Mathf.DegToRad(Spec.Heading),
-                Forward(Spec.Heading) * Spec.Launch);
+            float heading = WorldBearing(at, Spec.Heading);
+            Body.PlaceBoat(at with { Y = level - Spec.Draught }, -Mathf.DegToRad(heading), Forward(heading) * Spec.Launch);
             _afloat = true;
         }
         if (Spec.Drive == Drive.Fly && !_launched)
@@ -146,9 +146,10 @@ public sealed class Actor
             var at = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
             float floor = _chunks.TryGetSurface(at, out float g) ? g : Body.GlobalPosition.Y;
             float y = Spec.At.Agl ? floor + Spec.At.H : Spec.At.H;
-            Body.Rotation = new Vector3(0, -Mathf.DegToRad(Spec.Heading), 0);
+            float heading = WorldBearing(at, Spec.Heading);
+            Body.Rotation = new Vector3(0, -Mathf.DegToRad(heading), 0);
             float climb = Mathf.DegToRad(Spec.Climb);
-            Body.DebugLaunch(at with { Y = y }, (Forward(Spec.Heading) * Mathf.Cos(climb) + Vector3.Up * Mathf.Sin(climb)) * Spec.Launch);
+            Body.DebugLaunch(at with { Y = y }, (Forward(heading) * Mathf.Cos(climb) + Vector3.Up * Mathf.Sin(climb)) * Spec.Launch);
             _launched = true;
         }
         if (_route != null && Spec.Drive == Drive.Road)
@@ -200,14 +201,23 @@ public sealed class Actor
 
     private bool _doorLogged;
 
-    /// <summary>A flat unit vector along a compass bearing (0 north = −Z, 90 east = +X).</summary>
+    /// <summary>A flat unit vector along a world bearing (degrees clockwise from −Z, +X at 90).</summary>
     private static Vector3 Forward(float bearing) =>
         new(Mathf.Sin(Mathf.DegToRad(bearing)), 0f, -Mathf.Cos(Mathf.DegToRad(bearing)));
+
+    /// <summary>
+    /// Its compass bearing (degrees from true north: the director loaded the shot so, #1504) at a world point as a
+    /// world bearing in this frame.
+    /// </summary>
+    private float WorldBearing(Vector3 at, float trueBearing) =>
+        -Mathf.RadToDeg(TrueNorth.WorldYaw(_origin.Frame, at, -Mathf.DegToRad(trueBearing)));
 
     private void Spawn()
     {
         Vector3 at;
+        // its bearing from true north until a branch below finds a world one (from a host, a door, a road, a ramp)
         float bearing = Spec.Heading;
+        bool scripted = true;
         Vector3? carried = null;
         FootPlayer? carrier = null;
         if (Spec.Aboard >= 0)
@@ -216,6 +226,7 @@ public sealed class Actor
             if (_cast(Spec.Aboard) is not { Ready: true, Body: { } host }) return;
             at = host.GlobalTransform * Spec.Deck;
             bearing = Mathf.RadToDeg(-host.Rotation.Y) + Spec.Heading;
+            scripted = false;
             carried = host.Velocity;
             carrier = host;
         }
@@ -224,6 +235,8 @@ public sealed class Actor
             // in the shot's set: on its floor, inside (see below)
             if (SetPoint(local) is not { } inSet) return;
             at = inSet;
+            // a set's own axes, built under the ground: no north of the Earth in there
+            scripted = false;
         }
         else if (Spec.DownRamp is { } ramp)
         {
@@ -231,6 +244,7 @@ public sealed class Actor
             if (RampTop(ramp) is not { } top) return;
             at = top.Feet;
             bearing = top.Bearing;
+            scripted = false;
             carrier = top.Host as FootPlayer;
             _onRamp = true;
         }
@@ -244,6 +258,7 @@ public sealed class Actor
             at = door.World + outward * 0.8f;
             if (_chunks.TryGetSurface(at, out float dg)) at.Y = dg;
             bearing = Mathf.RadToDeg(Mathf.Atan2(outward.X, -outward.Z));
+            scripted = false;
             Interiors.InteriorManager.Instance?.OpenDoorForCamera(door.World + outward * 1.5f, 6f);
         }
         else if (_route != null)
@@ -252,12 +267,14 @@ public sealed class Actor
             at = _route.Line.PointAt(s);
             var fwd = MathX.Flat(_route.Line.PointAt(s + 2f) - _route.Line.PointAt(s - 2f)).Normalized();
             bearing = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
+            scripted = false;
             if (!_chunks.TryGetHeight(at, out float rg)) return;
             at.Y = rg;
             _arc = s;
         }
         else if (Ground(Spec.Board ?? Spec.At) is { } g) at = g;
         else return;
+        if (scripted) bearing = WorldBearing(at, bearing);
 
         // an NPC body anchors its own ground and has no camera; one on foot only stands (on the ground,
         // under a deck: it never boards one), so a walker is not one, nor one aboard a machine
@@ -490,7 +507,7 @@ public sealed class RouteBook
         if (_routes.TryGetValue(key, out var entry)) return entry.State;
         if (chunks.Source is not { } source) return State.Building;
         var at = origin.ToWorld(spec.At.E, spec.At.N, 0);
-        var far = spec.Toward ?? spec.At.Toward(spec.Heading, 400f);
+        var far = spec.Toward ?? spec.At.TowardTrue(spec.Heading, 400f);
         var toward = origin.ToWorld(far.E, far.N, 0);
         _routes[key] = (State.Building, null, 0f);
         var frame = origin.Frame;

@@ -175,10 +175,9 @@ public static class DormantSlots
                 if (water(e, n) is not { } w || w.Level - w.Bed < MarinaMinDepth) continue;
                 string owner = $"{id.E}_{id.N}_{b.Id[..b.Id.IndexOf('_')]}";
                 float draught = b.Speedboat ? SpeedboatDraught : JetskiDraught;
-                // the berth's heading is degrees clockwise from grid north (a yaw turns the other way): true north at
-                // the berth (#1504), kept in the slot's offset axes
-                float yaw = TrueNorth.OffsetYaw(GlobalPos.FromLv95(e, n, w.Level),
-                    TrueNorth.GridYawToTrue(e, n, -(float)(b.Heading * Math.PI / 180)));
+                // the berth's heading is degrees clockwise from true north (a yaw turns the other way), kept in the
+                // slot's offset axes (#1504)
+                float yaw = TrueNorth.OffsetYaw(GlobalPos.FromLv95(e, n, w.Level), -(float)(b.Heading * Math.PI / 180));
                 into.Add(new VehicleSlot(owner, k, e, n, w.Level - draught, Wrap(yaw),
                     b.Speedboat ? speedboatKind : jetskiKind, 0, false, Respawns: true));
             }

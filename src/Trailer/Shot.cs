@@ -11,11 +11,20 @@ public readonly record struct Spot(double E, double N, float H = 0f, bool Agl = 
     /// <summary>The same place, <paramref name="h"/> above the sea.</summary>
     public static Spot Alt(double e, double n, float h) => new(e, n, h, Agl: false);
 
-    /// <summary><paramref name="metres"/> along a compass bearing (0 north, 90 east), same height.</summary>
+    /// <summary>
+    /// <paramref name="metres"/> along a bearing on the LV95 grid (0 north, 90 east), same height: a script writing its
+    /// places, in grid numbers like its spots (the trailer turns its bearings to true north at load, #1504).
+    /// </summary>
     public Spot Toward(float bearing, float metres) =>
         this with { E = E + metres * Math.Sin(Mathf.DegToRad(bearing)), N = N + metres * Math.Cos(Mathf.DegToRad(bearing)) };
 
     public Spot Up(float h) => this with { H = h };
+
+    /// <summary>The LV95 grid's meridian convergence here, degrees (#1504): a bearing from grid north less this is from true north.</summary>
+    public float ConvergenceDeg => (float)Terrain.Format.SwissGeodesy.GridConvergenceDeg(E, N);
+
+    /// <summary><see cref="Toward"/> along a bearing from true north: the local turn its LV95 numbers still need (until G2 D).</summary>
+    public Spot TowardTrue(float trueBearing, float metres) => Toward(trueBearing + ConvergenceDeg, metres);
 }
 
 /// <summary>
@@ -62,6 +71,9 @@ public sealed record Pt
     public static Pt Dir(float bearing, float pitch = 0f) => new() { Bearing = bearing, Pitch = pitch };
 
     public bool IsDirection => !float.IsNaN(Bearing);
+
+    /// <summary>A direction's bearing less <paramref name="degrees"/> (a script's grid bearing turned to true north, #1504); others as they are.</summary>
+    public Pt TurnedBy(float degrees) => IsDirection ? this with { Bearing = Bearing - degrees } : this;
 
     /// <summary>A point of the shot's set (<see cref="Shot.Set"/>), in its own metres (the dormitory's: see <see cref="DormSet"/>).</summary>
     public static Pt Set(float x, float y, float z) => new() { InSet = new Vector3(x, y, z) };
@@ -169,7 +181,10 @@ public sealed record Cast
 {
     public RideKind Ride { get; init; } = RideKind.OnFoot;
     public required Spot At { get; init; }
-    /// <summary>Compass bearing it faces, degrees (on a road: which way along it, roughly).</summary>
+    /// <summary>
+    /// Compass bearing it faces, degrees (on a road: which way along it, roughly). Written from grid north in the
+    /// scripts, from true north once the director has loaded the shot (#1504).
+    /// </summary>
     public float Heading { get; init; }
     public Drive Drive { get; init; } = Drive.Stand;
 

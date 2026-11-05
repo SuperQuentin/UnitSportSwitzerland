@@ -189,7 +189,7 @@ public static class StadiumBuilder
     /// <summary>The stadium frame (u across, v along the pitch, y up from it) into tile-local metres.</summary>
     private static Func<Vector2, float, Vector3> Frame(StadiumSpec s, TileId id, float ground)
     {
-        float a = Mathf.DegToRad(s.AzimuthDeg);
+        float a = Mathf.DegToRad(s.LocalAzimuthDeg);
         var u = new Vector3(MathF.Cos(a), 0, MathF.Sin(a));
         var v = new Vector3(-MathF.Sin(a), 0, MathF.Cos(a));
         var (sx, sz) = id.Local(s.E, s.N);

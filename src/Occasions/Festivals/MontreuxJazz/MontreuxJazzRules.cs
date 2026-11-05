@@ -89,10 +89,10 @@ public static class MontreuxJazzRules
     public static float FrontV => -Venue.FrontHalfV + 1.5f + DeckDepth;
 
     /// <summary>The stage's front (the middle of the deck's front edge) at a site, LV95.</summary>
-    public static (double E, double N) StageFront(ResolvedSite site) => FromFrame(site.E, site.N, Venue.AzimuthDeg, 0, FrontV);
+    public static (double E, double N) StageFront(ResolvedSite site) => FromFrame(site.E, site.N, Venue.LocalAzimuthDeg, 0, FrontV);
 
     /// <summary>The rail: the crew barrier 2.5 m ahead of the front, where E marks "I am listening".</summary>
-    public static (double E, double N) Rail(ResolvedSite site) => FromFrame(site.E, site.N, Venue.AzimuthDeg, 0, FrontV + 2.5f);
+    public static (double E, double N) Rail(ResolvedSite site) => FromFrame(site.E, site.N, Venue.LocalAzimuthDeg, 0, FrontV + 2.5f);
 
     public static double Dist(double e, double n, (double E, double N) p) => Math.Sqrt((e - p.E) * (e - p.E) + (n - p.N) * (n - p.N));
 

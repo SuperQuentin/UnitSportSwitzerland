@@ -28,7 +28,7 @@ public partial class ErrandGivers : Node3D
         public required SkinnedFigure Figure;
         public required Sprite3D Icon;
         public bool Grounded;
-        /// <summary>Its stored heading has been turned to this world's (true north at the giver, #1504).</summary>
+        /// <summary>Its heading from true north has been set down in this world's frame (#1504).</summary>
         public bool Faced;
         public int Mark = -1;
         public float Yaw;
@@ -234,9 +234,8 @@ public partial class ErrandGivers : Node3D
         e.Holder.Position = w - GlobalPosition;
         if (!e.Faced)
         {
-            // the heading is stored from grid north (the givers file): true north at the giver, then this frame
             e.Faced = true;
-            e.Yaw = TrueNorth.GridYawToWorld(origin.Frame, w, -e.Giver.Heading);
+            e.Yaw = TrueNorth.WorldYaw(origin.Frame, w, -e.Giver.TrueHeading);
             e.Figure.Rotation = new Vector3(0, e.Yaw, 0);
         }
     }

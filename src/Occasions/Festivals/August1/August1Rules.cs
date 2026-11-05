@@ -5,13 +5,34 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Occasions.Festivals.August1;
 
-/// <summary>A lake town that holds a 1 August fireworks: where it is (WGS84) and the compass bearing, in degrees, from the town towards the water.</summary>
+/// <summary>
+/// A lake town that holds a 1 August fireworks: where it is (WGS84) and the bearing, in degrees, from the town towards the
+/// water, read off the map from grid north; the game reads it from true north (<see cref="Bearing"/>, #1504).
+/// </summary>
 public sealed record Lake(string Name, double Lat, double Lon, double BearingDeg)
 {
     /// <summary>The quay: the shore point the lat/lon names (LV95).</summary>
     public (double E, double N) Quay => SwissGeodesy.ToLv95(Lat, Lon);
 
-    public double Bearing => BearingDeg * Math.PI / 180;
+    /// <summary>Towards the water from true north, radians: <see cref="BearingDeg"/> turned by the meridian convergence at the quay.</summary>
+    public double Bearing
+    {
+        get
+        {
+            var (e, n) = Quay;
+            return TrueNorth.GridToTrue(e, n, BearingDeg * Math.PI / 180);
+        }
+    }
+
+    /// <summary><see cref="Bearing"/> turned back onto the grid at the quay: the local turn for the LV95 numbers below.</summary>
+    private double GridBearing
+    {
+        get
+        {
+            var (e, n) = Quay;
+            return TrueNorth.TrueToGrid(e, n, Bearing);
+        }
+    }
 
     /// <summary>The festival ground, <see cref="August1Rules.Inland"/> m back from the quay (the village loop must be on land).</summary>
     public (double E, double N) Site
@@ -19,7 +40,7 @@ public sealed record Lake(string Name, double Lat, double Lon, double BearingDeg
         get
         {
             var (e, n) = Quay;
-            return (e - Math.Sin(Bearing) * August1Rules.Inland, n - Math.Cos(Bearing) * August1Rules.Inland);
+            return (e - Math.Sin(GridBearing) * August1Rules.Inland, n - Math.Cos(GridBearing) * August1Rules.Inland);
         }
     }
 
@@ -29,7 +50,7 @@ public sealed record Lake(string Name, double Lat, double Lon, double BearingDeg
         get
         {
             var (e, n) = Quay;
-            return (e + Math.Sin(Bearing) * August1Rules.BargeOut, n + Math.Cos(Bearing) * August1Rules.BargeOut);
+            return (e + Math.Sin(GridBearing) * August1Rules.BargeOut, n + Math.Cos(GridBearing) * August1Rules.BargeOut);
         }
     }
 }

@@ -71,11 +71,11 @@ public static class Landings
         origin.ToWorld(berth.E, berth.N, berth.Level - draught);
 
     /// <summary>
-    /// The steamer's node yaw at a berth, this peer's world frame (Godot: 0 faces -Z): the berth's heading, stored
-    /// from grid north, turned to true north at the berth and into the frame (#1504).
+    /// The steamer's node yaw at a berth, this peer's world frame (Godot: 0 faces -Z): the berth's heading from true
+    /// north (<see cref="LandingBerth.TrueHeading"/>) set down in the frame (#1504).
     /// </summary>
     public static float Yaw(LandingBerth berth, WorldOrigin origin) =>
-        TrueNorth.GridYawToWorld(origin.Frame, KeelWorld(berth, origin, 0f), -Mathf.DegToRad((float)berth.Heading));
+        TrueNorth.WorldYaw(origin.Frame, KeelWorld(berth, origin, 0f), -Mathf.DegToRad((float)berth.TrueHeading));
 
     /// <summary>The bow's direction at a berth, this peer's world frame (level).</summary>
     public static Vector3 Bow(LandingBerth berth, WorldOrigin origin)

@@ -99,7 +99,7 @@ public partial class TrafficTool : Node
             {
                 var p = _origin.ToWorld(nearest.E, nearest.N, 0) with { Y = at.Y };
                 if (traffic?.OnRoad(p, PickReach) is var (edge, pos, _)) (p, _) = edge.Sample(pos);
-                return new TrafficAim(TrafficAimKind.Edit, true, "", p, HeadingOf(_origin.Frame, p, nearest.Heading), nearest.Id);
+                return new TrafficAim(TrafficAimKind.Edit, true, "", p, HeadingOf(_origin.Frame, p, nearest), nearest.Id);
             }
         }
 
@@ -111,12 +111,13 @@ public partial class TrafficTool : Node
     }
 
     /// <summary>
-    /// An endpoint's LV95 heading (east 0, north π/2, from grid north) as a world direction at a world point, and back:
-    /// through true north there (#1504), so the same on the flat ground and right in an anchor frame.
+    /// An endpoint's heading (<see cref="TrafficEndpoint.TrueYaw"/>, from true north) as a world direction at a world
+    /// point (#1504); and back, a world direction as the stored LV95 angle (east 0, north π/2, from grid north: the
+    /// endpoints' file and wire format).
     /// </summary>
-    public static Vector3 HeadingOf(OriginFrame frame, Vector3 at, float lv95)
+    public static Vector3 HeadingOf(OriginFrame frame, Vector3 at, TrafficEndpoint ep)
     {
-        float yaw = TrueNorth.GridYawToWorld(frame, at, lv95 - Mathf.Pi / 2);
+        float yaw = TrueNorth.WorldYaw(frame, at, ep.TrueYaw);
         return new(-Mathf.Sin(yaw), 0f, -Mathf.Cos(yaw));
     }
 
@@ -134,7 +135,7 @@ public partial class TrafficTool : Node
         if (player != null && _ui.IsOpen && _ui.Pending is { } pending)
         {
             var pendingAt = _origin.ToWorld(pending.E, pending.N, 0) with { Y = _ui.PendingY };
-        Draw(pendingAt, HeadingOf(_origin.Frame, pendingAt, pending.Heading), Valid, halo: false);
+        Draw(pendingAt, HeadingOf(_origin.Frame, pendingAt, pending), Valid, halo: false);
             _hint.Visible = false;
             return;
         }

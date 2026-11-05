@@ -156,7 +156,7 @@ public static class PhotoJudge
         double de = spot.TargetE - e, dn = spot.TargetN - n, dist = GlobalPos.HorizontalDistance(spot.TargetE, spot.TargetN, e, n);
         if (dist < 1) return PhotoVerdict.OffTarget;
         // from true north at the body: the grid's bearing less the meridian convergence (#1504)
-        double bearing = (Math.Atan2(de, dn) - Core.TrueNorth.GridConvergence(e, n, eyeAlt)) * 180 / Math.PI;
+        double bearing = (Math.Atan2(de, dn) - Terrain.Format.SwissGeodesy.GridConvergence(e, n, eyeAlt)) * 180 / Math.PI;
         // aimed where the target is drawn: lower by the Earth's drop (#187, 27 m at 20 km)
         double elev = Math.Atan2(spot.TargetAlt - Core.Curvature.Drop(dist) - eyeAlt, dist) * 180 / Math.PI;
         double half = fovDeg / 2 * PhotoSpots.FrameShare;
