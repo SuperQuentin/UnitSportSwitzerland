@@ -22,11 +22,10 @@ public sealed class Structure
     public readonly Dictionary<Slot, Placed> Pieces = new();
 
     /// <summary>Where it stands in <paramref name="origin"/>'s world; <see cref="Yaw"/> is a record's (GlobalPos's axes, as saved; the world's in a flat frame).</summary>
-    public Transform3D WorldTransform(WorldOrigin origin)
-    {
-        var at = new GlobalPos(E, N, Altitude);
-        return new(new Basis(Vector3.Up, origin.Frame.WorldYawOf(at, Yaw)), origin.ToWorld(at));
-    }
+    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(Vector3.Up, origin.Frame.WorldYawOf(At, Yaw)), origin.ToWorld(At));
+
+    /// <summary>Where its corner is, as a place: what is saved and sent (#1503).</summary>
+    public GlobalPos At => GlobalPos.FromLv95(E, N, Altitude);
 
     public IReadOnlyCollection<Piece> Grid => Pieces.Values.Select(p => p.Piece).ToList();
 }
@@ -364,7 +363,7 @@ public partial class Structures : Node
     {
         if (!_known.TryGetValue(peer, out var known)) _known[peer] = known = new HashSet<long>();
         known.Add(s.Id);
-        var corner = new GlobalPos(s.E, s.N, s.Altitude);
+        var corner = s.At;
         var (x, y, z) = corner.ToWire();
         RpcId(peer, MethodName.AddStructure, s.Id, x, y, z, corner.TrueYaw(s.Yaw), DisplayOwner(s.Owner, s.OwnerName), s.Match);
         // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
@@ -675,8 +674,10 @@ public partial class Structures : Node
 
     // ---- persistence (free roam only) -----------------------------------------------------------
 
+    /// <summary>The file (#1503, G2 A2b): each structure's corner an Earth place, its heading from true north there; an older one goes through <see cref="EarthSaves.Structures"/> first.</summary>
     private sealed class Store
     {
+        [System.Text.Json.Serialization.JsonPropertyName("version")] public int Version { get; set; } = EarthSaves.Current;
         public long Next { get; set; } = 1;
         public List<SavedStructure> Structures { get; set; } = new();
     }
@@ -684,10 +685,8 @@ public partial class Structures : Node
     private sealed class SavedStructure
     {
         public long Id { get; set; }
-        public double E { get; set; }
-        public double N { get; set; }
-        public double Altitude { get; set; }
-        public float Yaw { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("at")] public GlobalPos At { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("yawTrue")] public float YawTrue { get; set; }
         public string Owner { get; set; } = "";
         public string OwnerName { get; set; } = "";
         public List<SavedPiece> Pieces { get; set; } = new();
@@ -714,10 +713,14 @@ public partial class Structures : Node
         try
         {
             if (!File.Exists(_storePath)) return;
-            var store = System.Text.Json.JsonSerializer.Deserialize<Store>(File.ReadAllText(_storePath)) ?? new Store();
+            var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(_storePath)) as System.Text.Json.Nodes.JsonObject ?? new();
+            // a file from before G2 A2b (LV95, grid north): converted in place, written back below (#1503)
+            bool migrated = EarthSaves.Structures(root);
+            var store = System.Text.Json.JsonSerializer.Deserialize<Store>(root) ?? new Store();
             foreach (var ss in store.Structures)
             {
-                var s = new Structure { Id = ss.Id, E = ss.E, N = ss.N, Altitude = ss.Altitude, Yaw = ss.Yaw, Owner = ss.Owner, OwnerName = BackupOf(ss.Owner, ss.OwnerName) };
+                var (ce, cn, ch) = ss.At.Lv95;
+                var s = new Structure { Id = ss.Id, E = ce, N = cn, Altitude = ch, Yaw = ss.At.OffsetYaw(ss.YawTrue), Owner = ss.Owner, OwnerName = BackupOf(ss.Owner, ss.OwnerName) };
                 PutStructure(s);
                 foreach (var sp in ss.Pieces)
                 {
@@ -731,7 +734,8 @@ public partial class Structures : Node
                 if (s.Pieces.Count == 0) DropStructure(s.Id);
             }
             _nextId = Math.Max(store.Next, _structures.Count > 0 ? _structures.Keys.Max() + 1 : 1);
-            GD.Print($"[build] loaded {_structures.Count} structure(s) from {_storePath}");
+            GD.Print($"[build] loaded {_structures.Count} structure(s) from {_storePath}{(migrated ? " (LV95: written back in Earth places)" : "")}");
+            if (migrated) Save();
         }
         catch (Exception ex) { GD.PushWarning($"[build] {_storePath}: {ex.Message}"); }
     }
@@ -746,7 +750,8 @@ public partial class Structures : Node
                 Next = _nextId,
                 Structures = _structures.Values.Where(s => !s.Match).OrderBy(s => s.Id).Select(s => new SavedStructure
                 {
-                    Id = s.Id, E = s.E, N = s.N, Altitude = s.Altitude, Yaw = s.Yaw, Owner = s.Owner, OwnerName = s.OwnerName,
+                    Id = s.Id, At = s.At, YawTrue = s.At.TrueYaw(s.Yaw),
+                    Owner = s.Owner, OwnerName = s.OwnerName,
                     Pieces = s.Pieces.Values.Select(p => new SavedPiece
                     {
                         Slot = PackSlot(p.Piece.Slot), Kind = p.Piece.Kind.ToString(), Dir = p.Piece.Dir,

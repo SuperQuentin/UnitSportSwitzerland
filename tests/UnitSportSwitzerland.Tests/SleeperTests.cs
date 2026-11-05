@@ -46,7 +46,7 @@ public class SleeperTests
         finally { Directory.Delete(Path.GetDirectoryName(path)!, true); }
     }
 
-    private static Sleeper S(string key, string name) => new(0, key, name, 2600000.5, 1200000.25, 1234.5, 1.5f, 77, 123456789L, 42, 3);
+    private static Sleeper S(string key, string name) => new(0, key, name, UnitSport.Core.GlobalPos.FromLv95(2600000.5, 1200000.25, 1234.5), 1.5f, 77, 123456789L, 42, 3);
 
     [Fact]
     public void One_sleeper_per_key_and_waking_removes_it()
@@ -70,8 +70,13 @@ public class SleeperTests
     {
         var book = new SleeperBook();
         var laid = book.Lay(S("k1", "Anna"), out _);
-        var back = SleeperBook.FromJson(book.ToJson());
-        Assert.Equal(laid, Assert.Single(back.All));
+        var back = SleeperBook.FromJson(book.ToJson(), out bool migrated);
+        Assert.False(migrated);
+        var s = Assert.Single(back.All);
+        // saved as ECEF and true north (#1503): the same place to a tenth of a millimetre, the same heading
+        Assert.True(laid.At.DistanceTo(s.At) < 1e-4, $"{laid.At} came back as {s.At}");
+        Assert.Equal(laid.Yaw, s.Yaw, 1e-6f);
+        Assert.Equal(laid with { At = s.At, Yaw = s.Yaw }, s);
         // ids keep counting up after a restart
         Assert.True(back.Lay(S("k2", "Beat"), out _).Id > laid.Id);
     }

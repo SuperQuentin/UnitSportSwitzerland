@@ -338,10 +338,10 @@ public partial class AdventureTravel : Node
     }
 
     /// <summary>The rewards plan's portable flag (5.6): a travel point "Your flag" for that player.</summary>
-    public void SetPortable(long peer, double e, double n, float alt)
+    public void SetPortable(long peer, GlobalPos at)
     {
         if (_adventure.Progress(peer) is not { } p) return;
-        p.Get(TravelBook.Section).Flag = new PortableFlag(e, n, alt, Now);
+        p.Get(TravelBook.Section).Flag = new PortableFlag(at, Now);
         p.Touch(TravelBook.Section);
     }
 
@@ -441,7 +441,7 @@ public partial class AdventureTravel : Node
                     owners.Add(m);
                     names.Add(_adventure.NameOf?.Invoke(m) ?? $"Rider{m}");
                     ids.Add(pin.Id);
-                    var (x, y, z) = GlobalPos.FromLv95(pin.E, pin.N, 0).ToWire();
+                    var (x, y, z) = pin.At.ToWire();
                     xyz.Add(x);
                     xyz.Add(y);
                     xyz.Add(z);
@@ -594,7 +594,7 @@ public partial class AdventureTravel : Node
         {
             if (!PartyPins.TryGetValue(owners[i], out var entry)) PartyPins[owners[i]] = entry = (names[i], new List<Pin>());
             var at = GlobalPos.FromWire(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]);
-            entry.Pins.Add(new Pin { Id = ids[i], E = at.E, N = at.N, Icon = Math.Min(icons[i], (byte)(PinBook.Icons - 1)), Note = PinBook.Sanitize(notes[i]), Shared = true });
+            entry.Pins.Add(new Pin { Id = ids[i], At = at, Icon = Math.Min(icons[i], (byte)(PinBook.Icons - 1)), Note = PinBook.Sanitize(notes[i]), Shared = true });
         }
         PartyPinsVersion++;
         GD.Print($"[nav] party pins: {count} from {PartyPins.Count} member(s)");

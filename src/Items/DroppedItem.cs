@@ -25,16 +25,11 @@ public readonly record struct DropState(
 {
     /// <summary>
     /// The state on the wire (a spawn, an RPC): ECEF, and its tumble, velocity and spin in the local ENU (#1503); in
-    /// memory they are in GlobalPos's offset axes at <see cref="Position"/>, as <see cref="ToSavedDict"/> keeps them.
+    /// memory they are in GlobalPos's offset axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
     /// </summary>
-    public Godot.Collections.Dictionary ToDict() => Dict(saved: false);
-
-    /// <summary>The state as the object containers keep it on disk: LV95 and grid axes until G2 A2b migrates them.</summary>
-    public Godot.Collections.Dictionary ToSavedDict() => Dict(saved: true);
-
-    private Godot.Collections.Dictionary Dict(bool saved)
+    public Godot.Collections.Dictionary ToDict()
     {
-        var enu = saved ? default : Position.Enu;
+        var enu = Position.Enu;
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
@@ -42,19 +37,18 @@ public readonly record struct DropState(
         ["id"] = (int)Stack.Id,
         ["count"] = Stack.Count,
         ["data"] = Stack.Data ?? "",
-        ["rot"] = saved ? Rotation : enu.ToEnu(Quaternion.FromEuler(Rotation)).GetEuler(),
-        ["vel"] = saved ? Velocity : enu.ToEnu(Velocity),
-        ["spin"] = saved ? Spin : enu.ToEnu(Spin),
+        ["rot"] = enu.ToEnu(Quaternion.FromEuler(Rotation)).GetEuler(),
+        ["vel"] = enu.ToEnu(Velocity),
+        ["spin"] = enu.ToEnu(Spin),
         ["settled"] = Settled,
         ["token"] = Token,
         };
         if (Oid != 0) d["oid"] = Oid;
-        if (saved) Position.WriteSaved(d);
-        else Position.Write(d);
+        Position.Write(d);
         return d;
     }
 
-    /// <summary>A state from <see cref="ToDict"/> (the wire) or <see cref="ToSavedDict"/> (a saved record), told apart by their keys.</summary>
+    /// <summary>A state from <see cref="ToDict"/> (the wire, and the object containers since G2 A2b) or a container record saved before it (LV95 and grid north: its migration), told apart by their keys.</summary>
     public static DropState FromDict(Godot.Collections.Dictionary d)
     {
         var s = Read(d);

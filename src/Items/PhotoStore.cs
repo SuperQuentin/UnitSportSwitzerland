@@ -6,13 +6,16 @@ using UnitSport.Core;
 
 namespace UnitSport.Items;
 
-/// <summary>Where and when a photo was taken; the sidecar <c>&lt;id&gt;.json</c> next to its print.</summary>
+/// <summary>
+/// Where and when a photo was taken; the sidecar <c>&lt;id&gt;.json</c> next to its print. The place is an Earth one
+/// (#1503, G2 A2b); a sidecar from before (LV95 <c>E</c>, <c>N</c>, <c>Altitude</c>) goes through
+/// <see cref="EarthSaves.Photo"/> and is written back the first time it is read.
+/// </summary>
 public sealed class PhotoMeta
 {
+    [System.Text.Json.Serialization.JsonPropertyName("version")] public int Version { get; set; } = EarthSaves.Current;
     public string Id { get; set; } = "";
-    public double E { get; set; }
-    public double N { get; set; }
-    public double Altitude { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("at")] public GlobalPos At { get; set; }
     /// <summary>Local date-time, ISO 8601 ("yyyy-MM-ddTHH:mm:ss"), culture-invariant.</summary>
     public string Taken { get; set; } = "";
     public float FocalMm { get; set; }
@@ -143,7 +146,7 @@ public static class PhotoStore
         File.WriteAllBytes(Path.Combine(LocalDir, id + ".jpg"), jpeg);
         var meta = new PhotoMeta
         {
-            Id = id, E = Math.Round(e, 1), N = Math.Round(n, 1), Altitude = Math.Round(altitude, 1),
+            Id = id, At = GlobalPos.FromLv95(Math.Round(e, 1), Math.Round(n, 1), Math.Round(altitude, 1)),
             Taken = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture),
             FocalMm = MathF.Round(focalMm), Source = source, Spot = spot,
         };
@@ -202,7 +205,14 @@ public static class PhotoStore
         try
         {
             string p = Path.Combine(LocalDir, id + ".json");
-            m = File.Exists(p) ? JsonSerializer.Deserialize<PhotoMeta>(File.ReadAllText(p)) : null;
+            m = null;
+            if (File.Exists(p) && System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(p)) is System.Text.Json.Nodes.JsonObject root)
+            {
+                // a sidecar from before G2 A2b (LV95): converted in place (#1503)
+                bool migrated = EarthSaves.Photo(root);
+                m = root.Deserialize<PhotoMeta>();
+                if (migrated && m != null) Core.JsonStore.Save(p, m, Core.JsonStore.Indented);
+            }
         }
         catch (Exception ex)
         {
@@ -242,8 +252,9 @@ public static class PhotoStore
         if (Meta(id) is not { } m) return $"Photo {id[..Math.Min(8, id.Length)]}";
         string when = DateTime.TryParse(m.Taken, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)
             ? t.ToString("d MMM yyyy HH:mm", CultureInfo.InvariantCulture) : m.Taken;
+        var at = m.At.Lv95;
         return string.Format(CultureInfo.InvariantCulture, "E {0:0} N {1:0} · {2:0} m · {3} · {4:0} mm",
-            m.E, m.N, m.Altitude, when, m.FocalMm);
+            at.E, at.N, at.H, when, m.FocalMm);
     }
 
     public static string ShortCaption(string id)
@@ -251,6 +262,6 @@ public static class PhotoStore
         if (Meta(id) is not { } m) return id[..Math.Min(8, id.Length)];
         string when = DateTime.TryParse(m.Taken, CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)
             ? t.ToString("d MMM HH:mm", CultureInfo.InvariantCulture) : m.Taken;
-        return string.Format(CultureInfo.InvariantCulture, "{0} · {1:0} m", when, m.Altitude);
+        return string.Format(CultureInfo.InvariantCulture, "{0} · {1:0} m", when, m.At.Alt);
     }
 }

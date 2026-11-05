@@ -293,7 +293,9 @@ public class MovieShotTests
         Assert.Equal((TransitionKind.Crossfade, 0.6), (q.Sequences[0].Cuts[0].Transition, q.Sequences[0].Cuts[0].Duration));
         var again = new MemoryStream();
         MovieFile.Write(q, again);
-        Assert.Equal(bytes.ToArray(), again.ToArray());
+        // the same file again, its places (ECEF since version 7, #1503) only a rounding apart
+        Assert.Equal(bytes.Length, again.Length);
+        MovieTests.AssertSameTracks(q, MovieFile.Read(new MemoryStream(again.ToArray()), Props));
 
         // a version 5 file: one cut list, which loads as the sequence "Main"
         var old = new MemoryStream();

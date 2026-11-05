@@ -27,7 +27,12 @@ namespace UnitSport.Core;
 /// person or a Swiss source: <see cref="FromLv95"/> in, <see cref="Lv95"/> out. LV95 is still inside until
 /// A1's last step, so moving a site onto these is bit-identical.
 /// </para>
+/// <para>
+/// In a JSON save it is <c>{"x", "y", "z"}</c>, ECEF metres (<see cref="GlobalPosJson"/>, #1503 G2 A2b): saves mean the
+/// same place whatever this type holds inside.
+/// </para>
 /// </summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(GlobalPosJson))]
 public readonly record struct GlobalPos(double E, double N, double Alt)
 {
     /// <summary>A place given in LV95 notation (a Swiss source, a literal, a typed coordinate), its height LHN95.</summary>
@@ -192,26 +197,15 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
     }
 
     /// <summary>
-    /// The position <see cref="Write"/> put in <paramref name="d"/>, or <see cref="WriteSaved"/>: a dictionary
-    /// without the ECEF keys is a saved record, in LV95 until G2 A2b migrates the stores.
+    /// The position <see cref="Write"/> put in <paramref name="d"/>. A dictionary without the ECEF keys is a record the
+    /// object containers saved before G2 A2b (LV95 <c>_e</c>, <c>_n</c>, <c>_alt</c>): read for its migration only.
     /// </summary>
     public static GlobalPos Read(Godot.Collections.Dictionary d, string key = "pos") => d.ContainsKey(key + "_x")
         ? FromWire(d[key + "_x"].AsDouble(), d[key + "_y"].AsDouble(), d[key + "_z"].AsDouble())
         : new(d[key + "_e"].AsDouble(), d[key + "_n"].AsDouble(), d[key + "_alt"].AsDouble());
 
-    /// <summary>Whether <paramref name="d"/> holds a position as <see cref="Write"/> puts it (the wire), not a saved record's.</summary>
+    /// <summary>Whether <paramref name="d"/> holds a position as <see cref="Write"/> puts it (the wire, and saves since A2b), not an older saved record's.</summary>
     public static bool IsWire(Godot.Collections.Dictionary d, string key = "pos") => d.ContainsKey(key + "_x");
-
-    /// <summary>
-    /// The saved records' form of <see cref="Write"/> (LV95 and the altitude, as before protocol 93), for a store that
-    /// keeps a dictionary on disk (the object containers): saves move in G2 A2b, not on the wire's step.
-    /// </summary>
-    public void WriteSaved(Godot.Collections.Dictionary d, string key = "pos")
-    {
-        d[key + "_e"] = E;
-        d[key + "_n"] = N;
-        d[key + "_alt"] = Alt;
-    }
 
     public override string ToString() => $"LV95 {E:F2}/{N:F2} alt {Alt:F2}";
 }
