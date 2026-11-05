@@ -527,7 +527,11 @@ public partial class RewardService : Node
         var par = Trials.Par(def, gates);
         GD.Print($"[rewards] {Short(p.Key)} starts {def.Id}: {gates.Length} gates, gold {par.Gold:F0} s");
         var flat = new double[gates.Length * 4];
-        for (int i = 0; i < gates.Length; i++) (flat[i * 4], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]) = (gates[i].E, gates[i].N, gates[i].Alt, gates[i].Radius);
+        for (int i = 0; i < gates.Length; i++)   // (#1503) ECEF x, y, z and the radius
+        {
+            var (x, y, z) = GlobalPos.FromLv95(gates[i].E, gates[i].N, gates[i].Alt).ToWire();
+            (flat[i * 4], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]) = (x, y, z, gates[i].Radius);
+        }
         if (Connected(peer)) RpcId(peer, MethodName.TellTrialStarted, def.Id, flat, now, par.Gold, par.Silver, par.Bronze);
         else if (!_networked) TellTrialStarted(def.Id, flat, now, par.Gold, par.Silver, par.Bronze);
         SendBoard(peer, def.Id);
@@ -800,7 +804,18 @@ public partial class RewardService : Node
     public void ReportPhoto(string spotId, float yawDeg, float pitchDeg, float fovDeg)
     {
         if (Authority) Log(ServePhoto(AdventureService.LocalPeer, spotId, yawDeg, pitchDeg, fovDeg));
-        else RpcId(1, MethodName.RequestPhoto, spotId, yawDeg, pitchDeg, fovDeg);
+        else if (_adventure.PositionOf?.Invoke(AdventureService.LocalPeer) is { } me)
+            RpcId(1, MethodName.RequestPhoto, spotId, BearingTrue(me, yawDeg, toWire: true), pitchDeg, fovDeg);
+    }
+
+    /// <summary>
+    /// (#1503) A photo's compass bearing (degrees, 0 north, 90 east) between this type's offset axes (grid north, what
+    /// <see cref="PhotoJudge"/> uses) and a bearing from true north at <paramref name="at"/> (what goes on the wire).
+    /// </summary>
+    private static float BearingTrue(GlobalPos at, float bearingDeg, bool toWire)
+    {
+        float yaw = -Mathf.DegToRad(bearingDeg);   // a compass bearing turns clockwise, a Godot yaw to the left
+        return -Mathf.RadToDeg(toWire ? at.TrueYaw(yaw) : at.OffsetYaw(yaw));
     }
 
     public void ReportFauna(string name)
@@ -872,7 +887,13 @@ public partial class RewardService : Node
     private void RequestGuide(string chestId) { if (_server) Log(ServeGuide(Sender, chestId)); }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPhoto(string spotId, float yaw, float pitch, float fov) { if (_server) Log(ServePhoto(Sender, spotId, yaw, pitch, fov)); }
+    private void RequestPhoto(string spotId, float yaw, float pitch, float fov)
+    {
+        if (!_server) return;
+        // (#1503) the bearing is from true north at the body; the judge works in the grid's
+        if (float.IsFinite(yaw) && _adventure.PositionOf?.Invoke(Sender) is { } at) yaw = BearingTrue(at, yaw, toWire: false);
+        Log(ServePhoto(Sender, spotId, yaw, pitch, fov));
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestFauna(string name) { if (_server) ServeFauna(Sender, name); }
@@ -941,7 +962,11 @@ public partial class RewardService : Node
     private void TellTrialStarted(string trialId, double[] gates, double since, double gold, double silver, double bronze)
     {
         var list = new TrialGate[gates.Length / 4];
-        for (int i = 0; i < list.Length; i++) list[i] = new TrialGate(gates[i * 4], gates[i * 4 + 1], (float)gates[i * 4 + 2], (float)gates[i * 4 + 3]);
+        for (int i = 0; i < list.Length; i++)
+        {
+            var at = GlobalPos.FromWire(gates[i * 4], gates[i * 4 + 1], gates[i * 4 + 2]);
+            list[i] = new TrialGate(at.E, at.N, (float)at.Alt, (float)gates[i * 4 + 3]);
+        }
         Trial = new ActiveTrial(trialId, list, since, new TrialPar(gold, silver, bronze)) { Next = 0 };
         TrialStarted?.Invoke(Trial);
     }

@@ -21,8 +21,12 @@ public sealed class Structure
     public bool Match;
     public readonly Dictionary<Slot, Placed> Pieces = new();
 
-    public Transform3D WorldTransform(WorldOrigin origin) =>
-        new(new Basis(Vector3.Up, Yaw), origin.ToWorld(E, N, Altitude));
+    /// <summary>Where it stands in <paramref name="origin"/>'s world; <see cref="Yaw"/> is a record's (GlobalPos's axes, as saved; the world's in a flat frame).</summary>
+    public Transform3D WorldTransform(WorldOrigin origin)
+    {
+        var at = new GlobalPos(E, N, Altitude);
+        return new(new Basis(Vector3.Up, origin.Frame.WorldYawOf(at, Yaw)), origin.ToWorld(at));
+    }
 
     public IReadOnlyCollection<Piece> Grid => Pieces.Values.Select(p => p.Piece).ToList();
 }
@@ -178,12 +182,17 @@ public partial class Structures : Node
     /// </summary>
     public void RequestBuild(long structure, Transform3D newAt, Piece piece, Action<string?> done)
     {
-        var (e, n) = _origin.ToLv95(newAt.Origin);
-        float yaw = newAt.Basis.GetEuler().Y;
+        var g = _origin.ToGlobal(newAt.Origin);
+        float yaw = newAt.Basis.GetEuler().Y;   // a world yaw here
         int req = Track(done);
         int[] packed = Pack(piece);
-        if (Online) RpcId(1, MethodName.AskBuild, req, structure, e, n, (double)newAt.Origin.Y, yaw, packed);
-        else ServeBuild(1, req, structure, e, n, newAt.Origin.Y, yaw, packed);
+        // ECEF and a heading from true north at the corner (#1503); offline the record's own axes
+        if (Online)
+        {
+            var (x, y, z) = g.ToWire();
+            RpcId(1, MethodName.AskBuild, req, structure, x, y, z, _origin.TrueYaw(newAt.Origin, yaw), packed);
+        }
+        else ServeBuild(1, req, structure, g.E, g.N, g.Alt, _origin.Frame.OffsetYawOf(newAt.Origin, yaw), packed);
     }
 
     /// <summary>Asks to take back a piece you built. <paramref name="done"/> gets null when it is yours again.</summary>
@@ -245,8 +254,12 @@ public partial class Structures : Node
     // ---- client: from the server ----------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AddStructure(long id, double e, double n, double alt, float yaw, string owner, bool match) =>
-        PutStructure(new Structure { Id = id, E = e, N = n, Altitude = alt, Yaw = yaw, Owner = owner, Match = match });
+    private void AddStructure(long id, double x, double y, double z, float trueYaw, string owner, bool match)
+    {
+        // ECEF and a heading from true north, as the record keeps them (#1503)
+        var at = GlobalPos.FromWire(x, y, z);
+        PutStructure(new Structure { Id = id, E = at.E, N = at.N, Altitude = at.Alt, Yaw = at.OffsetYaw(trueYaw), Owner = owner, Match = match });
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AddPiece(long structure, int[] packed, string owner, float damage, double builtAt, bool live)
@@ -351,7 +364,9 @@ public partial class Structures : Node
     {
         if (!_known.TryGetValue(peer, out var known)) _known[peer] = known = new HashSet<long>();
         known.Add(s.Id);
-        RpcId(peer, MethodName.AddStructure, s.Id, s.E, s.N, s.Altitude, s.Yaw, DisplayOwner(s.Owner, s.OwnerName), s.Match);
+        var corner = new GlobalPos(s.E, s.N, s.Altitude);
+        var (x, y, z) = corner.ToWire();
+        RpcId(peer, MethodName.AddStructure, s.Id, x, y, z, corner.TrueYaw(s.Yaw), DisplayOwner(s.Owner, s.OwnerName), s.Match);
         // undamaged pieces of one owner in one go (a prefab is dozens); the rest one by one
         foreach (var group in s.Pieces.Values.Where(p => p.Damage == 0).GroupBy(p => (p.Owner, p.OwnerName)))
             RpcId(peer, MethodName.AddPieces, s.Id, group.SelectMany(p => Pack(p.Piece)).ToArray(), DisplayOwner(group.Key.Owner, group.Key.OwnerName), group.Min(p => p.BuiltAt));
@@ -445,8 +460,17 @@ public partial class Structures : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskBuild(int req, long structure, double e, double n, double alt, float yaw, int[] packed) =>
-        ServeBuild(Multiplayer.GetRemoteSenderId(), req, structure, e, n, alt, yaw, packed);
+    private void AskBuild(int req, long structure, double x, double y, double z, float trueYaw, int[] packed)
+    {
+        // ECEF and a heading from true north -> the record's LV95 and GlobalPos axes; a non-finite claim stays NaN for ServeBuild to refuse (#1503)
+        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(z) || !float.IsFinite(trueYaw))
+        {
+            ServeBuild(Multiplayer.GetRemoteSenderId(), req, structure, double.NaN, double.NaN, double.NaN, float.NaN, packed);
+            return;
+        }
+        var at = GlobalPos.FromWire(x, y, z);
+        ServeBuild(Multiplayer.GetRemoteSenderId(), req, structure, at.E, at.N, at.Alt, at.OffsetYaw(trueYaw), packed);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskRemove(int req, long structure, int[] slot) =>

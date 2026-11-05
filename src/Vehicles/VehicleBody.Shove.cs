@@ -47,14 +47,15 @@ public partial class VehicleBody
         // where it was struck, from its middle: origin-free, so it means the same on every peer
         var lever = (at - GlobalPosition) with { Y = 0 };
         if (IsMultiplayerAuthority()) Shove(kick, lever);
-        else RpcId(GetMultiplayerAuthority(), MethodName.ShovedBy, kick, lever);
+        else RpcId(GetMultiplayerAuthority(), MethodName.ShovedBy, Origin.EnuOf(at, kick), Origin.EnuOf(at, lever));   // the local east-up-south at the blow (#1503)
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ShovedBy(Vector3 kick, Vector3 lever)
+    private void ShovedBy(Vector3 enuKick, Vector3 enuLever)
     {
         // a blow is a few m/s, from somewhere on the body: anything past that is not one
-        if (IsMultiplayerAuthority() && kick.Length() < 40f && lever.Length() < 30f) Shove(kick, lever);
+        if (!IsMultiplayerAuthority() || !(enuKick.Length() < 40f) || !(enuLever.Length() < 30f)) return;
+        Shove(Origin.WorldOfEnu(GlobalPosition, enuKick), Origin.WorldOfEnu(GlobalPosition, enuLever));
     }
 
     /// <summary>A change of velocity from a blow: along its heading it rolls, across it slides; asleep, it wakes.</summary>

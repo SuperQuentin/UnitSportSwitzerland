@@ -172,7 +172,7 @@ public sealed class VersteckisBrain : IBotBrain
                 var (se, sn) = Lv95(seen.At);
                 seeker = (se, sn);
                 dist = Math.Sqrt((se - be) * (se - be) + (sn - bn) * (sn - bn));
-                float yaw = seen.Body.NetYaw;
+                float yaw = seen.Body.GlobalYaw;   // LV95 maths: grid north (#1503)
                 facing = VsTactics.Facing(se, sn, -Math.Sin(yaw), Math.Cos(yaw), be, bn);
             }
         if (seeker == null && bot.Senses.Memory.TryGetValue(s.Seeker, out var mem) && now - mem.When < 20)

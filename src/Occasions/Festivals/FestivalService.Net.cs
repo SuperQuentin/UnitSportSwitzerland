@@ -127,7 +127,7 @@ public partial class FestivalService
     private void TellFestivals(string json)
     {
         List<RunningFestival> list;
-        try { list = JsonSerializer.Deserialize<List<RunningFestival>>(json, _json) ?? new(); }
+        try { list = JsonSerializer.Deserialize<List<RunningFestival>>(FestivalsWire(json, toWire: false), _json) ?? new(); }
         catch (JsonException e)
         {
             GD.PushWarning($"[festival] unreadable list from the server: {e.Message}");

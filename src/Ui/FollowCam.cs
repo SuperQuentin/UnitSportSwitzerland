@@ -80,7 +80,8 @@ public partial class FollowCam : Node
         }
         if (_body == null) return;   // not streamed here yet: hold the view until it arrives
         var target = _body;
-        var behind = new Vector3(Mathf.Sin(target.NetYaw), 0, Mathf.Cos(target.NetYaw)) * 6f + Vector3.Up * 2.8f;
+        float yaw = target.WorldYaw;
+        var behind = new Vector3(Mathf.Sin(yaw), 0, Mathf.Cos(yaw)) * 6f + Vector3.Up * 2.8f;
         var want = target.GlobalPosition + behind;
         float k = 1f - Mathf.Exp(-6f * (float)delta);
         _camera.GlobalPosition = _camera.GlobalPosition.DistanceTo(want) > 200f ? want : _camera.GlobalPosition.Lerp(want, k);

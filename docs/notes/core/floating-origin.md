@@ -5,7 +5,7 @@
   follows in one synchronous call at the start of a frame (`ProcessPriority = int.MinValue`).
   Altitude never shifts. Plan and later phases: `docs/plans/floating-origin.md`,
   `docs/plans/spherical-world.md` (#187).
-- **Online too, and every peer has its own origin**: positions cross the network in LV95, never
+- **Online too, and every peer has its own origin**: positions cross the network as ECEF, directions as local ENU, never
   world space (`net/positions-on-the-wire`). The server keeps the manifest's origin and never
   shifts (its players can be anywhere); far clusters of bodies get a frame and a physics space of
   their own (`net/server-regions`, #1456); it measures with what players publish (`FootPlayer.Global`),

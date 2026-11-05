@@ -49,8 +49,15 @@ public enum PlacedKind
 public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, double E, double N, double Altitude,
     Quaternion Rotation, string Payload)
 {
-    public Transform3D WorldTransform(WorldOrigin origin) =>
-        new(new Basis(Rotation), origin.ToWorld(E, N, Altitude));
+    /// <summary>
+    /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's, in GlobalPos's offset axes
+    /// (what is saved); the world's turn of it is the same in a flat frame (#1503).
+    /// </summary>
+    public Transform3D WorldTransform(WorldOrigin origin)
+    {
+        var at = new GlobalPos(E, N, Altitude);
+        return new(new Basis(origin.Frame.WorldTurnOf(at, Rotation)), origin.ToWorld(at));
+    }
 }
 
 /// <summary>The server's answer to a request: the object on success, else why not.</summary>
@@ -214,11 +221,18 @@ public partial class PlacedObjects : Node
     /// </summary>
     public void RequestPlace(PlacedKind kind, Transform3D at, string payload, Action<PlacedResult>? done = null)
     {
-        var (e, n) = _origin.ToLv95(at.Origin);
+        var g = _origin.ToGlobal(at.Origin);
         var rot = at.Basis.Orthonormalized().GetRotationQuaternion();
         int req = Track(done);
-        if (Online) RpcId(1, MethodName.AskPlace, req, (int)kind, e, n, (double)at.Origin.Y, rot, payload);
-        else ServePlace(1, req, (int)kind, e, n, at.Origin.Y, rot, payload);
+        if (Online)
+        {
+            // ECEF; the turn in the local east-up-south at the place (#1503)
+            var (x, y, z) = g.ToWire();
+            RpcId(1, MethodName.AskPlace, req, (int)kind, x, y, z, _origin.EnuTurn(at.Origin, rot),
+                kind == PlacedKind.Zipline ? Build.Gadgets.ZipToWire(payload) : payload);
+        }
+        // a record turns about GlobalPos's axes, as saved
+        else ServePlace(1, req, (int)kind, g.E, g.N, g.Alt, _origin.Frame.OffsetTurnOf(at.Origin, rot), payload);
     }
 
     /// <summary>Asks to remove an object. <paramref name="done"/> gets the removed object, or the reason it stays.</summary>
@@ -246,8 +260,13 @@ public partial class PlacedObjects : Node
     // ---- client: from the server ----------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Add(long id, int kind, string owner, double e, double n, double alt, Quaternion rot, string payload) =>
-        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, e, n, alt, rot, payload)));
+    private void Add(long id, int kind, string owner, double x, double y, double z, Quaternion enuRot, string payload)
+    {
+        // ECEF and the turn in the local east-up-south, as a record keeps it in GlobalPos's axes (#1503)
+        var at = GlobalPos.FromWire(x, y, z);
+        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, at.E, at.N, at.Alt, at.Enu.FromEnu(enuRot),
+            kind == (int)PlacedKind.Zipline ? Build.Gadgets.ZipFromWire(payload) : payload)));
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Remove(long id) => Drop(id);
@@ -258,8 +277,13 @@ public partial class PlacedObjects : Node
     {
         foreach (long id in _objects.Keys.ToList()) Drop(id);
         for (int i = 0; i < ids.Length; i++)
-            Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], pos[3 * i], pos[3 * i + 1], pos[3 * i + 2],
-                new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3]), payloads[i]));
+        {
+            // three ECEF doubles and a turn in the local east-up-south each (#1503)
+            var at = GlobalPos.FromWire(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+            Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], at.E, at.N, at.Alt,
+                at.Enu.FromEnu(new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3])),
+                kinds[i] == (int)PlacedKind.Zipline ? Build.Gadgets.ZipFromWire(payloads[i]) : payloads[i]));
+        }
         GD.Print($"[placed] snapshot: {ids.Length} object(s)");
     }
 
@@ -338,14 +362,31 @@ public partial class PlacedObjects : Node
             list.Select(o => o.Id).ToArray(),
             list.Select(o => (int)o.Kind).ToArray(),
             list.Select(o => OwnerShown(o.Owner)).ToArray(),
-            list.SelectMany(o => new[] { o.E, o.N, o.Altitude }).ToArray(),
-            list.SelectMany(o => new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }).ToArray(),
-            list.Select(o => o.Payload).ToArray());
+            list.SelectMany(o => { var (x, y, z) = new GlobalPos(o.E, o.N, o.Altitude).ToWire(); return new[] { x, y, z }; }).ToArray(),
+            list.SelectMany(o => { var q = WireTurn(o); return new[] { q.X, q.Y, q.Z, q.W }; }).ToArray(),
+            list.Select(WirePayload).ToArray());
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskPlace(int req, int kind, double e, double n, double alt, Quaternion rot, string payload) =>
-        ServePlace(Multiplayer.GetRemoteSenderId(), req, kind, e, n, alt, rot, payload);
+    private void AskPlace(int req, int kind, double x, double y, double z, Quaternion enuRot, string payload)
+    {
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(z) || !enuRot.IsFinite())
+        {
+            Reply(peer, req, 0, "Bad position.");
+            return;
+        }
+        // ECEF and a turn in the local east-up-south -> the record's LV95 and GlobalPos axes (#1503)
+        var at = GlobalPos.FromWire(x, y, z);
+        ServePlace(peer, req, kind, at.E, at.N, at.Alt, at.Enu.FromEnu(enuRot),
+            kind == (int)PlacedKind.Zipline ? Build.Gadgets.ZipFromWire(payload) : payload);
+    }
+
+    /// <summary>A record's turn in the local east-up-south at its place: what goes on the wire.</summary>
+    private static Quaternion WireTurn(PlacedObject o) => new GlobalPos(o.E, o.N, o.Altitude).Enu.ToEnu(o.Rotation);
+
+    /// <summary>A record's payload as the wire carries it: a zipline's start in ECEF, the rest as saved.</summary>
+    private static string WirePayload(PlacedObject o) => o.Kind == PlacedKind.Zipline ? Build.Gadgets.ZipToWire(o.Payload) : o.Payload;
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskRemove(int req, long id) => ServeRemove(Multiplayer.GetRemoteSenderId(), req, id);
@@ -414,9 +455,10 @@ public partial class PlacedObjects : Node
         Save();
         ServedByPeer?.Invoke(peer, o, true);
         GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {OwnerShown(owner)} at LV95 {e:F1}/{n:F1}"));
+        var (wx, wy, wz) = new GlobalPos(o.E, o.N, o.Altitude).ToWire();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), o.E, o.N, o.Altitude, o.Rotation, o.Payload);
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, WireTurn(o), WirePayload(o));
         Reply(peer, req, o.Id, "");
     }
 
@@ -426,9 +468,10 @@ public partial class PlacedObjects : Node
         var (e, n) = _origin.ToLv95(at.Origin);
         var o = Put(new PlacedObject(_nextId++, kind, owner, e, n, at.Origin.Y, at.Basis.Orthonormalized().GetRotationQuaternion(), payload));
         if (owner != MatchOwner) Save();
+        var (wx, wy, wz) = new GlobalPos(o.E, o.N, o.Altitude).ToWire();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), o.E, o.N, o.Altitude, o.Rotation, o.Payload);
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, WireTurn(o), WirePayload(o));
         return o;
     }
 
