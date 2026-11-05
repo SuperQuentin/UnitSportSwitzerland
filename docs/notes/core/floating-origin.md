@@ -12,7 +12,7 @@
   and runs each race in a frame of its own at the host (`RaceManager`). A client's origin is its
   own from boot: joining neither checks nor adopts the server's.
 - **A world-space `Vector3` means a place only in the frame it was computed in.** Anything that
-  keeps a position across frames either keeps a `GlobalPos` (LV95 doubles), keeps it relative to its
+  keeps a position across frames either keeps a `GlobalPos` (ECEF doubles, `core/globalpos-earth`), keeps it relative to its
   tile (trunks, bird perches, gathering trees are stored as the `.trees` file has them), or
   implements `IOriginShiftAware` and moves it in `OnOriginShifted`. Directions and velocities go
   through `shift.Direction`, points through `shift.Point`, placements through `shift.Apply`: the

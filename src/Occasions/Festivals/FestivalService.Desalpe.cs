@@ -130,6 +130,16 @@ public partial class FestivalService
         }
     }
 
+    /// <summary>
+    /// Metres east and north of the site on the LV95 grid (#1502): the flock keeps its cows in these (the world draws them
+    /// at <c>site.E + x</c>), so a body's place is measured in the same axes, not in the true east and north.
+    /// </summary>
+    private static (double E, double N) GridOffset(ResolvedSite site, GlobalPos at)
+    {
+        var l = at.Lv95;
+        return (l.E - site.E, l.N - site.N);
+    }
+
     private void DesalpeStep(DesalpeSrv s, float dt)
     {
         var run = s.Run;
@@ -141,7 +151,7 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !_adventure.Active(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            var (x, y, _) = s.Site.Pos.OffsetTo(at);
+            var (x, y) = GridOffset(s.Site, at);
             float zone = DesalpeRules.ZoneFoot;
             if (s.Last.TryGetValue(peer, out var was) && Math.Sqrt((x - was.X) * (x - was.X) + (y - was.Y) * (y - was.Y)) / dt > 3.5) zone = DesalpeRules.ZoneMounted;
             s.Last[peer] = (x, y);
@@ -256,7 +266,7 @@ public partial class FestivalService
     private static byte[] DesalpeTurn(byte[] bytes, GlobalPos fair, bool toWire)
     {
         if (bytes.Length < DesalpeWire.Header || bytes.Length != DesalpeWire.Header + bytes[1] * DesalpeWire.PerCow) return bytes;
-        var axes = fair.Enu;
+        var axes = Lv95Grid.Axes(fair);
         var turned = (byte[])bytes.Clone();
         for (int i = 0; i < bytes[1]; i++)
         {
@@ -290,7 +300,7 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !Connected(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
+            var (offE, offN) = GridOffset(s.Site, at);
             double x = offE - cx, y = offN - cy;
             if (x * x + y * y <= 500 * 500) RpcId(peer, MethodName.TellDesalpeSnap, wire, fx, fy, fz);
         }
@@ -314,7 +324,7 @@ public partial class FestivalService
         if (peer > 0)
         {
             if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Where are you?");
-            var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
+            var (offE, offN) = GridOffset(s.Site, at);
             double x = offE - s.Run.Flock.X[cow], y = offN - s.Run.Flock.Y[cow];
             if (x * x + y * y > (DesalpeRules.DressReach + 3) * (DesalpeRules.DressReach + 3)) return Tell(peer, $"Go to the cow to dress it ({Math.Sqrt(x * x + y * y):F0} m).");
         }
@@ -344,7 +354,7 @@ public partial class FestivalService
         foreach (long p in _adventure.Peers.ToArray())
         {
             if (p <= 0 || !_adventure.Active(p) || _adventure.PositionOf?.Invoke(p) is not { } at) continue;
-            var (offE, offN, _) = s.Site.Pos.OffsetTo(at);
+            var (offE, offN) = GridOffset(s.Site, at);
             double x = offE - sign.X, y = offN - sign.Y;
             double d2 = x * x + y * y;
             if (d2 <= (DesalpeRules.StartReach + 40) * (DesalpeRules.StartReach + 40)) near++;

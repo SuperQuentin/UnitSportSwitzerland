@@ -91,8 +91,8 @@ public static class FranceStage
 
         var buildingStats = new FranceBuildings.Stats();
         var geo = GeoInput.Over(outDir);
-        foreach (var f in footprints) f.OntoGround(geo);
-        var buildingsByTile = FranceBuildings.Build(footprints, wanted, heightAt, buildingStats);
+        // the space takes each latitude and longitude onto the tiles' ground (GeoInput), as BdFeature.OntoGround does
+        var buildingsByTile = FranceBuildings.Build(footprints, new Lv95FeatureSpace(wanted, new Lv95Ground(grids), geo), buildingStats);
 
         foreach (var (tile, built) in buildingsByTile) MergeBuildings(outDir, tile, built);
 

@@ -9,7 +9,13 @@ namespace UnitSport.Terrain.Format;
 /// <c>GiverKind</c> number (Farmer 3, Senn 4, Dairy 5, Postmaster 6, Host 7): never renumber. <see cref="Heading"/> is where the
 /// figure faces, radians, 0 = north, clockwise. <see cref="Source"/> names where it came from (<c>osm:n123</c>, <c>gwr:egid</c>).
 /// </summary>
-public sealed record GiverRecord(string Id, int Kind, double E, double N, float Heading, string Canton, float Elevation, string Name, string Source);
+public sealed record GiverRecord(string Id, int Kind, double E, double N, float Heading, string Canton, float Elevation, string Name, string Source)
+{
+    /// <summary>The giver on the Earth, on the ground (#1507: four more columns; null before).</summary>
+    public GeoPoint? Geo { get; init; }
+    /// <summary>The heading in radians clockwise from true north (#1507, with <see cref="Geo"/>).</summary>
+    public float? GeoHeading { get; init; }
+}
 
 /// <summary>
 /// <c>givers.tsv.gz</c> (#1339): the farms, alp and village dairies, post offices and Beizen of Switzerland, written by
@@ -23,17 +29,23 @@ public static class GiverFormat
     public const string Header = "# givers v1";
     public const string Columns = "id\tkind\te\tn\theading\tcanton\televation\tname\tsource";
 
+    /// <summary>The columns a run with Earth positions adds after the source (#1507): latitude, longitude, ellipsoidal height, true heading.</summary>
+    public const string GeoColumns = "\tlat\tlon\th\ttrue_heading";
+
     public static void Write(Stream stream, string source, IEnumerable<GiverRecord> rows)
     {
         // no file name or time in the gzip header (.NET writes none), so the same rows give the same bytes
         using var gz = new GZipStream(stream, CompressionLevel.SmallestSize, leaveOpen: true);
         using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+        var list = rows.OrderBy(r => r.Id, StringComparer.Ordinal).ToList();
+        bool geo = list.Count > 0 && list.All(r => r.Geo != null);
         w.WriteLine($"{Header} {Clean(source)}");
-        w.WriteLine(Columns);
+        w.WriteLine(geo ? Columns + GeoColumns : Columns);
         var inv = CultureInfo.InvariantCulture;
-        foreach (var r in rows.OrderBy(r => r.Id, StringComparer.Ordinal))
+        foreach (var r in list)
             w.WriteLine(string.Join('\t', r.Id, r.Kind.ToString(inv), r.E.ToString("0.0", inv), r.N.ToString("0.0", inv),
-                r.Heading.ToString("0.00", inv), r.Canton, r.Elevation.ToString("0", inv), Clean(r.Name), Clean(r.Source)));
+                r.Heading.ToString("0.00", inv), r.Canton, r.Elevation.ToString("0", inv), Clean(r.Name), Clean(r.Source))
+                + (geo ? string.Create(inv, $"\t{r.Geo!.Value.Lat:F9}\t{r.Geo.Value.Lon:F9}\t{r.Geo.Value.H:F2}\t{r.GeoHeading ?? 0:0.0000}") : ""));
     }
 
     public static List<GiverRecord> Read(Stream stream)
@@ -50,8 +62,11 @@ public static class GiverFormat
             if (line.Length == 0) continue;
             var c = line.Split('\t');
             if (c.Length < 9) throw new InvalidDataException($"givers: {c.Length} columns in \"{line}\"");
-            rows.Add(new GiverRecord(c[0], int.Parse(c[1], inv), double.Parse(c[2], inv), double.Parse(c[3], inv), float.Parse(c[4], inv),
-                c[5], float.Parse(c[6], inv), c[7], c[8]));
+            var row = new GiverRecord(c[0], int.Parse(c[1], inv), double.Parse(c[2], inv), double.Parse(c[3], inv), float.Parse(c[4], inv),
+                c[5], float.Parse(c[6], inv), c[7], c[8]);
+            if (c.Length >= 13)
+                row = row with { Geo = new GeoPoint(double.Parse(c[9], inv), double.Parse(c[10], inv), double.Parse(c[11], inv)), GeoHeading = float.Parse(c[12], inv) };
+            rows.Add(row);
         }
         return rows;
     }

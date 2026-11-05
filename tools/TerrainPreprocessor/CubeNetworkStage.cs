@@ -42,6 +42,7 @@ public static class CubeNetworkStage
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         int block = DefaultBlock, halo = DefaultHalo;
         bool lv95Ground = false, planOnly = false, smooth = true;
+        int framesParallel = 1;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -58,7 +59,9 @@ public static class CubeNetworkStage
                 case "--lv95-ground": lv95Ground = true; break;
                 // the frames a box makes, with their leaves' LV95 extent, and nothing built (where to put a box across a frame edge)
                 case "--plan-only": planOnly = true; break;
-                case "--no-smooth": smooth = false; break;   // junctions only, centrelines left alone (as RoadGen --rewrite --no-smooth)
+                case "--no-smooth": smooth = false; break;
+                // frames side by side (#1508): RoadGen runs one thread a frame; each frame wants 3-5 GB
+                case "--frames-parallel": framesParallel = Math.Max(1, int.Parse(args[++i], CultureInfo.InvariantCulture)); break;   // junctions only, centrelines left alone (as RoadGen --rewrite --no-smooth)
                 case "--cube-box":
                     var v = args[++i].Split(',').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
                     if (v.Length != 4) { Console.Error.WriteLine("--cube-box minE,minN,maxE,maxN (LV95 m)"); return 2; }
@@ -100,16 +103,29 @@ public static class CubeNetworkStage
 
         var writer = new LeafWriter(region, driver.FrameLevel, [LeafKind.Roads]);
         var totals = new FrameTileLoop.Counts();
-        foreach (var plan in driver.Frames)
+        // one frame at a time writes each as it is done; side by side, every frame is written at the end in the driver's
+        // order: a written bundle's entries move, and the other frames read their margins' heights from it meanwhile
+        var done = new System.Collections.Concurrent.ConcurrentDictionary<CubeKey, Dictionary<CubeKey, List<LeafSection>>>();
+        Parallel.ForEach(driver.Frames, new ParallelOptions { MaxDegreeOfParallelism = framesParallel }, plan =>
         {
             var fs = Stopwatch.StartNew();
             var loop = new FrameTileLoop(plan, driver.LeafLevel, heights, raw, chunks, data, gantries, options, block, totals, lv95Ground);
             var stats = TileRewriter.Run(loop, options, _ => { });
-            writer.WriteFrame(plan.Cell, loop.Sections);
-            heights.Reload(plan.Cell);
+            if (framesParallel == 1)
+            {
+                writer.WriteFrame(plan.Cell, loop.Sections);
+                heights.Reload(plan.Cell);
+            }
+            else done[plan.Cell] = loop.Sections;
             Console.WriteLine($"  frame {plan.Cell.Describe()}: {plan.Core.Count} leaves, {loop.Sections.Count(e => e.Value.Count > 0)} with roads, "
                 + $"{stats.Junctions:N0} junctions, {loop.Frame.Signals} signals, {fs.Elapsed.TotalSeconds:F1} s, "
                 + $"working set {Process.GetCurrentProcess().WorkingSet64 / 1e9:F1} GB; {sw.Elapsed.TotalSeconds:F0} s");
+        });
+        foreach (var plan in driver.Frames)
+        {
+            if (!done.TryGetValue(plan.Cell, out var sections)) continue;
+            writer.WriteFrame(plan.Cell, sections);
+            heights.Reload(plan.Cell);
         }
 
         var manifestPath = Path.Combine(region, CubeManifest.FileName);
@@ -252,6 +268,7 @@ public sealed class FrameTileLoop : ITileLoop
     public void Write(RoadTile tile, byte[] bytes)
     {
         foreach (var c in (ReadOnlySpan<Counts>)[Frame, _totals])
+        lock (c)
         {
             c.Tiles++;
             c.Segments += tile.Segments.Count;

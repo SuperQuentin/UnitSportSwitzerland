@@ -428,11 +428,11 @@ public partial class Gathering : Node, Core.IOriginShiftAware
 
         // stone underfoot or just ahead
         foreach (var at in new[] { ahead, feet })
-            if (_chunks.TryGetCover(at, out var c) && IsStony(c))
+            if (_chunks.Ground.TryGetCover(at, out var c) && IsStony(c))
                 return (Resource.Stone, Spot("stone", at), c);
 
         // the floor of a wood: fallen branches, less than a tree gives
-        if (_chunks.TryGetCover(feet, out var here) && CoverFormat.IsWooded(here))
+        if (_chunks.Ground.TryGetCover(feet, out var here) && CoverFormat.IsWooded(here))
             return (Resource.Deadwood, Spot("dead", feet), here);
 
         return (Resource.None, "", CoverClass.Open);

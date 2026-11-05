@@ -50,7 +50,7 @@ public partial class GpxCheck : Node
         if (_track == null)
         {
             var (e, n) = SpawnPoint.ParseTarget();
-            if (!_chunks.TryGetHeight(_origin.ToWorld(e, n, 0), out _)) return;
+            if (!_chunks.Ground.TryGetHeight(_origin.ToWorld(e, n, 0), out _)) return;
             _track = Course(e, n);
             _ribbon = TrackRibbon.Create(_track, _chunks, _origin);
             _runner = Runner.Create(_track, _chunks, _origin, 0);
@@ -120,7 +120,7 @@ public partial class GpxCheck : Node
             for (int k = 0; k < 6; k++)
             {
                 var w = xf * verts[i + k];
-                if (!_chunks.TryGetHeight(w, out float ground)) continue;
+                if (!_chunks.Ground.TryGetHeight(w, out float ground)) continue;
                 float gap = w.Y - ground - TreadLift;
                 tread++;
                 worst = Mathf.Max(worst, Mathf.Abs(gap));

@@ -586,7 +586,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Vehicles left standing in the world. Same node path as on the server, so parking and
         // claiming work over the network; offline it just holds the nodes.
-        var vehicles = Vehicles.VehicleManager.Create(this, _chunks, origin);
+        var vehicles = Vehicles.VehicleManager.Create(this, _chunks?.Ground, origin);
         // seats in vehicles other players drive (#158): same path as the server's
         Vehicles.PassengerService.Create(this);
         vehicles.PlayerPositions = () =>
@@ -606,7 +606,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Player.TractorBeams.Create(this);
         var chunksForDrops = _chunks;
         // on the water where there is some (#299): nothing is dropped onto a lake bed
-        Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.TryGetSurface(p, out float y) ? y : null;
+        Items.DroppedItems.GroundHeight = p => chunksForDrops != null && chunksForDrops.Ground.TryGetSurface(p, out float y) ? y : null;
         Audio.Hearing.Ground = Items.DroppedItems.GroundHeight;
         // every body that may hold a radio that plays (#168): the remote players and this one
         radios.Players = () =>
@@ -640,14 +640,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
             AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
         // the paddle steamer at the Nyon landing (#303): likewise
-        AddChild(new World.SteamerBerth(_chunks));
+        AddChild(new World.SteamerBerth(_chunks?.Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
-        var combat = Combat.CombatManager.Create(this, _chunks, origin, server: false);
+        var combat = Combat.CombatManager.Create(this, _chunks?.Ground, origin, server: false);
         combat.LocalPlayer = () => _onFoot ? LocalPlayer : null;
 
         // Building interiors: E opens a front door, and you walk through it. Same node path as the
@@ -749,7 +749,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             _dayNight = new World.DayNight(environment)
             {
-                GroundHeight = p => chunksForSky.TryGetHeight(p, out float y) ? y : null,
+                GroundHeight = p => chunksForSky.Ground.TryGetHeight(p, out float y) ? y : null,
                 Origin = origin,
             };
             AddChild(_dayNight);
@@ -869,6 +869,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the far horizon at its corners, across origin shifts (#1429)
             new(Terrain.HorizonCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.HorizonCheck(chunks, origin)),
             new(Terrain.SpaceBandCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.SpaceBandCheck(chunks, origin)),
+            // the ground gameplay asks, against the streamer's own answers, and its cost (#1532)
+            new(Terrain.WorldGroundCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.WorldGroundCheck(chunks, origin)),
             // a GPX course drawn and run where it belongs, across origin shifts (#1429)
             new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(chunks, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
@@ -960,7 +962,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             {
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
-                runner.GroundHeight = at => chunks.TryGetSurface(at, out float h) ? h : null;
+                runner.GroundHeight = at => chunks.Ground.TryGetSurface(at, out float h) ? h : null;
                 runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
@@ -1303,12 +1305,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Adventure.AdventureCheck.Requested) AddChild(new Adventure.AdventureCheck(items, () => LocalPlayer));
             if (Adventure.AdventureNetProbe.Role != null) AddChild(new Adventure.AdventureNetProbe(items));
             // places (#1224): stamps, fog, viewpoints; offline this client finds its own places
-            Func<double, double, float?> ground = (e, n) => _chunks != null && _worldOrigin is { } o && _chunks.TryGetHeight(o.ToWorld(e, n, 0), out float h) ? h : null;
+            Func<double, double, float?> ground = (e, n) => _chunks != null && _worldOrigin is { } o && _chunks.Ground.TryGetHeight(o.ToWorld(e, n, 0), out float h) ? h : null;
             var places = Adventure.Places.PlacesService.Create(adventure, server: false, networked: Launch.Networked);
             places.BodyOf = _ => LocalPlayer is { } me ? Adventure.Places.PlacesBodies.Of(me, me.Global, _ => null, ground) : null;
             AddChild(new Adventure.Places.StampToast());
             AddChild(new Adventure.Places.PoiMarkers(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
-                p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
+                p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null));
             Adventure.Places.AtlasPage.Register();
             Adventure.Places.AdventureMap.Me = () => LocalPlayer is { } me ? (me.Global, me.GlobalRotation.Y) : null;
             Adventure.Places.AdventureMap.PlaceSearch = () => _places?.SetOpen(true);
@@ -1318,7 +1320,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var start = _fixtureStart ?? (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
             var rewards = Adventure.Rewards.RewardService.Create(adventure, server: false, networked: Launch.Networked, () => _chunks?.Source, start);
             rewards.Occupied = (e, n, radius, except) => Adventure.Rewards.RewardWorld.DroppedOn(e, n, radius);
-            Func<Vector3, float?> groundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            Func<Vector3, float?> groundAt = p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null;
             AddChild(new Adventure.Rewards.RewardWorld(() => _onFoot ? LocalPlayer : null, () => _worldOrigin, groundAt));
             AddChild(new Adventure.Rewards.GuideNode(() => _worldOrigin, groundAt));
             AddChild(new Adventure.Rewards.TrialRunner(() => LocalPlayer, () => _worldOrigin, () => _chunks));
@@ -1337,7 +1339,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // Steinstossen (#1269 part 3): the attempt's wire, the stone, its arc and its stakes
             Occasions.Festivals.SteinService.Create(festivals, adventure, server: false, networked: Launch.Networked);
             if (_worldOrigin is { } steinOrigin)
-                Occasions.Festivals.SteinGame.Create(this, () => LocalPlayer, steinOrigin, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
+                Occasions.Festivals.SteinGame.Create(this, () => LocalPlayer, steinOrigin, p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null);
             if (Occasions.Festivals.SteinCheck.Requested) AddChild(new Occasions.Festivals.SteinCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.SteinNetProbe.Role != null) AddChild(new Occasions.Festivals.SteinNetProbe(items));
             AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
@@ -1400,7 +1402,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         versteckis.AddAnchor = node => _chunks?.AddAnchor(node);
         versteckis.RemoveAnchor = node => _chunks?.RemoveAnchor(node);
         versteckis.Source = () => _chunks?.Source;
-        versteckis.GroundAt = p => _chunks != null && _chunks.TryGetSurface(p, out float h) ? h : null;
+        versteckis.GroundAt = p => _chunks != null && _chunks.Ground.TryGetSurface(p, out float h) ? h : null;
         AddChild(versteckis);
         if (Adventure.Versteckis.VersteckisCheck.Requested && _items != null) AddChild(new Adventure.Versteckis.VersteckisCheck(_items, () => LocalPlayer));
         if (Adventure.Versteckis.VersteckisNetProbe.Role != null && _items != null) AddChild(new Adventure.Versteckis.VersteckisNetProbe(_items));
@@ -1423,7 +1425,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Build))
         {
             var structures = Build.Structures.Create(this, origin, server: false, networked: Launch.Networked);
-            structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            structures.GroundAt = p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null;
         }
 
         if (Systems.On(Systems.Loot))
@@ -1444,7 +1446,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             stands.Items = items;
             stands.Source = () => _chunks?.Source;
             // the specialty buyers' offices and signs, beside their access roads
-            Farming.FarmBuyerYards.Create(this, origin, () => _chunks?.Source, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
+            Farming.FarmBuyerYards.Create(this, origin, () => _chunks?.Source, p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null);
             if (Farming.SellCheck.Requested) AddChild(new Farming.SellCheck(items, origin));
             if (Farming.BuyerCheck.Requested) AddChild(new Farming.BuyerCheck(origin));
             if (Farming.SellNetProbe.Role != null) AddChild(new Farming.SellNetProbe(items));
@@ -1503,7 +1505,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // changes: real terrain arriving where generated ground was, or a rebase. The player is
         // put down again only if the ground under them is what went — this fires on every merge,
         // and snapping someone mid-jump to the ground over a change 20 km away would be a bug.
-        _chunks.TerrainReplaced += affected =>
+        _chunks.Ground.TerrainReplaced += affected =>
         {
             Audio.Surfaces.Forget();
             _ambience?.ForgetTiles();
@@ -1512,7 +1514,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             trees.Forget();
             Occasions.OccasionTowns.Reload();
             if (LocalPlayer is { } player
-                && (affected == null || affected(origin.TileAt(player.GlobalPosition))))
+                && (affected == null || affected(_chunks.Ground.TileAt(player.GlobalPosition))))
                 player.RequestReplacement();
         };
 
@@ -1690,7 +1692,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _groundStarted = true;
             if (!_onFoot && _player == null)
             {
-                AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
+                AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks?.Ground });
                 EnterFootMode(_player);
                 _groundStart = new GroundStart(_chunks, _player);
                 if (_worldOrigin != null) _seatStart?.Attach(_player, _chunks, _worldOrigin);
@@ -1914,7 +1916,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new Adventure.Navigation.GuidingWind());
         AddChild(new Adventure.Navigation.TravelCurtain());
         AddChild(new Adventure.Navigation.TravelSigns(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
-            p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
+            p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null));
         Adventure.Navigation.DepartureBoard.Register();
         Adventure.Navigation.NavMapOverlay.Register();
         // the point the chat's Map button shows (#1277)
@@ -2069,7 +2071,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         br.Source = () => _chunks?.Source;
         // the match's crates (#194): drawn on this client's own ground
         var crates = BattleRoyale.BrCrates.Create(this, _worldOrigin!, server: false);
-        crates.GroundAt = at => _chunks != null && _chunks.TryGetSurface(at, out float h) ? h : null;
+        crates.GroundAt = at => _chunks != null && _chunks.Ground.TryGetSurface(at, out float h) ? h : null;
         br.Places = () => (IEnumerable<Terrain.Format.Place>?)_places?.All ?? Array.Empty<Terrain.Format.Place>();
         AddChild(br);
         if (CarSwitchCheck.Create(() => LocalPlayer, () => _players) is { } switchCheck) AddChild(switchCheck);
@@ -2804,7 +2806,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (player == null)
             {
                 if (_networked) return; // our player hasn't been spawned by the server yet
-                _player = player = new FootPlayer { Name = "Player", Terrain = _chunks };
+                _player = player = new FootPlayer { Name = "Player", Terrain = _chunks?.Ground };
                 AddChild(player);
             }
             EnterFootMode(player);
@@ -2852,7 +2854,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// The ground under the fly camera is known. A spawn point that gave up (no tile after 15 s, a
     /// slow first join) leaves the camera at its preload altitude: the body waits for the ground then.
     /// </summary>
-    private bool GroundUnderCamera => _chunks != null && _spectator != null && _chunks.TryGetSurface(_spectator.GlobalPosition, out _);
+    private bool GroundUnderCamera => _chunks != null && _spectator != null && _chunks.Ground.TryGetSurface(_spectator.GlobalPosition, out _);
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
@@ -2907,7 +2909,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 player.GlobalPosition = spot;
             else
             {
-                float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
+                float ground = _chunks!.Ground.TryGetSurface(pos, out float h) ? h : pos.Y;
                 player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
             }
             player.Velocity = Vector3.Zero;

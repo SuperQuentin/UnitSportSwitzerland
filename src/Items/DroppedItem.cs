@@ -25,11 +25,11 @@ public readonly record struct DropState(
 {
     /// <summary>
     /// The state on the wire (a spawn, an RPC): ECEF, and its tumble, velocity and spin in the local ENU (#1503); in
-    /// memory they are in GlobalPos's offset axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
+    /// memory they are in the LV95 grid's axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
     /// </summary>
     public Godot.Collections.Dictionary ToDict()
     {
-        var enu = Position.Enu;
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
@@ -53,7 +53,7 @@ public readonly record struct DropState(
     {
         var s = Read(d);
         if (!GlobalPos.IsWire(d)) return s;
-        var enu = s.Position.Enu;
+        var enu = Lv95Grid.Axes(s.Position);
         return s with
         {
             Rotation = enu.FromEnu(Quaternion.FromEuler(s.Rotation)).GetEuler(),
@@ -168,7 +168,7 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
         // the record's tumble is in GlobalPos's axes at its place: this world's here (#1503)
         var turn = Quaternion.FromEuler(s.Rotation);
         AddChild(_place = new NetPlace(_origin, s.Position, turn));
-        Quaternion = _origin.Frame.WorldTurnOf(s.Position, turn);
+        Quaternion = _origin.Frame.WorldTurnOfGrid(s.Position, turn);
 
         // the collider is the drawn item's box (thin cards and bars get a minimum, or they sink)
         var mesh = ItemDefs.HandMesh(s.Stack.Id);
@@ -225,8 +225,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
     private void Simulate(DropState s)
     {
         // in GlobalPos's axes at its place, as the record keeps them: this world's here (#1503)
-        LinearVelocity = _origin.Frame.WorldOfOffset(s.Position, s.Velocity);
-        AngularVelocity = _origin.Frame.WorldOfOffset(s.Position, s.Spin);
+        LinearVelocity = _origin.Frame.WorldOfGrid(s.Position, s.Velocity);
+        AngularVelocity = _origin.Frame.WorldOfGrid(s.Position, s.Spin);
         _lastPos = _origin.ToWorld(s.Position);
         _lastVel = LinearVelocity;
     }
@@ -375,7 +375,7 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>
-    public DropState Capture() => new(Name, Owner, Stack, _place.Global, _origin.Frame.OffsetTurnOf(Position, Quaternion).GetEuler(),
+    public DropState Capture() => new(Name, Owner, Stack, _place.Global, _origin.Frame.GridTurnOf(Position, Quaternion).GetEuler(),
         Vector3.Zero, Vector3.Zero, Settled, Oid: _initial.Oid);
 
     /// <summary>Which item this is to the object containers (#689); 0 = not persisted.</summary>

@@ -105,7 +105,7 @@ public partial class GatherProbe : Node
             }
         }
 
-        _player = new FootPlayer { Name = "GatherProbe", Terrain = _chunks };
+        _player = new FootPlayer { Name = "GatherProbe", Terrain = _chunks?.Ground };
         AddChild(_player);
         _gathering.PlayerOverride = () => _player;
 
@@ -133,7 +133,7 @@ public partial class GatherProbe : Node
     private static GlobalPos World(TileId id, ChunkGrid grid, int col, int row)
     {
         var (e, n) = id.Global(col * ChunkFormat.SpacingM, row * ChunkFormat.SpacingM);
-        return new(e, n, grid.HeightMetersAt(col, row));
+        return GlobalPos.FromLv95(e, n, grid.HeightMetersAt(col, row));
     }
 
     private async Task Visit(string what, (GlobalPos Stand, GlobalPos Face)? spot, Gathering.Resource expected, params ItemId[] gives)

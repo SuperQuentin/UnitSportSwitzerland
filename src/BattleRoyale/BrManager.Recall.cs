@@ -149,7 +149,7 @@ public partial class BrManager
         StopSpectating();
         _follow?.Prefer(0);
         var stop = GlobalPos.FromWire(x, y, z);
-        var at = Origin.ToWorld(stop.E, stop.N, stop.Alt + 180);
+        var at = Origin.ToWorld(stop.Lv95.E, stop.Lv95.N, stop.Alt + 180);
         me.Respawn(at);
         me.Leap(at, -me.Camera.GlobalTransform.Basis.Z with { Y = 0 } * 20f, RideKind.Wingsuit);
         if (Inventory() is { } inv)

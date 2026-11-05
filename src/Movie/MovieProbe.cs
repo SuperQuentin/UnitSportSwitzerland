@@ -236,9 +236,9 @@ public partial class MovieProbe : Node
                 // two keys round the actor at 2 s: the first aims at it, the second is a cut to a fixed view
                 _stage!.Playing = false;
                 _stage.Seek(2);
-                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition);
-                _project!.Camera.Set(new CameraKey { T = 1, E = actor.E + 30, N = actor.N, Alt = actor.Alt + 8, Lens = 24, Ease = KeyEase.Cut, LookAt = 0 }, 0);
-                _cutTo = _project.Camera.Set(new CameraKey { T = 3, E = actor.E - 30, N = actor.N + 5, Alt = actor.Alt + 2, Lens = 85 }, 0);
+                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition).Lv95;
+                _project!.Camera.Set(new CameraKey { T = 1, E = actor.E + 30, N = actor.N, Alt = actor.H + 8, Lens = 24, Ease = KeyEase.Cut, LookAt = 0 }, 0);
+                _cutTo = _project.Camera.Set(new CameraKey { T = 3, E = actor.E - 30, N = actor.N + 5, Alt = actor.H + 2, Lens = 85 }, 0);
                 _cam = new StudioCamera(_origin);
                 AddChild(_cam);
                 _soundFrames = 0;
@@ -277,9 +277,9 @@ public partial class MovieProbe : Node
                 if (made.Count != covering || _project.Clips.Count != before + covering) Fail("cut all missed a lane");
 
                 // a second camera, high and wide, and the program cutting to it at 3.5 s
-                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition);
+                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition).Lv95;
                 var wide = _project.AddCamera();
-                _wide = wide.Set(new CameraKey { T = 0, E = actor.E, N = actor.N - 40, Alt = actor.Alt + 20, Lens = 135 }, 0);
+                _wide = wide.Set(new CameraKey { T = 0, E = actor.E, N = actor.N - 40, Alt = actor.H + 20, Lens = 135 }, 0);
                 _project.CutTo(3.5, 1, 0);
                 _gizmos = new CameraGizmos(_stage, _origin, lane => _stage.Puppet(lane)?.GlobalPosition);
                 AddChild(_gizmos);

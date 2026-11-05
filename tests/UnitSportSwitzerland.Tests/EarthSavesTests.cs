@@ -42,7 +42,7 @@ public class EarthSavesTests
     {
         var at = AtOf(o);
         float t = o[SavedPlace.YawTrue]!.GetValue<float>();
-        Assert.Equal(grid, at.OffsetYaw(t), 1e-6f);
+        Assert.Equal(grid, Lv95Grid.GridYaw(at, t), 1e-6f);
         Assert.True(Math.Abs(EnuAxes.Wrap(t - grid)) > 0.01f, $"at Geneva true north is ~0.9° off the grid's, got {t} for {grid}");
     }
 
@@ -139,7 +139,7 @@ public class EarthSavesTests
         var grid = new Quaternion(0, 0.5646425f, 0, 0.8253356f);
         Assert.True(Math.Abs(back.Dot(grid)) > 1 - 1e-6f, $"{grid} came back as {back}");
         // the turn about up in the local ENU is the true heading: the grid's turned by the convergence
-        Assert.Equal(AtOf(flag).TrueYaw(grid.GetEuler().Y), new Quaternion(turn[0], turn[1], turn[2], turn[3]).GetEuler().Y, 1e-5f);
+        Assert.Equal(Lv95Grid.TrueYaw(AtOf(flag), grid.GetEuler().Y), new Quaternion(turn[0], turn[1], turn[2], turn[3]).GetEuler().Y, 1e-5f);
 
         var zip = root["Objects"]![1]!;
         string payload = zip["Payload"]!.GetValue<string>();
@@ -238,6 +238,28 @@ public class EarthSavesTests
         Near(E, N, Alt, t.At);
         Assert.Equal(Yaw, t.Yaw, 1e-6f);
         Assert.Equal(3, again.Lay(t with { Key = "k2" }, out _).Id);
+    }
+
+    /// <summary>
+    /// #1547: a body that left before its first state was laid at LV95 0/0 before G2; A2b migrated that to the sea off
+    /// Madeira, where waking put the player 3,000 km from any ground. Such placeholders are dropped on load, old or new.
+    /// </summary>
+    [Fact]
+    public void Sleepers_laid_before_any_state_are_dropped_on_load()
+    {
+        var old = SleeperBook.FromJson("""
+            {"Next": 4, "Sleepers": [
+              {"Id": 2, "Key": "a", "Name": "Anna", "E": 2500123.25, "N": 1118456.75, "Alt": 402.5, "Yaw": 0},
+              {"Id": 3, "Key": "b", "Name": "Ghost", "E": 0, "N": 0, "Alt": 0, "Yaw": 0}]}
+            """, out _);
+        Assert.Equal("a", Assert.Single(old.All).Key);
+
+        var migrated = new SleeperBook();
+        migrated.Lay(new Sleeper(0, "a", "Anna", GlobalPos.FromLv95(E, N, Alt), 0, 0, 0, 0, 0), out _);
+        migrated.Lay(new Sleeper(0, "b", "Ghost", GlobalPos.FromLv95(0, 0, 0), 0, 0, 0, 0, 0), out _);
+        Assert.Equal("a", Assert.Single(SleeperBook.FromJson(migrated.ToJson()).All).Key);
+        Assert.True(SleeperBook.Placeholder(default));
+        Assert.False(SleeperBook.Placeholder(GlobalPos.FromLv95(E, N, Alt)));
     }
 
     // <containers>/awake.json before A2b: the bare dictionary of AwakeSlot

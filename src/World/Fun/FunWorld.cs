@@ -74,7 +74,9 @@ public static class FunWorld
     public static bool InPvp(GlobalPos at)
     {
         var (x0, y0, x1, y1) = FunCourse.PvpBox;
-        var (x, y, _) = GlobalPos.FromLv95(Start.E, Start.N, 0).OffsetTo(at);
+        // the box is in course metres on the LV95 grid (FunCourse), as the festival sites are laid
+        var l = at.Lv95;
+        double x = l.E - Start.E, y = l.N - Start.N;
         return x >= x0 && x <= x1 && y >= y0 && y <= y1;
     }
 

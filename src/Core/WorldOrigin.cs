@@ -258,8 +258,11 @@ public sealed class OriginFrame
     public static OriginFrame AnchorAt(EcefPos origin) => new(FrameAxes.Enu(origin), -1);
 
     /// <summary>An anchor on the whole kilometre nearest <paramref name="p"/>.</summary>
-    public static OriginFrame AnchorNear(GlobalPos p) =>
-        Anchor(System.Math.Round(p.E / 1000) * 1000, System.Math.Round(p.N / 1000) * 1000);
+    public static OriginFrame AnchorNear(GlobalPos p)
+    {
+        var l = p.Lv95;
+        return Anchor(System.Math.Round(l.E / 1000) * 1000, System.Math.Round(l.N / 1000) * 1000);
+    }
 
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude)
     {
@@ -268,17 +271,31 @@ public sealed class OriginFrame
         return new((float)x, (float)y, (float)z);
     }
 
-    public Vector3 ToWorld(GlobalPos p) => ToWorld(p.E, p.N, p.Alt);
+    /// <summary>
+    /// A place in this world: through its LV95 notation in the flat ground frame (~1 µs, the rigorous projection: the
+    /// flat world is LV95's plane), straight from its ECEF in an anchor frame.
+    /// </summary>
+    public Vector3 ToWorld(GlobalPos p)
+    {
+        if (Axes == null)
+        {
+            var (e, n, h) = SwissGeodesy.FromEcef(p.Ecef);
+            return new((float)(e - E), (float)(h - Alt0), (float)-(n - N));
+        }
+        var (x, y, z) = Axes.FromEcef(p.Ecef);
+        return new((float)x, (float)y, (float)z);
+    }
 
     public (double E, double N) ToLv95(Vector3 world)
     {
         if (Axes == null) return (E + world.X, N - world.Z);
-        var g = ToGlobal(world);
-        return (g.E, g.N);
+        var (e, n, _) = SwissGeodesy.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
+        return (e, n);
     }
 
+    /// <summary>A world point as a place: through the LV95 projection in the flat ground frame (~1 µs), the axes in an anchor frame.</summary>
     public GlobalPos ToGlobal(Vector3 world) => Axes == null
-        ? new(E + world.X, N - world.Z, world.Y + Alt0)
+        ? GlobalPos.FromLv95(E + world.X, N - world.Z, world.Y + Alt0)
         : GlobalPos.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
 
     /// <summary>
@@ -291,8 +308,7 @@ public sealed class OriginFrame
     public Vector3 UpAt(Vector3 world)
     {
         if (Axes == null) return Vector3.Up;
-        var g = ToGlobal(world);
-        var up = FrameAxes.GroundAt(g.E, g.N, g.Alt).Y;
+        var up = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(Axes.ToEcef(world.X, world.Y, world.Z))).Up;
         return Turn(up, Axes).Normalized();
     }
 
@@ -316,14 +332,12 @@ public sealed class OriginFrame
     public FrameAxes EcefAxesAt(double e, double n) => Axes ?? Embedding(SwissGeodesy.ToEcef(e, n, 0));
 
     /// <summary>A world point as ECEF (#1430 H5): through the anchor's axes, or the point's LV95 place in the ground frame.</summary>
-    public EcefPos ToEcef(Vector3 world) => Axes?.ToEcef(world.X, world.Y, world.Z) ?? ToGlobal(world).ToEcef();
+    public EcefPos ToEcef(Vector3 world) => Axes?.ToEcef(world.X, world.Y, world.Z) ?? ToGlobal(world).Ecef;
 
     /// <summary>An ECEF point in this world (#1430 H5), the inverse of <see cref="ToEcef(Vector3)"/>.</summary>
     public Vector3 FromEcef(EcefPos p)
     {
-        if (Axes == null) return ToWorld(GlobalPos.FromEcef(p));
-        var (x, y, z) = Axes.FromEcef(p);
-        return new((float)x, (float)y, (float)z);
+        return ToWorld(GlobalPos.FromEcef(p));
     }
 
     /// <summary>
@@ -335,29 +349,12 @@ public sealed class OriginFrame
         var axes = Axes;
         if (axes == null)
         {
-            var g = ToGlobal(at);
-            axes = FrameAxes.GroundAt(g.E, g.N, g.Alt);
+            var (e, n) = ToLv95(at);
+            axes = FrameAxes.GroundAt(e, n, at.Y + Alt0);
         }
         return new(axes.X.X * dir.X + axes.Y.X * dir.Y + axes.Z.X * dir.Z,
             axes.X.Y * dir.X + axes.Y.Y * dir.Y + axes.Z.Y * dir.Z,
             axes.X.Z * dir.X + axes.Y.Z * dir.Y + axes.Z.Z * dir.Z);
-    }
-
-    /// <summary>
-    /// A world velocity at a world point as the rate its LV95 place changes, in GlobalPos's axes (east, up,
-    /// south; what positions on the wire are interpolated with, #1430 H5): the same vector in the ground
-    /// frame; in an anchor frame turned, and shrunk with the height (400 km up, a metre east moves E by 0.94 m).
-    /// </summary>
-    public Vector3 GridVelocity(Vector3 at, Vector3 velocity)
-    {
-        if (Axes == null) return velocity;
-        // over a hundredth of a second, in doubles: the place's curve is a millimetre off the line there
-        const double h = 0.01;
-        var p0 = ToEcef(at);
-        var d = EcefDirection(at, velocity);
-        var (e0, n0, a0) = SwissGeodesy.FromEcef(p0);
-        var (e1, n1, a1) = SwissGeodesy.FromEcef(new EcefPos(p0.X + d.X * h, p0.Y + d.Y * h, p0.Z + d.Z * h));
-        return new Vector3((float)((e1 - e0) / h), (float)((a1 - a0) / h), (float)(-(n1 - n0) / h));
     }
 
     /// <summary>An Earth-fixed direction in world axes at a world point (#1430 H5), the inverse of <see cref="EcefDirection"/>.</summary>
@@ -366,23 +363,55 @@ public sealed class OriginFrame
         var axes = Axes;
         if (axes == null)
         {
-            var g = ToGlobal(at);
-            axes = FrameAxes.GroundAt(g.E, g.N, g.Alt);
+            var (e, n) = ToLv95(at);
+            axes = FrameAxes.GroundAt(e, n, at.Y + Alt0);
         }
         return Turn(dir, axes);
     }
 
     /// <summary>
     /// This world's axes at a world point against the local east-up-south there (#1503, x east, y up, z south):
-    /// in the ground frame the grid's axes at the point (<see cref="GlobalPos.Enu"/>: a turn about up by the meridian
+    /// in the ground frame the grid's axes at the point (<see cref="GridAxes"/>: a turn about up by the meridian
     /// convergence and the grid's scale, a flat world's metres being grid metres), in an anchor frame its own axes
     /// (a turn, its metres true ones). A few microseconds (rigorous geodesy): per packet, never per vertex.
     /// </summary>
     public EnuAxes EnuAt(Vector3 at)
     {
-        if (Axes == null) return ToGlobal(at).Enu;
+        if (Axes == null)
+        {
+            var (e, n) = ToLv95(at);
+            return GridAxes(e, n, at.Y + Alt0);
+        }
         var p = Axes.ToEcef(at.X, at.Y, at.Z);
         return new EnuAxes(Axes.InEnu(new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(p))), 1f);
+    }
+
+    /// <summary>This world's axes at a place against the local east-up-south there (<see cref="EnuAt(Vector3)"/>).</summary>
+    public EnuAxes EnuAt(GlobalPos at)
+    {
+        if (Axes == null)
+        {
+            var (e, n, h) = SwissGeodesy.FromEcef(at.Ecef);
+            return GridAxes(e, n, h);
+        }
+        return new EnuAxes(Axes.InEnu(at.Enu), 1f);
+    }
+
+    /// <summary>
+    /// The LV95 grid's axes at a place (grid east, up, grid south: a flat world's) against the local east-up-south
+    /// there: a turn about up by the meridian convergence (0 at Bern, ~0.95° at Geneva) and the grid's scale, the
+    /// physical metres a grid metre is at that height (1 + 80 to 190·10⁻⁶ on the ground). Two projections (~2 µs).
+    /// </summary>
+    public static EnuAxes GridAxes(double e, double n, double alt)
+    {
+        // as FrameAxes.GroundAt(e, n, alt).InEnu(the ENU here), in half the time: grid east is a metre's step
+        // along the grid, laid flat in the ENU (the grid's up is the ellipsoid's); grid south is east x up
+        var o = SwissGeodesy.ToEcef(e, n, alt);
+        var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(o));
+        var (x, _, z) = enu.DirectionToLocal(SwissGeodesy.ToEcef(e + 1, n, alt) - o);
+        double len = System.Math.Sqrt(x * x + z * z);
+        float c = (float)(x / len), s = (float)(z / len);
+        return new EnuAxes(new Basis(new Vector3(c, 0, s), Vector3.Up, new Vector3(-s, 0, c)), (float)len);
     }
 
     /// <summary>A world direction or velocity at a world point as the local east-up-south there: what goes on the wire.</summary>
@@ -406,33 +435,44 @@ public sealed class OriginFrame
     /// <summary>The inverse of <see cref="EnuTurn"/>.</summary>
     public Quaternion WorldTurn(Vector3 at, Quaternion enu) => EnuAt(at).FromEnu(enu);
 
-    /// <summary>
-    /// A heading in <see cref="GlobalPos"/>'s offset axes (a record's, a saved one's: grid north until A1) at
-    /// <paramref name="at"/> as a world heading here: itself in the ground frame, whose axes are those, turned in an
-    /// anchor frame. Free in the ground frame, so a per-frame caller pays nothing on the ground.
-    /// </summary>
-    public float WorldYawOf(GlobalPos at, float offsetYaw) =>
-        Axes == null ? offsetYaw : WorldYaw(ToWorld(at), at.TrueYaw(offsetYaw));
+    /// <summary>A direction or velocity in the local east-up-south at a place (a record's, the wire's) in world axes.</summary>
+    public Vector3 WorldOfEnu(GlobalPos at, Vector3 enu) => EnuAt(at).FromEnu(enu);
 
-    /// <summary>The inverse of <see cref="WorldYawOf"/>: a world heading at a world point in <see cref="GlobalPos"/>'s offset axes.</summary>
-    public float OffsetYawOf(Vector3 at, float worldYaw) =>
-        Axes == null ? worldYaw : ToGlobal(at).OffsetYaw(TrueYaw(at, worldYaw));
+    /// <summary>A heading from true north at a place (a record's, the wire's) as a world heading.</summary>
+    public float WorldYaw(GlobalPos at, float trueYaw) => EnuAt(at).Yaw(trueYaw);
 
-    /// <summary>A direction in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> in world axes (see <see cref="WorldYawOf"/>).</summary>
-    public Vector3 WorldOfOffset(GlobalPos at, Vector3 offset) =>
-        Axes == null ? offset : WorldOfEnu(ToWorld(at), at.EnuFromOffset(offset));
+    /// <summary>A rotation in the local east-up-south at a place (a record's, the wire's) in world axes.</summary>
+    public Quaternion WorldTurn(GlobalPos at, Quaternion enu) => EnuAt(at).FromEnu(enu);
 
-    /// <summary>A rotation in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> in world axes (see <see cref="WorldYawOf"/>).</summary>
-    public Quaternion WorldTurnOf(GlobalPos at, Quaternion offset) =>
-        Axes == null ? offset : WorldTurn(ToWorld(at), at.Enu.ToEnu(offset));
+    // ---- LV95 grid records (#1502) ----------------------------------------------------------------------------------
+    // A record that keeps a heading, a velocity or a rotation in the LV95 grid's axes at its place (what A2 called
+    // GlobalPos's offset axes: the records and the server's flat-world maths, until G2 D moves them to true north) is
+    // set into a world through these: free in the flat ground frame, whose axes the grid's are; through the ENU in an
+    // anchor frame. GlobalPos's own maths are the ENU's, never these axes.
 
-    /// <summary>The inverse of <see cref="WorldTurnOf"/>.</summary>
-    public Quaternion OffsetTurnOf(Vector3 at, Quaternion world) =>
-        Axes == null ? world : ToGlobal(at).Enu.FromEnu(EnuTurn(at, world));
+    /// <summary>A heading on the LV95 grid at <paramref name="at"/> (a record's) as a world heading here.</summary>
+    public float WorldYawOfGrid(GlobalPos at, float gridYaw) =>
+        Axes == null ? gridYaw : WorldYaw(at, Lv95Grid.TrueYaw(at, gridYaw));
 
-    /// <summary>The inverse of <see cref="WorldOfOffset"/>.</summary>
-    public Vector3 OffsetOfWorld(Vector3 at, Vector3 world) =>
-        Axes == null ? world : ToGlobal(at).OffsetFromEnu(EnuOf(at, world));
+    /// <summary>The inverse of <see cref="WorldYawOfGrid"/>: a world heading at a world point on the LV95 grid.</summary>
+    public float GridYawOf(Vector3 at, float worldYaw) =>
+        Axes == null ? worldYaw : Lv95Grid.GridYaw(ToGlobal(at), TrueYaw(at, worldYaw));
+
+    /// <summary>A vector in the LV95 grid's axes at <paramref name="at"/> (a record's velocity) in world axes.</summary>
+    public Vector3 WorldOfGrid(GlobalPos at, Vector3 grid) =>
+        Axes == null ? grid : WorldOfEnu(at, Lv95Grid.Axes(at).ToEnu(grid));
+
+    /// <summary>The inverse of <see cref="WorldOfGrid"/>.</summary>
+    public Vector3 GridOfWorld(Vector3 at, Vector3 world) =>
+        Axes == null ? world : Lv95Grid.Axes(ToGlobal(at)).FromEnu(EnuOf(at, world));
+
+    /// <summary>A rotation in the LV95 grid's axes at <paramref name="at"/> (a record's) in world axes.</summary>
+    public Quaternion WorldTurnOfGrid(GlobalPos at, Quaternion grid) =>
+        Axes == null ? grid : WorldTurn(at, Lv95Grid.Axes(at).ToEnu(grid));
+
+    /// <summary>The inverse of <see cref="WorldTurnOfGrid"/>.</summary>
+    public Quaternion GridTurnOf(Vector3 at, Quaternion world) =>
+        Axes == null ? world : Lv95Grid.Axes(ToGlobal(at)).FromEnu(EnuTurn(at, world));
 
     /// <summary>An Earth-fixed direction in this frame's world axes (the ground frame: grid axes at its own origin).</summary>
     public Vector3 DirectionOf(EcefPos ecef)
@@ -478,9 +518,9 @@ public sealed class OriginFrame
             var (x, z) = id.Local(e, n);
             return new Vector3((float)x, (float)(world.Y + Alt0), (float)z);
         }
-        var p = ToGlobal(world);
+        var p = SwissGeodesy.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
         var (lx, lz) = id.Local(p.E, p.N);
-        return new Vector3((float)lx, (float)p.Alt, (float)lz);
+        return new Vector3((float)lx, (float)p.H, (float)lz);
     }
 
     /// <summary>
@@ -528,6 +568,34 @@ public sealed class OriginFrame
 
     /// <summary>The inverse of <see cref="SinceAnchor(EcefPos)"/>: what a sender maps its points with to send them in the ENU at <paramref name="origin"/>.</summary>
     public OriginShift ToAnchor(EcefPos origin) => AnchorAt(origin).Since(this);
+}
+
+/// <summary>
+/// LV95 grid headings and grid vectors at a place (#1502), for the code that still keeps a place as LV95 eastings and
+/// northings with a grid-north yaw (a Swiss source's heading, a subsystem not on <see cref="GlobalPos"/> yet; they go
+/// at G2 D): at its edge with true north and the local east-up-south. Notation, like <see cref="GlobalPos.Lv95"/>:
+/// two projections (~2 µs), never per vertex.
+/// </summary>
+public static class Lv95Grid
+{
+    /// <summary>The grid's axes at <paramref name="at"/> against its east-up-south (<see cref="OriginFrame.GridAxes"/>).</summary>
+    public static EnuAxes Axes(GlobalPos at)
+    {
+        var l = at.Lv95;
+        return OriginFrame.GridAxes(l.E, l.N, l.H);
+    }
+
+    /// <summary>A heading on the LV95 grid at <paramref name="at"/> (radians, as <c>Rotation.Y</c>) as one from true north.</summary>
+    public static float TrueYaw(GlobalPos at, float gridYaw) => Axes(at).TrueYaw(gridYaw);
+
+    /// <summary>The inverse of <see cref="TrueYaw"/>: a heading from true north as one on the grid.</summary>
+    public static float GridYaw(GlobalPos at, float trueYaw) => Axes(at).Yaw(trueYaw);
+
+    /// <summary>A vector in the grid's axes at <paramref name="at"/> (a record's velocity) in the local east-up-south there.</summary>
+    public static Vector3 ToEnu(GlobalPos at, Vector3 grid) => Axes(at).ToEnu(grid);
+
+    /// <summary>The inverse of <see cref="ToEnu"/>.</summary>
+    public static Vector3 FromEnu(GlobalPos at, Vector3 enu) => Axes(at).FromEnu(enu);
 }
 
 /// <summary>

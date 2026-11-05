@@ -171,7 +171,7 @@ public partial class Fireworks : Node3D, IOriginContainer
 
     public static Fireworks Create(Node world, ChunkManager? chunks, WorldOrigin origin)
     {
-        var f = new Fireworks(origin, p => chunks != null && chunks.TryGetHeight(p, out float h) ? h : null);
+        var f = new Fireworks(origin, p => chunks != null && chunks.Ground.TryGetHeight(p, out float h) ? h : null);
         world.AddChild(f);
         return f;
     }

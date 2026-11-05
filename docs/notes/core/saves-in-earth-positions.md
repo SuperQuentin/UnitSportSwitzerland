@@ -7,11 +7,11 @@ Since #1503 (G2 A2b of `docs/plans/global-tiling-g2.md`). Before it the saves he
 
 - **A place** in a JSON save is `{"x": …, "y": …, "z": …}`, ECEF metres (WGS84), under `"at"`: `GlobalPosJson`, put on
   the `GlobalPos` type, so any saved record with a `GlobalPos` property writes it so. It goes through
-  `GlobalPos.ToWire` / `FromWire` (back to the place within 0.1 mm), and does not change when A1 puts ECEF inside.
+  `GlobalPos.ToWire` / `FromWire` (back to the place within 0.1 mm), and since A1 (#1502) is a plain copy of the doubles inside.
 - **A heading** is `"yawTrue"`, radians from true north at the place (Godot's sense); **a rotation** `"turn"`, the
   quaternion in the local east-up-south there; a place on the ground (a pin, a landing, a spawn, a bay) at altitude 0.
-- **In memory** the records keep `GlobalPos` (LV95 inside until A1) and their grid yaws: they convert at the file,
-  `at.TrueYaw(yaw)` out, `at.OffsetYaw(t)` in. A record whose file moved holds or gives a `GlobalPos`
+- **In memory** the records keep `GlobalPos` (ECEF inside since A1, #1502) and their grid yaws: they convert at the
+  file, `Lv95Grid.TrueYaw(at, yaw)` out, `Lv95Grid.GridYaw(at, t)` in. A record whose file moved holds or gives a `GlobalPos`
   (`Sleeper.At`, `PlacedObject.At`, `Structure.At`, `Pin.At`, `PortableFlag.At`); its `E`/`N` are views for the map.
 - **Every store has a version** (`"version": 2`, `EarthSaves.Current`; the adventure sections their own `v`); a file
   without one is the old form, **converted in place on first load and written back, no backup** (the plan's

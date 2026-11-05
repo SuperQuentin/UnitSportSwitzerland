@@ -26,8 +26,8 @@ public partial class ArrivalProbe : ChatProbe
         if (SpawnPoint.ParseLv95("--expect-spawn") is not { } expect) { Fail("no --expect-spawn E,N"); return; }
         if (!await Joined(150)) return;
 
-        var at = Me!.Global;
-        double off = Math.Sqrt((at.E - expect.E) * (at.E - expect.E) + (at.N - expect.N) * (at.N - expect.N));
+        var at = Me!.Global.Lv95;
+        double off = Me.Global.HorizontalDistanceTo(GlobalPos.FromLv95(expect.E, expect.N, Me.Global.Alt));
         Expect(off < 30, $"started at the server's spawn ({at.E:F0}/{at.N:F0}, {off:F0} m from {expect.E:F0}/{expect.N:F0})");
         Expect(!Permissions.CanTeleport, "the client knows it may not teleport");
 

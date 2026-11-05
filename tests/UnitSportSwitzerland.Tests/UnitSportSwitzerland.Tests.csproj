@@ -108,6 +108,7 @@
     <Compile Include="..\..\src\Net\Invites\PartyBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\GroundTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\BuildPolicy.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
@@ -452,6 +453,8 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\TileRegion.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the cube-native build's frames, leaf regions and leaf writer with its seam pass (#1507): pure, over TerrainFormat -->
     <Compile Include="..\..\tools\TerrainPreprocessor\FrameDriver.cs;..\..\tools\TerrainPreprocessor\LeafWriter.cs;..\..\tools\TerrainPreprocessor\TerrainSampler.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <!-- a feature stage's space, LV95 and frame (#1507), and the French buildings built through it: pure -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\FeatureSpace.cs;..\..\tools\TerrainPreprocessor\FranceBuildings.cs;..\..\tools\TerrainPreprocessor\BdTopo.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the road stage's spaces (#1507): the LV95 and work-frame tile loops, and the reader whose polylines they cut -->
     <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs;..\..\tools\TerrainPreprocessor\CoverExtractor.cs;..\..\tools\TerrainPreprocessor\FrameCoverSpace.cs;..\..\tools\TerrainPreprocessor\WaterWindow.cs;..\..\tools\TerrainPreprocessor\CubeWaterLattice.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- OSM maxspeed to km/h for the overlay (#711): pure -->

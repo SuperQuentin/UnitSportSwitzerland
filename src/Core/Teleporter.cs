@@ -55,6 +55,13 @@ public sealed partial class Teleporter : Node
     /// settle it.
     /// </summary>
     /// <returns>False when there is nothing to move — no camera and no player yet.</returns>
+    public bool TeleportTo(GlobalPos to, string? label = null)
+    {
+        var l = to.Lv95;
+        return TeleportTo(l.E, l.N, label);
+    }
+
+    /// <summary>The same, given in LV95 notation (a typed coordinate, a Swiss source).</summary>
     public bool TeleportTo(double lv95E, double lv95N, string? label = null)
     {
         var target = ActiveTarget();

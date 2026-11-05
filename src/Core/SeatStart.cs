@@ -129,7 +129,7 @@ public sealed class SeatStart
                 if (wish is { } w && along.Dot(w) < 0f) along = -along;
                 facing = along;
                 var road = route.Centre[0];
-                float ground = _chunks!.TryGetSurface(road, out float h) ? h : road.Y;
+                float ground = _chunks!.Ground.TryGetSurface(road, out float h) ? h : road.Y;
                 at = new Vector3(road.X, ground + 0.5f, road.Z);
                 GD.Print($"[seat] on the road {MathX.FlatDistance(road, _player.GlobalPosition):F0} m from where the body landed");
             }

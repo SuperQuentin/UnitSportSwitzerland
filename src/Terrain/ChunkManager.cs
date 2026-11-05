@@ -10,9 +10,19 @@ namespace UnitSport.Terrain;
 /// file IO, decoding and array building; the main thread commits a budgeted number of
 /// Godot resources per frame to avoid hitches. With BuildMeshes=false (dedicated server)
 /// only ChunkGrid data is loaded, which is all height queries need.
+///
+/// <para>
+/// The flat world's <see cref="IWorldGround"/> (#1532), served through <see cref="Ground"/>: gameplay asks
+/// that, never this class, and cannot pass this class where the ground is wanted.
+/// </para>
 /// </summary>
 public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 {
+    /// <summary>The ground gameplay asks (#1532): this streamer's tiles, in the flat world.</summary>
+    public IWorldGround Ground => _ground ??= new FlatGround(this);
+
+    private FlatGround? _ground;
+
     [Export] public bool BuildMeshes { get; set; } = true;
     [Export] public bool BuildCollision { get; set; } = true;
 
@@ -407,14 +417,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         /// <summary>
         /// The pits the tile's building sites are dug into (#619), tile-local; null until a build has
         /// planned its sites. Kept so a surface rebuilt without the buildings (a finer or coarser
-        /// LOD) is cut the same, and for <see cref="InPit"/>.
+        /// LOD) is cut the same, and for <see cref="IWorldGround.InPit"/>.
         /// </summary>
         public List<Construction.PitCut>? Pits;
         public byte[]? Cover;
         public bool CoverLoaded;
         /// <summary>
         /// The tile's still water (#299; null: none, or not kept). Kept where the cover is (tiles
-        /// drawn finer than the coarse stride) and on a server; see <see cref="TryGetWaterLevel"/>.
+        /// drawn finer than the coarse stride) and on a server; see <see cref="IWorldGround.TryGetWaterLevel"/>.
         /// </summary>
         public WaterLayer? Water;
         public ChunkNode? Node;
@@ -641,8 +651,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _chunks.TryGetValue(id, out var state) ? state.Node?.BuildingBody : null;
 
     /// <summary>A loaded tile's ground mesh, for per-tile shader parameters (<see cref="PhotoLayer"/>).</summary>
-    public MeshInstance3D? GroundAt(TileId id) =>
-        _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
+    private MeshInstance3D? GroundMeshAt(GroundTile tile) =>
+        _chunks.TryGetValue(tile.Lv95Tile, out var state) ? state.Node?.Ground : null;
 
     /// <summary>A loaded tile's road mesh, for per-tile shader parameters (the ski slopes, #887).</summary>
     public MeshInstance3D? RoadsAt(TileId id) =>
@@ -774,26 +784,31 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>Whether a tile is drawn from generated rather than real data, as of now.</summary>
     public bool IsGenerated(TileId id) => _fallback?.Covers(id) == true;
 
+    // The tile events of IWorldGround (#1532), raised with the flat world's GroundTile (FlatGround subscribes to them).
+
     /// <summary>
     /// Raised on the main thread after tiles were unloaded because the world under them changed,
     /// for anything that cached what it read from them (road surfaces, streams, trees to gather,
     /// lane graphs). The argument selects the affected tiles; null means all of them.
     /// </summary>
-    public event Action<Func<TileId, bool>?>? TerrainReplaced;
+    private Action<Func<GroundTile, bool>?>? _terrainReplaced;
+
 
     /// <summary>
     /// Main thread: a tile's buildings, doors and trees have just committed, for systems that
     /// dress a tile (occasion decorations). The node is the tile's own, so anything parented to it
     /// unloads with it. Doors are tile-local, like <see cref="Interiors.DoorSpot.Position"/>.
     /// </summary>
-    public event Action<TileId, ChunkNode, Interiors.DoorSpot[]>? TileFurnished;
+    private Action<GroundTile, ChunkNode, Interiors.DoorSpot[]>? _tileFurnished;
+
 
     /// <summary>
     /// Main thread: a tile has left the building ring and shed its buildings (#553). Whatever
-    /// <see cref="TileFurnished"/> hung on them (signs, decorations) goes too; they come back with
-    /// the next <see cref="TileFurnished"/> if the tile comes near again.
+    /// the furnished event hung on them (signs, decorations) goes too; they come back with the
+    /// next one if the tile comes near again.
     /// </summary>
-    public event Action<TileId, ChunkNode>? TileUnfurnished;
+    private Action<GroundTile, ChunkNode>? _tileUnfurnished;
+
 
     /// <summary>
     /// Buildings round the camera drawn in cells with occluders, for occlusion culling (#553). On:
@@ -827,7 +842,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     {
         float lowest = float.MaxValue;
         foreach (var anchor in _anchors)
-            if (IsInstanceValid(anchor) && TryGetHeight(anchor.GlobalPosition, out float ground))
+            if (IsInstanceValid(anchor) && HeightAt(anchor.GlobalPosition, out float ground))
                 lowest = Math.Min(lowest, anchor.GlobalPosition.Y - ground);
         if (lowest == float.MaxValue) return _street;
         if (_street && lowest > StreetLeaveM) _street = false;
@@ -854,10 +869,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
-    public event Action<TileId>? TileEntered;
+    private Action<GroundTile>? _tileEntered;
+
 
     /// <summary>Main thread: a tile has been unloaded and its node freed.</summary>
-    public event Action<TileId>? TileUnloaded;
+    private Action<GroundTile>? _tileUnloaded;
+
 
     /// <summary>
     /// Generates every tile the real set does not have, inside the fallback's domain.
@@ -921,7 +938,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _sinceEval = double.MaxValue;
         FitHorizonCoverage();
         Horizon?.Reload();
-        TerrainReplaced?.Invoke(affected);
+        _terrainReplaced?.Invoke(tile => affected(tile.Lv95Tile));
     }
 
     /// <summary>
@@ -1040,7 +1057,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var (e, n) = _origin!.ToLv95(pos);
         var v = anchor is CharacterBody3D body ? body.Velocity : Vector3.Zero;
         var ahead = CollisionReach.Ahead(e, n, pos.Y, v.X, -v.Z, v.Y);
-        bool airborne = TryGetHeight(pos, out float ground)
+        bool airborne = HeightAt(pos, out float ground)
             && pos.Y - ground > CollisionReach.AirGapM && ahead.Alt - ground > CollisionReach.AirGapM;
         return (e, n, ahead.E, ahead.N, airborne);
     }
@@ -1233,7 +1250,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// The land-cover class under a point, for tiles loaded at a fine stride (the ones around a
     /// player — far tiles drop their cover once meshed). False when that is not known.
     /// </summary>
-    public bool TryGetCover(Vector3 worldPos, out CoverClass cover)
+    private bool CoverAt(Vector3 worldPos, out CoverClass cover)
     {
         cover = CoverClass.Open;
         if (_origin == null) return false;
@@ -1256,14 +1273,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// a source layer, never the legacy one, which needs the cover). On a legacy tile (#298 not
     /// there yet) the level is the terrain + 0.12 m, so the water there is 0.12 m deep.
     /// </summary>
-    public bool TryGetWaterLevel(Vector3 worldPos, out float stillLevel) =>
-        TryGetWater(worldPos, out stillLevel, out _);
-
-    /// <summary>
-    /// <see cref="TryGetWaterLevel"/> plus the wave scale there, 0..1 (fetch x depth), the factor the
-    /// water mesh bakes into its vertices: what <see cref="World.WaterField"/> multiplies the waves by.
-    /// </summary>
-    public bool TryGetWater(Vector3 worldPos, out float stillLevel, out float waveScale)
+    /// <para>
+    /// With the wave scale there, 0..1 (fetch x depth), the factor the water mesh bakes into its
+    /// vertices: what <see cref="World.WaterField"/> multiplies the waves by.
+    /// </para>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private bool WaterAt(Vector3 worldPos, out float stillLevel, out float waveScale)
     {
         stillLevel = 0f;
         waveScale = 0f;
@@ -1277,13 +1292,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     /// <summary>
     /// Where something put down here rests (#299): the ground, or the still water surface where
-    /// there is water over it. <see cref="TryGetHeight"/> is the terrain, which under a lake is now
+    /// there is water over it. <see cref="IWorldGround.TryGetHeight"/> is the terrain, which under a lake is now
     /// its bed: spawns, respawns, drops, birds and the void rescue want this one.
     /// </summary>
-    public bool TryGetSurface(Vector3 worldPos, out float height)
+    private bool SurfaceAt(Vector3 worldPos, out float height)
     {
-        if (!TryGetHeight(worldPos, out height)) return false;
-        if (TryGetWaterLevel(worldPos, out float still) && still > height) height = still;
+        if (!HeightAt(worldPos, out height)) return false;
+        if (WaterAt(worldPos, out float still, out _) && still > height) height = still;
         return true;
     }
 
@@ -1294,7 +1309,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public ChunkGrid? GridAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.Grid : null;
 
-    public bool TryGetHeight(Vector3 worldPos, out float height)
+    /// <summary>
+    /// <see cref="IWorldGround.TryGetHeight"/>'s own path, for the streamer itself and the interface's
+    /// benchmark (<c>--worldgroundcheck</c>'s direct leg); gameplay asks <see cref="Ground"/>.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    internal bool HeightAt(Vector3 worldPos, out float height)
     {
         height = 0f;
         if (_origin == null) return false;
@@ -1317,7 +1337,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// ramps and streets metres under the raw terrain the safety nets compare against (#119), and a
     /// body standing on that is not under the world.
     /// </summary>
-    public bool FloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth = 4f)
+    private static bool FloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth)
     {
         var q = PhysicsRayQueryParameters3D.Create(worldPos + Vector3.Up * 0.5f, worldPos - Vector3.Up * depth);
         q.Exclude = new Godot.Collections.Array<Rid> { self };
@@ -1330,7 +1350,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// Whether a world position lies inside a tunnel bore of a tile whose collision is built (#119):
     /// there a body is legitimately under the terrain surface, and no safety net may lift it out.
     /// </summary>
-    public bool InTunnel(Vector3 worldPos)
+    private bool InTunnelAt(Vector3 worldPos)
     {
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
@@ -1344,7 +1364,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// Whether a world position is down in a building site's pit (#619): under the ground the height
     /// queries answer, over the pit's floor. A body there is not under the ground.
     /// </summary>
-    public bool InPit(Vector3 worldPos)
+    private bool InPitAt(Vector3 worldPos)
     {
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
@@ -1361,7 +1381,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// Whether the tile under a world position has its collision shape committed. A body
     /// placed before that falls through the ground it can see.
     /// </summary>
-    public bool HasCollisionAt(Vector3 worldPos)
+    private bool CollisionAt(Vector3 worldPos)
     {
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
@@ -1379,7 +1399,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// Whether the tile under a world position has every cell of its buildings' collision
     /// committed: until then a spot can look free and be inside a house (#517, the on-foot start).
     /// </summary>
-    public bool BuildingCollisionDoneAt(Vector3 worldPos)
+    private bool BuildingCollisionAt(Vector3 worldPos)
     {
         if (_origin == null) return false;
         var (e, n) = _origin.ToLv95(worldPos);
@@ -1608,7 +1628,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 state.BuildingCells = state.PendingCells;
                 if (result.Doors != null)
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.TileTransform(result.Id).Origin, result.Doors);
-                TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
+                _tileFurnished?.Invoke(GroundTile.FromLv95(result.Id), EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
                 {
                     var node = EnsureNode(result.Id, state);
@@ -1656,7 +1676,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// one frame: a 1001² HeightMapShape3D (~80 ms), the buildings' BVH (up to 80 ms) and the
     /// bridges together. Now the height field is 16 cells of 251², the bridges and buildings
     /// are a piece each, and the cell a body stands in goes first, then its bridge, so
-    /// <see cref="HasCollisionAt"/> turns true as early as it can.
+    /// <see cref="IWorldGround.HasCollisionAt"/> turns true as early as it can.
     /// </summary>
     private int CommitCollisionPieces(System.Diagnostics.Stopwatch clock)
     {
@@ -1860,7 +1880,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (!_chunks.TryGetValue(id, out var state))
             {
                 _chunks[id] = state = new ChunkState();
-                TileEntered?.Invoke(id);
+                _tileEntered?.Invoke(GroundTile.FromLv95(id));
             }
 
             bool needMesh = BuildMeshes && state.ActiveStride != want.Stride;
@@ -1989,7 +2009,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             bool byRadius = CollisionByRadius && _collisionAnchors.Contains(anchor);
             var reach = byRadius ? ReachOf(anchor) : default;
             // how high the anchor is above its ground, for the vertical LOD (LodPolicy.WithAltitude)
-            float agl = VerticalLod && TryGetHeight(anchor.GlobalPosition, out float under) ? anchor.GlobalPosition.Y - under : 0f;
+            float agl = VerticalLod && HeightAt(anchor.GlobalPosition, out float under) ? anchor.GlobalPosition.Y - under : 0f;
             // dz runs from south to north, the order the tiles were always visited in
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dz = radius; dz >= -radius; dz--)
@@ -2041,7 +2061,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 shedNode.ClearBuildings();
                 shed.HasBuildings = false;
                 Interiors.DoorIndex.ClearTile(id);
-                TileUnfurnished?.Invoke(id, shedNode);
+                _tileUnfurnished?.Invoke(GroundTile.FromLv95(id), shedNode);
             }
             if (shed.HasRoads && !shed.PendingRoads && want.Dist > Lod.RoadMaxDist + Lod.UnloadSlack)
             {
@@ -2143,7 +2163,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _chunks.Remove(id);
         Horizon?.SetCovered(id, false);
         Interiors.DoorIndex.ClearTile(id);
-        TileUnloaded?.Invoke(id);
+        _tileUnloaded?.Invoke(GroundTile.FromLv95(id));
     }
 
     /// <summary>

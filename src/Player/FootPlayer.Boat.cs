@@ -156,7 +156,7 @@ public partial class FootPlayer
         // (the state's position is a GlobalPos on the wire: the body, still where the boat is, is this frame's)
         var at = GlobalPosition + right * (boat.ParkedBox.Size.X * 0.5f + BodyRadius + 0.6f);
         ApplyRide(RideKind.OnFoot, Vector3.Zero);
-        IntoWater(at, Origin!.Frame.WorldOfOffset(state.Position, state.Velocity) with { Y = 0 } * 0.4f);   // this world's (#1503)
+        IntoWater(at, Origin!.Frame.WorldOfGrid(state.Position, state.Velocity) with { Y = 0 } * 0.4f);   // this world's (#1503)
         _stunTimer = 1f;
         GD.Print($"[boat] {Name} thrown off the {boat.Label} (landing {boat.State.LastLanding:F1} m/s, capsized {boat.State.Capsized:F1} s)");
     }

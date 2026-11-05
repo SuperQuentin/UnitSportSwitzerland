@@ -504,7 +504,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 // would find the same terrain
                 bool built = true;
                 foreach (var (e, n, alt) in _unposed[id])
-                    if (!_chunks.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
+                    if (!_chunks.Ground.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
                 if (!built) continue;
                 DrawLooks(id);
                 // and only once: a point that still misses with its collision built never will be hit (a
@@ -912,7 +912,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         float Ground(Vector3 p)
         {
             // the very query a parked train stands on (VehicleBody.Ground): what a vehicle collides with
-            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _chunks, true, out bool solid);
+            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _chunks?.Ground, true, out bool solid);
             if (!solid)
             {
                 var g = _origin.ToGlobal(p);

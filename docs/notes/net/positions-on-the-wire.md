@@ -17,10 +17,11 @@ Since protocol 93 (#1503, G2 A2 of `docs/plans/global-tiling-g2.md`). Before it:
   `origin.EnuOf(at, v)` / `WorldOfEnu(at, enu)`. **A heading**: from true north at the object, radians in
   `Rotation.Y`'s sense: `origin.TrueYaw(at, yaw)` / `WorldYaw(at, t)`. **A rotation**: `EnuTurn` / `WorldTurn`.
   `EnuAt(at)` (an `EnuAxes`) does all of them at once (~3 µs); `EnuNear` keeps it for what is published every frame.
-- **Records and LV95 maths** keep directions and headings in `GlobalPos`'s offset axes (the grid's, which a flat
-  frame's axes are): `g.EnuFromOffset` / `OffsetFromEnu`, `g.TrueYaw` / `OffsetYaw` convert at the edge without a
-  frame; `frame.WorldYawOf(g, y)`, `WorldOfOffset`, `WorldTurnOf` and their inverses turn them into a world, free in
-  a flat frame. The server's frames are always flat, so there a world yaw is a record's. A state that is saved too
+- **Records and LV95 maths** keep directions and headings in the LV95 grid's axes (which a flat frame's axes are;
+  `GlobalPos`'s own maths are ENU since #1502, `core/globalpos-earth`): `Lv95Grid.ToEnu` / `FromEnu`, `TrueYaw` /
+  `GridYaw` convert at the edge without a frame; `frame.WorldYawOfGrid(g, y)`, `WorldOfGrid`, `WorldTurnOfGrid` and
+  their inverses turn them into a world, free in a flat frame. The server's frames are always flat, so there a world
+  yaw is a record's. A state that is saved too
   (`VehicleState`, `DropState`, `RadioState` in the object containers) saves its wire form, `ToDict`; `FromDict` also
   reads a container record saved before A2b (the keys tell). Saves: `core/saves-in-earth-positions`.
 - **A list of points**: an ECEF origin near them and float offsets in the ENU there
@@ -29,9 +30,9 @@ Since protocol 93 (#1503, G2 A2 of `docs/plans/global-tiling-g2.md`). Before it:
   and gates (`RaceManager.Setup`, `NpcArrive`), bird snapshots (per bird the yaw turned by the shift's `Yaw`), trial
   ghosts (`GhostTrack` `GSH2`; a `GSH1` the server stored is rewritten as `GSH2` when read, never sent).
 - **Synchronized bodies**: `FootPlayer` replicates `NetX/NetY/NetZ` (`NetGlobal`, read whole when `NetZ` arrives),
-  `NetVel` (ENU) and `NetYaw` (true north). Read `GlobalYaw` / `GlobalVelocity` for LV95 maths and records,
-  `WorldYaw` / `WorldVelocity` for this peer's world; `SetNetState` publishes from a record. Copies interpolate in
-  GlobalPos's axes (`RemoteInterpolator`) and turn the heading into their frame on the way out. Vehicles, radios and
+  `NetVel` (ENU) and `NetYaw` (true north). Read `GlobalYaw` / `GlobalVelocity` for LV95 maths and records (grid),
+  `WorldYaw` / `WorldVelocity` for this peer's world; `SetNetState` publishes from a record. Copies interpolate in the
+  wire's ENU and true north (`RemoteInterpolator`, GlobalPos's own maths) and turn the heading into their frame on the way out. Vehicles, radios and
   dropped items carry a `Net/NetPlace` child: `NetPlace.Properties` (ECEF) then `NetPlace.Turn` (the body's rotation
   in ENU) and, for a vehicle, `NetPlace.Velocity`, in place of `.:position`, `.:rotation`, `.:velocity`; a flyer's or
   a boat's attitude goes as `VehicleBody.NetTilt`. The authority publishes; every other peer is moved and turned when

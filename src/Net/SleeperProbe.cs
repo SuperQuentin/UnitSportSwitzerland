@@ -42,7 +42,7 @@ public partial class SleeperProbe : ChatProbe
     {
         Me!.GlobalPosition += new Vector3(30, 0, 0);
         await Seconds(3);
-        GD.Print($"{Log} leaving at {Me.Global.E:F1}/{Me.Global.N:F1}");
+        GD.Print($"{Log} leaving at {Me.Global.Lv95}");
         GD.Print($"{Log} RESULT: ok");
         // a clean ENet disconnect, so the server knows at once rather than at the peer's time-out
         Multiplayer.MultiplayerPeer?.Close();
@@ -93,6 +93,6 @@ public partial class SleeperProbe : ChatProbe
     private static double Distance(Player.FootPlayer me, (double E, double N) at)
     {
         var g = me.Global;
-        return System.Math.Sqrt((g.E - at.E) * (g.E - at.E) + (g.N - at.N) * (g.N - at.N));
+        return g.HorizontalDistanceTo(Core.GlobalPos.FromLv95(at.E, at.N, g.Alt));
     }
 }

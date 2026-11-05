@@ -130,7 +130,7 @@ public partial class AdventureCheck : ChatProbe
         var me = Me!;
         var g = me.Global;
         var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
-        me.GlobalPosition += new Vector3((float)toE, 0.3f, -(float)toN);
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.3f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Until(() => false, 0.3);
         GD.Print(FormattableString.Invariant($"{Log} at {me.Global.Lv95}"));

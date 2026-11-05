@@ -236,7 +236,7 @@ public partial class SteinCheck : ChatProbe
         var me = Me!;
         var g = me.Global;
         var (jumpE, jumpN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
-        me.GlobalPosition += new Vector3((float)jumpE, 0.2f, (float)-jumpN);
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)jumpE, 0.2f, (float)-jumpN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.3);
     }

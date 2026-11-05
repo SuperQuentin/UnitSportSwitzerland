@@ -27,7 +27,11 @@ TerrainPreprocessor --cube-compare --chunks <LV95 dir> --cube <cube region dir>
   Heights under LV95 still water are counted apart: the `.terr` holds the bed there (#298).
 - **Draped features** (road vertices, surveyed trees) are compared as height above their own build's ground:
   the `.terr` bilinear for LV95 (its draping), the leaf mesh (its triangles split along (i, j)–(i+1, j+1))
-  for leaves. Buildings and signals are not draped: absolute.
+  for leaves. Signals are not draped: absolute. **Buildings** sit on their own build's ground (a re-seat, #1507
+  PR 3), so with the user: each vertex's height above its build's **seat** (the median ground at the stage's
+  samples: the 3 × 3 grid over the footprint box, French ones at their corners and centroid, each build's
+  median over the samples where it has ground) is held to 2 cm p99; the absolute height to the heights' bars
+  (|mean| 2 cm, p50 7.2 cm); the seats' difference is printed.
 - **Matching**: by id where there is one (EGID, OSM and LWB ids for pistes and fields), else mutual
   nearest neighbour in plan (5 m; surveyed trees 1 m). A record counts only where both builds have ground:
   an LV95 record in a leaf the region holds, a leaf record over an LV95 tile with a `.terr`.

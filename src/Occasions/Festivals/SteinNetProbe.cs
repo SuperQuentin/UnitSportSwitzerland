@@ -42,7 +42,7 @@ public partial class SteinNetProbe : ChatProbe
         double back = _role == "A" ? 0.8 : 5.0;
         var g = me.Global;
         var (backE, backN, _) = g.OffsetTo(GlobalPos.FromLv95(ground.E - ground.DirE * back, ground.N - ground.DirN * back, g.Alt));
-        me.GlobalPosition += new Vector3((float)backE, 0.2f, (float)-backN);
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)backE, 0.2f, (float)-backN));
         me.Velocity = Vector3.Zero;
         await Seconds(1.5);
 

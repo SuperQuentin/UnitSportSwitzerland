@@ -306,7 +306,7 @@ public sealed class TrialRuns
 /// <summary>
 /// A trial's ghost (#1227): the run sampled at 4 Hz, ~4 KB a minute, capped at <see cref="MaxBytes"/>. The client
 /// records and uploads it after a personal best; the server keeps the top 3 (on disk, as uploaded); a retry races it.
-/// In memory a <see cref="Sample"/> is LV95, the altitude and a heading on the grid (GlobalPos's offset axes). The
+/// In memory a <see cref="Sample"/> is LV95, the altitude and a heading on the grid (the LV95 grid's axes). The
 /// bytes are <c>GSH2</c> since protocol 93 (#1503): an ECEF origin (the first sample) and per sample a float offset
 /// in the local east-up-south there and a heading from true north at the sample. A <c>GSH1</c> the server stored before
 /// (LV95 offsets from the first point, grid headings) is rewritten as <c>GSH2</c> the first time it is read
@@ -341,7 +341,7 @@ public static class GhostTrack
             w.Write((float)x);
             w.Write((float)y);
             w.Write((float)z);
-            w.Write(at.TrueYaw(samples[i].Yaw));
+            w.Write(Core.Lv95Grid.TrueYaw(at, samples[i].Yaw));
         }
         return ms.ToArray();
     }
@@ -376,7 +376,7 @@ public static class GhostTrack
             if (!float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z) || !float.IsFinite(yaw)) return null;
             var at = Core.GlobalPos.FromEcef(enu.ToEcef(x, y, z));
             var l = at.Lv95;
-            list.Add(new Sample(l.E, l.N, (float)at.Alt, at.OffsetYaw(yaw)));
+            list.Add(new Sample(l.E, l.N, (float)at.Alt, Core.Lv95Grid.GridYaw(at, yaw)));
         }
         return list;
     }
