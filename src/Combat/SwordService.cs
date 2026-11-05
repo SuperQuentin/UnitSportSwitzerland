@@ -360,7 +360,7 @@ public partial class SwordService : Node
         if (_dummyData.Count >= MaxDummies || owned >= MaxDummiesPerPeer)
             return $"[dummy] Enough dummies ({Math.Min(MaxDummiesPerPeer, MaxDummies)} each); /dummy clear takes yours away.";
         var g = body.Global;
-        float yaw = _origin.TrueYaw(body.GlobalPosition, body.Rotation.Y);   // from true north: Moved's axes
+        float yaw = Lv95Grid.TrueYaw(g, body.Rotation.Y);   // from true north (Moved's axes); a server body's world yaw is a grid one
         // 2.6 m ahead, facing the one who put it there
         var at = g.Moved(-Mathf.Sin(yaw) * 2.6, Mathf.Cos(yaw) * 2.6);
         AddDummy(sender, at, Lv95Grid.GridYaw(at, yaw + Mathf.Pi));   // a dummy keeps a grid yaw

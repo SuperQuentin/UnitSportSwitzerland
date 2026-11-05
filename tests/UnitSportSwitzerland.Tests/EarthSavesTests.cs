@@ -42,7 +42,7 @@ public class EarthSavesTests
     {
         var at = AtOf(o);
         float t = o[SavedPlace.YawTrue]!.GetValue<float>();
-        Assert.Equal(grid, at.OffsetYaw(t), 1e-6f);
+        Assert.Equal(grid, Lv95Grid.GridYaw(at, t), 1e-6f);
         Assert.True(Math.Abs(EnuAxes.Wrap(t - grid)) > 0.01f, $"at Geneva true north is ~0.9° off the grid's, got {t} for {grid}");
     }
 
@@ -139,7 +139,7 @@ public class EarthSavesTests
         var grid = new Quaternion(0, 0.5646425f, 0, 0.8253356f);
         Assert.True(Math.Abs(back.Dot(grid)) > 1 - 1e-6f, $"{grid} came back as {back}");
         // the turn about up in the local ENU is the true heading: the grid's turned by the convergence
-        Assert.Equal(AtOf(flag).TrueYaw(grid.GetEuler().Y), new Quaternion(turn[0], turn[1], turn[2], turn[3]).GetEuler().Y, 1e-5f);
+        Assert.Equal(Lv95Grid.TrueYaw(AtOf(flag), grid.GetEuler().Y), new Quaternion(turn[0], turn[1], turn[2], turn[3]).GetEuler().Y, 1e-5f);
 
         var zip = root["Objects"]![1]!;
         string payload = zip["Payload"]!.GetValue<string>();

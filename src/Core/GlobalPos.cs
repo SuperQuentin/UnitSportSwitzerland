@@ -212,7 +212,11 @@ public readonly record struct GlobalPos
     /// ground (d²/2R: 8 cm at 1 km); use <see cref="Moved"/> for metres along the ground. A world vector of a flat
     /// frame is no ENU vector: convert it with the frame (<see cref="OriginFrame.EnuOf"/>).
     /// </summary>
-    public static GlobalPos operator +(GlobalPos p, Vector3 d) => FromEcef(p.Enu.ToEcef(d.X, d.Y, d.Z));
+    public static GlobalPos operator +(GlobalPos p, Vector3 d)
+    {
+        var (e, u, n) = p.Axes();
+        return new(p._x + e.X * d.X + u.X * d.Y - n.X * d.Z, p._y + e.Y * d.X + u.Y * d.Y - n.Y * d.Z, p._z + u.Z * d.Y - n.Z * d.Z);
+    }
 
     /// <summary>
     /// The vector from <paramref name="b"/> to <paramref name="a"/> in the local east-up-south at <paramref name="b"/>,
@@ -220,8 +224,21 @@ public readonly record struct GlobalPos
     /// </summary>
     public static Vector3 operator -(GlobalPos a, GlobalPos b)
     {
-        var (x, y, z) = b.Enu.ToLocal(a.Ecef);
-        return new((float)x, (float)y, (float)z);
+        var (e, u, n) = b.Axes();
+        double dx = a._x - b._x, dy = a._y - b._y, dz = a._z - b._z;
+        return new((float)(e.X * dx + e.Y * dy), (float)(u.X * dx + u.Y * dy + u.Z * dz), (float)-(n.X * dx + n.Y * dy + n.Z * dz));
+    }
+
+    // the local east, up and north here without the iterated geodetic latitude (what + and - run on, per frame): up the
+    // ellipsoid's gradient (within 10⁻⁶ rad of the plumb line 10 km up: micrometres on a metre-scale vector), east
+    // square to the axis, north up × east. Rounds the same both ways, so b + (a - b) is a.
+    private ((double X, double Y, double Z) East, (double X, double Y, double Z) Up, (double X, double Y, double Z) North) Axes()
+    {
+        var up = Normal(_x, _y, _z);
+        double rho = System.Math.Sqrt(_x * _x + _y * _y);
+        var east = rho > 1e-9 ? (-_y / rho, _x / rho, 0.0) : (0.0, 1.0, 0.0);
+        var north = (up.Y * east.Item3 - up.Z * east.Item2, up.Z * east.Item1 - up.X * east.Item3, up.X * east.Item2 - up.Y * east.Item1);
+        return (east, up, north);
     }
 
     public bool IsFinite => double.IsFinite(_x) && double.IsFinite(_y) && double.IsFinite(_z);

@@ -45,8 +45,9 @@ public class FlatLv95RatchetTests
             new(@"\w\)?\.(E|N)\b(?!\s*\()", RegexOptions.Compiled),
             // 4150 on main before G2 A2 (#1503), 4162 after the wire's step (the records' E/N read at the RPC edge); 4134
             // after A2b: the saves keep Earth places, and records whose file moved hold a GlobalPos (sleepers) or give one
-            // (placed objects, structures, pins, the travel flag), which the RPC edges now read
-            Baseline: 4134, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+            // (placed objects, structures, pins, the travel flag), which the RPC edges now read; 4093 after A1's last step
+            // (#1502): GlobalPos has no E/N, what is left reads its LV95 notation (`.Lv95.E`) or a record's LV95 fields
+            Baseline: 4093, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);

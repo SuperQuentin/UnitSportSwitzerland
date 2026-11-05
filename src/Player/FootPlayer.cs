@@ -379,6 +379,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The owner's turn from its world to the ENU, kept while it moves less than 100 m (#1503): published every frame.</summary>
     private EnuNear _enuNear;
 
+    /// <summary>A copy's turn from this peer's world to the ENU where it is drawn, kept as <see cref="_enuNear"/>.</summary>
+    private EnuNear _drawEnu;
+
     /// <summary>
     /// The heading in <see cref="GlobalPos"/>'s offset axes at <see cref="Global"/> (grid north until G2 A1): what
     /// server code doing LV95 maths reads, and what a record keeps. On the owner its body's, else the published one.
@@ -400,8 +403,26 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Where this player is, origin-free: on a copy, what its owner last published (exact on the
     /// server's proxies, which is what the server measures with); on the owner, its own body.
     /// </summary>
-    public GlobalPos Global => !IsMultiplayerAuthority() && _netTime > 0 || Origin is not { } origin
-        ? NetGlobal : origin.ToGlobal(GlobalPosition);
+    public GlobalPos Global
+    {
+        get
+        {
+            if (!IsMultiplayerAuthority() && _netTime > 0 || Origin is not { } origin) return NetGlobal;
+            // the projection costs ~1 µs and many systems ask each frame: kept while the body and the frame stay put
+            var at = GlobalPosition;
+            var frame = origin.Frame;
+            if (at != _globalAt || !ReferenceEquals(frame, _globalFrame))
+            {
+                _global = frame.ToGlobal(at);
+                _globalAt = at;
+                _globalFrame = frame;
+            }
+            return _global;
+        }
+    }
+    private GlobalPos _global;
+    private Vector3 _globalAt = new(float.NaN, 0, 0);
+    private OriginFrame? _globalFrame;
 
     /// <summary>The owner's clock when <see cref="NetGlobal"/> was taken. Replicated LAST, so its
     /// setter sees a complete state.</summary>
@@ -1979,8 +2000,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the new simulator takes it over where it is drawn, a metre or two off the line in a bend
             _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
             var (p, trueYaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
-            // the interpolator's heading is from true north: this frame's at the drawn place
-            float yaw = Origin is { } framed ? framed.Frame.WorldYaw(p, trueYaw) : trueYaw;
+            // the interpolator's heading is from true north: this frame's at the drawn place (the frame's turn there kept
+            // while it moves less than 100 m: a few microseconds of geodesy otherwise, per remote per frame)
+            float yaw = Origin is { } framed ? _drawEnu.At(framed.Frame, Position).Yaw(trueYaw) : trueYaw;
             if (Origin is { } origin)
             {
                 var at = origin.ToWorld(p);
