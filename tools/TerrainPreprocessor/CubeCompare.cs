@@ -42,6 +42,7 @@ public static class CubeCompare
     {
         string? chunks = null, cubeDir = null, lvRoads = null, cubeRaw = null;
         var kinds = AllKinds.ToList();
+        int coverRing = 1;
         int stride = 1, maxLeaves = int.MaxValue, jobs = Math.Max(1, Environment.ProcessorCount - 2);
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         for (int i = 0; i < args.Count; i++)
@@ -66,6 +67,7 @@ public static class CubeCompare
                     if (v.Length != 4) { Console.Error.WriteLine("--compare-box minE,minN,maxE,maxN (LV95 m)"); return 2; }
                     box = (v[0], v[1], v[2], v[3]);
                     break;
+                case "--cover-ring": coverRing = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 default: Console.Error.WriteLine($"--cube-compare: unknown option {args[i]}"); return 2;
             }
         }
@@ -74,7 +76,7 @@ public static class CubeCompare
 
         var clock = Stopwatch.StartNew();
         Console.OutputEncoding = System.Text.Encoding.UTF8;   // the keys' lat/lon print with a degree sign
-        var lv = new Lv95Build(chunks, lvRoads) { Box = box };
+        var lv = new Lv95Build(chunks, lvRoads) { Box = box, CoverRing = coverRing };
         var cube = new CubeBuild(cubeDir, maxLeaves, cubeRaw) { Box = box };
         Console.WriteLine($"cube-compare: {lv.Tiles.Count} LV95 tiles in {chunks}; {cube.Leaves.Count} leaves at level {CubeBuild.LeafLevel} "
             + $"in {cube.Bundles.Count} bundles in {cubeDir} ({string.Join(", ", cube.KindsPresent.Order())})");
@@ -197,6 +199,8 @@ public static class CubeCompare
             for (int j = 0; j < n; j += c.Stride)
                 for (int i = 0; i < n; i += c.Stride)
                 {
+                    // --seam-margin: away from either build's cuts (a pass that works tile by tile stops at its edges)
+                    if (_seamMargin > 0 && NearSeam(key.Vertex(tile.Bits, i, j, double.IsNaN(tile.HeightAt(i, j)) ? 0 : tile.HeightAt(i, j)))) continue;
                     var (e, nn) = c.Cube.Lv95Of(key, tile, i, j);
                     var (lvClass, uniform) = c.Lv.CoverAround(e, nn);
                     if (lvClass >= 0) (uniform ? acc.A : acc.E).Add(lvClass, cells[j * n + i]);
@@ -1132,7 +1136,7 @@ public static class CubeCompare
         return (lv, 610 * Math.Min(Frac((u + 1) * 0.5 * side), Frac((v + 1) * 0.5 * side)));
     }
 
-    /// <summary><c>--seam-margin</c> (0: off): roads compared away from either build's cuts only.</summary>
+    /// <summary><c>--seam-margin</c> (0: off): roads and cover compared away from either build's cuts only.</summary>
     private static double _seamMargin;
 
     private static bool NearSeam(EcefPos p)
@@ -1233,6 +1237,13 @@ internal sealed class Lv95Build
     /// <summary>The LV95 box the comparison is held to (<c>--compare-box</c>); null: everywhere.</summary>
     public (double MinE, double MinN, double MaxE, double MaxN)? Box { get; init; }
 
+    /// <summary>
+    /// How many LV95 vertices round the nearest one must hold its class for the class to count as resolved there
+    /// (<c>--cover-ring</c>, 1 by default: the 3 × 3); wider tells a boundary moved by a metre or two (an input's own
+    /// difference) from a wrong class.
+    /// </summary>
+    public int CoverRing { get; init; } = 1;
+
     public bool Covers(double e, double n) => Tiles.Contains(TileId.FromLv95(e, n))
         && (Box is not { } b || (e >= b.MinE && e <= b.MaxE && n >= b.MinN && n <= b.MaxN));
 
@@ -1271,10 +1282,11 @@ internal sealed class Lv95Build
     /// </summary>
     public (int Class, bool Uniform) CoverAround(double e, double n)
     {
+        if (Box is { } b && !(e >= b.MinE && e <= b.MaxE && n >= b.MinN && n <= b.MaxN)) return (-1, false);   // --compare-box
         int k = CoverAt(e, n);
         if (k < 0) return (k, false);
-        for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
+        for (int dy = -CoverRing; dy <= CoverRing; dy++)
+            for (int dx = -CoverRing; dx <= CoverRing; dx++)
                 if ((dx != 0 || dy != 0) && CoverAt(e + dx, n + dy) != k) return (k, false);
         return (k, true);
     }
