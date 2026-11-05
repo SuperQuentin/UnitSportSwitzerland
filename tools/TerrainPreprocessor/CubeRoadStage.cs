@@ -59,8 +59,8 @@ public static class CubeRoadStage
                 default: Console.Error.WriteLine($"--cube-roads: unknown option {args[i]}"); return 2;
             }
         }
-        if (region == null || tlm == null) { Console.Error.WriteLine("--cube-roads needs --cube-out REGION (with its heights) and --tlm GPKG"); return 2; }
-        if (!File.Exists(tlm)) { Console.Error.WriteLine($"swissTLM3D GeoPackage not found: {tlm}"); return 1; }
+        if (region == null || (tlm == null && !bdtopo)) { Console.Error.WriteLine("--cube-roads needs --cube-out REGION (with its heights) and --tlm GPKG and/or --cube-bdtopo"); return 2; }
+        if (tlm != null && !File.Exists(tlm)) { Console.Error.WriteLine($"swissTLM3D GeoPackage not found: {tlm}"); return 1; }
         temp ??= region.TrimEnd('/', '\\') + "_temp";
         string rawDir = RawDir(temp);
 
@@ -69,8 +69,10 @@ public static class CubeRoadStage
         var wanted = heights.Leaves.Where(k => box is not { } b || InBox(k, b)).ToList();
         if (wanted.Count == 0) { Console.Error.WriteLine($"--cube-roads: no leaf with heights in {region}" + (box != null ? " inside the box" : "")); return 2; }
         var driver = new FrameDriver(wanted, MarginM, SwissSeaLevel.Instance, heights.FrameLevel);
-        var extractor = new RoadExtractor(tlm, routeKeys);
-        Console.WriteLine($"cube roads: {wanted.Count} leaves in {driver.Frames.Count} frames; {extractor.CycleKeyCount} cycle / {extractor.MtbKeyCount} MTB route keys");
+        // without swissTLM3D (France alone, Brest) only BD TOPO's roads are written
+        var extractor = tlm != null ? new RoadExtractor(tlm, routeKeys) : null;
+        Console.WriteLine($"cube roads: {wanted.Count} leaves in {driver.Frames.Count} frames; "
+            + (extractor != null ? $"{extractor.CycleKeyCount} cycle / {extractor.MtbKeyCount} MTB route keys" : "no swissTLM3D"));
 
         var holesWriter = new LeafWriter(region, driver.FrameLevel, [LeafKind.Holes]);
         var rawWriter = new LeafWriter(rawDir, driver.FrameLevel, [LeafKind.Roads, LeafKind.RoadKeys, LeafKind.Parking]);
@@ -83,8 +85,15 @@ public static class CubeRoadStage
             var fs = Stopwatch.StartNew();
             var ground = new FrameGround(plan.Frame, heights.Read, driver.LeafLevel);
             var space = new FrameRoadSpace(plan, ground);
-            var x = extractor.Extract(space);
-            var keys = x.SourceKeys.ToDictionary(e => e.Key, e => e.Value.Select(k => k is { } a ? new RoadSourceKey(a.Uuid, a.Part, a.FromM) : (RoadSourceKey?)null).ToList());
+            var tiles = plan.Core.ToDictionary(k => k, space.NewTile);
+            var keys = plan.Core.ToDictionary(k => k, _ => new List<RoadSourceKey?>());
+            var holeQuadsOf = new Dictionary<CubeKey, HashSet<int>>();
+            if (extractor != null)
+            {
+                var x = extractor.Extract(space);
+                (tiles, holeQuadsOf) = (x.Tiles, x.Holes);
+                keys = x.SourceKeys.ToDictionary(e => e.Key, e => e.Value.Select(k => k is { } a ? new RoadSourceKey(a.Uuid, a.Part, a.FromM) : (RoadSourceKey?)null).ToList());
+            }
 
             if (client != null)
             {
@@ -93,35 +102,35 @@ public static class CubeRoadStage
                 var stats = new FranceRoads.Stats();
                 foreach (var (leaf, list) in FranceRoads.Build(lines, space, stats))
                 {
-                    x.Tiles[leaf].Segments.AddRange(list);
+                    tiles[leaf].Segments.AddRange(list);
                     keys[leaf].AddRange(Enumerable.Repeat((RoadSourceKey?)null, list.Count));
                 }
                 french += stats.Segments;
                 frenchSkipped += stats.Skipped;
             }
 
-            var parking = new ParkingAreaExtractor<CubeKey>(tlm, space);
-            parking.Extract(overrides);
+            var parking = tlm != null ? new ParkingAreaExtractor<CubeKey>(tlm, space) : null;
+            parking?.Extract(overrides);
 
             var raw = new Dictionary<CubeKey, List<LeafSection>>();
             var holes = new Dictionary<CubeKey, List<LeafSection>>();
             foreach (var leaf in plan.Core)
             {
-                var tile = x.Tiles[leaf];
+                var tile = tiles[leaf];
                 var list = new List<LeafSection>();
                 if (tile.Segments.Count > 0)
                 {
                     list.Add(LeafRoads.Encode(tile));
                     list.Add(LeafRoadKeys.Encode(keys[leaf]));
                 }
-                if (parking.Lots.TryGetValue(leaf, out var ls) && ls.Count > 0)
+                if (parking != null && parking.Lots.TryGetValue(leaf, out var ls) && ls.Count > 0)
                 {
                     list.Add(LeafParking.Encode(ls.Select(l => ToLeaf(plan, ground, leaf, l)).ToList()));
                     lots += ls.Count;
                 }
                 raw[leaf] = list;
                 holes[leaf] = new List<LeafSection>();
-                if (x.Holes.TryGetValue(leaf, out var quads) && quads.Count > 0)
+                if (holeQuadsOf.TryGetValue(leaf, out var quads) && quads.Count > 0)
                 {
                     holes[leaf].Add(LeafHoles.Encode(quads, plan.Transform(leaf).Bits));
                     holeQuads += quads.Count;
@@ -137,7 +146,7 @@ public static class CubeRoadStage
             rawWriter.WriteFrame(plan.Cell, raw);
             holesWriter.WriteFrame(plan.Cell, holes);
             Console.WriteLine($"  frame {plan.Cell.Describe()}: {plan.Core.Count} leaves, {raw.Values.Count(l => l.Count > 0)} with raw roads, "
-                + $"{x.Holes.Where(e => space.Writes(e.Key)).Sum(e => e.Value.Count)} hole quads, {fs.Elapsed.TotalSeconds:F1} s, "
+                + $"{holeQuadsOf.Where(e => space.Writes(e.Key)).Sum(e => e.Value.Count)} hole quads, {fs.Elapsed.TotalSeconds:F1} s, "
                 + $"working set {Process.GetCurrentProcess().WorkingSet64 / 1e9:F1} GB; {sw.Elapsed.TotalSeconds:F0} s");
         }
 

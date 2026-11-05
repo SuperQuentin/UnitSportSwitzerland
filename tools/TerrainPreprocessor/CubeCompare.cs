@@ -378,15 +378,23 @@ public static class CubeCompare
         var lvToCube = new Tally();
         var aboveCube = new Tally();
         var surveyed = new Tally();
+        long noGround = 0;   // draped leaf vertices over no leaf heights (the leaf mesh NaN there): not held to the height bars
         var lenLv = new Dictionary<int, double>();
         var lenCube = new Dictionary<int, double>();
         var junctions = (Lv: new List<Feature>(), Cube: new List<Feature>());
         var signals = (Lv: new List<Feature>(), Cube: new List<Feature>());
         long cubeAlone = 0, lvAlone = 0;
+        var aloneAt = new List<string>();   // where the first alone vertices are, as LV95 (a person reads it)
+        void Alone(EcefPos p, int cls)
+        {
+            if (aloneAt.Count >= 6) return;
+            var (e, n, _) = SwissGeodesy.FromEcef(p);
+            aloneAt.Add(string.Create(CultureInfo.InvariantCulture, $"{(RoadClass)cls} {e:F0},{n:F0}"));
+        }
         foreach (var bundle in c.Cube.Bundles)
         {
             var frame = bundle.Anchor;
-            var cubeLines = new ConcurrentBag<(Line Line, CubeKey Leaf)>();
+            var cubeLines = new ConcurrentBag<(Line Line, CubeKey Leaf, bool Surveyed)>();
             var lvLines = new ConcurrentBag<(Line Line, bool[] Owned, TileId Tile)>();
             var bag = (LvJ: new ConcurrentBag<Feature>(), CJ: new ConcurrentBag<Feature>(), LvS: new ConcurrentBag<Feature>(), CS: new ConcurrentBag<Feature>());
             Parallel.ForEach(c.Cube.LeavesIn(bundle), c.Par, key =>
@@ -397,8 +405,9 @@ public static class CubeCompare
                 foreach (var s in tile.Segments)
                 {
                     var (pts, above) = ToFrame(s.Points, 3, i => anchor.ToEcef(s.Points[i], s.Points[i + 1], s.Points[i + 2]), frame, c.Cube.AboveGround);
-                    if (Surveyed(s)) Array.Fill(above, double.NaN);
-                    cubeLines.Add((new Line(pts, (int)s.Class, above), key));
+                    bool surveyedLine = Surveyed(s, above);
+                    if (surveyedLine) Array.Fill(above, double.NaN);
+                    cubeLines.Add((new Line(pts, (int)s.Class, above), key, surveyedLine));
                 }
                 foreach (var j in tile.Junctions)
                     if (Centroid(j.Vertices, i => anchor.ToEcef(j.Vertices[i], j.Vertices[i + 1], j.Vertices[i + 2])) is { } p && c.Lv.Covers(p))
@@ -413,7 +422,7 @@ public static class CubeCompare
                 {
                     var (pts, above) = ToFrame(s.Points, 3, i => Lv95Point(id, s.Points[i], s.Points[i + 1], s.Points[i + 2]), frame,
                         p => c.Lv.AboveGround(p));
-                    if (Surveyed(s)) Array.Fill(above, double.NaN);
+                    if (Surveyed(s, above)) Array.Fill(above, double.NaN);
                     var owned = new bool[s.PointCount];
                     for (int k = 0; k < owned.Length; k++) owned[k] = c.Cube.Owns(bundle, Lv95Point(id, s.Points[k * 3], s.Points[k * 3 + 1], s.Points[k * 3 + 2]));
                     lvLines.Add((new Line(pts, (int)s.Class, above), owned, id));
@@ -429,7 +438,7 @@ public static class CubeCompare
 
             var lvIndex = new LineIndex(lvLines.Select(l => l.Line).ToList());
             var cubeIndex = new LineIndex(cubeLines.Select(l => l.Line).ToList());
-            foreach (var (line, leaf) in cubeLines)
+            foreach (var (line, leaf, surveyedLine) in cubeLines)
             {
                 var p = line.Points;
                 for (int k = 0; k < line.Count; k++)
@@ -440,9 +449,10 @@ public static class CubeCompare
                     {
                         cubeToLv.Add(h);
                         if (!double.IsNaN(da)) aboveCube.Add(da);
-                        else if (double.IsNaN(line.Above[k]) && !double.IsNaN(dy)) surveyed.Add(dy);
+                        else if (surveyedLine && !double.IsNaN(dy)) surveyed.Add(dy);
+                        else if (double.IsNaN(line.Above[k])) noGround++;
                     }
-                    else cubeAlone++;
+                    else { cubeAlone++; Alone(ecef, line.Class); }
                 }
                 Accumulate(lenCube, line, (x, y, z) => frame.ToEcef(x, y, z) is var m && c.Cube.Owner(m) == leaf && c.Lv.Covers(m));
             }
@@ -453,7 +463,7 @@ public static class CubeCompare
                 {
                     if (!owned[k]) continue;
                     if (cubeIndex.Nearest(p[k * 3], p[k * 3 + 1], p[k * 3 + 2], line.Above![k], line.Class, 5, out double h, out _, out _)) lvToCube.Add(h);
-                    else lvAlone++;
+                    else { lvAlone++; Alone(frame.ToEcef(p[k * 3], p[k * 3 + 1], p[k * 3 + 2]), line.Class); }
                 }
                 Accumulate(lenLv, line, (x, y, z) =>
                 {
@@ -463,10 +473,12 @@ public static class CubeCompare
                 });
             }
         }
-        r.Note($"centreline vertices: {cubeToLv.Count + cubeAlone} leaf, {lvToCube.Count + lvAlone} LV95; alone (no line of their class within 5 m): {cubeAlone} leaf, {lvAlone} LV95");
+        r.Note($"centreline vertices: {cubeToLv.Count + cubeAlone} leaf, {lvToCube.Count + lvAlone} LV95; alone (no line of their class within 5 m): {cubeAlone} leaf, {lvAlone} LV95"
+            + (aloneAt.Count > 0 ? $" (at {string.Join("; ", aloneAt)})" : ""));
         r.Check("leaf vertex to the LV95 line", cubeToLv.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         r.Check("LV95 vertex to the leaf line", lvToCube.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         r.Check("height above ground (draped), leaf − LV95", aboveCube.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
+        if (noGround > 0) r.Note($"{noGround} leaf vertices over no leaf heights (the mesh has none there): left out of the height bars");
         // bridges, tunnels, cables and walls keep their surveyed Z: absolute, not above a ground the two builds sample differently
         if (surveyed.Count > 0) r.Check("height of surveyed lines (structures), leaf − LV95", surveyed.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         foreach (int k in lenLv.Keys.Union(lenCube.Keys).Order())
@@ -559,9 +571,17 @@ public static class CubeCompare
         return len;
     }
 
-    /// <summary>A segment that keeps its surveyed Z (RoadExtractor's own-Z rule): bridges, tunnels, aerial ropeways, walls.</summary>
-    private static bool Surveyed(RoadSegment s) =>
-        (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0 || RoadFormat.IsAerial(s.Class) || RoadFormat.IsWall(s.Class);
+    /// <summary>
+    /// A segment that keeps its surveyed Z (RoadExtractor's own-Z rule: bridges, tunnels, aerial ropeways, walls), told by
+    /// its flags and by where it is: BD TOPO's bridges and tunnels have no Z and are draped like any road (<see cref="FranceRoads"/>),
+    /// so a structure whose middle vertex is within a metre above its ground counts as draped.
+    /// </summary>
+    private static bool Surveyed(RoadSegment s, double[] above)
+    {
+        if ((s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0 && !RoadFormat.IsAerial(s.Class) && !RoadFormat.IsWall(s.Class)) return false;
+        var known = above.Where(a => !double.IsNaN(a)).Order().ToList();
+        return known.Count > 0 && known[known.Count / 2] is < 0 or > 1.0;
+    }
 
     private static void Accumulate(Dictionary<int, double> len, Line line, Func<double, double, double, bool> keep)
     {
