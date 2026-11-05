@@ -83,3 +83,35 @@ TerrainPreprocessor --cube-cover-network --cube-out REGION --facades LV95_CHUNKS
   follows its streets: their urban flags, widths and sidewalk reach differ where its wall raster and smoothing do
   (#1546). TunnelRoof 251 / 251 vertices; the comparer's cover now honours `--compare-box` and `--seam-margin`.
 
+## Trees (PR 5b)
+
+The four kinds of `CoverExtractor`, their rules shared (`ScatterChance`, `ScatterTree`, `RowTree`, `SurveyedHeight`,
+`CoverStage.TreeClearance`, `CoverStage.PlanterHeight`: the LV95 build calls them in its old order, byte-identical),
+placed on leaves by `--cube-trees` and written as each leaf's `Trees` in its anchor frame.
+
+```
+TerrainPreprocessor --cube-trees --cube-out REGION --tlm GPKG [--cube-temp DIR] [--cube-box ...] [--lv95-roads LV95_CHUNKS]
+```
+
+- **Scattered** (wooded classes): every vertex a leaf owns draws its chance, the class's density per hectare over
+  the vertex's area (`ScatterChance`: the LV95 build's 0.0004 a square metre, kept per area), from a seed of its
+  **global lattice vertex** (`TreeSeed.Of(face, i, j)`, SplitMix64), then its jitter (±1 m) and height.
+- **Planted rows** (orchards, nurseries): the frame's plane every `PlantingSpacing` metres; a row tree's seed from
+  its grid node.
+- **Surveyed** (`tlm_bb_einzelbaum`): each point onto the plane at its own height, on the leaf mesh.
+- **Planters**: the network's islands (4b), heights from their LV95 position.
+- **Road clearance**: the leaf's raw and network segments, `TreeClearance` rounded up to whole metres (the LV95 mask
+  stamps a disc of whole 1 m cells round points truncated to its grid: the threshold a lattice turned against it
+  cannot repeat to the tree).
+
+### Checks (Nov 5 2026)
+
+- LV95 byte-identical: `--cover-only` on 4b's 85 Geneva tiles, main (c949402) and this branch, all 553 files
+  (1,653,606 trees).
+- D: region (base cover, raw-road masks; LV95 `test_b3/cover/region_lv`): 13.1 M trees in 82 s, peak 1.6 GB.
+  Conifers 12,408,481 / 12,461,927 (**0.43 %**), fruit rows 313,519 / 315,165 (**0.53 %**), shrubs 5,485 / 5,358
+  (2.3 %: one Poisson σ is 1.35 % at that count); surveyed 287,191 matched, plan p99 0.07 cm, max 1.4 cm, vertical
+  p99 0.02 cm; 4.96 % alone, every one at a road's clearance.
+- **The mask is the only difference**: with no road mask on either side (a diagnostic run, 4b's Geneva box),
+  surveyed trees **1,123 / 1,123 matched**, plan max 0.11 cm, vertical max 0.01 cm.
+

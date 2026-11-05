@@ -997,7 +997,7 @@ public static class CubeCompare
                 foreach (var t in c.Lv.Trees(id))
                 {
                     var p = Lv95Point(id, t.X, t.Y, t.Z);
-                    if (!c.Cube.Owns(bundle, p)) continue;
+                    if (!c.Cube.Owns(bundle, p) || !c.Lv.Covers(p)) continue;   // --compare-box both sides
                     counts[t.Kind]++;
                     if (t.Kind == Surveyed) lvBag.Add(At(frame, p, 0, c.Lv.AboveGround(p)));
                 }

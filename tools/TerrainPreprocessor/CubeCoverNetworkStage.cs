@@ -174,7 +174,7 @@ public static class CubeCoverNetworkStage
     /// The LV95 build's network records (segments, junction caps, area props) of the tiles round a leaf, every point moved
     /// into the leaf's anchor frame through ECEF (<c>--lv95-roads</c>, a check: the passes on the LV95 build's own roads).
     /// </summary>
-    private static RoadTile Lv95RoadsIn(string dir, CubeKey key)
+    internal static RoadTile Lv95RoadsIn(string dir, CubeKey key)
     {
         double e0 = double.MaxValue, n0 = double.MaxValue, e1 = double.MinValue, n1 = double.MinValue;
         for (int j = 0; j <= 2; j++)
