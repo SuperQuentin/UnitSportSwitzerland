@@ -54,10 +54,10 @@ public static class FranceBuildings
     /// are drawn together.
     /// </para>
     /// </summary>
-    public static Dictionary<TileId, List<Building>> Build(IEnumerable<BdFeature> features,
-        IReadOnlySet<TileId> tiles, Func<double, double, double?> heightAt, Stats stats)
+    public static Dictionary<TTile, List<Building>> Build<TTile>(IEnumerable<BdFeature> features,
+        IFeatureSpace<TTile> space, Stats stats) where TTile : notnull
     {
-        var byTile = new Dictionary<TileId, List<Building>>();
+        var byTile = new Dictionary<TTile, List<Building>>();
 
         foreach (var feature in features)
         {
@@ -65,7 +65,8 @@ public static class FranceBuildings
 
             // The outer ring only. BD TOPO courtyards are rare and a hole in a footprint costs
             // an ear-clipper that handles them; without one, the courtyard is simply filled.
-            var ring = feature.Rings[0];
+            // on the space's plane from their latitudes and longitudes (#1507)
+            var ring = feature.LatLonRings[0].Select(p => space.FromLatLon(p.Lat, p.Lon)).ToList();
             if (ring.Count < 4) { stats.Skipped++; continue; }
 
             var footprint = CleanRing(ring);
@@ -76,10 +77,10 @@ public static class FranceBuildings
             centroidE /= footprint.Count;
             centroidN /= footprint.Count;
 
-            var tile = TileId.FromLv95(centroidE, centroidN);
-            if (!tiles.Contains(tile)) continue;
+            if (!space.TryOwner(centroidE, centroidN, out var tile)) continue;
+            Place place = (x, y, h) => space.ToLocal(tile, x, y, h);
 
-            double? ground = SampleGround(footprint, centroidE, centroidN, heightAt);
+            double? ground = SampleGround(footprint, centroidE, centroidN, space.Ground.Sample);
             if (ground == null) { stats.Skipped++; continue; }
 
             var heights = Heights(feature);
@@ -94,9 +95,9 @@ public static class FranceBuildings
             if (pitched) stats.Pitched++; else stats.Flat++;
 
             var triangles = new List<float>();
-            AppendWalls(triangles, footprint, baseZ, eaveZ, tile);
-            if (pitched) AppendPitchedRoof(triangles, footprint, eaveZ, ridgeZ, tile);
-            else AppendCap(triangles, footprint, eaveZ, tile);
+            AppendWalls(triangles, footprint, baseZ, eaveZ, place);
+            if (pitched) AppendPitchedRoof(triangles, footprint, eaveZ, ridgeZ, place);
+            else AppendCap(triangles, footprint, eaveZ, place);
 
             if (triangles.Count == 0) { stats.Skipped++; continue; }
 
@@ -107,8 +108,9 @@ public static class FranceBuildings
                 Egid = 0,                       // no EGID in France; the RNB id is a string
                 YearBuilt = 0,                  // BD TOPO carries no construction year
                 Floors = (byte)Math.Clamp((int)Math.Round(wallHeight / 2.9), 0, 255),
-                MinY = (float)baseZ,
-                MaxY = (float)ridgeZ,
+                // the base and ridge heights at the centroid, in the tile's frame (LV95: the altitudes themselves)
+                MinY = place(centroidE, centroidN, baseZ).Y,
+                MaxY = place(centroidE, centroidN, ridgeZ).Y,
                 Triangles = triangles.ToArray(),
             });
             stats.Built++;
@@ -271,17 +273,22 @@ public static class FranceBuildings
     }
 
     // ---- geometry ------------------------------------------------------------------------
+    // Plane points (E, N: LV95 in the LV95 build, a work frame's plane in the cube one) and heights above
+    // sea level, put in the owner tile's frame by the space (#1507).
+
+    private delegate (float X, float Y, float Z) Place(double x, double y, double h);
+
     // Tile-local frame: X east, Y altitude, Z south from the tile's NW corner. The Z flip is
     // what turns a counter-clockwise LV95 ring into a clockwise one, so wall normals face out.
 
     private static void AppendWalls(List<float> tris, List<(double E, double N)> ring,
-        double baseZ, double topZ, TileId tile)
+        double baseZ, double topZ, Place place)
     {
         for (int i = 0; i < ring.Count; i++)
         {
             var a = ring[i];
             var b = ring[(i + 1) % ring.Count];
-            Quad(tris, tile, a, baseZ, a, topZ, b, topZ, b, baseZ);
+            Quad(tris, place, a, baseZ, a, topZ, b, topZ, b, baseZ);
         }
     }
 
@@ -303,7 +310,7 @@ public static class FranceBuildings
     /// </para>
     /// </summary>
     private static void AppendCap(List<float> tris, List<(double E, double N)> ring,
-        double z, TileId tile)
+        double z, Place place)
     {
         if (ring.Count < 3) return;
 
@@ -323,7 +330,7 @@ public static class FranceBuildings
 
                 if (!IsEar(ring, remaining, previous, current, next)) continue;
 
-                Triangle(tris, tile, ring[previous], z, ring[current], z, ring[next], z);
+                Triangle(tris, place, ring[previous], z, ring[current], z, ring[next], z);
                 remaining.RemoveAt(k);
                 clipped = true;
                 break;
@@ -332,7 +339,7 @@ public static class FranceBuildings
         }
 
         for (int k = 1; k + 1 < remaining.Count; k++)
-            Triangle(tris, tile, ring[remaining[0]], z, ring[remaining[k]], z, ring[remaining[k + 1]], z);
+            Triangle(tris, place, ring[remaining[0]], z, ring[remaining[k]], z, ring[remaining[k + 1]], z);
     }
 
     /// <summary>Convex corner, with no other remaining vertex inside the candidate triangle.</summary>
@@ -400,7 +407,7 @@ public static class FranceBuildings
     /// </para>
     /// </summary>
     private static void AppendPitchedRoof(List<float> tris, List<(double E, double N)> ring,
-        double eaveZ, double ridgeZ, TileId tile)
+        double eaveZ, double ridgeZ, Place place)
     {
         // The pitch sets the inset: with a rise of (ridge - eave), a ~35 degree roof runs back
         // about 1.4 times that horizontally. Capped so a tall narrow turret cannot inset past
@@ -435,9 +442,9 @@ public static class FranceBuildings
             for (int i = 0; i < ring.Count; i++)
             {
                 int j = (i + 1) % ring.Count;
-                Quad(scratch, tile, ring[i], eaveZ, ring[j], eaveZ, capped[j], ridgeZ, capped[i], ridgeZ);
+                Quad(scratch, place, ring[i], eaveZ, ring[j], eaveZ, capped[j], ridgeZ, capped[i], ridgeZ);
             }
-            AppendCap(scratch, capped, ridgeZ, tile);
+            AppendCap(scratch, capped, ridgeZ, place);
 
             if (!FacesUp(scratch)) continue;
 
@@ -448,7 +455,7 @@ public static class FranceBuildings
         // Nothing safe to pitch, so leave it flat — and check that too, because the cap of a
         // concave footprint is itself only as good as the ear clipper.
         var flat = new List<float>();
-        AppendCap(flat, ring, eaveZ, tile);
+        AppendCap(flat, ring, eaveZ, place);
         if (FacesUp(flat)) tris.AddRange(flat);
     }
 
@@ -546,27 +553,28 @@ public static class FranceBuildings
         return inside;
     }
 
-    private static void Quad(List<float> tris, TileId tile,
+    private static void Quad(List<float> tris, Place place,
         (double E, double N) a, double az, (double E, double N) b, double bz,
         (double E, double N) c, double cz, (double E, double N) d, double dz)
     {
-        Triangle(tris, tile, a, az, b, bz, c, cz);
-        Triangle(tris, tile, a, az, c, cz, d, dz);
+        Triangle(tris, place, a, az, b, bz, c, cz);
+        Triangle(tris, place, a, az, c, cz, d, dz);
     }
 
-    private static void Triangle(List<float> tris, TileId tile,
+    private static void Triangle(List<float> tris, Place place,
         (double E, double N) a, double az, (double E, double N) b, double bz,
         (double E, double N) c, double cz)
     {
-        Vertex(tris, tile, a, az);
-        Vertex(tris, tile, b, bz);
-        Vertex(tris, tile, c, cz);
+        Vertex(tris, place, a, az);
+        Vertex(tris, place, b, bz);
+        Vertex(tris, place, c, cz);
     }
 
-    private static void Vertex(List<float> tris, TileId tile, (double E, double N) p, double z)
+    private static void Vertex(List<float> tris, Place place, (double E, double N) p, double z)
     {
-        tris.Add((float)(p.E - tile.MinE));
-        tris.Add((float)z);
-        tris.Add((float)(tile.MaxN - p.N));
+        var (x, y, w) = place(p.E, p.N, z);
+        tris.Add(x);
+        tris.Add(y);
+        tris.Add(w);
     }
 }
