@@ -7,6 +7,12 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Builder performance ([#1540](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1540))
+
+On the NAS or the X: drive; a Linux server/NAS run is unverified.
+
+- [ ] A nationwide feature build with the new parallelism (`tools/rebuild-map.sh`, defaults) → watch peak memory and total time (the `[stage]` lines of the log); `.road`, cover, trees and water match an earlier build of the same sources (`tools/builder-bench.sh compare`-style hashes), and a lower `--jobs` or a `DOTNET_GCHeapHardLimit` still finishes with the same bytes.
+
 ## True north ([#1533](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1533))
 
 At Geneva (`--chunks D:/UnitSportSwitzerland/terrain_chunks`, `--tp` to the Jardin Anglais), where true north is 0.9° east of grid north.
