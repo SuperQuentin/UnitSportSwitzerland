@@ -113,7 +113,9 @@ public static partial class TileRewriter
     }
 
     /// <summary>OSM's uncontrolled walkers' crossings of a tram track (#1176), LV95: a middle stage within <see cref="UncontrolledReach"/> stays unlit.</summary>
-    internal static List<Vec2> UncontrolledTramCrossings = [];
+    /// <summary>A run's walkers' crossings over a tram track left without lights, per thread (#1508: frames run side by side).</summary>
+    internal static List<Vec2> UncontrolledTramCrossings { get => _uncontrolled ?? []; set => _uncontrolled = value; }
+    [ThreadStatic] private static List<Vec2>? _uncontrolled;
 
     /// <summary>OSM's walkers' crossings over a tram track left without lights (#1176: railway=tram_crossing, crossing=uncontrolled).</summary>
     internal static List<Vec2> UncontrolledCrossings(OsmNodesReader? nodes) => nodes is null ? [] : nodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing

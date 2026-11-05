@@ -146,8 +146,10 @@ public static partial class Planner
             () => ["--cube", "--cube-out", region, "--in", p.AltiDir, "--cube-box", Box(), "--cube-cache", Path.Combine(p.Temp, "cube_cache")]);
         Add("Cube roads", "raw roads, tunnel holes and car parks per leaf (swissTLM3D)", 10 + tiles * 0.06, tlm == null ? "no swissTLM3D" : null,
             () => ["--cube-roads", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
-        Add("Cube road network", "RoadGen's network stage on the work frames", 30 + tiles * 15, tlm == null ? "no swissTLM3D" : null,
-            () => ["--cube-network", "--cube-out", region, "--chunks", p.Chunks, "--osm", p.Temp, "--cube-box", Box()]);
+        // frames side by side (#1508): RoadGen is one thread a frame, a frame wants up to ~5 GB; as many as the free memory holds, 1-4
+        int frames = (int)Math.Clamp(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (5L << 30), 1, 4);
+        Add("Cube road network", $"RoadGen's network stage on the work frames, {frames} at a time", 30 + tiles * 15.0 / frames, tlm == null ? "no swissTLM3D" : null,
+            () => ["--cube-network", "--cube-out", region, "--chunks", p.Chunks, "--osm", p.Temp, "--cube-box", Box(), "--frames-parallel", frames.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         Add("Cube land cover", "the cover classes at every leaf vertex", 10 + tiles * 0.03, tlm == null ? "no swissTLM3D" : null,
             () => ["--cube-cover", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
         Add("Cube water", "lakes and rivers, beds and still levels on the leaves", 20 + tiles * 0.1, null,
