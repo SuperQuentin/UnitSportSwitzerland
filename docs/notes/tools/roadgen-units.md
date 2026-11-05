@@ -71,7 +71,7 @@ The frame instance of the three seams, and `--cube-network`, which runs the stag
 
 ```
 TerrainPreprocessor --cube-network --cube-out REGION [--cube-temp DIR] --chunks LV95_CHUNKS [--osm DIR]
-    [--cube-box minE,minN,maxE,maxN] [--block 8] [--halo 2] [--plan-only] [--no-smooth] [--lv95-ground]
+    [--cube-box minE,minN,maxE,maxN] [--block 8] [--halo 2] [--frames-parallel N] [--plan-only] [--no-smooth] [--lv95-ground]
 ```
 
   Frames in the driver's order; per frame a `FrameTileLoop`: blocks of 8 × 8 core leaves, halo 2 leaves (~1.2 km,
@@ -124,3 +124,13 @@ LV95 references: main's `RoadGen --rewrite` of the same raw input (`test_b3/road
 - Heights above ground differ p99 5-7 cm (the leaf mesh against the 1 m `.terr` under the town lowering; decided:
   features drape on the leaf mesh).
 - The LV95 instance stays byte-identical: the 41-tile check (above) again on this branch.
+
+## Frames side by side (#1508)
+
+- `--frames-parallel N`: RoadGen runs one thread a frame, so N frames run at once (a frame wants 3-5 GB). With N > 1
+  every frame is written at the end in the driver's order, since a written bundle's entries move while the other frames
+  read their margins' heights. The run state RoadGen kept in statics is per thread (`UncontrolledTramCrossings`, as the
+  rest already was: the game runs several on its workers). MapSetup's cube layer passes as many as the free memory
+  holds (5 GB a frame, 1-4).
+- Versoix (2 frames, 24 leaves): `--frames-parallel 2` writes **byte-identical** bundles to one at a time, 48 s against
+  80 s (frames of 17 and 7 leaves), peak 4.6 GB against 3.2 GB.
