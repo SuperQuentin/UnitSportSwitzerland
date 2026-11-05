@@ -169,9 +169,8 @@ internal sealed partial class XrWatch : Node3D
         {
             var g = player.Global;
             var (toEast, toNorth, _) = g.OffsetTo(Core.GlobalPos.FromLv95(t.E, t.N, 0));
-            // the offset's bearing less true north's in the offset axes: from true north, as the ring
-            float offsetNorth = frame != null ? Mathf.RadToDeg(_north.Offset(frame, player.GlobalPosition)) : 0f;
-            float bearing = Ui.CompassStrip.Bearing(new Vector2((float)toEast, (float)toNorth)) - offsetNorth;
+            // the offset is in true east and north (#1502): its bearing is from true north, as the ring
+            float bearing = Ui.CompassStrip.Bearing(new Vector2((float)toEast, (float)toNorth));
             _notch.Rotation = new Vector3(0, 0, -Mathf.DegToRad(bearing));
             _notch.Visible = true;
         }

@@ -90,7 +90,7 @@ public sealed record StadiumSpec
     /// The long axis in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> (what <c>OffsetTo</c> measures in):
     /// the grid's while those are the grid's, the true one once A1 puts ECEF inside.
     /// </summary>
-    public float OffsetAzimuthDeg(GlobalPos at) => AzimuthDeg + (float)(at.Convergence * 180 / Math.PI);
+    public float OffsetAzimuthDeg(GlobalPos at) => AzimuthDeg + (float)(at.GridConvergence * 180 / Math.PI);
 
     /// <summary>The pitch's lines, for the record and the check: 105 x 68 is the UEFA size.</summary>
     public float PitchWidth { get; init; } = 68f;

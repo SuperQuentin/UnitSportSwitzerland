@@ -65,10 +65,10 @@ public class HitGuardTests
 
     // ---- terrain ----
 
-    /// <summary>A 200 m-high ridge 10 m wide at E = 500; flat at 0 elsewhere.</summary>
-    private static float? Ridge(GlobalPos p) => Math.Abs(p.E - 500) < 30 ? 200f : 0f;
+    /// <summary>A 200 m-high ridge 60 m wide 500 m east of Bern; flat at 0 elsewhere.</summary>
+    private static float? Ridge(GlobalPos p) => Math.Abs(p.Lv95.E - 2_600_500) < 30 ? 200f : 0f;
 
-    private static GlobalPos At(double e, double n, double alt) => GlobalPos.FromLv95(e, n, alt);
+    private static GlobalPos At(double e, double n, double alt) => GlobalPos.FromLv95(2_600_000 + e, 1_200_000 + n, alt);   // metres from Bern
 
     [Fact]
     public void A_shot_over_flat_ground_is_clear()

@@ -275,7 +275,7 @@ public partial class HornGame : Node
         var cam = GetViewport().GetCamera3D();
         double bearing = cam == null ? 0 : Math.Atan2(-cam.GlobalTransform.Basis.Z.X, cam.GlobalTransform.Basis.Z.Z);
         var ground = Ground ?? ((e, n) => _chunks() is { } chunks && chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null);
-        if (EchoFinder.Find(ground, g.E, g.N, bearing, g.E, g.N) is not { } echo) { LastEcho = null; return; }
+        if (EchoFinder.Find(ground, g.Lv95.E, g.Lv95.N, bearing, g.Lv95.E, g.Lv95.N) is not { } echo) { LastEcho = null; return; }
         LastEcho = echo;
         int slot = _nextEcho++ % _echoVoices.Length;
         if (hold) _echoing = (slot, echo.DelaySeconds);

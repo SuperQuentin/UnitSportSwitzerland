@@ -33,7 +33,7 @@ public partial class VersteckisManager
     private void RequestTag(double x, double y, double z)
     {
         var at = GlobalPos.FromWire(x, y, z);   // (#1503) the wire is ECEF
-        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.E, at.N, (float)at.Alt));
+        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, (float)at.Alt));
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -434,7 +434,7 @@ public partial class VersteckisManager
             if (now < run.SpeedBadUntil) { ok = false; fault = "speed"; }
             if (!VsRules.Inside(s.E, s.N, s.Radius, at)) { ok = false; fault ??= "bounds"; }
             // inside a building: through a door (an interior is far under the world) or through a wall
-            bool indoors = Interiors.InteriorManager.SurfacePoint(at) != at;
+            bool indoors = Interiors.InteriorManager.SurfacePoint(at).DistanceTo(at) > 0.01;   // (not ==: the doubles of a moved place differ, #1502)
             if (indoors || g.Site?.InBuilding(at.Lv95.E, at.Lv95.N) == true) { ok = false; fault ??= "building"; }
             else if (!VsRules.GroundOk((float)at.Alt, g.Site?.GroundAt(at.Lv95.E, at.Lv95.N))) { ok = false; fault ??= "ground"; }
             if (ok)

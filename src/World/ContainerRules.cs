@@ -357,7 +357,7 @@ public static class AwakeSlots
         foreach (var (key, s) in awake)
         {
             GlobalPos? at = s.E is { } e && s.N is { } n ? GlobalPos.FromLv95(e, n, 0) : null;
-            file.Slots[key] = new Saved { Since = s.Since, At = at, YawTrue = at?.TrueYaw(s.Yaw) ?? s.Yaw, KindId = s.KindId, Train = s.Train, Load = s.Load };
+            file.Slots[key] = new Saved { Since = s.Since, At = at, YawTrue = at is { } g ? Lv95Grid.TrueYaw(g, s.Yaw) : s.Yaw, KindId = s.KindId, Train = s.Train, Load = s.Load };
         }
         return JsonSerializer.Serialize(file);
     }
@@ -376,7 +376,7 @@ public static class AwakeSlots
             if (s.At is { } at)
             {
                 var (e, n, _) = at.Lv95;
-                slots[key] = new AwakeSlot(s.Since, e, n, at.OffsetYaw(s.YawTrue), s.KindId, s.Train, s.Load);
+                slots[key] = new AwakeSlot(s.Since, e, n, Lv95Grid.GridYaw(at, s.YawTrue), s.KindId, s.Train, s.Load);
             }
             else slots[key] = new AwakeSlot(s.Since, null, null, s.YawTrue, s.KindId, s.Train, s.Load);
         }

@@ -16,7 +16,11 @@ public partial class SchwingRing : Node3D, IOriginContainer
     public const string NodeName = "SchwingRing";
 
     /// <summary>The ring's middle (LV95), 20 m north of the site's middle (the mortar rack is 14 m west, the flag ground 12 m east).</summary>
-    public static (double E, double N) Of(ResolvedSite site) => (site.E, site.N + 20);
+    public static (double E, double N) Of(ResolvedSite site)
+    {
+        var l = PosOf(site).Lv95;   // 20 m of true north, as PosOf (a grid-north 20 m is up to 0.7 m off at Scuol, #1502)
+        return (l.E, l.N);
+    }
 
     /// <summary><see cref="Of"/> as a position (the same 20 m north of the site's middle).</summary>
     public static GlobalPos PosOf(ResolvedSite site) => site.Pos.Moved(0, 20);

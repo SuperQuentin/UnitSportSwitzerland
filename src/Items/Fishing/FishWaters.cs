@@ -118,8 +118,8 @@ public static class FishWaters
 
     public static FishSpot Spot(bool onLayer, Core.GlobalPos at, double slope, string place = "")
     {
-        var lake = onLayer && slope <= 0.002 ? LakeAt(at.E, at.N, at.Alt) : null;
-        return new FishSpot(Classify(onLayer, at.Alt, slope, lake), BasinAt(at.E, at.N), at.Alt, lake, place);
+        var lake = onLayer && slope <= 0.002 ? LakeAt(at.Lv95.E, at.Lv95.N, at.Alt) : null;
+        return new FishSpot(Classify(onLayer, at.Alt, slope, lake), BasinAt(at.Lv95.E, at.Lv95.N), at.Alt, lake, place);
     }
 
     /// <summary><see cref="Spot(bool, Core.GlobalPos, double, string)"/> for a place given in LV95 notation.</summary>

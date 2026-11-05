@@ -92,12 +92,12 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
     public void Drop(ItemStack stack, Vector3 at, Vector3 velocity, Vector3 rotation, Vector3 spin)
     {
         if (stack.IsEmpty) return;
-        // the arguments are this peer's world axes; a state keeps GlobalPos's offset axes at its place (#1503), the same on the ground
+        // the arguments are this peer's world axes; a state keeps the LV95 grid's axes at its place (#1503), the same on the ground
         if (Origin.Frame.IsAnchor)
         {
-            rotation = Origin.Frame.OffsetTurnOf(at, Quaternion.FromEuler(rotation)).GetEuler();
-            velocity = Origin.Frame.OffsetOfWorld(at, velocity);
-            spin = Origin.Frame.OffsetOfWorld(at, spin);
+            rotation = Origin.Frame.GridTurnOf(at, Quaternion.FromEuler(rotation)).GetEuler();
+            velocity = Origin.Frame.GridOfWorld(at, velocity);
+            spin = Origin.Frame.GridOfWorld(at, spin);
         }
         var state = new DropState("", 0, stack, Origin.ToGlobal(at), rotation, velocity, spin);
         if (!Online)

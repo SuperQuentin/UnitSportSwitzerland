@@ -297,7 +297,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         if (!(at.Alt < InteriorBaseY + 1000f)) return at;
         float floor = ground?.Invoke(at) ?? 0f;
-        return at with { Alt = floor + (at.Alt - InteriorBaseY) };
+        return at.WithAlt(floor + (at.Alt - InteriorBaseY));
     }
 
     /// <summary>The built interior whose plan holds a point far underground, if any (none on a dedicated server).</summary>

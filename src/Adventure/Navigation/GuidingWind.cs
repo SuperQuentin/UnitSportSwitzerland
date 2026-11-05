@@ -152,7 +152,9 @@ public partial class GuidingWind : Node3D
         var toward = new Vector2((float)towardE, (float)towardN);
         float bearing = CompassStrip.Bearing(toward);
         // the world's way: east +X, north -Z
-        var flat = new Vector3(toward.X, 0, -toward.Y).Normalized();
+        // (the toward vector is true east/north: the world's axes are the grid's, so it goes through the frame, #1502)
+        var flat = (body.Origin is { } fo ? fo.WorldOfEnu(body.GlobalPosition, new Vector3(toward.X, 0, -toward.Y)) : new Vector3(toward.X, 0, -toward.Y)) with { Y = 0 };
+        flat = flat.Normalized();
         bool mounted = body.RideKindId != 0;
         float speed = body.Velocity.Length();
         float ahead = mounted ? 8f : 3f;
@@ -180,7 +182,7 @@ public partial class GuidingWind : Node3D
             var cam = GetViewport()?.GetCamera3D();
             bool behind = cam != null && (-cam.GlobalBasis.Z with { Y = 0 }).Normalized().Dot(flat) < Mathf.Cos(Mathf.DegToRad(120));
             _arrow.Visible = !behind;
-            float ground = NavTarget.GroundUnder(me.Moved(flat.X * 4, -flat.Z * 4)) is { } g && body.Origin is { } o
+            float ground = NavTarget.GroundUnder(me.Moved(toward.X / Math.Max(toward.Length(), 1) * 4, toward.Y / Math.Max(toward.Length(), 1) * 4)) is { } g && body.Origin is { } o
                 ? o.ToWorld(0, 0, g).Y + 0.05f : body.GlobalPosition.Y + 0.05f;
             var at = body.GlobalPosition + flat * 4f;
             _arrow.GlobalTransform = new Transform3D(Basis.LookingAt(flat, Vector3.Up), new Vector3(at.X, ground, at.Z));

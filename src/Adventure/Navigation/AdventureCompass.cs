@@ -54,22 +54,21 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
     public bool Shown => GameSettings.Current.AdventureCompass && AdventureLog.Adventuring && !Permissions.InMatch
         && !XR.XrSession.Active && Me?.Invoke() != null && GameShell.Instance is not { Top: not null };
 
-    /// <summary>The camera's heading in <see cref="GlobalPos"/>'s offset axes, the markers' (<see cref="GlobalPos.OffsetTo"/>).</summary>
+    /// <summary>The camera's heading in true east and north, the markers' axes (<see cref="GlobalPos.OffsetTo"/>).</summary>
     public Vector2? Heading
     {
         get
         {
             if (GetViewport()?.GetCamera3D() is not { } cam) return null;
             var f = -cam.GlobalBasis.Z;
+            // the view's way as true east and north, as the markers' Toward (OffsetTo, #1502; a flat world's -Z is grid north)
             var h = new Vector2(f.X, -f.Z);
-            return TargetMarker.Origin?.Invoke() is { } origin ? _north.WorldToOffset(origin.Frame, cam.GlobalPosition, h) : h;
+            return TargetMarker.Origin?.Invoke() is { } origin ? _north.WorldToEnu(origin.Frame, cam.GlobalPosition, h) : h;
         }
     }
 
-    /// <summary>True north's bearing in the offset axes at the camera, degrees (#1504).</summary>
-    public float North => GetViewport()?.GetCamera3D() is { } cam && TargetMarker.Origin?.Invoke() is { } origin
-        ? Mathf.RadToDeg(_north.Offset(origin.Frame, cam.GlobalPosition))
-        : 0f;
+    /// <summary>True north's bearing in the axes of <see cref="Heading"/> and the markers: the local ENU's (#1502), so 0.</summary>
+    public float North => 0f;
 
     private TrueNorth.Near _north;
 

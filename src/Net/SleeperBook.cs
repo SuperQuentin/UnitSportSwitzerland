@@ -12,7 +12,7 @@ namespace UnitSport.Net;
 /// A player who left, lying asleep where they were (#644). <see cref="Key"/> is their
 /// <see cref="PlayerKey.Fingerprint"/> and never leaves the server; <see cref="Id"/> is what clients
 /// know it by. <see cref="At"/> is where they lie, at the feet; <see cref="Yaw"/> their heading in GlobalPos's
-/// offset axes there (grid north until G2 A1; the file keeps it from true north). <see cref="Rider"/> is the peer id they
+/// the LV95 grid's axes there (grid north until G2 D; the file keeps it from true north). <see cref="Rider"/> is the peer id they
 /// had, which their jersey hue and (if they never chose one) their figure come from.
 /// </summary>
 public sealed record Sleeper(long Id, string Key, string Name, GlobalPos At, float Yaw,
@@ -84,11 +84,11 @@ public sealed class SleeperBook
 
         public static Saved Of(Sleeper s) => new()
         {
-            Id = s.Id, Key = s.Key, Name = s.Name, At = s.At, YawTrue = s.At.TrueYaw(s.Yaw),
+            Id = s.Id, Key = s.Key, Name = s.Name, At = s.At, YawTrue = Lv95Grid.TrueYaw(s.At, s.Yaw),
             Rider = s.Rider, Outfit = s.Outfit, Appearance = s.Appearance, Headwear = s.Headwear,
         };
 
-        public Sleeper ToSleeper() => new(Id, Key, Name, At, At.OffsetYaw(YawTrue), Rider, Outfit, Appearance, Headwear);
+        public Sleeper ToSleeper() => new(Id, Key, Name, At, Lv95Grid.GridYaw(At, YawTrue), Rider, Outfit, Appearance, Headwear);
     }
 
     public static readonly JsonSerializerOptions Json = new() { WriteIndented = true };

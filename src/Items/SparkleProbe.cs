@@ -65,7 +65,7 @@ public partial class SparkleProbe : Node
         var fwd = (-cam.GlobalBasis.Z with { Y = 0 }).Normalized();
         var at = cam.GlobalPosition + fwd * 1.4f + Vector3.Down * 0.35f;
         float yaw = Mathf.Atan2(fwd.X, fwd.Z);
-        radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(at), radios.Origin.Frame.OffsetYawOf(at, yaw), Vector3.Zero, Settled: true));
+        radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(at), radios.Origin.Frame.GridYawOf(at, yaw), Vector3.Zero, Settled: true));
         await Wait(0.2);
         RadioBody? radio = null;
         foreach (var n in radios.GetChildren()) if (n is RadioBody r) radio = r;

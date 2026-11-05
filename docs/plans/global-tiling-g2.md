@@ -47,7 +47,9 @@ flat world; track B builds data the game does not read yet; C wires the two toge
 
 ### Track A: positions (flat world, no switch)
 
-**A1 `GlobalPos` in ECEF** (several PRs, area by area)
+**A1 `GlobalPos` in ECEF** (several PRs, area by area; **built**: the API #1517, the areas #1520-#1522, the last step
+PR #1544: ECEF inside, `E`/`N` deleted, ENU maths; records keep LV95 grid yaws through `Lv95Grid` until D;
+see `docs/notes/core/globalpos-earth.md`)
 - `GlobalPos` holds three ECEF doubles. New: `FromLv95(e, n, h)` and `Lv95` (the notation view, the
   rigorous projection, explicit and costly), `Geodetic`, `Altitude` (above the geoid: LHN95 through
   `SwissGeodesy` inside its grid), `Up`/`East`/`North` (ENU at the point), `+ Vector3` and `−` in the
