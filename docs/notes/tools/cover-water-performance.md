@@ -57,7 +57,7 @@ E 2538-2567 x N 1136-1152 (510 listed, 477 with a source), Léman with its surve
 the GC's committed heap at 2.5-3.5 GB, and the process's committed memory (`VirtualQuery`, private) growing 3.5 GB per group, 7 -> 42 GB over the stage (the working set stopped at 23 GB, the rest paged out). So `BedWindowBytes` was right
 about live data (250 MB a window): the excess was **dead large-object garbage in freed but still committed regions**, which the GC's own commit figure leaves out. Each tile allocated ~70 MB (no survey) to ~450 MB (survey) of
 window arrays; Server GC with 12 heaps collects the large object heap rarely and returns the regions late, and under a heap limit the freed 4 MB regions cannot serve 19 MB arrays. Not the `held` cache, the survey kilometres or a stale `HeapSizeBytes`.
-Fix: a pool of exact-length arrays, rented zeroed (same as `new`), returned when a tile is done. The pool keeps about 190 MB a worker.
+Fix: a pool of exact-length arrays, rented zeroed (same as `new`), returned when a tile is done. The pool keeps about 190 MB a worker, for phase C only: it is a local of `WaterStage.Run`, dropped before the stitch (the stage also runs in-process in the game's map builder).
 
 | Multi-batch, 477 tiles | Before (#1540) | With the pool |
 |---|---|---|

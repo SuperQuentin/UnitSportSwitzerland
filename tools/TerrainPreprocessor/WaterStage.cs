@@ -49,9 +49,6 @@ public static class WaterStage
     /// <summary>What one tile's bed computation holds at its peak: its 2201² window's arrays, about 250 MB, with room for the GC.</summary>
     private const long BedWindowBytes = 500L << 20;
 
-    /// <summary>The 2201² window arrays, kept between tiles (see <see cref="WaterWindow.Pool"/>).</summary>
-    private static readonly WaterWindow.Pool Arrays = new();
-
     private const int S = ChunkFormat.GridSize;   // 1001
     private const int Q = S - 1;                  // 1000 vertices a tile owns per side
 
@@ -271,6 +268,8 @@ public static class WaterStage
         TileData? Input(TileId id) => labelBase.TryGetValue(id, out int lb)
             ? held.GetOrAdd(id, k => new Lazy<TileData>(() => ReadCache(cacheDir, k, lb))).Value
             : null;
+        // the 2201² window arrays, kept between tiles for this phase only (see WaterWindow.Pool)
+        WaterWindow.Pool? arrays = new();
         var toWrite = o.Only == null ? ordered : ordered.Where(o.Only.Contains).ToList();
         var memory = GC.GetGCMemoryInfo();
         int bedJobs = (int)Math.Clamp((memory.TotalAvailableMemoryBytes - memory.HeapSizeBytes) / BedWindowBytes, 1, o.Jobs);
@@ -288,7 +287,7 @@ public static class WaterStage
             bathy?.ReleaseBefore(west - 1);   // survey kilometres: the same three columns
             Parallel.ForEach(group, new ParallelOptions { MaxDegreeOfParallelism = bedJobs, CancellationToken = ct }, id =>
             {
-                var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
+                var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf, arrays!);
 
                 // the level first: a run interrupted between the two files repeats safely
                 string waterPath = Path.Combine(outDir, WaterFormat.FileName(id));
@@ -322,6 +321,7 @@ public static class WaterStage
                 if (k % 25 == 0) Console.WriteLine($"  [{k}/{toWrite.Count}] {clock.Elapsed.TotalSeconds:F0}s");
             });
         }
+        arrays = null;
         held.Clear();
         Directory.Delete(cacheDir, recursive: true);
 
@@ -580,7 +580,7 @@ public static class WaterStage
 
     private static TileResult ComputeTile(string outDir, TileId id, Func<TileId, TileData?> data,
         HashSet<TileId> region, BathySource? bathy, int[] rootOf, double[] maxDepthOf, double[] sqrtAreaOf,
-        double[] surveyLevelOf)
+        double[] surveyLevelOf, WaterWindow.Pool Arrays)
     {
         var td = data(id)!;
         ChunkGrid grid;

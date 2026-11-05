@@ -13,7 +13,7 @@ public static class WaterWindow
     /// Window-sized scratch arrays handed back and forth between tiles (#1557). A tile's 2201² window takes about thirty
     /// arrays of 5-39 MB, all on the large object heap; a fresh set per tile left the GC holding many times the live
     /// set in freed-but-committed regions (23 GB of the 24 GB peak on the multi-batch region, 16 GB heap limit out of
-    /// memory). A rented array is zeroed, so it is exactly what <c>new T[n]</c> gives. A null pool allocates, as before.
+    /// memory). One pool lives for one stage phase and is dropped with it, so a build run inside the game keeps nothing. A rented array is zeroed, so it is exactly what <c>new T[n]</c> gives. A null pool allocates, as before.
     /// </summary>
     public sealed class Pool
     {
