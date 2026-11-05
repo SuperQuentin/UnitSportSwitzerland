@@ -41,6 +41,7 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
   selection's LV95 box into `<chunks>_cube`, in order:
   1. `--cube` (heights)
   2. `--cube-roads`
+  2b. `--cube-buildings` (buildings layer; the LV95 pass's sources: the GeoPackage or the selection's newest sheet zips, the GWR)
   3. `--cube-network`
   4. `--cube-cover`
   5. `--cube-water`
