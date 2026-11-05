@@ -130,12 +130,13 @@ public partial class FestivalService
         int seed = August1Rules.OwnSeed(run.Instance, ++_ownCount);
         August1Volleys++;
         GD.Print($"[festival] a volley #{_ownCount} is lit at {at.Lv95.E:F0},{at.Lv95.N:F0}");
+        var (x, y, z) = at.ToWire();   // (#1503) the wire is ECEF
         foreach (long other in _adventure.Peers.ToArray())
         {
             if (other <= 0) continue;
             if (_adventure.PositionOf?.Invoke(other) is { } viewer && viewer.HorizontalDistanceTo(at) > August1Rules.OwnRange) continue;
-            if (Connected(other)) RpcId(other, MethodName.ShowOwn, start, seed, at.E, at.N);
-            else if (!_networked) ShowOwn(start, seed, at.E, at.N);
+            if (Connected(other)) RpcId(other, MethodName.ShowOwn, start, seed, x, y, z);
+            else if (!_networked) OwnShowTold?.Invoke(start, seed, at.E, at.N);
         }
         NoteAugust1(peer, August1Event.Lit, 0, 0, "The fireworks are lit: stand back.");
         return null;
@@ -275,5 +276,9 @@ public partial class FestivalService
     private void TellAugust1(int what, int a, int ms, string text) => August1Told?.Invoke((August1Event)what, a, ms, text);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ShowOwn(double start, int seed, double e, double n) => OwnShowTold?.Invoke(start, seed, e, n);
+    private void ShowOwn(double start, int seed, double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        OwnShowTold?.Invoke(start, seed, at.E, at.N);
+    }
 }

@@ -166,6 +166,12 @@ public sealed class ShuttlePilot
         return Mathf.Atan2(nose.Cross(flat).Dot(-up), nose.Dot(flat));
     }
 
+    /// <summary>
+    /// The most the drive banks to turn, rad: 20°. At 57° the turns out, back and home rolled the craft over on film
+    /// for no reason (the user, #1528): a wider turn costs only drive time.
+    /// </summary>
+    public const float DriveBank = 0.35f;
+
     /// <summary>The stick for a nose elevation and a bank (the reaction jets', or the law's in the air).</summary>
     private static Vector2 Attitude(float elevation, float wantElevation, float bank, float wantBank) =>
         new(Mathf.Clamp((wantBank - bank) * 2.5f, -1f, 1f), Mathf.Clamp((wantElevation - elevation) * 3f, -1f, 1f));
@@ -225,7 +231,7 @@ public sealed class ShuttlePilot
                 double top = Plan.OrbitKm * 1000;
                 float want = Mathf.Clamp((float)((top - alt) / 60_000), -1f, 1f) * Mathf.DegToRad(35f);
                 // over home's reach (#1497), the climb also turns back toward home
-                float wantBank = Plan.RoundTheEarth || alt < 150_000 ? 0f : Mathf.Clamp(Bearing(_home) * 2f, -1f, 1f);
+                float wantBank = Plan.RoundTheEarth || alt < 150_000 ? 0f : Mathf.Clamp(Bearing(_home) * 2f, -DriveBank, DriveBank);
                 Fly(Attitude(elev, want, bank, wantBank), 1f);
                 if (!jet.DriveOn && StageTime > 1) { Fail("the drive dropped out on the way up"); return; }
                 if (Math.Abs(alt - top) < 3000 && Mathf.Abs(elev) < 0.02f)
@@ -267,7 +273,7 @@ public sealed class ShuttlePilot
                 float err = Bearing(target);
                 double dist = Angle(Here, target) * 6_371_000;
                 float lever = ShuttleFlight.DriveLever((float)Math.Clamp(dist / 30, 7_700, 1e6), alt);
-                Fly(Attitude(elev, want, bank, Mathf.Clamp(err * 2f, -1f, 1f)), lever);
+                Fly(Attitude(elev, want, bank, Mathf.Clamp(err * 2f, -DriveBank, DriveBank)), lever);
                 double home = DistanceHome(frame, p);
                 if (_turnedOut && Mathf.Abs(err) < 0.05f && (Plan.TurnOutKm > 0 || home < 200_000))
                 {
@@ -293,15 +299,21 @@ public sealed class ShuttlePilot
             }
             case Stage.Retro:
             {
-                // nose to retrograde (the jets pitch it over), then the rockets till the perigee is down to the plan's
+                // nose to retrograde, then the rockets till the perigee is down to the plan's. The retrograde direction
+                // in the craft's own axes (nose -Z, up +Y, right +X): a roll brings it into the pitch plane, then a
+                // pitch turns the nose onto it, both slowing as they close. Pitching alone missed it whenever it lay
+                // off that plane and looped the craft over and over on film (the user, #1528)
                 var v = s.Velocity.Normalized();
                 var nose = -s.Attitude.Z;
                 float off = Mathf.Acos(Mathf.Clamp(nose.Dot(-v), -1f, 1f));
+                var t = s.Attitude.Inverse() * -v;
+                float pitchErr = Mathf.Atan2(t.Y, -t.Z);
+                float rollErr = off > 0.2f ? Mathf.Atan2(t.X, Mathf.Abs(t.Y) + 1e-3f) * Mathf.Sign(t.Y == 0 ? 1f : t.Y) : 0f;
                 var o = jet.Space!.Orbit;
                 double target = Plan.PerigeeKm * 1000;
                 double perigee = o is { } orbit ? Orbit.Apsides(Planet.Earth, orbit).Periapsis - Planet.Earth.Shape.A : double.NaN;
                 bool burn = off < 0.05f && perigee > target;
-                Fly(new Vector2(-bank * 0.5f, off > 0.05f ? Mathf.Clamp(off, 0.3f, 1f) : 0f), burn ? 1f : 0f);
+                Fly(off > 0.03f ? new Vector2(Mathf.Clamp(rollErr, -0.4f, 0.4f), Mathf.Clamp(pitchErr * 0.8f, -0.4f, 0.4f)) : Vector2.Zero, burn ? 1f : 0f);
                 if (o != null && perigee <= target && s.Spool <= jet.Spec.IdleSpool + 0.02f)
                 {
                     Say(FormattableString.Invariant($"retro burn done: perigee {perigee / 1000:F1} km after {StageTime:F0} s"));
@@ -388,7 +400,7 @@ public sealed class ShuttlePilot
         var target = _passedFar ? entry : far;
         double dist = _passedFar ? toEntry : toFar + 250_000;
         float err = Bearing(target);
-        float wantBank = Mathf.Clamp(err * 2f, -1f, 1f);
+        float wantBank = Mathf.Clamp(err * 2f, -DriveBank, DriveBank);
         // the altitude falls with the distance, the speed with it (the lever sets it: v = lever · d / τ)
         double wantAlt = Math.Clamp(EntryAlt + Math.Max(dist - 100_000, 0) * 0.2, EntryAlt, 300_000);
         float wantElev = Mathf.Clamp((float)((wantAlt - alt) / 40_000), -1f, 1f) * Mathf.DegToRad(25f);
@@ -408,8 +420,8 @@ public sealed class ShuttlePilot
     private void Fall(double alt, float elev, float bank)
     {
         float err = Bearing(_home);
-        // out of the drive quickly, 45° down at 300 m/s: it drops out below 50 km a few km on
-        if (_jet.DriveOn) { Fly(Attitude(elev, Mathf.DegToRad(-45f), bank, Mathf.Clamp(err * 2f, -0.5f, 0.5f)), ShuttleFlight.DriveLever(300f, alt)); return; }
+        // out of the drive, 25° down at 300 m/s: it drops out below 50 km some 20 km on (45° looked like a plunge)
+        if (_jet.DriveOn) { Fly(Attitude(elev, Mathf.DegToRad(-25f), bank, Mathf.Clamp(err * 2f, -DriveBank, DriveBank)), ShuttleFlight.DriveLever(300f, alt)); return; }
         // then the air takes it: pull out to the glide
         float q = 0.5f * AirlinerFlight.Density((float)alt) * _jet.State.Tas * _jet.State.Tas;
         Fly(Attitude(elev, q < 3000 ? Mathf.DegToRad(-15f) : Mathf.DegToRad(-8f), bank, Mathf.Clamp(err * 2f, -0.5f, 0.5f)), 0f);

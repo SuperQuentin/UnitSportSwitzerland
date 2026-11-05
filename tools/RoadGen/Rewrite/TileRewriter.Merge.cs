@@ -21,7 +21,7 @@ public static partial class TileRewriter
     private static List<JunctionPlan> PlanAndMerge(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, IReadOnlyList<RoundaboutShaper.Ring> rings,
-        Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        IGround? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, CrossingNodes? crossings,
         MergeStats stats)
     {
@@ -171,7 +171,7 @@ public static partial class TileRewriter
         // members stay as they are (the user, Oct 16, against the aerials); a tree of them (a pair, a chain) is one junction
         if (ring is null && inner.Count >= nodes.Count) { no = "streets between members enclose an island"; return null; }
         var centre = ring?.Centre ?? new Vec2(members.Average(p => p.Junction.Centre.X), members.Average(p => p.Junction.Centre.Y));
-        var home = TileId.FromLv95(centre.X, centre.Y);
+        var home = Plane.TileAt(centre.X, centre.Y);
         var rep = members.Where(p => Home(p.Junction) == home).OrderBy(p => p.Junction.Centre.DistanceTo(centre)).FirstOrDefault();
         if (rep.Junction is null) { no = "a centre outside its members' tiles"; return null; }
 
@@ -257,7 +257,7 @@ public static partial class TileRewriter
         return result;
     }
 
-    private static TileId Home(Junction j) => TileId.FromLv95(j.Centre.X, j.Centre.Y);
+    private static TileId Home(Junction j) => Plane.TileAt(j.Centre.X, j.Centre.Y);
 
     /// <summary>Where an arm of a merged junction leaves its core, seen from the core's centre: its mouth 10 m on along it.</summary>
     private static double RingOf(Junction j, JunctionArm arm) =>

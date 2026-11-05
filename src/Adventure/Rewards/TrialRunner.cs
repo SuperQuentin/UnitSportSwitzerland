@@ -136,7 +136,8 @@ public partial class TrialRunner : Node3D
         if (now >= _nextSample && _samples.Count * 16 < GhostTrack.MaxBytes - 64)
         {
             _nextSample = now + 1 / GhostTrack.Rate;
-            _samples.Add(new GhostTrack.Sample(at.Lv95.E, at.Lv95.N, (float)at.Alt, me.GlobalRotation.Y));
+            // the heading in GlobalPos's axes, as a ghost's samples keep it (#1503: the same as the world's on the ground)
+            _samples.Add(new GhostTrack.Sample(at.Lv95.E, at.Lv95.N, (float)at.Alt, me.GlobalYaw));
         }
         _ghost?.UpdateTo(now - _ghostStart, 1, delta);
         // a gate the server did not count (the body's published position lagged) is reported again a second later

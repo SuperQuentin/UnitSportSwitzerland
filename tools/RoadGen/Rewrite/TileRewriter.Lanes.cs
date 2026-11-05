@@ -163,7 +163,7 @@ public static partial class TileRewriter
         }
         var record = new RoadApproach
         {
-            X = stop[0], Y = stop[1], Z = stop[2], Heading = (float)j.Arms[arm].OutwardHeading, Signal = signal, SignalArm = planArm,
+            X = stop[0], Y = stop[1], Z = stop[2], Heading = (float)Plane.AngleToTile(j.Centre, j.Arms[arm].OutwardHeading), Signal = signal, SignalArm = planArm,
             Banned = banned, LaneCentre = centre, Lanes = lanes,
         };
         stats.Count(record);
@@ -189,7 +189,7 @@ public static partial class TileRewriter
                 var at = way.At(built.Home, stop, across * 0.5);
                 var record = new RoadApproach
                 {
-                    X = at[0], Y = at[1], Z = at[2], Heading = (float)junction.Arms[i].OutwardHeading,
+                    X = at[0], Y = at[1], Z = at[2], Heading = (float)Plane.AngleToTile(junction.Centre, junction.Arms[i].OutwardHeading),
                     Banned = restrictions?.Banned(junction, i, net, stats) ?? SignalMoves.None, LaneCentre = centre, Lanes = lanes,
                 };
                 Get(approaches, built.Home).Add(record);

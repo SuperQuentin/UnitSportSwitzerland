@@ -507,13 +507,69 @@ public partial class VersteckisManager : Node
     private void Push()
     {
         if (!_server) return;
-        string json = VsState.ListJson(_games.Select(g => g.S));
+        string json = WireJson(VsState.ListJson(_games.Select(g => g.S)), toWire: true);
         foreach (long peer in Multiplayer.GetPeers())
             RpcId(peer, MethodName.SetGames, json);
     }
 
     /// <summary>Server: a joining peer gets every game (it draws the disguises of the bodies it meets).</summary>
-    public void SendTo(long peer) => RpcId(peer, MethodName.SetGames, VsState.ListJson(_games.Select(g => g.S)));
+    public void SendTo(long peer) => RpcId(peer, MethodName.SetGames, WireJson(VsState.ListJson(_games.Select(g => g.S)), toWire: true));
+
+    /// <summary>
+    /// (#1503) <see cref="VsState"/>'s JSON on the wire: every place (<c>E</c>/<c>N</c>, <c>DoorE</c>/<c>DoorN</c>,
+    /// <c>FromE</c>/<c>FromN</c>) as ECEF <c>X</c>/<c>Y</c>/<c>Z</c> (<c>DoorX</c>..., <c>FromX</c>...) at the object's
+    /// <c>Alt</c> (or the area's <c>Ground</c>), a decoy's <c>Yaw</c> as a heading from true north there. The state itself
+    /// (plain C#, LV95 and grid yaw) is not touched; the receiver turns the JSON back.
+    /// </summary>
+    internal static string WireJson(string json, bool toWire)
+    {
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json);
+        WireNode(root, toWire);
+        return root?.ToJsonString() ?? json;
+    }
+
+    private static void WireNode(System.Text.Json.Nodes.JsonNode? node, bool toWire)
+    {
+        if (node is System.Text.Json.Nodes.JsonArray list)
+        {
+            foreach (var item in list) WireNode(item, toWire);
+            return;
+        }
+        if (node is not System.Text.Json.Nodes.JsonObject o) return;
+        double alt = (o["Alt"] ?? o["Ground"])?.GetValue<double>() ?? 0;
+        GlobalPos? at = null;
+        foreach (string prefix in new[] { "", "Door", "From" })
+        {
+            string pe = prefix + "E", pn = prefix + "N", px = prefix + "X", py = prefix + "Y", pz = prefix + "Z";
+            if (toWire && o[pe] != null && o[pn] != null)
+            {
+                var g = GlobalPos.FromLv95(o[pe]!.GetValue<double>(), o[pn]!.GetValue<double>(), alt);
+                if (prefix.Length == 0) at = g;
+                var (x, y, z) = g.ToWire();
+                o.Remove(pe);
+                o.Remove(pn);
+                o[px] = x;
+                o[py] = y;
+                o[pz] = z;
+            }
+            else if (!toWire && o[px] != null && o[py] != null && o[pz] != null)
+            {
+                var g = GlobalPos.FromWire(o[px]!.GetValue<double>(), o[py]!.GetValue<double>(), o[pz]!.GetValue<double>());
+                if (prefix.Length == 0) at = g;
+                o.Remove(px);
+                o.Remove(py);
+                o.Remove(pz);
+                o[pe] = g.E;
+                o[pn] = g.N;
+            }
+        }
+        if (at is { } place && o["Yaw"] != null)
+        {
+            float yaw = o["Yaw"]!.GetValue<float>();
+            o["Yaw"] = toWire ? place.TrueYaw(yaw) : place.OffsetYaw(yaw);
+        }
+        foreach (var child in o.Select(kv => kv.Value).ToList()) WireNode(child, toWire);
+    }
 
     /// <summary>Server: a peer left the game.</summary>
     public void PeerLeft(long peer)
@@ -537,9 +593,10 @@ public partial class VersteckisManager : Node
         try
         {
             if (!Godot.FileAccess.FileExists(HistoryFile)) return new();
-            using var f = Godot.FileAccess.Open(HistoryFile, Godot.FileAccess.ModeFlags.Read);
-            var list = JsonSerializer.Deserialize<List<double[]>>(f.GetAsText()) ?? new();
-            return list.Where(p => p.Length == 2).Select(p => (p[0], p[1])).ToList();
+            var places = SavedPlace.ReadPlaces(Godot.FileAccess.GetFileAsString(HistoryFile), out bool old);
+            // a file from before G2 A2b (LV95 pairs): converted in place (#1503)
+            if (old) WriteHistory(places);
+            return places.Select(p => { var (e, n, _) = p.Lv95; return (e, n); }).ToList();
         }
         catch (Exception ex)
         {
@@ -551,6 +608,10 @@ public partial class VersteckisManager : Node
     private static void SaveHistory(double e, double n)
     {
         var list = VsArea.Remember(LoadHistory(), e, n);
-        JsonStore.SaveAsync(HistoryFile, list.Select(p => new[] { p.E, p.N }).ToList(), JsonStore.Indented, ex => GD.PushWarning($"[vs] history: {ex.Message}"));
+        WriteHistory(list.Select(p => GlobalPos.FromLv95(p.E, p.N, 0)));
     }
+
+    /// <summary>The villages played last, as Earth places on the ground (<see cref="SavedPlace.PlacesNode"/>, #1503).</summary>
+    private static void WriteHistory(IEnumerable<GlobalPos> places) =>
+        JsonStore.SaveAsync(HistoryFile, SavedPlace.PlacesNode(places), JsonStore.Indented, ex => GD.PushWarning($"[vs] history: {ex.Message}"));
 }

@@ -394,7 +394,21 @@ public partial class UfoSightings : Node3D, IOriginContainer
         GD.Print($"[sightings] planned {s.Kind} {s.Id}: {s.Count} craft at LV95 {s.E:F1}/{s.N:F1} ground {s.Ground:F1}, "
             + $"from sim {s.Start:F1} for {s.Length:F0} s, heading {Mathf.RadToDeg(s.Heading):F0}");
         if (NetLink.Online(this) && Multiplayer.IsServer())
-            Rpc(MethodName.Plan, s.Id, (int)s.Kind, s.Start, s.Length, s.E, s.N, s.Ground, s.Heading, s.Count, (long)s.Seed);
+        {
+            var (x, y, z, t) = WirePlan(s);
+            Rpc(MethodName.Plan, s.Id, (int)s.Kind, s.Start, s.Length, x, y, z, s.Ground, t, s.Count, (long)s.Seed);
+        }
+    }
+
+    /// <summary>
+    /// (#1503) A plan's anchor as ECEF and its heading (a compass bearing on the grid, clockwise) as a Godot-sense heading
+    /// from true north there.
+    /// </summary>
+    private static (double X, double Y, double Z, float Heading) WirePlan(Sighting s)
+    {
+        var at = GlobalPos.FromLv95(s.E, s.N, s.Ground);
+        var (x, y, z) = at.ToWire();
+        return (x, y, z, at.TrueYaw(-s.Heading));
     }
 
     // ---- the director (#866) and probes ----------------------------------------------------------
@@ -429,17 +443,21 @@ public partial class UfoSightings : Node3D, IOriginContainer
     {
         if (!NetLink.Online(this) || !Multiplayer.IsServer()) return;
         foreach (var s in _plans.Values)
-            RpcId(peer, MethodName.Plan, s.Id, (int)s.Kind, s.Start, s.Length, s.E, s.N, s.Ground, s.Heading, s.Count, (long)s.Seed);
+        {
+            var (x, y, z, t) = WirePlan(s);
+            RpcId(peer, MethodName.Plan, s.Id, (int)s.Kind, s.Start, s.Length, x, y, z, s.Ground, t, s.Count, (long)s.Seed);
+        }
         foreach (int id in _taken) RpcId(peer, MethodName.Taken, id);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Plan(int id, int kind, double start, float length, double e, double n, float ground, float heading, int count, long seed)
+    private void Plan(int id, int kind, double start, float length, double x, double y, double z, float ground, float heading, int count, long seed)
     {
         if (Authority) return;
-        var s = new Sighting(id, (SightingKind)kind, start, length, e, n, ground, heading, Math.Clamp(count, 1, 8), (uint)seed);
+        var at = GlobalPos.FromWire(x, y, z);
+        var s = new Sighting(id, (SightingKind)kind, start, length, at.E, at.N, ground, -at.OffsetYaw(heading), Math.Clamp(count, 1, 8), (uint)seed);
         _plans[id] = s;
-        GD.Print($"[sightings] server planned {s.Kind} {id} at LV95 {e:F1}/{n:F1}, in {start - Now:F1} s");
+        GD.Print($"[sightings] server planned {s.Kind} {id} at LV95 {at.E:F1}/{at.N:F1}, in {start - Now:F1} s");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

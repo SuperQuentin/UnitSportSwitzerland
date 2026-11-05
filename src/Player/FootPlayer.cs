@@ -310,21 +310,92 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     // Not `position`/`rotation` themselves: a remote copy would snap to every packet, which at
     // 150 km/h is a 0.7-2 m hop and a freeze-then-jump whenever one is late. The owner writes these
     // with its own clock; a remote copy interpolates them, and the server's proxy copy applies them.
-    // The position is LV95 and altitude in doubles, never world space: every peer has its own
-    // origin (#185), and the server relays these unchanged, so nothing on the way rounds them.
+    // The position is ECEF in doubles, never world space: every peer has its own origin (#185) and
+    // axes, and the server relays these unchanged, so nothing on the way rounds them. The velocity is in
+    // the local east-up-south at the body and the heading from true north there (#1503, protocol 93):
+    // each reader turns them into its own world with its frame at the body's place.
 
-    [Export] public double NetE { get; set; }
-    [Export] public double NetN { get; set; }
-    [Export] public double NetAlt { get; set; }
+    [Export] public double NetX { get; set; }
+    [Export] public double NetY { get; set; }
+
+    /// <summary>The last of the position's three doubles: the position is read whole when it arrives.</summary>
+    [Export]
+    public double NetZ
+    {
+        get => _netZ;
+        set { _netZ = value; _netGlobal = GlobalPos.FromWire(NetX, NetY, value); }
+    }
+    private double _netZ;
+    private GlobalPos _netGlobal;
+
+    /// <summary>The velocity, in the local east-up-south at <see cref="NetGlobal"/> (m/s; x east, y up, z south).</summary>
     [Export] public Vector3 NetVel { get; set; }
+
+    /// <summary>The heading from true north at <see cref="NetGlobal"/> (radians, as <c>Rotation.Y</c>: 0 faces north).</summary>
     [Export] public float NetYaw { get; set; }
 
     /// <summary>The position the owner last published.</summary>
     public GlobalPos NetGlobal
     {
-        get => new(NetE, NetN, NetAlt);
-        set { NetE = value.E; NetN = value.N; NetAlt = value.Alt; }
+        get => _netGlobal;
+        set { _netGlobal = value; (NetX, NetY, _netZ) = value.ToWire(); }
     }
+
+    /// <summary>
+    /// Publishes a state given in <see cref="GlobalPos"/>'s offset axes at <paramref name="at"/> (what LV95 maths and
+    /// records hold: a recording, a scripted puppet, a swarm bot): the wire's ENU velocity and true heading from them.
+    /// <c>NetTime</c> is not set: the caller sets it last.
+    /// </summary>
+    public void SetNetState(GlobalPos at, Vector3 globalVelocity, float globalYaw)
+    {
+        var enu = at.Enu;
+        NetGlobal = at;
+        NetVel = enu.ToEnu(globalVelocity);
+        NetYaw = enu.TrueYaw(globalYaw);
+    }
+
+    /// <summary>
+    /// The published velocity and heading in <see cref="GlobalPos"/>'s offset axes at <see cref="NetGlobal"/> (grid
+    /// east, up and south until G2 A1, which a flat world's axes are): worked out once per state, when asked.
+    /// </summary>
+    private (Vector3 Velocity, float Yaw) NetInGlobal
+    {
+        get
+        {
+            if (_inGlobalStamp != _netTime || _inGlobalFor != _netGlobal)
+            {
+                // the velocity as the rate the position changes, over a hundredth of a second (bounded where the
+                // grid's scale runs away: a polar orbit over LV95's singular points)
+                _inGlobal = (_netGlobal.RateOfEnu(NetVel), _netGlobal.Enu.Yaw(NetYaw));
+                _inGlobalStamp = _netTime;
+                _inGlobalFor = _netGlobal;
+            }
+            return _inGlobal;
+        }
+    }
+    private (Vector3, float) _inGlobal;
+    private double _inGlobalStamp = double.NaN;
+    private GlobalPos _inGlobalFor;
+
+    /// <summary>The owner's turn from its world to the ENU, kept while it moves less than 100 m (#1503): published every frame.</summary>
+    private EnuNear _enuNear;
+
+    /// <summary>
+    /// The heading in <see cref="GlobalPos"/>'s offset axes at <see cref="Global"/> (grid north until G2 A1): what
+    /// server code doing LV95 maths reads, and what a record keeps. On the owner its body's, else the published one.
+    /// </summary>
+    public float GlobalYaw => IsMultiplayerAuthority() || _netTime <= 0
+        ? (Origin is { } origin ? origin.Frame.OffsetYawOf(Position, Rotation.Y) : Rotation.Y)
+        : NetInGlobal.Yaw;
+
+    /// <summary>The velocity in <see cref="GlobalPos"/>'s offset axes (see <see cref="GlobalYaw"/>).</summary>
+    public Vector3 GlobalVelocity => IsMultiplayerAuthority() || _netTime <= 0
+        ? (Origin is { } origin ? origin.Frame.OffsetOfWorld(Position, Velocity) : Velocity)
+        : NetInGlobal.Velocity;
+
+    /// <summary>The heading in this peer's world: the body's own on the owner, the published one turned into this frame on a copy.</summary>
+    public float WorldYaw => IsMultiplayerAuthority() || _netTime <= 0 || Origin is not { } origin
+        ? Rotation.Y : origin.Frame.WorldYawOf(_netGlobal, NetInGlobal.Yaw);
 
     /// <summary>
     /// Where this player is, origin-free: on a copy, what its owner last published (exact on the
@@ -345,8 +416,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
     private double _netTime;
 
-    /// <summary>World velocity, for local and remote copies alike (a remote's <c>Velocity</c> is always zero).</summary>
-    public Vector3 WorldVelocity => IsMultiplayerAuthority() ? Velocity : NetVel;
+    /// <summary>World velocity, for local and remote copies alike (a remote's <c>Velocity</c> is always zero): a copy's
+    /// is the published one turned into this peer's frame at the body (#1503).</summary>
+    public Vector3 WorldVelocity => IsMultiplayerAuthority() || Origin is not { } origin
+        ? Velocity : origin.Frame.WorldOfOffset(_netGlobal, NetInGlobal.Velocity);
 
     /// <summary>The server's copy of a client's player: data only, never drawn or simulated.</summary>
     public bool NetProxy { get; private set; }
@@ -397,14 +470,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!IsInsideTree() || NetProxy || Puppet)
         {
             // spawn state, the server's proxy or a movie puppet: exactly where the owner says, no smoothing
-            if (Origin is { } origin) Position = origin.ToWorld(NetGlobal);
-            Rotation = new Vector3(0, NetYaw, 0);
+            var inGlobal = NetInGlobal;
+            if (Origin is { } origin)
+            {
+                Position = origin.ToWorld(NetGlobal);
+                Rotation = new Vector3(0, origin.Frame.WorldYawOf(NetGlobal, inGlobal.Yaw), 0);
+            }
+            else Rotation = new Vector3(0, inGlobal.Yaw, 0);
             return;
         }
         if (IsMultiplayerAuthority()) return;
         double now = Time.GetTicksUsec() / 1e6;
+        // in GlobalPos's offset axes, where the interpolator works: turned into this frame only on the way out
+        var state = NetInGlobal;
         _interp.BeginCorrection(now);
-        _interp.Push(_netTime, now, NetGlobal, NetVel, NetYaw);
+        _interp.Push(_netTime, now, NetGlobal, state.Velocity, state.Yaw);
         _interp.EndCorrection();
     }
 
@@ -473,10 +553,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Rotation = new Vector3(0, Rotation.Y, 0);
             if (kind != RideKind.OnFoot)
             {
-                ApplyRide(kind, NetVel, TuningBits, CarSetupId);
+                ApplyRide(kind, WorldVelocity, TuningBits, CarSetupId);
                 if (_ride is { IsVehicle: true } machine) { EngineOn = true; VehicleHealth = machine.MaxHealth; }
             }
-            else { _ride = null; Velocity = NetVel; }
+            else { _ride = null; Velocity = WorldVelocity; }
             RefreshVisual(force: true);   // the authority animates its own mount's visual
             // it is on the ground already: no drop-onto-terrain pass, unless nothing is solid here yet
             _placed = Terrain?.HasCollisionAt(GlobalPosition) != false;
@@ -1353,9 +1433,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
-        replication.AddProperty(".:NetE");
-        replication.AddProperty(".:NetN");
-        replication.AddProperty(".:NetAlt");
+        // ECEF: Z last of the three, its setter reads the position whole
+        replication.AddProperty(".:NetX");
+        replication.AddProperty(".:NetY");
+        replication.AddProperty(".:NetZ");
         replication.AddProperty(".:NetVel");
         replication.AddProperty(".:NetYaw");
         // What you are riding travels with where you are. Without it a remote client sees a
@@ -1491,8 +1572,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         CollisionMask |= DeckLayer;
         _walkMask = CollisionMask;
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
-        if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
-        NetYaw = Rotation.Y;
+        if (Origin is { } start)
+        {
+            NetGlobal = start.ToGlobal(Position);
+            NetYaw = start.Frame.TrueYaw(Position, Rotation.Y);
+        }
+        else NetYaw = Rotation.Y;
         // a movie puppet (#638) is drawn here only: nothing to send, nothing to relay, no spawn to decide
         if (!Puppet) SetUpNet();
 
@@ -1526,7 +1611,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // no camera to put behind it: it faces where it goes, or where it looks (SquareToView)
             _thirdPerson = true;
             // spawned here after a handoff (#50): the spawn state put the mount in RideKindId, not under the body
-            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, NetVel, TuningBits, CarSetupId);
+            if (RideKindId != (int)RideKind.OnFoot && _ride == null) ApplyRide((RideKind)RideKindId, WorldVelocity, TuningBits, CarSetupId);
         }
         else if (IsMultiplayerAuthority())
         {
@@ -1774,9 +1859,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
             if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
             if (!Npc) DeviceKind = XR.XrSession.Active ? DeviceVr : Core.Platform.IsMobile ? DeviceMobile : DeviceDesktop;
-            // in a turned Space frame (#1430 H5) the world's axes are not the grid's every receiver reads it in
-            NetVel = Origin is { Frame: { IsAnchor: true } frame } ? frame.GridVelocity(Position, Velocity) : Velocity;
-            NetYaw = Rotation.Y;
+            // in the local east-up-south and from true north (#1503): every receiver turns them into its own frame
+            if (Origin is { } published)
+            {
+                var enu = _enuNear.At(published.Frame, Position);
+                NetVel = enu.ToEnu(Velocity);
+                NetYaw = enu.TrueYaw(Rotation.Y);
+            }
+            else { NetVel = Velocity; NetYaw = Rotation.Y; }
             NetTime = Time.GetTicksUsec() / 1e6;
             float dt = (float)delta;
             UpdateLiftSeat();
@@ -1890,7 +1980,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // new simulator's first states on the way (#159: it stood still ~3 s before). Carried straight on,
             // the new simulator takes it over where it is drawn, a metre or two off the line in a bend
             _interp.MaxAhead = Npc ? 1.6f : Net.RemoteInterpolator.MaxExtrapolation;
-            var (p, yaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
+            var (p, globalYaw) = _interp.Sample(Time.GetTicksUsec() / 1e6, (float)delta);
+            // the interpolator's heading is in GlobalPos's axes: this frame's at the drawn place (the same on the ground)
+            float yaw = Origin is { } framed ? framed.Frame.WorldYawOf(p, globalYaw) : globalYaw;
             if (Origin is { } origin)
             {
                 var at = origin.ToWorld(p);
@@ -2995,6 +3087,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ClearDecks();
         var at = Origin!.ToWorld(state.Position);
         GlobalPosition = at;
+        // the record's heading and velocity are in GlobalPos's axes at its place: this world's here (#1503)
+        state = state with
+        {
+            Yaw = Origin.Frame.WorldYawOf(state.Position, state.Yaw),
+            Velocity = Origin.Frame.WorldOfOffset(state.Position, state.Velocity),
+        };
         Rotation = new Vector3(0, state.Yaw, 0);
         // the same car: its preset, its garage parts and whatever doors were left open come with it; the
         // driver's door opens to let them in, and once seated every door shuts (and stays shut:
@@ -3081,8 +3179,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // parked in a hold (#418): it stands still in the carrier, whatever the carrier does
             : hold.Key != "" ? Vector3.Zero
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
-        return new VehicleState((RideKind)RideKindId, Origin!.ToGlobal(GlobalPosition),
-            _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
+        // the heading and velocity in GlobalPos's axes at its place, as a record keeps them (#1503)
+        var frame = Origin!.Frame;
+        return new VehicleState((RideKind)RideKindId, frame.ToGlobal(GlobalPosition),
+            frame.OffsetYawOf(GlobalPosition, _ride is Flyer ? _flight.Yaw : Rotation.Y), frame.OffsetOfWorld(GlobalPosition, velocity),
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen
@@ -3199,15 +3299,17 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // out of the hold's frame (#418): the parked vehicle stays carried, the driver walks
         if (InHoldRide && Aboard) LeaveHold();
 
-        ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
-        if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
+        // the record's velocity is in GlobalPos's axes (#1503): this world's for the body
+        var velocity = Origin!.Frame.WorldOfOffset(state.Position, state.Velocity);
+        ApplyRide(RideKind.OnFoot, velocity + right * 2f);
+        if (aisle is { } spot) StandIn(spot, velocity, (door, right, side, frame, vehicle));
         // down the ramp of a landed saucer (#861): at its foot, if that is clear
         else if (grounded && vehicle.ExitSpot is { } foot && ClearStandAt(frame * foot) is { } stand) GlobalPosition = stand;
         else GlobalPosition = FindExit(door, right, side, frame, vehicle, grounded);
         // over the side of a boat: onto a pier or jetty alongside (#377), else into the water beside
         // it, swimming (#302, #301)
         if (vehicle is Boat && aisle == null && !StepOntoPier(door, right, side))
-            IntoWater(GlobalPosition, state.Velocity with { Y = 0 } * 0.5f);
+            IntoWater(GlobalPosition, velocity with { Y = 0 } * 0.5f);
     }
 
     /// <summary>
@@ -3314,12 +3416,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void WreckVehicle()
     {
         var state = CaptureVehicle(wrecked: true);
-        var away = -state.Velocity with { Y = 0 };
+        var velocity = Origin!.Frame.WorldOfOffset(state.Position, state.Velocity);   // this world's (#1503)
+        var away = -velocity with { Y = 0 };
         away = away.LengthSquared() > 0.01f ? away.Normalized() : GlobalTransform.Basis.Z;
 
         Announced?.Invoke("WRECKED!", false);
         PlayerInput.Rumble(1f, 1f, 0.6f);
-        ApplyRide(RideKind.OnFoot, state.Velocity * 0.25f + away * 5f + Vector3.Up * 7f);
+        ApplyRide(RideKind.OnFoot, velocity * 0.25f + away * 5f + Vector3.Up * 7f);
         GlobalPosition = Origin!.ToWorld(state.Position) + Vector3.Up * 1.5f + away * 1.5f;
         _stunTimer = 1.5f;
         _ejected = 2.0;

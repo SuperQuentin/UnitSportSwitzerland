@@ -643,6 +643,41 @@ public class TrialsTests
         var cut = bytes[..^4];
         Assert.Null(GhostTrack.Decode(cut));
     }
+
+    [Fact]
+    public void A_ghost_goes_as_GSH2_in_ECEF_and_true_north_and_a_stored_GSH1_is_upgraded()
+    {
+        // at Geneva, where grid north is 0.95° off true north: positions to a centimetre, headings to 1e-4 rad
+        var samples = Enumerable.Range(0, 400).Select(i => new GhostTrack.Sample(2_500_000 + i * 8.0, 1_118_000 - i * 3.0, 380 + i * 0.5f, 0.3f + i * 0.002f)).ToList();
+        var bytes = GhostTrack.Encode(samples);
+        Assert.Equal(0x32485347u, BitConverter.ToUInt32(bytes, 0));
+        var back = GhostTrack.Decode(bytes)!;
+        for (int i = 0; i < samples.Count; i += 37)
+        {
+            Assert.True(Math.Abs(back[i].E - samples[i].E) < 0.01 && Math.Abs(back[i].N - samples[i].N) < 0.01, $"{i}: {back[i]} vs {samples[i]}");
+            Assert.Equal(samples[i].Alt, back[i].Alt, 2);
+            Assert.Equal(samples[i].Yaw, back[i].Yaw, 4);
+        }
+        // a ghost stored by an older server (RewardService keeps them on disk as uploaded)
+        using var ms = new System.IO.MemoryStream();
+        using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(0x31485347u); w.Write(2); w.Write(2_600_000.0); w.Write(1_200_000.0);
+            w.Write(0f); w.Write(0f); w.Write(500f); w.Write(0.5f);
+            w.Write(10f); w.Write(-4f); w.Write(501f); w.Write(0.6f);
+        }
+        // G2 A2b (#1503): the server rewrites it as GSH2 the first time it reads it; the wire never takes GSH1
+        Assert.Null(GhostTrack.Decode(ms.ToArray()));
+        var upgraded = GhostTrack.Upgrade(ms.ToArray())!;
+        Assert.Equal(0x32485347u, BitConverter.ToUInt32(upgraded, 0));
+        Assert.Null(GhostTrack.Upgrade(upgraded));
+        var old = GhostTrack.Decode(upgraded)!;
+        Assert.Equal(2, old.Count);
+        // the place to the GSH2 floats' millimetre a few metres from its origin, the heading to float rounding
+        Assert.True(Math.Abs(old[1].E - 2_600_010) < 1e-3 && Math.Abs(old[1].N - 1_199_996) < 1e-3, $"{old[1]}");
+        Assert.Equal(501f, old[1].Alt, 3);
+        Assert.Equal(0.6f, old[1].Yaw, 5);
+    }
 }
 
 public class RewardSectionTests

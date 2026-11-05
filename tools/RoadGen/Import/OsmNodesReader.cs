@@ -64,6 +64,26 @@ public sealed class OsmNodesReader
         return reader;
     }
 
+    /// <summary>
+    /// The same rows with their positions on another plane (#1507: a work frame's, from LV95); line ends of 0, 0
+    /// (none) stay so. Distances along lines are kept: LV95 grid metres, within the plan's 2×10⁻⁴ of a frame's.
+    /// </summary>
+    public OsmNodesReader Moved(Func<double, double, (double X, double Y)> toPlane)
+    {
+        var reader = new OsmNodesReader();
+        foreach (var e in _all)
+        {
+            var (x, y) = toPlane(e.E, e.N);
+            var (ex, ey) = e.EndE == 0 && e.EndN == 0 ? (0.0, 0.0) : toPlane(e.EndE, e.EndN);
+            var entry = e with { E = x, N = y, EndE = ex, EndN = ey };
+            reader._all.Add(entry);
+            var key = (entry.Uuid, entry.Part);
+            if (!reader._byLine.TryGetValue(key, out var list)) reader._byLine[key] = list = new List<Entry>();
+            list.Add(entry);
+        }
+        return reader;
+    }
+
     /// <summary>Every row on a TLM line (for a restriction: its from-line), in along-line order.</summary>
     public IReadOnlyList<Entry> ForLine(string uuid, int part) =>
         _byLine.TryGetValue((uuid, part), out var list) ? list : [];

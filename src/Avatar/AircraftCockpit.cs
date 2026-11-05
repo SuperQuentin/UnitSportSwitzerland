@@ -136,6 +136,11 @@ public partial class AircraftCockpit : Node3D
     /// <summary>The world's height over the sea at y = 0 (the floating origin's), set by the local player: altitudes read in feet AMSL.</summary>
     public static float WorldAltitude;
 
+    /// <summary>The client's world origin, set by the client world: HDG and track read true north from its frame (#1504).</summary>
+    public static Func<WorldOrigin?>? Origin { get; set; }
+
+    private TrueNorth.Near _north;
+
     private const float Deg = Mathf.Pi / 180f;
 
     public AircraftCockpit(Node3D model, CockpitLayout layout, AirlinerSpec spec)
@@ -583,7 +588,9 @@ public partial class AircraftCockpit : Node3D
 
         var g = GlobalTransform.Basis.Orthonormalized();
         var fwd = -g.Z;
-        float hdg = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
+        // headings from true north at the aircraft, not the world's −Z (#1504); grid north without a world (probes)
+        float north = Origin?.Invoke() is { } origin ? Mathf.RadToDeg(_north.World(origin.Frame, pos)) : 0f;
+        float hdg = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z)) - north;
         float pitch = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(fwd.Y, -1f, 1f)));
         float roll = Mathf.RadToDeg(Mathf.Atan2(-g.X.Y, g.Y.Y));
         var flat = _vel with { Y = 0 };
@@ -597,7 +604,7 @@ public partial class AircraftCockpit : Node3D
             Alt: Mathf.RoundToInt(altitude / CockpitInstruments.Foot / 10f) * 10,
             Vs: Mathf.RoundToInt(_vs / CockpitInstruments.Foot * 60f / 50f) * 50,
             Hdg: CockpitInstruments.Wrap360(hdg),
-            Track: flat.Length() > 3f ? CockpitInstruments.Wrap360(Mathf.RadToDeg(Mathf.Atan2(flat.X, -flat.Z))) : -1,
+            Track: flat.Length() > 3f ? CockpitInstruments.Wrap360(Mathf.RadToDeg(Mathf.Atan2(flat.X, -flat.Z)) - north) : -1,
             Pitch: Mathf.RoundToInt(pitch * 2f),
             Roll: Mathf.RoundToInt(roll),
             Gs: Mathf.RoundToInt(flat.Length() / CockpitInstruments.Knot),

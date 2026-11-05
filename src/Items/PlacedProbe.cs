@@ -262,6 +262,8 @@ public partial class PlacedProbe : ChatProbe
         Expect(flag != null, "A's flag survived the server restart");
         Expect(!placed.All.Values.Any(o => o.Kind == PlacedKind.Photo && o.Owner == "PlacedA"), "A's removed photo stayed removed");
         if (flag == null) return;
+        // where it came back: the place A planted it, through the server's file (Earth places since #1503)
+        GD.Print(FormattableString.Invariant($"[placedcheck C] flag #{flag.Id} at LV95 {flag.E:F4}/{flag.N:F4} alt {flag.Altitude:F4}"));
         // anyone may pull a flag up; C walks over first (the server checks reach)
         var me = Me!;
         me.GlobalPosition = flag.WorldTransform(placed.Origin).Origin + new Vector3(1.5f, 1.5f, 0);

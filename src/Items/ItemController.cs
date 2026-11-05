@@ -1096,7 +1096,8 @@ public partial class ItemController : Node
             var play = RadioPlay.Decode(stack.Data);
             var held = play ?? RadioPlay.DecodeAny(stack.Data);
             for (int i = 0; i < stack.Count; i++)
-                RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
+                RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)),
+                    _origin.Frame.OffsetYawOf(origin, yaw), _origin.Frame.OffsetOfWorld(origin, velocity),   // GlobalPos's axes (#1503)
                     held?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, held?.Length ?? 0, player.RadioVolume,
                     Voice: player.RadioMix.X, Music: player.RadioMix.Y));
             return;
@@ -1634,8 +1635,7 @@ public partial class ItemController : Node
     {
         var p = player.GlobalPosition;
         var (e, n) = _origin.ToLv95(p);
-        var f = -player.Camera.GlobalTransform.Basis.Z;
-        int bearing = Mathf.PosMod(Mathf.RoundToInt(Mathf.RadToDeg(Mathf.Atan2(f.X, -f.Z))), 360);
+        int bearing = GpsBearing(player);
         string[] points = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
         string point = points[(int)Mathf.Round(bearing / 45f) % 8];
         return $"E {e:# ### ###}\nN {n:# ### ###}\n{p.Y:F0} m\n{bearing:000}° {point}";
@@ -1646,12 +1646,22 @@ public partial class ItemController : Node
     {
         var p = player.GlobalPosition;
         var (e, n) = _origin.ToLv95(p);
-        var f = -player.Camera.GlobalTransform.Basis.Z;
-        // world −Z is north (LV95 N grows as Z falls), +X is east
-        // whole degrees as an int: formatting a float -0.0 prints "-000"
-        int bearing = Mathf.PosMod(Mathf.RoundToInt(Mathf.RadToDeg(Mathf.Atan2(f.X, -f.Z))), 360);
+        int bearing = GpsBearing(player);
         string[] points = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
         string point = points[(int)Mathf.Round(bearing / 45f) % 8];
         return $"E {e:# ### ###}   N {n:# ### ###}\n{p.Y:F0} m   {bearing:000}° {point}";
+    }
+
+    private TrueNorth.Near _gpsNorth;
+
+    /// <summary>
+    /// The camera's compass bearing from true north at the player (#1504), not the world's −Z; whole degrees as an
+    /// int (formatting a float −0.0 prints "−000").
+    /// </summary>
+    private int GpsBearing(FootPlayer player)
+    {
+        var f = -player.Camera.GlobalTransform.Basis.Z;
+        float north = _gpsNorth.World(_origin.Frame, player.GlobalPosition);
+        return Mathf.PosMod(Mathf.RoundToInt(Mathf.RadToDeg(Mathf.Atan2(f.X, -f.Z) - north)), 360);
     }
 }

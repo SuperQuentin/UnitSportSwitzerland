@@ -271,7 +271,7 @@ public partial class SteamerCheck : Node
         Expect(berth.Fits && berth.Depth >= SteamerLines.Draught + SteamerBerth.Clearance, "the berth floats the steamer with its clearance");
         var keel = Landings.KeelWorld(berth, origin, SteamerBerth.FloatDraught);
         float off = MathX.FlatDistance(steamer.GlobalPosition, keel);
-        float turn = Mathf.RadToDeg(Mathf.Abs(Mathf.AngleDifference(steamer.Rotation.Y, Landings.Yaw(berth))));
+        float turn = Mathf.RadToDeg(Mathf.Abs(Mathf.AngleDifference(steamer.Rotation.Y, Landings.Yaw(berth, origin))));
         Expect(off < 1.0f && turn < 3f, F($"the steamer lies at the berth ({off:F2} m, {turn:F1}° off)"));
         Expect((steamer.BusDoors & (1 << berth.Side)) != 0, $"its gangway on the pier side stands open (gates {steamer.BusDoors})");
 
@@ -324,7 +324,7 @@ public partial class SteamerCheck : Node
         await Shot("pier_moored", () =>
         {
             // from over the pier's side, its neck in front, the ship beyond
-            var bow = Landings.Bow(berth);
+            var bow = Landings.Bow(berth, origin);
             var towardPier = new Vector3(bow.Z, 0, -bow.X) * side;
             var target = keel + Vector3.Up * 4f - bow * 8f;
             var eye = target + towardPier * 60f - bow * 45f + Vector3.Up * 20f;
@@ -339,7 +339,7 @@ public partial class SteamerCheck : Node
         await Shot("pier_player", () =>
         {
             // from the pier's shore side, the player in front, the ship and its gangway behind
-            var bow = Landings.Bow(berth);
+            var bow = Landings.Bow(berth, origin);
             var towardPier = new Vector3(bow.Z, 0, -bow.X) * side;
             var eye = me.GlobalPosition + towardPier * 8f - bow * 3.5f + Vector3.Up * 2.4f;
             var target = me.GlobalPosition + Vector3.Up * 1.3f - towardPier * 3f + bow * 1.5f;

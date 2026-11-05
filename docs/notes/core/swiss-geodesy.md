@@ -33,6 +33,8 @@
   - `lhn95tobessel` gives the geoid (altitude 0 in, the geoid out). It answers over the whole grid
     but not at 2,900,000 / 1,300,000. To resample the grid, loop over the nodes with `xargs -P 8`
     (273 calls in a few seconds) and paste the centimetres into `GeoidCm`.
+- **Grid north against true north**: `SwissGeodesy.GridConvergence(e, n)`, the meridian convergence (0 on Bern's
+  meridian, ~+0.93° at Geneva); what the game turns every grid heading by (`core/true-north`, #1504).
 - **The projection sphere's radius is 6,378,815.904 m** (`SwissGeodesy.R`): the same R the
   render-space curvature of #187 uses near Bern.
 - **The valid domain** (#1480): LV95 round-trips to a tenth of a millimetre over the whole Earth **but a

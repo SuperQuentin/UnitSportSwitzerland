@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 using UnitSport.Terrain.Construction;
 
@@ -170,12 +171,14 @@ public static class DormantSlots
             for (int k = 0; k < berths.Count; k++)
             {
                 var b = berths[k];
-                if (water(b.E, b.N) is not { } w || w.Level - w.Bed < MarinaMinDepth) continue;
+                double e = b.E, n = b.N;
+                if (water(e, n) is not { } w || w.Level - w.Bed < MarinaMinDepth) continue;
                 string owner = $"{id.E}_{id.N}_{b.Id[..b.Id.IndexOf('_')]}";
                 float draught = b.Speedboat ? SpeedboatDraught : JetskiDraught;
-                // the berth's heading is degrees clockwise from grid north; a yaw turns the other way
-                float yaw = -(float)(b.Heading * Math.PI / 180);
-                into.Add(new VehicleSlot(owner, k, b.E, b.N, w.Level - draught, Wrap(yaw),
+                // the berth's heading is degrees clockwise from true north (a yaw turns the other way), kept in the
+                // slot's offset axes (#1504)
+                float yaw = TrueNorth.OffsetYaw(GlobalPos.FromLv95(e, n, w.Level), -(float)(b.Heading * Math.PI / 180));
+                into.Add(new VehicleSlot(owner, k, e, n, w.Level - draught, Wrap(yaw),
                     b.Speedboat ? speedboatKind : jetskiKind, 0, false, Respawns: true));
             }
         }

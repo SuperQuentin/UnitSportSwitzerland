@@ -85,7 +85,7 @@ public static partial class TileRewriter
         foreach (var (junction, plan) in priority.Plans)
         {
             if (JunctionRules.Of(plan.Kind).Has(JunctionRule.StopLine)) continue;   // the lights draw theirs with the stop line (#682)
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             for (int i = 0; i < junction.Arms.Count; i++)
             {
@@ -166,7 +166,7 @@ public static partial class TileRewriter
         }
         bool OnStrip(Vec2 p)
         {
-            double x = p.X - tile.MinE, z = tile.MaxN - p.Y;
+            double x = p.X - Plane.West(tile), z = Plane.North(tile) - p.Y;
             foreach (var a in strips)
             {
                 var v = a.Vertices;

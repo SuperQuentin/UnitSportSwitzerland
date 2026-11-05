@@ -28,6 +28,17 @@ public enum LeafKind : ushort
     Fields = 9,
     /// <summary>The aerial photo over the leaf, an encoded image (<see cref="LeafPhoto"/>).</summary>
     Photo = 10,
+    /// <summary>Raw (G2 B3 PR 2, a temporary <c>.cubl</c>): each raw road segment's swissTLM3D source, aligned with the raw <see cref="Roads"/> section (<see cref="LeafRoadKeys"/>).</summary>
+    RoadKeys = 11,
+    /// <summary>Raw (a temporary <c>.cubl</c>): the car park rings the network stage lays out (<see cref="LeafParking"/>).</summary>
+    Parking = 12,
+}
+
+/// <summary>What a kind is for (#1507).</summary>
+public static class LeafKinds
+{
+    /// <summary>A stage's intermediate (the road stage's raw kinds, in a temporary <c>.cubl</c>): never in a region's leaves, nor in <see cref="CubeLeafContent"/>.</summary>
+    public static bool IsRaw(LeafKind kind) => kind is LeafKind.RoadKeys or LeafKind.Parking;
 }
 
 /// <summary>

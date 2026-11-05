@@ -43,7 +43,7 @@ public sealed class RailRoadOverlap
     private const double StreetRunMin = 25.0;
     private const double ZoneMargin = 0.5;    // road paint kept this far outside the outer rail
     private const double Cell = 20.0;
-    private const float TileSize = 1000f;
+    private static double TileSize => Plane.TileSizeM;   // tile edges on the plane (#1507)
 
     /// <summary>
     /// The raised rails' height over the line (RoadMeshBuilder 0.18) less the paint lift (0.02).
@@ -308,11 +308,7 @@ public sealed class RailRoadOverlap
         return pieces;
     }
 
-    private static bool OnSeam(Vec2 p)
-    {
-        double fx = p.X / TileSize - Math.Round(p.X / TileSize), fy = p.Y / TileSize - Math.Round(p.Y / TileSize);
-        return Math.Abs(fx) * TileSize < 0.01 || Math.Abs(fy) * TileSize < 0.01;
-    }
+    private static bool OnSeam(Vec2 p) => Plane.OnAnyEdge(p.X, p.Y, 0.01);
 
     /// <summary>
     /// <see cref="PaintType.RailGroove"/> lines for one embedded piece, one per rail, tile-local,
@@ -338,7 +334,7 @@ public sealed class RailRoadOverlap
                 f = f.LengthSquared < 1e-12 ? new Vec2(0, 1) : f.Normalized();
                 var q = plan[i] + f.Perp * offset;
                 float y = (!ownHeight && Covered(q, 3.0, out float h, bridge) ? h : piece.Height[i]) + lift;
-                v.Add((float)(q.X - tile.MinE)); v.Add(y); v.Add((float)(tile.MaxN - q.Y));
+                v.Add((float)(q.X - Plane.West(tile))); v.Add(y); v.Add((float)(Plane.North(tile) - q.Y));
             }
             into.Add(new RoadPaint
             {
@@ -396,12 +392,12 @@ public sealed class RailRoadOverlap
     {
         if (_zones.Count == 0 || paint.Count == 0) return;
         var near = _zones.Where(z => z.Line.Any(p =>
-            p.X > tile.MinE - 50 && p.X < tile.MinE + TileSize + 50 && p.Y > tile.MinN - 50 && p.Y < tile.MaxN + 50)).ToList();
+            p.X > Plane.West(tile) - 50 && p.X < Plane.West(tile) + TileSize + 50 && p.Y > Plane.South(tile) - 50 && p.Y < Plane.North(tile) + 50)).ToList();
         if (near.Count == 0) return;
 
         bool InZone(float x, float z)
         {
-            var p = new Vec2(tile.MinE + x, tile.MaxN - z);
+            var p = new Vec2(Plane.West(tile) + x, Plane.North(tile) - z);
             foreach (var (line, half) in near)
                 for (int i = 1; i < line.Length; i++)
                     if (Polyline.PointSegmentDistance(p, line[i - 1], line[i]) < half) return true;

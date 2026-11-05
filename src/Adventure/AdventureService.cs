@@ -272,7 +272,11 @@ public partial class AdventureService : Node
             if (!File.Exists(path)) return null;
             var p = AdventureBook.FromJson(File.ReadAllText(path));
             // a file renamed by hand under another identity never gives that identity its progress
-            return p.Key == key ? p : null;
+            if (p.Key != key) return null;
+            // the sections that held LV95 places migrate now (#1503, G2 A2b): written back in Earth places at the next save
+            if (p.Has(Navigation.PinBook.Section.Id)) p.Get(Navigation.PinBook.Section);
+            if (p.Has(Navigation.TravelBook.Section.Id)) p.Get(Navigation.TravelBook.Section);
+            return p;
         }
         catch (Exception e)
         {
