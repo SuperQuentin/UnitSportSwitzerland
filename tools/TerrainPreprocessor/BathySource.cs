@@ -79,7 +79,21 @@ public sealed class BathySource
     /// <summary>The lake a survey kilometre belongs to (the STAC item's name, e.g. "lacleman"), or null.</summary>
     public string? LakeAt(TileId id) => _index.TryGetValue(id, out var e) ? e.Lake : null;
 
-    private Grid? GetGrid(TileId id) =>
+    // The kilometre this thread sampled last: a window walks its cells along rows, so the next sample is almost always in the
+    // same kilometre, and asking the dictionaries again for every cell cost a fifth of the water stage's bed phase (#1566).
+    // A grid is a pure function of its file, so a kept reference to one that ReleaseBefore has dropped reads the same cells.
+    [ThreadStatic] private static (BathySource? Owner, TileId Id, Grid? Grid) _home;
+
+    private Grid? GetGrid(TileId id)
+    {
+        var h = _home;
+        if (ReferenceEquals(h.Owner, this) && h.Id == id) return h.Grid;
+        var g = FindGrid(id);
+        _home = (this, id, g);
+        return g;
+    }
+
+    private Grid? FindGrid(TileId id) =>
         _index.ContainsKey(id) ? _grids.GetOrAdd(id, k => new Lazy<Grid?>(() => Load(_index[k]))).Value : null;
 
     /// <summary>Bed elevation (LN02 metres) at an LV95 point, or NaN off the survey.</summary>
@@ -100,7 +114,8 @@ public sealed class BathySource
             {
                 double wt = (di == 0 ? 1 - fu : fu) * (dj == 0 ? 1 - fv : fv);
                 if (wt <= 1e-9) continue;
-                double z = Cell(home, i0 + di, j0 + dj);
+                int ci = i0 + di, cj = j0 + dj;
+                double z = (uint)ci < (uint)home.Cols && (uint)cj < (uint)home.Rows ? home.Z[cj * home.Cols + ci] : Cell(home, ci, cj);
                 if (double.IsNaN(z)) return double.NaN;
                 sum += z * wt;
                 w += wt;
@@ -113,7 +128,7 @@ public sealed class BathySource
     {
         if ((uint)i < (uint)home.Cols && (uint)j < (uint)home.Rows) return home.Z[j * home.Cols + i];
         double x = home.CellX(i), y = home.CellY(j);
-        var other = GetGrid(TileId.FromLv95(x, y));
+        var other = FindGrid(TileId.FromLv95(x, y));   // not GetGrid: a neighbour must not take the home kilometre's place
         if (other == null || other.CellSize != home.CellSize) return double.NaN;
         int oi = (int)Math.Floor((x - other.XllCorner) / other.CellSize);
         int oj = (int)Math.Floor((other.YllCorner + other.Rows * other.CellSize - y) / other.CellSize);

@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
@@ -111,26 +113,49 @@ public static class WaterWindow
             }
             var mins = rowMin.AsSpan(y * w, w);
             if (!any) { mins.Fill(int.MaxValue); continue; }
-            for (int k = 0; k < padded; k++)
-                fromStart[k] = k % block == 0 ? row[k] : Math.Min(fromStart[k - 1], row[k]);
-            for (int k = padded - 1; k >= 0; k--)
-                fromEnd[k] = k == padded - 1 || (k + 1) % block == 0 ? row[k] : Math.Min(fromEnd[k + 1], row[k]);
+            // a block at a time, so no cell needs its position in the block worked out by a division
+            for (int b0 = 0; b0 < padded; b0 += block)
+            {
+                int b1 = Math.Min(b0 + block, padded);
+                fromStart[b0] = row[b0];
+                for (int k = b0 + 1; k < b1; k++) fromStart[k] = Math.Min(fromStart[k - 1], row[k]);
+                fromEnd[b1 - 1] = row[b1 - 1];
+                for (int k = b1 - 2; k >= b0; k--) fromEnd[k] = Math.Min(fromEnd[k + 1], row[k]);
+            }
             for (int x = 0; x < w; x++)
                 mins[x] = Math.Min(fromEnd[x], fromStart[x + 2 * probe]);
         }
-        var dry = new List<int>();
+        // the same minimum down each column, a row of columns at a time. A wet cell is dry when it stands more than the rise above it.
+        // The minima are complete before the first cell is changed and a cell only reads its own state, so it is done in place.
+        var colMin = new int[w];
         for (int y = 0; y < w; y++)
+        {
+            MinOfRows(rowMin, w, Math.Max(0, y - probe), Math.Min(w - 1, y + probe), colMin);
             for (int x = 0; x < w; x++)
             {
                 int i = y * w + x;
-                if (state[i] != 1) continue;
-                int m = int.MaxValue;
-                for (int dy = Math.Max(0, y - probe); dy <= Math.Min(w - 1, y + probe); dy++)
-                    m = Math.Min(m, rowMin[dy * w + x]);
-                if (surfaceQ[i] > (long)m + riseQ) dry.Add(i);
+                if (state[i] == 1 && surfaceQ[i] > (long)colMin[x] + riseQ) state[i] = 0;
             }
-        foreach (int i in dry) state[i] = 0;
+        }
         pool?.Return(rowMin);
+    }
+
+    /// <summary>
+    /// The smallest value in each column over rows <paramref name="y0"/> to <paramref name="y1"/> (inclusive) of a w-wide array,
+    /// into <paramref name="min"/>. Integer minima, so a vector gives the scalar loop's numbers exactly; the scalar loop covers
+    /// the columns a whole vector does not (public for the test).
+    /// </summary>
+    public static void MinOfRows(int[] rows, int w, int y0, int y1, int[] min)
+    {
+        Array.Copy(rows, y0 * w, min, 0, w);
+        for (int y = y0 + 1; y <= y1; y++)
+        {
+            int o = y * w, x = 0;
+            if (Vector.IsHardwareAccelerated)
+                for (int n = w - Vector<int>.Count; x <= n; x += Vector<int>.Count)
+                    Vector.Min(new Vector<int>(min, x), new Vector<int>(rows, o + x)).CopyTo(min, x);
+            for (; x < w; x++) min[x] = Math.Min(min[x], rows[o + x]);
+        }
     }
 
     /// <summary>The exact Euclidean distance from every cell to the nearest site, in metres (cells × the cell size).</summary>
@@ -220,29 +245,47 @@ public static class WaterWindow
     public static float[] BoxMean(float[] f, int w, int r, Pool? pool = null)
     {
         const double Unit = 1e-4;
-        int sw = w + 1;
-        var sum = Rent<long>(pool, sw * sw);
-        var cnt = Rent<int>(pool, sw * sw);
+        var o = Rent<float>(pool, w * w);
+        Array.Fill(o, float.NaN);
+        // The table only needs the rectangle the defined cells lie in: outside it every cell adds nothing to a sum or a count, so a
+        // box clipped to the rectangle holds the same sums. The gap fill's cells are a strip along the survey's edge, often none.
+        int minX = w, maxX = -1, minY = w, maxY = -1;
         for (int y = 0; y < w; y++)
+        {
+            var line = f.AsSpan(y * w, w);
+            int first = -1, last = -1;
+            for (int x = 0; x < line.Length; x++)
+                if (!float.IsNaN(line[x])) { if (first < 0) first = x; last = x; }
+            if (first < 0) continue;
+            minX = Math.Min(minX, first);
+            maxX = Math.Max(maxX, last);
+            minY = Math.Min(minY, y);
+            maxY = y;
+        }
+        if (maxX < 0) return o;
+        int bw = maxX - minX + 1, bh = maxY - minY + 1, sw = bw + 1;
+        // sized for the whole window so that the pool can lend them to a window of the same size again; only sw * (bh + 1) is used
+        var sum = Rent<long>(pool, (w + 1) * (w + 1));
+        var cnt = Rent<int>(pool, (w + 1) * (w + 1));
+        for (int y = 0; y < bh; y++)
         {
             long rowSum = 0;
             int rowCnt = 0;
-            for (int x = 0; x < w; x++)
+            for (int x = 0; x < bw; x++)
             {
-                float v = f[y * w + x];
+                float v = f[(minY + y) * w + minX + x];
                 if (!float.IsNaN(v)) { rowSum += (long)Math.Round(v / Unit); rowCnt++; }
                 sum[(y + 1) * sw + x + 1] = sum[y * sw + x + 1] + rowSum;
                 cnt[(y + 1) * sw + x + 1] = cnt[y * sw + x + 1] + rowCnt;
             }
         }
-        var o = Rent<float>(pool, w * w);
-        for (int y = 0; y < w; y++)
+        for (int y = minY; y <= maxY; y++)
         {
-            int y0 = Math.Max(0, y - r), y1 = Math.Min(w, y + r + 1);
-            for (int x = 0; x < w; x++)
+            int y0 = Math.Max(minY, y - r) - minY, y1 = Math.Min(maxY + 1, y + r + 1) - minY;
+            for (int x = minX; x <= maxX; x++)
             {
-                if (float.IsNaN(f[y * w + x])) { o[y * w + x] = float.NaN; continue; }
-                int x0 = Math.Max(0, x - r), x1 = Math.Min(w, x + r + 1);
+                if (float.IsNaN(f[y * w + x])) continue;
+                int x0 = Math.Max(minX, x - r) - minX, x1 = Math.Min(maxX + 1, x + r + 1) - minX;
                 long s = sum[y1 * sw + x1] - sum[y0 * sw + x1] - sum[y1 * sw + x0] + sum[y0 * sw + x0];
                 int n = cnt[y1 * sw + x1] - cnt[y0 * sw + x1] - cnt[y1 * sw + x0] + cnt[y0 * sw + x0];
                 o[y * w + x] = (float)(s * Unit / n);

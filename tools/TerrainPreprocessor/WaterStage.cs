@@ -728,13 +728,16 @@ public static class WaterStage
                 {
                     int ti = r * S + c;
                     if (levels[ti] == 0) continue;
-                    foreach (int tj in new[] { ti + 1, ti - S })
+                    for (int pair = 0; pair < 2; pair++)   // east, then north (an array per pair here was garbage by the gigabyte)
+                    {
+                        int tj = pair == 0 ? ti + 1 : ti - S;
                         if (levels[tj] != 0 && (kind[ti] == 1) != (kind[tj] == 1))
                         {
                             float step = MathF.Abs(depth[ti] - depth[tj]);
                             join.Add(step);
                             if (step > worst.Step) worst = (step, id.MinE + c, id.MaxN - r);
                         }
+                    }
                 }
 
         Arrays.Return(state); Arrays.Return(surfaceQ); Arrays.Return(label); Arrays.Return(ds);
