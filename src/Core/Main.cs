@@ -173,6 +173,13 @@ public partial class Main : Node
 			return;
 		}
 
+		// the leaves' aerial photos into a cube region (#1507, G2 B3 row 7): a tool, no game
+		if (UnitSport.World.CubePhotoBake.Requested())
+		{
+			AddChild(new UnitSport.World.CubePhotoBake { Name = "CubePhotoBake" });
+			return;
+		}
+
 		// the globe's colour bake into a --cube-global region (#1430 H4): a tool, no game
 		if (UnitSport.World.GlobeAlbedoBake.Requested())
 		{
