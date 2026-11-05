@@ -43,7 +43,9 @@ public class FlatLv95RatchetTests
         // all (#1500, A1 #1502); a person's LV95 goes through GlobalPos.Lv95 / FromLv95, which still count
         new("LV95 coordinate member",
             new(@"\w\)?\.(E|N)\b(?!\s*\()", RegexOptions.Compiled),
-            Baseline: 4150, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+            // 4150 on main before G2 A2 (#1503); the wire's step converts the LV95 records (pins, pots, structures, placed
+            // objects, pallets, traffic endpoints...) at the RPC edge, reading their E/N there until A2b migrates them
+            Baseline: 4162, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);

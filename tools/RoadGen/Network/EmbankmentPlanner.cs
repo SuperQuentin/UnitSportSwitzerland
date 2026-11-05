@@ -2,6 +2,7 @@ namespace UnitSport.Tools.RoadGen.Network;
 
 using System.Globalization;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
 
 /// <summary>
 /// Retaining walls for one tile's roads (#125), decided at build time with the full-resolution
@@ -65,7 +66,7 @@ public static class EmbankmentPlanner
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var props = new List<RoadLinearProp>();
-        double Ground(double x, double z) => ground(id.MinE + x, id.MaxN - z);
+        double Ground(double x, double z) => ground(Plane.West(id) + x, Plane.North(id) - z);
         var lines = new LineIndex(segments);
         var tunnelEnds = new List<(double X, double Z)>();
         foreach (var s in segments)

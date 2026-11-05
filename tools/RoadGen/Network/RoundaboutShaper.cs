@@ -258,13 +258,13 @@ public static class RoundaboutShaper
             double e = ring.Centre.X + inner * Math.Cos(a), n = ring.Centre.Y + inner * Math.Sin(a);
             double y = ring.HeightAt(a);
             sum += y;
-            v[(k + 1) * 3] = (float)(e - id.MinE);
+            v[(k + 1) * 3] = (float)(e - Plane.West(id));
             v[(k + 1) * 3 + 1] = (float)y;
-            v[(k + 1) * 3 + 2] = (float)(id.MaxN - n);
+            v[(k + 1) * 3 + 2] = (float)(Plane.North(id) - n);
         }
-        v[0] = (float)(ring.Centre.X - id.MinE);
+        v[0] = (float)(ring.Centre.X - Plane.West(id));
         v[1] = (float)(sum / rim);
-        v[2] = (float)(id.MaxN - ring.Centre.Y);
+        v[2] = (float)(Plane.North(id) - ring.Centre.Y);
         var idx = new ushort[rim * 3];
         for (int k = 0; k < rim; k++)
         {

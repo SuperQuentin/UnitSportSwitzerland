@@ -25,7 +25,7 @@ public static partial class TileRewriter
     {
         var core = jp.Core!;
         var net = result.Network;
-        var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
+        var home = Plane.TileAt(jp.Centre.X, jp.Centre.Y);
         var anchors = new List<(Vec2 At, float Height)>();
         foreach (var m in core.Mouths)
             if (net.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source s) anchors.Add(((m.Left + m.Right) * 0.5, s.SampleHeight((m.Left + m.Right) * 0.5)));
@@ -467,7 +467,7 @@ public static partial class TileRewriter
     /// </summary>
     private static float CapHeightAt(RoadJunction cap, TileId home, Vec2 p)
     {
-        double x = p.X - home.MinE, z = home.MaxN - p.Y;
+        double x = p.X - Plane.West(home), z = Plane.North(home) - p.Y;
         var v = cap.Vertices;
         for (int t = 0; t + 2 < cap.Indices.Length; t += 3)
         {

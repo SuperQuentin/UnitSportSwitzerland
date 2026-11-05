@@ -127,6 +127,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public WorldOrigin? Origin => _origin;
     private WorldOrigin? _origin;
     private Material? _material;
+    private static readonly StringName FlatEdgeParam = "flat_edge";
     private HashSet<TileId> _available = new();
 
     /// <summary>
@@ -470,6 +471,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _source = source;
         _origin = origin;
         _material = material;
+        // the tiles' square dissolves into the globe at its edge while the globe is drawn (#1528, World/Globe)
+        (material as ShaderMaterial)?.SetShaderParameter(FlatEdgeParam, 1);
         _roadMaterial = roadMaterial;
         _buildingMaterial = buildingMaterial;
         _treeMaterial = treeMaterial;
@@ -480,6 +483,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         {
             // its own material instance: the discard rectangle must not touch the tiles
             var horizonMaterial = Styles.StyleKit.Material(Styles.MaterialRole.Terrain);
+            // and the horizon blocks' circle at theirs
+            horizonMaterial.SetShaderParameter(FlatEdgeParam, 2);
             Horizon = new HorizonLayer { Name = "Horizon" };
             Horizon.Initialize(source, origin, horizonMaterial,
                 () => _anchors.Select(a => a.GlobalPosition));

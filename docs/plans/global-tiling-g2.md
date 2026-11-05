@@ -62,7 +62,9 @@ flat world; track B builds data the game does not read yet; C wires the two toge
 - Check: `tools/test.sh coords` against step 0's baseline after each area (no change), the quick
   tier, a microbenchmark of the conversions.
 
-**A2 The wire and saves** (one PR for the wire, one for saves)
+**A2 The wire and saves** (one PR for the wire, one for saves; **the wire in progress**, PR #1524: the lists
+anchor on `OriginFrame.AnchorAt(ECEF)`, ENU axes at the origin, rather than a carried `FrameAxes`; records keep
+GlobalPos's offset axes and convert at the wire's edge; see `docs/notes/net/positions-on-the-wire.md`)
 - `Handshake.Protocol` 93, the one bump for positions:
   - single positions as ECEF doubles (`GlobalPos.Write`/`Read` as `_x/_y/_z`; the 59 RPCs with
     e/n/alt doubles take `double x, double y, double z`); `FootPlayer.NetX/Y/Z`, `NetPlace`;
@@ -146,7 +148,7 @@ game's (C1), not a build stage.
 | 1 | driver, transforms, `IGround`, leaf writer and seam pass, cube manifest; heights into `.cubl`; `--cube-swiss` from `.cubl` | transforms within 0.1 mm; `--cube-check`; heights against `.terr`. **Built** (PR #1527, `docs/notes/tools/cube-frames.md`): transforms 0.057 mm, edges to the bit; D: region's heights bit-identical to G1's; 0 edges differ; `.terr` median 17 mm |
 | 2 | road extraction, holes, parking; raw kinds; French roads | raw length per TLM line; vertices 2 cm; a hole per portal |
 | 3 | buildings with GWR; French buildings | count by id; vertices 2 cm |
-| 4a | RoadGen behind `IUnits`/`IGround`, LV95 instance | byte-identical |
+| 4a | RoadGen behind `IUnits`/`IGround`, LV95 instance | byte-identical. **Built** (PR #1536, `docs/notes/tools/roadgen-units.md`): `IUnits` (tiles, corners, km caches, headings) through `Plane`, `IGround` (`Lv95TileGround`), `ITileLoop` (`Lv95TileLoop`); 41 Geneva and Valais tiles, all 844 files SHA-256 identical to main |
 | 4b | RoadGen on frames: blocks, km caches, the Jacobian for angles, overlay / nodes / SITG / tram / places in lat/lon | junction and signal counts; centrelines 2 cm; across frame edges |
 | 5 | cover and trees | per class ≥ 99.5 %; surveyed trees exact; scatter density ±1 % |
 | 6 | water and beds (one union-find over the region on leaf labels) | levels per body; bed percentiles; exact shared edges |

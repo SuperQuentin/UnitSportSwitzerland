@@ -86,7 +86,19 @@ The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`
 - **The generated fill far from Switzerland** follows a player anywhere (`terrain/generated-fill`'s 40-tile box)
   and comes back under 80 km (`Globe.FillGoneM`): re-entering 1,600 km out it was a black disc under the shuttle
   from 68 km. Farther than 100 km from the real tiles' box (`Globe.FillFarM`) it stays hidden wherever the
-  globe shows (above 15 km, gone over the 5 km above that), #1497.
+  globe shows (above 5 km, gone over the 5 km above that), #1518.
+- **The globe from 5 km** (#1528, `Globe.ShowAboveM`, was 15): where the far plane starts reaching past the horizon
+  blocks' 60 km and the haze thins on the globe's word (`CameraGlobal.HazeAt` from 3 km). At 15 km a landing from
+  space looked through thinned haze at nothing past 60 km: a flat haze-coloured plane with the far lakes on it.
+- **The air is drawn as one full-screen quad** (#1528, `atmosphere.gdshader`, `Atmosphere`): each pixel's ray comes
+  from the screen and the depth, never the geometry. The sphere's back faces, pulled in to 90 % of the far plane, were
+  clipped round the view's axis on the way down from the drive: a sharp disc of no air (yellow ground) under the
+  shuttle at 57-62 km. The colour-coded branches (`--shuttlefilm shot,Fall,at=61`) showed no fragment there at all.
+- **The flat world's edges dissolve into the globe** while it is drawn (#1528, the user's choice; `terrain.gdshaderinc`
+  `flat_edge`, globals `world_flat_edge`/`_on` pushed by `Globe.Edge`): the tiles' square (Chebyshev from the
+  camera's tile, as they load) and the horizon blocks' circle over their last 4 km, in over 5-10 km of height. From
+  above, the tile square stood out against the globe as a green-yellow patch at 50-80 km. Drawing the globe from
+  5 km cost nothing measurable (6,430 draws against 6,693 at 6 km).
 - No vertical origin yet: world Y is still ~altitude in Space anchors (3 cm floats at 400 km).
   **The camera's near plane follows it** (#1497, `Styles/CameraGlobal.NearOfDistance`): at least the camera's
   distance from the world's origin / 200,000 (1.5 m at 300 km, 2 m at 400 km). With the player's 0.08 m near

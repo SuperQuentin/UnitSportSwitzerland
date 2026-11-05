@@ -78,12 +78,18 @@ public partial class Arrival : Node
     }
 
     /// <summary>Server: a peer was accepted; tell it where it starts and what it may do.</summary>
-    public void SendTo(long peer) => RpcId(peer, MethodName.Rules, Spawn.E, Spawn.N, FreeTeleport, WorldChoice.ActiveId, Stamina, Lift, (byte)Alcohol, Crevasses);
+    public void SendTo(long peer)
+    {
+        // a ground point, as ECEF at sea level (#1503)
+        var (x, y, z) = GlobalPos.FromLv95(Spawn.E, Spawn.N, 0).ToWire();
+        RpcId(peer, MethodName.Rules, x, y, z, FreeTeleport, WorldChoice.ActiveId, Stamina, Lift, (byte)Alcohol, Crevasses);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Rules(double e, double n, bool freeTeleport, string world, bool stamina, bool lift, byte alcohol, bool crevasses)
+    private void Rules(double x, double y, double z, bool freeTeleport, string world, bool stamina, bool lift, byte alcohol, bool crevasses)
     {
         if (_server) return;
+        var (e, n, _) = GlobalPos.FromWire(x, y, z).Lv95;
         // the world this client loaded came from the server list; a server it could not ask says it here
         if (world != WorldChoice.ActiveId)
         {

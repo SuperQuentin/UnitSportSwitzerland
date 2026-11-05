@@ -2,6 +2,7 @@ namespace UnitSport.Tools.RoadGen.Network;
 
 using System.Globalization;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
 
 /// <summary>
 /// Road heights against the ground (#119): the extractor drapes every line
@@ -94,7 +95,7 @@ public static class RoadHeights
             for (int i = 0; i < seg.PointCount; i++)
             {
                 double x = p[i * 3], z = p[i * 3 + 2];
-                double e = id.MinE + x, n = id.MaxN - z;
+                double e = Plane.West(id) + x, n = Plane.North(id) - z;
                 double w = field.Weight(e, n);
                 double d = ends.Distance(e, n);
                 double t = Math.Clamp(d / StructureTaper, 0, 1);
@@ -130,7 +131,7 @@ public static class RoadHeights
                 if (s.PointCount < 1 || (s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0) continue;
                 foreach (int i in new[] { 0, s.PointCount - 1 })
                 {
-                    double e = line.Tile.MinE + s.Points[i * 3], n = line.Tile.MaxN - s.Points[i * 3 + 2];
+                    double e = Plane.West(line.Tile) + s.Points[i * 3], n = Plane.North(line.Tile) - s.Points[i * 3 + 2];
                     var key = ((long)Math.Floor(e / Cell), (long)Math.Floor(n / Cell));
                     if (!_buckets.TryGetValue(key, out var list)) _buckets[key] = list = new();
                     list.Add((e, n));

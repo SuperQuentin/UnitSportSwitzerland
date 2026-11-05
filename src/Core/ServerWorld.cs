@@ -393,7 +393,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 for (int i = 0; i < _players!.GetChildCount(); i++)
                     if (_players.GetChild(i) is Player.FootPlayer { Npc: false } p)
-                        list.Add(new Birds.BirdLife.Observer(origin.ToWorld(p.Global), p.NetVel, p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
+                        list.Add(new Birds.BirdLife.Observer(origin.ToWorld(p.Global), origin.Frame.WorldOfOffset(p.Global, p.GlobalVelocity), p.Ride is Player.RideKind.Plane or Player.RideKind.Helicopter
                             or Player.RideKind.Paraglider or Player.RideKind.Parachute or Player.RideKind.Wingsuit, p.GetMultiplayerAuthority()));
             },
         };

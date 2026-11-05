@@ -140,15 +140,20 @@ public partial class SwordService : Node
     /// </summary>
     public void SendAct(SwordMove move, float yaw, int code = 0)
     {
-        if (!Online) { ServerAct(1, move, yaw, code); return; }
-        RpcId(1, MethodName.Act, (int)move, yaw, code);
+        // <paramref name="yaw"/> is this peer's world yaw; the wire carries the heading from true north at the body (#1503)
+        var body = BodyOf(Online ? Multiplayer.GetUniqueId() : 1);
+        if (!Online) { ServerAct(1, move, body == null ? yaw : _origin.Frame.OffsetYawOf(body.GlobalPosition, yaw), code); return; }
+        RpcId(1, MethodName.Act, (int)move, body == null ? yaw : _origin.TrueYaw(body.GlobalPosition, yaw), code);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Act(int move, float yaw, int code)
+    private void Act(int move, float trueYaw, int code)
     {
-        if (!_server || !float.IsFinite(yaw) || move is < 0 or > 255) return;
-        ServerAct(Multiplayer.GetRemoteSenderId(), (SwordMove)move, yaw, code & 0x3F);
+        if (!_server || !float.IsFinite(trueYaw) || move is < 0 or > 255) return;
+        long who = Multiplayer.GetRemoteSenderId();
+        // heading from true north at the body -> the server's GlobalPos axes (#1503)
+        float yaw = BodyOf(who) is { } body ? body.Global.OffsetYaw(trueYaw) : trueYaw;
+        ServerAct(who, (SwordMove)move, yaw, code & 0x3F);
     }
 
     /// <summary>
@@ -170,17 +175,18 @@ public partial class SwordService : Node
         _code[who] = code;
         if (!Online)
             return true;
+        float trueYaw = body.Global.TrueYaw(yaw);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != who && Sees(peer, who))
-                RpcId(peer, MethodName.Acted, who, (int)move, yaw, code);
+                RpcId(peer, MethodName.Acted, who, (int)move, trueYaw, code);
         return true;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Acted(long who, int move, float yaw, int code)
+    private void Acted(long who, int move, float trueYaw, int code)
     {
         if (BodyOf(who) is not { } body) return;
-        body.SwordSeen((SwordMove)move, yaw, code);
+        body.SwordSeen((SwordMove)move, _origin.WorldYaw(body.GlobalPosition, trueYaw), code);
         Swung?.Invoke(who, (SwordMove)move);
     }
 
@@ -237,7 +243,7 @@ public partial class SwordService : Node
         // east is +x, north is -z, as the world's axes: a yaw is the same in every frame
         var (offE, offN, offUp) = from.OffsetTo(to);
         float dx = (float)offE, dz = (float)-offN;
-        float yaw = _yaw.GetValueOrDefault(who, attacker.Rotation.Y);
+        float yaw = _yaw.GetValueOrDefault(who, attacker.GlobalYaw);
         float fx = -Mathf.Sin(yaw), fz = -Mathf.Cos(yaw);
         // the blow lands only where the blade is: its capsule swept over the swing's window around now (the server's clock since the move began,
         // 100 ms either side) against the target's own shape, from the two bodies as the server has them, with 0.30 m of slack for their age
@@ -276,7 +282,7 @@ public partial class SwordService : Node
         GD.Print(FormattableString.Invariant($"[sword] {who} hit {kind} {id} for {def.Damage:F0} ({move})"));
         // where the blade touched: a point of the blade, relative to the attacker, put back in the world
         var at = from.Moved(contact.X, -contact.Z, contact.Y);
-        var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, knock, _origin.ToWorld(at), down);
+        var strike = new SwordStrike(who, move, kind, id, def.Damage, hp, _origin.Frame.WorldOfOffset(from, knock), _origin.ToWorld(at), down);   // the knock was worked in GlobalPos's axes (#1503)
         if (victim != null && !victim.Bot) PvpRules.RaiseHit(who, id, def.Damage);
         BroadcastStruck(strike, at, victim != null && !victim.Bot ? id : 0);
         return true;
@@ -289,15 +295,17 @@ public partial class SwordService : Node
             Apply(s);
             return;
         }
+        var (x, y, z) = at.ToWire();   // ECEF; the knock goes as the local east-up-south at the blow (#1503)
         foreach (int peer in Multiplayer.GetPeers())
             if (peer == s.Attacker || peer == victimPeer || Sees(peer, s.Attacker) || s.Kind == SwordTargetKind.Body && Sees(peer, s.Id) || s.Kind == SwordTargetKind.Dummy)
-                RpcId(peer, MethodName.Struck, s.Attacker, (int)s.Move, (int)s.Kind, s.Id, s.Damage, s.Hp, s.Knock, at.E, at.N, at.Alt, s.Down);
+                RpcId(peer, MethodName.Struck, s.Attacker, (int)s.Move, (int)s.Kind, s.Id, s.Damage, s.Hp, _origin.EnuOf(s.At, s.Knock), x, y, z, s.Down);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Struck(long attacker, int move, int kind, long id, float damage, float hp, Vector3 knock, double e, double n, double alt, bool down)
+    private void Struck(long attacker, int move, int kind, long id, float damage, float hp, Vector3 knock, double x, double y, double z, bool down)
     {
-        Apply(new SwordStrike(attacker, (SwordMove)move, (SwordTargetKind)kind, id, damage, hp, knock, _origin.ToWorld(e, n, alt), down));
+        var at = _origin.ToWorld(GlobalPos.FromWire(x, y, z));
+        Apply(new SwordStrike(attacker, (SwordMove)move, (SwordTargetKind)kind, id, damage, hp, _origin.WorldOfEnu(at, knock), at, down));
     }
 
     /// <summary>Every peer that hears a blow: the numbers, the sound, the dummy's recoil, the swinger's feel, the victim's health.</summary>
@@ -361,7 +369,8 @@ public partial class SwordService : Node
     {
         int id = _nextDummy++;
         _dummyData[id] = new DummyData { Id = id, Owner = owner, Pos = at, Yaw = yaw, Hp = DummyHp };
-        Broadcast(0, MethodName.DummyAdd, id, at.E, at.N, at.Alt, yaw, DummyHp);
+        var (x, y, z) = at.ToWire();
+        Broadcast(0, MethodName.DummyAdd, id, x, y, z, at.TrueYaw(yaw), DummyHp);
     }
 
     private void RemoveDummy(int id)
@@ -391,14 +400,18 @@ public partial class SwordService : Node
         if (!_server) return;
         int peer = Multiplayer.GetRemoteSenderId();
         foreach (var d in _dummyData.Values)
-            RpcId(peer, MethodName.DummyAdd, d.Id, d.Pos.E, d.Pos.N, d.Pos.Alt, d.Yaw, d.Hp);
+        {
+            var (x, y, z) = d.Pos.ToWire();
+            RpcId(peer, MethodName.DummyAdd, d.Id, x, y, z, d.Pos.TrueYaw(d.Yaw), d.Hp);
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void DummyAdd(int id, double e, double n, double alt, float yaw, float hp)
+    private void DummyAdd(int id, double x, double y, double z, float trueYaw, float hp)
     {
         if (_server || _dummies.ContainsKey(id)) return;
-        var dummy = TrainingDummy.Create(id, _origin, new GlobalPos(e, n, alt), yaw, hp);
+        var at = GlobalPos.FromWire(x, y, z);
+        var dummy = TrainingDummy.Create(id, _origin, at, _origin.WorldYaw(_origin.ToWorld(at), trueYaw), hp);
         _dummies[id] = dummy;
         AddChild(dummy);
     }

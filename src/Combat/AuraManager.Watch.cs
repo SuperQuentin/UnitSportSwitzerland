@@ -48,12 +48,13 @@ public partial class AuraManager
         for (int i = 0; i < moves.Length; i++) moves[i] = (byte)r.Plan[i];
         for (int i = 0; i < grades.Length; i++) grades[i] = (byte)r.Grades[i];
         var last = r.LastTurn;
+        var (cx, cy, cz) = m.Centre.ToWire();   // ECEF (#1503)
         foreach (long w in _watchNow)
         {
             m.Watchers.Add(w);
             RpcId(w, MethodName.Watch, m.Id, Who(r.A), Who(r.B), r.A, r.B, r.TotalA, r.TotalB, r.Turn, r.Performer, (int)r.Phase,
                 r.PhaseEnds, r.Beat, r.T0, moves, grades, r.LaughsA, r.LaughsB, r.Winner, m.Music,
-                last?.Performer ?? 0, last?.Score.Total ?? 0, m.Centre.E, m.Centre.N);
+                last?.Performer ?? 0, last?.Score.Total ?? 0, cx, cy, cz);
         }
     }
 
@@ -94,7 +95,7 @@ public partial class AuraManager
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Watch(int id, string nameA, string nameB, long a, long b, int totalA, int totalB, int turn, long performer, int phase,
         double phaseEnds, double beat, double t0, byte[] moves, byte[] grades, int laughsA, int laughsB, long winner, string music,
-        long lastPerformer, int lastTotal, double e, double n)
+        long lastPerformer, int lastTotal, double x, double y, double z)
     {
         if (_watched == null || _watched.Id != id)
         {
@@ -109,7 +110,7 @@ public partial class AuraManager
         if (w.Grades.Length != grades.Length) w.Grades = new AuraGrade[grades.Length];
         for (int i = 0; i < grades.Length; i++) w.Grades[i] = (AuraGrade)grades[i];
         w.LaughsA = laughsA; w.LaughsB = laughsB; w.Winner = winner; w.Music = music;
-        w.LastPerformer = lastPerformer; w.LastTotal = lastTotal; w.Centre = new GlobalPos(e, n, 0);
+        w.LastPerformer = lastPerformer; w.LastTotal = lastTotal; w.Centre = GlobalPos.FromWire(x, y, z);
         w.At = GameClock.Now;
     }
 

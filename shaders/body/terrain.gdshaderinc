@@ -51,10 +51,24 @@ global uniform sampler2D world_real_mask : filter_nearest, repeat_disable;
 global uniform vec2 world_real_origin;
 global uniform vec2 world_real_extent;
 global uniform vec4 world_real_axes;
+// the flat world's own edge, dissolved into the globe beneath while the globe is drawn (#1528: from above, the
+// tiles' square stood out as a patch): its centre (world x, z), the tiles' half side (Chebyshev from the
+// anchor's tile, as they load) and the horizon blocks' radius, metres; world_flat_edge_on 0..1 by height
+global uniform vec4 world_flat_edge;
+global uniform float world_flat_edge_on;
+// which edge this material dissolves at: 0 none, 1 the tiles' square, 2 the horizon blocks' circle
+uniform int flat_edge = 0;
+const float FLAT_EDGE_FADE = 4000.0;
 
 // how far a world XZ point has given way, 0..1
 float flat_hide(vec2 xz) {
     float hide = world_flat_hide;
+    if (flat_edge != 0 && world_flat_edge_on > 0.0) {
+        vec2 d = abs(xz - world_flat_edge.xy);
+        float r = flat_edge == 1 ? max(d.x, d.y) : length(d);
+        float edge = flat_edge == 1 ? world_flat_edge.z : world_flat_edge.w;
+        hide = max(hide, smoothstep(edge - FLAT_EDGE_FADE, edge, r) * world_flat_edge_on);
+    }
     if (world_fill_hide > 0.0) {
         vec2 d = xz - world_real_origin;
         vec2 uv = vec2(dot(d, world_real_axes.xy), dot(d, world_real_axes.zw)) / world_real_extent;

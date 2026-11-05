@@ -630,9 +630,11 @@ public partial class WorldEvents : Node3D, IOriginContainer
             ev.Informed.Add(peer);
             if (Connected(peer))
             {
-                RpcId(peer, MethodName.PlanOut, ev.Id, (int)ev.Kind, ev.E, ev.N, ev.Ground, ev.Canton, (long)ev.Seed, ev.Near, ev.Card);
+                var (px, py, pz) = GlobalPos.FromLv95(ev.E, ev.N, ev.Ground).ToWire();   // (#1503) the wire is ECEF
+                RpcId(peer, MethodName.PlanOut, ev.Id, (int)ev.Kind, px, py, pz, ev.Ground, ev.Canton, (long)ev.Seed, ev.Near, ev.Card);
                 RpcId(peer, MethodName.StateOut, ev.Id, StateOf(ev));
-                RpcId(peer, MethodName.MovedOut, ev.Id, e, n, YawOf(ev), false);
+                var (x, y, z, t) = MovedWire(ev, e, n);
+                RpcId(peer, MethodName.MovedOut, ev.Id, x, y, z, t, false);
             }
             else if (!_networked)
             {
@@ -645,14 +647,23 @@ public partial class WorldEvents : Node3D, IOriginContainer
 
     private static float YawOf(Live ev) => ev.Cow?.Yaw ?? ev.Hiker?.Yaw ?? 0f;
 
+    /// <summary>(#1503) An event's moving figure on the wire: its place as ECEF and its grid yaw as a heading from true north.</summary>
+    private static (double X, double Y, double Z, float Yaw) MovedWire(Live ev, double e, double n)
+    {
+        var g = GlobalPos.FromLv95(e, n, ev.Ground);
+        var (x, y, z) = g.ToWire();
+        return (x, y, z, g.TrueYaw(YawOf(ev)));
+    }
+
     private void SendMoved(Live ev)
     {
         if ((ev.Cow ?? (object?)ev.Hiker) == null) return;
         var (e, n) = ev.At;
         bool walking = ev.Hiker?.Walking ?? ev.Cow != null;
+        var (x, y, z, t) = MovedWire(ev, e, n);
         foreach (long peer in ev.Informed)
         {
-            if (Connected(peer)) RpcId(peer, MethodName.MovedOut, ev.Id, e, n, YawOf(ev), walking);
+            if (Connected(peer)) RpcId(peer, MethodName.MovedOut, ev.Id, x, y, z, t, walking);
             else if (!_networked) OnMoved(ev.Id, e, n, YawOf(ev), walking);
         }
     }
@@ -723,11 +734,18 @@ public partial class WorldEvents : Node3D, IOriginContainer
     // ---- server -> client ---------------------------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void PlanOut(int id, int kind, double e, double n, float ground, string canton, long seed, string near, string card) =>
-        OnPlan(id, kind, e, n, ground, canton, (uint)seed, near, card);
+    private void PlanOut(int id, int kind, double x, double y, double z, float ground, string canton, long seed, string near, string card)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        OnPlan(id, kind, at.E, at.N, ground, canton, (uint)seed, near, card);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
-    private void MovedOut(int id, double e, double n, float yaw, bool walking) => OnMoved(id, e, n, yaw, walking);
+    private void MovedOut(int id, double x, double y, double z, float yaw, bool walking)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        OnMoved(id, at.E, at.N, at.OffsetYaw(yaw), walking);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void StateOut(int id, int[] data) => OnState(id, data);

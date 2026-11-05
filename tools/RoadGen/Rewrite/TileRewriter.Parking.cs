@@ -45,7 +45,7 @@ public static partial class TileRewriter
         HashSet<TileId> wanted,
         Dictionary<TileId, List<RoadSegment>> roads,
         Facades facades,
-        Dictionary<TileId, ChunkGrid>? grids,
+        IGround? grids,
         Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> points,
@@ -107,8 +107,8 @@ public static partial class TileRewriter
             double bE = 0, bN = 0, heading = 0;
             for (int i = 0; i < seg.PointCount - 1; i++)
             {
-                var (e0, n0) = seg.Lv95(tile, i);
-                var (e1, n1) = seg.Lv95(tile, i + 1);
+                var (e0, n0) = Plane.PointOf(seg, tile, i);
+                var (e1, n1) = Plane.PointOf(seg, tile, i + 1);
                 double dx = e1 - e0, dy = n1 - n0;
                 double len2 = dx * dx + dy * dy;
                 double t = len2 < 1e-9 ? 0 : Math.Clamp(((cE - e0) * dx + (cN - n0) * dy) / len2, 0, 1);
@@ -129,7 +129,7 @@ public static partial class TileRewriter
     /// extent for its size. A big retail shed is what earns a trolley shelter.
     /// </summary>
     private static ParkingPlanner.Frontage? Frontage(
-        Facades facades, Dictionary<TileId, ChunkGrid>? grids, List<(double E, double N)> ring)
+        Facades facades, IGround? grids, List<(double E, double N)> ring)
     {
         var (cE, cN) = (ring.Average(p => p.E), ring.Average(p => p.N));
         double bestD = double.MaxValue, dE = 0, dN = 0;
@@ -160,12 +160,12 @@ public static partial class TileRewriter
     /// <summary>The ground and the obstacles a lot is laid out over: the block's terrain, its walls and its roads.</summary>
     private sealed class ParkingGround : IParkingGround
     {
-        private readonly Dictionary<TileId, ChunkGrid> _grids;
+        private readonly IGround _grids;
         private readonly Facades _facades;
         private readonly List<(TileId Tile, RoadSegment Segment)> _near;
 
         /// <summary>Only the segments whose extent comes near this lot: a corridor test per sample point otherwise walks the block.</summary>
-        public ParkingGround(Dictionary<TileId, ChunkGrid> grids, Facades facades,
+        public ParkingGround(IGround grids, Facades facades,
             List<(TileId Tile, RoadSegment Segment)> roads, List<(double E, double N)> ring)
         {
             _grids = grids;
@@ -178,7 +178,7 @@ public static partial class TileRewriter
             {
                 for (int i = 0; i < seg.PointCount; i++)
                 {
-                    var (e, n) = seg.Lv95(tile, i);
+                    var (e, n) = Plane.PointOf(seg, tile, i);
                     if (e < minE || e > maxE || n < minN || n > maxN) continue;
                     _near.Add((tile, seg));
                     break;
@@ -199,8 +199,8 @@ public static partial class TileRewriter
                 double r2 = radius * radius;
                 for (int i = 0; i < seg.PointCount - 1; i++)
                 {
-                    var (e0, n0) = seg.Lv95(tile, i);
-                    var (e1, n1) = seg.Lv95(tile, i + 1);
+                    var (e0, n0) = Plane.PointOf(seg, tile, i);
+                    var (e1, n1) = Plane.PointOf(seg, tile, i + 1);
                     double dx = e1 - e0, dy = n1 - n0;
                     double len2 = dx * dx + dy * dy;
                     double t = len2 < 1e-9 ? 0 : Math.Clamp(((e - e0) * dx + (n - n0) * dy) / len2, 0, 1);
@@ -245,34 +245,34 @@ public static partial class TileRewriter
         {
             if (mark.Type == PaintType.Arrow)
             {
-                var at = TileId.FromLv95(mark.Line[0], mark.Line[1]);
+                var at = Plane.TileAt(mark.Line[0], mark.Line[1]);
                 if (!wanted.Contains(at)) continue;
                 Get(paint, at).Add(PaintEmitter.Arrow(
-                    mark.Line[0] - at.MinE, mark.Y, at.MaxN - mark.Line[1],
+                    mark.Line[0] - Plane.West(at), mark.Y, Plane.North(at) - mark.Line[1],
                     Math.Cos(mark.HeadingRad), -Math.Sin(mark.HeadingRad), PaintArrow.Straight, tipY: mark.Y));   // an aisle is level
                 stats.Marks++;
                 continue;
             }
             if (mark.Type == PaintType.DisabledBay)
             {
-                var at = TileId.FromLv95(mark.Line[0], mark.Line[1]);
+                var at = Plane.TileAt(mark.Line[0], mark.Line[1]);
                 if (!wanted.Contains(at)) continue;
                 Get(paint, at).Add(PaintEmitter.DisabledBay(
-                    mark.Line[0] - at.MinE, mark.Y, at.MaxN - mark.Line[1], mark.HeadingRad, mark.Width));
+                    mark.Line[0] - Plane.West(at), mark.Y, Plane.North(at) - mark.Line[1], mark.HeadingRad, mark.Width));
                 stats.Marks++;
                 continue;
             }
 
             // a line: the tile holding its middle takes it whole (a bay divider is 5 m long)
             double mE = (mark.Line[0] + mark.Line[^2]) * 0.5, mN = (mark.Line[1] + mark.Line[^1]) * 0.5;
-            var tile = TileId.FromLv95(mE, mN);
+            var tile = Plane.TileAt(mE, mN);
             if (!wanted.Contains(tile)) continue;
             var v = new float[mark.Line.Length / 2 * 3];
             for (int i = 0; i < mark.Line.Length / 2; i++)
             {
-                v[i * 3] = (float)(mark.Line[i * 2] - tile.MinE);
+                v[i * 3] = (float)(mark.Line[i * 2] - Plane.West(tile));
                 v[i * 3 + 1] = (float)mark.Y;
-                v[i * 3 + 2] = (float)(tile.MaxN - mark.Line[i * 2 + 1]);
+                v[i * 3 + 2] = (float)(Plane.North(tile) - mark.Line[i * 2 + 1]);
             }
             Get(paint, tile).Add(new RoadPaint
             {
@@ -288,7 +288,7 @@ public static partial class TileRewriter
             // get the tree LOD, thinning and pooled collision instead of being props
             if (f.Kind == ParkingPlanner.FixtureKind.Tree) continue;
 
-            var at = TileId.FromLv95(f.E, f.N);
+            var at = Plane.TileAt(f.E, f.N);
             if (!wanted.Contains(at)) continue;
             var (type, height) = f.Kind switch
             {
@@ -300,18 +300,18 @@ public static partial class TileRewriter
                     RoadSigns.LowerEdge + RoadSigns.PlateHeight(PointPropType.ParkingSign, RoadSigns.Normal)),
             };
             Get(points, at).Add(new RoadPointProp(type, f.Variant, PropFlags.Solid,
-                (float)(f.E - at.MinE), (float)f.Y, (float)(at.MaxN - f.N),
-                (float)ParkingPlanner.ToGodotHeading(f.HeadingRad), height));
+                (float)(f.E - Plane.West(at)), (float)f.Y, (float)(Plane.North(at) - f.N),
+                (float)ParkingPlanner.ToGodotHeading(Plane.AngleToTile(at, new Vec2(f.E, f.N), f.HeadingRad)), height));
             stats.Fixtures++;
         }
 
         foreach (var b in plan.Bays)
         {
-            var at = TileId.FromLv95(b.E, b.N);
+            var at = Plane.TileAt(b.E, b.N);
             if (!wanted.Contains(at)) continue;
             Get(bays, at).Add(new ParkingBay(
-                (float)(b.E - at.MinE), (float)b.Y, (float)(at.MaxN - b.N),
-                (float)ParkingPlanner.ToGodotHeading(b.HeadingRad), b.Kind, b.Flags));
+                (float)(b.E - Plane.West(at)), (float)b.Y, (float)(Plane.North(at) - b.N),
+                (float)ParkingPlanner.ToGodotHeading(Plane.AngleToTile(at, new Vec2(b.E, b.N), b.HeadingRad)), b.Kind, b.Flags));
             stats.Bays++;
         }
     }
@@ -332,8 +332,8 @@ public static partial class TileRewriter
         var c = (E: ring[4], N: ring[5]);
         var d = (E: ring[6], N: ring[7]);
 
-        var t0 = TileId.FromLv95(a.E, a.N);
-        bool same = TileId.FromLv95(b.E, b.N) == t0 && TileId.FromLv95(c.E, c.N) == t0 && TileId.FromLv95(d.E, d.N) == t0;
+        var t0 = Plane.TileAt(a.E, a.N);
+        bool same = Plane.TileAt(b.E, b.N) == t0 && Plane.TileAt(c.E, c.N) == t0 && Plane.TileAt(d.E, d.N) == t0;
         double side = Math.Max(Dist(a, b), Dist(b, c));
 
         if (!same && side > ParkingPieceMin && depth < 8)
@@ -357,15 +357,15 @@ public static partial class TileRewriter
 
         // the tile holding the middle owns it, so a piece that still straddles a line lands beside
         // its neighbours rather than two tiles away
-        var at = TileId.FromLv95((a.E + c.E) * 0.5, (a.N + c.N) * 0.5);
+        var at = Plane.TileAt((a.E + c.E) * 0.5, (a.N + c.N) * 0.5);
         if (!wanted.Contains(at)) return;
 
         var v = new float[12];
         foreach (var (p, i) in new[] { (a, 0), (b, 1), (c, 2), (d, 3) })
         {
-            v[i * 3] = (float)(p.E - at.MinE);
+            v[i * 3] = (float)(p.E - Plane.West(at));
             v[i * 3 + 1] = (float)y;
-            v[i * 3 + 2] = (float)(at.MaxN - p.N);
+            v[i * 3 + 2] = (float)(Plane.North(at) - p.N);
         }
         Get(areas, at).Add(new RoadAreaProp
         {

@@ -48,7 +48,7 @@ public static class RoadTileImporter
                 var points = new List<Vec2>(segment.PointCount);
                 for (int i = 0; i < segment.PointCount; i++)
                 {
-                    var (east, north) = segment.Lv95(id, i);
+                    var (east, north) = Plane.PointOf(segment, id, i);
                     points.Add(new Vec2(east, north));
                 }
 
