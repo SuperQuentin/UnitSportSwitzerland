@@ -99,7 +99,7 @@ public partial class TrafficTool : Node
             {
                 var p = _origin.ToWorld(nearest.E, nearest.N, 0) with { Y = at.Y };
                 if (traffic?.OnRoad(p, PickReach) is var (edge, pos, _)) (p, _) = edge.Sample(pos);
-                return new TrafficAim(TrafficAimKind.Edit, true, "", p, HeadingOf(nearest.Heading), nearest.Id);
+                return new TrafficAim(TrafficAimKind.Edit, true, "", p, HeadingOf(_origin.Frame, p, nearest), nearest.Id);
             }
         }
 
@@ -110,9 +110,19 @@ public partial class TrafficTool : Node
         return new TrafficAim(TrafficAimKind.Place, true, "", point, heading, 0);
     }
 
-    /// <summary>LV95 heading (east 0, north π/2) as a world direction, and back.</summary>
-    public static Vector3 HeadingOf(float lv95) => new(Mathf.Cos(lv95), 0f, -Mathf.Sin(lv95));
-    public static float Lv95Heading(Vector3 world) => Mathf.Atan2(-world.Z, world.X);
+    /// <summary>
+    /// An endpoint's heading (<see cref="TrafficEndpoint.TrueYaw"/>, from true north) as a world direction at a world
+    /// point (#1504); and back, a world direction as the stored LV95 angle (east 0, north π/2, from grid north: the
+    /// endpoints' file and wire format).
+    /// </summary>
+    public static Vector3 HeadingOf(OriginFrame frame, Vector3 at, TrafficEndpoint ep)
+    {
+        float yaw = TrueNorth.WorldYaw(frame, at, ep.TrueYaw);
+        return new(-Mathf.Sin(yaw), 0f, -Mathf.Cos(yaw));
+    }
+
+    public static float Lv95Heading(OriginFrame frame, Vector3 at, Vector3 world) =>
+        TrueNorth.WorldYawToGrid(frame, at, Mathf.Atan2(-world.X, -world.Z)) + Mathf.Pi / 2;
 
     /// <summary>
     /// Called every frame by the item controller: <paramref name="active"/> while the tool is held and usable. Held, the placed
@@ -124,7 +134,8 @@ public partial class TrafficTool : Node
         if (Traffic.Current is { } traffic) traffic.EndpointsHeld = player != null && (active || _ui.IsOpen);
         if (player != null && _ui.IsOpen && _ui.Pending is { } pending)
         {
-            Draw(_origin.ToWorld(pending.E, pending.N, 0) with { Y = _ui.PendingY }, HeadingOf(pending.Heading), Valid, halo: false);
+            var pendingAt = _origin.ToWorld(pending.E, pending.N, 0) with { Y = _ui.PendingY };
+        Draw(pendingAt, HeadingOf(_origin.Frame, pendingAt, pending), Valid, halo: false);
             _hint.Visible = false;
             return;
         }
@@ -172,7 +183,7 @@ public partial class TrafficTool : Node
                 break;
             case TrafficAimKind.Place when aim.Valid:
                 var (e, n) = _origin.ToLv95(aim.Point);
-                _ui.Open(new TrafficEndpoint(0, e, n, Lv95Heading(aim.Heading), true, true, TrafficGenerators.DefaultPerMinute), isNew: true,
+                _ui.Open(new TrafficEndpoint(0, e, n, Lv95Heading(_origin.Frame, aim.Point, aim.Heading), true, true, TrafficGenerators.DefaultPerMinute), isNew: true,
                     aim.Point.Y);
                 break;
             default:

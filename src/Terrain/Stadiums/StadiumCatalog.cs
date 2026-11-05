@@ -28,7 +28,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Geneva = new()
     {
         Name = "Stade de Genève", Town = "Lancy",
-        E = 2498751.2, N = 1114890.3, AzimuthDeg = -1.35f,
+        E = 2498751.2, N = 1114890.3, GridAzimuthDeg = -1.35f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 40f, FrontHalfV = 62f, FrontCorner = 4f,
         Tiers = new[]
@@ -50,7 +50,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Wankdorf = new()
     {
         Name = "Stadion Wankdorf", Town = "Bern",
-        E = 2601996.7, N = 1201338.3, AzimuthDeg = -63.5f,
+        E = 2601996.7, N = 1201338.3, GridAzimuthDeg = -63.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 42.5f, FrontHalfV = 63.5f, FrontCorner = 6f,
         Tiers = new[]
@@ -71,7 +71,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec StJakobPark = new()
     {
         Name = "St. Jakob-Park", Town = "Basel",
-        E = 2613666.2, N = 1265671.3, AzimuthDeg = -68f,
+        E = 2613666.2, N = 1265671.3, GridAzimuthDeg = -68f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 41f, FrontHalfV = 63.5f, FrontCorner = 10f,
         Tiers = new[]
@@ -93,7 +93,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Letzigrund = new()
     {
         Name = "Stadion Letzigrund", Town = "Zürich",
-        E = 2680429.7, N = 1248535.3, AzimuthDeg = 38.7f,
+        E = 2680429.7, N = 1248535.3, GridAzimuthDeg = 38.7f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 52f, FrontHalfV = 90f, FrontCorner = 48f,
         Tiers = new[]
@@ -114,7 +114,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Kybunpark = new()
     {
         Name = "kybunpark (Berit Sitterstadion)", Town = "St. Gallen",
-        E = 2740904.3, N = 1252512, AzimuthDeg = 67f,
+        E = 2740904.3, N = 1252512, GridAzimuthDeg = 67f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 40f, FrontHalfV = 58.5f, FrontCorner = 8f,
         Tiers = new[]
@@ -135,7 +135,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Swissporarena = new()
     {
         Name = "swissporarena", Town = "Luzern",
-        E = 2665861.7, N = 1209462, AzimuthDeg = -10.5f,
+        E = 2665861.7, N = 1209462, GridAzimuthDeg = -10.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 39f, FrontHalfV = 58.5f, FrontCorner = 14f,
         Tiers = new[]
@@ -156,7 +156,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec StockhornArena = new()
     {
         Name = "Stockhorn Arena (Visana Stadion)", Town = "Thun",
-        E = 2612836, N = 1177056.7, AzimuthDeg = -22.5f,
+        E = 2612836, N = 1177056.7, GridAzimuthDeg = -22.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 40f, FrontHalfV = 60f, FrontCorner = 4f,
         Tiers = new[]
@@ -177,7 +177,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Tourbillon = new()
     {
         Name = "Stade de Tourbillon", Town = "Sion",
-        E = 2595164.7, N = 1120212.3, AzimuthDeg = -58f,
+        E = 2595164.7, N = 1120212.3, GridAzimuthDeg = -58f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 43.5f, FrontHalfV = 59f, FrontCorner = 12f,
         Tiers = new[]
@@ -197,7 +197,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Tuiliere = new()
     {
         Name = "Stade de la Tuilière", Town = "Lausanne",
-        E = 2537360.3, N = 1155029.3, AzimuthDeg = -27.2f,
+        E = 2537360.3, N = 1155029.3, GridAzimuthDeg = -27.2f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37.5f, FrontHalfV = 57f, FrontCorner = 4f,
         Tiers = new[]
@@ -218,7 +218,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Maladiere = new()
     {
         Name = "Stade de la Maladière", Town = "Neuchâtel",
-        E = 2562388, N = 1205021, AzimuthDeg = 63f,
+        E = 2562388, N = 1205021, GridAzimuthDeg = 63f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37f, FrontHalfV = 57.5f, FrontCorner = 4f,
         Tiers = new[]
@@ -239,7 +239,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Brugglifeld = new()
     {
         Name = "Stadion Brügglifeld", Town = "Aarau",
-        E = 2646907, N = 1248242, AzimuthDeg = 41.5f,
+        E = 2646907, N = 1248242, GridAzimuthDeg = 41.5f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37f, FrontHalfV = 53f, FrontCorner = 4f,
         Tiers = new[]
@@ -259,7 +259,7 @@ public static class StadiumCatalog
     public static readonly StadiumSpec Schutzenwiese = new()
     {
         Name = "Stadion Schützenwiese", Town = "Winterthur",
-        E = 2696352.7, N = 1261898.3, AzimuthDeg = 23f,
+        E = 2696352.7, N = 1261898.3, GridAzimuthDeg = 23f,
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 41f, FrontHalfV = 56.5f, FrontCorner = 4f,
         Tiers = new[]
@@ -280,7 +280,7 @@ public static class StadiumCatalog
     {
         Name = "Hallenstadion", Town = "Zürich",
         Kind = VenueKind.Arena,
-        E = 2684005, N = 1251786, AzimuthDeg = 0f,
+        E = 2684005, N = 1251786, GridAzimuthDeg = 0f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -302,7 +302,7 @@ public static class StadiumCatalog
     {
         Name = "PostFinance Arena", Town = "Bern",
         Kind = VenueKind.Arena,
-        E = 2602296, N = 1200841, AzimuthDeg = -42f,
+        E = 2602296, N = 1200841, GridAzimuthDeg = -42f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -325,7 +325,7 @@ public static class StadiumCatalog
     {
         Name = "St. Jakobshalle", Town = "Basel",
         Kind = VenueKind.Arena,
-        E = 2613529, N = 1265481, AzimuthDeg = -4f,
+        E = 2613529, N = 1265481, GridAzimuthDeg = -4f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -347,7 +347,7 @@ public static class StadiumCatalog
     {
         Name = "Swiss Life Arena", Town = "Zürich",
         Kind = VenueKind.Arena,
-        E = 2678619, N = 1249913, AzimuthDeg = 21f,
+        E = 2678619, N = 1249913, GridAzimuthDeg = 21f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -369,7 +369,7 @@ public static class StadiumCatalog
     {
         Name = "Vaudoise Aréna", Town = "Lausanne",
         Kind = VenueKind.Arena,
-        E = 2535600, N = 1153410, AzimuthDeg = 25f,
+        E = 2535600, N = 1153410, GridAzimuthDeg = 25f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -391,7 +391,7 @@ public static class StadiumCatalog
     {
         Name = "Patinoire des Vernets", Town = "Genève",
         Kind = VenueKind.Arena,
-        E = 2499209, N = 1116735, AzimuthDeg = 39f,
+        E = 2499209, N = 1116735, GridAzimuthDeg = 39f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -413,7 +413,7 @@ public static class StadiumCatalog
     {
         Name = "Palexpo Arena Genève (Geneva Arena)", Town = "Genève",
         Kind = VenueKind.Arena,
-        E = 2497680, N = 1121110, AzimuthDeg = 40f,
+        E = 2497680, N = 1121110, GridAzimuthDeg = 40f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -435,7 +435,7 @@ public static class StadiumCatalog
     {
         Name = "BCF Arena", Town = "Fribourg",
         Kind = VenueKind.Arena,
-        E = 2578388, N = 1185176, AzimuthDeg = 74f,
+        E = 2578388, N = 1185176, GridAzimuthDeg = 74f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -457,7 +457,7 @@ public static class StadiumCatalog
     {
         Name = "Tissot Arena (ice halls)", Town = "Biel/Bienne",
         Kind = VenueKind.Arena,
-        E = 2588178, N = 1222825, AzimuthDeg = 56f,
+        E = 2588178, N = 1222825, GridAzimuthDeg = 56f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -479,7 +479,7 @@ public static class StadiumCatalog
     {
         Name = "Bossard Arena", Town = "Zug",
         Kind = VenueKind.Arena,
-        E = 2681044, N = 1225660, AzimuthDeg = -78f,
+        E = 2681044, N = 1225660, GridAzimuthDeg = -78f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -501,7 +501,7 @@ public static class StadiumCatalog
     {
         Name = "Cornèr Arena", Town = "Lugano",
         Kind = VenueKind.Arena,
-        E = 2718047, N = 1098354, AzimuthDeg = 4f,
+        E = 2718047, N = 1098354, GridAzimuthDeg = 4f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -523,7 +523,7 @@ public static class StadiumCatalog
     {
         Name = "THE HALL (ex Samsung Hall)", Town = "Dübendorf",
         Kind = VenueKind.Arena,
-        E = 2687522, N = 1250085, AzimuthDeg = 0f,
+        E = 2687522, N = 1250085, GridAzimuthDeg = 0f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -544,7 +544,7 @@ public static class StadiumCatalog
     {
         Name = "SWISS Arena (Kloten)", Town = "Kloten",
         Kind = VenueKind.Arena,
-        E = 2686386, N = 1255203, AzimuthDeg = -30f,
+        E = 2686386, N = 1255203, GridAzimuthDeg = -30f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -566,7 +566,7 @@ public static class StadiumCatalog
     {
         Name = "Zondacrypto Arena (Vaillant Arena)", Town = "Davos",
         Kind = VenueKind.Arena,
-        E = 2782260, N = 1185812, AzimuthDeg = -80f,
+        E = 2782260, N = 1185812, GridAzimuthDeg = -80f,
         PitchWidth = 30f, PitchLength = 60f,
         FrontHalfU = 17f, FrontHalfV = 32f, FrontCorner = 8f,
         Tiers = new[]
@@ -589,7 +589,7 @@ public static class StadiumCatalog
     {
         Name = "Paléo Festival, Grande Scène", Town = "Nyon",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2505256.1, N = 1139822.8, AzimuthDeg = 176f,
+        E = 2505256.1, N = 1139822.8, GridAzimuthDeg = 176f,
         FrontHalfU = 95f, FrontHalfV = 80f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -604,7 +604,7 @@ public static class StadiumCatalog
     {
         Name = "Gurtenfestival, Hauptbühne", Town = "Bern",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2600188.6, N = 1196352.6, AzimuthDeg = -25f,
+        E = 2600188.6, N = 1196352.6, GridAzimuthDeg = -25f,
         FrontHalfU = 55f, FrontHalfV = 80f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -619,7 +619,7 @@ public static class StadiumCatalog
     {
         Name = "Openair Frauenfeld, Arena Stage", Town = "Frauenfeld",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2710209.4, N = 1270159.3, AzimuthDeg = 35f,
+        E = 2710209.4, N = 1270159.3, GridAzimuthDeg = 35f,
         FrontHalfU = 67.5f, FrontHalfV = 100f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -634,7 +634,7 @@ public static class StadiumCatalog
     {
         Name = "OpenAir St. Gallen, Sitterbühne", Town = "St. Gallen",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2742507.9, N = 1253134.6, AzimuthDeg = 50f,
+        E = 2742507.9, N = 1253134.6, GridAzimuthDeg = 50f,
         FrontHalfU = 55f, FrontHalfV = 65f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -649,7 +649,7 @@ public static class StadiumCatalog
     {
         Name = "Greenfield Festival, Jungfrau Stage", Town = "Interlaken",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2633958.7, N = 1169472.0, AzimuthDeg = 120f,
+        E = 2633958.7, N = 1169472.0, GridAzimuthDeg = 120f,
         FrontHalfU = 55f, FrontHalfV = 90f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -664,7 +664,7 @@ public static class StadiumCatalog
     {
         Name = "Heitere Open Air", Town = "Zofingen",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2639062.5, N = 1237134.7, AzimuthDeg = -30f,
+        E = 2639062.5, N = 1237134.7, GridAzimuthDeg = -30f,
         FrontHalfU = 35f, FrontHalfV = 75f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -679,7 +679,7 @@ public static class StadiumCatalog
     {
         Name = "Moon&Stars, Piazza Grande", Town = "Locarno",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2704818.4, N = 1114001.6, AzimuthDeg = -102f,
+        E = 2704818.4, N = 1114001.6, GridAzimuthDeg = -102f,
         FrontHalfU = 35f, FrontHalfV = 85f, FrontCorner = 6f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,
@@ -698,7 +698,7 @@ public static class StadiumCatalog
     {
         Name = "Montreux Jazz, Lake Stage", Town = "Montreux",
         Kind = VenueKind.OpenAir, StageAt = StadiumSide.North,
-        E = 2559335, N = 1142425, AzimuthDeg = 270f,
+        E = 2559335, N = 1142425, GridAzimuthDeg = 270f,
         FrontHalfU = 16f, FrontHalfV = 30f, FrontCorner = 3f,
         Tiers = Array.Empty<StadiumTier>(),
         DepthNorth = 1f, DepthEast = 1f, DepthSouth = 1f, DepthWest = 1f,

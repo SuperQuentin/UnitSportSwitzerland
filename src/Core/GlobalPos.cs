@@ -54,8 +54,22 @@ public readonly record struct GlobalPos(double E, double N, double Alt)
     /// <summary>This place at another altitude (above sea level), straight up or down.</summary>
     public GlobalPos WithAlt(double alt) => this with { Alt = alt };
 
-    /// <summary>The compass bearing to <paramref name="other"/>, radians clockwise from north (grid north until G2's A3).</summary>
-    public double BearingTo(GlobalPos other) => System.Math.Atan2(other.E - E, other.N - N);
+    /// <summary>The compass bearing to <paramref name="other"/>, radians clockwise from true north (#1504).</summary>
+    public double BearingTo(GlobalPos other) => System.Math.Atan2(other.E - E, other.N - N) - Convergence;
+
+    /// <summary>
+    /// The bearing of true north in this type's offset axes here (<see cref="OffsetTo"/>, <see cref="Moved"/>,
+    /// <c>+ Vector3</c>), radians clockwise: the meridian convergence while they are the LV95 grid's
+    /// (<see cref="SwissGeodesy.GridConvergence"/>, 0 at Bern, ~0.9° at Geneva), 0 once A1 puts ECEF inside (#1504).
+    /// A few microseconds: per object, never per vertex.
+    /// </summary>
+    public double Convergence => SwissGeodesy.GridConvergence(E, N, Alt);
+
+    /// <summary>
+    /// The LV95 grid's meridian convergence here, whatever this type holds inside: what a heading stored in grid north
+    /// (a Swiss source's, a literal catalogue's) is turned by.
+    /// </summary>
+    public double GridConvergence => SwissGeodesy.GridConvergence(E, N, Alt);
 
     /// <summary>The terrain tile under this place (the LV95 kilometre today, the cube leaf in G2).</summary>
     public TileId Tile => TileId.FromLv95(E, N);

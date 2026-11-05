@@ -37,6 +37,8 @@ public partial class ShuttleFilm : Node
     private const double SwE = 2496258.4, SwN = 1120489.3, NeE = 2498857.9, NeN = 1122955.1;
     private const float Length = 3583f, HalfWidth = 25f;
     private static readonly float Heading04 = (float)Math.Atan2(NeE - SwE, NeN - SwN);
+    /// <summary>The runway's heading from true north at the threshold (#1504): what the shuttle is set down along.</summary>
+    private static readonly float TrueHeading04 = (float)TrueNorth.GridToTrue(SwE, SwN, Heading04);
 
     /// <summary>The field's height when its tiles are not there to say, m.</summary>
     private const double FieldElevation = 420;
@@ -150,10 +152,10 @@ public partial class ShuttleFilm : Node
         {
             if (!_player.SetRide(RideKind.Shuttle) || _player.Vehicle is not Airliner { Spec.Spacecraft: true } jet) { End(1, "no shuttle"); return; }
             _shuttle = jet;
-            float heading = Heading04 - Mathf.Pi / 2;
-            _player.Rotation = new Vector3(0, -heading, 0);
-            jet.State.Yaw = -heading;
-            jet.State.Attitude = new Basis(Vector3.Up, -heading);
+            float yaw = TrueNorth.WorldYaw(_origin.Frame, start, Mathf.Pi / 2 - TrueHeading04);
+            _player.Rotation = new Vector3(0, yaw, 0);
+            jet.State.Yaw = yaw;
+            jet.State.Attitude = new Basis(Vector3.Up, yaw);
             jet.State.Settle = 2f;
             _wait = 0;
             return;

@@ -141,7 +141,7 @@ public static class PhotoSpots
 /// </summary>
 public static class PhotoJudge
 {
-    /// <param name="yawDeg">Compass bearing the camera looked along (0 north, 90 east).</param>
+    /// <param name="yawDeg">Compass bearing the camera looked along, from true north (0 north, 90 east; #1504).</param>
     /// <param name="pitchDeg">Up from the horizontal.</param>
     /// <param name="fovDeg">The frame's full angle (the print is a square crop: the same both ways).</param>
     /// <param name="ground">The terrain height, null where unknown (an unloaded tile: taken as clear).</param>
@@ -155,7 +155,8 @@ public static class PhotoJudge
         if (!PhotoSpots.Inside(spot, e, n)) return PhotoVerdict.NotThere;
         double de = spot.TargetE - e, dn = spot.TargetN - n, dist = GlobalPos.HorizontalDistance(spot.TargetE, spot.TargetN, e, n);
         if (dist < 1) return PhotoVerdict.OffTarget;
-        double bearing = Math.Atan2(de, dn) * 180 / Math.PI;
+        // from true north at the body: the grid's bearing less the meridian convergence (#1504)
+        double bearing = (Math.Atan2(de, dn) - Terrain.Format.SwissGeodesy.GridConvergence(e, n, eyeAlt)) * 180 / Math.PI;
         // aimed where the target is drawn: lower by the Earth's drop (#187, 27 m at 20 km)
         double elev = Math.Atan2(spot.TargetAlt - Core.Curvature.Drop(dist) - eyeAlt, dist) * 180 / Math.PI;
         double half = fovDeg / 2 * PhotoSpots.FrameShare;

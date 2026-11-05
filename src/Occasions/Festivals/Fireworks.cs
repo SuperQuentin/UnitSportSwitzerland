@@ -336,7 +336,8 @@ public partial class Fireworks : Node3D, IOriginContainer
     {
         _show = birthday ? FireworkShow.Birthday(seed) : own ? FireworkShow.Volley(seed) : FireworkShow.Plan(seed);
         _playingOwn = own;
-        _rot = float.IsNaN(bearing) ? 0f : bearing - _show.Heading;
+        // the bearing is from true north (a launch's); the show's maths below is in LV95 numbers: the local turn there
+        _rot = float.IsNaN(bearing) ? 0f : (float)TrueNorth.TrueToGrid(e, n, bearing) - _show.Heading;
         _start = start;
         _siteE = e;
         _siteN = n;
