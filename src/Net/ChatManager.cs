@@ -1542,7 +1542,7 @@ public partial class ChatManager : Node
         if (words.Length == 0)
         {
             if (at is not { } here) return ([.. StadiumLookup.List(), "/stadium <name | town | #n> to go to one."], null, false);
-            var (near, metres) = StadiumLookup.Nearest(here.E, here.N);
+            var (near, metres) = StadiumLookup.Nearest(here.Lv95.E, here.Lv95.N);
             return ([$"Nearest venue: #{StadiumLookup.Number(near)} {StadiumLookup.Label(near)}, {StadiumLookup.Distance(metres)} away; "
                 + $"{Concert.ConcertService.ShowAt(near)}.", "/stadium list for all of them, /stadium <name | town | #n> to go to one."], null, false);
         }
@@ -1596,7 +1596,7 @@ public partial class ChatManager : Node
         }
 
         // what the player published, exact: not the server's own world, far from its origin (#185)
-        (e, n) = (node.Global.E, node.Global.N);
+        (e, n) = (node.Global.Lv95.E, node.Global.Lv95.N);
         return true;
     }
 

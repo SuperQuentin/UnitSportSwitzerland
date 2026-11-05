@@ -33,7 +33,7 @@ public static class Gadgets
 
     // ---- payloads -------------------------------------------------------------------------------
 
-    public static string ZipPayload(GlobalPos p) => ZipPayload(p.E, p.N, p.Alt);
+    public static string ZipPayload(GlobalPos p) => ZipPayload(p.Lv95.E, p.Lv95.N, p.Alt);
 
     public static string ZipPayload(double e, double n, double alt) =>
         string.Create(CultureInfo.InvariantCulture, $"{e:F2};{n:F2};{alt:F2}");

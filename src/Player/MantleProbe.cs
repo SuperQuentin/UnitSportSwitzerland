@@ -51,8 +51,8 @@ public partial class MantleProbe : Node
 
         if (_player == null)
         {
-            if (!_chunks.TryGetHeight(at, out _ground)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!_chunks.Ground.TryGetHeight(at, out _ground)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, _ground + 1f, at.Z);
             return;
@@ -60,7 +60,7 @@ public partial class MantleProbe : Node
         if (_block == null)
         {
             // each case starts standing still on the ground
-            if (!_chunks.HasCollisionAt(at) || !_player.IsOnFloor()) return;
+            if (!_chunks.Ground.HasCollisionAt(at) || !_player.IsOnFloor()) return;
             StartCase();
             return;
         }

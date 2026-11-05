@@ -92,8 +92,8 @@ public partial class RoadStandProbe : Node
 
         if (_player == null)
         {
-            if (!_chunks.TryGetHeight(at, out float g)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!_chunks.Ground.TryGetHeight(at, out float g)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1.5f, at.Z);
             _roads = _chunks.Source!.LoadRoadsAsync(tile);
@@ -104,7 +104,7 @@ public partial class RoadStandProbe : Node
         // the road-blended collision is the tail of the tile build; give it time to land
         if (_points == null)
         {
-            if (_roads is not { IsCompleted: true } || !_chunks.HasCollisionAt(at) || _wait < 8) return;
+            if (_roads is not { IsCompleted: true } || !_chunks.Ground.HasCollisionAt(at) || _wait < 8) return;
             if ((Embankments || Sidewalks || FloorAtArg() != null) && _grid is not { IsCompleted: true }) return;
             _points = Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
             if (FloorAtArg() is { } fa && _roads.Result is { } ft && _grid?.Result is { } fg)
@@ -213,7 +213,7 @@ public partial class RoadStandProbe : Node
                 var a = new Vector3(s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
                 var b = new Vector3(s.Points[j * 3], s.Points[j * 3 + 1], s.Points[j * 3 + 2]);
                 var p = basePos + (a + b) * 0.5f + (Bridges ? Vector3.Up * BridgeLift : Vector3.Zero);
-                if (!_chunks.HasCollisionAt(p)) continue;
+                if (!_chunks.Ground.HasCollisionAt(p)) continue;
                 result.Add((p, $"{s.Class}/{s.Surface}", Kind.Body));
             }
         if (Bridges) return result;
@@ -225,7 +225,7 @@ public partial class RoadStandProbe : Node
                 .Select(t => (V(strip.Indices[t * 3]), V(strip.Indices[t * 3 + 1]), V(strip.Indices[t * 3 + 2])))
                 .MaxBy(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length());
             var p = basePos + (widest.Item1 + widest.Item2 + widest.Item3) / 3f;
-            if (_chunks.HasCollisionAt(p)) result.Add((p, "turn lane strip", Kind.Body));
+            if (_chunks.Ground.HasCollisionAt(p)) result.Add((p, "turn lane strip", Kind.Body));
         }
         // transitions (#818): a body on the carriageway where it is widest past the plain street, 0.6 m in from that edge, and on
         // the middle of each band beside it, at its height: the blend and the side's collision hold them as a ribbon's
@@ -243,7 +243,7 @@ public partial class RoadStandProbe : Node
             var at = new Vector3(s.Points[i * 3], s.Points[i * 3 + 1], s.Points[i * 3 + 2]);
             var d = new Vector3(s.Points[i * 3 + 3] - s.Points[i * 3 - 3], 0, s.Points[i * 3 + 5] - s.Points[i * 3 - 1]).Normalized();
             var right = new Vector3(-d.Z, 0, d.X);
-            void Add(Vector3 local, string what) { var q = basePos + local; if (_chunks.HasCollisionAt(q)) result.Add((q, what, Kind.Body)); }
+            void Add(Vector3 local, string what) { var q = basePos + local; if (_chunks.Ground.HasCollisionAt(q)) result.Add((q, what, Kind.Body)); }
             bool rightWider = sec.RibbonRight[i] - half >= -sec.RibbonLeft[i] - half;
             Add(at + right * (rightWider ? sec.RibbonRight[i] - 0.6f : sec.RibbonLeft[i] + 0.6f), "transition carriageway");
             foreach (bool r in (ReadOnlySpan<bool>)[false, true])
@@ -326,7 +326,7 @@ public partial class RoadStandProbe : Node
                 float w = profile.Width;
                 // past a turn lane's widening the side is shifted out (#120)
                 float edge = half + side.ShiftAt(RoadStreetSection.Fractions(s)[i]);
-                void Add(Vector3 at, string what, Kind kind) { var q = basePos + at; if (_chunks.HasCollisionAt(q)) result.Add((q, what, kind)); }
+                void Add(Vector3 at, string what, Kind kind) { var q = basePos + at; if (_chunks.Ground.HasCollisionAt(q)) result.Add((q, what, kind)); }
                 // the middle of every band at its height (#120: grass, bike path, sidewalk)
                 for (int m = 0; m + 1 < profile.Count; m++)
                     if (profile.Surface[m] != StreetSurface.Kerb)
@@ -363,7 +363,7 @@ public partial class RoadStandProbe : Node
                 if (ar > area) { area = ar; best = (p0 + p1 + p2) / 3f; }
             }
             var q = basePos + best + Vector3.Up * a.Height;
-            if (area > 0.5f && _chunks.HasCollisionAt(q)) result.Add((q, "corner", Kind.Floor));
+            if (area > 0.5f && _chunks.Ground.HasCollisionAt(q)) result.Add((q, "corner", Kind.Floor));
         }
         return result;
     }
@@ -382,7 +382,7 @@ public partial class RoadStandProbe : Node
         {
             int c = Math.Clamp((int)Math.Round(x), 0, last), r = Math.Clamp((int)Math.Round(z), 0, last);
             var p = basePos + new Vector3(c, ground(c, r), r);
-            if (_chunks.HasCollisionAt(p)) result.Add((p, what, Kind.Floor));
+            if (_chunks.Ground.HasCollisionAt(p)) result.Add((p, what, Kind.Floor));
         }
 
         var walls = tile.LinearProps.Where(RoadWallBuilder.IsWall).ToList();
@@ -403,13 +403,13 @@ public partial class RoadStandProbe : Node
             // a railing on the crown (#126) leaves no room to stand there: a body rests on its top
             bool railed = tile.LinearProps.Any(r => RoadRailing.IsRailing(r) && Enumerable.Range(0, r.PointCount).Any(k =>
                 new Vector2(basePos.X + r.Points[k * 4] - cap.X, basePos.Z + r.Points[k * 4 + 2] - cap.Z).Length() < 1.5f));
-            if (!railed && _chunks.HasCollisionAt(cap)) result.Add((cap, $"wall {name} crown", Kind.Body));
+            if (!railed && _chunks.Ground.HasCollisionAt(cap)) result.Add((cap, $"wall {name} crown", Kind.Body));
             var back = basePos + face + left * (RoadEmbankment.CoverDepth * 0.6f) + Vector3.Up * cover;
-            if (_chunks.HasCollisionAt(back)) result.Add((back, $"wall {name} cover", Kind.Body));
+            if (_chunks.Ground.HasCollisionAt(back)) result.Add((back, $"wall {name} cover", Kind.Body));
             if (w.Points[m * 4 + 3] >= 1.5f)
             {
                 var edge = basePos + face - left * 0.4f + Vector3.Up * top;
-                if (_chunks.HasCollisionAt(edge)) result.Add((edge, $"wall {name} off edge", Kind.Fall));
+                if (_chunks.Ground.HasCollisionAt(edge)) result.Add((edge, $"wall {name} off edge", Kind.Fall));
             }
             var foot = face - left * 2.0f;
             // a cut wall's foot lies toward its road: on a street that is the sidewalk (#119), whose

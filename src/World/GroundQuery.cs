@@ -23,7 +23,7 @@ public static class GroundQuery
     /// the road, threw the tractor up off its wheels.
     /// </summary>
     public static float Under(CollisionObject3D self, RayQuery ray, Godot.Collections.Array<Rid> exclude, Vector3 p,
-        ChunkManager? terrain, bool pastPlayers = false, bool pastVehicles = false) =>
+        IWorldGround? terrain, bool pastPlayers = false, bool pastVehicles = false) =>
         Under(self.GetWorld3D(), self.CollisionMask, ray, exclude, p, terrain, pastPlayers, out _, pastVehicles);
 
     /// <summary>
@@ -37,7 +37,7 @@ public static class GroundQuery
     /// </para>
     /// </summary>
     public static float Under(World3D world, uint collisionMask, RayQuery ray, Godot.Collections.Array<Rid> exclude, Vector3 p,
-        ChunkManager? terrain, bool pastPlayers, out bool solid, bool pastVehicles = false)
+        IWorldGround? terrain, bool pastPlayers, out bool solid, bool pastVehicles = false)
     {
         var space = world.DirectSpaceState;
         var from = p + Vector3.Up * 3f;

@@ -66,7 +66,7 @@ public partial class WallOffProbe : Node
                 break;
             case 2:
                 // collision follows the player: wait for it, keep it parked on the cap meanwhile
-                if (!_chunks.HasCollisionAt(_cap)) { Put(me, _cap + Vector3.Up * 1.0f); _stageT = 0; return; }
+                if (!_chunks.Ground.HasCollisionAt(_cap)) { Put(me, _cap + Vector3.Up * 1.0f); _stageT = 0; return; }
                 if (_stageT < 2.5) return;
                 GD.Print($"[walloff] on the cap: body {me.GlobalPosition.Y - _top:+0.000;-0.000} m from the top, onFloor={me.IsOnFloor()}");
                 Put(me, _edge);

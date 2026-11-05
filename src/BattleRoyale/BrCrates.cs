@@ -148,12 +148,12 @@ public partial class BrCrates : Node3D, IOriginContainer
                 o.Remove("X");
                 o.Remove("Y");
                 o.Remove("Z");
-                o["E"] = at.E;
-                o["N"] = at.N;
+                o["E"] = at.Lv95.E;
+                o["N"] = at.Lv95.N;
             }
             else continue;
             if (o["Yaw"] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue(out float yaw) && float.IsFinite(yaw))
-                o["Yaw"] = toWire ? at.TrueYaw(yaw) : at.OffsetYaw(yaw);
+                o["Yaw"] = toWire ? Lv95Grid.TrueYaw(at, yaw) : Lv95Grid.GridYaw(at, yaw);
         }
         return list.ToJsonString();
     }

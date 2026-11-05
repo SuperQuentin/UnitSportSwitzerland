@@ -23,7 +23,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
 
     public const string NodeName = "Vehicles";
 
-    public ChunkManager? Terrain { get; set; }
+    public IWorldGround? Terrain { get; set; }
 
     /// <summary>This peer's origin: vehicle states carry LV95 (#185), its bodies stand in world space.</summary>
     public Core.WorldOrigin Origin { get; private set; } = null!;
@@ -101,7 +101,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>The manager of this process's world, if there is one.</summary>
     public static VehicleManager? Instance { get; private set; }
 
-    public static VehicleManager Create(Node world, ChunkManager? terrain, Core.WorldOrigin origin)
+    public static VehicleManager Create(Node world, IWorldGround? terrain, Core.WorldOrigin origin)
     {
         var manager = new VehicleManager { Name = NodeName, Terrain = terrain, Origin = origin };
         world.AddChild(manager);

@@ -139,7 +139,7 @@ public partial class PassengerService : Node
     /// </summary>
     public void Wrecked(Vector3 velocity)
     {
-        if (Online) RpcId(1, MethodName.HostWrecked, Local is { } me ? me.Global.EnuFromOffset(velocity) : velocity);
+        if (Online) RpcId(1, MethodName.HostWrecked, Local is { } me ? Lv95Grid.ToEnu(me.Global, velocity) : velocity);
     }
 
     // ---- server side ----------------------------------------------------------------------
@@ -339,7 +339,7 @@ public partial class PassengerService : Node
         bool rolls = Rideable.Create(state.Kind).Driverless;
         if (riders.Count == 0 || !rolls)
         {
-            var enu = state.Position.EnuFromOffset(state.Velocity);   // the state's velocity is in GlobalPos's axes (#1503)
+            var enu = Lv95Grid.ToEnu(state.Position, state.Velocity);   // the state's velocity is in GlobalPos's axes (#1503)
             foreach (var (peer, _) in riders) { _byRider.Remove(peer); RpcId(peer, MethodName.Eject, enu); }
             VehicleManager.Instance?.ParkFor(host, state);
             return;

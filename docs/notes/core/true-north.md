@@ -8,8 +8,8 @@
   (TerrainFormat, Godot-free), the bearing of true north on the grid, radians clockwise: 0 on Bern's meridian (to
   0.0007°, the datums' normals), ~+0.93° at Geneva, ~−2° at Scuol. A grid bearing less it is a true one.
 - **Readers** take north from the frame (`Core/TrueNorth`: `frame.WorldDirection` of the ENU north at the point),
-  never world −Z: the compass strip (`ICompassSource.North`, the BR viewpoint and the adventure compass give their
-  heading in `GlobalPos`'s offset axes and true north's bearing there), the cockpit's HDG and track and the AP HDG
+  never world −Z: the compass strip (`ICompassSource.North`: the adventure compass gives its heading in true east and
+  north, `OffsetTo`'s axes since #1502, north 0; the BR viewpoint on its grid map, north the convergence), the cockpit's HDG and track and the AP HDG
   line, the VR watch's bezel and notch, the debug readout, the GPS, the telescope's azimuth, the festival runs'
   compass words, a photo's aim and `PhotoJudge`, `--heading`, `GlobalPos.BearingTo`. A viewer read every frame keeps
   a `TrueNorth.Near` (one geodesy call every 100 m).
@@ -23,9 +23,10 @@
     the August 1 lakes' `Bearing`, the shuttle film's runway, the trailer's shots (`TrailerDirector.TrueNorthOf`, at
     load; a bearing relative to something, aboard, in a set, along a road or an actor, is left).
 - **Setting a heading down**: `TrueNorth.WorldYaw(frame, at, trueYaw)` for a node in world axes, `OffsetYaw(pos, trueYaw)`
-  for a record's yaw (`VehicleState`, a slot), which is in `GlobalPos`'s offset axes: the grid's until A1 puts ECEF
-  inside, then true (`GlobalPos.Convergence`, the offset axes' north, goes to 0 then; `GridConvergence` stays the
-  grid's). On the flat ground both give the yaw the grid gave, to float precision.
+  for a record's yaw (`VehicleState`, a slot), which stays on the LV95 grid until G2 D (#1502: `GlobalPos.GridConvergence`, `Lv95Grid`;
+  `GlobalPos`'s own maths are true north, `core/globalpos-earth`). On the flat ground both give the yaw the grid
+  gave, to float precision. `TrueNorth.Near` gives true north's bearing in world axes (`World`), on the grid
+  (`Grid`, `WorldToGrid`) and turns a world direction into true east and north (`WorldToEnu`).
 - **Grid is left only as a marked local turn** inside maths still done in LV95 numbers or a tile's grid axes:
   `TrueNorth.TrueToGrid`, `StadiumSpec.LocalAzimuthDeg` (the bowl's mesh, its seats, the stage frame),
   `Spot.TowardTrue` (the trailer), the lakes' site and barge, the fireworks' fan. They go with that maths (G2 C, D).

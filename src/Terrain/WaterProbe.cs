@@ -63,8 +63,8 @@ public partial class WaterProbe : Node3D
         _done = true;
 
         var at = _origin.ToWorld(_e, _n, 0);
-        bool wet = _chunks.TryGetWaterLevel(at, out float level);
-        bool ground = _chunks.TryGetHeight(at, out float bed);
+        bool wet = _chunks.Ground.TryGetWaterLevel(at, out float level);
+        bool ground = _chunks.Ground.TryGetHeight(at, out float bed);
         // the ground's collision only: a player spawned here (--at) stands in the ray
         var space = GetViewport().World3D.DirectSpaceState;
         var query = PhysicsRayQueryParameters3D.Create(_origin.ToWorld(_e, _n, 5000), _origin.ToWorld(_e, _n, -500));

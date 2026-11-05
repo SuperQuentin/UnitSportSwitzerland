@@ -136,7 +136,7 @@ public partial class FestivalService
             if (other <= 0) continue;
             if (_adventure.PositionOf?.Invoke(other) is { } viewer && viewer.HorizontalDistanceTo(at) > August1Rules.OwnRange) continue;
             if (Connected(other)) RpcId(other, MethodName.ShowOwn, start, seed, x, y, z);
-            else if (!_networked) OwnShowTold?.Invoke(start, seed, at.E, at.N);
+            else if (!_networked) OwnShowTold?.Invoke(start, seed, at.Lv95.E, at.Lv95.N);
         }
         NoteAugust1(peer, August1Event.Lit, 0, 0, "The fireworks are lit: stand back.");
         return null;
@@ -279,6 +279,6 @@ public partial class FestivalService
     private void ShowOwn(double start, int seed, double x, double y, double z)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        OwnShowTold?.Invoke(start, seed, at.E, at.N);
+        OwnShowTold?.Invoke(start, seed, at.Lv95.E, at.Lv95.N);
     }
 }

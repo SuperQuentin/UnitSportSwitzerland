@@ -221,7 +221,7 @@ public partial class BirdNetProbe : ChatProbe
         Expect(await Heard("A", "at", 30), "A says where it stands");
         var at = (_heard.LastOrDefault(l => l.Contains("PN A at")) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var shooter = at.Length >= 2
-            ? new Core.GlobalPos(double.Parse(at[^2], CultureInfo.InvariantCulture), double.Parse(at[^1], CultureInfo.InvariantCulture), 0)
+            ? Core.GlobalPos.FromLv95(double.Parse(at[^2], CultureInfo.InvariantCulture), double.Parse(at[^1], CultureInfo.InvariantCulture), 0)
             : me.Global;
         // in this client's world space now, whatever it was when A said it
         Vector3 Shooter() => life.Origin.ToWorld(shooter);

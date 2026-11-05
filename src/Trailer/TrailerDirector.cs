@@ -360,7 +360,7 @@ public partial class TrailerDirector : Node
         Place = PlaceSpot,
         Actor = i => i >= 0 && i < _actors.Count ? _actors[i].Frame : null,
         // in a set, far under the ground, the camera's floor is the set's own
-        Surface = p => shot.Set == null && _chunks.TryGetSurface(p, out float g) ? g : null,
+        Surface = p => shot.Set == null && _chunks.Ground.TryGetSurface(p, out float g) ? g : null,
         SetPoint = SetPoint,
         Road = (key, at) => _routes.Point(key, at, _chunks),
         Seat = i => i >= 0 && i < _actors.Count ? _actors[i].Seat : null,
@@ -423,7 +423,7 @@ public partial class TrailerDirector : Node
     {
         if (Occasions.UfoSightings.Instance is not { } sightings) { GD.PrintErr("[trailer] no UFO sightings in this world: left out"); return; }
         var where = _origin.ToWorld(u.At.E, u.At.N, 0);
-        float ground = _chunks.TryGetSurface(where, out float g) ? g : 0f;
+        float ground = _chunks.Ground.TryGetSurface(where, out float g) ? g : 0f;
         float anchor = u.At.Agl ? ground + u.At.H : u.At.H;
         // a sighting's heading is a world bearing: the shot's true one set down at its anchor (#1504)
         _stagedUfos.Add(sightings.Stage(u.Kind, u.At.E, u.At.N, anchor, Mathf.DegToRad(WorldBearing(where, u.Heading)), u.Count, -u.From, u.Seed));
@@ -441,7 +441,7 @@ public partial class TrailerDirector : Node
     {
         var at = _origin.ToWorld(s.E, s.N, s.Agl ? 0 : s.H);
         if (!s.Agl) return at;
-        if (!_chunks.TryGetSurface(at, out float g)) return null;
+        if (!_chunks.Ground.TryGetSurface(at, out float g)) return null;
         return at with { Y = g + s.H };
     }
 
@@ -570,7 +570,7 @@ public partial class TrailerDirector : Node
             _props.Add(item);
             return;
         }
-        float g = _chunks.TryGetHeight(at, out float h) ? h : 0f;
+        float g = _chunks.Ground.TryGetHeight(at, out float h) ? h : 0f;
         var body = new StaticBody3D { Name = $"Prop{_props.Count}" };
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = prop.Size } });
         body.AddChild(new MeshInstance3D
@@ -592,7 +592,7 @@ public partial class TrailerDirector : Node
     /// </summary>
     private float? FloorAt(Vector3 at, bool terrain = true)
     {
-        float? floor = terrain && _chunks.TryGetSurface(at, out float g) ? g : null;
+        float? floor = terrain && _chunks.Ground.TryGetSurface(at, out float g) ? g : null;
         var from = at with { Y = (floor ?? at.Y) + 3f };
         var hit = _camera.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + Vector3.Down * 8f));
         if (hit.Count > 0)
@@ -621,7 +621,7 @@ public partial class TrailerDirector : Node
         {
             var f = Focus(shot);
             var over = _origin.ToWorld(f.E, f.N, 0);
-            _camera.GlobalPosition = over with { Y = (_chunks.TryGetSurface(over, out float g) ? g : 500f) + 40f };
+            _camera.GlobalPosition = over with { Y = (_chunks.Ground.TryGetSurface(over, out float g) ? g : 500f) + 40f };
         }
         if (shot.Keys[0].Look.World is { } look && PlaceSpot(look) is { } lp && lp != _camera.GlobalPosition)
             _camera.LookAt(lp, Vector3.Up);
@@ -1010,7 +1010,7 @@ public partial class TrailerDirector : Node
         var prop = new CraftProp(craft) { Name = $"Craft{_craft.Count}" };
         AddChild(prop);
         var at = _origin.ToWorld(craft.At.E, craft.At.N, 0);
-        float ground = _chunks.TryGetSurface(at, out float g) ? g : 0f;
+        float ground = _chunks.Ground.TryGetSurface(at, out float g) ? g : 0f;
         prop.Put(at, ground, WorldBearing(at, craft.Heading));
         _craft.Add(prop);
         _props.Add(prop);
@@ -1273,7 +1273,7 @@ public partial class TrailerDirector : Node
                 {
                     // a cow on its ground has no altitude of its own (its ground's); one with one is beamed or set down by a beam
                     bool moved = !float.IsNaN(alt);
-                    float y = moved ? alt : _chunks.TryGetSurface(_origin.ToWorld(e, n, 0), out float g) ? g : 0f;
+                    float y = moved ? alt : _chunks.Ground.TryGetSurface(_origin.ToWorld(e, n, 0), out float g) ? g : 0f;
                     dump.Row(frame, t, $"h{k}.{c++}", "cow", e, n, y, Mathf.RadToDeg(yaw), 0, "-", "-", moved);
                 }
             }

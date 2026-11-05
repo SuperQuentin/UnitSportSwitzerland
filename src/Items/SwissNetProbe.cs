@@ -100,7 +100,7 @@ public partial class SwissNetProbe : ChatProbe
     {
         if (!await Until(() => _heard.Any(l => l.Contains("SW A posA")), 150)) { Fail("A never reported"); return; }
         var p = _heard.First(l => l.Contains("SW A posA")).Split("posA ")[1].Split(' ');
-        _a = new GlobalPos(Lv95(p[0]), Lv95(p[1]), Lv95(p[2]));
+        _a = GlobalPos.FromLv95(Lv95(p[0]), Lv95(p[1]), Lv95(p[2]));
         await Until(() => !GetParent().GetChildren().OfType<SpawnPoint>().Any() && me.IsOnFloor(), 60);
         for (int tries = 0; tries < 4; tries++)
         {

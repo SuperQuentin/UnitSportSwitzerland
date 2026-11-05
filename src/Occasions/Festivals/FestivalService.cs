@@ -627,8 +627,8 @@ public partial class FestivalService : Node
                 site.Remove("x");
                 site.Remove("y");
                 site.Remove("z");
-                site["e"] = at.E;
-                site["n"] = at.N;
+                site["e"] = at.Lv95.E;
+                site["n"] = at.Lv95.N;
             }
         }
         return list.ToJsonString();

@@ -39,7 +39,7 @@ public partial class HornNetProbe : ChatProbe
         var (rowE, rowN) = HornGround.SpotOf(site);
         var g0 = Me!.Global;
         var (rowDE, rowDN, _) = g0.OffsetTo(GlobalPos.FromLv95(rowE, rowN, g0.Alt));
-        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)rowDE, 0.3f, (float)-rowDN), Me.Rotation.Y);
+        Me.PlaceAt(Me.GlobalPosition + Me.Origin!.Frame.WorldOfEnu(g0, new Vector3((float)rowDE, 0.3f, (float)-rowDN)), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         Expect(await Until(() => HornGround.At(Me) != null && HornGround.InteractionFor(Me) != null, 10), "at the row, with the prompt");
         Expect(await Handshake("ready", _role == "A" ? "B" : "A", "ready", 120), "the other player is at the row too");

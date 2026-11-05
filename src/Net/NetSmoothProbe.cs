@@ -194,7 +194,7 @@ public partial class NetSmoothProbe : Node
             // the raw track, for profiles the summary does not cover (a bump at a level crossing, #124);
             // LV95 and altitude, so it means the same places however often the origin moved (#185)
             File.WriteAllLines(Path.Combine(dir, "netsmooth_track.csv"), _rec.Select(r =>
-                string.Create(inv, $"{r.T:F4},{r.P.E:F3},{r.P.N:F3},{r.P.Alt:F3}")).Prepend("t,e,n,alt"));
+                string.Create(inv, $"{r.T:F4},{r.P.Lv95.E:F3},{r.P.Lv95.N:F3},{r.P.Alt:F3}")).Prepend("t,e,n,alt"));
         }
         catch (Exception e) { GD.PushWarning($"[netsmooth] cannot write result: {e.Message}"); }
         GetTree().Quit();

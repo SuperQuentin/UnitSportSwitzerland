@@ -46,14 +46,13 @@ public static class TrueNorth
         (float)(TrueYaw(frame, at, worldYaw) - frame.ToGlobal(at).GridConvergence);
 
     /// <summary>
-    /// A heading from true north (a Godot yaw) at <paramref name="at"/> as a yaw in <see cref="GlobalPos"/>'s offset
-    /// axes, what a record keeps beside its position (<c>VehicleState</c>, a slot): the same as the grid yaw while those
-    /// axes are the grid's, the true one once A1 puts ECEF inside.
+    /// A heading from true north (a Godot yaw) at <paramref name="at"/> as a record's yaw beside its position
+    /// (<c>VehicleState</c>, a slot): from LV95 grid north until G2 D (#1502, <see cref="Lv95Grid"/>).
     /// </summary>
-    public static float OffsetYaw(GlobalPos at, float trueYaw) => (float)(trueYaw - at.Convergence);
+    public static float OffsetYaw(GlobalPos at, float trueYaw) => (float)(trueYaw - at.GridConvergence);
 
     /// <summary>The inverse of <see cref="OffsetYaw"/>.</summary>
-    public static float TrueYawOfOffset(GlobalPos at, float offsetYaw) => (float)(offsetYaw + at.Convergence);
+    public static float TrueYawOfOffset(GlobalPos at, float offsetYaw) => (float)(offsetYaw + at.GridConvergence);
 
     /// <summary>
     /// True north at a world point, as a horizontal unit direction in the frame's world axes: the local north at the
@@ -102,7 +101,7 @@ public static class TrueNorth
 
     /// <summary>
     /// True north for a viewer read every frame (a compass, a cockpit): its bearing in world axes
-    /// (<see cref="NorthBearing"/>) and in <see cref="GlobalPos"/>'s offset axes (<see cref="GlobalPos.Convergence"/>),
+    /// (<see cref="NorthBearing"/>) and on the LV95 grid (<see cref="GlobalPos.GridConvergence"/>: a grid map's, a record's),
     /// kept while the viewer stays within 100 m in one frame (the convergence turns ~0.001° in that), so standing or
     /// flying costs two geodesy calls every 100 m. A mutable struct: keep it in a field and call it on the field.
     /// </summary>
@@ -110,7 +109,7 @@ public static class TrueNorth
     {
         private OriginFrame? _frame;
         private Vector3 _at;
-        private float _world, _offset;
+        private float _world, _grid;
 
         /// <summary>The bearing of true north in world axes near <paramref name="at"/>, radians clockwise.</summary>
         public float World(OriginFrame frame, Vector3 at)
@@ -119,18 +118,25 @@ public static class TrueNorth
             return _world;
         }
 
-        /// <summary>The bearing of true north in <see cref="GlobalPos"/>'s offset axes near <paramref name="at"/>, radians clockwise.</summary>
-        public float Offset(OriginFrame frame, Vector3 at)
+        /// <summary>The bearing of true north on the LV95 grid near <paramref name="at"/> (the convergence), radians clockwise.</summary>
+        public float Grid(OriginFrame frame, Vector3 at)
         {
             Refresh(frame, at);
-            return _offset;
+            return _grid;
         }
 
-        /// <summary>A world (east, north) direction near <paramref name="at"/> in <see cref="GlobalPos"/>'s offset axes (the identity on the flat ground).</summary>
-        public Vector2 WorldToOffset(OriginFrame frame, Vector3 at, Vector2 eastNorth)
+        /// <summary>A world (east, north) direction near <paramref name="at"/> on the LV95 grid (the identity on the flat ground).</summary>
+        public Vector2 WorldToGrid(OriginFrame frame, Vector3 at, Vector2 eastNorth)
         {
             Refresh(frame, at);
-            return Turn(eastNorth, _world, _offset);
+            return Turn(eastNorth, _world, _grid);
+        }
+
+        /// <summary>A world (east, north) direction near <paramref name="at"/> in true east and north (<see cref="GlobalPos"/>'s maths, #1502).</summary>
+        public Vector2 WorldToEnu(OriginFrame frame, Vector3 at, Vector2 eastNorth)
+        {
+            Refresh(frame, at);
+            return Turn(eastNorth, _world, 0f);
         }
 
         private void Refresh(OriginFrame frame, Vector3 at)
@@ -139,8 +145,8 @@ public static class TrueNorth
             _frame = frame;
             _at = at;
             _world = NorthBearing(frame, at);
-            // on the flat ground the world's axes are the offset axes: one call (the convergence at the point, the same maths)
-            _offset = frame.IsAnchor ? (float)frame.ToGlobal(at).Convergence : _world;
+            // on the flat ground the world's axes are the grid's: one call (the convergence at the point, the same maths)
+            _grid = frame.IsAnchor ? (float)frame.ToGlobal(at).GridConvergence : _world;
         }
     }
 }
