@@ -1,10 +1,11 @@
 namespace UnitSport.Tools.RoadGen.Network;
 
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
 
 /// <summary>
 /// How built-up a place is, from the building walls around it alone (#119): on a lattice of
-/// <see cref="Cell"/> nodes in LV95, a node is <i>near</i> a building when a wall stands within
+/// <see cref="Cell"/> nodes on the plane, a node is <i>near</i> a building when a wall stands within
 /// <see cref="NearM"/> of it (a square). Two shares of near nodes are taken: within
 /// <see cref="WindowM"/> (local: a village street) and within <see cref="CityWindowM"/> (a city:
 /// a quay along a river, a street past a park or a station square has no wall at hand, but is in
@@ -19,6 +20,7 @@ using UnitSport.Terrain.Format;
 /// </summary>
 public sealed class UrbanField(Facades facades)
 {
+    private readonly IUnits _units = facades.Units;   // the walls' tiles (#1507)
     public const double Cell = 2.0;
     public const double NearM = 18.0, WindowM = 25.0, CityWindowM = 150.0;
     /// <summary>The city share at which a place is urban, whatever is at hand.</summary>
@@ -28,14 +30,14 @@ public sealed class UrbanField(Facades facades)
     /// <summary>The road starts to lower toward the town's height at this density.</summary>
     public const double RuralBelow = 0.15;
 
-    private const int PerTile = (int)(1000 / Cell);          // cells per tile side
+    private readonly int PerTile = (int)(facades.Units.TileSizeM / Cell);   // cells per tile side
     private const int Near = (int)(NearM / Cell);            // 9
     private const int Window = (int)(WindowM / Cell);       // 12: +-24 m
     private const int City = (int)(CityWindowM / Cell);       // 75: +-150 m
     private const int Margin = Near + City;
     private readonly Dictionary<TileId, float[]> _density = new();
 
-    /// <summary>Density at an LV95 point, bilinear between lattice nodes.</summary>
+    /// <summary>Density at a plane point, bilinear between lattice nodes.</summary>
     public double Density(double e, double n)
     {
         double gx = e / Cell, gy = n / Cell;   // global lattice coordinates, y north
@@ -56,9 +58,9 @@ public sealed class UrbanField(Facades facades)
     private double Node(long x, long y)
     {
         // node (x, y) sits at E = x * Cell, N = y * Cell; its tile: the one whose cell [x, x+1) x [y, y+1) it opens
-        var id = new TileId((int)Math.Floor(x * Cell / 1000), (int)Math.Floor(y * Cell / 1000));
+        var id = _units.TileAt(x * Cell, y * Cell);
         if (!_density.TryGetValue(id, out var d)) _density[id] = d = Build(id);
-        int c = (int)(x - (long)id.E * PerTile), r = (int)(y - (long)id.N * PerTile);   // r counts north
+        int c = (int)(x - WestNode(id)), r = (int)(y - SouthNode(id));   // r counts north
         return d[r * PerTile + c];
     }
 
@@ -70,10 +72,10 @@ public sealed class UrbanField(Facades facades)
         var wall = new int[(size + 1) * (size + 1)];   // summed-area table, one row/column of zeros
         for (int r = 0; r < size; r++)
         {
-            long gy = (long)id.N * PerTile - Margin + r;
+            long gy = SouthNode(id) - Margin + r;
             for (int c = 0; c < size; c++)
             {
-                long gx = (long)id.E * PerTile - Margin + c;
+                long gx = WestNode(id) - Margin + c;
                 int w = WallAt(gx, gy) ? 1 : 0;
                 wall[(r + 1) * (size + 1) + c + 1] = w + wall[r * (size + 1) + c + 1] + wall[(r + 1) * (size + 1) + c] - wall[r * (size + 1) + c];
             }
@@ -106,13 +108,17 @@ public sealed class UrbanField(Facades facades)
         return density;
     }
 
+    /// <summary>The global lattice column of a tile's west edge and the row of its south edge (tiles are a whole number of cells).</summary>
+    private long WestNode(TileId id) => (long)Math.Round(_units.West(id) / Cell);
+    private long SouthNode(TileId id) => (long)Math.Round(_units.South(id) / Cell);
+
     /// <summary>Whether a wall stands in the global 2 m cell [gx, gx+1) x [gy, gy+1) (gy counting north).</summary>
     private bool WallAt(long gx, long gy)
     {
-        var id = new TileId((int)Math.Floor(gx * Cell / 1000), (int)Math.Floor(gy * Cell / 1000));
+        var id = _units.TileAt(gx * Cell, gy * Cell);
         if (facades.Coarse(id) is not { } mask) return false;
-        int c = (int)(gx - (long)id.E * PerTile);
-        int rNorth = (int)(gy - (long)id.N * PerTile);
+        int c = (int)(gx - WestNode(id));
+        int rNorth = (int)(gy - SouthNode(id));
         int r = PerTile - 1 - rNorth;   // Coarse rows count south from the north edge
         return mask[r * PerTile + c];
     }

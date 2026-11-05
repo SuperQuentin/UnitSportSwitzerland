@@ -78,7 +78,7 @@ public static partial class TileRewriter
         if (linkId >= 0)
         {
             var at = new List<Vec2>();
-            for (int k = 0; k + 2 < verts.Count; k += 3) at.Add(new Vec2(source.Tile.MinE + verts[k], source.Tile.MaxN - verts[k + 2]));
+            for (int k = 0; k + 2 < verts.Count; k += 3) at.Add(new Vec2(Plane.West(source.Tile) + verts[k], Plane.North(source.Tile) - verts[k + 2]));
             if (s0 < 1.5) at.Add(mid);
             (_ramps ??= []).Add(new KerbRamp(linkId, at, 0.6));
         }
