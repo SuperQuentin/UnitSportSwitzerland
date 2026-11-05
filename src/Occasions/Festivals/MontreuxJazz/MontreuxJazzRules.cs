@@ -80,8 +80,10 @@ public static class MontreuxJazzRules
     public static (double U, double V) ToFrame(GlobalPos centre, float azimuthDeg, GlobalPos at)
     {
         double a = azimuthDeg * Math.PI / 180.0, c = Math.Cos(a), s = Math.Sin(a);
-        var (dx, dn, _) = centre.OffsetTo(at);
-        double dz = -dn;
+        var (de, dn, _) = centre.OffsetTo(at);
+        // the venue's azimuth is a grid one (the double overload's frame is the LV95 grid's): the true offset goes to the grid's axes (#1502)
+        var grid = Lv95Grid.FromEnu(centre, new Godot.Vector3((float)de, 0, (float)-dn));
+        double dx = grid.X, dz = grid.Z;
         return (dx * c + dz * s, -dx * s + dz * c);
     }
 
