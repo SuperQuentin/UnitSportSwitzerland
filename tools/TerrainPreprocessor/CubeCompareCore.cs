@@ -166,7 +166,8 @@ public static class CompareBars
 }
 
 /// <summary>A point record in a local frame: an id when the source has one (0 none), a class, and its height above its own ground (NaN when not draped).</summary>
-public readonly record struct Feature(double X, double Y, double Z, long Id = 0, int Class = 0, double Above = double.NaN);
+/// <summary>A point feature in a bundle's anchor frame; <see cref="Where"/> its LV95 position for a person (the worst pairs, the alone).</summary>
+public readonly record struct Feature(double X, double Y, double Z, long Id = 0, int Class = 0, double Above = double.NaN, string? Where = null);
 
 /// <summary>Matched pairs (<c>ById</c> when the id did it) and what each side kept alone.</summary>
 public sealed record Matches(List<(int A, int B, bool ById)> Pairs, List<int> OnlyA, List<int> OnlyB);

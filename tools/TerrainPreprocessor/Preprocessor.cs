@@ -114,6 +114,8 @@ public static partial class Preprocessor
         if (CubeCompare.Wants(args)) return CubeCompare.Run(args, ct);
         // the road stage on work frames (#1507, G2 B3 PR 2), over a --cube region's heights; before --cube
         if (CubeRoadStage.Wants(args)) return await CubeRoadStage.RunAsync(args, ct);
+        // RoadGen's network stage on work frames (#1507, G2 B3 4b), over the road stage's raw kinds
+        if (CubeNetworkStage.Wants(args)) return CubeNetworkStage.Run(args);
         // the cover on work frames (#1507, G2 B3 PR 5a), over a --cube region's heights
         if (CubeCoverStage.Wants(args)) return CubeCoverStage.Run(args, ct);
         // lake and river beds on work frames (#1507, G2 B3 PR 6), over a --cube region's heights and cover

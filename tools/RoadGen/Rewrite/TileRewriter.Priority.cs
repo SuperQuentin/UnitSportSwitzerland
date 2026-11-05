@@ -227,10 +227,8 @@ public static partial class TileRewriter
         private bool Scan(Vec2 p)
         {
             var at = Plane.TileAt(p.X, p.Y);
-            for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+            foreach (var id in Plane.Around(at, 1))
             {
-                var id = new TileId(at.E + de, at.N + dn);
                 double x = p.X - Plane.West(id), z = Plane.North(id) - p.Y;
                 if (!Load(id).TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var here)) continue;
                 for (int t = 0; t + 9 < here.Count; t += 10)

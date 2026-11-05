@@ -277,6 +277,9 @@ public sealed class RegionHeights
     /// <summary>A leaf's heights section as it is, or null.</summary>
     public LeafSection? ReadSection(CubeKey leaf) => Entry(leaf) is { } bytes ? CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) : null;
 
+    /// <summary>A leaf's section of one kind (#1507: the network stage reads the raw kinds this way), or null.</summary>
+    public LeafSection? ReadKind(CubeKey leaf, LeafKind kind) => Entry(leaf) is { } bytes ? CubeLeafCodec.ReadSection(bytes, kind) : null;
+
     /// <summary>A leaf with every section, or null.</summary>
     public CubeLeaf? ReadLeaf(CubeKey leaf) => Entry(leaf) is { } bytes ? CubeLeafCodec.Decode(bytes) : null;
 

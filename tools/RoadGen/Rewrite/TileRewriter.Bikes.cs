@@ -152,7 +152,7 @@ public static partial class TileRewriter
     /// the path starts or ends (a junction, or a stretch without it).
     /// </summary>
     private static void EmitTrackPaint(List<RoadSegment> pieces, bool startsAtJunction, bool endsAtJunction,
-        List<RoadPaint> into)
+        List<RoadPaint> into, TileId tile)
     {
         static bool Track(RoadSegment s, bool right) => (right ? s.Attributes.Right : s.Attributes.Left).HasTrack;
         for (int i = 0; i < pieces.Count; i++)
@@ -169,7 +169,7 @@ public static partial class TileRewriter
                 float sign = right ? 1f : -1f, half = p.Width * 0.5f + side.ShiftStartCm / 100f;
                 if (dashed)
                     PaintEmitter.AddDashed(p, sign * (half + (side.VergeDm + side.BikeDm) / 10f), 0, into,
-                        PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
+                        PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap, tile);
                 bool atStart = i == 0 ? startsAtJunction : !Track(pieces[i - 1], right);
                 bool atEnd = i == pieces.Count - 1 ? endsAtJunction : !Track(pieces[i + 1], right);
                 PaintEmitter.Symbols(p, sign * (half + RoadStreetSection.TrackCentre(side)), right, into, atStart, atEnd);

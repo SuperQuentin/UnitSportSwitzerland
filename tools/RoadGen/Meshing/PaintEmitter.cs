@@ -112,7 +112,7 @@ public static class PaintEmitter
     /// <param name="bikeLanes">Paint the bike lanes too; the network stage paints them later, on the
     /// street's final pieces (<see cref="BikeLanes"/>), which may be shifted off a turn lane.</param>
     public static void Emit(RoadSegment seg, double station, List<RoadPaint> into,
-        bool startsAtJunction = false, bool endsAtJunction = false, bool bikeLanes = true)
+        bool startsAtJunction = false, bool endsAtJunction = false, bool bikeLanes = true, TileId? tile = null)
     {
         if (seg.Surface != RoadSurface.Paved || seg.Class > RoadClass.Minor || seg.PointCount < 2) return;
         if ((seg.Flags & RoadFlags.Stairs) != 0) return;
@@ -127,7 +127,7 @@ public static class PaintEmitter
         float solid = RoadCrossSection.IsHighSpeed(seg.Class) ? HighSpeedEdgeWidth : LineWidth;
         void Line(float offset, bool dashed)
         {
-            if (dashed) AddDashed(seg, offset, station, into);
+            if (dashed) AddDashed(seg, offset, station, into, tile);
             else Add(into, RoadPaint.AlongSegment(seg, PaintType.WhiteSolid, White, solid, 0, 0, offset));
         }
 
@@ -166,7 +166,7 @@ public static class PaintEmitter
             }
         }
 
-        if (bikeLanes) BikeLanes(seg, station, into, startsAtJunction, endsAtJunction);
+        if (bikeLanes) BikeLanes(seg, station, into, startsAtJunction, endsAtJunction, tile: tile);
     }
 
     /// <summary>
@@ -176,7 +176,7 @@ public static class PaintEmitter
     /// is offset by it, along a taper drawn as its own geometry, with no symbol there.
     /// </summary>
     public static void BikeLanes(RoadSegment seg, double station, List<RoadPaint> into, bool startsAtJunction, bool endsAtJunction,
-        bool skipLeft = false, bool skipRight = false)
+        bool skipLeft = false, bool skipRight = false, TileId? tile = null)
     {
         if (seg.Surface != RoadSurface.Paved || seg.Class > RoadClass.Minor || seg.PointCount < 2) return;
         var a = seg.Attributes;
@@ -184,7 +184,7 @@ public static class PaintEmitter
         {
             var side = right ? a.Right : a.Left;
             if (!side.HasLane || (right ? skipRight : skipLeft)) continue;
-            if (side.ShiftStartCm == side.ShiftEndCm) BikeLane(seg, right, station, into, startsAtJunction, endsAtJunction);
+            if (side.ShiftStartCm == side.ShiftEndCm) BikeLane(seg, right, station, into, startsAtJunction, endsAtJunction, tile);
             else TaperLane(seg, right, into);
         }
     }
@@ -255,12 +255,12 @@ public static class PaintEmitter
     /// every Radstreifen), facing the lane's traffic (right side with the drawing, left against).
     /// </summary>
     private static void BikeLane(RoadSegment seg, bool right, double station, List<RoadPaint> into,
-        bool startsAtJunction, bool endsAtJunction)
+        bool startsAtJunction, bool endsAtJunction, TileId? tile)
     {
         var side = right ? seg.Attributes.Right : seg.Attributes.Left;
         float sign = right ? 1f : -1f, half = seg.Width * 0.5f + side.ShiftStartCm / 100f, lane = side.BikeDm / 10f;
         AddDashed(seg, sign * (half - lane), station, into, PaintType.YellowDashed, Yellow,
-            BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
+            BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap, tile);
         Symbols(seg, sign * (half - lane * 0.5f), right, into, startsAtJunction, endsAtJunction);
     }
 
@@ -328,22 +328,22 @@ public static class PaintEmitter
         return true;
     }
 
-    private static void AddDashed(RoadSegment seg, float offset, double station, List<RoadPaint> into)
+    private static void AddDashed(RoadSegment seg, float offset, double station, List<RoadPaint> into, TileId? tile)
     {
         var (dash, gap) = Leitlinie(seg);
-        AddDashed(seg, offset, station, into, PaintType.WhiteDashed, White, LineWidth, dash, gap);
+        AddDashed(seg, offset, station, into, PaintType.WhiteDashed, White, LineWidth, dash, gap, tile);
     }
 
     /// <summary>A dashed line along the segment, phased on its TLM line's metre so dashes run on across seams.</summary>
     public static void AddDashed(RoadSegment seg, float offset, double station, List<RoadPaint> into,
-        PaintType type, uint rgba, float width, float dash, float gap)
+        PaintType type, uint rgba, float width, float dash, float gap, TileId? tile = null)
     {
         var line = RoadPaintGeometry.Offset(seg, RoadPaint.FileOffset(offset));
         if (line.Length < 6) return;
         double length = RoadPaintGeometry.Length(line);
         double period = dash + gap;
         double phase = station - Math.Floor(station / period) * period;
-        bool seamStart = OnSeam(seg.Points, 0), seamEnd = OnSeam(seg.Points, seg.PointCount - 1);
+        bool seamStart = OnSeam(seg.Points, 0, tile), seamEnd = OnSeam(seg.Points, seg.PointCount - 1, tile);
 
         // the dash already running at the first point: the seam cut it, or it is long enough to keep
         double first = phase < 1e-6 ? 0 : period - phase;
@@ -372,10 +372,12 @@ public static class PaintEmitter
         if (paint.Vertices.Length >= 6) into.Add(paint);
     }
 
-    private static bool OnSeam(float[] p, int i)
+    /// <summary>Whether a tile-local point is on its tile's edge (#1507: the tile's own edge through the units; without one, the 1 km square's).</summary>
+    private static bool OnSeam(float[] p, int i, TileId? tile)
     {
         const float eps = 0.01f;
         float x = p[i * 3], z = p[i * 3 + 2];
+        if (tile is { } t) return Plane.OnEdge(t, x, z, eps);
         return MathF.Abs(x) < eps || MathF.Abs(z) < eps || MathF.Abs(x - TileSize) < eps || MathF.Abs(z - TileSize) < eps;
     }
 
