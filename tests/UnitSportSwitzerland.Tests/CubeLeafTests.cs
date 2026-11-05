@@ -208,7 +208,8 @@ public class CubeLeafTests
         byte[] entry = content.Encode();
         var (key, table) = CubeLeafCodec.ReadTable(entry);
         Assert.Equal(Leaf, key);
-        Assert.Equal(Enum.GetValues<LeafKind>(), table.Select(t => t.Kind));
+        // every kind a region's leaf holds; the road stage's raw kinds live in a temporary .cubl only
+        Assert.Equal(Enum.GetValues<LeafKind>().Where(k => !LeafKinds.IsRaw(k)), table.Select(t => t.Kind));
 
         var back = CubeLeafContent.Decode(entry);
         Assert.Empty(back.Skipped);

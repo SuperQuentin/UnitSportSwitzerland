@@ -85,6 +85,8 @@ and the game reads none (C1).
 | `Trees` | Brotli of `TreeFormat.EncodeBody` | 10 KB (15 KB) |
 | `Pistes` | bits u8, Brotli of `PisteFormat.EncodeBody` with `Slot`/`Aux` on the leaf lattice; flags `FlagOsm` | (no piste on D:) |
 | `Fields` | Brotli of `FieldFormat.EncodeBody`: outlines, ring points (x, z) | (no field on D:) |
+| `RoadKeys` | raw (B3 PR 2, the temporary `.cubl` only): Brotli of the count, per raw segment a byte (0 none, 1 a key), the TLM uuid (7-bit length, UTF-8), the part (7-bit), the distance along the part on the work plane (f64), aligned with the raw `Roads` section (`LeafRoadKeys`) | (`cube-roads`) |
+| `Parking` | raw (the temporary `.cubl` only): Brotli of the count, per lot the `CoverClass` byte, the source (`tlm`, `override`), the point count and the ring's (x, y, z) f32 on the leaf mesh, unclosed (`LeafParking`) | |
 | `Photo` | format u8 (`CubeAlbedoFormat`, `Jpeg` added), width and height u16, the image bytes as they are; row 0 the south edge, as `CubeAlbedo` | 122 KB (SWISSIMAGE 512² JPEG) |
 
 - **Compression**: Brotli quality 6, window 22 (`LeafPack`): roads kept 72 % at quality 4 (.NET's
