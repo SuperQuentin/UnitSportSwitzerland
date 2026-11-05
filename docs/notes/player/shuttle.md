@@ -87,6 +87,10 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   `DriveHome`, `Fall`, `Glide`, `Rollout`) and says what it wants of the time scale; the host judges and films.
 - Client-side only: a server-run bot pilot is #1498, after #1443 G2 (on the server a body above 60 km stays in
   the main region's flat LV95 frame), with a long orbital path.
+- **Calm in space** (#1528, the user: the acrobatics looked stupid on film): the drive banks at most 20° to turn
+  (`ShuttlePilot.DriveBank`, was 57°), the dive out of the drive is 25° (was 45°), and the retro burn's turn takes
+  the retrograde direction in the craft's own axes: a roll brings it into the pitch plane, a pitch closes on it, both
+  slowing as they close. Pitching alone missed it off that plane and looped the craft until it passed close.
 - The taxi: square to the centreline, round onto it from 40 m out, on a whisper of rocket (6 %) and the brakes.
 
 ## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
@@ -106,9 +110,12 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   with `atempo` (the pitch kept). Real-time capture (`AudioEffectCapture`) cannot do it: the mixer runs on the
   wall clock while the frames do not.
 - The same mission headless on the flat world: `--shuttlecheck europe`.
-- **Pictures for chasing a rendering bug**: `--shuttlefilm drive[,at=<km>][,hide=<node name>...][,sky][,bigstars][,stardist=<share>]`
-  flies the mission to that height on the drive up (80 km by default) and saves one picture,
-  `test_output/clips/shuttle-drive-<km>[-...].png`: nodes hidden by name, the space sky magenta (a black thing, or
+- **Pictures for chasing a rendering bug**: `--shuttlefilm drive|shot,<stage>[,at=<km>][,skip][,hide=<node name>...][,sky][,bigstars][,stardist=<share>]`
+  flies the mission to that height in that stage (`drive` = `shot,DriveUp`; past `at` going up in the climb and
+  the drive up, under it in the others; 80 km by default) and saves one picture,
+  `test_output/clips/shuttle-<stage>-<km>[-...].png`, the horizon's progress and the draw calls in the log. `skip`
+  starts the descent at once (80 km out on 22's line, 62 km up, as `--shuttlecheck glide`): a minute instead of
+  fifteen, though its dive is steeper than the mission's. Nodes hidden by name, the space sky magenta (a black thing, or
   hidden stars?), every star 40 times its size (`size_scale` in `sky_point`: whatever crops them shows its edge),
   the stars nearer. It found the stars' depth floor (`world/night-sky`). `--shuttlefilm orbit[,km]` takes one in orbit.
 

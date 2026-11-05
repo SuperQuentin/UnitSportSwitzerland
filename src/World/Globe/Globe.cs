@@ -42,8 +42,13 @@ public partial class Globe : Node
         }
     }
 
-    /// <summary>Drawn above this camera altitude, metres (H1's exact sphere blend starts at 20 km).</summary>
-    public const float ShowAboveM = 15_000;
+    /// <summary>
+    /// Drawn above this camera altitude, metres: where the far plane starts reaching past the flat world's
+    /// horizon (<c>CameraGlobal</c>, from 5 km) and the haze thins on the globe's word (<c>HazeAt</c>, from 3 km).
+    /// At 15 km a landing from space looked through 3-15 km of thinned haze at nothing past the horizon
+    /// blocks' 60 km: a flat haze-coloured plane with the lakes on it (#1528).
+    /// </summary>
+    public const float ShowAboveM = 5_000;
 
     /// <summary>Every this many lattice vertices are drawn: 64 cells a tile of 512.</summary>
     public const int Stride = 8;
@@ -80,6 +85,10 @@ public partial class Globe : Node
     /// hidden wherever the globe shows, gone over the 5 km above <see cref="ShowAboveM"/>.
     /// </summary>
     public const double FillFarM = 100_000;
+
+    private static readonly StringName FlatEdge = "world_flat_edge", FlatEdgeOn = "world_flat_edge_on";
+    private Vector4 _edge = new(float.NaN, 0, 0, 0);
+    private float _edgeOn = -1;
 
     private static readonly StringName FillHide = "world_fill_hide", FlatHide = "world_flat_hide", RealMask = "world_real_mask",
         RealOrigin = "world_real_origin", RealExtent = "world_real_extent", RealAxes = "world_real_axes";
@@ -136,7 +145,26 @@ public partial class Globe : Node
         Axes = null;
         RenderingServer.GlobalShaderParameterSet(FillHide, 0f);
         RenderingServer.GlobalShaderParameterSet(FlatHide, 0f);
+        RenderingServer.GlobalShaderParameterSet(FlatEdgeOn, 0f);
         if (FlatWorld != null && IsInstanceValid(FlatWorld)) FlatWorld.Visible = true;
+    }
+
+    /// <summary>
+    /// The flat world's edge dissolved into the globe while it is drawn (#1528, the user's choice: from above,
+    /// the tiles' square stood out against the globe as a patch): the tiles' square round the camera's tile, the
+    /// horizon blocks' circle, faded in over the 5 km above <see cref="ShowAboveM"/> (terrain.gdshaderinc's
+    /// <c>flat_edge</c>). Written on change only.
+    /// </summary>
+    private void Edge(double altitude, Vector3 camera)
+    {
+        float on = FlatWorld is Terrain.ChunkManager { Visible: true } ? (float)Mathf.SmoothStep(ShowAboveM, ShowAboveM + 5_000, altitude) : 0f;
+        if (on != _edgeOn) RenderingServer.GlobalShaderParameterSet(FlatEdgeOn, _edgeOn = on);
+        if (on <= 0 || FlatWorld is not Terrain.ChunkManager chunks) return;
+        var (e, n) = Origin!.ToLv95(camera);
+        // the tiles load by Chebyshev distance from the anchor's tile: the camera's tile, give or take one
+        var centre = Origin.ToWorld(Math.Floor(e / 1000) * 1000 + 500, Math.Floor(n / 1000) * 1000 + 500, 0);
+        var edge = new Vector4(centre.X, centre.Z, (chunks.Lod.MaxDist + 0.5f) * 1000f, (float)(chunks.Horizon?.DistanceM ?? 0));
+        if (edge != _edge) RenderingServer.GlobalShaderParameterSet(FlatEdge, _edge = edge);
     }
 
     /// <summary>
@@ -210,6 +238,7 @@ public partial class Globe : Node
 
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
         Hide(altitude, cam.GlobalPosition);
+        Edge(altitude, cam.GlobalPosition);
         bool show = altitude > ShowAboveM;
         if (show != _shown)
         {
