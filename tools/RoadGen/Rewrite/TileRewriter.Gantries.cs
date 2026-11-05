@@ -178,7 +178,7 @@ public static partial class TileRewriter
         return new SignGantry
         {
             Arm = arm, Lit = true, X = fa[0], Y = fa[1], Z = fa[2], EndX = fb[0], EndY = fb[1], EndZ = fb[2],
-            Bottom = road + GantryLowerEdge, Heading = Heading(u), Signs = signs,
+            Bottom = road + GantryLowerEdge, Heading = Heading(home, pa, u), Signs = signs,
         };
     }
 
