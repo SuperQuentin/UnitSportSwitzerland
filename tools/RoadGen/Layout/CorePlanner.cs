@@ -1157,16 +1157,22 @@ public static class CorePlanner
     /// <summary>How far a point lies outside the ring (0 inside).</summary>
     public static double Outside(IReadOnlyList<Vec2> ring, Vec2 p)
     {
+        // (asked for thousands of points that mostly lie inside: no distance is measured for those, #1539)
+        var points = ring is List<Vec2> list ? System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list) : ring.ToArray();
         bool inside = false;
-        double near = double.MaxValue;
-        for (int k = 0, l = ring.Count - 1; k < ring.Count; l = k++)
+        for (int k = 0, l = points.Length - 1; k < points.Length; l = k++)
         {
-            Vec2 a = ring[k], b = ring[l];
+            ref readonly Vec2 a = ref points[k], b = ref points[l];
             if ((a.Y > p.Y) != (b.Y > p.Y) && p.X < (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X) inside = !inside;
-            var ab = b - a;
+        }
+        if (inside) return 0;
+        double near = double.MaxValue;
+        for (int k = 0, l = points.Length - 1; k < points.Length; l = k++)
+        {
+            Vec2 a = points[k], ab = points[l] - a;
             double t = ab.LengthSquared < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / ab.LengthSquared, 0, 1);
             near = Math.Min(near, (a + ab * t).DistanceTo(p));
         }
-        return inside ? 0 : near;
+        return near;
     }
 }
