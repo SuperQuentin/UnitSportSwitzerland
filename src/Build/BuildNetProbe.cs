@@ -130,12 +130,13 @@ public partial class BuildNetProbe : Node
         Expect(s.Pieces.TryGetValue(WallA, out var w) && w.Damage == 0, "my hit on A's wall was ignored");
 
         // interest (#359): 1.6 km away the structure is taken back, nearby again it comes back whole
-        if (Me is { } me)
+        if (Me is { Origin: { } origin } me)
         {
-            var home = me.GlobalPosition;
-            me.GlobalPosition = home + new Vector3(1600f, 400f, 0);
+            // an Earth position: 1.6 km away the origin may move (--originstress), and a world point would name another place
+            var home = origin.ToGlobal(me.GlobalPosition);
+            me.GlobalPosition = origin.ToWorld(home) + new Vector3(1600f, 400f, 0);
             Expect(await Until(() => !structures.All.ContainsKey(id), 8), "far away, A's structure is taken back here");
-            me.GlobalPosition = home + Vector3.Up * 2f;
+            me.GlobalPosition = origin.ToWorld(home) + Vector3.Up * 2f;
             Expect(await Until(() => structures.All.TryGetValue(id, out var back) && back.Pieces.Count == 4, 8),
                 "back again, it is sent whole");
             s = structures.All[id];
