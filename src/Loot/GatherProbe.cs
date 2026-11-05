@@ -105,7 +105,7 @@ public partial class GatherProbe : Node
             }
         }
 
-        _player = new FootPlayer { Name = "GatherProbe", Terrain = _chunks };
+        _player = new FootPlayer { Name = "GatherProbe", Terrain = _chunks?.Ground };
         AddChild(_player);
         _gathering.PlayerOverride = () => _player;
 

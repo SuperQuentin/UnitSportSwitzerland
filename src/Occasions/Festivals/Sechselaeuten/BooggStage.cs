@@ -81,7 +81,7 @@ public partial class BooggStage : Node3D, IOriginContainer
 
     public static BooggStage Create(Node world, ChunkManager? chunks, WorldOrigin origin)
     {
-        var s = new BooggStage(origin, p => chunks != null && chunks.TryGetHeight(p, out float h) ? h : null);
+        var s = new BooggStage(origin, p => chunks != null && chunks.Ground.TryGetHeight(p, out float h) ? h : null);
         world.AddChild(s);
         return s;
     }

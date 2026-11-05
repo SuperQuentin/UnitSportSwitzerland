@@ -67,7 +67,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     /// <summary>A boat's height over the waves (#302, <see cref="Boat.Heave"/>): copies draw it on their own waves.</summary>
     [Export] public float Heave { get; set; } = Boat.NoHeave;
 
-    public ChunkManager? Terrain { get; set; }
+    public IWorldGround? Terrain { get; set; }
 
     /// <summary>At rest and not simulated until someone claims it (a heartbeat replicates it).</summary>
     public bool Asleep => _asleep;
@@ -174,7 +174,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     private GpuParticles3D? _fire, _smoke;
     private readonly List<PhysicsBody3D> _ignoring = new();
 
-    public static VehicleBody Create(VehicleState state, ChunkManager? terrain, WorldOrigin origin)
+    public static VehicleBody Create(VehicleState state, IWorldGround? terrain, WorldOrigin origin)
     {
         var v = new VehicleBody
         {

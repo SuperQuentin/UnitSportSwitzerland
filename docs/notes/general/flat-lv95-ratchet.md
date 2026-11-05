@@ -35,6 +35,10 @@
   that is left of the tile corners (26) and neighbours (1) in `src/`.
 - **The LV95 coordinate member** count (`.E` / `.N` read off anything): 4091 after A1's last step (#1502), where
   `GlobalPos` lost `E`/`N`; what is left reads `.Lv95.E` (notation) or a record's own LV95 fields.
+- **Flat ground escape hatches** (#1532, G2 C1): gameplay asks the ground through `IWorldGround`
+  (`terrain/world-ground`), whose tiles are opaque `GroundTile`s. `GroundTile.FromLv95(id)`, `tile.Lv95Tile`
+  and `ChunkManager.Of(ground)` cross back to the LV95 tile or the streamer's `IChunkSource`; counted (32),
+  lowered as the `IChunkSource` users move in C1's leaf half and C5, 0 at D.
 - A change that removes some lowers the baseline in the same commit (the test prints the new
   count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
   are the seam and are not counted, nor is `src/Terrain/ProceduralWorld.Network.cs`, the generated

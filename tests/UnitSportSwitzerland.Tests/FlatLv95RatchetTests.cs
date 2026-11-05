@@ -48,6 +48,12 @@ public class FlatLv95RatchetTests
             // (placed objects, structures, pins, the travel flag), which the RPC edges now read; 4091 after A1's last step
             // (#1502): GlobalPos has no E/N, what is left reads its LV95 notation (`.Lv95.E`) or a record's LV95 fields
             Baseline: 4091, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+        // the flat world's escape hatches out of IWorldGround (#1532, G2 C1): an LV95 tile key read off a
+        // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; counted
+        // after #1532, lowered as the IChunkSource users move (C1's leaf half, C5) and to 0 by D
+        new("flat ground escape hatch",
+            new(@"\.Lv95Tile\b|\bGroundTile\.FromLv95\(|\bChunkManager\.Of\(", RegexOptions.Compiled),
+            Baseline: 32, Instead: "the GroundTile itself, or IWorldGround's own queries (TileAt, GroundAt)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);

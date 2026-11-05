@@ -44,8 +44,8 @@ public partial class TreeCheck : Node
             {
                 var (e, n) = SpawnPoint.ParseTarget();
                 var at = _origin.ToWorld(e, n, 0);
-                if (!_chunks.TryGetHeight(at, out float g)) return;
-                _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+                if (!_chunks.Ground.TryGetHeight(at, out float g)) return;
+                _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
                 AddChild(_player);
                 _player.GlobalPosition = new Vector3(at.X, g + 1.5f, at.Z);
                 _player.Impacted += lost => _impact += lost;   // reported a slice per frame
@@ -64,7 +64,7 @@ public partial class TreeCheck : Node
                     if (d > 40f) break;
                     var dir = MathX.Flat(t.Base - me).Normalized();
                     var start = t.Base - dir * 25f;
-                    if (!_chunks.TryGetHeight(start, out float gs) || Mathf.Abs(gs - t.Base.Y) > 3f) continue;
+                    if (!_chunks.Ground.TryGetHeight(start, out float gs) || Mathf.Abs(gs - t.Base.Y) > 3f) continue;
                     if (Blocked(pool, start, t.Base, dir)) continue;
                     _tree = t.Base; _radius = t.Radius; _dir = dir;
                     _player.GlobalPosition = start with { Y = gs + 1.2f };
@@ -106,7 +106,7 @@ public partial class TreeCheck : Node
                     // hovers hands-off and settles without collective: stick forward, and hold
                     // about 4 m of height with the collective (Space), as a pilot would
                     Input.ActionPress(Core.PlayerInput.MoveForward);
-                    bool low = !_chunks.TryGetHeight(_player!.GlobalPosition, out float gh) || _player.GlobalPosition.Y < gh + 4f;
+                    bool low = !_chunks.Ground.TryGetHeight(_player!.GlobalPosition, out float gh) || _player.GlobalPosition.Y < gh + 4f;
                     if (low) Input.ActionPress(Core.PlayerInput.Jump); else Input.ActionRelease(Core.PlayerInput.Jump);
                 }
                 if (CmdArgs.Has("--trace") && (int)(_t * 2) != (int)((_t - delta) * 2))

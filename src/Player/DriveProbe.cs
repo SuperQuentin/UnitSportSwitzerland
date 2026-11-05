@@ -181,7 +181,7 @@ public partial class DriveProbe : Node
         // 6 m Jura road put six cars into the first corner together and the forest took them
         if (_entries.Count == 0)
         {
-            if (!_chunks.TryGetHeight(line.Points[0], out _)) return;
+            if (!_chunks.Ground.TryGetHeight(line.Points[0], out _)) return;
             int count = _mount != null ? (CmdArgs.Int("--riders") ?? 1) : _cars.Length;
             for (int k = 0; k < count; k++)
             {
@@ -194,8 +194,8 @@ public partial class DriveProbe : Node
                 float s = 12f + 15f * (count - 1 - k);
                 var at = line.PointAt(s);
                 var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
-                float g = _chunks.TryGetHeight(at, out float gh) ? gh : at.Y;
-                var player = new FootPlayer { Name = $"Driver{k}", Terrain = _chunks };
+                float g = _chunks.Ground.TryGetHeight(at, out float gh) ? gh : at.Y;
+                var player = new FootPlayer { Name = $"Driver{k}", Terrain = _chunks?.Ground };
                 AddChild(player);
                 player.GlobalPosition = at with { Y = g + 1.2f };
                 player.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
@@ -396,7 +396,7 @@ public partial class DriveProbe : Node
         }
         _cinePlaced = true;
         var cp = _cine.GlobalPosition;
-        if (_chunks.TryGetHeight(cp, out float ground) && cp.Y < ground + 1.5f) _cine.GlobalPosition = cp with { Y = ground + 1.5f };
+        if (_chunks.Ground.TryGetHeight(cp, out float ground) && cp.Y < ground + 1.5f) _cine.GlobalPosition = cp with { Y = ground + 1.5f };
         var look = car - _cine.GlobalPosition;
         if (look.LengthSquared() > 0.25f && Mathf.Abs(look.Normalized().Y) < 0.98f)
             _cine.GlobalBasis = Basis.LookingAt(look.Normalized(), Vector3.Up);

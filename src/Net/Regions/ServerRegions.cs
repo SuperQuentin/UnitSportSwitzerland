@@ -298,7 +298,7 @@ public partial class ServerRegions : Node
             if (h.Ghost != null) h.Ghost.Position = at;
             // ready when the target has collision there, when the body has none where it is either (in the
             // air, not placed yet), or after the timeout (a body never waits for good)
-            bool ready = h.Target.Chunks.HasCollisionAt(at)
+            bool ready = h.Target.Chunks.Ground.HasCollisionAt(at)
                 || body.Terrain?.HasCollisionAt(body.GlobalPosition) != true
                 || _clock - h.Since > HandoverTimeoutSeconds;
             if (!ready) continue;

@@ -50,7 +50,7 @@ public partial class ShuttleFilm : Node
     }
 
     private double Ground(double e, double n) =>
-        TestWorld.TryGround(_chunks, _origin.ToWorld(e, n, 0), out float y) ? _origin.Frame.AltitudeOf(new Vector3(0, y, 0)) : FieldElevation;
+        TestWorld.TryGround(_chunks?.Ground, _origin.ToWorld(e, n, 0), out float y) ? _origin.Frame.AltitudeOf(new Vector3(0, y, 0)) : FieldElevation;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -60,7 +60,7 @@ public partial class ShuttleFilm : Node
         var p = _player!;
         var jet = _shuttle!;
         double alt = _origin.Frame.AltitudeOf(p.GlobalPosition);
-        float agl = TestWorld.TryGround(_chunks, p.GlobalPosition, out float g) && _chunks != null ? p.GlobalPosition.Y - g
+        float agl = TestWorld.TryGround(_chunks?.Ground, p.GlobalPosition, out float g) && _chunks != null ? p.GlobalPosition.Y - g
             : (float)(alt - _pilot.Plan.To.Elevation);
         if (p.Vehicle != jet) { End(1, $"out of the shuttle at {_pilot.Now} (crashed?)"); return; }
         _pilot.Step(p, jet, _origin.Frame, agl, (float)delta);
@@ -140,14 +140,14 @@ public partial class ShuttleFilm : Node
         var start = _origin.ToWorld(se, sn, 0);
         if (_player == null)
         {
-            if (!TestWorld.TryGround(_chunks, start, out float ground)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!TestWorld.TryGround(_chunks?.Ground, start, out float ground)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(start.X, ground + 1f, start.Z);
             return;
         }
         if (_debugAt >= 0) { DebugOrbit(); return; }
-        if (_chunks != null && !_chunks.HasCollisionAt(start) || !_player.IsOnFloor()) return;
+        if (_chunks != null && !_chunks.Ground.HasCollisionAt(start) || !_player.IsOnFloor()) return;
         if (_shuttle == null)
         {
             if (!_player.SetRide(RideKind.Shuttle) || _player.Vehicle is not Airliner { Spec.Spacecraft: true } jet) { End(1, "no shuttle"); return; }

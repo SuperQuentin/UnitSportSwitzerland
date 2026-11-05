@@ -98,7 +98,7 @@ public static class PlayerReplication
         if (region != null)
         {
             npc.Region = region;
-            npc.Terrain = region.Chunks;
+            npc.Terrain = region.Chunks?.Ground;
         }
         npc.SetMultiplayerAuthority((int)owner);
         if (d.Count > 8 && d[8].AsInt32() == DriverBot)

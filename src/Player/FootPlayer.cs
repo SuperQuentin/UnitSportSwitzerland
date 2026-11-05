@@ -59,7 +59,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Push away from the wall. Above <see cref="RunSpeed"/>, so it actually launches.</summary>
     [Export] public float WallJumpPush { get; set; } = 5.4f;
 
-    public ChunkManager? Terrain { get; set; }
+    public IWorldGround? Terrain { get; set; }
 
     /// <summary>
     /// The world origin, to put positions on the wire (#185): handed over by the spawner, which
@@ -1590,7 +1590,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // and the decks of walkable vehicles (#162), which only exist on a walking player's own peer
         CollisionMask |= DeckLayer;
         _walkMask = CollisionMask;
-        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
+        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain")?.Ground;
         if (Origin is { } start)
         {
             NetGlobal = start.ToGlobal(Position);

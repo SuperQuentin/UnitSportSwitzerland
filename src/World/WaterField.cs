@@ -100,7 +100,7 @@ public static class WaterField
     {
         still = 0f;
         scale = 0f;
-        return _chunks != null && _chunks.TryGetWater(world, out still, out scale);
+        return _chunks != null && _chunks.Ground.TryGetWater(world, out still, out scale);
     }
 
     // ---- the surface -----------------------------------------------------------------------

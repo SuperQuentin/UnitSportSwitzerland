@@ -42,7 +42,7 @@ public partial class SchwingRing : Node3D, IOriginContainer
 
     public static SchwingRing Create(Node world, ChunkManager? chunks, WorldOrigin origin)
     {
-        var r = new SchwingRing(origin, p => chunks != null && chunks.TryGetHeight(p, out float h) ? h : null);
+        var r = new SchwingRing(origin, p => chunks != null && chunks.Ground.TryGetHeight(p, out float h) ? h : null);
         world.AddChild(r);
         return r;
     }

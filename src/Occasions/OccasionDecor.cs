@@ -71,10 +71,10 @@ public partial class OccasionDecor : Node
         _steady = MakeMaterial(candle: false);
         GameSettings.Changed += ApplyFog;
 
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnloaded += OnUnloaded;
-        _chunks.TileUnfurnished += OnUnfurnished;
-        _chunks.TerrainReplaced += OnReplaced;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnloaded += OnUnloaded;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TerrainReplaced += OnReplaced;
         OccasionManager.Changed += RedecorateAll;
         OccasionTowns.Changed += RedecorateAll;
     }
@@ -87,10 +87,10 @@ public partial class OccasionDecor : Node
         OccasionTowns.Changed -= RedecorateAll;
         if (_chunks != null)
         {
-            _chunks.TileFurnished -= OnFurnished;
-            _chunks.TileUnloaded -= OnUnloaded;
-            _chunks.TileUnfurnished -= OnUnfurnished;
-            _chunks.TerrainReplaced -= OnReplaced;
+            _chunks.Ground.TileFurnished -= OnFurnished;
+            _chunks.Ground.TileUnloaded -= OnUnloaded;
+            _chunks.Ground.TileUnfurnished -= OnUnfurnished;
+            _chunks.Ground.TerrainReplaced -= OnReplaced;
         }
         if (Instance == this) Instance = null;
     }
@@ -131,8 +131,9 @@ public partial class OccasionDecor : Node
 
     // ---- tile lifecycle ------------------------------------------------------------------------
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile ground, ChunkNode node, DoorSpot[] doors)
     {
+        var id = ground.Lv95Tile;
         // a tile rebuilt at another stride commits its buildings again: same doors, same roads
         if (_tiles.TryGetValue(id, out var existing) && existing.Node == node && existing.RoadsReady)
         {
@@ -161,12 +162,12 @@ public partial class OccasionDecor : Node
         });
     }
 
-    private void OnUnloaded(TileId id) => _tiles.Remove(id);   // the props went with the tile's node
+    private void OnUnloaded(GroundTile tile) => _tiles.Remove(tile.Lv95Tile);   // the props went with the tile's node
 
     /// <summary>The tile shed its buildings (#553): the decorations at their doors go, back with the next furnishing.</summary>
-    private void OnUnfurnished(TileId id, ChunkNode node)
+    private void OnUnfurnished(GroundTile ground, ChunkNode node)
     {
-        if (_tiles.Remove(id, out var tile)) Drop(tile);
+        if (_tiles.Remove(ground.Lv95Tile, out var tile)) Drop(tile);
     }
 
     private static void Drop(Tile tile)
@@ -175,7 +176,7 @@ public partial class OccasionDecor : Node
         tile.Decor = null;
     }
 
-    private void OnReplaced(Func<TileId, bool>? affected)
+    private void OnReplaced(Func<GroundTile, bool>? affected)
     {
         // a rebase: everything goes, and anything still waiting on a tile's roads is stale
         if (affected == null)
@@ -188,7 +189,7 @@ public partial class OccasionDecor : Node
         // real tiles merged into the generated fill: only the tiles whose ground changed were
         // unloaded (TileUnloaded has dropped them already); a decoration still waiting for one
         // finds its entry gone and gives up, the rest carry on
-        foreach (var id in _tiles.Keys.Where(affected).ToList())
+        foreach (var id in _tiles.Keys.Where(id => affected(GroundTile.FromLv95(id))).ToList())
             if (_tiles.Remove(id, out var tile)) Drop(tile);
     }
 
@@ -232,8 +233,8 @@ public partial class OccasionDecor : Node
             // doorsteps on the ground only: a lantern or a gift at a raised door (#827) stood on the walkway
             Doors = Array.FindAll(tile.Doors, d => d.Level == 0),
             Roads = tile.Roads,
-            HeightAtWorld = p => _chunks.TryGetSurface(p, out float h) ? h : null,
-            CoverAtWorld = p => _chunks.TryGetCover(p, out var c) ? c : null,
+            HeightAtWorld = p => _chunks.Ground.TryGetSurface(p, out float h) ? h : null,
+            CoverAtWorld = p => _chunks.Ground.TryGetCover(p, out var c) ? c : null,
             Towns = OccasionTowns.Near(id.Centre.E, id.Centre.N, 3000).ToList(),
         };
         var into = new DecorBuilder { IsClaimed = IsClaimed };

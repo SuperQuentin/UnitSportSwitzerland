@@ -56,7 +56,7 @@ public partial class DoorWatchProbe : Node
             if (_player == null) return;
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!_chunks.TryGetHeight(at, out float g)) { _player = null; return; }
+            if (!_chunks.Ground.TryGetHeight(at, out float g)) { _player = null; return; }
             _player.Camera.Current = true;
             _player.LeaveInterior(new Vector3(at.X, g + 1f, at.Z), 0);
             var me = _player;
@@ -71,7 +71,7 @@ public partial class DoorWatchProbe : Node
             if (_door is not { } d) return;
             _key = d.Key.ToString();
             var stand = d.World + d.Outward * 8f;
-            if (_chunks.TryGetHeight(stand, out float g)) stand.Y = g + 1f;
+            if (_chunks.Ground.TryGetHeight(stand, out float g)) stand.Y = g + 1f;
             var face = -d.Outward;
             _stand = stand;
             _standYaw = Mathf.Atan2(-face.X, -face.Z);

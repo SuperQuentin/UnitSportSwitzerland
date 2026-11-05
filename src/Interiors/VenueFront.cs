@@ -248,8 +248,8 @@ public partial class VenueFronts : Node
         _prop.SetShaderParameter("flicker", 0f);
         FogUniforms.Apply(_prop);
         GameSettings.Changed += ApplyFog;
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
     }
 
     private void ApplyFog() => FogUniforms.Apply(_prop);
@@ -258,13 +258,13 @@ public partial class VenueFronts : Node
     {
         GameSettings.Changed -= ApplyFog;
         if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
         node.GetNodeOrNull(NodeName)?.QueueFree();
         if (VenueFront.Build(doors, _prop, VenueFront.GlassMaterial()) is { } fronts) node.AddChild(fronts);

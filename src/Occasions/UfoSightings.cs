@@ -352,7 +352,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
     private float Ground(double e, double n)
     {
         if (_chunks == null) return float.NaN;
-        return _chunks.TryGetHeight(_origin.ToWorld(e, n, 0), out float h) ? h : float.NaN;
+        return _chunks.Ground.TryGetHeight(_origin.ToWorld(e, n, 0), out float h) ? h : float.NaN;
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
             }
             else if (farm.HasFields(TileId.FromLv95(e, n))) return null;   // off the fields where there are fields: a road, a yard
         }
-        if (_chunks != null && _chunks.TryGetCover(_origin.ToWorld(e, n, g), out var cover) && cover != CoverClass.Open) return null;
+        if (_chunks != null && _chunks.Ground.TryGetCover(_origin.ToWorld(e, n, g), out var cover) && cover != CoverClass.Open) return null;
         float lo = g, hi = g;
         for (int i = 0; i < 6; i++)
         {
