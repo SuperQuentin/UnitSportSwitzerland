@@ -14,11 +14,12 @@ namespace UnitSport.Tools.Preprocessor;
 /// heights as the <c>--cube</c> stage wrote them (kept in <c>&lt;temp&gt;/water_surface/</c> the first time, so a rerun
 /// starts from them again, as the LV95 pass starts from its old <c>.water</c>), in centimetres above sea level;
 /// a 4-connected flood fill per leaf.</item>
-/// <item><b>B</b>: one union-find over the region, along every shared leaf edge on a face: bodies, their area (the
+/// <item><b>B</b>: one union-find over the region, along every shared leaf edge, across face edges too: bodies, their area (the
 /// leaf's own vertices, each the leaf's area over its cells), their most common level, their maximum depth.</item>
 /// <item><b>C</b>: frame by frame in the driver's order, each leaf with water (or with water before) in a window of
-/// itself and <see cref="WaterWindow.Halo"/> of its face's lattice round it (the 3 × 3 leaves at level 14; a leaf on
-/// another face or with no heights is unknown, as a missing LV95 tile), cells of the leaf's own spacing: the bank refine,
+/// itself and <see cref="WaterWindow.Halo"/> of its face's lattice round it (the 3 × 3 leaves at level 14; past a face
+/// edge the lattice folds onto the next face's leaves, <see cref="CubeWaterLattice"/>; past a cube corner, or a leaf with no
+/// heights, unknown, as a missing LV95 tile), cells of the leaf's own spacing: the bank refine,
 /// the distance to shore, the half width, the survey (swissBATHY3D at the cell's LV95 position) and its gap fill, the
 /// depth. The bed goes into the leaf's <see cref="LeafKind.Heights"/> (the surface less the depth, ellipsoidal), the
 /// level and fetch into its <see cref="LeafKind.Water"/>, through the <see cref="LeafWriter"/>'s heights and water seams.</item>
@@ -126,6 +127,10 @@ public static class CubeWaterStage
                 for (int j = 0; j <= n; j++) Union(parent, Global(d, j * side + n), Global(de, j * side));
             if (k.Neighbour(0, 1) is { } north && north.Face == k.Face && data.TryGetValue(north, out var dn))
                 for (int i = 0; i <= n; i++) Union(parent, Global(d, n * side + i), Global(dn, i));
+            // across a face edge: the shared vertices, the same bits from either side (#1552)
+            foreach (var (mine, other, theirs) in CubeWaterLattice.AcrossFaces(k))
+                if (data.TryGetValue(other, out var dO))
+                    Union(parent, Global(d, mine), Global(dO, theirs));
         }
         var bodies = new Dictionary<int, Body>();
         foreach (var k in ordered)
@@ -373,6 +378,39 @@ public static class CubeWaterStage
                     }
                 }
             }
+        // past the face's edge: each cell from the leaf it folds onto on the next face (#1552); past a cube corner, unknown
+        int bits = CubeKey.LatticeBits(key.Level);
+        long faceN = (long)key.Side << bits;
+        if (gx0 < 0 || gy0 < 0 || gx0 + w - 1 > faceN || gy0 + w - 1 > faceN)
+        {
+            CubeKey? lastKey = null;
+            LeafData? ld = null;
+            bool has = false;
+            for (int y = 0; y < w; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    long gx = gx0 + x, gy = gy0 + y;
+                    if (gx >= 0 && gy >= 0 && gx <= faceN && gy <= faceN) continue;
+                    if (CubeWaterLattice.Past(key.Face, key.Level, bits, gx, gy) is not { } past) continue;
+                    var (nb, li) = past;
+                    if (nb != lastKey)
+                    {
+                        lastKey = nb;
+                        has = heights.Has(nb);
+                        ld = data.TryGetValue(nb, out var v) ? v : null;
+                    }
+                    if (!has) continue;
+                    int wi = y * w + x;
+                    if (ld != null && ld.Wet[li] == 2) continue;
+                    if (ld != null && ld.Wet[li] == 1)
+                    {
+                        state[wi] = 1;
+                        surfaceQ[wi] = ld.SurfaceCm[li];
+                        label[wi] = ld.LabelBase + ld.Labels[li];
+                    }
+                    else state[wi] = 0;
+                }
+        }
 
         WaterWindow.RefineWet(state, surfaceQ, w, WaterWindow.Cells(WaterWindow.BankProbeM, cellM), BankRiseCm);
         var land = new bool[w * w];
@@ -483,16 +521,19 @@ public static class CubeWaterStage
 
     /// <summary>
     /// LV95 positions of a window's face lattice vertices, rigorous every <see cref="Step"/> cells and bilinear between
-    /// (the projection is smooth: under a millimetre over 8 cells), at the Plateau's height.
+    /// (the projection is smooth: under a millimetre over 8 cells), at the Plateau's height. Past the face's edge the
+    /// lattice folds onto the next face (#1552): a block reaching past it is rigorous, cell by cell.
     /// </summary>
     private sealed class Lv95Lattice
     {
         private const int Step = 8;
         private readonly double[] _e, _n;
-        private readonly int _side;
+        private readonly int _side, _face, _level;
+        private readonly long _gx0, _gy0, _faceN;
 
         public Lv95Lattice(int face, int latticeLevel, long gx0, long gy0, int w)
         {
+            (_face, _level, _gx0, _gy0, _faceN) = (face, latticeLevel, gx0, gy0, 1L << latticeLevel);
             _side = (w + Step - 1) / Step + 1;
             _e = new double[_side * _side];
             _n = new double[_side * _side];
@@ -507,11 +548,19 @@ public static class CubeWaterStage
         public (double E, double N) At(int x, int y)
         {
             int a = x / Step, b = y / Step;
+            if (!Inside(_gx0 + a * Step, _gy0 + b * Step) || !Inside(_gx0 + (a + 1) * Step, _gy0 + (b + 1) * Step))
+            {
+                if (CubeSphere.Fold(_face, _level, _gx0 + x, _gy0 + y) is not { } f) return (double.NaN, double.NaN);
+                var (e, n, _) = SwissGeodesy.FromEcef(CubeSphere.LatticeEcef(f.Face, _level, f.I, f.J, SwissGeodesy.GroundH));
+                return (e, n);
+            }
             double fa = (x - a * Step) / (double)Step, fb = (y - b * Step) / (double)Step;
             int k = b * _side + a;
             double Lerp(double[] v) => (v[k] * (1 - fa) + v[k + 1] * fa) * (1 - fb) + (v[k + _side] * (1 - fa) + v[k + _side + 1] * fa) * fb;
             return (Lerp(_e), Lerp(_n));
         }
+
+        private bool Inside(long gx, long gy) => gx >= 0 && gy >= 0 && gx <= _faceN && gy <= _faceN;
     }
 }
 
