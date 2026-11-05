@@ -41,7 +41,7 @@ public static class CubeNetworkStage
         string? region = null, temp = null, chunks = null, osm = null;
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         int block = DefaultBlock, halo = DefaultHalo;
-        bool lv95Ground = false, planOnly = false;
+        bool lv95Ground = false, planOnly = false, smooth = true;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -58,6 +58,7 @@ public static class CubeNetworkStage
                 case "--lv95-ground": lv95Ground = true; break;
                 // the frames a box makes, with their leaves' LV95 extent, and nothing built (where to put a box across a frame edge)
                 case "--plan-only": planOnly = true; break;
+                case "--no-smooth": smooth = false; break;   // junctions only, centrelines left alone (as RoadGen --rewrite --no-smooth)
                 case "--cube-box":
                     var v = args[++i].Split(',').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
                     if (v.Length != 4) { Console.Error.WriteLine("--cube-box minE,minN,maxE,maxN (LV95 m)"); return 2; }
@@ -91,7 +92,7 @@ public static class CubeNetworkStage
         }
         string Beside(string name) => Path.Combine(osm, name);
         var options = new TileRewriter.Options(
-            Halo: halo, OsmOverlay: Beside("osm_overlay.tsv"), TramStops: Beside("tram_stops.tsv"),
+            Halo: halo, Smooth: smooth, OsmOverlay: Beside("osm_overlay.tsv"), TramStops: Beside("tram_stops.tsv"),
             SitgSigns: Beside("sitg_signs.tsv"), Places: Path.Combine(chunks, PlaceIndex.FileName), KeepPlans: false);
         Console.WriteLine($"cube network: {wanted.Count} leaves in {driver.Frames.Count} frames, blocks of {block}x{block} leaves, halo {halo}");
         var data = RegionData.Load(options, Console.WriteLine);
