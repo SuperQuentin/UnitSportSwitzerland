@@ -35,6 +35,8 @@ flat world; track B builds data the game does not read yet; C wires the two toge
 
 ### Step 0: baselines and data (no code)
 
+**Done** (#1501, Nov 5): baselines on `dd6b7207` in `D:/UnitSportSwitzerland/baselines/dd6b7207/` (304 rows, 4 flaky, 20 broken on main; 6,744 shots twice, `noise.json`); 1,896 2 m GeoTIFFs (2.19 GB).
+
 - The regression net on the `main` commit G2 starts from: `tools/test.sh coords` with `results.csv`
   and a `flaky.txt` (each FAIL rerun twice alone), and reference shots twice for the noise floor
   (`tools/refshots.sh main-<c>-a`, `-b`, `refshot-diff.py --write-noise`), kept in
