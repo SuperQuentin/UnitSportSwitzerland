@@ -100,8 +100,10 @@ tools/TerrainPreprocessor --cube --cube-out D:/UnitSportSwitzerland/test_b3/fram
   cells centred at base + 1 + 2i, cached as `E_N_2m.f32` (1 MB); `CubeHeightSource.Swiss` is a list,
   finest first (0.5 m, then 2 m where 0.5 m has none).
 - `--cube-check` adds: shared edges counted across frame and face edges; the frame ground against the
-  sources; with `--cube-terr DIR` against the LV95 `.terr` at the same place (lake beds left out:
-  the LV95 build holds beds there, the leaves the surveyed surface); points on edges across frames
+  sources; with `--cube-terr DIR` against the LV95 `.terr` at the same place (on leaves without the
+  water stage, lake beds left out: the LV95 build holds beds there, those leaves the surveyed surface).
+  Once `--cube-water` has run, the leaves hold the beds: the rows against the sources leave out points
+  under a leaf's `Water` section and print how many (#1568); points on edges across frames
   from both frames' grounds (1 µm). G1's height-field collision rows are informational (it misses
   2 cm; collision is trimesh patches, C2).
 
