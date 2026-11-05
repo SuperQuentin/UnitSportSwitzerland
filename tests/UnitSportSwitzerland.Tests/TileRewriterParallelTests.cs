@@ -85,6 +85,16 @@ public class TileRewriterParallelTests
         Assert.Equal(2, TileRewriter.BlockJobs(new Row(2), new TileRewriter.Options(Jobs: 4)));
     }
 
+    /// <summary>An explicit <c>--jobs</c> is held to the memory bound like the default (10 at once under a 6 GB limit ran out of memory).</summary>
+    [Fact]
+    public void An_explicit_jobs_is_held_to_the_memory()
+    {
+        long usable = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes - GC.GetTotalMemory(false);
+        long bound = Math.Max(1, usable / (2L * 1024 * 1024 * 1024));
+        int jobs = TileRewriter.BlockJobs(new Row(100), new TileRewriter.Options(Jobs: 1000));
+        Assert.InRange(jobs, 1, bound);
+    }
+
     /// <summary>A stats field no rule covers would throw in the first real run: every class is walked here, and the kinds of field add up.</summary>
     [Fact]
     public void Stats_add_up_field_by_field()

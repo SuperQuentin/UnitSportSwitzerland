@@ -311,6 +311,8 @@ public static partial class TileRewriter
         }
 
         int jobs = BlockJobs(loop, options);
+        if (options.Jobs > jobs && jobs == MemoryBound() && jobs < blocks.Count)
+            log($"  --jobs {options.Jobs} lowered to {jobs}: the memory allows {jobs} blocks at once");
         if (jobs > 1) log($"  {blocks.Count} blocks, {jobs} at once");
         using var slots = new SemaphoreSlim(jobs);
         var threads = new List<Thread>(blocks.Count);
@@ -342,19 +344,20 @@ public static partial class TileRewriter
 
     /// <summary>
     /// How many blocks run at once: one where blocks read what others write (<see cref="ITileLoop.BlocksIndependent"/>), share a
-    /// cache (<see cref="Inputs.Facades"/>) or a diagnostic writes files or traces; else <see cref="Options.Jobs"/>, else as many as
-    /// the cores and the memory (the heap limit where one is set) allow.
+    /// cache (<see cref="Inputs.Facades"/>) or a diagnostic writes files or traces; else <see cref="Options.Jobs"/> or the cores, held to what the memory (the heap limit where one is set) allows.
     /// </summary>
     public static int BlockJobs(ITileLoop loop, Options options)
     {
         if (!loop.BlocksIndependent || loop.Inputs.Facades is not null || Diagnosing) return 1;
-        int jobs = options.Jobs;
-        if (jobs <= 0)
-        {
-            long usable = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes - GC.GetTotalMemory(false);
-            jobs = (int)Math.Clamp(usable / BlockMemoryBytes, 1, Environment.ProcessorCount);
-        }
-        return Math.Clamp(jobs, 1, Math.Max(1, loop.Blocks.Count));
+        int jobs = options.Jobs > 0 ? options.Jobs : Environment.ProcessorCount;
+        return Math.Clamp(Math.Min(jobs, MemoryBound()), 1, Math.Max(1, loop.Blocks.Count));
+    }
+
+    /// <summary>How many blocks the heap allows at once (the heap limit where one is set), at least 1; an explicit <c>--jobs</c> is held to it too.</summary>
+    private static int MemoryBound()
+    {
+        long usable = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes - GC.GetTotalMemory(false);
+        return (int)Math.Clamp(usable / BlockMemoryBytes, 1, int.MaxValue);
     }
 
     /// <summary>Whether a diagnostic is on that appends to a file or prints a trace in the order of the work.</summary>

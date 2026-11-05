@@ -30,8 +30,8 @@ done: `Session.Absorb` adds them up in block order, so the log and `Stats` do no
 ## Jobs and memory
 
 `--jobs N` on both entries (`RoadGen --rewrite`, the preprocessor: `JobsFromCommandLine`), `Options.Jobs`. Default:
-`min(cores, (TotalAvailableMemoryBytes - heap in use) / 2 GB)`, so `DOTNET_GCHeapHardLimit` is obeyed by itself. An explicit `--jobs` is not
-bounded. Zurich below: its 12 blocks one by one pass under a 2 GB limit; 10 at once under a 6 GB limit run **out of memory**; the default gives one
+`min(cores, (TotalAvailableMemoryBytes - heap in use) / 2 GB)`, so `DOTNET_GCHeapHardLimit` is obeyed by itself. An explicit `--jobs` is held to
+the same bound (lowered, with one log line); before that, it was not. Zurich below: its 12 blocks one by one pass under a 2 GB limit; 10 at once under a 6 GB limit run **out of memory**; the default gives one
 at 6 GB, 7 at 16 GB, 12 on 32 GB (peak 10.5 GB).
 
 `Lv95TileLoop`'s blocks are 6 km squares, so a single dense block sets the time of a small region: Geneva's 24 tiles are most of the benchmark's stage.
