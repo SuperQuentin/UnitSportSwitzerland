@@ -89,6 +89,8 @@ TerrainPreprocessor --cube-compare --chunks <LV95 dir> --lv-roads <LV95 temp>/ro
 - **cover** (B3 PR 5a): held where the LV95 raster resolves the class (its 3 × 3 vertices round the nearest
   one all of it); at its class edges a leaf vertex up to 0.7 m from the nearest 1 m vertex can fall either
   side (~90 % for every class), reported, no bar.
+- **heights under water** (B3 PR 6): once the leaves carry `Water`, the beds are held as the dry ground (|mean| ≤
+  2 cm, p50 ≤ 7.2 cm); the leaves with the largest mean under water are listed.
 - **parking**: lots counted where both builds hold their area centroid (their home rule), matched by the
   vertex mean within 1 m, ring vertices in plan; bars 2 cm p99, none alone, the same vertex count.
 - D: region numbers and what breaks: `cube-roads`.

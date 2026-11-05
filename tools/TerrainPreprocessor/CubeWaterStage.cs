@@ -50,6 +50,8 @@ public static class CubeWaterStage
         public double VertexAreaM2;
         public double CellM;
         public bool HadWater;
+        /// <summary>The leaf has water or had some: it is solved and written (a leaf held only for its gaps is not).</summary>
+        public bool Water;
     }
 
     private sealed class Body
@@ -75,6 +77,7 @@ public static class CubeWaterStage
     {
         string? region = null, temp = null, bathyDir = null;
         int jobs = Math.Max(1, Environment.ProcessorCount / 2);
+        CubeKey? debug = null;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -84,6 +87,8 @@ public static class CubeWaterStage
                 case "--cube-temp": temp = args[++i]; break;
                 case "--bathy": bathyDir = args[++i]; break;
                 case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+                // one leaf solved and described, nothing written (a check)
+                case "--cube-water-debug": debug = CubeKey.Parse(args[++i]); break;
                 default: Console.Error.WriteLine($"--cube-water: unknown option {args[i]}"); return 2;
             }
         }
@@ -103,8 +108,8 @@ public static class CubeWaterStage
         {
             if (Load(region, heights, surfaceStore, key) is { } d) data[key] = d;
         });
-        Console.WriteLine($"cube water: {data.Count} of {leaves.Count} leaves hold water (or did) [{clock.Elapsed.TotalSeconds:F1}s]");
-        if (data.IsEmpty) return 0;
+        Console.WriteLine($"cube water: {data.Values.Count(d => d.Water)} of {leaves.Count} leaves hold water (or did), {data.Values.Count(d => !d.Water)} more with gaps in their heights [{clock.Elapsed.TotalSeconds:F1}s]");
+        if (!data.Values.Any(d => d.Water)) return 0;
 
         // ---- B: bodies over the region ----------------------------------------------------------------
         var ordered = data.Keys.OrderBy(k => k.Face).ThenBy(k => k.Y).ThenBy(k => k.X).ToList();
@@ -163,6 +168,17 @@ public static class CubeWaterStage
         }
         Console.WriteLine($"  {bodies.Count} water bodies, {bodies.Values.Sum(b => b.AreaM2) / 1e6:F1} km² [{clock.Elapsed.TotalSeconds:F1}s]");
 
+        if (debug is { } dk)
+        {
+            if (!data.TryGetValue(dk, out var dw) || !dw.Water) { Console.WriteLine($"{dk}: no water"); return 0; }
+            var d0 = data[dk];
+            int roots = d0.Labels.Where(l => l != 0).Select(l => rootOf[d0.LabelBase + l]).Distinct().Count();
+            Console.WriteLine($"{dk}: cell {d0.CellM:F3} m, {d0.Wet.Count(b => b != 0)} wet, {d0.Count} labels in {roots} bodies: "
+                + string.Join(", ", d0.Labels.Where(l => l != 0).Select(l => rootOf[d0.LabelBase + l]).Distinct().Select(r2 => bodies.TryGetValue(r2, out var b2) ? $"{b2.AreaM2 / 1e6:F2} km² at {b2.SurveyLevel:F2}" : "?")));
+            Solve(dk, data, heights, surfaceStore, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf, Console.WriteLine);
+            return 0;
+        }
+
         // ---- C: beds and levels, frame by frame -----------------------------------------------------------
         var driver = new FrameDriver(leaves, 0, SwissSeaLevel.Instance, heights.FrameLevel);
         var writer = new LeafWriter(region, driver.FrameLevel, [LeafKind.Heights, LeafKind.Water], [LatticeKind.Heights, LatticeKind.Water]);
@@ -172,7 +188,7 @@ public static class CubeWaterStage
         foreach (var plan in driver.Frames)
         {
             ct.ThrowIfCancellationRequested();
-            var todo = plan.Core.Where(data.ContainsKey).ToList();
+            var todo = plan.Core.Where(k => data.TryGetValue(k, out var dk2) && dk2.Water).ToList();
             if (todo.Count == 0) continue;
             var fs = Stopwatch.StartNew();
             var results = new ConcurrentDictionary<CubeKey, List<LeafSection>>();
@@ -232,11 +248,16 @@ public static class CubeWaterStage
         bool any = false;
         var tile = store.Read(key) is { } kept ? LeafHeights.Decode(kept) : LeafHeights.Decode(hs);
         int side = tile.Side, n = side - 1;
+        // 1 water, 0 dry, 2 no heights: neither land nor water, as a missing LV95 tile (the lake does not end where the data does)
         var wet = new byte[side * side];
-        if (cover != null)
-            for (int i = 0; i < wet.Length; i++)
-                if (cover[i] == (byte)CoverClass.Water) { wet[i] = 1; any = true; }
-        if (!any && !hadWater) return null;
+        bool gaps = false;
+        for (int i = 0; i < wet.Length; i++)
+        {
+            if (float.IsNaN(tile.Heights[i])) { wet[i] = 2; gaps = true; }
+            else if (cover != null && cover[i] == (byte)CoverClass.Water) { wet[i] = 1; any = true; }
+        }
+        if (!any && !hadWater)
+            return gaps ? new LeafData { Key = key, Cells = n, Wet = wet, SurfaceCm = Array.Empty<int>(), Labels = new int[side * side] } : null;
         var t = new LeafTransform(new WorkFrame(key.AncestorAt(heights.FrameLevel), SwissSeaLevel.Instance), key, tile.Bits);
         var surface = new int[side * side];
         for (int j = 0; j <= n; j++)
@@ -244,12 +265,11 @@ public static class CubeWaterStage
             {
                 float h = tile.Heights[j * side + i];
                 surface[j * side + i] = float.IsNaN(h) ? int.MinValue : (int)Math.Round((h - t.UndulationAt(i, j)) / Cm);
-                if (float.IsNaN(h)) wet[j * side + i] = 0;
             }
         // the leaf's spacing and a vertex's area: its corners on the ellipsoid
         var p00 = key.Vertex(tile.Bits, 0, 0, 0); var p10 = key.Vertex(tile.Bits, n, 0, 0); var p01 = key.Vertex(tile.Bits, 0, n, 0);
         double su = p00.DistanceTo(p10) / n, sv = p00.DistanceTo(p01) / n;
-        var d = new LeafData { Key = key, Cells = n, Wet = wet, SurfaceCm = surface, HadWater = hadWater, VertexAreaM2 = su * sv, CellM = 0.5 * (su + sv) };
+        var d = new LeafData { Key = key, Cells = n, Wet = wet, SurfaceCm = surface, HadWater = hadWater, Water = true, VertexAreaM2 = su * sv, CellM = 0.5 * (su + sv) };
         Label(d);
         return d;
     }
@@ -262,7 +282,7 @@ public static class CubeWaterStage
         int next = 0;
         for (int start = 0; start < labels.Length; start++)
         {
-            if (d.Wet[start] == 0 || labels[start] != 0) continue;
+            if (d.Wet[start] != 1 || labels[start] != 0) continue;
             labels[start] = ++next;
             stack.Push(start);
             while (stack.Count > 0)
@@ -280,7 +300,7 @@ public static class CubeWaterStage
 
         void Visit(int j)
         {
-            if (d.Wet[j] == 0 || labels[j] != 0) return;
+            if (d.Wet[j] != 1 || labels[j] != 0) return;
             labels[j] = next;
             stack.Push(j);
         }
@@ -311,7 +331,7 @@ public static class CubeWaterStage
     private sealed record Result(List<LeafSection> Sections, Dictionary<int, Stats> Stats);
 
     private static Result Solve(CubeKey key, IReadOnlyDictionary<CubeKey, LeafData> data, RegionHeights heights, LeafStore store,
-        BathySource? bathy, int[] rootOf, double[] maxDepthOf, double[] sqrtAreaOf, double[] surveyLevelOf)
+        BathySource? bathy, int[] rootOf, double[] maxDepthOf, double[] sqrtAreaOf, double[] surveyLevelOf, Action<string>? describe = null)
     {
         var me = data[key];
         int n = me.Cells, side = n + 1;
@@ -342,7 +362,8 @@ public static class CubeWaterStage
                         long x = ox + i;
                         if ((ulong)x >= (ulong)w) continue;
                         int wi = (int)(y * w + x), li = j * side + i;
-                        if (nd != null && nd.Wet[li] != 0)
+                        if (nd != null && nd.Wet[li] == 2) continue;   // no heights: unknown
+                        if (nd != null && nd.Wet[li] == 1)
                         {
                             state[wi] = 1;
                             surfaceQ[wi] = nd.SurfaceCm[li];
@@ -425,6 +446,23 @@ public static class CubeWaterStage
                 if (kind == 1) st.Surveyed++;
                 if (kind == 2) st.Filled++;
             }
+        if (describe != null)
+        {
+            int wetCore = 0, surveyed = 0;
+            double dmax = 0, dsum = 0, dsMax = 0;
+            for (int j = 0; j <= n; j++)
+                for (int i = 0; i <= n; i++)
+                {
+                    int wi = (halo + j) * w + halo + i, li = j * side + i;
+                    if (state[wi] != 1) continue;
+                    wetCore++;
+                    double dd = surfaceTile.Heights[li] - bedH[li];
+                    dmax = Math.Max(dmax, dd); dsum += dd; dsMax = Math.Max(dsMax, ds[wi]);
+                    if (survey != null && !float.IsNaN(survey[wi])) surveyed++;
+                }
+            describe($"  window {w}² (halo {halo}), state: {state.Count(b => b == 0)} dry {state.Count(b => b == 1)} wet {state.Count(b => b == 2)} unknown; "
+                + $"core wet {wetCore}, surveyed {surveyed}, depth max {dmax:F1} mean {dsum / Math.Max(1, wetCore):F1}, shore distance max {dsMax:F0} m; survey near: {survey != null}");
+        }
         var tile = new CubeTile { Key = key, Bits = now.Bits, Heights = bedH, Quantum = now.Quantum, Roads = now.Roads, Buildings = now.Buildings };
         var sections = new List<LeafSection> { LeafHeights.Encode(tile) };
         if (anyWet) sections.Add(LeafWater.Encode(water));

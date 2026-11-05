@@ -448,7 +448,7 @@
     <!-- the cube-native build's frames, leaf regions and leaf writer with its seam pass (#1507): pure, over TerrainFormat -->
     <Compile Include="..\..\tools\TerrainPreprocessor\FrameDriver.cs;..\..\tools\TerrainPreprocessor\LeafWriter.cs;..\..\tools\TerrainPreprocessor\TerrainSampler.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the road stage's spaces (#1507): the LV95 and work-frame tile loops, and the reader whose polylines they cut -->
-    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs;..\..\tools\TerrainPreprocessor\CoverExtractor.cs;..\..\tools\TerrainPreprocessor\FrameCoverSpace.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs;..\..\tools\TerrainPreprocessor\CoverExtractor.cs;..\..\tools\TerrainPreprocessor\FrameCoverSpace.cs;..\..\tools\TerrainPreprocessor\WaterWindow.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- OSM maxspeed to km/h for the overlay (#711): pure -->
     <Compile Include="..\..\tools\TerrainPreprocessor\OsmSpeed.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the neighbours' terrain (#965): their grids from LV95, and the gap fill: pure -->
