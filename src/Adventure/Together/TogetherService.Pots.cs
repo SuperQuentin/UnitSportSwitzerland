@@ -588,10 +588,8 @@ public partial class TogetherService
     public void AskStartAt(Vector3 top, bool raclette = false)
     {
         if (Me?.Invoke() is not { } me) return;
-        // the table's place in LV95: the player's, moved by the table's offset (x east, z south, y up)
-        var d = top - me.GlobalPosition;
-        var g = me.Global;
-        var table = g.Moved(d.X, -d.Z, d.Y);
+        // the table's place: its world point as a place (a world offset is the grid's, not the ENU, #1502)
+        var table = me.Origin!.ToGlobal(top);
         double e = table.Lv95.E, n = table.Lv95.N;
         float alt = (float)table.Alt;
         if (Authority) ServeStartAt(Self, raclette, e, n, alt);

@@ -68,7 +68,7 @@ public partial class VersteckisNetProbe : ChatProbe
             double d = g.HorizontalDistanceTo(to);
             if (d < 0.3) break;
             double s = Math.Min(d, step);
-            me.GlobalPosition += new Vector3((float)(de / d * s), 0.1f, (float)(-dn / d * s));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * s), 0.1f, (float)(-dn / d * s)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }
