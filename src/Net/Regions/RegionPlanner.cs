@@ -136,8 +136,8 @@ public static class RegionPlanner
     public static GlobalPos Centre(IReadOnlyList<Body> bodies, List<int> members)
     {
         double e = 0, nn = 0;
-        foreach (int i in members) { e += bodies[i].At.E; nn += bodies[i].At.N; }
-        return new GlobalPos(Math.Round(e / members.Count / 1000) * 1000, Math.Round(nn / members.Count / 1000) * 1000, 0);
+        foreach (int i in members) { var l = bodies[i].At.Lv95; e += l.E; nn += l.N; }   // the anchor is an LV95 km (a flat frame)
+        return GlobalPos.FromLv95(Math.Round(e / members.Count / 1000) * 1000, Math.Round(nn / members.Count / 1000) * 1000, 0);
     }
 
     private static int Find(int[] parent, int i)

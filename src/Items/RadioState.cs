@@ -32,11 +32,11 @@ public readonly record struct RadioState(
 {
     /// <summary>
     /// The state on the wire (a spawn, an RPC): ECEF, true north and the local ENU (#1503); in memory the heading and
-    /// velocity are in GlobalPos's offset axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
+    /// velocity are in the LV95 grid's axes at <see cref="Position"/>; the object containers save this form too (G2 A2b).
     /// </summary>
     public Godot.Collections.Dictionary ToDict()
     {
-        var enu = Position.Enu;
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["name"] = Name,
@@ -61,7 +61,7 @@ public readonly record struct RadioState(
     {
         var s = Read(d);
         if (!GlobalPos.IsWire(d)) return s;
-        var enu = s.Position.Enu;
+        var enu = Lv95Grid.Axes(s.Position);
         return s with { Yaw = enu.Yaw(s.Yaw), Velocity = enu.FromEnu(s.Velocity) };
     }
 

@@ -26,8 +26,6 @@ public sealed class BuildingExtractor
     private sealed record GwrPoint(uint Egid, double E, double N, int? Gklas, int? Year,
         int? Floors, int? Dwellings);
 
-    private Func<double, double, double?>? _heightOf;
-
     /// <summary>
     /// Depth of the building base below our terrain after normalisation. The source
     /// solids include a foundation block, so a little burial is correct — what is not
@@ -67,7 +65,7 @@ public sealed class BuildingExtractor
     // The tiles of the batch being extracted. A batch is not a rectangle when the map is made of
     // separate areas, and a sheet between two of them overlaps the batch's box without holding a
     // single building for it (#678).
-    private TileRegion? _region;
+    private ISourceRegion? _region;
 
     private bool Wanted((double MinE, double MinN, double MaxE, double MaxN) b,
         double minE, double minN, double maxE, double maxN) =>
@@ -177,20 +175,22 @@ public sealed class BuildingExtractor
     public int Reseated { get; private set; }
     public double MaxLift { get; private set; }
 
-    public Dictionary<TileId, BuildingTile> Extract(IReadOnlyCollection<TileId> tiles,
-        Func<double, double, double?>? heightOf = null)
+    /// <summary>
+    /// Every building owned by one of <paramref name="space"/>'s tiles (#1507): solids read through its source box and
+    /// region, cleaned and joined to GWR in their own LV95 coordinates, then placed through the space: plane, owner
+    /// tile, ground, local frame.
+    /// </summary>
+    public Dictionary<TTile, List<Building>> Extract<TTile>(IFeatureSpace<TTile> space) where TTile : notnull
     {
-        _heightOf = heightOf;
-        var result = tiles.ToDictionary(t => t, t => new BuildingTile { Id = t, Buildings = new() });
-        if (tiles.Count == 0) return result;
+        var result = space.Tiles.ToDictionary(t => t, _ => new List<Building>());
+        if (space.Tiles.Count == 0) return result;
 
-        double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
-        double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
-        _region = new TileRegion(tiles);
+        var (minE, minN, maxE, maxN) = space.SourceBox(Lv95Source.Instance);
+        _region = space.SourceRegion(Lv95Source.Instance);
 
         foreach (var (objektart, rings) in _solids(minE, minN, maxE, maxN))
             if (rings.Count > 0)
-                AddBuilding(result, objektart, rings);
+                AddBuilding(space, result, objektart, rings);
 
         return result;
     }
@@ -264,14 +264,16 @@ public sealed class BuildingExtractor
         return sorted[sorted.Length / 2];
     }
 
-    private void AddBuilding(Dictionary<TileId, BuildingTile> result, string? objektart,
-        List<GeoPackageReader.Ring> rings)
+    private void AddBuilding<TTile>(IFeatureSpace<TTile> space, Dictionary<TTile, List<Building>> result, string? objektart,
+        List<GeoPackageReader.Ring> rings) where TTile : notnull
     {
         rings = DropStrayFaces(rings);
         double minE = double.MaxValue, maxE = double.MinValue;
         double minN = double.MaxValue, maxN = double.MinValue;
-        double minZ = double.MaxValue, maxZ = double.MinValue;
+        // every ring point on the space's plane (LV95 itself in the LV95 build), and the lowest
+        double minZ = double.MaxValue;
         int triCount = 0;
+        var placed = new double[rings.Count][];
 
         foreach (var ring in rings)
         {
@@ -281,22 +283,38 @@ public sealed class BuildingExtractor
             triCount += corners - 2;
             for (int i = 0; i < ring.Count; i++)
             {
-                double x = ring.Xyz[i * 3], y = ring.Xyz[i * 3 + 1], z = ring.Xyz[i * 3 + 2];
-                if (x < minE) minE = x;
-                if (x > maxE) maxE = x;
-                if (y < minN) minN = y;
-                if (y > maxN) maxN = y;
-                if (z < minZ) minZ = z;
-                if (z > maxZ) maxZ = z;
+                double e = ring.Xyz[i * 3], n = ring.Xyz[i * 3 + 1];
+                if (e < minE) minE = e;
+                if (e > maxE) maxE = e;
+                if (n < minN) minN = n;
+                if (n > maxN) maxN = n;
             }
         }
         if (triCount == 0) return;
+        // the owner holds the centre, and the region holds the owner: a solid centred outside it is another run's,
+        // known before its every vertex is projected (a frame's query box is its whole 20 km cell)
+        if (_region != null && !_region.Touches((minE + maxE) * 0.5, (minN + maxN) * 0.5)) return;
+
+        for (int r = 0; r < rings.Count; r++)
+        {
+            var ring = rings[r];
+            if (ring.Count - 1 < 3) continue;
+            var p = placed[r] = new double[ring.Count * 3];
+            for (int i = 0; i < ring.Count; i++)
+            {
+                var (x, y, z) = space.FromSource(Lv95Source.Instance, ring.Xyz[i * 3], ring.Xyz[i * 3 + 1], ring.Xyz[i * 3 + 2]);
+                p[i * 3] = x; p[i * 3 + 1] = y; p[i * 3 + 2] = z;
+                if (z < minZ) minZ = z;
+            }
+        }
 
         // a building belongs to the tile containing its centre; it is never split, so it
-        // stays whole when neighbouring tiles stream in and out
+        // stays whole when neighbouring tiles stream in and out. The centre and the re-seat grid
+        // below are the source box's (LV95 axes), taken onto the plane (#1507)
         double cE = (minE + maxE) * 0.5, cN = (minN + maxN) * 0.5;
-        var tile = TileId.FromLv95(cE, cN);
-        if (!result.TryGetValue(tile, out var bucket)) return;
+        var (ox, oy, _) = space.FromSource(Lv95Source.Instance, cE, cN, minZ);
+        if (!space.TryOwner(ox, oy, out var tile)) return;
+        var bucket = result[tile];
 
         var match = FindCadastre(minE, minN, maxE, maxN, cE, cN);
         // counted here, not per query row: the batch bbox also returns buildings owned by
@@ -306,66 +324,80 @@ public sealed class BuildingExtractor
 
         // Re-seat the solid on our own heightfield. Sampling a 3x3 grid over the footprint
         // and taking the median keeps a building on a slope from being driven by one
-        // outlying corner.
+        // outlying corner. The grid is the source's (#1507): its box in LV95's own axes, each
+        // point taken onto the plane, so a work frame (turned ~1° from grid north) samples the
+        // ground where the LV95 build does; on a slope the median of a turned grid moved
+        // buildings by tens of centimetres.
         double lift = 0;
-        if (_heightOf != null)
-        {
-            var samples = new List<double>(9);
-            for (int gy = 0; gy <= 2; gy++)
-                for (int gx = 0; gx <= 2; gx++)
-                {
-                    double? h = _heightOf(minE + (maxE - minE) * gx / 2.0,
-                                          minN + (maxN - minN) * gy / 2.0);
-                    if (h.HasValue) samples.Add(h.Value);
-                }
-            if (samples.Count > 0)
+        var samples = new List<double>(9);
+        for (int gy = 0; gy <= 2; gy++)
+            for (int gx = 0; gx <= 2; gx++)
             {
-                samples.Sort();
-                double ground = samples[samples.Count / 2];
-                lift = (ground - FoundationDepth) - minZ;
-                if (Math.Abs(lift) > 0.05)
-                {
-                    Reseated++;
-                    MaxLift = Math.Max(MaxLift, Math.Abs(lift));
-                }
-                minZ += lift;
-                maxZ += lift;
+                var (sx, sy, _) = space.FromSource(Lv95Source.Instance, minE + (maxE - minE) * gx / 2.0,
+                                                   minN + (maxN - minN) * gy / 2.0, minZ);
+                double? h = space.Ground.Sample(sx, sy);
+                if (h.HasValue) samples.Add(h.Value);
+            }
+        if (samples.Count > 0)
+        {
+            samples.Sort();
+            double ground = samples[samples.Count / 2];
+            lift = (ground - FoundationDepth) - minZ;
+            if (Math.Abs(lift) > 0.05)
+            {
+                Reseated++;
+                MaxLift = Math.Max(MaxLift, Math.Abs(lift));
+            }
+        }
+
+        // every ring point in the tile's frame once; the solid's height range is theirs
+        float lowY = float.MaxValue, highY = float.MinValue;
+        var local = new float[rings.Count][];
+        for (int r = 0; r < rings.Count; r++)
+        {
+            if (placed[r] is not { } p) continue;
+            var l = local[r] = new float[p.Length];
+            for (int i = 0; i < p.Length; i += 3)
+            {
+                var (x, y, z) = space.ToLocal(tile, p[i], p[i + 1], p[i + 2] + lift);
+                l[i] = x; l[i + 1] = y; l[i + 2] = z;
+                if (y < lowY) lowY = y;
+                if (y > highY) highY = y;
             }
         }
 
         var tris = new float[triCount * 9];
         int w = 0;
-        foreach (var ring in rings)
+        for (int r = 0; r < rings.Count; r++)
         {
-            int corners = ring.Count - 1;
-            if (corners < 3) continue;
+            if (local[r] is not { } l) continue;
+            int corners = rings[r].Count - 1;
             // fan-triangulate; source faces are already triangles so this is usually a no-op
             for (int i = 1; i < corners - 1; i++)
             {
-                WriteVertex(tris, ref w, ring, 0, tile, lift);
-                WriteVertex(tris, ref w, ring, i, tile, lift);
-                WriteVertex(tris, ref w, ring, i + 1, tile, lift);
+                WriteVertex(tris, ref w, l, 0);
+                WriteVertex(tris, ref w, l, i);
+                WriteVertex(tris, ref w, l, i + 1);
             }
         }
 
-        bucket.Buildings.Add(new Building
+        bucket.Add(new Building
         {
             Kind = BuildingFormat.Classify(objektart, match?.Gklas, match?.Dwellings),
             Egid = match?.Egid ?? 0,
             YearBuilt = (ushort)Math.Clamp(match?.Year ?? 0, 0, ushort.MaxValue),
             Floors = (byte)Math.Clamp(match?.Floors ?? 0, 0, 255),
-            MinY = (float)minZ,
-            MaxY = (float)maxZ,
+            MinY = lowY,
+            MaxY = highY,
             Triangles = tris,
         });
     }
 
-    private static void WriteVertex(float[] tris, ref int w, GeoPackageReader.Ring ring,
-        int index, TileId tile, double lift)
+    private static void WriteVertex(float[] tris, ref int w, float[] local, int index)
     {
-        tris[w++] = (float)(ring.Xyz[index * 3] - tile.MinE);
-        tris[w++] = (float)(ring.Xyz[index * 3 + 2] + lift);
-        tris[w++] = (float)(tile.MaxN - ring.Xyz[index * 3 + 1]);
+        tris[w++] = local[index * 3];
+        tris[w++] = local[index * 3 + 1];
+        tris[w++] = local[index * 3 + 2];
     }
 
     /// <summary>Nearest GWR point whose coordinates fall inside the building footprint.</summary>

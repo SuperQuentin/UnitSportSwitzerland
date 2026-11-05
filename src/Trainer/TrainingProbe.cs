@@ -203,8 +203,9 @@ public partial class TrainingProbe : Node
         for (int i = 0; i < 300 && session.State != TrainingSession.Phase.Riding; i++) await Wait(0.1);
         Check(session.State == TrainingSession.Phase.Riding, $"riding ({session.State})");
 
-        double X() => GlobalPos.FromLv95(e0, n0, 0).OffsetTo(_origin.ToGlobal(me.GlobalPosition)).East;
-        double Y() => GlobalPos.FromLv95(e0, n0, 0).OffsetTo(_origin.ToGlobal(me.GlobalPosition)).North;
+        // course metres on the LV95 grid, as the course is laid (ToWorld(e0 + x, n0))
+        double X() => _origin.ToLv95(me.GlobalPosition).E - e0;
+        double Y() => _origin.ToLv95(me.GlobalPosition).N - n0;
 
         // the T in sight: its roads, straight on taken
         for (int i = 0; i < 300 && session.NextJunction == null; i++) await Wait(0.1);

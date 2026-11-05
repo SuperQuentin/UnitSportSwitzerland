@@ -28,7 +28,6 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
 | `traffic_endpoints.tsv` (the test region) | four trailing columns `lat lon h true_heading` (the reader ignored extra columns before) |
 
 - **Not here**:
-  - **Castles, venues and givers**: their points are snapped onto building solids, so they follow buildings, row 3 (#1535).
   - **Wikidata's `atlas_facts.json`**: it carries no positions, only a match distance and an elevation.
   - **`horizon.bin`**: none is written for a cube region. Its far terrain is the pyramid.
   - **`manifest.json`**: the cube region has `cube_manifest.json`.
@@ -42,6 +41,7 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
   selection's LV95 box into `<chunks>_cube`, in order:
   1. `--cube` (heights)
   2. `--cube-roads`
+  2b. `--cube-buildings` (buildings layer; the LV95 pass's sources: the GeoPackage or the selection's newest sheet zips, the GWR)
   3. `--cube-network`
   4. `--cube-cover`
   5. `--cube-water`
@@ -65,3 +65,19 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
     4,278 pier points, airport, 4 runway ends, 9 stands, 608 lift ends);
   - headings: 24 berths and 9 stands, worst 0.00000°.
 - **The traffic-lights test region** (`RoadGen --test-region`): 382 endpoints, worst 0.007 cm; 29 places.
+
+## Castles, venues and givers (after buildings, #1535)
+
+- Written by their own stages (decided with the user: in the stages, exact on the solids; the committed nationwide
+  files gain the Earth positions at their next full rebuild, on a machine with every canton's buildings):
+  - **`--castles`** writes, beside `Castles.List.cs`'s `List`, a `Geo` array: per castle, latitude, longitude and
+    ellipsoidal height of each point at the base (`MinY`) of the solid it is in.
+  - **`--venues`** adds `lat lon h` columns after the name. The height is the base of the solid the venue is inside or
+    snapped onto; in the open, the tiles' ground; off the built tiles, the Plateau's height, as `GeoInput` placed the
+    OSM point, so it goes back to OSM's latitude and longitude.
+  - **`--givers`** adds `lat lon h true_heading` columns. The height is the ground (the Plateau's off the tiles); the
+    heading is in radians from true north.
+  - The columns are written only when every row has them; the readers (at least 9 columns) read them when present.
+- Checked on the D: region's buildings: 35 castles (35 `Geo` rows), 29,786 venues (inside a solid 2,661, median
+  451 m ellipsoidal; snapped 191; open 368; off the tiles 26,566 at the Plateau's ~500 m), 317 givers (423-1,565 m).
+  `Giver`, `Venue`, `Castle` and `Errand` tests: 57 passed.

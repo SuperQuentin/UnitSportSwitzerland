@@ -320,7 +320,7 @@ public partial class RaceNpcs : Node
         {
             long id = PlayerReplication.NpcId(owner, n);
             if (_live.ContainsKey(id)) continue;
-            var (pos, facing) = place?.Invoke(ids.Count) ?? (at + back * (8f * (ids.Count + 1)) + Vector3.Up * 1.5f, yaw);
+            var (pos, facing) = place?.Invoke(ids.Count) ?? (at + Lv95Grid.ToEnu(at, back * (8f * (ids.Count + 1)) + Vector3.Up * 1.5f), yaw);
             _live[id] = new Live { Kind = kind, Since = Now };
             _spawner.Spawn(PlayerReplication.NpcData(owner, n, (int)kind, pos, facing, setup));
             ids.Add(id);

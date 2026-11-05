@@ -282,7 +282,7 @@ public partial class CarCdCheck : Node
                 if (RadioManager.Instance is { } radios)
                 {
                     var spot = me.GlobalPosition + Vector3.Up * 1.2f + forward.Normalized() * 1.2f;
-                    radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(spot), radios.Origin.Frame.OffsetYawOf(spot, me.Rotation.Y), Vector3.Zero));
+                    radios.Throw(new RadioState("", 0, radios.Origin.ToGlobal(spot), radios.Origin.Frame.GridYawOf(spot, me.Rotation.Y), Vector3.Zero));
                 }
                 _step++;
                 break;

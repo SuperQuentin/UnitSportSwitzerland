@@ -185,9 +185,9 @@ public partial class RideProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!TestWorld.TryGround(_chunks, at, out float ground)) return;
+            if (!TestWorld.TryGround(_chunks?.Ground, at, out float ground)) return;
 
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
             // (west). Set before the node enters the tree, whose _Ready takes its view from it.
             if (CmdArgs.Float("--heading") is float bearing)
@@ -329,14 +329,14 @@ public partial class RideProbe : Node
         {
             _sinceReport = 0;
             var p = _player.GlobalPosition;
-            float clearance = TestWorld.TryGround(_chunks, p, out float g) ? p.Y - g : float.NaN;
+            float clearance = TestWorld.TryGround(_chunks?.Ground, p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
                 + (_player.Vehicle is Bicycle cycle ? $"  {cycle.Gears}  {cycle.Cadence,3:F0} rpm  {cycle.Position}{(cycle.Spec.Assist != null ? $"  {ElectricAssist.Name(cycle.Level)} +{cycle.MotorWatts:F0} W  battery {cycle.BatteryWh:F1} Wh" : "")}{(cycle.RearLocked ? "  REAR LOCKED" : "")}  W' {cycle.Body.WFraction * 100f,3:F0}%  {cycle.Body.HeartRate,3:F0} bpm" : "")
-                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}"
+                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c.Ground, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}"
                     + $"  pitch {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().X),5:F1}°  roll {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().Z),5:F1}°" : "")
-                + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
+                + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc.Ground, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
                     + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
                 + (Inside() is { } inside ? $"  inside {inside.DressedKind()} {inside.Key}" : "")
@@ -356,7 +356,7 @@ public partial class RideProbe : Node
 
         var end = _player.GlobalPosition;
         float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
-        bool underground = TestWorld.TryGround(_chunks, end, out float endGround) && end.Y < endGround - 1.5f;
+        bool underground = TestWorld.TryGround(_chunks?.Ground, end, out float endGround) && end.Y < endGround - 1.5f;
         if (Inside() is { } building)
         {
             // driven in through the door's portal: the interior's floor is the ground in there
@@ -403,7 +403,7 @@ public partial class RideProbe : Node
     {
         var fwd = -_player!.GlobalBasis.Z with { Y = 0 };
         var at = _player.GlobalPosition + fwd.Normalized() * ahead;
-        _chunks.TryGetHeight(at, out float g);
+        _chunks.Ground.TryGetHeight(at, out float g);
         var size = new Vector3(30f, 4f, 1f);
         var wall = new StaticBody3D { Name = "CrashWall" };
         wall.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
@@ -440,7 +440,7 @@ public partial class RideProbe : Node
         if (limp && _sinceCrashReport >= 0.2)
         {
             _sinceCrashReport = 0;
-            float clearance = _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+            float clearance = _chunks.Ground.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[crash] t={_elapsed - _thrownAt,4:F1}s hips {p.X - _thrownFrom.X,6:F1} {p.Y - _thrownFrom.Y,5:F1} {p.Z - _thrownFrom.Z,6:F1}  clearance {clearance:F2}"
                 + (XR.XrSession.Active ? $"  VR anchor {XR.XrSession.Anchor?.Name} at {XR.XrSession.Anchor?.GlobalPosition.DistanceTo(p):F1} m" : ""));
         }

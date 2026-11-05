@@ -189,7 +189,7 @@ public partial class SteinService : Node
         // towards north, on the grid), a Godot yaw a quarter turn less
         var place = GlobalPos.FromLv95(l.E, l.N, 0);
         var (x, y, z) = place.ToWire();
-        float heading = place.TrueYaw(l.Yaw - Mathf.Pi / 2);
+        float heading = Lv95Grid.TrueYaw(place, l.Yaw - Mathf.Pi / 2);
         foreach (int p in Multiplayer.GetPeers())
         {
             bool near = p == l.Thrower || _adventure.PositionOf?.Invoke(p) is { } at && g.DistanceTo(at) <= HearM;
@@ -244,6 +244,6 @@ public partial class SteinService : Node
     {
         var at = GlobalPos.FromWire(x, y, z);
         Landed?.Invoke(new SteinLanding(thrower, name, attempt, cls, metres, angle, speed, power, batzen, points, foul.Length == 0 ? null : foul,
-            at.E, at.N, at.OffsetYaw(heading) + Mathf.Pi / 2));
+            at.Lv95.E, at.Lv95.N, Lv95Grid.GridYaw(at, heading) + Mathf.Pi / 2));
     }
 }

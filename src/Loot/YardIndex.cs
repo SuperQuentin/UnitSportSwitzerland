@@ -43,7 +43,7 @@ internal sealed class YardIndex
                 var id = here.Neighbour(tx, tz);
                 if (_tiles.ContainsKey(id) || _loading.ContainsKey(id)) continue;
                 // how far the player is outside the tile, in its own frame (#1443)
-                var (x, z) = id.Local(at.E, at.N);
+                var (x, z) = id.Local(at.Lv95.E, at.Lv95.N);
                 double dx = Math.Max(0, Math.Max(-x, x - ChunkFormat.TileSizeM));
                 double dz = Math.Max(0, Math.Max(-z, z - ChunkFormat.TileSizeM));
                 if (dx * dx + dz * dz > TileReach * TileReach) continue;

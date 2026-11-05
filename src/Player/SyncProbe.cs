@@ -103,9 +103,9 @@ public partial class SyncProbe : Node
 
         var (e, n) = SpawnPoint.ParseTarget();
         var at = _origin.ToWorld(e, n, 0);
-        if (!TestWorld.TryGround(_chunks, at, out float g)) return;   // collision follows the player, who asks for it
+        if (!TestWorld.TryGround(_chunks?.Ground, at, out float g)) return;   // collision follows the player, who asks for it
 
-        _owner = new FootPlayer { Name = "Owner", Terrain = _chunks };
+        _owner = new FootPlayer { Name = "Owner", Terrain = _chunks?.Ground };
         AddChild(_owner);
         _owner.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
         if (_chunks == null) _owner.DebugLaunch(_owner.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for

@@ -437,7 +437,7 @@ public partial class TogetherService
     private void PotState(int id, byte spot, byte flags, double x, double y, double z, byte split, int dips, long[] seats, byte[] bits, int cheese, byte quality)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        ApplyPot(id, spot, flags, at.E, at.N, (float)at.Alt, split, dips, seats, bits, cheese, quality);
+        ApplyPot(id, spot, flags, at.Lv95.E, at.Lv95.N, (float)at.Alt, split, dips, seats, bits, cheese, quality);
     }
 
     private void ApplyPot(int id, byte spot, byte flags, double e, double n, float alt, byte split, int dips, long[] seats, byte[] bits, int cheese, byte quality)
@@ -588,10 +588,8 @@ public partial class TogetherService
     public void AskStartAt(Vector3 top, bool raclette = false)
     {
         if (Me?.Invoke() is not { } me) return;
-        // the table's place in LV95: the player's, moved by the table's offset (x east, z south, y up)
-        var d = top - me.GlobalPosition;
-        var g = me.Global;
-        var table = g.Moved(d.X, -d.Z, d.Y);
+        // the table's place: its world point as a place (a world offset is the grid's, not the ENU, #1502)
+        var table = me.Origin!.ToGlobal(top);
         double e = table.Lv95.E, n = table.Lv95.N;
         float alt = (float)table.Alt;
         if (Authority) ServeStartAt(Self, raclette, e, n, alt);
@@ -665,7 +663,7 @@ public partial class TogetherService
     {
         if (!_server) return;
         var at = GlobalPos.FromWire(x, y, z);
-        ServeStartAt(Multiplayer.GetRemoteSenderId(), raclette, at.E, at.N, (float)at.Alt);
+        ServeStartAt(Multiplayer.GetRemoteSenderId(), raclette, at.Lv95.E, at.Lv95.N, (float)at.Alt);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -759,7 +757,7 @@ public partial class TogetherService
     private void PotOffered(int id, double x, double y, double z)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        ApplyOffered(id, at.E, at.N);
+        ApplyOffered(id, at.Lv95.E, at.Lv95.N);
     }
 
     private void ApplyOffered(int id, double e, double n)

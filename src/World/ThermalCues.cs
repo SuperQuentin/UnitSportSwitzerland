@@ -88,7 +88,7 @@ public partial class ThermalCues : Node3D
         int n = 0;
         if (cam != null)
         {
-            AirLiftField.Use(_chunks, _origin);
+            AirLiftField.Use(_chunks?.Ground, _origin);
             n = AirLiftField.ThermalsNear(cam.GlobalPosition, Reach, _found);
         }
         if (n != _shown)

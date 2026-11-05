@@ -75,7 +75,7 @@ public sealed class Actor
     {
         var at = _origin.ToWorld(spot.E, spot.N, 0);
         // the surface is enough: the body (an NPC anchors its own ground) waits for its collision itself
-        if (!_chunks.TryGetSurface(at, out float g)) return null;
+        if (!_chunks.Ground.TryGetSurface(at, out float g)) return null;
         return at with { Y = g };
     }
 
@@ -144,7 +144,7 @@ public sealed class Actor
         if (Spec.Drive == Drive.Fly && !_launched)
         {
             var at = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
-            float floor = _chunks.TryGetSurface(at, out float g) ? g : Body.GlobalPosition.Y;
+            float floor = _chunks.Ground.TryGetSurface(at, out float g) ? g : Body.GlobalPosition.Y;
             float y = Spec.At.Agl ? floor + Spec.At.H : Spec.At.H;
             float heading = WorldBearing(at, Spec.Heading);
             Body.Rotation = new Vector3(0, -Mathf.DegToRad(heading), 0);
@@ -252,11 +252,11 @@ public sealed class Actor
         {
             // on the step of the door nearest its spot, facing out, the door asked open
             var near = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
-            if (!_chunks.TryGetSurface(near, out float ng)) return;
+            if (!_chunks.Ground.TryGetSurface(near, out float ng)) return;
             if (DoorFor(near with { Y = ng }) is not { } door) return;
             var outward = (door.Outward with { Y = 0 }).Normalized();
             at = door.World + outward * 0.8f;
-            if (_chunks.TryGetSurface(at, out float dg)) at.Y = dg;
+            if (_chunks.Ground.TryGetSurface(at, out float dg)) at.Y = dg;
             bearing = Mathf.RadToDeg(Mathf.Atan2(outward.X, -outward.Z));
             scripted = false;
             Interiors.InteriorManager.Instance?.OpenDoorForCamera(door.World + outward * 1.5f, 6f);
@@ -268,7 +268,7 @@ public sealed class Actor
             var fwd = MathX.Flat(_route.Line.PointAt(s + 2f) - _route.Line.PointAt(s - 2f)).Normalized();
             bearing = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
             scripted = false;
-            if (!_chunks.TryGetHeight(at, out float rg)) return;
+            if (!_chunks.Ground.TryGetHeight(at, out float rg)) return;
             at.Y = rg;
             _arc = s;
         }
@@ -285,7 +285,7 @@ public sealed class Actor
         // same for every actor here, so an NPC is named as a race entrant of owner 0 (an index of its
         // own) and its look registered there; a walker registers its own, the one walking in its shot
         var name = npc ? Net.PlayerReplication.NodeName(Net.PlayerReplication.NpcId(0, Index + 1)) : $"Actor{Index}";
-        var body = new FootPlayer { Name = name, Terrain = _chunks, Npc = npc };
+        var body = new FootPlayer { Name = name, Terrain = _chunks?.Ground, Npc = npc };
         body.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
         body.AppearanceBits = Spec.Who?.AppearanceBits ?? Avatar.Appearance.ForSeed(Spec.Seed).Pack();
         if (npc) Avatar.Appearance.Register(body.RiderIndex(), body.AppearanceBits);
@@ -553,7 +553,7 @@ public sealed class RouteBook
         var fwd = MathX.Flat(route.Line.PointAt(s + 2f) - route.Line.PointAt(Mathf.Max(0f, s - 2f))).Normalized();
         var right = fwd.Cross(Vector3.Up).Normalized();
         p += right * at.X;
-        float g = chunks.TryGetSurface(p, out float h) ? h : p.Y;
+        float g = chunks.Ground.TryGetSurface(p, out float h) ? h : p.Y;
         return p with { Y = Mathf.Max(g, p.Y) + at.Y };
     }
     public float StartArc(string key) => _routes.TryGetValue(key, out var e) ? e.Start : 0f;

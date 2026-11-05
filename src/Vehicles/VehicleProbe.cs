@@ -46,7 +46,7 @@ public partial class VehicleProbe : Node
 
     private VehicleManager Vehicles => VehicleManager.Instance!;
     private IEnumerable<VehicleBody> All => Vehicles.GetChildren().OfType<VehicleBody>();
-    private float Agl(Vector3 p) => _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+    private float Agl(Vector3 p) => _chunks.Ground.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
 
     private void Check(bool condition, string what)
     {
@@ -110,13 +110,13 @@ public partial class VehicleProbe : Node
             case 0:
                 if (p == null)
                 {
-                    if (!_chunks.TryGetHeight(at, out float g)) return;
-                    _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+                    if (!_chunks.Ground.TryGetHeight(at, out float g)) return;
+                    _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
                     AddChild(_player);
                     _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
                     return;
                 }
-                if (!_chunks.HasCollisionAt(at) || !p.IsOnFloor()) return;
+                if (!_chunks.Ground.HasCollisionAt(at) || !p.IsOnFloor()) return;
                 Check(p.SetRide(RideKind.Helicopter), "mounted a helicopter");
                 Next("climb");
                 break;
@@ -162,7 +162,7 @@ public partial class VehicleProbe : Node
 
             case 4:
                 // back to the spawn point: wherever the canopy came down may be too steep to ride
-                if (_mark == 0 && _t < 0.1 && _chunks.TryGetHeight(at, out float g4))
+                if (_mark == 0 && _t < 0.1 && _chunks.Ground.TryGetHeight(at, out float g4))
                     p.GlobalPosition = new Vector3(at.X, g4 + 0.5f, at.Z);
                 if (!p.IsOnFloor() || p.GroundSpeed > 1f) return;
                 if (_t > 3 && p.Ride == RideKind.OnFoot && _mark == 0)
@@ -325,7 +325,7 @@ public partial class VehicleProbe : Node
             Check(_tracked != null && IsInstanceValid(_tracked) && !_tracked.Wrecked,
                 "the abandoned plane flies on instead of exploding");
             // back into a plane on the ground for the crash test
-            if (_chunks.TryGetHeight(p.GlobalPosition, out float g)) p.GlobalPosition = p.GlobalPosition with { Y = g + 0.5f };
+            if (_chunks.Ground.TryGetHeight(p.GlobalPosition, out float g)) p.GlobalPosition = p.GlobalPosition with { Y = g + 0.5f };
             p.RequestReplacement();   // the teleport path, which forgives the fall in progress
             _mark = 5;
             _t = 0;

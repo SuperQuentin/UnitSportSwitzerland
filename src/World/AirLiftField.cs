@@ -23,7 +23,7 @@ public static class AirLiftField
     /// <summary>The ground of the tiles in use, LV95 in and out.</summary>
     private sealed class ChunkTerrain : IAirLiftTerrain
     {
-        public ChunkManager? Chunks;
+        public IWorldGround? Chunks;
         public WorldOrigin? Origin;
 
         public bool TryHeight(double e, double n, out float height)
@@ -54,7 +54,7 @@ public static class AirLiftField
     public static IAirLiftTerrain Terrain => Ground;
 
     /// <summary>Points the field at the tiles in use (the flyer's own chunks and origin); cheap when unchanged.</summary>
-    public static void Use(ChunkManager? chunks, WorldOrigin? origin)
+    public static void Use(IWorldGround? chunks, WorldOrigin? origin)
     {
         if (ReferenceEquals(Ground.Chunks, chunks) && ReferenceEquals(Ground.Origin, origin)) return;
         Ground.Chunks = chunks;

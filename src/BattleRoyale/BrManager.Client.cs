@@ -192,7 +192,7 @@ public partial class BrManager
     {
         if (_server) return;
         var at = GlobalPos.FromWire(x, y, z);
-        double e = at.E, n = at.N, alt = onMap ? double.NaN : at.Alt;
+        double e = at.Lv95.E, n = at.Lv95.N, alt = onMap ? double.NaN : at.Alt;
         string name = _state.Find(from)?.Name ?? "?";
         // one ping a player: a new one replaces the last
         _pings.RemoveAll(p => p.Peer == from);
@@ -583,9 +583,9 @@ public partial class BrManager
             heading = new Vector2(fwd.X, -fwd.Z);
             heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector2.Up;
         }
-        // the world's axes into the zone's (GlobalPos offsets): the identity on the flat ground, a turn in an anchor frame
-        heading = _viewNorth.WorldToOffset(Origin.Frame, at, heading);
-        return (ZonePoint(at), heading, Mathf.RadToDeg(_viewNorth.Offset(Origin.Frame, at)));
+        // the world's axes into the zone's (the LV95 grid's, #1502): the identity on the flat ground, a turn in an anchor frame
+        heading = _viewNorth.WorldToGrid(Origin.Frame, at, heading);
+        return (ZonePoint(at), heading, Mathf.RadToDeg(_viewNorth.Grid(Origin.Frame, at)));
     }
 
     private TrueNorth.Near _viewNorth;

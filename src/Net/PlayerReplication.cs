@@ -49,12 +49,12 @@ public static class PlayerReplication
 
     /// <summary>
     /// A race NPC's spawn data: its place as ECEF and its heading from true north there (#1503); <paramref name="yaw"/>
-    /// is in GlobalPos's offset axes at <paramref name="at"/> (the server's flat frame: its world yaw).
+    /// is in the LV95 grid's axes at <paramref name="at"/> (the server's flat frame: its world yaw).
     /// </summary>
     public static Godot.Collections.Array NpcData(long owner, int n, int rideKind, GlobalPos at, float yaw, int setup = 0)
     {
         var (x, y, z) = at.ToWire();
-        return new() { owner, n, rideKind, x, y, z, at.TrueYaw(yaw), setup };
+        return new() { owner, n, rideKind, x, y, z, Lv95Grid.TrueYaw(at, yaw), setup };
     }
 
     // ---- bots (#837) ----
@@ -75,7 +75,7 @@ public static class PlayerReplication
     public static Godot.Collections.Array BotData(int n, GlobalPos at, float yaw, string name)
     {
         var (x, y, z) = at.ToWire();
-        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, at.TrueYaw(yaw), 0, DriverBot, name };
+        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, Lv95Grid.TrueYaw(at, yaw), 0, DriverBot, name };
     }
 
     public static FootPlayer CreateNpc(Godot.Collections.Array d, WorldOrigin origin)
@@ -98,7 +98,7 @@ public static class PlayerReplication
         if (region != null)
         {
             npc.Region = region;
-            npc.Terrain = region.Chunks;
+            npc.Terrain = region.Chunks?.Ground;
         }
         npc.SetMultiplayerAuthority((int)owner);
         if (d.Count > 8 && d[8].AsInt32() == DriverBot)

@@ -304,7 +304,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>The ground (or water surface) under a point, or the point's own height when the tile is not loaded.</summary>
-    public float Ground(Vector3 p) => _chunks.TryGetSurface(p, out float h) ? h : p.Y;
+    public float Ground(Vector3 p) => _chunks.Ground.TryGetSurface(p, out float h) ? h : p.Y;
 
     // ------------------------------------------------------------------------------------
     // habitat and species
@@ -365,7 +365,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         float a = (float)(_rng.NextDouble() * Mathf.Tau);
         float d = Mathf.Lerp(SpawnMin, SpawnMax, (float)_rng.NextDouble());
         var p = focus + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
-        if (!_chunks.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return (Habitat.None, 0);
+        if (!_chunks.Ground.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return (Habitat.None, 0);
         p.Y = ground;
         var habitat = HabitatAt(cover, ground);
         var tile = _origin.TileAt(p);
@@ -443,7 +443,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// </summary>
     private bool CoverAt(Vector3 p, out CoverClass cover)
     {
-        if (_chunks.TryGetCover(p, out cover)) return true;
+        if (_chunks.Ground.TryGetCover(p, out cover)) return true;
         if (!Headless || _chunks.Source is not { } source) return false;
         var tile = _origin.TileAt(p);
         if (!_cover.TryGetValue(tile, out var raster))
@@ -733,7 +733,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         EnsureTrees(_origin.TileAt(near));
         bool percher = b.Species.Body is BodyPlan.Passerine or BodyPlan.Corvid or BodyPlan.Pigeon or BodyPlan.Woodpecker;
         if (percher && NearestTreeTop(near, 16f) is { } top) return (top, Bird.Mode.Perched, null);
-        if (b.Species.Body is BodyPlan.Woodpecker || !_chunks.TryGetHeight(near, out float ground)
+        if (b.Species.Body is BodyPlan.Woodpecker || !_chunks.Ground.TryGetHeight(near, out float ground)
             || World.WaterField.TryGetStill(near, out float still, out _) && still > ground
             || CoverAt(near, out var cover) && cover is CoverClass.Water or CoverClass.Forest) return null;
         return (near with { Y = ground }, Bird.Mode.Ground, null);
@@ -1155,7 +1155,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         var dir = flat.Normalized();
         var p = at + dir * Mathf.Lerp(120f, 220f, (float)_rng.NextDouble())
             + dir.Cross(Vector3.Up) * ((float)_rng.NextDouble() * 2f - 1f) * 60f;
-        if (!_chunks.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return 0;
+        if (!_chunks.Ground.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return 0;
         p.Y = ground;
         var s = Pick(HabitatAt(cover, ground), ground);
         if (s == null) return 0;

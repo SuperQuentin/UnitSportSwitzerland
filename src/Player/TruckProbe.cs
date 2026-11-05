@@ -83,9 +83,9 @@ public partial class TruckProbe : Node
         if (_player == null)
         {
             var start = _route.Centre[Mathf.Min(8, _route.Centre.Count - 1)];
-            if (!_chunks.TryGetHeight(start, out float g) || !_chunks.HasCollisionAt(start)) return;
+            if (!_chunks.Ground.TryGetHeight(start, out float g) || !_chunks.Ground.HasCollisionAt(start)) return;
             var ahead = _route.Centre[Mathf.Min(14, _route.Centre.Count - 1)] - start;
-            _player = new FootPlayer { Name = "TruckProbe", Terrain = _chunks };
+            _player = new FootPlayer { Name = "TruckProbe", Terrain = _chunks?.Ground };
             // a node faces −Z: the yaw that turns −Z onto the road
             _player.Rotation = new Vector3(0, Mathf.Atan2(-ahead.X, -ahead.Z), 0);
             AddChild(_player);
@@ -153,7 +153,7 @@ public partial class TruckProbe : Node
             GD.Print($"[truckprobe] t={_t,5:F1}s  {_player.RideSpeed * 3.6f,5:F1} km/h  {truck.GearLabel} {truck.Rpm:F0} rpm"
                 + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}"
                 + $"  off-centre {string.Join(" ", Enumerable.Range(0, truck.SectionCount).Select(k => { var b = truck.Train.Bodies[k]; return $"{Off(_player.GlobalTransform * (truck.NodeLocal(k) * new Vector3(0, 0, -(b.CgAt - HeavyTrain.RearGroupAt(b.Spec)))), out _):F1}"; }))} m"
-                + $"  roll {truck.Train.WorstRoll:F2}  section hits {_player.SectionHits}  on {Audio.Surfaces.At(_chunks, pos, false)}"
+                + $"  roll {truck.Train.WorstRoll:F2}  section hits {_player.SectionHits}  on {Audio.Surfaces.At(_chunks?.Ground, pos, false)}"
                 + $"  mem {Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1e6:F0} MB  objects {Performance.GetMonitor(Performance.Monitor.ObjectCount):F0}  nodes {Performance.GetMonitor(Performance.Monitor.ObjectNodeCount):F0}");
         }
         _sinceShot += delta;

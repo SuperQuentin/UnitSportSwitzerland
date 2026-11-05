@@ -414,7 +414,7 @@ public partial class CraneService : Node
     private static GlobalPos Lv95(TileId tile, Vector3 local)
     {
         var (e, n) = tile.Global(local.X, local.Z);
-        return new(e, n, local.Y);
+        return GlobalPos.FromLv95(e, n, local.Y);
     }
 
     private static double Flat(GlobalPos a, GlobalPos b) => a.HorizontalDistanceTo(b);
