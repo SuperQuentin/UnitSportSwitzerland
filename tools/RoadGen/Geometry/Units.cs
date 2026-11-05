@@ -32,7 +32,9 @@ public interface IUnits
 
     /// <summary>
     /// A plan-view direction at plane point <paramref name="at"/> in tile <paramref name="id"/>'s own axes
-    /// (x east, y north), not normalised again: what a heading written into the tile is measured from.
+    /// (x east, y north), not normalised again: what a heading written into the tile is measured from. Both
+    /// instances' tiles are plane-aligned (the identity): a frame's loop turns its records into each leaf's
+    /// anchor frame, headings by the leaf's Jacobian, when it writes them (<c>LeafRecords</c>).
     /// </summary>
     Vec2 DirectionToTile(TileId id, Vec2 at, Vec2 direction);
 
@@ -41,6 +43,21 @@ public interface IUnits
     /// (radians), in tile <paramref name="id"/>'s own axes: <see cref="DirectionToTile"/> for headings kept as angles.
     /// </summary>
     double AngleToTile(TileId id, Vec2 at, double angle);
+
+    /// <summary>Whether tile-local (x, z) lies on tile <paramref name="id"/>'s own edge, within <paramref name="eps"/> metres (a cut there).</summary>
+    bool OnEdge(TileId id, double x, double z, double eps);
+
+    /// <summary>Whether tile-local (x, z) lies on tile <paramref name="id"/> itself (edges in): past it is the next tile's.</summary>
+    bool Inside(TileId id, double x, double z);
+
+    /// <summary>Whether a plane point lies on any tile's edge, within <paramref name="eps"/> metres.</summary>
+    bool OnAnyEdge(double x, double y, double eps);
+
+    /// <summary>
+    /// The tiles within <paramref name="ring"/> steps of <paramref name="id"/>, itself included (the halo; LV95: the
+    /// (2r+1)² square, east outer, north inner; a frame: its leaves' neighbours, across face edges).
+    /// </summary>
+    IEnumerable<TileId> Around(TileId id, int ring);
 }
 
 /// <summary>
@@ -60,6 +77,24 @@ public sealed class Lv95Units : IUnits
     public double North(TileId id) => id.MaxN;
     public Vec2 DirectionToTile(TileId id, Vec2 at, Vec2 direction) => direction;
     public double AngleToTile(TileId id, Vec2 at, double angle) => angle;
+
+    public bool OnEdge(TileId id, double x, double z, double eps) =>
+        Math.Abs(x) < eps || Math.Abs(z) < eps || Math.Abs(x - 1000) < eps || Math.Abs(z - 1000) < eps;
+
+    public bool Inside(TileId id, double x, double z) => !(x < 0 || z < 0 || x > 1000 || z > 1000);
+
+    public bool OnAnyEdge(double x, double y, double eps)
+    {
+        double fx = x / 1000 - Math.Round(x / 1000), fy = y / 1000 - Math.Round(y / 1000);
+        return Math.Abs(fx) * 1000 < eps || Math.Abs(fy) * 1000 < eps;
+    }
+
+    public IEnumerable<TileId> Around(TileId id, int ring)
+    {
+        for (int de = -ring; de <= ring; de++)
+            for (int dn = -ring; dn <= ring; dn++)
+                yield return new TileId(id.E + de, id.N + dn);
+    }
 }
 
 /// <summary>
@@ -96,6 +131,10 @@ public static class Plane
     public static double AngleToTile(TileId id, Vec2 at, double angle) => Units.AngleToTile(id, at, angle);
     /// <summary><see cref="AngleToTile(TileId, Vec2, double)"/> in the tile holding <paramref name="at"/>.</summary>
     public static double AngleToTile(Vec2 at, double angle) => Units.AngleToTile(TileAt(at.X, at.Y), at, angle);
+    public static bool OnEdge(TileId id, double x, double z, double eps) => Units.OnEdge(id, x, z, eps);
+    public static bool Inside(TileId id, double x, double z) => Units.Inside(id, x, z);
+    public static bool OnAnyEdge(double x, double y, double eps) => Units.OnAnyEdge(x, y, eps);
+    public static IEnumerable<TileId> Around(TileId id, int ring) => Units.Around(id, ring);
 
     /// <summary>A segment's vertex <paramref name="i"/> on the plane (<c>RoadSegment.Lv95</c> on <see cref="Lv95Units"/>).</summary>
     public static (double X, double Y) PointOf(RoadSegment seg, TileId tile, int i) =>

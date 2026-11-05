@@ -328,6 +328,8 @@ public static partial class TileRewriter
         internal CrossingNodes? Crossings { get; init; }
         /// <summary>The gantries' data and rule (#1110); null = no gantries.</summary>
         public GantryContext? Gantries { get; init; }
+        /// <summary>The region's tram stops on the inputs' plane (#1057, #1507); null = read <see cref="Options.TramStops"/>.</summary>
+        public List<(string Name, Vec2 At)>? TramStops { get; init; }
         /// <summary>The plane the inputs are on and its tiles (#1507); LV95 unless a frame says otherwise.</summary>
         public IUnits Units { get; init; } = Lv95Units.Instance;
     }
@@ -360,7 +362,7 @@ public static partial class TileRewriter
         // one block's, made in Block: a session-long cache held every building tile it ever saw (#1425)
         private Footprints buildings = null!;
         /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
-        private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : [];
+        private readonly List<(string Name, Vec2 At)> tramStops = inputs.TramStops ?? (options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : []);
 
         /// <summary>
         /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;
@@ -676,7 +678,7 @@ public static partial class TileRewriter
                         continue;
                     }
                     segmentOf[linkId] = (segment, source.Tile, paintOn);   // turn lanes find the lines on paintOn (#325)
-                    PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false);
+                    PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false, tile: source.Tile);
                     paintStation[linkId] = (station, startsAtJunction, endsAtJunction);
                     if (paintAttributes.Left.HasLane || paintAttributes.Right.HasLane)   // on the final pieces (#120)
                         lanePaint.Add((segment, source.Tile, station, startsAtJunction, endsAtJunction));
@@ -885,7 +887,7 @@ public static partial class TileRewriter
                         // a transition's piece (#818): its own paint has the bike lanes
                         if (pieces[i].Attributes.Has(RoadAttrFlags.InTransition)) { s += length; continue; }
                         PaintEmitter.BikeLanes(pieces[i], s, into, i == 0 && start, i == pieces.Count - 1 && end,
-                            skipLeft: Inside(false), skipRight: Inside(true));
+                            skipLeft: Inside(false), skipRight: Inside(true), tile: tileId);
                         foreach (var (right, stop, solid) in stops)
                             BikeLaneToStop(into, before, pieces[i], right, stop - (s - station), solid - (s - station));
                         // an exit's bike lane starts where the left-turn guides leave it (#711): the left side at a link's end,
@@ -918,7 +920,7 @@ public static partial class TileRewriter
                         for (int k = 1; k < line.Vertices.Length; k += 3) line.Vertices[k] = y + lift;
                 _pathLines?.Clear();
                 foreach (var (segment, tileId, start, end) in trackPaint)
-                    EmitTrackPaint((finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment]).Where(x => !x.Attributes.Has(RoadAttrFlags.InTransition)).ToList(), start, end, Get(paint, tileId));
+                    EmitTrackPaint((finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment]).Where(x => !x.Attributes.Has(RoadAttrFlags.InTransition)).ToList(), start, end, Get(paint, tileId), tileId);
                 KerbArcs(oldPriority, townArcs, kerbArcs);
             }
 
@@ -1892,9 +1894,8 @@ public static partial class TileRewriter
     {
         var result = new HashSet<TileId>(block);
         foreach (var id in block)
-            for (int de = -halo; de <= halo; de++)
-            for (int dn = -halo; dn <= halo; dn++)
-                result.Add(new TileId(id.E + de, id.N + dn));
+            foreach (var near in Plane.Around(id, halo))
+                result.Add(near);
         return result;
     }
 }
