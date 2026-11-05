@@ -30,6 +30,9 @@ public sealed class FixtureChunkSource : IChunkSource
 
     public FixtureCourse Course => _course;
 
+    /// <summary>Where the course's metres start, in this source's LV95 tiles (the leaves place it by latitude and longitude, #1509).</summary>
+    public (double E, double N) Start => (_startE, _startN);
+
     /// <summary>The course's ground height at an LV95 point, m.</summary>
     public double GroundAt(double e, double n) => _course.Ground(e - _startE, n - _startN);
 
