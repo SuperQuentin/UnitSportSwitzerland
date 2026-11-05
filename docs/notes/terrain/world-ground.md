@@ -24,7 +24,9 @@
   like it in logs. Code that still needs the LV95 tile crosses with `GroundTile.FromLv95(id)` /
   `tile.Lv95Tile`, and code that still loads LV95 tiles through the streamer's `IChunkSource` with
   `ChunkManager.Of(ground)?.Source`. `FlatLv95RatchetTests` counts the three as "flat ground escape hatch"
-  (32 after PR 1). PR 2 re-keys `IChunkSource` by `GroundTile` and lowers it; step D takes it to 0.
+  (32). `IChunkSource` stays keyed by `TileId` until the leaf half: its data (`RoadTile.Id` and the other
+  format ids) and the helpers it feeds are LV95-keyed too, so it moves with B's leaf sections and C5;
+  step D takes the count to 0.
 - **Cost**: `--worldgroundcheck --chunks fixture:lake` times `TryGetHeight` through the interface against
   the direct call (best of 7 x 400 000): 242.8 ns against 240.5 ns (+0.9 %), 0 bytes allocated. A height
   query is ~240 ns because `ToLv95` runs the rigorous projection (G2 A1), not because of the interface.

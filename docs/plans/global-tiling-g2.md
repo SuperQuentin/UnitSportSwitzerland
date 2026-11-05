@@ -179,10 +179,16 @@ heights is ~1 GB; the cost of rigorous projection per point (measured in PR 1); 
   `InTunnel`, `FloorBelow`, `GroundAt`, `HasCollisionAt`, the tile events) served by `ChunkManager` in
   `flat` and by leaves in `earth`; the 170 `TryGetHeight` callers and the 68 `IChunkSource` users move
   to it.
-- **Status (#1532, first half: the interface on `ChunkManager`)**: PR 1 in progress: `IWorldGround`
-  (`terrain/world-ground`) with `GroundTile` keys, served through `chunks.Ground`; every point query and
-  tile event moved onto it, same values and cost (`--worldgroundcheck`). PR 2: `IChunkSource` keyed by
-  `GroundTile` and its users moved. The leaf instance and the earth streamer are the second half, after B.
+- **Status (#1532, first half: the interface on `ChunkManager`)**: `IWorldGround` (`terrain/world-ground`)
+  with `GroundTile` keys, served through `chunks.Ground`; every point query and tile event moved onto it,
+  same values and cost (`--worldgroundcheck`). **The `IChunkSource` users move with the leaf half**
+  (decided with the user, 2026-11-05): 79 files, and the tile data itself is LV95-keyed (`RoadTile.Id`
+  and the other format ids), as are the helpers it feeds (`LaneGraph.Build`, the BR planners, `Corridor`,
+  `VsGround`), so re-keying the source alone would only move each conversion a line down. They move when
+  B's leaf sections say what a tile's roads and buildings look like, with C5. About 15 of them bake LV95
+  kilometres into saves or network keys (`BuildingKey`/`DoorKey`, `{E}_{N}.json`, `FarmField`'s RPC, the
+  cow ids, `veh_slot_E_N`): those wait for D's store re-keying. The leaf instance and the earth streamer
+  are the second half, after B.
 
 **C2 Collision patches** (one PR)
 - Trimesh patches (~128 × 128 cells, ~150 m) of a leaf's own triangles plus its road and building

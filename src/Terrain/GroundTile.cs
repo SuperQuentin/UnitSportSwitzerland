@@ -11,7 +11,7 @@ namespace UnitSport.Terrain;
 /// <para>
 /// Code that still needs the LV95 tile (a <see cref="IChunkSource"/> load, a <c>BuildingKey</c> made of its
 /// kilometres) crosses with <see cref="FromLv95"/> and <see cref="Lv95Tile"/>, the flat world's escape
-/// hatch: <c>FlatLv95RatchetTests</c> counts both, and step D takes the count to 0.
+/// hatch: <c>FlatLv95RatchetTests</c> counts both (with <c>ChunkManager.Of</c>), and step D takes the count to 0.
 /// </para>
 /// </summary>
 public readonly record struct GroundTile

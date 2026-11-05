@@ -8,7 +8,7 @@ public partial class ChunkManager
 {
     /// <summary>
     /// The streamer behind a flat world's ground, for what still loads LV95 tiles through its
-    /// <see cref="Source"/> (#1532: PR 2 re-keys those by <see cref="GroundTile"/>). Null for any other ground.
+    /// <see cref="Source"/> (#1532: they move with G2 C1's leaf half). Null for any other ground.
     /// Counted by <c>FlatLv95RatchetTests</c> with the other flat-world escape hatches.
     /// </summary>
     public static ChunkManager? Of(IWorldGround? ground) => (ground as FlatGround)?.Owner;
