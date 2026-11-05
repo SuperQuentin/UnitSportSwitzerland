@@ -8,6 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 ## Architecture
 
 - `feature-clips` (general) — `tools/record-clip.sh`: one launch films a probe to a GIF (+ MP4); `RELEASE=1` stages it, `release.sh` shows it under Highlights
+- `cover-water-performance` — #1539: cover and water per tile on all cores, byte-identical: paint order per tile, per-block `UrbanField`, the water window's memory bound, what was measured and dismissed
 - `builder-bench` — #1539: `tools/builder-bench.sh prepare|publish|run|compare`: a fixed Geneva + Valais region built by a published binary, `[stage]` timer lines (`StageClock`) to a per-stage table, SHA-256 of every output file; the speed-up proof must also be byte-identical
 - `delta-updates` — per-release `.delta` files (rsync-style binary patches, SHA-256 checked, Brotli) made by `tools/deltas.sh` from the published archives and uploaded by `release.sh`; staging + swap script; measured 8 KB vs 176 MB (#532)
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
