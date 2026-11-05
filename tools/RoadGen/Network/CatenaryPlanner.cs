@@ -42,7 +42,7 @@ public static class CatenaryPlanner
         public int Pieces, Cantilevers, CentreMasts, CentreMastsShared, LoneTram, TwinBuilt, Spans, SpansShared, WallEnds, MastEnds, Skipped;
         public double WireKm, Ms;
         /// <summary>A few off-street single tram supports with no twin and with a twin but no centre mast (LV95), for a look.</summary>
-        public readonly List<Vec2> LoneAt = new(), BuiltAt = new();
+        [Rewrite.StatsSample(8)] public readonly List<Vec2> LoneAt = new(), BuiltAt = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    overhead lines (#1052): {Pieces:N0} electrified rail pieces, {WireKm:F2} km of contact wire, {Cantilevers:N0} cantilever masts, {CentreMasts:N0} centre masts ({CentreMastsShared:N0} times a single track's wire hung from its twin's; single tram supports on a bed of their own: {LoneTram:N0} with no twin, {TwinBuilt:N0} with one but built near or blocked), {Spans:N0} spans ({WallEnds:N0} ends on facades, {MastEnds:N0} on masts; {SpansShared:N0} times a track's wire hung from another track's span), {Skipped:N0} supports with no room; planning {Ms:N0} ms")

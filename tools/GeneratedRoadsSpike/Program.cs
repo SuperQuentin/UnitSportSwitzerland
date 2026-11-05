@@ -82,12 +82,12 @@ foreach (var v in picks)
 
     sw.Restart();
     var refStats = TileRewriter.Run(refDir, targets,
-        new TileRewriter.Options(BlockSize: 100000, Halo: 1, Smooth: smooth, RawDir: raw, AuditHeights: false), _ => { });
+        new TileRewriter.Options(BlockSize: 100000, Halo: 1, Smooth: smooth, RawDir: raw, AuditHeights: false, Jobs: 1), _ => { });
     Console.WriteLine($"  reference (one block): {sw.Elapsed.TotalMilliseconds:F0} ms, {refStats.Junctions} junctions, {Grow(targets, 1).Count} context tiles");
 
     sw.Restart();
     TileRewriter.Run(oneDir, targets,
-        new TileRewriter.Options(BlockSize: 1, Halo: halo, Smooth: smooth, RawDir: raw, AuditHeights: false), _ => { });
+        new TileRewriter.Options(BlockSize: 1, Halo: halo, Smooth: smooth, RawDir: raw, AuditHeights: false, Jobs: 1), _ => { });
     double ms = sw.Elapsed.TotalMilliseconds;
     singleMs += ms;
     Console.WriteLine($"  single (1 tile + halo 1): {ms:F0} ms for {targets.Count} tiles, {ms / Math.Max(1, targets.Count):F0} ms a tile");

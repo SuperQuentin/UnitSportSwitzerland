@@ -284,9 +284,9 @@ public static partial class TileRewriter
         public int ArmsWithoutPedestrians;
         /// <summary>Where the first lights junctions are that leave an arm with a sidewalk without a crosswalk (LV95, #711).</summary>
         public readonly List<string> UnmappedAt = new();
-        public readonly List<string> InvalidExamples = new();
+        [StatsSample(5)] public readonly List<string> InvalidExamples = new();
         /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
-        public readonly List<string> InferredAt = new();
+        [StatsSample(8)] public readonly List<string> InferredAt = new();
         public readonly SortedDictionary<int, int> Cycles = new();
 
         public string Format()

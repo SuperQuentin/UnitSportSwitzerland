@@ -96,7 +96,7 @@ public static class RoadStage
         {
             var stats = TileRewriter.Run(outDir, tiles, new TileRewriter.Options(
                 RawDir: RawRoads.DirFor(tempDir), OsmOverlay: overlay,
-                KeepPlans: tiles.Count <= 256), Console.WriteLine);   // #1425: nationwide the plans are not kept, so no summary lines
+                KeepPlans: tiles.Count <= 256, Jobs: TileRewriter.JobsFromCommandLine()), Console.WriteLine);   // #1425: nationwide the plans are not kept, so no summary lines; #1539: --jobs
             Console.WriteLine($"  {stats.TilesWritten} tiles, {stats.SegmentsWritten:N0} segments, "
                 + $"{stats.Junctions:N0} junctions in {sw.Elapsed.TotalSeconds:F1}s");
             Console.WriteLine(stats.Network.Format(stats.TilesWritten));

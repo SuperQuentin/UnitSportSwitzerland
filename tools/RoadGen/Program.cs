@@ -32,6 +32,7 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
               --chunks DIR       default terrain_chunks;  --tiles limits which
               --temp DIR         where roads_raw/ and osm_overlay.tsv live, default <chunks>_temp
               --tiles-file FILE  same, one "E-N" per line (for lists too long for a command line)
+              --jobs N           blocks at once (default: as many as the cores and the memory allow; a diagnostic runs one)
               --skip-rewritten   leave rewritten tiles with no raw input alone instead of refusing
               --no-smooth        junctions only, leave centrelines alone
               --dry-run          measure without writing
@@ -213,7 +214,8 @@ else if (args.Contains("--rewrite"))
         SitgSigns: args.Contains("--no-sitg") ? null : Path.Combine(temp, "sitg_signs.tsv"), Places: Path.Combine(chunks, "places.json"),
         GantryFacts: Path.Combine(temp, "gantry_facts.tsv"), Gantries: !args.Contains("--no-gantries"),
         NewJunctions: ArgValue("--junctions") != "old", WriteJunctions: ArgValue("--junctions") is null or "write",
-        KeepPlans: !args.Contains("--drop-plans")), Console.WriteLine);   // #1425: --drop-plans = the nationwide memory bound
+        KeepPlans: !args.Contains("--drop-plans"),   // #1425: --drop-plans = the nationwide memory bound
+        Jobs: TileRewriter.JobsFromCommandLine()), Console.WriteLine);   // #1539: --jobs N blocks at once
     }
     catch (TileRewriter.AlreadyRewrittenException e)
     {
@@ -243,6 +245,9 @@ else if (args.Contains("--rewrite"))
     if (stats.VerticesReverted > 0)
         Console.WriteLine($"    {stats.VerticesReverted:N0} vertices put back on the surveyed line (cliff guard)");
     Console.WriteLine($"{stopwatch.Elapsed.TotalSeconds:F1} s");
+    using (var self = System.Diagnostics.Process.GetCurrentProcess())   // as the preprocessor's stage lines (builder-bench)
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"[stage] name=roads/network wall={stopwatch.Elapsed.TotalSeconds:F2} cpu={self.TotalProcessorTime.TotalSeconds:F2} cores={self.TotalProcessorTime.TotalSeconds / stopwatch.Elapsed.TotalSeconds:F2} gc_pause={GC.GetTotalPauseDuration().TotalSeconds:F2} peak_ws_mb={self.PeakWorkingSet64 / (1024 * 1024)}"));
 }
 else if (ArgValue("--tiles") is { } tileList)
 {
