@@ -393,7 +393,6 @@ public static class CubeCompare
         var lvToCube = new Tally();
         var aboveCube = new Tally();
         var surveyed = new Tally();
-        var dbg = new Dictionary<(string, string), double>();
         long noGround = 0;   // draped leaf vertices over no leaf heights (the leaf mesh NaN there): not held to the height bars
         var lenLv = new Dictionary<int, double>();
         var lenCube = new Dictionary<int, double>();
@@ -471,7 +470,6 @@ public static class CubeCompare
                     else { cubeAlone++; Alone(ecef, line.Class); }
                 }
                 Accumulate(lenCube, line, (x, y, z) => frame.ToEcef(x, y, z) is var m && c.Cube.Owner(m) == leaf && c.Lv.Covers(m));
-                if (Debug && line.Class == (int)RoadClass.Motorway) lock (dbg) dbg[(bundle.ToString(), "cube")] = dbg.GetValueOrDefault((bundle.ToString(), "cube")) + LineIndex.Length(line, (x, y, z) => frame.ToEcef(x, y, z) is var m && c.Cube.Owner(m) == leaf && c.Lv.Covers(m));
             }
             foreach (var (line, owned, id) in lvLines)
             {
@@ -482,12 +480,6 @@ public static class CubeCompare
                     if (cubeIndex.Nearest(p[k * 3], p[k * 3 + 1], p[k * 3 + 2], line.Above![k], line.Class, 5, out double h, out _, out _)) lvToCube.Add(h);
                     else { lvAlone++; Alone(frame.ToEcef(p[k * 3], p[k * 3 + 1], p[k * 3 + 2]), line.Class); }
                 }
-                if (Debug && line.Class == (int)RoadClass.Motorway) lock (dbg) dbg[(bundle.ToString(), "lv")] = dbg.GetValueOrDefault((bundle.ToString(), "lv")) + LineIndex.Length(line, (x, y, z) =>
-                {
-                    var m = frame.ToEcef(x, y, z);
-                    var (e, n, _) = SwissGeodesy.FromEcef(m);
-                    return TileId.FromLv95(e, n) == id && c.Cube.Owns(bundle, m);
-                });
                 Accumulate(lenLv, line, (x, y, z) =>
                 {
                     var m = frame.ToEcef(x, y, z);
@@ -512,7 +504,6 @@ public static class CubeCompare
             if (a > 1000) r.AtMost(what, Density.Relative((long)Math.Round(a), (long)Math.Round(b)), CompareBars.PerDistance + 1e-4, "P3");
             else r.Note(string.Create(CultureInfo.InvariantCulture, $"length {(RoadClass)k}: {a:F0} m LV95, {b:F0} m leaves (too short for the bar)"));
         }
-        foreach (var g in dbg.GroupBy(d => d.Key.Item1)) if (Debug) Console.WriteLine($"DBG {g.Key}: " + string.Join(" ", g.Select(x => $"{x.Key.Item2}={x.Value:F1}")));
         MatchPoints(r, "junction", junctions.Lv, junctions.Cube, 5, true);
         MatchPoints(r, "signal", signals.Lv, signals.Cube, 5, false);
         if (c.Cube.KindsPresent.Contains(LeafKind.RoadKeys)) LineLengths(c, r);
@@ -657,8 +648,6 @@ public static class CubeCompare
         var known = above.Where(a => !double.IsNaN(a)).Order().ToList();
         return known.Count > 0 && known[known.Count / 2] is < 0 or > 1.0;
     }
-
-    private static readonly bool Debug = Environment.GetEnvironmentVariable("CMP_DEBUG") == "1";
 
     private static void Accumulate(Dictionary<int, double> len, Line line, Func<double, double, double, bool> keep)
     {
