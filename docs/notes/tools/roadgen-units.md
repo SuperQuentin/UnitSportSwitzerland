@@ -16,7 +16,7 @@ B3 row 4a; the frame instances are 4b, the generated world's move to leaves B5).
   length is scaled. `Lv95Units` is `TileId`'s own arithmetic and the identity for directions.
 - **`Plane`**: the instance a run is on, `[ThreadStatic]`, `Lv95Units` by default; `Plane.Use(units)` scopes it.
   `Session.Block` and `Run(ITileLoop)` set it from `Inputs.Units`, so the static planners (`CornerPlanner`,
-  `StreetPlanner`, ...) need no new parameter. The stage is synchronous (no `await`, no `Parallel` in a block):
+  `StreetPlanner`, ...) need no new parameter. A block is synchronous (no `await`, no `Parallel` inside it; each runs on a thread of its own, `roadgen-parallel`):
   keep it so, or pass the units explicitly. `Facades` binds its units at construction (a shared pair is built
   outside a block; `UrbanField` takes the facades').
 - **`IGround`** (TerrainFormat's, `cube-frames`): `Inputs.Ground` (a block's ground over its tiles and halo) or,

@@ -26,4 +26,4 @@ byte-identical. `tools/builder-bench.sh` builds one fixed region with a publishe
   - `chunks_temp/tile_hashes.tsv`: holds each file's mtime; the tiles' content hashes are in `manifest.json`.
 - The `<E>_<N>.edge` files in `chunks_temp` carry the source zip's mtime: runs sharing `bench/src` agree,
   a `--tiles` run copies its sources and gets other mtimes.
-- RoadGen has no Server GC (the Preprocessor has); that is a later change, not part of the baseline.
+- The baseline predates RoadGen's Server GC; the Preprocessor had it all along, so only standalone `--rewrite` runs differ (`roadgen-parallel`).
