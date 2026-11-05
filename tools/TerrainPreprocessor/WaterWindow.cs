@@ -10,6 +10,34 @@ namespace UnitSport.Tools.Preprocessor;
 public static class WaterWindow
 {
     /// <summary>
+    /// Window-sized scratch arrays handed back and forth between tiles (#1557). A tile's 2201² window takes about thirty
+    /// arrays of 5-39 MB, all on the large object heap; a fresh set per tile left the GC holding many times the live
+    /// set in freed-but-committed regions (23 GB of the 24 GB peak on the multi-batch region, 16 GB heap limit out of
+    /// memory). A rented array is zeroed, so it is exactly what <c>new T[n]</c> gives. A null pool allocates, as before.
+    /// </summary>
+    public sealed class Pool
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<(Type, int), System.Collections.Concurrent.ConcurrentBag<Array>> _free = new();
+
+        public T[] Rent<T>(int n)
+        {
+            if (_free.TryGetValue((typeof(T), n), out var bag) && bag.TryTake(out var a))
+            {
+                Array.Clear(a);
+                return (T[])a;
+            }
+            return new T[n];
+        }
+
+        public void Return<T>(T[]? a)
+        {
+            if (a != null) _free.GetOrAdd((typeof(T), a.Length), _ => new()).Add(a);
+        }
+    }
+
+    private static T[] Rent<T>(Pool? pool, int n) => pool != null ? pool.Rent<T>(n) : new T[n];
+
+    /// <summary>
     /// Metres of neighbouring tiles each tile is computed with. Everything a core vertex reads must
     /// be exact inside it: the gap fill reads the smoothed edge depth up to 2·<see cref="EdgeSmoothM"/>
     /// out, whose nearest survey vertex may be <see cref="FillReachM"/> + 2·EdgeSmoothM further
@@ -61,13 +89,13 @@ public static class WaterWindow
     public static int Cells(double metres, double cellM) => cellM == 1 ? (int)metres : Math.Max(1, (int)Math.Round(metres / cellM));
 
     /// <summary>The wet cells on a bank (see <see cref="BankProbeM"/>) become dry: <paramref name="riseQ"/> quanta above the lowest wet surface round them.</summary>
-    public static void RefineWet(byte[] state, int[] surfaceQ, int w, int probe, int riseQ)
+    public static void RefineWet(byte[] state, int[] surfaceQ, int w, int probe, int riseQ, Pool? pool = null)
     {
         // separable min of the wet surface over a (2·probe+1)² square, in quanta (exact): along a row
         // in constant time per cell (van Herk: the running min from a block's start and from its end
         // meet in every window), on a row padded with "no water" either side
         int block = 2 * probe + 1, padded = w + 2 * probe;
-        var rowMin = new int[w * w];
+        var rowMin = Rent<int>(pool, w * w);
         var row = new int[padded];
         var fromStart = new int[padded];
         var fromEnd = new int[padded];
@@ -102,13 +130,14 @@ public static class WaterWindow
                 if (surfaceQ[i] > (long)m + riseQ) dry.Add(i);
             }
         foreach (int i in dry) state[i] = 0;
+        pool?.Return(rowMin);
     }
 
     /// <summary>The exact Euclidean distance from every cell to the nearest site, in metres (cells × the cell size).</summary>
-    public static float[] Distances(ReadOnlySpan<bool> sites, int w, double cellM, int[]? site = null)
+    public static float[] Distances(ReadOnlySpan<bool> sites, int w, double cellM, int[]? site = null, Pool? pool = null)
     {
-        var d = new float[w * w];
-        DistanceTransform.Run(sites, w, w, d, site);
+        var d = Rent<float>(pool, w * w);
+        DistanceTransform.Run(sites, w, w, d, site, pool);
         if (cellM != 1)
         {
             float s = (float)cellM;
@@ -152,9 +181,9 @@ public static class WaterWindow
     /// <see cref="EdgeSmoothM"/> over the gap turn those into gentle ramps. Box sums over the window
     /// only read cells within the halo, so the result stays a function of the region's data.
     /// </summary>
-    public static float[] SmoothEdgeDepth(float[] survey, byte[] state, float[] dv, int[] site, int w, double cellM)
+    public static float[] SmoothEdgeDepth(float[] survey, byte[] state, float[] dv, int[] site, int w, double cellM, Pool? pool = null)
     {
-        var raw = new float[w * w];
+        var raw = Rent<float>(pool, w * w);
         float reach = (float)(FillReachM + 2 * EdgeSmoothM + 2 * cellM);
         int r2 = Cells(EdgeSiteM, cellM);
         for (int i = 0; i < raw.Length; i++)
@@ -175,7 +204,11 @@ public static class WaterWindow
             raw[i] = n > 0 ? (float)(sum / n) : float.NaN;
         }
         int box = Cells(EdgeSmoothM, cellM);
-        return BoxMean(BoxMean(raw, w, box), w, box);
+        var once = BoxMean(raw, w, box, pool);
+        var twice = BoxMean(once, w, box, pool);
+        pool?.Return(raw);
+        pool?.Return(once);
+        return twice;
     }
 
     /// <summary>
@@ -184,12 +217,12 @@ public static class WaterWindow
     /// differently from each window's origin, and a shared vertex would then differ by a quantum
     /// between the two tiles that hold it.
     /// </summary>
-    public static float[] BoxMean(float[] f, int w, int r)
+    public static float[] BoxMean(float[] f, int w, int r, Pool? pool = null)
     {
         const double Unit = 1e-4;
         int sw = w + 1;
-        var sum = new long[sw * sw];
-        var cnt = new int[sw * sw];
+        var sum = Rent<long>(pool, sw * sw);
+        var cnt = Rent<int>(pool, sw * sw);
         for (int y = 0; y < w; y++)
         {
             long rowSum = 0;
@@ -202,7 +235,7 @@ public static class WaterWindow
                 cnt[(y + 1) * sw + x + 1] = cnt[y * sw + x + 1] + rowCnt;
             }
         }
-        var o = new float[w * w];
+        var o = Rent<float>(pool, w * w);
         for (int y = 0; y < w; y++)
         {
             int y0 = Math.Max(0, y - r), y1 = Math.Min(w, y + r + 1);
@@ -215,6 +248,8 @@ public static class WaterWindow
                 o[y * w + x] = (float)(s * Unit / n);
             }
         }
+        pool?.Return(sum);
+        pool?.Return(cnt);
         return o;
     }
 

@@ -13,11 +13,11 @@ public static class DistanceTransform
     /// <param name="isSite">Sites, row-major <paramref name="w"/> x <paramref name="h"/>.</param>
     /// <param name="dist">Out: distance in cells to the nearest site (<see cref="float.PositiveInfinity"/> when there is none).</param>
     /// <param name="site">Out, optional: row-major index of that site (-1 when there is none).</param>
-    public static void Run(ReadOnlySpan<bool> isSite, int w, int h, float[] dist, int[]? site = null)
+    public static void Run(ReadOnlySpan<bool> isSite, int w, int h, float[] dist, int[]? site = null, WaterWindow.Pool? pool = null)
     {
         // pass 1, columns: squared distance to the nearest site in the same column, and its row
-        var colD = new float[w * h];
-        var colRow = new int[w * h];
+        var colD = pool != null ? pool.Rent<float>(w * h) : new float[w * h];
+        var colRow = pool != null ? pool.Rent<int>(w * h) : new int[w * h];
         // (a row at a time, the columns side by side: a column at a time misses the cache on every cell)
         var lastSite = new int[w];
         Array.Fill(lastSite, -1);
@@ -89,5 +89,7 @@ public static class DistanceTransform
                 if (site != null) site[row + q] = colRow[row + p] * w + p;
             }
         }
+        pool?.Return(colD);
+        pool?.Return(colRow);
     }
 }

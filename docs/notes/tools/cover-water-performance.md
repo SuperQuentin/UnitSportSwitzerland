@@ -21,6 +21,7 @@ How the two stages run, what must stay true when they change, and what was measu
 - Phase C reads only the cache and its own tile, so tiles can run in any order. Report numbers (`OutDepthSum`, `worstJoin`) add up in thread order: they go to the log, never to a file.
 - **Three columns of input stay the bound for tall columns** (`water-pass-memory`). Only short columns join into a group, until `2 x workers` tiles.
 - A tile's window takes about 250 MB; workers are `(available - heap) / BedWindowBytes`, 500 MB each, so `DOTNET_GCHeapHardLimit` lowers them, an explicit `--jobs` too.
+- **Window arrays come from `WaterWindow.Pool`** (#1557): a tile's ~30 W*W arrays (5-39 MB, large object heap) are rented zeroed and returned, never allocated per tile. A new window-sized array in `ComputeTile` or in a `WaterWindow` method takes `pool` too, or the GC again holds many times the live set.
 - Identical minimum and distance, faster walks only: `RefineWet` (van Herk), `DistanceTransform` (a row at a time).
 
 ## Measured (6-core 5600X, warm, Nov 2026)
@@ -50,8 +51,24 @@ The gains, each proved alone on both regions: per-tile painting (benchmark cover
 ## Multi-batch region (Lausanne to the Vaud Alps, 477 tiles, 2 batches, 20 blocks, Nov 2026)
 
 E 2538-2567 x N 1136-1152 (510 listed, 477 with a source), Léman with its survey, Vevey, Montreux, the Alps. Identical bytes (4383 of 4383) against `main` at default jobs, at `--jobs 3` and with the cover, trees and network running across both batches.
-`main`: 404.5 s, 21 GB; this branch: 143.7 s, 24.2 GB (12 blocks at once). **`water/C-beds` is the peak** (8.6 -> 24.2 GB, 12 workers): a worker takes about 1.3 GB here, not the 500 MB `BedWindowBytes` assumes
-(the benchmark's +3.6 GB with 12 workers fits it). A 16 GB heap limit runs out of memory in that stage on this region, `main` included (its `LabelTile`, earlier): the bound lowers the workers but 500 MB is too low for a big lake with a survey. Not changed (#1539).
+`main`: 404.5 s, 21 GB; this branch before #1557: 143.7 s, 24.2 GB (12 blocks at once). `water/C-beds` was the peak (8.6 -> 24.2 GB, 12 workers) and a 16 GB heap limit ran out of memory in it.
+
+**Measured (#1557)**: forced blocking gen2 collections between the groups of columns showed the live set flat at 1.0-1.1 GB (about 0.65 GB left by earlier stages, 45 MB of survey, 40-55 cached input tiles, the rest the group's windows),
+the GC's committed heap at 2.5-3.5 GB, and the process's committed memory (`VirtualQuery`, private) growing 3.5 GB per group, 7 -> 42 GB over the stage (the working set stopped at 23 GB, the rest paged out). So `BedWindowBytes` was right
+about live data (250 MB a window): the excess was **dead large-object garbage in freed but still committed regions**, which the GC's own commit figure leaves out. Each tile allocated ~70 MB (no survey) to ~450 MB (survey) of
+window arrays; Server GC with 12 heaps collects the large object heap rarely and returns the regions late, and under a heap limit the freed 4 MB regions cannot serve 19 MB arrays. Not the `held` cache, the survey kilometres or a stale `HeapSizeBytes`.
+Fix: a pool of exact-length arrays, rented zeroed (same as `new`), returned when a tile is done. The pool keeps about 190 MB a worker.
+
+| Multi-batch, 477 tiles | Before (#1540) | With the pool |
+|---|---|---|
+| `water/C-beds` wall / GC pause | 38.1 s / 11.1 s | 24.7 s / 0.7 s |
+| `water` wall | 43.0 s | 27.7 s |
+| Peak working set | 24.2 GB | 8.9 GB |
+| Whole run | 143.7 s | 100.5 s |
+| 16 GB heap limit | out of memory in `C-beds` | completes, 107.8 s, 8.9 GB |
+
+Identical bytes (4383 of 4383) at default and at 16, 12, 8, 6 and 4 GB heap limits. Whole run / `water/C-beds` wall / peak working set: 12 GB 111 s / 24.9 s / 9.2 GB; 8 GB 121 s / 24.8 s / 7.8 GB; 6 GB 178 s / 27.0 s / 6.2 GB; 4 GB 188 s / 35.8 s / 4.2 GB
+(the bound leaves 6 then 4 workers). 2 GB runs out of memory in `RoadCodec.ReadFloats`, in the cover stage after the roads: the water stage is not what stops it.
 
 ## Looked at, not changed
 
