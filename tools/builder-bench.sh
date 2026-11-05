@@ -106,10 +106,10 @@ run)
   log=$run/log.txt
   t0=$(date +%s.%N)
   {
-    echo "==== terrain"; "${pre[@]}" --in "$(N "$src")" --out "$(N "$chunks")"
-    echo "==== osm overlay"; "${pre[@]}" --out "$(N "$chunks")" --tlm "$(N "$tlm")" --osm-overlay "$(N "$pbf")"
-    echo "==== features"; "${pre[@]}" "${feat[@]}"
-    echo "==== airports"; "${pre[@]}" --out "$(N "$chunks")" --tlm "$(N "$tlm")" --osm "$(N "$pbf")" --airports
+    echo "==== terrain" && "${pre[@]}" --in "$(N "$src")" --out "$(N "$chunks")" &&
+    echo "==== osm overlay" && "${pre[@]}" --out "$(N "$chunks")" --tlm "$(N "$tlm")" --osm-overlay "$(N "$pbf")" &&
+    echo "==== features" && "${pre[@]}" "${feat[@]}" &&
+    echo "==== airports" && "${pre[@]}" --out "$(N "$chunks")" --tlm "$(N "$tlm")" --osm "$(N "$pbf")" --airports
   } > "$log" 2>&1 || { echo "run failed, see $log" >&2; tail -20 "$log" >&2; exit 1; }
   t1=$(date +%s.%N)
   $(pyc) "$here/builder-bench-compare.py" stage "$log" > "$run/stage.tsv"

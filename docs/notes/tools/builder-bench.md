@@ -30,3 +30,5 @@ byte-identical. `tools/builder-bench.sh` builds one fixed region with a publishe
 - The `<E>_<N>.edge` files in `chunks_temp` carry the source zip's mtime: runs sharing `bench/src` agree,
   a `--tiles` run copies its sources and gets other mtimes.
 - The baseline predates RoadGen's Server GC; the Preprocessor had it all along, so only standalone `--rewrite` runs differ (`roadgen-parallel`).
+- A failed step fails the run: the four steps stop at the first non-zero exit, so a run that died (2026-11-05: out of memory in the features step) prints "run failed", exits 1 and writes no `summary.txt`.
+- One writer per run folder: a second build left writing into the same folder (a background chain restarted while its build was still running) changes bytes. On 2026-11-05 this gave 10 differing files in one `main` run, seen as a `[hash]` line reporting 361 files and 9 changed before the airport stage had run, where a clean run reports 360 and 52. Check the `[hash]` lines before calling a difference non-determinism.
