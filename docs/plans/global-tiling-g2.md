@@ -62,9 +62,11 @@ flat world; track B builds data the game does not read yet; C wires the two toge
 - Check: `tools/test.sh coords` against step 0's baseline after each area (no change), the quick
   tier, a microbenchmark of the conversions.
 
-**A2 The wire and saves** (one PR for the wire, one for saves; **the wire in progress**, PR #1524: the lists
+**A2 The wire and saves** (one PR for the wire, one for saves; **the wire merged**, PR #1524: the lists
 anchor on `OriginFrame.AnchorAt(ECEF)`, ENU axes at the origin, rather than a carried `FrameAxes`; records keep
-GlobalPos's offset axes and convert at the wire's edge; see `docs/notes/net/positions-on-the-wire.md`)
+GlobalPos's offset axes and convert at the wire's edge; see `docs/notes/net/positions-on-the-wire.md`. **Saves
+built**, PR #1538: 11 stores, places `{x, y, z}` ECEF through `GlobalPosJson` on the type, `yawTrue`, a version,
+protocol 94 for the adventure sections' shape; see `docs/notes/core/saves-in-earth-positions.md`)
 - `Handshake.Protocol` 93, the one bump for positions:
   - single positions as ECEF doubles (`GlobalPos.Write`/`Read` as `_x/_y/_z`; the 59 RPCs with
     e/n/alt doubles take `double x, double y, double z`); `FootPlayer.NetX/Y/Z`, `NetPlace`;

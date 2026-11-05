@@ -129,7 +129,9 @@ public partial class Handshake : Node
     /// double x, y, z, FootPlayer.NetX/Y/Z, NetPlace), velocities, directions and rotations in the local east-up-south at the
     /// object and headings from true north (FootPlayer.NetVel/NetYaw, NetPlace.NetTurn/NetVel, VehicleBody.NetTilt, the
     /// heading and direction RPCs), point lists in the ENU at an ECEF origin (races, bird snapshots, trial ghosts GSH2).
-    public const int Protocol = 93;
+    /// 94: saves in Earth positions (#1503, G2 A2b): the adventure's pins and travel sections (version 2) hold their place as
+    /// "at": {x, y, z} ECEF in the section's JSON, which SectionSync carries as it is (93 flattened it to x, y, z at the edge).
+    public const int Protocol = 94;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

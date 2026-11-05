@@ -272,7 +272,11 @@ public partial class AdventureService : Node
             if (!File.Exists(path)) return null;
             var p = AdventureBook.FromJson(File.ReadAllText(path));
             // a file renamed by hand under another identity never gives that identity its progress
-            return p.Key == key ? p : null;
+            if (p.Key != key) return null;
+            // the sections that held LV95 places migrate now (#1503, G2 A2b): written back in Earth places at the next save
+            if (p.Has(Navigation.PinBook.Section.Id)) p.Get(Navigation.PinBook.Section);
+            if (p.Has(Navigation.TravelBook.Section.Id)) p.Get(Navigation.TravelBook.Section);
+            return p;
         }
         catch (Exception e)
         {
@@ -550,58 +554,7 @@ public partial class AdventureService : Node
         if (_ownSync.Contains(id) || !Connected(peer)) return;
         // an unproven peer hears nothing until it is told its progress is the session's
         if (p.Key.StartsWith("peer:", StringComparison.Ordinal) && !_toldUnsaved.Contains(peer)) return;
-        RpcId(peer, MethodName.SectionSync, id, p.VersionOf(id), SectionWire(id, p.DataOf(id)?.ToJsonString(AdventureJson.Options) ?? "null", toWire: true));
-    }
-
-    /// <summary>
-    /// (#1503) The sections that hold a place (<c>pins</c>: each pin; <c>travel</c>: the flag) cross the wire with it as
-    /// ECEF <c>x</c>, <c>y</c>, <c>z</c>; the saved form (LV95 <c>e</c>, <c>n</c>) is kept in memory and on disk.
-    /// </summary>
-    internal static string SectionWire(string id, string json, bool toWire)
-    {
-        if (id != "pins" && id != "travel") return json;
-        try
-        {
-            var root = JsonNode.Parse(json);
-            if (id == "pins" && root?["pins"] is JsonArray pins)
-            {
-                foreach (var pin in pins)
-                    if (pin is JsonObject o) PlaceWire(o, toWire, false);
-            }
-            else if (id == "travel" && root?["flag"] is JsonObject flag) PlaceWire(flag, toWire, true);
-            return root?.ToJsonString(AdventureJson.Options) ?? json;
-        }
-        catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or FormatException)
-        {
-            return json;
-        }
-    }
-
-    /// <summary>One object's <c>e</c>, <c>n</c> (and <c>alt</c>) as ECEF <c>x</c>, <c>y</c>, <c>z</c>, or back.</summary>
-    private static void PlaceWire(JsonObject o, bool toWire, bool hasAlt)
-    {
-        if (toWire)
-        {
-            if (o["e"] == null || o["n"] == null) return;
-            var (x, y, z) = GlobalPos.FromLv95(o["e"]!.GetValue<double>(), o["n"]!.GetValue<double>(), hasAlt ? o["alt"]?.GetValue<double>() ?? 0 : 0).ToWire();
-            o.Remove("e");
-            o.Remove("n");
-            o.Remove("alt");
-            o["x"] = x;
-            o["y"] = y;
-            o["z"] = z;
-        }
-        else
-        {
-            if (o["x"] == null || o["y"] == null || o["z"] == null) return;
-            var g = GlobalPos.FromWire(o["x"]!.GetValue<double>(), o["y"]!.GetValue<double>(), o["z"]!.GetValue<double>());
-            o.Remove("x");
-            o.Remove("y");
-            o.Remove("z");
-            o["e"] = g.E;
-            o["n"] = g.N;
-            if (hasAlt) o["alt"] = (float)g.Alt;
-        }
+        RpcId(peer, MethodName.SectionSync, id, p.VersionOf(id), p.DataOf(id)?.ToJsonString(AdventureJson.Options) ?? "null");
     }
 
     private readonly HashSet<long> _toldUnsaved = new();
@@ -659,7 +612,7 @@ public partial class AdventureService : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void SectionSync(string id, int version, string json)
     {
-        try { Mine.SetRaw(id, version, JsonNode.Parse(SectionWire(id, json, toWire: false))); }
+        try { Mine.SetRaw(id, version, JsonNode.Parse(json)); }
         catch (Exception e) { GD.PushWarning($"[adventure] section '{id}' from the server: {e.Message}"); return; }
         OnSectionChanged(id);
     }

@@ -53,11 +53,10 @@ public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, double
     /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's, in GlobalPos's offset axes
     /// (what is saved); the world's turn of it is the same in a flat frame (#1503).
     /// </summary>
-    public Transform3D WorldTransform(WorldOrigin origin)
-    {
-        var at = new GlobalPos(E, N, Altitude);
-        return new(new Basis(origin.Frame.WorldTurnOf(at, Rotation)), origin.ToWorld(at));
-    }
+    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(origin.Frame.WorldTurnOf(At, Rotation)), origin.ToWorld(At));
+
+    /// <summary>Where it stands, as a place: what is saved and sent (#1503).</summary>
+    public GlobalPos At => GlobalPos.FromLv95(E, N, Altitude);
 }
 
 /// <summary>The server's answer to a request: the object on success, else why not.</summary>
@@ -229,7 +228,7 @@ public partial class PlacedObjects : Node
             // ECEF; the turn in the local east-up-south at the place (#1503)
             var (x, y, z) = g.ToWire();
             RpcId(1, MethodName.AskPlace, req, (int)kind, x, y, z, _origin.EnuTurn(at.Origin, rot),
-                kind == PlacedKind.Zipline ? Build.Gadgets.ZipToWire(payload) : payload);
+                kind == PlacedKind.Zipline ? Core.EarthSaves.ZipToEarth(payload) : payload);
         }
         // a record turns about GlobalPos's axes, as saved
         else ServePlace(1, req, (int)kind, g.E, g.N, g.Alt, _origin.Frame.OffsetTurnOf(at.Origin, rot), payload);
@@ -265,7 +264,7 @@ public partial class PlacedObjects : Node
         // ECEF and the turn in the local east-up-south, as a record keeps it in GlobalPos's axes (#1503)
         var at = GlobalPos.FromWire(x, y, z);
         Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, at.E, at.N, at.Alt, at.Enu.FromEnu(enuRot),
-            kind == (int)PlacedKind.Zipline ? Build.Gadgets.ZipFromWire(payload) : payload)));
+            kind == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payload) : payload)));
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -282,7 +281,7 @@ public partial class PlacedObjects : Node
             var at = GlobalPos.FromWire(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
             Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], at.E, at.N, at.Alt,
                 at.Enu.FromEnu(new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3])),
-                kinds[i] == (int)PlacedKind.Zipline ? Build.Gadgets.ZipFromWire(payloads[i]) : payloads[i]));
+                kinds[i] == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payloads[i]) : payloads[i]));
         }
         GD.Print($"[placed] snapshot: {ids.Length} object(s)");
     }
@@ -362,7 +361,7 @@ public partial class PlacedObjects : Node
             list.Select(o => o.Id).ToArray(),
             list.Select(o => (int)o.Kind).ToArray(),
             list.Select(o => OwnerShown(o.Owner)).ToArray(),
-            list.SelectMany(o => { var (x, y, z) = new GlobalPos(o.E, o.N, o.Altitude).ToWire(); return new[] { x, y, z }; }).ToArray(),
+            list.SelectMany(o => { var (x, y, z) = o.At.ToWire(); return new[] { x, y, z }; }).ToArray(),
             list.SelectMany(o => { var q = WireTurn(o); return new[] { q.X, q.Y, q.Z, q.W }; }).ToArray(),
             list.Select(WirePayload).ToArray());
     }
@@ -379,14 +378,22 @@ public partial class PlacedObjects : Node
         // ECEF and a turn in the local east-up-south -> the record's LV95 and GlobalPos axes (#1503)
         var at = GlobalPos.FromWire(x, y, z);
         ServePlace(peer, req, kind, at.E, at.N, at.Alt, at.Enu.FromEnu(enuRot),
-            kind == (int)PlacedKind.Zipline ? Build.Gadgets.ZipFromWire(payload) : payload);
+            kind == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payload) : payload);
     }
 
     /// <summary>A record's turn in the local east-up-south at its place: what goes on the wire.</summary>
-    private static Quaternion WireTurn(PlacedObject o) => new GlobalPos(o.E, o.N, o.Altitude).Enu.ToEnu(o.Rotation);
+    private static Quaternion WireTurn(PlacedObject o) => o.At.Enu.ToEnu(o.Rotation);
+
+    /// <summary>The turn as saved: <see cref="WireTurn"/>'s, the local east-up-south at the object (#1503, G2 A2b).</summary>
+    private static float[] SavedTurn(PlacedObject o)
+    {
+        var q = WireTurn(o);
+        return new[] { q.X, q.Y, q.Z, q.W };
+    }
 
     /// <summary>A record's payload as the wire carries it: a zipline's start in ECEF, the rest as saved.</summary>
-    private static string WirePayload(PlacedObject o) => o.Kind == PlacedKind.Zipline ? Build.Gadgets.ZipToWire(o.Payload) : o.Payload;
+    /// <summary>A zipline's payload as sent and saved: its high end in ECEF (<see cref="Core.EarthSaves.ZipToEarth"/>); other kinds' as they are.</summary>
+    private static string WirePayload(PlacedObject o) => o.Kind == PlacedKind.Zipline ? Core.EarthSaves.ZipToEarth(o.Payload) : o.Payload;
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void AskRemove(int req, long id) => ServeRemove(Multiplayer.GetRemoteSenderId(), req, id);
@@ -455,7 +462,7 @@ public partial class PlacedObjects : Node
         Save();
         ServedByPeer?.Invoke(peer, o, true);
         GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {OwnerShown(owner)} at LV95 {e:F1}/{n:F1}"));
-        var (wx, wy, wz) = new GlobalPos(o.E, o.N, o.Altitude).ToWire();
+        var (wx, wy, wz) = o.At.ToWire();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, WireTurn(o), WirePayload(o));
@@ -468,7 +475,7 @@ public partial class PlacedObjects : Node
         var (e, n) = _origin.ToLv95(at.Origin);
         var o = Put(new PlacedObject(_nextId++, kind, owner, e, n, at.Origin.Y, at.Basis.Orthonormalized().GetRotationQuaternion(), payload));
         if (owner != MatchOwner) Save();
-        var (wx, wy, wz) = new GlobalPos(o.E, o.N, o.Altitude).ToWire();
+        var (wx, wy, wz) = o.At.ToWire();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
                 RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, WireTurn(o), WirePayload(o));
@@ -580,8 +587,13 @@ public partial class PlacedObjects : Node
 
     // ---- persistence ----------------------------------------------------------------------------
 
+    /// <summary>
+    /// The file (#1503, G2 A2b): each object an Earth place, its turn in the local east-up-south there, a zipline's
+    /// payload its high end in ECEF (as sent); an older file goes through <see cref="EarthSaves.Placed"/> first.
+    /// </summary>
     private sealed class Store
     {
+        [System.Text.Json.Serialization.JsonPropertyName("version")] public int Version { get; set; } = Core.EarthSaves.Current;
         public long Next { get; set; } = 1;
         public List<Entry> Objects { get; set; } = new();
         /// <summary>Owner id to the last name seen with it: only a fallback for an id that no longer resolves.</summary>
@@ -593,10 +605,8 @@ public partial class PlacedObjects : Node
         public long Id { get; set; }
         public string Kind { get; set; } = "";
         public string Owner { get; set; } = "";
-        public double E { get; set; }
-        public double N { get; set; }
-        public double Altitude { get; set; }
-        public float[] Rotation { get; set; } = { 0, 0, 0, 1 };
+        [System.Text.Json.Serialization.JsonPropertyName("at")] public GlobalPos At { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("turn")] public float[] Turn { get; set; } = { 0, 0, 0, 1 };
         public string Payload { get; set; } = "";
     }
 
@@ -607,17 +617,22 @@ public partial class PlacedObjects : Node
         {
             if (!File.Exists(_storePath)) return;
             // System.Text.Json reads and writes numbers culture-invariantly
-            var store = JsonSerializer.Deserialize<Store>(File.ReadAllText(_storePath)) ?? new Store();
+            var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(_storePath)) as System.Text.Json.Nodes.JsonObject ?? new();
+            // a file from before G2 A2b (LV95, grid axes): converted in place, written back below (#1503)
+            bool migrated = Core.EarthSaves.Placed(root);
+            var store = JsonSerializer.Deserialize<Store>(root) ?? new Store();
             foreach (var en in store.Objects)
             {
                 // by name, so a reordered enum does not turn flags into photos
-                if (!Enum.TryParse<PlacedKind>(en.Kind, out var kind) || en.Rotation.Length != 4) continue;
-                Put(new PlacedObject(en.Id, kind, en.Owner, en.E, en.N, en.Altitude,
-                    new Quaternion(en.Rotation[0], en.Rotation[1], en.Rotation[2], en.Rotation[3]), en.Payload));
+                if (!Enum.TryParse<PlacedKind>(en.Kind, out var kind) || Core.SavedPlace.GridTurn(en.At, en.Turn) is not { } rot) continue;
+                var (e, n, h) = en.At.Lv95;
+                Put(new PlacedObject(en.Id, kind, en.Owner, e, n, h, rot,
+                    kind == PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(en.Payload) : en.Payload));
             }
             foreach (var (id, name) in store.OwnerNames) _ownerNames[id] = name;
             _nextId = Math.Max(store.Next, _objects.Count > 0 ? _objects.Keys.Max() + 1 : 1);
-            GD.Print($"[placed] loaded {_objects.Count} object(s) from {_storePath}");
+            GD.Print($"[placed] loaded {_objects.Count} object(s) from {_storePath}{(migrated ? " (LV95: written back in Earth places)" : "")}");
+            if (migrated) Save();
         }
         catch (Exception ex) { GD.PushWarning($"[placed] {_storePath}: {ex.Message}"); }
     }
@@ -633,8 +648,7 @@ public partial class PlacedObjects : Node
                 OwnerNames = _ownerNames.Where(n => _objects.Values.Any(o => o.Owner == n.Key)).ToDictionary(n => n.Key, n => n.Value),
                 Objects = _objects.Values.Where(o => o.Owner != MatchOwner).OrderBy(o => o.Id).Select(o => new Entry
                 {
-                    Id = o.Id, Kind = o.Kind.ToString(), Owner = o.Owner, E = o.E, N = o.N, Altitude = o.Altitude,
-                    Rotation = new[] { o.Rotation.X, o.Rotation.Y, o.Rotation.Z, o.Rotation.W }, Payload = o.Payload,
+                    Id = o.Id, Kind = o.Kind.ToString(), Owner = o.Owner, At = o.At, Turn = SavedTurn(o), Payload = WirePayload(o),
                 }).ToList(),
             };
             Core.JsonStore.SaveAsync(_storePath, store, Core.JsonStore.Indented, e => GD.PushError($"[placed] saving: {e.Message}"));

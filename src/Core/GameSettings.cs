@@ -488,18 +488,23 @@ public sealed class GameSettings
     public int AppearanceBits { get; set; }
 
     /// <summary>
-    /// Where the player landed last (#515), LV95 metres, so the map screen opens on it instead of
-    /// sending everyone back to Riddes every session. Zero until a world has been entered.
+    /// The file's layout (#1503, G2 A2b): 2 keeps places as Earth positions (<see cref="GlobalPosJson"/>); a file
+    /// without it had LV95 <c>lastLandingE</c>/<c>N</c> and <c>hostSpawnE</c>/<c>N</c>, which <see cref="EarthSaves.Settings"/>
+    /// converts on the first load.
     /// </summary>
-    public double LastLandingE { get; set; }
-    public double LastLandingN { get; set; }
+    public int Version { get; set; } = EarthSaves.Current;
 
     /// <summary>
-    /// Hosting from the menu (#799): where players start on this machine's server, LV95 metres (zero:
+    /// Where the player landed last (#515), on the ground, so the map screen opens on it instead of
+    /// sending everyone back to Riddes every session. None until a world has been entered.
+    /// </summary>
+    public GlobalPos? LastLanding { get; set; }
+
+    /// <summary>
+    /// Hosting from the menu (#799): where players start on this machine's server, on the ground (none:
     /// Riddes), and whether they may teleport. Remembered for the next game hosted.
     /// </summary>
-    public double HostSpawnE { get; set; }
-    public double HostSpawnN { get; set; }
+    public GlobalPos? HostSpawn { get; set; }
     public bool HostTeleport { get; set; } = true;
 
     /// <summary>The world last picked on Play solo and in the Host dialog (#999, a <see cref="WorldChoice"/> id).</summary>
@@ -635,7 +640,15 @@ public sealed class GameSettings
             {
                 using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Read);
                 string text = file.GetAsText();
-                loaded = JsonSerializer.Deserialize<GameSettings>(text, JsonOptions) ?? loaded;
+                file.Close();
+                var root = System.Text.Json.Nodes.JsonNode.Parse(text) as System.Text.Json.Nodes.JsonObject ?? new();
+                // a file from before G2 A2b (LV95 places): converted in place, the file itself (not this run's flags) written back (#1503)
+                if (EarthSaves.Settings(root))
+                {
+                    try { JsonStore.Save(File, root, JsonOptions); }
+                    catch (Exception e) { GD.PushWarning($"[settings] could not write {File}: {e.Message}"); }
+                }
+                loaded = root.Deserialize<GameSettings>(JsonOptions) ?? loaded;
                 // before #261 the radios' volume lived in radio.cfg: carried over once
                 if (!text.Contains("\"musicVolume\"", StringComparison.OrdinalIgnoreCase) && OldRadioVolume() is float old)
                     loaded.MusicVolume = old;

@@ -74,6 +74,9 @@
     <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1503 G2 A2b: GlobalPos's JSON shape in the saves (on the type) and the stores' in-place migrations -->
+    <Compile Include="..\..\src\Core\SavedPlace.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />

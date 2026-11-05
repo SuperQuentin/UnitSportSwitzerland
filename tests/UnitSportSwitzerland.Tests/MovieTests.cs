@@ -141,6 +141,41 @@ public class MovieTests
         Assert.Equal(p.Duration + 1, p.PlaceGrab(5), 9);
     }
 
+    /// <summary>
+    /// Two tracks alike once through the file (#1503, G2 A2b: places as ECEF, velocities in the local east-up-south,
+    /// headings from true north): the place to a tenth of a millimetre, the velocity and the heading to float rounding,
+    /// every other channel exactly.
+    /// </summary>
+    internal static void AssertSameTrack(ActorTrack a, ActorTrack b)
+    {
+        Assert.Equal(a.Frames, b.Frames);
+        for (int k = 0; k < a.Pos.Length; k++) Assert.True(Math.Abs(a.Pos[k] - b.Pos[k]) < 1e-4, $"pos[{k}] {a.Pos[k]} came back as {b.Pos[k]}");
+        for (int k = 0; k < a.F.Length; k++)
+        {
+            int c = k % Channels.Stride;
+            if (c is >= Channels.Vel and < Channels.Vel + 3 or Channels.Yaw)
+                Assert.True(Math.Abs(a.F[k] - b.F[k]) < 1e-5f, $"channel {c} of frame {k / Channels.Stride}: {a.F[k]} came back as {b.F[k]}");
+            else Assert.Equal(a.F[k], b.F[k]);
+        }
+    }
+
+    internal static void AssertSameTracks(MovieProject a, MovieProject b)
+    {
+        Assert.Equal(a.Tracks.Count, b.Tracks.Count);
+        for (int i = 0; i < a.Tracks.Count; i++) AssertSameTrack(a.Tracks[i], b.Tracks[i]);
+        Assert.Equal(a.Cameras.Count, b.Cameras.Count);
+        for (int i = 0; i < a.Cameras.Count; i++)
+        {
+            Assert.Equal(a.Cameras[i].Keys.Count, b.Cameras[i].Keys.Count);
+            for (int k = 0; k < a.Cameras[i].Keys.Count; k++)
+            {
+                var (x, y) = (a.Cameras[i].Keys[k], b.Cameras[i].Keys[k]);
+                Assert.True(Math.Abs(x.E - y.E) < 1e-4 && Math.Abs(x.N - y.N) < 1e-4 && Math.Abs(x.Alt - y.Alt) < 1e-4, "a camera key moved");
+                Assert.True(Math.Abs(new Godot.Quaternion(x.Qx, x.Qy, x.Qz, x.Qw).Dot(new Godot.Quaternion(y.Qx, y.Qy, y.Qz, y.Qw))) > 1 - 1e-6f, "a camera key turned");
+            }
+        }
+    }
+
     [Fact]
     public void AProjectSurvivesTheFileAndAPropertyRename()
     {
@@ -157,12 +192,13 @@ public class MovieTests
         Assert.Equal(42, q.Lanes[0].PeerId);
         Assert.Equal(2, q.Clips.Count);
         Assert.Equal(track.Times, q.Tracks[0].Times);
-        Assert.Equal(track.Pos, q.Tracks[0].Pos);
-        Assert.Equal(track.F, q.Tracks[0].F);
+        AssertSameTrack(track, q.Tracks[0]);
         Assert.Equal(track.Events, q.Tracks[0].Events);
         var again = new MemoryStream();
         MovieFile.Write(q, again);
-        Assert.Equal(bytes.ToArray(), again.ToArray());
+        // the same file again, its places (ECEF since version 7, #1503) only a rounding apart
+        Assert.Equal(bytes.Length, again.Length);
+        AssertSameTracks(q, MovieFile.Read(new MemoryStream(again.ToArray()), Props));
 
         // a newer build without HeldRadio and with a new property: the ride still plays, the radio is gone
         bytes.Position = 0;
