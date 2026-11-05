@@ -650,6 +650,7 @@ public static class WaterStage
                 survey = Arrays.Rent<float>(W * W);
                 var valid = Arrays.Rent<bool>(W * W);
                 bool anyValid = false;
+                var cursor = new BathySource.BedCursor();   // this tile's, one thread
                 for (int y = 0; y < W; y++)
                     for (int x = 0; x < W; x++)
                     {
@@ -659,7 +660,7 @@ public static class WaterStage
                         double lakeLevel = surveyLevelOf[label[i]];
                         double surf = ChunkFormat.Dequantize((ushort)surfaceQ[i]);
                         if (!(Math.Abs(surf - lakeLevel) <= WaterWindow.SurveyLevelToleranceM)) continue;
-                        double bed = bathy.SampleBed(wMinE + x, wMaxN - y);
+                        double bed = bathy.SampleBed(wMinE + x, wMaxN - y, ref cursor);
                         if (double.IsNaN(bed)) continue;
                         survey[i] = (float)Math.Max(0, surf - bed);
                         valid[i] = anyValid = true;

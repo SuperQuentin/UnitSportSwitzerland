@@ -30,7 +30,7 @@ public sealed class BathySource
 
     private readonly record struct Entry(string Archive, string? EntryName, string Lake);
 
-    private sealed class Grid
+    internal sealed class Grid
     {
         public required string Lake;
         public required int Cols, Rows;
@@ -79,18 +79,24 @@ public sealed class BathySource
     /// <summary>The lake a survey kilometre belongs to (the STAC item's name, e.g. "lacleman"), or null.</summary>
     public string? LakeAt(TileId id) => _index.TryGetValue(id, out var e) ? e.Lake : null;
 
-    // The kilometre this thread sampled last: a window walks its cells along rows, so the next sample is almost always in the
-    // same kilometre, and asking the dictionaries again for every cell cost a fifth of the water stage's bed phase (#1566).
-    // A grid is a pure function of its file, so a kept reference to one that ReleaseBefore has dropped reads the same cells.
-    [ThreadStatic] private static (BathySource? Owner, TileId Id, Grid? Grid) _home;
-
-    private Grid? GetGrid(TileId id)
+    /// <summary>
+    /// The kilometre a caller sampled last. A window walks its cells along rows, so the next sample is almost always in the same
+    /// kilometre, and asking the dictionaries again for every cell cost a fifth of the water stage's bed phase (#1566). The caller
+    /// owns it (one per tile, one thread), so nothing outlives the build. A grid is a pure function of its file, so a cursor still
+    /// holding one that <see cref="ReleaseBefore"/> dropped reads the same cells.
+    /// </summary>
+    public struct BedCursor
     {
-        var h = _home;
-        if (ReferenceEquals(h.Owner, this) && h.Id == id) return h.Grid;
-        var g = FindGrid(id);
-        _home = (this, id, g);
-        return g;
+        internal bool Set;
+        internal TileId Id;
+        internal Grid? Grid;
+    }
+
+    private Grid? GetGrid(TileId id, ref BedCursor c)
+    {
+        if (c.Set && c.Id == id) return c.Grid;
+        c = new BedCursor { Set = true, Id = id, Grid = FindGrid(id) };
+        return c.Grid;
     }
 
     private Grid? FindGrid(TileId id) =>
@@ -99,7 +105,14 @@ public sealed class BathySource
     /// <summary>Bed elevation (LN02 metres) at an LV95 point, or NaN off the survey.</summary>
     public double SampleBed(double e, double n)
     {
-        var home = GetGrid(TileId.FromLv95(e, n));
+        var c = new BedCursor();
+        return SampleBed(e, n, ref c);
+    }
+
+    /// <summary>As <see cref="SampleBed(double, double)"/>, remembering the kilometre in <paramref name="c"/> for the next call (one thread per cursor).</summary>
+    public double SampleBed(double e, double n, ref BedCursor c)
+    {
+        var home = GetGrid(TileId.FromLv95(e, n), ref c);
         if (home == null) return double.NaN;
 
         double cs = home.CellSize;
