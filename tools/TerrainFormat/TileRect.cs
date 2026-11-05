@@ -12,6 +12,14 @@ public readonly record struct TileRect(int MinE, int MinN, int MaxE, int MaxN)
     public TileRect Union(TileRect o) =>
         new(Math.Min(MinE, o.MinE), Math.Min(MinN, o.MinN), Math.Max(MaxE, o.MaxE), Math.Max(MaxN, o.MaxN));
     /// <summary>The box <paramref name="radius"/> tiles round one tile.</summary>
+    /// <summary>The tiles an LV95 box reaches, edges included (#1509: the LV95 tiles under a cube leaf).</summary>
+    public static TileRect Covering(double minE, double minN, double maxE, double maxN)
+    {
+        var lo = TileId.FromLv95(minE, minN);
+        var hi = TileId.FromLv95(maxE, maxN);
+        return new TileRect(lo.E, lo.N, hi.E, hi.N);
+    }
+
     public static TileRect Around(TileId id, int radius) => new TileRect(id.E, id.N, id.E, id.N).Grow(radius);
 
     /// <summary>The smallest rectangle holding every tile; null for none.</summary>

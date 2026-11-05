@@ -122,6 +122,10 @@ public static partial class Preprocessor
         // trees on work frames (#1507, G2 B3 PR 5b), over a region's cover and roads
         if (CubeTreesStage.Wants(args)) return CubeTreesStage.Run(args, ct);
         if (CubeCoverStage.Wants(args)) return CubeCoverStage.Run(args, ct);
+        // the farm fields on work frames (#1507, G2 B3 row 7)
+        if (CubeFieldStage.Wants(args)) return CubeFieldStage.Run(args);
+        // the ski slopes on work frames (#1507, G2 B3 row 7)
+        if (CubePisteStage.Wants(args)) return CubePisteStage.Run(args);
         // lake and river beds on work frames (#1507, G2 B3 PR 6), over a --cube region's heights and cover
         if (CubeWaterStage.Wants(args)) return CubeWaterStage.Run(args, ct);
         // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
