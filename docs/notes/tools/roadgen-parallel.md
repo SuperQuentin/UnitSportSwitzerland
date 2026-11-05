@@ -54,3 +54,45 @@ The serial fixes, each proved alone on the benchmark: `CorePlanner.Outside` pari
 
 `--rewrite` alone does not write the preprocessor's bytes: it also passes `places.json`, `tram_stops.tsv` and `sitg_signs.tsv` (31 of the benchmark's 52 `.road`
 differ, gantry destinations), and it finds `switzerland.bin` only from a checkout (run it elsewhere: no cantons, other signal heads). Compare like with like.
+
+## Where the stage's memory goes (#1563, Nov 2026)
+
+Measured on the multi-batch region (477 tiles, 20 blocks, 12 at once, Server GC) with temporary probes (not kept): a forced blocking gen2
+every 3 s, one at every phase of a block with `--jobs 1`, and `GC.GetAllocatedBytesForCurrentThread` per phase. The stage's 8.3-8.6 GB peak working
+set is **not** blocks holding 2 GB each:
+
+| What | Size | Note |
+|---|---|---|
+| Live before the first block | 0.52 GB | `Inputs` and what earlier stages left; held once |
+| Live per block, densest | +0.5 GB | roads +4, lines and graph +70, junction pipeline +210, layouts and emit +410, tiles +420 MB; the 8x8 ground grids are 128 MB of it |
+| Live per block, typical | +0.1 to +0.3 GB | back to +13 MB when the block is written: a finished session holds numbers only |
+| Live at the peak (11 blocks) | 4.3 GB | = 0.5 shared + blocks in flight |
+| Dead, waiting for a GC | 2.9 GB | about 1.8 GB gen0/gen1 (the 12 heaps' budgets), 1 GB dead large-object arrays (finished blocks' grids), 0.2 GB gen2 |
+| Committed at the peak | 7.5 GB | the process working set stays near 8 GB for the rest of the stage |
+
+- 56-60 GB are allocated in the stage's 25 s. `CornerPlanner.Plan` (tile assembly) allocates 24 GB of it (50 MB a tile of lists, tuples and LINQ),
+  `PlanAndMerge` 20 GB, the lines and graph 4.7 GB, `WriteLayouts` 3.4 GB. There is no big array reallocated per tile to pool; the garbage is small objects.
+- The heap runs to about 7.5 GB between full GCs (3 gen2 and about 40 gen0 in the stage). Fewer blocks do not cut it in proportion: `--jobs 3` still
+  peaks at 5.7 GB in the stage (45 s), because the budgets belong to the heaps, not the threads.
+- The 2 GB a block (`BlockMemoryBytes`) is 4 times what a block of this region holds live, but it is the bound the denser Zurich blocks were found
+  under (10 of them at once failed at 6 GB), and it only matters under a heap limit. Not changed; the Zurich blocks were not re-measured.
+- **The run's peak is not always the network stage's.** Benchmark: the network stage (4.5 GB). Rural: the water stage (8.1 GB; network 5.8 GB, cover 5.9 GB).
+  Multi-batch: the network stage and the cover stage after it, which starts on top of the network stage's committed memory and reaches 8.6 GB in the
+  pipeline against 6.0 GB (cover) and 7.3 GB (water) in a fresh process (`--cover-only`). Lowering the network stage alone lowers the multi-batch peak
+  by what the cover stage then falls to, and no further than the water stage's 7.3 GB.
+
+Tried, byte-identical in every case, none kept (network stage on the multi-batch region, 24.3-25.7 s and 8.3-8.6 GB in five unchanged runs):
+
+| Change | Stage wall | Stage peak | Verdict |
+|---|---|---|---|
+| Ground tiles decoded when first sampled (halo tiles with no road were decoded and dropped) | 24.8 s | 8.27 GB | -0.2 GB, within the spread |
+| ... and the block's height arrays pooled (`ChunkCodec.Decode` into a rented array, back at the block's end) | 26.9 s | 7.98 GB | -0.4 GB, 5 %, for a shared codec change |
+| `DOTNET_GCgen0MaxBudget=256 MB` (env only: `System.GC.Gen0MaxBudget` in the runtime config is ignored) | 25.1 s | 8.46 GB | nothing |
+| `DOTNET_GCgen0MaxBudget=64 MB` | 26.9 s | 6.81 GB | -1.7 GB, +11 %; the cover stage then peaks at 8.3 GB |
+| `System.GC.HeapCount=6` (a fixed count suits only this CPU) | 25.9 s | 7.04 GB | -1.5 GB, +6 %; cover then peaks at 8.7 GB |
+
+Under a hard heap limit (`DOTNET_GCHeapHardLimit`, default jobs, which the 2 GB bound lowers): 16 GB passes (7 at once, 28.5 s in the stage), 8 GB passes
+(3 at once, 69 s), 4 GB passes (1 block, 100 s in the stage, 4.2 GB peak, 190 s the run). **The network stage itself completes in 2 GB**, one block at a
+time (103 s, 2.2 GB); what stops the run is after it: at 3 GB `cover/pave` ran out of memory (once; a 1 GB bound with the same one block passed
+at 3 GB, so it is a coin flip there), at 2 GB loading the next 400-tile batch of grids (`cover/load`, 0.8 GB of grids) does. A 1 GB bound gives 2 blocks at 4 GB, which
+then ran out of memory in `cover/pave` where 1 block had passed: a lower `BlockMemoryBytes` buys time under a limit, not a lower limit. Linux and a nationwide run were not tried.
