@@ -186,7 +186,7 @@ frame; the fill domain as discs; the blend against real leaves left to C1, which
   `flat` and by leaves in `earth`; the 170 `TryGetHeight` callers and the 68 `IChunkSource` users move
   to it.
 
-**C2 Collision patches** (one PR; **built**, PR #1554, `docs/notes/terrain/collision-patches.md`: patches as level-16
+**C2 Collision patches** (one PR; **built**, PR #1556, `docs/notes/terrain/collision-patches.md`: patches as level-16
 cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook up; 42-83 ms and ~1.5 MB a patch, rays
 0.2 mm p99)
 - Trimesh patches (~128 × 128 cells, ~150 m) of a leaf's own triangles plus its road and building
