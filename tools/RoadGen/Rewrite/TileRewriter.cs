@@ -337,8 +337,8 @@ public static partial class TileRewriter
     /// <summary>A block's thread's stack: what the main thread the stage used to run on had at least.</summary>
     private const int BlockStackBytes = 16 * 1024 * 1024;
 
-    /// <summary>What a block may take at its peak, garbage included: bounds the blocks run at once by the memory there is.</summary>
-    private const long BlockMemoryBytes = 3L * 1024 * 1024 * 1024;
+    /// <summary>The heap one block needs at most (Zurich's 12 blocks one by one under a 2 GB heap limit; roadgen-parallel): bounds the blocks at once by the memory there is.</summary>
+    private const long BlockMemoryBytes = 2L * 1024 * 1024 * 1024;
 
     /// <summary>
     /// How many blocks run at once: one where blocks read what others write (<see cref="ITileLoop.BlocksIndependent"/>), share a
