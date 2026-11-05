@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 using UnitSport.Vehicles;
 using Xunit;
@@ -48,8 +49,8 @@ public class MarinaSlotTests
             Assert.Equal(b.Speedboat ? Speedboat : Jetski, s.KindId);
             // floating: the keel under the still level by the boat's own draught
             Assert.Equal(Level - (b.Speedboat ? DormantSlots.SpeedboatDraught : DormantSlots.JetskiDraught), s.Height, 4);
-            // the yaw MarinaBoats placed them with, -heading, kept in 0..2pi
-            double yaw = -b.Heading * Math.PI / 180;
+            // the yaw MarinaBoats placed them with, -heading (from true north) in the slot's offset axes (#1504), kept in 0..2pi
+            double yaw = TrueNorth.OffsetYaw(GlobalPos.FromLv95(b.E, b.N, Level), (float)(-b.Heading * Math.PI / 180));
             Assert.Equal(0, Math.IEEERemainder(s.Yaw - yaw, 2 * Math.PI), 4);
             Assert.InRange(s.Yaw, 0, 2 * Math.PI);
             Assert.True(s.Respawns, "a harbour is restocked");
