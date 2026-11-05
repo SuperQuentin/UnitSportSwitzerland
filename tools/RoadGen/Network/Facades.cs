@@ -1,16 +1,18 @@
 namespace UnitSport.Tools.RoadGen.Network;
 
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
 
 /// <summary>
 /// Where building walls stand, in plan, for the street planner (#119): every wall triangle of a
-/// tile's <c>.bldg</c> (normal close to horizontal) rasterised into a <see cref="Cell"/> grid, LV95.
+/// tile's <c>.bldg</c> (normal close to horizontal) rasterised into a <see cref="Cell"/> grid on the plane.
 /// Walls only, not roofs: a roof's eave overhangs the facade by up to a metre, and a sidewalk
 /// stopping at the eave would leave a strip of grass along every house. A road running through an
 /// arcade starts inside a footprint, which is fine: its ray meets the arcade's wall line.
-/// Tiles load on first use; a tile with no <c>.bldg</c> has no walls.
+/// Tiles load on first use; a tile with no <c>.bldg</c> has no walls. A km cache over the tiles of
+/// <paramref name="units"/> (#1507; the units the stage runs on when left out).
 /// </summary>
-public sealed class Facades(Func<TileId, BuildingTile?> source)
+public sealed class Facades(Func<TileId, BuildingTile?> source, IUnits? units = null)
 {
     /// <summary>The <c>.bldg</c> files of a chunk directory.</summary>
     public Facades(string chunkDir) : this(id => Read(chunkDir, id)) { }
@@ -18,19 +20,23 @@ public sealed class Facades(Func<TileId, BuildingTile?> source)
     /// <summary>Grid spacing, metres.</summary>
     public const double Cell = 0.5;
 
-    private const int Side = (int)(1000 / Cell);
+    private readonly IUnits _units = units ?? Plane.Units;
+    private readonly int Side = (int)((units ?? Plane.Units).TileSizeM / Cell);   // cells per tile side
+
+    /// <summary>The tiling the cache is keyed by.</summary>
+    public IUnits Units => _units;
     private readonly Dictionary<TileId, ulong[]?> _tiles = new();
 
     public int TilesLoaded => _tiles.Count(t => t.Value != null);
     public int Walls { get; private set; }
 
-    /// <summary>Whether a wall stands in the cell holding the LV95 point.</summary>
+    /// <summary>Whether a wall stands in the cell holding the plane point.</summary>
     public bool Occupied(double e, double n)
     {
-        var id = TileId.FromLv95(e, n);
+        var id = _units.TileAt(e, n);
         var bits = Tile(id);
         if (bits == null) return false;
-        int c = (int)((e - id.MinE) / Cell), r = (int)((id.MaxN - n) / Cell);
+        int c = (int)((e - _units.West(id)) / Cell), r = (int)((_units.North(id) - n) / Cell);
         if ((uint)c >= Side || (uint)r >= Side) return false;
         int i = r * Side + c;
         return (bits[i >> 6] & (1UL << (i & 63))) != 0;
@@ -48,7 +54,8 @@ public sealed class Facades(Func<TileId, BuildingTile?> source)
         var bits = Tile(id);
         if (bits != null)
         {
-            const int k = 4, n = Side / k;   // 0.5 m cells per 2 m cell, 2 m cells per side
+            const int k = 4;
+            int n = Side / k;   // 0.5 m cells per 2 m cell, 2 m cells per side
             mask = new bool[n * n];
             for (int r = 0; r < Side; r++)
                 for (int c = 0; c < Side; c++)
@@ -109,7 +116,7 @@ public sealed class Facades(Func<TileId, BuildingTile?> source)
     }
 
     /// <summary>Every cell a plan-view wall edge passes through (sampled at a quarter cell).</summary>
-    private static void Mark(ulong[] bits, double ax, double az, double bx, double bz)
+    private void Mark(ulong[] bits, double ax, double az, double bx, double bz)
     {
         double len = Math.Sqrt((bx - ax) * (bx - ax) + (bz - az) * (bz - az));
         int steps = Math.Max(1, (int)Math.Ceiling(len / (Cell * 0.25)));

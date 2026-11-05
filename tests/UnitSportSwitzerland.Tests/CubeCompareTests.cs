@@ -116,11 +116,12 @@ public class CubeCompareTests
     }
 
     [Fact]
-    public void A_length_counts_the_edges_its_filter_keeps()
+    public void A_length_counts_the_edges_its_filter_keeps_in_plan()
     {
+        // x, z in plan; the first edge also climbs 4 m (y), which a plan length leaves out
         var line = new CompareLine([0, 0, 0, 3, 4, 0, 3, 4, 10], 0);
-        Assert.Equal(15, LineIndex.Length(line), 12);
-        Assert.Equal(10, LineIndex.Length(line, (x, _, z) => z > 1), 12);
+        Assert.Equal(13, LineIndex.Length(line), 12);
+        Assert.Equal(9, LineIndex.Length(line, (x, _, z) => z > 1), 6);   // the climb from z 0 to 10 cut at z 1
     }
 
     [Fact]

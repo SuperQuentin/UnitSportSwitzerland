@@ -63,6 +63,12 @@ public partial class ClipRecorder : Node
 
     /// <summary>The frame the clip's first picture was drawn in (<c>Engine.GetFramesDrawn</c>): where its sound starts in a <c>--write-movie</c> track (#1497).</summary>
     private int _firstFrame;
+
+    /// <summary>
+    /// The frame the last picture was read in, and the pictures skipped because nothing was drawn since (#1528: a
+    /// locked or sleeping screen stops the window drawing, and a film's re-entry came out one still picture).
+    /// </summary>
+    private int _lastDrawn = -1, _undrawn;
     private Vector2I _size;
     private System.Action<string>? _reply;
 
@@ -161,6 +167,8 @@ public partial class ClipRecorder : Node
         _elapsed = 0;
         _sinceFrame = 0;
         _frames = 0;
+        _undrawn = 0;
+        _lastDrawn = -1;
         _size = default;
         _pipeError = null;
         _reply = reply;
@@ -189,6 +197,14 @@ public partial class ClipRecorder : Node
         }
         else _sinceFrame = _frames > 0 ? System.Math.Min(_sinceFrame - 1.0 / Fps, 1.0 / Fps) : 0;
 
+        // the window drew nothing since the last picture: no copy of it (the log counts them)
+        int drawn = Engine.GetFramesDrawn();
+        if (_frames > 0 && drawn == _lastDrawn)
+        {
+            _undrawn++;
+            return;
+        }
+        _lastDrawn = drawn;
         var image = GetViewport().GetTexture().GetImage();
         if (_size == default)
         {
@@ -310,6 +326,7 @@ public partial class ClipRecorder : Node
         int frames = _frames;
         double seconds = _elapsed;
         int first = _firstFrame;
+        if (_undrawn > 0) Say($"{_name}: the window drew nothing for {_undrawn} of the pictures (a locked or sleeping screen?): skipped, the clip jumps there", failed: true);
         System.Threading.Tasks.Task.Run(async () =>
         {
             await writer.ConfigureAwait(false);

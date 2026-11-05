@@ -27,11 +27,11 @@ public partial class Atmosphere : Node3D
     public WorldOrigin? Origin { get; set; }
 
     private static readonly StringName PlanetCentre = "planet_centre", PlanetR = "planet_r", AtmoR = "atmo_r",
-        SunDir = "sun_dir", Intensity = "intensity", ClampDist = "clamp_dist", WorldSpace = "world_space", TrueSunParam = "world_true_sun";
+        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", TrueSunParam = "world_true_sun";
 
     private MeshInstance3D _shell = null!;
     private ShaderMaterial _material = null!;
-    private float _space = -1, _skyEnergy = 1, _radius, _clamp;
+    private float _space = -1, _skyEnergy = 1, _radius;
     private Vector3 _centre = new(float.NaN, 0, 0), _sun;
     private Color _bgBase, _bgWritten;
     private Godot.Environment? _env;
@@ -47,7 +47,10 @@ public partial class Atmosphere : Node3D
         _shell = new MeshInstance3D
         {
             Name = "Shell",
-            Mesh = new SphereMesh { Radius = r, Height = 2 * r, RadialSegments = 96, Rings = 48 },
+            // a quad the shader lays over the whole screen (atmosphere.gdshader), never culled: the air is marched
+            // per pixel from the screen and the depth; a sphere's clamped back faces were clipped round the view (#1528)
+            Mesh = new QuadMesh { Size = new Vector2(2f, 2f) },
+            CustomAabb = new Aabb(new Vector3(-r, -r, -r), new Vector3(2 * r, 2 * r, 2 * r)),
             MaterialOverride = _material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
@@ -111,8 +114,6 @@ public partial class Atmosphere : Node3D
             _material.SetShaderParameter(AtmoR, (float)(r + ThicknessM));
         }
         if (!sun.IsEqualApprox(_sun)) _material.SetShaderParameter(SunDir, _sun = sun);
-        float clamp = cam.Far * 0.9f;
-        if (clamp != _clamp) _material.SetShaderParameter(ClampDist, _clamp = clamp);
         if (space != _space) _material.SetShaderParameter(Intensity, space);
         _space = space;
     }

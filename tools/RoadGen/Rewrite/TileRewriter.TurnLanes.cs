@@ -125,7 +125,8 @@ public static partial class TileRewriter
     /// </summary>
     private const double TurnRejoin = 30, TurnEntry = 15, TurnMinHatch = 5;
 
-    private const double TurnStation = 2.5, TurnGroundStep = 1.2, TileSizeM = 1000;
+    private const double TurnStation = 2.5, TurnGroundStep = 1.2;
+    private static double TileSizeM => Plane.TileSizeM;   // a tile's local extent (#1507)
 
     /// <summary>
     /// With a painted bike lane on the widened side (#120), every car lane beside it along the
@@ -215,7 +216,7 @@ public static partial class TileRewriter
     /// </returns>
     private static Dictionary<(int Node, int Arm), ArmLanes> EmitTurnLanes(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
-        HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> block, HashSet<TileId> wanted, IGround? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPointProp>> signs, List<(RoadSegment Segment, bool Right, (double From, double To) Along)> bikeBetween,
         Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide,
@@ -255,7 +256,7 @@ public static partial class TileRewriter
             if (plan.Kind is not (PriorityPlanner.Kind.Main or PriorityPlanner.Kind.Signal)) continue;
             var rules = JunctionRules.Of(plan.Kind);
             bool every = rules.Has(JunctionRule.PocketsOnEveryApproach);
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
             {
@@ -580,7 +581,7 @@ public static partial class TileRewriter
         {
             var rules = JunctionRules.Of(plan.Kind);
             if (!rules.Has(JunctionRule.SolidCentreBeforeStop)) continue;
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
             {
@@ -633,7 +634,7 @@ public static partial class TileRewriter
                 }
                 exitWay.Emit(Get(paint, so.Tile), Get(areas, so.Tile), stripOwners);
                 // the arm's exit stands out by it at the mouth: guides, crosswalk and the left pole follow (the user's review)
-                var exitLanes = Arm(junction.NodeId, i, TileId.FromLv95(junction.Centre.X, junction.Centre.Y));
+                var exitLanes = Arm(junction.NodeId, i, Plane.TileAt(junction.Centre.X, junction.Centre.Y));
                 exitLanes.ExitWidening = Math.Max(exitLanes.ExitWidening, extra);
                 exitLanes.BikeExitWay = exitWay;
                 stats.ExitsWidenedBesideBike++;
@@ -662,7 +663,7 @@ public static partial class TileRewriter
         {
             int n = junction.Arms.Count;
             if (n < 3 || plan.Arms.Count != n || !Enumerable.Range(0, n).Any(i => placed.ContainsKey((junction.NodeId, i)))) continue;
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             var anchors = Anchors(junction, net);
             for (int i = 0; i < n; i++)
@@ -706,7 +707,7 @@ public static partial class TileRewriter
                     if (tris.Count != 3 * (outline.Count - 2)) { stats.CornersRejected++; if (Environment.GetEnvironmentVariable("CORNERDBG") == "1") Console.WriteLine($"[corner] rejected (tris) at {junction.Centre.X:F0},{junction.Centre.Y:F0} corner {i}"); continue; }
                     var v = new float[patch.Count * 3];
                     for (int k = 0; k < patch.Count; k++)
-                        (v[k * 3], v[k * 3 + 1], v[k * 3 + 2]) = ((float)(patch[k].P.X - home.MinE), patch[k].Y, (float)(home.MaxN - patch[k].P.Y));
+                        (v[k * 3], v[k * 3 + 1], v[k * 3 + 2]) = ((float)(patch[k].P.X - Plane.West(home)), patch[k].Y, (float)(Plane.North(home) - patch[k].P.Y));
                     Get(areas, home).Add(new RoadAreaProp
                     {
                         Type = AreaPropType.Pavement, Flags = PropFlags.None, Height = 0f,
@@ -820,14 +821,14 @@ public static partial class TileRewriter
     {
         foreach (var (junction, _) in priority.Plans)
         {
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             for (int i = 0; i < junction.Arms.Count; i++)
             {
                 if (!arcs.TryGetValue((junction.NodeId, i), out var arc)) continue;
                 var line = arc.Offset(0, 0);
                 var local = new List<(Vec2 P, float Y)>(line.Count);
                 for (int k = 0; k < line.Count; k++)
-                    local.Add((new Vec2(line[k].X - home.MinE, line[k].Y - home.MaxN), arc.Yi + (arc.Yj - arc.Yi) * k / Math.Max(line.Count - 1, 1)));
+                    local.Add((new Vec2(line[k].X - Plane.West(home), line[k].Y - Plane.North(home)), arc.Yi + (arc.Yj - arc.Yi) * k / Math.Max(line.Count - 1, 1)));
                 Get(into, home).Add(new CornerPlanner.KerbArc(local, arc.Ei, arc.Ej));
             }
         }
@@ -1182,7 +1183,7 @@ public static partial class TileRewriter
 
         /// <summary>Lays the slot out for its pockets still planned; null when it fits, else the pocket to drop and why.</summary>
         public (PocketPlan Pocket, string Why)? Layout(EmbankmentPlanner.LineIndex lines, List<RoadSegment> tileSegments,
-            Dictionary<TileId, ChunkGrid>? grids, Footprints buildings)
+            IGround? grids, Footprints buildings)
         {
             var a = Approach is { Dropped: false } ? Approach : null;
             var e = Exit is { Dropped: false } ? Exit : null;
@@ -1483,7 +1484,7 @@ public static partial class TileRewriter
         {
             double d = far ? _length - dist : dist;
             var p = Point(d, _half + BaseAt(d) + Widen(d));
-            return (new Vec2(_tile.MinE + p[0], _tile.MaxN - p[2]), p[1]);
+            return (new Vec2(Plane.West(_tile) + p[0], Plane.North(_tile) - p[2]), p[1]);
         }
 
         /// <summary>The along-segment metres the widening covers, mouth to its far end.</summary>
@@ -1519,7 +1520,7 @@ public static partial class TileRewriter
         public float[] At(TileId frame, double dist, double offset)
         {
             var p = Point(dist, offset);
-            return [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
+            return [(float)(p[0] + Plane.West(_tile) - Plane.West(frame)), p[1], (float)(p[2] + Plane.North(frame) - Plane.North(_tile))];
         }
 
         /// <param name="painted">The segment the road's lines were laid on (the one they name), <paramref name="seg"/> or an Urban-flagged copy of it.</param>
@@ -1667,7 +1668,7 @@ public static partial class TileRewriter
         public (float[] Inner, float[] Outer) Mouth(TileId frame, double inset = 0, bool far = false)
         {
             float[] In(float[] p) =>
-                [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
+                [(float)(p[0] + Plane.West(_tile) - Plane.West(frame)), p[1], (float)(p[2] + Plane.North(frame) - Plane.North(_tile))];
             double at = far ? _length : 0;
             return (In(Inner(at)), In(Point(at, _half + BaseAt(at) + Widen(at) - inset)));
         }
@@ -1716,7 +1717,7 @@ public static partial class TileRewriter
         private double AlongOf(double dist) => _atEnd ? _total - dist : dist;
 
         /// <summary>Null when it fits; else why not.</summary>
-        public string? Check(EmbankmentPlanner.LineIndex lines, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings)
+        public string? Check(EmbankmentPlanner.LineIndex lines, IGround? grids, Footprints buildings)
         {
             if (_total < Reach + _clear) return "short";
             foreach (double dist in _dists)
@@ -1728,7 +1729,7 @@ public static partial class TileRewriter
                 {
                     double px = x + sx * o, pz = z + sz * o;
                     if (px < 0 || pz < 0 || px > TileSizeM || pz > TileSizeM) return "seam";
-                    var lv95 = new Vec2(_tile.MinE + px, _tile.MaxN - pz);
+                    var lv95 = new Vec2(Plane.West(_tile) + px, Plane.North(_tile) - pz);
                     if (buildings.Contains(lv95)) return "building";
                     if (lines.Covering(px, pz, _self, x, z, _half + 1.0) is not null) return "line";
                     if (grids is not null && SampleGround(grids, lv95.X, lv95.Y) is var g && !double.IsNaN(g)
@@ -2195,7 +2196,7 @@ public static partial class TileRewriter
             if (crosswalk) Island(zebraTo + 0.15, near + 2.0);
             double at = -IslandInside * 0.5 + after * 0.1;
             var spot = At2(at, Margin + iw * 0.5);
-            return (new Vec2(_tile.MinE + spot[0], _tile.MaxN - spot[2]), spot[1] + (float)Top);
+            return (new Vec2(Plane.West(_tile) + spot[0], Plane.North(_tile) - spot[2]), spot[1] + (float)Top);
         }
 
         /// <summary>Set once its lane markings are painted (a merged strip is painted once, by the pocket it leads to).</summary>

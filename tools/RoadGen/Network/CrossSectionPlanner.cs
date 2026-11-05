@@ -222,7 +222,7 @@ public static class CrossSectionPlanner
         var id = line.Tile;
         var plan = new Vec2[s.PointCount];
         for (int i = 0; i < plan.Length; i++)
-            plan[i] = new Vec2(id.MinE + s.Points[i * 3], id.MaxN - s.Points[i * 3 + 2]);
+            plan[i] = new Vec2(Plane.West(id) + s.Points[i * 3], Plane.North(id) - s.Points[i * 3 + 2]);
         line.Plan = plan;
         line.Shifted = plan;
         for (int i = 1; i < plan.Length; i++) line.Length += plan[i].DistanceTo(plan[i - 1]);
@@ -627,7 +627,7 @@ public static class CrossSectionPlanner
             }
             var points = new float[pts.Count * 3];
             for (int i = 0; i < pts.Count; i++)
-                (points[i * 3], points[i * 3 + 2]) = ((float)(pts[i].E - tile.MinE), (float)(tile.MaxN - pts[i].N));
+                (points[i * 3], points[i * 3 + 2]) = ((float)(pts[i].E - Plane.West(tile)), (float)(Plane.North(tile) - pts[i].N));
             return new Line
             {
                 Tile = tile, Write = true,
