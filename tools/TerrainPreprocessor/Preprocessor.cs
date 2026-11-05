@@ -118,6 +118,8 @@ public static partial class Preprocessor
         if (CubeNetworkStage.Wants(args)) return CubeNetworkStage.Run(args);
         // the cover on work frames (#1507, G2 B3 PR 5a), over a --cube region's heights
         if (CubeCoverStage.Wants(args)) return CubeCoverStage.Run(args, ct);
+        // lake and river beds on work frames (#1507, G2 B3 PR 6), over a --cube region's heights and cover
+        if (CubeWaterStage.Wants(args)) return CubeWaterStage.Run(args, ct);
         // the cube-sphere tiler (#1443, G1): its own options, beside the LV95 build
         if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
         // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format

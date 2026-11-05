@@ -257,10 +257,13 @@ public sealed class RegionHeights
     }
 
     /// <summary>A leaf's heights, or null when the region has none for it.</summary>
-    public CubeTile? Read(CubeKey leaf) => ReadKind(leaf, LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null;
+    public CubeTile? Read(CubeKey leaf) => ReadSection(leaf) is { } s ? LeafHeights.Decode(s) : null;
 
-    /// <summary>A leaf's section of one kind (#1507: the network stage reads the raw kinds this way), or null.</summary>
-    public LeafSection? ReadKind(CubeKey leaf, LeafKind kind)
+    /// <summary>Whether the region has the leaf (an entry in its frame's bundle).</summary>
+    public bool Has(CubeKey leaf) => _index.TryGetValue(leaf.AncestorAt(FrameLevel), out var index) && index.ContainsKey(leaf);
+
+    /// <summary>A leaf's entry bytes, or null.</summary>
+    private byte[]? Entry(CubeKey leaf)
     {
         var frame = leaf.AncestorAt(FrameLevel);
         if (!_index.TryGetValue(frame, out var index) || !index.TryGetValue(leaf, out var at)) return null;
@@ -268,6 +271,26 @@ public sealed class RegionHeights
         fs.Position = at.Offset;
         var bytes = new byte[at.Length];
         fs.ReadExactly(bytes);
-        return CubeLeafCodec.ReadSection(bytes, kind);
+        return bytes;
+    }
+
+    /// <summary>A leaf's heights section as it is, or null.</summary>
+    public LeafSection? ReadSection(CubeKey leaf) => Entry(leaf) is { } bytes ? CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) : null;
+
+    /// <summary>A leaf's section of one kind (#1507: the network stage reads the raw kinds this way), or null.</summary>
+    public LeafSection? ReadKind(CubeKey leaf, LeafKind kind) => Entry(leaf) is { } bytes ? CubeLeafCodec.ReadSection(bytes, kind) : null;
+
+    /// <summary>A leaf with every section, or null.</summary>
+    public CubeLeaf? ReadLeaf(CubeKey leaf) => Entry(leaf) is { } bytes ? CubeLeafCodec.Decode(bytes) : null;
+
+    /// <summary>The heights section of every leaf in a frame's bundle, as it is: what a stage that rewrites heights passes for the leaves it leaves alone.</summary>
+    public Dictionary<CubeKey, List<LeafSection>> AllHeightSections(CubeKey frame)
+    {
+        var all = new Dictionary<CubeKey, List<LeafSection>>();
+        string path = Path.Combine(_dir, CubeBundle.LeafFileName(frame));
+        if (!File.Exists(path)) return all;
+        foreach (var (k, bytes) in CubeBundle.ReadAllEntries(path))
+            if (CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s) all[k] = [s];
+        return all;
     }
 }
