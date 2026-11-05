@@ -21,6 +21,30 @@ public sealed class WorkPlane(EnuFrame centre)
             dx * centre.North.X + dy * centre.North.Y + dz * centre.North.Z);
     }
 
+    /// <summary>The plane point of a point on the ellipsoid given in ECEF (#1507): <see cref="ToPlane(double, double)"/> without the trip through latitude and longitude.</summary>
+    public (double X, double Y) ToPlane(EcefPos s)
+    {
+        double dx = s.X - centre.Origin.X, dy = s.Y - centre.Origin.Y, dz = s.Z - centre.Origin.Z;
+        return (dx * centre.East.X + dy * centre.East.Y + dz * centre.East.Z,
+            dx * centre.North.X + dy * centre.North.Y + dz * centre.North.Z);
+    }
+
+    /// <summary>The geodetic normal (unit, ECEF) under a plane point (#1507): <see cref="FromPlane"/> without the angles.</summary>
+    public EcefPos NormalAt(double x, double y)
+    {
+        var (o, e, n, u) = (centre.Origin, centre.East, centre.North, centre.Up);
+        double px = o.X + e.X * x + n.X * y, py = o.Y + e.Y * x + n.Y * y, pz = o.Z + e.Z * x + n.Z * y;
+        var ell = Ellipsoid.Wgs84;
+        double ia = 1 / (ell.A * ell.A), ib = 1 / (ell.B * ell.B);
+        double qa = (u.X * u.X + u.Y * u.Y) * ia + u.Z * u.Z * ib;
+        double qb = 2 * ((px * u.X + py * u.Y) * ia + pz * u.Z * ib);
+        double qc = (px * px + py * py) * ia + pz * pz * ib - 1;
+        double t = -2 * qc / (qb + Math.Sqrt(qb * qb - 4 * qa * qc));
+        double nx = (px + u.X * t) * ia, ny = (py + u.Y * t) * ia, nz = (pz + u.Z * t) * ib;
+        double inv = 1 / Math.Sqrt(nx * nx + ny * ny + nz * nz);
+        return new(nx * inv, ny * inv, nz * inv);
+    }
+
     public (double LatDeg, double LonDeg) FromPlane(double x, double y)
     {
         var (o, e, n, u) = (centre.Origin, centre.East, centre.North, centre.Up);

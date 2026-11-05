@@ -93,8 +93,22 @@ public static class FieldFormat
 
     public static void Encode(TileId id, IReadOnlyList<FieldPolygon> fields, Stream output)
     {
-        new TileHeader(Magic, Version, 0, id, (uint)fields.Count).Write(output);
+        TileHeader.WriteHead(output, Magic, Version, 0, id);
+        EncodeBody(fields, output);
+    }
+
+    /// <summary>
+    /// The key-free body (#1505, G2 B1): the count and the fields, what follows the header's tile id.
+    /// The .fld file is its 16-byte head and then this, byte for byte as before the split; a cube
+    /// leaf's field section (<see cref="LeafFields"/>) is this alone, compressed. Inside a leaf a ring's
+    /// points are (x, z) in the leaf's anchor frame (<see cref="CubeKey.Anchor"/>: x east, z south,
+    /// metres from the cell centre), not (east, north) from the tile's south-west corner.
+    /// </summary>
+    public static void EncodeBody(IReadOnlyList<FieldPolygon> fields, Stream output)
+    {
         Span<byte> b = stackalloc byte[12];
+        BinaryPrimitives.WriteUInt32LittleEndian(b, (uint)fields.Count);
+        output.Write(b[..4]);
         foreach (var f in fields)
         {
             BinaryPrimitives.WriteUInt32LittleEndian(b, f.Id);
@@ -119,10 +133,18 @@ public static class FieldFormat
 
     public static List<FieldPolygon> Decode(Stream input)
     {
-        var header = TileHeader.Read(input, Magic, "field");
-        var fields = new List<FieldPolygon>((int)header.Count);
+        TileHeader.ReadHead(input, Magic, "field");
+        return DecodeBody(input);
+    }
+
+    /// <summary>Reads what <see cref="EncodeBody"/> wrote.</summary>
+    public static List<FieldPolygon> DecodeBody(Stream input)
+    {
         var b = new byte[12];
-        for (uint i = 0; i < header.Count; i++)
+        input.ReadExactly(b, 0, 4);
+        uint count = BinaryPrimitives.ReadUInt32LittleEndian(b);
+        var fields = new List<FieldPolygon>((int)count);
+        for (uint i = 0; i < count; i++)
         {
             input.ReadExactly(b);
             uint fid = BinaryPrimitives.ReadUInt32LittleEndian(b);

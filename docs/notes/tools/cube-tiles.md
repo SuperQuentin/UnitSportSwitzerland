@@ -50,6 +50,62 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
   (i, j)–(i+1, j+1). `MeshHeightAt` finds the mesh height below a tangent-plane point;
   `CollisionField` samples a regular height field from it.
 
+## Leaves with content (G2 B1, #1505)
+
+Every tile kind of a level-14 leaf as a **section of one entry** (layout A, chosen by the user on
+measurements over the D: region: 1 read and 24 ms median cold a leaf, against 5.3 reads and 92 ms for
+a bundle per kind; equal from the OS cache). Code: `CubeLeaf.cs` (container), `CubeLeafSections.cs`
+(the section codecs, `CubeLeafContent`); tests `CubeLeafTests`. `--cube` writes their heights since B3 PR 1 (`cube-frames`), the other kinds come with the later B3 stages,
+and the game reads none (C1).
+
+- **Frame**: every position is in the leaf's anchor frame (`CubeKey.Anchor`): x east, y ENU up, z
+  south, metres from the cell centre on the ellipsoid, floats. **y is not an altitude**: it is
+  measured from the ellipsoid (~50 m below sea level in Switzerland, the geoid) along the centre's
+  up, so the ellipsoid itself drops ~1.5 cm below y = 0 at a leaf's corner. Heights are ellipsoidal,
+  as G1's. Lattice kinds are on the
+  leaf's lattice (`CubeKey.LatticeBits`: 513² at level 14, row-major from the south-west, i along u,
+  j along v), as the heights.
+- **Entry** (`CubeLeafCodec`, `CULF`): head 20 B (magic, version, section count, face, level, x, y),
+  a table of 12 B a section (kind u16, the section codec's own version u16 and flags u16, length
+  u32), the payloads back to back. A reader skips a kind it does not know and a codec version newer
+  than it reads (`CubeLeafContent.Skipped`), so neither bumps the entry version. `Decode` keeps
+  every section, unknown ones too; `CubeLeafCodec.Replace` and `CubeBundle.UpdateLeaves` (a stage
+  rewrites its own kinds in a bundle) keep every other section bit for bit.
+- **Bundles**: `CUBL`, `F0_L9_x_y.cubl`, one per level-9 ancestor, `CubeBundle`'s index layout; the
+  coarse pyramid keeps `.cubb` (CUBT entries) and colour `.cuba`.
+
+| Kind | Payload | Geneva km² (2499/1117) as one section |
+|---|---|---|
+| `Heights` | `CubeTileCodec` bytes as they are (version and features included) | G1 leaves 170 KB mean, 338 KB max |
+| `Cover` | bits u8, Brotli of a `CoverClass` byte a vertex (`CoverPalette`'s codes) | 9.8 KB (LV95 26.8 KB) |
+| `Holes` | bits u8, Brotli of the count and the sorted quads (i + j·2^bits, quad (i, j) south-west of vertex (i, j)) as delta varints | 89 B (560 B) |
+| `Water` | every second vertex (257², ~2.4 m): bits u8, base i64 (1 cm quanta, rounded from the lowest level), a `CubeTileCodec.EncodeHeights` blob of the ellipsoidal surface (dry = its missing code), then Brotli of the fetch bytes (`WaterFormat.FetchUnitM`, 0 dry) | 3.6 KB (20 KB) |
+| `Roads` | Brotli of `RoadCodec.EncodeBody`; version `RoadFormat.Version`, flags the `RoadTileFlags` | 3.3 MB (5.9 MB) |
+| `Buildings` | Brotli of `BuildingCodec.EncodeBody` | 427 KB (2.1 MB) |
+| `Trees` | Brotli of `TreeFormat.EncodeBody` | 10 KB (15 KB) |
+| `Pistes` | bits u8, Brotli of `PisteFormat.EncodeBody` with `Slot`/`Aux` on the leaf lattice; flags `FlagOsm` | (no piste on D:) |
+| `Fields` | Brotli of `FieldFormat.EncodeBody`: outlines, ring points (x, z) | (no field on D:) |
+| `Photo` | format u8 (`CubeAlbedoFormat`, `Jpeg` added), width and height u16, the image bytes as they are; row 0 the south edge, as `CubeAlbedo` | 122 KB (SWISSIMAGE 512² JPEG) |
+
+- **Compression**: Brotli quality 6, window 22 (`LeafPack`): roads kept 72 % at quality 4 (.NET's
+  `Optimal`), 56 % at 6 (0.9 s for that km²), 45 % at 11 (24 s); decoding costs the same.
+- **The body split**: the road, building, tree, piste and field codecs are a 16-byte head (magic,
+  version, flags, `TileId`: `TileHeader.WriteHead`/`ReadHead`) and a key-free body
+  (`EncodeBody`/`DecodeBody`), which the leaf sections reuse. The LV95 files are byte-identical
+  (pinned SHA-256 from main in `CubeLeafTests`; all 2,103 road, building and tree files of the D:
+  region re-encode to their own bytes with the split codecs, as with main's). The record types keep
+  their `TileId Id` until C1; inside a leaf it is default.
+- **Pistes**: `PisteTile.Slot`/`Aux` index the LV95 1 m grid (row 0 north), so a leaf carries them
+  on its lattice and `PisteTile.IndexAt` does not apply there; `AltLow`/`AltHigh` stay altitudes
+  above sea level (the snow model's input), not ENU heights.
+- **Fields**: outlines, not cells: the game rasterises its 4 m cells from them at load
+  (`FieldTile.Build` → `FieldFormat.Rasterise`) and clips the drawing to them (`FieldMeshBuilder`,
+  Versteckis' `VsGround` through `FieldTile`), so the leaf form needs no lattice; cells keyed by leaf
+  come with the farm store's re-keying (D).
+- **Re-encoding**: every section codec re-encodes a decoded section to the same bytes except the
+  heights: G1's header keeps the height range before quantising (a decoded tile writes a range a few
+  mm off, the same heights).
+
 ## Coarse levels: the pyramid (#1430 H4, agreed on #1455)
 
 The globe (H4) and G2's far view are one pyramid in this format, from the leaves up to the faces.
@@ -120,11 +176,15 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
 dotnet run --project tools/TerrainPreprocessor -c Release -- --cube --cube-out D:/.../cube13 \
   --in <swissALTI3D zips> [--rgealti <RGE ALTI dir> | --dem lambert93,<dir>,-0.28] [--cube-level 14] \
   [--cube-box minE,minN,maxE,maxN] [--tlm <swissTLM3D.gpkg>] [--buildings <swissBUILDINGS3D gpkg>] \
-  [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only]
+  [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only] [--cube-terr <LV95 chunks>]
 ```
 
+- **Since #1507 (G2 B3) it writes leaves**: one level-9 work frame at a time through the leaf writer,
+  each leaf's `Heights` section into the frame's `.cubl` (G1's `.cubb` leaves are still read by the
+  check and `--cube-swiss`); the driver, transforms, ground and writer are in `cube-frames`.
 - Sources: swissALTI3D parsed once to float32 (`<cache>/alti/E_N.f32`, 16 MB a km², not the
-  build's 7 cm ushorts), an LRU of 300 in memory; then `ForeignDem` (RGE ALTI etc.) with its dz.
+  build's 7 cm ushorts; the 2 m corridor `E_N_2m.f32`, 1 MB, read where 0.5 m has nothing), an LRU
+  of 300 in memory; then `ForeignDem` (RGE ALTI etc.) with its dz.
 - Heights: the point on each vertex's normal whose LHN95 height (`SwissGeodesy.FromEcef`) equals the
   source height at its own LV95 position (`CubeHeightSource.ExactHeight`, a fixed point). The
   LV95 position, LHN95 height and each DEM's grid position are rigorous at 17 × 17 control points

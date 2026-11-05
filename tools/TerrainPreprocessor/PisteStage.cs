@@ -99,7 +99,7 @@ public static class PisteStage
     /// multipolygon relations are areas; other ways are lines; a <c>route=piste</c> relation lends
     /// its tags to member ways that carry no <c>piste:type</c> of their own.
     /// </summary>
-    public static List<Slope> Load(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box)
+    public static List<Slope> Load(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box, GeoInput geo)
     {
         var rels = PbfReader.Read(pbf, jobs, new PbfReader.Filter
         {
@@ -127,7 +127,7 @@ public static class PisteStage
             for (int i = 0; i < count; i++)
             {
                 if (!nodes.TryGetValue(ids[i], out var ll)) return null;
-                var (e, n) = SwissProjection.ToLv95(ll.Lat, ll.Lon);
+                var (e, n) = geo.ToLv95(ll.Lat, ll.Lon);
                 pts[i * 2] = e; pts[i * 2 + 1] = n;
             }
             return pts;
@@ -197,7 +197,7 @@ public static class PisteStage
     }
 
     /// <summary>The region's OSM aerialways, their two ends in LV95 and their tags.</summary>
-    public static List<RopewayInfo> LoadAerialways(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box)
+    public static List<RopewayInfo> LoadAerialways(string pbf, int jobs, (double Lat0, double Lat1, double Lon0, double Lon1) box, GeoInput geo)
     {
         var data = PbfReader.Read(pbf, jobs, new PbfReader.Filter
         {
@@ -209,8 +209,8 @@ public static class PisteStage
         foreach (var w in data.Ways)
         {
             if (w.Refs.Length < 2 || !data.Nodes.TryGetValue(w.Refs[0], out var a) || !data.Nodes.TryGetValue(w.Refs[^1], out var b)) continue;
-            var (e0, n0) = SwissProjection.ToLv95(a.Lat, a.Lon);
-            var (e1, n1) = SwissProjection.ToLv95(b.Lat, b.Lon);
+            var (e0, n0) = geo.ToLv95(a.Lat, a.Lon);
+            var (e1, n1) = geo.ToLv95(b.Lat, b.Lon);
             int seats = int.TryParse(w.Tags.GetValueOrDefault("aerialway:occupancy"), out int o) ? o : 0;
             bool? detach = w.Tags.GetValueOrDefault("aerialway:detachable") switch { "yes" => true, "no" => false, _ => null };
             result.Add(new RopewayInfo(Math.Round(e0, 1), Math.Round(n0, 1), Math.Round(e1, 1), Math.Round(n1, 1), w.Tags["aerialway"],
@@ -467,17 +467,18 @@ public static class PisteStage
         // a lat/lon box round the region, 3 km wider, so slopes crossing its edge come whole
         double minE = region.Min(t => t.MinE) - 3000, maxE = region.Max(t => t.MinE) + 4000;
         double minN = region.Min(t => t.MinN) - 3000, maxN = region.Max(t => t.MaxN) + 3000;
-        var (la0, lo0) = SwissProjection.ToWgs84(minE, minN);
-        var (la1, lo1) = SwissProjection.ToWgs84(maxE, maxN);
-        var (la2, lo2) = SwissProjection.ToWgs84(minE, maxN);
-        var (la3, lo3) = SwissProjection.ToWgs84(maxE, minN);
+        var (la0, lo0) = GeoInput.ToLatLon(minE, minN);
+        var (la1, lo1) = GeoInput.ToLatLon(maxE, maxN);
+        var (la2, lo2) = GeoInput.ToLatLon(minE, maxN);
+        var (la3, lo3) = GeoInput.ToLatLon(maxE, minN);
         var box = (Math.Min(Math.Min(la0, la1), Math.Min(la2, la3)), Math.Max(Math.Max(la0, la1), Math.Max(la2, la3)),
                    Math.Min(Math.Min(lo0, lo1), Math.Min(lo2, lo3)), Math.Max(Math.Max(lo0, lo1), Math.Max(lo2, lo3)));
-        var slopes = Load(osmPbf, jobs, box);
+        var geo = GeoInput.Over(outDir);
+        var slopes = Load(osmPbf, jobs, box, geo);
         Console.WriteLine($"Pistes: {slopes.Count} slopes read from {Path.GetFileName(osmPbf)} in {clock.Elapsed.TotalSeconds:F1}s");
 
         // the lifts' OSM details beside them (#915): the game matches them to the TLM lines
-        var lifts = LoadAerialways(osmPbf, jobs, box);
+        var lifts = LoadAerialways(osmPbf, jobs, box, geo);
         File.WriteAllText(Path.Combine(outDir, RopewayInfoIndex.FileName), new RopewayInfoIndex { Ropeways = lifts }.ToJson());
         Console.WriteLine($"Pistes: {lifts.Count} aerialways written to {RopewayInfoIndex.FileName}");
 

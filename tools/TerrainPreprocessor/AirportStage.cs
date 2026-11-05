@@ -36,6 +36,7 @@ public static class AirportStage
         var tiles = TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet();
         if (tiles.Count == 0) return 0;
         var sampler = new LandingStage.TileSampler(outDir, tiles);
+        var geo = GeoInput.Over(outDir);
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MaxN) - ChunkFormat.TileSizeM, maxN = tiles.Max(t => t.MaxN);
 
@@ -80,8 +81,8 @@ public static class AirportStage
         // OpenStreetMap inside the airports' boxes (each 300 m wider)
         var boxes = areas.Select(a =>
         {
-            var (la0, lo0) = SwissProjection.ToWgs84(a.Box.E0 - 300, a.Box.N0 - 300);
-            var (la1, lo1) = SwissProjection.ToWgs84(a.Box.E1 + 300, a.Box.N1 + 300);
+            var (la0, lo0) = GeoInput.ToLatLon(a.Box.E0 - 300, a.Box.N0 - 300);
+            var (la1, lo1) = GeoInput.ToLatLon(a.Box.E1 + 300, a.Box.N1 + 300);
             return (Math.Min(la0, la1), Math.Min(lo0, lo1), Math.Max(la0, la1), Math.Max(lo0, lo1));
         }).ToList();
         var osm = PbfReader.Read(pbf, jobs, new PbfReader.Filter
@@ -100,7 +101,7 @@ public static class AirportStage
         {
             var pts = new List<(double E, double N)>();
             foreach (long id in w.Refs)
-                if (osm.Nodes.TryGetValue(id, out var ll)) pts.Add(SwissProjection.ToLv95(ll.Lat, ll.Lon));
+                if (osm.Nodes.TryGetValue(id, out var ll)) pts.Add(geo.ToLv95(ll.Lat, ll.Lon));
             return pts;
         }
         var ways = osm.Ways.Select(w => (Way: w, Pts: Line(w), Aeroway: w.Tags["aeroway"])).Where(w => w.Pts.Count > 0).ToList();
@@ -129,7 +130,7 @@ public static class AirportStage
             string code = area.Name;
             foreach (var node in osm.TaggedNodes)
             {
-                var p = SwissProjection.ToLv95(node.Lat, node.Lon);
+                var p = geo.ToLv95(node.Lat, node.Lon);
                 if (!In(p)) continue;
                 if (node.Tags.GetValueOrDefault("aeroway") == "aerodrome" && node.Tags.TryGetValue("icao", out var icao)) code = icao;
                 if (node.Tags.GetValueOrDefault("aeroway") != "parking_position") continue;
