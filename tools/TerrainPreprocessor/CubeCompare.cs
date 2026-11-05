@@ -476,6 +476,8 @@ public static class CubeCompare
         var r = new KindReport("buildings");
         var h = new Tally();
         var v = new Tally();
+        var seat = new Tally();
+        var onGround = new Tally();
         long lvTotal = 0, cubeTotal = 0, byId = 0, byNearest = 0, lvAlone = 0, cubeAlone = 0, lvWithId = 0, lvIdFound = 0;
         foreach (var bundle in c.Cube.Bundles)
         {
@@ -505,7 +507,14 @@ public static class CubeCompare
             {
                 if (!lvList[a].Owned) continue;
                 if (id) byId++; else byNearest++;
-                VertexOffsets(lvList[a].Pts, cubeList[b].Pts, h, v);
+                // each build seats a building on its own ground (#1507): the grounds' difference under its centre,
+                // and the vertices' vertical offset less it (what the stage itself moved)
+                var f = lvList[a].F;
+                var centre = frame.ToEcef(f.X, f.Y, f.Z);
+                double dg = c.Lv.AboveGround(centre) - c.Cube.AboveGround(centre);
+                if (double.IsNaN(dg)) dg = 0;
+                else seat.Add(dg);
+                VertexOffsets(lvList[a].Pts, cubeList[b].Pts, h, v, onGround, dg);
             }
             for (int a = 0; a < lvList.Count; a++)
             {
@@ -523,6 +532,8 @@ public static class CubeCompare
         r.AtMost("buildings alone", (lvAlone + cubeAlone) / (double)Math.Max(1, Math.Max(lvTotal, cubeTotal)), 1 - CompareBars.ClassAgreement, "P2");
         r.Check("vertex plan distance", h.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
         r.Check("vertex vertical", v.Spread(), true, new Bar(Stat.P99, CompareBars.Vertex));
+        r.Check("the grounds under them (leaf mesh less .terr at each centre)", seat.Spread(), true);
+        r.Check("vertex vertical less that ground difference", onGround.Spread(), true);
         return r;
     }
 
@@ -543,7 +554,7 @@ public static class CubeCompare
     }
 
     /// <summary>Vertex k against vertex k when both builds kept the same triangles, else each leaf vertex against the nearest LV95 one.</summary>
-    private static void VertexOffsets(double[] a, double[] b, Tally h, Tally v)
+    private static void VertexOffsets(double[] a, double[] b, Tally h, Tally v, Tally? less = null, double ground = 0)
     {
         bool same = a.Length == b.Length;
         for (int k = 0; k + 2 < b.Length; k += 3)
@@ -561,6 +572,7 @@ public static class CubeCompare
             double ex = b[k] - a[best], ez = b[k + 2] - a[best + 2];
             h.Add(Math.Sqrt(ex * ex + ez * ez));
             v.Add(b[k + 1] - a[best + 1]);
+            less?.Add(b[k + 1] - a[best + 1] - ground);
         }
     }
 

@@ -17,7 +17,7 @@ namespace UnitSport.Tools.Preprocessor;
 /// <code>
 /// --cube-buildings --cube-out REGION (--buildings-gdb ZIP ... | --buildings GPKG) [--gwr data.sqlite]
 ///   [--france minLon,minLat,maxLon,maxLat] [--cube-box minE,minN,maxE,maxN] [--tiles-file F] [--temp DIR]
-///   [--cube-margin 250]
+///   [--cube-margin 250] [--jobs N]
 /// </code>
 /// </summary>
 public static class CubeBuildingStage
@@ -36,6 +36,7 @@ public static class CubeBuildingStage
         var gdb = new List<string>();
         (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         double margin = DefaultMarginM;
+        int jobs = Environment.ProcessorCount;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -48,6 +49,7 @@ public static class CubeBuildingStage
                 case "--temp": temp = args[++i]; break;
                 case "--france": france = args[++i]; break;
                 case "--tiles-file": tilesFile = args[++i]; break;
+                case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--cube-margin": margin = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--cube-box":
                     var v = args[++i].Split(',').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
@@ -128,7 +130,7 @@ public static class CubeBuildingStage
             }
 
             var sections = new ConcurrentDictionary<CubeKey, List<LeafSection>>();
-            Parallel.ForEach(byLeaf.Where(kv => kv.Value.Count > 0), new ParallelOptions { CancellationToken = ct }, kv =>
+            Parallel.ForEach(byLeaf.Where(kv => kv.Value.Count > 0), new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, kv =>
                 sections[kv.Key] = new List<LeafSection> { LeafBuildings.Encode(new BuildingTile { Buildings = kv.Value }) });
             writer.WriteFrame(plan.Cell, new Dictionary<CubeKey, List<LeafSection>>(sections));
 

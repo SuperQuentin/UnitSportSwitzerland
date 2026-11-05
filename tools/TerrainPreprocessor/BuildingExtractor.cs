@@ -270,9 +270,7 @@ public sealed class BuildingExtractor
         rings = DropStrayFaces(rings);
         double minE = double.MaxValue, maxE = double.MinValue;
         double minN = double.MaxValue, maxN = double.MinValue;
-        // the same box on the space's plane (LV95 itself in the LV95 build), and every ring point there
-        double minX = double.MaxValue, maxX = double.MinValue;
-        double minY = double.MaxValue, maxY = double.MinValue;
+        // every ring point on the space's plane (LV95 itself in the LV95 build), and the lowest
         double minZ = double.MaxValue;
         int triCount = 0;
         var placed = new double[rings.Count][];
@@ -306,20 +304,19 @@ public sealed class BuildingExtractor
             {
                 var (x, y, z) = space.FromSource(Lv95Source.Instance, ring.Xyz[i * 3], ring.Xyz[i * 3 + 1], ring.Xyz[i * 3 + 2]);
                 p[i * 3] = x; p[i * 3 + 1] = y; p[i * 3 + 2] = z;
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
                 if (z < minZ) minZ = z;
             }
         }
 
         // a building belongs to the tile containing its centre; it is never split, so it
-        // stays whole when neighbouring tiles stream in and out
-        if (!space.TryOwner((minX + maxX) * 0.5, (minY + maxY) * 0.5, out var tile)) return;
+        // stays whole when neighbouring tiles stream in and out. The centre and the re-seat grid
+        // below are the source box's (LV95 axes), taken onto the plane (#1507)
+        double cE = (minE + maxE) * 0.5, cN = (minN + maxN) * 0.5;
+        var (ox, oy, _) = space.FromSource(Lv95Source.Instance, cE, cN, minZ);
+        if (!space.TryOwner(ox, oy, out var tile)) return;
         var bucket = result[tile];
 
-        var match = FindCadastre(minE, minN, maxE, maxN, (minE + maxE) * 0.5, (minN + maxN) * 0.5);
+        var match = FindCadastre(minE, minN, maxE, maxN, cE, cN);
         // counted here, not per query row: the batch bbox also returns buildings owned by
         // tiles in other batches, which are skipped above and must not dilute the match rate
         Total++;
@@ -327,14 +324,18 @@ public sealed class BuildingExtractor
 
         // Re-seat the solid on our own heightfield. Sampling a 3x3 grid over the footprint
         // and taking the median keeps a building on a slope from being driven by one
-        // outlying corner.
+        // outlying corner. The grid is the source's (#1507): its box in LV95's own axes, each
+        // point taken onto the plane, so a work frame (turned ~1° from grid north) samples the
+        // ground where the LV95 build does; on a slope the median of a turned grid moved
+        // buildings by tens of centimetres.
         double lift = 0;
         var samples = new List<double>(9);
         for (int gy = 0; gy <= 2; gy++)
             for (int gx = 0; gx <= 2; gx++)
             {
-                double? h = space.Ground.Sample(minX + (maxX - minX) * gx / 2.0,
-                                                minY + (maxY - minY) * gy / 2.0);
+                var (sx, sy, _) = space.FromSource(Lv95Source.Instance, minE + (maxE - minE) * gx / 2.0,
+                                                   minN + (maxN - minN) * gy / 2.0, minZ);
+                double? h = space.Ground.Sample(sx, sy);
                 if (h.HasValue) samples.Add(h.Value);
             }
         if (samples.Count > 0)
