@@ -6,6 +6,7 @@
     python -I tools/plancues/plancues.py place   <venue> <file> <page> [--region K]
     python -I tools/plancues/plancues.py export  <venue> house|stadium [--cue NAME]
     python -I tools/plancues/plancues.py review  <venue> [--cue NAME]
+    python -I tools/plancues/plancues.py footscale validate|apply [--jobs N]   scale from the footprint: check it against bars / use it where there is none
     python -I tools/plancues/plancues.py run     <venue> <file> <page> [--region K]     scale + extract + place + review
 
 Pages are 1-based. Documents are read from --root (default X:/UnitSportSwitzerland), results go to --out
@@ -112,7 +113,20 @@ def main(argv=None):
     _common(p)
     p.add_argument("venue")
     p.add_argument("--cue")
+    p = sub.add_parser("footscale")
+    _common(p)
+    p.add_argument("what", choices=["validate", "apply", "draw"])
+    p.add_argument("file", nargs="?", help="draw: part of the file name")
+    p.add_argument("page", nargs="?", type=int)
+    p.add_argument("--region", type=int)
+    p.add_argument("--relax", action="store_true", help="draw: let the gate pass a near miss, for looking only")
+    p.add_argument("--jobs", type=int, default=6, help="pages in parallel")
+    p.add_argument("--types", default="floor_plan,site_plan,mixed_sheet", help="validate: sorter types to try")
+    p.add_argument("--all-types", action="store_true", help="apply: also pages the sorter is unsure of")
     a = ap.parse_args(argv)
+    if a.cmd == "footscale":
+        import footscalecmd
+        return footscalecmd.main(a)
     if a.cmd == "sort":
         import sortpages
         return sortpages.main(a)

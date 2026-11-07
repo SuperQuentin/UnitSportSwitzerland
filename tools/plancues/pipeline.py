@@ -12,6 +12,7 @@ import aerial
 import cue as cuem
 import extract as ex
 import features
+import footscale
 import northarrow
 import pdfio
 import place
@@ -94,6 +95,78 @@ def scale_stage(root, venue, rel_path, page, region=None, kinds=("pitch",)):
     return c, pg
 
 
+# ------------------------------------------------------------------------------------------------ scale from the footprint
+FOOT_RADIUS_M = 120.0   # buildings considered around the venue hint
+FOOT_CANDIDATES = 12
+_cand_cache = {}
+
+
+def footprint_candidates(chunks, at, radius=FOOT_RADIUS_M, limit=FOOT_CANDIDATES):
+    """The buildings near a hint that a plan could be of: the `limit` nearest solids over 30 m2."""
+    from shapely.geometry import Point
+    key = (chunks, round(at[0]), round(at[1]), radius)
+    if key not in _cand_cache:
+        pt = Point(at[0], at[1])
+        bs = [b for b in tiles.buildings_near(chunks, at[0], at[1], radius) if b["fp"].area > 30]
+        bs.sort(key=lambda b: (b["fp"].distance(pt), -b["fp"].area))
+        _cand_cache[key] = bs[:limit]
+    return _cand_cache[key]
+
+
+def footscale_stage(root, venue, rel_path, page, chunks, info, region=None, thr=None, bias=None, refs=True, final=True,
+                    cache_dir=None, log=print):
+    """A vector page with no bar and no known object, scaled to the building's footprint when the two clearly share a shape.
+
+    The outline is extracted at a provisional scale (the scale found is fed back until it settles, at most 3 passes), searched
+    against the nearby footprints (`footscale.judge`) and, if the gate passes, the page is extracted at the scale found and placed
+    on the building chosen. Returns (cue, page, judgement); the judgement carries the numbers even when the gate rejects.
+    """
+    pg = Page(root, rel_path, page)
+    bbox = region or (0.0, 0.0, pg.rect.width, pg.rect.height)
+    c = cuem.new_cue(venue, rel_path, page, bbox, "vector" if pg.stats["n_paths"] > 30 else "raster")
+    j = None
+    at = info.get("at")
+    if not at:
+        cuem.set_status(c, "rejected", ["no map position hint for this venue (--at E,N)"])
+        return c, pg, j
+    cands = footprint_candidates(chunks, at)
+    if not cands:
+        cuem.set_status(c, "rejected", ["no building solid near the position hint in the tiles"])
+        return c, pg, j
+    m = 0.15
+    for _ in range(3):
+        c0 = cuem.new_cue(venue, rel_path, page, bbox, "vector")
+        c0["scale"] = dict(m_per_pt=m, method="provisional", cross_check=None)
+        extract_stage(c0, pg, "building", outline_only=True)
+        if not c0["levels"]:
+            cuem.set_status(c, "rejected", ["footprint scale: " + "; ".join(r for r in c0["reasons"] if r != "not processed")])
+            return c, pg, j
+        poly = place.scaled(Polygon(c0["levels"][0]["outline"]), 1.0 / m)
+        j = footscale.judge(poly, cands, thr, bias, words=pg.words, refs=refs)
+        new = j.get("raw_m_per_pt") or m
+        done = abs(new / m - 1) < 0.15
+        m = new
+        if done:
+            break
+    j["passes_m_per_pt"] = m
+    if j["status"] == "rejected":
+        c["scale"] = None
+        cuem.set_status(c, "rejected", ["no scale: no bar, no known object, and the footprint does not clearly match"] + j["reasons"])
+        return c, pg, j
+    cc = j["cross_check"] if j["cross_check"] and j["cross_check"]["agrees"] else None
+    c["scale"] = dict(m_per_pt=j["m_per_pt"], method="footprint_fit", cross_check=cc,
+                      footprint=dict(egid=j["egid"], iou=round(j["iou"], 4), rms_m=round(j["rms_m"], 3), margin=None if j["margin"] is None else round(j["margin"], 4),
+                                     distinct=None if j.get("distinct") is None else round(j["distinct"], 4), raw_m_per_pt=j["raw_m_per_pt"],
+                                     bias=footscale.BIAS if bias is None else bias))
+    cuem.set_status(c, j["status"], j["reasons"])
+    if final:
+        extract_stage(c, pg, "building", debug_dir=None)
+        if c["levels"]:
+            info2 = dict(info, kind="building")
+            place_stage(c, chunks, cache_dir or "", info2, egid=j["egid"], log=log)
+    return c, pg, j
+
+
 # ------------------------------------------------------------------------------------------------ stadium facts
 def _dashed_lines(pg, minlen=100.0):
     hs, vs = [], []
@@ -142,7 +215,7 @@ def _origin_and_shift(poly_clip_m):
     return (minx + maxx) / 2, (miny + maxy) / 2
 
 
-def extract_stage(c, pg, venue_kind="building", close_m=None, res=ex.RES, debug_dir=None):
+def extract_stage(c, pg, venue_kind="building", close_m=None, res=ex.RES, debug_dir=None, outline_only=False):
     m = c["scale"]["m_per_pt"]
     clip = _clip_of(c, pg.rect) or (0, 0, pg.rect.width, pg.rect.height)
     sel = [d for d in pg.drawings if d["rect"].x1 > clip[0] and d["rect"].x0 < clip[2] and d["rect"].y1 > clip[1] and d["rect"].y0 < clip[3]]
@@ -176,6 +249,10 @@ def extract_stage(c, pg, venue_kind="building", close_m=None, res=ex.RES, debug_
     outline = max(outs, key=lambda p: p.area)
     ox, oz = _origin_and_shift(outline)
     ox_pt, oz_pt = clip[0] + ox / m, clip[1] + oz / m  # the origin as a page point
+    if outline_only:  # the scale search only needs the envelope
+        c["levels"] = [dict(name="outline", outline=[[round(x - ox, 3), round(z - oz, 3)] for x, z in list(outline.exterior.coords)[:-1]],
+                            origin_pt=[round(ox_pt, 3), round(oz_pt, 3)], rooms=[], openings=[], extra={})]
+        return c
     markers, _ = ex.segment_rooms(mask, ol, fr)
     markers = ex.grow_into_walls(markers, mask, int(0.6 * res))
     ids = [int(i) for i in np.unique(markers) if i > 1]
@@ -411,18 +488,7 @@ def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_p
     if b is None:
         cuem.set_status(c, "rejected", ["no building solid near the position hint to fit the scan to"])
         return c
-    s0 = math.sqrt(b["fp"].area / poly.area)  # metres per pixel if the outline filled the footprint
-    best = None
-    for f in np.concatenate([np.arange(0.6, 1.5, 0.05), np.arange(1.5, 1.6, 0.05)]):
-        r = place.fit_footprint(poly_scaled(poly, s0 * f), b["fp"], g=1.0, step=3.0)
-        if best is None or r["iou"] > best[0]["iou"]:
-            best = (r, s0 * f)
-    r, s1 = best
-    for f in np.arange(0.96, 1.041, 0.01):
-        r2 = place.fit_footprint(poly_scaled(poly, s1 * f), b["fp"], g=0.5, step=1.0, yaw_hint=r["yaw_deg"], hint_tol=4.0)
-        if r2["iou"] > r["iou"]:
-            r, best = r2, (r2, s1 * f)
-    r, s = best
+    r, s = place.scale_search(poly, b["fp"])
     m_per_pt = s * sc  # metres per page point
     sp = poly_scaled(poly, s)
     cx, cz = r["origin"]
@@ -454,5 +520,4 @@ def pymupdf_rect(box):
 
 
 def poly_scaled(poly, s):
-    from shapely import affinity
-    return affinity.scale(poly, s, s, origin=(0, 0))
+    return place.scaled(poly, s)

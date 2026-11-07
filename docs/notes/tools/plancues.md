@@ -54,6 +54,27 @@ sheet has nothing inside it; the Untergeschoss sheet's wing B has no door to the
 ring, so no front door exists in the drawing and none is invented (`--exit-snap` only moves a door that really leads out of the layout, and did not help).
 Stepped solids need a frame from their real footprint before layouts can describe them.
 
+## Scale from the footprint (vector pages with no bar and no known object)
+
+`footscale.py`, `pipeline.footscale_stage`, `plancues.py footscale validate|apply|draw`. The outline (extracted at a provisional scale that is fed back
+until it settles) is searched against the 12 nearest footprints within 120 m of the venue hint (`place.scale_search`, shared with the scan stage: coarse
+then fine scale x every turn, IoU, parabola on the fine steps). The gate: IoU >= 0.85 and boundary rms <= 2 % of sqrt(footprint area); the best building
+beats the next by 0.05 IoU (a runner-up with the same scale +-3 % does not count against the scale); the plan beats its own minimum rectangle and convex
+hull on that footprint by 0.03 IoU (else only an elongated near-rectangle, aspect >= 1.3, whose two aspect ratios agree within 4 %, passes, as low_confidence);
+neither is a part of the other (plan cover minus footprint cover within 0.12); a plausible scale (0.015-1.5 m per point). A written ratio ("1:200", the PDF's
+page size is the paper size) within 5 % of the result makes it `ok`, otherwise `low_confidence`; method `footprint_fit`. Door gaps and stair treads were
+not used: they pin a scale to +-20 %, not 5 %. Venue hints for the 15 venues with plans are in `venues.json` (swisstopo geocoder).
+
+Validation (hide the bar, compare; `footscale validate`): only **3 pages** have a bar that is really the drawing's (the outline at the bar's scale fits a footprint,
+IoU >= 0.75) and a building that is in our tiles: vonRoll p24 -0.3 % (IoU 0.96), UniS p3 region 2 -1.8 % (IoU 0.83), vonRoll p27 -6.7 % (IoU 0.77). Mean -3 %, the
+footprint scale runs **small**, not large (overhangs would make it large); three pages cannot support a correction, so `BIAS = 1.0`. The gate passes none of them
+(vonRoll p24: the next building fits 0.95 against 0.96, and a box fits as well; UniS: a stepped complex, rms 5.6 %), so 0 accepted, 0 wrongly accepted. One more
+page is confirmed by its written ratio: UniLuzern `Bauwelt_2012_33_plans` p4 region 1, 1:1000 against the fit's 0.3536 m per point (-0.2 %), its bar belongs to
+another drawing. Thresholds follow these pages and the failures seen, not a fitted optimum: too few pages for more.
+`apply` on the 49 sure vector floor and site plans (4 already have a scale): **0 newly scaled**. 17 fail only the rms limit or the scale-plausibility test with IoU
+0.84-0.97 (Hallenstadion 9, UniLuzern 4: the footprint's outline is not the plan's, rms 4-7 m); the rest have no wall weight, no outline or IoU under 0.85.
+`footscale draw <file> <page> [--region K] --relax` draws the overlay of a near miss (gate relaxed, for looking only).
+
 ## Sort: method and honest numbers
 
 Three label sets, kept apart: `sort_labels.csv` (54, the first look, which the old rules were tuned on), `sort_labels_train.csv` (222, two random draws by

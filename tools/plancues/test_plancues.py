@@ -9,6 +9,7 @@ import pymupdf
 from shapely.geometry import Polygon
 
 import extract as ex
+import footscale
 import features
 import pipeline
 import place
@@ -250,6 +251,87 @@ class PlaceTests(unittest.TestCase):
     def test_north_arrow_yaw(self):
         self.assertAlmostEqual(place.yaw_of_north_arrow(0, -1), 90.0 - 90.0, places=6)  # north up: page right is east: yaw 0
         self.assertAlmostEqual(place.yaw_of_north_arrow(-math.cos(math.radians(27.2)), -math.sin(math.radians(27.2))) % 360, 297.2, delta=0.01)
+
+
+class FootScaleTests(unittest.TestCase):
+    """A plan in page points at a known scale against footprints in LV95: the scale must be found, and wrong matches refused."""
+    M = 0.12  # true metres per point
+    E0, N0 = 2600000.0, 1200000.0
+    L = [(0, 0), (40, 0), (40, 12), (16, 12), (16, 30), (0, 30)]  # an L, 40 x 30 m
+
+    def fp(self, pts, dx=0.0, dy=0.0):
+        return Polygon([(self.E0 + x + dx, self.N0 + y + dy) for x, y in pts])
+
+    def plan(self, pts, yaw=27.0, m=None):
+        """The shape as a plan drawn at scale m, turned by yaw (the plan's frame is not the map's)."""
+        m = m or self.M
+        f = self.fp(pts)
+        c = f.centroid
+        pm = Polygon([place.to_plan(x, y, c.x, c.y, yaw) for x, y in f.exterior.coords])
+        return place.scaled(pm, 1.0 / m)
+
+    def bld(self, egid, pts, dx=0.0, dy=0.0):
+        return dict(egid=egid, fp=self.fp(pts, dx, dy))
+
+    def test_scale_recovered_and_confirmed_by_the_written_ratio(self):
+        m = 200 * footscale.PT_M  # 1:200 on the paper
+        j = footscale.judge(self.plan(self.L, m=m), [self.bld(1, self.L)], words=[(0, 0, 1, 1, "Massstab"), (0, 0, 1, 1, "1:200")])
+        self.assertEqual(j["status"], "ok", j["reasons"])
+        self.assertAlmostEqual(j["m_per_pt"] / m, 1.0, delta=0.015)
+        self.assertEqual(j["egid"], 1)
+        self.assertTrue(j["cross_check"]["agrees"])
+
+    def test_without_a_written_ratio_it_is_low_confidence(self):
+        j = footscale.judge(self.plan(self.L), [self.bld(1, self.L)])
+        self.assertEqual(j["status"], "low_confidence", j["reasons"])
+        self.assertAlmostEqual(j["m_per_pt"] / self.M, 1.0, delta=0.015)
+
+    def test_a_wrong_written_ratio_does_not_confirm(self):
+        j = footscale.judge(self.plan(self.L), [self.bld(1, self.L)], words=[(0, 0, 1, 1, "1:100")])
+        self.assertEqual(j["status"], "low_confidence")
+        self.assertFalse(j["cross_check"]["agrees"])
+
+    def test_a_plain_rectangle_is_not_distinctive(self):
+        sq = [(0, 0), (30, 0), (30, 28), (0, 28)]  # near-square: no aspect cue either
+        j = footscale.judge(self.plan(sq), [self.bld(1, sq)], words=[(0, 0, 1, 1, "1:340")])
+        self.assertEqual(j["status"], "rejected")
+        self.assertLess(j["distinct"], footscale.THR["distinct"])
+
+    def test_an_elongated_rectangle_only_gets_low_confidence(self):
+        bar_ = [(0, 0), (60, 0), (60, 14), (0, 14)]
+        j = footscale.judge(self.plan(bar_), [self.bld(1, bar_)])
+        self.assertEqual(j["status"], "low_confidence", j["reasons"])
+        self.assertTrue(any("aspect" in r for r in j["reasons"]))
+
+    def test_a_partial_plan_is_rejected(self):
+        wing = [(0, 0), (40, 0), (40, 12), (16, 12), (16, 14), (0, 14)]  # one wing of the L only
+        # the plan is drawn from the wing's own footprint, the building is the whole L
+        j = footscale.judge(self.plan(wing), [self.bld(1, self.L)])
+        self.assertEqual(j["status"], "rejected")
+        self.assertIsNone(j["m_per_pt"])
+
+    def test_the_wrong_neighbour_loses(self):
+        other = [(0, 0), (30, 0), (30, 10), (22, 10), (22, 25), (0, 25)]  # a different L next door
+        cands = [self.bld(7, other, dx=60), self.bld(1, self.L), self.bld(9, [(0, 0), (35, 0), (35, 35), (0, 35)], dx=-70)]
+        j = footscale.judge(self.plan(self.L), cands)
+        self.assertEqual(j["egid"], 1)
+        self.assertGreater(j["margin"], footscale.THR["margin"])
+        self.assertAlmostEqual(j["m_per_pt"] / self.M, 1.0, delta=0.015)
+
+    def test_two_lookalikes_with_other_sizes_are_refused(self):
+        big = [(x * 1.02, y * 1.02) for x, y in self.L]  # nearly the same shape, nearly the same size
+        j = footscale.judge(self.plan(self.L), [self.bld(1, self.L), self.bld(2, big, dx=80)], thr=dict(twin_scale=0.0))
+        self.assertEqual(j["status"], "rejected")
+        self.assertIn("another building", " ".join(j["reasons"]))
+
+    def test_an_implausible_scale_is_refused(self):
+        j = footscale.judge(self.plan(self.L, m=3.0), [self.bld(1, self.L)])  # 3 m per point: the plan would be a stamp
+        self.assertEqual(j["status"], "rejected")
+        self.assertIn("plausible", " ".join(j["reasons"]))
+
+    def test_written_ratios(self):
+        w = lambda *t: [(0, 0, 1, 1, x) for x in t]
+        self.assertEqual(footscale.written_ratios(w("M", "1:200", "und", "1", ":", "500", "10:30", "1:7")), [200, 500])
 
 
 class ModelTests(unittest.TestCase):

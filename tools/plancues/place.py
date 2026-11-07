@@ -67,7 +67,6 @@ def fit_footprint(plan_poly, fp, yaw_hint=None, hint_tol=12.0, step=2.0, g=G):
     H = int((maxy - miny) / g) + 2 * pad + 2
     F = _fill(fp, lambda e, n: ((e - minx) / g + pad, (maxy - n) / g + pad), (H, W))
     area_f = float(F.sum())
-    area_p = plan.area / (g * g)
 
     def tmpl(yaw):
         a = math.radians(yaw)
@@ -96,6 +95,7 @@ def fit_footprint(plan_poly, fp, yaw_hint=None, hint_tol=12.0, step=2.0, g=G):
             if inter > best[0]:
                 best = (inter, float(yaw), loc)
     inter, yaw, loc = best
+    area_p = float(tmpl(yaw).sum())  # the template's own raster area: the fill rule makes it larger than polygon.area / g^2
     iou = inter / (area_f + area_p - inter)
     e_c = minx + (loc[0] + Rt + 0.5 - pad) * g
     n_c = maxy - (loc[1] + Rt + 0.5 - pad) * g
@@ -109,6 +109,48 @@ def fit_footprint(plan_poly, fp, yaw_hint=None, hint_tol=12.0, step=2.0, g=G):
     rms = float(np.sqrt(np.mean(np.square(ds))))
     return dict(e=e_c, n=n_c, yaw_deg=yaw, iou=float(iou), coverage=float(inter / area_p), rms_m=rms,
                 origin=(ox, oz), footprint_cover=float(inter / area_f))
+
+
+def scaled(poly, s):
+    """A plan polygon with every coordinate multiplied by s (about the origin)."""
+    return affinity.scale(poly, s, s, origin=(0, 0))
+
+
+COARSE_FACTORS = np.concatenate([np.arange(0.6, 1.5, 0.05), np.arange(1.5, 1.6, 0.05)])
+
+
+def scale_search(poly, fp, s0=None, refine=False, factors=COARSE_FACTORS):
+    """Scale and turn of a plan outline that make it overlap a footprint most (IoU), coarse then fine.
+
+    `poly` is in any unit (pixels, points); the result `s` multiplies it into metres. `s0` is the scale if the outline filled
+    the footprint (default: from the areas); the coarse pass tries `factors` x s0 (20 steps of 5 %, every turn), the fine
+    pass 1 % steps over +-4 %. With `refine` the best fine step is sharpened by a parabola through its neighbours.
+    Returns (fit dict of `fit_footprint`, s).
+    """
+    s0 = s0 or math.sqrt(fp.area / poly.area)
+    best = None
+    for f in factors:
+        r = fit_footprint(scaled(poly, s0 * f), fp, g=1.0, step=3.0)
+        if best is None or r["iou"] > best[0]["iou"]:
+            best = (r, s0 * f)
+    r, s1 = best
+    fine = []
+    for f in np.arange(0.96, 1.041, 0.01):
+        r2 = fit_footprint(scaled(poly, s1 * f), fp, g=0.5, step=1.0, yaw_hint=r["yaw_deg"], hint_tol=4.0)
+        fine.append((s1 * f, r2["iou"]))
+        if r2["iou"] > r["iou"]:
+            r, best = r2, (r2, s1 * f)
+    r, s = best
+    if refine and len(fine) >= 3:
+        i = max(range(len(fine)), key=lambda k: fine[k][1])
+        if 0 < i < len(fine) - 1:
+            (xa, ya), (xb, yb), (xc, yc) = fine[i - 1], fine[i], fine[i + 1]
+            den = ya - 2 * yb + yc
+            if den < -1e-9:
+                s_ref = xb + 0.5 * (xc - xa) / 2 * (ya - yc) / den
+                if abs(s_ref / s - 1) <= 0.02:
+                    r, s = fit_footprint(scaled(poly, s_ref), fp, g=0.5, step=1.0, yaw_hint=r["yaw_deg"], hint_tol=2.0), s_ref
+    return r, s
 
 
 def status_of_fit(f):
