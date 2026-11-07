@@ -735,6 +735,23 @@ class DoorTests(unittest.TestCase):
         sq = raster.as_polygon([(0, 0), (4, 0), (4, 4), (0, 4)])
         self.assertAlmostEqual(sq.area, 16.0, 3)
 
+    def test_a_lone_room_with_many_corners_is_simplified_without_a_neighbour(self):
+        import shapely
+        import export
+        circle = shapely.Point(0, 0).buffer(10, quad_segs=20)  # 80 corners, over the limit; no other room to take what is cut off
+        out = export.shrink_corners([circle], shapely.box(-11, -11, 11, 11))
+        self.assertEqual(len(out), 1)
+        self.assertLessEqual(len(out[0].exterior.coords) - 1, 52)
+
+    def test_gap_pieces_keep_only_polygons(self):
+        import shapely
+        import export
+        mixed = shapely.GeometryCollection([shapely.LineString([(0, 0), (0, 1)]), shapely.box(1, 1, 3, 3)])
+        part = export._areal(mixed)
+        self.assertAlmostEqual(part.area, 4.0, 3)
+        self.assertTrue(export._areal(shapely.LineString([(0, 0), (1, 1)])).is_empty)
+        self.assertAlmostEqual(export._areal(part.difference(shapely.box(0, 0, 2, 2))).area, 3.0, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

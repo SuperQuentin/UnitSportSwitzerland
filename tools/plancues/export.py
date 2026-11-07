@@ -483,6 +483,13 @@ def split_holes(g):
     return out + [Polygon(q.exterior) for q in todo]
 
 
+def _areal(g):
+    """Only the polygons of a geometry: an intersection can return lines and points too, and GEOS fails on a difference with such a collection."""
+    if g.geom_type in ("Polygon", "MultiPolygon"):
+        return g
+    return unary_union([x for x in getattr(g, "geoms", []) if x.geom_type in ("Polygon", "MultiPolygon")])
+
+
 def close_gaps(cand, bound, reach=0.5):
     """Rooms that a thick wall leaves 1 m or less apart touch again: the gap goes to the room that reaches it first (lowest id), so the layout's
     rooms share their walls and a door can sit on one. Most thicker walls are the building's outer wall or a shaft, which no door crosses."""
@@ -492,13 +499,13 @@ def close_gaps(cand, bound, reach=0.5):
         return cand
     out, taken = dict(cand), None
     for i in sorted(cand):
-        part = gap.intersection(cand[i].buffer(reach + 0.01, join_style=2, mitre_limit=2.0))
+        part = _areal(gap.intersection(cand[i].buffer(reach + 0.01, join_style=2, mitre_limit=2.0)))
         if taken is not None:
-            part = part.difference(taken)
+            part = _areal(part.difference(taken))
         if part.is_empty:
             continue
         out[i] = _clean(cand[i].union(part)) or cand[i]
-        taken = part if taken is None else taken.union(part)
+        taken = part if taken is None else _areal(taken.union(part))
     return out
 
 
@@ -567,7 +574,7 @@ def shrink_corners(polys, bound, limit=52):
             if piece.is_empty or piece.area < 1e-6:
                 continue
             fit = [(piece.buffer(0.002).intersection(h).area, j) for j, h in enumerate(polys) if j != i]
-            area, j = max(fit)
+            area, j = max(fit, default=(0.0, None))  # a lone room has no neighbour to take the piece
             if area > 0:
                 polys[j] = _clean(polys[j].union(piece)) or polys[j]
         if not gained.is_empty:
