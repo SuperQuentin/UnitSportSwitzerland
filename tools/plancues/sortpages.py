@@ -19,9 +19,12 @@ import corpus_features as cf
 import features
 import pdfio
 
-TYPES = ["floor_plan", "site_plan", "section", "elevation", "seating_plan", "access_map", "mixed_sheet", "photo", "text"]
+TYPES = ["floor_plan", "orientation_plan", "site_plan", "section", "elevation", "seating_plan", "access_map", "mixed_sheet", "photo", "text"]
 
 KW = {
+    "orientation_plan": r"orientierung|orientation|uebersichtsplan|ubersichtsplan|overview floor|building overview|plan des services|besucherplan|"
+                        r"gebaeudeplan|legende|legend\b|toilet|toilette|\bwc\b|\blift\b|ascenseur|treppe|stairs|escalier|eingang|entree|entrance|"
+                        r"ausgang|garderobe|information desk|infodesk",
     "floor_plan": r"erdgeschoss|obergeschoss|untergeschoss|grundriss|rez[- ]de[- ]chauss|rez-de|\betage\b|sous-sol|floor ?plan|ground ?floor|first floor|"
                   r"\blevel \d|\bniveau\b|piano terra|pianta|planta|geschoss|\b\d\.? ?og\b|\bug\b|\brdc\b|plan du \d|plan de l.etage|"
                   r"grundrisse|plans? des|etage|stockwerk|plan \d|plan_\d|/plan|floor_plan|ground_floor",
@@ -35,6 +38,7 @@ KW = {
                   r"anfahrt|fahrplan|map\b|karte|parkplatz|parking|getting here|venue map|zufahrt|bahnhof|park.?and|itinerary|wayfinding|lageplan.*anreise",
 }
 FN_ONLY = {  # file name words that settle a type on their own
+    "orientation_plan": r"uebersicht|orientier|wayfinding|overview|orientation",
     "elevation": r"elevation|facade|fassade|ansicht",
     "section": r"section|schnitt|coupe|sezione",
     "site_plan": r"site_?plan|lageplan|situation|siteplan|perimeter",

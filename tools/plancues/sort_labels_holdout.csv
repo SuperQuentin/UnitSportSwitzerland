@@ -2,8 +2,8 @@ path,page,type,labelled_by,ambiguous_with
 Landmarks/Basel_Kunstmuseum_Extension/CG_KUMU_PRESS_PL_EN3.jpg,1,floor_plan,claude-review,
 Landmarks/Basel_Muenster/Grundriss Münster BS Röttler Gräber.jpg,1,floor_plan,claude-review,
 Landmarks/Basel_Museum_Tinguely_Botta/Tinguely_sketch_thumb.jpg,1,elevation,claude-review,photo
-Landmarks/Bern_Zentrum_Paul_Klee/wayback/2022_content_uebersichtsplan-2017a_content.png,1,floor_plan,claude-review,mixed_sheet
-Landmarks/Bern_Zentrum_Paul_Klee/wayback/2024_content_orientierung-vor-ort_content.png,1,floor_plan,claude-review,mixed_sheet
+Landmarks/Bern_Zentrum_Paul_Klee/wayback/2022_content_uebersichtsplan-2017a_content.png,1,orientation_plan,claude-review,
+Landmarks/Bern_Zentrum_Paul_Klee/wayback/2024_content_orientierung-vor-ort_content.png,1,orientation_plan,claude-review,
 Landmarks/Chur_Buendner_Kunstmuseum/Chur_plan_0.jpg,1,floor_plan,claude-review,
 Landmarks/Corseaux_Villa_Le_Lac_Le_Corbusier/VillaLeLac_61-original-section-roof-site-plan-drawing.jpg,1,mixed_sheet,claude-review,section
 Landmarks/Lausanne_Cathedrale/Cathedrale_teaching_dossier_plan.pdf,5,text,claude-review,mixed_sheet
@@ -23,7 +23,7 @@ Landmarks/Veytaux_Chateau_de_Chillon/Chillon_teaching_dossier_plan.pdf,25,text,c
 Landmarks/Zermatt_Monte_Rosa_Hut/MonteRosa_section.jpg,1,section,claude-review,
 Landmarks/Zurich_Hauptbahnhof_Wanner/CH-NB - Zürich - Hauptbahnhof - Wannerpläne - EAD-151477.jpg,1,floor_plan,claude-review,
 Landmarks/Zurich_Kunsthaus_Chipperfield/Kunsthaus_847_06_D_SAA_750.jpg,1,section,claude-review,
-Landmarks/Zurich_Kunsthaus_Chipperfield/wayback/2007_floorplan_kunsthaus.pdf,2,floor_plan,claude-review,
+Landmarks/Zurich_Kunsthaus_Chipperfield/wayback/2007_floorplan_kunsthaus.pdf,2,orientation_plan,claude-review,
 Landmarks/Zurich_Landesmuseum_Extension/Landesmuseum_BBL_documentation.pdf,2,mixed_sheet,claude-review,
 Landmarks/Zurich_Pavillon_Le_Corbusier/wayback/2023_01_grundriss-1-og_baueingabe-1961-2000x1125.jpg,1,floor_plan,claude-review,
 Landmarks/Zurich_Prime_Tower/PrimeTower_152_4_2_GR_01_www-1500x1030.jpg,1,floor_plan,claude-review,
@@ -65,12 +65,12 @@ Universities/EPFL_Pavilions_Kengo_Kuma/section_1.jpg,1,section,claude-review,
 Universities/EPFL_Rolex_Learning_Center_SANAA/site_site-plan-epfl-campus-lake-geneva.jpg,1,site_plan,claude-review,
 Universities/EPFL_SwissTech_Convention_Center/wayback/2025_STCC_ACCESS_PLAN_Jan2023.pdf,1,access_map,claude-review,
 Universities/ETH_Hoenggerberg/ETH_Hoenggerberg_deliveries_en.pdf,1,access_map,claude-review,site_plan
-Universities/ETH_Zentrum_Hauptgebaeude/ETH_UZH_wayfinding_extract.pdf,9,access_map,claude-review,mixed_sheet
+Universities/ETH_Zentrum_Hauptgebaeude/ETH_UZH_wayfinding_extract.pdf,9,orientation_plan,claude-review,
 Universities/ETH_Zentrum_Hauptgebaeude/ETH_Zentrum_gastronomy_de.pdf,1,access_map,claude-review,site_plan
 Universities/HSG_StGallen_and_SQUARE/SQUARE_axonometry.jpg,1,mixed_sheet,claude-review,elevation
 Universities/HSG_StGallen_and_SQUARE/SQUARE_plan_d.jpg,1,floor_plan,claude-review,
-Universities/UNIGE_Uni_Bastions/Bastions_AileJura_level_0.png,1,floor_plan,claude-review,
-Universities/UNIGE_Uni_Mail/UniMail_level_2.png,1,floor_plan,claude-review,
+Universities/UNIGE_Uni_Bastions/Bastions_AileJura_level_0.png,1,orientation_plan,claude-review,
+Universities/UNIGE_Uni_Mail/UniMail_level_2.png,1,orientation_plan,claude-review,
 Universities/UNIL_Dorigny/Unitheque_extension_jury_report.pdf,3,text,claude-review,
 Universities/UNIL_Dorigny/Unitheque_extension_jury_report.pdf,22,mixed_sheet,claude-review,
 Universities/UNIL_Dorigny/Unitheque_extension_jury_report.pdf,34,text,claude-review,
