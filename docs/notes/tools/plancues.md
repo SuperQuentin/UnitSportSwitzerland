@@ -8,12 +8,15 @@ copyrighted. Only synthetic test PDFs (made by the tests) are in the repo. No ga
 ## Commands (`python -I tools/plancues/plancues.py ...`, pages are 1-based)
 
 - `sort <venue|all> [--vlm] [--labels sort_labels.csv] [--only-unsure]` -> `out/<venue>/sort_report.csv` (type, whether the classifier
-  was unsure, rule, classifier and model types, duplicate_of, regions of a sheet, failures recorded and skipped). Types: floor_plan, site_plan, section, elevation,
-  seating_plan, access_map, mixed_sheet, photo, text.
+  was unsure, rule, classifier and model types, duplicate_of, regions of a sheet, failures recorded and skipped). Types: floor_plan, orientation_plan, site_plan, section,
+  elevation, seating_plan, access_map, mixed_sheet, photo, text.
+- `orient <venue> <file> <page> [--region K] [--relax]` / `orient all`: orientation plans (visitor plans of flat colour rooms, see below): cue, footprint gate,
+  review drawings. `all` takes every non-duplicate page the sort calls orientation_plan and writes `out/_all/orientation_report.csv`. `--relax` draws a near miss for
+  looking (`out/_all/orient_review`), never a cue file.
 - `scale|extract|place|run <venue> <file> <page> [--region K]`: scale (bar, then known object), walls/rooms/doors/outline, fit to
   the map; `run` does all of them and draws the review. Cues: `out/<venue>/cues/*.json`; debug rasters in `out/<venue>/debug_*`.
 - `export <venue> house [--exit-snap M]|stadium`: `house-layouts_<cue>.json` (HouseLayout v2, written only if it validates; a Python mirror of
-  `HouseLayout.Validate`, plus a `.report.json` of what was left out) or `stadium_row.cs.txt/.diff/.json` (a `StadiumSpec` row and a diff
+  `HouseLayout.Validate`, plus a `.report.json` of what was left out; **refused** when it keeps under 50 % of the cue's rooms or of their area, `export.keep_guard`) or `stadium_row.cs.txt/.diff/.json` (a `StadiumSpec` row and a diff
   against `StadiumCatalog.cs`, which is never edited).
 - `review <venue>`: the cue over the swissimage aerial (3 px/m, the WMS of `terrain/stadiums`) and over its source page.
 - `python -I evalsort.py sort_labels_holdout.csv [--field rule_type|model_type|type]`: confusion matrix, precision and recall against labels.
@@ -83,6 +86,36 @@ another drawing. Thresholds follow these pages and the failures seen, not a fitt
 UniLuzern, the swissporarena site plan), the scale-plausibility test (2-4 m per point) or the runner-up margin; the rest have no wall weight, no outline or IoU under 0.85.
 `footscale draw <file> <page> [--region K] --relax` draws the overlay of a near miss (gate relaxed, for looking only).
 
+## Orientation plans (visitor and wayfinding plans of the inside of one building)
+
+`orient.py`, `pipeline.orientation_stage`, `orientcmd.py`. Such a plan has no scale bar and draws rooms as flat colour fills with names, entrances, stairs, lifts and
+toilets: it used to be called an access map and rejected as "not geometry". It is a sort type of its own (`orientation_plan`; arrival, parking, campus and district maps are not).
+- **Rooms**: the page is rendered (2000 px long side), its colours quantised (4-bit bins merged under Lab distance 6), and each colour's connected regions after an opening that
+  removes text strokes and line work are rooms. Dropped: the paper (the colour of the page border), banners touching the border, round badges and small regions lying inside one
+  other (pictograms), anything outside the biggest cluster of rooms (a legend). Specks inside a room (letters) are absorbed by it. The outline is the union of the rooms closed over
+  the gaps between them. A room that surrounds others (a corridor) keeps them as holes.
+- **Names**: words of the PDF text layer grouped into labels, attached to the room that holds the label's centre, or that a thin leader line from the label reaches (a chain of
+  strokes under 1.6 pt whose far end is in exactly one room). A raster page (png, jpg) has no text layer and there is no OCR, so its rooms are unnamed. Stairs, lifts, toilets and
+  entrances are marked only where a word says so (DE/FR/IT/EN); an entrance word within 8 % of the outline is placed on it. No pictogram is read.
+- **Gate**: the outline goes through the footprint gate of any page with no bar (`footscale.judge`); the plan has no walls to be wrong about, so a passing plan is `low_confidence`
+  at best (method `orientation_plan`, scale method `footprint_fit`), placed on the building. **No door is drawn, so none is written**, and a plan that fails the gate is a
+  **topology-only cue** (`cue["topology"]`: rooms, names, relative areas, adjacency by contact length, entrances on the outline; coordinates are fractions of the plan's longest
+  side, no metre anywhere).
+- **Export**: a placed plan goes through the same house export, which needs a front door and a way into every room. An orientation plan has the entrance words at best and no door
+  between rooms, so **every export so far is refused or not valid** ("no front door"): see the table. Inferring doors from adjacency would be inventing them; the format has no
+  "rooms without doors" yet.
+- **Limits**: a white room on a coloured ground (paper rule), several floors on one page (the biggest cluster only), isometric stacks (rooms found, shape never passes the gate),
+  names beside the plan with no leader line, partial plans (the Kunsthaus plans leave the white rooms out, IoU 0.7 to 0.8).
+
+54 pages (non-duplicates the full sort calls orientation_plan): 4 placed, all UniLuzern `UniLU_floor_plans_{de,en}` p5 and p7 (the 1. OG and 1. UG of the Uni/PH building, 50 and 34
+rooms, 7 and 14 named, IoU 0.98, rms 0.75 m, but a near-rectangle: only its aspect ratio 2.04 / 2.07 supports the scale). The other 50: IoU under 0.85 (23), IoU fine and boundary rms over
+2 % of the footprint's size (17: Uni Mail, Bastions, UniLuzern 4. OG and EG), a plain shape a box fits as well (5), a twin building (1), under 3 colour regions (3), no position hint (1).
+2690 rooms in all, 215 named, 26 pages with a name. The four placed plans export "no front door" (45 of 50 and 33 of 34 rooms kept): nothing was written.
+Same building, both kinds of plan: only the Uni/PH building in Lucerne (the Bauwelt article's `Bauwelt_2012_33_plans` p4 Erdgeschoss, region (80, 60, 480, 295), passes the gate at
+IoU 0.98, `ok` by its written 1:1000, against the orientation plan `UniLU_floor_plans_de` p6, a near miss drawn with `--relax`, IoU 0.96, rms 2.06 m): both sit on EGID 213248, outlines
+IoU 0.96, placements 5.7 m apart. Of the 11 numbered keys of the Bauwelt plan, the Free Flow and Gästebereich keys fall in the room named Mensa, three of five Hörsaal keys in rooms named
+Hörsaal 6, Hörsaal 8 and the Auditorium corridor; the Foyer and Küche keys fall in unnamed rooms, Eingang and Poststelle in none (the offset above). A scratch comparison, not a command.
+
 ## Sort: method and honest numbers
 
 Three label sets, kept apart: `sort_labels.csv` (54, the first look, which the old rules were tuned on), `sort_labels_train.csv` (222, two random draws by
@@ -109,6 +142,10 @@ mixed_sheet 59 -> 137, section 41 -> 53, elevation 8 -> 24, seating_plan 5 -> 49
 (`2022_hsg-campusplan-20211221.pdf`), a small section on a large page called mixed_sheet (`Wankdorf_sections_axo_roofplan.pdf`), text pages with one picture called
 mixed_sheet (`Cathedrale_teaching_dossier_plan.pdf`), historic St Gall plans (`Plan_of_Saint_Gall_recto_full.jpg`, labelled site plan, floor plan by the model).
 The model invents room labels (a label is kept only if the text layer has it); its numbers are never used; bonsai-27b mistook floor plans for access maps and is not used.
+**orientation_plan** (added later): 42 train pages (and 2 of the first 54) and 6 held-out pages relabelled or labelled from the renders (floor_plan, access_map, site_plan, mixed_sheet before; the
+held-out six were relabelled, nothing was tuned on them). Retrained: held-out 78 of 90 = 86.7 % (was 87.8 % on the same pages with the old labels), orientation_plan precision 71.4 %
+(5 of 7), recall 83.3 % (5 of 6; a sample of 6); floor_plan recall 75 %, precision 92 % (two floor plans read as orientation plans). Full sort: orientation_plan 60 pages (54
+non-duplicates); floor_plan 138 -> 93, access_map 82 -> 73, mixed_sheet 137 -> 130, seating_plan 49 -> 48, site_plan 47 -> 53, unsure 143.
 Run: `lms server start`, `lms load qwen/qwen3.8-27b --gpu max --context-length 8192 -y`; afterwards `lms unload --all`, `lms server stop`.
 
 ## Does not
