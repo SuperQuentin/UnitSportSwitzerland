@@ -124,7 +124,7 @@ def main(argv=None):
         return exportcmd.main(a)
     if a.cmd == "review":
         import exportcmd
-        return exportcmd.review(a)
+        return exportcmd.review_cmd(a)
 
 
 if __name__ == "__main__":

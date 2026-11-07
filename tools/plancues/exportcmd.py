@@ -83,7 +83,7 @@ def main(a):
             print("  not written: it does not validate")
 
 
-def review(a):
+def review_cmd(a):
     dest = os.path.join(a.out, a.venue)
     for p in _cues(a):
         c = cuem.load(p)
