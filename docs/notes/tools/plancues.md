@@ -71,8 +71,8 @@ footprint scale runs **small**, not large (overhangs would make it large); three
 (vonRoll p24: the next building fits 0.95 against 0.96, and a box fits as well; UniS: a stepped complex, rms 5.6 %), so 0 accepted, 0 wrongly accepted. One more
 page is confirmed by its written ratio: UniLuzern `Bauwelt_2012_33_plans` p4 region 1, 1:1000 against the fit's 0.3536 m per point (-0.2 %), its bar belongs to
 another drawing. Thresholds follow these pages and the failures seen, not a fitted optimum: too few pages for more.
-`apply` on the 49 sure vector floor and site plans (4 already have a scale): **0 newly scaled**. 17 fail only the rms limit or the scale-plausibility test with IoU
-0.84-0.97 (Hallenstadion 9, UniLuzern 4: the footprint's outline is not the plan's, rms 4-7 m); the rest have no wall weight, no outline or IoU under 0.85.
+`apply` on the 49 sure vector floor and site plans (4 already have a scale): **0 newly scaled**. 14 reach IoU >= 0.85 and fail the rms limit (rms 4-7 m on Hallenstadion,
+UniLuzern, the swissporarena site plan), the scale-plausibility test (2-4 m per point) or the runner-up margin; the rest have no wall weight, no outline or IoU under 0.85.
 `footscale draw <file> <page> [--region K] --relax` draws the overlay of a near miss (gate relaxed, for looking only).
 
 ## Sort: method and honest numbers
