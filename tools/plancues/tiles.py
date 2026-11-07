@@ -104,3 +104,15 @@ def buildings_near(chunks, e, n, radius):
                     b["fp"] = fp
                     out.append(b)
     return out
+
+
+def gwr_entrances(path, egid):
+    """[(E, N, EDID)] of the building's entrances in the GWR sqlite (`entrance` table, LV95); [] when the file or the EGID is absent."""
+    import sqlite3
+    if not path or not os.path.exists(path):
+        return []
+    con = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True)
+    try:
+        return [(e, n, d) for d, e, n in con.execute("select EDID, DKODE, DKODN from entrance where EGID=? and DKODE is not null", (egid,))]
+    finally:
+        con.close()

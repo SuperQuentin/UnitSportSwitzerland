@@ -15,7 +15,7 @@ copyrighted. Only synthetic test PDFs (made by the tests) are in the repo. No ga
   looking (`out/_all/orient_review`), never a cue file.
 - `scale|extract|place|run <venue> <file> <page> [--region K]`: scale (bar, then known object), walls/rooms/doors/outline, fit to
   the map; `run` does all of them and draws the review. Cues: `out/<venue>/cues/*.json`; debug rasters in `out/<venue>/debug_*`.
-- `export <venue> house [--exit-snap M]|stadium`: `house-layouts_<cue>.json` (HouseLayout v2, written only if it validates; a Python mirror of
+- `export <venue> house [--exit-snap M] [--gwr data.sqlite]|stadium`: `house-layouts_<cue>.json` (HouseLayout v2, written only if it validates, doors the plan lacks are inferred and listed in `house-layouts_<cue>_doors.json`, see Doors inferred; a Python mirror of
   `HouseLayout.Validate`, plus a `.report.json` of what was left out; **refused** when it keeps under 50 % of the cue's rooms or of their area, `export.keep_guard`) or `stadium_row.cs.txt/.diff/.json` (a `StadiumSpec` row and a diff
   against `StadiumCatalog.cs`, which is never edited).
 - `review <venue>`: the cue over the swissimage aerial (3 px/m, the WMS of `terrain/stadiums`) and over its source page.
@@ -45,7 +45,7 @@ copyrighted. Only synthetic test PDFs (made by the tests) are in the repo. No ga
 | Venue | Result |
 |---|---|
 | Tuilière ground floor | Bar 0.17644 m/pt, pitch cross-check 0.17639 (ratio 1.0003); pitch 105.03 x 68.02 m; seating front 114.05 x 75.15; roof outer 161.93 x 128.53. Placed on the centre circle: yaw 297.146 (north arrow: 297.15), roof outline median 0.5 m and p90 1.5 m from the aerial's edge. Proposed row E 2537360.5, N 1155029.2, azimuth -27.1 (catalog 2537360.3, 1155029.3, -27.2), depths N 23.9 E 24.0 S 23.9 W 29.4 (catalog 23, 23.5, 25, 29.5). The long section, scaled by the roof length (0.1411 m/pt, which is exactly 1:400), gives a roof 15.0 m over the pitch against the catalog's 22 and 20, and on the end stand 0.80 m treads and 0.55 m risers. |
-| UniS ground floor (p2) and UG sheet (p3, region 2) | Bar 0.2207 m/pt. 84 and 118 rooms, 37 doors. IoU with the solid's footprint 0.73 and 0.84 (rms 4.3 and 3.5 m): low_confidence. **No usable layout**, even on the whole base (#1574): see below. |
+| UniS ground floor (p2) and UG sheet (p3, region 2) | Bar 0.2207 m/pt. 84 and 118 rooms, 37 doors. IoU with the solid's footprint 0.73 and 0.84 (rms 4.3 and 3.5 m): low_confidence. With inferred doors the EG exports 52 of 84 rooms (27 doors extracted, 26 inferred) but **fails `--houselayoutcheck`** (two doorways, see below); the UG keeps 45 of 118 and is refused (the format holds 60 rooms a floor). |
 | Maladière `plan_01.jpg` | A faint scan of the parking level, no scale: rejected (IoU 0.50, the outline took the ramp and the caption). The PDF's plans are thumbnails in magazine pages (mixed sheets). |
 | swissporarena site plan | Rejected as a schematic map before extraction. |
 
@@ -62,8 +62,8 @@ height: 3449.8 m2, frame 100.5 x 77.4 m at yaw 13.11 (swissBUILDINGS3D about 345
   have no way in through the extracted doors. The greedy drop then ends at **one sliver room** each (a 3 m2 "corridor" with one
   door). `--houselayoutcheck` passes the UG export (that sliver plus a generated entrance passage about 40 m long: not a usable interior) and
   fails the EG one ("no ground floor room can be reached from the front wall, where the door leads in").
-- **To fix (plancues, not the format):** extract the office doors (37 to 41 found for 84 to 118 rooms), refuse a layout that keeps
-  only a few rooms instead of writing it, and, for both sheets as two levels, stair cues to link them (the format has floors and stairs).
+- **Since the inferred doors (#1572):** the rooms are reachable, so the greedy drop no longer ends at a sliver. What is left out is what the game refuses: 12 (EG) and 19 (UG) rooms outside the footprint in our tile, the format's 60 rooms a floor, and rooms whose largest piece in the game's strip cut is under 1 m (20 and 45).
+  The EG layout (52 rooms) still fails the game's check on two doorways, "doorway without a matching cut on the other side": the entrance corridor's end wall and the wall of the office it opens on are 0.107 m apart (two corner heights under 0.15 m apart, which the game's strip cut merges), so the two cuts land 10 cm apart (limit 5 cm). Snapping all corner heights 0.16 m apart fixed that but dropped 30 more rooms. The UG has 118 rooms against a format limit of 60. Stairs between the two sheets are not tried (see Doors inferred).
 
 ## Scale from the footprint (vector pages with no bar and no known object)
 
@@ -98,23 +98,36 @@ toilets: it used to be called an access map and rejected as "not geometry". It i
   strokes under 1.6 pt whose far end is in exactly one room). A raster page (png, jpg) has no text layer and there is no OCR, so its rooms are unnamed. Stairs, lifts, toilets and
   entrances are marked only where a word says so (DE/FR/IT/EN); an entrance word within 8 % of the outline is placed on it. No pictogram is read.
 - **Gate**: the outline goes through the footprint gate of any page with no bar (`footscale.judge`); the plan has no walls to be wrong about, so a passing plan is `low_confidence`
-  at best (method `orientation_plan`, scale method `footprint_fit`), placed on the building. **No door is drawn, so none is written**, and a plan that fails the gate is a
+  at best (method `orientation_plan`, scale method `footprint_fit`), placed on the building. No door is drawn (doors are inferred at export, see Doors inferred), and a plan that fails the gate is a
   **topology-only cue** (`cue["topology"]`: rooms, names, relative areas, adjacency by contact length, entrances on the outline; coordinates are fractions of the plan's longest
   side, no metre anywhere).
-- **Export**: a placed plan goes through the same house export, which needs a front door and a way into every room. An orientation plan has the entrance words at best and no door
-  between rooms, so **every export so far is refused or not valid** ("no front door"): see the table. Inferring doors from adjacency would be inventing them; the format has no
-  "rooms without doors" yet.
+- **Export**: a placed plan goes through the same house export; with no door drawn every door is inferred (all of them: the layout is low_confidence and the reason says how many).
 - **Limits**: a white room on a coloured ground (paper rule), several floors on one page (the biggest cluster only), isometric stacks (rooms found, shape never passes the gate),
   names beside the plan with no leader line, partial plans (the Kunsthaus plans leave the white rooms out, IoU 0.7 to 0.8).
 
 54 pages (non-duplicates the full sort calls orientation_plan): 4 placed, all UniLuzern `UniLU_floor_plans_{de,en}` p5 and p7 (the 1. OG and 1. UG of the Uni/PH building, 50 and 34
 rooms, 7 and 14 named, IoU 0.98, rms 0.75 m, but a near-rectangle: only its aspect ratio 2.04 / 2.07 supports the scale). The other 50: IoU under 0.85 (23), IoU fine and boundary rms over
 2 % of the footprint's size (17: Uni Mail, Bastions, UniLuzern 4. OG and EG), a plain shape a box fits as well (5), a twin building (1), under 3 colour regions (3), no position hint (1).
-2690 rooms in all, 215 named, 26 pages with a name. The four placed plans export "no front door" (45 of 50 and 33 of 34 rooms kept): nothing was written.
+2690 rooms in all, 215 named, 26 pages with a name. The four placed plans now export with inferred doors (UniLU de/en p5: 40 of 50 rooms, p7: 30 of 34) and pass `--houselayoutcheck`.
 Same building, both kinds of plan: only the Uni/PH building in Lucerne (the Bauwelt article's `Bauwelt_2012_33_plans` p4 Erdgeschoss, region (80, 60, 480, 295), passes the gate at
 IoU 0.98, `ok` by its written 1:1000, against the orientation plan `UniLU_floor_plans_de` p6, a near miss drawn with `--relax`, IoU 0.96, rms 2.06 m): both sit on EGID 213248, outlines
 IoU 0.96, placements 5.7 m apart. Of the 11 numbered keys of the Bauwelt plan, the Free Flow and Gästebereich keys fall in the room named Mensa, three of five Hörsaal keys in rooms named
 Hörsaal 6, Hörsaal 8 and the Auditorium corridor; the Foyer and Küche keys fall in unnamed rooms, Eingang and Poststelle in none (the offset above). A scratch comparison, not a command.
+
+## Doors inferred (`doors.py`, `strips.py`, `export.house_layout`)
+
+A plan with no door (orientation plans) or too few reaches only a few rooms. At export the missing doors are inferred, marked and counted; extracted doors, entrance arrows and entrance words are never touched.
+- **Circulation space**: a room named Gang, Korridor, Flur, Foyer, Erschliessung, Treppenhaus, Eingangshalle, couloir, vestibule, corridoio, corridor, lobby..., or "hall"/"Halle"/"Treppe" at the start of a name; unnamed: long and thin (short side under 3.5 m, ratio over 3.5) with 3 neighbours or more, or the largest room with 5 neighbours or more; the parts of a cut room (below).
+- **Placement**: the fewest doors that reach every room, spreading from the front door. A group of rooms joined by extracted doors but unreachable gets one door, on the longest wall (1.2 m or more) shared with a circulation room already reachable, else on the longest shared wall with any reachable room (0.8 m or more); circulation spaces first. A door is 0.9 m, 1.1 m between two circulation spaces or into a room over 120 m2, centred on the wall and 0.3 m from the corners (0.15 m on a 1.2 to 1.5 m wall). Windows and openings are not read from the plan, so a wall drawn as glazing is not avoided. Only a wall along an axis of the layout and exactly (2 mm) on both rooms takes a door.
+- **Front door**: a real entrance (arrow, word, gap) when the plan shows one. Otherwise on the outer wall of a circulation room (1.5 m or more) nearest the building's GWR entrance point (`data/gwr/data.sqlite`, table `entrance`; the EGID of the tile matches: UniS EDID 0 at 2599750.3 / 1199903.1, Uni/PH Lucerne EDID 0 at 2666387.5 / 1211322.6). With no GWR point: the longest outer wall (the road data of the tiles is not read: RoadCodec is large and both buildings have a point).
+- **Marking**: every inferred door has `source: "inferred: <rule>"` and a confidence (0.5 beside circulation space or at a GWR point, 0.35 beside an ordinary room, 0.3 for a cut) in the cue's `openings` (plan coordinates); `levels[0].extra.inferred_doors` counts them; `house-layouts_<cue>_doors.json` lists every door, extracted or inferred, in the layout's frame (the game format has no source field). Over 70 % inferred: still exported, the cue is low_confidence and says "N of M doors are inferred".
+- **What the export had to learn to keep the rooms** (UniS lost 13 of 98 rooms before; each fix is a rule of the game or of the format, `--houselayoutcheck` names it):
+  - corners of one room that lie on a neighbour's wall are added to it and everything is rounded to the millimetre together (rounding each room alone to 12.5 cm moved shared walls apart by 9 cm: 5 of 122 left); corners closer than 13 cm are one; corners on a straight wall are dropped again (the 64-corner limit); gaps up to 1 m between rooms are closed, the gap going to one room;
+  - the plan is turned about its middle to be square to the building's box when it is within 10 degrees of it (the game draws a layout square to its box; UniS was 2 degrees off, which made a staircase of strips), and near-vertical and near-horizontal walls are made exact (`rectify`);
+  - a room that surrounds others has holes, the format has none: it is cut by straight lines through the holes into parts, which tile the same space and are joined by an inferred door (Lucerne p5: rooms 0, 2, 3);
+  - the game plans inside a 120 m box (`BuildingFootprint.MaxSide`; the Lucerne building is 132.7 m long: what lies beyond is cut off), 60 rooms a floor (the smallest go), and refuses a room whose largest piece in its strip cut is under 1 m a side. `strips.py` is a port of that cut (`RoomStrips.Cut`) used to name and drop such rooms (it ignores the other rooms' corners, so it can miss one).
+- **Result** (`--houselayoutcheck` with the build of #1574, plans in `out/<venue>/check/`): Uni/PH p5 (40 of 50 rooms, 517 rooms in the game after its cut, 50 doors, all inferred) and p7 (30 of 34, 42 doors) pass, `de` and `en` twins alike. UniS EG fails as above, UG is refused.
+- **Not done**: two levels of UniS joined by stairs. The UG sheet is the solid's level 0 and the EG the level above, but the format then wants the street door on the UG, no Treppe or Treppenhaus is named on both sheets, and the 60-room limit already refuses the UG.
 
 ## Sort: method and honest numbers
 
@@ -150,5 +163,5 @@ Run: `lms server start`, `lms load qwen/qwen3.8-27b --gpu max --context-length 8
 
 ## Does not
 
-Multi-storey stacking, stairs, windows, vector section or elevation geometry beyond the Tuilière measurements, OCR (no pass needed it), rooms of a
+Multi-storey stacking, stairs, windows (a wall drawn as glazing is not avoided by an inferred door), vector section or elevation geometry beyond the Tuilière measurements, OCR (no pass needed it), rooms of a
 raster page, or any shipping of the derived data.

@@ -15,6 +15,7 @@ SKIP_EXT = {".db"}
 
 DEFAULT_ROOT = os.environ.get("PLANCUES_ROOT", "X:/UnitSportSwitzerland")
 DEFAULT_OUT = os.environ.get("PLANCUES_OUT", "X:/UnitSportSwitzerland/plancues/out")
+DEFAULT_GWR = os.environ.get("PLANCUES_GWR", "X:/UnitSportSwitzerland/data/gwr/data.sqlite")
 DEFAULT_CHUNKS = os.environ.get("PLANCUES_CHUNKS", "X:/UnitSportSwitzerland/terrain_chunks")
 
 

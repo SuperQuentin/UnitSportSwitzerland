@@ -70,11 +70,15 @@ def main(a):
         c = cuem.load(p)
         if not c.get("placement") or c["placement"].get("egid") is None:
             continue
-        lay, rep = export.house_layout(c, a.chunks, exit_snap=a.exit_snap)
+        lay, rep = export.house_layout(c, a.chunks, exit_snap=a.exit_snap, gwr=a.gwr)
         name = os.path.basename(p)[:-5]
         with open(os.path.join(dest, "house-layouts_%s.report.json" % name), "w", encoding="utf-8") as fh:
             json.dump(rep, fh, indent=1, default=float)
+        _write_back(p, c, rep, dest, name)
         print(name, "rooms kept %s of %s, doors %s, python validation: %s" % (rep.get("rooms_kept"), rep.get("rooms_in_cue"), rep.get("doors"), rep.get("python_validate")))
+        stale = os.path.join(dest, "house-layouts_%s.json" % name)
+        if (rep.get("refused") or not lay or rep.get("python_validate")) and os.path.exists(stale):
+            os.remove(stale)  # an earlier export of this cue must not outlive a refusal
         if rep.get("refused"):
             print("  not written: refused, %s" % rep["refused"])
         elif lay and not rep.get("python_validate"):
@@ -83,6 +87,23 @@ def main(a):
             print("  written:", path)
         else:
             print("  not written: it does not validate")
+
+
+def _write_back(path, c, rep, dest, name):
+    """The inferred doors go into the cue (source, confidence, a count per level) and into a sidecar *_doors.json next to the export."""
+    if "cue_openings" not in rep:
+        return
+    lvl = c["levels"][0]
+    lvl["openings"] = [o for o in lvl["openings"] if not str(o.get("source", "")).startswith("inferred")] + rep["cue_openings"]
+    n, tot = rep["doors_inferred"], rep["doors"]
+    lvl["extra"]["inferred_doors"] = n
+    c["reasons"] = [r for r in c["reasons"] if "doors are inferred" not in r]
+    if tot and n > 0.7 * tot:
+        cuem.set_status(c, "low_confidence", ["%d of %d doors are inferred (no door is drawn, or too few to reach every room)" % (n, tot)])
+    cuem.save(path, c)
+    with open(os.path.join(dest, "house-layouts_%s_doors.json" % name), "w", encoding="utf-8") as fh:
+        json.dump(dict(cue=name, inferred=n, real=rep["doors_real"], front_door_target=rep["front_door_target"], doors=rep["door_list"],
+                       circulation=rep["circulation"]), fh, indent=1, default=float)
 
 
 def review_cmd(a):

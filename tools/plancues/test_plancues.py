@@ -650,5 +650,83 @@ class ExportGuardTests(unittest.TestCase):
         self.assertEqual(rep["rooms_kept"], 1)
 
 
+class DoorTests(unittest.TestCase):
+    """doors.infer on synthetic plans: a 20 x 2 m corridor (id 0) along z 0..2 with four 5 m rooms above it (ids 1-4)."""
+    FOOT = Polygon([(0, 0), (20, 0), (20, 7), (0, 7)])
+
+    def plan(self, extra=None):
+        polys = {0: Polygon([(0, 0), (20, 0), (20, 2), (0, 2)])}
+        for k in range(4):
+            polys[1 + k] = Polygon([(5 * k, 2), (5 * k + 5, 2), (5 * k + 5, 7), (5 * k, 7)])
+        polys.update(extra or {})
+        return polys
+
+    def infer(self, polys, real=(), target=None, names=None):
+        import doors
+        return doors.infer(polys, names or {0: "Korridor"}, list(real), self.FOOT, target)
+
+    def test_a_corridor_with_rooms_gets_one_door_per_room(self):
+        out, info = self.infer(self.plan(), real=[dict(_rooms=(0, None))])
+        self.assertEqual(sorted(tuple(sorted(o["_rooms"])) for o in out), [(0, 1), (0, 2), (0, 3), (0, 4)])
+        self.assertEqual(info["unreachable_after"], [])
+        for o in out:
+            self.assertAlmostEqual(math.hypot(o["x1"] - o["x0"], o["z1"] - o["z0"]), 0.9, 2)
+            self.assertAlmostEqual(o["z0"], 2.0)  # on the shared wall
+
+    def test_a_room_behind_another_gets_a_chained_door(self):
+        polys = self.plan({5: Polygon([(0, 7), (5, 7), (5, 10), (0, 10)])})
+        out, info = self.infer(polys, real=[dict(_rooms=(0, None))])
+        self.assertIn((1, 5), [tuple(sorted(o["_rooms"])) for o in out])
+        self.assertNotIn((0, 5), [tuple(sorted(o["_rooms"])) for o in out])
+        self.assertEqual(len(out), 5)
+        self.assertEqual(info["unreachable_after"], [])
+
+    def test_a_real_door_prevents_an_inferred_one(self):
+        real = [dict(_rooms=(0, None)), dict(_rooms=(0, 1))]
+        out, _ = self.infer(self.plan(), real=real)
+        self.assertEqual(sorted(tuple(sorted(o["_rooms"])) for o in out), [(0, 2), (0, 3), (0, 4)])
+
+    def test_a_front_door_is_inferred_nearest_the_entrance_point(self):
+        out, _ = self.infer(self.plan(), target=(15.0, -3.0, "test entrance"))
+        front = [o for o in out if o["_rooms"][1] is None]
+        self.assertEqual(len(front), 1)
+        self.assertEqual(front[0]["_rooms"][0], 0)  # the corridor's outer wall, z = 0, near x = 15
+        self.assertAlmostEqual(front[0]["z0"], 0.0)
+        self.assertAlmostEqual((front[0]["x0"] + front[0]["x1"]) / 2, 15.0, 1)
+        self.assertIn("test entrance", front[0]["_src"])
+
+    def test_every_inferred_door_carries_its_source(self):
+        out, _ = self.infer(self.plan(), target=(15.0, -3.0, "x"))
+        self.assertEqual(len(out), 5)
+        for o in out:
+            self.assertTrue(o["_src"].startswith("inferred: "))
+            self.assertGreater(o["_conf"], 0)
+
+    def test_the_doors_pass_the_validator(self):
+        import export
+        polys = self.plan()
+        out, _ = self.infer(polys, target=(15.0, -3.0, "x"))
+        rooms = [list(polys[i].exterior.coords)[:-1] for i in sorted(polys)]
+        self.assertEqual(export.validate(rooms, out, [list(self.FOOT.exterior.coords)[:-1]]), [])
+
+    def test_corners_on_a_neighbours_wall_keep_the_wall_shared(self):
+        import export
+        a = Polygon([(0, 0), (10, 0), (10, 5), (0, 5)])
+        b = Polygon([(0, 5), (3.03, 5), (3.03, 8), (0, 8)])  # a T corner on a's wall, 3 cm off the 12.5 cm grid the old rounding used
+        c = Polygon([(3.03, 5), (10, 5), (10, 8), (3.03, 8)])
+        ra, rb, rc = export.node_and_snap([a, b, c])
+        self.assertTrue(any(abs(p[0] - 3.03) < 1e-6 for p in ra.exterior.coords) is False)  # the straight wall lost the extra corner
+        import doors
+        self.assertEqual(len(doors.shared_walls({0: ra, 1: rb, 2: rc})), 3)
+
+    def test_a_corridor_round_a_block_is_cut_in_parts_without_holes(self):
+        import export
+        ring = Polygon([(0, 0), (20, 0), (20, 10), (0, 10)], [[(5, 3), (15, 3), (15, 7), (5, 7)]])
+        parts = export.split_holes(ring)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(not p.interiors for p in parts))
+        self.assertAlmostEqual(sum(p.area for p in parts), ring.area, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -116,6 +116,7 @@ def main(argv=None):
     p.add_argument("venue")
     p.add_argument("what", choices=["house", "stadium"])
     p.add_argument("--cue", help="cue name (default: every cue of the venue)")
+    p.add_argument("--gwr", default=pdfio.DEFAULT_GWR, help="house: GWR data.sqlite, its entrance points place an inferred front door")
     p.add_argument("--exit-snap", type=float, default=0.0, help="house: snap a door that leads out of the layout up to this many metres (default 0: off)")
     p = sub.add_parser("review")
     _common(p)
