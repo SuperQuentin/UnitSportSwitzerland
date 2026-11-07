@@ -562,7 +562,7 @@ def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_p
     m_per_pt = s * sc  # metres per page point
     sp = poly_scaled(poly, s)
     cx, cz = r["origin"]
-    e0, n0 = place.to_lv95(-cx, -cz, r["e"], r["n"], r["yaw_deg"])
+    e0, n0 = scan_origin_lv95(r)
     shifted = [[round(x - cx, 3), round(z - cz, 3)] for x, z in list(sp.exterior.coords)[:-1]]
     c["scale"] = dict(m_per_pt=m_per_pt, method="footprint_fit", cross_check=None, m_per_px=s)
     ox_pt = (clip.x0 if clip else 0) + cx / s / sc
@@ -582,6 +582,12 @@ def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_p
         os.makedirs(debug_dir, exist_ok=True)
         pdfio.save_png(os.path.join(debug_dir, "ink.png"), ink)
     return c
+
+
+def scan_origin_lv95(r):
+    """LV95 of a scan cue's origin. The cue's outline is centred on the centroid of the fitted outline, so its origin falls where the fit put that
+    centroid, (r["e"], r["n"]). (It was once taken as the raster's own corner, which put every scan one centroid vector away from its building.)"""
+    return r["e"], r["n"]
 
 
 def pymupdf_rect(box):

@@ -240,6 +240,21 @@ class PlaceTests(unittest.TestCase):
         e0, n0 = place.to_lv95(-f["origin"][0], -f["origin"][1], f["e"], f["n"], f["yaw_deg"])
         self.assertAlmostEqual(math.hypot(e0 - c.x, n0 - c.y), 0, delta=1.0)
 
+    def test_a_scans_cue_origin_lands_the_outline_on_the_footprint(self):
+        # a scan's outline is far from its raster corner; the origin written to the cue must put the shifted outline back on the building
+        from shapely import affinity
+        fp = affinity.translate(Polygon([(0, 0), (40, 0), (40, 15), (20, 15), (20, 30), (0, 30)]), 2600000, 1200000)
+        c = fp.centroid
+        px = Polygon([place.to_plan(x, y, c.x, c.y, 33.0) for x, y in fp.exterior.coords])
+        px = affinity.translate(affinity.scale(px, 2.0, 2.0, origin=(0, 0)), 400, 300)  # 0.5 m per pixel, corner of the raster far away
+        r, s = place.scale_search(px, fp)
+        sp = place.scaled(px, s)
+        cx, cz = r["origin"]
+        e0, n0 = pipeline.scan_origin_lv95(r)
+        placed = Polygon([place.to_lv95(x - cx, z - cz, e0, n0, r["yaw_deg"]) for x, z in sp.exterior.coords])
+        self.assertGreater(placed.intersection(fp).area / placed.union(fp).area, 0.9)
+        self.assertGreater(math.hypot(cx, cz), 100)  # the old origin (the raster's corner) would have been that far off
+
     def test_a_misfit_is_rejected(self):
         fp = Polygon([(0, 0), (60, 0), (60, 10), (0, 10)])
         plan = Polygon([(0, 0), (20, 0), (20, 20), (0, 20)])
