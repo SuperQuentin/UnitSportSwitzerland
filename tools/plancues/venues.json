@@ -1,0 +1,21 @@
+{
+  "Lausanne_Stade_de_la_Tuiliere": {"kind": "stadium", "at": [2537360, 1155029], "name": "Stade de la Tuilière", "town": "Lausanne"},
+  "Neuchatel_Maladiere": {"kind": "stadium", "at": [2562388, 1205021], "name": "Stade de la Maladière", "town": "Neuchâtel"},
+  "UniBE_UniS_GrosseSchanze": {"kind": "building", "at": [2599750, 1199903], "name": "UniS, Schanzeneckstrasse 1", "town": "Bern"},
+  "Luzern_swissporarena": {"kind": "stadium", "at": [2665862, 1209462], "name": "swissporarena", "town": "Luzern"},
+  "Zurich_Hallenstadion": {"kind": "building", "at": [2684002, 1251778], "name": "Hallenstadion", "town": "Zürich"},
+  "UniLuzern": {"kind": "building", "at": [2666387, 1211322], "name": "Universität Luzern, Frohburgstrasse 3", "town": "Luzern"},
+  "Zurich_Kunsthaus_Chipperfield": {"kind": "building", "at": [2683843, 1247180], "name": "Kunsthaus, Heimplatz 1", "town": "Zürich"},
+  "Magglingen_BASPO": {"kind": "building", "at": [2582936, 1220844], "name": "BASPO, Hauptstrasse 247", "town": "Magglingen"},
+  "Bern_Zentrum_Paul_Klee": {"kind": "building", "at": [2602693, 1199785], "name": "Zentrum Paul Klee", "town": "Bern"},
+  "Lausanne_Cathedrale": {"kind": "building", "at": [2538304, 1152707], "name": "Cathédrale", "town": "Lausanne"},
+  "Biel_Tissot_Arena": {"kind": "building", "at": [2588075, 1222753], "name": "Tissot Arena", "town": "Biel"},
+  "HSG_StGallen_and_SQUARE": {"kind": "building", "at": [2746052, 1255225], "name": "HSG, Dufourstrasse 50", "town": "St. Gallen"},
+  "Baden_Fortyseven_Botta": {"kind": "building", "at": [2665768, 1258969], "name": "Fortyseven, Bäderstrasse", "town": "Baden"},
+  "Zurich_Letzigrund": {"kind": "building", "at": [2680371, 1248580], "name": "Letzigrund", "town": "Zürich"},
+  "Zurich_Landesmuseum_Extension": {"kind": "building", "at": [2683215, 1248160], "name": "Landesmuseum, Museumstrasse 2", "town": "Zürich"},
+  "Basel_St_Jakob_Park": {"kind": "building", "at": [2613582, 1265712], "name": "St. Jakob-Park", "town": "Basel"},
+  "UniBE_vonRoll": {"kind": "building", "at": [2598756, 1200208], "name": "vonRoll, Fabrikstrasse 6", "town": "Bern"},
+  "Bern_Stadion_Wankdorf": {"kind": "building", "at": [2601996, 1201234], "name": "Stadion Wankdorf", "town": "Bern"},
+  "UNIL_Synathlon": {"kind": "building", "at": [2534214, 1152328], "name": "Synathlon, centre sportif de Dorigny", "town": "Lausanne"}
+}
