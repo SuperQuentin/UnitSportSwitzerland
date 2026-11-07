@@ -40,7 +40,7 @@ def collect(root, out, venue, log=print):
     dirty = 0
     for path in pdfio.list_documents(root, venue):
         rp = pdfio.rel(path, root)
-        key = rp + "|" + pdfio.file_sig(path)
+        key = rp + "|" + pdfio.file_sig(path) + "|v" + str(features.VERSION)
         if key in cache:
             for item in cache[key]:
                 yield item

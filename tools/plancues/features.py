@@ -9,6 +9,7 @@ import pymupdf
 import pdfio
 
 CELL = 8  # points per cell of the coverage grid used for regions
+VERSION = 3  # bump when page_features gains keys: the feature cache is keyed on it
 
 
 def _is_page_background(r, page_rect, fill):
@@ -90,6 +91,109 @@ def raster_stats(rgb):
                 axis=round(near_axis, 3), entropy=round(ent, 2))
 
 
+def raster_shape(rgb, long_side=640):
+    """What kind of image is it: a drawing (few flat colours, hard edges, rectilinear straight lines, closed rooms) or a photo?"""
+    import cv2
+    h, w = rgb.shape[:2]
+    s = long_side / float(max(h, w))
+    if s < 1:
+        rgb = cv2.resize(rgb, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+    n = gray.size
+    ink = gray < 225
+    ink_share = float(ink.mean())
+    out = dict(ink=round(ink_share, 4), dark=round(float((gray < 100).mean()), 4), mid=round(float(((gray >= 100) & (gray < 200)).mean()), 4))
+    # flat colours: the share of non-white pixels that sit in the 6 most common 3-bit colours
+    if ink.any():
+        q = ((rgb[:, :, 0] >> 5).astype(np.int32) << 6) | ((rgb[:, :, 1] >> 5).astype(np.int32) << 3) | (rgb[:, :, 2] >> 5).astype(np.int32)
+        cnt = np.bincount(q[ink], minlength=512)
+        out["flat6"] = round(float(np.sort(cnt)[-6:].sum() / cnt.sum()), 3)
+        out["ncol"] = int((cnt > 0.005 * cnt.sum()).sum())
+        sat = hsv[:, :, 1][ink] / 255.0
+        val = hsv[:, :, 2][ink] / 255.0
+        out["vivid"] = round(float(((sat > 0.45) & (val > 0.3)).mean()), 3)
+    else:
+        out.update(flat6=1.0, ncol=0, vivid=0.0)
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1)
+    mag = np.hypot(gx, gy)
+    any_edge = mag > 40
+    out["soft"] = round(float(((mag > 40) & (mag < 150)).sum() / max(1, any_edge.sum())), 3)  # soft gradients: photographs
+    # straight lines
+    edges = cv2.Canny(gray, 60, 150)
+    segs = cv2.HoughLinesP(edges, 1, np.pi / 180, 40, minLineLength=int(0.06 * max(gray.shape)), maxLineGap=3)
+    if segs is None:
+        out.update(hl_n=0, hl_len=0.0, hl_orth=0.0)
+    else:
+        d = np.asarray(segs, np.float32).reshape(-1, 4)
+        dx, dy = d[:, 2] - d[:, 0], d[:, 3] - d[:, 1]
+        ln = np.hypot(dx, dy)
+        ang = np.degrees(np.arctan2(dy, dx)) % 90
+        orth = (ang < 5) | (ang > 85)
+        out["hl_n"] = int(len(d))
+        out["hl_len"] = round(float(ln.sum() / (max(gray.shape) * 20)), 3)
+        out["hl_orth"] = round(float(ln[orth].sum() / max(1e-6, ln.sum())), 3)
+    # where the ink is: bounding box of the non-white content, light greys (roads, tints), horizontal and vertical line balance
+    ys, xs = np.nonzero(ink)
+    if len(xs) > 20:
+        bw, bh = xs.max() - xs.min() + 1, ys.max() - ys.min() + 1
+        out["c_aspect"] = round(float(bw) / bh, 3)
+        out["c_share"] = round(float(bw * bh) / n, 3)
+        out["c_fill"] = round(ink_share * n / float(bw * bh), 3)
+    else:
+        out.update(c_aspect=1.0, c_share=0.0, c_fill=0.0)
+    out["light"] = round(float(((gray >= 200) & (gray < 245)).mean()), 4)
+    if segs is not None and ln.sum() > 0:
+        a0 = np.abs(np.degrees(np.arctan2(dy, dx)))
+        out["hl_h"] = round(float(ln[(a0 < 5) | (a0 > 175)].sum() / ln.sum()), 3)
+        out["hl_v"] = round(float(ln[np.abs(a0 - 90) < 5].sum() / ln.sum()), 3)
+        hist = np.histogram(np.degrees(np.arctan2(dy, dx)) % 180, bins=18, range=(0, 180), weights=ln)[0]
+        p = hist / max(1e-6, hist.sum())
+        out["hl_ent"] = round(float(-(p[p > 0] * np.log2(p[p > 0])).sum()), 3)
+    else:
+        out.update(hl_h=0.0, hl_v=0.0, hl_ent=0.0)
+    # vivid colour blobs: seating zones are a few large flat colour areas, routes and symbols are many small ones
+    vm = ((hsv[:, :, 1] > 115) & (hsv[:, :, 2] > 76)).astype(np.uint8)
+    nv, _, stv, _ = cv2.connectedComponentsWithStats(vm, connectivity=8)
+    av = stv[1:, cv2.CC_STAT_AREA] if nv > 1 else np.zeros(0)
+    out["vb_big"] = int((av > 0.004 * n).sum())
+    out["vb_max"] = round(float(av.max() / n), 4) if len(av) else 0.0
+    out["vb_n"] = int((av > 0.0002 * n).sum())
+    # closed rooms: enclosed white areas of moderate size with box-like shapes
+    dark = (gray < 170).astype(np.uint8)
+    dark = cv2.dilate(dark, np.ones((2, 2), np.uint8))
+    nlab, lab, st, _ = cv2.connectedComponentsWithStats(1 - dark, connectivity=4)
+    areas = st[1:, cv2.CC_STAT_AREA]
+    boxes = st[1:, cv2.CC_STAT_WIDTH] * st[1:, cv2.CC_STAT_HEIGHT]
+    sel = (areas > 0.0003 * n) & (areas < 0.08 * n)
+    out["rooms"] = int(sel.sum())
+    out["room_fill"] = round(float((areas[sel] / boxes[sel]).mean()), 3) if sel.any() else 0.0
+    return out
+
+
+def vector_shape(page, dr):
+    """Orthogonal share of vector lines, tiny repeated shapes (seats), longest dark line weights."""
+    r = page.rect
+    n_l = n_orth = 0
+    long_l = 0
+    small = 0
+    area_pg = r.width * r.height
+    for d in dr:
+        rc = d["rect"]
+        if rc.width * rc.height < 0.00015 * area_pg and rc.width > 0.2 and rc.height > 0.2:
+            small += 1
+        for it in d["items"]:
+            if it[0] == "l":
+                dx, dy = abs(it[2][0] - it[1][0]), abs(it[2][1] - it[1][1])
+                n_l += 1
+                if min(dx, dy) < 0.02 * max(dx, dy, 1e-6) + 0.05:
+                    n_orth += 1
+                if max(dx, dy) > 0.05 * max(r.width, r.height):
+                    long_l += 1
+    return dict(v_orth=round(n_orth / max(1, n_l), 3), v_long=long_l, v_small=small)
+
+
 def dhash(rgb, n=16):
     import cv2
     g = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY) if rgb.ndim == 3 else rgb
@@ -144,8 +248,12 @@ def page_features(doc, pno):
     f = dict(w_pt=round(r.width, 1), h_pt=round(r.height, 1), **vs)
     f["n_words"] = len(words)
     f["n_chars"] = len(text)
-    f["text"] = re.sub(r"\s+", " ", text)[:1500]
+    f["text"] = re.sub(r"\s+", " ", text)[:3000]
     f["n_images"] = len(boxes)
+    ba = sorted(((b[2] - b[0]) * (b[3] - b[1]) / (r.width * r.height) for b in boxes), reverse=True)
+    f["img_max"] = round(float(ba[0]), 3) if ba else 0.0
+    f["img_big"] = sum(1 for a in ba if a > 0.04)
+    f["text_cover"] = round(coverage(r, [(w[0], w[1], w[2], w[3]) for w in words]), 3)
     f["img_cover"] = round(coverage(r, boxes), 3)
     f["regions"] = drawing_regions(page, dr, boxes)
     f["image_boxes"] = [tuple(round(v, 1) for v in b) for b in boxes[:40]]
@@ -161,5 +269,11 @@ def page_features(doc, pno):
         f["draw_cover"] = 0.0
     rgb = pdfio.render(page, width_px=320)
     f.update(raster_stats(rgb))
+    big = pdfio.render(page, width_px=640) if r.width >= r.height else pdfio.render(page, scale=640.0 / r.height)
+    f.update(raster_shape(big))
+    f.update(vector_shape(page, dr))
+    f["n_scale_ratio"] = len(re.findall(r"1\s?:\s?\d{2,5}", text))
+    f["n_big_words"] = sum(1 for sp in page.get_text("dict")["blocks"] if sp.get("type") == 0
+                           for ln in sp["lines"] for s in ln["spans"] if s["size"] > 20)
     f["dhash"] = "%064x" % dhash(rgb)
     return f

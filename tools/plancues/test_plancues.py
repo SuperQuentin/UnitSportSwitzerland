@@ -13,6 +13,9 @@ import features
 import pipeline
 import place
 import scale as scalem
+import evalsort
+import sortmodel
+import sortpages
 import vlm
 
 
@@ -253,6 +256,92 @@ class ModelTests(unittest.TestCase):
     def test_model_label_needs_the_text_layer(self):
         self.assertTrue(vlm.keep_label("Foyer", "A 027 Foyer Lift"))
         self.assertFalse(vlm.keep_label("salle de sport", "rez-de-chaussee 0 5 10 20 30"))
+
+
+def plan_page(p):
+    """Walls on a grid: orthogonal strokes, closed rooms, a few words."""
+    sh = p.new_shape()
+    for x in range(100, 501, 100):
+        sh.draw_line((x, 60), (x, 340))
+    for y in (60, 200, 340):
+        sh.draw_line((100, y), (500, y))
+    sh.finish(width=1.6)
+    sh.commit()
+    p.insert_text((120, 130), "Grundriss Erdgeschoss", fontsize=8)
+
+
+def photo_page(p):
+    """A smooth, noisy colour image over the page: no vector paths, soft gradients, many colours."""
+    import cv2
+    rng = np.random.default_rng(1)
+    yy, xx = np.mgrid[0:400, 0:600]
+    img = np.stack([128 + 100 * np.sin(xx / 37.0), 128 + 100 * np.sin(yy / 23.0 + xx / 91.0), 128 + 100 * np.cos(xx / 53.0)], axis=2)
+    img = np.clip(img + rng.normal(0, 12, img.shape), 0, 255).astype(np.uint8)
+    p.insert_image(p.rect, stream=cv2.imencode(".png", img)[1].tobytes())
+
+
+class SortFeatureTests(unittest.TestCase):
+    def feats(self, draw):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            f = os.path.join(d, "p.pdf")
+            make_pdf(f, draw)
+            doc = pymupdf.open(f)
+            out = features.page_features(doc, 0)
+            doc.close()
+        return out
+
+    def test_plan_is_orthogonal_with_closed_rooms(self):
+        f = self.feats(plan_page)
+        self.assertEqual(f["v_orth"], 1.0)
+        self.assertGreaterEqual(f["rooms"], 6)  # a 4 x 2 grid of rooms
+        self.assertGreater(f["hl_orth"], 0.9)
+        self.assertEqual(f["n_images"], 0)
+        self.assertEqual(f["n_scale_ratio"], 0)
+
+    def test_photo_has_soft_gradients_and_no_straight_lines(self):
+        ph, pl = self.feats(photo_page), self.feats(plan_page)
+        self.assertGreater(ph["img_max"], 0.9)
+        self.assertGreater(ph["soft"], pl["soft"])
+        self.assertLess(ph["flat6"], 0.8)
+        self.assertGreater(ph["ncol"], pl["ncol"])
+        self.assertEqual(ph["v_orth"], 0.0)
+
+    def test_scale_ratio_and_big_words_are_counted(self):
+        def draw(p):
+            p.insert_text((50, 100), "Plan 1:200  Schnitt 1 : 500", fontsize=10)
+            p.insert_text((50, 200), "TITLE", fontsize=40)
+        f = self.feats(draw)
+        self.assertEqual(f["n_scale_ratio"], 2)
+        self.assertEqual(f["n_big_words"], 1)
+
+    def test_vector_has_one_value_per_name(self):
+        v = sortmodel.vector(self.feats(plan_page), "Grundriss_EG.pdf")
+        self.assertEqual(len(v), len(sortmodel.names()))
+        self.assertTrue(np.isfinite(v).all())
+        self.assertIsNone(sortmodel.vector({"error": "cannot open"}, "x.pdf"))
+
+    def test_model_trains_and_tells_a_plan_from_a_photo(self):
+        pl, ph = self.feats(plan_page), self.feats(photo_page)
+        pages, labels = [], {}
+        for i in range(6):
+            for kind, f in (("floor_plan", pl), ("photo", ph)):
+                p = dict(f, path="%s_%d.pdf" % (kind, i), page=1)
+                pages.append(p)
+                labels[(p["path"], 1)] = kind
+        m = sortmodel.train(pages, labels)
+        self.assertEqual(max(sortmodel.probabilities(m, pl, "x.pdf").items(), key=lambda kv: kv[1])[0], "floor_plan")
+        self.assertEqual(max(sortmodel.probabilities(m, ph, "x.pdf").items(), key=lambda kv: kv[1])[0], "photo")
+
+
+class EvalTests(unittest.TestCase):
+    def test_confusion_precision_recall(self):
+        pairs = [("floor_plan", "floor_plan")] * 3 + [("floor_plan", "site_plan"), ("site_plan", "site_plan"), ("section", "floor_plan")]
+        m, acc = evalsort.confusion(pairs)
+        self.assertAlmostEqual(acc, 4 / 6)
+        pc = evalsort.per_class(m)
+        self.assertAlmostEqual(pc["floor_plan"][0], 3 / 4)  # one section was called a floor plan
+        self.assertAlmostEqual(pc["floor_plan"][1], 3 / 4)  # one floor plan was called a site plan
+        self.assertIn("floor_plan", evalsort.text_matrix(m))
 
 
 if __name__ == "__main__":

@@ -7,8 +7,8 @@ copyrighted. Only synthetic test PDFs (made by the tests) are in the repo. No ga
 
 ## Commands (`python -I tools/plancues/plancues.py ...`, pages are 1-based)
 
-- `sort <venue|all> [--vlm] [--labels sort_labels.csv] [--only-unsure]` -> `out/<venue>/sort_report.csv` (type, whether the rules
-  were unsure, duplicate_of, regions of a sheet, failures recorded and skipped). Types: floor_plan, site_plan, section, elevation,
+- `sort <venue|all> [--vlm] [--labels sort_labels.csv] [--only-unsure]` -> `out/<venue>/sort_report.csv` (type, whether the classifier
+  was unsure, rule, classifier and model types, duplicate_of, regions of a sheet, failures recorded and skipped). Types: floor_plan, site_plan, section, elevation,
   seating_plan, access_map, mixed_sheet, photo, text.
 - `scale|extract|place|run <venue> <file> <page> [--region K]`: scale (bar, then known object), walls/rooms/doors/outline, fit to
   the map; `run` does all of them and draws the review. Cues: `out/<venue>/cues/*.json`; debug rasters in `out/<venue>/debug_*`.
@@ -16,7 +16,8 @@ copyrighted. Only synthetic test PDFs (made by the tests) are in the repo. No ga
   `HouseLayout.Validate`, plus a `.report.json` of what was left out) or `stadium_row.cs.txt/.diff/.json` (a `StadiumSpec` row and a diff
   against `StadiumCatalog.cs`, which is never edited).
 - `review <venue>`: the cue over the swissimage aerial (3 px/m, the WMS of `terrain/stadiums`) and over its source page.
-- Tests: `cd tools/plancues && python -m unittest` (synthetic PDFs, no X: needed).
+- `python -I evalsort.py sort_labels_holdout.csv [--field rule_type|model_type|type]`: confusion matrix, precision and recall against labels.
+- Tests: `cd tools/plancues && python -m unittest` (synthetic PDFs, no X: needed). `requirements.txt` adds scikit-learn.
 
 ## How it works
 
@@ -53,15 +54,33 @@ sheet has nothing inside it; the Untergeschoss sheet's wing B has no door to the
 ring, so no front door exists in the drawing and none is invented (`--exit-snap` only moves a door that really leads out of the layout, and did not help).
 Stepped solids need a frame from their real footprint before layouts can describe them.
 
-## Sort evaluation and the local model
+## Sort: method and honest numbers
 
-54 pages labelled by looking at their renders (`sort_labels.csv`: relative paths and types only). Rules alone 64.8 % (35 of 54; the rules were
-tuned once against these labels, so that is optimistic). With `qwen/qwen3.8-27b` voting only on the 10 pages the rules were unsure of, 68.5 % (37 of 54):
-three fixed (a section, a sector plan, a sheet), one broken (an arena floor plan called a seating plan). The corpus: 833 pages and images, 57
-near-duplicates, one failure (a Basel Messe jpg of an unknown format; every PDF opens in PyMuPDF 2.1). The model takes 45-280 s a page, needs
-at least 12000 tokens, invents room labels (so a label is kept only if the text layer has it) and its numbers are never used; bonsai-27b
-mistook floor plans for access maps and is not used. Run it with `lms server start` and `lms load qwen/qwen3.8-27b --gpu max --context-length 16384 -y`;
-afterwards `lms unload --all` and `lms server stop`. Results are cached per page content in `out/_cache/vlm.json`.
+Three label sets, kept apart: `sort_labels.csv` (54, the first look, which the old rules were tuned on), `sort_labels_train.csv` (222, two random draws by
+folder and venue) and `sort_labels_holdout.csv` (90, drawn at random with seed 1572 before any rule changed, never trained or tuned on, read once).
+The last two were labelled by Claude from the renders (`labelled_by`; `ambiguous_with` names a second acceptable type): a human should spot-check them.
+
+Method (`sortmodel.py`): per-page features (vector paths and orthogonal share, stroke weights, raster flat colours and soft gradients, Hough lines,
+closed rooms, vivid blobs, text and picture cover, scale ratios, FR/DE/IT/EN keywords of text and file name; `features.VERSION` keys the cache) feed a
+mean of a logistic regression and a random forest (scikit-learn, no torch). Under 0.65 best probability the page goes to `qwen/qwen3.8-27b` with reasoning
+off (`reasoning_effort: none`, 1000 px, a hint line of word and picture counts): 2.5 s a page against 45-280 s with reasoning, cached per content.
+The type is the classifier's probabilities plus 0.5 for the model's type; `unsure` = the two disagree (or no vote and under 0.55). **Use floor_plan,
+site_plan and section only when not unsure.** `evalsort.py <labels>` prints the matrix, precision and recall.
+
+| Labels | Hand rules | Classifier | Classifier + model |
+|---|---|---|---|
+| 90 held-out | 47.8 % | 77.8 % | **87.8 %** strict, 94.4 % counting the second acceptable type of 26 ambiguous pages |
+| 54 + 222 (6-fold CV by file) | 51.8 % (48.6 % on the 222 unseen) | 67.4 % | 83.7 % |
+
+On the held-out set, pages not unsure (69 of 90) are 94.2 % right; sure floor_plan 12 of 12, site_plan 6 of 6, section 4 of 4 (recall 57 %, 50 %, 100 %: a
+missed plan costs less than a wrong one). An audit of 12 fresh sure geometry pages found none wrong. The rules scored 64.8 % on the 54 they were tuned on.
+Samples are small (4 sections, 4 elevations): treat a type's percentage as rough. Costs per page: rules 0.3 ms, classifier 33 ms, features 0.19 s, model 2.5 s.
+All 833 pages (57 duplicates, 1 unreadable jpg), before -> after: photo 309 -> 111, text 191 -> 192, floor_plan 81 -> 138, site_plan 77 -> 47, access_map 62 -> 82,
+mixed_sheet 59 -> 137, section 41 -> 53, elevation 8 -> 24, seating_plan 5 -> 49; unsure 309 -> 145. Remaining misses: site plan against access map
+(`2022_hsg-campusplan-20211221.pdf`), a small section on a large page called mixed_sheet (`Wankdorf_sections_axo_roofplan.pdf`), text pages with one picture called
+mixed_sheet (`Cathedrale_teaching_dossier_plan.pdf`), historic St Gall plans (`Plan_of_Saint_Gall_recto_full.jpg`, labelled site plan, floor plan by the model).
+The model invents room labels (a label is kept only if the text layer has it); its numbers are never used; bonsai-27b mistook floor plans for access maps and is not used.
+Run: `lms server start`, `lms load qwen/qwen3.8-27b --gpu max --context-length 8192 -y`; afterwards `lms unload --all`, `lms server stop`.
 
 ## Does not
 

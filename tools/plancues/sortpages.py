@@ -1,10 +1,12 @@
 """Sort every page (and image file) of a venue or of the whole corpus into plan types.
 
-Rules first: keywords of the text layer and of the file name (FR/DE/IT/EN), path counts and stroke weights, image
-coverage, how rectilinear and colourful a raster is. A page the rules are unsure of may be put to a local vision model
-(--vlm), which only votes on the page type; its answers are cached by page content. Duplicates (the wayback folders
-hold many near-identical access maps) are marked, never dropped from the report. A sheet with several drawings and
-photos is split into regions by bounding box.
+A small classifier (sortmodel.py: logistic regression and a random forest on vector, raster and text features) gives
+each page a probability per type. The hand rules of `classify` are kept as the fallback and as a comparison column. A page
+the classifier is unsure of (best probability under VOTE_BELOW) may be put to a local vision model (--vlm, reasoning off,
+about 2.5 s a page), which only votes on the page type; its answers are cached by page content. A page is `unsure` when the
+vision model and the classifier name different types, or when no model voted and the classifier is under MIN_SURE.
+Duplicates (the wayback folders hold many near-identical access maps) are marked, never dropped from the report. A sheet
+with several drawings and photos is split into regions by bounding box.
 """
 import csv
 import hashlib
@@ -126,6 +128,25 @@ def classify(f, fname):
     return "site_plan", True, "vector drawing, nothing names its type"
 
 
+VOTE_BELOW = 0.65  # the vision model votes only where the classifier's best probability is under this
+MIN_SURE = 0.55  # with no vote, a page is sure from this probability
+VLM_WEIGHT = 0.5  # added to the vision model's type in the classifier's probabilities
+GEOMETRY = ("floor_plan", "site_plan", "section")  # the types the pipeline turns into geometry: use them only when not unsure
+
+
+def decide(probs, vlm_type, rule):
+    """(type, unsure, reason) from the classifier's probabilities, the vision model's type (or None) and the rules' answer."""
+    if not probs:
+        return rule
+    top = max(probs, key=probs.get)
+    if vlm_type in TYPES:
+        score = dict(probs)
+        score[vlm_type] = score.get(vlm_type, 0.0) + VLM_WEIGHT
+        best = max(score, key=score.get)
+        return best, vlm_type != top, "classifier %s %.2f, vision model %s" % (top, probs[top], vlm_type)
+    return top, probs[top] < MIN_SURE, "classifier %s %.2f" % (top, probs[top])
+
+
 def collect_pages(root, out, venue, log=print):
     pages = list(cf.collect(root, out, venue, log=lambda s: None))
     return pages
@@ -159,19 +180,33 @@ def read_labels(path):
 
 def run(root, out, venue, vlm=False, labels=None, only_unsure=False, log=print):
     pages = collect_pages(root, out, venue)
+    try:
+        import sortmodel
+        model = sortmodel.load_or_train(pages, out)
+    except ImportError:  # scikit-learn missing: the hand rules alone
+        sortmodel = model = None
     for p in pages:
         p["venue"] = pdfio.venue_of(os.path.join(root, p["path"]), root)
         fname = os.path.basename(p["path"])
-        p["type"], p["unsure"], p["reason"] = classify(p, fname)
-        p["rule_type"] = p["type"]
+        p["rule_type"], rule_unsure, rule_reason = classify(p, fname)
+        probs = sortmodel.probabilities(model, p, fname) if model else {}
+        p["model_type"] = max(probs, key=probs.get) if probs else ""
+        p["model_p"] = round(max(probs.values()), 3) if probs else ""
+        p["probs"] = probs
+        p["type"], p["unsure"], p["reason"] = decide(probs, None, (p["rule_type"], rule_unsure, rule_reason))
+        p["needs_vote"] = not p.get("error") and (not probs or max(probs.values()) < VOTE_BELOW)
     dedupe(pages)
     if vlm:
         import vlm as vlmmod
         vlmmod.vote(pages, root, out, labels=labels, only_unsure=only_unsure, log=log)
+        for p in pages:
+            if p.get("vlm_type"):
+                p["type"], p["unsure"], p["reason"] = decide(p["probs"], p["vlm_type"], (p["rule_type"], True, "rules"))
     dest = os.path.join(out, venue if venue != "all" else "_all")
     os.makedirs(dest, exist_ok=True)
     path = os.path.join(dest, "sort_report.csv")
-    cols = ["venue", "path", "page", "type", "rule_type", "unsure", "reason", "duplicate_of", "regions", "n_paths", "n_words", "img_cover", "w_pt", "h_pt"]
+    cols = ["venue", "path", "page", "type", "rule_type", "model_type", "model_p", "vlm_type", "unsure", "reason", "duplicate_of", "regions", "n_paths",
+            "n_words", "img_cover", "w_pt", "h_pt"]
     try:
         fh = open(path, "w", newline="", encoding="utf-8")
     except OSError:
@@ -207,11 +242,8 @@ def main(a):
     print("pages:", len(pages), Counter(p["type"] for p in pages))
     print("duplicates:", sum(1 for p in pages if p["duplicate_of"]), "errors:", [(p["path"], p["error"]) for p in pages if p.get("error")])
     print("report:", path)
-    if labels:
-        hit, tot, wrong = score(pages, labels, "rule_type")
-        print("rules only: %d / %d = %.1f %%" % (hit, tot, 100 * hit / max(1, tot)))
-        if a.vlm:
-            hit2, tot2, wrong2 = score(pages, labels, "type")
-            print("with model: %d / %d = %.1f %%" % (hit2, tot2, 100 * hit2 / max(1, tot2)))
-        for k, t, g in wrong:
-            print("  rules wrong: %s p%d: labelled %s, rules said %s" % (k[0], k[1], t, g))
+    print("unsure:", sum(1 for p in pages if p["unsure"]), "of", len(pages))
+    if labels:  # `python evalsort.py <labels>` gives the confusion matrix and per-type precision and recall from the report
+        for field, name in (("rule_type", "hand rules"), ("model_type", "classifier"), ("type", "final")):
+            hit, tot, wrong = score(pages, labels, field)
+            print("%s: %d / %d = %.1f %%" % (name, hit, tot, 100 * hit / max(1, tot)))

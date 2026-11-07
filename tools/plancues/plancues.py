@@ -86,14 +86,15 @@ def cmd_run(a, stages):
 
 
 def main(argv=None):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # file names have accents the console code page lacks
     ap = argparse.ArgumentParser(prog="plancues", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("sort")
     _common(p)
     p.add_argument("venue")
-    p.add_argument("--vlm", action="store_true", help="let a local vision model vote on pages the rules are unsure of")
+    p.add_argument("--vlm", action="store_true", help="let a local vision model (LM Studio) vote on the pages the classifier is unsure of")
     p.add_argument("--labels", help="hand labels CSV (path,page,type) to score the sort against")
-    p.add_argument("--only-unsure", action="store_true", help="with --labels: run the model only on labelled pages the rules are unsure of")
+    p.add_argument("--only-unsure", action="store_true", help="with --labels: run the vision model only on labelled pages")
     for name in ("scale", "extract", "place", "run"):
         p = sub.add_parser(name)
         _common(p)
