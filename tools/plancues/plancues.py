@@ -3,7 +3,7 @@
     python -I tools/plancues/plancues.py sort    <venue|all> [--vlm] [--labels sort_labels.csv]
     python -I tools/plancues/plancues.py scale   <venue> <file> <page> [--region K]
     python -I tools/plancues/plancues.py extract <venue> <file> <page> [--region K] [--kind building|stadium]
-    python -I tools/plancues/plancues.py place   <venue> <cue>
+    python -I tools/plancues/plancues.py place   <venue> <file> <page> [--region K]
     python -I tools/plancues/plancues.py export  <venue> house|stadium [--cue NAME]
     python -I tools/plancues/plancues.py review  <venue> [--cue NAME]
     python -I tools/plancues/plancues.py run     <venue> <file> <page> [--region K]     scale + extract + place + review
@@ -99,14 +99,14 @@ def main(argv=None):
         _common(p)
         p.add_argument("venue")
         p.add_argument("file")
-        if name != "place":
-            p.add_argument("page", type=int)
-            p.add_argument("--region", type=int)
+        p.add_argument("page", type=int)
+        p.add_argument("--region", type=int)
     p = sub.add_parser("export")
     _common(p)
     p.add_argument("venue")
     p.add_argument("what", choices=["house", "stadium"])
     p.add_argument("--cue", help="cue name (default: every cue of the venue)")
+    p.add_argument("--exit-snap", type=float, default=0.0, help="house: snap a door that leads out of the layout up to this many metres (default 0: off)")
     p = sub.add_parser("review")
     _common(p)
     p.add_argument("venue")
@@ -123,9 +123,8 @@ def main(argv=None):
         import exportcmd
         return exportcmd.main(a)
     if a.cmd == "review":
-        import review
-        for path in cuem.cue_list_for(a):
-            pass
+        import exportcmd
+        return exportcmd.review(a)
 
 
 if __name__ == "__main__":
