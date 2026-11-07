@@ -42,17 +42,25 @@ copyrighted. Only synthetic test PDFs (made by the tests) are in the repo. No ga
 | Venue | Result |
 |---|---|
 | Tuilière ground floor | Bar 0.17644 m/pt, pitch cross-check 0.17639 (ratio 1.0003); pitch 105.03 x 68.02 m; seating front 114.05 x 75.15; roof outer 161.93 x 128.53. Placed on the centre circle: yaw 297.146 (north arrow: 297.15), roof outline median 0.5 m and p90 1.5 m from the aerial's edge. Proposed row E 2537360.5, N 1155029.2, azimuth -27.1 (catalog 2537360.3, 1155029.3, -27.2), depths N 23.9 E 24.0 S 23.9 W 29.4 (catalog 23, 23.5, 25, 29.5). The long section, scaled by the roof length (0.1411 m/pt, which is exactly 1:400), gives a roof 15.0 m over the pitch against the catalog's 22 and 20, and on the end stand 0.80 m treads and 0.55 m risers. |
-| UniS ground floor (p2) and UG sheet (p3, region 2) | Bar 0.2207 m/pt. 84 and 118 rooms, 37 doors. IoU with the solid's footprint 0.73 and 0.84 (rms 4.3 and 3.5 m): low_confidence. **No layout passes**: see below. |
+| UniS ground floor (p2) and UG sheet (p3, region 2) | Bar 0.2207 m/pt. 84 and 118 rooms, 37 doors. IoU with the solid's footprint 0.73 and 0.84 (rms 4.3 and 3.5 m): low_confidence. **No usable layout**, even on the whole base (#1574): see below. |
 | Maladière `plan_01.jpg` | A faint scan of the parking level, no scale: rejected (IoU 0.50, the outline took the ramp and the caption). The PDF's plans are thumbnails in magazine pages (mixed sheets). |
 | swissporarena site plan | Rejected as a schematic map before extraction. |
 
 ## UniS house layout: why it is a miss
 
-The EGID's solid (1232343, 3455 m2) is the whole complex, but `BuildingOutline` takes the **floor triangles at the lowest height**: a
-422 m2 ring, wing B of the Untergeschoss, 28 x 16 m. The game's frame, its footprint test and its box fit all use that ring. The Erdgeschoss
-sheet has nothing inside it; the Untergeschoss sheet's wing B has no door to the outside, and its only link to wing A lies 2.7 m beyond the
-ring, so no front door exists in the drawing and none is invented (`--exit-snap` only moves a door that really leads out of the layout, and did not help).
-Stepped solids need a frame from their real footprint before layouts can describe them.
+**Before #1574** `BuildingOutline` took only the floor triangles at the solid's lowest height: a 422 m2 ring (28 x 16 m, the
+south-east wing), so neither sheet fitted. **Since #1574** (`bldgframe.py` follows it) the base is the union of the floors at every
+height: 3449.8 m2, frame 100.5 x 77.4 m at yaw 13.11 (swissBUILDINGS3D about 3455 m2).
+- **Which sheet is which level:** the solid's floors lie at 559.7 m (south-east wing, 422 m2) and 562-564 m (the rest, about
+  3030 m2). The Untergeschoss sheet covers 398 m2 of that wing and 2706 m2 of the rest; the Erdgeschoss sheet 7 m2 and 2732 m2. So the
+  Untergeschoss is the solid's base, the format's level 0, and the Erdgeschoss the storey above.
+- **What the export now does:** 98 (UG) and 72 (EG) rooms fit the footprint; 11 and 13 are dropped for corners, lying outside or
+  overlapping. That drops their doors too (34 to 20, 32 to 13), and the rest are not linked: 85 of 87 (UG) and 56 of 59 (EG) rooms
+  have no way in through the extracted doors. The greedy drop then ends at **one sliver room** each (a 3 m2 "corridor" with one
+  door). `--houselayoutcheck` passes the UG export (that sliver plus a generated entrance passage about 40 m long: not a usable interior) and
+  fails the EG one ("no ground floor room can be reached from the front wall, where the door leads in").
+- **To fix (plancues, not the format):** extract the office doors (37 to 41 found for 84 to 118 rooms), refuse a layout that keeps
+  only a few rooms instead of writing it, and, for both sheets as two levels, stair cues to link them (the format has floors and stairs).
 
 ## Scale from the footprint (vector pages with no bar and no known object)
 

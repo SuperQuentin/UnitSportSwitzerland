@@ -426,5 +426,44 @@ class EvalTests(unittest.TestCase):
         self.assertIn("floor_plan", evalsort.text_matrix(m))
 
 
+def _face(tris, y, down, *p):
+    """A flat polygon as a fan, wound like the tiles' solids: a face looking down has a negative plan winding."""
+    for k in range(1, len(p) - 1):
+        a, b, c = p[0], p[k], p[k + 1]
+        if (((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) < 0) != down:
+            b, c = c, b
+        tris.append([(a[0], y, a[1]), (b[0], y, b[1]), (c[0], y, c[1])])
+
+
+class FrameTests(unittest.TestCase):
+    """bldgframe, the twin of BuildingOutline.cs (HouseLayoutTests has the same two cases)."""
+
+    def test_a_building_stepped_down_a_slope_gets_its_whole_base(self):
+        import bldgframe
+        tris = []
+        _face(tris, 0, True, (490, 496), (500, 496), (500, 504), (490, 504))
+        _face(tris, 3, True, (500, 500), (500, 496), (510, 496), (510, 504), (500, 504))
+        _face(tris, 9, False, (490, 496), (510, 496), (510, 504), (490, 504))
+        o = bldgframe.outline(dict(tris=np.array(tris, dtype="<f4"), min_y=0.0, tile=(2594, 1120)))
+        self.assertEqual(len(o["rings"]), 1)
+        self.assertAlmostEqual(abs(sum(bldgframe._area(r) for r in bldgframe.local_rings(o))), 160, places=0)
+        self.assertAlmostEqual(o["length"], 20, places=1)
+        self.assertAlmostEqual(o["width"], 8, places=1)
+
+    def test_eaves_are_no_floor(self):
+        import bldgframe
+        tris = []
+        _face(tris, 0, True, (495, 496), (505, 496), (505, 504), (495, 504))
+        _face(tris, 6, False, (494.3, 495.3), (505.7, 495.3), (505.7, 504.7), (494.3, 504.7))
+        _face(tris, 5.8, True, (494.3, 495.3), (505.7, 495.3), (505, 496), (495, 496))
+        _face(tris, 5.8, True, (505.7, 495.3), (505.7, 504.7), (505, 504), (505, 496))
+        _face(tris, 5.8, True, (505.7, 504.7), (494.3, 504.7), (495, 504), (505, 504))
+        _face(tris, 5.8, True, (494.3, 504.7), (494.3, 495.3), (495, 496), (495, 504))
+        o = bldgframe.outline(dict(tris=np.array(tris, dtype="<f4"), min_y=0.0, tile=(2594, 1120)))
+        self.assertAlmostEqual(abs(sum(bldgframe._area(r) for r in bldgframe.local_rings(o))), 80, places=0)
+        self.assertAlmostEqual(o["length"], 10, places=1)
+        self.assertAlmostEqual(o["width"], 8, places=1)
+
+
 if __name__ == "__main__":
     unittest.main()
