@@ -17,5 +17,12 @@
   "Basel_St_Jakob_Park": {"kind": "building", "at": [2613582, 1265712], "name": "St. Jakob-Park", "town": "Basel"},
   "UniBE_vonRoll": {"kind": "building", "at": [2598756, 1200208], "name": "vonRoll, Fabrikstrasse 6", "town": "Bern"},
   "Bern_Stadion_Wankdorf": {"kind": "building", "at": [2601996, 1201234], "name": "Stadion Wankdorf", "town": "Bern"},
-  "UNIL_Synathlon": {"kind": "building", "at": [2534214, 1152328], "name": "Synathlon, centre sportif de Dorigny", "town": "Lausanne"}
+  "UNIL_Synathlon": {"kind": "building", "at": [2534214, 1152328], "name": "Synathlon, centre sportif de Dorigny", "town": "Lausanne"},
+  "Fribourg_BCF_Arena": {"kind": "building", "at": [2578395, 1185175], "name": "BCF Arena", "town": "Fribourg"},
+  "Zurich_Swiss_Life_Arena": {"kind": "building", "at": [2678740, 1249777], "name": "Swiss Life Arena, Vulkanstrasse 120", "town": "Zürich"},
+  "ETH_Zentrum_Hauptgebaeude": {"kind": "building", "at": [2683866, 1247682], "name": "UZH Hauptgebäude, Rämistrasse 71 (the wayfinding extract's floors D-H)", "town": "Zürich"},
+  "UNIGE_Uni_Bastions": {"kind": "building", "at": [2500098, 1117211], "name": "Uni Bastions, Rue De-Candolle 5", "town": "Genève"},
+  "UNIGE_Uni_Mail": {"kind": "building", "at": [2499772, 1116632], "name": "Uni Mail, Boulevard du Pont-d'Arve", "town": "Genève"},
+  "Veytaux_Chateau_de_Chillon": {"kind": "building", "at": [2560728, 1140415], "name": "Château de Chillon", "town": "Veytaux"},
+  "Bern_Bundeshaus": {"kind": "building", "at": [2600423, 1199521], "name": "Bundeshaus, Bundesplatz 3", "town": "Bern"}
 }

@@ -167,6 +167,76 @@ def footscale_stage(root, venue, rel_path, page, chunks, info, region=None, thr=
     return c, pg, j
 
 
+# ------------------------------------------------------------------------------------------------ orientation plans
+def orientation_stage(root, venue, rel_path, page, chunks, info, region=None, cands=None, cache_dir=None, log=print, do_place=True, thr=None):
+    """An orientation plan (flat colour rooms, no scale bar, no wall lines, see orient.py) as a cue.
+
+    The rooms are the colour regions of the render; their union is the outline. The outline goes through the footprint gate
+    (`footscale.judge`, the same gate as any page with no bar). Gate passed: the rooms are geometry in metres, placed on the building,
+    method orientation_plan, low_confidence at best (a flat region is not a wall); no doors, since none is drawn. Gate failed: a
+    topology-only cue (`cue["topology"]`: rooms, names, relative areas, adjacency, entrances on the outline) and no dimension at all.
+    `cands` replaces the footprint search (tests); `thr` relaxes the gate for a drawing of a near miss, for looking only. Returns (cue, extraction, judgement).
+    """
+    import orient
+    full = os.path.join(root, rel_path)
+    rect = pdfio.open_doc(full)[page - 1].rect
+    bbox = region or (0.0, 0.0, rect.width, rect.height)
+    c = cuem.new_cue(venue, rel_path, page, bbox, "orientation_plan")
+    img, ppp, origin, words = orient.render(full, page, region)
+    res = orient.extract(img, ppp, origin, words, lines=orient.leader_lines(full, page) if full.lower().endswith(".pdf") else ())
+    if not res["ok"]:
+        cuem.set_status(c, "rejected", ["orientation plan: " + res["why"]])
+        return c, res, None
+    c["topology"] = orient.topology(res)
+    sm = orient.summary(res)
+    cuem.add_fact(c, "n_rooms", sm["rooms"], None, 0, 0.5)
+    cuem.add_fact(c, "n_rooms_named", sm["named"], None, 0, 0.5)
+    at = info.get("at")
+    if cands is None:
+        if not at:
+            cuem.set_status(c, "rejected", ["orientation plan, topology only: no map position hint for this venue (--at E,N), so no footprint to scale it to"])
+            return c, res, None
+        cands = footprint_candidates(chunks, at)
+        if not cands:
+            cuem.set_status(c, "rejected", ["orientation plan, topology only: no building solid near the position hint in the tiles"])
+            return c, res, None
+    poly_pt = Polygon([(origin[0] + x / ppp, origin[1] + y / ppp) for x, y in res["outline"].exterior.coords])
+    j = footscale.judge(poly_pt, cands, thr=thr, words=words, refs=True)
+    if j["status"] == "rejected":
+        cuem.set_status(c, "rejected", ["orientation plan, topology only: the footprint gate failed, so there is no scale"] + j["reasons"])
+        return c, res, j
+    m = j["m_per_pt"]
+    cx, cz = res["outline"].centroid.x, res["outline"].centroid.y
+    ox_pt, oz_pt = origin[0] + cx / ppp, origin[1] + cz / ppp
+
+    def to_m(p):
+        return [round((origin[0] + p[0] / ppp - ox_pt) * m, 3), round((origin[1] + p[1] / ppp - oz_pt) * m, 3)]
+    rooms = []
+    for r in res["rooms"]:
+        rooms.append(dict(label=r["label"], type=r["type"], poly=[to_m(p) for p in r["poly_px"]], holes=[[to_m(p) for p in h] for h in r["holes_px"]],
+                          confidence=0.3, area_m2=round(r["area_px"] / ppp / ppp * m * m, 1), features=r["features"]))
+    labels = [dict(tip=to_m(k["at_px"]), label=k["text"]) for k in res["marks"] if k["kind"] == "entrance" and k["at_px"]]
+    cc = j["cross_check"] if j["cross_check"] and j["cross_check"]["agrees"] else None
+    c["scale"] = dict(m_per_pt=m, method="footprint_fit", cross_check=cc, source="orientation_plan",
+                      footprint=dict(egid=j["egid"], iou=round(j["iou"], 4), rms_m=round(j["rms_m"], 3), margin=None if j["margin"] is None else round(j["margin"], 4),
+                                     distinct=None if j.get("distinct") is None else round(j["distinct"], 4), raw_m_per_pt=j["raw_m_per_pt"]))
+    c["levels"] = [dict(name="orientation plan", outline=[to_m(p) for p in res["outline"].exterior.coords[:-1]],
+                        walls=dict(note="orientation plan: rooms are flat colour regions, there are no walls and no doors"),
+                        rooms=rooms, openings=[], origin_pt=[round(ox_pt, 3), round(oz_pt, 3)],
+                        extra=dict(method="orientation_plan", entrance_labels=labels, marks=sm["marks"]))]
+    cuem.add_fact(c, "outline_area_m2", round(res["outline"].area / ppp / ppp * m * m, 1), "m2", 0, 0.4)
+    cuem.set_status(c, j["status"], j["reasons"])
+    if do_place:
+        place_stage(c, chunks or "", cache_dir or "", dict(info, kind="building"), egid=j["egid"], log=log)
+    if c.get("placement"):
+        c["placement"]["method"] = "orientation_plan"
+        c["placement"]["scale_method"] = "footprint_fit"
+    if c["status"] == "ok":
+        c["status"] = "low_confidence"
+    c["reasons"].append("orientation plan: the rooms are flat colour regions of a visitor plan, not walls; no doors are drawn")
+    return c, res, j
+
+
 # ------------------------------------------------------------------------------------------------ stadium facts
 def _dashed_lines(pg, minlen=100.0):
     hs, vs = [], []

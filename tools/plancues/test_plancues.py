@@ -465,5 +465,190 @@ class FrameTests(unittest.TestCase):
         self.assertAlmostEqual(o["width"], 8, places=1)
 
 
+class OrientationPlanTests(unittest.TestCase):
+    """Orientation plans: flat colour rooms with names in the text layer, no scale bar, no walls."""
+    M = 0.12  # true metres per point
+    # (rect in page points, fill, label): an L, 40 x 30 m at M; the vertical arm is at the top of the page (north up on the map is page up)
+    ROOMS = [((0, 0, 133, 70), (0.78, 0.78, 0.78), "Lager"), ((0, 76, 133, 150), (0.98, 0.94, 0.5), "Mensa"),
+             ((0, 156, 78, 250), (1.0, 0.6, 0.78), "Aula"), ((84, 156, 162, 250), (0.5, 0.75, 0.95), "Buro 1"),
+             ((168, 156, 246, 250), (0.6, 0.87, 0.6), "Bibliothek"), ((252, 156, 333, 250), (0.98, 0.75, 0.4), "WC Damen")]
+
+    def draw(self, page, legend=True, entrance=True):
+        ox, oy = 80, 40
+        for (x0, y0, x1, y1), col, label in self.ROOMS:
+            page.draw_rect(pymupdf.Rect(ox + x0, oy + y0, ox + x1, oy + y1), fill=col, color=None)
+            page.insert_text((ox + x0 + 6, oy + (y0 + y1) / 2), label, fontsize=9)
+        if legend:  # a swatch and its word, far from the building
+            page.draw_rect(pymupdf.Rect(500, 330, 530, 350), fill=(1.0, 0.6, 0.78), color=None)
+            page.insert_text((536, 344), "Treppe", fontsize=9)
+        if entrance:
+            page.insert_text((ox + 40, oy + 262), "Eingang", fontsize=9)
+
+    def pdf(self, d, **kw):
+        path = os.path.join(d, "orient.pdf")
+        make_pdf(path, lambda pg: self.draw(pg, **kw), size=(600, 400))
+        return path
+
+    def test_colour_regions_are_rooms_with_names_and_marks(self):
+        import orient
+        with tempfile.TemporaryDirectory() as d:
+            path = self.pdf(d)
+            img, ppp, org, words = orient.render(path, 1)
+            res = orient.extract(img, ppp, org, words)
+        self.assertTrue(res["ok"], res["why"])
+        self.assertEqual(len(res["rooms"]), 6)  # the legend swatch is another drawing, not a room
+        labels = sorted(r["label"] for r in res["rooms"])
+        self.assertEqual(labels, sorted(["Lager", "Mensa", "Aula", "Buro 1", "Bibliothek", "WC Damen"]))
+        wc = next(r for r in res["rooms"] if r["label"] == "WC Damen")
+        self.assertIn("wc", wc["features"])
+        self.assertEqual(wc["type"], "WC")
+        ent = [m for m in res["marks"] if m["kind"] == "entrance"]
+        self.assertEqual(len(ent), 1)  # "Eingang" is under the building, on its outline
+        self.assertIsNotNone(ent[0]["at_px"])
+        self.assertFalse(any(m["text"] == "Treppe" for m in res["marks"]))  # the legend's word is not part of the building
+        want = sum((x1 - x0) * (y1 - y0) for (x0, y0, x1, y1), _, _ in self.ROOMS) * ppp * ppp
+        self.assertAlmostEqual(sum(r["area_px"] for r in res["rooms"]) / want, 1.0, delta=0.06)
+
+    def test_a_label_beside_the_plan_reaches_its_room_by_a_leader_line(self):
+        import orient
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "l.pdf")
+
+            def draw(pg):
+                for (x0, y0, x1, y1), col, _ in self.ROOMS:
+                    pg.draw_rect(pymupdf.Rect(80 + x0, 40 + y0, 80 + x1, 40 + y1), fill=col, color=None)
+                pg.insert_text((260, 30), "Sonderausstellung", fontsize=9)  # above the plan, tied to Bibliothek (x 248-326, y 196-290)
+                sh = pg.new_shape()
+                sh.draw_line((300, 34), (300, 205))  # the leader: from the label down into the room
+                sh.finish(width=0.5, color=(0, 0, 0))
+                sh.commit()
+            make_pdf(path, draw, size=(600, 400))
+            img, ppp, org, words = orient.render(path, 1)
+            plain = orient.extract(img, ppp, org, words)
+            led = orient.extract(img, ppp, org, words, lines=orient.leader_lines(path, 1))
+        self.assertEqual([r["label"] for r in plain["rooms"]], [None] * 6)  # no text lies in a room
+        named = [r["label"] for r in led["rooms"] if r["label"]]
+        self.assertEqual(named, ["Sonderausstellung"])
+
+    def test_text_and_line_work_are_not_rooms(self):
+        import orient
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "t.pdf")
+
+            def draw(pg):
+                self.draw(pg, legend=False)
+                sh = pg.new_shape()
+                sh.draw_line((20, 20), (560, 20))  # a rule and a caption in dark ink
+                sh.finish(width=1.0, color=(0, 0, 0))
+                sh.commit()
+                pg.insert_text((20, 14), "UNI GEBAEUDE UEBERSICHT 4. OG", fontsize=12)
+            make_pdf(path, draw, size=(600, 400))
+            img, ppp, org, words = orient.render(path, 1)
+            res = orient.extract(img, ppp, org, words)
+        self.assertEqual(len(res["rooms"]), 6)
+
+    def cands(self):
+        """The building the plan is of (an L, 40 x 30 m)."""
+        L = [(0, 0), (40, 0), (40, 12), (16, 12), (16, 30), (0, 30)]
+        fp = Polygon([(2600000.0 + x, 1200000.0 + y) for x, y in L])
+        return [dict(egid=1, fp=fp)]
+
+    def test_a_gated_plan_is_geometry_in_metres_low_confidence_no_doors(self):
+        import pipeline
+        with tempfile.TemporaryDirectory() as d:
+            self.pdf(d)
+            c, res, j = pipeline.orientation_stage(d, "V", "orient.pdf", 1, None, {"at": [2600010, 1200010]}, cands=self.cands(), do_place=False)
+        self.assertEqual(c["status"], "low_confidence", c["reasons"])
+        self.assertEqual(c["scale"]["method"], "footprint_fit")
+        self.assertAlmostEqual(c["scale"]["m_per_pt"] / self.M, 1.0, delta=0.05)
+        lvl = c["levels"][0]
+        self.assertEqual(lvl["extra"]["method"], "orientation_plan")
+        self.assertEqual(len(lvl["rooms"]), 6)
+        self.assertEqual(lvl["openings"], [])  # no door is drawn, none is invented
+        self.assertEqual(len(lvl["extra"]["entrance_labels"]), 1)
+        self.assertAlmostEqual(sum(r["area_m2"] for r in lvl["rooms"]), 702, delta=30)  # the rooms drawn, without the gaps between them
+
+    def test_a_plan_that_fails_the_gate_is_topology_only(self):
+        import json
+        import pipeline
+        far = [(0, 0), (90, 0), (90, 20), (0, 20)]  # not this building
+        cands = [dict(egid=2, fp=Polygon([(2600000.0 + x, 1200000.0 + y) for x, y in far]))]
+        with tempfile.TemporaryDirectory() as d:
+            self.pdf(d)
+            c, res, j = pipeline.orientation_stage(d, "V", "orient.pdf", 1, None, {"at": [2600010, 1200010]}, cands=cands, do_place=False)
+        self.assertEqual(c["status"], "rejected")
+        self.assertIsNone(c["scale"])
+        self.assertEqual(c["levels"], [])  # nothing in metres
+        self.assertTrue(any("topology only" in r for r in c["reasons"]))
+        t = c["topology"]
+        self.assertEqual(len(t["rooms"]), 6)
+        self.assertAlmostEqual(sum(r["area_share"] for r in t["rooms"]), 1.0, places=2)
+        names = {r["id"]: r["label"] for r in t["rooms"]}
+        pair = {frozenset((names[a["a"]], names[a["b"]])) for a in t["adjacency"]}
+        self.assertIn(frozenset(("Aula", "Buro 1")), pair)
+        self.assertIn(frozenset(("Aula", "Mensa")), pair)
+        self.assertNotIn(frozenset(("Aula", "WC Damen")), pair)
+        self.assertEqual(len(t["entrances"]), 1)
+        text = json.dumps(t)
+        for dim in ("m_per_pt", "area_m2", "width_m"):
+            self.assertNotIn(dim, text)
+
+    def test_a_raster_page_has_rooms_but_no_names(self):
+        import cv2
+        import orient
+        img = np.full((400, 600, 3), 255, np.uint8)
+        for (x0, y0, x1, y1), col, _ in self.ROOMS:
+            img[40 + y0:40 + y1, 80 + x0:80 + x1] = [int(v * 255) for v in col]
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "scan.png")
+            cv2.imwrite(p, img[:, :, ::-1])
+            im, ppp, org, words = orient.render(p, 1)
+            res = orient.extract(im, ppp, org, words)
+        self.assertTrue(res["ok"])
+        self.assertEqual(len(res["rooms"]), 6)
+        self.assertEqual([r["label"] for r in res["rooms"]], [None] * 6)  # there is no text layer and no OCR
+
+
+class ExportGuardTests(unittest.TestCase):
+    """A layout that keeps only a small part of the extracted rooms is refused (UniS: 98 rooms became one 3 m2 sliver)."""
+
+    def test_guard_numbers(self):
+        import export
+        self.assertIsNotNone(export.keep_guard(1, 98, 3.0, 2800.0))
+        self.assertIn("1 of 98", export.keep_guard(1, 98, 3.0, 2800.0))
+        self.assertIn("m2 of", export.keep_guard(40, 60, 100.0, 2800.0))  # enough rooms, a small part of the area
+        self.assertIsNone(export.keep_guard(50, 98, 1500.0, 2800.0))
+        self.assertIsNotNone(export.keep_guard(0, 0, 0.0, 0.0))
+
+    def cue(self, n_out):
+        rooms = [dict(label=None, type=None, poly=[[1, -1], [6, -1], [6, -6], [1, -6]], area_m2=25.0)]
+        for k in range(n_out):  # rooms drawn far outside the building: left out
+            x = 100 + 10 * k
+            rooms.append(dict(label=None, type=None, poly=[[x, -1], [x + 6, -1], [x + 6, -6], [x, -6]], area_m2=25.0))
+        return dict(placement=dict(e=2600000.0, n=1200000.0, yaw_deg=0.0, egid=5, tile="2600_1200"),
+                    levels=[dict(rooms=rooms, openings=[], extra={})])
+
+    def run_layout(self, cue):
+        from unittest import mock
+        import export
+        o = dict(e=2600000.0, n=1200000.0, yaw_deg=0.0, length=20.0, width=10.0)
+        ring = [(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (0.0, 10.0)]
+        with mock.patch.object(export.tiles, "buildings_near", return_value=[dict(egid=5)]), \
+                mock.patch.object(export.bldgframe, "outline", return_value=o), \
+                mock.patch.object(export.bldgframe, "local_rings", return_value=[ring]), \
+                mock.patch.object(export.bldgframe, "to_local", side_effect=lambda o_, e, n: (e - o_["e"], n - o_["n"])):
+            return export.house_layout(cue, "chunks")
+
+    def test_one_room_of_ten_is_refused(self):
+        lay, rep = self.run_layout(self.cue(9))
+        self.assertIsNone(lay)
+        self.assertIn("1 of 10", rep["refused"])
+
+    def test_every_room_kept_is_not_refused(self):
+        lay, rep = self.run_layout(self.cue(0))
+        self.assertNotIn("refused", rep)
+        self.assertEqual(rep["rooms_kept"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

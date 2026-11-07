@@ -3,7 +3,7 @@ import json
 import os
 import re
 
-TOP_KEYS = ("version", "venue", "status", "reasons", "sources", "scale", "placement", "levels", "facts")
+TOP_KEYS = ("version", "venue", "status", "reasons", "sources", "scale", "placement", "levels", "facts", "topology")
 
 
 def cue_dir(out, venue):
@@ -39,7 +39,7 @@ def fact(cue, key, default=None):
 
 def save(path, cue):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    clean = {k: cue[k] for k in TOP_KEYS}
+    clean = {k: cue[k] for k in TOP_KEYS if k in cue}
     with open(path, "w", encoding="utf-8") as f:
         json.dump(clean, f, indent=1, ensure_ascii=False, default=float)
 

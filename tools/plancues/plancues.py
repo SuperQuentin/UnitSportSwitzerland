@@ -7,6 +7,7 @@
     python -I tools/plancues/plancues.py export  <venue> house|stadium [--cue NAME]
     python -I tools/plancues/plancues.py review  <venue> [--cue NAME]
     python -I tools/plancues/plancues.py footscale validate|apply [--jobs N]   scale from the footprint: check it against bars / use it where there is none
+    python -I tools/plancues/plancues.py orient  <venue|all> [<file> <page>] [--region K]   orientation plans (flat colour rooms): cue, gate, review
     python -I tools/plancues/plancues.py run     <venue> <file> <page> [--region K]     scale + extract + place + review
 
 Pages are 1-based. Documents are read from --root (default X:/UnitSportSwitzerland), results go to --out
@@ -103,6 +104,13 @@ def main(argv=None):
         p.add_argument("file")
         p.add_argument("page", type=int)
         p.add_argument("--region", type=int)
+    p = sub.add_parser("orient")
+    _common(p)
+    p.add_argument("venue", help="a venue, or 'all' for every page the sort calls an orientation plan")
+    p.add_argument("file", nargs="?")
+    p.add_argument("page", nargs="?", type=int)
+    p.add_argument("--region", type=int)
+    p.add_argument("--relax", action="store_true", help="orient: relax the footprint gate to draw a near miss for looking (out/_all/orient_review), never a cue file")
     p = sub.add_parser("export")
     _common(p)
     p.add_argument("venue")
@@ -127,6 +135,9 @@ def main(argv=None):
     if a.cmd == "footscale":
         import footscalecmd
         return footscalecmd.main(a)
+    if a.cmd == "orient":
+        import orientcmd
+        return orientcmd.main(a)
     if a.cmd == "sort":
         import sortpages
         return sortpages.main(a)
