@@ -727,6 +727,14 @@ class DoorTests(unittest.TestCase):
         self.assertTrue(all(not p.interiors for p in parts))
         self.assertAlmostEqual(sum(p.area for p in parts), ring.area, 3)
 
+    def test_a_bow_tie_outline_of_a_scan_keeps_its_larger_part(self):
+        import raster
+        g = raster.as_polygon([(0, 0), (10, 10), (10, 0), (0, 10)])  # crosses itself: two triangles
+        self.assertEqual(g.geom_type, "Polygon")
+        self.assertAlmostEqual(g.area, 25.0, 3)
+        sq = raster.as_polygon([(0, 0), (4, 0), (4, 4), (0, 4)])
+        self.assertAlmostEqual(sq.area, 16.0, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,12 @@ import numpy as np
 from shapely.geometry import Polygon
 
 
+def as_polygon(pts):
+    """A valid polygon from a traced ring; a ring that crosses itself (a bow-tie) splits in two on `buffer(0)`: keep the larger part."""
+    g = Polygon(pts).buffer(0)
+    return max(g.geoms, key=lambda q: q.area) if g.geom_type == "MultiPolygon" else g
+
+
 def outline_px(gray, close_frac=0.03, min_frac=0.02):
     """Largest filled blob of the drawing's ink as a polygon in pixels, and the ink mask."""
     g = cv2.GaussianBlur(gray, (0, 0), 1.0)
@@ -31,4 +37,4 @@ def outline_px(gray, close_frac=0.03, min_frac=0.02):
         return None, ink
     eps = 0.004 * cv2.arcLength(c, True)
     poly = cv2.approxPolyDP(c, eps, True)[:, 0, :].astype(float)
-    return Polygon(poly).buffer(0), ink
+    return as_polygon(poly), ink
