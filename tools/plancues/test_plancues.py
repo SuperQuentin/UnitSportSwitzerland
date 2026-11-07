@@ -768,5 +768,97 @@ class DoorTests(unittest.TestCase):
         self.assertAlmostEqual(export._areal(part.difference(shapely.box(0, 0, 2, 2))).area, 3.0, 3)
 
 
+def synth_scan(ppm=20, wall=0.2, door=0.9, extras=True):
+    """A raster plan, 14 x 8 m of building on a 18 x 12 m sheet: a left room (7 x 8 m) and two right rooms (7 x 4 m), a doorway in the vertical wall
+    (y 5.0-5.9 m of the building) and one in the horizontal wall (x 9.0-9.9). Extras: lettering, hatching, a piece of furniture, a dimension line."""
+    import cv2
+    g = np.full((int(12 * ppm), int(18 * ppm)), 255, np.uint8)
+
+    def rect(x0, y0, x1, y1):
+        cv2.rectangle(g, (int(round(x0 * ppm)), int(round(y0 * ppm))), (int(round(x1 * ppm)) - 1, int(round(y1 * ppm)) - 1), 0, -1)
+    ox, oy, t = 2, 2, wall
+    rect(ox, oy, ox + 14, oy + t)
+    rect(ox, oy + 8 - t, ox + 14, oy + 8)
+    rect(ox, oy, ox + t, oy + 8)
+    rect(ox + 14 - t, oy, ox + 14, oy + 8)
+    rect(ox + 7 - t / 2, oy, ox + 7 + t / 2, oy + 5.0)
+    rect(ox + 7 - t / 2, oy + 5.0 + door, ox + 7 + t / 2, oy + 8)
+    rect(ox + 7, oy + 4 - t / 2, ox + 9, oy + 4 + t / 2)
+    rect(ox + 9 + door, oy + 4 - t / 2, ox + 14, oy + 4 + t / 2)
+    if extras:
+        for cx, cy in ((4.5, 5), (10.5, 2), (10.5, 6)):
+            cv2.putText(g, "ROOM", (int((ox + cx - 1) * ppm), int((oy + cy) * ppm)), cv2.FONT_HERSHEY_SIMPLEX, ppm / 40, 0, 1, cv2.LINE_AA)
+        for k in range(0, 60, 4):
+            cv2.line(g, (int((ox + 0.5) * ppm + k * 3), int((oy + 0.5) * ppm)), (int((ox + 0.5) * ppm + k * 3 - 60), int((oy + 2.5) * ppm)), 90, 1)
+        cv2.rectangle(g, (int((ox + 8) * ppm), int((oy + 5) * ppm)), (int((ox + 10) * ppm), int((oy + 6) * ppm)), 0, 1)
+        cv2.line(g, (int(ox * ppm), int(0.8 * ppm)), (int((ox + 14) * ppm), int(0.8 * ppm)), 0, 1)
+    return g
+
+
+class ScanRoomTests(unittest.TestCase):
+    OUTLINE = Polygon([(2, 2), (16, 2), (16, 10), (2, 10)])
+    ROOMS = [Polygon([(2.1, 2.1), (9, 2.1), (9, 10), (2.1, 10)]).intersection(OUTLINE.buffer(-0.1)),
+             Polygon([(9, 2.1), (15.9, 2.1), (15.9, 6), (9, 6)]), Polygon([(9, 6), (15.9, 6), (15.9, 9.9), (9, 9.9)])]
+
+    def run_scan(self, **kw):
+        import scanrooms
+        return scanrooms.extract(synth_scan(**kw), 0.05, outline=self.OUTLINE)
+
+    @staticmethod
+    def iou(a, b):
+        return a.intersection(b).area / a.union(b).area
+
+    def test_walls_of_a_known_width_give_the_right_rooms(self):
+        res = self.run_scan()
+        self.assertTrue(res["ok"], res["why"])
+        self.assertAlmostEqual(res["wall_m"], 0.2, delta=0.05)  # measured from the strokes, not given
+        self.assertEqual(len(res["rooms"]), 3)
+        for want in self.ROOMS:
+            self.assertGreater(max(self.iou(r, want) for r in res["rooms"]), 0.92)
+
+    def test_the_wall_width_follows_the_walls_not_a_constant(self):
+        res = self.run_scan(wall=0.3)
+        self.assertAlmostEqual(res["wall_m"], 0.3, delta=0.06)
+        self.assertEqual(len(res["rooms"]), 3)
+
+    def test_a_door_gap_is_found_as_a_door(self):
+        res = self.run_scan()
+        self.assertEqual(len(res["doors"]), 2)
+        mids = sorted(((d["a"][0] + d["b"][0]) / 2, (d["a"][1] + d["b"][1]) / 2) for d in res["doors"])
+        # the vertical wall's doorway (x = 9.0, y 7.0-7.9) and the horizontal wall's (y = 6.0, x 11.0-11.9)
+        self.assertAlmostEqual(mids[0][0], 9.0, delta=0.2)
+        self.assertAlmostEqual(mids[0][1], 7.45, delta=0.25)
+        self.assertAlmostEqual(mids[1][0], 11.45, delta=0.25)
+        self.assertAlmostEqual(mids[1][1], 6.0, delta=0.2)
+        for d in res["doors"]:
+            self.assertAlmostEqual(d["width_m"], 0.9, delta=0.2)
+            i, j = d["between"]
+            self.assertNotEqual(i, j)
+
+    def test_a_wall_without_a_gap_has_no_door_and_a_wider_gap_than_a_door_is_not_closed(self):
+        res = self.run_scan(door=0.0)
+        self.assertEqual(len(res["doors"]), 0)
+        self.assertEqual(len(res["rooms"]), 3)
+        wide = self.run_scan(door=2.6)  # an opening, not a doorway: the rooms are one
+        self.assertEqual(len(wide["doors"]), 0)
+        self.assertLess(len(wide["rooms"]), 3)
+
+    def test_lettering_hatching_furniture_and_dimension_lines_are_ignored(self):
+        with_extras, plain = self.run_scan(extras=True), self.run_scan(extras=False)
+        self.assertEqual(len(with_extras["rooms"]), len(plain["rooms"]))
+        self.assertEqual(len(with_extras["doors"]), len(plain["doors"]))
+        for a, b in zip(sorted(with_extras["rooms"], key=lambda r: r.area), sorted(plain["rooms"], key=lambda r: r.area)):
+            self.assertGreater(self.iou(a, b), 0.97)
+
+    def test_a_sheet_with_no_heavy_strokes_gives_no_rooms(self):
+        import scanrooms
+        faint = np.full((240, 360), 255, np.uint8)
+        import cv2
+        cv2.rectangle(faint, (40, 40), (320, 200), 0, 1)  # one hairline box: nothing is wall-sized
+        res = scanrooms.extract(faint, 0.05, outline=self.OUTLINE)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["rooms"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
