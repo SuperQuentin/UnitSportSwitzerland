@@ -57,6 +57,16 @@ def cmd_run(a, stages):
     box = region_bbox(a.root, a.out, rel_path, a.page, a.region)
     name = cuem.cue_name(rel_path, a.page, a.region)
     path = cuem.cue_path(a.out, a.venue, name)
+    raster_page = rel_path.lower().endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff"))
+    if raster_page:
+        c = pipeline.raster_stage(a.root, a.venue, rel_path, a.page, a.chunks, info, box, debug_dir=os.path.join(a.out, a.venue, "debug_" + name))
+        cuem.save(path, c)
+        print("raster:", c["status"], c["reasons"], c["placement"])
+        if c.get("placement") and "review" in stages:
+            d = os.path.join(a.out, a.venue)
+            print("review:", review.overlay_aerial(c, os.path.join(a.out, "_cache"), os.path.join(d, name + "_aerial.png")))
+            print("review:", review.overlay_page(c, a.root, os.path.join(d, name + "_page.png")))
+        return
     c, pg = pipeline.scale_stage(a.root, a.venue, rel_path, a.page, box, kinds=("pitch", "rink") if info["kind"] == "stadium" else ())
     print("scale:", c["status"], c["scale"] and (c["scale"]["method"], round(c["scale"]["m_per_pt"], 5)), c["reasons"])
     if c["scale"]:

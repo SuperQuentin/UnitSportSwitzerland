@@ -74,6 +74,16 @@ def scale_stage(root, venue, rel_path, page, region=None, kinds=("pitch",)):
         if abs(cc["ratio"] - 1) > 0.03:
             reasons.append("scale bar and %s disagree by %.1f %%" % (cc["kind"], 100 * (cc["ratio"] - 1)))
             status = "low_confidence"
+    import sortpages
+    votes = sortpages.keyword_votes(" ".join(w[4] for w in pg.words), os.path.basename(rel_path))
+    top = max(votes, key=votes.get) if votes else None
+    walls = ex.stroke_classes(pg.drawings)["wall_widths"]
+    if top in ("access_map", "site_plan") and votes[top] >= 4 and (not cc or abs(cc["ratio"] - 1) > 0.03):
+        cuem.set_status(c, "rejected", ["schematic %s: the page says %s and no scale bar agrees with a known object, so it is not geometry"
+                                        % (top.replace("_", " "), top.replace("_", " ")),
+                                        "wall weights found: %s" % (walls or "none")])
+        c["scale"] = None
+        return c, pg
     c["scale"] = dict(m_per_pt=res["m_per_pt"], method=res["method"], cross_check=cc)
     if res["bar"]:
         c["scale"]["bar"] = dict(labels=res["bar"]["labels"], residual_m=res["bar"]["resid_m"], anchor=res["bar"]["anchor"])
@@ -380,3 +390,69 @@ def _place_stadium(c, cache_dir, info, yaw_hint, log):
         st = "low_confidence"
     cuem.set_status(c, st, why)
     return c
+
+
+# ------------------------------------------------------------------------------------------------ raster pages
+def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_px=1400, debug_dir=None):
+    """A scan: outline only, scale from the footprint (circular), so low confidence at best, rejected on a poor fit."""
+    import raster
+    doc = pdfio.open_doc(os.path.join(root, rel_path))
+    pg = doc[page - 1]
+    clip = pymupdf_rect(region) if region else None
+    img = pdfio.render(pg, width_px=width_px, clip=clip, gray=True)
+    sc = width_px / (clip.width if clip else pg.rect.width)  # px per page point
+    c = cuem.new_cue(venue, rel_path, page, region or (0, 0, pg.rect.width, pg.rect.height), "raster")
+    poly, ink = raster.outline_px(img)
+    if poly is None or poly.is_empty:
+        cuem.set_status(c, "rejected", ["no outline found in the scan"])
+        return c
+    at = info.get("at")
+    b = place.pick_building(chunks, at[0], at[1], radius=80) if at else None
+    if b is None:
+        cuem.set_status(c, "rejected", ["no building solid near the position hint to fit the scan to"])
+        return c
+    s0 = math.sqrt(b["fp"].area / poly.area)  # metres per pixel if the outline filled the footprint
+    best = None
+    for f in np.concatenate([np.arange(0.6, 1.5, 0.05), np.arange(1.5, 1.6, 0.05)]):
+        r = place.fit_footprint(poly_scaled(poly, s0 * f), b["fp"], g=1.0, step=3.0)
+        if best is None or r["iou"] > best[0]["iou"]:
+            best = (r, s0 * f)
+    r, s1 = best
+    for f in np.arange(0.96, 1.041, 0.01):
+        r2 = place.fit_footprint(poly_scaled(poly, s1 * f), b["fp"], g=0.5, step=1.0, yaw_hint=r["yaw_deg"], hint_tol=4.0)
+        if r2["iou"] > r["iou"]:
+            r, best = r2, (r2, s1 * f)
+    r, s = best
+    m_per_pt = s * sc  # metres per page point
+    sp = poly_scaled(poly, s)
+    cx, cz = r["origin"]
+    e0, n0 = place.to_lv95(-cx, -cz, r["e"], r["n"], r["yaw_deg"])
+    shifted = [[round(x - cx, 3), round(z - cz, 3)] for x, z in list(sp.exterior.coords)[:-1]]
+    c["scale"] = dict(m_per_pt=m_per_pt, method="footprint_fit", cross_check=None, m_per_px=s)
+    ox_pt = (clip.x0 if clip else 0) + cx / s / sc
+    oz_pt = (clip.y0 if clip else 0) + cz / s / sc
+    c["levels"] = [dict(name="scan", outline=shifted, walls=dict(note="raster: outline only"), rooms=[], openings=[],
+                        origin_pt=[ox_pt, oz_pt], extra={})]
+    cuem.add_fact(c, "outline_area_m2", round(sp.area, 1), "m2", 0, 0.3)
+    c["placement"] = dict(e=round(e0, 3), n=round(n0, 3), yaw_deg=round(r["yaw_deg"], 3), fit_rms_m=round(r["rms_m"], 3), coverage=round(r["coverage"], 4),
+                          tile="%d_%d" % tiles.tile_of(e0, n0), iou=round(r["iou"], 4), egid=int(b["egid"]), method="footprint_correlation_with_scale_search",
+                          footprint_area_m2=round(b["fp"].area, 1))
+    why = ["scale taken from the footprint fit itself (no readable scale bar): circular, cannot confirm the plan's size"]
+    st, w2 = place.status_of_fit(r)
+    if st == "ok":
+        st = "low_confidence"
+    cuem.set_status(c, st, why + w2)
+    if debug_dir:
+        os.makedirs(debug_dir, exist_ok=True)
+        pdfio.save_png(os.path.join(debug_dir, "ink.png"), ink)
+    return c
+
+
+def pymupdf_rect(box):
+    import pymupdf
+    return pymupdf.Rect(*box)
+
+
+def poly_scaled(poly, s):
+    from shapely import affinity
+    return affinity.scale(poly, s, s, origin=(0, 0))
