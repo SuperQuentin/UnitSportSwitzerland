@@ -164,7 +164,7 @@ def find_known_objects(drawings, page_rect, kinds=("pitch",), clip=None):
 
 def decide(words, drawings, page_rect, clip=None, kinds=("pitch",)):
     """The scale of a page: the graphic bar if there is one, else a known object; the other, when present, is the cross-check."""
-    bar = find_scale_bar(words, drawings, clip)
+    bar = find_scale_bar(words, drawings, None)  # one bar serves a whole sheet, wherever on it
     objs = find_known_objects(drawings, page_rect, kinds, clip)
     res = dict(m_per_pt=None, method=None, cross_check=None, bar=bar, objects=objs[:3])
     if bar:

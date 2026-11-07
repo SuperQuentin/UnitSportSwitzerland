@@ -1,0 +1,6 @@
+{
+  "Lausanne_Stade_de_la_Tuiliere": {"kind": "stadium", "at": [2537360, 1155029], "name": "Stade de la Tuilière", "town": "Lausanne"},
+  "Neuchatel_Maladiere": {"kind": "stadium", "at": [2562388, 1205021], "name": "Stade de la Maladière", "town": "Neuchâtel"},
+  "UniBE_UniS_GrosseSchanze": {"kind": "building", "at": [2599750, 1199903], "name": "UniS, Schanzeneckstrasse 1", "town": "Bern"},
+  "Luzern_swissporarena": {"kind": "stadium", "at": [2665862, 1209462], "name": "swissporarena", "town": "Luzern"}
+}

@@ -69,3 +69,38 @@ def sports_field_cells(chunks, tile):
         return np.zeros((0, 2))
     r, q = np.nonzero(c == SPORTS_FIELD)
     return np.stack([tile[0] * 1000.0 + q, (tile[1] + 1) * 1000.0 - r], axis=1)
+
+
+def cover_window(chunks, e0, n0, e1, n1):
+    """Cover classes over an LV95 box at 1 m: (rows north->south, cols west->east) uint8, 255 where no tile."""
+    w, h = int(e1 - e0), int(n1 - n0)
+    out = np.full((h, w), 255, np.uint8)
+    for te in range(int(e0 // 1000), int(e1 // 1000) + 1):
+        for tn in range(int(n0 // 1000), int(n1 // 1000) + 1):
+            c = read_cover(chunks, (te, tn))
+            if c is None:
+                continue
+            # tile vertex (r, q) is at E = te*1000 + q, N = (tn+1)*1000 - r
+            ee = te * 1000 + np.arange(COVER_SIZE)
+            nn = (tn + 1) * 1000 - np.arange(COVER_SIZE)
+            ci = np.nonzero((ee >= e0) & (ee < e1))[0]
+            ri = np.nonzero((nn > n0) & (nn <= n1))[0]
+            if len(ci) == 0 or len(ri) == 0:
+                continue
+            out[np.ix_((n1 - nn[ri]).astype(int).clip(0, h - 1), (ee[ci] - e0).astype(int).clip(0, w - 1))] = c[np.ix_(ri, ci)]
+    return out
+
+
+def buildings_near(chunks, e, n, radius):
+    """Buildings (dicts with a 'fp' shapely footprint in LV95) whose footprint lies within radius of (e, n)."""
+    from shapely.geometry import Point
+    p = Point(e, n)
+    out = []
+    for te in range(int((e - radius) // 1000), int((e + radius) // 1000) + 1):
+        for tn in range(int((n - radius) // 1000), int((n + radius) // 1000) + 1):
+            for b in read_buildings(chunks, (te, tn)):
+                fp = footprint_polygons(b)
+                if not fp.is_empty and fp.distance(p) <= radius:
+                    b["fp"] = fp
+                    out.append(b)
+    return out
