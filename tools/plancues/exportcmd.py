@@ -75,7 +75,9 @@ def main(a):
         with open(os.path.join(dest, "house-layouts_%s.report.json" % name), "w", encoding="utf-8") as fh:
             json.dump(rep, fh, indent=1, default=float)
         print(name, "rooms kept %s of %s, doors %s, python validation: %s" % (rep.get("rooms_kept"), rep.get("rooms_in_cue"), rep.get("doors"), rep.get("python_validate")))
-        if lay and not rep.get("python_validate"):
+        if rep.get("refused"):
+            print("  not written: refused, %s" % rep["refused"])
+        elif lay and not rep.get("python_validate"):
             path = os.path.join(dest, "house-layouts_%s.json" % name)
             export.write_layouts(path, [lay])
             print("  written:", path)

@@ -21,6 +21,20 @@ ROOM_TYPES = ["Hall", "Living", "Kitchen", "Dining", "Bedroom", "Bathroom", "WC"
 SLACK = 0.3  # HouseLayout.FootprintSlack
 GRID = 0.125
 MAX_COORD, MIN_AREA, MIN_WALL, ON_WALL, MAX_CORNERS = 150.0, 1.0, 0.1, 0.03, 64
+MIN_KEPT_ROOMS, MIN_KEPT_AREA = 0.5, 0.5  # a layout that keeps less than this share of the extracted rooms, or of their area, is refused
+
+
+def keep_guard(kept, total, kept_area, total_area):
+    """Why a layout must not be written: it keeps only a small part of what was extracted (UniS: 98 rooms became one 3 m2 sliver and
+    still validated). None when enough is kept."""
+    if not total or kept <= 0:
+        return "no room is kept (the cue has %d)" % total
+    why = []
+    if kept < MIN_KEPT_ROOMS * total:
+        why.append("only %d of %d extracted rooms are kept (%.0f %%, under %.0f %%)" % (kept, total, 100.0 * kept / total, 100 * MIN_KEPT_ROOMS))
+    if total_area > 0 and kept_area < MIN_KEPT_AREA * total_area:
+        why.append("only %.0f m2 of %.0f m2 of room area is kept (%.0f %%, under %.0f %%)" % (kept_area, total_area, 100.0 * kept_area / total_area, 100 * MIN_KEPT_AREA))
+    return "; ".join(why) or None
 
 
 # ------------------------------------------------------------------------------------------------ house layout
@@ -266,8 +280,9 @@ def house_layout(c, chunks, exit_snap=0.0, log=print):
             continue
         openings.append(dict(kind="door", x0=round(seg[0][0], 3), z0=round(seg[0][1], 3), x1=round(seg[1][0], 3), z1=round(seg[1][1], 3),
                              _rooms=(i, j), _src=why_out if why_out != "free-space contact" or j is not None else op["source"]))
-    # entrance arrows: a door on the ground-floor wall nearest each arrow tip that meets the outline
-    for ar in lvl["extra"].get("entrance_arrows", []):
+    # entrance arrows and entrance words (orientation plans): a door on the ground-floor wall nearest each tip that meets the outline
+    ent = [(a_, "entrance arrow symbol") for a_ in lvl["extra"].get("entrance_arrows", [])] +           [(a_, "entrance word on the plan") for a_ in lvl["extra"].get("entrance_labels", [])]
+    for ar, ent_src in ent:
         tip = Point(local(ar["tip"]))
         best = None
         for i, g in final.items():
@@ -278,7 +293,7 @@ def house_layout(c, chunks, exit_snap=0.0, log=print):
             seg = _near_straight(best[2].exterior, (tip.x, tip.y), 1.1, outer=foot)
             if seg:
                 openings.append(dict(kind="door", x0=round(seg[0][0], 3), z0=round(seg[0][1], 3), x1=round(seg[1][0], 3),
-                                     z1=round(seg[1][1], 3), _rooms=(best[1], None), _src="entrance arrow symbol"))
+                                     z1=round(seg[1][1], 3), _rooms=(best[1], None), _src=ent_src))
     # drop rooms that break a rule or cannot be reached, until the layout validates
     order = list(final)
     for _ in range(40):
@@ -320,6 +335,11 @@ def house_layout(c, chunks, exit_snap=0.0, log=print):
                                openings=[{k: v for k, v in o_.items() if not k.startswith("_")} for o_ in ops], stairs=[])])
     rep["footprint_area_m2"] = round(foot.area, 1)
     rep["rooms_area_m2"] = round(sum(final[i].area for i in order), 1)
+    rep["cue_rooms_area_m2"] = round(sum(r.get("area_m2", 0.0) for r in lvl["rooms"]), 1)
+    why = keep_guard(len(order), len(lvl["rooms"]), rep["rooms_area_m2"], rep["cue_rooms_area_m2"])
+    if why:
+        rep["refused"] = why
+        return None, rep
     rep["frame"] = dict(e=o["e"], n=o["n"], yaw_deg=o["yaw_deg"], length=o["length"], width=o["width"])
     return layout, rep
 
