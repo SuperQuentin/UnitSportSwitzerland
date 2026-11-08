@@ -50,6 +50,9 @@ public sealed class LeafStore
 
     public bool Has(CubeKey key) => _index.ContainsKey(key);
 
+    /// <summary>A leaf's entry size on disk, bytes (0 where the region holds none): the densest leaf has the most.</summary>
+    public int Bytes(CubeKey key) => _index.TryGetValue(key, out var at) ? at.Length : 0;
+
     /// <summary>A leaf decoded, null where the region holds none. Reads the disk on the first ask.</summary>
     public CubeLeafContent? Get(CubeKey key)
     {

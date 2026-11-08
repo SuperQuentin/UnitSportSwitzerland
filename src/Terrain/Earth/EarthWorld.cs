@@ -99,8 +99,21 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         _material = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 1f };
     }
 
-    public override void _Ready() =>
+    public override void _Ready()
+    {
         GD.Print($"[earth] {Store.Count} leaves from {Store.Dir}; near {NearM:F0} m, collision {CollisionReach.RadiusM:F0} m");
+        // where the region is: its leaves' box in LV95 (a start outside it stands on nothing)
+        if (Store.Count == 0) return;
+        double minE = double.MaxValue, maxE = double.MinValue, minN = double.MaxValue, maxN = double.MinValue;
+        foreach (var key in Store.Keys)
+        {
+            var (e, n, _) = SwissGeodesy.FromEcef(key.Anchor.Origin);
+            (minE, maxE, minN, maxN) = (Math.Min(minE, e), Math.Max(maxE, e), Math.Min(minN, n), Math.Max(maxN, n));
+        }
+        var densest = Store.Keys.MaxBy(Store.Bytes);
+        var (de, dn, _) = SwissGeodesy.FromEcef(densest.Anchor.Origin);
+        GD.Print($"[earth] leaves from LV95 {minE:F0}/{minN:F0} to {maxE:F0}/{maxN:F0}; the densest {densest} at {de:F0}/{dn:F0}");
+    }
 
     public void AddAnchor(Node3D anchor, bool? collision = null)
     {
