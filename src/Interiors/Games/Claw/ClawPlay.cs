@@ -58,7 +58,7 @@ public sealed class ClawPlay : TableGamePlay.Mode
 
     public static GameSpec Spec => new(
         FurnitureType.ClawMachine, GameKind.Claw, "Claw machine",
-        f => new ClawGame(f.W, f.D, System.Environment.TickCount),
+        f => new ClawGame(f.W, f.D, System.Random.Shared.Next()),
         (local, f) => GameCatalog.Front(local, f, 1.2f),
         f => (new Vector3(0, f.H / 2, 0), new Vector3(f.W, f.H, f.D)),
         ClawRig.Create,

@@ -19,8 +19,10 @@
     look-ahead.
   - **Spawn budget.** At most 32 new entities per peer per round, nearest first, so a join or a
     teleport does not burst.
-  - **Spatial search.** Entities up to 8 m (`CellSize`) are found through 1 km cells round the
-    viewer. Bigger ones (lorries, ships, aircraft) are checked against every viewer.
+  - **Spatial search.** Entities up to 8 m (`CellSize`) are found through the level-13 cube cells
+    (`CubeKey`, ~1.2 km, anywhere on the Earth; #1513) in `EntityInterestRules.CellRings(reach)` rings round
+    the viewer's, through `CubeKey.Neighbour` across face edges (seven neighbours at a cube corner, all at
+    sea). Bigger ones (lorries, ships, aircraft) are checked against every viewer.
 - **No pop.** On a client, a remote vehicle's meshes get `VisibilityRangeEnd` = 0.8 R, with a
   0.1 R margin and `FadeMode.Self` (`VehicleBody.FadeAtRange`). The node arrives at R while
   still invisible and fades in. It is fully gone by 0.9 R, long before the despawn at 1.25 R.

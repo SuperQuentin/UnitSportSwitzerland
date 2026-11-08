@@ -46,7 +46,7 @@ public sealed partial class NavMapOverlay : IMapOverlay
         side.AddChild(pin);
     }
 
-    public void Draw(MapView view, CanvasItem on)
+    public void Draw(EarthMapView view, CanvasItem on)
     {
         _drawnPoints.Clear();
         _drawnPins.Clear();
@@ -81,7 +81,7 @@ public sealed partial class NavMapOverlay : IMapOverlay
         _drawnPoints.Add((poi, at));
     }
 
-    private void DrawPin(CanvasItem on, Font font, MapView view, Pin pin, long owner, string? name)
+    private void DrawPin(CanvasItem on, Font font, EarthMapView view, Pin pin, long owner, string? name)
     {
         var at = view.ToScreen(pin.E, pin.N);
         if (at.X < -20 || at.Y < -20 || at.X > view.Size.X + 20 || at.Y > view.Size.Y + 20) return;

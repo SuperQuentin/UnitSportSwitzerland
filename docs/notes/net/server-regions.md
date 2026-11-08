@@ -52,12 +52,23 @@ G2a of global tiling (#1443); design and audit in `docs/plans/server-regions.md`
     from its frame (`ItemEvents.ServerSend/ServerHit(..., frame)`).
 - **Checks**: `tools/regioncheck.sh` (net tier for the region code): at the spawn and 300 km east, a
   walker into a blocker and a second into a parked car; the tracks with both sites match each site
-  alone to 0.000 cm. `BEFORE=1` adds `--noregions` (the far site 3.7 cm off) and `--nomirrors` (the far
+  alone to 0.000 cm. The hop prints the walker's true heading either side (flat to flat it turns by the meridians'
+  2.8° over 300 km, as before G2; a turning handover keeps it). `BEFORE=1` adds `--noregions` (the far site 3.7 cm off) and `--nomirrors` (the far
   walker goes 22.7 m through the car). `--regionat E,N --regionfar E,N --regionwander S` for real terrain
   (`--chunks D:/...`): Geneva and Riddes (the D: set spans 93 km), every bot strolled 60-90 m among trunks
   and houses, on the ground 100 % of the time.
 - **Run Godot by hand with a scratch `user://`** (`APPDATA=...`): the server files parked cars in its
   object containers, and the check's cars stayed in the real save once.
-- **Not yet**: a region's frame is an LV95 offset; G2 gives it #1430's anchor frame (`OriginFrame.Axes`,
-  #1460), and a handover's `Frame.Since` then carries the rotation. Interiors are still not built on
-  the server (`bots/server-collision`).
+- **ENU regions** (#1513, G2 C4): when the server's main world is an anchor frame (`--frame earth`), a new region is an ENU frame (`WorldOrigin(FrameAxes.Enu(..))`: true north, true metres,
+  Y its anchor's up, so the space's default −Y gravity is its own) at its members' **Earth mean** (the ECEF mean put
+  on the ellipsoid, `RegionPlanner.Anchoring.Earth`). Under the flat frame a region stays the whole-km LV95 frame.
+  Never over the flat tiles: the flat `ChunkManager` answers heights as LV95 altitudes in world Y, which an ENU
+  frame's Y is not (a tried `--regionenu` left its bots hovering beside their ground); ENU regions stand on leaves.
+- **A turning handover** (`OriginFrame.Carry(earlier, from, to)`): the body lands on its place, and what it keeps
+  (velocity, headings, mantle points) keeps its bearing against the local east-up-south; the node is then stood up
+  on the new frame's +Y. Where the two places are one (a handover) that is the frames' rigid map there; on a
+  teleport 300 km away (`Put`) a rigid map would turn the heading by the meridians' 2.8°. Flat to flat it is the
+  plain translation of `Since`. Mirrors turn their copies the same way.
+- **Not yet**: the server under `--frame earth` (the main region and each ENU region on `EarthWorld`'s leaves:
+  `ServerRegions.MakeChunks` still builds a flat `ChunkManager`), the follow-up of #1513. Interiors are still not built on the server
+  (`bots/server-collision`).

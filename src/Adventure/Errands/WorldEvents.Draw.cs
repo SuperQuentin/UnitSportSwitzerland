@@ -480,7 +480,7 @@ public partial class WorldEvents
     {
         public static EventMapOverlay Instance { get; } = new();
 
-        public void Draw(MapView view, CanvasItem on)
+        public void Draw(EarthMapView view, CanvasItem on)
         {
             if (WorldEvents.Instance is not { } events) return;
             foreach (var (_, e, n, kind, _) in events.Markers)

@@ -167,13 +167,14 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             _net = null;
             if (source != null)
             {
-                double minE = track.Points.Min(p => p.E), maxE = track.Points.Max(p => p.E);
-                double minN = track.Points.Min(p => p.N), maxN = track.Points.Max(p => p.N);
+                // the junctions' walking graph stays LV95 (until G2 D); the matcher gets the same roads on
+                // the track's plane (#1514)
+                var (minE, minN, maxE, maxN) = track.Lv95Bounds(0);
                 var net = await RoadNetwork.LoadAsync(source, minE, minN, maxE, maxN, pad: 1000);
                 if (net.Edges.Count > 0)
                 {
                     match = track.Points.Count < 4 ? new MatchResult(null, "track too short to match", 0)
-                        : await Task.Run(() => TrackMatcher.Match(track, net));
+                        : await Task.Run(() => TrackMatcher.Match(track, net.InPlane(track.Plane)));
                     await Task.Run(net.BuildWalkGraph);
                     _net = net;
                 }
@@ -198,6 +199,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         }
     }
 
+    /// <summary>The course in LV95, as the trainer's junctions and route keep it (until G2 D): each plane point's LV95.</summary>
     private static Course Build(GpxTrack track)
     {
         var points = new List<(double E, double N, double H)>();
@@ -206,14 +208,15 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         double s = 0;
         foreach (var p in track.Points)
         {
+            var (e, n, _) = track.At(p.X, p.Y, p.Elevation).Lv95;
             if (points.Count > 0)
             {
                 var (e0, n0, _) = points[^1];
-                double step = Math.Sqrt((p.E - e0) * (p.E - e0) + (p.N - n0) * (p.N - n0));
+                double step = Math.Sqrt((e - e0) * (e - e0) + (n - n0) * (n - n0));
                 if (step < 0.5) continue;   // a standstill's repeated fixes are no road
                 s += step;
             }
-            points.Add((p.E, p.N, p.Elevation));
+            points.Add((e, n, p.Elevation));
             arc.Add(s);
             profile.Add((s, p.Elevation));
         }

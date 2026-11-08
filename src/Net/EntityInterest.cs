@@ -1,13 +1,14 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Player;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Net;
 
 /// <summary>A vehicle, dropped item or radio as <see cref="EntityInterest"/> sees it (#689).</summary>
 public interface IInterestEntity
 {
-    /// <summary>Where it is, LV95, as last published.</summary>
+    /// <summary>Where it is on the Earth, as last published.</summary>
     GlobalPos InterestAt { get; }
 
     /// <summary>How far a viewer with this lens is sent it, m (<see cref="EntityInterestRules"/>).</summary>
@@ -50,7 +51,6 @@ public partial class EntityInterest : Node
     /// <summary>Entities up to this size are found by cell; bigger ones (lorries, ships, aircraft) are checked against every viewer.</summary>
     public const float CellSize = 8f;
 
-    private const double CellM = 1000;
 
     /// <summary>The server's, or null on a client and offline.</summary>
     public static EntityInterest? Instance { get; private set; }
@@ -69,7 +69,7 @@ public partial class EntityInterest : Node
     // per round, reused (#221: no allocations per round)
     private readonly List<(ulong Id, IInterestEntity Entity, GlobalPos At)> _entities = new();
     private readonly Dictionary<ulong, int> _index = new();
-    private readonly Dictionary<(long, long), List<int>> _cells = new();
+    private readonly Dictionary<CubeKey, List<int>> _cells = new();
     private readonly Stack<List<int>> _spare = new();
     private readonly List<int> _big = new();
     private readonly HashSet<int> _seen = new();
@@ -225,11 +225,13 @@ public partial class EntityInterest : Node
             _seen.Clear();
             _candidates.Clear();
             float reach = EntityInterestRules.VehicleRange(CellSize, view.Far, view.FovDeg) * EntityInterestRules.LeaveFactor;
-            int cells = (int)Math.Ceiling(reach / CellM);
-            var (ce, cn) = CellOf(at);
-            for (long de = -cells; de <= cells; de++)
-                for (long dn = -cells; dn <= cells; dn++)
-                    if (_cells.TryGetValue((ce + de, cn + dn), out var cell))
+            int cells = EntityInterestRules.CellRings(reach);
+            var centre = CellOf(at);
+            // the square of cells round the viewer's along its face's axes, across face edges (a cube corner has no
+            // diagonal cell: Neighbour gives null there, seven neighbours instead of eight)
+            for (int dx = -cells; dx <= cells; dx++)
+                for (int dy = -cells; dy <= cells; dy++)
+                    if (centre.Neighbour(dx, dy) is { } key && _cells.TryGetValue(key, out var cell))
                         foreach (int i in cell) Consider(i);
             foreach (int i in _big) Consider(i);
             foreach (var id in set)
@@ -268,14 +270,10 @@ public partial class EntityInterest : Node
     }
 
     /// <summary>
-    /// The bucket a place is in: a CellM square of its LV95 notation, only a spatial hash (neighbouring buckets are
-    /// searched with a margin, distances are the Earth's), until G2 D gives the cube key.
+    /// The bucket a place is in (#1513): its level-13 cube cell, anywhere on the Earth. Only a spatial hash: the rings
+    /// round a viewer's cell are searched (<see cref="EntityInterestRules.CellRings"/>), distances are the Earth's.
     /// </summary>
-    private static (long E, long N) CellOf(GlobalPos at)
-    {
-        var l = at.Lv95;
-        return ((long)Math.Floor(l.E / CellM), (long)Math.Floor(l.N / CellM));
-    }
+    public static CubeKey CellOf(GlobalPos at) => CubeKey.FromEcef(at.Ecef, EntityInterestRules.CellLevel);
 }
 
 /// <summary>

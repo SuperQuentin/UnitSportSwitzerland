@@ -29,8 +29,8 @@ S="$OUT/festivalnet_server.log"
 grep -h "\[festival\]" "$S"
 grep -h "\[festivalnet" "$OUT"/festivalnet_A.log "$OUT"/festivalnet_B.log "$OUT"/festivalnet_B2.log "$OUT"/festivalnet_A2.log
 paid=$(grep -c "credited 140 CHF (festival)" "$S")
-lea=$(grep -c "Lea credited 140 CHF (festival)" "$S")
-tom=$(grep -c "Tom credited 140 CHF (festival)" "$S")
+lea=$(grep -cE "Lea( \([0-9A-F]+\))? credited 140 CHF \(festival\)" "$S")   # Bank.Shown adds the account id
+tom=$(grep -cE "Tom( \([0-9A-F]+\))? credited 140 CHF \(festival\)" "$S")
 echo "[festivalnetcheck] bank lines: $paid in all, Lea $lea, Tom $tom"
 if tc_ok 4 "$OUT/festivalnet_A.log" "$OUT/festivalnet_B.log" "$OUT/festivalnet_B2.log" "$OUT/festivalnet_A2.log" \
    && [ "$lea" = 1 ] && [ "$tom" = 1 ] && [ "$paid" = 2 ] \

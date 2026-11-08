@@ -123,7 +123,20 @@ public partial class PlacesCheck : ChatProbe
             map.Select(peak, centre: true);
             await Seconds(0.6);
             Expect(map.Selected == peak, "a place is selected on it");
-            if (DisplayServer.GetName() != "headless") GD.Print($"{Log} shot {Shot("map")}");
+            if (DisplayServer.GetName() != "headless")
+            {
+                GD.Print($"{Log} shot {Shot("map")}");
+                // the projection (#1514): the country at 2 px/km centred on Scuol, where LV95's grid north is 2° off true
+                // north, the fog lifted: the relief (an LV95 picture) turned by it, true north up
+                map.View.FocusOn(2_818_000, 1_186_000, 2);
+                map.ShowFog(false);
+                // the relief is baked on a worker once per process
+                for (int i = 0; i < 100 && Ui.MapRelief.TryGet() == null; i++) await Seconds(0.1);
+                map.Redraw();
+                await Seconds(0.4);
+                GD.Print($"{Log} shot {Shot("map_projection")}");
+                map.ShowFog(true);
+            }
             GameShell.Instance?.Back();
         }
 

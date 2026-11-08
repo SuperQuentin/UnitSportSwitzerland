@@ -39,6 +39,16 @@ public partial class ServerRegions : Node
     /// <summary><c>--noregions</c>: every body in the main region, as before #1456 (a check's "before").</summary>
     public static bool Off => CmdArgs.Has("--noregions");
 
+    /// <summary>
+    /// Whether new regions are ENU frames at their cluster's Earth mean (#1513, G2 C4): when the main world is an
+    /// anchor frame (<c>--frame earth</c>). Otherwise each is the flat LV95 frame on its whole km, as before, and a
+    /// handover is a plain translation. Not over the flat tiles: the flat <see cref="ChunkManager"/> answers heights as
+    /// LV95 altitudes in world Y, which an ENU frame's Y is not (a body there stands beside its ground).
+    /// </summary>
+    public bool Enu => Main.IsEnu;
+
+    private RegionPlanner.Anchoring Anchoring => Enu ? RegionPlanner.Anchoring.Earth : RegionPlanner.Anchoring.Lv95Km;
+
     /// <summary>Makes a region's terrain (and its trunks) in a frame: the server's own settings and tile cache.</summary>
     public Func<WorldOrigin, ChunkManager>? MakeChunks { get; set; }
     /// <summary>Whatever else a region holds beside its terrain (its trunks).</summary>
@@ -103,7 +113,7 @@ public partial class ServerRegions : Node
         if (Off || at.HorizontalDistanceTo(Main.Anchor) <= RegionPlanner.HomeM) return Main;
         foreach (var body in Bodies())
             if (body.Region is { } r && !_inSpace.Contains(body) && Global(body).HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
-        return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }));
+        return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }, Anchoring));
     }
 
     /// <summary>
@@ -207,7 +217,7 @@ public partial class ServerRegions : Node
         }
         _known.Clear();
         foreach (var r in _regions.Values) _known.Add(new RegionPlanner.Region(r.Id, r.Anchor));
-        var plan = RegionPlanner.Decide(_bodies, _known, Main.Anchor, ref _nextId);
+        var plan = RegionPlanner.Decide(_bodies, _known, Main.Anchor, ref _nextId, Anchoring);
         foreach (var made in plan.Create) Create(made.Anchor, made.Id);
 
         int i = 0;
@@ -237,7 +247,9 @@ public partial class ServerRegions : Node
     private ServerRegion Create(GlobalPos anchor, int id = -1)
     {
         if (id < 0) id = _nextId++;
-        var origin = new WorldOrigin(anchor.Lv95.E, anchor.Lv95.N);
+        // an ENU frame at the anchor (#1513): true north, true metres, its gravity down its own up (a space's default
+        // gravity is -Y, and Y is the anchor's up); or the flat LV95 frame on the anchor's whole km
+        var origin = Enu ? new WorldOrigin(FrameAxes.Enu(anchor.Ecef)) : new WorldOrigin(anchor.Lv95.E, anchor.Lv95.N);
         // a world of its own, so a physics space of its own (OwnWorld3D would keep it out of reach: World3D null)
         var world = new World3D();
         var root = new SubViewport

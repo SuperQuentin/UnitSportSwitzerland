@@ -199,4 +199,40 @@ public class WireFrameTests
         _out.WriteLine($"EnuAt {basis:F2} µs, ToWire+FromWire {wire:F2} µs ({sink:F0})");
         Assert.True(basis < 50 && wire < 50, "per packet, never per vertex");
     }
+
+    [Fact]
+    public void A_region_handover_carries_a_body_with_its_true_heading()
+    {
+        // #1513: a server region is an ENU frame at its cluster's centre; a body handed to it, or teleported 300 km into
+        // it, lands on its place with its heading from true north and its velocity's bearing kept, and stands upright
+        var flat = Ground(BernE, BernN);
+        var bern = GlobalPos.FromLv95(BernE + 400, BernN - 250, 560);
+        var far = bern.Moved(300_000, 0);
+        foreach (var (to, place) in new[] { (bern, "here"), (far, "300 km east") })
+        {
+            var region = new OriginFrame(FrameAxes.Enu(to.Moved(1800, -900).WithAlt(0).Ecef), 0);
+            var from = flat.ToWorld(bern);
+            float yaw = 0.7f;   // a world heading in the flat frame
+            var velocity = new Vector3(3, 0.5f, -2);
+            var shift = region.Carry(flat, from, to);
+            var landed = shift.Point(from);
+            Assert.True(region.ToGlobal(landed).DistanceTo(to) < 0.002, $"{place}: {region.ToGlobal(landed).DistanceTo(to)} m");
+            // a heading: its true bearing before (at the old place) and after (at the new)
+            float trueBefore = flat.TrueYaw(from, yaw);
+            var facing = shift.Direction(new Vector3(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw)));
+            float trueAfter = region.TrueYaw(landed, Mathf.Atan2(-facing.X, -facing.Z));
+            Assert.True(Math.Abs(EnuAxes.Wrap(trueAfter - trueBefore)) < 1e-4, $"{place}: heading {trueAfter - trueBefore} rad");
+            // the velocity's ENU, up included
+            var enuBefore = flat.EnuOf(from, velocity);
+            var enuAfter = region.EnuOf(landed, shift.Direction(velocity));
+            Assert.True((enuAfter - enuBefore).Length() < 2e-3f, $"{place}: velocity {enuBefore} -> {enuAfter}");
+            // and back again, ENU to flat: the same bearing
+            var back = flat.Carry(region, landed, bern);
+            float trueBack = flat.TrueYaw(back.Point(landed), Mathf.Atan2(-back.Direction(facing).X, -back.Direction(facing).Z));
+            Assert.True(Math.Abs(EnuAxes.Wrap(trueBack - trueBefore)) < 1e-4, $"{place}: back {trueBack - trueBefore} rad");
+        }
+        // between two flat frames, the plain translation as before G2
+        var other = Ground(GenevaE, GenevaN);
+        Assert.Equal(other.Since(flat).Transform, other.Carry(flat, flat.ToWorld(bern), bern).Transform);
+    }
 }

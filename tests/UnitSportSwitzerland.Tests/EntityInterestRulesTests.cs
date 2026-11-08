@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnitSport.Net;
+using UnitSport.Terrain.Format;
 using Xunit;
 
 namespace UnitSport.Tests;
@@ -65,4 +67,38 @@ public class EntityInterestRulesTests
         EntityInterestRules.Select(candidates, keep, new List<EntityInterestRules.Candidate>(), budget: 2);
         Assert.Equal(new[] { 3, 1, 2 }, keep);
     }
+
+    [Fact]
+    public void Cube_cell_rings_hold_everything_within_reach()
+    {
+        // #1513: entities are bucketed by level-13 cube cell; the rings round a viewer's cell (across face edges) must
+        // hold every place within reach, at Bern, astride a face edge and near a cube corner
+        var places = new List<UnitSport.Core.GlobalPos>
+        {
+            UnitSport.Core.GlobalPos.FromLv95(2600000, 1200000, 500),
+            OnFace(0, 0.99995, 0.3), OnFace(0, -0.3, -0.99995), OnFace(0, 0.97, 0.97), OnFace(3, -0.97, 0.97),
+        };
+        foreach (double reach in new[] { 150.0, 2400, 7000 })
+        {
+            int rings = EntityInterestRules.CellRings(reach);
+            foreach (var viewer in places)
+            {
+                var centre = CubeKey.FromEcef(viewer.Ecef, EntityInterestRules.CellLevel);
+                var found = new HashSet<CubeKey>();
+                for (int dx = -rings; dx <= rings; dx++)
+                    for (int dy = -rings; dy <= rings; dy++)
+                        if (centre.Neighbour(dx, dy) is { } k) found.Add(k);
+                for (int b = 0; b < 72; b++)
+                    foreach (double f in new[] { 0.5, 0.999 })
+                    {
+                        double a = b * 5 * System.Math.PI / 180, d = reach * f;
+                        var at = viewer.Moved(d * System.Math.Sin(a), d * System.Math.Cos(a));
+                        Assert.Contains(CubeKey.FromEcef(at.Ecef, EntityInterestRules.CellLevel), found);
+                    }
+            }
+        }
+    }
+
+    private static UnitSport.Core.GlobalPos OnFace(int face, double u, double v) =>
+        UnitSport.Core.GlobalPos.FromEcef(CubeSphere.ToEcef(face, u, v, 400));
 }

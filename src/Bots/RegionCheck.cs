@@ -20,7 +20,8 @@ namespace UnitSport.Bots;
 /// walker walked, never passed through its blocker (they touched), and each site's bots share one region. A second walker
 /// heads north into a car the server parked in its main frame <see cref="CarGap"/> m ahead: in a far region
 /// it meets the car's copy there (<c>RegionMirrors</c>), and stops at its side as at home.
-/// <c>--noregions</c> runs the same with every body in the server's one frame: the "before".
+/// <c>--noregions</c> runs the same with every body in the server's one frame: the "before". The hop prints the walker's
+/// heading from true north before and after; a turning handover (ENU regions, #1513) must keep it.
 /// <c>--regionat E,N --regionfar E,N</c> put the sites elsewhere (a real-terrain run: Geneva and Riddes);
 /// <c>--regionwander S</c> then lets every bot stroll S seconds among the trunks and houses (WanderBrain) and
 /// reports how far each went, whether it stayed on its ground and how many trunks its region holds.
@@ -221,9 +222,16 @@ public partial class RegionCheck : Node
         {
             var from = hopper.Region;
             var to = home.Global.Moved(0, -6, 1);
+            // its heading from true north, before and after: a turning handover (an ENU region into the flat main one,
+            // #1513) keeps it; between two flat frames the grid heading is kept, as before G2
+            float before = hopper.Origin!.TrueYaw(hopper.Position, hopper.Rotation.Y);
             ServerRegions.Put(hopper, to);
-            _hopLine = $"hop {hopper.Name} from {from} to {hopper.Region}";
-            _hopOk = hopper.Region == home.Region;
+            float after = hopper.Origin!.TrueYaw(hopper.Position, hopper.Rotation.Y);
+            float turned = Mathf.RadToDeg(EnuAxes.Wrap(after - before));
+            bool turns = from?.IsEnu == true || hopper.Region?.IsEnu == true;
+            _hopLine = string.Create(CultureInfo.InvariantCulture,
+                $"hop {hopper.Name} from {from} to {hopper.Region}, true heading {Mathf.RadToDeg(before):F3}° -> {Mathf.RadToDeg(after):F3}° ({turned:+0.000;-0.000}°)");
+            _hopOk = hopper.Region == home.Region && (!turns || Math.Abs(turned) < 0.01f);
             _hopped = 0;
             return true;
         }

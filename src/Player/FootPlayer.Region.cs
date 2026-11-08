@@ -65,7 +65,15 @@ public partial class FootPlayer
         Origin = target.Origin;
         Terrain = target.Chunks?.Ground;
         ApplyRegionSpace();
-        if (from != null) OriginShifter.Move(this, target.Origin.Frame.Since(from.Frame));
+        if (from != null)
+        {
+            // what the body keeps in world space moves as at an origin shift; between frames that turn against each other
+            // (ENU regions, #1513) it turns too, keeping its bearings against true north (velocity, headings, as at a
+            // Space re-anchor), and the node is stood up on the new frame's up
+            var shift = target.Origin.Frame.Carry(from.Frame, Position, at);
+            OriginShifter.Move(this, shift);
+            if (shift.Turns) Rotation = new Vector3(0, Rotation.Y, 0);
+        }
         // exact from the Earth position, not the float sum of a far position and a far offset
         Position = target.Origin.ToWorld(at);
         if (PhysicsServer3D.BodyGetMode(GetRid()) == PhysicsServer3D.BodyMode.Kinematic) OriginShifter.Teleport(this);

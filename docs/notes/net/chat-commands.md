@@ -5,7 +5,7 @@
   submit text and render replies; **every** decision (permissions, names, teleport
   destinations) is taken on the server, since a client-side permission check is one the client
   can edit. **Look** (`ui/style-guide`): closed, each line floats bottom-left as outlined text (no box)
-  and fades after 9 s (max 7 on screen); **Enter** opens a small glass panel (scrollback + input),
+  and fades after 9 s (max 7 on screen; the outline is strong enough for snow); **Enter** opens a small glass panel (scrollback + input),
   **/** opens it pre-filled, Up/Down walk the history like a shell (the line being typed comes back past the newest; caught on the LineEdit's own GuiInput, which otherwise keeps the arrows), Esc closes.
   **Offline the chat still runs:** `ClientWorld` builds `World/Chat` and `ChatUi` at boot, and
   with no server connection (`ChatManager.IsLocal`) commands run on this machine with operator
@@ -63,7 +63,42 @@
   an LV95 point (`AdminArgs.TryLv95`: space or comma, apostrophes allowed, only round Switzerland).
 - **`/help` is read off the completer's table** (`ChatCompleter.Help`, the same `Commands` rows as Tab): a new command
   gets its row there and shows in Tab, its usage line and `/help` together, so it can't be forgotten in one of them.
-  Each row carries a group (`Groups`: General, Travel, World, Activities, Concerts & media, Items & money, Admin) and a
+  Each row carries a group (`Groups`: General, Chat, Travel, World, Activities, Concerts & media, Items & money, Admin) and a
   few words: `/help` prints one line per group of what this player may run (#1173), `/help <command>` its arguments
   and those words (`HelpFor`). `--chatcheck` fails if a command is in no group or two.
   Tab also completes `/concert` (sub-commands, cues, input protocols, xchange), `/transfer` and `/inertia`.
+
+## Safety, moderation and the command browser (#1499)
+
+- **Flood gate** (`ChatManager.AcceptLine`, before parsing): five lines in a burst, then a refill of
+  0.6/s; going past it silences the peer for 3 s, doubling to 60 s if they keep hammering. The refusal
+  warning is itself rate-limited, so an error line cannot become the flood. The server console and
+  bodiless console players are exempt; bots call `Say` directly.
+- **Text boundary**: `Scrub` walks code points and replaces controls, newlines and Unicode format
+  characters (RTL overrides, zero-width spaces) that could reverse or hide a line; emoji survive,
+  joiners and all.
+  `ClampText` cuts by code point, never through a surrogate pair. Both are used by `SubmitLine`,
+  `Say`, `SubmitFromConsole` and the client's `Send`.
+- **Whisper**: `/w <player> <text>` (also `/whisper`, `/tell`, `/msg`) and `/r <text>`; `ChatKind.Whisper`
+  (5) is violet with an `@` mark. Only the two see it; a muted player cannot whisper.
+- **Mute**: `/mute <player> [minutes]` (admin, 10 min default, max 24 h) stops speech, `/me` and
+  whispers; `/unmute` lets them back. The target is told, everyone sees an admin line, and the
+  warning to a muted flooder is throttled.
+- **Ignore**: `/ignore <player>` / `/unignore <player>` (`ChatUi`/`GameSettings.ChatIgnore`, saved)
+  hides their speech, whispers, emotes and speech bubbles on this screen. Local preference only; the
+  server is never told and nobody else's view changes.
+- **Report**: `/report <player> [reason]` (anyone, one per 30 s) writes a timestamped block with the
+  reporter, target and the last 80 broadcast lines to `user://chat-reports.log`.
+- **`/help` is a panel now** (`ChatUi.ShowHelp`): grouped by `ChatCompleter.GroupNames`, searchable,
+  each command clickable into the input, with its arguments and a word on what it does; Esc / B closes
+  it first, then the chat. The server console and a hand-written client still get the text form
+  (`ChatManager.SendHelp`). `--chathelp [word]` opens it for a screenshot (`--chatopen` first).
+- **Look**: scrollback is 300 lines (a ring); `ChatTimestamps` adds a dim `HH:mm`; repeated
+  System/Admin lines inside 5 s collapse to `×n`; a speaker's consecutive lines within 90 s omit the
+  name; kinds carry a glyph (`· ! > @ ×`) so colour is not the only difference; mentions of your own
+  name are amber. Auto-scroll happens only when already at the bottom, otherwise a `N new ↓` chip
+  jumps there. `ChatFontScale`, `ChatOpacity`, `ChatTimestamps`, `ChatShowJoins` and `ChatMentions`
+  are in Settings › Gameplay › Chat.
+- **`--chatdemo`**: floats (or, with `--chatopen`, opens with) one line of each kind, for screenshots;
+  `ChatCheck` covers the scrubber, the rune cut, the speaker lookup, the flood burst, the ignore list
+  and the command browser.

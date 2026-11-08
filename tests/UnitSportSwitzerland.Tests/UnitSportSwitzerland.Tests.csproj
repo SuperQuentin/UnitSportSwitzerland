@@ -147,6 +147,8 @@
     <Compile Include="..\..\src\Trainer\CourseProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Trainer\JunctionChoice.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Gpx\WalkGraph.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1514: a GPX track on its own map plane (GlobalPos, MapProjection and Godot maths only) -->
+    <Compile Include="..\..\src\Gpx\GpxTrack.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />

@@ -42,7 +42,19 @@ public sealed class ChatCompleter
     public Action? PlayersWanted { get; init; }
 
     /// <summary>The groups <c>/help</c> lists the commands in, in this order (#1173).</summary>
-    private static readonly string[] Groups = ["General", "Travel", "World", "Activities", "Concerts & media", "Items & money", "Admin"];
+    private static readonly string[] Groups = ["General", "Chat", "Travel", "World", "Activities", "Concerts & media", "Items & money", "Admin"];
+
+    /// <summary>One command, as the browser and <c>/help</c> show it.</summary>
+    public readonly record struct CommandInfo(string Name, bool Admin, bool Offline, string Args, string Group, string About);
+
+    private static IReadOnlyList<CommandInfo>? _all;
+
+    /// <summary>Every command, in table order, for the chat's command browser.</summary>
+    public static IReadOnlyList<CommandInfo> All =>
+        _all ??= Commands.Select(c => new CommandInfo(c.Name, c.Admin, c.Offline, c.Args, c.Group, c.About)).ToList();
+
+    /// <summary>The browser's section order.</summary>
+    public static IReadOnlyList<string> GroupNames => Groups;
 
     /// <summary>
     /// Name, whether it needs operator rights online, whether it also works without a server, its
@@ -56,6 +68,12 @@ public sealed class ChatCompleter
         ("name", false, false, "<name>", "General", "change your name"),
         ("login", false, false, "<password>", "General", "become an operator"),
         ("stream", false, false, "", "General", "terrain streaming stats"),
+        // talking to one person, and the tools against a nuisance (#1499)
+        ("w", false, false, "<player> <text>", "Chat", "whisper to one player (also /whisper, /tell, /msg)"),
+        ("r", false, false, "<text>", "Chat", "answer the player who last whispered you"),
+        ("report", false, false, "<player> [what happened]", "Chat", "write a report for the operators"),
+        ("ignore", false, true, "[player]", "Chat", "hide a player's chat and bubbles on this screen"),
+        ("unignore", false, true, "<player>", "Chat", "show an ignored player again"),
 #if PLAYTEST
         ("note", false, true, "<what's wrong>", "General", "a playtest note with a screenshot"),
 #endif
@@ -114,6 +132,8 @@ public sealed class ChatCompleter
         ("say", true, false, "<message>", "Admin", "a server announcement"),
         ("admin", true, false, "list | add <player> | remove <player>", "Admin", "the operators"),
         ("kick", true, false, "<player> [reason]", "Admin", "kick a player"),
+        ("mute", true, false, "<player> [minutes]", "Admin", "stop a player's chat and whispers for a while"),
+        ("unmute", true, false, "<player>", "Admin", "let a muted player speak again"),
         ("pvp", true, false, "on | off", "Admin", "player-on-player damage"),
         ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list", "Admin", "server-run bots"),
         ("despawn", true, true, "<vehicles | items | all> [radius m | everywhere]", "Admin", "remove parked vehicles or dropped items around you"),
@@ -320,6 +340,16 @@ public sealed class ChatCompleter
                 };
                 break;
             }
+
+            case "w" or "whisper" or "tell" or "msg":
+                if (argIndex != 0) return [];
+                options = PlayerNames();
+                break;
+
+            case "report" or "ignore" or "unignore" or "mute" or "unmute":
+                if (argIndex != 0) return [];
+                options = PlayerNames();
+                break;
 
             case "kick":
                 // the reason after the name is free text

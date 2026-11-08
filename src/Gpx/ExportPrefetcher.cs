@@ -74,7 +74,9 @@ public sealed class ExportPrefetcher
             if (p.Distance < nextSample) continue;
             nextSample = p.Distance + SampleSpacingM;
 
-            var centre = TileId.FromLv95(p.E, p.N);
+            // the LV95 tile under the track's plane point (the tiles are LV95 until G2 D; #1514)
+            var (e, n) = track.Plane.Lv95Of(p.X, p.Y);
+            var centre = TileId.FromLv95(e, n);
             for (int ring = 0; ring <= lod.MaxDist; ring++)
                 for (int dx = -ring; dx <= ring; dx++)
                     for (int dz = ring; dz >= -ring; dz--)

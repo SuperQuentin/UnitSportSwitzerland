@@ -42,12 +42,14 @@ public class InteractOutlineTests
     /// <summary>The prompts made outside an <c>Interaction</c> on purpose: how many in the method, and why.</summary>
     private static readonly Dictionary<string, (int Count, string Why)> Allowed = new()
     {
-        ["src/Core/ClientWorld.cs:Prompts"] = (13,
+        ["src/Core/ClientWorld.cs:Prompts"] = (12,
             "the prompt bar: a world item and a radio (Highlight.Pointed outlines them), a vehicle's door (VehicleReach); "
             + "acts with no thing: the ski lift's wait and letting go, the crane's controls let go, a deck's hint, "
             + "standing up (three times: a stand, a deck, a cinema seat #1279), getting out, the dance (twice), the rope's let go / haul and the pot's seat (#1266)"),
         ["src/BattleRoyale/BrHud.cs:_Draw"] = (1, "the drop's jump from the plane: no thing"),
         ["src/Interiors/Games/TableGamePlay.cs:Prompts"] = (2, "standing at a pool table, a dartboard, a game: a place and a bot are the game's own, the game is the whole view (#1324)"),
+        ["src/Interiors/Pinball/PinballPlay.cs:Prompts"] = (1, "the prompt bar's rows at a pinball machine (a phone's pills, #1353): Start is the machine's own button, the machine is the whole view"),
+        ["src/Interiors/InteriorManager.cs:Untagged"] = (1, "not a prompt: cuts E's key tag off the floating line, for the phone's button (#1353)"),
         ["src/Interiors/Pinball/PinballPlay.cs:UpdateHint"] = (2, "standing at a pinball machine: Start is the machine's own button, the machine is the whole view (#1325)"),
         ["src/Items/TelescopeView.cs:Hint"] = (1, "looking through a telescope: stepping back, the telescope is the whole view (#1440)"),
     };
