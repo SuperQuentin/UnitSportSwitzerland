@@ -48,7 +48,10 @@ public partial class CampfireNetProbe : ChatProbe
         int slot = SlotOf(ItemId.Campfire);
         me.LookYaw = 0f;
         me.LookPitch = -0.6f;
-        await Until(() => FlagGhost.Aim(me, Placeables.ForItem(ItemId.Campfire)) is { Kind: FlagAimKind.Plant, Valid: true }, 2);
+        // the ground's collision under A first (#1569): before it, the spot test reads the slope off
+        // nothing and says "Too steep for a fire." on the flat fixture
+        Expect(await Until(() => me.IsOnFloor() && me.Terrain?.HasCollisionAt(me.GlobalPosition) == true, 20), "my ground has its collision");
+        await Until(() => FlagGhost.Aim(me, Placeables.ForItem(ItemId.Campfire)) is { Kind: FlagAimKind.Plant, Valid: true }, 10);
         var aim = FlagGhost.Aim(me, Placeables.ForItem(ItemId.Campfire));
         Expect(aim is { Kind: FlagAimKind.Plant, Valid: true }, $"a spot for the fire ({aim.Kind}, {aim.Reason})");
         _items.UseSlot(me, slot);
@@ -101,7 +104,7 @@ public partial class CampfireNetProbe : ChatProbe
         Expect(placed.All.TryGetValue(id, out var fire) && fire.Owner == "FireA", $"A's fire ({fire?.Owner})");
 
         // A holds a torch: its light on A's hand, from the replicated held item
-        Expect(await Until(() => TorchOf() is { Visible: true }, 15), "A's torch lights up on this side");
+        Expect(await Until(() => TorchOf() is { Visible: true }, 15), $"A's torch lights up on this side ({OtherHolds()})");
 
         PlacedResult? tried = null;
         placed.RequestRemove(id, r => tried = r);
@@ -116,6 +119,16 @@ public partial class CampfireNetProbe : ChatProbe
         Say("gone");
         await Seconds(0.5);
         Say("gone");
+    }
+
+    /// <summary>What this side knows of the other player's hand, for a failure's line.</summary>
+    private string OtherHolds()
+    {
+        var own = Multiplayer.GetUniqueId().ToString();
+        foreach (var child in GetParent().GetNodeOrNull("Players")?.GetChildren() ?? new Godot.Collections.Array<Node>())
+            if (child is FootPlayer { Npc: false } p && p.Name != own)
+                return $"{p.Name}: holds {p.HeldItemId}, ride {p.Ride}, held node {p.GetNodeOrNull<HeldItemVisual>("HeldItem") != null}, light {TorchOf()?.Visible.ToString() ?? "none"}";
+        return "no other player here";
     }
 
     /// <summary>The torch light on the other player's held item, if any.</summary>
