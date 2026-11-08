@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare --regioncheck tracks (#1456): each site's walker and blocker in a run with both sites
+"""Compare --regioncheck tracks (#1456; the ENU runs, #1513): each site's walker and blocker in a run with both sites
 against the same site run alone. Prints the largest difference per site and fails past the tolerance.
 
     regioncheck-compare.py DIR [--tolerance 0.01] [--before]
@@ -39,6 +39,17 @@ def main():
         ok = d <= tol
         failed |= not ok
         print(f"site {site}: with the other site vs alone, worst {d * 100:.3f} cm {'ok' if ok else 'FAILED'} (tolerance {tol * 100:.1f} cm)")
+    # --regionenu (#1513): the far site in an ENU frame, with the home site beside it and alone
+    if (folder / "both-enu-b.csv").exists():
+        d = worst(load(folder / "both-enu-b.csv"), load(folder / "b-enu-b.csv"))
+        ok = d <= tol
+        failed |= not ok
+        print(f"site b in an ENU region: with the other site vs alone, worst {d * 100:.3f} cm {'ok' if ok else 'FAILED'} (tolerance {tol * 100:.1f} cm)")
+        d = worst(load(folder / "both-enu-a.csv"), load(folder / "a-a.csv"))
+        ok = d <= tol
+        failed |= not ok
+        print(f"site a beside an ENU region vs alone, worst {d * 100:.3f} cm {'ok' if ok else 'FAILED'}")
+        print(f"site b, ENU region vs flat region (true east vs grid east, ~2.8 deg apart there): worst {worst(load(folder / 'both-enu-b.csv'), load(folder / 'b-b.csv')) * 100:.3f} cm")
     print(f"sites b vs a (the same walk 300 km apart, on two different grounds): worst {worst(load(folder / 'both-a.csv'), load(folder / 'both-b.csv')) * 100:.3f} cm")
     if "--before" in args:
         for site in ("a", "b"):

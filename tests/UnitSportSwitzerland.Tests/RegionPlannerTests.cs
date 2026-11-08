@@ -41,6 +41,37 @@ public class RegionPlannerTests
     }
 
     [Fact]
+    public void Earth_anchors_are_the_members_mean_on_the_ellipsoid()
+    {
+        // #1513: an ENU region's anchor is the members' ECEF mean put on the ellipsoid, no LV95 km in it
+        int next = 1;
+        var bodies = new List<Body> { new(1, At(300.2, 0.3), None), new(2, At(301.4, -0.5), None) };
+        var plan = RegionPlanner.Decide(bodies, new List<Region>(), Home, ref next, Anchoring.Earth);
+        var anchor = Assert.Single(plan.Create).Anchor;
+        Assert.InRange(anchor.Geodetic.H, -1e-6, 1e-6);
+        // over the members' midpoint (which is 500 m up): the level distance to it is under a millimetre
+        var mid = GlobalPos.Midpoint(bodies[0].At, bodies[1].At);
+        Assert.True(anchor.HorizontalDistanceTo(mid) < 0.001, $"{anchor.HorizontalDistanceTo(mid)} m");
+        // the flat anchoring keeps today's whole km
+        next = 1;
+        var flat = RegionPlanner.Decide(bodies, new List<Region>(), Home, ref next);
+        Assert.Equal(GlobalPos.FromLv95(HomeE + 301000, HomeN, 0), Assert.Single(flat.Create).Anchor);
+    }
+
+    [Fact]
+    public void Earth_anchors_hold_far_from_Switzerland()
+    {
+        // Brest and the antipode's sliver: the Earth mean needs no LV95
+        foreach (var (lat, lon) in new[] { (48.39, -4.49), (-47.0, -172.6) })
+        {
+            var p = GlobalPos.FromEcef(Terrain.Format.Ellipsoid.Wgs84.ToEcef(new Terrain.Format.Geodetic(lat, lon, 120)));
+            var anchor = Centre(new[] { new Body(1, p, None), new Body(2, p.Moved(800, 300), None) }, new() { 0, 1 }, Anchoring.Earth);
+            Assert.InRange(anchor.Geodetic.H, -1e-6, 1e-6);
+            Assert.True(anchor.HorizontalDistanceTo(p.Moved(400, 150)) < 0.01);
+        }
+    }
+
+    [Fact]
     public void Bodies_within_the_link_distance_share_a_region_far_from_home()
     {
         int next = 1;

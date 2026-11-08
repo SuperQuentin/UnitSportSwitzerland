@@ -101,11 +101,16 @@ internal sealed class RegionMirrors
         }
     }
 
-    /// <summary>The original's placement in the region's frame: its Earth position when it keeps one exactly (a vehicle's).</summary>
+    /// <summary>
+    /// The original's placement in the region's frame: its Earth position when it keeps one exactly (a vehicle's), its
+    /// turn against the local east-up-south kept (a few µs, only when the original moved).
+    /// </summary>
     private static Transform3D Place(ServerRegion main, ServerRegion region, CollisionObject3D source, Transform3D t)
     {
         var global = source is VehicleBody v ? v.Global : main.Origin.ToGlobal(t.Origin);
-        return new Transform3D(t.Basis, region.Origin.ToWorld(global));
+        // turned as the region's frame turns against the main one there (an ENU region, #1513); none between flat frames
+        var shift = region.Origin.Frame.Carry(main.Origin.Frame, t.Origin, global);
+        return new Transform3D(shift.Transform.Basis * t.Basis, region.Origin.ToWorld(global));
     }
 
     private void Make(ServerRegion main, ServerRegion region, CollisionObject3D source)

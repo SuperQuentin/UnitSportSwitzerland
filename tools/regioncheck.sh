@@ -5,7 +5,8 @@
 # each site alone. At each site a walker walks east into a blocker 4 m ahead; tools/regioncheck-compare.py
 # compares each site's tracks with and without the other site (tolerance 1 cm). A second walker at each site
 # heads into a car the server parked in its main frame: in the far region it meets the car's copy
-# (RegionMirrors). BEFORE=1 adds a run with --noregions (every body in the server's one frame: what the far
+# (RegionMirrors). Then the same with --regionenu (#1513): the far region an ENU frame (true north, its own up), the
+# far site alone in it, and the hop a turning handover that keeps the walker's heading from true north. BEFORE=1 adds a run with --noregions (every body in the server's one frame: what the far
 # frame cost) and one of the far site with --nomirrors (its walker goes through the car).
 #   GODOT=<exe> [BEFORE=1] tools/regioncheck.sh      tracks: test_output/regions/*.csv
 . "$(dirname "$0")/lib/twoclient.sh" regions
@@ -24,11 +25,13 @@ run() {   # <name> <regioncheck args...>
 run both both --regionhop
 run a a
 run b b
+run both-enu both --regionhop --regionenu
+run b-enu b --regionenu
 if [ -n "${BEFORE:-}" ]; then
   run noregions both --noregions
   run nomirrors b --nomirrors   # expected to FAIL: the walker goes through the parked car
 fi
-if tc_ok 3 "$DIR"/both.log "$DIR"/a.log "$DIR"/b.log && "$PYTHON" tools/regioncheck-compare.py "$DIR" ${BEFORE:+--before}; then
+if tc_ok 5 "$DIR"/both.log "$DIR"/a.log "$DIR"/b.log "$DIR"/both-enu.log "$DIR"/b-enu.log && "$PYTHON" tools/regioncheck-compare.py "$DIR" ${BEFORE:+--before}; then
     echo "[regioncheck] RESULT: ok"; exit 0
 fi
 echo "[regioncheck] RESULT: FAILED (see $DIR/*.log)"; exit 1

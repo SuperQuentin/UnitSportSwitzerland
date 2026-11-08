@@ -541,6 +541,24 @@ public sealed class OriginFrame
         return new(new Transform3D(new Basis(Turn(a.X, b), Turn(a.Y, b), Turn(a.Z, b)), Turn(a.Origin - b.Origin, b)));
     }
 
+    /// <summary>
+    /// What carries a body standing at <paramref name="from"/> in <paramref name="earlier"/>'s world to the place
+    /// <paramref name="to"/> in this one (#1513: a server region's handover, or a teleport into another region): its
+    /// position lands on <paramref name="to"/>, and its directions keep their bearing against the local
+    /// east-up-south (a heading from true north stays the same, up stays up). Where the two places are one, that is the
+    /// frames' rigid map there; across a teleport 300 km away a rigid map would turn the heading by the meridians' 2.8°.
+    /// Between two ground frames, the plain translation of <see cref="Since"/> (grid headings kept, as before G2).
+    /// A few microseconds: once per handover.
+    /// </summary>
+    public OriginShift Carry(OriginFrame earlier, Vector3 from, GlobalPos to)
+    {
+        if (Axes == null && earlier.Axes == null) return Since(earlier);
+        var target = ToWorld(to);
+        // old world -> local ENU at the old place -> new world at the new place, the grids' scale left out (a turn)
+        var turn = (EnuAt(to).Turn.Transposed() * earlier.EnuAt(from).Turn).Orthonormalized();
+        return new(new Transform3D(turn, target - turn * from));
+    }
+
     /// <summary>This frame as a rigid one on the Earth: an anchor its own axes, the ground frame its axes at <paramref name="at"/>.</summary>
     private FrameAxes Embedding(EcefPos at)
     {
@@ -619,6 +637,15 @@ public sealed class WorldOrigin
     public WorldOrigin(double e, double n)
     {
         _frame = new OriginFrame(e, n, 0);
+    }
+
+    /// <summary>
+    /// An anchor-frame world (#1430 H3): world (0, 0, 0) and its axes at <paramref name="axes"/>, e.g. a server region's
+    /// ENU frame at its cluster's centre (<see cref="FrameAxes.Enu"/>, #1513). Such a world never moves.
+    /// </summary>
+    public WorldOrigin(FrameAxes axes)
+    {
+        _frame = new OriginFrame(axes, 0);
     }
 
     /// <summary>The current frame: a consistent snapshot, safe to hand to another thread.</summary>

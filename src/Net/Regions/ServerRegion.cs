@@ -35,8 +35,16 @@ public sealed class ServerRegion
     public Rid Space => World.Space;
     /// <summary>Its physics for queries (rays, shapes): only valid in a physics step, as any space state.</summary>
     public PhysicsDirectSpaceState3D DirectSpace => World.DirectSpaceState;
-    /// <summary>The anchor of its frame as an Earth position.</summary>
-    public GlobalPos Anchor => GlobalPos.FromLv95(Origin.E, Origin.N, 0);
+    /// <summary>
+    /// The anchor of its frame as an Earth position: an ENU frame's origin (on the ellipsoid, #1513), or a flat frame's
+    /// whole-km LV95 corner at altitude 0.
+    /// </summary>
+    public GlobalPos Anchor => Origin.Frame.Axes is { } axes ? GlobalPos.FromEcef(axes.Origin) : GlobalPos.FromLv95(Origin.E, Origin.N, 0);
 
-    public override string ToString() => $"region {Id} (LV95 {Origin.E:F0}/{Origin.N:F0})";
+    /// <summary>Whether its frame is an ENU anchor frame (true north, true metres, its own up) rather than the flat LV95 one.</summary>
+    public bool IsEnu => Origin.Frame.IsAnchor;
+
+    public override string ToString() => IsEnu
+        ? $"region {Id} (ENU at {Anchor.Geodetic.LatDeg:F4}N {Anchor.Geodetic.LonDeg:F4}E, LV95 {Origin.E:F0}/{Origin.N:F0})"
+        : $"region {Id} (LV95 {Origin.E:F0}/{Origin.N:F0})";
 }
