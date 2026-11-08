@@ -25,6 +25,7 @@ DOOR_M = 1.2
 DOOR_MIN_M, DOOR_MAX_M = 0.5, 2.4
 MIN_WALL_M, MAX_WALL_M = 0.07, 0.9
 WALL_SHARE = 0.15
+OPEN_FACTOR = 0.7  # strokes thinner than this share of the wall width are not walls
 MIN_PIECE_M = 1.2
 MIN_AREA_M2, MIN_THICK_M = 1.0, 1.0  # export.MIN_AREA, export.MIN_THICK
 
@@ -77,7 +78,7 @@ def wall_width(ink, ppm):
 
 def walls_of(ink, w, ppm, inside=None):
     """Strokes about as heavy as the walls: the opening removes what is thinner than 0.7 w, pieces under MIN_PIECE_M and anything outside the outline go."""
-    walls = cv2.morphologyEx(ink, cv2.MORPH_OPEN, _disk(max(2, round(0.7 * w))))
+    walls = cv2.morphologyEx(ink, cv2.MORPH_OPEN, _disk(max(2, round(OPEN_FACTOR * w))))
     if inside is not None:
         walls = cv2.bitwise_and(walls, cv2.dilate(inside, _disk(w + 2)))
     n, lab, st, _ = cv2.connectedComponentsWithStats(walls, connectivity=8)
@@ -116,14 +117,14 @@ def _grow(lab, allowed, steps):
     return lab
 
 
-def extract(gray, m_per_px, outline=None, door_m=DOOR_M, wall_m=None):
+def extract(gray, m_per_px, outline=None, door_m=None, wall_m=None):
     """Rooms and doors of a grey raster plan.
 
     `outline` is a shapely polygon in metres from the raster's top-left corner (x right, z down), else the plan's own outline is traced.
     Returns dict(ok, why, wall_m, wall_share, rooms=[Polygon], doors=[dict(between, a, b, width_m)], dropped, work_px_per_m). Coordinates are metres in
     the raster's frame, the same as `outline`.
     """
-    h0, w0 = gray.shape
+    door_m = DOOR_M if door_m is None else door_m
     ppm0 = 1.0 / m_per_px
     f = min(3.0, WORK_PX_PER_M / ppm0)
     if abs(f - 1.0) > 0.05:

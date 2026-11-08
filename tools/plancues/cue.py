@@ -3,7 +3,7 @@ import json
 import os
 import re
 
-TOP_KEYS = ("version", "venue", "status", "reasons", "sources", "scale", "placement", "levels", "facts", "topology")
+TOP_KEYS = ("version", "venue", "status", "reasons", "sources", "scale", "placement", "levels", "facts", "topology", "placement_check")
 
 
 def cue_dir(out, venue):

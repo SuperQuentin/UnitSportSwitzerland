@@ -795,6 +795,72 @@ def synth_scan(ppm=20, wall=0.2, door=0.9, extras=True):
     return g
 
 
+class ScanPlacementCheckTests(unittest.TestCase):
+    INFO = dict(name="Test Museum, Teststrasse 5", town="Bern", at=[2600100, 1200100], kind="building")
+
+    def gwr(self):
+        import sqlite3
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "gwr.sqlite")
+        con = sqlite3.connect(path)
+        con.execute("create table entrance(EGID integer, EDID integer, DEINR text, STRNAME text, DPLZNAME text, DKODE real, DKODN real)")
+        con.execute("create table building(EGID integer, GBEZ text, GKODE real, GKODN real)")
+        con.execute("insert into entrance values (1, 0, '5', 'Teststrasse', 'Bern', 2600100.0, 1200100.0)")
+        con.execute("insert into entrance values (2, 0, '7', 'Teststrasse', 'Bern', 2600160.0, 1200100.0)")
+        con.commit()
+        con.close()
+        return path
+
+    def test_the_address_picks_the_building_and_a_fit_to_the_wrong_solid_is_rejected(self):
+        import scancheck
+        g = self.gwr()
+        right = Polygon([(2600090, 1200090), (2600110, 1200090), (2600110, 1200110), (2600090, 1200110)])
+        wrong = Polygon([(2600150, 1200090), (2600170, 1200090), (2600170, 1200110), (2600150, 1200110)])  # the neighbour, number 7, 60 m away
+        ok = scancheck.identity(right, 1, self.INFO, g)
+        self.assertEqual((ok["verdict"], ok["how"]), ("match", "address"))
+        bad = scancheck.identity(wrong, 2, self.INFO, g)
+        self.assertEqual(bad["verdict"], "mismatch")
+        self.assertGreater(bad["dist_m"], 40)
+        aer = dict(score=0.9, null_p90=0.4, lift=0.5, tall=False, height_m=12.0, passes=True)
+        self.assertEqual(scancheck.verdict(ok, aer)[0], "ok")
+        v, why = scancheck.verdict(bad, aer)  # a great aerial score does not save a wrong building
+        self.assertEqual(v, "wrong_building?")
+        self.assertIn("identity", why)
+
+    def test_a_hint_that_is_only_a_guess_confirms_nothing(self):
+        import scancheck
+        box = Polygon([(2600090, 1200090), (2600110, 1200090), (2600110, 1200110), (2600090, 1200110)])
+        guess = dict(name="Some Hall (matched by size)", at=[2600100, 1200100], unsure=True)
+        self.assertEqual(scancheck.identity(box, 1, guess, None)["verdict"], "unconfirmed")
+        geocoded = dict(name="Some Hall", at=[2600100, 1200100])
+        self.assertEqual(scancheck.identity(box, 1, geocoded, None)["verdict"], "point")
+
+    def test_the_aerial_check_prefers_the_outline_on_the_roof_edges_to_a_displaced_copy(self):
+        import scancheck
+        rng = np.random.RandomState(1)
+        ppm = 3
+        rgb = (60 + rng.randint(0, 6, (300, 300, 3))).astype(np.uint8)  # 100 x 100 m of faint texture, a bright 30 x 20 m roof in it
+        rgb[120:180, 105:195] = 190
+        box = (2600000, 1200000, 2600100, 1200100)
+        roof = Polygon([(2600035, 1200040), (2600065, 1200040), (2600065, 1200060), (2600035, 1200060)])  # x 105..195 px, y 120..180 px (north up)
+        good = scancheck.aerial_agreement(roof, rgb, box, ppm)
+        self.assertGreater(good["score"], 0.8)
+        self.assertGreater(good["lift"], 0.3)
+        from shapely import affinity
+        off = scancheck.aerial_agreement(affinity.translate(roof, 8, 0), rgb, box, ppm)
+        self.assertLess(off["score"], 0.5)
+
+    def test_a_tall_solid_is_decided_on_identity_alone_and_only_a_strong_identity_counts(self):
+        import scancheck
+        aer = dict(score=0.3, null_p90=0.35, lift=-0.05, tall=True, height_m=129.0, passes=False)
+        strong = dict(verdict="match", how="address", dist_m=0.0, detail="x")
+        weak = dict(verdict="point", how="geocoded hint", dist_m=0.0, detail="x")
+        self.assertEqual(scancheck.verdict(strong, aer)[0], "ok (tall, identity only)")
+        self.assertEqual(scancheck.verdict(weak, aer)[0], "wrong_building?")
+        low = dict(aer, tall=False, height_m=10.0)
+        self.assertEqual(scancheck.verdict(strong, low)[0], "wrong_building?")
+
+
 class ScanRoomTests(unittest.TestCase):
     OUTLINE = Polygon([(2, 2), (16, 2), (16, 10), (2, 10)])
     ROOMS = [Polygon([(2.1, 2.1), (9, 2.1), (9, 10), (2.1, 10)]).intersection(OUTLINE.buffer(-0.1)),

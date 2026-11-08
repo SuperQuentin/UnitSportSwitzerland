@@ -540,8 +540,12 @@ def _place_stadium(c, cache_dir, info, yaw_hint, log):
 
 
 # ------------------------------------------------------------------------------------------------ raster pages
-def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_px=1400, debug_dir=None):
-    """A scan: outline only, scale from the footprint (circular), so low confidence at best, rejected on a poor fit."""
+def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_px=1400, debug_dir=None, gwr=None, cache_dir=None, rooms=True):
+    """A scan: outline, scale from the footprint (circular), so low confidence at best, rejected on a poor fit.
+
+    With a `cache_dir` (the aerial cache) the placement is also checked against the GWR address and the aerial (`scancheck`); a placement that both
+    confirm is the right building, and then the rooms and doorways of the scan are measured at that scale (`scanrooms`, no names: there is no OCR).
+    Otherwise the cue is marked `wrong_building?` with the reason and stays outline only."""
     import raster
     doc = pdfio.open_doc(os.path.join(root, rel_path))
     pg = doc[page - 1]
@@ -578,10 +582,57 @@ def raster_stage(root, venue, rel_path, page, chunks, info, region=None, width_p
     if st == "ok":
         st = "low_confidence"
     cuem.set_status(c, st, why + w2)
+    if cache_dir is not None:
+        chk = scan_placement_check(c, b, info, gwr, cache_dir)
+        if chk["verdict"].startswith("ok") and rooms:
+            scan_rooms_stage(c, pg, clip, sp, cx, cz)
     if debug_dir:
         os.makedirs(debug_dir, exist_ok=True)
         pdfio.save_png(os.path.join(debug_dir, "ink.png"), ink)
     return c
+
+
+def scan_placement_check(c, b, info, gwr, cache_dir):
+    """Identity (GWR) and aerial agreement of a scan placed on solid `b`; the result is `c["placement_check"]`, a failure is a reason on the cue."""
+    import scancheck
+    poly = scancheck.placed_outline(c)
+    ident = scancheck.identity(b["fp"], int(b["egid"]), info, gwr)
+    try:
+        aer = scancheck.aerial_check(poly, cache_dir, float(b["max_y"] - b["min_y"]))
+    except Exception as e:  # no network or no aerial: the placement is then not confirmed
+        aer = dict(score=None, null_p90=None, lift=None, tall=False, height_m=None, passes=False, error=repr(e))
+    v, why = scancheck.verdict(ident, aer)
+    c["placement_check"] = dict(verdict=v, reason=why, identity=ident, aerial=aer)
+    if v != "ok":
+        c["reasons"].append("wrong_building?: " + why)
+    return c["placement_check"]
+
+
+def scan_rooms_stage(c, pg, clip, sp, cx, cz, render_px=3000):
+    """Rooms and doorways of a confirmed scan at its scale (`scanrooms`), into level 0 of the cue, in the same frame as its outline.
+
+    `sp` is the outline in metres from the clip corner, (cx, cz) the cue origin in that frame."""
+    import scanrooms
+    m_per_pt = c["scale"]["m_per_pt"]
+    rect = clip or pg.rect
+    img = pdfio.render(pg, width_px=render_px, clip=clip, gray=True)
+    m_px = m_per_pt * rect.width / img.shape[1]
+    res = scanrooms.extract(img, m_px, outline=sp)
+    lvl = c["levels"][0]
+    lvl["extra"]["scan_rooms"] = dict(ok=res["ok"], why=res["why"], wall_m=res["wall_m"], wall_share=res["wall_share"], door_close_m=scanrooms.DOOR_M,
+                                      dropped=len(res["dropped"]), work_px_per_m=res["work_px_per_m"])
+    if not res["ok"]:
+        c["reasons"].append("scan rooms: " + (res["why"] or "none found"))
+        return res
+
+    def sh(pt):
+        return [round(pt[0] - cx, 3), round(pt[1] - cz, 3)]
+    lvl["rooms"] = [dict(label=None, type=None, poly=[sh(p) for p in list(r.exterior.coords)[:-1]], confidence=0.3, area_m2=round(r.area, 1)) for r in res["rooms"]]
+    lvl["openings"] = [dict(kind="door", between=d["between"], a=sh(d["a"]), b=sh(d["b"]), width_m=d["width_m"], source="scan gap", confidence=0.4) for d in res["doors"]]
+    lvl["walls"] = dict(note="raster: walls measured from the ink (stroke width %.2f m), rooms and doorways from the free space; no names (no OCR)" % res["wall_m"])
+    cuem.add_fact(c, "n_rooms", len(lvl["rooms"]), None, 0, 0.3)
+    c["reasons"].append("rooms from a scan at a scale taken from the footprint fit: %d rooms, %d doorways found as gaps, no names" % (len(lvl["rooms"]), len(lvl["openings"])))
+    return res
 
 
 def scan_origin_lv95(r):
