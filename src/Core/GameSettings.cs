@@ -712,6 +712,9 @@ public sealed class GameSettings
         WindowWidth = 640,
         WindowHeight = 360,
         FirstRunDone = false,   // as a fresh user:// before: the welcome stays a probe's own choice
+        // a probe holds an item and waits on the other peer for longer than the 8 s holster (#1369): the
+        // flag's ghost read None and A's torch went dark on B; PhoneProbe turns it on to check the holster itself
+        AutoHolster = false,
     };
 
     /// <summary>
