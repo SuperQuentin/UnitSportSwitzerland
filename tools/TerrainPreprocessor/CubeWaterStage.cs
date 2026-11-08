@@ -38,6 +38,9 @@ public static class CubeWaterStage
 
     private const double Cm = 0.01;
 
+    /// <summary>Leaf rows phase C solves side by side: the cache holds them and a window's reach round them (~10 rows of a frame's 32).</summary>
+    private const int RowsABand = 8;
+
     public static bool Wants(IReadOnlyList<string> args) => args.Contains("--cube-water");
 
     /// <summary>
@@ -54,6 +57,9 @@ public static class CubeWaterStage
         public int LabelBase => S.LabelBase;
     }
 
+    /// <summary>A label's owned vertices in a leaf: their count and how many at each surface level (cm).</summary>
+    private sealed record OwnedLabel(int Label, int Count, Dictionary<int, long> Levels);
+
     /// <summary>What the region keeps of a leaf in memory between the phases: its counts and its edges' labels.</summary>
     private sealed class LeafSummary
     {
@@ -68,6 +74,8 @@ public static class CubeWaterStage
         public bool Water;
         /// <summary>The flood-fill labels on the leaf's edges, (i, 0), (i, n), (0, j), (n, j); null with no water.</summary>
         public int[]? Bottom, Top, Left, Right;
+        /// <summary>Per label, in the order its first owned vertex (i, j &lt; cells) comes row by row: how many it owns, at which levels.</summary>
+        public List<OwnedLabel>? Owned;
 
         /// <summary>The label at vertex index <paramref name="idx"/>, which must lie on the leaf's edge.</summary>
         public int EdgeLabel(int idx)
@@ -172,30 +180,19 @@ public static class CubeWaterStage
                     Union(parent, Global(d, mine), Global(dO, theirs));
         }
         var bodies = new Dictionary<int, Body>();
-        // the leaves with labels, read back from the cache a batch at a time and counted in order (the sums as before)
-        var labelled = ordered.Where(k => data[k].Count > 0).ToList();
-        int batch = Math.Max(1, 4 * jobs);
-        for (int b0 = 0; b0 < labelled.Count; b0 += batch)
+        // from each leaf's owned counts (phase A's): a body's area is the same additions in the same order as vertex by
+        // vertex (every vertex of a leaf adds the leaf's own area), its first leaf and level counts the same
+        foreach (var k in ordered)
         {
-            var ids = labelled.GetRange(b0, Math.Min(batch, labelled.Count - b0));
-            var loaded = new LeafData[ids.Count];
-            Parallel.For(0, ids.Count, par, i => loaded[i] = ReadCache(cacheDir, data[ids[i]]));
-            foreach (var d in loaded)
+            var d = data[k];
+            if (d.Owned == null) continue;
+            foreach (var o in d.Owned)
             {
-                var k = d.S.Key;
-                int n = d.S.Cells, side = n + 1;
-                for (int j = 0; j < n; j++)          // a leaf owns its vertices i, j < cells
-                    for (int i = 0; i < n; i++)
-                    {
-                        int l = d.Labels[j * side + i];
-                        if (l == 0) continue;
-                        int root = Find(parent, d.LabelBase + l);
-                        if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body { First = k };
-                        b.Count++;
-                        b.AreaM2 += d.S.VertexAreaM2;
-                        int q = d.SurfaceCm[j * side + i];
-                        b.LevelCounts[q] = b.LevelCounts.GetValueOrDefault(q) + 1;
-                    }
+                int root = Find(parent, d.LabelBase + o.Label);
+                if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body { First = k };
+                b.Count += o.Count;
+                for (int c = 0; c < o.Count; c++) b.AreaM2 += d.VertexAreaM2;
+                foreach (var (q, m) in o.Levels) b.LevelCounts[q] = b.LevelCounts.GetValueOrDefault(q) + m;
             }
         }
         foreach (var b in bodies.Values)
@@ -247,28 +244,31 @@ public static class CubeWaterStage
             if (todo.Count == 0) continue;
             var fs = Stopwatch.StartNew();
             var results = new ConcurrentDictionary<CubeKey, List<LeafSection>>();
-            // a row of the frame at a time: the cache holds the rows within a window's reach of it, the survey the
-            // kilometres round it (the frame's leaves are (y, x) ordered)
-            foreach (var row in todo.GroupBy(k => k.Y))
+            // the survey: the kilometres round this frame (a frame is ~20 km a side), the rest dropped
+            int ring = 0, marginKm = 0;
+            int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
+            foreach (var k in todo)
             {
-                int ring = 0, marginKm = 0;
-                int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
-                foreach (var k in row)
-                {
-                    var s = data[k];
-                    ring = Math.Max(ring, RingOf(s));
-                    marginKm = Math.Max(marginKm, (int)Math.Ceiling((s.Cells * s.CellM + WaterWindow.Halo) / 1000) + 1);
-                    var c = k.Centre;
-                    var (ce, cn) = SwissGeodesy.ToLv95(c.LatDeg, c.LonDeg);
-                    var t = TileId.FromLv95(ce, cn);
-                    minE = Math.Min(minE, t.E); maxE = Math.Max(maxE, t.E);
-                    minN = Math.Min(minN, t.N); maxN = Math.Max(maxN, t.N);
-                }
-                int x0 = row.Min(k => k.X) - ring, x1 = row.Max(k => k.X) + ring, y0 = row.Key - ring, y1 = row.Key + ring;
+                var s = data[k];
+                ring = Math.Max(ring, RingOf(s));
+                marginKm = Math.Max(marginKm, (int)Math.Ceiling((s.Cells * s.CellM + WaterWindow.Halo) / 1000) + 1);
+                var c = k.Centre;
+                var (ce, cn) = SwissGeodesy.ToLv95(c.LatDeg, c.LonDeg);
+                var t = TileId.FromLv95(ce, cn);
+                minE = Math.Min(minE, t.E); maxE = Math.Max(maxE, t.E);
+                minN = Math.Min(minN, t.N); maxN = Math.Max(maxN, t.N);
+            }
+            bathy?.ReleaseOutside(minE - marginKm, minN - marginKm, maxE + marginKm, maxN + marginKm);
+            // a band of rows at a time: the cache holds the rows within a window's reach of the band (the frame's leaves
+            // are (y, x) ordered)
+            int yMin = todo.Min(k => k.Y);
+            foreach (var band in todo.GroupBy(k => (k.Y - yMin) / RowsABand))
+            {
+                int x0 = band.Min(k => k.X) - ring, x1 = band.Max(k => k.X) + ring;
+                int y0 = band.Min(k => k.Y) - ring, y1 = band.Max(k => k.Y) + ring;
                 foreach (var k in held.Keys)
                     if (k.Face != plan.Cell.Face || k.X < x0 || k.X > x1 || k.Y < y0 || k.Y > y1) held.TryRemove(k, out _);
-                bathy?.ReleaseOutside(minE - marginKm, minN - marginKm, maxE + marginKm, maxN + marginKm);
-                Parallel.ForEach(row, par, key =>
+                Parallel.ForEach(band, par, key =>
                 {
                     var r = Solve(key, Input, heights, surfaceStore, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
                     results[key] = r.Sections;
@@ -359,6 +359,26 @@ public static class CubeWaterStage
             s.Left[k] = d.Labels[k * side];
             s.Right[k] = d.Labels[k * side + n];
         }
+        // the owned counts phase B sums (so it never reads the leaves back)
+        var owned = new List<OwnedLabel>();
+        var slot = new Dictionary<int, int>();
+        var counts = new List<int>();
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int l = d.Labels[j * side + i];
+                if (l == 0) continue;
+                if (!slot.TryGetValue(l, out int at))
+                {
+                    slot[l] = at = owned.Count;
+                    owned.Add(new OwnedLabel(l, 0, new Dictionary<int, long>()));
+                    counts.Add(0);
+                }
+                counts[at]++;
+                int q = d.SurfaceCm[j * side + i];
+                owned[at].Levels[q] = owned[at].Levels.GetValueOrDefault(q) + 1;
+            }
+        s.Owned = owned.Select((o, at) => o with { Count = counts[at] }).ToList();
         return d;
     }
 
