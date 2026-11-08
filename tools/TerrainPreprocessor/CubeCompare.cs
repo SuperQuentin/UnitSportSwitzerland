@@ -837,7 +837,7 @@ public static class CubeCompare
     /// its flags and by where it is: BD TOPO's bridges and tunnels have no Z and are draped like any road (<see cref="FranceRoads"/>),
     /// so a structure whose middle vertex is within a metre above its ground counts as draped.
     /// </summary>
-    private static bool Surveyed(RoadSegment s, double[] above)
+    internal static bool Surveyed(RoadSegment s, double[] above)
     {
         if ((s.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0 && !RoadFormat.IsAerial(s.Class) && !RoadFormat.IsWall(s.Class)) return false;
         var known = above.Where(a => !double.IsNaN(a)).Order().ToList();
@@ -1550,11 +1550,14 @@ internal sealed class CubeBuild
     /// A point's ellipsoidal height above the leaf mesh below it (NaN off the leaves): the mesh's triangles
     /// split along (i, j)–(i+1, j+1), as <see cref="CubeGeometry"/> builds it, interpolated on the lattice.
     /// </summary>
-    public double AboveGround(EcefPos p)
+    public double AboveGround(EcefPos p) => AboveMesh(p, LeafLevel, Heights);
+
+    /// <summary><see cref="AboveGround"/> over any leaves' heights (<c>--cube-check</c>'s feature rows read them too, #1579).</summary>
+    public static double AboveMesh(EcefPos p, int leafLevel, Func<CubeKey, CubeTile?> heights)
     {
         var (f, u, v, h) = CubeSphere.FromEcef(p);
-        var key = CubeKey.FromFace(f, u, v, LeafLevel);
-        if (Heights(key) is not { } t) return double.NaN;
+        var key = CubeKey.FromFace(f, u, v, leafLevel);
+        if (heights(key) is not { } t) return double.NaN;
         int cells = 1 << t.Bits;
         double fi = Math.Clamp((u - key.U0) / key.Size * cells, 0, cells), fj = Math.Clamp((v - key.V0) / key.Size * cells, 0, cells);
         int i = Math.Min((int)fi, cells - 1), j = Math.Min((int)fj, cells - 1);
