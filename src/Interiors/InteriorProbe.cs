@@ -964,6 +964,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 _shutT += GetPhysicsProcessDeltaTime();
                 bool shut = interiors.Links.TryGetValue(door, out var link) ? link.Swing <= 0f : !interiors.IsOpen(door);
                 if (!shut && _shutT < 8) return null;
+                Check(shut, $"{door} shut ({_shutT:F1} s)");
                 if (DoorLeaf.SwingsOut(_door.Hang) && DoorLeaf.LeafWidth(_door.Hang, _door.Width) > 2f)
                 {
                     var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Hang, _door.Width) + Vector3.Up;
@@ -1033,7 +1034,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             }
             case 4:
                 // opened again from the street, so the walk away below still sees it shut by itself
-                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0) return null;
+                // the leaf shut behind us first, not after a fixed second (docs/notes/general/check-waits.md)
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0 || interiors.IsOpen(door) && _shutT < 8.0) return null;
+                Check(!interiors.IsOpen(door), $"{door} shut behind us ({_shutT:F1} s)");
                 Check(!interiors.IsOpen(door) && _player!.TryInteract(), $"E outside opens {door} again");
                 _shut = 5;
                 _shutT = 0;

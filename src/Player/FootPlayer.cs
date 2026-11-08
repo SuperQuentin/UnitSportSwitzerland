@@ -2963,7 +2963,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.Games.TableGames.TryUse(this)) return true;   // a pool table, a dartboard, a game (#1324, #1326)
             if (Interiors.Games.ArcadeCounters.TryUse(this)) return true;   // the change machine, the prize counter (#1326)
             if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;   // a slice of a birthday cake (#1423)
-            if (TrySit()) return true;   // a cinema seat, from its row's lane (#1279)
+            // a chair or a cinema seat (#1279), but at the way out E is the door, as for a cupboard
+            if (interiors?.AtExit(this) != true && TrySit()) return true;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
             if (!byHand && interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))
