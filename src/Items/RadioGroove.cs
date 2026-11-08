@@ -39,6 +39,13 @@ public readonly struct RadioGroove
     public float Syllable { get; init; }
     /// <summary>-1 "oo" .. +1 "ee".</summary>
     public float Vowel { get; init; }
+    /// <summary>The mouth's opening from the vocal's spectrum, 0..1 (v4); -1 on a v3 block.</summary>
+    public float Aperture { get; init; } = -1f;
+    /// <summary>A consonant's high-band burst now, 0..1: the lips close for it (v4).</summary>
+    public float Consonant { get; init; }
+
+    /// <summary>No music, no voice, no aperture (the field initializer needs this constructor).</summary>
+    public RadioGroove() { this = default; Aperture = -1f; }
 
     public static readonly RadioGroove Silent = new() { Level = 0f, Peak = 0.5f, Section = SectionKind.Groove, Voice = -1f };
 
@@ -52,7 +59,8 @@ public readonly struct RadioGroove
         int inBar = ((beat % 4) + 4) % 4;   // BeatOf already counts from the bar's one (#728)
         float beatKick = Mathf.Exp(-phase * 6f);
         bool env = CdAnalysisRuntime.Sample(cd, t, out float level, out float kick);
-        bool sung = CdAnalysisRuntime.SampleVocal(cd, t, out float voice, out float syllable, out float vowel, out _);
+        bool sung = CdAnalysisRuntime.SampleVocal(cd, t + CdAnalysisRuntime.LipLead,
+            out float voice, out float syllable, out float vowel, out _, out float aperture, out float consonant);
         var kind = CdAnalysisRuntime.SectionAt(cd, t, out int section);
         float burst = 0f;
         if (section > 0 && cd.Analysis is { SectionStarts: { } starts } && section < starts.Length)
@@ -77,6 +85,8 @@ public readonly struct RadioGroove
             Voice = sung ? voice : -1f,
             Syllable = syllable,
             Vowel = vowel,
+            Aperture = sung ? aperture : -1f,
+            Consonant = sung ? consonant : 0f,
         };
     }
 

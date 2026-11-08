@@ -73,7 +73,7 @@ public partial class FootPlayer
             : Avatar.HumanMeshBuilder.IsBreakPower(d.Move) ? (beats < 3.7f ? 1 : beats < 7f ? 2 : 0)
             : 0;
         var hearing = new DanceHearing((int)d.Style, (int)g.Section, g.Level, g.Kick, g.BarKick, g.Burst, g.Beat, d.Bar, floor,
-            g.Voice, g.Syllable, g.Vowel);
+            g.Voice, g.Syllable, g.Vowel, g.Aperture, g.Consonant);
         _singing = g.Voice >= 0f;
         return DanceFace.Target(hearing, DanceSeed());
     }

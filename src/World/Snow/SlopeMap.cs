@@ -8,7 +8,8 @@ namespace UnitSport.World.Snow;
 
 /// <summary>
 /// The ski map (#887), top right while the local player is on skis: the slopes within
-/// <see cref="Span"/> m in their colours, north up, your arrow in the middle. The picture is
+/// <see cref="Span"/> m in their colours, true north up (the oblique stereographic at you, which over 1.2 km is
+/// the LV95 grid turned by its convergence: #1514), your arrow in the middle. The picture is
 /// <see cref="Pixels"/>² sampled from the slope rasters the client already holds (<see cref="PisteIndex"/>),
 /// into one reused buffer, and only when you have moved <see cref="Redraw"/> m. Between rebuilds
 /// it is redrawn only when the arrow turns (perf-no-per-frame-allocations).
@@ -64,7 +65,8 @@ public partial class SlopeMap : Control
 
         var (e, n) = _chunks.Origin!.ToLv95(p!.GlobalPosition);
         var fwd = -p.GlobalTransform.Basis.Z;
-        float heading = Mathf.Atan2(fwd.X, -fwd.Z); // 0 north, clockwise
+        // 0 true north, clockwise
+        float heading = -_chunks.Origin.TrueYaw(p.GlobalPosition, Mathf.Atan2(-fwd.X, -fwd.Z));
         _sincePaint += 0.1;
         // a tile still loading at the last paint: paint again once a second until all are in
         bool moved = double.IsNaN(_centre.E) || Math.Abs(e - _centre.E) + Math.Abs(n - _centre.N) > Redraw
@@ -86,16 +88,19 @@ public partial class SlopeMap : Control
     private void Paint(PisteIndex index, double e, double n)
     {
         float m = Span / Pixels;
+        // a map metre east and north as LV95 metres: the grid turned by its convergence γ (true north is at grid bearing γ)
+        double g = SwissGeodesy.GridConvergence(e, n), cos = Math.Cos(g), sin = Math.Sin(g);
         TileId lastId = default;
         PisteTile? tile = null;
         bool haveTile = false;
         _incomplete = false;
         for (int y = 0; y < Pixels; y++)
         {
-            double pn = n + Span / 2 - (y + 0.5) * m;
+            double my = Span / 2 - (y + 0.5) * m;
             for (int x = 0; x < Pixels; x++)
             {
-                double pe = e - Span / 2 + (x + 0.5) * m;
+                double mx = -Span / 2 + (x + 0.5) * m;
+                double pe = e + mx * cos + my * sin, pn = n - mx * sin + my * cos;
                 var id = TileId.FromLv95(pe, pn);
                 if (!haveTile || id != lastId)
                 {

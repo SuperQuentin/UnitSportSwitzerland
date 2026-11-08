@@ -47,8 +47,16 @@ TerrainPreprocessor --cube-water --cube-out REGION [--bathy DIR] [--cube-temp DI
   along face 0's edge, more towards a corner) and a cell's length steps by the flattening (~0.1 %). The survey's
   LV95 positions past the edge are rigorous, cell by cell. Tests: `CubeWaterEdgeTests` (a lake on an edge and on a
   cube corner is one body; the fold is the neighbour key's, the same distance in).
-- **Not yet**: nationwide, phase A's leaves want a disk cache as the LV95 pass has (#747): here they are held,
-  which with the survey (Léman's 693 km of grid) peaked at 9.6 GB.
+- **Disk cache** (#1577, as the LV95 pass since #747): phase A writes each leaf's wet flags and surface, deflated, to
+  `<temp>/water_cache/` and keeps a summary: its edges' labels (for B's union) and, per label in the order its first
+  owned vertex comes, its owned count and levels, so B sums the same additions in the same order without reading a
+  leaf back. C reads the leaves from the cache a band of 8 rows at a time (the band and a window's reach round it are
+  held) and keeps only the survey kilometres round the frame (`BathySource.ReleaseOutside`). The cache is deleted at
+  the end. D: region (Nov 8 2026, 8 jobs, below normal): bytes identical to main; peak 9.4 → 2.9 GB, 120 → 148 s
+  (A 8 → 23 s: the deflate; C +18 s). What still grows with the region: the summaries (~10 KB a water leaf) and the
+  bodies. A first cut, a row at a time with the survey released per row, also held 2.7 GB but took 487 s (reloaded
+  survey kilometres and a barrier per row).
+- **Not yet**: the window arrays of C are allocated per leaf; #1562's `WaterWindow.Pool` (LV95 pass) would serve them too.
 
 ## Checks (Nov 5 2026)
 

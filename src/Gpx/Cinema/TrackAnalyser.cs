@@ -46,7 +46,8 @@ public static class TrackAnalyser
     /// </summary>
     private const double EffortSpacing = 75.0;
 
-    public sealed record Sample(double Time, Vector3 World, double E, double N,
+    /// <summary>One step of the run; <see cref="X"/> and <see cref="Y"/> on the track's plane (#1514).</summary>
+    public sealed record Sample(double Time, Vector3 World, double X, double Y,
         double Height, double Speed, double Distance, Vector3 Heading);
 
     /// <summary>Everything the director needs about the run, computed once.</summary>
@@ -116,9 +117,9 @@ public static class TrackAnalyser
 
         for (double t = 0; t <= track.Duration; t += Step)
         {
-            var (e, n, ele, speed, distance) = track.Sample(t);
-            double height = corridor.HeightAt(e, n) ?? ele;
-            samples.Add(new Sample(t, origin.ToWorld(e, n, height), e, n,
+            var (x, y, ele, speed, distance) = track.Sample(t);
+            double height = corridor.HeightAt(x, y) ?? ele;
+            samples.Add(new Sample(t, origin.ToWorld(track.At(x, y, height)), x, y,
                 height, speed, distance, Vector3.Forward));
         }
 
@@ -174,7 +175,7 @@ public static class TrackAnalyser
         var buckets = new Dictionary<(long, long), List<int>>();
         for (int i = 0; i < s.Count; i++)
         {
-            var key = ((long)Math.Floor(s[i].E / Cell), (long)Math.Floor(s[i].N / Cell));
+            var key = ((long)Math.Floor(s[i].X / Cell), (long)Math.Floor(s[i].Y / Cell));
             if (!buckets.TryGetValue(key, out var list)) buckets[key] = list = new List<int>();
             list.Add(i);
         }
@@ -183,7 +184,7 @@ public static class TrackAnalyser
 
         for (int i = 0; i < s.Count; i++)
         {
-            long cx = (long)Math.Floor(s[i].E / Cell), cy = (long)Math.Floor(s[i].N / Cell);
+            long cx = (long)Math.Floor(s[i].X / Cell), cy = (long)Math.Floor(s[i].Y / Cell);
 
             for (long dx = -1; dx <= 1 && !revisited[i]; dx++)
                 for (long dy = -1; dy <= 1 && !revisited[i]; dy++)
@@ -194,7 +195,9 @@ public static class TrackAnalyser
                     {
                         if (Math.Abs(s[i].Time - s[j].Time) < ApartSeconds) continue;
 
-                        if (GlobalPos.HorizontalDistanceSquared(s[i].E, s[i].N, s[j].E, s[j].N) < NearM * NearM) { revisited[i] = true; break; }
+                        // plane metres: a true metre to 15 ppm within 50 km of the track's centre
+                        double gx = s[i].X - s[j].X, gy = s[i].Y - s[j].Y;
+                        if (gx * gx + gy * gy < NearM * NearM) { revisited[i] = true; break; }
                     }
                 }
         }

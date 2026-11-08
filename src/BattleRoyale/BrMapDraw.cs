@@ -28,8 +28,46 @@ public static class BrMapDraw
             .Select(c => (new Vector2((float)(c.E - br.State.AreaE), (float)(c.N - br.State.AreaN)), !BrCrates.Instance.Landed(c)))
         ?? Enumerable.Empty<(Vector2, bool)>();
 
-    /// <summary>A screen direction for a zone direction: north is up.</summary>
-    public static Vector2 Screen(Vector2 zoneDir) => new(zoneDir.X, -zoneDir.Y);
+    /// <summary>
+    /// How far the zone's grid north turns on the screen so that true north is up (#1514, G2 C5), radians, clockwise
+    /// positive: the map is the oblique stereographic at the area's centre (<c>MapProjection</c>), which over a few
+    /// kilometres is the zone plane turned by the LV95 meridian convergence there (scale within 200 ppm, a tenth of
+    /// a pixel). Set with the map image, per match.
+    /// </summary>
+    public static float NorthTurn { get; private set; }
+
+    /// <summary>Sets <see cref="NorthTurn"/> for an area centred at an LV95 point.</summary>
+    public static void SetArea(double e, double n) => NorthTurn = -(float)Terrain.Format.SwissGeodesy.GridConvergence(e, n);
+
+    /// <summary>A screen direction for a zone direction: true north is up.</summary>
+    public static Vector2 Screen(Vector2 zoneDir) => new Vector2(zoneDir.X, -zoneDir.Y).Rotated(NorthTurn);
+
+    /// <summary>The inverse of <see cref="Screen"/>: a zone direction for a screen direction.</summary>
+    public static Vector2 Zone(Vector2 screenDir)
+    {
+        var r = screenDir.Rotated(-NorthTurn);
+        return new Vector2(r.X, -r.Y);
+    }
+
+    /// <summary>
+    /// Draws the map image (the zone's square, grid north up in its pixels) with its north-west corner at
+    /// <paramref name="nw"/>, turned by <see cref="NorthTurn"/>, inside the canvas transform <paramref name="under"/>
+    /// already set (the turning minimap's), which it sets back.
+    /// </summary>
+    public static void Image(CanvasItem c, Texture2D tex, Vector2 nw, float sidePx, Transform2D under)
+    {
+        c.DrawSetTransformMatrix(under * new Transform2D(NorthTurn, nw));
+        c.DrawTextureRect(tex, new Rect2(Vector2.Zero, new Vector2(sidePx, sidePx)), false);
+        c.DrawSetTransformMatrix(under);
+    }
+
+    /// <summary>The outline of the zone's square, turned as the image (no canvas transform set).</summary>
+    public static void Outline(CanvasItem c, Vector2 nw, float sidePx, Color color, float width)
+    {
+        c.DrawSetTransformMatrix(new Transform2D(NorthTurn, nw));
+        c.DrawRect(new Rect2(Vector2.Zero, new Vector2(sidePx, sidePx)), color, false, width);
+        c.DrawSetTransformMatrix(Transform2D.Identity);
+    }
 
     public static void Overlays(CanvasItem c, BrManager br, Func<Vector2, Vector2> toScreen, float ppm, float reach)
     {

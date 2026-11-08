@@ -104,7 +104,7 @@ public sealed class LocateMapPin : IMapOverlay
         AdventureMap.OpenAt(e, n);
     }
 
-    public void Draw(MapView view, CanvasItem on)
+    public void Draw(EarthMapView view, CanvasItem on)
     {
         if (_pin is not { } p) return;
         var at = view.ToScreen(p.E, p.N);

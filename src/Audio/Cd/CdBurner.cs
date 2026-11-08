@@ -113,14 +113,17 @@ public sealed class CdBurner
                 var r = VocalAnalyzer.Analyse(vocal, AnalysisRate, bpm);
                 double all = watch.Elapsed.TotalSeconds;
                 WriteWav(Path.Combine(dir, $"{name}_{how}.wav"), vocal, AnalysisRate);
-                var csv = new StringBuilder().AppendLine("t,level,syllable,vowel,pitch");
-                for (int o = 0; o < r.Frames.Length / 4; o++)
+                var csv = new StringBuilder().AppendLine("t,level,syllable,vowel,pitch,aperture,consonant");
+                int frameCount = r.Frames.Length / VocalAnalyzer.FrameBytes;
+                for (int o = 0; o < frameCount; o++)
                     csv.AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                        $"{o / (float)CdAnalysis.EnvRate:F2},{r.Frames[4 * o]},{r.Frames[4 * o + 1]},{r.Frames[4 * o + 2]},{r.Frames[4 * o + 3]}"));
+                        $"{o / (float)CdAnalysis.EnvRate:F2},{r.Frames[VocalAnalyzer.FrameBytes * o]},{r.Frames[VocalAnalyzer.FrameBytes * o + 1]},"
+                        + $"{r.Frames[VocalAnalyzer.FrameBytes * o + 2]},{r.Frames[VocalAnalyzer.FrameBytes * o + 3]},"
+                        + $"{r.Frames[VocalAnalyzer.FrameBytes * o + 4]},{r.Frames[VocalAnalyzer.FrameBytes * o + 5]}"));
                 File.WriteAllText(Path.Combine(dir, $"{name}_{how}.csv"), csv.ToString());
                 int sung = 0, voiced = 0;
-                for (int o = 0; o < r.Frames.Length / 4; o++) { if (r.Frames[4 * o] > 0) sung++; if (r.Frames[4 * o + 3] > 0) voiced++; }
-                int frames = Math.Max(1, r.Frames.Length / 4);
+                for (int o = 0; o < frameCount; o++) { if (r.Frames[VocalAnalyzer.FrameBytes * o] > 0) sung++; if (r.Frames[VocalAnalyzer.FrameBytes * o + 3] > 0) voiced++; }
+                int frames = Math.Max(1, frameCount);
                 Godot.GD.Print($"[vocalstem] {how}: separated in {sep:F1} s, analysed in {all - sep:F1} s; sung {100f * sung / frames:F0} %, "
                     + $"pitched {100f * voiced / frames:F0} %; {r.Rises.Length / 2} rise(s) {r.Falls.Length / 2} fall(s) "
                     + $"{r.Holds.Length / 2} long note(s) {r.VocalIns.Length} entr(ies) at bpm {bpm:F0}");

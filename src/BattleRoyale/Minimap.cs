@@ -40,14 +40,16 @@ public partial class Minimap : Control
         float s = Side, ppm = s / Span;
         var mid = new Vector2(s, s) * 0.5f;
         // turning: the whole picture drawn about the middle, rotated so your heading points up
-        float turn = BrPrefs.Current.MinimapTurns ? -Mathf.DegToRad(BrCompass.Bearing(view.Heading)) : 0f;
+        // (the zone's grid bearing, less the turn that already puts true north up: #1514)
+        float turn = BrPrefs.Current.MinimapTurns ? -Mathf.DegToRad(BrCompass.Bearing(view.Heading)) - BrMapDraw.NorthTurn : 0f;
         Vector2 ToScreen(Vector2 z) => BrMapDraw.Screen(z - view.Position) * ppm;
 
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.08f, 0.09f, 0.1f));
-        DrawSetTransform(mid, turn, Vector2.One);
+        var under = new Transform2D(turn, mid);
+        DrawSetTransformMatrix(under);
         float side = _br.State.Side;
         var nw = ToScreen(new Vector2(-side * 0.5f, side * 0.5f));
-        DrawTextureRect(tex, new Rect2(nw, new Vector2(side, side) * ppm), false);
+        BrMapDraw.Image(this, tex, nw, side * ppm, under);
         BrMapDraw.Overlays(this, _br, ToScreen, ppm, s * 2f);
         // the radar (#359): opponents close by, unless hidden under a net or in a bale
         foreach (var at in _br.Nearby())

@@ -76,6 +76,16 @@ public sealed class BathySource
             if (key.E < e) _grids.TryRemove(key, out _);
     }
 
+    /// <summary>
+    /// Drops the decoded grids outside the kilometre box: the cube water pass (#1577) walks a frame's leaf rows, which do
+    /// not follow LV95 columns. A dropped kilometre is read again if it is asked for.
+    /// </summary>
+    public void ReleaseOutside(int minE, int minN, int maxE, int maxN)
+    {
+        foreach (var key in _grids.Keys)
+            if (key.E < minE || key.E > maxE || key.N < minN || key.N > maxN) _grids.TryRemove(key, out _);
+    }
+
     /// <summary>The lake a survey kilometre belongs to (the STAC item's name, e.g. "lacleman"), or null.</summary>
     public string? LakeAt(TileId id) => _index.TryGetValue(id, out var e) ? e.Lake : null;
 

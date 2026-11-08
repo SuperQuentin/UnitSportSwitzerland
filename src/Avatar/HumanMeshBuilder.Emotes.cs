@@ -72,13 +72,13 @@ public static partial class HumanMeshBuilder
         switch (k & 3)
         {
             case 0: off = new Vector3(s * 0.30f, 0.38f, 0.05f); hint = HUp(s); break;
-            case 1: off = new Vector3(-s * 0.10f, 0.34f, 0.04f); hint = new Vector3(s, 0.2f, 0f); break;
+            case 1: off = new Vector3(-s * 0.02f, 0.34f, 0.04f); hint = new Vector3(s, 0.2f, 0f); break;   // M: hands on the crown's sides, not in it (#728)
             case 2:
                 if (s > 0f) { off = new Vector3(0.28f, 0.28f, 0.12f); hint = HUp(s); }
                 else { off = new Vector3(0.24f, -0.04f, 0.30f); hint = HLow(s); }
                 break;
             // A: straight arms meeting in a peak high over the head (M's hands rest on it, elbows out)
-            default: off = new Vector3(-s * 0.15f, 0.47f, 0.06f); hint = HUp(s); break;
+            default: off = new Vector3(-s * 0.12f, 0.47f, 0.06f); hint = HUp(s); break;   // A: the hands meet above the head, 0.12 m apart (#728)
         }
     }
 

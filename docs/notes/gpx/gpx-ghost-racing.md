@@ -1,7 +1,16 @@
 # GPX ghost racing
 
-- **GPX ghost racing** (`src/Gpx/`): `GpxParser` -> `GpxTrack` (LV95 via `SwissProjection`,
-  cumulative time + distance). `RacePlayback` owns ONE clock; each `Runner` samples its own
+- **GPX ghost racing** (`src/Gpx/`): `GpxParser` -> `GpxTrack` (cumulative time + distance).
+  **A track lies on its own plane** (#1514, G2 C5): `GpxTrack.Plane`, a `MapProjection` (oblique
+  stereographic, conformal, true north up) centred on the middle of the file's latitude/longitude
+  box; `TrackPoint.X`/`Y` are its metres, never LV95. Smoothing, distances and the matcher run on it;
+  `Distance` is plane length over the plane's scale (`TrackPlane.Length`, 15 ppm at 50 km). A world
+  position is `origin.ToWorld(track.At(x, y, ele))`; `<ele>` is taken as LHN95 (EGM96 and LHN95
+  differ by a metre or two in Switzerland). The LV95 tiles are reached through the plane:
+  `RoadNetwork.LoadAsync(source, track)` converts every road vertex into the track's plane
+  (`RoadNetwork.InPlane` for a network already loaded in LV95, the trainer's), `Corridor.HeightAt`
+  and `ExportPrefetcher` take a plane point's LV95 (`TrackPlane.Lv95Of`) for the tile key. The trainer's
+  course and junctions stay LV95 until G2 D (`TrainingSession.Build` converts). `RacePlayback` owns ONE clock; each `Runner` samples its own
   track at that shared time, so several GPX files start together and race as ghosts —
   alignment is by *elapsed* time, not wall-clock date, so runs recorded months apart still
   compare. `TrackRibbon` draws the focused runner's course draped on terrain,

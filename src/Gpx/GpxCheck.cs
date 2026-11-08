@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Gpx;
 
@@ -10,7 +11,7 @@ namespace UnitSport.Gpx;
 /// (5 m/s, no file), draws its <see cref="TrackRibbon"/> and runs a <see cref="Runner"/> along it.
 /// Checks that the ribbon's tread lies on the ground it was draped onto (its world vertices against
 /// <see cref="ChunkManager.TryGetHeight"/>), that <see cref="Runner.CourseAt"/> is the course's
-/// LV95 point and that the runner's feet are on it; then shifts the origin twice mid-run and checks
+/// place (its plane point, #1514) and that the runner's feet are on it; then shifts the origin twice mid-run and checks
 /// the same in each frame, plus that the runner never jumps in LV95 between two frames.
 /// RESULT ok or FAILED with the first faults. Runs on the generated world: <c>--systems terrain,generated</c>.
 /// </summary>
@@ -97,12 +98,13 @@ public partial class GpxCheck : Node
 
     private void Verify(string when)
     {
-        // the course: CourseAt is the sampled LV95 point, on the ground
-        var (e, n, _, _, _) = _track!.Sample(_raceTime);
+        // the course: CourseAt is the sampled plane point's place, on the ground
+        var (x, y, _, _, _) = _track!.Sample(_raceTime);
         var course = _runner!.CourseAt(_raceTime);
         var at = _origin.ToGlobal(course);
-        if (at.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, 0)) > 0.05)
-            Fault($"{when}: CourseAt is LV95 {at.Lv95.E:F2}/{at.Lv95.N:F2}, the track says {e:F2}/{n:F2}");
+        var want = _track.At(x, y, at.Alt);
+        if (at.HorizontalDistanceTo(want) > 0.05)
+            Fault($"{when}: CourseAt is {at.HorizontalDistanceTo(want):F2} m from the track's point {x:F2}/{y:F2} on its plane");
         // the avatar eases toward the course (a couple of metres behind it at this pace): a misplacement
         // across a shift would be kilometres, a wrong frame for the height tens of metres
         var foot = _runner.FootWorld;
@@ -131,13 +133,17 @@ public partial class GpxCheck : Node
         else if (off > tread / 50) Fault($"{when}: {off} of {tread} ribbon vertices off the ground (worst {worst:F2} m)");
     }
 
-    /// <summary>A straight course east from (e, n) at a steady pace, one fix a second, elevation left to the drape.</summary>
+    /// <summary>
+    /// A straight course true east from LV95 (e, n) at a steady pace, one fix a second, elevation left to the drape:
+    /// on a plane centred on its start (#1514), where a plane metre is a true one to 1e-8 over 1.5 km.
+    /// </summary>
     private static GpxTrack Course(double e, double n)
     {
         int count = (int)(CourseM / PaceMs) + 1;
+        var plane = MapProjection.At(GlobalPos.FromLv95(e, n, 0).Ecef);
         var points = new TrackPoint[count];
-        for (int i = 0; i < count; i++) points[i] = new TrackPoint(e + i * PaceMs, n, 0, i, i * PaceMs);
-        return new GpxTrack { Name = "gpxcheck", Points = points, HasTiming = true };
+        for (int i = 0; i < count; i++) points[i] = new TrackPoint(i * PaceMs, 0, 0, i, i * PaceMs);
+        return new GpxTrack { Name = "gpxcheck", Plane = plane, Points = points, HasTiming = true };
     }
 
     private void Fault(string what) => _faults.Add(what);
