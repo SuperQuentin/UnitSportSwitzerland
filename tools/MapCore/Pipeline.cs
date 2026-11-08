@@ -86,6 +86,8 @@ public sealed class SetupContext
     public required Stats Stats { get; init; }
     public required SetupState State { get; init; }
     public int Cores { get; init; } = Environment.ProcessorCount;
+    /// <summary>RGE ALTI for the cube heights in place of <see cref="Paths.RgeAltiDir"/> (a sample folder, MapSetup's <c>--rgealti</c>).</summary>
+    public string? RgeAlti { get; init; }
 }
 
 /// <summary>One stage of the pipeline, with its estimate and, unless skipped, how to run it.</summary>
@@ -101,6 +103,13 @@ public sealed class Step
     /// <summary>Why the step will not run (already done, layer off, GDAL missing); null when it runs.</summary>
     public string? Skip { get; init; }
     public Func<StepRun, Task<bool>>? Run { get; init; }
+
+    /// <summary>The same step, not run, for <paramref name="why"/>.</summary>
+    public Step Skipped(string why) => new()
+    {
+        Title = Title, Detail = Detail, DownloadBytes = DownloadBytes, DiskBytes = DiskBytes, DiskPath = DiskPath,
+        Seconds = Seconds, Skip = why, Run = Run,
+    };
 }
 
 /// <summary>
@@ -143,8 +152,20 @@ public static partial class Planner
             Run = r => args() is { } a ? r.Tool("TerrainPreprocessor", a, LineProgress.None) : Task.FromResult(false),
         });
         string? tlm = p.TlmGpkg;
-        Add("Cube heights", $"level-14 leaves of the selection into {region} (.cubl, one bundle per level-9 frame)", 10 + tiles * 0.2, null,
-            () => ["--cube", "--cube-out", region, "--in", p.AltiDir, "--cube-box", Box(), "--cube-cache", Path.Combine(p.Temp, "cube_cache")]);
+        // every height source here (#1578): swissALTI3D 0.5 m, then 2 m where 0.5 m has none (the stage takes the finest), and
+        // IGN RGE ALTI where swissALTI3D has nothing (France, its own dz)
+        string? alti2m = Directory.Exists(p.Alti2mDir) ? p.Alti2mDir : null;
+        string? rgeAlti = c.RgeAlti ?? (Directory.Exists(p.RgeAltiDir) ? p.RgeAltiDir : null);
+        string heightSources = "swissALTI3D 0.5 m" + (alti2m != null ? ", 2 m" : "") + (rgeAlti != null ? ", RGE ALTI" : "");
+        Add("Cube heights", $"level-14 leaves of the selection into {region} (.cubl, one bundle per level-9 frame) from {heightSources}", 10 + tiles * 0.2, null,
+            () =>
+            {
+                var a = new List<string> { "--cube", "--cube-out", region, "--in", p.AltiDir };
+                if (alti2m != null) a.AddRange(["--in", alti2m]);
+                if (rgeAlti != null) a.AddRange(["--rgealti", rgeAlti]);
+                a.AddRange(["--cube-box", Box(), "--cube-cache", Path.Combine(p.Temp, "cube_cache")]);
+                return a;
+            });
         Add("Cube roads", "raw roads, tunnel holes and car parks per leaf (swissTLM3D)", 10 + tiles * 0.06, tlm == null ? "no swissTLM3D" : null,
             () => ["--cube-roads", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
         // frames side by side (#1508): RoadGen is one thread a frame, a frame wants up to ~5 GB; as many as the free memory

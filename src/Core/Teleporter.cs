@@ -20,7 +20,7 @@ public sealed partial class Teleporter : Node
     /// <summary>Height above ground a walking body arrives at — just enough to land.</summary>
     private const float WalkingArrivalHeight = 2.0f;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
 
     /// <summary>The world's teleporter, for the VR hand map (#439).</summary>
@@ -33,9 +33,9 @@ public sealed partial class Teleporter : Node
         if (Instance == this) Instance = null;
     }
 
-    public Teleporter(ChunkManager chunks, WorldOrigin origin)
+    public Teleporter(IWorldGround ground, WorldOrigin origin)
     {
-        _chunks = chunks;
+        _ground = ground;
         _origin = origin;
         Name = "Teleporter";
     }
@@ -108,7 +108,7 @@ public sealed partial class Teleporter : Node
         // the old one, and the tiles there are built in precise coordinates from the start
         OriginShifter.Instance?.ShiftTo(lv95E, lv95N);
 
-        GetParent().AddChild(new SpawnPoint(target, _chunks, _origin, lv95E, lv95N, arrival));
+        GetParent().AddChild(new SpawnPoint(target, _ground, _origin, lv95E, lv95N, arrival));
 
         string where = label ?? $"{lv95E:F0}/{lv95N:F0}";
         GD.Print($"[teleport] {target.Name} -> {where}");

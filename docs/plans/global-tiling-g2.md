@@ -199,6 +199,27 @@ frame; the fill domain as discs; the blend against real leaves left to C1, which
   kilometres into saves or network keys (`BuildingKey`/`DoorKey`, `{E}_{N}.json`, `FarmField`'s RPC, the
   cow ids, `veh_slot_E_N`): those wait for D's store re-keying. The leaf instance and the earth streamer
   are the second half, after B.
+- **Second half (#1510), decided with the user (2026-11-08)**: three PRs, each working behind
+  `--frame earth`, with `flat` still the default:
+  1. **Bare ground.**
+     - The `--frame flat|earth` switch and its setting.
+     - A game-side leaf reader: the `.cubl` bundle index and a cache of decoded leaves (lifted from
+       `CubeHarness.Patches`).
+     - `GroundTile` from a `CubeKey`, and the earth `IWorldGround` on leaves: height and surface from
+       the leaf mesh, cover, water, tunnels and the tile events.
+     - `Globe` split down to the L14 leaves under one time budget.
+     - C2's `CollisionPatches` hooked up round bodies.
+     - Done when you can walk and drive on the bare real ground of the D: region.
+  2. **Furnishing.** Roads, buildings, trees, water and doors on leaves, from their sections.
+  3. **Generated leaves.** Generated and fixture leaves, and their blend against real ones (B5's
+     `correction` seam, as a convex blend).
+- **The frame until C3**: the world is the ENU frame on the tangent plane at spawn (`FrameAxes`).
+  `OriginShifter` re-anchors it every 3 km by translation only (a `ReanchorMode` with `Rotates`
+  false). Leaves are placed rigidly, as in `--cubeharness`. Gravity is the anchor's up, so it tilts
+  by 0.009° for each km from the anchor. C3 adds the rotation.
+- **Builders on leaves**: a leaf-frame stand-in for `ChunkGrid`, a 1 m grid in the leaf's anchor
+  frame with the records shifted 500 m (C2's `LeafRoadBlend` trick). Today's builders then run
+  unchanged; D may replace the grid.
 
 **C2 Collision patches** (one PR; **built**, PR #1556, `docs/notes/terrain/collision-patches.md`: patches as level-16
 cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook up; 42-83 ms and ~1.5 MB a patch, rays

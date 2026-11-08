@@ -192,9 +192,156 @@ public static class CubeCheck
         Report($"collision field at twice the spacing ({2 * spacing:F2} m) against the mesh", coll2, 0.02);
         Report("swissTLM3D feature points against the mesh below", featTlm, double.NaN);
         Report("BD TOPO feature points against the mesh below", featBd, double.NaN);
+        ok &= LeafFeatureCheck(o.Out!, manifest, tiles, water, o.Jobs);
         ok &= GroundCheck(o, src, manifest, tiles, water, sample);
         Console.WriteLine(ok ? "check: PASS" : "check: FAIL");
         return ok ? 0 : 1;
+    }
+
+    /// <summary>Points a leaf gives each feature row at most (drawn at random, the same each run): the rows read every leaf.</summary>
+    private const int FeaturePointsPerLeaf = 400;
+
+    /// <summary>
+    /// Features on the ground for <c>.cubl</c> leaves (#1579): every leaf's <see cref="LeafKind.Roads"/>,
+    /// <see cref="LeafKind.Buildings"/>, <see cref="LeafKind.Trees"/> and <see cref="LeafKind.Water"/> against the leaf
+    /// mesh below them (<see cref="CubeBuild.AboveMesh"/>: ellipsoidal height over the mesh's triangles, along the true
+    /// vertical, on whichever leaf the point falls). Roads: draped vertices, those that keep their surveyed height
+    /// (bridges, tunnels, ropeways, walls; <see cref="CubeCompare.Surveyed"/>) counted apart. Buildings: per building,
+    /// its base corners' highest point above the ground (seated on the lowest ground under it: about zero; a floating
+    /// building is far above). Trees: the trunk's foot. Water: the still level at each wet sample against the bed below it
+    /// (a level under the ground hides the water).
+    /// </summary>
+    private static bool LeafFeatureCheck(string dir, CubeManifest manifest, Dictionary<CubeKey, CubeTile> tiles, Dictionary<CubeKey, CubeWater> water, int jobs)
+    {
+        var files = Directory.GetFiles(dir, "*.cubl");
+        if (files.Length == 0) return true;
+        int leafLevel = manifest.LeafLevel;
+        double Above(CubeKey key, float x, float y, float z) =>
+            CubeBuild.AboveMesh(key.Anchor.ToEcef(x, y, z), leafLevel, k => tiles.GetValueOrDefault(k));
+        var draped = new List<double>();
+        var buildings = new List<double>();
+        var trees = new List<double>();
+        var levels = new List<double>();
+        var sunk = new List<double>();
+        long noRoad = 0, noBuilding = 0, noTree = 0;
+        long surveyedSegs = 0, drapedSegs = 0, leavesRoads = 0, leavesBuildings = 0, leavesTrees = 0, leavesWater = 0;
+        var gate = new object();
+        Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        {
+            foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+            {
+                var rng = new Random(key.GetHashCode() ^ 1579);
+                List<double> Pick(List<double> all)
+                {
+                    if (all.Count <= FeaturePointsPerLeaf) return all;
+                    var pick = new List<double>(FeaturePointsPerLeaf);
+                    for (int k = 0; k < FeaturePointsPerLeaf; k++) pick.Add(all[rng.Next(all.Count)]);
+                    return pick;
+                }
+                List<double>? r = null, b = null, bSunk = null, t = null;
+                long sv = 0, dr = 0, missR = 0, missB = 0, missT = 0;
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Roads) is { } rs)
+                {
+                    r = new();
+                    foreach (var s in LeafRoads.Decode(rs).Segments)
+                    {
+                        var above = new double[s.Points.Length / 3];
+                        for (int p = 0; p < above.Length; p++) above[p] = Above(key, s.Points[p * 3], s.Points[p * 3 + 1], s.Points[p * 3 + 2]);
+                        if (CubeCompare.Surveyed(s, above)) { sv++; continue; }
+                        dr++;
+                        foreach (double a in above) if (double.IsNaN(a)) missR++; else r.Add(a);
+                    }
+                }
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Buildings) is { } bs)
+                {
+                    b = new(); bSunk = new();
+                    foreach (var bd in LeafBuildings.Decode(bs).Buildings)
+                    {
+                        double low = double.PositiveInfinity, high = double.NegativeInfinity;
+                        var tri = bd.Triangles;
+                        for (int v = 0; v + 2 < tri.Length; v += 3)
+                        {
+                            if (tri[v + 1] > bd.MinY + 0.01f) continue;   // a base corner
+                            double a = Above(key, tri[v], tri[v + 1], tri[v + 2]);
+                            if (double.IsNaN(a)) { missB++; continue; }
+                            low = Math.Min(low, a);
+                            high = Math.Max(high, a);
+                        }
+                        if (double.IsInfinity(low)) continue;
+                        // seated at the median ground of its footprint less the foundation: some corner is under the ground,
+                        // and none deeper than the foundation where the ground is lowest
+                        b.Add(Math.Max(0, low));
+                        bSunk.Add(Math.Max(0, -FoundationM - high));
+                    }
+                }
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Trees) is { } ts)
+                {
+                    t = new();
+                    foreach (var tr in LeafTrees.Decode(ts))
+                    {
+                        double a = Above(key, tr.X, tr.Y, tr.Z);
+                        if (double.IsNaN(a)) missT++; else t.Add(a);
+                    }
+                }
+                List<double>? l = null;
+                if (water.TryGetValue(key, out var w) && tiles.TryGetValue(key, out var ht))
+                {
+                    l = new();
+                    for (int j = 0; j < w.Side; j++)
+                        for (int i = 0; i < w.Side; i++)
+                        {
+                            float level = w.Level[j * w.Side + i];
+                            if (float.IsNaN(level)) continue;
+                            float bed = ht.HeightAt(i * CubeWater.Stride, j * CubeWater.Stride);
+                            if (float.IsNaN(bed)) continue;
+                            l.Add(Math.Max(0, bed - level));   // how far the level lies under the ground
+                        }
+                }
+                lock (gate)
+                {
+                    if (r != null) { leavesRoads++; draped.AddRange(Pick(r)); }
+                    if (b != null) { leavesBuildings++; buildings.AddRange(b); sunk.AddRange(bSunk!); }
+                    if (t != null) { leavesTrees++; trees.AddRange(Pick(t)); }
+                    if (l != null) { leavesWater++; levels.AddRange(Pick(l)); }
+                    surveyedSegs += sv; drapedSegs += dr; noRoad += missR; noBuilding += missB; noTree += missT;
+                }
+            }
+        });
+        Console.WriteLine($"check: features on the leaves' ground: roads in {leavesRoads} leaves ({drapedSegs:N0} draped segments, {surveyedSegs:N0} keep their surveyed height), "
+            + $"buildings in {leavesBuildings} ({buildings.Count:N0}), trees in {leavesTrees}, water in {leavesWater}; at most {FeaturePointsPerLeaf} road, tree and water points a leaf; "
+            + $"over no leaf or no heights (past the data's edge): {noRoad:N0} road vertices, {noBuilding:N0} building corners, {noTree:N0} trees");
+        bool ok = true;
+        // the bars are gross (a feature a metre off its ground): the heights each stage gives a feature by design (a kerb, the
+        // network's smoothing, a seat on the median ground) are the comparer's to hold against the LV95 build (--cube-compare)
+        ok &= Gross("draped road vertices above the leaf mesh (the network's own heights: kerbs, smoothing)", draped, 1.0, RoadsOverPct);
+        ok &= Gross("buildings: the base's lowest corner above the leaf mesh (0: seated under the median ground)", buildings, 1.0, FloatingOverPct);
+        ok &= Gross($"buildings: the base's highest corner deeper than the foundation ({FoundationM} m) under the leaf mesh", sunk, 1.0, SunkOverPct);
+        ok &= Gross("trees: the foot above the leaf mesh", trees, 1.0, TreesOverPct);
+        ok &= Report("still water level under the leaf's bed (target 1 cm)", levels, 0.01);
+        return ok;
+    }
+
+    /// <summary>The foundation a building is sunk by (<see cref="BuildingExtractor"/>'s, BD TOPO's too).</summary>
+    private const double FoundationM = 0.8;
+
+    /// <summary>Gross bars (#1579): the share of a row's points more than a metre off, at most this many percent.</summary>
+    private const double RoadsOverPct = 1, FloatingOverPct = 0.1, SunkOverPct = 0.1, TreesOverPct = 0.01;
+
+    /// <summary>
+    /// Percentiles of signed values (a feature above or under the ground), how many lie over 0.1, 1 and 5 m off, and the
+    /// bar: at most <paramref name="maxPct"/> % over <paramref name="overM"/>.
+    /// </summary>
+    private static bool Gross(string what, List<double> v, double overM, double maxPct)
+    {
+        if (v.Count == 0) { Console.WriteLine($"  {what}: no samples"); return true; }
+        v.Sort();
+        double P(double q) => v[Math.Clamp((int)(v.Count * q), 0, v.Count - 1)] * 1000;
+        double Over(double m) => v.Count(x => Math.Abs(x) > m) * 100.0 / v.Count;
+        bool pass = Over(overM) <= maxPct;
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"  {what}: {v.Count} samples, min {v[0] * 1000:F0} p1 {P(0.01):F1} p50 {P(0.5):F1} p99 {P(0.99):F1} max {v[^1] * 1000:F0} mm; "
+            + $"over 0.1 m {Over(0.1):F2} %, 1 m {Over(1):F3} %, 5 m {Over(5):F4} % (bar: {maxPct} % over {overM} m){(pass ? "  ok" : "  OVER")}"));
+        return pass;
     }
 
     /// <summary>
