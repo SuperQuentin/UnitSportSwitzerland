@@ -224,9 +224,14 @@ cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook u
   Earth occlusion; `EntityInterest`'s cells by cube key.
 - Check: `--regioncheck`, `--interestcheck`, `tools/test.sh net` under `--frame earth`.
 
-**C5 What reads far** (one PR)
+**C5 What reads far** (one PR; **built**, PR #1581: `ui/map-projection`, `core/earth-ids`, `gpx/gpx-ghost-racing`)
 - GPX, maps (the Swiss map keeps LV95 as its own map projection; elsewhere a local conformal one,
   never the world frame), the trailer's places, loot, chests and the farm generated per leaf.
+- **As built**: maps and GPX on the oblique stereographic (EPSG 9809), centred on the view and on the track (the
+  GPX frame decided with the user, Nov 8 2026); `BuildingId` from the footprint centre (B4's D: region: 28,165 of
+  28,168 EGIDs the same from the LV95 and leaf builds), Earth spot ids and per-leaf lottery cells; the films'
+  check on leaves. **Decided with the user (Nov 8 2026)**: the generators land here and C1's PR 2 calls them when
+  it furnishes leaves (`core/earth-ids`, "What C1 PR 2 wires").
 
 ### D: the flip (one PR)
 
