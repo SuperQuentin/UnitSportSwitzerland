@@ -10,7 +10,8 @@ namespace UnitSport.Terrain.Earth;
 /// earth world on a region's real leaves. Waits for the ground under the start, then:
 /// <list type="number">
 /// <item>collision and the height query agree: over a 21 × 21 grid 20 m apart, a ray down onto the patches lands
-/// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> wherever both have the ground;</item>
+/// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> or on a feature over it (a roof, a bridge), under it at
+/// most 1 % of the rays (road holes), and at least half reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
 /// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km along a line (the camera with it, so the origin
 /// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer;</item>
@@ -36,7 +37,7 @@ public partial class EarthCheck : Node3D
     private RigidBody3D? _ball;
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
-    private int _phase, _shifts, _rays, _hits;
+    private int _phase, _shifts, _rays, _hits, _above, _below;
     private float _travelled;
     private Vector3 _dir;
     private double _worstRay;
@@ -118,13 +119,22 @@ public partial class EarthCheck : Node3D
                 var hit = space.IntersectRay(q);
                 if (hit.Count == 0) continue;
                 _hits++;
-                double off = Mathf.Abs(((Vector3)hit["position"]).Y - h);
-                _worstRay = System.Math.Max(_worstRay, off);
+                // over the ground: a roof, a bridge, a wall (the patches carry the leaf's features); under it: a hole
+                double off = ((Vector3)hit["position"]).Y - h;
+                if (off > 0.05) { _above++; continue; }
+                if (off < -0.05)
+                {
+                    _below++;
+                    if (_below <= 5) Log($"  under the query at {i * Step:F0},{j * Step:F0} m: {off:F2} m");
+                }
+                _worstRay = System.Math.Max(_worstRay, System.Math.Abs(off));
             }
-        Log($"rays: {_hits} of {_rays} hit, worst {_worstRay * 100:F1} cm from the query");
+        int ground = _hits - _above;
+        Log($"rays: {_hits} of {_rays} hit; {_above} on a feature over the ground, {_below} under the query; on the ground worst {_worstRay * 100:F1} cm");
         if (_rays < 100) _faults.Add($"only {_rays} grid points had ground and collision");
         if (_hits < _rays * 0.99) _faults.Add($"rays missed the patches: {_rays - _hits} of {_rays}");
-        if (_worstRay > 0.05) _faults.Add($"collision {_worstRay * 100:F1} cm off the height query (bar 5 cm)");
+        if (ground < _rays / 2) _faults.Add($"only {ground} of {_rays} rays reached the ground (the rest stopped on features)");
+        if (_below > _rays / 100) _faults.Add($"{_below} of {_rays} rays went under the height query by over 5 cm (bar 1 %)");
 
         _ball = new RigidBody3D { Name = "Ball" };
         _ball.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 0.5f } });
