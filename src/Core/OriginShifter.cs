@@ -67,6 +67,15 @@ public partial class OriginShifter : Node
     /// </summary>
     public static ReanchorMode SpaceMode { get; set; } = new(20_000, Vertical: false, Rotates: true);
 
+    /// <summary>
+    /// The earth world's ground re-anchor (#1510, G2 C1): past <see cref="ThresholdM"/> the anchor frame moves under
+    /// the camera, its axes kept (a translation only); C3 makes it turn.
+    /// </summary>
+    public static ReanchorMode GroundMode { get; set; } = new(3000, Vertical: false, Rotates: false);
+
+    /// <summary>The world is the earth world's anchor frame (<c>--frame earth</c>): re-anchored by <see cref="GroundMode"/>.</summary>
+    public bool Earth { get; init; }
+
     /// <summary>Whether the origin follows the camera in Space (above 60 km climbing, until below 50 km).</summary>
     public bool InSpace { get; private set; }
 
@@ -153,7 +162,8 @@ public partial class OriginShifter : Node
         // the Space regime (#1430 H3): entered climbing past 60 km, left below 50 km. Both handovers are
         // one rigid move of everything, the camera with it: the picture cannot change.
         double altitude = _origin.AltitudeOf(at);
-        bool space = Curvature.SpaceRegime(InSpace, altitude);
+        // the earth world has no Space regime of its own until C3 folds it into the turning ground frame
+        bool space = !Earth && Curvature.SpaceRegime(InSpace, altitude);
         if (space != InSpace)
         {
             InSpace = space;
@@ -186,9 +196,17 @@ public partial class OriginShifter : Node
             ShiftTo(pe, pn, exact: true, alt0: alt0, axes: Turned ? SpaceAnchor(at, alt0) : null);
             return;
         }
-        if (new Vector2(at.X, at.Z).Length() <= ThresholdM) return;
+        if (new Vector2(at.X, at.Z).Length() <= (Earth ? GroundMode.ThresholdM : ThresholdM)) return;
 
         var (e, n) = _origin.ToLv95(at);
+        if (Earth && _origin.Frame.Axes is { } axes)
+        {
+            // the anchor moves to the camera's plane point, to the step, its axes kept
+            double step = Math.Max(1, StepM);
+            double x = Math.Round(at.X / step) * step, z = Math.Round(at.Z / step) * step;
+            ShiftTo(e, n, exact: true, axes: GroundMode.Rotates ? FrameAxes.Enu(axes.ToEcef(x, 0, z)) : axes with { Origin = axes.ToEcef(x, 0, z) });
+            return;
+        }
         ShiftTo(e, n);
     }
 

@@ -43,6 +43,10 @@ public sealed class Paths
     public string LwbDir => Path.Combine(Data, "lwb");
     /// <summary>swissBATHY3D lake zips (#298, <c>swiss_data.py swissbathy3d</c>); without them every bed is synthetic.</summary>
     public string BathyDir => Path.Combine(Data, "bathy3d");
+    /// <summary>swissALTI3D at 2 m (the corridor, #1527): the cube heights read it where the 0.5 m tiles have none (#1578).</summary>
+    public string Alti2mDir => Path.Combine(Data, "swissalti3d_2m");
+    /// <summary>IGN RGE ALTI 1 m, a folder per département (<c>docs/notes/tools/france-nas-run.md</c>): the cube heights in France (#1578).</summary>
+    public string RgeAltiDir => Path.Combine(Data, "france", "rgealti");
 
     public string Chunks => ChunksOverride ?? DefaultChunks;
     /// <summary>

@@ -1337,6 +1337,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// ramps and streets metres under the raw terrain the safety nets compare against (#119), and a
     /// body standing on that is not under the world.
     /// </summary>
+    /// <summary>The ray <see cref="IWorldGround.FloorBelow"/> casts, any world's (the earth ground's too, #1510).</summary>
+    internal static bool RayFloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth) => FloorBelow(body, worldPos, self, depth);
+
     private static bool FloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth)
     {
         var q = PhysicsRayQueryParameters3D.Create(worldPos + Vector3.Up * 0.5f, worldPos - Vector3.Up * depth);
