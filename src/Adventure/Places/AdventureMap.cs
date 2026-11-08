@@ -218,6 +218,9 @@ public partial class AdventureMap : Screen
         _canvas.Redraw();
     }
 
+    /// <summary>Shows or hides this player's fog (a check's picture of the relief under it).</summary>
+    public void ShowFog(bool on) => _canvas.ShowFog(on);
+
     /// <summary>Redraws the map's layers (an overlay's data changed).</summary>
     public void Redraw() => _canvas.Redraw();
 
@@ -281,6 +284,12 @@ public partial class AdventureMap : Screen
             if (_country == null)
                 try { _country = CountryData.LoadEmbedded(); }
                 catch (Exception e) { GD.PushWarning($"[map] no canton borders: {e.Message}"); }
+        }
+
+        public void ShowFog(bool on)
+        {
+            _fog.Visible = on;
+            Redraw();
         }
 
         public void Redraw()
@@ -403,8 +412,11 @@ public partial class AdventureMap : Screen
         {
             if (Me?.Invoke() is not { } me) return;
             var at = View.ToScreen(me.At);
+            // off the view (or far round the Earth): no arrow; a polygon thousands of km off screen is drawn as a sliver across it
+            if (!float.IsFinite(at.X) || !float.IsFinite(at.Y) || at.X < -40 || at.Y < -40 || at.X > Size.X + 40 || at.Y > Size.Y + 40) return;
             // the heading from true north as one on the map (its convergence there), 0 up
             float yaw = View.ScreenYaw(at, me.Yaw);
+            if (!float.IsFinite(yaw)) yaw = me.Yaw;
             var fwd = new Vector2(Mathf.Sin(-yaw), -Mathf.Cos(yaw));
             var side = new Vector2(-fwd.Y, fwd.X);
             Vector2[] arrow = [at + fwd * 11, at - fwd * 7 + side * 7, at - fwd * 3, at - fwd * 7 - side * 7];
