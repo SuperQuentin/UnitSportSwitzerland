@@ -70,12 +70,16 @@ public static partial class Preprocessor
     // incremental — see TerrainBuild.
     private static async Task<int> RunCoreAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
     {
-        int rc = await RunPassAsync(args, writer, ct);
+        int rc;
+        try { rc = await RunPassAsync(args, writer, ct); }
+        finally { StageClock.End(); }
         // every pass that writes tiles ends with their content hashes in the manifest (#924), so a
         // fresh build carries them; incremental, so a pass that changed a few tiles reads only those
         if (rc != 0 || !HashesAfter(args, out string outDir, out string tempDir, out int ioJobs)) return rc;
         if (writer != null) writer.Stage = "hash";
-        return ManifestHashStage.Run(outDir, tempDir, ioJobs, ct);
+        StageClock.Mark("hash");
+        try { return ManifestHashStage.Run(outDir, tempDir, ioJobs, ct); }
+        finally { StageClock.End(); }
     }
 
     /// <summary>
@@ -141,7 +145,7 @@ public static partial class Preprocessor
         // the levels the game ships, on their own
         if (CubeSubset.Wants(args)) return CubeSubset.Run(args);
 
-        void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
+        void SetStage(string stage) { StageClock.Mark(stage); if (writer != null) writer.Stage = stage; }
 
         var inDirs = new List<string>();
         string? outDir = null, tempDir = null, pngDir = null;
@@ -409,6 +413,7 @@ public static partial class Preprocessor
                 Console.Error.WriteLine("--airports requires --out <chunk dir>, --tlm <swisstlm3d .gpkg> and --osm <switzerland .osm.pbf>");
                 return 2;
             }
+            SetStage("airports");
             return AirportStage.Run(outDir, tlmGpkg, airportsOsm, airportsFile, jobs);
         }
 
@@ -469,7 +474,9 @@ public static partial class Preprocessor
             }
             SetStage("water");
             int wrc = WaterStage.Run(outDir, WaterOptions(), ct);
-            return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+            if (wrc != 0 || tlmGpkg == null) return wrc;
+            SetStage("landings");
+            return LandingStage.Run(outDir, tlmGpkg);
         }
 
         // ---- direction signs (#1110): SITG's signs, gantries and overhead heads in canton Geneva, for RoadGen's rewrite ----
@@ -530,6 +537,7 @@ public static partial class Preprocessor
                 Console.Error.WriteLine("--landings requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
                 return 2;
             }
+            SetStage("landings");
             return LandingStage.Run(outDir, tlmGpkg, landingsFile);
         }
 
@@ -903,6 +911,7 @@ public static partial class Preprocessor
             // skip the sheets it cannot possibly contain, so rebuilding it per batch turned a
             // nationwide run from minutes into hours.
             BuildingExtractor? buildings = null;
+            SetStage("open-sources");
             if (buildingsGdb.Count > 0)
                 buildings = BuildingStage.OpenGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath);
             else if (buildingsGpkg != null)
@@ -931,17 +940,21 @@ public static partial class Preprocessor
                 for (int b = 0; b < batches; b++)
                 {
                     ct.ThrowIfCancellationRequested();
+                    StageClock.Sub("roads/load");
                     var batch = LoadBatch(b, out var slice);
                     Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+                    StageClock.Sub("roads/raw");
                     int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
                     if (rc != 0) return rc;
                     if (buildings != null)
                     {
+                        StageClock.Sub("roads/buildings");
                         rc = BuildingStage.Run(buildings, outDir!, batch);
                         if (rc != 0) return rc;
                     }
                 }
                 if (noNetwork) { Console.WriteLine("--no-network: the raw roads are written, the network stage is skipped"); return 0; }
+                StageClock.Sub("roads/network");
                 int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
                 if (nrc != 0) return nrc;
             }
@@ -956,15 +969,17 @@ public static partial class Preprocessor
             for (int b = 0; b < batches; b++)
             {
                 ct.ThrowIfCancellationRequested();
+                StageClock.Sub("cover/load");
                 var batch = LoadBatch(b, out var slice);
                 Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
                 if (doCover)
                 {
-                    int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
+                    int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!), jobs);
                     if (rc != 0) return rc;
                 }
                 if ((buildingsGpkg != null || buildingsGdb.Count > 0) && !roads)
                 {
+                    StageClock.Sub("cover/buildings");
                     int rc = buildings == null ? 1 : BuildingStage.Run(buildings, outDir!, batch);
                     if (rc != 0) return rc;
                 }
@@ -975,7 +990,9 @@ public static partial class Preprocessor
             {
                 SetStage("water");
                 int wrc = WaterStage.Run(outDir!, WaterOptions(), ct);
-                return wrc != 0 ? wrc : LandingStage.Run(outDir!, tlmGpkg!);
+                if (wrc != 0) return wrc;
+                SetStage("landings");
+                return LandingStage.Run(outDir!, tlmGpkg!);
             }
             return 0;
         }

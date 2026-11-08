@@ -16,7 +16,7 @@
   rings, a `CoverClass` name, a `source` note each) for ground TLM does not map, e.g. the parking
   rows at Riddes house 15, traced from the owner's aerial photo. `CoverExtractor.StampOverrides`
   stamps them after the six layers (so they win) and before the trees (so a row paved over an
-  orchard is not planted), never over Water (`MarkIn`). Picked up automatically when the
+  orchard is not planted), never over Water (`PaintRing`). Picked up automatically when the
   preprocessor runs from the repo root; `--cover-overrides <file>` points elsewhere. Parking
   classes get the bay pattern from `CoverFormat.PatternFor` like TLM car parks. Redo only the
   touched tile with `--cover-only --tiles-file` (see `commands`). The bay grid is world-aligned,

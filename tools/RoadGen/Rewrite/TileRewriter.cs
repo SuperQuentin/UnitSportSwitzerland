@@ -2,6 +2,7 @@ namespace UnitSport.Tools.RoadGen.Rewrite;
 
 using System.Globalization;
 using System.IO.Compression;
+using System.Runtime.ExceptionServices;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Import;
 using UnitSport.Tools.RoadGen.Geometry;
@@ -82,7 +83,9 @@ public static partial class TileRewriter
         /// everywhere), the region's <c>places.json</c> (the signs' destinations) and where to write every lit approach's facts
         /// (<c>gantry_facts.tsv</c>, for <c>--gantry-benchmark</c>); <see cref="Gantries"/> false: none at all.
         /// </summary>
-        string? SitgSigns = null, string? Places = null, string? GantryFacts = null, bool Gantries = true);
+        string? SitgSigns = null, string? Places = null, string? GantryFacts = null, bool Gantries = true,
+        /// <summary>Blocks run at once (#1539); 0 = as many as the cores and the memory allow (<see cref="BlockJobs"/>).</summary>
+        int Jobs = 0);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,
@@ -121,6 +124,14 @@ public static partial class TileRewriter
         public readonly CatenaryPlanner.Stats Catenary = new();
         public readonly PriorityPlanner.Stats Priority = new();
         public readonly BikePlanner.Stats Bikes = new();
+
+        /// <summary>Adds a later block's numbers (<see cref="StatsMerge"/>); the first of equal maxima keeps its tile, as when they ran one by one.</summary>
+        public void Absorb(NetworkStats other)
+        {
+            if (other.MaxBytes > MaxBytes) MaxBytesTile = other.MaxBytesTile;
+            if (other.Paint.MaxTriangles > Paint.MaxTriangles) Paint.MaxTile = other.Paint.MaxTile;
+            StatsMerge.Add(this, other);
+        }
 
         private string FormatParts(int tiles) => "    parts     " + string.Join(", ", Parts.Select(kv =>
             string.Create(CultureInfo.InvariantCulture,
@@ -258,37 +269,107 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// The stage over a tile loop (#1507): its blocks one after another, each finished tile handed to
-    /// <see cref="ITileLoop.Write"/>, on the loop's units.
+    /// The stage over a tile loop (#1507, #1539): its blocks, up to <see cref="BlockJobs"/> at once, each on a new thread of its own (so
+    /// no [ThreadStatic] of a block before it is there to read) with its own <see cref="Session"/>, each finished tile handed to
+    /// <see cref="ITileLoop.Write"/> by that thread, on the loop's units. The blocks' numbers are added up in block order, whichever
+    /// finishes first. What a block may touch: <c>docs/notes/tools/roadgen-parallel.md</c>.
     /// </summary>
     public static Stats Run(ITileLoop loop, Options options, Action<string> log)
     {
-        using var units = Plane.Use(loop.Inputs.Units);
-        var session = new Session(options, loop.Inputs);
+        var inputs = loop.Inputs;
+        using var units = Plane.Use(inputs.Units);
+        var stops = inputs.TramStops ?? (options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : []);
+        var total = new Session(options, inputs, stops);
         var blocks = loop.Blocks;
+        var finished = new Session?[blocks.Count];
+        int merged = 0;
+        ExceptionDispatchInfo? failure = null;
 
-        int blockIndex = 0;
-        foreach (var block in blocks)
+        void RunBlock(int index)
         {
-            blockIndex++;
-            foreach (var tile in session.Block(block, loop.Wanted))
+            using var scope = Plane.Use(inputs.Units);
+            var session = new Session(options, inputs, stops);
+            foreach (var tile in session.Block(blocks[index], loop.Wanted))
             {
                 options.Decorate?.Invoke(tile);
                 var bytes = Encode(tile);
                 Count(session.Net, tile, bytes);
-
-                if (options.DryRun) { session.TilesWritten++; continue; }
-
-                loop.Write(tile, bytes);
+                if (!options.DryRun) loop.Write(tile, bytes);
                 session.TilesWritten++;
             }
-
-            if (blockIndex % 10 == 0 || blockIndex == blocks.Count)
-                log($"  block {blockIndex}/{blocks.Count}  {session.TilesWritten} tiles, {session.JunctionCount} junctions");
+            lock (finished)
+            {
+                finished[index] = session;
+                while (merged < blocks.Count && finished[merged] is { } next)
+                {
+                    total.Absorb(next);
+                    finished[merged++] = null;
+                    if (merged % 10 == 0 || merged == blocks.Count)
+                        log($"  block {merged}/{blocks.Count}  {total.TilesWritten} tiles, {total.JunctionCount} junctions");
+                }
+            }
         }
 
+        int jobs = BlockJobs(loop, options);
+        if (options.Jobs > jobs && jobs == MemoryBound() && jobs < blocks.Count)
+            log($"  --jobs {options.Jobs} lowered to {jobs}: the memory allows {jobs} blocks at once");
+        if (jobs > 1) log($"  {blocks.Count} blocks, {jobs} at once");
+        using var slots = new SemaphoreSlim(jobs);
+        var threads = new List<Thread>(blocks.Count);
+        for (int i = 0; i < blocks.Count && Volatile.Read(ref failure) is null; i++)
+        {
+            slots.Wait();
+            int index = i;
+            var thread = new Thread(() =>
+            {
+                try { RunBlock(index); }
+                catch (Exception e) { Interlocked.CompareExchange(ref failure, ExceptionDispatchInfo.Capture(e), null); }
+                finally { slots.Release(); }
+            }, BlockStackBytes);
+            thread.Start();
+            threads.Add(thread);
+        }
+        foreach (var thread in threads) thread.Join();
+        failure?.Throw();
+
         loop.Finish();
-        return session.Finish(log);
+        return total.Finish(log);
+    }
+
+    /// <summary>A block's thread's stack: what the main thread the stage used to run on had at least.</summary>
+    private const int BlockStackBytes = 16 * 1024 * 1024;
+
+    /// <summary>The heap one block needs at most (Zurich's 12 blocks one by one under a 2 GB heap limit; roadgen-parallel): bounds the blocks at once by the memory there is.</summary>
+    private const long BlockMemoryBytes = 2L * 1024 * 1024 * 1024;
+
+    /// <summary>
+    /// How many blocks run at once: one where blocks read what others write (<see cref="ITileLoop.BlocksIndependent"/>), share a
+    /// cache (<see cref="Inputs.Facades"/>) or a diagnostic writes files or traces; else <see cref="Options.Jobs"/> or the cores, held to what the memory (the heap limit where one is set) allows.
+    /// </summary>
+    public static int BlockJobs(ITileLoop loop, Options options)
+    {
+        if (!loop.BlocksIndependent || loop.Inputs.Facades is not null || Diagnosing) return 1;
+        int jobs = options.Jobs > 0 ? options.Jobs : Environment.ProcessorCount;
+        return Math.Clamp(Math.Min(jobs, MemoryBound()), 1, Math.Max(1, loop.Blocks.Count));
+    }
+
+    /// <summary>How many blocks the heap allows at once (the heap limit where one is set), at least 1; an explicit <c>--jobs</c> is held to it too.</summary>
+    private static int MemoryBound()
+    {
+        long usable = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes - GC.GetTotalMemory(false);
+        return (int)Math.Clamp(usable / BlockMemoryBytes, 1, int.MaxValue);
+    }
+
+    /// <summary>Whether a diagnostic is on that appends to a file or prints a trace in the order of the work.</summary>
+    private static bool Diagnosing => DebugJunction is not null || JunctionFailures is not null || JunctionList is not null || JunctionSvg is not null
+        || StreetPlanner.Debug is not null || CornerPlanner.Debug is not null;
+
+    /// <summary>The process's <c>--jobs N</c>, 0 without one (the preprocessor's stage reads its own command line).</summary>
+    public static int JobsFromCommandLine()
+    {
+        var args = Environment.GetCommandLineArgs();
+        int at = Array.IndexOf(args, "--jobs");
+        return at >= 0 && at + 1 < args.Length && int.TryParse(args[at + 1], NumberStyles.None, CultureInfo.InvariantCulture, out int jobs) ? jobs : 0;
     }
 
     /// <summary>
@@ -342,8 +423,11 @@ public static partial class TileRewriter
     public static List<RoadTile> Rewrite(HashSet<TileId> block, Options options, Inputs inputs) =>
         new Session(options, inputs).Block(block, block);
 
-    /// <summary>One run of the stage: its inputs and the region's numbers, block after block.</summary>
-    public sealed class Session(Options options, Inputs inputs)
+    /// <summary>
+    /// The stage's numbers over its inputs: one block's in <see cref="Run(ITileLoop, Options, Action{string})"/>, added up with
+    /// <see cref="Absorb"/>. Nothing on it is shared between blocks.
+    /// </summary>
+    public sealed class Session(Options options, Inputs inputs, List<(string Name, Vec2 At)>? stops = null)
     {
         public readonly NetworkStats Net = new();
         public int TilesWritten { get; set; }
@@ -362,7 +446,7 @@ public static partial class TileRewriter
         // one block's, made in Block: a session-long cache held every building tile it ever saw (#1425)
         private Footprints buildings = null!;
         /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
-        private readonly List<(string Name, Vec2 At)> tramStops = inputs.TramStops ?? (options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : []);
+        private readonly List<(string Name, Vec2 At)> tramStops = stops ?? inputs.TramStops ?? (options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : []);
 
         /// <summary>
         /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;
@@ -977,7 +1061,31 @@ public static partial class TileRewriter
                 rails.ClearTrackZones(tile.Paint, id, tile.Signals.Select(s => (s.X, s.Z)).ToList());
                 built.Add(tile);
             }
+            buildings = null!;   // a finished session waits for the blocks before it with its numbers only
             return built;
+        }
+
+        /// <summary>Adds a later block's session: its numbers, as if it had run on this one.</summary>
+        internal void Absorb(Session other)
+        {
+            Net.Absorb(other.Net);
+            TilesWritten += other.TilesWritten;
+            tilesRead += other.tilesRead;
+            junctionCount += other.junctionCount;
+            written += other.written;
+            dropped += other.dropped;
+            guarded += other.guarded;
+            overlapBefore += other.overlapBefore;
+            overlapAfter += other.overlapAfter;
+            carriageway += other.carriageway;
+            audit.Absorb(other.audit);
+            shiftAudit.Absorb(other.shiftAudit);
+            StatsMerge.Add(embankments, other.embankments);
+            StatsMerge.Add(streetStats, other.streetStats);
+            StatsMerge.Add(cornerStats, other.cornerStats);
+            StatsMerge.Add(heightStats, other.heightStats);
+            StatsMerge.Add(railings, other.railings);
+            StatsMerge.Add(parkingStats, other.parkingStats);
         }
 
         public Stats Finish(Action<string> log)
@@ -1689,6 +1797,14 @@ public static partial class TileRewriter
                 }
                 if (displacement > _worstDisplacement) _worstDisplacement = displacement;
             }
+        }
+
+        /// <summary>A later block's samples, the first of equal worsts staying as when they ran one by one.</summary>
+        public void Absorb(HeightAuditor other)
+        {
+            _deltas.AddRange(other._deltas);
+            if (other._worstDelta > _worstDelta) (_worstDelta, _worstWhere) = (other._worstDelta, other._worstWhere);
+            _worstDisplacement = Math.Max(_worstDisplacement, other._worstDisplacement);
         }
 
         internal static double Sample(IGround terrain, Vec2 p) => SampleGround(terrain, p.X, p.Y);

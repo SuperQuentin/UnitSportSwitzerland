@@ -10,3 +10,6 @@ The nationwide features pass died with "Out of memory" in `TileRewriter.Run` aft
 
 Measured on 576 tiles around Zurich (24 x 24, 16 blocks, 2.2 M OSM rows): peak RSS 8.3 GB -> 5.3 GB, and 7.5 GB -> 3.7 GB
 at the end instead of growing; `.road` output byte-identical (576 files), time 880 s -> 861 s.
+
+Those numbers are one block at a time. Since #1539 blocks run at once, so the peak is per block in flight and the job count is bounded by
+the memory there is (`roadgen-parallel`, 2 GB a block); finished sessions wait for earlier blocks with their numbers only (`Footprints` dropped).

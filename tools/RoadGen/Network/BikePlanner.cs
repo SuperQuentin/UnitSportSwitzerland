@@ -114,7 +114,7 @@ public static class BikePlanner
         public int SignalLanesRed, SignalLanesDashed;
         /// <summary>Gaps cut in a grass verge where a left-turn pocket opens (#352), and openings too near a segment end to cut.</summary>
         public int VergeCuts, VergeCutsRejected;
-        public readonly List<string> VergeCutsAt = new();
+        [Rewrite.StatsSample(3)] public readonly List<string> VergeCutsAt = new();
 
         public string Format()
         {

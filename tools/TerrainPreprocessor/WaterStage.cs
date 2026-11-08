@@ -46,6 +46,9 @@ public static class WaterStage
     /// <summary>The LV95 bank rise: 7 height quanta (0.5 m), <see cref="WaterWindow.BankProbeM"/> round.</summary>
     private const int BankRiseQ = 7;
 
+    /// <summary>What one tile's bed computation holds at its peak: its 2201² window's arrays, about 250 MB, with room for the GC.</summary>
+    private const long BedWindowBytes = 500L << 20;
+
     private const int S = ChunkFormat.GridSize;   // 1001
     private const int Q = S - 1;                  // 1000 vertices a tile owns per side
 
@@ -134,6 +137,7 @@ public static class WaterStage
         // Holding every water tile's arrays at once is 7 MB a tile: 17,180 tiles nationwide, over
         // 120 GB (#747). So each tile is read and labelled once, its input cached to disk, and only
         // its label count and edge labels kept; phases B and C read the cache back as they go.
+        StageClock.Sub("water/A-label");
         string cacheDir = Path.Combine(o.TempDir ?? outDir.TrimEnd('/', '\\') + "_temp", "water_cache");
         Directory.CreateDirectory(cacheDir);
         var edges = new ConcurrentDictionary<TileId, Edges>();
@@ -150,6 +154,7 @@ public static class WaterStage
         if (edges.IsEmpty) return 0;
 
         // ---- B: water bodies across the region (union of per-tile flood fills along the seams) ---
+        StageClock.Sub("water/B-bodies");
         var ordered = edges.Keys.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
         var labelBase = new Dictionary<TileId, int>(ordered.Count);
         int total = 0;
@@ -186,21 +191,38 @@ public static class WaterStage
             foreach (var td in loaded)
             {
                 var id = td.Id;
+                Body? b = null;
+                int lastLabel = 0;
+                ushort lastLevel = 0;
+                long run = 0;
                 for (int r = 1; r < S; r++)          // a tile owns rows 1..1000 and columns 0..999
                     for (int c = 0; c < Q; c++)
                     {
                         int l = td.Labels[r * S + c];
                         if (l == 0) continue;
-                        int root = Find(parent, td.LabelBase + l);
-                        if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body();
-                        b.Count++;
-                        b.LevelCounts[td.Surface[r * S + c]] = b.LevelCounts.GetValueOrDefault(td.Surface[r * S + c]) + 1;
+                        // neighbours mostly share a body and a level: dictionaries only when one changes
+                        ushort q = td.Surface[r * S + c];
+                        if (l != lastLabel || q != lastLevel)
+                        {
+                            if (run > 0) b!.LevelCounts[lastLevel] = b.LevelCounts.GetValueOrDefault(lastLevel) + run;
+                            run = 0;
+                            lastLevel = q;
+                        }
+                        if (l != lastLabel)
+                        {
+                            int root = Find(parent, td.LabelBase + l);
+                            if (!bodies.TryGetValue(root, out b)) bodies[root] = b = new Body();
+                            lastLabel = l;
+                        }
+                        run++;
+                        b!.Count++;
                         int e = id.E * 1000 + c, nn = (id.N + 1) * 1000 - r;
                         if (e < b.MinE) b.MinE = e;
                         if (e > b.MaxE) b.MaxE = e;
                         if (nn < b.MinN) b.MinN = nn;
                         if (nn > b.MaxN) b.MaxN = nn;
                     }
+                if (run > 0) b!.LevelCounts[lastLevel] = b.LevelCounts.GetValueOrDefault(lastLevel) + run;
             }
         }
         foreach (var b in bodies.Values)
@@ -232,7 +254,10 @@ public static class WaterStage
         // ---- C: bed and level per tile ----------------------------------------------------------
         // Column by column, west to east: a tile's window reads the columns either side of it, so
         // only three columns of cached input are held at a time. Every read comes from the cache,
-        // never from the files this phase is rewriting.
+        // never from the files this phase is rewriting, so tiles run in any order: short columns
+        // go together until they fill the workers (a few tiles' input, nothing to bound), and a
+        // tile's window takes BedWindowBytes, so a heap limit lowers the workers.
+        StageClock.Sub("water/C-beds");
         var changed = new ConcurrentBag<ManifestTile>();
         var joinSteps = new ConcurrentBag<float>();
         var worstJoin = (Step: 0f, E: 0.0, N: 0.0);
@@ -244,12 +269,21 @@ public static class WaterStage
             ? held.GetOrAdd(id, k => new Lazy<TileData>(() => ReadCache(cacheDir, k, lb))).Value
             : null;
         var toWrite = o.Only == null ? ordered : ordered.Where(o.Only.Contains).ToList();
+        var memory = GC.GetGCMemoryInfo();
+        int bedJobs = (int)Math.Clamp((memory.TotalAvailableMemoryBytes - memory.HeapSizeBytes) / BedWindowBytes, 1, o.Jobs);
+        var groups = new List<List<TileId>>();
         foreach (var column in toWrite.GroupBy(t => t.E))
         {
+            if (groups.Count == 0 || groups[^1].Count >= 2 * bedJobs) groups.Add(new List<TileId>());
+            groups[^1].AddRange(column);
+        }
+        foreach (var group in groups)
+        {
+            int west = group[0].E;
             foreach (var key in held.Keys)
-                if (key.E < column.Key - 1) held.TryRemove(key, out _);
-            bathy?.ReleaseBefore(column.Key - 1);   // survey kilometres: the same three columns
-            Parallel.ForEach(column, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
+                if (key.E < west - 1) held.TryRemove(key, out _);
+            bathy?.ReleaseBefore(west - 1);   // survey kilometres: the same three columns
+            Parallel.ForEach(group, new ParallelOptions { MaxDegreeOfParallelism = bedJobs, CancellationToken = ct }, id =>
             {
                 var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
 
@@ -292,16 +326,19 @@ public static class WaterStage
         // A tile with no water of its own is not rewritten, so where a river crosses into one whose
         // cover does not know it (a foreign tile, #965: the Rhine at Basel) the wet tile's carved edge
         // would meet the old surface. The neighbour takes the shared vertices instead.
+        StageClock.Sub("water/stitch");
         foreach (var st in StitchDryNeighbours(outDir, changed.Select(t => t.Id).ToHashSet(), labelBase.Keys.ToHashSet(), region))
             changed.Add(st);
 
         // ---- D: manifest, horizon, seams ---------------------------------------------------------
+        StageClock.Sub("water/D-horizon");
         var byId = changed.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.Last());
         foreach (var t in manifest.Tiles)
             if (byId.TryGetValue(t.Id, out var c)) { t.Min = c.Min; t.Max = c.Max; }
         AtomicFile.Write(manifestPath, s => { using var w = new StreamWriter(s); w.Write(manifest.ToJson()); });
         if (HorizonStage.Run(outDir, o.Jobs, ct) is var hrc && hrc != 0) return hrc;
 
+        StageClock.Sub("water/seams");
         var seamTiles = new HashSet<TileId>();
         foreach (var id in byId.Keys)
             for (int dy = -1; dy <= 1; dy++)
@@ -309,6 +346,7 @@ public static class WaterStage
                     if (region.Contains(new TileId(id.E + dx, id.N + dy))) seamTiles.Add(new TileId(id.E + dx, id.N + dy));
         int seamErrors = TerrainBuild.VerifySeams(outDir, seamTiles, o.Jobs, ct);
 
+        StageClock.Sub("water/report");
         // ---- report ------------------------------------------------------------------------------
         Console.WriteLine($"Water bodies (area >= 0.02 km²), bed depth below the still level:");
         Console.WriteLine($"  {"body",-28} {"centre E,N",-16} {"km²",7} {"level",8} {"max",7} {"mean",6} {"survey",7} {"fill",6}  published max");

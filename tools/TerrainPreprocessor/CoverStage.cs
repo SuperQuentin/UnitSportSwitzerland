@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Network;
@@ -84,6 +85,7 @@ public static class CoverStage
     {
         var mask = new bool[CoverFormat.Size * CoverFormat.Size];
         double spacing = ChunkFormat.SpacingM;
+        var reach = new int[64];   // a disc's half width per row off its centre
 
         foreach (var seg in tiles.SelectMany(t => t.Segments))
         {
@@ -92,6 +94,13 @@ public static class CoverStage
             // a street's sidewalk and verge (#119) are part of the corridor
             double radius = TreeClearance(seg);
             int cells = (int)Math.Ceiling(radius / spacing);
+            if (cells >= reach.Length) reach = new int[cells + 1];
+            for (int dr = 0, dc = cells; dr <= cells; dr++)
+            {
+                while (dc * dc + dr * dr > cells * cells) dc--;
+                reach[dr] = dc;
+            }
+            int lastC = int.MinValue, lastR = int.MinValue;
 
             for (int i = 0; i < seg.PointCount - 1; i++)
             {
@@ -106,15 +115,18 @@ public static class CoverStage
                     double x = ax + (bx - ax) * t;
                     double z = az + (bz - az) * t;
                     int c0 = (int)(x / spacing), r0 = (int)(z / spacing);
+                    if (c0 == lastC && r0 == lastR) continue;   // the same disc again
+                    lastC = c0;
+                    lastR = r0;
 
                     for (int dr = -cells; dr <= cells; dr++)
-                        for (int dc = -cells; dc <= cells; dc++)
-                        {
-                            int c = c0 + dc, r = r0 + dr;
-                            if ((uint)c >= CoverFormat.Size || (uint)r >= CoverFormat.Size) continue;
-                            if (dc * dc + dr * dr > cells * cells) continue;
-                            mask[r * CoverFormat.Size + c] = true;
-                        }
+                    {
+                        int r = r0 + dr;
+                        if ((uint)r >= CoverFormat.Size) continue;
+                        int half = reach[Math.Abs(dr)];
+                        int from = Math.Max(c0 - half, 0), to = Math.Min(c0 + half, CoverFormat.Size - 1);
+                        if (from <= to) mask.AsSpan(r * CoverFormat.Size + from, to - from + 1).Fill(true);
+                    }
                 }
             }
         }
@@ -296,8 +308,11 @@ public static class CoverStage
         return !(neg && pos);
     }
 
+    /// <summary>Tiles per side of a block of the paving pass, each with its own <see cref="UrbanField"/> cache.</summary>
+    private const int PaveBlock = 4;
+
     public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null,
-        string? rawDir = null)
+        string? rawDir = null, int jobs = 0)
     {
         if (!File.Exists(tlmGpkg))
         {
@@ -306,15 +321,19 @@ public static class CoverStage
         }
 
         var sw = Stopwatch.StartNew();
-        var extractor = new CoverExtractor(tlmGpkg) { OverridesPath = overridesPath };
+        if (jobs <= 0) jobs = Environment.ProcessorCount;
+        var workers = new ParallelOptions { MaxDegreeOfParallelism = jobs };
+        var extractor = new CoverExtractor(tlmGpkg) { OverridesPath = overridesPath, Jobs = jobs };
 
         var heightOf = TerrainSampler.For(grids);
+        StageClock.Sub("cover/roadmask");
 
         // roads are written before this stage, so their corridors can be masked out: the raw
         // extractor lines (they run through the junction areas the network stage trims away) and
         // the network stage's tile, whose motorway carriageways #117 moved outward and widened.
         // The full build runs the network stage before this one.
-        foreach (var id in grids.Keys)
+        var masks = new ConcurrentBag<(TileId Id, bool[] Mask)>();
+        Parallel.ForEach(grids.Keys, workers, id =>
         {
             var tiles = new List<RoadTile>();
             foreach (var path in new[] { rawDir != null ? RawRoads.RoadPath(rawDir, id) : null,
@@ -324,60 +343,78 @@ public static class CoverStage
                 using var fs = File.OpenRead(path);
                 tiles.Add(RoadCodec.Decode(fs));
             }
-            if (tiles.Count > 0) extractor.RoadMask[id] = BuildRoadMask(tiles);
-        }
+            if (tiles.Count > 0) masks.Add((id, BuildRoadMask(tiles)));
+        });
+        foreach (var (id, mask) in masks) extractor.RoadMask[id] = mask;
 
+        StageClock.Sub("cover/extract");
         extractor.Extract(grids.Keys.ToList(), heightOf);
+        StageClock.Sub("cover/pave");
 
         // in town, the ground along the streets is paved (#119)
-        var field = new UrbanField(new Facades(outDir));
+        // The field is a pure function of the walls but caches as it goes, so it is one per block of
+        // tiles at a time, and dropped with the block: 2.6 MB a tile, 25 tiles at most.
         long paved = 0, roofs = 0, lotCells = 0;
-        int lotTrees = 0;
-        foreach (var (id, cells) in extractor.Cover)
+        var planters = new ConcurrentBag<(TileId Id, List<CoverExtractor.TreeInstance> Trees)>();
+        var blocks = extractor.Cover.Keys.GroupBy(id => (id.E / PaveBlock, id.N / PaveBlock));
+        Parallel.ForEach(blocks, workers, block =>
         {
-            string road = Path.Combine(outDir, RoadFormat.FileName(id));
-            if (!File.Exists(road)) continue;
-            RoadTile tile;
-            using (var fs = File.OpenRead(road)) tile = RoadCodec.Decode(fs);
-            grids.TryGetValue(id, out var grid);
-            var lattice = new Lv95CoverLattice(id, grid, field);
-            paved += PaveStreets(tile, cells, lattice);
-            if (grid != null) roofs += RoofTunnels(tile, cells, lattice);
-            var (lc, lt) = LaidOutLots(tile, cells, lattice, (cx, cy, cz) =>   // #499
+            var field = new UrbanField(new Facades(outDir));
+            foreach (var id in block)
             {
-                // a car park tree is a planted broadleaf, 4.5 to 7 m, hashed off its position so a
-                // rebuild grows the same one
-                float height = PlanterHeight(id.MinE + cx, id.MaxN - cz);
-                extractor.AddTree(id, new CoverExtractor.TreeInstance((float)cx, (float)cy, (float)cz, height, 3));
-            });
-            lotCells += lc;
-            lotTrees += lt;
-        }
-
-        var histogram = new SortedDictionary<CoverClass, long>();
-        long coveredCells = 0, totalCells = 0;
-        foreach (var (id, cells) in extractor.Cover)
-        {
-            using (var fs = File.Create(Path.Combine(outDir, CoverFormat.FileName(id))))
-                CoverFormat.Encode(id, cells, fs);
-
-            foreach (byte b in cells)
-            {
-                totalCells++;
-                if (b == 0) continue;
-                coveredCells++;
-                histogram[(CoverClass)b] = histogram.GetValueOrDefault((CoverClass)b) + 1;
+                var cells = extractor.Cover[id];
+                string road = Path.Combine(outDir, RoadFormat.FileName(id));
+                if (!File.Exists(road)) continue;
+                RoadTile tile;
+                using (var fs = File.OpenRead(road)) tile = RoadCodec.Decode(fs);
+                grids.TryGetValue(id, out var grid);
+                var lattice = new Lv95CoverLattice(id, grid, field);
+                Interlocked.Add(ref paved, PaveStreets(tile, cells, lattice));
+                if (grid != null) Interlocked.Add(ref roofs, RoofTunnels(tile, cells, lattice));
+                var lot = new List<CoverExtractor.TreeInstance>();
+                var (lc, _) = LaidOutLots(tile, cells, lattice, (cx, cy, cz) =>   // #499
+                {
+                    // a car park tree is a planted broadleaf, 4.5 to 7 m, hashed off its position so a
+                    // rebuild grows the same one
+                    float height = PlanterHeight(id.MinE + cx, id.MaxN - cz);
+                    lot.Add(new CoverExtractor.TreeInstance((float)cx, (float)cy, (float)cz, height, 3));
+                });
+                Interlocked.Add(ref lotCells, lc);
+                if (lot.Count > 0) planters.Add((id, lot));
             }
-        }
+        });
+        int lotTrees = 0;
+        foreach (var (id, lot) in planters)
+            foreach (var tree in lot)
+            {
+                extractor.AddTree(id, tree);
+                lotTrees++;
+            }
 
-        long treeTotal = 0;
-        foreach (var (id, list) in extractor.Trees)
+        StageClock.Sub("cover/write");
+        var histogram = new long[256];
+        Parallel.ForEach(extractor.Cover, workers, () => new long[256], (entry, _, counts) =>
         {
-            var trees = list.Select(t => new UnitSport.Terrain.Format.TreeInstance(t.X, t.Y, t.Z, t.Height, t.Kind)).ToList();
-            using var fs = File.Create(Path.Combine(outDir, TreeFormat.FileName(id)));
-            TreeFormat.Encode(id, trees, fs);
-            treeTotal += trees.Count;
-        }
+            using (var fs = File.Create(Path.Combine(outDir, CoverFormat.FileName(entry.Key))))
+                CoverFormat.Encode(entry.Key, entry.Value, fs);
+            foreach (byte b in entry.Value) counts[b]++;
+            return counts;
+        }, counts =>
+        {
+            lock (histogram)
+                for (int b = 0; b < counts.Length; b++) histogram[b] += counts[b];
+        });
+        long totalCells = histogram.Sum(), coveredCells = totalCells - histogram[0];
+
+        StageClock.Sub("cover/trees-write");
+        long treeTotal = 0;
+        Parallel.ForEach(extractor.Trees, workers, entry =>
+        {
+            var trees = entry.Value.Select(t => new UnitSport.Terrain.Format.TreeInstance(t.X, t.Y, t.Z, t.Height, t.Kind)).ToList();
+            using var fs = File.Create(Path.Combine(outDir, TreeFormat.FileName(entry.Key)));
+            TreeFormat.Encode(entry.Key, trees, fs);
+            Interlocked.Add(ref treeTotal, trees.Count);
+        });
 
         long ringTotal = extractor.LayerRings.Values.Sum();
         Console.WriteLine($"Cover: {ringTotal} rings from {extractor.LayerRings.Count} layers " +
@@ -387,7 +424,8 @@ public static class CoverStage
         Console.WriteLine($"  road corridors masked on {extractor.RoadMask.Count} tiles; {paved:N0} town vertices paved along the streets, {roofs:N0} over shallow tunnels concrete");
         Console.WriteLine($"  car parks: {lotCells:N0} vertices under a laid-out pad lost the bay pattern, {lotTrees} planters planted");
         Console.WriteLine($"  classified {100.0 * coveredCells / totalCells:F1}% of vertices; " +
-                          string.Join(", ", histogram.Select(kv => $"{kv.Key}={100.0 * kv.Value / totalCells:F1}%")));
+                          string.Join(", ", Enumerable.Range(1, 255).Where(b => histogram[b] > 0)
+                              .Select(b => $"{(CoverClass)b}={100.0 * histogram[b] / totalCells:F1}%")));
         Console.WriteLine($"  trees: {treeTotal:N0} across {extractor.Trees.Count} tiles " +
                           $"({extractor.ScatteredTrees:N0} scattered, {extractor.PlantedTrees:N0} planted, " +
                           $"{extractor.SurveyedTrees:N0} surveyed singles)");
