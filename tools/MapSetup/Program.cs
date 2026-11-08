@@ -120,11 +120,18 @@ if (Flag("--resume") || (scripted == false && state.Tiles.Count > 0))
 Layers layers = state.Layers;
 if (Arg("--layers") is { } layerText) layers = ParseLayers(layerText);
 
-List<Step> Plan() => Planner.Build(new SetupContext
+// --no-download: every step that would fetch something is skipped; the build steps take what is here (#1580)
+List<Step> Plan()
 {
-    Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-    Stats = stats, State = state,
-});
+    var steps = Planner.Build(new SetupContext
+    {
+        Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
+        Stats = stats, State = state,
+    });
+    return Flag("--no-download")
+        ? steps.Select(s => s.Skip == null && s.DownloadBytes > 0 ? s.Skipped("no downloads (--no-download)") : s).ToList()
+        : steps;
+}
 
 if (Arg("--snapshot") is { } snapshotPath)
 {
@@ -168,9 +175,20 @@ while (true)
             async _ => await stats.ProbeDownloadAsync(country, TimeSpan.FromSeconds(6)));
     var steps = Plan();
     ShowPlan(steps);
+    long toFetch = steps.Where(s => s.Skip == null).Sum(s => s.DownloadBytes);
     if (Flag("--plan-only")) return 0;
 
-    if (Flag("--yes")) break;
+    // a scripted run never starts a download unasked (#1580): a box or a canton can be many GB
+    if (Flag("--yes"))
+    {
+        if (toFetch > 0 && !Flag("--download"))
+        {
+            AnsiConsole.MarkupLine($"[red]Nothing started: this run would download {Bytes(toFetch)}.[/] "
+                + "Add --download to fetch it, or --no-download to build only what is already here.");
+            return 1;
+        }
+        break;
+    }
     var choice = AnsiConsole.Prompt(new SelectionPrompt<string>()
         .Title("Go?")
         .AddChoices("Start", "Back to the map", "Storage location...", "Quit"));
@@ -345,6 +363,11 @@ void ShowPlan(List<Step> steps)
     string rate = stats.DownloadProbedAt != null ? $"measured {stats.DownloadBytesPerSec / 1e6:N0} MB/s" : "assumed 40 MB/s (not measured)";
     AnsiConsole.MarkupLine($"[grey]Download at {rate}; processing on {Environment.ProcessorCount} cores"
                            + (stats.TerrainCoreSecPerTile != new Stats().TerrainCoreSecPerTile ? ", rates calibrated by earlier runs" : "") + ".[/]");
+    var fetching = running.Where(s => s.DownloadBytes > 0).ToList();
+    if (fetching.Count > 0)
+        AnsiConsole.MarkupLine($"[yellow]Downloads {Bytes(fetching.Sum(s => s.DownloadBytes))}: "
+            + Markup.Escape(string.Join(", ", fetching.Select(s => $"{s.Title} ({s.Detail}) {Bytes(s.DownloadBytes)}")))
+            + ".[/] [grey]With --yes they start only given --download; --no-download builds what is here.[/]");
 
     // not enough room is the one failure worth catching before anything starts
     foreach (var group in running.Where(s => s.DiskBytes > 0 && s.DiskPath != null).GroupBy(s => Path.GetPathRoot(Path.GetFullPath(s.DiskPath!))))
@@ -573,8 +596,8 @@ static void PrintHelp()
           --tiles-file FILE            one "E-N" per line
           --resume                     the last selection and layers
         Layers:
-          --layers terrain,roads,buildings,cadastre,routes,places,fields,osm|all
-                                       (osm is optional and never implied by all)
+          --layers terrain,roads,buildings,cadastre,routes,places,fields,osm,pistes,cube|all
+                                       (osm, pistes and cube are optional and never implied by all)
         Folders:
           --data DIR                   source data instead of ressources/data (dataset subfolders inside)
           --chunks DIR                 built tiles instead of terrain_chunks (state goes to DIR_temp)
@@ -586,8 +609,11 @@ static void PrintHelp()
           --pick-tiles FILE            the map as a selector: writes the built tiles picked, one "E-N"
                                        per line, and builds nothing (tools/rebuild-map.sh uses it)
         Run:
-          --plan-only                  show the estimate and stop
-          --yes                        do not ask before starting
+          --plan-only                  show the estimate (and what it would download) and stop
+          --yes                        do not ask before starting; refuses a run that downloads
+                                       anything unless --download is given too
+          --download                   with --yes: fetch what the plan lists
+          --no-download                skip every download; build only what is already here
         Maintenance:
           --bake                       rebuild tools/MapSetup/switzerland.bin from swisstopo (slow, once)
         """);
