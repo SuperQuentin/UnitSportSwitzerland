@@ -291,7 +291,13 @@ netsmoke() { # headless dedicated server on the flat fixture world + a headless 
 }
 
 # the whole check in the log's name: one flag runs in several worlds
-log_of() { local name=${1//[^A-Za-z0-9]/_}; name=${name#"${name%%[!_]*}"}; echo "$OUT/$name.log"; }
+# A long command line is cut to 120 characters plus a hash of the whole: Windows' 260-character paths
+# refused the playtest smoke row's 330-character log name, and the check failed in 0 s with no log
+log_of() {
+  local name=${1//[^A-Za-z0-9]/_}; name=${name#"${name%%[!_]*}"}
+  [ ${#name} -gt 120 ] && name="${name:0:120}_$(printf %s "$1" | cksum | cut -d' ' -f1)"
+  echo "$OUT/$name.log"
+}
 
 run_one() { # tier check log: runs one check, its exit code
   local tier=$1 check=$2 log=$3 eng=
