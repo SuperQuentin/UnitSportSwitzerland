@@ -1312,7 +1312,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Adventure.Places.PoiMarkers(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
                 p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null));
             Adventure.Places.AtlasPage.Register();
-            Adventure.Places.AdventureMap.Me = () => LocalPlayer is { } me ? (me.Global, me.GlobalRotation.Y) : null;
+            Adventure.Places.AdventureMap.Me = () => LocalPlayer is { } me
+                ? (me.Global, _worldOrigin is { } o ? o.TrueYaw(me.GlobalPosition, me.GlobalRotation.Y) : me.GlobalRotation.Y) : null;
             Adventure.Places.AdventureMap.PlaceSearch = () => _places?.SetOpen(true);
             if (Adventure.Places.PlacesCheck.Requested) AddChild(new Adventure.Places.PlacesCheck(items, () => LocalPlayer));
             if (Adventure.Places.PlacesNetProbe.Role != null) AddChild(new Adventure.Places.PlacesNetProbe(items));

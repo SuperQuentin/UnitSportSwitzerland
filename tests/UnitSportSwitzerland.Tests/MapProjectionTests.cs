@@ -68,6 +68,36 @@ public class MapProjectionTests
         Assert.True(Math.Abs(cos) < 1e-6, $"angle off a right one by {Math.Asin(cos) * 180 / Math.PI * 3600:F2}″");
     }
 
+    /// <summary>
+    /// The adventure map places LV95 data (relief, fog, borders, POIs) through the projection's first-order fit to
+    /// LV95 at the view's centre (<c>EarthMapView</c>). Both are conformal, so the fit is off at second order only: at
+    /// the widest zoom (2 px/km, a 900 × 700 px view: ±225 × ±175 km) under half a pixel (250 m).
+    /// </summary>
+    [Theory]
+    [InlineData(2_500_000, 1_118_000)] // Geneva
+    [InlineData(2_600_000, 1_200_000)] // Bern
+    [InlineData(2_818_000, 1_186_000)] // Scuol
+    public void The_lv95_fit_at_the_centre_is_sub_pixel_at_the_widest_zoom(double cE, double cN)
+    {
+        var (lat0, lon0) = SwissGeodesy.ToLatLon(cE, cN);
+        var p = new MapProjection(lat0, lon0);
+        (double X, double Y) Map(double e, double n) { var (la, lo) = SwissGeodesy.ToLatLon(e, n); return p.Forward(la, lo); }
+        const double d = 500;
+        var (xe1, ye1) = Map(cE + d, cN); var (xe0, ye0) = Map(cE - d, cN);
+        var (xn1, yn1) = Map(cE, cN + d); var (xn0, yn0) = Map(cE, cN - d);
+        double a11 = (xe1 - xe0) / (2 * d), a21 = (ye1 - ye0) / (2 * d), a12 = (xn1 - xn0) / (2 * d), a22 = (yn1 - yn0) / (2 * d);
+        var (x0, y0) = Map(cE, cN);
+        double worst = 0;
+        for (double de = -225_000; de <= 225_000; de += 25_000)
+            for (double dn = -175_000; dn <= 175_000; dn += 25_000)
+            {
+                var (x, y) = Map(cE + de, cN + dn);
+                double fx = x0 + a11 * de + a12 * dn, fy = y0 + a21 * de + a22 * dn;
+                worst = Math.Max(worst, Math.Sqrt((x - fx) * (x - fx) + (y - fy) * (y - fy)));
+            }
+        Assert.True(worst < 250, $"fit off by {worst:F1} m");
+    }
+
     [Fact]
     public void North_is_up_at_the_centre_and_turns_away_from_it()
     {
