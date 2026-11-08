@@ -39,7 +39,10 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
 
 - `--layers ...,cube` (off unless picked) adds, after the LV95 steps (which they read), the cube steps over the
   selection's LV95 box into `<chunks>_cube`, in order:
-  1. `--cube` (heights)
+  1. `--cube` (heights): every source present (#1578): swissALTI3D 0.5 m (`swiss_chunks`), 2 m where 0.5 m has none
+     (`<data>/swissalti3d_2m`, the corridor), IGN RGE ALTI where swissALTI3D has nothing (`<data>/france/rgealti`, or
+     MapSetup's `--rgealti DIR` for a sample). The plan's detail names them. Before #1578 only 0.5 m was read, so B4 ran the
+     corridor and France by hand.
   2. `--cube-roads`
   2b. `--cube-buildings` (buildings layer; the LV95 pass's sources: the GeoPackage or the selection's newest sheet zips, the GWR)
   3. `--cube-network`
