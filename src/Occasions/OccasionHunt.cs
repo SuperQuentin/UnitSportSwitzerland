@@ -119,7 +119,7 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     private void Finish(bool ok, string? why)
     {
         _probe = false;
-        GD.Print(ok ? "[huntcheck] all passed" : $"[huntcheck] FAILED{(why == null ? "" : ": " + why)}");
+        GD.Print(ok ? "[huntcheck] RESULT: ok" : $"[huntcheck] RESULT: FAILED{(why == null ? "" : ": " + why)}");   // the runner reads the RESULT line: without it a crash at exit (139) failed a passing run
         GetTree().Quit(ok ? 0 : 1);
     }
 

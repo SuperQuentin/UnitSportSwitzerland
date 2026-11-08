@@ -105,9 +105,27 @@ public partial class HornNetProbe : ChatProbe
         while (GameClock.Now < end)
         {
             Say(say);
-            if (await Heard(role, expected, 3)) return true;
+            if (await Heard(role, expected, 3))
+            {
+                Echo(say);
+                return true;
+            }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The other peer may not have heard us yet, though we heard it: B answered A's "ready" once and moved on,
+    /// A never got that one line and waited out its 120 s. Said three more times, 3 s apart, alongside.
+    /// </summary>
+    private async void Echo(string say)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            await Seconds(3.0);
+            if (!IsInsideTree()) return;
+            Say(say);
+        }
     }
 
     private async Task Frames(Func<bool> done, int max)
