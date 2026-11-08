@@ -20,24 +20,38 @@
   - Without the model (phones, a host that never fetched it, a model that throws): a centre-panned
     150 Hz..4 kHz mask from left/right likeness. Worse (octave errors 10 % vs 0.7 % of frames), never nothing.
 - **Analysis** (`VocalAnalyzer`, pure C#, linked into the tests): 10 ms frames of the 22 kHz vocal: RMS,
-  300 Hz..4 kHz flux (syllables), F1 (300..900 Hz) vs F2 (1.5..3 kHz) energy (the vowel), YIN pitch
-  (70..1000 Hz, difference by FFT correlation); boiled down to 20 Hz. Gate 8 % of the track's loud vocal.
+  300 Hz..4 kHz log flux (syllables), F1 (300..900 Hz) vs F2 (1.5..3 kHz) energy (the vowel), YIN pitch
+  (70..1000 Hz, difference by FFT correlation), the **first formant** (the low band's envelope peak,
+  250..1100 Hz box-smoothed over 200 Hz so harmonics do not pass for formants, lowest peak above 55 %
+  of the band's maximum; 300 Hz closed .. 800 Hz open, median-3 smoothed, the mouth's aperture) and the
+  **3..8 kHz burst** (a consonant's bite); boiled down to 20 Hz. Gate 5 % of the track's loud vocal.
   Melody: phrases (gaps <= 0.25 s bridged), rises/falls >= 4 semitones over 0.5..8 s, long notes within
   1 semitone for >= 1.2 s, vocal entries after two bars (at the CD's bpm) without voice.
-- **`CdAnalysis` v3**: `voc` base64 20 Hz x 4 bytes (level, syllable, vowel 0 oo..255 ee, MIDI pitch,
-  0 unvoiced), `vs` the source (`Kim_Vocal_2` or `centre`), `rises`/`falls`/`holds` (start/end pairs),
-  `vin`, `st` stems written. A CD analysed with the fallback is stale once the model is here: backfill
-  redoes it. Runtime: `CdAnalysisRuntime.SampleVocal`, `MelodyAt` (rise ramps through a run and lets go
-  over 1 s), `MelodyMoment.Of` (`ConcertMusic.cs`).
+- **`CdAnalysis` v4**: `voc` base64 20 Hz x 6 bytes (level, syllable, vowel 0 oo..255 ee, MIDI pitch,
+  0 unvoiced, aperture 0..255, consonant 0..255), `vs` the source (`Kim_Vocal_2` or `centre`),
+  `rises`/`falls`/`holds` (start/end pairs), `vin`, `st` stems written. The runtime reads the stride
+  from the version, so a v3 block (4 bytes: no aperture, no consonant) still plays while its CD waits
+  for the backfill; a CD analysed with the fallback is stale once the model is here. Runtime:
+  `CdAnalysisRuntime.SampleVocal` (4-lane and 6-lane forms), `MelodyAt` (rise ramps through a run and
+  lets go over 1 s), `MelodyMoment.Of` (`ConcertMusic.cs`).
 - **`/cd`** (`CdCommand`, `CdLibrary.Command`): `/cd analysis` counts the CDs per analyser version and
   vocal source, with the queue; `/cd reanalyse [stale | all | <id>]` queues them on the backfill (admin
   online; `all`/an id force a current CD, e.g. after the model arrived). Online it acts on the server's
   library; a client's personal CDs are backfilled at its start.
-- **Lip sync**: `DanceFace.Sing(ref face, voice, syllable, vowel, amount)` (jaw on the voice and its
-  syllables, Wide from the vowel). The concert's lead artist (`ConcertPerformers`, artist 0, centre
-  stage) sings at the **listener's** song time (`ConcertRig.HeardSongTime`: the nearest hang's delay),
-  through a `FaceAnimator` at `LipEase` 30/s. Dancers (`RadioGroove.Voice/Syllable/Vowel` ->
-  `DanceHearing`): a singer personality mouths every line, others the chorus and a mumble.
+- **Lip sync**: `DanceFace.Sing(ref face, voice, syllable, vowel, amount, aperture, consonant)` (jaw on
+  the voice and its syllables, Wide from the vowel). With a v4 block the **aperture** owns the jaw: it
+  stays open through a held note (the level's guess used to fall back between the syllables), an "ah"
+  is wider than an "ee"/"oo", and a **consonant** burst presses the lips together for an instant.
+  Without it (v3) the level is expanded (`level^0.6`, a verse at a third of the chorus opens the lips),
+  a held note keeps 55 % of the full jaw, and the vowel sets the aperture. The face reads
+  `CdAnalysisRuntime.LipLead` 20 ms ahead so the analysis frames and the ease do not leave the mouth
+  behind the voice; the shader opens a small jaw non-linearly (`jaw^0.75`) so even a held note is a
+  real opening, not a line. Singing is effort: the brows lift and the eyes narrow a little with the
+  voice. The concert's lead artist (`ConcertPerformers`, artist 0, centre stage)
+  sings at the **listener's** song time (`ConcertRig.HeardSongTime`: the nearest hang's delay),
+  through a `FaceAnimator` at `LipEase` 50/s. Dancers (`RadioGroove.Voice/Syllable/Vowel/Aperture/Consonant` ->
+  `DanceHearing`): a singer personality mouths every line, others the chorus at full voice and a
+  half-size mumble the rest. `--vocalstem` writes the lanes to CSV (now t,level,syllable,vowel,pitch,aperture,consonant).
 - **Lights** (`LightDesk`): a rise lifts the washes and beams up to 25 deg and warms them (fall: down,
   cool); a long note or a vocal entry (fading over 4 s) puts the front spots on the singer
   (`OnSinger`). A build or the 2.5 s after a drop own the rig: the melody waits.

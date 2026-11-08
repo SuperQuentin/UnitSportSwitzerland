@@ -1,6 +1,6 @@
 # Dance moves: joint-level spec for the procedural avatar, per style and move
 
-**Conventions.** Author space (the space `HumanMeshBuilder.Rig` is written in): origin at the feet, metres, `+Y` up, `+Z` forward, `+X` right; `MeshScratch.Build` turns the mesh half a turn afterwards, so the figure's own right hand is **rig-L (`-X`)** and its left hand is **rig-R (`+X`)**; `s = -1` for L joints, `+1` for R joints. Mirroring a move is invisible to players, so asymmetric moves simply say rig-L / rig-R. Joints are the `Rig` fields (`HeadTop, HeadBase, Neck, Chest, Waist, Hip, Shoulder/Elbow/Wrist L/R, Hip/Knee/Ankle/Toe L/R, TorsoLean`). Standing spine offsets above `Hip` (from `GaitRig`): Waist `+0.155`, Chest `+0.410`, Shoulders `+0.510` at `x = ±0.18`, Neck `+0.590`, HeadBase `Neck+0.065`, HeadTop `Neck+0.255`; leg roots `x = ±0.09`; standing `Hip.Y = 0.935`; ankle height `0.085`. Bones (`HumanMeshBuilder` constants): `UpperArmLength 0.270`, `ForearmLength 0.245` (full arm **0.515 m**, not 0.57: clamp every wrist target to **0.50 m** from its shoulder), `ThighLength 0.435`, `ShinLength 0.415` (leg **0.85 m**: clamp hip-to-ankle to 0.845). Inputs per frame: `Style`, `Move` (index into the table below), `BeatPhase b` (0..1 inside the beat), `BarPhase r` (0..1 inside a 4-beat bar), `Weight` (0..1 ease in/out of the dance), `moving m` (0 standing .. 1 walking). Derived: **count clock `c = 4r`** (0..4; beat number `k = floor(c)`, so beat 1 is `k = 0`, and `b = frac(c)`). The result is a pure function of these inputs, so every peer computes the same pose. What the mesh can and cannot show: head **yaw is invisible** (the head is a box built by `UprightBasis` from the head axis; only head pitch/roll, i.e. the `HeadBase -> HeadTop` tilt, show), hand orientation (palm up/down) is invisible (the hand is an axis-aligned box), there is no body yaw (the figure cannot turn; "turns" are a chest twist `psi` of at most +/-0.9 rad, visible through the shoulder line and arms), and the pelvis/torso tubes are round, so pelvis yaw is invisible (pelvis roll/tilt shows through the two leg roots). Background: `avatars.md`, `avatar-meshes-authored-facing-z.md`, `item-arm-poses.md`.
+**Conventions.** Author space (the space `HumanMeshBuilder.Rig` is written in): origin at the feet, metres, `+Y` up, `+Z` forward, `+X` right; `MeshScratch.Build` turns the mesh half a turn afterwards, so the figure's own right hand is **rig-L (`-X`)** and its left hand is **rig-R (`+X`)**; `s = -1` for L joints, `+1` for R joints. Mirroring a move is invisible to players, so asymmetric moves simply say rig-L / rig-R. Joints are the `Rig` fields (`HeadTop, HeadBase, Neck, Chest, Waist, Hip, Shoulder/Elbow/Wrist L/R, Hip/Knee/Ankle/Toe L/R, TorsoLean`). Standing spine offsets above `Hip` (from `GaitRig`): Waist `+0.155`, Chest `+0.410`, Shoulders `+0.510` at `x = ±0.18`, Neck `+0.590`, HeadBase `Neck+0.065`, HeadTop `Neck+0.255`; leg roots `x = ±0.09`; standing `Hip.Y = 0.935`; ankle height `0.085`. Bones (`HumanMeshBuilder` constants): `UpperArmLength 0.270`, `ForearmLength 0.245` (full arm **0.515 m**, not 0.57: clamp every wrist target to **0.50 m** from its shoulder), `ThighLength 0.435`, `ShinLength 0.415` (leg **0.85 m**: clamp hip-to-ankle to 0.845). Inputs per frame: `Style`, `Move` (index into the table below), `BeatPhase b` (0..1 inside the beat), `BarPhase r` (0..1 inside a 4-beat bar), `Weight` (0..1 ease in/out of the dance), `moving m` (0 standing .. 1 walking), and the music's `Level`/`Kick`/`Section`/`Bpm`/`Rise`/`Hold` (see "Music on the body"). Derived: **count clock `c = 4r`** (0..4; beat number `k = floor(c)`, so beat 1 is `k = 0`, and `b = frac(c)`). The result is a pure function of these inputs, so every peer computes the same pose. What the mesh can and cannot show: head **yaw is invisible** (the head is a box built by `UprightBasis` from the head axis; only head pitch/roll, i.e. the `HeadBase -> HeadTop` tilt, show), hand orientation (palm up/down) is invisible (the hand is an axis-aligned box), there is no body yaw (the figure cannot turn; "turns" are a chest twist `psi` of at most +/-0.9 rad, visible through the shoulder line and arms), and the pelvis/torso tubes are round, so pelvis yaw is invisible (pelvis roll/tilt shows through the two leg roots). Background: `avatars.md`, `avatar-meshes-authored-facing-z.md`, `item-arm-poses.md`.
 
 ## Move table
 
@@ -111,10 +111,26 @@ the highest range first.
 - **Flow**: `DanceParams.PrevMove` and `MoveBlend` (beats into the slot / 0.9): the first beat of a
   slot mixes the channels of the move before into the new one (`Mix(DanceCh)`), no cut.
 - **Groove** (every table move, not the jumps): the knees give 1.8 cm on each beat, the head nods
-  0.045 rad into it, the shoulders bounce 1 cm a beat-fraction later, the hips sway 1.2 cm over two beats.
-- **Pogo**: one jump per beat, off at b = 0.16, down at 0.94, 22 cm up (ankles raised with the hip,
-  so the feet really leave the ground), a soft knee give on landing, one fist punched up every
-  other beat. **JumpTogether**: beats 1-3 bounce deeper (3.5, 6, 8.5 cm) with the arms swinging back,
+  0.045 rad into it 0.06 beat after the knee, the shoulders bounce 1 cm a beat-fraction later, the
+  hips sway 1.2 cm over two beats. A slow song (under 110 bpm) gives a little more and a fast one
+  less (`1 + (110 - bpm) * 0.0015`, clamped 0.90..1.08); the moves' own amplitudes are untouched.
+- **Music on the body (#728)**: `DanceParams` also carries what `RadioGroove` and `MelodyAt` hear —
+  `Level`, the analysed `Kick`, `Section`, `Bpm`, and the melody's `Rise`/`Hold`. After a move's
+  channels are mixed (so the crossfade keeps its shape) `Feel`:
+  - scales the pelvis/spine/head/shrug channels by `(1 + 0.30*(level - 0.8)) * section` (calm 0.92,
+    peak/chorus 1.10): a chorus opens, a quiet verse closes; the arm targets and feet stay the move's;
+  - gives on the real kick: `py -0.018*kick`, `thN +0.030*kick`, `shL/shR +0.008*kick`, under the grid
+    groove, so a syncopated or half-time song lands where it plays, not only on the count;
+  - lifts the chin on a climb (`thN -0.05*rise`) and arches slowly through a long note
+    (`thN -0.03*hold`, `phi +0.025*hold*sin(pi*hold/2)`).
+  Every input is the shared clock plus the CD's burnt analysis, so every peer computes the same body
+  with nothing on the wire; callers that pass no music (emotes, previews, patrons, fights) keep the
+  old pose because `Level` defaults to 0.8 and the rest to 0/Groove.
+- **Pogo**: one jump per beat, off at b = 0.14, down at 0.92, 25 cm up (ankles raised with the hip
+  and tucked 3.5 cm more at the top, toes pointed, so the feet really leave the ground), a deep knee
+  give on landing with a shoulder drop and a fold, a stretch and chest arch at the top, the head
+  snapping down on the landing and up at the apex, and the two fists taking turns overhead (rig-L on
+  even beats, rig-R on odd) instead of one hanging at the chest. **JumpTogether**: beats 1-3 bounce deeper (3.5, 6, 8.5 cm) with the arms swinging back,
   beat 4 crouches 13 cm and jumps 34 cm with both arms thrown up, landing on the next bar's one.
 - **Music to dance to** (`RadioManager.NearestMusic`): a playing radio in the world, or a player
   carrying one that plays (hand or back); the beat from `RadioBody.BeatOf(cd, startedAt, clock)`.
@@ -156,9 +172,13 @@ the highest range first.
   **HipSway** (wider hips, hands up loose), **Floss** (a wider swing).
 - **Judge a move** with `<godot> --path . --resolution 1920x1080 -- --avatars 1.5 <png> --dancesheet <style|emotes|break>[,first,count] [--view deg]`:
   a row per move, a frame a beat (each an eighth further into its beat). `--view -20` is near front;
-  a forward punch or drum hit only shows from the side (`--view 50`).
+  a forward punch or drum hit only shows from the side (`--view 50`). The music on the body:
+  `--dancefeel <style>,<move> --view 0` puts one instant under quiet, groove, chorus, a kick, a climb
+  and a long note side by side.
 - **Check**: `--emotecheck` (quick tier) also builds every style's moves and both halves of a break
-  set at 32 instants, standing and walking, flowing in: nothing at infinity, nothing through the floor.
+  set at 32 instants, standing and walking, flowing in: nothing at infinity, nothing through the
+  floor, and — through `HumanMeshBuilder.Clearance` — no wrist through the torso (0.21 m), the head
+  (0.14 m) or its partner's hand (0.085 m). Floor moves are exempt (the hands are on the floor).
 
 ## Notation (used by every move section)
 
@@ -170,7 +190,7 @@ the highest range first.
 - **Key-framed arms.** `Seq(x, [v0..vN-1])` = cyclic interpolation, `i = floor(x)`, value `Lerp(v_i, v_(i+1 mod N), Smooth(frac(x)))`; `SeqHold(x, vs, a)` = same but the transition happens in the first fraction `a` of each slot, then holds (`Smooth(clamp(frac(x)/a, 0, 1))`). Crossfade between two segments of one move over 0.25 beat with `Smooth`.
 - **Legs (standing only).** `HipRoot(s) = (px + s*0.09, hipY + py + s*t, pz)`; knee from `Limb.Solve(HipRoot, Ankle, 0.435, 0.415, (s*0.35,0,1))` (use `(s*0.6,0,1)` when ankle `|x| >= 0.2`, so the knees splay over the toes). `Planted(w, d, a=0.15)`: ankle `(s*w, 0.085, 0)`, `py = -d` (squat depth), toe `= Ankle + (s*0.145*sin a, -0.045, 0.145*cos a)` (toes turned out by `a`). Lifted foot: add to ankle `y`, toe `= Ankle + (0, -0.045+0.045*liftFrac, 0.145)`. Heel up (ball on ground): ankle `y = 0.085+h` (`h <= 0.07`), toe `= (x, 0.040, ankle.z+0.13)`. **LegFit** (mandatory last step): per leg `hipYmax = ankle.y + sqrt(0.845^2 - dx^2 - dz^2)` with `dx, dz` the horizontal offsets from the leg root to the ankle; `hipY = min(hipY, hipYmax_L, hipYmax_R)`. Without it wide stances and long slides give unreachable ankles.
 - **Weight and moving.** With `we = Smooth(Weight)`: every channel `X = X_rest + we*(X_dance - X_rest)` (wrist and ankle targets too, *before* the IK), where `rest` is the rig the player would have without dancing (`GaitRig(speed, phase)`; standing when `m = 0`). **Moving variant:** legs always follow `GaitRig` and the dance never touches them when `m = 1` (`legs = Lerp(danceLegs, gaitLegs, Smooth(m))`); the pelvis offset is applied to `Hip/Waist/Chest/...` only (leg roots stay on the gait, which the round pelvis tube hides) and is clamped to `|px|, |py|, |pz| <= 0.04`; every other channel amplitude (`theta`, `phi`, `psi`, nods, arm offsets relative to the gait arm) is scaled by `A = 1 - m*(1-kMov)`; `kMov` and the arm policy are given per move. `theta` adds to the gait's own lean.
-- **Clearance.** Never leave a wrist with `|x| < 0.12` and `|z - Chest.z| < 0.10` (inside the torso). Practical rule: keep every wrist at least **0.21 m** from the segment `Hip..Neck` (chest radius 0.158 + hand half depth 0.04); hands on hips stay at `|x| >= 0.23`; hands beside the head stay at `|x| >= 0.12`. The presets above satisfy this.
+- **Clearance.** Keep every wrist at least **0.21 m** from the segment `Hip..Neck` (chest radius 0.158 + hand half depth 0.04), at least **0.15 m** from the head's axis below the crown (head + hand), and claps' wrists at least **0.085 m** apart (a 0.068 m palm meets, it does not overlap). `SolveArm` enforces the torso (0.215 m, a little margin for a leaning torso) and head rule in `ClearOfBody` after the blend, so a move target and the straight line a crossfade takes between two gestures both stay outside the body; on the axis the hand goes forward. `--emotecheck` measures the final rig (`HumanMeshBuilder.Clearance`) and fails a move that breaks the rule.
 
 ## Move: Twerk
 
@@ -207,9 +227,9 @@ the highest range first.
   - Pelvis: `px = -0.07*D` (hips against the arms); `py = -0.06 - 0.02*Dip(b)` (knees bent, dip on every swing); `pz = 0`.
   - Torso: `theta = 0.05`; `phi = 0.08*D` (shoulders go with the arms); `psi = 0`.
   - Head: `thN = 0`, `phH = 0.05*D`.
-  - Arms (straight arms, fists, anchored at the hip so the circling path stays outside the body): `Wrist_s = H(0.20*D, 0.22, s*0.22*E)`; hint `hLow`. Both hands share `x = 0.20*D`; `s*0.22*E` puts rig-R in front (+Z) when `E > 0` and rig-L behind, swapping at the extremes where `E = 0`. The path is an ellipse `(0.20, 0.22)` about the body axis, radius at least 0.29 m, so the hands never enter the torso; at the extremes `|Wrist - Shoulder|` is 0.48.
+  - Arms (straight arms, fists, anchored at the hip so the path stays outside the body): `Wrist_s = H(0.20*D, 0.28, s*0.23)`; hint `hLow`. Both hands share `x = 0.20*D` and keep a **constant** `s*0.23` front/back separation: one fist is in front of the belly, the other behind the back for the whole swing. The old `s*0.22*E` put both hands on the body's axis at the side extremes (where `E = 0`), in one point; that was the bug. At the crossing `(x = 0, z = ±0.23)` each wrist is 0.23 m from the torso's axis (the chest radius is 0.158 + a hand), and the far arm at a side extreme is 0.50 m from its shoulder.
   - Legs: `Planted(0.15, d)` with `d` from `py`; free-foot heel lift `ankle.y += 0.02*max(0, -s*D)`.
-- **Moving variant:** legs walk. `kMov = 0.7` (arms circle at 70 %: `0.14*D`, `0.154*E`), `px = -0.03*D`, arms replace the gait arms (blend 1).
+- **Moving variant:** legs walk. `kMov = 0.7` (arms swing at 70 %: `0.14*D`, but the `0.23` front/back separation stays so the fists never close), `px = -0.03*D`, arms replace the gait arms (blend 1).
 
 ## Move: Carlton
 
@@ -242,7 +262,7 @@ the highest range first.
 - **Name / origin:** Macarena (Los del Rio, 1993), simplified to eight counts for the 1996 video (https://en.wikipedia.org/wiki/Macarena_(song); also https://www.linedance.com/dance/144800/macarena). Arm sequence from tutorial summaries (recorded in the research notes at the end).
 - **Tempo range:** 70-115 BPM.
 - **Counts:** Eight gestures, each held until the next: 1 rig-L arm straight forward, 2 rig-R arm forward, 3 rig-L palm up, 4 rig-R palm up, 5 rig-L hand to the rig-R shoulder, 6 rig-R hand to the rig-L shoulder, 7 rig-L hand behind the ear, 8 rig-R hand behind the ear; then both hands drop to the hips and the cycle restarts. **Clock:** with the fixed inputs use double time, gesture `j = floor(2c)` (0..7) and `f = frac(2c)`: one gesture per half beat (0.26-0.43 s at 70-115 BPM). If an optional bar-parity bit `P` (alternate bars) is supplied use `j = 4P + floor(c)` and `f = b`: one gesture per beat, the authentic speed (prefer this).
-- **Joint spec:** each arm moves to the target of the current gesture during the first 0.45 of the slot (`Smooth(min(f/0.45, 1))`) and holds. Targets (`o(...)`): `OUT = FWD` hint `hLow`; `UP = o(-0.03, 0.04, 0.47)` (palm-up flip is not visible: only a slight lift); `CROSS = o(-0.32, -0.02, 0.22)` hint `h(0,-1,0.3)` (hand at the opposite shoulder, 0.39 m, crossing in front of the chest); `EAR = o(-0.05, 0.16, -0.04)` hint `h(1,0.3,-0.3)` (hand beside the ear, `|x| = 0.13`, outside the head box); `HIP = AKIMBO`. rig-L sequence: j0 `OUT`, j1 hold, j2 `UP`, j3 hold, j4 `CROSS`, j5 hold, j6 `EAR`, j7 hold. rig-R sequence: j0 `HIP`, j1 `OUT`, j2 hold, j3 `UP`, j4 hold, j5 `CROSS`, j6 hold, j7 `EAR`. The two `CROSS` hands pass each other at different `fwd` (rig-L 0.22, rig-R 0.22 + 0.05 during the crossing) so they never overlap.
+- **Joint spec:** each arm moves to the target of the current gesture during the first 0.45 of the slot (`Smooth(min(f/0.45, 1))`) and holds. Targets (`o(...)`): `OUT = FWD` hint `hLow`; `UP = o(-0.03, 0.04, 0.47)` (palm-up flip is not visible: only a slight lift); `CROSS = o(-0.32, -0.02, 0.22)` hint `h(0,-1,0.3)` (hand at the opposite shoulder, 0.39 m, crossing in front of the chest); `EAR = o(-0.01, 0.16, -0.04)` hint `h(1,0.3,-0.3)` (hand beside the ear, `|x| = 0.17`, outside the head box, and the global clearance rule pushes it further if needed); `HIP = AKIMBO`. rig-L sequence: j0 `OUT`, j1 hold, j2 `UP`, j3 hold, j4 `CROSS`, j5 hold, j6 `EAR`, j7 hold. rig-R sequence: j0 `HIP`, j1 `OUT`, j2 hold, j3 `UP`, j4 hold, j5 `CROSS`, j6 hold, j7 `EAR`. The two `CROSS` hands pass each other at different `fwd` (rig-L 0.22, rig-R 0.22 + 0.05 during the crossing) so they never overlap.
   - Pelvis: `px = 0.04*sinT(c/2)` (hip sway each beat; in the original hips roll between the arm sets and the whole body makes a quarter turn, which the mesh cannot show); `py = -0.02*Dip(b)`.
   - Torso: `theta = 0`; `phi = -0.04*sinT(c/2)`; `psi = 0.08*D` (a slight turn toward the moving hand).
   - Head: `thN = 0.04*Dip(b)`; `phH = 0.05*D`.
@@ -258,7 +278,7 @@ the highest range first.
   - Pelvis: `py = -0.06 - 0.05*Dip(b)` (deeper on the beat); `px = 0`.
   - Torso: `theta = 0.05`; `phi = 0.04*D`; `psi = 0.10*D` (shoulders follow the crossing).
   - Head: `thN = 0.05*Dip(b)`; `phH = 0`.
-  - Arms, `c < 3`: `Wrist_s = H(-s*0.18*D, 0.38 + 0.04*Dip(b), 0.30 + 0.08*s*E)` (hands cross the midline in opposite directions, offset in `Z` by 0.16 m at the crossing so they never touch; at the extremes `|Wrist - Shoulder| = 0.49`), hint `hLow`. Shrug `c in [3,3.5)`: `sh = 0.05*Smooth(...)` (both `shL`, `shR`), `wrist = o(0.05,-0.05,0.22)`, hint `hOut`. Clap `c in [3.5,4)`: `sh` back to 0, `wrist = o(-0.16, 0.44, 0.03)` (hands meet at `x = ±0.02`, 0.95 m above the hip, above the head box).
+  - Arms, `c < 3`: `Wrist_s = H(-s*0.18*D, 0.38 + 0.04*Dip(b), 0.30 + 0.08*s*E)` (hands cross the midline in opposite directions, offset in `Z` by 0.16 m at the crossing so they never touch; at the extremes `|Wrist - Shoulder| = 0.49`), hint `hLow`. Shrug `c in [3,3.5)`: `sh = 0.05*Smooth(...)` (both `shL`, `shR`), `wrist = o(0.05,-0.05,0.22)`, hint `hOut`. Clap `c in [3.5,4)`: `sh` back to 0, `wrist = o(-0.10, 0.44, 0.03)` (hands meet at `x = ±0.08`, 0.95 m above the hip, above the head box; at 0.16 they overlapped).
   - Legs: `Planted(0.15, d)` with `d` from `py`; heel lift on the clap `ankle.y += 0.03*Smooth`.
 - **Moving variant:** legs walk. `kMov = 0.7` (pump `0.13`, `0.27`), the shrug and clap unchanged, arms blend 1.
 
@@ -271,7 +291,7 @@ the highest range first.
   - Pelvis: `px = 0.06*sinT(r)`; `py = -0.03 - 0.02*Dip(b)`.
   - Torso: `phi = -0.04*sinT(r)`; `psi = 0`; `theta = 0.03`.
   - Head: `thN = 0.03*Dip(b)`.
-  - Arms: claps on 2 and 4 with `cl = ((1 - cosT(c/2))/2)^2` (1 at c = 1 and 3): `wrist = o(0.20 - 0.35*cl, -0.05 - 0.05*cl, 0.30)` (open at about 0.76 m apart, closed at `x = ±0.03`, at chest height), hint `hLow`.
+  - Arms: claps on 2 and 4 with `cl = ((1 - cosT(c/2))/2)^2` (1 at c = 1 and 3): `wrist = o(0.20 - 0.30*cl, -0.05 - 0.05*cl, 0.30)` (open at about 0.76 m apart, closed at `x = ±0.08` — 0.16 m apart, the palms meet rather than pass through each other — at chest height), hint `hLow`.
   - Legs: ankle `x = s*0.098 + s*0.06*(1 + s*S)` (the weight foot steps out to 0.218, the free foot closes to 0.098), free-foot lift `0.05*max(0, D)*[s*S < 0]` (lift on beats 1 and 3, land on the clap), `Planted` toes `a = 0.15`; LegFit.
 - **Moving variant:** legs walk. `kMov = 0.6`; claps unchanged (blend 1), `px = 0.03*sinT(r)`.
 
@@ -297,7 +317,7 @@ the highest range first.
   - Pelvis: `py = -0.02*Dip(b)`; `px = 0.03*E`.
   - Torso: `phi = -0.03*E`; `theta = 0.04`.
   - Head: `thN = 0.04*Dip(b)`.
-  - Arms: `wrist = o(0.20 - 0.35*cl, -0.05 - 0.05*cl, 0.30)` (open to about 0.76 m apart, closed to `x = ±0.03`), hint `hLow`.
+  - Arms: `wrist = o(0.20 - 0.30*cl, -0.05 - 0.05*cl, 0.30)` (open to about 0.76 m apart, closed to `x = ±0.08`), hint `hLow`.
   - Legs: `Planted(0.11, 0.03)`; no foot events.
 - **Moving variant:** legs walk. `kMov = 0.8`; the clap stays (blend 1), torso `0.8x`.
 
@@ -323,7 +343,7 @@ the highest range first.
   - Pelvis: `py = -0.03*Dip(b)`; `px = 0`.
   - Torso: `theta = 0.20 + 0.15*Dip(b)`; `phi = 0.04*D`; `psi = 0`.
   - Head: `thN = SawNod(b)` (+0.60 on the beat, -0.25 just before the whip); `phH = 0.10*D`.
-  - Arms: `wrist = o(0, -0.30 - 0.06*Dip(b), 0.28)` (fists forward at belt level, pumping down with the nod), hint `hLow`.
+  - Arms: `wrist = o(0.14, -0.32 - 0.05*Dip(b), 0.06 + 0.03*Dip(b))` (fists loose by the hips, elbows a little out, pumping down with the nod), hint `hLow`.
   - Legs: `Planted(0.22, 0.08, a = 0.2)` (wide rock stance); heel lift on the upbeat `ankle.y += 0.015*(1 - Dip(b))`.
 - **Moving variant:** legs walk. `kMov = 0.7`: the head nod stays at full size (`thN` is not scaled, the clearest read at a run), `theta` reduced to `0.12 + 0.08*Dip(b)`, arms blend 0.5 over the gait arms.
 
@@ -336,7 +356,7 @@ the highest range first.
   - Pelvis: `py = -0.06 - 0.03*Dip(b)`; `pz = 0`.
   - Torso: `theta = 0.12 + 0.05*Dip(b)`; `psi = 0.15` (body angled, guitar stance); `phi = -0.05`.
   - Head: `thN = 0.25*Dip(b)`; `phH = 0.08*D`.
-  - Arms: fret arm (rig-R): `wrist = o(0.12, -0.08, 0.42 + 0.05*D)`, hint `hLow`. Strum arm (rig-L): `c < 3`: `wrist = o(-0.18, -0.36 - 0.06*cosT(2b), 0.26)` (low on the beat and the "&", high between), hint `hLow`; `c in [3,4)`: windmill angle `al = 2*pi*(c - 3)`, `wrist = o(0.05, -0.46*cos(al), 0.46*sin(al))` (0.463 m; at `al = 0` the hand hangs, at `pi/2` it is forward, at `pi` straight up, at `3*pi/2` behind the back, clear of the torso everywhere).
+  - Arms: fret arm (rig-R): `wrist = o(0.28, -0.18, 0.30 + 0.04*D)`, hint `hLow` — up the neck on the `+X` side at chest height. Strum arm (rig-L): `c < 3`: `wrist = offset(0.02, -0.34 - 0.06*cosT(2b), 0.24)` in its own shoulder frame (world `x = -0.16`, clear of the belly; low on the beat and the "&", high between), hint `hLow`; `c in [3,4)`: windmill angle `al = 2*pi*(c - 3)`, `wrist = offset(-0.05, -0.46*cos(al), 0.46*sin(al))` (0.463 m; at `al = 0` the hand hangs, at `pi/2` it is forward, at `pi` straight up, at `3*pi/2` behind the back, clear of the torso everywhere).
   - Legs: `Planted(0.25, 0.12)` with a power stance: `ankle.z = +0.15` for rig-R, `-0.10` for rig-L; knee bounce is the `py` above.
 - **Moving variant:** legs walk. `kMov = 0.7`; strumming and fretting stay, the windmill is skipped when `m > 0.5` (strum continues through beat 4).
 
@@ -427,7 +447,7 @@ the highest range first.
   - Pelvis: `py = -0.06 - 0.01*Dip(b)`; `px = 0`.
   - Torso: `theta = 0.25` (waist bend); `phi = 0`; `psi`: for `c < 3`: `-0.9 + 0.6*(floor(c) + Smooth(min(b/0.35, 1)))` (steps from -0.9 to +0.9), for `c >= 3`: `Lerp(0.9, -0.9, Smooth(b))`.
   - Head: `thN = 0`, `phH = 0`.
-  - Arms: rig-R extended: `wrist = o(0.50, 0, 0.02)` (0.50 m, horizontal at shoulder height, hint `hOut`); rig-L behind the head: `wrist = o(-0.05, 0.16, -0.06)` (beside the back of the head, `|x| = 0.13`), hint `h(1,0.2,-0.3)`.
+  - Arms: rig-R extended: `wrist = o(0.50, 0, 0.02)` (0.50 m, horizontal at shoulder height, hint `hOut`); rig-L behind the head: `wrist = o(0.02, 0.16, -0.06)` (beside the back of the head, `|x| = 0.20` — the old 0.13 put the hand box inside the head), hint `h(1,0.2,-0.3)`.
   - Legs: `Planted(0.14, 0.12)` (knees bent).
 - **Moving variant:** legs walk. `kMov = 0.6` (`psi` +/-0.54), `theta = 0.15`, arms as above (blend 1).
 
@@ -492,7 +512,7 @@ the highest range first.
   - Pelvis: `py = -0.03 - 0.02*Hit`, with `Hit = (1 - b)^3` (a small drop on the stamp); `px = 0.03*E`.
   - Torso: `theta = 0.05`; `phi = -0.03*E`; `psi = 0`.
   - Head: `thN = 0.04*Dip(b)`.
-  - Arms: `wrist = o(0.20 - 0.35*cl, -0.05 - 0.05*cl, 0.30)`, hint `hLow` (a clap on each beat).
+  - Arms: `wrist = o(0.20 - 0.30*cl, -0.05 - 0.05*cl, 0.30)`, hint `hLow` (a clap on each beat).
   - Legs: `Planted(0.13, 0.03)`; stamping foot `ankle.y += 0.07*max(0, -sinT(b))` (lifts in the second half of the preceding beat, lands on the next beat) for rig-R when `k` is odd (before beats 1 and 3) and rig-L when `k` is even (before 2 and 4).
 - **Moving variant:** legs walk (no stamps). `kMov = 0.8`: claps stay at full amplitude, bounce `py` clamped.
 
@@ -514,10 +534,11 @@ the highest range first.
 Authored like the others, numbers against the bone lengths; joint values are in the code, here the shape.
 
 - **Ymca** (Village People, 1978): one letter a beat, snapped in over 0.3 beat (`DSm`) and held. Y
-  arms up and out `(s*0.30, 0.38, 0.05)`; M hands resting on the head `(-s*0.10, 0.34, 0.04)`,
-  elbows flared (hint `(s, 0.2, 0)`); C both arms curved to `+X` (rig-R up-out, rig-L across the
-  chest at `(+0.24, -0.04, 0.30)`) with `phi = 0.12`; A straight arms meeting in a peak
-  `(-s*0.15, 0.47, 0.06)` (0.497 m: nearly full reach, so it reads straighter than M). 70-140 BPM.
+  arms up and out `(s*0.30, 0.38, 0.05)`; M hands on the crown's sides `(-s*0.02, 0.34, 0.04)`
+  (`|x| = 0.16`, clear of the head; it was 0.10, inside it), elbows flared (hint `(s, 0.2, 0)`);
+  C both arms curved to `+X` (rig-R up-out, rig-L across the chest at `(+0.24, -0.04, 0.30)`) with
+  `phi = 0.12`; A straight arms meeting in a peak `(-s*0.12, 0.47, 0.06)` (the wrists 0.12 m apart;
+  at 0.15 they met in one point). 70-140 BPM.
 - **ChickenDance**: a section per beat, two hits in each (`DDip(frac(2b))`): beak (hands in front at
   shoulder height bobbing), wings (wrists at the armpits, the elbow hint flapping), tail (squat
   `py = -0.16`, `theta = 0.30`, hips wiggling `px = 0.06*sinT(2b)`), claps; sections crossfade over

@@ -266,11 +266,15 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
     float wide = face_mouth.z;
     float dx = p.x - 8.0;
     vec3 lip = (mouth == 0 || mouth == 6) ? FACE_LINE : FACE_MOUTH;
+    // #1153: a small jaw must already show an opening. The old linear jaw * 3.05 kept a held note
+    // (jaw ~0.34) under a pixel and drew the lips as a line; the curve below is the same at jaw 1
+    // and a third more open at 0.34, so singing reads at every face grid.
+    float ja = pow(jaw, 0.75);
     if (mouth == 4) {
         // an "oh": a ring, wider as the jaw drops
         vec2 o = vec2(dx, p.y - mouth_y - 0.3);
-        float rr = (0.55 + 1.1 * jaw) * (1.0 + 0.25 * wide);
-        float dl = length(o / vec2(1.0, 1.0 + 0.4 * jaw));
+        float rr = (0.55 + 1.1 * ja) * (1.0 + 0.25 * wide);
+        float dl = length(o / vec2(1.0, 1.0 + 0.4 * ja));
         if (abs(dl - rr) <= half_px) {
             return vec4(lip, 1.0);
         }
@@ -287,9 +291,10 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
             } else if (mouth == 5) {
                 yc -= 0.6 * smile * dx / w;   // a smirk: one corner up
             }
-            float top = yc - jaw * 0.45 * f;
-            float bottom = yc + jaw * 2.6 * f * (1.0 - 0.3 * max(-wide, 0.0));
-            if (bottom - top > px * 1.5) {
+            float ap = 3.05 * ja;
+            float top = yc - ap * 0.15 * f;
+            float bottom = yc + ap * 0.85 * f * (1.0 - 0.3 * max(-wide, 0.0));
+            if (bottom - top > px) {
                 if (abs(p.y - top) <= half_px || abs(p.y - bottom) <= half_px) {
                     return vec4(lip, 1.0);
                 }

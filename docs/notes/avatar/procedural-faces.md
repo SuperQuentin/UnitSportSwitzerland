@@ -40,7 +40,7 @@ Replaced the #394 face atlas (16×16 pixel faces drawn from text). Plan: `docs/p
   ragdoll has spiral eyes.
 - A face on something new: draw a `FaceBand` with a genome's `Code` and the figure material. A new
   shape: a row in the shader's `FACE_EYES` / `FACE_MOUTHS` and the enum, both at the end.
-- Check: `--avatars 2 <png> --bodies faces|expressions|expressions2|seeded --view 180 [--style ...]`
+- Check: `--avatars 2 <png> --bodies faces|expressions|expressions2|seeded|lipsync --view 180 [--style ...]`
   (heads in a grid); model viewer category **Faces** (Preset, Expression, Seeded);
   `tools/emotenetcheck.sh` checks a remote copy's face shows its emote's expression.
 - **Dancing faces (#728)**: dancing to music with no emote picked, the walker's face follows the CD's
