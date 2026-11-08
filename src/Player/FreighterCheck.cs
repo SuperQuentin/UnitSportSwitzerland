@@ -375,7 +375,7 @@ public partial class FreighterCheck : Node
         brake = 1f;
         await Until(() => me.GroundSpeed < 0.2f, 10);
         var l = Local(me);
-        Expect(inside && Mathf.Abs(l.Y - FloorY) < 0.3f, $"drove up the ramp into the hold: carried by '{me.DeckOn}' at {Where(me)}");
+        Expect(inside && Mathf.Abs(l.Y - FloorY) < 0.3f, $"drove up the ramp into the hold: carried by '{me.DeckOn}' at {Where(me)}" + (inside ? "" : $" ({me.BaysSeen()})"));
         brake = 0f;
         handbrake = true;
         Expect(await Until(() => me.TiedDown, 5), "the handbrake tied it down in the hold");
