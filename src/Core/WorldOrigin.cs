@@ -640,16 +640,6 @@ public sealed class WorldOrigin
     }
 
     /// <summary>
-    /// An anchor-frame world (#1430 H3): world (0, 0, 0) and its axes at <paramref name="axes"/>, e.g. a server region's
-    /// ENU frame at its cluster's centre (<see cref="FrameAxes.Enu"/>, #1513). Such a world never moves.
-    /// </summary>
-    public WorldOrigin(FrameAxes axes)
-    {
-        _frame = new OriginFrame(axes, 0);
-    }
-
-    /// <summary>The current frame: a consistent snapshot, safe to hand to another thread.</summary>
-    /// <summary>
     /// The earth world's origin (#1510, G2 C1): an anchor frame from the start, the ENU frame at a point
     /// (<see cref="FrameAxes.Enu"/>), which <see cref="OriginShifter"/> moves without turning until C3.
     /// </summary>
@@ -658,6 +648,7 @@ public sealed class WorldOrigin
         _frame = new OriginFrame(axes, 0);
     }
 
+    /// <summary>The current frame: a consistent snapshot, safe to hand to another thread.</summary>
     public OriginFrame Frame => _frame;
 
     public double E => _frame.E;
