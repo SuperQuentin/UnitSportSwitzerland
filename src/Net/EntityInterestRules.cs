@@ -51,6 +51,18 @@ public static class EntityInterestRules
     /// <summary>A radio: heard well before it is seen.</summary>
     public const float RadioRange = 300f;
 
+    /// <summary>The level of the cube cells entities are bucketed by (#1513, G2 C4): ~1.2 km a side at a face's centre.</summary>
+    public const int CellLevel = 13;
+
+    /// <summary>
+    /// A level-13 cell's least width, m: 1.22 km at a face's centre, 0.94 of that along a face edge near a cube corner,
+    /// whose 120° there narrows it by 0.87 more (the corners are all at sea).
+    /// </summary>
+    public const double CellMinWidthM = 950;
+
+    /// <summary>How many rings of cells round a viewer's hold everything within <paramref name="reachM"/> of it.</summary>
+    public static int CellRings(double reachM) => (int)Math.Ceiling(reachM / CellMinWidthM);
+
     /// <summary>How far a thing <paramref name="sizeM"/> across stays <see cref="MinPixels"/> wide on screen, capped by what the viewer draws.</summary>
     public static float RangeOfSize(float sizeM, float far, float fovDeg)
     {

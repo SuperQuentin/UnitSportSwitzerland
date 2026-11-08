@@ -11,8 +11,10 @@ namespace UnitSport.Net.Regions;
 /// in one physics space; a region's members part only past <see cref="SplitM"/> (no flicker on the
 /// border). The main region is today's frame at the manifest origin: every body within
 /// <see cref="HomeM"/> of it, or linked to one that is, stays there, so play near the start runs
-/// exactly as before. Measured in <see cref="GlobalPos"/>, so it becomes Earth distances with the
-/// global tiling. Pure, unit-tested (<c>RegionPlannerTests</c>).
+/// exactly as before. Measured in Earth distances (<see cref="GlobalPos"/>, true metres since #1502). A new
+/// region's anchor is the cluster's centre: the whole LV95 km in a flat world, the Earth mean (the ECEF mean
+/// on the ellipsoid) when regions are ENU frames (<see cref="Anchoring"/>, #1513). Pure, unit-tested
+/// (<c>RegionPlannerTests</c>).
 /// </summary>
 public static class RegionPlanner
 {
@@ -31,6 +33,15 @@ public static class RegionPlanner
     /// <summary>The region of a body not placed yet.</summary>
     public const int None = -1;
 
+    /// <summary>How a new region's anchor is chosen (#1513).</summary>
+    public enum Anchoring
+    {
+        /// <summary>The whole LV95 km nearest the members' mean, at altitude 0: a flat frame's origin.</summary>
+        Lv95Km,
+        /// <summary>The members' ECEF mean put on the ellipsoid (height 0): an ENU frame's origin.</summary>
+        Earth,
+    }
+
     /// <summary>A body: its id, where it is, and the region it is in now (<see cref="None"/> for a new one).</summary>
     public readonly record struct Body(long Id, GlobalPos At, int Region);
 
@@ -48,10 +59,11 @@ public static class RegionPlanner
     /// <summary>
     /// Clusters <paramref name="bodies"/> and gives each cluster a region: the main one when it
     /// reaches home, else the existing region most of its members are in (a region goes to one
-    /// cluster only, the larger), else a new one anchored at the cluster's centre on the whole km.
+    /// cluster only, the larger), else a new one anchored at the cluster's centre (<paramref name="anchoring"/>).
     /// New ids are taken from <paramref name="nextId"/>.
     /// </summary>
-    public static Plan Decide(IReadOnlyList<Body> bodies, IReadOnlyList<Region> regions, GlobalPos mainAnchor, ref int nextId)
+    public static Plan Decide(IReadOnlyList<Body> bodies, IReadOnlyList<Region> regions, GlobalPos mainAnchor, ref int nextId,
+        Anchoring anchoring = Anchoring.Lv95Km)
     {
         var plan = new Plan();
         int n = bodies.Count;
@@ -89,7 +101,7 @@ public static class RegionPlanner
         foreach (var (root, members) in ordered)
         {
             int region = root == homeRoot ? Main : Claim(bodies, members, anchors, claimed);
-            if (region != Main && region != None && Drifted(bodies, members, anchors[region]))
+            if (region != Main && region != None && Drifted(bodies, members, anchors[region], anchoring))
             {
                 claimed.Remove(region);
                 region = None;
@@ -97,7 +109,7 @@ public static class RegionPlanner
             if (region == None)
             {
                 region = nextId++;
-                var anchor = Centre(bodies, members);
+                var anchor = Centre(bodies, members, anchoring);
                 anchors[region] = anchor;
                 plan.Create.Add(new Region(region, anchor));
             }
@@ -125,19 +137,36 @@ public static class RegionPlanner
     }
 
     /// <summary>Whether a region's members reach past <see cref="ReanchorM"/> and their centre has moved half as far from the anchor.</summary>
-    private static bool Drifted(IReadOnlyList<Body> bodies, List<int> members, GlobalPos anchor)
+    private static bool Drifted(IReadOnlyList<Body> bodies, List<int> members, GlobalPos anchor, Anchoring anchoring)
     {
         double far = 0;
         foreach (int i in members) far = Math.Max(far, bodies[i].At.HorizontalDistanceTo(anchor));
-        return far > ReanchorM && Centre(bodies, members).HorizontalDistanceTo(anchor) > ReanchorM / 2;
+        return far > ReanchorM && Centre(bodies, members, anchoring).HorizontalDistanceTo(anchor) > ReanchorM / 2;
     }
 
-    /// <summary>The members' mean position snapped to the whole km, at altitude 0: a frame's anchor.</summary>
-    public static GlobalPos Centre(IReadOnlyList<Body> bodies, List<int> members)
+    /// <summary>
+    /// A frame's anchor for <paramref name="members"/>: their mean position snapped to the whole LV95 km at altitude 0
+    /// (a flat frame), or their Earth mean, the mean of their ECEF positions put on the ellipsoid at height 0 (an ENU frame:
+    /// no LV95 in it, so it holds anywhere on the Earth).
+    /// </summary>
+    public static GlobalPos Centre(IReadOnlyList<Body> bodies, List<int> members, Anchoring anchoring = Anchoring.Lv95Km)
     {
+        if (anchoring == Anchoring.Earth)
+        {
+            double x = 0, y = 0, z = 0;
+            foreach (int i in members) { var p = bodies[i].At.Ecef; x += p.X; y += p.Y; z += p.Z; }
+            return EarthMean(new Terrain.Format.EcefPos(x / members.Count, y / members.Count, z / members.Count));
+        }
         double e = 0, nn = 0;
         foreach (int i in members) { var l = bodies[i].At.Lv95; e += l.E; nn += l.N; }   // the anchor is an LV95 km (a flat frame)
         return GlobalPos.FromLv95(Math.Round(e / members.Count / 1000) * 1000, Math.Round(nn / members.Count / 1000) * 1000, 0);
+    }
+
+    /// <summary>An ECEF point (a mean, below the ground) put on the ellipsoid along its normal: height 0 there.</summary>
+    public static GlobalPos EarthMean(Terrain.Format.EcefPos mean)
+    {
+        var g = Terrain.Format.Ellipsoid.Wgs84.ToGeodetic(mean);
+        return GlobalPos.FromEcef(Terrain.Format.Ellipsoid.Wgs84.ToEcef(g with { H = 0 }));
     }
 
     private static int Find(int[] parent, int i)
