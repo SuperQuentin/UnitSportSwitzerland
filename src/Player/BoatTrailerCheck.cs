@@ -181,10 +181,11 @@ public partial class BoatTrailerCheck : Node
             }
             await Wait(0.1);
         }
-        // a metre further, past the very edge of deep enough, as a driver would
-        if (wet) await Wait(0.7);
-        // stopped on the parking brake: an automatic creeps in reverse at idle
-        me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        // a few metres further, past the very edge of deep enough, as a driver would: at the edge the
+        // stop's last swing of the trailer took the spot back out of the boat's water
+        if (wet) await Wait(2.0);
+        // stopped on the parking brake (an automatic creeps in reverse at idle), still steered against the joint
+        me.RideControls = () => new RideInput(0f, 0f, Mathf.Clamp(ReverseGain * truck.Articulation[0], -1f, 1f), false, Handbrake: true);
         await Until(() => me.GroundSpeed < 0.2f, 8);
         Expect(me.CanLaunchBoat(truck), "stopped there, the boat's water still behind the trailer");
         float backed = Flat(me.GlobalPosition - foot);
