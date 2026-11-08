@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Trailer;
 
@@ -10,7 +11,8 @@ namespace UnitSport.Trailer;
 /// each actor's spot (<see cref="HighRadius"/> when the eye is more than <see cref="HighEye"/> m above
 /// the sea: it sees further) must be a built real tile, one the chunk manifest lists. A tile abroad
 /// (no swissALTI3D tile there: Italy, France, much of Lake Geneva's French side) has no survey to build
-/// from, so it is allowed and only counted. Pure (no Godot), so tier 0 tests it.
+/// from, so it is allowed and only counted. Under <c>--frame earth</c> the ground is cube leaves: <see cref="MissingLeaves"/>
+/// (#1514). Pure (no Godot), so tier 0 tests it.
 /// </summary>
 public static class FilmCoverage
 {
@@ -70,6 +72,47 @@ public static class FilmCoverage
                 else missing.Add(t);
             }
         abroad = outside.ToList();
+        return missing.ToList();
+    }
+
+    // ---- on cube leaves (#1514, G2 C5) -------------------------------------------------------------
+
+    /// <summary>
+    /// The leaves (at <paramref name="level"/>, 14 for the real world's) within <paramref name="radius"/> m of a need,
+    /// on the level plane at the place: what <c>--frame earth</c> must hold real round a shot, as
+    /// <see cref="TilesNear"/> is in the flat world. A lattice of points every <paramref name="step"/> m over the
+    /// disc and its rim, each's leaf; a leaf is ~600 m, so 150 m misses none that reaches into the disc by more.
+    /// </summary>
+    public static IEnumerable<CubeKey> LeavesNear(Need p, double radius, int level = 14, double step = 150)
+    {
+        var at = SwissGeodesy.ToEcef(p.E, p.N, double.IsNaN(p.Alt) ? 500 : p.Alt);
+        var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(at));
+        var seen = new HashSet<CubeKey>();
+        int n = (int)Math.Ceiling(radius / step);
+        for (int i = -n; i <= n; i++)
+            for (int j = -n; j <= n; j++)
+            {
+                double x = i * step, z = j * step;
+                if (x * x + z * z > radius * radius) continue;
+                var key = CubeKey.FromEcef(enu.ToEcef(x, 0, z), level);
+                if (seen.Add(key)) yield return key;
+            }
+        for (int k = 0; k < 64; k++)
+        {
+            double a = k * Math.PI / 32;
+            var rim = CubeKey.FromEcef(enu.ToEcef(Math.Sin(a) * radius, 0, Math.Cos(a) * radius), level);
+            if (seen.Add(rim)) yield return rim;
+        }
+    }
+
+    /// <summary>The leaves round <paramref name="points"/> (each within its <see cref="RadiusFor"/>) that are not real, sorted, each once.</summary>
+    public static List<CubeKey> MissingLeaves(IEnumerable<Need> points, Func<CubeKey, bool> real, int level = 14)
+    {
+        var missing = new SortedSet<CubeKey>(Comparer<CubeKey>.Create((a, b) =>
+            (a.Face, a.Level, a.Y, a.X).CompareTo((b.Face, b.Level, b.Y, b.X))));
+        foreach (var p in points)
+            foreach (var leaf in LeavesNear(p, RadiusFor(p), level))
+                if (!real(leaf)) missing.Add(leaf);
         return missing.ToList();
     }
 
