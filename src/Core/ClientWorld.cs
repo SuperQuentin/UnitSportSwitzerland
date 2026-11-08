@@ -784,7 +784,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (World.Globe.DataDir is { } globe)
             {
                 var chunksForGlobe = _chunks;
-                AddChild(new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
+                AddChild(_earth != null
+                    // the earth world (#1510): the globe at every altitude, down to the region's leaves
+                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Store }
+                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
                 if (World.AltitudeReadout.Requested) AddChild(new World.AltitudeReadout { Name = "AltitudeReadout", Origin = origin });
             }
@@ -978,7 +981,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 {
                     Origin = _worldOrigin,
                     // settled on the tiles, not a fixed time (#924), as the trailer director stages
-                    TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3),
+                    TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3)),
                 };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
@@ -986,7 +989,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;
-                runner.TilesComplete = at => chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3);
+                runner.TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;

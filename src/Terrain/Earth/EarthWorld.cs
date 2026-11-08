@@ -214,11 +214,17 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         foreach (var key in _drop) Remove(key);
     }
 
-    /// <summary>From a point to a leaf's nearest edge, about: the chord to its centre less its half diagonal.</summary>
+    /// <summary>
+    /// From a point to a leaf's nearest edge along the ground, about: the point brought down (or up) to the leaf
+    /// centre's radius, then the chord to the centre less the half diagonal. A camera 2 km up still loads the leaves
+    /// under it.
+    /// </summary>
     private static double Distance(CubeKey key, EcefPos p)
     {
         var c = key.Anchor.Origin;
-        double dx = c.X - p.X, dy = c.Y - p.Y, dz = c.Z - p.Z;
+        double rc = Math.Sqrt(c.X * c.X + c.Y * c.Y + c.Z * c.Z), rp = Math.Sqrt(p.X * p.X + p.Y * p.Y + p.Z * p.Z);
+        double k = rp > 0 ? rc / rp : 1;
+        double dx = c.X - p.X * k, dy = c.Y - p.Y * k, dz = c.Z - p.Z * k;
         return Math.Sqrt(dx * dx + dy * dy + dz * dz) - LeafRadiusM;
     }
 
