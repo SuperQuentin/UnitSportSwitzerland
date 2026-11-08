@@ -54,9 +54,9 @@
   the match, 10-90 fps depending on the crowd in view.
 - **Client memory**, two bugs on `main`, both fixed there:
   - the replay buffer kept a copy of every pulsing light (`WorldRecorder`): 75,000 orphan nodes, 128 GB;
-  - the chat's trim loop spun forever once the log passed 80 lines (`ChatUi.Append`, `QueueFree` with the
-    child still counted): a frozen client growing ~100 MB/s, at about 35 alive in a 100-player match, when
-    the kill feed passes 80 lines.
+  - the chat's trim loop spun forever once the log passed its cap (80 lines then, 300 now; `ChatUi.Append`,
+    `QueueFree` with the child still counted): a frozen client growing ~100 MB/s, at about 35 alive in a
+    100-player match, when the kill feed passed the cap.
   The second was found with a footprint sampler every 5 s (`top`) and, at the jump, `sample <pid> 5` with
   `DOTNET_PerfMapEnabled=1`: `/tmp/perf-<pid>.map` names the C# frames the stack sample shows as unknown
   addresses (Godot's own frames stay `???`, the binary is stripped). Malloc sat under `Node.QueueFree`
