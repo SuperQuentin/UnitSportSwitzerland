@@ -5113,6 +5113,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // wheels on the verge. An NPC given a preset (#40) races on the ground it is built for.
         var surface = (_ride is Motorbike or Truck or SnowRide or Bicycle || _ride is Car && (!Npc || CarSetupId != 0)) && Terrain != null
             ? Audio.Surfaces.At(Terrain, GlobalPosition, Indoors, this) : Audio.Surface.Asphalt;
+        // an occasion's snow (Christmas, 1 November to 31 December) is a look and a ski slope (#899), not
+        // ice under every tyre: wheels grip the ground under it (#1590; a car could not climb a freighter's ramp)
+        if (surface == Audio.Surface.Snow && _ride is not SnowRide && World.DayNight.OccasionSnow > 0.5f && Terrain != null)
+            surface = Audio.Surfaces.Beneath(Terrain, GlobalPosition, this);
         // a tow behind another vehicle: less air to push (cars and motorbikes read it)
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles())

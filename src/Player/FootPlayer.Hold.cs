@@ -125,6 +125,25 @@ public partial class FootPlayer
         _holdTilt = (new Basis(Vector3.Up, Rotation.Y).Inverse() * now.Basis * new Basis(Vector3.Up, DeckYaw)).Orthonormalized();
     }
 
+    /// <summary>For a check's failure line: every cargo bay built here, and whether this vehicle is of its kind, fits it and stands in it.</summary>
+    public string BaysSeen()
+    {
+        if (_ride == null) return "on foot";
+        var hull = HullSize(_ride);
+        var sb = new System.Text.StringBuilder($"{_decks.Count} deck set(s), hull {hull}");
+        foreach (var set in _decks.Values)
+            foreach (var (deck, _, _) in set.Sections)
+            {
+                if (deck.CargoBays.Length == 0) continue;
+                var node = SectionFrame(set.Host, deck.Section);
+                if (node == null || !node.IsInsideTree()) { sb.Append($"; {set.Key}/{deck.Section}: no frame"); continue; }
+                var local = node.GlobalTransform.Orthonormalized().AffineInverse() * GlobalPosition;
+                foreach (var bay in deck.CargoBays)
+                    sb.Append($"; {set.Key}/{deck.Section} bay {bay.Centre} {bay.Size}: takes {bay.Takes(_ride.Kind)}, fits {bay.Fits(hull)}, in {bay.Contains(local, 0f)} at {local}");
+            }
+        return sb.ToString();
+    }
+
     /// <summary>The bay this vehicle stands in and fits, among the carriers' decks built here: the one it is in first.</summary>
     private (string Key, int Section, Transform3D Frame)? BayHere()
     {
