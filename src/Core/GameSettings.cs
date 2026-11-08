@@ -1000,7 +1000,12 @@ public sealed class GameSettings
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
-                case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
+                // --traffic 0 is no traffic: the riders (#1056, 30 by default) too, unless --bikes asks for some;
+                // a cyclist on the lake fixture's slipway kept --boattrailercheck's pickup out of the water
+                case "--traffic" when int.TryParse(v, out int cars):
+                    TrafficCars = cars;
+                    if (cars == 0 && Array.IndexOf(args, "--bikes") < 0) TrafficRiders = 0;
+                    break;
                 // the traffic modes (#1060): walkers, riders, trams for this run
                 case "--walkers" when int.TryParse(v, out int walkers): TrafficWalkers = walkers; break;
                 // (--bikes: --riders already counts a --drivecheck's racers)
