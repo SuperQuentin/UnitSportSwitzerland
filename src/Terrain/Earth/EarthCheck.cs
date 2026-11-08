@@ -11,7 +11,7 @@ namespace UnitSport.Terrain.Earth;
 /// <list type="number">
 /// <item>collision and the height query agree: over a 21 × 21 grid 20 m apart, a ray down onto the patches lands
 /// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> or on a feature over it (a roof, a bridge), under it at
-/// most 1 % of the rays (road holes), and at least half reach the ground;</item>
+/// most 1 % of the rays (road holes), and at least 100 reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
 /// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km along a line (the camera with it, so the origin
 /// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer;</item>
@@ -133,7 +133,8 @@ public partial class EarthCheck : Node3D
         Log($"rays: {_hits} of {_rays} hit; {_above} on a feature over the ground, {_below} under the query; on the ground worst {_worstRay * 100:F1} cm");
         if (_rays < 100) _faults.Add($"only {_rays} grid points had ground and collision");
         if (_hits < _rays * 0.99) _faults.Add($"rays missed the patches: {_rays - _hits} of {_rays}");
-        if (ground < _rays / 2) _faults.Add($"only {ground} of {_rays} rays reached the ground (the rest stopped on features)");
+        // in a city centre half the grid is roofs: enough rays on the ground to judge, whatever stands on it
+        if (ground < 100) _faults.Add($"only {ground} of {_rays} rays reached the ground (the rest stopped on features; bar 100)");
         if (_below > _rays / 100) _faults.Add($"{_below} of {_rays} rays went under the height query by over 5 cm (bar 1 %)");
 
         _ball = new RigidBody3D { Name = "Ball" };
