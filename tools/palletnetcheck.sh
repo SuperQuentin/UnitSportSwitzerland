@@ -11,7 +11,8 @@
 . "$(dirname "$0")/lib/twoclient.sh" palletnet
 PORT=${PORT:-7879}
 PW=pw583
-WORLD="--generated-world --traffic 0"
+# the test profile is detail Low (#1411): buildings, so doors, one ring out; the nearest warehouse with a pallet, 2586_1115, is three rings out
+WORLD="--generated-world --traffic 0 --detail medium"
 tc_server 420 120 "$OUT/palletnet_server.log" --server --port $PORT --generated-world --admin-password $PW
 # B first, so it is beside the bay when A arrives at it
 tc_client 300 "$OUT/palletnet_B.log" --connect 127.0.0.1:$PORT --name PalletB $WORLD --palletnetcheck watch & B=$!
