@@ -187,7 +187,8 @@
   again out to 3 km (21.7 M primitives against 10.9 M), and the artists' meshes were rebuilt every frame
   (3 ms of CPU for one figure).
 - Now ~10.3 ms: the IMAG camera's `Far` is 450 m and it renders every other frame; the artists' poses
-  are cached (`ConcertPerformers._poses`, 8 a beat over a move's two bars, at most one new pose a frame).
+  are cached (`ConcertPerformers._poses`, 12 a beat over a move's two bars — 24 fps at 120 bpm, 8
+  stepped too visibly under the IMAG camera — at most one new pose a frame).
   A pose is cached as surface arrays (with their format: the figure's custom channels) and copied into
   the artist's own mesh, never swapped in as another mesh: the figure material's face parameters are
   `instance uniform`s, and Godot registers them again for every new mesh on an instance without

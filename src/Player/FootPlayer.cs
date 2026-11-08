@@ -2329,7 +2329,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float barPhase = (beat - bar * 4 + phase) / 4f;
         // beats into this move: the first one flows out of the last move instead of cutting to the next
         float into = (bar - start) * 4 + (beat - bar * 4) + phase;
-        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
+        // the music's dynamics (#728): level, the analysed kick and section, the tempo, and the
+        // melody's climb and long note. All of it from the shared clock and the burnt analysis, so
+        // every peer works out the same body with nothing on the wire.
+        double serverNow = Net.ClockSync.ServerNow;
+        var groove = Items.RadioGroove.Of(m.CdId, m.StartedAt, serverNow);
+        var cd = Audio.Cd.CdLibrary.Instance?.Find(m.CdId);
+        float rise = 0f, hold = 0f;
+        if (cd != null) Audio.Cd.CdAnalysisRuntime.MelodyAt(cd, serverNow - m.StartedAt, out rise, out hold, out _);
+        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev,
+            Mathf.Clamp(into / 0.9f, 0f, 1f), groove.Level, groove.Kick, (int)groove.Section, cd?.Bpm ?? 0f, rise, hold);
     }
 
     /// <summary>

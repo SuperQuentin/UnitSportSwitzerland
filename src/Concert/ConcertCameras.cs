@@ -300,8 +300,13 @@ public partial class ConcertPerformers : Node3D
     private readonly LightDesk _desk;
     private readonly List<(SkinnedFigure Node, HumanPalette Palette, int Offset)> _people = new();
 
-    /// <summary><see cref="PerBeat"/> poses a beat over a move's 8 counts: the artists move in those steps.</summary>
-    private const int PerBeat = 8;
+    /// <summary>
+    /// <see cref="PerBeat"/> poses a beat over a move's 8 counts: the artists move in those steps.
+    /// 12 (24 fps at 120 bpm) rather than 8 halves the stepping the IMAG camera shows at close range
+    /// for half again the cached-pose builds; the pose cache (one new pose a frame at most) is what
+    /// keeps concerts cheap, so this does not go to 16.
+    /// </summary>
+    private const int PerBeat = 12;
     /// <summary>
     /// The pose each artist shows. Its mesh is never swapped once shown: the figure material's face
     /// parameters are per instance, and Godot registers them again on every new mesh without freeing
@@ -435,8 +440,9 @@ public partial class ConcertPerformers : Node3D
         var face = Avatar.Face.FaceState.Neutral;
         face.Smile = 0.3f;
         if (song != null && heardT >= 0
-            && Audio.Cd.CdAnalysisRuntime.SampleVocal(song, heardT, out float voice, out float syllable, out float vowel, out _))
-            Avatar.Face.DanceFace.Sing(ref face, voice, syllable, vowel, 1f);
+            && Audio.Cd.CdAnalysisRuntime.SampleVocal(song, heardT + Audio.Cd.CdAnalysisRuntime.LipLead,
+                out float voice, out float syllable, out float vowel, out _, out float aperture, out float consonant))
+            Avatar.Face.DanceFace.Sing(ref face, voice, syllable, vowel, 1f, aperture, consonant);
         _singerFace.Step(_people[Singer].Node, face, null, dt, ease: Avatar.Face.FaceAnimator.LipEase);
     }
 

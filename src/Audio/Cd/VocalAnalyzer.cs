@@ -2,21 +2,30 @@ namespace UnitSport.Audio.Cd;
 
 /// <summary>
 /// What the singer does, from the vocal <see cref="VocalSeparator"/> pulled out of a CD (#1153):
-/// level, syllables, vowel and pitch per 50 ms frame for lip sync, and the melody's runs, long notes
-/// and entries for the light desk. Pure C#, on the burn worker, ~10 ms frames boiled down to
-/// <see cref="CdAnalysis.EnvRate"/> Hz.
+/// level, syllables, vowel, pitch, the mouth's aperture and a consonant's burst per 50 ms frame for
+/// lip sync, and the melody's runs, long notes and entries for the light desk. Pure C#, on the burn
+/// worker, ~10 ms frames boiled down to <see cref="CdAnalysis.EnvRate"/> Hz.
 /// </summary>
 public static class VocalAnalyzer
 {
     /// <summary>Frames a second of the result: <see cref="CdAnalysis.EnvRate"/>, kept here so the analyser links into the tests without Godot.</summary>
     public const int FrameRate = 20;
 
+    /// <summary>Bytes per frame (v4, #1153): level, syllable, vowel, pitch, the mouth's aperture and a consonant's burst.</summary>
+    public const int FrameBytes = 6;
+
     public sealed record Result(byte[] Frames, float[] Rises, float[] Falls, float[] Holds, float[] VocalIns);
 
     private const int Win = 1024, Hop = 220;           // at 22.05 kHz: 46 ms window, ~10 ms hop
     private const float MinHz = 70f, MaxHz = 1000f;    // a sung voice, bass to soprano's top
     private const float YinThreshold = 0.15f;
-    private const float Gate = 0.08f;                  // of the track's loud vocal: below it is bleed, not singing
+    private const float Gate = 0.05f;                  // of the track's loud vocal: below it is bleed, not singing
+
+    /// <summary>
+    /// The first formant's band and its map to the aperture: a closed vowel's F1 sits near 300 Hz, an
+    /// open "ah" near 800, so F1 is the jaw without needing a full formant tracker.
+    /// </summary>
+    private const float OpenLoHz = 300f, OpenHiHz = 800f, EnvelopeHz = 200f;
 
     /// <summary>Semitones a run must climb (or fall) to count, and its shortest / longest span, s.</summary>
     public const float RunSemitones = 4f, RunMin = 0.5f, RunMax = 8f;
@@ -34,6 +43,8 @@ public static class VocalAnalyzer
         var flux = new float[frames];
         var vowel = new float[frames];
         var hz = new float[frames];
+        var open = new float[frames];   // the first formant, Hz: how far the jaw is open
+        var burst = new float[frames];  // high-band flux: a consonant's bite
 
         var re = new float[Win];
         var im = new float[Win];
@@ -43,7 +54,12 @@ public static class VocalAnalyzer
         float binHz = rate / (float)Win;
         int f1a = (int)(300 / binHz), f1b = (int)(900 / binHz), f2a = (int)(1500 / binHz), f2b = (int)(3000 / binHz);
         int va = (int)(300 / binHz), vb = (int)(4000 / binHz);
+        int ca = (int)(250 / binHz), cb = (int)(1100 / binHz);   // where the first formant lives
+        int ha = (int)(3000 / binHz), hb = (int)(8000 / binHz);  // where a consonant's burst lives
         var yin = new YinScratch((int)(rate / MinHz) + 2);
+        var amp = new float[Win / 2];
+        var env = new float[cb - ca + 1];                        // the smoothed low band, reused per frame
+        int half = Math.Max(1, (int)(EnvelopeHz / binHz));       // the envelope's half width
 
         for (int f = 0; f < frames; f++)
         {
@@ -58,23 +74,29 @@ public static class VocalAnalyzer
             }
             rms[f] = (float)Math.Sqrt(e / Win);
             Fft.Forward(re, im);
-            float e1 = 0f, e2 = 0f, fl = 0f;
+            float e1 = 0f, e2 = 0f, fl = 0f, hi = 0f;
             for (int k = 1; k < Win / 2; k++)
             {
-                float mag = MathF.Log(1f + 100f * MathF.Sqrt(re[k] * re[k] + im[k] * im[k]));
+                float a = MathF.Sqrt(re[k] * re[k] + im[k] * im[k]);
+                amp[k] = a;
+                float mag = MathF.Log(1f + 100f * a);
                 if (k >= va && k <= vb) fl += Math.Max(0f, mag - prev[k]);
+                if (k >= ha && k <= hb) hi += Math.Max(0f, mag - prev[k]);   // before prev moves on
                 prev[k] = mag;
                 if (k >= f1a && k <= f1b) e1 += mag;
                 else if (k >= f2a && k <= f2b) e2 += mag;
             }
             flux[f] = fl;
+            burst[f] = hi;
+            open[f] = rms[f] > 2e-3f ? EnvPeak(amp, ca, cb, env, half, binHz) : 0f;   // F1, Hz
             vowel[f] = MathF.Log((e2 / (f2b - f2a + 1) + 1e-3f) / (e1 / (f1b - f1a + 1) + 1e-3f));
             hz[f] = rms[f] > 2e-3f ? Yin(vocal, s, rate, yin) : 0f;   // silence has no pitch
         }
 
-        // per-track references: the loud vocal (99th percentile), the vowel's spread
+        // per-track references: the loud vocal (99th percentile), the vowel's spread, a consonant's burst
         float loud = Percentile(rms, 0.99f);
         float fluxRef = Math.Max(1e-6f, Percentile(flux, 0.99f));
+        float burstRef = Math.Max(1e-6f, Percentile(burst, 0.99f));
         var sung = new List<float>();
         for (int f = 0; f < frames; f++) if (loud > 0f && rms[f] >= Gate * loud) sung.Add(vowel[f]);
         float vLo = sung.Count > 0 ? Percentile(sung.ToArray(), 0.1f) : 0f, vHi = sung.Count > 0 ? Percentile(sung.ToArray(), 0.9f) : 1f;
@@ -91,36 +113,55 @@ public static class VocalAnalyzer
         }
         float onsetRef = Math.Max(1e-6f, Percentile(onset, 0.99f));
 
-        // down to EnvRate: max level and onset, median pitch over voiced 10 ms frames, mean vowel
+        // median of 3 over F1: one harmonic jumps it, a vowel does not
+        var openS = new float[frames];
+        for (int f = 0; f < frames; f++)
+        {
+            if (open[f] <= 0f) continue;
+            float o0 = f > 0 && open[f - 1] > 0f ? open[f - 1] : open[f];
+            float o2 = f + 1 < frames && open[f + 1] > 0f ? open[f + 1] : open[f];
+            openS[f] = Median3(o0, open[f], o2);
+        }
+
+        // down to EnvRate: max level, onset and burst, median pitch over voiced 10 ms frames,
+        // mean vowel and aperture
         double perOut = rate / (double)FrameRate / Hop;
         int outN = (int)(vocal.Length / (double)rate * FrameRate);
-        var bytes = new byte[outN * 4];
+        var bytes = new byte[outN * FrameBytes];
         var pitch = new float[outN];
         var level = new float[outN];
         var buf = new List<float>();
         for (int o = 0; o < outN; o++)
         {
             int a = (int)(o * perOut), b = Math.Min(frames, (int)((o + 1) * perOut));
-            float lv = 0f, on = 0f, vw = 0f;
-            int sungN = 0;
+            float lv = 0f, on = 0f, vw = 0f, ap = 0f, bu = 0f;
+            int sungN = 0, openN = 0;
             buf.Clear();
             for (int f = a; f < b; f++)
             {
                 lv = Math.Max(lv, rms[f]);
                 on = Math.Max(on, onset[f]);
+                bu = Math.Max(bu, burst[f]);
                 if (loud > 0f && rms[f] >= Gate * loud)
                 {
                     vw += vowel[f];
                     sungN++;
                     if (hz[f] > 0f) buf.Add(Midi(hz[f]));
+                    if (openS[f] > 0f)
+                    {
+                        ap += Math.Clamp((openS[f] - OpenLoHz) / (OpenHiHz - OpenLoHz), 0f, 1f);
+                        openN++;
+                    }
                 }
             }
             bool singing = loud > 0f && lv >= Gate * loud;
             level[o] = singing ? Math.Min(1f, lv / loud) : 0f;
-            bytes[4 * o] = (byte)(level[o] * 255f);
-            bytes[4 * o + 1] = singing ? (byte)(Math.Min(1f, on / onsetRef) * 255f) : (byte)0;
+            bytes[FrameBytes * o] = (byte)(level[o] * 255f);
+            bytes[FrameBytes * o + 1] = singing ? (byte)(Math.Min(1f, on / onsetRef) * 255f) : (byte)0;
             float v = sungN > 0 && vHi > vLo ? Math.Clamp((vw / sungN - vLo) / (vHi - vLo), 0f, 1f) : 0.5f;
-            bytes[4 * o + 2] = (byte)(v * 255f);
+            bytes[FrameBytes * o + 2] = (byte)(v * 255f);
+            bytes[FrameBytes * o + 4] = singing && openN > 0 ? (byte)(ap / openN * 255f) : (byte)0;
+            bytes[FrameBytes * o + 5] = (byte)(Math.Min(1f, bu / burstRef) * 255f);
             if (buf.Count * 2 >= Math.Max(1, b - a)) { buf.Sort(); pitch[o] = buf[buf.Count / 2]; }
         }
         // median of 3 over the pitch: one octave error in a frame is not a run
@@ -130,7 +171,7 @@ public static class VocalAnalyzer
             if (pitch[o] == 0f) continue;
             float p0 = o > 0 && pitch[o - 1] > 0f ? pitch[o - 1] : pitch[o], p2 = o + 1 < outN && pitch[o + 1] > 0f ? pitch[o + 1] : pitch[o];
             smooth[o] = Median3(p0, pitch[o], p2);
-            bytes[4 * o + 3] = (byte)Math.Clamp(MathF.Round(smooth[o]), 1f, 127f);
+            bytes[FrameBytes * o + 3] = (byte)Math.Clamp(MathF.Round(smooth[o]), 1f, 127f);
         }
 
         Melody(smooth, out var rises, out var falls, out var holds);
@@ -285,6 +326,33 @@ public static class VocalAnalyzer
     private static float Midi(float hz) => 69f + 12f * MathF.Log2(hz / 440f);
 
     private static float Median3(float a, float b, float c) => Math.Max(Math.Min(a, b), Math.Min(Math.Max(a, b), c));
+
+    /// <summary>
+    /// The first spectral-envelope peak in bins <paramref name="lo"/>..<paramref name="hi"/>: F1, which
+    /// follows the jaw. The band is box-smoothed over ~200 Hz so harmonics do not pass for formants,
+    /// and the lowest local maximum above 55 % of the band's maximum wins, so a strong F2 does not
+    /// read as an open vowel; the plain maximum when no peak qualifies. Returns Hz, 0 in silence.
+    /// </summary>
+    private static float EnvPeak(float[] amp, int lo, int hi, float[] env, int half, float binHz)
+    {
+        int n = hi - lo + 1;
+        float max = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            int a = Math.Max(0, i - half), b = Math.Min(n - 1, i + half);
+            float sum = 0f;
+            for (int j = a; j <= b; j++) sum += amp[lo + j];
+            env[i] = sum / (b - a + 1);
+            if (env[i] > max) max = env[i];
+        }
+        if (max <= 1e-9f) return 0f;
+        int pick = 0;
+        for (int i = 1; i < n - 1; i++)
+            if (env[i] >= env[i - 1] && env[i] > env[i + 1] && env[i] >= 0.55f * max) { pick = i; break; }
+        if (pick == 0)
+            for (int i = 1; i < n; i++) if (env[i] > env[pick]) pick = i;
+        return (lo + pick) * binHz;
+    }
 
     private static float Percentile(float[] v, float q)
     {

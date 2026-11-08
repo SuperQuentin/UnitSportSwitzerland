@@ -84,18 +84,38 @@ public static class EmoteCheck
                 int move = all[k];
                 bool floor = move >= HumanMeshBuilder.BreakMoves;
                 int prev = move == HumanMeshBuilder.BreakDown ? 0 : floor ? HumanMeshBuilder.BreakDown : all[(k + all.Count - 1) % all.Count];
+                float torso = float.MaxValue, head = float.MaxValue, hands = float.MaxValue;
                 for (int f = 0; f < 32; f++)
                 {
                     float bars = f / 16f;
                     var dance = new DanceParams(style, move, (bars * 4f) % 1f, bars % 1f, (int)bars, 1f,
                         f < 2 ? prev : -1, f < 2 ? 0.5f : 1f);
+                    var clearance = HumanMeshBuilder.Clearance(dance);
+                    torso = Mathf.Min(torso, clearance.Torso);
+                    head = Mathf.Min(head, clearance.Head);
+                    hands = Mathf.Min(hands, clearance.Hands);
                     foreach (float speed in new[] { 0f, 1.4f })
                     {
                         built++;
                         if (Problem(Vertices(HumanMeshBuilder.BuildStride(palette, speed, bars % 1f, dance: dance)), floor ? 1.9f : 1.3f) is { } why)
                             Fail($"{style} {HumanMeshBuilder.MoveName(style, move)} at bar {bars:F2}, speed {speed}: {why}");
                     }
+                    // #728: the music layer at its extremes — a loud peak on the kick with the melody
+                    // at its top and a long note — still keeps every joint in reach and off the floor
+                    built++;
+                    var peak = dance with { Level = 1f, Kick = 1f, Section = 2, Bpm = 150f, Rise = 1f, Hold = 1f };
+                    var peakClearance = HumanMeshBuilder.Clearance(peak);
+                    torso = Mathf.Min(torso, peakClearance.Torso);
+                    head = Mathf.Min(head, peakClearance.Head);
+                    hands = Mathf.Min(hands, peakClearance.Hands);
+                    if (Problem(Vertices(HumanMeshBuilder.BuildStride(palette, 0f, 0f, dance: peak)), floor ? 1.9f : 1.3f) is { } pwhy)
+                        Fail($"{style} {HumanMeshBuilder.MoveName(style, move)} with the music layer at bar {bars:F2}: {pwhy}");
                 }
+                // #728: hands must not pass through the torso, the head or each other. Floor moves are
+                // excluded: a six-step and a headspin put the hands on the floor beside the body.
+                if (!floor && (torso < 0.21f || head < 0.14f || hands < 0.085f))
+                    Fail($"{style} {HumanMeshBuilder.MoveName(style, move)}: clearance torso {torso:F2} (>= 0.21), "
+                        + $"head {head:F2} (>= 0.14), hands {hands:F2} (>= 0.085)");
             }
         }
 

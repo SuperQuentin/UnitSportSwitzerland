@@ -331,6 +331,14 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--dancefeel <style>,<move>": one instant of a move under different music (#728) — quiet
+        // calm, groove, chorus, a kick, a climb, a long note — to judge the body's dynamics
+        if (CmdArgs.Value("--dancefeel") is { } feel)
+        {
+            DanceFeel(feel, material);
+            return;
+        }
+
         // "--dance <style>,<move>": one standing and one walking (1.4 m/s) figure dancing that move
         // at 120 BPM, rebuilt every frame in _Process. Judge it with --view 180 (front) and 90 (side).
         if (_dance is { } dance)
@@ -509,6 +517,57 @@ public partial class AvatarPreview : Node3D
         cam.Current = true;
     }
 
+    /// <summary>
+    /// <c>--dancefeel &lt;style&gt;,&lt;move&gt;</c>: the same instant of a move under the music's own
+    /// dynamics (#728), a column per feel: quiet calm, groove, chorus, a chorus hit on the analysed
+    /// kick, a climb and a long note. Judge it front-on (<c>--view 0</c>; the built mesh faces -Z).
+    /// </summary>
+    private void DanceFeel(string spec, Material material)
+    {
+        var parts = spec.Split(',');
+        var style = Audio.Cd.MusicStyle.HipHop;
+        if (parts.Length > 0) Enum.TryParse(parts[0], ignoreCase: true, out style);
+        int move = parts.Length > 1 && int.TryParse(parts[1], out int m) ? m : 0;
+        var cases = new (string Name, float Level, float Kick, int Section, float Bpm, float Rise, float Hold)[]
+        {
+            ("quiet calm", 0.15f, 0f, 0, 90f, 0f, 0f),
+            ("groove", 0.8f, 0f, 1, 120f, 0f, 0f),
+            ("chorus", 1f, 0f, 3, 140f, 0f, 0f),
+            ("chorus + kick", 1f, 1f, 3, 140f, 0f, 0f),
+            ("a climb", 0.8f, 0f, 1, 120f, 1f, 0f),
+            ("a long note", 0.8f, 0f, 1, 120f, 0f, 0.5f),
+        };
+        const float Dx = 1.05f, barPhase = 0f;      // the bar's one: a hit of the move
+        float yaw = Mathf.Pi - Mathf.DegToRad(_viewDegrees);
+        for (int i = 0; i < cases.Length; i++)
+        {
+            var c = cases[i];
+            var dance = new DanceParams(style, move, 0f, barPhase, 0, 1f, -1, 1f,
+                c.Level, c.Kick, c.Section, c.Bpm, c.Rise, c.Hold);
+            AddChild(new MeshInstance3D
+            {
+                Mesh = HumanMeshBuilder.BuildStride(HumanPalette.ForRider(1), 0f, 0f, dance: dance),
+                MaterialOverride = material,
+                Position = new Vector3(i * Dx, 0f, 0f),
+                Rotation = new Vector3(0, yaw, 0),
+            });
+            AddChild(new Label3D
+            {
+                Text = c.Name, FontSize = 40, PixelSize = 0.005f, Position = new Vector3(i * Dx, 2.05f, 0),
+                Modulate = Colors.Black, OutlineSize = 0, HorizontalAlignment = HorizontalAlignment.Center,
+            });
+        }
+        var cam = new Camera3D
+        {
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            Size = Mathf.Max(2.7f, ((cases.Length - 1) * Dx + 2f) * 9f / 16f + 0.4f),
+            Position = new Vector3((cases.Length - 1) * Dx * 0.5f, 0.95f, 12f),
+        };
+        AddChild(cam);
+        cam.Current = true;
+        GD.Print($"[dancefeel] {style} {HumanMeshBuilder.MoveName(style, move)}: {cases.Length} feels");
+    }
+
     /// <summary>The dance figures at <paramref name="dt"/> further along a 120 BPM clock.</summary>
     private void UpdateDance(Audio.Cd.MusicStyle style, int move, float dt)
     {
@@ -614,7 +673,7 @@ public partial class AvatarPreview : Node3D
     /// "--bodies [page]" (#394): the figures. <c>builds</c> (default): every build in the same
     /// jersey; <c>crowd</c>: ten seeded figures, as NPCs and players who never chose get them; <c>looks</c>: six styled looks; <c>faces</c>: every
     /// face close up, four to a row; <c>expressions</c> / <c>expressions2</c>: every <see cref="Face.FaceExpression"/> (#657), on a big-eyed and a small-eyed face;
-    /// <c>seeded</c>: sixteen faces made up from seeds (<see cref="FaceGenome.ForSeed"/>); <c>heads</c>: the looks' heads and hair; <c>walk</c>: the builds mid-stride. Long lens, turned
+    /// <c>seeded</c>: sixteen faces made up from seeds (<see cref="FaceGenome.ForSeed"/>); <c>lipsync</c>: the mouth through a sung line (#1153); <c>heads</c>: the looks' heads and hair; <c>walk</c>: the builds mid-stride. Long lens, turned
     /// three-quarters (or by --view degrees).
     /// </summary>
     private void BuildBodies()
@@ -756,6 +815,29 @@ public partial class AvatarPreview : Node3D
                         Add($"{(Audio.Cd.MusicStyle)style} {c.Name}", look,
                             Face.DanceFace.Target(new Face.DanceHearing(style, c.Section, c.Level, c.Kick, c.Bar, c.Burst, c.Beat, 2, c.Floor), 0u));
                 Grid(9);
+                break;
+            }
+            case "lipsync":
+            {
+                // #1153: the mouth on the voice, a row of the states a singer passes through
+                var look = looks[3].Look with { Face = 0, HairStyle = HairStyle.None };
+                var cases = new (string Name, float Voice, float Syllable, float Vowel, int Section, float Aperture, float Consonant)[]
+                {
+                    ("closed", 0f, 0f, 0f, 1, -1f, 0f),
+                    ("held note (v3)", 1f, 0f, 0f, 1, -1f, 0f),
+                    ("syllable: ah (v3)", 1f, 1f, 0f, 1, -1f, 0f),
+                    ("syllable: ee (v3)", 1f, 1f, 0.9f, 1, -1f, 0f),
+                    ("syllable: oo (v3)", 1f, 1f, -0.9f, 1, -1f, 0f),
+                    ("soft verse (v3)", 0.3f, 1f, 0f, 1, -1f, 0f),
+                    ("v4: wide open", 1f, 0f, 0f, 1, 0.9f, 0f),
+                    ("v4: closed vowel", 1f, 0f, 0f, 1, 0.15f, 0f),
+                    ("v4: consonant", 1f, 0f, 0f, 1, 0.9f, 1f),
+                    ("chorus", 1f, 1f, 0f, 3, -1f, 0f),
+                };
+                foreach (var c in cases)
+                    Add(c.Name, look, Face.DanceFace.Target(new Face.DanceHearing(0, c.Section, 0.8f, 0f, 0f, 0f, 1, 2, 0,
+                        c.Voice, c.Syllable, c.Vowel, c.Aperture, c.Consonant), 0u));
+                Grid(10);
                 break;
             }
             case "seeded":

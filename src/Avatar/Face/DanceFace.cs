@@ -20,8 +20,11 @@ namespace UnitSport.Avatar.Face;
 /// <param name="Voice">The singer's level now, 0..1 (#1153); -1 when the CD has no vocal analysis.</param>
 /// <param name="Syllable">A sung syllable's onset, 0..1, decaying.</param>
 /// <param name="Vowel">-1 "oo" .. +1 "ee".</param>
+/// <param name="Aperture">The mouth's opening from the vocal's spectrum, 0..1 (v4); -1 on a v3 block, which falls back to the level and the vowel.</param>
+/// <param name="Consonant">A consonant's high-band burst now, 0..1: the lips close for it (v4).</param>
 public readonly record struct DanceHearing(int Style, int Section, float Level, float Kick, float BarKick, float Burst,
-    int Beat, int Bar, int Floor, float Voice = -1f, float Syllable = 0f, float Vowel = 0f);
+    int Beat, int Bar, int Floor, float Voice = -1f, float Syllable = 0f, float Vowel = 0f,
+    float Aperture = -1f, float Consonant = 0f);
 
 /// <summary>
 /// A dancing face (#728): the expression follows the music instead of one fixed "happy". Calm
@@ -87,7 +90,7 @@ public static class DanceFace
         // the song's own singer (#1153): the mouth follows the voice instead of the kick. A singer
         // personality mouths every line, the others join the chorus and mumble the rest
         if (h.Voice >= 0f && h.Floor == 0)
-            Sing(ref s, h.Voice, h.Syllable, h.Vowel, singer || h.Section == 3 ? 1f : 0.35f);
+            Sing(ref s, h.Voice, h.Syllable, h.Vowel, singer || h.Section == 3 ? 1f : 0.5f, h.Aperture, h.Consonant);
 
         // the bar's one lifts the brows; a hit narrows the eyes a little
         s.Brow = Math.Clamp(s.Brow + 0.35f * Clamp01(h.BarKick), -1f, 1f);
@@ -121,13 +124,50 @@ public static class DanceFace
     /// Lip sync from a CD's vocal (#1153), shared by dancers and the concert's singer: the jaw opens
     /// with the voice and pops on each syllable, the lips round for "oo" and spread for "ee";
     /// <paramref name="amount"/> 1 sings the line, less mouths it. Silence closes the mouth.
+    ///
+    /// <para>
+    /// The level is expanded (<c>v^0.6</c>) because it is normalised against the track's loudest
+    /// vocal: a verse sung at a third of the chorus's level must still move the lips. The sustained
+    /// opening keeps more than half of the full voice's jaw, so a held note stays open between the
+    /// syllable spikes instead of closing to a line (#1153). The vowel sets the aperture as well as
+    /// the width: an "ah" opens wider than an "ee" or an "oo" at the same level.
+    /// </para>
+    /// <para>
+    /// With a v4 analysis, <paramref name="aperture"/> is the mouth's own opening measured from the
+    /// vocal's low band, so the jaw follows the vowel through a long note instead of the level's
+    /// guess; a consonant's burst closes the lips for an instant between the syllables. A v3 block
+    /// (or a CD still waiting for its backfill) passes -1 and gets the level-and-vowel fallback.
+    /// </para>
     /// </summary>
-    public static void Sing(ref FaceState s, float voice, float syllable, float vowel, float amount)
+    public static void Sing(ref FaceState s, float voice, float syllable, float vowel, float amount,
+        float aperture = -1f, float consonant = 0f)
     {
-        float v = Clamp01(voice), open = v * (0.35f + 0.65f * Clamp01(syllable));
-        s.Jaw = Math.Clamp(amount * (0.08f + 0.75f * open), 0f, 1f);
-        if (v > 0.02f) s.Wide = Math.Clamp(vowel, -1f, 1f) * (0.4f + 0.6f * amount);
-        s.Brow = Math.Clamp(s.Brow + 0.3f * amount * v, -1f, 1f);
+        float level = Clamp01(voice);
+        float v = MathF.Pow(level, 0.6f);
+        float open;
+        if (aperture >= 0f)
+        {
+            open = Clamp01(aperture) * (0.85f + 0.15f * Clamp01(syllable));
+            open *= Math.Min(1f, level * 8f);            // the voice's presence, not its loudness, gates it
+        }
+        else
+        {
+            open = v * (0.55f + 0.45f * Clamp01(syllable));
+            open *= 1f - 0.30f * MathF.Abs(Math.Clamp(vowel, -1f, 1f));
+        }
+        // a consonant presses the lips together: only the strong bursts (the band's top decile),
+        // so an airy voice does not keep the mouth half shut through every vowel
+        float bite = Math.Clamp((Clamp01(consonant) - 0.5f) * 2.5f, 0f, 1f);
+        open *= 1f - 0.6f * bite * bite * (3f - 2f * bite);
+        s.Jaw = Math.Clamp(amount * (0.10f + 0.90f * open), 0f, 1f);
+        if (v > 0.02f)
+        {
+            float w = MathF.Pow(MathF.Abs(Math.Clamp(vowel, -1f, 1f)), 0.8f);
+            s.Wide = Math.Clamp((vowel < 0f ? -w : w) * (0.4f + 0.6f * amount), -1f, 1f);
+        }
+        // singing is effort: the brows lift and the eyes narrow a little as the voice opens
+        s.Brow = Math.Clamp(s.Brow + 0.4f * amount * v, -1f, 1f);
+        s.Squint = Clamp01(s.Squint + 0.12f * amount * v);
     }
 
     private static FaceState Calm()
