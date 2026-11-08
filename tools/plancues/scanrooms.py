@@ -1,8 +1,8 @@
 """Walls, rooms and doors from a raster plan (a scan) whose scale in metres per pixel is known. Measured, not guessed; no names (there is no OCR).
 
 1. Ink: the drawing's dark marks against its background (background = a wide grey dilation of the page, so poché and pale scans both work).
-2. Wall width: a histogram of the stroke widths of the ink (distance transform ridge, 2 * d - 0.5). The wall is the heaviest width class that carries at
-   least WALL_SHARE of the ridge pixels thicker than a hairline; strokes thinner than 0.7 of it (text, hatching, dimension lines, furniture) are
+2. Wall width: a histogram of the stroke widths of the ink (distance transform ridge, 2 * d - 0.5). The wall is the most common width between 7 cm and 90 cm;
+   strokes thinner than 0.7 of it (text, hatching, dimension lines, furniture) are
    removed by an opening, and pieces under 1.2 m long are dropped.
 3. Rooms: the free spaces inside the outline. The walls are first closed with a line of DOOR_M (the width of a doorway) at four orientations, so a doorway
    in a wall is bridged and the two rooms come apart (a disk does not bridge a gap between thin wall ends: it fits against the opening); each room is
@@ -24,7 +24,6 @@ WORK_PX_PER_M = 20.0  # finer sources are shrunk to this, coarser ones enlarged 
 DOOR_M = 1.2
 DOOR_MIN_M, DOOR_MAX_M = 0.5, 2.4
 MIN_WALL_M, MAX_WALL_M = 0.07, 0.9
-WALL_SHARE = 0.15
 OPEN_FACTOR = 0.7  # strokes thinner than this share of the wall width are not walls
 MIN_PIECE_M = 1.2
 MIN_AREA_M2, MIN_THICK_M = 1.0, 1.0  # export.MIN_AREA, export.MIN_THICK
@@ -57,24 +56,18 @@ def stroke_widths(ink):
 
 
 def wall_width(ink, ppm):
-    """(width in px, share of the thick ridge pixels it carries) of the walls, or (None, 0) when no stroke class qualifies."""
+    """(width in px, share of the stroke pixels it carries) of the walls: the most common stroke width of the ink between MIN_WALL_M and MAX_WALL_M
+    (a plan draws far more wall than anything else at that weight; the first try, the heaviest class with 15 % of the pixels, picked poché blobs and
+    lettering and found 2 % of the rooms)."""
     w = stroke_widths(ink)
     lo, hi = max(2.0, MIN_WALL_M * ppm), MAX_WALL_M * ppm
-    w = w[(w >= lo * 0.8) & (w <= hi * 2.0)]
+    w = w[(w >= lo) & (w <= hi)]
     if w.size < 30:
         return None, 0.0
-    best = None
-    for c in np.arange(hi, lo - 1e-6, -0.5):
-        share = float(((w >= 0.75 * c) & (w <= 1.33 * c)).mean())
-        if share >= WALL_SHARE:
-            best = (c, share)
-            break
-    if best is None:
-        return None, 0.0
-    c, share = best
-    sel = w[(w >= 0.75 * c) & (w <= 1.33 * c)]
-    return float(np.median(sel)), share
-
+    h, e = np.histogram(w, bins=np.arange(lo, hi + 1.0, 0.5))
+    k = int(h.argmax())
+    sel = w[(w >= e[k] - 0.5) & (w <= e[k + 1] + 0.5)]
+    return float(np.median(sel)), float(h[k] / w.size)
 
 def walls_of(ink, w, ppm, inside=None):
     """Strokes about as heavy as the walls: the opening removes what is thinner than 0.7 w, pieces under MIN_PIECE_M and anything outside the outline go."""
