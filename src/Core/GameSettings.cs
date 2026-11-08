@@ -407,6 +407,27 @@ public sealed class GameSettings
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;
 
+    /// <summary>Chat text scale, 0.8 to 1.6; lines already on screen keep the size they were drawn at.</summary>
+    public float ChatFontScale { get; set; } = 1f;
+
+    /// <summary>How opaque the open chat panel's glass is, 0.2 (see-through) to 1 (solid).</summary>
+    public float ChatOpacity { get; set; } = 0.72f;
+
+    /// <summary>A dim time before each scrollback line, so a conversation can be followed later.</summary>
+    public bool ChatTimestamps { get; set; } = true;
+
+    /// <summary>Show "X joined" / "X left" in the chat; the rest of the world's news stays either way.</summary>
+    public bool ChatShowJoins { get; set; } = true;
+
+    /// <summary>Paint <c>@YourName</c> in amber in the chat.</summary>
+    public bool ChatMentions { get; set; } = true;
+
+    /// <summary>
+    /// Players whose chat and speech bubbles are hidden on this screen (<c>/ignore</c>, saved with the
+    /// settings). A local preference: the server is never told, and nobody else's view changes.
+    /// </summary>
+    public List<string> ChatIgnore { get; set; } = new();
+
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
@@ -869,6 +890,9 @@ public sealed class GameSettings
         TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
         TouchPins ??= new();
         TouchOverrides ??= new();
+        ChatFontScale = Math.Clamp(ChatFontScale, 0.8f, 1.6f);
+        ChatOpacity = Math.Clamp(ChatOpacity, 0.2f, 1f);
+        ChatIgnore ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
