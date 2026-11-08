@@ -73,7 +73,23 @@ public static class Surfaces
         return s;
     }
 
-    private static Surface Compute(IWorldGround chunks, Vector3 feet)
+    /// <summary>
+    /// What the ground is under an occasion's snow, cached per caller: the surface as it would be with no
+    /// occasion running. Farming works the soil under Christmas's snow (#494): the snow is a look, the
+    /// field is still there.
+    /// </summary>
+    public static Surface Beneath(IWorldGround chunks, Vector3 feet, object caller)
+    {
+        var c = Under.GetValue(caller, _ => new Cache());
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (now - c.Time < CacheSeconds && !float.IsNaN(c.At.X) && c.At.DistanceTo(feet) < CacheMetres) return c.Value;
+        c.Value = Compute(chunks, feet, occasionSnow: false); c.At = feet; c.Time = now;
+        return c.Value;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, Cache> Under = new();
+
+    private static Surface Compute(IWorldGround chunks, Vector3 feet, bool occasionSnow = true)
     {
         // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
         if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
@@ -89,7 +105,7 @@ public static class Surfaces
 
         if (RoadUnder(chunks, feet) is { } road) return road;
         // the white above the permanent snow line, and an occasion's snow, are snow underfoot (#899)
-        if (feet.Y > CoverPalette.SnowLine + 125f || World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
+        if (feet.Y > CoverPalette.SnowLine + 125f || occasionSnow && World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
         return known ? FromCover(cover) : Surface.Grass;
     }
 
