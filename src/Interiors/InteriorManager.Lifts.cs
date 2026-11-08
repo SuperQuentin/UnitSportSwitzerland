@@ -192,9 +192,17 @@ public partial class InteriorManager
     /// </summary>
     private void ServeLift(long sender, string key, int lift, int floor)
     {
-        if (!_cache.TryGetValue(key, out var l) || lift < 0 || lift >= l.Lifts.Count || !l.Lifts[lift].Serves(floor)) return;
+        if (!_cache.TryGetValue(key, out var l) || lift < 0 || lift >= l.Lifts.Count || !l.Lifts[lift].Serves(floor))
+        {
+            GD.Print($"[lifts] {sender}'s call to floor {floor} of {key} lift {lift} ignored: {(l == null ? "no plan here" : "no such lift or floor")}");
+            return;
+        }
         // only someone in the building, at the button or in the cabin
-        if (Online && SpaceOf(sender) != key) return;
+        if (Online && SpaceOf(sender) != key)
+        {
+            GD.Print($"[lifts] {sender}'s call to floor {floor} of {key} ignored: the server has them in '{SpaceOf(sender)}'");
+            return;
+        }
         if (LocalOf(sender, l) is { } local && (LiftAt(l, local, CallReach + ServerLiftSlack) is not { } near || near.Lift != lift))
         {
             Refuse(sender, "Too far from the elevator.");
@@ -202,7 +210,11 @@ public partial class InteriorManager
         }
         double now = Clock;
         var ride = LiftOf(l, lift);
-        if (ride.Busy(now) || ride.At(now) == floor) return;
+        if (ride.Busy(now) || ride.At(now) == floor)
+        {
+            GD.Print($"[lifts] {sender}'s call to floor {floor} of {key} lift {lift} ignored: {(ride.Busy(now) ? "busy" : "already there")}");
+            return;
+        }
         BroadcastLift(key, lift, new LiftRide(ride.At(now), floor, now));
     }
 
@@ -211,7 +223,7 @@ public partial class InteriorManager
     {
         var body = PlayerBody(peer);
         if (body == null || Origin == null || !IsInstanceValid(body)) return null;
-        return PlacementFor(l, Origin).AffineInverse() * body.GlobalPosition;
+        return PlacementFor(l, Origin).AffineInverse() * WorldOf(body);   // its Earth position: on the server it may be in another region's frame (#1456), as NearDoor
     }
 
     private void BroadcastLift(string key, int lift, LiftRide ride)
