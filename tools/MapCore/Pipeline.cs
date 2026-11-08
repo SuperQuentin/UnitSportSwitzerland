@@ -101,6 +101,13 @@ public sealed class Step
     /// <summary>Why the step will not run (already done, layer off, GDAL missing); null when it runs.</summary>
     public string? Skip { get; init; }
     public Func<StepRun, Task<bool>>? Run { get; init; }
+
+    /// <summary>The same step, not run, for <paramref name="why"/>.</summary>
+    public Step Skipped(string why) => new()
+    {
+        Title = Title, Detail = Detail, DownloadBytes = DownloadBytes, DiskBytes = DiskBytes, DiskPath = DiskPath,
+        Seconds = Seconds, Skip = why, Run = Run,
+    };
 }
 
 /// <summary>
