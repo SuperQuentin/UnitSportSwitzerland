@@ -47,7 +47,8 @@ public class FlatLv95RatchetTests
             // after A2b: the saves keep Earth places, and records whose file moved hold a GlobalPos (sleepers) or give one
             // (placed objects, structures, pins, the travel flag), which the RPC edges now read; 4091 after A1's last step
             // (#1502): GlobalPos has no E/N, what is left reads its LV95 notation (`.Lv95.E`) or a record's LV95 fields
-            Baseline: 4091, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+            // 4039 after C5 (#1514): GPX tracks lie on their own plane (X/Y), not LV95
+            Baseline: 4039, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
         // the flat world's escape hatches out of IWorldGround (#1532, G2 C1): an LV95 tile key read off a
         // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; counted
         // after #1532, lowered as the IChunkSource users move (C1's leaf half, C5) and to 0 by D

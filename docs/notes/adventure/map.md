@@ -8,6 +8,8 @@
   M or Esc / B closes it. In a Battle Royale round M stays `BrMap`; with the adventure off, M is the place
   search as before. The side panel's "Town search" button opens the old search (teleporting where the server
   allows it); navigation's travel rules come with #1226.
+- **On the oblique stereographic since #1514** (`ui/map-projection`): the map holds an `EarthMapView`, which keeps
+  the API below for LV95 data and adds Earth places. MapSetup's `MapCanvas` keeps `MapView`.
 - **`MapView`** holds the centre, the zoom steps, the size, `ToScreen` / `ToLv95` / `Bounds`, `Pan`, `ZoomAt`,
   `DrawSampled` (a lattice texture sampled for the view) and the canton borders in one `DrawMultiline`.
   `MapCanvas` (MapSetup's tile picker) uses it; `--mapcheck` covers it.

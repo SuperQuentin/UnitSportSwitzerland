@@ -519,6 +519,7 @@ public partial class BrManager
     private async void BuildMap(BrArea area)
     {
         _mapFor = (area.E, area.N, area.Side);
+        BrMapDraw.SetArea(area.E, area.N);
         MapTexture = null;
         Waypoint = null;
         Towns = Places().Where(p => p.Kind == Terrain.Format.PlaceKind.Town && area.Contains(p.E, p.N))

@@ -77,7 +77,7 @@ public partial class CinemaProbe : Node
         // every gradient zero and every summit vanish, which would look like a flat route
         int draped = 0;
         foreach (var s in profile.Samples)
-            if (corridor.HeightAt(s.E, s.N) != null) draped++;
+            if (corridor.HeightAt(s.X, s.Y) != null) draped++;
         GD.Print($"[cinema] draped on real terrain: {draped}/{profile.Samples.Count} "
             + $"({100.0 * draped / Math.Max(1, profile.Samples.Count):F0}%)");
 
@@ -107,15 +107,13 @@ public partial class CinemaProbe : Node
         // How much of this run is on a structure, and how far the road surface sits from the
         // terrain there. That difference IS the bug: draped onto terrain, the runner would be
         // that far below a bridge deck or above a tunnel bore.
-        var network = await RoadNetwork.LoadAsync(_source,
-            track.Points.Min(q => q.E), track.Points.Min(q => q.N),
-            track.Points.Max(q => q.E), track.Points.Max(q => q.N)).ConfigureAwait(false);
+        var network = await RoadNetwork.LoadAsync(_source, track).ConfigureAwait(false);
 
         int bridges = 0, tunnels = 0, offGround = 0;
         double worst = 0;
         foreach (var s2 in profile.Samples)
         {
-            var near = network.Near(s2.E, s2.N, 20);
+            var near = network.Near(s2.X, s2.Y, 20);
             if (near.Count == 0) continue;
 
             var edge = network.Edges[near[0].Edge];
