@@ -622,6 +622,15 @@ public sealed class WorldOrigin
     }
 
     /// <summary>The current frame: a consistent snapshot, safe to hand to another thread.</summary>
+    /// <summary>
+    /// The earth world's origin (#1510, G2 C1): an anchor frame from the start, the ENU frame at a point
+    /// (<see cref="FrameAxes.Enu"/>), which <see cref="OriginShifter"/> moves without turning until C3.
+    /// </summary>
+    public WorldOrigin(FrameAxes axes)
+    {
+        _frame = new OriginFrame(axes, 0);
+    }
+
     public OriginFrame Frame => _frame;
 
     public double E => _frame.E;
