@@ -5,6 +5,13 @@ using Godot;
 
 namespace UnitSport.Core;
 
+/// <summary>The world the game stands on (<see cref="GameSettings.Frame"/>): flat LV95 tiles or cube leaves.</summary>
+public enum WorldFrame
+{
+    Flat,
+    Earth,
+}
+
 /// <summary>How finely the inner LOD rings and their roads/buildings are drawn.</summary>
 /// <summary>How much the client streams (#63): Low data keeps fine tiles to the nearest rings.</summary>
 public enum DataPreset
@@ -152,6 +159,12 @@ public sealed class GameSettings
     /// copy with no terrain it generates anyway, the only ground there is (#1002).
     /// </summary>
     public bool GeneratedFill { get; set; } = true;
+
+    /// <summary>
+    /// The world the game stands on (#1510, G2 C1): today's flat LV95 tiles, or the cube leaves in true Earth
+    /// positions. <c>--frame flat|earth</c>; flat until G2's last step flips it.
+    /// </summary>
+    public WorldFrame Frame { get; set; } = WorldFrame.Flat;
 
     /// <summary>Tile builds allowed in flight at once; 0 picks by whether a server is involved.</summary>
     public int MaxConcurrentBuilds { get; set; }
@@ -906,6 +919,7 @@ public sealed class GameSettings
                 case "--rings" when int.TryParse(v, out int r): RenderDistanceRings = r; break;
                 case "--horizon" when int.TryParse(v, out int h): HorizonKm = h; break;
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
+                case "--frame" when Enum.TryParse<WorldFrame>(v, true, out var wf): Frame = wf; break;
                 case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
                 // raw: generated roads without the road network stage (#559), to compare; not saved
                 case "--generated-roads": Terrain.FallbackChunkSource.RewriteRoads = v != "raw" && v != "off"; break;
