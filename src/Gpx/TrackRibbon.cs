@@ -107,8 +107,8 @@ public partial class TrackRibbon : MeshInstance3D
         for (int i = 0; i <= steps; i++)
         {
             double seconds = _track.Duration * i / steps;
-            var (e, n, ele, _, _) = _track.Sample(seconds);
-            var p = _origin.ToWorld(e, n, ele);
+            var (x, y, ele, _, _) = _track.Sample(seconds);
+            var p = _origin.ToWorld(_track.At(x, y, ele));
 
             // Only include stretches whose terrain has streamed in — the ribbon is still gated on
             // that even for a road-matched course, because a segment with nothing under it would

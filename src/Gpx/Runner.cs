@@ -223,8 +223,8 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
     public Vector3 CourseAt(double raceTime)
     {
         var course = Active;
-        var (e, n, ele, _, _) = course.Sample(raceTime);
-        var p = _origin.ToWorld(e, n, ele);
+        var (x, y, ele, _, _) = course.Sample(raceTime);
+        var p = _origin.ToWorld(course.At(x, y, ele));
         if (!course.ElevationIsSurface && _chunks.Ground.TryGetHeight(p, out float g)) p.Y = g;
         return p;
     }
@@ -235,11 +235,11 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         var course = Active;
         Finished = raceTime >= course.Duration;
 
-        var (e, n, recordedEle, speed, distance) = course.Sample(raceTime);
+        var (x, y, recordedEle, speed, distance) = course.Sample(raceTime);
         Speed = Finished ? 0 : speed;
         Distance = distance;
 
-        var pos = _origin.ToWorld(e, n, recordedEle);
+        var pos = _origin.ToWorld(course.At(x, y, recordedEle));
 
         // A road-matched course already sits on the road surface, bridge decks and tunnel bores
         // included, so re-draping it onto the terrain would undo exactly that. Only a raw
@@ -279,9 +279,9 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
 
         double ahead = Math.Min(raceTime + window, course.Duration);
         double behind = Math.Max(raceTime - window, 0);
-        var (fe, fn, _, _, _) = course.Sample(ahead);
-        var (be, bn, _, _, _) = course.Sample(behind);
-        var dir = _origin.ToWorld(fe, fn, recordedEle) - _origin.ToWorld(be, bn, recordedEle);
+        var (fx, fy, _, _, _) = course.Sample(ahead);
+        var (bx, by, _, _, _) = course.Sample(behind);
+        var dir = _origin.ToWorld(course.At(fx, fy, recordedEle)) - _origin.ToWorld(course.At(bx, by, recordedEle));
         dir.Y = 0;
 
         if (dir.LengthSquared() > 1e-4f)

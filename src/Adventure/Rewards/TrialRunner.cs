@@ -105,14 +105,19 @@ public partial class TrialRunner : Node3D
     private void OnGhost(string id, List<GhostTrack.Sample> samples)
     {
         if (RewardService.Instance?.Trial?.Id != id || _chunks() is not { } chunks || _origin() is not { } origin || samples.Count < 2) return;
+        // the ghost's LV95 samples on a plane centred on its start, as a GPX track lies (#1514)
+        var places = samples.Select(s => GlobalPos.FromLv95(s.E, s.N, s.Alt)).ToList();
+        var plane = UnitSport.Terrain.Format.MapProjection.At(places[0].Ecef);
         var points = new List<TrackPoint>(samples.Count);
-        double dist = 0;
+        double dist = 0, px = 0, py = 0;
         for (int i = 0; i < samples.Count; i++)
         {
-            if (i > 0) dist += Math.Sqrt((samples[i].E - samples[i - 1].E) * (samples[i].E - samples[i - 1].E) + (samples[i].N - samples[i - 1].N) * (samples[i].N - samples[i - 1].N));
-            points.Add(new TrackPoint(samples[i].E, samples[i].N, samples[i].Alt, i / GhostTrack.Rate, dist));
+            var (x, y) = plane.Forward(places[i].Ecef);
+            if (i > 0) dist += TrackPlane.Length(plane, px, py, x, y);
+            (px, py) = (x, y);
+            points.Add(new TrackPoint(x, y, samples[i].Alt, i / GhostTrack.Rate, dist));
         }
-        var track = new GpxTrack { Name = "Ghost", Points = points, HasTiming = true, ElevationIsSurface = true };
+        var track = new GpxTrack { Name = "Ghost", Plane = plane, Points = points, HasTiming = true, ElevationIsSurface = true };
         _ghost?.QueueFree();
         _ghost = Runner.Create(track, chunks, origin, 1);
         GetParent().AddChild(_ghost);

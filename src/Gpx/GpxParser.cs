@@ -171,13 +171,13 @@ public static class GpxParser
     /// path. Endpoints keep their weight so the track still starts and finishes where it
     /// was recorded. Uses a sliding window, so cost stays linear on long recordings.
     /// </summary>
-    private static void Smooth(List<TrackPoint> points)
+    private static void Smooth(List<TrackPoint> points, MapProjection plane)
     {
         int n = points.Count;
         if (n < 3) return;
 
-        var outE = new double[n];
-        var outN = new double[n];
+        var outX = new double[n];
+        var outY = new double[n];
         int lo = 0, hi = 0;
 
         for (int i = 0; i < n; i++)
@@ -186,28 +186,25 @@ public static class GpxParser
             while (lo < i && points[i].Distance - points[lo].Distance > SmoothingWindowM) lo++;
             while (hi < n - 1 && points[hi + 1].Distance - d <= SmoothingWindowM) hi++;
 
-            double sumE = 0, sumN = 0, weight = 0;
+            double sumX = 0, sumY = 0, weight = 0;
             for (int j = lo; j <= hi; j++)
             {
                 // triangular weighting: nearby fixes count for more than the window edge
                 double w = 1.0 - Math.Abs(points[j].Distance - d) / SmoothingWindowM;
                 if (w <= 0) continue;
-                sumE += points[j].E * w;
-                sumN += points[j].N * w;
+                sumX += points[j].X * w;
+                sumY += points[j].Y * w;
                 weight += w;
             }
-            outE[i] = weight > 0 ? sumE / weight : points[i].E;
-            outN[i] = weight > 0 ? sumN / weight : points[i].N;
+            outX[i] = weight > 0 ? sumX / weight : points[i].X;
+            outY[i] = weight > 0 ? sumY / weight : points[i].Y;
         }
 
         double distance = 0;
         for (int i = 0; i < n; i++)
         {
-            if (i > 0)
-                distance += Math.Sqrt(
-                    (outE[i] - outE[i - 1]) * (outE[i] - outE[i - 1]) +
-                    (outN[i] - outN[i - 1]) * (outN[i] - outN[i - 1]));
-            points[i] = points[i] with { E = outE[i], N = outN[i], Distance = distance };
+            if (i > 0) distance += TrackPlane.Length(plane, outX[i - 1], outY[i - 1], outX[i], outY[i]);
+            points[i] = points[i] with { X = outX[i], Y = outY[i], Distance = distance };
         }
     }
 
@@ -223,15 +220,16 @@ public static class GpxParser
         double distance = 0;
         double minEle = double.MaxValue, maxEle = double.MinValue, ascent = 0;
         double lastCountedEle = double.NaN;
-        double prevE = 0, prevN = 0;
+        double prevX = 0, prevY = 0;
+        // the track's own map plane (#1514): latitude and longitude straight from the file, never LV95
+        var plane = TrackPlane.Around(lats, lons);
 
         for (int i = 0; i < n; i++)
         {
-            var (e, nn) = SwissGeodesy.ToLv95(lats[i], lons[i]);
-            if (i > 0)
-                distance += Math.Sqrt((e - prevE) * (e - prevE) + (nn - prevN) * (nn - prevN));
-            prevE = e;
-            prevN = nn;
+            var (x, y) = plane.Forward(lats[i], lons[i]);
+            if (i > 0) distance += TrackPlane.Length(plane, prevX, prevY, x, y);
+            prevX = x;
+            prevY = y;
 
             double ele = eles[i];
             if (!double.IsNaN(ele))
@@ -251,10 +249,10 @@ public static class GpxParser
                 ? (times[i]!.Value - start.Value).TotalSeconds
                 : distance / AssumedSpeed;
 
-            points.Add(new TrackPoint(e, nn, double.IsNaN(ele) ? 0 : ele, seconds, distance));
+            points.Add(new TrackPoint(x, y, double.IsNaN(ele) ? 0 : ele, seconds, distance));
         }
 
-        if (smooth) Smooth(points);
+        if (smooth) Smooth(points, plane);
 
         // recorded time can stall or jump backwards; force it to advance so binary search
         // over the timeline stays valid
@@ -265,6 +263,7 @@ public static class GpxParser
         return new GpxTrack
         {
             Name = name,
+            Plane = plane,
             Points = points,
             HasTiming = hasTiming,
             MinElevation = minEle == double.MaxValue ? 0 : minEle,

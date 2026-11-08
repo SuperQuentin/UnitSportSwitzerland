@@ -395,10 +395,10 @@ public partial class GpxSession : Node
                  $"ascent {track.Ascent.ToString("0", inv)} m, timing={track.HasTiming}");
 
         // Where the track is, in both frames. The LV95 pair says which tiles have to exist;
-        // the world one is what --shot needs to point a camera at it.
-        double midE = (track.Points.Min(p => p.E) + track.Points.Max(p => p.E)) * 0.5;
-        double midN = (track.Points.Min(p => p.N) + track.Points.Max(p => p.N)) * 0.5;
-        var centre = _origin.ToWorld(midE, midN, 0);
+        // the world one is what --shot needs to point a camera at it. The plane's centre (#1514).
+        var mid = track.At(0, 0, 0);
+        var (midE, midN, _) = mid.Lv95;
+        var centre = _origin.ToWorld(mid);
         GD.Print($"[gpx]  centre LV95 {midE.ToString("0", inv)}/{midN.ToString("0", inv)}"
                  + $"  world {centre.X.ToString("0", inv)},{centre.Z.ToString("0", inv)}");
 

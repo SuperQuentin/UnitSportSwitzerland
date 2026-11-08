@@ -90,16 +90,8 @@ public static class TrackMatcher
     {
         if (track.Points.Count < 4) return new MatchResult(null, "track too short to match", 0);
 
-        double minE = double.MaxValue, minN = double.MaxValue;
-        double maxE = double.MinValue, maxN = double.MinValue;
-        foreach (var p in track.Points)
-        {
-            minE = Math.Min(minE, p.E); maxE = Math.Max(maxE, p.E);
-            minN = Math.Min(minN, p.N); maxN = Math.Max(maxN, p.N);
-        }
-
-        var network = await RoadNetwork.LoadAsync(source, minE, minN, maxE, maxN, ct: ct)
-            .ConfigureAwait(false);
+        // the roads on the track's own plane (#1514)
+        var network = await RoadNetwork.LoadAsync(source, track, ct: ct).ConfigureAwait(false);
 
         if (network.Edges.Count == 0)
             return new MatchResult(null, "no road data covers this track", 0);
@@ -107,9 +99,15 @@ public static class TrackMatcher
         return Match(track, network, ct);
     }
 
-    /// <summary>The matching itself, separated so it can be run against a network built any way.</summary>
+    /// <summary>
+    /// The matching itself, separated so it can be run against a network built any way, on the track's plane
+    /// (<see cref="RoadNetwork.LoadAsync(IChunkSource, GpxTrack, double, CancellationToken)"/> or
+    /// <see cref="RoadNetwork.InPlane"/>).
+    /// </summary>
     public static MatchResult Match(GpxTrack track, RoadNetwork network, CancellationToken ct = default)
     {
+        if (!ReferenceEquals(network.Plane, track.Plane))
+            throw new ArgumentException("the road network is not on the track's plane", nameof(network));
         var samples = Thin(track);
         if (samples.Count < 3) return new MatchResult(null, "track too short to match", 0);
 
@@ -119,7 +117,7 @@ public static class TrackMatcher
         for (int i = 0; i < samples.Count; i++)
         {
             var p = track.Points[samples[i]];
-            candidates[i] = network.Near(p.E, p.N, SearchRadiusM);
+            candidates[i] = network.Near(p.X, p.Y, SearchRadiusM);
             if (candidates[i].Count > 0) withCandidates++;
         }
 
@@ -161,7 +159,8 @@ public static class TrackMatcher
             var before = candidates[previous];
             var a = track.Points[samples[previous]];
             var b = track.Points[samples[i]];
-            double straight = Math.Sqrt((b.E - a.E) * (b.E - a.E) + (b.N - a.N) * (b.N - a.N));
+            double dx = b.X - a.X, dy = b.Y - a.Y;
+            double straight = Math.Sqrt(dx * dx + dy * dy);
             double limit = Math.Min(RouteLimitM, straight * 3 + 60);
 
             for (int c = 0; c < here.Count; c++)
@@ -335,8 +334,8 @@ public static class TrackMatcher
 
         for (int i = 0; i < n; i++)
         {
-            double dx = snapped.Points[i].E - raw.Points[i].E;
-            double dy = snapped.Points[i].N - raw.Points[i].N;
+            double dx = snapped.Points[i].X - raw.Points[i].X;
+            double dy = snapped.Points[i].Y - raw.Points[i].Y;
             offsets[i] = Math.Sqrt(dx * dx + dy * dy);
             total += offsets[i];
 
@@ -355,8 +354,8 @@ public static class TrackMatcher
 
         static double Distance(GpxTrack t, int i)
         {
-            double dx = t.Points[i].E - t.Points[i - 1].E;
-            double dy = t.Points[i].N - t.Points[i - 1].N;
+            double dx = t.Points[i].X - t.Points[i - 1].X;
+            double dy = t.Points[i].Y - t.Points[i - 1].Y;
             return Math.Sqrt(dx * dx + dy * dy);
         }
     }
@@ -435,7 +434,7 @@ public static class TrackMatcher
             while (sample + 1 < samples.Count && samples[sample + 1] <= i) sample++;
 
             var p = track.Points[i];
-            double e = p.E, n = p.N;
+            double e = p.X, n = p.Y;
 
             // Consider the edge chosen here and at the next sample, and take whichever the fix
             // is actually nearer. This looks like the pointwise snapping the HMM exists to
@@ -448,7 +447,7 @@ public static class TrackMatcher
             foreach (int edge in Bracket(chosen, sample))
             {
                 if (edge < 0) continue;
-                var hit = Closest(network.Edges[edge], p.E, p.N);
+                var hit = Closest(network.Edges[edge], p.X, p.Y);
                 if (hit.Distance < best)
                 {
                     best = hit.Distance;
@@ -458,8 +457,8 @@ public static class TrackMatcher
                 }
             }
 
-            offsetE[i] = e - p.E;
-            offsetN[i] = n - p.N;
+            offsetE[i] = e - p.X;
+            offsetN[i] = n - p.Y;
         }
 
         SmoothOffsets(offsetE, offsetN);
@@ -471,13 +470,9 @@ public static class TrackMatcher
         for (int i = 0; i < total; i++)
         {
             var p = track.Points[i];
-            double e = p.E + offsetE[i], n = p.N + offsetN[i];
+            double e = p.X + offsetE[i], n = p.Y + offsetN[i];
 
-            if (i > 0)
-            {
-                double dx = e - previousE, dy = n - previousN;
-                cumulative += Math.Sqrt(dx * dx + dy * dy);
-            }
+            if (i > 0) cumulative += TrackPlane.Length(track.Plane, previousE, previousN, e, n);
             previousE = e; previousN = n;
 
             // The road's own altitude where we have it, the recording's where we do not. Falling
@@ -490,6 +485,7 @@ public static class TrackMatcher
         return new GpxTrack
         {
             Name = track.Name,
+            Plane = track.Plane,
             Points = points,
             HasTiming = track.HasTiming,
             ElevationIsSurface = true,

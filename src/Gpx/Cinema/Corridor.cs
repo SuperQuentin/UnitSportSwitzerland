@@ -22,6 +22,9 @@ public sealed class Corridor
     private readonly Dictionary<TileId, BuildingTile?> _buildings = new();
     private readonly Dictionary<TileId, RoadTile?> _roads = new();
 
+    /// <summary>The track's plane, which <see cref="HeightAt"/> is asked on (#1514).</summary>
+    private MapProjection _plane = null!;
+
     public int TileCount => _grids.Count;
     public int BuildingCount { get; private set; }
 
@@ -43,18 +46,12 @@ public sealed class Corridor
     public static async Task<Corridor> LoadAsync(GpxTrack track, IChunkSource source,
         IReadOnlySet<TileId>? known = null, double pad = 400, CancellationToken ct = default)
     {
-        var corridor = new Corridor();
+        var corridor = new Corridor { _plane = track.Plane };
 
-        double minE = double.MaxValue, minN = double.MaxValue;
-        double maxE = double.MinValue, maxN = double.MinValue;
-        foreach (var p in track.Points)
-        {
-            minE = Math.Min(minE, p.E); maxE = Math.Max(maxE, p.E);
-            minN = Math.Min(minN, p.N); maxN = Math.Max(maxN, p.N);
-        }
-
-        var from = TileId.FromLv95(minE - pad, minN - pad);
-        var to = TileId.FromLv95(maxE + pad, maxN + pad);
+        // the LV95 tiles under the track's plane box (LV95 until G2 D; #1514)
+        var (minE, minN, maxE, maxN) = track.Lv95Bounds(pad);
+        var from = TileId.FromLv95(minE, minN);
+        var to = TileId.FromLv95(maxE, maxN);
 
         var wanted = new List<TileId>();
         for (int e = from.E; e <= to.E; e++)
@@ -104,7 +101,7 @@ public sealed class Corridor
     }
 
     /// <summary>
-    /// Terrain height at an LV95 position, or null outside the loaded tiles.
+    /// Terrain height at a point of the track's plane (#1514), or null outside the loaded tiles.
     ///
     /// <para>
     /// Every boundary vertex belongs to two tiles and every corner to four, and
@@ -113,8 +110,10 @@ public sealed class Corridor
     /// fix the preprocessor's sampler uses.
     /// </para>
     /// </summary>
-    public double? HeightAt(double e, double n)
+    public double? HeightAt(double x, double y)
     {
+        // the tiles are LV95 (until G2 D): the plane point's LV95 to ~10 cm, a twentieth of a grid cell
+        var (e, n) = _plane.Lv95Of(x, y);
         var id = TileId.FromLv95(e, n);
         if (_grids.TryGetValue(id, out var grid)) return grid.SampleHeight(e, n);
 
