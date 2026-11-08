@@ -40,18 +40,12 @@ public partial class ServerRegions : Node
     public static bool Off => CmdArgs.Has("--noregions");
 
     /// <summary>
-    /// <c>--regionenu</c>: far regions are ENU frames even while the server's main world is the flat LV95 one, so a
-    /// check can turn bodies across frames today (#1513). Their ground is still the flat tiles, placed through
-    /// <see cref="OriginFrame.TileTransform"/>: steps of a few cm at tile seams, fine for a check, not for play.
-    /// </summary>
-    public static bool ForceEnu => CmdArgs.Has("--regionenu");
-
-    /// <summary>
     /// Whether new regions are ENU frames at their cluster's Earth mean (#1513, G2 C4): when the main world is an
-    /// anchor frame (<c>--frame earth</c>), or <see cref="ForceEnu"/>. Otherwise each is the flat LV95 frame on its
-    /// whole km, as before, and a handover is a plain translation.
+    /// anchor frame (<c>--frame earth</c>). Otherwise each is the flat LV95 frame on its whole km, as before, and a
+    /// handover is a plain translation. Not over the flat tiles: the flat <see cref="ChunkManager"/> answers heights as
+    /// LV95 altitudes in world Y, which an ENU frame's Y is not (a body there stands beside its ground).
     /// </summary>
-    public bool Enu => Main.IsEnu || ForceEnu;
+    public bool Enu => Main.IsEnu;
 
     private RegionPlanner.Anchoring Anchoring => Enu ? RegionPlanner.Anchoring.Earth : RegionPlanner.Anchoring.Lv95Km;
 

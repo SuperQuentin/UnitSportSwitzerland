@@ -244,9 +244,8 @@ cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook u
   Earth distances; `InterestService`'s line of sight over the pyramid's geometry with refraction and
   Earth occlusion; `EntityInterest`'s cells by cube key.
 - Check: `--regioncheck`, `--interestcheck`, `tools/test.sh net` under `--frame earth`.
-- Status: the position half built (#1584): regions as ENU frames at their members' Earth mean (under `--frame earth`,
-  or `--regionenu` for the check), turning handovers (`OriginFrame.Carry`), `EntityInterest` by level-13 cube cell.
-  Waits for C1's earth streamer: an ENU region's ground, the main region on leaves, line of sight over the pyramid.
+- Status: the position half built (#1584): regions as ENU frames at their members' Earth mean (under `--frame earth`), turning handovers (`OriginFrame.Carry`), `EntityInterest` by level-13 cube cell.
+  Next: the server under `--frame earth` on `EarthWorld` (main and ENU regions), then line of sight over the pyramid.
 
 **C5 What reads far** (one PR)
 - GPX, maps (the Swiss map keeps LV95 as its own map projection; elsewhere a local conformal one,

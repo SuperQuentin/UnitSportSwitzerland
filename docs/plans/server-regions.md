@@ -107,16 +107,16 @@ The position half, built in PR #1584:
 - **Anchors**: a region's anchor is its members' Earth mean, the mean of their ECEF positions put on the ellipsoid
   (`RegionPlanner.Anchoring.Earth`), and its frame the ENU there (`WorldOrigin(FrameAxes)`): true north, true metres,
   its own up and gravity. The planner already measured in Earth distances (`GlobalPos` since #1502).
-- **When**: whenever the server's main world is an anchor frame (`--frame earth`); `--regionenu` forces it over
-  today's flat world for the check. Under the flat frame regions keep their whole-km LV95 frames, so nothing changes
-  there.
+- **When**: whenever the server's main world is an anchor frame (`--frame earth`). Under the flat frame regions keep
+  their whole-km LV95 frames, so nothing changes there; ENU regions over the flat tiles do not work (the flat
+  `ChunkManager`'s heights are LV95 altitudes in world Y).
 - **Handovers turn**: `OriginFrame.Carry` keeps a body's bearings against the local east-up-south (exact at its
   place; true heading kept across a 300 km teleport), mirrors likewise.
 - **Entity interest** buckets by level-13 `CubeKey` (~1.2 km), neighbours through `CubeKey.Neighbour` across face
   edges (seven at a cube corner).
 
-Left for the second half, once C1's earth streamer (#1576) exists: an ENU region's own ground (its `ChunkManager`
-is still the flat one), the main region on leaves, and `InterestService`'s line of sight over the pyramid with
+Left for the follow-up, now that C1's earth streamer (#1576) is on main: the server under `--frame earth`, the main
+region and each ENU region on `EarthWorld`'s leaves (their `ChunkManager` is still the flat one), and `InterestService`'s line of sight over the pyramid with
 refraction and Earth occlusion (still the 100 m horizon lattice).
 
 ## Out of scope

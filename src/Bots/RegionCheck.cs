@@ -20,9 +20,8 @@ namespace UnitSport.Bots;
 /// walker walked, never passed through its blocker (they touched), and each site's bots share one region. A second walker
 /// heads north into a car the server parked in its main frame <see cref="CarGap"/> m ahead: in a far region
 /// it meets the car's copy there (<c>RegionMirrors</c>), and stops at its side as at home.
-/// <c>--noregions</c> runs the same with every body in the server's one frame: the "before". <c>--regionenu</c> makes the
-/// far regions ENU frames (#1513): the far site walks in true north and its own up, and the hop is a turning handover that
-/// must keep the walker's heading from true north.
+/// <c>--noregions</c> runs the same with every body in the server's one frame: the "before". The hop prints the walker's
+/// heading from true north before and after; a turning handover (ENU regions, #1513) must keep it.
 /// <c>--regionat E,N --regionfar E,N</c> put the sites elsewhere (a real-terrain run: Geneva and Riddes);
 /// <c>--regionwander S</c> then lets every bot stroll S seconds among the trunks and houses (WanderBrain) and
 /// reports how far each went, whether it stayed on its ground and how many trunks its region holds.
@@ -72,7 +71,7 @@ public partial class RegionCheck : Node
 
     private readonly List<Site> _sites = new();
     /// <summary>The run's name in its files and its cars: the sites, and how it differs from a plain run.</summary>
-    private string Tag => _run + (ServerRegions.Off ? "-noregions" : "") + (RegionMirrors.Off ? "-nomirrors" : "") + (ServerRegions.ForceEnu ? "-enu" : "");
+    private string Tag => _run + (ServerRegions.Off ? "-noregions" : "") + (RegionMirrors.Off ? "-nomirrors" : "");
     private readonly string _run;
     private string _out = "";
     private int _tick, _settled, _walked = -1, _wander, _wandered = -1;
