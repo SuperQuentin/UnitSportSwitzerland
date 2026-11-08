@@ -17,7 +17,7 @@ public enum SectionKind { Calm = 0, Groove = 1, Peak = 2, Chorus = 3 }
 public sealed class CdAnalysis
 {
     /// <summary>Bump when the analyser changes what it stores: older CDs are re-analysed at start.</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>Envelope frames per second.</summary>
     public const int EnvRate = 20;
@@ -54,9 +54,12 @@ public sealed class CdAnalysis
     [JsonPropertyName("kinds")] public int[] SectionKinds { get; init; } = Array.Empty<int>();
 
     /// <summary>
-    /// Base64 of <see cref="EnvRate"/> Hz frames, 4 bytes each (v3, #1153), from the separated vocal:
-    /// its level (normalised per track, 0 = no voice), syllable onsets (0..255), the vowel (0 = "oo"
-    /// .. 255 = "ee", 128 when unsure) and the sung pitch as a MIDI note (0 = unvoiced).
+    /// Base64 of <see cref="EnvRate"/> Hz frames from the separated vocal: v3 had 4 bytes each
+    /// (#1153), the level (normalised per track, 0 = no voice), syllable onsets (0..255), the vowel
+    /// (0 = "oo" .. 255 = "ee", 128 when unsure) and the sung pitch as a MIDI note (0 = unvoiced);
+    /// v4 adds the mouth's aperture (0..255, closed to open) and a consonant's high-band burst
+    /// (0..255). The stride is <see cref="VocalAnalyzer.FrameBytes"/> but read from the version, so
+    /// a v3 block still plays while its CD waits for the backfill.
     /// </summary>
     [JsonPropertyName("voc")] public string Vocal { get; init; } = "";
 
@@ -158,6 +161,13 @@ public sealed class CdAnalysis
 public static class CdAnalysisRuntime
 {
     /// <summary>
+    /// How far ahead of the audible time the lips read the vocal, s (#1153): the 50 ms analysis
+    /// frames and the face's own ease leave the mouth a little behind the voice, and because the
+    /// analysis is offline a look-ahead costs nothing. The lights and the melody stay on the time.
+    /// </summary>
+    public const double LipLead = 0.02;
+
+    /// <summary>
     /// Loudness and kick at <paramref name="t"/> seconds into the file, 0..1. The level is
     /// interpolated between frame centres; the kick holds a frame's onset and lets the previous
     /// frame's fade over this one, so a 50 ms hit is seen at any frame rate. False when the CD has
@@ -240,27 +250,41 @@ public static class CdAnalysisRuntime
         return idx < a.SectionKinds.Length ? (SectionKind)a.SectionKinds[idx] : SectionKind.Groove;
     }
 
+    /// <summary>The four lanes of a v3 block, for callers that do not need the mouth (the aperture comes back -1).</summary>
+    public static bool SampleVocal(CdInfo cd, double t, out float level, out float syllable, out float vowel, out float pitch) =>
+        SampleVocal(cd, t, out level, out syllable, out vowel, out pitch, out _, out _);
+
     /// <summary>
-    /// The voice at <paramref name="t"/> seconds into the file (v3): level 0..1 (interpolated),
-    /// syllable 0..1 (held a frame and fading over the next, as the kick), vowel -1 "oo" .. +1 "ee",
-    /// pitch as a MIDI note (interpolated while sung, 0 unvoiced). False without vocal data.
+    /// The voice at <paramref name="t"/> seconds into the file: level 0..1 (interpolated),
+    /// syllable 0..1 and consonant 0..1 (held a frame and fading over the next, as the kick), vowel
+    /// -1 "oo" .. +1 "ee", pitch as a MIDI note (interpolated while sung, 0 unvoiced), and the mouth's
+    /// aperture 0..1 (interpolated). <paramref name="aperture"/> is -1 and the consonant 0 on a v3
+    /// block, which the face draws from the level and the vowel instead. False without vocal data.
     /// </summary>
-    public static bool SampleVocal(CdInfo cd, double t, out float level, out float syllable, out float vowel, out float pitch)
+    public static bool SampleVocal(CdInfo cd, double t, out float level, out float syllable, out float vowel, out float pitch,
+        out float aperture, out float consonant)
     {
-        level = syllable = vowel = pitch = 0f;
+        level = syllable = vowel = pitch = consonant = 0f;
+        aperture = -1f;
         if (cd.Analysis is not { } a) return false;
         byte[] e = a.VocalBytes();
-        int n = e.Length / 4;
+        int sb = a.Version >= 4 ? VocalAnalyzer.FrameBytes : 4;   // a v3 block still plays while it waits for the backfill
+        int n = e.Length / sb;
         if (n == 0) return false;
         double x = t * CdAnalysis.EnvRate;
         if (x < 0 || x >= n) return true;
         int i = (int)x, j = Math.Min(i + 1, n - 1);
         float fr = (float)(x - i);
-        level = (e[4 * i] * (1f - fr) + e[4 * j] * fr) / 255f;
-        syllable = Math.Max(e[4 * i + 1] / 255f, i > 0 ? e[4 * i - 3] / 255f * (1f - fr) : 0f);
-        vowel = (e[4 * i + 2] * (1f - fr) + e[4 * j + 2] * fr) / 127.5f - 1f;
-        byte p0 = e[4 * i + 3], p1 = e[4 * j + 3];
+        level = (e[sb * i] * (1f - fr) + e[sb * j] * fr) / 255f;
+        syllable = Math.Max(e[sb * i + 1] / 255f, i > 0 ? e[sb * (i - 1) + 1] / 255f * (1f - fr) : 0f);
+        vowel = (e[sb * i + 2] * (1f - fr) + e[sb * j + 2] * fr) / 127.5f - 1f;
+        byte p0 = e[sb * i + 3], p1 = e[sb * j + 3];
         pitch = p0 == 0 ? 0f : p1 == 0 ? p0 : p0 * (1f - fr) + p1 * fr;
+        if (sb >= VocalAnalyzer.FrameBytes)
+        {
+            aperture = (e[sb * i + 4] * (1f - fr) + e[sb * j + 4] * fr) / 255f;
+            consonant = Math.Max(e[sb * i + 5] / 255f, i > 0 ? e[sb * (i - 1) + 5] / 255f * (1f - fr) : 0f);
+        }
         return true;
     }
 

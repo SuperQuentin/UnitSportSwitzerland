@@ -20,8 +20,8 @@ public sealed class FaceAnimator
     /// <summary>How fast a face follows its expression, 1/s.</summary>
     private const float Ease = 9f;
 
-    /// <summary>How fast lips follow a voice (#1153), 1/s: a syllable lasts a tenth of a second.</summary>
-    public const float LipEase = 30f;
+    /// <summary>How fast lips follow a voice (#1153), 1/s: a syllable lasts a tenth of a second, and the mouth must not trail it.</summary>
+    public const float LipEase = 50f;
     /// <summary>The eyes follow a target this far off the nose at most, rad (gaze 1).</summary>
     private const float GazeReach = 0.7f;
 

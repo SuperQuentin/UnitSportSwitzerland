@@ -69,6 +69,51 @@ public class DanceFaceTests
     }
 
     [Fact]
+    public void A_held_note_stays_open_between_the_syllable_spikes()
+    {
+        DanceHearing H(float voice, float syllable, float vowel, int section = 1) =>
+            new(0, section, 0.8f, 0f, 0f, 0f, 1, 2, 0, voice, syllable, vowel);
+        var held = DanceFace.Target(H(1f, 0f, 0f), 0u);      // the syllable has long decayed
+        var onset = DanceFace.Target(H(1f, 1f, 0f), 0u);
+        Assert.True(held.Jaw > 0.5f, $"a held note leaves the mouth open (jaw {held.Jaw:F2})");
+        Assert.True(onset.Jaw > held.Jaw + 0.2f, "a syllable still pops it wider");
+    }
+
+    [Fact]
+    public void A_quiet_verse_and_a_mumbling_dancer_still_move_the_lips()
+    {
+        DanceHearing H(float voice, float syllable, float vowel, uint seed) =>
+            new(0, 1, 0.8f, 0f, 0f, 0f, 1, 2, 0, voice, syllable, vowel);
+        // a third of the track's loud vocal, on a syllable: the level is expanded so it reads
+        Assert.True(DanceFace.Target(H(0.35f, 1f, 0f, 1u), 1u).Jaw > 0.25f,
+            "a quiet verse syllable opens the mouth of a dancer who only mumbles");
+        // and the mumbler is no longer nearly shut at full voice
+        Assert.True(DanceFace.Target(H(1f, 1f, 0f, 1u), 1u).Jaw > 0.4f);
+    }
+
+    [Fact]
+    public void The_aperture_lane_opens_the_jaw_and_a_consonant_closes_it()
+    {
+        DanceHearing H(float aperture, float consonant, float syllable = 0f) =>
+            new(0, 1, 0.8f, 0f, 0f, 0f, 1, 2, 0, 1f, syllable, 0f, aperture, consonant);
+        var wide = DanceFace.Target(H(0.9f, 0f), 0u);
+        var narrow = DanceFace.Target(H(0.1f, 0f), 0u);
+        Assert.True(wide.Jaw > narrow.Jaw + 0.4f, "an open vowel's aperture opens the jaw");
+        Assert.True(DanceFace.Target(H(0.9f, 1f), 0u).Jaw < wide.Jaw - 0.2f, "a consonant presses it shut");
+        // a held open vowel, on a dancer who only mumbles: the aperture carries it between syllables
+        Assert.True(DanceFace.Target(H(0.9f, 0f), 1u).Jaw > 0.35f);
+    }
+
+    [Fact]
+    public void An_ah_opens_wider_than_an_ee_or_an_oo()
+    {
+        DanceHearing H(float vowel) => new(0, 3, 0.8f, 0f, 0f, 0f, 1, 2, 0, 1f, 1f, vowel);
+        Assert.True(DanceFace.Target(H(0f), 0u).Jaw > DanceFace.Target(H(0.8f), 0u).Jaw + 0.15f);
+        Assert.True(DanceFace.Target(H(-0.8f), 0u).Jaw > 0.5f, "an oo is still open, just rounder");
+        Assert.True(DanceFace.Target(H(-0.8f), 0u).Wide < -0.3f);
+    }
+
+    [Fact]
     public void The_same_music_and_dancer_give_the_same_face()
     {
         Assert.Equal(At(2, 3, kick: 0.7f, seed: 9u), At(2, 3, kick: 0.7f, seed: 9u));

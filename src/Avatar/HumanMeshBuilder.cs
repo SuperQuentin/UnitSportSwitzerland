@@ -174,9 +174,19 @@ public enum Headwear
 /// crossfade on the beat, not a cut (#261). A move at or past <see cref="HumanMeshBuilder.GroupMoves"/>
 /// is one of the crowd moves danced together (<see cref="HumanMeshBuilder.GroupPogo"/>, <see cref="HumanMeshBuilder.GroupJump"/>);
 /// one at or past <see cref="HumanMeshBuilder.EmoteMoves"/> is an emote off the wheel (#404), whatever the style.
+///
+/// <para>
+/// The music the body hears (#728): <paramref name="Level"/> (0..1) and <paramref name="Kick"/>
+/// (the analysed low-band onset, 0..1) let the whole move grow in a loud chorus and give on a real
+/// hit, <paramref name="Section"/> (0 calm, 1 groove, 2 peak, 3 chorus) sets how far it opens,
+/// <paramref name="Bpm"/> lets the shared groove breathe with the tempo, and <paramref name="Rise"/>
+/// / <paramref name="Hold"/> (the CD's melody, -1..1 and 0..1) lift the chin on a climb and lean
+/// through a long note. Defaults leave every other caller exactly as it was.
+/// </para>
 /// </summary>
 public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, float BeatPhase, float BarPhase, int Bar, float Weight,
-    int PrevMove = -1, float MoveBlend = 1f);
+    int PrevMove = -1, float MoveBlend = 1f, float Level = 0.8f, float Kick = 0f, int Section = 1, float Bpm = 0f,
+    float Rise = 0f, float Hold = 0f);
 
 /// <summary>
 /// A low-poly human, built from tubes and boxes at roughly 1.78 m.
@@ -1760,9 +1770,9 @@ public static partial class HumanMeshBuilder
         float m = DSm(moving);
         if (IsFloor(move) || IsFloor(prev)) return ApplyFloor(rig, d, prev, move, flow, beat, we, m);
 
-        if (m <= 0.001f) return DanceVariant(rig, prev, move, flow, beat, we, false);
-        if (m >= 0.999f) return DanceVariant(rig, prev, move, flow, beat, we, true);
-        return MixRigs(DanceVariant(rig, prev, move, flow, beat, we, false), DanceVariant(rig, prev, move, flow, beat, we, true), m);
+        if (m <= 0.001f) return DanceVariant(rig, prev, move, flow, beat, we, false, d);
+        if (m >= 0.999f) return DanceVariant(rig, prev, move, flow, beat, we, true, d);
+        return MixRigs(DanceVariant(rig, prev, move, flow, beat, we, false, d), DanceVariant(rig, prev, move, flow, beat, we, true, d), m);
     }
 
     /// <summary>
@@ -1772,14 +1782,14 @@ public static partial class HumanMeshBuilder
     private static Rig ApplyFloor(in Rig rig, in DanceParams d, DanceMove prev, DanceMove move, float flow, in Beat beat, float we, float m)
     {
         float beats = (d.Bar & 1) * 4f + DFrac(d.BarPhase) * 4f;
-        var now = IsFloor(move) ? FloorRig(move, rig, beats, beat) : DanceVariant(rig, move, move, 1f, beat, 1f, false);
+        var now = IsFloor(move) ? FloorRig(move, rig, beats, beat) : DanceVariant(rig, move, move, 1f, beat, 1f, false, d);
         // a set's halves run into each other by themselves; anything else crossfades as usual
         if (flow < 1f && !(prev == DanceMove.BreakDown && IsFloor(move)))
         {
-            var before = IsFloor(prev) ? FloorRig(prev, rig, 8f, beat) : DanceVariant(rig, prev, prev, 1f, beat, 1f, false);
+            var before = IsFloor(prev) ? FloorRig(prev, rig, 8f, beat) : DanceVariant(rig, prev, prev, 1f, beat, 1f, false, d);
             now = MixRigs(before, now, flow);
         }
-        if (m > 0.001f) now = MixRigs(now, DanceVariant(rig, DanceMove.Toprock, DanceMove.Toprock, 1f, beat, 1f, true), m);
+        if (m > 0.001f) now = MixRigs(now, DanceVariant(rig, DanceMove.Toprock, DanceMove.Toprock, 1f, beat, 1f, true, d), m);
         return we >= 0.999f ? now : MixRigs(rig, now, we);
     }
 
@@ -1798,20 +1808,21 @@ public static partial class HumanMeshBuilder
         return table[((index % table.Length) + table.Length) % table.Length];
     }
 
-    private static Rig DanceVariant(in Rig rig, DanceMove prev, DanceMove move, float flow, in Beat t, float we, bool mv)
+    private static Rig DanceVariant(in Rig rig, DanceMove prev, DanceMove move, float flow, in Beat t, float we, bool mv, in DanceParams d)
     {
-        var ch = Channels(move, t, mv);
-        if (flow < 1f) ch = Mix(Channels(prev, t, mv), ch, flow);
+        var ch = Channels(move, t, mv, d.Bpm);
+        if (flow < 1f) ch = Mix(Channels(prev, t, mv, d.Bpm), ch, flow);
+        Feel(ref ch, d);
         return Compose(rig, ch, we, mv);
     }
 
-    private static DanceCh Channels(DanceMove move, in Beat t, bool mv)
+    private static DanceCh Channels(DanceMove move, in Beat t, bool mv, float bpm)
     {
         var ch = default(DanceCh);
         ch.ArmBlend = 1f;
         Planted(ref ch, 0.098f, 0f);
         EvalMove(move, t, mv, ref ch);
-        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute) && move < DanceMove.FightStand) Groove(ref ch, t, mv);
+        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute) && move < DanceMove.FightStand) Groove(ref ch, t, mv, bpm);
         return ch;
     }
 
@@ -1820,18 +1831,50 @@ public static partial class HumanMeshBuilder
     /// into it and the shoulders bounce a beat-fraction later, so even a move that only works the
     /// arms has the whole body in time. Small on purpose: added to what the move already does.
     /// </summary>
-    private static void Groove(ref DanceCh ch, in Beat t, bool mv)
+    private static void Groove(ref DanceCh ch, in Beat t, bool mv, float bpm)
     {
         float hit = DDip(t.B);
-        float late = DDip(DFrac(t.B - 0.12f));
-        float k = mv ? 0.5f : 1f;
+        float late = DDip(DFrac(t.B - 0.12f));      // the shoulders arrive a beat-fraction after the knee
+        float head = DDip(DFrac(t.B - 0.06f));      // and the head a little after the knee, before them
+        // a slow song gives more; a fast one less, without touching the move's own amplitude
+        float tempo = bpm > 0f ? Mathf.Clamp(1f + (110f - bpm) * 0.0015f, 0.90f, 1.08f) : 1f;
+        float k = (mv ? 0.5f : 1f) * tempo;
         ch.Py -= 0.018f * hit * k;
-        ch.ThN += 0.045f * hit * k;
+        ch.ThN += 0.045f * head * k;
         ch.ShL += 0.010f * late * k;
         ch.ShR += 0.010f * late * k;
         // a sway of the hips over two beats, alternating, under whatever the move does
         ch.Px += 0.012f * t.D * k;
         ch.Phi += 0.02f * t.D * k;
+    }
+
+    /// <summary>
+    /// The music on the body (#728): the move grows with the song's level and section, and gives on
+    /// a real low-band hit (not only on the grid), so a chorus opens and a drop lands where the music
+    /// does. A melody's climb lifts the chin, a long note arches the torso in a slow sway. Applied
+    /// after the move's channels are mixed, before the rig, so every peer draws the same frame from
+    /// the same analysis and the shared clock; the arm targets and feet stay the move's own.
+    /// </summary>
+    private static void Feel(ref DanceCh ch, in DanceParams d)
+    {
+        float level = Mathf.Clamp(d.Level, 0f, 1f);
+        float section = d.Section switch { 0 => 0.92f, 2 or 3 => 1.10f, _ => 1f };
+        float dyn = (1f + 0.30f * (level - 0.8f)) * section;
+        ch.Px *= dyn; ch.Py *= dyn; ch.Pz *= dyn; ch.Tilt *= dyn;
+        ch.Theta *= dyn; ch.Phi *= dyn; ch.Psi *= dyn; ch.ThN *= dyn; ch.PhH *= dyn;
+        ch.ShL *= dyn; ch.ShR *= dyn;
+
+        // the analysed kick: a knee dip and a head nod on the actual hit, under the grid's groove
+        float hit = Mathf.Clamp(d.Kick, 0f, 1f);
+        ch.Py -= 0.018f * hit;
+        ch.ThN += 0.030f * hit;
+        ch.ShL += 0.008f * hit;
+        ch.ShR += 0.008f * hit;
+
+        // the singer's line: a climb lifts the chin, a long note leans the torso through it
+        float rise = Mathf.Clamp(d.Rise, -1f, 1f), hold = Mathf.Clamp(d.Hold, 0f, 1f);
+        ch.ThN -= 0.05f * rise + 0.03f * hold;
+        ch.Phi += 0.025f * hold * DSin(0.5f * hold);
     }
 
     // ---- beat clock and small helpers ---------------------------------------------------
@@ -1972,8 +2015,10 @@ public static partial class HumanMeshBuilder
 
     private static void ClapArms(ref DanceCh ch, float cl)
     {
-        Aim(ref ch, -1f, 0.20f - 0.35f * cl, -0.05f - 0.05f * cl, 0.30f, HLow(-1f));
-        Aim(ref ch, 1f, 0.20f - 0.35f * cl, -0.05f - 0.05f * cl, 0.30f, HLow(1f));
+        // #728: the wrists stop 0.16 m apart, not 0.06: the hands (a 0.068 m palm) meet, they do not
+        // pass through each other. Open, they are still 0.76 m apart.
+        Aim(ref ch, -1f, 0.20f - 0.30f * cl, -0.05f - 0.05f * cl, 0.30f, HLow(-1f));
+        Aim(ref ch, 1f, 0.20f - 0.30f * cl, -0.05f - 0.05f * cl, 0.30f, HLow(1f));
     }
 
     // ---- feet ----------------------------------------------------------------------------
@@ -2088,15 +2133,17 @@ public static partial class HumanMeshBuilder
 
         float thH = 0.35f * theta + we * ch.ThN, phH = we * ch.PhH;
         var u = new Vector3(Mathf.Sin(phH), Mathf.Cos(phH) * Mathf.Cos(thH), Mathf.Cos(phH) * Mathf.Sin(thH));
+        var headBase = neck + u * 0.065f;
+        var headTop = neck + u * 0.255f;
 
         float bl = we * ch.ArmBlend;
-        SolveArm(ch.ArmL, -1f, sp, shoulderL, kneeL, rig.ShoulderL, rig.ElbowL, rig.WristL, bl,
-            out var elbowL, out var wristL);
-        SolveArm(ch.ArmR, 1f, sp, shoulderR, kneeR, rig.ShoulderR, rig.ElbowR, rig.WristR, bl,
-            out var elbowR, out var wristR);
+        SolveArm(ch.ArmL, -1f, sp, shoulderL, kneeL, hip, neck, headBase, headTop,
+            rig.ShoulderL, rig.ElbowL, rig.WristL, bl, out var elbowL, out var wristL);
+        SolveArm(ch.ArmR, 1f, sp, shoulderR, kneeR, hip, neck, headBase, headTop,
+            rig.ShoulderR, rig.ElbowR, rig.WristR, bl, out var elbowR, out var wristR);
 
         return new Rig(
-            HeadTop: neck + u * 0.255f, HeadBase: neck + u * 0.065f, Neck: neck,
+            HeadTop: headTop, HeadBase: headBase, Neck: neck,
             Chest: chest, Waist: waist, Hip: hip,
             ShoulderL: shoulderL, ElbowL: elbowL, WristL: wristL,
             ShoulderR: shoulderR, ElbowR: elbowR, WristR: wristR,
@@ -2111,6 +2158,7 @@ public static partial class HumanMeshBuilder
     /// elbow is re-solved toward the preferred bend, like <see cref="ApplyArms"/>.
     /// </summary>
     private static void SolveArm(in ArmAim aim, float s, in Spine sp, Vector3 shoulder, Vector3 knee,
+        Vector3 hip, Vector3 neck, Vector3 headBase, Vector3 headTop,
         Vector3 restShoulder, Vector3 restElbow, Vector3 restWrist, float bl,
         out Vector3 elbow, out Vector3 wrist)
     {
@@ -2135,7 +2183,45 @@ public static partial class HumanMeshBuilder
         }
 
         wrist = restW.Lerp(wd, bl);
+        wrist = ClearOfBody(wrist, hip, neck, headBase, headTop);
+        var reach = wrist - shoulder;
+        if (reach.Length() > 0.50f) wrist = shoulder + reach.Normalized() * 0.50f;   // pushing it out must not stretch the arm
         elbow = Limb.Solve(shoulder, wrist, UpperArmLength, ForearmLength, restE.Lerp(ed, bl) - shoulder);
+    }
+
+    /// <summary>
+    /// Pushes a wrist target out of the torso and the head (#728): the note's practical rule is
+    /// 0.21 m from the Hip..Neck segment (chest radius + hand) and 0.15 m from the head's axis
+    /// (head + hand, below the crown). It catches a move whose target sits in the chest, and the
+    /// straight line a crossfade takes between two gestures, which otherwise sweeps a fist through
+    /// the body. On the axis it goes forward, in front of the chest, never through it.
+    /// </summary>
+    private static Vector3 ClearOfBody(Vector3 wrist, Vector3 hip, Vector3 neck, Vector3 headBase, Vector3 headTop)
+    {
+        if (wrist.Y > hip.Y - 0.10f && wrist.Y < neck.Y + 0.05f)
+        {
+            var ab = neck - hip;
+            float u = Mathf.Clamp((wrist - hip).Dot(ab) / Mathf.Max(ab.LengthSquared(), 1e-9f), 0f, 1f);
+            var axis = hip + ab * u;
+            var r = new Vector2(wrist.X - axis.X, wrist.Z - axis.Z);
+            float len = r.Length();
+            if (len < 0.215f)
+            {
+                r = len < 1e-3f ? new Vector2(0f, 0.215f) : r / len * 0.215f;   // 0.005 of margin for a leaning torso
+                wrist = new Vector3(axis.X + r.X, wrist.Y, axis.Z + r.Y);
+            }
+        }
+        if (wrist.Y < headTop.Y - 0.01f && wrist.Y > headBase.Y - 0.08f)
+        {
+            var h = new Vector2(wrist.X, wrist.Z);
+            float len = h.Length();
+            if (len < 0.15f)
+            {
+                h = len < 1e-3f ? new Vector2(0f, 0.15f) : h / len * 0.15f;
+                wrist = new Vector3(h.X, wrist.Y, h.Y);
+            }
+        }
+        return wrist;
     }
 
     private static Vector3 Mx(Vector3 a, Vector3 b, float t) => a.Lerp(b, t);
@@ -2158,6 +2244,35 @@ public static partial class HumanMeshBuilder
             HipR: hipR, KneeR: Limb.Solve(hipR, anR, ThighLength, ShinLength, Mx(a.KneeR, b.KneeR, t) - hipR),
             AnkleR: anR, ToeR: Mx(a.ToeR, b.ToeR, t),
             TorsoLean: Mathf.Lerp(a.TorsoLean, b.TorsoLean, t), HandDir: a.HandDir);
+    }
+
+    /// <summary>
+    /// A standing pose's closest hand-to-body clearances, m, for the probes: the nearer wrist to the
+    /// torso's axis (Hip..Neck) and to the head's axis (HeadBase..HeadTop, only up to the crown — a
+    /// fist above the head is clear), and the gap between the two wrists. The note wants torso ≥ 0.21
+    /// (chest radius + hand), head ≥ 0.14 (head + hand) and hands ≥ 0.12 (a clap that meets, not
+    /// overlaps). Pure; <c>--emotecheck</c> reports every move that breaks one.
+    /// </summary>
+    public static (float Torso, float Head, float Hands) Clearance(in DanceParams d)
+    {
+        var rig = GaitWithDance(0f, 0f, d);
+        // the torso is a tube below the neck: a fist above the shoulders is clear of it
+        float torso = 1f, head = 1f;
+        foreach (var wrist in new[] { rig.WristL, rig.WristR })
+        {
+            if (wrist.Y > rig.Hip.Y - 0.10f && wrist.Y < rig.Neck.Y + 0.05f)
+                torso = Mathf.Min(torso, PointToSegment(wrist, rig.Hip, rig.Neck));
+            if (wrist.Y < rig.HeadTop.Y - 0.01f)
+                head = Mathf.Min(head, new Vector2(wrist.X, wrist.Z).Length());
+        }
+        return (torso, head, (rig.WristL - rig.WristR).Length());
+    }
+
+    private static float PointToSegment(Vector3 p, Vector3 a, Vector3 b)
+    {
+        var ab = b - a;
+        float u = Mathf.Clamp((p - a).Dot(ab) / Mathf.Max(ab.LengthSquared(), 1e-9f), 0f, 1f);
+        return (p - (a + ab * u)).Length();
     }
 
     // ---- the moves -----------------------------------------------------------------------
@@ -2306,20 +2421,24 @@ public static partial class HumanMeshBuilder
     /// </summary>
     private static void Pogo(ref DanceCh ch, in Beat t, bool mv)
     {
-        float air = Air(t.B, 0.16f, 0.94f);
-        float give = Give(t.B, 0.03f, 0.09f);
-        float h = 0.22f * air;
-        ch.Py = h - 0.085f * give;
-        ch.Theta = 0.05f + 0.10f * give;
-        ch.ThN = 0.20f * give - 0.10f * air;
-        ch.Phi = 0.04f * t.D;
-        ch.ShL = ch.ShR = 0.025f * air;
-        float punch = (t.K & 1) == 0 ? air : 0f;
-        // fists by the chest, elbows in; rig-L (the figure's right) punches up on the even beats
-        Aim(ref ch, 1f, 0.08f, -0.22f, 0.20f, HLow(1f));
-        SetArm(ref ch, -1f, new Vector3(-0.08f, -0.22f, 0.20f).Lerp(new Vector3(-0.12f, 0.46f, 0.08f), punch), HLow(-1f).Lerp(HUp(-1f), punch));
-        Foot(ref ch, -1f, -0.11f, AnkleHeight + h, 0f, 0.1f, air);
-        Foot(ref ch, 1f, 0.11f, AnkleHeight + h, 0f, 0.1f, air);
+        // #728: juicier — a deeper crouch and a higher jump, squash on the landing and a stretch at
+        // the top, the feet tucking up with pointed toes, and both fists taking turns overhead
+        // instead of one hanging at the chest for the whole bar.
+        float air = Air(t.B, 0.14f, 0.92f);
+        float give = Give(t.B, 0.01f, 0.10f);
+        float h = 0.25f * air;
+        ch.Py = h - 0.115f * give;
+        ch.Theta = 0.06f + 0.12f * give - 0.05f * air;
+        ch.ThN = 0.22f * give - 0.15f * air;
+        ch.Phi = 0.05f * t.D;
+        ch.ShL = ch.ShR = 0.03f * air - 0.012f * give;
+        float upL = (t.K & 1) == 0 ? air : 0f, upR = (t.K & 1) == 1 ? air : 0f;
+        SetArm(ref ch, -1f, new Vector3(-0.10f, -0.24f, 0.20f).Lerp(new Vector3(-0.14f, 0.48f, 0.06f), upL),
+            HLow(-1f).Lerp(HUp(-1f), upL));
+        SetArm(ref ch, 1f, new Vector3(0.10f, -0.24f, 0.20f).Lerp(new Vector3(0.14f, 0.48f, 0.06f), upR),
+            HLow(1f).Lerp(HUp(1f), upR));
+        Foot(ref ch, -1f, -0.11f, AnkleHeight + h + 0.035f * air, 0f, 0.1f, air);
+        Foot(ref ch, 1f, 0.11f, AnkleHeight + h + 0.035f * air, 0f, 0.1f, air);
         if (mv) { MovingScale(ref ch, 0.5f, 1f); ch.Py = Mathf.Clamp(h, 0f, 0.04f); }
     }
 
@@ -2420,9 +2539,12 @@ public static partial class HumanMeshBuilder
         for (int i = 0; i < 2; i++)
         {
             float s = i * 2f - 1f;
-            // an ellipse about the body axis, radius at least 0.29 m: the fists never enter the torso
-            // #728: a wider swing, so the fists clearly pass in front of and behind the hips
-            AimH(ref ch, s, 0.30f * ar * t.D, 0.22f, s * 0.28f * ar * t.E, HLow(s));
+            // #728: the fists keep a constant 0.46 m front/back separation while they swing side to
+            // side together. The old path put them both on the body's axis (z = s*0.28*E, and E = 0
+            // at the side extremes), so the two hands met in one point; that was the Floss bug. The
+            // 0.23 m z offset and 0.21 m from the torso axis keep the front fist clear of the belly
+            // even as it crosses it.
+            AimH(ref ch, s, 0.20f * ar * t.D, 0.28f, s * 0.23f, HLow(s));
         }
         Planted(ref ch, 0.15f, 0.15f);
         for (int i = 0; i < 2; i++) { float s = i * 2f - 1f; HeelUp(ref ch, s, 0.02f * Mathf.Max(0f, -s * t.D)); }
@@ -2522,7 +2644,7 @@ public static partial class HumanMeshBuilder
             case 0: off = new Vector3(s * -0.03f, 0f, 0.47f); hint = HLow(s); break;
             case 1: off = new Vector3(s * -0.03f, 0.04f, 0.47f); hint = HLow(s); break;
             case 2: off = new Vector3(s * -0.32f, -0.02f, s > 0f ? 0.27f : 0.22f); hint = new Vector3(0f, -1f, 0.3f); break;
-            case 3: off = new Vector3(s * -0.05f, 0.16f, -0.04f); hint = new Vector3(s, 0.3f, -0.3f); break;
+            case 3: off = new Vector3(s * -0.01f, 0.16f, -0.04f); hint = new Vector3(s, 0.3f, -0.3f); break;   // beside the ear, |x| 0.17 (#728)
             default: off = new Vector3(s * 0.05f, -0.40f, 0.06f); hint = HOut(s); break;
         }
     }
@@ -2565,7 +2687,7 @@ public static partial class HumanMeshBuilder
             var pump = new Vector3(-s * 0.18f * ar * t.D - s * 0.18f, 0.38f + 0.04f * DDip(t.B) - 0.51f,
                 (mv ? 0.27f : 0.30f) + 0.08f * s * t.E);
             var shrug = new Vector3(s * 0.05f, -0.05f, 0.22f);
-            var clapO = new Vector3(s * -0.16f, 0.44f, 0.03f);
+            var clapO = new Vector3(s * -0.10f, 0.44f, 0.03f);   // #728: 0.16 m apart above the head, not 0.04
             SetArm(ref ch, s, pump.Lerp(shrug, w1).Lerp(clapO, clap),
                 HLow(s).Lerp(HOut(s), w1).Lerp(HUp(s), clap));
         }
@@ -2641,8 +2763,11 @@ public static partial class HumanMeshBuilder
         ch.Py = -0.08f - 0.03f * dip;
         ch.Theta = 0.20f + 0.15f * dip; ch.Phi = 0.04f * t.D;
         ch.ThN = DSawNod(t.B); ch.PhH = 0.10f * t.D;          // head lowest exactly on the beat
-        Aim(ref ch, -1f, 0f, -0.30f - 0.06f * dip, 0.28f, HLow(-1f));
-        Aim(ref ch, 1f, 0f, -0.30f - 0.06f * dip, 0.28f, HLow(1f));
+        // #728: fists loose by the hips, elbows a little out, pumping down with the nod. The old
+        // hands hung out in front at belt height, which read as holding handlebars.
+        float pump = 0.05f * dip;
+        Aim(ref ch, -1f, 0.14f, -0.32f - pump, 0.06f + 0.03f * dip, HLow(-1f));
+        Aim(ref ch, 1f, 0.14f, -0.32f - pump, 0.06f + 0.03f * dip, HLow(1f));
         Planted(ref ch, 0.22f, 0.2f);
         Lift(ref ch, -1f, 0.015f * (1f - dip)); Lift(ref ch, 1f, 0.015f * (1f - dip));
         if (mv)
@@ -2661,14 +2786,17 @@ public static partial class HumanMeshBuilder
         ch.Py = -0.09f - 0.03f * dip;
         ch.Theta = 0.12f + 0.05f * dip; ch.Psi = 0.15f; ch.Phi = -0.05f;
         ch.ThN = 0.25f * dip; ch.PhH = 0.08f * t.D;
-        Aim(ref ch, 1f, 0.12f, -0.08f, 0.42f + 0.05f * t.D, HLow(1f));          // the fretting hand slides
-        // the strumming hand pumps low on the beat and the "&", and windmills once on beat 4
-        var strum = new Vector3(0.18f, -0.36f - 0.06f * DCos(2f * t.B), 0.26f);   // s = -1 mirrors o(-0.18, ...)
+        // #728: the fretting hand is up the neck, out to the figure's left (+X) at chest height; the
+        // old target was in front of the sternum, and the strumming hand sat on the centreline (its
+        // offset was not mirrored), so both hands read as one tray. The strumming hand now works the
+        // guitar's body at -0.16 m, clear of the belly.
+        Aim(ref ch, 1f, 0.28f, -0.18f, 0.30f + 0.04f * t.D, HLow(1f));           // fretting hand slides up the neck
+        var strum = new Vector3(0.02f, -0.34f - 0.06f * DCos(2f * t.B), 0.24f);
         float wm = 0f;
         if (!mv && t.K == 3) wm = DSm(t.B / 0.15f) * (1f - DSm((t.B - 0.85f) / 0.15f));
         float al = Mathf.Tau * (c - 3f);
         var windmill = new Vector3(-0.05f, -0.46f * Mathf.Cos(al), 0.46f * Mathf.Sin(al));
-        SetArm(ref ch, -1f, strum.Lerp(windmill, wm), HLow(-1f));
+        SetArm(ref ch, -1f, strum.Lerp(windmill, wm), HLow(-1f).Lerp(HUp(-1f), wm));
         Planted(ref ch, 0.25f, 0.15f);
         Foot(ref ch, 1f, 0.25f, AnkleHeight, 0.15f, 0.15f, 0f);
         Foot(ref ch, -1f, -0.25f, AnkleHeight, -0.10f, 0.15f, 0f);
@@ -2830,7 +2958,8 @@ public static partial class HumanMeshBuilder
         // the arc, as chest twist: three jerks across, one smooth sweep back
         ch.Psi = t.C < 3f ? -0.9f + 0.6f * (t.K + DSm(Mathf.Min(t.B / 0.35f, 1f))) : Mathf.Lerp(0.9f, -0.9f, DSm(t.B));
         Aim(ref ch, 1f, 0.50f, 0f, 0.02f, HOut(1f));
-        Aim(ref ch, -1f, -0.05f, 0.16f, -0.06f, new Vector3(-1f, 0.2f, -0.3f));
+        // #728: the hand behind the head sits beside the ear, 0.20 m off the head's axis, not 0.13
+        Aim(ref ch, -1f, 0.02f, 0.16f, -0.06f, new Vector3(-1f, 0.2f, -0.3f));
         Planted(ref ch, 0.14f, 0.15f);
         if (mv) MovingScale(ref ch, 0.6f, 1f);
     }
