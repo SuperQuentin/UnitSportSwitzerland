@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Maps and GPX on the oblique stereographic ([#1581](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1581), [#1514](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1514))
+
+On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Scuol, where LV95's grid north is 2° off true north.
+
+- [ ] The adventure map (M): drag, wheel-zoom from 2 to 128 px/km, pad stick and zoom → it pans and zooms smoothly under the pointer, the relief, fog, borders, places and pins stay on each other (no drift between them at any zoom), your arrow points along where you look.
+- [ ] A Battle Royale round near Scuol: the map (M) and the minimap, turning on and off → the image, circles, towns and your arrow agree; with turning off, true north is up (the image's square a little turned); right-click waypoint and middle-click ping land where clicked.
+- [ ] On skis at Scuol, the slope map → the slopes under your arrow are the ones you are on, the arrow points along your skis.
+- [ ] A real GPX recording (`--gpx <file>`), run and cinema mode → the runner follows the road as before, the ribbon on the ground, the speed and distance read as the recording's.
+
 ## GlobalPos holds ECEF ([#1544](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1544))
 
 On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Geneva and at Scuol, where the grid turns 0.95° and −2° from true north: what was laid in metres east and north is now in true ones.
