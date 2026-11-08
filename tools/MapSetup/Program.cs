@@ -126,7 +126,7 @@ List<Step> Plan()
     var steps = Planner.Build(new SetupContext
     {
         Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-        Stats = stats, State = state,
+        Stats = stats, State = state, RgeAlti = Arg("--rgealti"),
     });
     return Flag("--no-download")
         ? steps.Select(s => s.Skip == null && s.DownloadBytes > 0 ? s.Skipped("no downloads (--no-download)") : s).ToList()
@@ -240,7 +240,7 @@ await AnsiConsole.Progress()
             var run = new StepRun(new SetupContext
             {
                 Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-                Stats = stats, State = state,
+                Stats = stats, State = state, RgeAlti = Arg("--rgealti"),
             }, new SpectreProgress(task, step.Title), step.Title, log, cts.Token);
             var clock = Stopwatch.StartNew();
             bool ok;
@@ -601,6 +601,8 @@ static void PrintHelp()
         Folders:
           --data DIR                   source data instead of ressources/data (dataset subfolders inside)
           --chunks DIR                 built tiles instead of terrain_chunks (state goes to DIR_temp)
+          --rgealti DIR                IGN RGE ALTI for the cube heights (default <data>/france/rgealti when
+                                       there; swissALTI3D 2 m is read from <data>/swissalti3d_2m when there)
           --save-location              keep --data/--chunks for later runs, the game and the server
           --pick-location              choose a drive or folder first (also under "Go?")
                                        The choice is saved in terrain_location.json (repo root,
