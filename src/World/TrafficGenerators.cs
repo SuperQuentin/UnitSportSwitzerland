@@ -17,6 +17,12 @@ namespace UnitSport.World;
 public sealed record TrafficEndpoint(int Id, double E, double N, float Heading, bool Generates, bool Destination, float PerMinute,
     TrafficShare[]? Shares = null, MoverKind Mode = MoverKind.Car)
 {
+    /// <summary>
+    /// The way it faces from true north, a Godot yaw (0 north, positive turns left; #1504): <see cref="Heading"/>, the file's
+    /// and the wire's LV95 angle from grid east, turned by the grid's meridian convergence there. What the game sets down.
+    /// </summary>
+    public float TrueYaw => TrueNorth.GridYawToTrue(E, N, Heading - Mathf.Pi / 2);
+
     /// <summary><see cref="TrafficShare.To"/> for cars that set off along the heading and pick their way at random.</summary>
     public const int AlongHeading = 0;
     /// <summary><see cref="TrafficShare.To"/> for cars that set off the other way along the road and pick their way at random.</summary>
@@ -95,14 +101,14 @@ public partial class TrafficGenerators : Node
     {
         var at = GlobalPos.FromLv95(e, n, 0);
         var (x, y, z) = at.ToWire();
-        return (x, y, z, at.TrueYaw(lv95Heading - Mathf.Pi / 2));
+        return (x, y, z, Lv95Grid.TrueYaw(at, lv95Heading - Mathf.Pi / 2));
     }
 
     /// <summary>The inverse of <see cref="Wire"/>.</summary>
     private static (double E, double N, float Heading) FromWire(double x, double y, double z, float heading)
     {
         var at = GlobalPos.FromWire(x, y, z);
-        return (at.E, at.N, at.OffsetYaw(heading) + Mathf.Pi / 2);
+        return (at.Lv95.E, at.Lv95.N, Lv95Grid.GridYaw(at, heading) + Mathf.Pi / 2);
     }
 
     /// <summary>The next id <see cref="RequestSet"/> gives a new endpoint offline (the probe wires its shares by it).</summary>

@@ -219,7 +219,7 @@ public partial class WorldEventCheck : ChatProbe
             double d = g.HorizontalDistanceTo(to);
             if (d < 3) return;
             double step = Math.Min(d, 1.5);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.1f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.1f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(1);
         }
@@ -236,7 +236,7 @@ public partial class WorldEventCheck : ChatProbe
             double d = g.HorizontalDistanceTo(to);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }
@@ -247,7 +247,7 @@ public partial class WorldEventCheck : ChatProbe
         var me = Me!;
         var g = me.Global;
         var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
-        me.GlobalPosition += new Vector3((float)toE, 0.2f, -(float)toN);
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.2f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.5);
     }

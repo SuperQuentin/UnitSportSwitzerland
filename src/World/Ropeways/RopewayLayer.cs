@@ -175,7 +175,7 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
             // the side track runs to the left of the way up: the shed is centred between the two
             double ce = e - dn * line.Side * 0.5, cn = n + de * line.Side * 0.5;
             var at = origin.ToWorld(ce, cn, alt);
-            float ground = _chunks.TryGetHeight(at, out float g) ? g : alt - 4f;
+            float ground = _chunks.Ground.TryGetHeight(at, out float g) ? g : alt - 4f;
             float roof = Mathf.Max(alt + 1.2f, ground + 3f) - ground;
             float yaw = Mathf.Atan2(top ? de : -de, top ? -dn : dn);
             into.AddChild(new MeshInstance3D
@@ -224,7 +224,7 @@ public partial class RopewayLayer : Node3D, IOriginShiftAware
             if (d.Bar is { } barNode)
             {
                 // a T-bar: the rod reaches down to the rider's hip on the way up, wound in on the way down
-                float ground = _chunks.TryGetHeight(at, out float h) ? h : at.Y - 6f;
+                float ground = _chunks.Ground.TryGetHeight(at, out float h) ? h : at.Y - 6f;
                 float reach = up ? Mathf.Max(0.5f, at.Y - (ground + BarFloor) - 0.75f) : 0.8f;
                 main.SetInstanceTransform(i, new Transform3D(basis.Scaled(new Vector3(1, reach, 1)), at));
                 barNode.Multimesh.SetInstanceTransform(i, new Transform3D(basis, at - new Vector3(0, reach + 0.75f, 0)));

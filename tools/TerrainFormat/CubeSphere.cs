@@ -212,6 +212,36 @@ public static class CubeSphere
         return ((or.S * p[or.I] + n) / 2, (ow.S * p[ow.I] + n) / 2);
     }
 
+    /// <summary>
+    /// The lattice vertex (i, j) of a face at a level, when it may lie past one of the face's edges (i or j
+    /// outside 0..2^level, at most a face away): the face and indices it folds onto, the same distance in from
+    /// the shared edge as it is out (<see cref="CubeKey.Neighbour"/>'s fold, on vertices; #1552). Inside the face
+    /// it is itself; past a cube corner (both out), null, as only three faces meet there. Integer arithmetic on
+    /// the doubled cube lattice, so the point is the other face's own vertex, bit for bit.
+    /// </summary>
+    public static (int Face, long I, long J)? Fold(int face, int level, long i, long j)
+    {
+        long n = 1L << level;
+        long a = 2 * i - n, b = 2 * j - n;
+        bool outA = Math.Abs(a) > n, outB = Math.Abs(b) > n;
+        if (!outA && !outB) return (face, i, j);
+        if (outA && outB) return null;
+        if (Math.Abs(a) >= 3 * n || Math.Abs(b) >= 3 * n) throw new ArgumentOutOfRangeException(nameof(i), "at most one face away");
+        var (ax, r, w) = (Frame[face, 0], Frame[face, 1], Frame[face, 2]);
+        Span<long> p = stackalloc long[3];
+        long e = (outA ? Math.Abs(a) : Math.Abs(b)) - n;
+        p[ax.I] = ax.S * (n - e);
+        p[r.I] = r.S * (outA ? Math.Sign(a) * n : a);
+        p[w.I] = w.S * (outA ? b : Math.Sign(b) * n);
+        for (int f = 0; f < Faces; f++)
+        {
+            var (fa, fr, fw) = (Frame[f, 0], Frame[f, 1], Frame[f, 2]);
+            if (f == face || fa.S * p[fa.I] != n) continue;
+            return (f, (fr.S * p[fr.I] + n) / 2, (fw.S * p[fw.I] + n) / 2);
+        }
+        throw new InvalidOperationException($"no face holds face {face}'s vertex {i},{j} at level {level}");
+    }
+
     /// <summary>A face's frame in the cube's: the axis indices and signs of its outward axis, right and up (for <see cref="CubeKey"/>).</summary>
     internal static ((int I, int S) Axis, (int I, int S) Right, (int I, int S) Up) FaceFrame(int face) =>
         (Frame[face, 0], Frame[face, 1], Frame[face, 2]);

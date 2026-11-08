@@ -45,20 +45,21 @@ public partial class SlopeMarkers : Node
     {
         _material = StyleKit.Material(MaterialRole.Prop);
         _material.SetShaderParameter("flicker", 0f);
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
-    private void OnFurnished(TileId id, ChunkNode node, Interiors.DoorSpot[] _) => _waiting[id] = node;
+    private void OnFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] _) => _waiting[tile.Lv95Tile] = node;
 
-    private void OnUnfurnished(TileId id, ChunkNode node)
+    private void OnUnfurnished(GroundTile tile, ChunkNode node)
     {
+        var id = tile.Lv95Tile;
         _waiting.Remove(id);
         node.GetNodeOrNull(NodeName)?.QueueFree();
     }
@@ -162,7 +163,7 @@ public partial class SlopeMarkers : Node
     private float Ground(ChunkNode node, float east, float north)
     {
         var world = node.ToGlobal(new Vector3(east, 0, 1000 - north));
-        return _chunks.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : float.NaN;
+        return _chunks.Ground.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : float.NaN;
     }
 
     /// <summary>0 blue, 1 red, 2 black, 3 yellow (itinerary).</summary>

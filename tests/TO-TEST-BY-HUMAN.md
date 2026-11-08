@@ -7,6 +7,22 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## GlobalPos holds ECEF ([#1544](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1544))
+
+On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Geneva and at Scuol, where the grid turns 0.95° and −2° from true north: what was laid in metres east and north is now in true ones.
+
+- [ ] Two clients, one at Scuol: walk, drive and fly past each other → the other is drawn where it is and faces its way (no degree's turn, no lag-free jump), a remote car's wheels line up with its road.
+- [ ] At Scuol, a festival or errand site with stalls round it, a Schwingen ring, a sword dummy (`/dummy`) → set out round their centre as before, nothing half a metre into a wall; a sword hit lands where the blade is.
+- [ ] The adventure compass and the VR watch's notch on a tracked target at Scuol → both point at it within a degree.
+
+## True north ([#1533](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1533))
+
+At Geneva (`--chunks D:/UnitSportSwitzerland/terrain_chunks`, `--tp` to the Jardin Anglais), where true north is 0.9° east of grid north.
+
+- [ ] In an A320's cockpit at the airport, on stand, nose along runway 04 → the PFD's heading tape and the ND read about 046° (the runway's grid 46.5° less 0.9°), the track diamond on the heading when rolling straight; the AP HDG line agrees with the FCU.
+- [ ] In the headset, look at the watch (left wrist) while turning on the spot → the bezel's red N stays on true north (about 1° right of the world's −Z here), the notch points at a tracked target.
+- [ ] Free roam with the compass on, facing the Jet d'Eau → the strip's bearing matches the debug readout's "facing" and the GPS, all within a degree.
+
 ## The space shuttle ([#1494](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1494))
 
 On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks --airports <its airports.json>`), offline, at Geneva.

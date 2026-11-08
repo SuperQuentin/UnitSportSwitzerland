@@ -230,8 +230,8 @@ public partial class DesalpeHerd : Node3D
     {
         if (_chunks() is not { } chunks || _origin() is not { } origin) return float.NaN;
         var at = origin.ToWorld(e, n, 0);
-        if (chunks.TryGetSurface(at, out float s)) return s;
-        return chunks.TryGetHeight(at, out float h) ? h : float.NaN;
+        if (chunks.Ground.TryGetSurface(at, out float s)) return s;
+        return chunks.Ground.TryGetHeight(at, out float h) ? h : float.NaN;
     }
 
     public override void _Process(double delta)

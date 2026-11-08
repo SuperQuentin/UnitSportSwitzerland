@@ -237,7 +237,7 @@ public partial class ServerRegions : Node
     private ServerRegion Create(GlobalPos anchor, int id = -1)
     {
         if (id < 0) id = _nextId++;
-        var origin = new WorldOrigin(anchor.E, anchor.N);
+        var origin = new WorldOrigin(anchor.Lv95.E, anchor.Lv95.N);
         // a world of its own, so a physics space of its own (OwnWorld3D would keep it out of reach: World3D null)
         var world = new World3D();
         var root = new SubViewport
@@ -298,7 +298,7 @@ public partial class ServerRegions : Node
             if (h.Ghost != null) h.Ghost.Position = at;
             // ready when the target has collision there, when the body has none where it is either (in the
             // air, not placed yet), or after the timeout (a body never waits for good)
-            bool ready = h.Target.Chunks.HasCollisionAt(at)
+            bool ready = h.Target.Chunks.Ground.HasCollisionAt(at)
                 || body.Terrain?.HasCollisionAt(body.GlobalPosition) != true
                 || _clock - h.Since > HandoverTimeoutSeconds;
             if (!ready) continue;

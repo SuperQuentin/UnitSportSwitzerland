@@ -131,7 +131,8 @@ public static class VenueStage
             lock (tiles) return tiles[id] = read;
         }
         var rows = new VenueRecord[raw.Count];
-        Parallel.For(0, raw.Count, new ParallelOptions { MaxDegreeOfParallelism = jobs }, i => rows[i] = Place(raw[i], Tile));
+        // with the tiles, each venue also in Earth positions (#1507): at the base of its solid, else on the ground
+        Parallel.For(0, raw.Count, new ParallelOptions { MaxDegreeOfParallelism = jobs }, i => rows[i] = Place(raw[i], Tile, chunkDir != null ? geo : null));
 
         var list = rows.OrderBy(r => r.E).ThenBy(r => r.N).ThenBy(r => r.Osm, StringComparer.Ordinal).ToList();
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outFile))!);
@@ -186,8 +187,18 @@ public static class VenueStage
     }
 
     /// <summary>The row against the tiles: kept on its solid, moved onto the nearest, or marked raw or open.</summary>
-    private static VenueRecord Place(VenueRecord r, Func<TileId, BuildingTile?> tile)
+    private static VenueRecord Place(VenueRecord r, Func<TileId, BuildingTile?> tile, GeoInput? geo)
     {
+        var placed = Place(r, tile, out float? baseY);
+        if (geo == null) return placed;
+        // off the built tiles the Plateau's height, as GeoInput placed the OSM point: it goes back to OSM's latitude and longitude
+        double h = baseY is { } y ? y : geo.Ground(placed.E, placed.N) is var g && double.IsFinite(g) ? g : SwissGeodesy.GroundH - 50;
+        return placed with { Geo = GeoPoint.FromLv95(placed.E, placed.N, h) };
+    }
+
+    private static VenueRecord Place(VenueRecord r, Func<TileId, BuildingTile?> tile, out float? baseY)
+    {
+        baseY = null;
         bool any = false;
         (TileId Id, int Index, float Dist)? near = null;
         foreach (var id in Around(r.E, r.N))
@@ -198,13 +209,16 @@ public static class VenueStage
             for (int i = 0; i < t.Buildings.Count; i++)
             {
                 var b = t.Buildings[i];
-                if (b.Covers(x, z)) return r with { Fix = VenueFix.Inside };
+                if (b.Covers(x, z)) { baseY = b.MinY; return r with { Fix = VenueFix.Inside }; }
                 float d = PlanDistance(b, x, z);
                 if (d <= SnapReach && (near == null || d < near.Value.Dist)) near = (id, i, d);
             }
         }
         if (near is { } s && InsidePoint(s.Id, tile(s.Id)!.Buildings[s.Index]) is { } p)
+        {
+            baseY = tile(s.Id)!.Buildings[s.Index].MinY;
             return r with { E = p.E, N = p.N, Fix = VenueFix.Snapped };
+        }
         return r with { Fix = any ? VenueFix.Open : VenueFix.Raw };
     }
 

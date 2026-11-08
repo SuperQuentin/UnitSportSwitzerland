@@ -10,7 +10,7 @@ namespace UnitSport.Vehicles;
 /// Godot Dictionary, which is what a MultiplayerSpawner's spawn data and an RPC can carry. Its
 /// position is a <see cref="GlobalPos"/> (#185): it crosses the network, and the server keeps it for as
 /// long as the vehicle stands there. Its <see cref="Yaw"/>, <see cref="Velocity"/> and a boat's or an
-/// airliner's attitude (<see cref="Angles"/>) are in GlobalPos's offset axes at that place (grid north
+/// airliner's attitude (<see cref="Angles"/>) are in the LV95 grid's axes at that place (grid north
 /// until G2 A1, a flat world's axes): <see cref="ToDict"/> sends them in ECEF, local ENU and true north
 /// (#1503, protocol 93), the object containers save that form too (G2 A2b).
 /// </summary>
@@ -100,7 +100,7 @@ public readonly record struct VehicleState(
     /// <summary>The state on the wire (a spawn, an RPC): ECEF, the local ENU and true north (#1503).</summary>
     public Godot.Collections.Dictionary ToDict()
     {
-        var enu = Position.Enu;
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["kind"] = (int)Kind,
@@ -143,7 +143,7 @@ public readonly record struct VehicleState(
         var s = Read(d);
         if (!GlobalPos.IsWire(d)) return s;
         // from the wire: the local ENU and true north at its place, in GlobalPos's axes there
-        var enu = s.Position.Enu;
+        var enu = Lv95Grid.Axes(s.Position);
         return s with
         {
             Yaw = enu.Yaw(s.Yaw),

@@ -67,7 +67,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     /// <summary>A boat's height over the waves (#302, <see cref="Boat.Heave"/>): copies draw it on their own waves.</summary>
     [Export] public float Heave { get; set; } = Boat.NoHeave;
 
-    public ChunkManager? Terrain { get; set; }
+    public IWorldGround? Terrain { get; set; }
 
     /// <summary>At rest and not simulated until someone claims it (a heartbeat replicates it).</summary>
     public bool Asleep => _asleep;
@@ -174,7 +174,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     private GpuParticles3D? _fire, _smoke;
     private readonly List<PhysicsBody3D> _ignoring = new();
 
-    public static VehicleBody Create(VehicleState state, ChunkManager? terrain, WorldOrigin origin)
+    public static VehicleBody Create(VehicleState state, IWorldGround? terrain, WorldOrigin origin)
     {
         var v = new VehicleBody
         {
@@ -213,8 +213,8 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
         // the record's heading and velocity are in GlobalPos's axes at its place: this world's here (#1503)
         var s = _initial with
         {
-            Yaw = Origin.Frame.WorldYawOf(_initial.Position, _initial.Yaw),
-            Velocity = Origin.Frame.WorldOfOffset(_initial.Position, _initial.Velocity),
+            Yaw = Origin.Frame.WorldYawOfGrid(_initial.Position, _initial.Yaw),
+            Velocity = Origin.Frame.WorldOfGrid(_initial.Position, _initial.Velocity),
         };
         // A hand's breadth up. The terrain collision is a one-sided heightfield, and a box whose
         // bottom starts exactly on it — a vehicle parked from where the rider stood — begins a
@@ -399,7 +399,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
     /// </remarks>
     public VehicleState Capture() => new(Kind, Global,
         // in GlobalPos's axes at its place, as a record keeps them (#1503)
-        Origin.Frame.OffsetYawOf(Position, Rotation.Y), _inHold ? Vector3.Zero : Origin.Frame.OffsetOfWorld(Position, Velocity), Health, EngineOn, Wrecked,
+        Origin.Frame.GridYawOf(Position, Rotation.Y), _inHold ? Vector3.Zero : Origin.Frame.GridOfWorld(Position, Velocity), Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)

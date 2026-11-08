@@ -57,8 +57,8 @@ public partial class FlightCheckProbe : Node
 
         if (_player == null)
         {
-            if (!TestWorld.TryGround(_chunks, at, out float g)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!TestWorld.TryGround(_chunks?.Ground, at, out float g)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
             if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
@@ -69,7 +69,7 @@ public partial class FlightCheckProbe : Node
         }
         if (!_started)
         {
-            if (_chunks != null && !_chunks.HasCollisionAt(at) || !_player.IsOnFloor()) return;
+            if (_chunks != null && !_chunks.Ground.HasCollisionAt(at) || !_player.IsOnFloor()) return;
             Begin();
             _started = true;
             return;
@@ -91,7 +91,7 @@ public partial class FlightCheckProbe : Node
         }
     }
 
-    private float Agl(Vector3 p) => TestWorld.TryGround(_chunks, p, out float g) ? p.Y - g : float.NaN;
+    private float Agl(Vector3 p) => TestWorld.TryGround(_chunks?.Ground, p, out float g) ? p.Y - g : float.NaN;
 
     /// <summary>Puts the pilot where the sortie starts.</summary>
     private void Begin()
@@ -265,7 +265,7 @@ public partial class FlightCheckProbe : Node
         float hour = CmdArgs.Value("--time") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out float hh) ? hh : 13f;
         World.AirLiftField.HourOverride = hour;
-        World.AirLiftField.Use(_chunks, _origin);
+        World.AirLiftField.Use(_chunks?.Ground, _origin);
         var ground = p.GlobalPosition;
         if (_kind == "campfire")
         {
@@ -438,7 +438,7 @@ public partial class FlightCheckProbe : Node
         var p = _player!.GlobalPosition;
         float dist = (float)_origin.ToGlobal(p).HorizontalDistanceTo(_from);
         float drop = (float)_from.Alt - p.Y;
-        bool under = TestWorld.TryGround(_chunks, p, out float g) && p.Y < g - 1.5f;
+        bool under = TestWorld.TryGround(_chunks?.Ground, p, out float g) && p.Y < g - 1.5f;
         GD.Print($"[flycheck] END {how}: {dist:F0} m flown, {drop:F0} m lost"
             + (drop > 1 ? $", overall glide {dist / drop:F1}" : "") + $", now {_player.Ride}");
         bool ok = !_crashed && !under;

@@ -225,7 +225,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         var course = Active;
         var (e, n, ele, _, _) = course.Sample(raceTime);
         var p = _origin.ToWorld(e, n, ele);
-        if (!course.ElevationIsSurface && _chunks.TryGetHeight(p, out float g)) p.Y = g;
+        if (!course.ElevationIsSurface && _chunks.Ground.TryGetHeight(p, out float g)) p.Y = g;
         return p;
     }
 
@@ -244,7 +244,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         // A road-matched course already sits on the road surface, bridge decks and tunnel bores
         // included, so re-draping it onto the terrain would undo exactly that. Only a raw
         // recording gets draped, because its own elevation is GPS noise.
-        if (_chunks.TryGetHeight(pos, out float ground))
+        if (_chunks.Ground.TryGetHeight(pos, out float ground))
         {
             ElevationDrift = recordedEle - ground;
             if (!course.ElevationIsSurface) pos.Y = ground;

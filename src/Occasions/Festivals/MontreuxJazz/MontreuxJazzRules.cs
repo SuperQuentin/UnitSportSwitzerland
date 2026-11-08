@@ -76,12 +76,14 @@ public static class MontreuxJazzRules
         return (dx * c + dz * s, -dx * s + dz * c);
     }
 
-    /// <summary>The same for a position, from a centre's position.</summary>
+    /// <summary>The same for a position, from a centre's position; <paramref name="azimuthDeg"/> in its offset axes (<see cref="StadiumSpec.OffsetAzimuthDeg"/>).</summary>
     public static (double U, double V) ToFrame(GlobalPos centre, float azimuthDeg, GlobalPos at)
     {
         double a = azimuthDeg * Math.PI / 180.0, c = Math.Cos(a), s = Math.Sin(a);
-        var (dx, dn, _) = centre.OffsetTo(at);
-        double dz = -dn;
+        var (de, dn, _) = centre.OffsetTo(at);
+        // the venue's azimuth is a grid one (the double overload's frame is the LV95 grid's): the true offset goes to the grid's axes (#1502)
+        var grid = Lv95Grid.FromEnu(centre, new Godot.Vector3((float)de, 0, (float)-dn));
+        double dx = grid.X, dz = grid.Z;
         return (dx * c + dz * s, -dx * s + dz * c);
     }
 
@@ -89,10 +91,10 @@ public static class MontreuxJazzRules
     public static float FrontV => -Venue.FrontHalfV + 1.5f + DeckDepth;
 
     /// <summary>The stage's front (the middle of the deck's front edge) at a site, LV95.</summary>
-    public static (double E, double N) StageFront(ResolvedSite site) => FromFrame(site.E, site.N, Venue.AzimuthDeg, 0, FrontV);
+    public static (double E, double N) StageFront(ResolvedSite site) => FromFrame(site.E, site.N, Venue.LocalAzimuthDeg, 0, FrontV);
 
     /// <summary>The rail: the crew barrier 2.5 m ahead of the front, where E marks "I am listening".</summary>
-    public static (double E, double N) Rail(ResolvedSite site) => FromFrame(site.E, site.N, Venue.AzimuthDeg, 0, FrontV + 2.5f);
+    public static (double E, double N) Rail(ResolvedSite site) => FromFrame(site.E, site.N, Venue.LocalAzimuthDeg, 0, FrontV + 2.5f);
 
     public static double Dist(double e, double n, (double E, double N) p) => Math.Sqrt((e - p.E) * (e - p.E) + (n - p.N) * (n - p.N));
 
@@ -102,7 +104,7 @@ public static class MontreuxJazzRules
     public static bool InZone(ResolvedSite site, GlobalPos at, float slack = 0f)
     {
         if (Dist(at, StageFront(site)) > ZoneRadius + slack) return false;
-        return ToFrame(site.Pos, Venue.AzimuthDeg, at).V > FrontV + 1f - slack;
+        return ToFrame(site.Pos, Venue.OffsetAzimuthDeg(site.Pos), at).V > FrontV + 1f - slack;
     }
 
     public static bool AtRail(ResolvedSite site, GlobalPos at, float slack = 0f) => Dist(at, Rail(site)) <= RailReach + slack;

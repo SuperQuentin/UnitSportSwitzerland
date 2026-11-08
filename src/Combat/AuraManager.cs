@@ -225,8 +225,8 @@ public partial class AuraManager : Node
         var ga = Body(a)!.Global;
         var gb = Body(b)!.Global;
         var (de, dn, _) = ga.OffsetTo(gb);
-        // world yaw of the line from A to B (Godot: -Z is north, +X east)
-        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.GlobalYaw : Mathf.Atan2(-(float)de, (float)dn);
+        // the match keeps a grid yaw: the line from A to B is a true-north one here (#1502)
+        float yaw = ga.HorizontalDistanceSquaredTo(gb) < 0.01 ? Body(a)!.GlobalYaw : Lv95Grid.GridYaw(ga, Mathf.Atan2(-(float)de, (float)dn));
         var match = new Match
         {
             Id = _nextId++,
@@ -258,7 +258,7 @@ public partial class AuraManager : Node
         if (!Connected(to)) return;
         var r = m.Rules;
         var (x, y, z) = m.Centre.ToWire();   // ECEF and a heading from true north at the centre (#1503)
-        RpcId(to, MethodName.Begin, m.Id, r.A, r.B, Who(r.A), Who(r.B), x, y, z, m.Centre.TrueYaw(m.Yaw),
+        RpcId(to, MethodName.Begin, m.Id, r.A, r.B, Who(r.A), Who(r.B), x, y, z, Lv95Grid.TrueYaw(m.Centre, m.Yaw),
             r.Beat, r.Anchor, m.Music);
     }
 
@@ -745,7 +745,7 @@ public partial class AuraManager : Node
         var centre = GlobalPos.FromWire(x, y, z);
         // the view's yaw is a world yaw of this peer: from true north at the centre through the local body's frame (flat: the grid's)
         var origin = GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Multiplayer.GetUniqueId()))?.Origin;
-        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : centre.OffsetYaw(trueYaw);
+        float yaw = origin != null ? origin.WorldYaw(origin.ToWorld(centre), trueYaw) : Lv95Grid.GridYaw(centre, trueYaw);
         Current = new View
         {
             Id = id, A = a, B = b, NameA = nameA, NameB = nameB, Centre = centre, Yaw = yaw,

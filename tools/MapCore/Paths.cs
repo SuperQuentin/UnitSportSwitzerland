@@ -43,6 +43,10 @@ public sealed class Paths
     public string LwbDir => Path.Combine(Data, "lwb");
     /// <summary>swissBATHY3D lake zips (#298, <c>swiss_data.py swissbathy3d</c>); without them every bed is synthetic.</summary>
     public string BathyDir => Path.Combine(Data, "bathy3d");
+    /// <summary>swissALTI3D at 2 m (the corridor, #1527): the cube heights read it where the 0.5 m tiles have none (#1578).</summary>
+    public string Alti2mDir => Path.Combine(Data, "swissalti3d_2m");
+    /// <summary>IGN RGE ALTI 1 m, a folder per département (<c>docs/notes/tools/france-nas-run.md</c>): the cube heights in France (#1578).</summary>
+    public string RgeAltiDir => Path.Combine(Data, "france", "rgealti");
 
     public string Chunks => ChunksOverride ?? DefaultChunks;
     /// <summary>
@@ -51,6 +55,12 @@ public sealed class Paths
     /// </summary>
     public string Temp => Chunks.TrimEnd('/', '\\') + "_temp";
     public string StateFile => Path.Combine(Temp, "mapsetup.json");
+    /// <summary>The cube region beside the LV95 build (#1507, G2): &lt;chunks&gt;_cube.</summary>
+    public string CubeRegion => Chunks.TrimEnd('/', '\\') + "_cube";
+    /// <summary>The global cube region (the pyramid, <c>--cube-global</c>) beside the chunk directory.</summary>
+    public string CubeGlobal => Path.Combine(Path.GetDirectoryName(Chunks.TrimEnd('/', '\\')) ?? ".", "cube_global");
+    /// <summary>ETOPO 2022 (the pyramid's fill where no leaf reaches).</summary>
+    public string EtopoDir => Path.Combine(Data, "global", "etopo2022");
     public string StatsFile => Path.Combine(Temp, "mapsetup_stats.json");
     public string LogsDir => Path.Combine(Temp, "mapsetup_logs");
 

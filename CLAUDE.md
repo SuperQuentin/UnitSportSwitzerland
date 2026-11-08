@@ -43,7 +43,8 @@ occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes
 `topview` (a recorded session from above over its terrain, cover, buildings and roads: `tools/playtest.sh topview`, Shift+F12 live, server-vs-client offsets),
 `collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table),
 `session-length` (token cost grows with context: one session per task, `/compact` around 200k; measured breakdown),
-`flat-lv95-ratchet` (#1443: hand-written LV95 distances and tile-corner arithmetic in `src/` may only shrink; `FlatLv95RatchetTests`).
+`flat-lv95-ratchet` (#1443: hand-written LV95 distances and tile-corner arithmetic in `src/` may only shrink; `FlatLv95RatchetTests`),
+`working-during-g2` (until G2's flip: `GlobalPos` Earth maths and `IWorldGround`, no LV95-keyed stores, build-tool data in both builds, ask before touching what C rewrites).
 
 ## Rules
 

@@ -1,0 +1,738 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.Tools.Preprocessor;
+
+/// <summary>
+/// Lake and river beds on cube leaves (#1507, G2 B3 PR 6; docs/notes/tools/cube-water.md): <see cref="WaterStage"/>'s
+/// pass over a region's leaves, its window maths shared (<see cref="WaterWindow"/>), its windows on a face's leaf
+/// lattice instead of LV95's 1 m grid.
+/// <list type="number">
+/// <item><b>A</b>: every leaf's wet vertices (its <see cref="LeafKind.Cover"/> is Water) and its still surface, from the
+/// heights as the <c>--cube</c> stage wrote them (kept in <c>&lt;temp&gt;/water_surface/</c> the first time, so a rerun
+/// starts from them again, as the LV95 pass starts from its old <c>.water</c>), in centimetres above sea level;
+/// a 4-connected flood fill per leaf.</item>
+/// <item><b>B</b>: one union-find over the region, along every shared leaf edge, across face edges too: bodies, their area (the
+/// leaf's own vertices, each the leaf's area over its cells), their most common level, their maximum depth.</item>
+/// <item><b>C</b>: frame by frame in the driver's order, each leaf with water (or with water before) in a window of
+/// itself and <see cref="WaterWindow.Halo"/> of its face's lattice round it (the 3 × 3 leaves at level 14; past a face
+/// edge the lattice folds onto the next face's leaves, <see cref="CubeWaterLattice"/>; past a cube corner, or a leaf with no
+/// heights, unknown, as a missing LV95 tile), cells of the leaf's own spacing: the bank refine,
+/// the distance to shore, the half width, the survey (swissBATHY3D at the cell's LV95 position) and its gap fill, the
+/// depth. The bed goes into the leaf's <see cref="LeafKind.Heights"/> (the surface less the depth, ellipsoidal), the
+/// level and fetch into its <see cref="LeafKind.Water"/>, through the <see cref="LeafWriter"/>'s heights and water seams.</item>
+/// </list>
+///
+/// <code>
+/// --cube-water --cube-out REGION [--bathy DIR] [--cube-temp DIR] [--jobs N]
+/// </code>
+/// </summary>
+public static class CubeWaterStage
+{
+    /// <summary>The bank rise (<see cref="WaterWindow.BankProbeM"/>), in centimetres: the LV95 pass's 7 quanta of 7.2 cm.</summary>
+    private const int BankRiseCm = 50;
+
+    private const double Cm = 0.01;
+
+    /// <summary>Leaf rows phase C solves side by side: the cache holds them and a window's reach round them (~10 rows of a frame's 32).</summary>
+    private const int RowsABand = 8;
+
+    public static bool Wants(IReadOnlyList<string> args) => args.Contains("--cube-water");
+
+    /// <summary>
+    /// One leaf's input: its wet vertices, its surface in cm above sea level, its flood-fill labels. Held only while
+    /// phase A makes it and while phase C's rows need it: in between it lives in the disk cache (<see cref="WriteCache"/>,
+    /// #1577), and the region keeps its <see cref="LeafSummary"/>.
+    /// </summary>
+    private sealed class LeafData
+    {
+        public required LeafSummary S;
+        public required byte[] Wet;
+        public required int[] SurfaceCm;
+        public int[] Labels = Array.Empty<int>();
+        public int LabelBase => S.LabelBase;
+    }
+
+    /// <summary>A label's owned vertices in a leaf: their count and how many at each surface level (cm).</summary>
+    private sealed record OwnedLabel(int Label, int Count, Dictionary<int, long> Levels);
+
+    /// <summary>What the region keeps of a leaf in memory between the phases: its counts and its edges' labels.</summary>
+    private sealed class LeafSummary
+    {
+        public required CubeKey Key;
+        public required int Cells;
+        public int Count;
+        public int LabelBase;
+        public double VertexAreaM2;
+        public double CellM;
+        public bool HadWater;
+        /// <summary>The leaf has water or had some: it is solved and written (a leaf held only for its gaps is not).</summary>
+        public bool Water;
+        /// <summary>The flood-fill labels on the leaf's edges, (i, 0), (i, n), (0, j), (n, j); null with no water.</summary>
+        public int[]? Bottom, Top, Left, Right;
+        /// <summary>Per label, in the order its first owned vertex (i, j &lt; cells) comes row by row: how many it owns, at which levels.</summary>
+        public List<OwnedLabel>? Owned;
+
+        /// <summary>The label at vertex index <paramref name="idx"/>, which must lie on the leaf's edge.</summary>
+        public int EdgeLabel(int idx)
+        {
+            if (Bottom == null) return 0;
+            int side = Cells + 1, i = idx % side, j = idx / side;
+            if (j == 0) return Bottom[i];
+            if (j == Cells) return Top![i];
+            if (i == 0) return Left![j];
+            if (i == Cells) return Right![j];
+            throw new ArgumentOutOfRangeException(nameof(idx), $"{Key}: vertex {i},{j} is not on an edge");
+        }
+    }
+
+    private sealed class Body
+    {
+        public long Count;
+        public double AreaM2;
+        public readonly Dictionary<int, long> LevelCounts = new();
+        public double SurveyLevel, MaxDepth;
+        public double OutMaxDepth, OutDepthSum;
+        public long OutCount, Surveyed, Filled;
+        public CubeKey First;
+
+        public double ModeLevel()
+        {
+            int best = 0; long n = -1;
+            foreach (var (q, k) in LevelCounts)
+                if (k > n || (k == n && q < best)) { best = q; n = k; }
+            return best * Cm;
+        }
+    }
+
+    public static int Run(IReadOnlyList<string> args, CancellationToken ct)
+    {
+        string? region = null, temp = null, bathyDir = null;
+        int jobs = Math.Max(1, Environment.ProcessorCount / 2);
+        CubeKey? debug = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--cube-water": break;
+                case "--cube-out": region = args[++i]; break;
+                case "--cube-temp": temp = args[++i]; break;
+                case "--bathy": bathyDir = args[++i]; break;
+                case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+                // one leaf solved and described, nothing written (a check)
+                case "--cube-water-debug": debug = CubeKey.Parse(args[++i]); break;
+                default: Console.Error.WriteLine($"--cube-water: unknown option {args[i]}"); return 2;
+            }
+        }
+        if (region == null) { Console.Error.WriteLine("--cube-water needs --cube-out REGION (with its heights and cover)"); return 2; }
+        temp ??= region.TrimEnd('/', '\\') + "_temp";
+        var clock = Stopwatch.StartNew();
+        var heights = new RegionHeights(region);
+        var leaves = heights.Leaves.ToHashSet();
+        var surfaceStore = new LeafStore(Path.Combine(temp, "water_surface"), heights.FrameLevel);
+        BathySource? bathy = bathyDir != null ? new BathySource(bathyDir) : null;
+        Console.WriteLine(bathy != null ? $"swissBATHY3D: {bathy.TileCount} survey km ({string.Join(", ", bathy.Lakes)})" : "No --bathy: every bed is synthetic");
+        var par = new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct };
+
+        // ---- A: wet vertices, surfaces, labels --------------------------------------------------------------
+        // Each leaf's arrays go to a disk cache and only its summary stays (#1577): held, the D: region's peaked at
+        // 9.6 GB, and a nationwide region's would not fit a 16 GB heap (as the LV95 pass, #747).
+        string cacheDir = Path.Combine(temp, "water_cache");
+        if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, recursive: true);
+        Directory.CreateDirectory(cacheDir);
+        var data = new ConcurrentDictionary<CubeKey, LeafSummary>();
+        Parallel.ForEach(leaves, par, key =>
+        {
+            if (Load(region, heights, surfaceStore, key) is not { } d) return;
+            WriteCache(cacheDir, d);
+            data[key] = d.S;
+        });
+        Console.WriteLine($"cube water: {data.Values.Count(d => d.Water)} of {leaves.Count} leaves hold water (or did), {data.Values.Count(d => !d.Water)} more with gaps in their heights [{clock.Elapsed.TotalSeconds:F1}s]");
+        if (!data.Values.Any(d => d.Water)) { Directory.Delete(cacheDir, recursive: true); return 0; }
+        // a leaf's arrays from the cache, while a row of phase C (or the debug leaf) needs them
+        var held = new ConcurrentDictionary<CubeKey, Lazy<LeafData>>();
+        LeafData? Input(CubeKey k) => data.TryGetValue(k, out var s)
+            ? held.GetOrAdd(k, _ => new Lazy<LeafData>(() => ReadCache(cacheDir, s))).Value
+            : null;
+
+        // ---- B: bodies over the region ----------------------------------------------------------------
+        var ordered = data.Keys.OrderBy(k => k.Face).ThenBy(k => k.Y).ThenBy(k => k.X).ToList();
+        int total = 0;
+        foreach (var k in ordered) { data[k].LabelBase = total; total += data[k].Count; }
+        var parent = new int[total + 1];
+        for (int i = 0; i <= total; i++) parent[i] = i;
+        int Global(LeafSummary d, int idx) => d.EdgeLabel(idx) is var l && l == 0 ? 0 : d.LabelBase + l;
+        foreach (var k in ordered)
+        {
+            var d = data[k];
+            int n = d.Cells, side = n + 1;
+            if (k.Neighbour(1, 0) is { } east && east.Face == k.Face && data.TryGetValue(east, out var de))
+                for (int j = 0; j <= n; j++) Union(parent, Global(d, j * side + n), Global(de, j * side));
+            if (k.Neighbour(0, 1) is { } north && north.Face == k.Face && data.TryGetValue(north, out var dn))
+                for (int i = 0; i <= n; i++) Union(parent, Global(d, n * side + i), Global(dn, i));
+            // across a face edge: the shared vertices, the same bits from either side (#1552)
+            foreach (var (mine, other, theirs) in CubeWaterLattice.AcrossFaces(k))
+                if (data.TryGetValue(other, out var dO))
+                    Union(parent, Global(d, mine), Global(dO, theirs));
+        }
+        var bodies = new Dictionary<int, Body>();
+        // from each leaf's owned counts (phase A's): a body's area is the same additions in the same order as vertex by
+        // vertex (every vertex of a leaf adds the leaf's own area), its first leaf and level counts the same
+        foreach (var k in ordered)
+        {
+            var d = data[k];
+            if (d.Owned == null) continue;
+            foreach (var o in d.Owned)
+            {
+                int root = Find(parent, d.LabelBase + o.Label);
+                if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body { First = k };
+                b.Count += o.Count;
+                for (int c = 0; c < o.Count; c++) b.AreaM2 += d.VertexAreaM2;
+                foreach (var (q, m) in o.Levels) b.LevelCounts[q] = b.LevelCounts.GetValueOrDefault(q) + m;
+            }
+        }
+        foreach (var b in bodies.Values)
+        {
+            b.MaxDepth = WaterBed.MaxDepthForArea(b.AreaM2);
+            b.SurveyLevel = b.ModeLevel();
+        }
+        var rootOf = new int[total + 1];
+        var maxDepthOf = new double[total + 1];
+        var sqrtAreaOf = new double[total + 1];
+        var surveyLevelOf = new double[total + 1];
+        for (int i = 1; i <= total; i++)
+        {
+            rootOf[i] = Find(parent, i);
+            surveyLevelOf[i] = double.NaN;
+            if (bodies.TryGetValue(rootOf[i], out var b))
+            {
+                maxDepthOf[i] = b.MaxDepth;
+                sqrtAreaOf[i] = Math.Sqrt(b.AreaM2);
+                if (b.AreaM2 >= WaterWindow.MinSurveyAreaM2) surveyLevelOf[i] = b.SurveyLevel;
+            }
+            else maxDepthOf[i] = WaterBed.MinMaxDepthM;
+        }
+        Console.WriteLine($"  {bodies.Count} water bodies, {bodies.Values.Sum(b => b.AreaM2) / 1e6:F1} km² [{clock.Elapsed.TotalSeconds:F1}s]");
+
+        if (debug is { } dk)
+        {
+            if (!data.TryGetValue(dk, out var dw) || !dw.Water) { Console.WriteLine($"{dk}: no water"); Directory.Delete(cacheDir, recursive: true); return 0; }
+            var d0 = Input(dk)!;
+            int roots = d0.Labels.Where(l => l != 0).Select(l => rootOf[d0.LabelBase + l]).Distinct().Count();
+            Console.WriteLine($"{dk}: cell {d0.S.CellM:F3} m, {d0.Wet.Count(b => b != 0)} wet, {d0.S.Count} labels in {roots} bodies: "
+                + string.Join(", ", d0.Labels.Where(l => l != 0).Select(l => rootOf[d0.LabelBase + l]).Distinct().Select(r2 => bodies.TryGetValue(r2, out var b2) ? $"{b2.AreaM2 / 1e6:F2} km² at {b2.SurveyLevel:F2}" : "?")));
+            Solve(dk, Input, heights, surfaceStore, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf, Console.WriteLine);
+            held.Clear();
+            Directory.Delete(cacheDir, recursive: true);
+            return 0;
+        }
+
+        // ---- C: beds and levels, frame by frame -----------------------------------------------------------
+        var driver = new FrameDriver(leaves, 0, SwissSeaLevel.Instance, heights.FrameLevel);
+        var writer = new LeafWriter(region, driver.FrameLevel, [LeafKind.Heights, LeafKind.Water], [LatticeKind.Heights, LatticeKind.Water]);
+        var bodyLock = new object();
+        long seamSamples = 0, seamCopied = 0, wetAll = 0, surveyedAll = 0, filledAll = 0;
+        int written = 0;
+        foreach (var plan in driver.Frames)
+        {
+            ct.ThrowIfCancellationRequested();
+            var todo = plan.Core.Where(k => data.TryGetValue(k, out var dk2) && dk2.Water).ToList();
+            if (todo.Count == 0) continue;
+            var fs = Stopwatch.StartNew();
+            var results = new ConcurrentDictionary<CubeKey, List<LeafSection>>();
+            // the survey: the kilometres round this frame (a frame is ~20 km a side), the rest dropped
+            int ring = 0, marginKm = 0;
+            int minE = int.MaxValue, minN = int.MaxValue, maxE = int.MinValue, maxN = int.MinValue;
+            foreach (var k in todo)
+            {
+                var s = data[k];
+                ring = Math.Max(ring, RingOf(s));
+                marginKm = Math.Max(marginKm, (int)Math.Ceiling((s.Cells * s.CellM + WaterWindow.Halo) / 1000) + 1);
+                var c = k.Centre;
+                var (ce, cn) = SwissGeodesy.ToLv95(c.LatDeg, c.LonDeg);
+                var t = TileId.FromLv95(ce, cn);
+                minE = Math.Min(minE, t.E); maxE = Math.Max(maxE, t.E);
+                minN = Math.Min(minN, t.N); maxN = Math.Max(maxN, t.N);
+            }
+            bathy?.ReleaseOutside(minE - marginKm, minN - marginKm, maxE + marginKm, maxN + marginKm);
+            // a band of rows at a time: the cache holds the rows within a window's reach of the band (the frame's leaves
+            // are (y, x) ordered)
+            int yMin = todo.Min(k => k.Y);
+            foreach (var band in todo.GroupBy(k => (k.Y - yMin) / RowsABand))
+            {
+                int x0 = band.Min(k => k.X) - ring, x1 = band.Max(k => k.X) + ring;
+                int y0 = band.Min(k => k.Y) - ring, y1 = band.Max(k => k.Y) + ring;
+                foreach (var k in held.Keys)
+                    if (k.Face != plan.Cell.Face || k.X < x0 || k.X > x1 || k.Y < y0 || k.Y > y1) held.TryRemove(k, out _);
+                Parallel.ForEach(band, par, key =>
+                {
+                    var r = Solve(key, Input, heights, surfaceStore, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
+                    results[key] = r.Sections;
+                    lock (bodyLock)
+                        foreach (var (root, st) in r.Stats)
+                        {
+                            if (!bodies.TryGetValue(root, out var b)) continue;
+                            b.OutCount += st.Count; b.OutDepthSum += st.DepthSum; b.OutMaxDepth = Math.Max(b.OutMaxDepth, st.MaxDepth);
+                            b.Surveyed += st.Surveyed; b.Filled += st.Filled;
+                            wetAll += st.Count; surveyedAll += st.Surveyed; filledAll += st.Filled;
+                        }
+                });
+            }
+            // the surfaces the beds are cut from, kept the first time (a rerun cuts from them again)
+            foreach (var k in todo.Where(k => data[k].HadWater && !surfaceStore.Has(k))) Console.WriteLine($"  warning: {k} has water but no kept surface: its bed is cut from its current heights");
+            surfaceStore.Keep(plan.Cell, todo.Where(k => !surfaceStore.Has(k)).ToDictionary(k => k, k => heights.ReadSection(k)!));
+            // every other leaf of the bundle keeps its heights as they are (a stage's kinds are replaced in every entry)
+            var sections = heights.AllHeightSections(plan.Cell);
+            foreach (var (k, list) in results) sections[k] = list;
+            var seams = writer.WriteFrame(plan.Cell, sections);
+            heights.Reload(plan.Cell);
+            foreach (var st in seams) { seamSamples += st.Samples; seamCopied += st.Copied; }
+            written += todo.Count;
+            Console.WriteLine($"  frame {plan.Cell.Describe()}: {todo.Count} leaves with water, {fs.Elapsed.TotalSeconds:F1} s; "
+                + string.Join(", ", seams.Select(st => $"{st.Kind} seam {st.Copied} of {st.Samples} copied ({st.CopiedAcrossFrames} across frames)"))
+                + $"; {clock.Elapsed.TotalSeconds:F0} s");
+        }
+        held.Clear();
+        Directory.Delete(cacheDir, recursive: true);
+        var manifestPath = Path.Combine(region, CubeManifest.FileName);
+        var sources = File.Exists(manifestPath) ? CubeManifest.FromJson(File.ReadAllText(manifestPath)).Sources : new List<string>();
+        string source = bathy != null ? "swissBATHY3D lake beds, synthetic beds elsewhere (WaterBed)" : "synthetic lake and river beds (WaterBed)";
+        if (!sources.Contains(source)) sources.Add(source);
+        LeafWriter.WriteManifest(region, driver.LeafLevel, driver.FrameLevel, sources);
+
+        Console.WriteLine("Water bodies (area >= 0.02 km²), bed depth below the still level:");
+        Console.WriteLine($"  {"first leaf",-18} {"km²",8} {"level",8} {"max",7} {"mean",6} {"survey",7} {"fill",6}");
+        foreach (var b in bodies.Values.Where(b => b.AreaM2 >= 20_000).OrderByDescending(b => b.AreaM2))
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"  {b.First,-18} {b.AreaM2 / 1e6,8:F2} {b.SurveyLevel,8:F2} {b.OutMaxDepth,6:F1}m {(b.OutCount > 0 ? b.OutDepthSum / b.OutCount : 0),5:F1}m {100.0 * b.Surveyed / Math.Max(1, b.OutCount),6:F1}% {100.0 * b.Filled / Math.Max(1, b.OutCount),5:F1}%"));
+        Console.WriteLine($"  + {bodies.Values.Count(b => b.AreaM2 < 20_000)} smaller bodies; {wetAll:N0} wet vertices: {100.0 * surveyedAll / Math.Max(1, wetAll):F1}% surveyed, "
+            + $"{100.0 * filledAll / Math.Max(1, wetAll):F1}% gap fill, the rest synthetic");
+        Console.WriteLine($"cube water: {written} leaves written, seams {seamCopied:N0} of {seamSamples:N0} shared samples copied from their owner; "
+            + $"{clock.Elapsed.TotalSeconds:F0} s, peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
+        return 0;
+    }
+
+    // ---- A ---------------------------------------------------------------------------------------------
+
+    private static LeafData? Load(string region, RegionHeights heights, LeafStore store, CubeKey key)
+    {
+        var leaf = heights.ReadLeaf(key);
+        if (leaf?.Find(LeafKind.Heights) is not { } hs) return null;
+        var cover = leaf.Find(LeafKind.Cover) is { } cs ? LeafCover.Decode(cs) : null;
+        bool hadWater = leaf.Find(LeafKind.Water) != null;
+        bool any = false;
+        var tile = store.Read(key) is { } kept ? LeafHeights.Decode(kept) : LeafHeights.Decode(hs);
+        int side = tile.Side, n = side - 1;
+        // 1 water, 0 dry, 2 no heights: neither land nor water, as a missing LV95 tile (the lake does not end where the data does)
+        var wet = new byte[side * side];
+        bool gaps = false;
+        for (int i = 0; i < wet.Length; i++)
+        {
+            if (float.IsNaN(tile.Heights[i])) { wet[i] = 2; gaps = true; }
+            else if (cover != null && cover[i] == (byte)CoverClass.Water) { wet[i] = 1; any = true; }
+        }
+        if (!any && !hadWater)
+            return gaps ? new LeafData { S = new LeafSummary { Key = key, Cells = n }, Wet = wet, SurfaceCm = Array.Empty<int>() } : null;
+        var t = new LeafTransform(new WorkFrame(key.AncestorAt(heights.FrameLevel), SwissSeaLevel.Instance), key, tile.Bits);
+        var surface = new int[side * side];
+        for (int j = 0; j <= n; j++)
+            for (int i = 0; i <= n; i++)
+            {
+                float h = tile.Heights[j * side + i];
+                surface[j * side + i] = float.IsNaN(h) ? int.MinValue : (int)Math.Round((h - t.UndulationAt(i, j)) / Cm);
+            }
+        // the leaf's spacing and a vertex's area: its corners on the ellipsoid
+        var p00 = key.Vertex(tile.Bits, 0, 0, 0); var p10 = key.Vertex(tile.Bits, n, 0, 0); var p01 = key.Vertex(tile.Bits, 0, n, 0);
+        double su = p00.DistanceTo(p10) / n, sv = p00.DistanceTo(p01) / n;
+        var s = new LeafSummary { Key = key, Cells = n, HadWater = hadWater, Water = true, VertexAreaM2 = su * sv, CellM = 0.5 * (su + sv) };
+        var d = new LeafData { S = s, Wet = wet, SurfaceCm = surface };
+        s.Count = Label(d);
+        s.Bottom = new int[side]; s.Top = new int[side]; s.Left = new int[side]; s.Right = new int[side];
+        for (int k = 0; k <= n; k++)
+        {
+            s.Bottom[k] = d.Labels[k];
+            s.Top[k] = d.Labels[n * side + k];
+            s.Left[k] = d.Labels[k * side];
+            s.Right[k] = d.Labels[k * side + n];
+        }
+        // the owned counts phase B sums (so it never reads the leaves back)
+        var owned = new List<OwnedLabel>();
+        var slot = new Dictionary<int, int>();
+        var counts = new List<int>();
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int l = d.Labels[j * side + i];
+                if (l == 0) continue;
+                if (!slot.TryGetValue(l, out int at))
+                {
+                    slot[l] = at = owned.Count;
+                    owned.Add(new OwnedLabel(l, 0, new Dictionary<int, long>()));
+                    counts.Add(0);
+                }
+                counts[at]++;
+                int q = d.SurfaceCm[j * side + i];
+                owned[at].Levels[q] = owned[at].Levels.GetValueOrDefault(q) + 1;
+            }
+        s.Owned = owned.Select((o, at) => o with { Count = counts[at] }).ToList();
+        return d;
+    }
+
+    /// <summary>Leaves of the window's halo round a leaf, a side (the window's own rule in <see cref="Solve"/>).</summary>
+    private static int RingOf(LeafSummary s)
+    {
+        int halo = WaterWindow.Cells(WaterWindow.Halo, s.CellM);
+        return (halo + s.Cells - 1) / s.Cells;
+    }
+
+    private static string CachePath(string cacheDir, CubeKey key) => Path.Combine(cacheDir, key.FileStem + ".bin");
+
+    /// <summary>A leaf's input as phase A read it: the wet flags and, with water, the surface, deflated.</summary>
+    private static void WriteCache(string cacheDir, LeafData d)
+    {
+        using var file = File.Create(CachePath(cacheDir, d.S.Key));
+        using var z = new DeflateStream(file, CompressionLevel.Fastest);
+        z.Write(d.Wet);
+        if (d.S.Water) z.Write(MemoryMarshal.AsBytes(d.SurfaceCm.AsSpan()));
+    }
+
+    /// <summary>Reads a cached leaf back and labels it again: the flood fill is a function of the wet flags alone.</summary>
+    private static LeafData ReadCache(string cacheDir, LeafSummary s)
+    {
+        int side = s.Cells + 1;
+        var wet = new byte[side * side];
+        var surface = s.Water ? new int[side * side] : Array.Empty<int>();
+        using (var file = File.OpenRead(CachePath(cacheDir, s.Key)))
+        using (var z = new DeflateStream(file, CompressionMode.Decompress))
+        {
+            z.ReadExactly(wet);
+            if (s.Water) z.ReadExactly(MemoryMarshal.AsBytes(surface.AsSpan()));
+        }
+        var d = new LeafData { S = s, Wet = wet, SurfaceCm = surface };
+        if (s.Water && Label(d) != s.Count) throw new InvalidDataException($"{s.Key}: the cached leaf labels differently");
+        return d;
+    }
+
+    /// <summary>The 4-connected flood fill of the wet vertices into <see cref="LeafData.Labels"/>; returns the label count.</summary>
+    private static int Label(LeafData d)
+    {
+        int cells = d.S.Cells, side = cells + 1;
+        var labels = new int[side * side];
+        var stack = new Stack<int>();
+        int next = 0;
+        for (int start = 0; start < labels.Length; start++)
+        {
+            if (d.Wet[start] != 1 || labels[start] != 0) continue;
+            labels[start] = ++next;
+            stack.Push(start);
+            while (stack.Count > 0)
+            {
+                int i = stack.Pop();
+                int r = i / side, c = i % side;
+                if (c > 0) Visit(i - 1);
+                if (c < cells) Visit(i + 1);
+                if (r > 0) Visit(i - side);
+                if (r < cells) Visit(i + side);
+            }
+        }
+        d.Labels = labels;
+        return next;
+
+        void Visit(int j)
+        {
+            if (d.Wet[j] != 1 || labels[j] != 0) return;
+            labels[j] = next;
+            stack.Push(j);
+        }
+    }
+
+    private static int Find(int[] parent, int i)
+    {
+        while (parent[i] != i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+        return i;
+    }
+
+    private static void Union(int[] parent, int a, int b)
+    {
+        if (a == 0 || b == 0) return;
+        a = Find(parent, a);
+        b = Find(parent, b);
+        if (a != b) parent[Math.Max(a, b)] = Math.Min(a, b);
+    }
+
+    // ---- C ---------------------------------------------------------------------------------------------
+
+    private sealed class Stats
+    {
+        public long Count, Surveyed, Filled;
+        public double DepthSum, MaxDepth;
+    }
+
+    private sealed record Result(List<LeafSection> Sections, Dictionary<int, Stats> Stats);
+
+    private static Result Solve(CubeKey key, Func<CubeKey, LeafData?> input, RegionHeights heights, LeafStore store,
+        BathySource? bathy, int[] rootOf, double[] maxDepthOf, double[] sqrtAreaOf, double[] surveyLevelOf, Action<string>? describe = null)
+    {
+        var me = input(key)!.S;
+        int n = me.Cells, side = n + 1;
+        double cellM = me.CellM;
+        int halo = WaterWindow.Cells(WaterWindow.Halo, cellM);
+        int ring = (halo + n - 1) / n;
+        int w = side + 2 * halo;
+        var state = new byte[w * w];
+        var surfaceQ = new int[w * w];
+        var label = new int[w * w];
+        Array.Fill(state, (byte)2);
+        long gx0 = (long)key.X * n - halo, gy0 = (long)key.Y * n - halo;   // window cell (x, y) is face lattice vertex (gx0 + x, gy0 + y)
+
+        // (y, x) order: a vertex two leaves share is written by the same leaf in every window
+        for (int dy = -ring; dy <= ring; dy++)
+            for (int dx = -ring; dx <= ring; dx++)
+            {
+                var nb = new CubeKey(key.Face, key.Level, key.X + dx, key.Y + dy);
+                if (!nb.IsValid || !heights.Has(nb)) continue;
+                var nd = input(nb);
+                long ox = (long)nb.X * n - gx0, oy = (long)nb.Y * n - gy0;
+                for (int j = 0; j <= n; j++)
+                {
+                    long y = oy + j;
+                    if ((ulong)y >= (ulong)w) continue;
+                    for (int i = 0; i <= n; i++)
+                    {
+                        long x = ox + i;
+                        if ((ulong)x >= (ulong)w) continue;
+                        int wi = (int)(y * w + x), li = j * side + i;
+                        if (nd != null && nd.Wet[li] == 2) continue;   // no heights: unknown
+                        if (nd != null && nd.Wet[li] == 1)
+                        {
+                            state[wi] = 1;
+                            surfaceQ[wi] = nd.SurfaceCm[li];
+                            label[wi] = nd.LabelBase + nd.Labels[li];
+                        }
+                        else state[wi] = 0;
+                    }
+                }
+            }
+        // past the face's edge: each cell from the leaf it folds onto on the next face (#1552); past a cube corner, unknown
+        int bits = CubeKey.LatticeBits(key.Level);
+        long faceN = (long)key.Side << bits;
+        if (gx0 < 0 || gy0 < 0 || gx0 + w - 1 > faceN || gy0 + w - 1 > faceN)
+        {
+            CubeKey? lastKey = null;
+            LeafData? ld = null;
+            bool has = false;
+            for (int y = 0; y < w; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    long gx = gx0 + x, gy = gy0 + y;
+                    if (gx >= 0 && gy >= 0 && gx <= faceN && gy <= faceN) continue;
+                    if (CubeWaterLattice.Past(key.Face, key.Level, bits, gx, gy) is not { } past) continue;
+                    var (nb, li) = past;
+                    if (nb != lastKey)
+                    {
+                        lastKey = nb;
+                        has = heights.Has(nb);
+                        ld = input(nb);
+                    }
+                    if (!has) continue;
+                    int wi = y * w + x;
+                    if (ld != null && ld.Wet[li] == 2) continue;
+                    if (ld != null && ld.Wet[li] == 1)
+                    {
+                        state[wi] = 1;
+                        surfaceQ[wi] = ld.SurfaceCm[li];
+                        label[wi] = ld.LabelBase + ld.Labels[li];
+                    }
+                    else state[wi] = 0;
+                }
+        }
+
+        WaterWindow.RefineWet(state, surfaceQ, w, WaterWindow.Cells(WaterWindow.BankProbeM, cellM), BankRiseCm);
+        var land = new bool[w * w];
+        for (int i = 0; i < land.Length; i++) land[i] = state[i] == 0;
+        var ds = WaterWindow.Distances(land, w, cellM);
+
+        float[]? survey = null, dv = null, edgeDepth = null;
+        if (bathy != null && NearSurvey(key, bathy))
+        {
+            survey = new float[w * w];
+            var valid = new bool[w * w];
+            bool anyValid = false;
+            var lv95 = new Lv95Lattice(key.Face, key.Level + CubeKey.LatticeBits(key.Level), gx0, gy0, w);
+            for (int y = 0; y < w; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    survey[i] = float.NaN;
+                    if (state[i] != 1) continue;
+                    double lakeLevel = surveyLevelOf[label[i]];
+                    double surf = surfaceQ[i] * Cm;
+                    if (!(Math.Abs(surf - lakeLevel) <= WaterWindow.SurveyLevelToleranceM)) continue;
+                    var (e, nn) = lv95.At(x, y);
+                    double bed = bathy.SampleBed(e, nn);
+                    if (double.IsNaN(bed)) continue;
+                    survey[i] = (float)Math.Max(0, surf - bed);
+                    valid[i] = anyValid = true;
+                }
+            if (anyValid)
+            {
+                var site = new int[w * w];
+                dv = WaterWindow.Distances(valid, w, cellM, site);
+                edgeDepth = WaterWindow.SmoothEdgeDepth(survey, state, dv, site, w, cellM);
+            }
+            else survey = null;
+        }
+
+        // cut from the surface the leaf was built with (kept from the first run)
+        var leaf = heights.ReadLeaf(key)!;
+        var now = LeafHeights.Decode(leaf.Find(LeafKind.Heights)!);
+        var surfaceTile = store.Read(key) is { } kept ? LeafHeights.Decode(kept) : now;
+        var bedH = (float[])surfaceTile.Heights.Clone();
+        var water = CubeWater.Dry(surfaceTile.Bits);
+        int ws = water.Side;
+        var stats = new Dictionary<int, Stats>();
+        bool anyWet = false;
+        for (int j = 0; j <= n; j++)
+            for (int i = 0; i <= n; i++)
+            {
+                int x = halo + i, y = halo + j, wi = y * w + x, li = j * side + i;
+                if (state[wi] != 1) continue;
+                anyWet = true;
+                double dShore = Math.Min(ds[wi], (float)WaterWindow.DistanceCapM);
+                int gl = label[wi];
+                double half = WaterWindow.HalfWidth(ds, w, x, y);
+                var (d, kind) = WaterWindow.Depth(dShore, half, maxDepthOf[gl], survey, dv, edgeDepth, wi);
+                float surfEll = surfaceTile.Heights[li];
+                bedH[li] = (float)(surfEll - d);
+                if (i % CubeWater.Stride == 0 && j % CubeWater.Stride == 0)
+                {
+                    int si = (j / CubeWater.Stride) * ws + i / CubeWater.Stride;
+                    water.Level[si] = surfEll;
+                    double fetchM = double.IsPositiveInfinity(half) ? sqrtAreaOf[gl] : Math.Min(sqrtAreaOf[gl], 2 * half);
+                    water.Fetch[si] = WaterFormat.QuantizeFetch(fetchM);
+                }
+                if (i == n || j == n) continue;   // statistics on the vertices this leaf owns
+                if (!stats.TryGetValue(rootOf[gl], out var st)) stats[rootOf[gl]] = st = new Stats();
+                st.Count++;
+                st.DepthSum += d;
+                st.MaxDepth = Math.Max(st.MaxDepth, d);
+                if (kind == 1) st.Surveyed++;
+                if (kind == 2) st.Filled++;
+            }
+        if (describe != null)
+        {
+            int wetCore = 0, surveyed = 0;
+            double dmax = 0, dsum = 0, dsMax = 0;
+            for (int j = 0; j <= n; j++)
+                for (int i = 0; i <= n; i++)
+                {
+                    int wi = (halo + j) * w + halo + i, li = j * side + i;
+                    if (state[wi] != 1) continue;
+                    wetCore++;
+                    double dd = surfaceTile.Heights[li] - bedH[li];
+                    dmax = Math.Max(dmax, dd); dsum += dd; dsMax = Math.Max(dsMax, ds[wi]);
+                    if (survey != null && !float.IsNaN(survey[wi])) surveyed++;
+                }
+            describe($"  window {w}² (halo {halo}), state: {state.Count(b => b == 0)} dry {state.Count(b => b == 1)} wet {state.Count(b => b == 2)} unknown; "
+                + $"core wet {wetCore}, surveyed {surveyed}, depth max {dmax:F1} mean {dsum / Math.Max(1, wetCore):F1}, shore distance max {dsMax:F0} m; survey near: {survey != null}");
+        }
+        var tile = new CubeTile { Key = key, Bits = now.Bits, Heights = bedH, Quantum = now.Quantum, Roads = now.Roads, Buildings = now.Buildings };
+        var sections = new List<LeafSection> { LeafHeights.Encode(tile) };
+        if (anyWet) sections.Add(LeafWater.Encode(water));
+        return new Result(sections, stats);
+    }
+
+    /// <summary>Whether a survey kilometre lies under the leaf or within a kilometre of it.</summary>
+    private static bool NearSurvey(CubeKey key, BathySource bathy)
+    {
+        var c = key.Centre;
+        var (e, n) = SwissGeodesy.ToLv95(c.LatDeg, c.LonDeg);
+        var t = TileId.FromLv95(e, n);
+        for (int dy = -2; dy <= 2; dy++)
+            for (int dx = -2; dx <= 2; dx++)
+                if (bathy.Covers(new TileId(t.E + dx, t.N + dy))) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// LV95 positions of a window's face lattice vertices, rigorous every <see cref="Step"/> cells and bilinear between
+    /// (the projection is smooth: under a millimetre over 8 cells), at the Plateau's height. Past the face's edge the
+    /// lattice folds onto the next face (#1552): a block reaching past it is rigorous, cell by cell.
+    /// </summary>
+    private sealed class Lv95Lattice
+    {
+        private const int Step = 8;
+        private readonly double[] _e, _n;
+        private readonly int _side, _face, _level;
+        private readonly long _gx0, _gy0, _faceN;
+
+        public Lv95Lattice(int face, int latticeLevel, long gx0, long gy0, int w)
+        {
+            (_face, _level, _gx0, _gy0, _faceN) = (face, latticeLevel, gx0, gy0, 1L << latticeLevel);
+            _side = (w + Step - 1) / Step + 1;
+            _e = new double[_side * _side];
+            _n = new double[_side * _side];
+            for (int b = 0; b < _side; b++)
+                for (int a = 0; a < _side; a++)
+                {
+                    var p = CubeSphere.LatticeEcef(face, latticeLevel, gx0 + a * Step, gy0 + b * Step, SwissGeodesy.GroundH);
+                    (_e[b * _side + a], _n[b * _side + a], _) = SwissGeodesy.FromEcef(p);
+                }
+        }
+
+        public (double E, double N) At(int x, int y)
+        {
+            int a = x / Step, b = y / Step;
+            if (!Inside(_gx0 + a * Step, _gy0 + b * Step) || !Inside(_gx0 + (a + 1) * Step, _gy0 + (b + 1) * Step))
+            {
+                if (CubeSphere.Fold(_face, _level, _gx0 + x, _gy0 + y) is not { } f) return (double.NaN, double.NaN);
+                var (e, n, _) = SwissGeodesy.FromEcef(CubeSphere.LatticeEcef(f.Face, _level, f.I, f.J, SwissGeodesy.GroundH));
+                return (e, n);
+            }
+            double fa = (x - a * Step) / (double)Step, fb = (y - b * Step) / (double)Step;
+            int k = b * _side + a;
+            double Lerp(double[] v) => (v[k] * (1 - fa) + v[k + 1] * fa) * (1 - fb) + (v[k + _side] * (1 - fa) + v[k + _side + 1] * fa) * fb;
+            return (Lerp(_e), Lerp(_n));
+        }
+
+        private bool Inside(long gx, long gy) => gx >= 0 && gy >= 0 && gx <= _faceN && gy <= _faceN;
+    }
+}
+
+/// <summary>A temporary <c>.cubl</c> region of one kind of section a stage keeps per leaf (the water stage's surfaces).</summary>
+public sealed class LeafStore(string dir, int frameLevel)
+{
+    private readonly object _lock = new();
+
+    private string PathOf(CubeKey frame) => Path.Combine(dir, CubeBundle.LeafFileName(frame));
+
+    public bool Has(CubeKey leaf) => Read(leaf) != null;
+
+    public LeafSection? Read(CubeKey leaf)
+    {
+        string path = PathOf(leaf.AncestorAt(frameLevel));
+        lock (_lock)
+            return File.Exists(path) && CubeBundle.ReadLeaf(path, leaf) is { } l ? l.Find(LeafKind.Heights) : null;
+    }
+
+    /// <summary>Adds leaves' sections to a frame's bundle, keeping the ones already there.</summary>
+    public void Keep(CubeKey frame, Dictionary<CubeKey, LeafSection> add)
+    {
+        if (add.Count == 0) return;
+        lock (_lock)
+        {
+            Directory.CreateDirectory(dir);
+            string path = PathOf(frame);
+            var all = new Dictionary<CubeKey, List<LeafSection>>();
+            if (File.Exists(path))
+                foreach (var (k, bytes) in CubeBundle.ReadAllEntries(path))
+                    if (CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s) all[k] = [s];
+            foreach (var (k, s) in add) all.TryAdd(k, [s]);
+            CubeBundle.UpdateLeaves(path, frame, all, [LeafKind.Heights]);
+        }
+    }
+}

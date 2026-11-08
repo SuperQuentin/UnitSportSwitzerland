@@ -20,11 +20,11 @@ public partial class ClientWorld
         events.Toast = Toast;
         events.Origin = () => _worldOrigin;
         events.Me = () => LocalPlayer;
-        events.GroundAt = (e, n) => _chunks != null && _worldOrigin is { } o && _chunks.TryGetHeight(o.ToWorld(e, n, 0), out float h) ? h : null;
+        events.GroundAt = (e, n) => _chunks != null && _worldOrigin is { } o && _chunks.Ground.TryGetHeight(o.ToWorld(e, n, 0), out float h) ? h : null;
         events.ForestAt = (e, n) => _chunks != null && _worldOrigin is { } o && events.GroundAt?.Invoke(e, n) is { } g
-            && _chunks.TryGetCover(o.ToWorld(e, n, g), out var cover) ? cover is Terrain.Format.CoverClass.Forest : null;
+            && _chunks.Ground.TryGetCover(o.ToWorld(e, n, g), out var cover) ? cover is Terrain.Format.CoverClass.Forest : null;
         AddChild(new ErrandGivers(() => _onFoot ? LocalPlayer : null, () => _worldOrigin,
-            p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null));
+            p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null));
         AddChild(new ErrandDialog(() => _onFoot ? LocalPlayer : null));
         ErrandsPage.Where = () => _onFoot ? LocalPlayer?.Global : null;
         ErrandsPage.Register();

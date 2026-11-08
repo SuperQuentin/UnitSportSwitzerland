@@ -1,5 +1,6 @@
 using UnitSport.Terrain.Fixture;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 using Xunit;
 
 namespace UnitSport.Tests;
@@ -84,5 +85,119 @@ public class FixtureCourseTests
         for (int i = 1; i < road.Count; i++)
             if ((road[i - 1].X < 225) != (road[i].X < 225)) crossings++;
         Assert.Equal(6, crossings);
+    }
+
+    // ---- the same courses as cube leaves (#1509, G2 B5) ------------------------------------------
+
+    [Theory]
+    [MemberData(nameof(Courses))]
+    public void Leaves_are_valid_and_the_ground_follows_the_road(string name)
+    {
+        var source = FixtureChunkSource.Create(name, StartE, StartN)!;
+        var leaves = FixtureLeaves.At(source);
+        Assert.Contains(leaves.StartLeaf, leaves.Leaves);
+        Assert.All(leaves.Leaves, k => Assert.Equal(LeafFrames.LeafLevel, k.Level));
+
+        // the start's leaf, and every leaf a road crosses (the lake's and the airport's courses have dozens of leaves)
+        var withRoads = leaves.RoadLeaves.ToList();
+        int roadPoints = 0;
+        foreach (var key in withRoads.Append(leaves.StartLeaf).Distinct())
+        {
+            var leaf = leaves.Build(key)!;
+            var back = CubeLeafContent.Decode(leaf.Encode());
+            Assert.Empty(back.Skipped);
+            Assert.Equal(leaf.Roads!.Segments.Count, back.Roads!.Segments.Count);
+            Assert.Equal(leaf.Buildings!.Buildings.Count, back.Buildings!.Buildings.Count);
+            Assert.Equal(leaf.Trees!.Count, back.Trees!.Count);
+            Assert.DoesNotContain(leaf.Heights!.Heights, float.IsNaN);
+
+            var t = LeafFrames.Swiss.TransformOf(key);
+            // a ski lift is a cable: cut at a leaf edge, its straight line stands over the hill (the fun course's)
+            foreach (var seg in leaf.Roads.Segments.Where(s => s.Class != RoadClass.SkiLift))
+                for (int i = 0; i < seg.PointCount; i++)
+                {
+                    var (li, lj, hEll) = t.LocalToLattice(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
+                    // in its leaf, the cut points on its edges
+                    Assert.InRange(li, -1e-3, t.Cells + 1e-3);
+                    Assert.InRange(lj, -1e-3, t.Cells + 1e-3);
+                    // the collision blend pulls the ground to the road within 3 m; it must not have to pull far
+                    Assert.InRange(MeshHeight(leaf.Heights, li, lj) - hEll, -2.0, 2.0);
+                    roadPoints++;
+                }
+        }
+        Assert.Equal(name is not ("flat" or "crag"), roadPoints > 0);
+        Assert.Null(leaves.Build(new CubeKey(0, LeafFrames.LeafLevel, 0, 0)));
+    }
+
+    [Fact]
+    public void The_start_stands_on_the_course_s_ground_at_its_latitude_and_longitude()
+    {
+        var source = FixtureChunkSource.Create("hairpin", StartE, StartN)!;
+        var leaves = FixtureLeaves.At(source);
+        var on = new SourceOnLeaf(LeafFrames.Swiss, leaves.StartLeaf, leaves.Source);
+        var (x, y, z) = on.Local(0, 0, leaves.Course.Ground(0, 0));
+        var (i, j, hEll) = on.Transform.LocalToLattice(x, y, z);
+        // the leaf's ground is the course's every ~10 m, bilinear between, as the tile source's lattice (15 cm off here)
+        Assert.InRange(MeshHeight(leaves.Build(leaves.StartLeaf)!.Heights!, i, j) - hEll, -0.3, 0.3);
+        // and the start is where its LV95 point is
+        var (lat, lon) = Lv95Source.Instance.ToLatLon(StartE, StartN);
+        Assert.Equal(lat, leaves.Source.StartLatDeg, 12);
+        Assert.Equal(lon, leaves.Source.StartLonDeg, 12);
+    }
+
+    [Fact]
+    public void A_course_placed_elsewhere_keeps_its_metres()
+    {
+        // the hairpin's 3 km road at Scuol, 180 km from its LV95 start: its pieces' lengths in the leaves are the course's
+        // (inside Switzerland: the sea level is LHN95's until G3)
+        var source = FixtureChunkSource.Create("hairpin", StartE, StartN)!;
+        var leaves = new FixtureLeaves(source, 46.80, 10.30);
+        double inLeaves = 0;
+        foreach (var key in leaves.Leaves)
+            foreach (var seg in leaves.Build(key)!.Roads!.Segments)
+                for (int i = 1; i < seg.PointCount; i++)
+                {
+                    double dx = seg.Points[i * 3] - seg.Points[i * 3 - 3], dy = seg.Points[i * 3 + 1] - seg.Points[i * 3 - 2];
+                    double dz = seg.Points[i * 3 + 2] - seg.Points[i * 3 - 1];
+                    inLeaves += Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                }
+        var road = source.Course.Roads.Single().Points;
+        double course = 0;
+        for (int i = 1; i < road.Count; i++)
+            course += Math.Sqrt(Math.Pow(road[i].X - road[i - 1].X, 2) + Math.Pow(road[i].Y - road[i - 1].Y, 2) + Math.Pow(road[i].Z - road[i - 1].Z, 2));
+        // true at the course's height (2×10⁻⁴ long without: the hairpin runs 1,000-1,200 m up)
+        Assert.Equal(course, inLeaves, course * 2e-5);
+        Assert.Equal(46.80, LeafFrames.Swiss.FrameOf(leaves.StartLeaf).Cell.Centre.LatDeg, 0);
+    }
+
+    [Fact]
+    public void Leaf_pieces_stay_in_their_leaf_and_share_ends()
+    {
+        // a line of 3 km across several leaves, one leg doubling back
+        var course = new CourseSource(46.2, 7.2);
+        var line = new List<(double A, double B, double Z)> { (-400, -400, 10), (900, 1300, 11), (1500, 2100, 12), (-1200, 300, 13) };
+        var pieces = LeafSplit.AtLeaves(course, line);
+        Assert.True(pieces.Count >= 4);
+        for (int i = 0; i < pieces.Count; i++)
+        {
+            var (leaf, piece) = pieces[i];
+            for (int k = 1; k < piece.Count; k++)
+                Assert.Equal(leaf, SourceOnLeaf.LeafOf(course, (piece[k - 1].A + piece[k].A) / 2, (piece[k - 1].B + piece[k].B) / 2));
+            if (i > 0) Assert.Equal(pieces[i - 1].Piece[^1], piece[0]);
+        }
+        Assert.Equal(line[0], pieces[0].Piece[0]);
+        Assert.Equal(line[^1], pieces[^1].Piece[^1]);
+    }
+
+    /// <summary>A leaf's ground at a fractional lattice point, bilinear (the mesh's triangles are within a few cm of it here).</summary>
+    private static double MeshHeight(CubeTile tile, double i, double j)
+    {
+        int n = (1 << tile.Bits) + 1;
+        int i0 = Math.Clamp((int)i, 0, n - 2), j0 = Math.Clamp((int)j, 0, n - 2);
+        double u = i - i0, v = j - j0;
+        var h = tile.Heights;
+        double south = h[i0 + j0 * n] + (h[i0 + 1 + j0 * n] - h[i0 + j0 * n]) * u;
+        double north = h[i0 + (j0 + 1) * n] + (h[i0 + 1 + (j0 + 1) * n] - h[i0 + (j0 + 1) * n]) * u;
+        return south + (north - south) * v;
     }
 }

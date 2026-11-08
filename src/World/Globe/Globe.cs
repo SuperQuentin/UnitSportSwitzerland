@@ -113,6 +113,20 @@ public partial class Globe : Node
 
     public string Dir { get; set; } = DefaultDir;
 
+    /// <summary>
+    /// The earth world (<c>--frame earth</c>, #1510): no flat world to give way to, so the globe is drawn at every
+    /// altitude, placed in the world's own anchor frame, down to the region's leaves (<see cref="Leaves"/>), its tiles
+    /// added under <see cref="CommitBudgetMs"/>. The leaves round the camera are drawn whole by <c>EarthWorld</c>, in
+    /// front of these (the shader's push).
+    /// </summary>
+    public bool Earth { get; set; }
+
+    /// <summary>The region's leaves, the quadtree's last level in the earth world.</summary>
+    public Terrain.Leaves.LeafStore? Leaves { get; set; }
+
+    /// <summary>Main-thread time a frame spends adding built tiles in the earth world, ms.</summary>
+    public double CommitBudgetMs { get; set; } = 3;
+
     private CubeManifest _manifest = null!;
     private int _maxLevel;
     private Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
@@ -131,6 +145,7 @@ public partial class Globe : Node
         var files = new GlobeFiles(Dir);
         _manifest = files.Manifest();
         _maxLevel = _manifest.LevelsOrLeaf.Max(l => l.Level);
+        if (Leaves is { Count: > 0 }) _maxLevel = Math.Max(_maxLevel, Terrain.Leaves.LeafFrames.LeafLevel);
         (_heights, _albedo) = files.Index(_manifest);
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
@@ -232,14 +247,18 @@ public partial class Globe : Node
     {
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
 
-        // what the workers built, a few a frame
-        for (int k = 0; k < 4 && _ready.TryDequeue(out var r); k++)
+        // what the workers built, a few a frame (the earth world: under a time budget)
+        var clock = Earth ? System.Diagnostics.Stopwatch.StartNew() : null;
+        for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _ready.TryDequeue(out var r); k++)
             if (r.Month == _month && !_patches.ContainsKey(r.Key)) Commit(r.Key, r.Arrays, r.Colour);
 
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
-        Hide(altitude, cam.GlobalPosition);
-        Edge(altitude, cam.GlobalPosition);
-        bool show = altitude > ShowAboveM;
+        if (!Earth)
+        {
+            Hide(altitude, cam.GlobalPosition);
+            Edge(altitude, cam.GlobalPosition);
+        }
+        bool show = Earth || altitude > ShowAboveM;
         if (show != _shown)
         {
             _shown = show;
@@ -249,14 +268,29 @@ public partial class Globe : Node
         if (!show) return;
         Relight();
 
-        var (ce, cn) = Origin.ToLv95(cam.GlobalPosition);
-        if (Origin.Frame.Epoch != _epoch || double.IsNaN(_axesE) || Math.Abs(ce - _axesE) > ReembedM || Math.Abs(cn - _axesN) > ReembedM)
+        if (Earth)
         {
-            _epoch = Origin.Frame.Epoch;
-            (_axesE, _axesN) = (ce, cn);
-            Axes = Origin.Frame.EcefAxesAt(ce, cn);
-            foreach (var (key, node) in _patches) node.Transform = Place(key);
-            PushMaskCorner();
+            // the world is the anchor frame itself: placed again at each re-anchor
+            if (Origin.Frame.Epoch != _epoch)
+            {
+                // no generated fill to stand behind: the shader's fill push off
+                if (_fill != 1) RenderingServer.GlobalShaderParameterSet(FillHide, _fill = 1);
+                _epoch = Origin.Frame.Epoch;
+                Axes = Origin.Frame.Axes ?? Origin.EcefAxes;
+                foreach (var (key, node) in _patches) node.Transform = Place(key);
+            }
+        }
+        else
+        {
+            var (ce, cn) = Origin.ToLv95(cam.GlobalPosition);
+            if (Origin.Frame.Epoch != _epoch || double.IsNaN(_axesE) || Math.Abs(ce - _axesE) > ReembedM || Math.Abs(cn - _axesN) > ReembedM)
+            {
+                _epoch = Origin.Frame.Epoch;
+                (_axesE, _axesN) = (ce, cn);
+                Axes = Origin.Frame.EcefAxesAt(ce, cn);
+                foreach (var (key, node) in _patches) node.Transform = Place(key);
+                PushMaskCorner();
+            }
         }
 
         // five plans a second
@@ -354,7 +388,32 @@ public partial class Globe : Node
 
     private void Request(CubeKey key)
     {
-        if (_patches.ContainsKey(key) || _loading.Contains(key) || !_heights.TryGetValue(key, out var at)) return;
+        if (_patches.ContainsKey(key) || _loading.Contains(key)) return;
+        // the earth world's last level: a leaf's own heights, no colour of its own yet
+        if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel && Leaves is { } leaves)
+        {
+            if (!leaves.Has(key)) return;
+            _loading.Add(key);
+            int leafMonth = _month;
+            _ = Task.Run(async () =>
+            {
+                await _workers.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (leaves.Get(key)?.Heights is { } tile) _ready.Enqueue((key, Build(tile), null, leafMonth));
+                }
+                catch (Exception e)
+                {
+                    GD.PushError($"[globe] leaf {key}: {e.Message}");
+                }
+                finally
+                {
+                    _workers.Release();
+                }
+            });
+            return;
+        }
+        if (!_heights.TryGetValue(key, out var at)) return;
         _loading.Add(key);
         _albedo.TryGetValue(key, out var colourAt);
         int month = _month;

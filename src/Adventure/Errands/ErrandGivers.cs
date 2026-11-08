@@ -28,6 +28,8 @@ public partial class ErrandGivers : Node3D
         public required SkinnedFigure Figure;
         public required Sprite3D Icon;
         public bool Grounded;
+        /// <summary>Its heading from true north has been set down in this world's frame (#1504).</summary>
+        public bool Faced;
         public int Mark = -1;
         public float Yaw;
         public List<Offer> Cards = new();
@@ -230,6 +232,12 @@ public partial class ErrandGivers : Node3D
         var w = origin.ToWorld(e.Giver.E, e.Giver.N, e.Giver.Elevation);
         if (_ground(w) is { } y) { w.Y = y; e.Grounded = true; }
         e.Holder.Position = w - GlobalPosition;
+        if (!e.Faced)
+        {
+            e.Faced = true;
+            e.Yaw = TrueNorth.WorldYaw(origin.Frame, w, -e.Giver.TrueHeading);
+            e.Figure.Rotation = new Vector3(0, e.Yaw, 0);
+        }
     }
 
     /// <summary>The glyph over a giver: 2 a hand-over waits, 1 an untaken card, 0 none. Set only when it changes.</summary>

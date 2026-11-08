@@ -56,8 +56,8 @@ public partial class ConcertDirector : Node
     public override void _Ready()
     {
         if (_chunks == null) return;
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _chunks.Ground.TileFurnished += OnFurnished;
+        _chunks.Ground.TileUnfurnished += OnUnfurnished;
         // the crowd's loops are 0.7 s of DSP: made now off the main thread, not in the frame the first stage is hung
         if (DisplayServer.GetName() != "headless") System.Threading.Tasks.Task.Run(ConcertSound.Prewarm);
     }
@@ -65,8 +65,8 @@ public partial class ConcertDirector : Node
     public override void _ExitTree()
     {
         if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _chunks.Ground.TileFurnished -= OnFurnished;
+        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
     }
 
     private double _nextCheck;
@@ -104,8 +104,9 @@ public partial class ConcertDirector : Node
         old.QueueFree();
     }
 
-    private void OnUnfurnished(TileId id, ChunkNode node)
+    private void OnUnfurnished(GroundTile tile, ChunkNode node)
     {
+        var id = tile.Lv95Tile;
         node.GetNodeOrNull(NodeName)?.QueueFree();
         foreach (var key in _tiles.Where(kv => kv.Value.Id == id).Select(kv => kv.Key).ToList()) _tiles.Remove(key);
     }
@@ -118,8 +119,9 @@ public partial class ConcertDirector : Node
         if (Wanted(index)) Hang(t.Id, t.Node, index);
     }
 
-    private void OnFurnished(TileId id, ChunkNode node, Interiors.DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] doors)
     {
+        var id = tile.Lv95Tile;
         for (int i = 0; i < StadiumCatalog.All.Length; i++)
             if (StadiumCatalog.Owner(StadiumCatalog.All[i]) == id)
             {
@@ -143,9 +145,9 @@ public partial class ConcertDirector : Node
         var (lx, lz) = id.Local(s.E, s.N);
         var local = new Vector3((float)lx, 0, (float)lz);
         var world = node.ToGlobal(local);
-        if (!_chunks.TryGetSurface(world, out float ground)) return null;
+        if (!_chunks.Ground.TryGetSurface(world, out float ground)) return null;
         local.Y = node.ToLocal(world with { Y = ground }).Y;
-        float a = Mathf.DegToRad(s.AzimuthDeg);
+        float a = Mathf.DegToRad(s.LocalAzimuthDeg);
         var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
         return new Transform3D(basis, local);
     }
@@ -162,7 +164,7 @@ public partial class ConcertDirector : Node
             for (float v = -s.FrontHalfV + 3f; v <= s.FrontHalfV - 3f; v += 4f)
             {
                 var world = node.ToGlobal(frame * new Vector3(u, 0, v));
-                if (_chunks.TryGetSurface(world, out float y)) high = MathF.Max(high, (frame.AffineInverse() * node.ToLocal(world with { Y = y })).Y);
+                if (_chunks.Ground.TryGetSurface(world, out float y)) high = MathF.Max(high, (frame.AffineInverse() * node.ToLocal(world with { Y = y })).Y);
             }
         return Math.Min(high, 1.2f) + 0.08f;
     }
@@ -191,7 +193,7 @@ public partial class ConcertDirector : Node
             float GroundIn(Transform3D f, Vector2 uv)
             {
                 var world = node.ToGlobal(f * new Vector3(uv.X, 0, uv.Y));
-                return _chunks.TryGetSurface(world, out float y) ? (f.AffineInverse() * node.ToLocal(world with { Y = y })).Y : 0f;
+                return _chunks.Ground.TryGetSurface(world, out float y) ? (f.AffineInverse() * node.ToLocal(world with { Y = y })).Y : 0f;
             }
             frame = frame with { Origin = frame.Origin + frame.Basis.Y * GroundIn(frame, stageAt) };
             var f1 = frame;

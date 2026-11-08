@@ -29,9 +29,22 @@ public sealed class AirportStand
     public StandUse Use { get; set; }
     public double E { get; set; }
     public double N { get; set; }
+    /// <summary>Degrees clockwise from grid north, the file's; the game reads <see cref="TrueHeading"/>.</summary>
     public double Heading { get; set; }
+
+    /// <summary>The stand's heading from true north (#1504): <see cref="Heading"/> less the grid's meridian convergence there.</summary>
+    [JsonIgnore]
+    public double TrueHeading => Heading - SwissGeodesy.GridConvergenceDeg(E, N);
     /// <summary>The ground there, m (the built tile's height at the stand; NaN unknown).</summary>
     public double Ground { get; set; }
+
+    /// <summary>The aircraft origin on the Earth, on the ground (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo { get; set; }
+
+    /// <summary>The heading from true north, degrees clockwise, as written (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? GeoHeading { get; set; }
 }
 
 /// <summary>
@@ -53,6 +66,12 @@ public sealed class AirportRunway
     /// <summary>Largest departure of the ground (centreline and both edges) from a 200 m chord, m.</summary>
     public double Bump { get; set; }
     public bool Usable { get; set; }
+
+    /// <summary>The centreline's ends on the Earth, on the ground (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo1 { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo2 { get; set; }
 }
 
 /// <summary>An airport (swissTLM3D <c>Flughafenareal</c>) with its runways and the stands chosen for parked aircraft.</summary>
@@ -65,6 +84,10 @@ public sealed class Airport
     public double N { get; set; }
     public List<AirportRunway> Runways { get; set; } = new();
     public List<AirportStand> Stands { get; set; } = new();
+
+    /// <summary>The airport's point on the Earth, on the ground (#1507: a cube region's copy; null in LV95).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeoPoint? Geo { get; set; }
 }
 
 /// <summary>

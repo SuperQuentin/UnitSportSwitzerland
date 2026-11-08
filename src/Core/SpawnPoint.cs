@@ -27,7 +27,7 @@ public partial class SpawnPoint : Node
     private const float PreloadAltitude = 4800f;
 
     private readonly Node3D _target;
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly float _arrivalHeight;
     private bool _settled;
     private double _waited;
@@ -42,11 +42,11 @@ public partial class SpawnPoint : Node
     /// Height above ground to settle at. A free camera wants a viewpoint; a walking body
     /// wants to land, so <see cref="Teleporter"/> passes a couple of metres instead.
     /// </param>
-    public SpawnPoint(Node3D target, ChunkManager chunks, WorldOrigin origin,
+    public SpawnPoint(Node3D target, IWorldGround ground, WorldOrigin origin,
         double lv95E, double lv95N, float arrivalHeight = ViewHeight)
     {
         _target = target;
-        _chunks = chunks;
+        _ground = ground;
         _arrivalHeight = arrivalHeight;
         Name = "SpawnPoint";
         target.GlobalPosition = origin.ToWorld(lv95E, lv95N, PreloadAltitude);
@@ -104,14 +104,14 @@ public partial class SpawnPoint : Node
         if (_settled) return;
         _waited += delta;
 
-        if (_chunks.TryGetSurface(_target.GlobalPosition, out float ground))
+        if (_ground.TryGetSurface(_target.GlobalPosition, out float ground))
         {
             var p = _target.GlobalPosition;
             _target.GlobalPosition = new Vector3(p.X, ground + _arrivalHeight, p.Z);
             if (_target is CharacterBody3D body) body.Velocity = Vector3.Zero;
             _settled = true;
             GD.Print($"[spawn] settled at ground {ground:F0} m + {_arrivalHeight:F0} m");
-            if (_target is UnitSport.Player.FootPlayer { Indoors: false } walker) _clear = new GroundStart(_chunks, walker);
+            if (_target is UnitSport.Player.FootPlayer { Indoors: false } walker) _clear = new GroundStart(_ground, walker);
             else Finish();
         }
         else if (_waited > 15.0)

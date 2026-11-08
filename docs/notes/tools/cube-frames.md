@@ -100,10 +100,25 @@ tools/TerrainPreprocessor --cube --cube-out D:/UnitSportSwitzerland/test_b3/fram
   cells centred at base + 1 + 2i, cached as `E_N_2m.f32` (1 MB); `CubeHeightSource.Swiss` is a list,
   finest first (0.5 m, then 2 m where 0.5 m has none).
 - `--cube-check` adds: shared edges counted across frame and face edges; the frame ground against the
-  sources; with `--cube-terr DIR` against the LV95 `.terr` at the same place (lake beds left out:
-  the LV95 build holds beds there, the leaves the surveyed surface); points on edges across frames
+  sources; with `--cube-terr DIR` against the LV95 `.terr` at the same place (on leaves without the
+  water stage, lake beds left out: the LV95 build holds beds there, those leaves the surveyed surface).
+  Once `--cube-water` has run, the leaves hold the beds: the rows against the sources leave out points
+  under a leaf's `Water` section and print how many (#1568); points on edges across frames
   from both frames' grounds (1 µm). G1's height-field collision rows are informational (it misses
   2 cm; collision is trimesh patches, C2).
+- **Features on the leaves' ground** (#1579, `.cubl` regions; G1's `.cubb` keep their own rows): every leaf's
+  `Roads`, `Buildings`, `Trees` and `Water` against the leaf mesh below (`CubeBuild.AboveMesh`: ellipsoidal height
+  over the mesh's triangles, on whichever leaf the point falls; at most 400 points a leaf a row). Draped road vertices
+  (surveyed ones counted apart, `CubeCompare.Surveyed`), each building's base (its lowest corner not above the
+  ground, its highest not deeper than the 0.8 m foundation: the seat is the median ground less it), the trees' feet,
+  the still level against the bed at each wet sample (max 1 cm). The bars are gross, a share over 1 m: roads 1 %,
+  buildings 0.1 % each way, trees 0.01 %: the heights a stage gives a feature by design (kerbs, the network's
+  smoothing, the seat) are the comparer's to hold against the LV95 build. Points over no leaf or no heights are
+  counted (past the data's edge). Measured (Nov 8 2026): D: region roads p50 +11.6 cm, p99 +74 cm, 0.44 % over 1 m;
+  buildings 0.012 % floating and 0.007 % sunk over 1 m; trees p99 1 cm, none over 1 m; levels 0 under the bed;
+  Brest and the Geneva French sample (BD TOPO) roads 0.39 % and 0.38 % over 1 m, buildings 0. Geneva's sample has
+  a road vertex 583 m under its leaf (BD TOPO draped where the RGE ALTI sample stops), 0.18 % over 5 m. The check
+  holds every leaf's heights: 7.3 GB on the D: region, so a nationwide check runs per area.
 
 ### Numbers (Nov 4 2026, below-normal priority, 12 threads)
 

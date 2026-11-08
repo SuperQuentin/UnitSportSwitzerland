@@ -35,7 +35,10 @@ public static class TelescopeTargets
     /// <summary>A target's readings. <c>Lit</c> is 0..1; <c>Waxing</c> is only known for the moon.</summary>
     public readonly record struct Info(double Magnitude, double DistanceM, double ArcSec, double Lit, bool? Waxing);
 
-    /// <summary>Azimuth (degrees clockwise from north, 0..360) and altitude (degrees, negative below) of a world direction: north is -Z, east +X, up +Y.</summary>
+    /// <summary>
+    /// Azimuth (degrees clockwise from the world's −Z, 0..360) and altitude (degrees, negative below) of a world direction:
+    /// east +X, up +Y. The view turns the azimuth to true north at the scope (#1504).
+    /// </summary>
     public static (double Azimuth, double Altitude) Horizon(double x, double y, double z)
     {
         double len = Math.Sqrt(x * x + y * y + z * z);

@@ -319,6 +319,18 @@ src/Vehicles/VehicleBody quick  --wakecheck --wakekind car --chunks fixture:park
 src/World/GroundQuery    quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
+# the ground gameplay asks (#1532): IWorldGround against the streamer's own answers, its events, its cost
+src/Terrain/ChunkManager quick  --worldgroundcheck --chunks fixture:lake
+src/Terrain/IWorldGround quick  --worldgroundcheck --chunks fixture:lake
+src/Terrain/GroundTile   quick  --worldgroundcheck --chunks fixture:lake
+src/Terrain/WorldGroundCheck quick --worldgroundcheck --chunks fixture:lake
+# #1510: the earth world on real leaves (--frame earth; LEAVES=, skipped without them)
+src/Terrain/Earth        full   tools/earthcheck.sh
+src/Terrain/Leaves/LeafStore full tools/earthcheck.sh
+src/Terrain/LeafCollision full  tools/earthcheck.sh
+src/Core/OriginShifter   full   tools/earthcheck.sh
+src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
+src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 # swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit

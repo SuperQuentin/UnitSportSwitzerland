@@ -559,14 +559,14 @@ public partial class VersteckisManager : Node
                 o.Remove(px);
                 o.Remove(py);
                 o.Remove(pz);
-                o[pe] = g.E;
-                o[pn] = g.N;
+                o[pe] = g.Lv95.E;
+                o[pn] = g.Lv95.N;
             }
         }
         if (at is { } place && o["Yaw"] != null)
         {
             float yaw = o["Yaw"]!.GetValue<float>();
-            o["Yaw"] = toWire ? place.TrueYaw(yaw) : place.OffsetYaw(yaw);
+            o["Yaw"] = toWire ? Lv95Grid.TrueYaw(place, yaw) : Lv95Grid.GridYaw(place, yaw);
         }
         foreach (var child in o.Select(kv => kv.Value).ToList()) WireNode(child, toWire);
     }

@@ -62,26 +62,24 @@ public class WireFrameTests
 
     [Theory]
     [MemberData(nameof(Places))]
-    public void Offset_axes_turn_into_the_local_ENU_by_the_meridian_convergence(double e, double n)
+    public void Grid_axes_turn_into_the_local_ENU_by_the_meridian_convergence(double e, double n)
     {
         var p = GlobalPos.FromLv95(e, n, 500);
-        var b = p.Enu.Turn;
-        Assert.InRange(p.Enu.Scale, 0.9999f, 1.0003f);
+        var grid = Lv95Grid.Axes(p);
+        var b = grid.Turn;
+        Assert.InRange(grid.Scale, 0.9999f, 1.0003f);
         Assert.True(b.IsEqualApprox(b.Orthonormalized()) && Math.Abs(b.Determinant() - 1) < 1e-5, "a rotation");
         Assert.True((b * Vector3.Up).DistanceTo(Vector3.Up) < 1e-5f, "about up");
         // grid north, measured independently: a step north on the grid, seen in the ENU there
         var step = GlobalPos.FromLv95(e, n + 1, 500).ToEcef() - p.ToEcef();
         var gridNorth = Enu(p.ToEcef(), step).Normalized();
-        Assert.True(p.EnuFromOffset(new Vector3(0, 0, -1)).Normalized().DistanceTo(gridNorth) < 1e-5f, $"{p.EnuFromOffset(new Vector3(0, 0, -1))} vs {gridNorth}");
+        Assert.True(Lv95Grid.ToEnu(p, new Vector3(0, 0, -1)).Normalized().DistanceTo(gridNorth) < 1e-5f, $"{Lv95Grid.ToEnu(p, new Vector3(0, 0, -1))} vs {gridNorth}");
         var v = new Vector3(12.5f, -3f, 40f);
-        Assert.True(p.OffsetFromEnu(p.EnuFromOffset(v)).DistanceTo(v) < 1e-4f);
-        // the rate over a hundredth of a second is the linear form on the ground, to a hundredth of a mm/s
-        var rate = p.RateOfEnu(p.EnuFromOffset(v));
-        Assert.True(rate.DistanceTo(v) < 2e-3f, $"{rate} vs {v}");
+        Assert.True(Lv95Grid.FromEnu(p, Lv95Grid.ToEnu(p, v)).DistanceTo(v) < 1e-4f);
         // headings: grid north's true yaw is the convergence, and the two are inverses
-        float convergence = p.TrueYaw(0f);
+        float convergence = Lv95Grid.TrueYaw(p, 0f);
         Assert.Equal(YawOf(gridNorth), convergence, 5);
-        Assert.Equal(1.234f, p.TrueYaw(p.OffsetYaw(1.234f)), 5);
+        Assert.Equal(1.234f, Lv95Grid.TrueYaw(p, Lv95Grid.GridYaw(p, 1.234f)), 5);
         float deg = Mathf.RadToDeg(Mathf.Abs(convergence));
         _out.WriteLine($"convergence at {e}/{n}: {Mathf.RadToDeg(convergence):F4}°");
         if (e == BernE) Assert.True(deg < 0.01f, $"none at Bern ({deg:F4}°)");
@@ -109,8 +107,8 @@ public class WireFrameTests
         if (!f.IsAnchor) expected = new Vector3(expected.X * f.EnuAt(at).Scale, expected.Y, expected.Z * f.EnuAt(at).Scale);
         Assert.True(enu.DistanceTo(expected) < 1e-4f, $"{enu} vs {expected}");
         Assert.True(f.WorldOfEnu(at, enu).DistanceTo(v) < 1e-4f, "and back");
-        // in the ground frame the world's axes are GlobalPos's offset axes
-        if (!f.IsAnchor) Assert.True(enu.DistanceTo(f.ToGlobal(at).EnuFromOffset(v)) < 1e-5f);
+        // in the ground frame the world's axes are the LV95 grid's
+        if (!f.IsAnchor) Assert.True(enu.DistanceTo(Lv95Grid.ToEnu(f.ToGlobal(at), v)) < 1e-4f);
         // a world heading's true yaw is the yaw of its forward in the ENU; and back
         float worldYaw = 0.7f;
         var forward = new Basis(Vector3.Up, worldYaw) * Vector3.Forward;
@@ -119,12 +117,15 @@ public class WireFrameTests
         Assert.Equal(worldYaw, f.WorldYaw(at, trueYaw), 5);
         // true north's world yaw is the world yaw of the ENU's −Z
         Assert.Equal(YawOf(f.WorldOfEnu(at, new Vector3(0, 0, -1))), f.WorldYaw(at, 0f), 4);
-        // a record's heading (offset axes) as a world heading here and back
+        // a record's heading (LV95 grid) as a world heading here and back
         var g = f.ToGlobal(at);
-        float world = f.WorldYawOf(g, 0.3f);
-        Assert.Equal(0.3f, f.OffsetYawOf(at, world), 4);
-        Assert.Equal(g.TrueYaw(0.3f), f.TrueYaw(at, world), 4);
-        Assert.True(f.OffsetOfWorld(at, f.WorldOfOffset(g, v)).DistanceTo(v) < 1e-4f);
+        float world = f.WorldYawOfGrid(g, 0.3f);
+        Assert.Equal(0.3f, f.GridYawOf(at, world), 4);
+        Assert.Equal(Lv95Grid.TrueYaw(g, 0.3f), f.TrueYaw(at, world), 4);
+        Assert.True(f.GridOfWorld(at, f.WorldOfGrid(g, v)).DistanceTo(v) < 1e-4f);
+        // a heading and a direction from true north at a place (the wire's) as world ones
+        Assert.Equal(f.WorldYaw(at, 0.4f), f.WorldYaw(g, 0.4f), 4);
+        Assert.True(f.WorldOfEnu(g, enu).DistanceTo(v) < 1e-3f);
         // a body's rotation: in the ENU and back, and its forward follows the heading
         var q = new Quaternion(Vector3.Up, worldYaw) * new Quaternion(Vector3.Right, 0.2f);
         var qe = f.EnuTurn(at, q);

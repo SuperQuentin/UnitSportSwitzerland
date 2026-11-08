@@ -44,6 +44,11 @@
   `--features-only --tiles-file` and `--places-only` (places without re-running roads, which
   would strip junctions), RoadGen `--tiles-file --skip-rewritten`, and `export_buildings.py --src`
   (per-sheet zips).
+- **Downloads are explicit (#1580)**: the plan lists what a run would fetch and its size (also under
+  `--plan-only`). A `--yes` run that would download anything stops before starting (exit 1) unless
+  `--download` is given; `--no-download` skips every download step and builds what is already here.
+  The interactive "Go?" is the consent itself. A `--bbox` or `--canton` takes every missing tile in
+  the selection, whatever the layers, so a selection meant to rebuild uses `--tiles-file` or `--no-download`.
 - **The map as a selector for other tools**: `--pick-tiles FILE` opens the same map with an empty
   selection, writes the picked tiles that are **built** (one `E-N` per line) and exits: 0 with a
   file, 1 when the user quit or nothing picked is built. It saves no state, so `--resume` still

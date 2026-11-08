@@ -38,7 +38,7 @@ public static class ActorIo
     public static void Read(FootPlayer p, ActorState s)
     {
         var at = p.Global;
-        s.E = at.E; s.N = at.N; s.Alt = at.Alt;
+        s.E = at.Lv95.E; s.N = at.Lv95.N; s.Alt = at.Alt;
         var f = s.F;
         // a recording keeps its velocity and heading in GlobalPos's axes at its LV95 place (grid north, as saved
         // clips always have); the wire's ENU and true north are worked out again when it plays (#1503)
