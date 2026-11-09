@@ -88,6 +88,9 @@ public partial class ShotRunner : Node
     public const double CompleteHold = 1.0, CompleteTimeout = 150;
     private double _completeFor, _settleWall = -1;
 
+    /// <summary>What the ground is still busy with, for the log when <see cref="TilesComplete"/> never held.</summary>
+    public System.Func<string?>? TilesStatus { get; set; }
+
     /// <summary>The ground height under a point, once loaded; for the "g" heights of queued shots.</summary>
     public System.Func<Vector3, float?>? GroundHeight { get; set; }
 
@@ -203,7 +206,8 @@ public partial class ShotRunner : Node
         _completeFor = TilesComplete(_camera.GlobalPosition) ? _completeFor + delta : 0;
         if (_completeFor >= CompleteHold) return true;
         if (RealClock.Now - _settleWall < CompleteTimeout) return false;
-        GD.PrintErr($"[shot] {_shot.Value.OutPath}: the ground round the camera was not complete after {CompleteTimeout:F0} s; taken as it is");
+        GD.PrintErr($"[shot] {_shot.Value.OutPath}: the ground round the camera was not complete after {CompleteTimeout:F0} s; taken as it is"
+            + (TilesStatus?.Invoke() is { } status ? $" ({status})" : ""));
         return true;
     }
 

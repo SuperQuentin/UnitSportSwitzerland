@@ -41,7 +41,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public const int Workers = 3;
 
     /// <summary>
-    /// A camera higher than this streams no leaves under it, metres (#1631): from Space a leaf is under a pixel, the globe
+    /// A camera or anchor higher than this streams no leaves under it, metres (#1631): from Space a leaf is under a pixel, the globe
     /// draws the ground, and a fast orbit or climb over the fill would queue hundreds of leaves (~2 s each with roads)
     /// that the ground under the landing waits behind. <see cref="Curvature.SpaceEnterM"/>, the Space regime.
     /// </summary>
@@ -167,11 +167,19 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Nothing loading, waiting to be added, or building collision.</summary>
     public bool Idle => _loading.Count == 0 && _ready.IsEmpty && !_patches.Busy;
 
+    /// <summary>What the world is busy with, for a log line when something waited on <see cref="Idle"/> too long.</summary>
+    public string Status => $"{_loading.Count} leaves loading ({_cancelled.Count} skipped), {_ready.Count} to add, {_near.Count} loaded, "
+        + $"{_anchors.Count} anchors, collision {(_patches.Busy ? "busy" : "idle")}";
+
     public override void _Process(double delta)
     {
         var clock = Stopwatch.StartNew();
         while (clock.Elapsed.TotalMilliseconds < CommitBudgetMs && _ready.TryDequeue(out var leaf)) Add(leaf);
-        while (_abandoned.TryDequeue(out var gone)) _loading.Remove(gone);
+        while (_abandoned.TryDequeue(out var gone))
+        {
+            _loading.Remove(gone);
+            _cancelled.TryRemove(gone, out _);
+        }
 
         _nextPlan -= delta;
         if (_nextPlan > 0) return;
@@ -212,8 +220,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     {
         _foci.Clear();
         if (Camera?.Invoke() is { } cam && cam.IsFinite() && Origin.AltitudeOf(cam) < CameraCeilingM) _foci.Add(Origin.ToEcef(cam));
+        // an anchor in Space (the spectator camera is one, so is a craft in orbit) streams nothing either
         foreach (var a in _anchors)
-            if (IsInstanceValid(a) && a.IsInsideTree()) _foci.Add(Origin.ToEcef(a.GlobalPosition));
+            if (IsInstanceValid(a) && a.IsInsideTree() && Origin.AltitudeOf(a.GlobalPosition) < CameraCeilingM) _foci.Add(Origin.ToEcef(a.GlobalPosition));
         _want.Clear();
         foreach (var focus in _foci)
         {
@@ -320,6 +329,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private void Add(Near leaf)
     {
         _loading.Remove(leaf.Key);
+        // cancelled while it was being built: it is here now, and the next plan drops it if nothing wants it
+        _cancelled.TryRemove(leaf.Key, out _);
         if (_near.ContainsKey(leaf.Key)) return;
         _near[leaf.Key] = leaf;
         if (leaf.Arrays is { } arrays)

@@ -1002,6 +1002,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;
                 runner.TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
+                runner.TilesStatus = () => _earth?.Status;
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;
