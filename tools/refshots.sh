@@ -166,4 +166,4 @@ cat > "$out/meta.json" <<J
   "seconds": $((SECONDS - t_all))
 }
 J
-echo "[refshots] $(find "$out" -name '*.png' | wc -l) pictures in $out ($((SECONDS - t_all)) s)"
+echo "[refshots] $(find "$out" -name '*.png' -not -path '*/diff-*' | wc -l) pictures in $out ($((SECONDS - t_all)) s)"

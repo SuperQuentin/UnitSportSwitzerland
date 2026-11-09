@@ -37,7 +37,7 @@ if [ "$SKIP" != shots ]; then
     local lib=$1 try have; shift
     for try in 1 2 3; do
       RESUME=1 tools/refshots.sh "$@" || return $?
-      have=$(find "$lib" -mindepth 2 -maxdepth 2 -name '*.png' 2>/dev/null | wc -l)
+      have=$(find "$lib" -mindepth 2 -maxdepth 2 -name '*.png' -not -path '*/diff-*' 2>/dev/null | wc -l)
       [ "$have" -ge "$want" ] && return 0
       echo "[parity] $have of $want pictures after take $try"
     done
