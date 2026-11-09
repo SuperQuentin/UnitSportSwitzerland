@@ -273,7 +273,8 @@ The before/after film (D:/UnitSportSwitzerland/films/g2/) showed `--frame earth`
 world in almost every shot, space included: C was checked for correctness, never for looks. D does not start
 until earth looks at least as good as flat.
 - **Ground look**: the style kit's terrain materials on leaves instead of `CoverPalette` vertex colours (#1634);
-  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635).
+  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635). **Built** (#1642):
+  the leaves in the kit's terrain material (`gives_way` off), lakes clipped at leaf edges, the flat world's ±3 m normals.
 - **Far view** below 5 km: terrain, mountains and far trees to the horizon, as `HorizonLayer` gives flat (#1629).
 - **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631). **Built** (PR #1638): the
   film's climb never left 2 km (its glide waited for leaves under a fast climb); no leaves under any focus above 60 km,

@@ -583,6 +583,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
             _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
+            // the leaves' ground in the style kit's terrain material (#1634): fog and the settings reach it as the tiles'
+            FogUniforms.Apply(_earth.GroundMaterial);
+            _worldMaterials = [.. _worldMaterials, _earth.GroundMaterial];
             AddChild(_earth);
         }
         else AddChild(_chunks);
