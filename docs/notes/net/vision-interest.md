@@ -34,6 +34,19 @@
   their own: seen and relayed from where the NPC is, whoever simulates it; their simulator (the node's
   authority) never gets the relays, always has the node (`Vis`). See `docs/notes/world/npc-handoff.md`.
 - Gunfire goes to the server once and is relayed only to the peers who can see the shooter (`CombatManager.Shot` → `ShotFrom`).
+- **Under `--frame earth`** (#1513, PR #1617): the server's sight is `EarthSight.Clear` between the two Earth positions
+  (`InterestService.Sight`), not `horizon.bin`. The ray is the straight ECEF chord, marched every 100 m against the
+  ground's **ellipsoidal** height: the Earth's curve is in the geometry (a far chord dips under the ellipsoid), and
+  refraction (k = 0.13) lifts the ray by k·s(L−s)/2R, so a peak just past the geometric horizon is seen. The 12 m margin
+  stays; the ground within 250 m of either end (`EndM`) is not asked (each end stands on its own hill, and outside the
+  built region the pyramid is ETOPO's ~450 m, whose smoothed massif hid Mont Blanc's own summit point).
+  - The ground: the main `EarthWorld`'s loaded leaves (`EllipsoidalHeightAt`, round every body and shadow), else
+    `PyramidGround` on `cube_global` (`Globe.DataDir`; level 10, ~19 m a vertex, nearest stored ancestor, 48 tiles kept).
+    No pyramid: no line of sight (as a flat server with no horizon file). Heights above ground in LHN95 (`GlobalPos.Alt`).
+  - Distances and sizes still run in the per-viewer LV95 frame (< 0.1 % off a true distance at 60 km).
+  - Checks: `--interestcheck` (a plain at 60 km clear, 90 km hidden; a 500 m peak 122 km off hidden without refraction,
+    seen with it, 140 km hidden either way; a ridge); `--earthsightcheck [--globe DIR]` on the D: pyramid: Mont Blanc's
+    top from La Dôle (88 km) seen with 96 m to spare, the Chamonix and Riddes valley floors hidden.
 - Check: `<godot> --headless --path . -- --interestcheck` (rules + interpolation self-checks);
   loopback: two clients 100 m apart at the Mollendruz see each other, one at Riddes (70 km) never
   spawns them.

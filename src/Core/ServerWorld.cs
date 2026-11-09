@@ -202,9 +202,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         });
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
-        var horizon = await source.LoadHorizonAsync();
-        _interest = InterestService.CreateServer(this, _players,
-            horizon != null ? InterestService.HorizonGround(horizon) : null);
+        // Under --frame earth (#1513): the ray between Earth positions over the loaded leaves, the cube pyramid beyond.
+        if (_earth != null) _interest = CreateEarthInterest(_earth);
+        else
+        {
+            var horizon = await source.LoadHorizonAsync();
+            _interest = InterestService.CreateServer(this, _players,
+                horizon != null ? InterestService.HorizonGround(horizon) : null);
+        }
 
         _spawner = PlayerReplication.CreateSpawner(origin);
         AddChild(_spawner);
@@ -738,8 +743,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 // the ground this server holds under them: what any server-side check would use
                 var at = _origin!.ToWorld(p.Global);
+                // under --frame earth the world's Y is the ENU frame's, not an altitude: the ground point's own altitude
                 string ground = Ground is { } g && g.TryGetHeight(at, out float h)
-                    ? $"ground {h:F1} m" + (_earth == null && _chunks!.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
+                    ? $"ground {(_earth != null ? _origin.ToGlobal(new Vector3(at.X, h, at.Z)).Alt : h):F1} m" + (_earth == null && _chunks!.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
                     : "ground not loaded";
                 GD.Print($"[server] player {p.Name} at {p.Global}, {ground}");
             }
@@ -858,6 +864,27 @@ public partial class ServerWorld : Node3D, IOriginContainer
             Ground!.RemoveAnchor(player);
             player.QueueFree();
         }
+    }
+
+    /// <summary>
+    /// The interest of an earth server (#1513, G2 C4): the ground's ellipsoidal height from the main earth world's loaded
+    /// leaves (round every body, shadows included), else the <c>cube_global</c> pyramid (<see cref="World.Globe.DataDir"/>);
+    /// line of sight by <see cref="EarthSight.Clear"/>, heights above ground in LHN95 as <see cref="GlobalPos.Alt"/>.
+    /// With no pyramid, sight is free (as a flat server with no horizon file).
+    /// </summary>
+    private InterestService CreateEarthInterest(Terrain.Earth.EarthWorld earth)
+    {
+        var pyramid = World.Globe.DataDir is { } dir ? new PyramidGround(dir) : null;
+        GD.Print($"[interest] earth: line of sight over the leaves and {(pyramid != null ? $"the pyramid in {pyramid.Dir} ({pyramid.Count} tiles, level {pyramid.Level})" : "no pyramid")}");
+        double? Ellipsoidal(EcefPos p) => earth.EllipsoidalHeightAt(p, out double h) ? h : pyramid?.HeightAt(p);
+        var interest = InterestService.CreateServer(this, _players!, at =>
+        {
+            var g = at.Geodetic;
+            return Ellipsoidal(at.Ecef) is { } h
+                ? (float)GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(g with { H = h })).Alt : null;
+        });
+        if (pyramid != null) interest.Sight = (a, b) => EarthSight.Clear(a.Ecef, b.Ecef, Ellipsoidal);
+        return interest;
     }
 
     /// <summary>

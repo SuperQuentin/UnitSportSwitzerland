@@ -50,6 +50,12 @@ public partial class InterestService : Node
     /// <summary>Server: coarse ground height for line of sight and height above ground.</summary>
     public Func<GlobalPos, float?>? Ground { get; set; }
 
+    /// <summary>
+    /// Server, <c>--frame earth</c> (#1513): line of sight between two Earth positions (<see cref="EarthSight.Clear"/> over
+    /// the leaves and the pyramid). When set it replaces the flat test over <see cref="Ground"/> (the horizon lattice).
+    /// </summary>
+    public Func<GlobalPos, GlobalPos, bool>? Sight { get; set; }
+
     /// <summary>Server: true when two peers race each other; always relevant then.</summary>
     public Func<long, long, bool>? Together { get; set; }
 
@@ -200,7 +206,10 @@ public partial class InterestService : Node
             _frameE = Math.Round(from.E / 1000) * 1000;
             _frameN = Math.Round(from.N / 1000) * 1000;
             var eye = Local(from) + Vector3.Up * 1.7f;
-            if (Ground != null && _sight == null)
+            if (Sight is { } sight && _sight == null)
+                // --frame earth (#1513): the ray between the two Earth positions, the curve in its geometry
+                _sight = (a, b) => sight(GlobalPos.FromLv95(_frameE + a.X, _frameN - a.Z, a.Y), GlobalPos.FromLv95(_frameE + b.X, _frameN - b.Z, b.Y));
+            else if (Ground != null && _sight == null)
             {
                 var groundHere = (Func<Vector3, float?>)(p => Ground(GlobalPos.FromLv95(_frameE + p.X, _frameN - p.Z, p.Y)));
                 _sight = (a, b) => Interest.Clear(a, b, groundHere);
@@ -217,7 +226,7 @@ public partial class InterestService : Node
                 bool together = !withheld && Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
                 bool now_ = !withheld && Interest.Relevant(eye, Local(_lv95[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
-                    together, Ground == null ? null : _sight);
+                    together, Ground == null && Sight == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second (a withholding is never held back)
