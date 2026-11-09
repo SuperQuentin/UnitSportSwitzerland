@@ -873,3 +873,10 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] `--occasion christmas`, fly a plane up through the deck: grey overcast under it, a white-out inside, a sea of cloud under you above it; frame rate unchanged.
 - [ ] Over a lake from above the deck, and under it: no water surface drawn over the cloud or through it.
 - [ ] In VR: the deck is the same in both eyes.
+
+## Traffic on leaves under `--frame earth` (PR [#1645](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1645), [#1636](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1636))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --walkers 80 --bikes 40 --trams 6`, in a window, against the same without `--frame`/`--leaves`. The graphs take ~40 s to build at first (`[traffic] built around`).
+
+- [ ] Drive a car through Geneva's centre for 5 km, across two re-anchors and several graph rebuilds (every 800 m) → cars, trams, walkers and riders much as dense as in flat; cars stop at red and go on green; no car, tram or walker jumps, turns round on the spot or vanishes at a rebuild or a re-anchor.
+- [ ] Stand at the Pont du Mont-Blanc lights for two cycles → walkers cross on green only, riders wait at their line, trams run their lines over the bridge.
