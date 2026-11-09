@@ -116,7 +116,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // From the command line alone: a server never reads the machine's settings file (a client's choice)
         if (Enum.TryParse<WorldFrame>(CmdArgs.Value("--frame"), true, out var frame)) GameSettings.Current.Frame = frame;
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && Systems.FixtureCourse == null;
-        if (earth) origin = new WorldOrigin(FrameAxes.Enu(SwissGeodesy.ToEcef(origin.E, origin.N, 0)));
+        if (earth) origin = new WorldOrigin(FrameAxes.Enu(origin.ToGlobal(Vector3.Zero).Ecef));   // the flat origin's point at height 0
         _origin = origin;
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
             + (manifest.Tiles.Count == 0 ? " (generated world)" : "") + (earth ? ", frame earth (ENU, on leaves)" : ""));
