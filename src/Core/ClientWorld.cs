@@ -886,7 +886,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => FlightCheckProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
             {
                 var f = FlightCheckProbe.ParseArgs()!.Value;
-                return new FlightCheckProbe(chunks, origin, f.Kind, f.Shot);
+                return new FlightCheckProbe(chunks, origin, f.Kind, f.Shot, Ground);
             }),
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
@@ -929,7 +929,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
             {
                 var r = RideProbe.ParseArgs()!.Value;
-                return new RideProbe(chunks, origin, r.Kind, r.Seconds, r.Shot);
+                return new RideProbe(chunks, origin, r.Kind, r.Seconds, r.Shot, Ground);
             }),
             new(() => TunnelProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {

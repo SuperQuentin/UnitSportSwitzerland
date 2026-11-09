@@ -28,7 +28,7 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class RideProbe : Node
 {
-    private readonly ChunkManager? _chunks;   // null on --world flat
+    private readonly IWorldGround? _ground;   // null on --world flat
     private readonly WorldOrigin _origin;
     private readonly RideKind _kind;
     private readonly double _seconds;
@@ -96,10 +96,11 @@ public partial class RideProbe : Node
     /// <summary>A motorbike's worst use of its wheelie / stoppie limit; 1 or more would be a flip.</summary>
     private float _worstPitch;
 
+    /// <param name="ground">The world's ground (the earth world's leaves under <c>--frame earth</c>, #1512); the flat chunks' when null.</param>
     public RideProbe(ChunkManager? chunks, WorldOrigin origin, RideKind kind, double seconds,
-        string? shot = null)
+        string? shot = null, IWorldGround? ground = null)
     {
-        _chunks = chunks;
+        _ground = ground ?? chunks?.Ground;
         _origin = origin;
         _kind = kind;
         _seconds = seconds;
@@ -185,16 +186,16 @@ public partial class RideProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!TestWorld.TryGround(_chunks?.Ground, at, out float ground)) return;
+            if (!TestWorld.TryGround(_ground, at, out float ground)) return;
 
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
+            _player = new FootPlayer { Name = "Probe", Terrain = _ground };
             // --heading is a compass bearing: a node faces −Z (north) and +yaw turns it toward −X
             // (west). Set before the node enters the tree, whose _Ready takes its view from it.
             if (CmdArgs.Float("--heading") is float bearing)
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
-            if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
+            if (_ground == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _start = _origin.ToGlobal(_player.GlobalPosition);
             _startAltitude = ground;
             GD.Print($"[ride] spawned at LV95 {e:F0}/{n:F0}, ground {ground:F1} m");
@@ -329,14 +330,14 @@ public partial class RideProbe : Node
         {
             _sinceReport = 0;
             var p = _player.GlobalPosition;
-            float clearance = TestWorld.TryGround(_chunks?.Ground, p, out float g) ? p.Y - g : float.NaN;
+            float clearance = TestWorld.TryGround(_ground, p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
                 + (_player.Vehicle is Bicycle cycle ? $"  {cycle.Gears}  {cycle.Cadence,3:F0} rpm  {cycle.Position}{(cycle.Spec.Assist != null ? $"  {ElectricAssist.Name(cycle.Level)} +{cycle.MotorWatts:F0} W  battery {cycle.BatteryWh:F1} Wh" : "")}{(cycle.RearLocked ? "  REAR LOCKED" : "")}  W' {cycle.Body.WFraction * 100f,3:F0}%  {cycle.Body.HeartRate,3:F0} bpm" : "")
-                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c.Ground, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}"
+                + (_player.Vehicle is Car car ? $"  on {(_ground is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}"
                     + $"  pitch {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().X),5:F1}°  roll {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().Z),5:F1}°" : "")
-                + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc.Ground, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
+                + (_player.Vehicle is Truck truck ? $"  on {(_ground is { } tc ? Audio.Surfaces.At(tc, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
                     + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
                 + (Inside() is { } inside ? $"  inside {inside.DressedKind()} {inside.Key}" : "")
@@ -356,7 +357,7 @@ public partial class RideProbe : Node
 
         var end = _player.GlobalPosition;
         float travelled = (float)_origin.ToGlobal(end).HorizontalDistanceTo(_start);
-        bool underground = TestWorld.TryGround(_chunks?.Ground, end, out float endGround) && end.Y < endGround - 1.5f;
+        bool underground = TestWorld.TryGround(_ground, end, out float endGround) && end.Y < endGround - 1.5f;
         if (Inside() is { } building)
         {
             // driven in through the door's portal: the interior's floor is the ground in there
@@ -403,7 +404,7 @@ public partial class RideProbe : Node
     {
         var fwd = -_player!.GlobalBasis.Z with { Y = 0 };
         var at = _player.GlobalPosition + fwd.Normalized() * ahead;
-        _chunks.Ground.TryGetHeight(at, out float g);
+        _ground!.TryGetHeight(at, out float g);
         var size = new Vector3(30f, 4f, 1f);
         var wall = new StaticBody3D { Name = "CrashWall" };
         wall.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
@@ -440,7 +441,7 @@ public partial class RideProbe : Node
         if (limp && _sinceCrashReport >= 0.2)
         {
             _sinceCrashReport = 0;
-            float clearance = _chunks.Ground.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+            float clearance = _ground!.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
             GD.Print($"[crash] t={_elapsed - _thrownAt,4:F1}s hips {p.X - _thrownFrom.X,6:F1} {p.Y - _thrownFrom.Y,5:F1} {p.Z - _thrownFrom.Z,6:F1}  clearance {clearance:F2}"
                 + (XR.XrSession.Active ? $"  VR anchor {XR.XrSession.Anchor?.Name} at {XR.XrSession.Anchor?.GlobalPosition.DistanceTo(p):F1} m" : ""));
         }

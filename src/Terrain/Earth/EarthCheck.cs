@@ -13,7 +13,7 @@ namespace UnitSport.Terrain.Earth;
 /// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> or on a feature over it (a roof, a bridge), under it at
 /// most 1 % of the rays (road holes), and at least 100 reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
-/// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km along a line (the camera with it, so the origin
+/// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km (<c>--earthtravel &lt;m&gt;</c>) along a line (the camera with it, so the origin
 /// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer;</item>
 /// <item>the re-anchors turn the world with the Earth (#1512, G2 C3) and move nothing: at every re-anchor the
 /// ground under the body, asked again by its Earth position, is where it was within 1 cm (no pop); the world's up at
@@ -26,10 +26,12 @@ public partial class EarthCheck : Node3D
 {
     public static bool Requested() => CmdArgs.Has("--earthcheck");
 
-    private const double TimeoutS = 240;
+    private static double TimeoutS => 240 + TravelM / Speed;
     private const int Half = 10;
     private const float Step = 20f;
-    private const float Speed = 30f, TravelM = 4500f;
+    private const float Speed = 30f;
+    /// <summary>How far the body travels, metres: 4.5 km (one re-anchor), or <c>--earthtravel &lt;m&gt;</c> for a long drive across several.</summary>
+    private static readonly float TravelM = CmdArgs.Float("--earthtravel") is float m && m > 0 ? m : 4500f;
 
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
@@ -216,7 +218,7 @@ public partial class EarthCheck : Node3D
         }
         if (_travelled < TravelM) return;
         Log($"travelled {_travelled:F0} m at {Speed:F0} m/s: {_shifts} re-anchors, the ground missing at most {_worstMissingS:F1} s at once");
-        if (_shifts == 0) _faults.Add("no re-anchor in 4.5 km");
+        if (_shifts == 0) _faults.Add($"no re-anchor in {TravelM / 1000:F1} km");
         Log($"re-anchors: {_turns} of {_shifts} turned, {Mathf.RadToDeg((float)_turnSum):F4}° in all, each within {_worstTurnError * 100:F1} % of arc / R; "
             + $"up at the body within {_worstTilt:F4}° of the ellipsoid's; the ground under the body moved {_worstPop * 100:F2} cm at most ({_popsAsked} asked)");
         if (OriginShifter.GroundMode.Rotates && _turns < _shifts) _faults.Add($"only {_turns} of {_shifts} re-anchors turned the world (C3: the ground frame turns)");

@@ -287,10 +287,18 @@ public partial class OriginShifter : Node
         LastShiftNodes = pass.Moved;
         LastShiftMs = clock.Elapsed.TotalMilliseconds;
         if (!_stress || ShiftCount <= 50 || ShiftCount % 50 == 0)
-            GD.Print($"[origin] shift {ShiftCount} by {shift} to LV95 {newE:F0}/{newN:F0}: "
+            GD.Print($"[origin] shift {ShiftCount} by {shift}{(shift.Turns ? Turn(shift) : "")} to LV95 {newE:F0}/{newN:F0}: "
                 + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms, "
                 + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all");
         return true;
+    }
+
+    /// <summary>How a turning shift turned: the tilt of up and the yaw about it, degrees (the log line).</summary>
+    private static string Turn(OriginShift shift)
+    {
+        var up = shift.Direction(Vector3.Up);
+        double tilt = Math.Asin(Math.Min(1.0, Vector3.Up.Cross(up).Length()));
+        return string.Create(CultureInfo.InvariantCulture, $", turned {tilt * 180 / Math.PI:F4}° tilt {shift.Yaw * 180 / Math.PI:F4}° yaw");
     }
 
     /// <summary>
