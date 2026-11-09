@@ -40,7 +40,8 @@ public partial class ShuttleCheck : Node
 
     public override void _Ready()
     {
-        AddChild(new OriginShifter(_origin, () => _player?.GlobalPosition, () => true));
+        // --frame earth (#1630): the earth world's one turning frame
+        AddChild(new OriginShifter(_origin, () => _player?.GlobalPosition, () => true) { Earth = _origin.Frame.IsAnchor });
     }
 
     public override void _PhysicsProcess(double delta)
@@ -151,21 +152,33 @@ public partial class ShuttleCheck : Node
     }
 
     /// <summary>
-    /// The flat world's ground under the runway, in the frame the craft is in now (never an anchor frame), put
-    /// back after each shift.
+    /// The flat world's ground under the runway, in the frame the craft is in now, put back after each shift. The flat
+    /// world's Space frames turn only far from home (never an anchor frame on the way down); the earth world's frame turns
+    /// everywhere (#1630), so there the plane is laid on the ellipsoid at the runway, its up the ellipsoid's.
     /// </summary>
     private void PutGround()
     {
         var frame = _origin.Frame;
-        if (frame.IsAnchor || _groundIn != null && frame.SameFrame(_groundIn)) return;
+        if (frame.IsAnchor && !EarthFrame || _groundIn != null && frame.SameFrame(_groundIn)) return;
         if (GetParent().GetNodeOrNull<Node3D>("Ground") is not { } ground) return;
         var runway = _pilot!.Plan.To;
         // the runway's middle at sea level in this frame, level: the turned Space frames turned it with the
         // world, and on edge a 20 km plane is no runway
         var (e, n) = runway.At(runway.Length * 0.5);
-        ground.GlobalTransform = new Transform3D(Basis.Identity, frame.ToWorld(e, n, 0) + Vector3.Down * 0.5f);
+        var at = frame.ToWorld(e, n, 0);
+        var basis = Basis.Identity;
+        if (frame.IsAnchor)
+        {
+            var up = frame.UpAt(at);
+            var north = frame.ToWorld(e, n + 100, 0) - at;
+            var east = north.Cross(up).Normalized();
+            basis = new Basis(east, up, east.Cross(up).Normalized());
+        }
+        ground.GlobalTransform = new Transform3D(basis, at - basis.Y * 0.5f);
         _groundIn = frame;
     }
+
+    private bool EarthFrame => _origin.Frame.IsAnchor && OriginShifter.Instance?.Earth == true;
 
     private OriginFrame? _groundIn;
 

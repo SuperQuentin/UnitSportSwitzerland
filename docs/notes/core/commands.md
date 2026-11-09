@@ -42,7 +42,8 @@
   Each PNG is written as `<out>.part` and renamed, so poll for the final name. Use it whenever
   more than one picture is needed: every launch steals focus on macOS (`macos-launch-steals-focus`;
   Windows: `windows-launch-focus`).
-  A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in), and each
+  A queued shot's y may be `g1.7` (that high above the ground, once it has streamed in; from `g2000` up, the last ground found
+  where none is streamed, as under an earth camera in Space, #1630), and each
   shot logs `frame=` ms, averaged over its last second of settling. A `fov 6.87` line sets the
   camera's vertical field of view for the shots after it (#1433; zoomed, each shot also logs
   `zoomlod=`, see `styles/zoom-lod`). Or `i1.6`, inside a house
@@ -64,7 +65,7 @@
   still, then logs the CPU and GPU time of the 120 frames after it against the 30 before (#185):
   what a shift costs the renderer. Time it with no shot right after it (saving a PNG stalls the
   GPU); picture it in a second run, with settles of 0 for the very next frames.
-- `--origin E,N` (LV95): pins the starting world origin, so shots at fixed world coordinates stay put
+- `--origin E,N` (LV95): pins the starting world origin (under `--frame earth`, the anchor), so shots at fixed world coordinates stay put
   when the manifest's suggested origin moves. The floating origin still moves it as the camera
   travels (`ShotRunner` maps queued shots from that first frame); add `--originshift 1000000` to
   keep it still. Online too: every peer has its own origin since #185. On a server it moves the

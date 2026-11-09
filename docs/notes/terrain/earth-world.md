@@ -23,6 +23,11 @@ decisions were made with the user on 2026-11-08.
   - The shaders' curvature is refraction's lift only (`Curvature.RoundGeometry`, `world/earth-curvature`).
 - **`Earth/EarthWorld`** serves `IWorldGround` (`chunks.Ground`'s twin; `ClientWorld.Ground` picks one).
   - Leaves within 900 m along the ground of the camera or an anchor are loaded on 3 workers and committed under a 4 ms budget; they are dropped 300 m further out.
+  - **Not under a camera in Space** (#1631): above 60 km (`CameraCeilingM`, the Space regime's entry) the camera is no
+    focus; the globe draws the ground. A queued leaf no focus wants any more is skipped when a worker reaches it, and a
+    request that comes back with nothing frees its slot, so `Idle` holds again. Before, a fast climb or orbit over the
+    fill queued hundreds of leaves (~2 s each with roads, one at a time) and the ground under the landing waited
+    behind them for minutes. `Status` says what it is busy with (a shot's timeout line prints it).
   - A leaf's mesh is its collision's (`LeafCollision.Prepare`, road blend at clearance 0): what is drawn is what is stood on. It is coloured by cover through `CoverPalette`.
   - Each leaf is placed by one rigid transform from its anchor (`LeafToWorld`) and placed again from the frame at each shift, never accumulated.
   - Queries compose in doubles: world → ECEF → the leaf it lies in → that leaf's anchor frame → its mesh (`CubeGeometry.MeshHeightAt`) → back.

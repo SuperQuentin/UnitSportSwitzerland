@@ -40,6 +40,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Leaves read and meshed on workers at once.</summary>
     public const int Workers = 3;
 
+    /// <summary>
+    /// A camera or anchor higher than this streams no leaves under it, metres (#1631): from Space a leaf is under a pixel, the globe
+    /// draws the ground, and a fast orbit or climb over the fill would queue hundreds of leaves (~2 s each with roads)
+    /// that the ground under the landing waits behind. <see cref="Curvature.SpaceEnterM"/>, the Space regime.
+    /// </summary>
+    public const double CameraCeilingM = Curvature.SpaceEnterM;
+
     /// <summary>Main-thread time a frame spends adding what the workers built, ms (the flat world's <c>CommitBudgetMs</c>).</summary>
     public double CommitBudgetMs { get; set; } = 4;
 
@@ -71,6 +78,10 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private readonly Dictionary<CubeKey, Near> _near = new();
     private readonly HashSet<CubeKey> _loading = new();
     private readonly ConcurrentQueue<Near> _ready = new();
+    /// <summary>Requests no focus wants any more: a worker skips them (main thread marks, workers take).</summary>
+    private readonly ConcurrentDictionary<CubeKey, byte> _cancelled = new();
+    /// <summary>Requests that came back with nothing (skipped, or no ground): main thread frees them from <see cref="_loading"/>.</summary>
+    private readonly ConcurrentQueue<CubeKey> _abandoned = new();
     private readonly SemaphoreSlim _workers = new(Workers);
     private readonly Dictionary<CubeKey, StaticBody3D> _bodies = new();
     private readonly List<Node3D> _anchors = new();
@@ -156,10 +167,19 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Nothing loading, waiting to be added, or building collision.</summary>
     public bool Idle => _loading.Count == 0 && _ready.IsEmpty && !_patches.Busy;
 
+    /// <summary>What the world is busy with, for a log line when something waited on <see cref="Idle"/> too long.</summary>
+    public string Status => $"{_loading.Count} leaves loading ({_cancelled.Count} skipped), {_ready.Count} to add, {_near.Count} loaded, "
+        + $"{_anchors.Count} anchors, collision {(_patches.Busy ? "busy" : "idle")}";
+
     public override void _Process(double delta)
     {
         var clock = Stopwatch.StartNew();
         while (clock.Elapsed.TotalMilliseconds < CommitBudgetMs && _ready.TryDequeue(out var leaf)) Add(leaf);
+        while (_abandoned.TryDequeue(out var gone))
+        {
+            _loading.Remove(gone);
+            _cancelled.TryRemove(gone, out _);
+        }
 
         _nextPlan -= delta;
         if (_nextPlan > 0) return;
@@ -199,10 +219,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private void Plan()
     {
         _foci.Clear();
-        if (Camera?.Invoke() is { } cam && cam.IsFinite()) _foci.Add(Origin.ToEcef(cam));
+        bool lifted = false;
+        if (Camera?.Invoke() is { } cam && cam.IsFinite()) AddFocus(cam, ref lifted);
+        // an anchor in Space (the spectator camera is one, so is a craft in orbit) streams nothing either
         foreach (var a in _anchors)
-            if (IsInstanceValid(a) && a.IsInsideTree()) _foci.Add(Origin.ToEcef(a.GlobalPosition));
-        if (_foci.Count == 0) return;
+            if (IsInstanceValid(a) && a.IsInsideTree()) AddFocus(a.GlobalPosition, ref lifted);
+        // no focus at all (between a probe's bodies): keep what is loaded; only Space lets it all go
+        if (_foci.Count == 0 && !lifted) return;
 
         _want.Clear();
         foreach (var focus in _foci)
@@ -223,6 +246,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         }
         foreach (var key in _want)
             if (!_near.ContainsKey(key) && Leaves.Has(key)) Request(key);
+        // what is still queued but no longer wanted (the camera flew on, or up into Space) is skipped by the workers
+        foreach (var key in _loading)
+            if (!_want.Contains(key)) _cancelled.TryAdd(key, 0);
 
         _drop.Clear();
         foreach (var key in _near.Keys)
@@ -232,6 +258,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             if (nearest > NearM + ReleaseM) _drop.Add(key);
         }
         foreach (var key in _drop) Remove(key);
+    }
+
+    /// <summary>A focus of the streaming, unless it is in Space (<see cref="CameraCeilingM"/>): then <paramref name="lifted"/>.</summary>
+    private void AddFocus(Vector3 at, ref bool lifted)
+    {
+        if (Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
+        else _foci.Add(Origin.ToEcef(at));
     }
 
     /// <summary>
@@ -250,13 +283,21 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private void Request(CubeKey key)
     {
+        // wanted again while still queued: no longer skipped
+        _cancelled.TryRemove(key, out _);
         if (!_loading.Add(key)) return;
         _ = Task.Run(async () =>
         {
             await _workers.WaitAsync().ConfigureAwait(false);
+            bool built = false;
             try
             {
-                if (Load(key) is { } leaf) _ready.Enqueue(leaf);
+                if (_cancelled.TryRemove(key, out _)) return;
+                if (Load(key) is { } leaf)
+                {
+                    _ready.Enqueue(leaf);
+                    built = true;
+                }
                 else GD.PushWarning($"[earth] {key}: no ground");
             }
             catch (Exception e)
@@ -265,6 +306,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             }
             finally
             {
+                // a leaf that never comes is not loading any more: Idle may hold again, and a later plan asks again
+                if (!built) _abandoned.Enqueue(key);
                 _workers.Release();
             }
         });
@@ -297,6 +340,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private void Add(Near leaf)
     {
         _loading.Remove(leaf.Key);
+        // cancelled while it was being built: it is here now, and the next plan drops it if nothing wants it
+        _cancelled.TryRemove(leaf.Key, out _);
         if (_near.ContainsKey(leaf.Key)) return;
         _near[leaf.Key] = leaf;
         if (leaf.Arrays is { } arrays)

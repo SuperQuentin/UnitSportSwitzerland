@@ -275,7 +275,10 @@ until earth looks at least as good as flat.
 - **Ground look**: the style kit's terrain materials on leaves instead of `CoverPalette` vertex colours (#1634);
   lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635).
 - **Far view** below 5 km: terrain, mountains and far trees to the horizon, as `HorizonLayer` gives flat (#1629).
-- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631).
+- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631). **Built** (PR #1638): the
+  film's climb never left 2 km (its glide waited for leaves under a fast climb); no leaves under any focus above 60 km,
+  stale leaf requests skipped; flat and earth side by side match from 30 to 400 km and back; `--orbitcheck` and
+  `--shuttlecheck` under `--frame earth`.
 - **Life**: traffic and cyclists on leaves (#1636).
 - **The gate**: reference shots under `--frame earth` against the flat library, every style, `near` to `space`,
   each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user.
