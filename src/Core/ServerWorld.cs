@@ -155,7 +155,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // --frame earth: the leaves instead, nothing drawn; the flat streamer stays built for the LV95 services that hold
         // it (the dormant fleets, the steamer, the airports, the herds, the slopes), out of the tree: they wait for the
         // leaves to be furnished (C1 PR 2), as on an earth client
-        var leaves = earth ? Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir()) : null;
+        // the region's leaves alone: the fill and the generated world round them are the clients' until the server builds
+        // them too (C1 PR 3 follow-up)
+        var leaves = earth ? Terrain.Leaves.EarthLeaves.Region(Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir())) : null;
         if (leaves != null)
         {
             _earth = new Terrain.Earth.EarthWorld(leaves, origin) { BuildMeshes = false, CommitBudgetMs = _chunks.CommitBudgetMs };

@@ -10,7 +10,8 @@ decisions were made with the user on 2026-11-08.
 ## What there is (PR 1, #1576: bare ground)
 
 - **The switch**: `--frame flat|earth`, stored as `GameSettings.Frame`.
-  - Online too since #1513 (PR #1610): the server on leaves (`net/server-regions`); a fixture course falls back to `flat`.
+  - Online too since #1513 (PR #1610): the server on leaves (`net/server-regions`), the region's alone (the fill and the generated world are the clients' for now).
+  - A fixture course stands on its own leaves offline (PR 3); online it falls back to `flat`, as the server does.
 - **The leaves**: `Leaves/LeafStore` (Godot-free).
   - `Open(dir)` indexes every `.cubl` bundle; `Get(key)` reads and decodes a leaf on its first ask and keeps the last 96.
   - `Cached(key)` never touches the disk; `Keys`/`Has` are the real-leaf set.
@@ -69,6 +70,30 @@ decisions were made with the user on 2026-11-08.
   stadiums (their catalogues are LV95), castles and venues matched by LV95 position, C5's per-leaf ids, rewards and
   fields.
 
+## The fill and the fixture courses (PR 3)
+
+- **`Leaves/EarthLeaves`** (Godot-free) is what `EarthWorld` stands on (`ILeafSource`; `LeafStore` is one too):
+  - with the generator (`Systems.Generated`, `GeneratedFill` or no local terrain): the region's leaves, and the fill on
+    every leaf of `LeafFillDomain` (a 40 km disc round the start, the region's disc, grown by `Reach` wherever a focus
+    goes) that the region does not hold, built on the workers by B5's `GeneratedLeaves` and `GeneratedLeafRoads`;
+  - a part-real border leaf (`terrain/border-leaves-partial`) is merged: its real cells with everything on them, the
+    rest the fill's (cover, still water, trees and buildings standing in it; its roads stay the region's);
+  - a fixture course (`--chunks fixture:<course>`) on its own leaves (`FixtureLeaves`), all there is; the earth world
+    no longer falls back to `flat` on one;
+  - produced leaves are kept 64 at a time; a fill leaf takes ~0.5 s of a worker, ~2 s with roads (RoadGen's stage, one
+    leaf at a time).
+- **`Leaves/LeafBlend`**: the flat fill's blend on the face's global lattice, a convex mix all the way
+  (`M = (1 - W) G + W R`, then `h = (1 - F) M + F C`, C the real surface continued from the nearest real cell over
+  60 m). The real ground is `RealLeaf`'s 8-vertex cells with ground everywhere, as quadtree blocks; their heights are
+  kept to the bit and a fill vertex on a real leaf's edge copies it. What stands on the fill moves with the blend's
+  change under it; still water is dropped where the blend tilts its bed past 1.5 %. B5's additive `correction` seam
+  in `GeneratedLeaves.Build` is gone. Real leaves on another cube face are not seen (none in Switzerland).
+- C5's per-leaf generators (`core/earth-ids`) need no hook here: a produced leaf has the same sections as a real one,
+  and PR 2's furnishing calls them on every leaf `EarthWorld` loads.
+- The globe's last level (L14) reads `EarthLeaves.HeightsOf`: over the fill, the fill's heights (the generator every
+  8th vertex, blended), so the real relief the fill replaces never stands up through it (it did, in ribbons, when the
+  globe read the region alone). Its coarser levels over the fill are still the real relief (follow-up).
+
 ## Checks
 
 - `tools/earthcheck.sh` (full tier; `LEAVES=`, skipped without them; Geneva by default): `--frame earth --earthcheck`.
@@ -78,6 +103,10 @@ decisions were made with the user on 2026-11-08.
   - At every re-anchor (C3): the ground under the body asked again by its Earth position within 1 cm (no pop), up the ellipsoid's within 0.03°, the turn the arc over R within 10 %.
   - Marks asked again after the run within 1 cm.
   - `TRAVEL=<m>` (`--earthtravel`): a long drive across several re-anchors, back and forth along the same 4.5 km (the D: leaf set is sparse: 9 km NE of Geneva its edge leaves have NaN vertices).
+  - Then (PR 2) the leaves round the start furnished: roads, buildings, trees, water, 20 doors on the ground within 600 m, an interior planned behind one. `BARE=1` (`--earthbare`): a start with no town round it needs the roads alone.
+  - A ray that lands over the ground names its collider: [#1626](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1626), a border leaf's own patch ~27 m over its query in some runs, still open.
+- `--frame earth --earthcheck --chunks fixture:straight` (quick tier, `@realtime`, PR 3): the course's leaves, east along its longest reach and 300 m into its margin at 60 m/s (3.3 km, one re-anchor at 3 km), roads furnished; no town expected.
+- The border into the fill (PR 3): `AT=2578113,1115406 BARE=1 tools/earthcheck.sh` (north of Riddes, NE into the fill).
 - Geneva (2026-11-08):
   - the ground under the start in 15-30 s;
   - 441 rays: 235 on the ground at 0.0 cm, 206 on roofs, 0 under;
@@ -88,6 +117,6 @@ decisions were made with the user on 2026-11-08.
 
 ## Not yet
 
-- PR 3: generated and fixture leaves and their blend against real ones.
 - C3's patterns from tile coordinates (per-vertex face u, v in the leaves; `world_origin_offset` retired), with PR 2's meshes. (C4's server on leaves: `net/server-regions`.)
+- The server on the fill: it stands on the region's leaves alone (PR 3 follow-up).
 - `--ride` and `--flycheck` run on leaves (they take the world's ground and anchor their target, `TestWorld.AnchorEarthTarget`).

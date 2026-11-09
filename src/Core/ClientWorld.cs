@@ -462,8 +462,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             origin = new WorldOrigin(pinE, pinN);
         // --frame earth (#1510): the world is the ENU frame at the start, re-anchored under the camera as it goes, turning
         // with the Earth (#1512, C3). Online too since the server stands on leaves (#1513): the wire carries Earth positions,
-        // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk)
-        bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !fixture;
+        // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk).
+        // A fixture course stands on its own leaves offline (C1 PR 3); online it stays flat, as the server does on one
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !(fixture && Launch.Networked);
         if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
         // round leaves fall away by themselves: the shaders only add refraction's lift (#1512)
         Curvature.RoundGeometry = earth;
@@ -575,7 +576,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (earth)
         {
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
-            _earth = new Terrain.Earth.EarthWorld(Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir()), origin)
+            _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
             AddChild(_earth);
         }
@@ -792,7 +793,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var chunksForGlobe = _chunks;
                 AddChild(_earth != null
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
-                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Store }
+                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
                     : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
                 if (World.AltitudeReadout.Requested) AddChild(new World.AltitudeReadout { Name = "AltitudeReadout", Origin = origin });
@@ -894,7 +895,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }),
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
-            new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource }),
+            new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
@@ -1802,6 +1803,48 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The generated fill is on regardless of its setting: offline with no terrain data, it is the only ground.</summary>
     private bool _fillForced;
     private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
+
+    /// <summary>
+    /// <c>--earthcheck</c>: on a fixture course along its longest reach from the start, 300 m into the leaves' margin
+    /// (on <c>straight</c> past the 3 km re-anchor), at 60 m/s; on a region north-east for 4.5 km.
+    /// </summary>
+    private Terrain.Earth.EarthCheck EarthCheckFor(WorldOrigin origin)
+    {
+        if (_earth?.Leaves.IsFixture != true || Systems.FixtureCourse is not { } name || Terrain.Fixture.FixtureCourse.Create(name) is not { } course)
+            return new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource };
+        var (minX, minY, maxX, maxY) = course.Bounds(0);
+        // course metres east and north; the world's x east, -z north
+        var (reach, dir) = new[] { (maxX, Vector3.Right), (-minX, Vector3.Left), (maxY, Vector3.Forward), (-minY, Vector3.Back) }.MaxBy(r => r.Item1);
+        return new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource, ExpectTown = false, Direction = dir, TravelM = (float)reach + 300f, LegM = (float)reach + 300f, Speed = 60f };
+    }
+
+    /// <summary>
+    /// The earth world's leaves (#1510, G2 C1 PR 3): a fixture course's alone, or the region's and, with the generator,
+    /// the fill round them (its domain round the start, as the flat world's), blended into them.
+    /// </summary>
+    private Terrain.Leaves.EarthLeaves EarthLeaves(bool fixture, IChunkSource source, ProceduralWorld? generated, double startE, double startN)
+    {
+        Terrain.Leaves.EarthLeaves leaves;
+        if (fixture && source is Terrain.Fixture.FixtureChunkSource course)
+        {
+            var built = Terrain.Fixture.FixtureLeaves.At(course);
+            leaves = Terrain.Leaves.EarthLeaves.Fixture(built.Leaves.Contains, built.Build);
+            GD.Print($"[earth] fixture course {course.Course.Name} on {built.Leaves.Count} leaves");
+        }
+        else
+        {
+            var real = Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir());
+            if (generated != null)
+            {
+                var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
+                // --no-fill-roads: the fill's leaves without RoadGen's stage (~0.5 s a leaf instead of ~2 s)
+                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"));
+            }
+            else leaves = Terrain.Leaves.EarthLeaves.Region(real);
+        }
+        leaves.Log = s => GD.Print(s);
+        return leaves;
+    }
 
     private void OnSettingsChanged()
     {

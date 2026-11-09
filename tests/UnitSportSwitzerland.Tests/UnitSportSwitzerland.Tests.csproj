@@ -114,8 +114,8 @@
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
-    <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's are checked by BlendCheck, which builds ProceduralWorld) -->
-    <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\Generated*.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's, and EarthLeaves over it, are checked by BlendCheck, which builds ProceduralWorld) -->
+    <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\Generated*.cs;..\..\src\Terrain\Leaves\EarthLeaves.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <!-- #1511 G2 C2: the collision patch provider (the patches themselves need the road builders: the harness checks them) -->
     <Compile Include="..\..\src\Terrain\LeafCollision\CollisionPatches.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />

@@ -44,8 +44,8 @@ the LV95 tiles they still serve. The game reads none of them until C1 draws leav
 - Heights are the generator's function at every vertex (`ProceduralWorld.HeightIn`, its lattice cache). Cover and
   water come from its tile products (the classifier fills 10 m squares of a tile whole): the 1 m cell and 2 m sample
   nearest each vertex. Trees and buildings are filed into the leaf they stand in. 24 tiles' products are kept.
-- `Build(leaf, correction)`: a correction to the ground at a point. This is the seam for the blend against real
-  leaves, which comes with C1: it needs the game to know which leaves are real.
+- `Build(leaf)`: the generator's own leaf. The blend against real leaves is C1's `LeafBlend` on the built lattice
+  (`terrain/earth-world`, PR 3): a convex mix, so B5's additive `correction` seam is gone.
 - Roads: RoadGen's stage on the leaf's work frame (`FrameUnits`), halo 2 leaves, one leaf at a time. The raw input is
   the generator's keyed segments of the LV95 tiles under a leaf, cut at its edges, each keyed by its line and the
   metre it starts at. The ground is the generator's at a plane point; the walls are its buildings on the plane.

@@ -331,6 +331,12 @@ src/Terrain/LeafCollision full  tools/earthcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
+# #1510 PR 3: the earth world on a fixture course's own leaves (no map; real time: it streams at 60 m/s on the wall clock)
+src/Terrain/Earth        quick  @realtime --frame earth --earthcheck --chunks fixture:straight
+src/Terrain/Leaves       quick  @realtime --frame earth --earthcheck --chunks fixture:straight
+src/Terrain/Fixture/FixtureLeaves quick @realtime --frame earth --earthcheck --chunks fixture:straight
+src/Terrain/LeafCollision quick @realtime --frame earth --earthcheck --chunks fixture:straight
+src/Core/ClientWorld     quick  @realtime --frame earth --earthcheck --chunks fixture:straight
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 # swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit

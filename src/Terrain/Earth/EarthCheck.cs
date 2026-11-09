@@ -14,7 +14,9 @@ namespace UnitSport.Terrain.Earth;
 /// most 1 % of the rays (road holes), and at least 100 reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
 /// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km (<c>--earthtravel &lt;m&gt;</c>) along a line (the camera with it, so the origin
-/// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer;</item>
+/// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer. On a fixture
+/// course (C1 PR 3: <c>--chunks fixture:straight</c>, the quick tier) along the course's longest reach from the start and
+/// 300 m into its margin, at 60 m/s;</item>
 /// <item>the re-anchors turn the world with the Earth (#1512, G2 C3) and move nothing: at every re-anchor the
 /// ground under the body, asked again by its Earth position, is where it was within 1 cm (no pop); the world's up at
 /// the body is the ellipsoid's within 0.03°; each turn is the arc moved over R within 10 %; and the marks asked
@@ -29,15 +31,19 @@ public partial class EarthCheck : Node3D
 {
     public static bool Requested() => CmdArgs.Has("--earthcheck");
 
-    private static double TimeoutS => 240 + TravelM / Speed;
+    private double TimeoutS => 240 + TravelM / Speed;
     private const int Half = 10;
     private const float Step = 20f;
-    private const float Speed = 30f, LegM = 4500f;
+    /// <summary>The run's line: north-east by default; a fixture course's longest reach (see ClientWorld).</summary>
+    public Vector3 Direction { get; init; } = new Vector3(1, 0, -1).Normalized();
+    public float Speed { get; init; } = 30f;
+    /// <summary>One leg, metres: the body turns back at each end of it (the leaves of a sparse region lie along it).</summary>
+    public float LegM { get; init; } = 4500f;
     /// <summary>
     /// How far the body travels, metres: 4.5 km (one re-anchor), or <c>--earthtravel &lt;m&gt;</c> for a long drive across
-    /// several: back and forth along the same 4.5 km (<see cref="LegM"/>), where the region's leaves are known to be.
+    /// several: back and forth along the same leg (<see cref="LegM"/>), where the region's leaves are known to be.
     /// </summary>
-    private static readonly float TravelM = CmdArgs.Float("--earthtravel") is float m && m > 0 ? m : 4500f;
+    public float TravelM { get; init; } = CmdArgs.Float("--earthtravel") is float m && m > 0 ? m : 4500f;
 
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
@@ -47,8 +53,10 @@ public partial class EarthCheck : Node3D
     private RigidBody3D? _ball;
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
-    private int _phase, _shifts, _rays, _hits, _above, _below;
-    private float _travelled, _legEnd = LegM;
+    private int _phase, _shifts, _rays, _hits, _above, _below, _missed;
+    private List<(int I, int J)>? _points;
+    private double _ballS;
+    private float _travelled, _legEnd;
     private Vector3 _dir;
     private double _worstRay;
     // the ground under the body just before a re-anchor, by its Earth position, and the worst seen at the re-anchors
@@ -59,6 +67,12 @@ public partial class EarthCheck : Node3D
     /// <summary>The earth world (its furniture) and the chunk source that answers its stand-in tiles; the furniture phase is skipped without.</summary>
     public EarthWorld? Earth { get; init; }
     public IChunkSource? Source { get; init; }
+    /// <summary>
+    /// Whether the start has a town round it: buildings, trees, water and 20 doors within 600 m, one to plan an interior
+    /// behind (Geneva's default). Off on a fixture course (roads alone) and with <c>--earthbare</c>, for a start in the
+    /// mountains or at the region's border (C1 PR 3); the leaves must still be furnished with roads.
+    /// </summary>
+    public bool ExpectTown { get; init; } = !CmdArgs.Has("--earthbare");
 
     private Task<Interiors.InteriorLayout?>? _plan;
     private Interiors.DoorIndex.Entry _planned;
@@ -137,7 +151,7 @@ public partial class EarthCheck : Node3D
         {
             case 0: WaitForGround(); break;
             case 1: Rays(); break;
-            case 2: Ball(); break;
+            case 2: Ball(delta); break;
             case 3: Travel((float)delta); break;
             case 4: Marks(); break;
             case 5: Furniture(); break;
@@ -158,27 +172,49 @@ public partial class EarthCheck : Node3D
     {
         // a frame for the bodies to enter the physics space
         if (Now - _phaseS < 0.5) return;
-        var space = GetWorld3D().DirectSpaceState;
-        for (int j = -Half; j <= Half; j++)
-            for (int i = -Half; i <= Half; i++)
-            {
-                var p = Position + new Vector3(i * Step, 0, j * Step);
-                if (!_ground.HasCollisionAt(p) || !_ground.TryGetHeight(p, out float h)) continue;
-                _rays++;
-                var q = PhysicsRayQueryParameters3D.Create(p with { Y = h + 50 }, p with { Y = h - 50 });
-                var hit = space.IntersectRay(q);
-                if (hit.Count == 0) continue;
-                _hits++;
-                // over the ground: a roof, a bridge, a wall (the patches carry the leaf's features); under it: a hole
-                double off = ((Vector3)hit["position"]).Y - h;
-                if (off > 0.05) { _above++; continue; }
-                if (off < -0.05)
+        // the points are taken a physics frame before their rays: a patch counted the frame it stood up was not in
+        // the space's queries yet, and a whole patch's rays (52 of 308 at the region's border) found nothing
+        if (_points is null)
+        {
+            _points = new();
+            for (int j = -Half; j <= Half; j++)
+                for (int i = -Half; i <= Half; i++)
                 {
-                    _below++;
-                    if (_below <= 5) Log($"  under the query at {i * Step:F0},{j * Step:F0} m: {off:F2} m");
+                    var p = Position + new Vector3(i * Step, 0, j * Step);
+                    if (_ground.HasCollisionAt(p)) _points.Add((i, j));
                 }
-                _worstRay = System.Math.Max(_worstRay, System.Math.Abs(off));
+            return;
+        }
+        var space = GetWorld3D().DirectSpaceState;
+        foreach (var (i, j) in _points)
+        {
+            var p = Position + new Vector3(i * Step, 0, j * Step);
+            if (!_ground.HasCollisionAt(p) || !_ground.TryGetHeight(p, out float h)) continue;
+            _rays++;
+            var q = PhysicsRayQueryParameters3D.Create(p with { Y = h + 50 }, p with { Y = h - 50 });
+            var hit = space.IntersectRay(q);
+            if (hit.Count == 0)
+            {
+                if (++_missed <= 5) Log($"  no hit at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)})");
+                continue;
             }
+            _hits++;
+            // over the ground: a roof, a bridge, a wall (the patches carry the leaf's features); under it: a hole
+            double off = ((Vector3)hit["position"]).Y - h;
+            if (off > 0.05)
+            {
+                if (++_above <= 5)
+                    Log($"  on a feature {off:F2} m over the ground at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)}): "
+                        + $"{(hit["collider"].AsGodotObject() as Node)?.GetPath()} shape {hit["shape"]}");
+                continue;
+            }
+            if (off < -0.05)
+            {
+                _below++;
+                if (_below <= 5) Log($"  under the query at {i * Step:F0},{j * Step:F0} m: {off:F2} m");
+            }
+            _worstRay = System.Math.Max(_worstRay, System.Math.Abs(off));
+        }
         int ground = _hits - _above;
         Log($"rays: {_hits} of {_rays} hit; {_above} on a feature over the ground, {_below} under the query; on the ground worst {_worstRay * 100:F1} cm");
         if (_rays < 100) _faults.Add($"only {_rays} grid points had ground and collision");
@@ -195,9 +231,11 @@ public partial class EarthCheck : Node3D
         _phaseS = Now;
     }
 
-    private void Ball()
+    private void Ball(double delta)
     {
-        if (Now - _phaseS < 3) return;
+        // three seconds of physics, not of the wall clock: on a loaded machine the ball had hardly fallen
+        _ballS += delta;
+        if (_ballS < 3) return;
         var at = _ball!.GlobalPosition;
         float rest = _ground.TryGetHeight(at, out float h) ? at.Y - 0.5f - h : float.NaN;
         Log($"the ball after 3 s: {rest * 100:F1} cm over the ground");
@@ -210,7 +248,8 @@ public partial class EarthCheck : Node3D
             var p = Position + new Vector3(k * 37, 0, -k * 23);
             if (_ground.TryGetHeight(p, out float y)) _marks.Add((_origin.ToGlobal(p with { Y = y }), y));
         }
-        _dir = new Vector3(1, 0, -1).Normalized();
+        _dir = Direction;
+        _legEnd = LegM;
         _phase = 3;
         _phaseS = Now;
     }
@@ -300,6 +339,7 @@ public partial class EarthCheck : Node3D
         Log($"furnished {earth.FurnishedCount} leaves: {nodes} nodes, roads in {roads}, building meshes {buildings}, tree layers {trees}, water {water}");
         if (earth.FurnishedCount < 4) _faults.Add($"only {earth.FurnishedCount} leaves furnished round the start");
         if (roads == 0) _faults.Add("no roads drawn on the leaves");
+        if (!ExpectTown) { Finish(); return; }
         if (buildings == 0) _faults.Add("no buildings drawn on the leaves");
         if (trees == 0) _faults.Add("no trees drawn on the leaves");
         if (water == 0) _faults.Add("no water drawn on the leaves");

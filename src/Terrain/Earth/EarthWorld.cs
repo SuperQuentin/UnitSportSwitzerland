@@ -9,9 +9,11 @@ using UnitSport.Terrain.Leaves;
 namespace UnitSport.Terrain.Earth;
 
 /// <summary>
-/// The earth world's ground (#1510, G2 C1, behind <c>--frame earth</c>): the region's built cube leaves round the
-/// camera and the streaming anchors, read from a <see cref="LeafStore"/>, drawn at full resolution and asked through
-/// <see cref="Ground"/>, the same <see cref="IWorldGround"/> the flat world's <see cref="ChunkManager"/> serves.
+/// The earth world's ground (#1510, G2 C1, behind <c>--frame earth</c>): the cube leaves round the camera and the
+/// streaming anchors, drawn at full resolution and asked through <see cref="Ground"/>, the same
+/// <see cref="IWorldGround"/> the flat world's <see cref="ChunkManager"/> serves. The leaves are
+/// <see cref="EarthLeaves"/>': the region's built ones, and round them the generated world and the fill blended into
+/// them (PR 3), or a fixture course's.
 ///
 /// <para>
 /// The world is an anchor frame (<see cref="WorldOrigin(FrameAxes)"/>); a leaf stands in it by one rigid transform
@@ -47,7 +49,11 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// </summary>
     public bool BuildMeshes { get; init; } = true;
 
-    public LeafStore Store { get; }
+    /// <summary>Every leaf this world stands on: the region's, the fill's, a fixture course's.</summary>
+    public EarthLeaves Leaves { get; }
+
+    /// <summary>The region's built leaves (the globe draws them from afar).</summary>
+    public LeafStore Store => Leaves.Real;
 
     public WorldOrigin Origin { get; }
 
@@ -96,12 +102,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public ChunkNode? Node;
     }
 
-    public EarthWorld(LeafStore store, WorldOrigin origin)
+    public EarthWorld(EarthLeaves leaves, WorldOrigin origin)
     {
-        Store = store;
+        Leaves = leaves;
         Origin = origin;
         Name = "Earth";
-        _collisionSource = new LeafCollisionSource(store.Get);
+        _collisionSource = new LeafCollisionSource(leaves.Get);
         _patches = new CollisionPatches(_collisionSource.Build)
         {
             Failed = (key, e) => GD.PushError($"[earth] collision patch {key}: {e.Message}"),
@@ -111,7 +117,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     public override void _Ready()
     {
-        GD.Print($"[earth] {Store.Count} leaves from {Store.Dir}; near {NearM:F0} m, collision {CollisionReach.RadiusM:F0} m");
+        GD.Print($"[earth] {Store.Count} leaves from {Store.Dir}; near {NearM:F0} m, collision {CollisionReach.RadiusM:F0} m"
+            + (Leaves.Domain is { } fill ? $"; the fill round them ({fill.Discs.Count} disc(s) of {LeafFillDomain.RadiusM / 1000:F0} km and the region's)" : "")
+            + (Leaves.IsFixture ? "; a fixture course" : ""));
         // where the region is: its leaves' box in LV95 (a start outside it stands on nothing)
         if (Store.Count == 0) return;
         double minE = double.MaxValue, maxE = double.MinValue, minN = double.MaxValue, maxN = double.MinValue;
@@ -201,6 +209,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         {
             _walk.Clear();
             var start = CubeKey.FromEcef(focus, LeafFrames.LeafLevel);
+            // the fill reaches wherever a focus goes (a teleport, a long flight), as the flat world's domain grows
+            Leaves.Reach(start);
             _walk.Enqueue(start);
             var seen = new HashSet<CubeKey> { start };
             while (_walk.TryDequeue(out var key))
@@ -212,7 +222,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             }
         }
         foreach (var key in _want)
-            if (!_near.ContainsKey(key) && Store.Has(key)) Request(key);
+            if (!_near.ContainsKey(key) && Leaves.Has(key)) Request(key);
 
         _drop.Clear();
         foreach (var key in _near.Keys)
@@ -263,7 +273,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>A leaf read, its blended mesh made and meshed for drawing: on a worker.</summary>
     private Near? Load(CubeKey key)
     {
-        if (Store.Get(key) is not { Heights: not null } content) return null;
+        if (Leaves.Get(key) is not { Heights: not null } content) return null;
         if (_collisionSource.Prepared(key) is not { } prepared) return null;
         var vertices = prepared.Vertices.ToArray();
         int side = prepared.Side;

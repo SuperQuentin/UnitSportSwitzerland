@@ -186,7 +186,7 @@ public sealed partial class EarthWorld
     public LeafStand? StandOf(CubeKey leaf) => _collisionSource.Prepared(leaf)?.Stand;
 
     /// <summary>A chunk source answering the leaves' stand-in tiles too, over <paramref name="inner"/>.</summary>
-    public StandInChunkSource Source(IChunkSource inner) => new(inner, StandOf, Store.Get);
+    public StandInChunkSource Source(IChunkSource inner) => new(inner, StandOf, Leaves.Get);
 
     public override void _EnterTree()
     {

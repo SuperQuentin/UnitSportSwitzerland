@@ -14,8 +14,9 @@ namespace UnitSport.Terrain.Leaves;
 /// cover cell and the 2 m water sample nearest each vertex;</item>
 /// <item>trees and buildings: the tile's, each moved into the leaf its position or middle lies in.</item>
 /// </list>
-/// Roads come through RoadGen's frame seams (<c>GeneratedLeafRoads</c>); the blend against real leaves is
-/// <c>LeafBlend</c>. Thread-safe; a leaf costs ~0.5 s of one core, most of it the tiles' products, kept for the
+/// Roads come through RoadGen's frame seams (<c>GeneratedLeafRoads</c>). The blend against real leaves is
+/// <see cref="LeafBlend"/>, on the built leaf's lattice (a convex mix, so no correction to the generator's ground here).
+/// Thread-safe; a leaf costs ~0.5 s of one core, most of it the tiles' products, kept for the
 /// last <see cref="KeptTiles"/> tiles (a leaf reads one to four).
 /// </summary>
 public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = null)
@@ -37,22 +38,17 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
             new Products(world.BuildCover(t), world.BuildWater(t), world.BuildTrees(t), world.BuildBuildings(t)))).Value;
     }
 
-    /// <summary>A generated leaf: heights, cover, water, trees and buildings (roads: <c>GeneratedLeafRoads</c>).</summary>
-    /// <param name="correction">
-    /// A blend's correction to the ground at an LV95 point (its ground given), added to the generator's: the seam the
-    /// blend against real leaves takes (C1, which knows which leaves are real); none by default.
-    /// </param>
-    public CubeLeafContent Build(CubeKey leaf, Func<double, double, double, double>? correction = null)
+    /// <summary>
+    /// A generated leaf: heights, cover, water, trees and buildings (roads: <c>GeneratedLeafRoads</c>), the generator's
+    /// own; <see cref="LeafBlend.Apply"/> bends it into the real leaves near it.
+    /// </summary>
+    public CubeLeafContent Build(CubeKey leaf)
     {
         var on = new SourceOnLeaf(_frames, leaf, Lv95Source.Instance);
         var content = new CubeLeafContent
         {
             Key = leaf,
-            Heights = LeafLattice.Heights(on, (e, n) =>
-            {
-                double ground = world.HeightIn(TileId.FromLv95(e, n), e, n);
-                return correction is null ? ground : ground + correction(e, n, ground);
-            }),
+            Heights = LeafLattice.Heights(on, (e, n) => world.HeightIn(TileId.FromLv95(e, n), e, n)),
             Cover = LeafLattice.Cover(on, CoverAt),
             Water = LeafLattice.Water(on, WaterAt),
             Trees = new(),
@@ -72,6 +68,16 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
                 }
         }
         return content;
+    }
+
+    /// <summary>
+    /// A generated leaf's heights alone, the generator's function every <paramref name="stride"/> vertices and bilinear
+    /// between (the globe's far ground: none of the tiles' products, ~4,000 points a leaf at 8).
+    /// </summary>
+    public CubeTile Heights(CubeKey leaf, int stride)
+    {
+        var on = new SourceOnLeaf(_frames, leaf, Lv95Source.Instance);
+        return LeafLattice.Heights(on, (e, n) => world.HeightIn(TileId.FromLv95(e, n), e, n), stride);
     }
 
     /// <summary>The LV95 tiles a leaf's box reaches.</summary>
