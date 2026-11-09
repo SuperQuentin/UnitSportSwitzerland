@@ -8,7 +8,8 @@
 #
 # Writes $REFSHOTS/<tag>-flat, $REFSHOTS/<tag>-earth and the diff in $REFSHOTS/<tag>-earth/diff-<tag>-flat/
 # (summary.md, report.html, sheet-<style>.png). ~50 min for the three styles on a free machine; one heavy-run slot.
-# Env: as tools/refshots.sh (STYLES, VIEWS, LEAVES, GLOBE, CHUNKS, GODOT ...), plus
+# Env: as tools/refshots.sh (STYLES, VIEWS, LEAVES, GLOBE, CHUNKS, GODOT ...): earth gets B4's pyramid (GLOBE), flat
+# its own default one, the reference as a player sees it today. Plus
 #   NOISE   the floor at 1/8 scale (D:/UnitSportSwitzerland/baselines/dd6b7207/noise-s8.json: two flat runs of one
 #           commit; write another with refshot-diff.py A B --scale 8 --write-noise F)
 #   SKIP    "flat" retakes only earth against an existing <tag>-flat (a C6 fix that touches earth alone), "shots"
@@ -20,7 +21,6 @@ cd "$(dirname "$0")/.."
 tag=${1:?usage: tools/refshot-parity.sh <tag>}
 ROOT=${REFSHOTS:-D:/UnitSportSwitzerland/refshots}
 NOISE=${NOISE:-D:/UnitSportSwitzerland/baselines/dd6b7207/noise-s8.json}
-export GLOBE=${GLOBE:-D:/UnitSportSwitzerland/test_b3/b4/cube_global}   # the same pyramid in both worlds
 SKIP=${SKIP:-}
 flat=$ROOT/$tag-flat
 earth=$ROOT/$tag-earth

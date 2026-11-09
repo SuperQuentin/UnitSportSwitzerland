@@ -304,9 +304,10 @@ def main(argv):
                 md.append("none")
             for g in groups:
                 gs = [r for r in rs if r["group"] == g]
-                if gs:
-                    md.append(f"- **{g}**: " + ", ".join(
-                        f"`{r['rel'][:-4]}` {pct(r)}" + (f" ({r['why']})" if note and r["why"] else "") for r in gs))
+                for why in dict.fromkeys(r["why"] if note else "" for r in gs):
+                    ws = [r for r in gs if (r["why"] if note else "") == why]
+                    md.append(f"- **{g}**" + (f" ({why})" if why else "") + ": "
+                              + ", ".join(f"`{r['rel'][:-4]}` {pct(r)}" for r in ws))
         listing("Over the floor: need a human look", "over")
         listing("Judged by eye: expected differences", "judged", note=True)
         listing("Within the floor", "within")
