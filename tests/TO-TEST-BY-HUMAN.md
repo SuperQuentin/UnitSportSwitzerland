@@ -862,3 +862,22 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] Land from space at Geneva or Zurich: from 15 km down the ground and the Alps show out to the horizon, no haze-coloured plane with lakes on it.
 - [ ] The same in VR (a standalone headset sinks the faded edge instead of discarding it).
 - [ ] From orbit and on the way down, the atmosphere's haze and limb glow cover the whole view (no clear disc round where you look).
+
+## No snow above the clouds (PR [#1641](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1641), [#1637](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1637))
+
+- [ ] `--occasion christmas`, take off in a plane and climb: the snow thins out about 2 km over the valley floor and is gone above it, no pop; coming back down, it returns.
+- [ ] Inside a house with a door open: the street's snow still shows through the doorway.
+
+## Space under `--frame earth` (PR [#1638](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1638), [#1630](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1630), [#1631](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1631))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2026-06-21 --time 11`, in a window; beside it the same without `--frame`/`--leaves`.
+
+- [ ] Fly the spectator straight up to 400 km and back down, by keyboard, then by pad → the sky goes black past ~60 km (`[origin] the earth frame re-anchors every 20 km from 60.x km`), the limb, the Alps and the Mediterranean as in the flat run; back below 50 km the 3 km re-anchors resume, and on the ground the town is there at once.
+- [ ] The UFO, `/orbit 400`, a few minutes, then thrust down and land → the orbit looks as on flat, the ground loads under the landing.
+- [ ] The shuttle: the `--shuttlefilm` command line of `tools/shuttlefilm.sh` plus `--frame earth --leaves ...` → the climb to black and the landing on 22 look as the flat film's.
+
+## The cloud deck while it snows (PR [#1644](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1644), [#1643](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1643))
+
+- [ ] `--occasion christmas`, fly a plane up through the deck: grey overcast under it, a white-out inside, a sea of cloud under you above it; frame rate unchanged.
+- [ ] Over a lake from above the deck, and under it: no water surface drawn over the cloud or through it.
+- [ ] In VR: the deck is the same in both eyes.

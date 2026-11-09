@@ -110,6 +110,9 @@
     over 19 shifts: such a body is dormant, kept by its Earth place). One frame at every altitude: above 60 km it
     re-anchors past `SpaceMode`'s 20 km, with no handover (the flat world's band and its two rigid moves exist
     because its tiles are flat). A teleport (`ShiftTo(e, n)`) lands on the tangent anchor under the point.
+    #1630's film never reached Space: its `g400000` glide waited for leaves under a fast climb and stayed at 2 km.
+    A climb does enter the regime (`[origin] the earth frame re-anchors every 20 km from 60.x km`); `--orbitcheck` and
+    `--shuttlecheck` take `--frame earth` on `--world flat` to fly it.
     The shift log line says how a shift turned (`turned: tilt 0.0269°, yaw 0.0000°`). `OriginShift.Turns` is exact
     (a 20 m stress shift turns 3·10⁻⁶ rad, under `IsEqualApprox`); `Apply(Aabb)` bounds the moved corners.
     `--originstress <m> --originyaw <deg>` there turns the tangent anchor by ±deg, one way then back.

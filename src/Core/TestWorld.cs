@@ -44,7 +44,10 @@ public partial class TestWorld : Node3D
         PlayerInput.Install(GetParent());
         MouseCapture.Disabled = true;
         var (e, n) = SpawnPoint.ParseTarget();
-        var origin = new WorldOrigin(e, n);
+        // --frame earth (#1630): the earth world's anchor frame at the start, for the probes that check its frames in Space
+        var origin = GameSettings.Current.Frame == WorldFrame.Earth
+            ? new WorldOrigin(FrameAxes.Enu(Terrain.Format.SwissGeodesy.ToEcef(e, n, 0)))
+            : new WorldOrigin(e, n);
 
         // 20 km square, its top at GroundY: a box, which every physics engine collides with alike
         var ground = new StaticBody3D { Name = "Ground", Position = new Vector3(0, GroundY - 0.5f, 0) };
