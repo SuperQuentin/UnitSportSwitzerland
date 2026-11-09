@@ -735,11 +735,17 @@ public sealed class WorldOrigin
 
     public TileId TileAt(Vector3 world) => _frame.TileAt(world);
 
-    public Transform3D TileTransform(TileId id) => _frame.TileTransform(id);
+    public Transform3D TileTransform(TileId id) => StandIns?.Invoke(id) is { } t ? t : _frame.TileTransform(id);
 
-    public Vector3 TileToWorld(TileId id, Vector3 local) => _frame.TileToWorld(id, local);
+    public Vector3 TileToWorld(TileId id, Vector3 local) => StandIns?.Invoke(id) is { } t ? t * local : _frame.TileToWorld(id, local);
 
-    public Vector3 TileLocal(TileId id, Vector3 world) => _frame.TileLocal(id, world);
+    public Vector3 TileLocal(TileId id, Vector3 world) => StandIns?.Invoke(id) is { } t ? t.AffineInverse() * world : _frame.TileLocal(id, world);
+
+    /// <summary>
+    /// The earth world's leaves named as tiles (#1510, <c>LeafStandIn</c>): a stand-in tile's frame in the world, null
+    /// for a real LV95 tile. Set by <c>EarthWorld</c>; null in the flat world. Goes with step D.
+    /// </summary>
+    public Func<TileId, Transform3D?>? StandIns { get; set; }
 
     public double AltitudeOf(Vector3 world) => _frame.AltitudeOf(world);
 

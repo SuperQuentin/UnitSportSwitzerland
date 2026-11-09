@@ -560,6 +560,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public Material? PierMaterial { get; set; }
 
+    /// <summary>The materials a tile's furniture is drawn with: the earth world draws its leaves' with the same (#1510).</summary>
+    public (Material? Road, Material? Building, Material? Tree, Material? Water, Material? Prop) FurnishMaterials =>
+        (_roadMaterial, _buildingMaterial, _treeMaterial, _waterMaterial, PierMaterial);
+
     /// <summary>
     /// The landings changed (#377: <c>landings.json</c> streamed in after the tiles round the player
     /// were built): the tiles <paramref name="affected"/> selects build their roads (the piers' mesh)

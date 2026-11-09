@@ -19,6 +19,9 @@ namespace UnitSport.Terrain.Earth;
 /// ground under the body, asked again by its Earth position, is where it was within 1 cm (no pop); the world's up at
 /// the body is the ellipsoid's within 0.03°; each turn is the arc moved over R within 10 %; and the marks asked
 /// after the whole run are the same within 1 cm.</item>
+/// <item>(PR 2) the leaves round the start are furnished: roads, buildings, trees and water drawn in their nodes;
+/// the doors in the door index stand on the ground (the sill within 1.5 m of the height query, the median within
+/// 0.3 m); a door's building plans an interior through its stand-in tile, whose entrance is at that door (1 m).</item>
 /// </list>
 /// RESULT ok or FAILED.
 /// </summary>
@@ -52,6 +55,13 @@ public partial class EarthCheck : Node3D
     private GlobalPos? _under;
     private double _worstPop, _worstTilt, _worstTurnError, _turnSum;
     private int _turns, _popsAsked;
+
+    /// <summary>The earth world (its furniture) and the chunk source that answers its stand-in tiles; the furniture phase is skipped without.</summary>
+    public EarthWorld? Earth { get; init; }
+    public IChunkSource? Source { get; init; }
+
+    private Task<Interiors.InteriorLayout?>? _plan;
+    private Interiors.DoorIndex.Entry _planned;
 
     public EarthCheck(IWorldGround ground, WorldOrigin origin)
     {
@@ -130,6 +140,8 @@ public partial class EarthCheck : Node3D
             case 2: Ball(); break;
             case 3: Travel((float)delta); break;
             case 4: Marks(); break;
+            case 5: Furniture(); break;
+            case 6: Interior(); break;
         }
     }
 
@@ -258,6 +270,96 @@ public partial class EarthCheck : Node3D
         Log($"marks after {_shifts} re-anchors: {known} of {_marks.Count} known again, worst {worst * 100:F2} cm");
         if (known < _marks.Count) _faults.Add($"only {known} of {_marks.Count} marks had ground again");
         if (worst > 0.01) _faults.Add($"a height moved {worst * 100:F2} cm across the re-anchors (bar 1 cm)");
+        if (Earth == null) { Finish(); return; }
+        // back at the start, for its furniture
+        Position = _origin.ToWorld(_marks.Count > 0 ? _marks[0].At : _origin.ToGlobal(Position));
+        _phase = 5;
+        _phaseS = Now;
+    }
+
+    private void Furniture()
+    {
+        var earth = Earth!;
+        // the leaves round the start, furnished: wait while they load
+        if ((!earth.Idle || earth.FurnishedCount < 4) && Now - _phaseS < 60) return;
+        if (Now - _phaseS < 2) return;
+        int roads = 0, buildings = 0, trees = 0, water = 0, nodes = 0;
+        foreach (var node in earth.GetChildren())
+        {
+            if (node is not ChunkNode c) continue;
+            nodes++;
+            if (c.RoadMesh != null) roads++;
+            foreach (var child in c.GetChildren())
+            {
+                string name = child.Name;
+                if (child is MultiMeshInstance3D) trees++;
+                else if (name.Contains("Water")) water++;
+                else if (name.StartsWith("Buildings")) buildings++;
+            }
+        }
+        Log($"furnished {earth.FurnishedCount} leaves: {nodes} nodes, roads in {roads}, building meshes {buildings}, tree layers {trees}, water {water}");
+        if (earth.FurnishedCount < 4) _faults.Add($"only {earth.FurnishedCount} leaves furnished round the start");
+        if (roads == 0) _faults.Add("no roads drawn on the leaves");
+        if (buildings == 0) _faults.Add("no buildings drawn on the leaves");
+        if (trees == 0) _faults.Add("no trees drawn on the leaves");
+        if (water == 0) _faults.Add("no water drawn on the leaves");
+
+        // the doors stand where the ground is
+        var offs = new List<float>();
+        Interiors.DoorIndex.Entry? pick = null;
+        foreach (var d in Interiors.DoorIndex.All())
+        {
+            if (!Leaves.LeafStandIn.IsStandIn(d.Key.Tile)) continue;
+            if (d.World.DistanceTo(Position) > 600 || d.Level != 0) continue;
+            var front = d.World + d.Outward * 1.5f;
+            if (!_ground.TryGetHeight(front, out float g)) continue;
+            offs.Add(d.World.Y - g);
+            if (pick == null && d.Kind != Format.BuildingKind.UnderConstruction && !d.Vehicle) pick = d;
+        }
+        offs.Sort();
+        float median = offs.Count > 0 ? offs[offs.Count / 2] : float.NaN;
+        int far = offs.Count(o => Mathf.Abs(o) > 1.5f);
+        Log($"doors on the leaves within 600 m: {offs.Count}; sill over the ground in front: median {median * 100:F0} cm, {far} off by over 1.5 m");
+        if (offs.Count < 20) _faults.Add($"only {offs.Count} doors on the leaves round the start");
+        else
+        {
+            if (!(Mathf.Abs(median) < 0.3f)) _faults.Add($"the doors' median sill is {median:F2} m off the ground (bar 0.3 m)");
+            if (far > offs.Count / 20) _faults.Add($"{far} of {offs.Count} doors over 1.5 m off the ground (bar 5 %)");
+        }
+        if (pick is { } door && Source != null)
+        {
+            _planned = door;
+            string dir = System.IO.Path.Combine(OS.GetUserDataDir(), "earthcheck_interiors");
+            _plan = Interiors.InteriorManager.LoadOrGenerate(Source, dir, door.Key.Building.ToString());
+            _phase = 6;
+            _phaseS = Now;
+            return;
+        }
+        if (pick == null) _faults.Add("no street door to plan an interior behind");
+        Finish();
+    }
+
+    private void Interior()
+    {
+        if (!_plan!.IsCompleted && Now - _phaseS < 60) return;
+        var door = _planned;
+        if (!_plan.IsCompletedSuccessfully || _plan.Result is not { } layout)
+        {
+            _faults.Add($"no interior planned behind {door.Key}: {_plan.Exception?.GetBaseException().Message ?? "none"}");
+            Finish();
+            return;
+        }
+        var e = layout.EntranceOf(door.Key.ToString());
+        if (e == null)
+        {
+            _faults.Add($"the interior behind {door.Key} has no entrance at that door");
+            Finish();
+            return;
+        }
+        var at = _origin.TileTransform(door.Key.Tile) * new Vector3(e.DoorX, e.DoorY, e.DoorZ);
+        float off = at.DistanceTo(door.World);
+        Log($"interior behind {door.Key} ({door.Kind}): {layout.Floors.Sum(f => f.Rooms.Count)} rooms, its entrance {off * 100:F1} cm from the door on the leaf");
+        if (off > 1f) _faults.Add($"the interior's entrance is {off:F2} m from its door on the leaf (bar 1 m)");
         Finish();
     }
 

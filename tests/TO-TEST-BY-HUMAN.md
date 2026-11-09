@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Furnished leaves under `--frame earth` ([#1613](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1613), [#1510](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1510))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva's centre).
+
+- [ ] Walk the streets, then drive a car through them for a few km → roads, paint, signals, buildings, trees and the lake are drawn as in the flat world; you stand and drive on the roads, never sunk into them, and the ground never shows above a road.
+- [ ] Walk to a house's door and press E (pad and VR too), go in, come out → the door opens, the interior stands behind it, the way out lands on the street.
+- [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
+- [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
+
 ## The earth world's ground frame turns ([#1612](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1612), [#1512](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1512))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva), in a window. Each re-anchor (every 3 km) prints `[origin] shift N ... turned: tilt 0.0269°`.

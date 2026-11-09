@@ -11,8 +11,8 @@ namespace UnitSport.Terrain.Leaves;
 /// (i, j)–(i+1, j+1), front faces up; hole quads left out) clamped to the road blend (<see cref="LeafRoadBlend"/>,
 /// clearance 0), plus every road and building face whose middle lies in it: the same builders the LV95 tiles' collision
 /// uses (bridge decks, walls, railings, islands, signs, masts, car parks, signals, sidewalks and kerbs; buildings'
-/// shells). Faces are in the leaf's anchor frame (x east, y up, z south). Garage links, stoops and offices are left to
-/// C1 (they need the doors the ground grid gives).
+/// shells and footings; since #1510 the doors' garage links and stoops and the building sites' shells and offices, from
+/// the leaf's stand-in tile, <see cref="LeafStand"/>). Faces are in the leaf's anchor frame (x east, y up, z south).
 /// </summary>
 public sealed class LeafCollision
 {
@@ -29,11 +29,22 @@ public sealed class LeafCollision
 
     public CubeKey Leaf { get; }
 
-    private LeafCollision(CubeKey leaf, int n, float[] vertices, HashSet<int>? holes, List<Vector3>[] faces)
+    private LeafCollision(CubeKey leaf, int n, float[] vertices, HashSet<int>? holes, List<Vector3>[] faces,
+        LeafRoadBlend.Bands? bands, LeafStand stand, float[] bare)
     {
         Leaf = leaf;
         (_n, _cells, _vertices, _holes, _faces) = (n, n - 1, vertices, holes, faces);
+        (Bands, Stand, Bare) = (bands, stand, bare);
     }
+
+    /// <summary>The road blend's bands (null: no road reaches the leaf): the drawn ground takes them at the visual clearance.</summary>
+    public LeafRoadBlend.Bands? Bands { get; }
+
+    /// <summary>The leaf as its stand-in tile: grid, records, sites and doors (#1510).</summary>
+    public LeafStand Stand { get; }
+
+    /// <summary>The lattice vertices before the blend.</summary>
+    public float[] Bare { get; }
 
     /// <summary>The lattice vertices as the patches hold them (blended), x y z a vertex, row-major from the south-west.</summary>
     public ReadOnlySpan<float> Vertices => _vertices;
@@ -49,9 +60,11 @@ public sealed class LeafCollision
     {
         var heights = leaf.Heights ?? throw new ArgumentException($"leaf {leaf.Key} has no heights");
         int n = (1 << heights.Bits) + 1;
-        var vertices = CubeGeometry.Vertices(leaf.Key, heights.Bits, heights.Heights);
-        if (LeafRoadBlend.For(leaf.Key, leaf.Roads, neighbourRoads) is { } bands)
-            LeafRoadBlend.Apply(vertices, bands, 0);
+        var bare = CubeGeometry.Vertices(leaf.Key, heights.Bits, heights.Heights);
+        var stand = LeafStand.Make(leaf, bare, n);
+        var vertices = (float[])bare.Clone();
+        var bands = LeafRoadBlend.For(leaf.Key, leaf.Roads, neighbourRoads);
+        if (bands != null) LeafRoadBlend.Apply(vertices, bands, 0);
 
         var faces = new List<Vector3>[PerSide * PerSide];
         for (int p = 0; p < faces.Length; p++) faces[p] = new();
@@ -62,8 +75,10 @@ public sealed class LeafCollision
                 .. RoadSignBuilder.BuildCollisionFaces(roads), .. CatenaryBuilder.BuildCollisionFaces(roads),
                 .. ParkingBuilder.BuildCollisionFaces(roads), .. SignalBuilder.BuildCollisionFaces(roads),
                 .. RoadStreetBuilder.BuildCollisionFaces(roads)]);
-        if (leaf.Buildings is { Buildings.Count: > 0 } buildings)
-            all.AddRange(BuildingMeshBuilder.BuildCollisionFaces(buildings));
+        // the buildings' shells with their footings on the grid, and what C2 left to the doors: in the stand-in tile, moved back
+        var tileFaces = new List<Vector3>(stand.ExtraFaces);
+        if (stand.Buildings != null) tileFaces.AddRange(BuildingMeshBuilder.BuildCollisionFaces(stand.Buildings, stand.Grid));
+        foreach (var p in tileFaces) all.Add(LeafStand.ToAnchor(p));
         if (all.Count > 0)
         {
             var t = (frames ?? LeafFrames.Swiss).TransformOf(leaf.Key);
@@ -79,7 +94,7 @@ public sealed class LeafCollision
                 list.Add(all[k + 2]);
             }
         }
-        return new LeafCollision(leaf.Key, n, vertices, leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null, faces);
+        return new LeafCollision(leaf.Key, n, vertices, leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null, faces, bands, stand, bare);
     }
 
     /// <summary>Which patch of its leaf a patch key is (0..<see cref="PerSide"/> − 1 along u and v).</summary>

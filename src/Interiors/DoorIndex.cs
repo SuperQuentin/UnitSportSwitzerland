@@ -71,6 +71,23 @@ public static class DoorIndex
         Bounds[id] = BoundsOf(Tiles[id]);
     }
 
+    /// <summary>
+    /// A tile whose frame is turned in the world, not only moved: an earth world's leaf as its stand-in tile (#1510).
+    /// Positions and directions through the whole transform.
+    /// </summary>
+    public static void SetTile(TileId id, Transform3D tile, DoorSpot[] doors)
+    {
+        var list = new List<Entry>(doors.Length);
+        foreach (var d in doors)
+            if (d.Width > 0)
+                list.Add(new Entry(d.KeyIn(id), tile * d.Position, tile.Basis * d.Outward, d.Width, d.Height, d.Kind)
+                {
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop, Level = d.Level,
+                });
+        Tiles[id] = list.ToArray();
+        Bounds[id] = BoundsOf(Tiles[id]);
+    }
+
     public static void ClearTile(TileId id)
     {
         Tiles.Remove(id);
