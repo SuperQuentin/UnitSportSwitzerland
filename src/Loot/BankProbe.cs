@@ -139,7 +139,8 @@ public partial class BankProbe : ChatProbe
         {
             Expect(me.TryInteract() && dial.IsOpen, "E on the vault safe opens the dial");
             loot.SubmitCombination(combo);
-            Expect(simon.IsOpen && !dial.IsOpen && simon.Length == seq.Length, "the right dial leads to the Simon panel, as long as the safe is rich");
+            Expect(simon.IsOpen && !dial.IsOpen && simon.Length == seq.Length,
+                $"the right dial leads to the Simon panel, as long as the safe is rich (Simon open {simon.IsOpen}, {simon.Length}/{seq.Length} long, dial open {dial.IsOpen}, in {interiors.Current?.Key})");
             Shot("simon");
             loot.SubmitSimon(seq.Select(p => (p + 1) % 4).ToArray());
             await Seconds(2.0);
@@ -151,7 +152,8 @@ public partial class BankProbe : ChatProbe
             Expect(await Until(() => node.IsLockOpen(safe) && loot.IsUnlocked(layout.Key, safe), 5), "B saw the vault safe swing open");
             await Seconds(1.2);
             Shot("vault_open");
-            Expect(me.TryInteract() && loot.IsOpen, "B searches it straight away");
+            bool searched = me.TryInteract();
+            Expect(searched && loot.IsOpen, $"B searches it straight away (E took {searched}, panel open {loot.IsOpen}, nearest {LootService.NearestContainer(me, layout, node)}, prompt {loot.PromptFor(me)})");
             await Until(() => !loot.Waiting, 10);
             string seen = string.Join(",", loot.OpenContents().Select(c => $"{c.Stack.Id}x{c.Stack.Count}"));
             string theirs = _heard.Last(l => l.Contains("BK A cracked"));

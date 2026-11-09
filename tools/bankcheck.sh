@@ -12,11 +12,11 @@ AT=${2:-2582700,1113300}
 PORT=7794
 tc_server 480 120 $OUT/bank_server.log --server --port $PORT --lootepoch "$EP" ${CH[@]+"${CH[@]}"}
 tc_client 400 $OUT/bank_a.log --windowed --connect 127.0.0.1:$PORT --name BankA --cache "$OUT/bank_cache_a" \
-    --at "$AT" --view first --lootepoch "$EP" --bankcheck A ${CH[@]+"${CH[@]}"} &
+    --at "$AT" --view first --detail medium --lootepoch "$EP" --bankcheck A ${CH[@]+"${CH[@]}"} &
 A=$!
 sleep 3
 tc_client 400 $OUT/bank_b.log --windowed --connect 127.0.0.1:$PORT --name BankB --cache "$OUT/bank_cache_b" \
-    --at "$AT" --lootepoch "$EP" --bankcheck B ${CH[@]+"${CH[@]}"}
+    --at "$AT" --detail medium --lootepoch "$EP" --bankcheck B ${CH[@]+"${CH[@]}"}
 wait $A
 tc_stop
 grep -h "\[bank [AB]\]" $OUT/bank_a.log $OUT/bank_b.log
