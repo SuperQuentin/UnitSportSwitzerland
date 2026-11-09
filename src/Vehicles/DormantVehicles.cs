@@ -85,6 +85,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
 
+    /// <summary>
+    /// The ground the world stands on: the anchors followed, collision and the ground under a copy (#1649). The flat
+    /// streamer's own unless the world is the earth one's leaves; the slots still come from the streamer's source.
+    /// </summary>
+    private readonly IWorldGround _ground;
+
     /// <summary>Slots by tile, in <c>PARK</c> order; a tile with no car park has no entry.</summary>
     private readonly Dictionary<TileId, List<VehicleSlot>> _slots = new();
 
@@ -105,11 +111,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private readonly List<TileId> _drop = new();
     private double _sinceCheck = CheckEvery;
 
-    public DormantVehicles(ChunkManager chunks, WorldOrigin origin)
+    public DormantVehicles(ChunkManager chunks, WorldOrigin origin, IWorldGround? ground = null)
     {
         Name = "DormantVehicles";
         _chunks = chunks;
         _origin = origin;
+        _ground = ground ?? chunks.Ground;
     }
 
     public override void _Ready()
@@ -504,7 +511,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 // would find the same terrain
                 bool built = true;
                 foreach (var (e, n, alt) in _unposed[id])
-                    if (!_chunks.Ground.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
+                    if (!_ground.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
                 if (!built) continue;
                 DrawLooks(id);
                 // and only once: a point that still misses with its collision built never will be hit (a
@@ -516,7 +523,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         }
 
         _anchorTilesNow.Clear();
-        foreach (var anchor in _chunks.Anchors)
+        foreach (var anchor in _ground.Anchors)
             if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_origin.TileAt(anchor.GlobalPosition));
         if (SameTiles(_anchorTilesNow, _anchorTiles))
         {
@@ -912,7 +919,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         float Ground(Vector3 p)
         {
             // the very query a parked train stands on (VehicleBody.Ground): what a vehicle collides with
-            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _chunks?.Ground, true, out bool solid);
+            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _ground, true, out bool solid);
             if (!solid)
             {
                 var g = _origin.ToGlobal(p);

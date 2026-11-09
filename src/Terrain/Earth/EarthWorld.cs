@@ -650,6 +650,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public void AddAnchor(Node3D anchor, bool? collision = null) => w.AddAnchor(anchor, collision);
         public void RemoveAnchor(Node3D anchor) => w.RemoveAnchor(anchor);
         public bool HasAnchor(Node3D anchor) => w.HasAnchor(anchor);
+        public IReadOnlyList<Node3D> Anchors => w._anchors;
 
         public event Action<GroundTile>? TileEntered
         {

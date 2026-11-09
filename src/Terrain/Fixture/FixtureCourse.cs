@@ -81,8 +81,8 @@ public sealed class FixtureCourse
     /// this is how the fixture reaches that half of the planner.
     /// </summary>
     public (double DoorX, double DoorY, double FloorAreaM2, bool Retail)? Store { get; init; }
-    /// <summary>The course's airports (#422) planned at a start in LV95; null: none.</summary>
-    public Func<double, double, AirportIndex>? Airports { get; init; }
+    /// <summary>The course's airports (#422) planned where the course is laid (<see cref="CoursePlace"/>); null: none.</summary>
+    public Func<CoursePlace, AirportIndex>? Airports { get; init; }
 
     /// <summary>A road's own width (m), by its index in <see cref="Roads"/>; the others are their class's default.</summary>
     public Dictionary<int, float> RoadWidths { get; } = new();
@@ -114,8 +114,8 @@ public sealed class FixtureCourse
     /// <summary>Painted lines on the ground (a marked bay), metres from the start: white, 15 cm.</summary>
     public List<(double X0, double Y0, double X1, double Y1)> Lines { get; } = new();
 
-    /// <summary>A stadium of the course's own, planned at a start in LV95 (#1396); null: none.</summary>
-    public Func<double, double, Stadiums.StadiumSpec>? StadiumAt { get; init; }
+    /// <summary>A stadium of the course's own (#1396), planned where the course is laid (<see cref="CoursePlace"/>); null: none.</summary>
+    public Func<CoursePlace, Stadiums.StadiumSpec>? StadiumAt { get; init; }
 
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }

@@ -428,7 +428,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var (fE, fN) = SpawnPoint.ParseTarget(Launch);
             _fixtureStart = (fE, fN);
-            source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN)
+            // on its leaves under earth offline (below): what stands on it outside them is placed as they are (#1649)
+            source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN,
+                    earth: GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
         }
@@ -673,7 +675,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the cars already standing in the car parks (#499); the server promotes one when it is
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
-            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
+            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin, Ground));
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
@@ -926,7 +928,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => DriveProbe.ParseArgs().Requested, ToolAnchor.AtTarget, _ =>
             {
                 var d = DriveProbe.ParseArgs();
-                return new DriveProbe(chunks, origin, d.Shot, d.Car, d.Seconds);
+                return new DriveProbe(chunks, origin, d.Shot, d.Car, d.Seconds, Ground);
             }),
             new(() => World.ArrivalProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new World.ArrivalProbe(chunks, origin, World.ArrivalProbe.ParseArgs().Prefix)),
