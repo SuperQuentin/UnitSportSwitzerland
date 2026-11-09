@@ -282,7 +282,10 @@ until earth looks at least as good as flat.
   `--shuttlecheck` under `--frame earth`.
 - **Life**: traffic and cyclists on leaves (#1636).
 - **The gate**: reference shots under `--frame earth` against the flat library, every style, `near` to `space`,
-  each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user.
+  each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user. **Tool built**
+  (#1639, PR #1640): `tools/refshot-parity.sh <tag>` (`general/regression-net`); first run on `82e03ec5`, before
+  #1634/#1630/#1636 merged: 48 of 84 shots over the floor (the ground's colours, the void past the leaves, trees, a
+  different room in `riddes_interior`, B4's pyramid white west of Switzerland), 36 judged; posted on #1500.
 
 ### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
 
