@@ -70,6 +70,16 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
         return content;
     }
 
+    /// <summary>
+    /// A generated leaf's heights alone, the generator's function every <paramref name="stride"/> vertices and bilinear
+    /// between (the globe's far ground: none of the tiles' products, ~4,000 points a leaf at 8).
+    /// </summary>
+    public CubeTile Heights(CubeKey leaf, int stride)
+    {
+        var on = new SourceOnLeaf(_frames, leaf, Lv95Source.Instance);
+        return LeafLattice.Heights(on, (e, n) => world.HeightIn(TileId.FromLv95(e, n), e, n), stride);
+    }
+
     /// <summary>The LV95 tiles a leaf's box reaches.</summary>
     public static IEnumerable<TileId> TilesUnder(SourceOnLeaf on)
     {

@@ -115,6 +115,45 @@ public sealed class EarthLeaves : ILeafSource
         return Real.Cached(key);
     }
 
+    /// <summary>Generator vertices a side between the globe's heights-only samples (it draws every 8th).</summary>
+    public const int GlobeStride = 8;
+
+    private readonly ConcurrentDictionary<CubeKey, Lazy<CubeTile?>> _heightsMade = new();
+    private readonly ConcurrentQueue<CubeKey> _heightsOrder = new();
+
+    public CubeTile? HeightsOf(CubeKey key)
+    {
+        if (Cached(key) is { Heights: { } held }) return held;
+        if (Real.Has(key) && (!Filled(key) || Blend!.Summary(key) is { Full: true })) return Real.HeightsOf(key);
+        if (_fixtureHas?.Invoke(key) == true) return Get(key)?.Heights;
+        if (!Filled(key)) return null;
+        bool added = false;
+        var lazy = _heightsMade.GetOrAdd(key, k =>
+        {
+            added = true;
+            return new Lazy<CubeTile?>(() =>
+            {
+                try
+                {
+                    var g = _generated!.Heights(k, GlobeStride);
+                    var r = Blend!.Heights(k, g.Heights, Real.Has(k) ? Real.HeightsOf(k)?.Heights : null);
+                    return r is null ? g : new CubeTile { Key = k, Bits = g.Bits, Heights = r.Heights, Quantum = g.Quantum };
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    Log?.Invoke($"[earth] heights {k}: {e.GetType().Name}: {e.Message}");
+                    return null;
+                }
+            });
+        });
+        if (added)
+        {
+            _heightsOrder.Enqueue(key);
+            while (_heightsMade.Count > 4 * Kept && _heightsOrder.TryDequeue(out var old)) _heightsMade.TryRemove(old, out _);
+        }
+        return lazy.Value;
+    }
+
     private CubeLeafContent Generated(CubeKey key, bool roads)
     {
         var content = _generated!.Build(key);

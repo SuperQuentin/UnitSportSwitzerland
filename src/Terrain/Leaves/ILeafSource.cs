@@ -20,4 +20,10 @@ public interface ILeafSource
 
     /// <summary>The leaf only if it is at hand: never reads or produces (for a per-frame query).</summary>
     CubeLeafContent? Cached(CubeKey key);
+
+    /// <summary>
+    /// A leaf's heights alone, as cheaply as they come (the globe's last level, every 8th vertex of it drawn); null
+    /// where none. It may take a fraction of a second: call it on a worker.
+    /// </summary>
+    CubeTile? HeightsOf(CubeKey key);
 }

@@ -786,7 +786,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var chunksForGlobe = _chunks;
                 AddChild(_earth != null
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
-                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Store }
+                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
                     : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
                 if (World.AltitudeReadout.Requested) AddChild(new World.AltitudeReadout { Name = "AltitudeReadout", Origin = origin });
@@ -1830,7 +1830,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (generated != null)
             {
                 var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
-                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn);
+                // --no-fill-roads: the fill's leaves without RoadGen's stage (~0.5 s a leaf instead of ~2 s)
+                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"));
             }
             else leaves = Terrain.Leaves.EarthLeaves.Region(real);
         }

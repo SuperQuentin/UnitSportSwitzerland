@@ -56,8 +56,9 @@ decisions were made with the user on 2026-11-08.
   in `GeneratedLeaves.Build` is gone. Real leaves on another cube face are not seen (none in Switzerland).
 - C5's per-leaf generators (`core/earth-ids`) need no hook here: a produced leaf has the same sections as a real one,
   and PR 2's furnishing calls them on every leaf `EarthWorld` loads.
-- The globe draws the region's leaves from afar (`Store`), not the fill's: past 900 m over the fill the far ground is
-  the globe's real relief (follow-up).
+- The globe's last level (L14) reads `EarthLeaves.HeightsOf`: over the fill, the fill's heights (the generator every
+  8th vertex, blended), so the real relief the fill replaces never stands up through it (it did, in ribbons, when the
+  globe read the region alone). Its coarser levels over the fill are still the real relief (follow-up).
 
 ## Checks
 

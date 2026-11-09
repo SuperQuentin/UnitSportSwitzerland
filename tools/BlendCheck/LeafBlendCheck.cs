@@ -20,6 +20,7 @@ using static System.Console;
 /// A shaded relief of each block (the fill tinted) into <c>--out</c> as PPM.
 ///
 ///   dotnet run --project tools/BlendCheck -c Release -- --leaf-blend --leaves &lt;dir&gt; [--count 6] [--out &lt;dir&gt;]
+///     [--at E,N --side 5]   (one block of side × side leaves round an LV95 point instead)
 /// </summary>
 internal static class LeafBlendCheck
 {
@@ -52,6 +53,14 @@ internal static class LeafBlendCheck
         var border = store.Keys.Where(k => k.Neighbours().Any(n => !store.Has(n)))
             .OrderBy(k => k.Face).ThenBy(k => k.Y).ThenBy(k => k.X).ToList();
         var centres = Enumerable.Range(0, count).Select(i => border[(int)((i + 0.5) * border.Count / count)]).ToList();
+        int half = 1;
+        if (Value(args, "--at") is { } at)
+        {
+            var en = at.Split(',').Select(v => double.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            var (alat, alon) = Lv95Source.Instance.ToLatLon(en[0], en[1]);
+            centres = [LeafFrames.LeafAt(alat, alon)];
+            half = (int.TryParse(Value(args, "--side"), out int sd) ? sd : 3) / 2;
+        }
         WriteLine($"{store.Count} real leaves, {border.Count} at the border; blocks round {string.Join(", ", centres)}");
 
         var seam = new List<double>();
@@ -63,8 +72,8 @@ internal static class LeafBlendCheck
         {
             var block = new Dictionary<CubeKey, CubeLeafContent>();
             var kept = new Dictionary<CubeKey, bool[]>();
-            for (int dy = -1; dy <= 1; dy++)
-                for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -half; dy <= half; dy++)
+                for (int dx = -half; dx <= half; dx++)
                 {
                     if (centre.Neighbour(dx, dy) is not { } k) continue;
                     var sw = Stopwatch.StartNew();
@@ -154,7 +163,7 @@ internal static class LeafBlendCheck
                     }
                 }
 
-            if (outDir != null) Relief(outDir, centre, block, kept);
+            if (outDir != null) Relief(outDir, centre, block, kept, half);
         }
 
         void Edge(float a, float b)
@@ -183,16 +192,16 @@ internal static class LeafBlendCheck
     }
 
     /// <summary>A block's shaded relief, every second vertex, the fill tinted warm, as a binary PPM.</summary>
-    private static void Relief(string dir, CubeKey centre, Dictionary<CubeKey, CubeLeafContent> block, Dictionary<CubeKey, bool[]> kept)
+    private static void Relief(string dir, CubeKey centre, Dictionary<CubeKey, CubeLeafContent> block, Dictionary<CubeKey, bool[]> kept, int half)
     {
         Directory.CreateDirectory(dir);
-        const int Skip = 2;
-        int n = block.Values.First().Heights!.Side, px = (n - 1) / Skip, size = 3 * px;
+        int Skip = 2 * half;
+        int n = block.Values.First().Heights!.Side, px = (n - 1) / Skip, size = (2 * half + 1) * px;
         var rgb = new byte[size * size * 3];
-        const double Step = 1.19 * Skip;
+        double Step = 1.19 * Skip;
         foreach (var (k, leaf) in block)
         {
-            int ox = (k.X - centre.X + 1) * px, oy = (1 - (k.Y - centre.Y)) * px;   // north up
+            int ox = (k.X - centre.X + half) * px, oy = (half - (k.Y - centre.Y)) * px;   // north up
             var h = leaf.Heights!.Heights;
             var m = kept[k];
             for (int y = 0; y < px; y++)

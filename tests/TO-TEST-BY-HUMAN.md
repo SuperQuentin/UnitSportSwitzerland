@@ -12,7 +12,7 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 B4's leaves: `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`.
 
 - [ ] Start at `--at 2578113,1115406` (north of Riddes, the region's edge on a slope), walk and drive across into the real ground and back → no step, ledge or hole where the smooth generated ground meets the real one; a bank of at most a few metres over ~60 m is the hand-over.
-- [ ] Fly 10 km out of the region over the fill → the ground keeps streaming under you (generated leaves take ~2 s each with their roads); the far ground past 900 m is the globe's real relief (a known gap, not the fill's).
+- [ ] Fly 10 km out of the region over the fill → the ground keeps streaming under you (generated leaves take ~2 s each with their roads); no real relief stands up through the generated ground; from high up the far mountains are the real ones (the globe's coarser levels, a known gap).
 - [ ] `--chunks fixture:straight --frame earth`, drive east 3 km with a car → the ground is there end to end and the car never drops through it (the road itself is drawn with PR 2), a re-anchor at 3 km moves nothing.
 
 ## Maps and GPX on the oblique stereographic ([#1581](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1581), [#1514](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1514))

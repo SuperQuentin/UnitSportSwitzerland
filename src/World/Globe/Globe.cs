@@ -121,8 +121,11 @@ public partial class Globe : Node
     /// </summary>
     public bool Earth { get; set; }
 
-    /// <summary>The region's leaves, the quadtree's last level in the earth world.</summary>
-    public Terrain.Leaves.LeafStore? Leaves { get; set; }
+    /// <summary>
+    /// The earth world's leaves, the quadtree's last level: the region's, and the fill's round them (#1510 PR 3, their
+    /// heights alone), so the globe under the near leaves is their ground and never the real relief the fill replaces.
+    /// </summary>
+    public Terrain.Leaves.ILeafSource? Leaves { get; set; }
 
     /// <summary>Main-thread time a frame spends adding built tiles in the earth world, ms.</summary>
     public double CommitBudgetMs { get; set; } = 3;
@@ -145,7 +148,7 @@ public partial class Globe : Node
         var files = new GlobeFiles(Dir);
         _manifest = files.Manifest();
         _maxLevel = _manifest.LevelsOrLeaf.Max(l => l.Level);
-        if (Leaves is { Count: > 0 }) _maxLevel = Math.Max(_maxLevel, Terrain.Leaves.LeafFrames.LeafLevel);
+        if (Leaves != null) _maxLevel = Math.Max(_maxLevel, Terrain.Leaves.LeafFrames.LeafLevel);
         (_heights, _albedo) = files.Index(_manifest);
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
@@ -392,7 +395,7 @@ public partial class Globe : Node
         // the earth world's last level: a leaf's own heights, no colour of its own yet
         if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel && Leaves is { } leaves)
         {
-            if (!leaves.Has(key)) return;
+            if (!leaves.Has(key)) return;   // past the fill's domain: the parent's tile stays
             _loading.Add(key);
             int leafMonth = _month;
             _ = Task.Run(async () =>
@@ -400,7 +403,7 @@ public partial class Globe : Node
                 await _workers.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    if (leaves.Get(key)?.Heights is { } tile) _ready.Enqueue((key, Build(tile), null, leafMonth));
+                    if (leaves.HeightsOf(key) is { } tile) _ready.Enqueue((key, Build(tile), null, leafMonth));
                 }
                 catch (Exception e)
                 {
