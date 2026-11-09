@@ -81,4 +81,8 @@ G2a of global tiling (#1443); design and audit in `docs/plans/server-regions.md`
   - `EARTH=1 tools/regioncheck.sh` (D: leaves, Geneva and Riddes, 83 km): tracks with both sites as each alone to
     0.000 cm; the hop keeps the true heading to 0.000°. `EARTH=1 tools/botcheck.sh`: bots on leaf collision, two
     clients.
-- **Not yet**: interiors on the server (`bots/server-collision`); `InterestService`'s line of sight over the pyramid.
+  - A replicated player finds its ground at `World/Terrain`, else `World/Earth` (`FootPlayer._Ready`).
+- **Not yet**: a bot's drive (`BotDriving`) plans its road route from the flat tiles' source, so under `--frame earth`
+  it gets out at once ("no terrain") until roads stand on leaves (C1 PR 2): `EARTH=1 tools/botcheck.sh` fails only
+  its "drove off" step. Interiors on the server (`bots/server-collision`); `InterestService`'s line of sight over the
+  pyramid.
