@@ -19,6 +19,7 @@ public partial class FlightCheckProbe : Node
 {
     /// <summary>Null on <c>--world flat</c> (TestWorld): the ground is the plane.</summary>
     private readonly IWorldGround? _ground;
+    private bool _anchored;
     private readonly WorldOrigin _origin;
     private readonly string _kind;
     private readonly string? _shot;
@@ -58,10 +59,12 @@ public partial class FlightCheckProbe : Node
 
         if (_player == null)
         {
+            if (!_anchored) { _anchored = true; TestWorld.AnchorEarthTarget(this, _ground, _origin, e, n); }
             if (!TestWorld.TryGround(_ground, at, out float g)) return;
             _player = new FootPlayer { Name = "Probe", Terrain = _ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
+            if (_origin.Frame.IsAnchor) _ground?.AddAnchor(_player, collision: true);
             if (_ground == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _player.Announced += (text, good) => { _last = text; GD.Print($"[flycheck] announce: {text}"); };
             // the crash sortie is meant to hit: it judges its own impact

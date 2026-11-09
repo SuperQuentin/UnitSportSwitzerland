@@ -238,6 +238,10 @@ cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook u
   H1's sphere blend off for real geometry.
 - Check: `--originstress` with rotation (every handler, the boat's known gap), reference shots
   either side of a re-anchor (no pattern jump).
+- **Status: the turning frame and the refraction built** (PR #1612: `core/floating-origin`, "The earth world's
+  ground turns"; `world/earth-curvature`, "On round geometry"). **Patterns from tile coordinates wait for C1
+  PR 2's furnished meshes** (decided with the coordinator, 2026-11-09): the leaves' drawn mesh is plain cover
+  colours until then, so nothing reads `world_origin_offset` on leaves yet.
 
 **C4 The server and interest** (one PR)
 - Server regions anchored as ENU frames (rotating handovers, mirrors, shadows); `RegionPlanner` in

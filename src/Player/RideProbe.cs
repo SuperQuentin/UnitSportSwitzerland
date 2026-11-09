@@ -28,7 +28,8 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class RideProbe : Node
 {
-    private readonly IWorldGround? _ground;   // null on --world flat
+    private readonly IWorldGround? _ground;
+    private bool _anchored;   // null on --world flat
     private readonly WorldOrigin _origin;
     private readonly RideKind _kind;
     private readonly double _seconds;
@@ -186,6 +187,7 @@ public partial class RideProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
+            if (!_anchored) { _anchored = true; TestWorld.AnchorEarthTarget(this, _ground, _origin, e, n); }
             if (!TestWorld.TryGround(_ground, at, out float ground)) return;
 
             _player = new FootPlayer { Name = "Probe", Terrain = _ground };
@@ -195,6 +197,7 @@ public partial class RideProbe : Node
                 _player.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, ground + 1.5f, at.Z);
+            if (_origin.Frame.IsAnchor) _ground?.AddAnchor(_player, collision: true);
             if (_ground == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _start = _origin.ToGlobal(_player.GlobalPosition);
             _startAltitude = ground;

@@ -16,9 +16,10 @@ decisions were made with the user on 2026-11-08.
   - `Cached(key)` never touches the disk; `Keys`/`Has` are the real-leaf set.
   - `TerrainPaths.FindLeafDir()`: `--leaves <dir>`, else the chunk folder's `_cube` sibling.
 - **The frame**: the ENU frame on the tangent plane at the start (`new WorldOrigin(FrameAxes.Enu(ecef))`).
-  - `OriginShifter { Earth = true }` re-anchors it every 3 km (`GroundMode`) by translation only: `Rotates` stays false until C3.
-  - The Space regime is off in this world until C3 folds it in.
-  - Gravity is the anchor's up, so it tilts 0.009° for each km from the anchor.
+  - `OriginShifter { Earth = true }` re-anchors it every 3 km (`GroundMode`) to the tangent anchor under the camera, turning with the Earth (#1512, C3: `core/floating-origin`, "The earth world's ground turns").
+  - One frame at every altitude: Space re-anchors every 20 km, no handover.
+  - Gravity is the anchor's up: at most 0.027° off the ellipsoid's under the camera.
+  - The shaders' curvature is refraction's lift only (`Curvature.RoundGeometry`, `world/earth-curvature`).
 - **`Earth/EarthWorld`** serves `IWorldGround` (`chunks.Ground`'s twin; `ClientWorld.Ground` picks one).
   - Leaves within 900 m along the ground of the camera or an anchor are loaded on 3 workers and committed under a 4 ms budget; they are dropped 300 m further out.
   - A leaf's mesh is its collision's (`LeafCollision.Prepare`, road blend at clearance 0): what is drawn is what is stood on. It is coloured by cover through `CoverPalette`.
@@ -42,7 +43,9 @@ decisions were made with the user on 2026-11-08.
   - Rays against the queries: hits on the ground within 5 cm; hits on a feature over it allowed; at most 1 % under it.
   - A dropped ball rests on the ground.
   - 4.5 km at 30 m/s with the ground never missing over 2 s.
-  - Marks asked again after a re-anchor within 1 cm.
+  - At every re-anchor (C3): the ground under the body asked again by its Earth position within 1 cm (no pop), up the ellipsoid's within 0.03°, the turn the arc over R within 10 %.
+  - Marks asked again after the run within 1 cm.
+  - `TRAVEL=<m>` (`--earthtravel`): a long drive across several re-anchors.
 - Geneva (2026-11-08):
   - the ground under the start in 15-30 s;
   - 441 rays: 235 on the ground at 0.0 cm, 206 on roofs, 0 under;
@@ -55,4 +58,5 @@ decisions were made with the user on 2026-11-08.
 
 - PR 2: roads, buildings, trees, water and doors drawn on leaves, through a leaf-frame grid standing in for `ChunkGrid`.
 - PR 3: generated and fixture leaves and their blend against real ones.
-- C3: the frame turns; C4: the server on leaves.
+- C3's patterns from tile coordinates (per-vertex face u, v in the leaves; `world_origin_offset` retired), with PR 2's meshes; C4: the server on leaves.
+- `--ride` and `--flycheck` run on leaves (they take the world's ground and anchor their target, `TestWorld.AnchorEarthTarget`).

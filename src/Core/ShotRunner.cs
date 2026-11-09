@@ -249,7 +249,20 @@ public partial class ShotRunner : Node
             return;
         }
         _camera.Position = _origin != null && _start != null ? _origin.Since(_start).Point(shot.Position) : shot.Position;
-        _camera.Rotation = new Vector3(Mathf.DegToRad(shot.PitchDeg), Mathf.DegToRad(shot.YawDeg), 0);
+        Aim(shot.PitchDeg, shot.YawDeg);
+    }
+
+    /// <summary>
+    /// The camera turned as a line asks, in the first frame's axes: after a turning shift (the earth world's
+    /// ground, #1512) the world turned under the camera, and the view turns with it, so a shot either side of a
+    /// re-anchor looks the same way. A flat world's shifts never turn: the Euler angles as they are.
+    /// </summary>
+    private void Aim(float pitchDeg, float yawDeg)
+    {
+        var euler = new Vector3(Mathf.DegToRad(pitchDeg), Mathf.DegToRad(yawDeg), 0);
+        if (_origin != null && _start != null && _origin.Since(_start) is { Turns: true } since)
+            _camera.Basis = since.Transform.Basis * Basis.FromEuler(euler);
+        else _camera.Rotation = euler;
     }
 
     /// <summary>
@@ -367,7 +380,7 @@ public partial class ShotRunner : Node
             world = world with { Y = y };
         }
         _camera.Position = world;
-        _camera.Rotation = new Vector3(Mathf.DegToRad(pitch), Mathf.DegToRad(yaw), 0);
+        Aim(pitch, yaw);
         if (t >= 1f)
         {
             _lastYaw = yaw;
