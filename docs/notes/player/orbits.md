@@ -131,7 +131,7 @@ The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`
 
 ## Checks
 
-- `--orbitcheck [km] --world flat` (`Player/OrbitCheck`, quick, 45 s): `/orbit 400` heading north (over the
+- `--orbitcheck [km] --world flat [--frame earth]` (`Player/OrbitCheck`, quick, 45 s; `--frame earth` flies the earth world's one turning frame, out of the Space regime at 50 km into its 3 km ground steps, #1630): `/orbit 400` heading north (over the
   pole and the LV95 sliver), one period at 8x: closes within 0.32 m, energy drift 5·10⁻¹⁴, ~2,080 turned
   shifts, no contact, the world within 20 km of the craft; then boosted down out of orbit into a hover,
   the frame flat again (no turn, a whole-km corner), and onto its legs.

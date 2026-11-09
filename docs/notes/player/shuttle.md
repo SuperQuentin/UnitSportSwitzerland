@@ -121,7 +121,7 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
 
 ## Checks
 
-- `--shuttlecheck --world flat` (`Player/ShuttleCheck`, quick, ~50 s): a scripted pilot flies the whole
+- `--shuttlecheck --world flat [--frame earth]` (`Player/ShuttleCheck`, quick, ~50 s; under `--frame earth` the earth world's turning frame, the runway's plane laid on the ellipsoid, #1630): a scripted pilot flies the whole
   mission on the shuttle's own controls: take-off, a 50° rocket climb into Space, the drive up to 400 km and
   round the Earth (a whole turn of the ground track), the drive off (a circular orbit, apsides within 1 km),
   a retro burn to a 45 km perigee, half an orbit down and re-entry (fails without a glow over 0.5), a minute
@@ -134,4 +134,6 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
 - `ShuttleTests` (tier 0): the take-off and climb, no lapse, the drive's speed, the jets' share and rates,
   the drive's coordinated turn, relevelling, the heat, the attitude held in thin air. `AirportTests`: the
   fixture's C3.
+- The pilot's heading is read from grid north at the craft's place (`TrueNorth.WorldYawToGrid`) in an anchor frame: the
+  earth world's frame is carried round the Earth by the drive, and world −Z had landed it 224 m off the centreline (#1630).
 - A flare tuned on a sink loop porpoised (the airframe lags ~1.5 s): fly the attitude, not the sink.
