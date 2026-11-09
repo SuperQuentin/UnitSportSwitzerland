@@ -219,10 +219,14 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private void Plan()
     {
         _foci.Clear();
-        if (Camera?.Invoke() is { } cam && cam.IsFinite() && Origin.AltitudeOf(cam) < CameraCeilingM) _foci.Add(Origin.ToEcef(cam));
+        bool lifted = false;
+        if (Camera?.Invoke() is { } cam && cam.IsFinite()) AddFocus(cam, ref lifted);
         // an anchor in Space (the spectator camera is one, so is a craft in orbit) streams nothing either
         foreach (var a in _anchors)
-            if (IsInstanceValid(a) && a.IsInsideTree() && Origin.AltitudeOf(a.GlobalPosition) < CameraCeilingM) _foci.Add(Origin.ToEcef(a.GlobalPosition));
+            if (IsInstanceValid(a) && a.IsInsideTree()) AddFocus(a.GlobalPosition, ref lifted);
+        // no focus at all (between a probe's bodies): keep what is loaded; only Space lets it all go
+        if (_foci.Count == 0 && !lifted) return;
+
         _want.Clear();
         foreach (var focus in _foci)
         {
@@ -254,6 +258,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             if (nearest > NearM + ReleaseM) _drop.Add(key);
         }
         foreach (var key in _drop) Remove(key);
+    }
+
+    /// <summary>A focus of the streaming, unless it is in Space (<see cref="CameraCeilingM"/>): then <paramref name="lifted"/>.</summary>
+    private void AddFocus(Vector3 at, ref bool lifted)
+    {
+        if (Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
+        else _foci.Add(Origin.ToEcef(at));
     }
 
     /// <summary>
