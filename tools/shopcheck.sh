@@ -9,9 +9,10 @@
 PORT=${SHOP_PORT:-7834}
 
 tc_server 1800 120 $OUT/shopcheck_server.log --server --port $PORT --generated-world --admin-password shopcheck --shopstuck
-tc_client 480 $OUT/shopcheck_A.log --connect 127.0.0.1:$PORT --name ShopA --shopnet A --traffic 0 &
+# the test profile is detail Low (#1411): buildings, so doors, one ring out; A looks for a PAUSA machine among those of three rings
+tc_client 480 $OUT/shopcheck_A.log --connect 127.0.0.1:$PORT --name ShopA --shopnet A --traffic 0 --detail medium &
 CLIENT_A=$!
-tc_client 475 $OUT/shopcheck_B.log --connect 127.0.0.1:$PORT --name ShopB --shopnet B --traffic 0
+tc_client 475 $OUT/shopcheck_B.log --connect 127.0.0.1:$PORT --name ShopB --shopnet B --traffic 0 --detail medium
 wait $CLIENT_A
 code=0
 for r in A B; do
