@@ -70,10 +70,12 @@ public static class LeafWaterClip
 
     /// <summary>
     /// A water mesh clipped to the planes: whole triangles inside are kept as they are, those across an edge are cut
-    /// along it (their wave scale interpolated), those outside dropped. Null when nothing is left.
+    /// along it (their wave scale, UV, interpolated), those outside dropped. Null when nothing is left.
     /// </summary>
-    public static WaterMeshBuilder.MeshData? Clip(WaterMeshBuilder.MeshData mesh, Plane[] planes)
+    public static (Vector3[] Vertices, Vector2[] Uvs, int[] Indices)? Clip(Vector3[] meshVertices, Vector2[] meshUvs,
+        int[] meshIndices, Plane[] planes)
     {
+        var mesh = (Vertices: meshVertices, Uvs: meshUvs, Indices: meshIndices);
         var vertices = new List<Vector3>(mesh.Vertices);
         var uvs = new List<Vector2>(mesh.Uvs);
         var indices = new List<int>(mesh.Indices.Length);
@@ -132,6 +134,6 @@ public static class LeafWaterClip
                 indices.Add(first); indices.Add(first + k); indices.Add(first + k + 1);
             }
         }
-        return indices.Count == 0 ? null : new WaterMeshBuilder.MeshData(vertices.ToArray(), uvs.ToArray(), indices.ToArray());
+        return indices.Count == 0 ? null : (vertices.ToArray(), uvs.ToArray(), indices.ToArray());
     }
 }

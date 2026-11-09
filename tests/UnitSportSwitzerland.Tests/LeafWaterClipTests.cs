@@ -1,5 +1,4 @@
 using Godot;
-using UnitSport.Terrain;
 using UnitSport.Terrain.Earth;
 using UnitSport.Terrain.Format;
 using UnitSport.Terrain.Leaves;
@@ -13,6 +12,11 @@ namespace UnitSportSwitzerland.Tests;
 /// </summary>
 public class LeafWaterClipTests
 {
+    private sealed record Mesh(Vector3[] Vertices, Vector2[] Uvs, int[] Indices);
+
+    private static Mesh? Clip(Mesh m, LeafWaterClip.Plane[] planes) =>
+        LeafWaterClip.Clip(m.Vertices, m.Uvs, m.Indices, planes) is { } r ? new Mesh(r.Vertices, r.Uvs, r.Indices) : null;
+
     private static readonly CubeKey Geneva = CubeKey.FromLatLon(46.21, 6.15, LeafFrames.LeafLevel);
 
     private static EcefPos ToEcef(CubeKey leaf, Vector3 standIn) =>
@@ -25,7 +29,7 @@ public class LeafWaterClipTests
     }
 
     /// <summary>A flat lake over the whole stand-in tile, 2 m quads, at a height.</summary>
-    private static WaterMeshBuilder.MeshData Sheet(float y)
+    private static Mesh Sheet(float y)
     {
         const int m = 501;
         var v = new Vector3[m * m];
@@ -43,10 +47,10 @@ public class LeafWaterClipTests
                 int a = r * m + c, b = a + 1, d = a + m, e = d + 1;
                 idx.AddRange([a, e, b, a, d, e]);
             }
-        return new WaterMeshBuilder.MeshData(v, uv, idx.ToArray());
+        return new Mesh(v, uv, idx.ToArray());
     }
 
-    private static double Area(WaterMeshBuilder.MeshData mesh)
+    private static double Area(Mesh mesh)
     {
         double sum = 0;
         for (int t = 0; t < mesh.Indices.Length; t += 3)
@@ -81,23 +85,23 @@ public class LeafWaterClipTests
             var other = Geneva.Neighbour(dx, dy)!.Value;
             var mine = LeafWaterClip.EdgePlanes(Geneva);
             var theirs = LeafWaterClip.EdgePlanes(other);
-            // the corners both leaves have: their shared edge
-            var shared = Corners(Geneva).Where(c => Corners(other).Any(o => Dist(o, c) < 1e-6)).ToArray();
+            // the corners both leaves have: their shared edge, as lattice indices of this leaf
+            var shared = new[] { (0, 0), (1, 0), (1, 1), (0, 1) }
+                .Where(c => Corners(other).Any(o => Dist(o, Geneva.Vertex(0, c.Item1, c.Item2, 372)) < 1e-6)).ToArray();
             Assert.Equal(2, shared.Length);
-            // points along it, at the lake's height and 50 m above, sit on one plane of each, within a millimetre
+            // points along it, at the lake's height and 50 m above (the lattice's own verticals), sit on one plane of
+            // each, within a millimetre
             int hits = 0;
-            foreach (double h in new[] { 0.0, 50.0 })
+            foreach (double h in new[] { 372.0, 422.0 })
                 for (int k = 0; k <= 10; k++)
                 {
                     double s = k / 10.0;
-                    var c0 = shared[0];
-                    var c1 = shared[1];
+                    var c0 = Geneva.Vertex(0, shared[0].Item1, shared[0].Item2, h);
+                    var c1 = Geneva.Vertex(0, shared[1].Item1, shared[1].Item2, h);
                     var p = new EcefPos(c0.X + (c1.X - c0.X) * s, c0.Y + (c1.Y - c0.Y) * s, c0.Z + (c1.Z - c0.Z) * s);
-                    var up = Geneva.Anchor.Up;
-                    p = new EcefPos(p.X + up.X * h, p.Y + up.Y * h, p.Z + up.Z * h);
                     float da = mine.Min(pl => Math.Abs(pl.Distance(Local(Geneva, p))));
                     float db = theirs.Min(pl => Math.Abs(pl.Distance(Local(other, p))));
-                    Assert.True(da < 0.002f && db < 0.002f, $"({dx},{dy}) at {s}, {h} m up: {da * 1000:F2} / {db * 1000:F2} mm off the edge plane");
+                    Assert.True(da < 0.002f && db < 0.002f, $"({dx},{dy}) at {s}, {h} m: {da * 1000:F2} / {db * 1000:F2} mm off the edge plane");
                     hits++;
                 }
             Assert.Equal(22, hits);
@@ -107,7 +111,7 @@ public class LeafWaterClipTests
     [Fact]
     public void ALakeOverTheTileIsCutToTheLeaf()
     {
-        var clipped = LeafWaterClip.Clip(Sheet(380f), LeafWaterClip.EdgePlanes(Geneva));
+        var clipped = Clip(Sheet(380f), LeafWaterClip.EdgePlanes(Geneva));
         Assert.NotNull(clipped);
         // the leaf's own area from its corners, in the stand-in frame
         var p = new[] { (0, 0), (1, 0), (1, 1), (0, 1) }.Select(c => Local(Geneva, Geneva.Vertex(0, c.Item1, c.Item2, 380))).ToArray();
@@ -129,8 +133,8 @@ public class LeafWaterClipTests
     public void TwoNeighboursTileTheirSharedLakeWithoutGapOrOverlap()
     {
         var east = Geneva.Neighbour(1, 0)!.Value;
-        var a = LeafWaterClip.Clip(Sheet(380f), LeafWaterClip.EdgePlanes(Geneva))!;
-        var b = LeafWaterClip.Clip(Sheet(380f), LeafWaterClip.EdgePlanes(east))!;
+        var a = Clip(Sheet(380f), LeafWaterClip.EdgePlanes(Geneva))!;
+        var b = Clip(Sheet(380f), LeafWaterClip.EdgePlanes(east))!;
         // sample a line across the shared edge, in Geneva's frame: each point is covered by exactly one of the two
         var mid0 = Geneva.Vertex(0, 1, 0, 380);
         var mid1 = Geneva.Vertex(0, 1, 1, 380);
@@ -146,7 +150,7 @@ public class LeafWaterClipTests
         }
     }
 
-    private static bool Covers(WaterMeshBuilder.MeshData mesh, Vector3 p)
+    private static bool Covers(Mesh mesh, Vector3 p)
     {
         for (int t = 0; t < mesh.Indices.Length; t += 3)
         {

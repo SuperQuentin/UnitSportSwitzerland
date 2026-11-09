@@ -134,7 +134,8 @@ public sealed partial class EarthWorld
             var layer = LeafStandIn.Water(water, LeafFrames.Swiss.TransformOf(content.Key), side, stand.Nearest, grid);
             // the still water cut at the leaf's edges, where the neighbour's takes over (#1632); the streams in the roads as they are
             var lake = WaterMeshBuilder.Build(layer, null, 1, detail) is { } still
-                ? LeafWaterClip.Clip(still, LeafWaterClip.EdgePlanes(content.Key)) : null;
+                && LeafWaterClip.Clip(still.Vertices, still.Uvs, still.Indices, LeafWaterClip.EdgePlanes(content.Key)) is { } cut
+                ? new WaterMeshBuilder.MeshData(cut.Vertices, cut.Uvs, cut.Indices) : null;
             var streams = stand.Roads != null ? WaterMeshBuilder.Build(layer, stand.Roads, 1, detail, channelsOnly: true) : null;
             if (Merge(lake, streams) is { } waterData && !_gone)
                 f.Water = ChunkNode.ToArrayMesh(waterData, waterMaterial, pattern);
