@@ -28,6 +28,7 @@ uniform float indoors_below = -2000.0; // camera heights under this are inside a
 varying float keep;
 
 void vertex() {
+    PATTERN_NONE
     vec3 cam = INV_VIEW_MATRIX[3].xyz;
     vec3 home = VERTEX;
     float h = UV2.x;

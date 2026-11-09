@@ -58,6 +58,8 @@ public sealed partial class EarthWorld
         bool roadCells = Core.GameSettings.Lean;
         var grid = stand.Grid;
         var f = new Furniture { Id = stand.Id, Doors = stand.Doors ?? [] };
+        // patterns from the leaf's place on the Earth, never the world frame's (#1512)
+        var pattern = LeafPattern.For(content.Key);
 
         if (stand.Roads is { } roads && m.Road is { } roadMaterial)
         {
@@ -68,14 +70,14 @@ public sealed partial class EarthWorld
                 if (_gone) return null;
                 if (roadCells)
                 {
-                    f.RoadCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(roadData), roadMaterial);
-                    if (paint != null) f.PaintCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(paint), roadMaterial);
+                    f.RoadCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(roadData), roadMaterial, pattern);
+                    if (paint != null) f.PaintCells = ChunkNode.ToArrayMeshes(ChunkNode.SplitByCell(paint), roadMaterial, pattern);
                     f.Roads = new ArrayMesh();
                 }
                 else
                 {
-                    f.Roads = ChunkNode.ToArrayMesh(roadData, roadMaterial);
-                    if (paint != null) f.PaintCells = [ChunkNode.ToArrayMesh(paint, roadMaterial)];
+                    f.Roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, pattern: pattern);
+                    if (paint != null) f.PaintCells = [ChunkNode.ToArrayMesh(paint, roadMaterial, pattern: pattern)];
                 }
                 f.Lamps = SignalBuilder.BuildLamps(roads);
                 f.SignNames = RoadSignBuilder.Labels(roads);
@@ -102,14 +104,14 @@ public sealed partial class EarthWorld
                 var parts = BuildingOcclusion.SplitByCell(buildingData);
                 f.BuildingCells = new ArrayMesh?[parts.Length];
                 for (int c = 0; c < parts.Length; c++)
-                    if (parts[c] is { } part) f.BuildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
+                    if (parts[c] is { } part) f.BuildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial, pattern);
                 if (BuildingOcclusion.Occluders(buildings) is var (ov, oi)) (f.OccluderVertices, f.OccluderIndices) = (ov, oi);
                 if (BuildingMeshBuilder.BuildProxies(buildings) is { } proxyData)
                 {
                     var proxyParts = BuildingOcclusion.SplitByCell(proxyData);
                     f.Proxies = new ArrayMesh?[proxyParts.Length];
                     for (int c = 0; c < proxyParts.Length; c++)
-                        if (proxyParts[c] is { } part) f.Proxies[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
+                        if (proxyParts[c] is { } part) f.Proxies[c] = ChunkNode.ToArrayMesh(part, buildingMaterial, pattern);
                 }
             }
         }
@@ -131,11 +133,11 @@ public sealed partial class EarthWorld
         {
             var layer = LeafStandIn.Water(water, LeafFrames.Swiss.TransformOf(content.Key), side, stand.Nearest, grid);
             if (WaterMeshBuilder.Build(layer, stand.Roads, 1, detail) is { } waterData && !_gone)
-                f.Water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
+                f.Water = ChunkNode.ToArrayMesh(waterData, waterMaterial, pattern);
         }
         else if (m.Water is { } streamMaterial && stand.Roads != null
             && WaterMeshBuilder.Build(null, stand.Roads, 1, detail) is { } streams && !_gone)
-            f.Water = ChunkNode.ToArrayMesh(streams, streamMaterial);
+            f.Water = ChunkNode.ToArrayMesh(streams, streamMaterial, pattern);
         return f;
     }
 

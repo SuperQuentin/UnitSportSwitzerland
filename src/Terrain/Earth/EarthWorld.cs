@@ -521,6 +521,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public bool TryGetCover(Vector3 worldPos, out CoverClass cover) => w.CoverAt(worldPos, out cover);
         public bool TryGetWaterLevel(Vector3 worldPos, out float stillLevel) => w.WaterAt(worldPos, out stillLevel, out _);
         public bool TryGetWater(Vector3 worldPos, out float stillLevel, out float waveScale) => w.WaterAt(worldPos, out stillLevel, out waveScale);
+        public bool PatternsOnFaces => true;
         public bool InTunnel(Vector3 worldPos) => w.InTunnelAt(worldPos);
         // building sites stand on leaves with PR 2
         public bool InPit(Vector3 worldPos) => false;

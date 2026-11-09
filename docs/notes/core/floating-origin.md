@@ -51,6 +51,19 @@
   portal clipping are fine as they are (they want small local values). Uniforms holding world
   positions that are not pushed every frame must be re-pushed on a shift (`cover_origin`, the
   building shader's occupancy and open-door boxes).
+- **Patterns on the round world** (#1512, G2 C3, PR #1627): a turning re-anchor moves the world in a way no
+  offset follows, so a leaf's furniture (roads, paint, buildings, water) carries its pattern points instead:
+  `LeafPattern` bakes each vertex's cube-face (u, v) in metres (`PatternSpace`: X along u, Z along −v, arc at the
+  mean radius) into `CUSTOM1`, and the angle of the face's axes in the mesh's frame plus its distance past a face
+  edge into `CUSTOM2` (`ChunkNode`'s mesh helpers take the bake; the flat world passes none). Every body's
+  `vertex()` runs `PATTERN_VERTEX`; `pattern_xz` then reads the baked point, or `world_origin_offset` on a mesh
+  without one (`CUSTOM2.x` 0), so the flat world draws exactly as before. Within 60 m of a face edge a fragment
+  picks face A or B by an 8 m value noise on A's point (a ragged seam; the waves mix both). Exact on a 9 × 9 grid
+  per leaf with a height term, bilinear between: under 1 mm, 2 mm between neighbouring leaves
+  (`LeafPatternTests`). Points are kept near [0, 9.6 km) per leaf, so floats hold them; leaves differ by whole
+  periods, which no pattern sees. A new body that samples patterns: `PATTERN_VERTEX` first in its `vertex()`;
+  one that does not draw tile meshes: `PATTERN_NONE` (snow, wake foam). A direction in pattern space (waves,
+  ripples) goes through `pattern_turn`.
 - **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km; 22-47 ms in a
   window at Riddes (~530 nodes, 120 kinematic), so the frame that shifts takes 50-90 ms.
 - **The renderer across a shift** (phase 4, measured in a window at Riddes, RTX 4070, 1600x900,

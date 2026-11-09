@@ -24,6 +24,12 @@
   9.6 km (`OriginShifter.PatternPeriodM`), so the phase is a function of LV95 modulo 9.6 km; the
   shader feeds `pattern_xz(world)`, C# `WaveSpectrum.PatternX/Z(LV95)`. Every omega is a whole
   number of cycles over 1200 s, so `t` wraps without a jump and stays small for a float.
+- **On the round world** (#1512, `--frame earth`, `IWorldGround.PatternsOnFaces`): the waves run on the cube
+  face's pattern axes (`Terrain/Earth/PatternSpace`), not LV95's. A leaf's water mesh carries each vertex's
+  pattern point and the axes' angle (`LeafPattern`); the shader turns the displacement and normals by it, and
+  `WaterField` computes the same point and angle from the point's Earth position (`OnFaces`), so a hull floats on
+  the waves drawn under it in any frame. Within 60 m of a face edge both faces' fields mix by B's weight, in the
+  shader and in C# alike.
 - **Sea state is server state**: `--sea-state <0..1|calm|chop|storm|gamey>` (server, or an offline
   client), `/seastate [value]` (anyone asks, an admin sets; offline anyone), sent on join
   (`ServerWorld` → `ChatManager.SendSeaStateTo`) and on change (`SeaState` RPC). calm 0, chop 0.35,

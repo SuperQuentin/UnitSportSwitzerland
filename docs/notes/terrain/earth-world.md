@@ -117,6 +117,6 @@ decisions were made with the user on 2026-11-08.
 
 ## Not yet
 
-- C3's patterns from tile coordinates (per-vertex face u, v in the leaves; `world_origin_offset` retired), with PR 2's meshes. (C4's server on leaves: `net/server-regions`.)
+- The leaves' own ground in the style kit's terrain material (it keeps `CoverPalette`'s vertex colours: the material wants the flat tile's cover attributes). C3's patterns are on the furniture (#1627, `core/floating-origin`). (C4's server on leaves: `net/server-regions`.)
 - The server on the fill: it stands on the region's leaves alone (PR 3 follow-up).
 - `--ride` and `--flycheck` run on leaves (they take the world's ground and anchor their target, `TestWorld.AnchorEarthTarget`).

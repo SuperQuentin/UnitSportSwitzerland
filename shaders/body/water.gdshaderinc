@@ -84,6 +84,7 @@ varying float wave_lift;
 varying float wave_scale;
 
 void vertex() {
+    PATTERN_VERTEX
     // UV.x: the water layer's wave scale (fetch x depth). The tile's transform is a translation,
     // so the world displacement is the local one. The short waves fade out with distance (a
     // 2 m-spaced vertex's worth at 500 m, 4 m at 1 km), never by the mesh's own spacing: two tiles
@@ -92,7 +93,25 @@ void vertex() {
     vec3 rest = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float spacing = max(2.0, distance(rest, CAMERA_POSITION_WORLD) * 0.008);
     vec3 n;
-    vec3 d = water_wave_displace(pattern_xz(rest), UV.x, spacing, n);
+    vec3 d;
+    if (pattern_frame.x < 0.5) {
+        d = water_wave_displace(pattern_xz(rest), UV.x, spacing, n);
+    } else {
+        // a leaf (#1512): the field on its face's pattern axes, turned into the mesh's frame; across a
+        // face edge the two faces' fields mix (WaterField does the same for the physics)
+        d = water_wave_displace(pattern_ab.xy, UV.x, spacing, n);
+        d.xz = pattern_turn_by(d.xz, pattern_frame.y);
+        n.xz = pattern_turn_by(n.xz, pattern_frame.y);
+        float wb = pattern_weight_b(pattern_frame);
+        if (wb > 0.0) {
+            vec3 nb;
+            vec3 db = water_wave_displace(pattern_ab.zw, UV.x, spacing, nb);
+            db.xz = pattern_turn_by(db.xz, pattern_frame.z);
+            nb.xz = pattern_turn_by(nb.xz, pattern_frame.z);
+            d = mix(d, db, wb);
+            n = normalize(mix(n, nb, wb));
+        }
+    }
     wave_normal = n;
     VERTEX += d;
     wave_lift = d.y;
@@ -250,7 +269,8 @@ void fragment() {
 #else
     float ripple = 0.25;
 #endif
-    vec3 n_world = normalize(wave_n - vec3(det.y, 0.0, det.z) * ripple * near * (0.45 + 0.8 * sea));
+    vec2 det_xz = pattern_turn(det.yz);
+    vec3 n_world = normalize(wave_n - vec3(det_xz.x, 0.0, det_xz.y) * ripple * near * (0.45 + 0.8 * sea));
     // from below, the surface faces down
     vec3 n_face = FRONT_FACING ? n_world : -n_world;
     NORMAL = style_view_normal(VIEW_MATRIX, n_face);
