@@ -109,6 +109,18 @@ public sealed class EarthLeaves : ILeafSource
         return null;
     }
 
+    /// <summary>
+    /// A leaf's roads for the traffic's graphs (#1636), without decoding or keeping its other sections where the region holds
+    /// it (a leaf merged with the fill keeps the region's roads); a fixture course's from its built leaf; a fill leaf's only
+    /// once it is made (the ground near a view makes it): a generated leaf costs a RoadGen run, too much for a few km of graph.
+    /// </summary>
+    public RoadTile? RoadsOf(CubeKey key)
+    {
+        if (Real.Has(key)) return Real.RoadsOf(key);
+        if (_fixtureHas?.Invoke(key) == true) return Get(key)?.Roads;
+        return Filled(key) ? Cached(key)?.Roads : null;
+    }
+
     public CubeLeafContent? Cached(CubeKey key)
     {
         if (_made.TryGetValue(key, out var lazy)) return lazy.IsValueCreated ? lazy.Value : null;

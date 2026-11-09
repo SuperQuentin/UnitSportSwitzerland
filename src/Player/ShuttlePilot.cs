@@ -184,8 +184,13 @@ public sealed class ShuttlePilot
         _p.FlyControls = () => new FlightInput(stick, 0f, 0f, up, down, false, false, 0f, Brake: brake);
     }
 
-    /// <summary>A heading clockwise from grid north (minus the yaw in a ground frame) against a wanted one, rad.</summary>
-    private float HeadingError(float want) => Mathf.Wrap(want + _jet.State.Yaw, -Mathf.Pi, Mathf.Pi);
+    /// <summary>
+    /// A heading clockwise from grid north against a wanted one, rad: the jet's world yaw read from grid north at its
+    /// place. In the flat ground frame that is the yaw itself; the earth world's turning frame (#1630) has carried its
+    /// axes round the Earth with the drive, so there world −Z is north nowhere in particular.
+    /// </summary>
+    private float HeadingError(float want) =>
+        Mathf.Wrap(want + (_frame.IsAnchor ? TrueNorth.WorldYawToGrid(_frame, _p.GlobalPosition, _jet.State.Yaw) : _jet.State.Yaw), -Mathf.Pi, Mathf.Pi);
 
     // ---- the stages ---------------------------------------------------------------------------
 

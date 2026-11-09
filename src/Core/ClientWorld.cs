@@ -465,7 +465,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk).
         // A fixture course stands on its own leaves offline (C1 PR 3); online it stays flat, as the server does on one
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !(fixture && Launch.Networked);
-        if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
+        // --origin pins it as on the flat world, so a shot queue's places mean the same in both (#1630's film)
+        if (earth)
+        {
+            var (anchorE, anchorN) = SpawnPoint.ParseOrigin() ?? (startE, startN);
+            origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(anchorE, anchorN, 0)));
+        }
         // round leaves fall away by themselves: the shaders only add refraction's lift (#1512)
         Curvature.RoundGeometry = earth;
 
@@ -578,6 +583,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
             _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
+            // the leaves' ground in the style kit's terrain material (#1634): fog and the settings reach it as the tiles'
+            FogUniforms.Apply(_earth.GroundMaterial);
+            _worldMaterials = [.. _worldMaterials, _earth.GroundMaterial];
             AddChild(_earth);
         }
         else AddChild(_chunks);
@@ -731,8 +739,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // …the creatures in the air around the camera, and their sounds
             AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
-            // …and snow falling round the camera, except indoors
-            AddChild(new Occasions.OccasionPrecip());
+            // …and snow falling round the camera, except indoors and above the cloud layer (#1637)
+            AddChild(new Occasions.OccasionPrecip(origin, at => Ground is { } gr && gr.TryGetSurface(at, out float y) ? y : null));
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
@@ -828,6 +836,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     return obstacles;
                 },
             };
+            // the earth world (#1636): its graphs from the leaves round the view
+            if (_earth != null) _traffic.LeafRoads = _earth.Leaves.RoadsOf;
             AddChild(_traffic);
         }
         // traffic endpoints (#971): the server's list (same node path as its), every client running them on its own cars; the
@@ -997,6 +1007,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;
                 runner.TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
+                runner.TilesStatus = () => _earth?.Status;
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;

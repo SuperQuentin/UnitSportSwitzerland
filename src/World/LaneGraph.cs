@@ -218,6 +218,8 @@ public sealed class SignalSite
         // (the pairs' lines are these same arrays)
         foreach (var (_, points) in Lines)
             for (int i = 0; i < points.Length; i++) points[i] = shift.Point(points[i]);
+        // its arms' ways out turn with a turning frame (#1636: the earth world's re-anchors, #1512)
+        if (shift.Turns) for (int i = 0; i < Out.Length; i++) Out[i] = shift.Direction(Out[i]);
     }
 }
 
@@ -374,9 +376,11 @@ public sealed partial class LaneGraph
 
     /// <summary>The origin frame the edges' points are in.</summary>
     public OriginFrame Frame { get; private set; }
-    private readonly Dictionary<long, List<(LaneEdge Edge, bool AtStart)>> _incident = new();
 
-    private const float Snap = 0.5f;
+    /// <summary>Built from leaves' stand-in tiles (#1636): its keys are Earth places (<see cref="TilePlace.EarthKey"/>), not LV95.</summary>
+    public bool OnLeaves { get; set; }
+
+    private readonly Dictionary<long, List<(LaneEdge Edge, bool AtStart)>> _incident = new();
 
     /// <summary>RoadMeshBuilder's raised rail height (0.18) less the paint lift (0.02): RoadGen's RailRoadOverlap.RailTop.</summary>
     private const float EmbeddedRailSink = 0.16f;
@@ -408,8 +412,7 @@ public sealed partial class LaneGraph
     private const float StopReach = 15f;
 
     /// <summary>The snap cell of an LV95 point, laid out like world X/Z (east, then south).</summary>
-    public static long Key(double e, double n) =>
-        ((long)(int)Math.Round(e / Snap) << 32) ^ (uint)(int)Math.Round(-n / Snap);
+    public static long Key(double e, double n) => TilePlace.Lv95Key(e, n);
 
     /// <summary>The snap cell of an LV95 point as a tile answers it (<see cref="TileId.Global"/>).</summary>
     public static long Key((double E, double N) p) => Key(p.E, p.N);
@@ -423,6 +426,8 @@ public sealed partial class LaneGraph
         var g = new LaneGraph(origin);
         foreach (var tile in tiles)
         {
+            var place = TilePlace.Of(origin, tile);
+            g.OnLeaves |= place.OnLeaf;
             // the transitions' pieces (#818 phase 5): their lanes, which cars follow
             var transitionOf = tile.Transitions.Count == 0 ? null
                 : tile.Transitions.ToDictionary(t => t.Segment, t => t, ReferenceEqualityComparer.Instance);
@@ -437,11 +442,11 @@ public sealed partial class LaneGraph
                 long keyStart = 0, keyEnd = 0;
                 for (int i = 0; i < pts.Length; i++)
                 {
-                    var (e, n) = seg.Lv95(tile.Id, i);
-                    pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1] - sink);
+                    float x = seg.Points[i * 3], y = seg.Points[i * 3 + 1], z = seg.Points[i * 3 + 2];
+                    pts[i] = place.World(x, y - sink, z);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
-                    if (i == 0) keyStart = Key(e, n);
-                    if (i == pts.Length - 1) keyEnd = Key(e, n);
+                    if (i == 0) keyStart = place.Key(x, y, z);
+                    if (i == pts.Length - 1) keyEnd = place.Key(x, y, z);
                 }
                 if (cum[^1] < 1f) continue;
 
@@ -478,17 +483,18 @@ public sealed partial class LaneGraph
         var unlit = new List<(RoadJunctionPath, LaneEdge)>();   // car paths of cores without lights (#1057: they give way to trams)
         foreach (var tile in tiles)
         {
+            var place = TilePlace.Of(origin, tile);
             var sites = new SignalSite[tile.Signals.Count];
             for (int k = 0; k < sites.Length; k++)
             {
                 var plan = tile.Signals[k].Plan;
                 var outs = new Vector3[plan.Arms.Count];
-                for (int a = 0; a < outs.Length; a++) outs[a] = OutOf(plan.Arms[a].Heading);
+                for (int a = 0; a < outs.Length; a++) outs[a] = place.Out(plan.Arms[a].Heading);
                 g.Signals.Add(sites[k] = new SignalSite { Plan = plan, Out = outs });
                 Vector3[] World(float[] f)
                 {
                     var v = new Vector3[f.Length / 3];
-                    for (int i = 0; i < v.Length; i++) v[i] = origin.TileToWorld(tile.Id, new Vector3(f[i * 3], f[i * 3 + 1], f[i * 3 + 2]));
+                    for (int i = 0; i < v.Length; i++) v[i] = place.World(new Vector3(f[i * 3], f[i * 3 + 1], f[i * 3 + 2]));
                     return v;
                 }
                 var worldOf = new Dictionary<float[], Vector3[]>(ReferenceEqualityComparer.Instance);
@@ -501,10 +507,10 @@ public sealed partial class LaneGraph
                 var sg = tile.Signals[k];
                 foreach (var arm in sg.Poles.Where(p => (p.Flags & SignalPoleFlags.Pedestrian) != 0).GroupBy(p => p.Arm))
                 {
-                    var heads = arm.Select(p => origin.TileToWorld(tile.Id, new Vector3(p.X, p.Y, p.Z))).ToList();
+                    var heads = arm.Select(p => place.World(new Vector3(p.X, p.Y, p.Z))).ToList();
                     if (heads.Count < 2 || arm.Key * 3 + 2 >= sg.Stops.Length || float.IsNaN(sg.Stops[arm.Key * 3])) continue;
                     var (a0, b0) = heads.SelectMany(x => heads, (x, y) => (x, y)).MaxBy(xy => xy.x.DistanceSquaredTo(xy.y));
-                    var stop = origin.TileToWorld(tile.Id, new Vector3(sg.Stops[arm.Key * 3], sg.Stops[arm.Key * 3 + 1], sg.Stops[arm.Key * 3 + 2]));
+                    var stop = place.World(new Vector3(sg.Stops[arm.Key * 3], sg.Stops[arm.Key * 3 + 1], sg.Stops[arm.Key * 3 + 2]));
                     var u = outs[arm.Key];
                     // the zebra's own bars where the tile has them: the yellow paint across the arm nearest the stop line
                     var zebra = stop - u * 1.8f;
@@ -517,7 +523,7 @@ public sealed partial class LaneGraph
                         for (int v = 0; v < nv; v++)
                             c += new Vector3(paint.Vertices[v * 3], paint.Vertices[v * 3 + 1], paint.Vertices[v * 3 + 2]);
                         c /= nv;
-                        var at = origin.TileToWorld(tile.Id, c);
+                        var at = place.World(c);
                         var d = at - stop;
                         float along = d.Dot(u), across = (d - u * along).Length();
                         if (along < 0.5f && -along < best && across < 15f) { best = -along; zebra = at; }
@@ -560,7 +566,7 @@ public sealed partial class LaneGraph
                 {
                     var ride = new Vector3[jpath.PointCount];
                     for (int i = 0; i < ride.Length; i++)
-                        ride[i] = origin.TileToWorld(tile.Id, new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
+                        ride[i] = place.World(new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
                     sites[jpath.Signal].Rides.Add((ride, jpath.Group, jpath.Move));
                     ways[jpath.Signal].Add((new ConflictWay(jpath.Points, jpath.Group, ConflictMover.Bike, jpath.Move, jpath.Width * 0.5f), null));
                 }
@@ -573,7 +579,7 @@ public sealed partial class LaneGraph
                 var cum = new float[n];
                 for (int i = 0; i < n; i++)
                 {
-                    pts[i] = origin.TileToWorld(tile.Id, new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
+                    pts[i] = place.World(new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                 }
                 if (cum[^1] < 0.5f) continue;
@@ -581,7 +587,7 @@ public sealed partial class LaneGraph
                 var edge = new LaneEdge
                 {
                     Points = pts, Cumulative = cum, Class = jpath.Junction.Class, Width = Math.Max(jpath.Width, jpath.ToWidth), OneWay = 1, Connector = true,
-                    KeyStart = Key(tile.Id.Global(jpath.From.X, jpath.From.Z)), KeyEnd = Key(tile.Id.Global(jpath.To.X, jpath.To.Z)),
+                    KeyStart = place.Key(jpath.From.X, jpath.From.Y, jpath.From.Z), KeyEnd = place.Key(jpath.To.X, jpath.To.Y, jpath.To.Z),
                     Path = new JunctionPathInfo(jpath.Move, jpath.From.Offset, jpath.To.Offset, site, site is null ? -1 : jpath.Group),
                 };
                 g.Edges.Add(edge);
@@ -602,8 +608,8 @@ public sealed partial class LaneGraph
             {
                 var site = r.Signal >= 0 && r.Signal < sites.Length && r.SignalArm < sites[r.Signal].Out.Length ? sites[r.Signal] : null;
                 if (site is not null) recorded.Add((r.Signal, r.SignalArm));
-                var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, OutOf(r.Heading), r.AllowBlock);
-                g.Attach(approach, origin.TileToWorld(tile.Id, new Vector3(r.X, r.Y, r.Z)), matched);
+                var approach = LaneApproach.Make(r.Lanes.ToArray(), site, r.SignalArm, r.Banned, r.LaneCentre, place.Out(r.Heading), r.AllowBlock);
+                g.Attach(approach, place.World(new Vector3(r.X, r.Y, r.Z)), matched);
             }
             for (int k = 0; k < sites.Length; k++)
             {
@@ -615,7 +621,7 @@ public sealed partial class LaneGraph
                     for (int to = 0; to < signal.Plan.Arms.Count; to++)
                         if (to != a && signal.Plan.Arms[to].Out) moves |= SignalPlan.Turn(signal.Plan.Arms, a, to);
                     var approach = LaneApproach.Make([new ApproachLane(0f, 0f, 0f, moves, ApproachLaneKind.Car)], sites[k], a, SignalMoves.None, 0f, sites[k].Out[a]);
-                    g.Attach(approach, origin.TileToWorld(tile.Id, new Vector3(signal.Stops[a * 3], signal.Stops[a * 3 + 1], signal.Stops[a * 3 + 2])), matched);
+                    g.Attach(approach, place.World(new Vector3(signal.Stops[a * 3], signal.Stops[a * 3 + 1], signal.Stops[a * 3 + 2])), matched);
                 }
             }
         }
@@ -651,9 +657,6 @@ public sealed partial class LaneGraph
 
     /// <summary>Every approach tied to an edge (#353).</summary>
     public List<LaneApproach> Approaches { get; } = new();
-
-    /// <summary>World direction (flat, unit) of a heading in plan view (LV95: east 0, north π/2).</summary>
-    private static Vector3 OutOf(double heading) => new((float)Math.Cos(heading), 0f, -(float)Math.Sin(heading));
 
     /// <summary>
     /// Ties an approach (#353) to the edge that ends at it: the end nearest its stop point, of an

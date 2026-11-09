@@ -273,15 +273,35 @@ The before/after film (D:/UnitSportSwitzerland/films/g2/) showed `--frame earth`
 world in almost every shot, space included: C was checked for correctness, never for looks. D does not start
 until earth looks at least as good as flat.
 - **Ground look**: the style kit's terrain materials on leaves instead of `CoverPalette` vertex colours (#1634);
-  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635).
+  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635). **Built** (#1642):
+  the leaves in the kit's terrain material (`gives_way` off), lakes clipped at leaf edges, the flat world's ±3 m normals.
 - **Far view** below 5 km: terrain, mountains and far trees to the horizon, as `HorizonLayer` gives flat (#1629).
-- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631).
+- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631). **Built** (PR #1638): the
+  film's climb never left 2 km (its glide waited for leaves under a fast climb); no leaves under any focus above 60 km,
+  stale leaf requests skipped; flat and earth side by side match from 30 to 400 km and back; `--orbitcheck` and
+  `--shuttlecheck` under `--frame earth`.
 - **Life**: traffic and cyclists on leaves (#1636).
 - **The gate**: reference shots under `--frame earth` against the flat library, every style, `near` to `space`,
   each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user.
 
+### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
+
+D deletes the LV95 runtime, so every world the game can run must already work under `--frame earth`:
+- **The traffic-lights test region** (#1647): `RoadGen --test-region` and `WorldChoice.Prepare` build it only as
+  LV95 `.terr` tiles; it also builds cube leaves, compared with the LV95 build, and `WorldChoice` picks them under earth.
+- **The fun world's extras** (#1648): `FunBackdrop` (LV95 tile ids, `ToWorld(E, N)`), `FunRings`, the PvP zone and
+  its LV95 start move to Earth positions; its course is already on leaves (#1614).
+- **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
+  under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
+  (`Core/TestWorld`) checked.
+- **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
+  Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
+
+Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
+
 ### D: the flip (one PR)
 
+- Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
   path, `HorizonLayer`, `.terr` and the other LV95 readers, `FallbackChunkSource`'s LV95 path);
   tile-keyed stores re-keyed by leaf; the ratchet's counts at 0 and the test retired; a second

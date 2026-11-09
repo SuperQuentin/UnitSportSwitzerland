@@ -58,10 +58,16 @@ global uniform vec4 world_flat_edge;
 global uniform float world_flat_edge_on;
 // which edge this material dissolves at: 0 none, 1 the tiles' square, 2 the horizon blocks' circle
 uniform int flat_edge = 0;
+// off for the earth world's leaves (#1634): they are the globe's own last level and never give way to it (the
+// globe sets world_fill_hide to 1 there, and the real-tile mask is the flat world's)
+uniform bool gives_way = true;
 const float FLAT_EDGE_FADE = 4000.0;
 
 // how far a world XZ point has given way, 0..1
 float flat_hide(vec2 xz) {
+    if (!gives_way) {
+        return 0.0;
+    }
     float hide = world_flat_hide;
     if (flat_edge != 0 && world_flat_edge_on > 0.0) {
         vec2 d = abs(xz - world_flat_edge.xy);
