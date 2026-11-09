@@ -791,10 +791,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (World.Globe.DataDir is { } globe)
             {
                 var chunksForGlobe = _chunks;
-                AddChild(_earth != null
+                var g = _earth != null
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
                     ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
-                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
+                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
+                // the globe steps aside where a leaf is drawn whole (#1629)
+                if (_earth != null)
+                {
+                    _earth.TileEntered += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, true); };
+                    _earth.TileUnloaded += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, false); };
+                }
+                AddChild(g);
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
                 if (World.AltitudeReadout.Requested) AddChild(new World.AltitudeReadout { Name = "AltitudeReadout", Origin = origin });
             }

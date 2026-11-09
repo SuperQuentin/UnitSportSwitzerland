@@ -88,6 +88,18 @@ public sealed class LeafStore : ILeafSource
         return CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null;
     }
 
+    /// <summary>
+    /// A leaf's still water alone (the globe's last level lifts the lake beds the heights hold to it, #1629), decoded
+    /// from its entry without the other sections and not kept; the decoded leaf's own when it is held. Null where the
+    /// region holds none or the leaf has no water section.
+    /// </summary>
+    public CubeWater? WaterOf(CubeKey key)
+    {
+        if (Cached(key) is { } held) return held.Water;
+        if (!_index.ContainsKey(key)) return null;
+        return CubeLeafCodec.ReadSection(Entry(key), LeafKind.Water) is { } s ? LeafWater.Decode(s) : null;
+    }
+
     private byte[] Entry(CubeKey key)
     {
         var at = _index[key];

@@ -127,6 +127,29 @@ public partial class Globe : Node
     /// </summary>
     public Terrain.Leaves.ILeafSource? Leaves { get; set; }
 
+    private readonly HashSet<CubeKey> _drawnLeaves = new();
+    // every ancestor of a drawn leaf, with how many drawn leaves it holds: such a tile always splits
+    private readonly Dictionary<CubeKey, int> _holdsDrawn = new();
+
+    /// <summary>
+    /// The earth world drew a leaf, or dropped it (<c>EarthWorld.TileEntered</c>/<c>TileUnloaded</c>): the globe steps
+    /// aside exactly there, splitting down to that leaf and leaving its tile out, so its coarser ground (every 8th
+    /// vertex, a metre off in the hills) never shows through the leaf's own (#1629). Its neighbours stay the globe's.
+    /// </summary>
+    public void SetLeafDrawn(CubeKey leaf, bool drawn)
+    {
+        if (drawn ? !_drawnLeaves.Add(leaf) : !_drawnLeaves.Remove(leaf)) return;
+        for (var k = leaf; k.Level > 0;)
+        {
+            k = k.Parent;
+            int n = _holdsDrawn.GetValueOrDefault(k) + (drawn ? 1 : -1);
+            if (n > 0) _holdsDrawn[k] = n;
+            else _holdsDrawn.Remove(k);
+        }
+        // planned again at once: a gap or a double layer lasts a frame, not a fifth of a second
+        _nextPlan = 0;
+    }
+
     /// <summary>Main-thread time a frame spends adding built tiles in the earth world, ms.</summary>
     public double CommitBudgetMs { get; set; } = 3;
 
@@ -142,6 +165,20 @@ public partial class Globe : Node
     private int _month = 7, _epoch = int.MinValue;
     private double _nextPlan;
     private bool _shown;
+
+    /// <summary>
+    /// The earth world draws its tiles below this camera altitude, metres, in the style's own terrain material
+    /// (<c>StyleKit.Material(Terrain)</c>, the flat world's horizon blocks' and tiles'): lit, hazed, banded and lifted
+    /// by refraction as the leaves and the flat terrain are, coloured per vertex from the pyramid's palette
+    /// (<see cref="GlobeGround"/>). Above it, <c>globe.gdshader</c>: the true sun's terminator over the whole Earth,
+    /// which one scene light cannot give (#1629). Refraction's lift is gone by 20 km (<c>Curvature</c>), so the two meet.
+    /// </summary>
+    public const double TerrainBelowM = 20_000;
+
+    // each tile's own globe material (its colour image, the sun's terminator); the terrain one is shared
+    private readonly Dictionary<CubeKey, ShaderMaterial> _globeMaterials = new();
+    private ShaderMaterial? _terrain;
+    private bool _onTerrain;
 
     public override void _Ready()
     {
@@ -270,14 +307,20 @@ public partial class Globe : Node
         }
         if (!show) return;
         Relight();
-
         if (Earth)
         {
+            bool terrain = altitude < TerrainBelowM;
+            if (terrain != _onTerrain)
+            {
+                _onTerrain = terrain;
+                foreach (var (key, node) in _patches) node.MaterialOverride = MaterialFor(key);
+            }
             // the world is the anchor frame itself: placed again at each re-anchor
             if (Origin.Frame.Epoch != _epoch)
             {
-                // no generated fill to stand behind: the shader's fill push off
-                if (_fill != 1) RenderingServer.GlobalShaderParameterSet(FillHide, _fill = 1);
+                // no generated fill to hide (terrain.gdshaderinc's flat_hide would hide every terrain fragment) and
+                // none to stand behind (globe.gdshader's fill push is off by its own flag in this world)
+                if (_fill != 0) RenderingServer.GlobalShaderParameterSet(FillHide, _fill = 0);
                 _epoch = Origin.Frame.Epoch;
                 Axes = Origin.Frame.Axes ?? Origin.EcefAxes;
                 foreach (var (key, node) in _patches) node.Transform = Place(key);
@@ -311,6 +354,8 @@ public partial class Globe : Node
         _month = month;
         foreach (var node in _patches.Values) node.QueueFree();
         _patches.Clear();
+        _globeMaterials.Clear();
+        _palette.Clear();
         _loading.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         GD.Print($"[globe] month {month}: built again");
@@ -329,9 +374,8 @@ public partial class Globe : Node
             ? new Vector3(light.LightColor.R, light.LightColor.G, light.LightColor.B) * light.LightEnergy : _sunColor;
         if (ambient.IsEqualApprox(_ambient) && sun.IsEqualApprox(_sunColor)) return;
         (_ambient, _sunColor) = (ambient, sun);
-        foreach (var node in _patches.Values)
+        foreach (var m in _globeMaterials.Values)
         {
-            var m = (ShaderMaterial)node.MaterialOverride;
             m.SetShaderParameter(Ambient, ambient);
             m.SetShaderParameter(SunColor, sun);
         }
@@ -345,7 +389,7 @@ public partial class Globe : Node
         var eye = axes.ToEcef(c.X, c.Y, c.Z);
         double eyeR = Math.Sqrt(FrameAxes.Dot(eye, eye));
         var eyeDir = new EcefPos(eye.X / eyeR, eye.Y / eyeR, eye.Z / eyeR);
-        double horizon = Math.Acos(Math.Min(1, EarthR / eyeR));
+        double horizon = GlobeGround.HorizonAngle(eye);
         float viewH = GetViewport().GetVisibleRect().Size.Y;
         double focal = viewH / (2 * Math.Tan(Mathf.DegToRad(cam.Fov) / 2)) * Styles.LodScale.Value;
 
@@ -356,23 +400,28 @@ public partial class Globe : Node
 
     private void Select(CubeKey key, EcefPos eye, EcefPos eyeDir, double horizon, double focal)
     {
+        // drawn whole by the earth world
+        if (_drawnLeaves.Contains(key)) return;
         var anchor = AnchorOf(key);
-        var up = anchor.Up;
-        // the tile's angular radius on the sphere, a little generous: a face spans 90°
+        var centre = anchor.Origin;
+        double centreR = Math.Sqrt(FrameAxes.Dot(centre, centre));
+        // the tile's angular radius seen from the Earth's centre, a little generous: a face spans 90°
         double radius = Math.PI / 2 / key.Side * 0.8;
-        double angle = Math.Acos(Math.Clamp(FrameAxes.Dot(eyeDir, up), -1, 1));
+        double angle = Math.Acos(Math.Clamp(FrameAxes.Dot(eyeDir, centre) / centreR, -1, 1));
         if (angle > horizon + radius) return;
 
-        var centre = new EcefPos(up.X * EarthR, up.Y * EarthR, up.Z * EarthR);
+        // to the tile's nearest edge, from its anchor on the ellipsoid (the sphere's centre stood ~20 km off it
+        // at Swiss latitudes, so the tiles under the camera never split down to the leaves)
         var d = eye - centre;
-        double distance = Math.Max(Math.Sqrt(FrameAxes.Dot(d, d)) - EarthR * radius, 1000);
+        double distance = Math.Max(Math.Sqrt(FrameAxes.Dot(d, d)) - centreR * radius, GlobeGround.NearestM);
         double cell = EarthR * Math.PI / 2 / key.Side / ((1 << CubeKey.LatticeBits(key.Level)) / Stride);
-        bool split = key.Level < _maxLevel && cell / distance * focal > SplitPixels;
+        bool holds = _holdsDrawn.ContainsKey(key);
+        bool split = key.Level < _maxLevel && (holds || cell / distance * focal > SplitPixels);
         if (split)
         {
             bool all = true;
             foreach (var child in key.Children())
-                if (!_patches.ContainsKey(child)) { all = false; Request(child); }
+                if (!_patches.ContainsKey(child) && !_drawnLeaves.Contains(child)) { all = false; Request(child); }
             if (all)
             {
                 foreach (var child in key.Children()) Select(child, eye, eyeDir, horizon, focal);
@@ -403,7 +452,13 @@ public partial class Globe : Node
                 await _workers.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    if (leaves.HeightsOf(key) is { } tile) _ready.Enqueue((key, Build(tile), null, leafMonth));
+                    if (leaves.HeightsOf(key) is { } tile)
+                    {
+                        var (palette, rect) = Earth ? AncestorPalette(key) : (null, default);
+                        // the heights hold the lake's bed (#298): the surface over it, as the leaf draws its water
+                        var water = leaves is Terrain.Leaves.EarthLeaves { Real: var real } && real.Has(key) ? real.WaterOf(key) : null;
+                        if (Build(tile, palette, rect, water) is { } arrays) _ready.Enqueue((key, arrays, null, leafMonth));
+                    }
                 }
                 catch (Exception e)
                 {
@@ -426,16 +481,24 @@ public partial class Globe : Node
             try
             {
                 var tile = CubeTileCodec.Decode(ReadBytes(at));
-                var arrays = Build(tile);
                 Image? colour = null;
                 if (colourAt.Path != null)
                 {
                     var a = CubeAlbedoCodec.Decode(ReadBytes(colourAt));
                     colour = new Image();
-                    if (colour.LoadWebpFromBuffer(a.ForMonth(month)) == Error.Ok) colour.GenerateMipmaps();
-                    else colour = null;
+                    if (colour.LoadWebpFromBuffer(a.ForMonth(month)) != Error.Ok) colour = null;
                 }
-                _ready.Enqueue((key, arrays, colour, month));
+                byte[]? palette = null;
+                var rect = new Vector4(0, 0, 1, 1);
+                if (Earth)
+                {
+                    // the ground's cover per vertex, for the style's terrain material near the ground
+                    if (colour != null) _palette[key] = palette = GlobeGround.Weigh(colour.GetWidth(), colour.GetHeight(), colour.GetPixel);
+                    else (palette, rect) = AncestorPalette(key);
+                }
+                colour?.GenerateMipmaps();
+                // no height at all: the parent's tile stays (the key stays loading, never asked again)
+                if (Build(tile, palette, rect) is { } arrays) _ready.Enqueue((key, arrays, colour, month));
             }
             catch (Exception e)
             {
@@ -455,18 +518,37 @@ public partial class Globe : Node
     /// normals from its neighbours, the colour's UVs (row 0 the south edge, as the image), and a skirt
     /// along each edge hanging a third of a drawn cell, so a neighbour drawn a level coarser leaves no crack.
     /// </summary>
-    public static Godot.Collections.Array Build(CubeTile tile)
+    public static Godot.Collections.Array? Build(CubeTile tile, byte[]? palette = null, Vector4 rect = default, CubeWater? water = null)
     {
         var key = tile.Key;
         int bits = tile.Bits, m = (1 << bits) / Stride, n = m + 1;
         var anchor = key.Anchor;
         var pos = new Vector3[n * n];
         var up = new Vector3[n * n];
+        var hs = new float[n * n];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+                hs[j * n + i] = tile.HeightAt(i * Stride, j * Stride);
+        if (!GlobeGround.FillHoles(hs, n)) return null;
+        // still water's surface over its bed (a leaf's own: heights and water on the same lattice)
+        bool[]? wet = null;
+        if (water != null && water.Bits == bits)
+        {
+            wet = new bool[n * n];
+            int side = water.Side;
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    float level = water.Level[(j * Stride / CubeWater.Stride) * side + i * Stride / CubeWater.Stride];
+                    if (float.IsNaN(level)) continue;
+                    wet[j * n + i] = true;
+                    hs[j * n + i] = Math.Max(hs[j * n + i], level);
+                }
+        }
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
-                float h = tile.HeightAt(i * Stride, j * Stride);
-                if (float.IsNaN(h)) h = 0;
+                float h = hs[j * n + i];
                 var (x, y, z) = CubeGeometry.Exact(key, bits, i * Stride, j * Stride, h);
                 pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
                 var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, ((long)key.X << bits) + i * Stride), CubeSphere.Lattice(key.Level + bits, ((long)key.Y << bits) + j * Stride));
@@ -480,6 +562,7 @@ public partial class Globe : Node
         var verts = new Vector3[total];
         var norms = new Vector3[total];
         var uvs = new Vector2[total];
+        var colours = palette != null ? new Color[total] : null;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -491,6 +574,16 @@ public partial class Globe : Node
                 verts[k] = pos[k];
                 norms[k] = nrm;
                 uvs[k] = new Vector2(i / (float)m, j / (float)m);
+                if (colours != null)
+                {
+                    var weights = GlobeGround.Sample(palette!, rect.X + uvs[k].X * rect.Z, rect.Y + uvs[k].Y * rect.W);
+                    // a leaf's own water decides wet and dry; the colour image only what the dry ground is
+                    if (wet != null) weights = wet[k] ? new Vector4(1, 0, 0, 0) : GlobeGround.Dry(weights);
+                    // a coarser level has no water of its own: a lake's surface is level to the centimetre (Blue
+                    // Marble draws inland lakes black, and the region's colour fades out toward its edge)
+                    else if (GlobeGround.Level(hs, n, i, j)) weights = new Vector4(1, 0, 0, 0);
+                    colours[k] = GlobeGround.Colour(weights, hs[k], Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j));
+                }
             }
 
         // the edge ring, counter-clockwise in (i, j), then its lowered copy
@@ -506,6 +599,7 @@ public partial class Globe : Node
             verts[n * n + e] = pos[k] - up[k] * skirt;
             norms[n * n + e] = norms[k];
             uvs[n * n + e] = uvs[k];
+            if (colours != null) colours[n * n + e] = colours[k];
         }
 
         // Godot's front faces wind clockwise as seen; whether (i, j) runs clockwise from above depends on the face
@@ -539,18 +633,74 @@ public partial class Globe : Node
         arrays[(int)Mesh.ArrayType.Vertex] = verts;
         arrays[(int)Mesh.ArrayType.Normal] = norms;
         arrays[(int)Mesh.ArrayType.TexUV] = uvs;
+        if (colours != null) arrays[(int)Mesh.ArrayType.Color] = colours;
         arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
         return arrays;
+    }
+
+    // each tile's ground cover weights (GlobeGround.Weigh), for its children's vertices too
+    private readonly ConcurrentDictionary<CubeKey, byte[]> _palette = new();
+
+    /// <summary>The nearest ancestor's palette and the part of it over <paramref name="key"/>; none, (null, _).</summary>
+    private (byte[]? Palette, Vector4 Rect) AncestorPalette(CubeKey key)
+    {
+        for (var k = key; k.Level > 0;)
+        {
+            k = k.Parent;
+            if (!_palette.TryGetValue(k, out var p)) continue;
+            int dl = key.Level - k.Level;
+            float scale = 1f / (1 << dl);
+            return (p, new Vector4((key.X - (k.X << dl)) * scale, (key.Y - (k.Y << dl)) * scale, scale, scale));
+        }
+        return (null, default);
     }
 
     private void Commit(CubeKey key, Godot.Collections.Array arrays, Image? colour)
     {
         _loading.Remove(key);
         var node = Patch(key, arrays, colour, _shader);
+        var globe = (ShaderMaterial)node.MaterialOverride;
+        if (colour == null) Inherit(key, globe);
+        _globeMaterials[key] = globe;
+        if (Earth)
+        {
+            // drawn into a frame that turns with the Earth: no fill to stand behind
+            globe.SetShaderParameter(FillPush, false);
+            node.MaterialOverride = MaterialFor(key);
+        }
         node.Visible = false;
         AddChild(node);
         node.Transform = Place(key);
         _patches[key] = node;
+    }
+
+    private static readonly StringName AlbedoTex = "albedo_tex", UvRect = "uv_rect", FillPush = "fill_push";
+
+    /// <summary>A tile's material in the earth world: the style's terrain near the ground, its globe material above.</summary>
+    private Material MaterialFor(CubeKey key) =>
+        _onTerrain ? _terrain ??= Styles.StyleKit.Material(Styles.MaterialRole.Terrain) : _globeMaterials[key];
+
+    /// <summary>
+    /// A tile with no colour of its own (the leaves' level: heights alone) takes its nearest coloured ancestor's
+    /// image, the part over it (the pyramid's Swiss levels are the world's own palette, <see cref="OurColours"/>):
+    /// it was white (#1629).
+    /// </summary>
+    private void Inherit(CubeKey key, ShaderMaterial material)
+    {
+        for (var k = key; k.Level > 0;)
+        {
+            k = k.Parent;
+            if (!_globeMaterials.TryGetValue(k, out var m)
+                || m.GetShaderParameter(AlbedoTex).Obj is not Texture2D tex) continue;
+            int dl = key.Level - k.Level;
+            float scale = 1f / (1 << dl);
+            var rect = m.GetShaderParameter(UvRect).Obj is Vector4 r ? r : new Vector4(0, 0, 1, 1);
+            // within the ancestor's own rectangle of its image
+            var sub = new Vector4((key.X - (k.X << dl)) * scale, (key.Y - (k.Y << dl)) * scale, scale, scale);
+            material.SetShaderParameter(AlbedoTex, tex);
+            material.SetShaderParameter(UvRect, new Vector4(rect.X + sub.X * rect.Z, rect.Y + sub.Y * rect.W, sub.Z * rect.Z, sub.W * rect.W));
+            return;
+        }
     }
 
     /// <summary>A tile's drawn patch: its mesh and its colour, in its anchor frame.</summary>
@@ -615,7 +765,8 @@ public partial class Globe : Node
                 colour = new Image();
                 if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(ReadBytes(c)).ForMonth(7)) != Error.Ok) colour = null;
             }
-            var node = Patch(key, Build(tile), colour, shader);
+            if (Build(tile) is not { } arrays) continue;
+            var node = Patch(key, arrays, colour, shader);
             root.AddChild(node);
             if (earthFixed) node.Transform = PlaceIn(earth, key.Anchor);
         }
