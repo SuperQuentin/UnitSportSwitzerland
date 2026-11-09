@@ -117,6 +117,9 @@ tools/refshot-parity.sh c6-<commit>
   takes a view or `class:<c>` out of the count into "judged by eye" (`far` and `edge`: curvature is geometry on
   earth, #187; `space` until #1630/#1631), `mask x0,y0,x1,y1` leaves a part of the picture out of the numbers
   (grey on the heatmap). Each line says why; remove it once its difference is gone.
+- **A fresh worktree** needs `git lfs pull` and a headless `--import` (with `dotnet build`) before any windowed
+  shot: without them the fonts and the space and realistic textures are missing from every picture (the import
+  marks an LFS pointer file `valid=false` and rewrites its `.import`; `git checkout -- assets` after a pull).
 - `space` views (60 and 400 km, the limb and the ground straight down) are in the catalogue for both worlds.
   Both get the same pyramid (`GLOBE`, B4's `cube_global`).
 - The gate holds when `summary.md` has no shot over its floor and a person has looked at every judged sheet and

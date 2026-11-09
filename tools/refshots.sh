@@ -22,6 +22,7 @@
 #             started there (--at, --origin): the flat side of an earth comparison. Always so under --frame earth
 #   LEAVES    --frame earth: the cube leaves (D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube)
 #   GLOBE     the cube_global pyramid (--globe); --frame earth: B4's (D:/UnitSportSwitzerland/test_b3/b4/cube_global)
+#   RESUME    1: only the views with no picture yet in <tag> (a launch the RAM guard killed); a kept log stays
 #   HEIGHTS   --frame earth: a flat library (<root>/<tag>) whose logs give each "g" view's altitude, so both worlds
 #             stand at the same point (without it a "g" view stands above the earth ground)
 # Every run plays in a fresh user:// of its own (no player's settings), muted (Dummy audio), at low
@@ -78,6 +79,7 @@ poses() { # style dir
   [ "${ANCHORS:-0}" = 1 ] && o+=(--anchors)
   [ -n "${VIEWS:-}" ] && o+=(--views "$VIEWS")
   [ -n "${HEIGHTS:-}" ] && o+=(--heights "$HEIGHTS/$1")
+  [ "${RESUME:-0}" = 1 ] && o+=(--resume)
   rm -rf "$scratch/q_$1"
   python tools/refshot-poses.py "${o[@]}"
 }
@@ -117,8 +119,10 @@ for style in $STYLES; do
     envset=$(profile_env "$prof" | head -1)
     at=(--origin "$ae,$an"); log=$out/$style/$style.$date.log
     if [ "${ANCHORS:-0}" = 1 ]; then at=(--at "$ae,$an" --origin "$ae,$an"); log=$out/$style/$style.$date.${ae}_$an.log; fi
+    # a retake keeps the earlier log (its "wrote ... at" lines are HEIGHTS' altitudes)
+    n=1; while [ -f "$log" ]; do log=${log%.log}; log=${log%.r[0-9]*}.r$n.log; n=$((n + 1)); done
     echo "[refshots] $style $date ${at[*]}: $shots views"
-    guard_wait_ram 6
+    guard_wait_ram 6 7200 || { echo "[refshots] skipped: no 6 GB free (RESUME=1 retakes it)"; continue; }
     # shellcheck disable=SC2086
     guard_run 3600 "$log" env "$envset" "$GODOT" --resolution "$SIZE" --position 24,48 --audio-driver Dummy --path . -- \
       --chunks "$CHUNKS" --shot-queue "$q" "${at[@]}" --nohud --nocapture --date "$date" --time "$HOUR0" \

@@ -2,7 +2,7 @@
 """The shot queues of tools/refshots.sh (#1429; --frame earth for G2 C6, #1500): one per launch.
 
     tools/refshot-poses.py VIEWS_TXT OUT_DIR PNG_DIR [--frame flat|earth] [--anchors] [--heights LIB/STYLE]
-                           [--views "a b"] [--settle S] [--hour H] [--date D]
+                           [--views "a b"] [--resume] [--settle S] [--hour H] [--date D]
 
 Reads the catalogue (name class E N height pitch bearing [hour] [date]) and writes OUT_DIR/q_<n>.txt, one queue per
 launch, and prints the launches, one a line: "<queue> <date> <anchorE> <anchorN> <shots>".
@@ -19,6 +19,7 @@ flat, no --anchors: one launch per date, every view relative to the catalogue's 
     the same place looking the same way as the flat one: its direction is taken in the flat world's own axes at the
     place (FrameAxes.GroundAt: grid east, the ellipsoid's up, grid north) and turned into the anchor's, so the
     grid's convergence (~0.9 deg at Geneva) and the Earth's curvature are in the numbers, not in the picture.
+--resume: leaves out the views whose picture is already in PNG_DIR (a launch killed on a busy machine, retaken).
 --heights LIB/STYLE: the flat library's logs of that style ("[shot] wrote <view>.png ... at (x, y, z)"): a "g" view
     is taken at the altitude the flat shot stood at (y is the LHN95 altitude in the flat ground frame), so both
     worlds stand at the same point even where their grounds differ. Without it a "g" view keeps its "g" (above
@@ -200,7 +201,7 @@ def main(argv):
     i = 1
     while i < len(argv):
         a = argv[i]
-        if a == "--anchors":
+        if a in ("--anchors", "--resume"):
             flags.add(a)
         elif a.startswith("--"):
             opts[a] = argv[i + 1]
@@ -260,6 +261,8 @@ def main(argv):
                 h, m = int(hf), int((hf - int(hf)) * 60 + 0.5)
                 lines.append(f"/time set {h}:{m:02d}")
             path = f"{png_dir}/{v['name']}.png"
+            if "--resume" in flags and os.path.exists(path):
+                continue
             hs = v["h"]
             if axes is None:
                 y = hs if hs[0] in "gil" else num(hs)

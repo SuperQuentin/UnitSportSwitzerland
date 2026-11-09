@@ -28,11 +28,26 @@ earth=$ROOT/$tag-earth
 if [ "$SKIP" != shots ]; then
   [ -n "${GUARD_LOCK_HELD:-}" ] || { GUARD_WHAT="refshot-parity $tag" guard_lock 7200 10800 || exit 1; }
   trap guard_unlock EXIT
+  # a shared machine: a launch the RAM guard kills is taken again, the views already shot left (RESUME)
+  # (a VIEWS subset: one take, no count)
+  views=$(grep -cvE '^\s*(#|$)' tests/refshots/views.txt)
+  if [ -n "${VIEWS:-}" ]; then views=$(wc -w <<< "$VIEWS"); fi
+  want=$(( views * $(wc -w <<< "${STYLES:-cartoon ps1 real-}") ))
+  take() { # library, then refshots.sh's arguments
+    local lib=$1 try have; shift
+    for try in 1 2 3; do
+      RESUME=1 tools/refshots.sh "$@" || return $?
+      have=$(find "$lib" -mindepth 2 -maxdepth 2 -name '*.png' 2>/dev/null | wc -l)
+      [ "$have" -ge "$want" ] && return 0
+      echo "[parity] $have of $want pictures after take $try"
+    done
+    return 0   # the diff lists what is missing
+  }
   if [ "$SKIP" != flat ]; then
-    ANCHORS=1 tools/refshots.sh --frame flat "$tag-flat" || exit $?
+    ANCHORS=1 take "$flat" --frame flat "$tag-flat" || exit $?
   fi
   [ -d "$flat" ] || { echo "no flat library $flat" >&2; exit 2; }
-  HEIGHTS=$flat tools/refshots.sh --frame earth "$tag-earth" || exit $?
+  HEIGHTS=$flat take "$earth" --frame earth "$tag-earth" || exit $?
   guard_unlock
 fi
 
