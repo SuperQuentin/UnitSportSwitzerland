@@ -10,7 +10,7 @@ decisions were made with the user on 2026-11-08.
 ## What there is (PR 1, #1576: bare ground)
 
 - **The switch**: `--frame flat|earth`, stored as `GameSettings.Frame`.
-  - Offline only until C4: a networked launch, or a fixture course, falls back to `flat` with a warning.
+  - Online too since #1513 (PR #1610): the server on leaves (`net/server-regions`); a fixture course falls back to `flat`.
 - **The leaves**: `Leaves/LeafStore` (Godot-free).
   - `Open(dir)` indexes every `.cubl` bundle; `Get(key)` reads and decodes a leaf on its first ask and keeps the last 96.
   - `Cached(key)` never touches the disk; `Keys`/`Has` are the real-leaf set.
@@ -55,4 +55,4 @@ decisions were made with the user on 2026-11-08.
 
 - PR 2: roads, buildings, trees, water and doors drawn on leaves, through a leaf-frame grid standing in for `ChunkGrid`.
 - PR 3: generated and fixture leaves and their blend against real ones.
-- C3: the frame turns; C4: the server on leaves.
+- C3: the frame turns. (C4's server on leaves: `net/server-regions`.)

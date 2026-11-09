@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The server on leaves under `--frame earth` ([#1610](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1610), [#1513](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1513))
+
+A server and two windowed clients, all with `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, both clients `--at 2500956,1117569` (Geneva).
+
+- [ ] Walk, run and jump beside the other player, with the server also given `--bots 3 --botsat 2500956,1117569` → each sees the other and the bots standing on the drawn leaves (no hovering, no sinking), turning the way they walk.
+- [ ] One client teleports to Riddes (`--at 2581500,1113300` on a rejoin) and back → the other sees it go and come back, on the ground both times.
+
 ## Maps and GPX on the oblique stereographic ([#1581](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1581), [#1514](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1514))
 
 On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Scuol, where LV95's grid north is 2° off true north.

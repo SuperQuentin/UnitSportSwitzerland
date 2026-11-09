@@ -8,7 +8,6 @@
 # the leaves' collision patches, each client in an ENU frame of its own on the same leaves (default Geneva).
 #   EARTH=1 [LEAVES=<dir>] [CHUNKS=<dir>] [AT=E,N] tools/botcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" bots
-AT=2583250,1113250
 WORLD=(--generated-world)
 CWORLD=()
 if [ -n "${EARTH:-}" ]; then
@@ -18,6 +17,8 @@ if [ -n "${EARTH:-}" ]; then
   if [ ! -d "$LEAVES" ]; then echo "[botcheck] no LEAVES with built leaves: skipped"; echo "[botcheck] RESULT: ok (skipped)"; exit 0; fi
   WORLD=(--frame earth --leaves "$LEAVES" --chunks "$CHUNKS")
   CWORLD=("${WORLD[@]}")
+else
+  AT=2583250,1113250
 fi
 AT_B="$(( ${AT%,*} + 12 )),${AT#*,}"   # never on top of A
 PORT=7836
