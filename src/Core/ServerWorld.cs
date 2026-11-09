@@ -112,7 +112,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
         // --frame earth (#1513, G2 C4): the server's world is the ENU frame on the manifest origin at height 0, standing on
-        // the region's leaves; its far regions are ENU frames too (ServerRegions.Enu). Not on a fixture course (no leaves)
+        // the region's leaves; its far regions are ENU frames too (ServerRegions.Enu). Not on a fixture course (no leaves).
+        // From the command line alone: a server never reads the machine's settings file (a client's choice)
+        if (Enum.TryParse<WorldFrame>(CmdArgs.Value("--frame"), true, out var frame)) GameSettings.Current.Frame = frame;
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && Systems.FixtureCourse == null;
         if (earth) origin = new WorldOrigin(FrameAxes.Enu(SwissGeodesy.ToEcef(origin.E, origin.N, 0)));
         _origin = origin;
