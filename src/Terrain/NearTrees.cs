@@ -124,8 +124,11 @@ public partial class NearTrees : Node3D, IOriginShiftAware
             float dz = Mathf.Max(0, Mathf.Max(o.Z - at.Z, at.Z - (o.Z + 1000f)));
             float d2 = dx * dx + dz * dz;
             if (d2 > cone.Near2 && (d2 > cone.Far2 || !Styles.LodScale.InCone(o + TileCentre, TileHalfDiagonal))) continue;
-            nc = Gather(b.Conifers, b.ConiferCount, o, self, cone, _coniferBuf, nc, _capacity);
-            nb = Gather(b.Broadleaves, b.BroadleafCount, o, self, cone, _broadleafBuf, nb, _capacity);
+            // an earth world's leaf (#1510) is turned a little in the world: its trees through its whole transform
+            var basis = tile.GlobalBasis;
+            Basis? turn = basis.IsEqualApprox(Basis.Identity) ? null : basis;
+            nc = Gather(b.Conifers, b.ConiferCount, o, turn, self, cone, _coniferBuf, nc, _capacity);
+            nb = Gather(b.Broadleaves, b.BroadleafCount, o, turn, self, cone, _broadleafBuf, nb, _capacity);
         }
         // a zoomed cone over a forest holds more than the buffers: grow them, and refill next frame
         if ((nc >= _capacity || nb >= _capacity) && _capacity < MaxCapacity)
@@ -186,13 +189,19 @@ public partial class NearTrees : Node3D, IOriginShiftAware
     }
 
     /// <summary>Copies a tile's trees within reach, placed relative to this node. Returns the new count.</summary>
-    private static int Gather(float[] src, int count, Vector3 tile, Vector3 self, in Cone cone, float[] dst, int n, int capacity)
+    private static int Gather(float[] src, int count, Vector3 tile, Basis? turn, Vector3 self, in Cone cone, float[] dst, int n, int capacity)
     {
         var at = cone.At;
         for (int i = 0; i < count && n < capacity; i++)
         {
             int s = i * FloatsPerInstance;
-            float x = src[s + 3] + tile.X, y = src[s + 7] + tile.Y, z = src[s + 11] + tile.Z;
+            float x, y, z;
+            if (turn is { } t)
+            {
+                var p = tile + t * new Vector3(src[s + 3], src[s + 7], src[s + 11]);
+                (x, y, z) = (p.X, p.Y, p.Z);
+            }
+            else (x, y, z) = (src[s + 3] + tile.X, src[s + 7] + tile.Y, src[s + 11] + tile.Z);
             if (!cone.Takes(x - at.X, z - at.Z)) continue;
             int d = n * FloatsPerInstance;
             System.Array.Copy(src, s, dst, d, FloatsPerInstance);

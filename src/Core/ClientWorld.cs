@@ -1885,7 +1885,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _nearTrees = new NearTrees(CatalogueTree(ModelCatalog.TreeConifer) ?? cone,
             CatalogueTree(ModelCatalog.TreeBroadleaf) ?? crown, StyleKit.TreeReach);
         // under the terrain, an origin container: the floating origin moves it with the tiles
-        _chunks!.AddChild(_nearTrees);
+        // the earth world's leaves draw theirs there (#1510): the flat streamer is out of the tree
+        ((Node?)_earth ?? _chunks!).AddChild(_nearTrees);
         // the debug menu may have hidden the trees before this style made its own
         _nearTrees.Visible = (_chunks.HiddenLayers & TileLayers.Trees) == 0;
     }
