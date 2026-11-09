@@ -45,3 +45,26 @@ public class SnowCeilingTests
         Assert.Equal(0.5f, SnowCeiling.Share(SnowCeiling.CloudBaseAboveGroundM, 0), 3);   // half way at the base
     }
 }
+
+/// <summary>The cloud deck while it snows (#1643): over the snow's fade, full under 12 km, gone in space. Pure.</summary>
+public class CloudDeckTests
+{
+    [Fact]
+    public void The_snow_stops_inside_the_deck()
+    {
+        Assert.True(SnowCeiling.DeckBaseAboveGroundM < SnowCeiling.CloudBaseAboveGroundM);
+        Assert.True(SnowCeiling.DeckTopAboveGroundM >= SnowCeiling.CloudBaseAboveGroundM + SnowCeiling.FadeM / 2);
+    }
+
+    [Fact]
+    public void Full_while_it_snows_none_without_snow_or_in_space()
+    {
+        Assert.Equal(1f, SnowCeiling.DeckStrength(0.6f, 500), 3);      // Christmas, on the ground
+        Assert.Equal(1f, SnowCeiling.DeckStrength(0.6f, 11_000), 3);   // an airliner over it
+        Assert.Equal(0.5f, SnowCeiling.DeckStrength(0.15f, 500), 3);   // light snow, a thinner deck
+        Assert.Equal(0f, SnowCeiling.DeckStrength(0f, 500));
+        Assert.Equal(0f, SnowCeiling.DeckStrength(0.6f, 60_000));      // the shuttle
+        float mid = SnowCeiling.DeckStrength(0.6f, 16_000);
+        Assert.InRange(mid, 0.4f, 0.6f);
+    }
+}

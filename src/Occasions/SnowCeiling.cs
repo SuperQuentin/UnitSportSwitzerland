@@ -29,6 +29,19 @@ public static class SnowCeiling
         return (float)(ceiling * thin);
     }
 
+    /// <summary>The cloud deck drawn while it snows (#1643), m over the same ground: the snow fades out in its lower part.</summary>
+    public const double DeckBaseAboveGroundM = 1_900, DeckTopAboveGroundM = 2_400;
+
+    /// <summary>Camera altitudes (m) across which the deck fades out: space keeps its view of the Earth.</summary>
+    public const double DeckGoneFromM = 12_000, DeckGoneAboveM = 20_000;
+
+    /// <summary>The snowfall that makes a full overcast; lighter snow, a thinner deck.</summary>
+    public const float FullDeckSnowfall = 0.3f;
+
+    /// <summary>How much of the cloud deck is drawn, 0..1, for this snowfall and a camera at this altitude.</summary>
+    public static float DeckStrength(float snowfall, double altitude) =>
+        (float)(Math.Clamp(snowfall / FullDeckSnowfall, 0, 1) * (1 - Smooth(DeckGoneFromM, DeckGoneAboveM, altitude)));
+
     private static double Smooth(double from, double to, double x)
     {
         double t = Math.Clamp((x - from) / (to - from), 0, 1);
