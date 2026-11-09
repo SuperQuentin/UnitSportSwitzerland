@@ -9,7 +9,9 @@ namespace UnitSport.Occasions;
 /// this node only builds it once and sets its density: thinner in the low valleys and none above the
 /// cloud layer (<see cref="SnowCeiling"/>, #1637), by the camera's altitude through the world's frame
 /// (in the earth frame and in space world Y is not the altitude). The shader draws nothing indoors,
-/// per camera, so a door portal looking out shows the street's snow. Client only.
+/// per camera, so a door portal looking out shows the street's snow. While it snows a cloud deck
+/// hangs over it (#1643, <c>cloud_deck.gdshader</c>): a slab of fog over the same ground, one
+/// full-screen pass. Client only.
 /// </summary>
 public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 {
@@ -18,6 +20,8 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 
     private MeshInstance3D _snow = null!;
     private ShaderMaterial _material = null!;
+    private MeshInstance3D _deck = null!;
+    private ShaderMaterial _deckMaterial = null!;
 
     private readonly WorldOrigin? _origin;
     private readonly Func<Vector3, float?>? _groundHeight;
@@ -45,9 +49,24 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
             Visible = false,
         };
         AddChild(_snow);
+
+        _deckMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/cloud_deck.gdshader") };
+        // after the other transparent passes (the water's surface is not in the depth buffer)
+        _deckMaterial.RenderPriority = (int)Material.RenderPriorityMax - 1;
+        _deck = new MeshInstance3D
+        {
+            Name = "CloudDeck",
+            Mesh = new QuadMesh { Size = new Vector2(2, 2) },
+            MaterialOverride = _deckMaterial,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // the shader puts it over the whole screen: never cull it
+            ExtraCullMargin = 16384f,
+            Visible = false,
+        };
+        AddChild(_deck);
     }
 
-    private static readonly StringName Density = "density";
+    private static readonly StringName Density = "density", DeckBase = "deck_base", DeckTop = "deck_top", Strength = "strength";
 
     private static OccasionPrecip? _instance;
     private static float? _snowfallOverride;
@@ -85,20 +104,7 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
     // the ground's altitude the cloud layer sits on: NaN until one is known
     private double _groundAlt = double.NaN;
     private float _groundSampleIn;
-    private float _pushed = -1f;
-
-    /// <summary>The share of <see cref="Snowfall"/> drawn now, by the camera's height (<see cref="SnowCeiling"/>).</summary>
-    public static float Share => _instance?.CameraShare() ?? 1f;
-
-    private float CameraShare()
-    {
-        if (GetViewport()?.GetCamera3D() is not { } cam) return 1f;
-        var at = cam.GlobalPosition;
-        // indoors (3 km down) the shader hides the flakes itself; a door portal looks out at street level
-        if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return 1f;
-        double altitude = _origin?.AltitudeOf(at) ?? at.Y;
-        return SnowCeiling.Share(altitude, double.IsNaN(_groundAlt) ? 0 : _groundAlt);
-    }
+    private float _pushed = -1f, _pushedBase = float.NaN, _pushedStrength = -1f;
 
     /// <summary>
     /// The lowest ground round the camera (under it and 1.5 km out on eight sides), as an altitude,
@@ -128,17 +134,40 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
     {
         if (_snow == null) return;
         float snowfall = Snowfall;
-        float density = snowfall * CameraShare();
+        var cam = GetViewport()?.GetCamera3D();
+        // indoors (3 km down) the snow shader hides the flakes itself, and a door portal looks out at street level
+        bool indoors = cam == null || cam.GlobalPosition.Y < Interiors.InteriorManager.InteriorBaseY + 1000f;
+        double altitude = cam == null ? 0 : _origin?.AltitudeOf(cam.GlobalPosition) ?? cam.GlobalPosition.Y;
+        double ground = double.IsNaN(_groundAlt) ? 0 : _groundAlt;
+
+        float density = snowfall * (indoors ? 1f : SnowCeiling.Share(altitude, ground));
         bool shown = density > 0.001f;
         // the cloud layer crossed (not the occasion starting or ending): logged, it is rare
-        if (shown != _snow.Visible && snowfall > 0f && GetViewport()?.GetCamera3D() is { } cam)
-            GD.Print(FormattableString.Invariant(
-                $"[snow] {(shown ? "under" : "above")} the clouds at {_origin?.AltitudeOf(cam.GlobalPosition) ?? cam.GlobalPosition.Y:F0} m, ground {_groundAlt:F0} m"));
+        if (shown != _snow.Visible && snowfall > 0f && cam != null)
+            GD.Print(FormattableString.Invariant($"[snow] {(shown ? "under" : "above")} the clouds at {altitude:F0} m, ground {_groundAlt:F0} m"));
         _snow.Visible = shown;
         if (_snow.Visible && Mathf.Abs(density - _pushed) > 0.002f)
         {
             _pushed = density;
             _material.SetShaderParameter(Density, density);
+        }
+
+        // the deck, its heights over the camera: none indoors
+        float strength = indoors ? 0f : SnowCeiling.DeckStrength(snowfall, altitude);
+        _deck.Visible = strength > 0.001f;
+        if (!_deck.Visible) return;
+        float under = (float)(ground - altitude);
+        float deckBase = under + (float)SnowCeiling.DeckBaseAboveGroundM, deckTop = under + (float)SnowCeiling.DeckTopAboveGroundM;
+        if (!(Mathf.Abs(deckBase - _pushedBase) < 0.05f))
+        {
+            _pushedBase = deckBase;
+            _deckMaterial.SetShaderParameter(DeckBase, deckBase);
+            _deckMaterial.SetShaderParameter(DeckTop, deckTop);
+        }
+        if (Mathf.Abs(strength - _pushedStrength) > 0.002f)
+        {
+            _pushedStrength = strength;
+            _deckMaterial.SetShaderParameter(Strength, strength);
         }
     }
 
