@@ -22,6 +22,8 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 
 - [ ] Walk, then drive a car, NE for 4 km across a re-anchor → no jump, no hitch in the view or the steering, the body stays on the ground, the horizon stays level.
 - [ ] Fly the spectator 2 km up across two re-anchors, looking at the far ground → the far ground falls away smoothly (round leaves plus refraction's small lift), no step at the re-anchor.
+- [ ] Patterns ([#1627](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1627)), in Realistic (`--style real-`): drive along a Geneva street across a re-anchor watching the asphalt and the roof tiles, then stand at the lake shore (`--at 2500700,1118300`) with `/seastate gamey` → no texture slides or jumps, the waves keep rolling the same way, a boat on them bobs with the drawn crests.
+- [ ] The same in the headset (PC VR, then the Quest at Very low) → the textures hold in both eyes.
 
 ## The server on leaves under `--frame earth` ([#1610](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1610), [#1513](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1513))
 
