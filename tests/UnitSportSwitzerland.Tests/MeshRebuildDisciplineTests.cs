@@ -59,6 +59,7 @@ public class MeshRebuildDisciplineTests
     {
         // ---- built when what it is changes ----
         ["src/Terrain/CubeHarness.cs:Commit"] = "on change: a streamed cube tile when it loads or its LOD step changes, one commit a frame at most (#1443 G1 harness)",
+        ["src/Terrain/Earth/EarthWorld.Furnish.cs:Furnish"] = "on change: a leaf's roads, buildings, trees and water once, on the worker that loads it; never rebuilt, a shift only places its node again (#1510)",
         ["src/Terrain/Earth/EarthWorld.cs:Add"] = "on change: a leaf's ground once, when its worker has meshed it (under the commit budget); never rebuilt, a shift only places it again (#1510)",
         ["src/World/Globe/Globe.cs:Patch"] = "on change: a globe tile once, when its worker has built it (at most four a frame); never rebuilt, a shift only moves it (#1430 H4)",
         ["src/Farming/FarmField.Draw.cs:Commit"] = "on change: a field chunk when its version, LOD, month or growth step changes, one commit a frame at most",
