@@ -27,10 +27,24 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   its own altitude, as the flat horizon blocks are: open ground in altitude bands, the snow line. The photo's own
   colours (Blue Marble olive; over the region the palette averaged with roofs) drew a pale beige plain.
   A tile with no colour (the leaves' level) takes its ancestor's weights for its part (`AncestorPalette`).
-- **Water**: a leaf-level tile's heights are the lake's bed (#298); `LeafStore.WaterOf` reads the leaf's water section
-  alone and lifts the bed to the surface, the leaf's water deciding wet and dry. Coarser levels already hold the
-  surface; there a vertex whose eight neighbours are level within 5 cm is water (`GlobeGround.Level`: Blue Marble draws
-  inland lakes black).
-- **Holes**: NaN heights (past the data a level was built from) are filled from their neighbours
-  (`GlobeGround.FillHoles`); they drew at 0 m. A tile with no height at all is not built (its parent stays).
+- **Far leaves** (`Globe.FarLeaves.cs`), the flat world's real-tile rings: within `FarLeafM` (the flat streamer's ring
+  radius, 15.5 km at Medium) every ancestor of a real leaf splits down to the leaves, and a real leaf is built from its
+  own heights, water, cover and trees (`LeafStore.Sections`: those sections alone, never cached, so `EarthWorld`'s 96
+  near leaves are not churned) at `LeafStride` 16 (32 cells of 19 m): painted by its cover as flat tiles are, its trees
+  as far billboards (`FarTreeShare`, the flat far rings' 25 %, an even share by index). Within `FarBuildingsM` (the
+  flat building rings, 3.5 km) its buildings come as boxes (`BuildingMeshBuilder.BuildProxies`, what flat draws past
+  1 km), asked after each plan and dropped 500 m past it. Built in the leaf's anchor frame under the tile's node; the
+  materials are the flat streamer's (`FurnishMaterials`), the terrain one is the world's (`FogUniforms`, restyled).
+  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes.
+- **Water**: a leaf-level tile's heights are the lake's bed (#298, Lavaux's 310 m down). It is lifted to the leaf's own
+  water, and to the coarser level's surface sampled under it (`FillFromAncestors`) where that is level or the leaf lies
+  more than `BedM` (20 m) under it (shore vertices outside the leaf's water mask drew a wall that deep). Coarser levels
+  hold the surface; there a vertex whose eight neighbours are level within 5 cm is water (`GlobeGround.Level`: Blue
+  Marble draws inland lakes black).
+- **Data seen in the far view** (not fixed here): the pyramid's Swiss levels (`cube_global`, built by `--cube-swiss`
+  from G1's `region14` leaves) stand the lake 3.8 m apart in places (418.4 / 422.2 m ellipsoidal) and hold a straight
+  trench ~1.5 km long by the shore east of Lavaux (at levels 12 and 13, any shader): to rebuild from B4's leaves.
+- **Holes**: NaN heights (past the data a level was built from) come from the coarser levels first
+  (`GlobeGround.FillFromAncestors`, bilinear in each ancestor's lattice), then from their neighbours
+  (`GlobeGround.FillHoles`, never taken for water); they drew at 0 m. A tile with no height at all is not built.
 - Checks: `GlobeGroundTests`; side-by-sides at Geneva against flat (`--origin 2500300,1117900 --at …`, a `--shot-queue`).

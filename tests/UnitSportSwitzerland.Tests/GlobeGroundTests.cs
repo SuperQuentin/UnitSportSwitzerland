@@ -40,6 +40,27 @@ public class GlobeGroundTests
     }
 
     [Fact]
+    public void Missing_heights_come_from_the_coarser_levels_first()
+    {
+        // a parent whose heights rise 1 m per sample eastward; its child (the south-west quarter) lost everything
+        const int bits = 3, side = (1 << bits) + 1;
+        var parent = new CubeKey(0, 10, 5, 7);
+        var child = new CubeKey(0, 11, 10, 14);
+        var heights = new float[side * side];
+        for (int j = 0; j < side; j++)
+            for (int i = 0; i < side; i++) heights[j * side + i] = 100 + i;
+        var tile = new CubeTile { Key = parent, Bits = bits, Heights = heights };
+        var hs = new float[side * side];
+        Array.Fill(hs, float.NaN);
+        GlobeGround.FillFromAncestors(hs, side, child, bits, 1, k => k == parent ? tile : null);
+        // child vertex i is parent sample i / 2: 100 at the west edge, 104 at the east
+        Assert.Equal(100f, hs[0], 3);
+        Assert.Equal(102f, hs[4], 3);
+        Assert.Equal(104f, hs[8], 3);
+        Assert.Equal(101.5f, hs[5 * side + 3], 3);
+    }
+
+    [Fact]
     public void Still_water_is_level_and_land_is_not()
     {
         const int n = 3;

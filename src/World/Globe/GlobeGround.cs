@@ -77,6 +77,13 @@ public static class GlobeGround
         return [water, Math.Max(forest, 0), Math.Max(rock, 0), snow];
     }
 
+    /// <summary>
+    /// A leaf vertex this far under the coarser level's surface, metres, lies on a lake's bed (#298) even where that
+    /// surface is not level (a shore): the pyramid's levels over the region hold the water's surface on a 2.4 m lattice.
+    /// Well over what the region's two builds differ by on land (the lake stands 3.8 m apart in places).
+    /// </summary>
+    public const float BedM = 20f;
+
     /// <summary>How level still water is, metres: every neighbour of a vertex within this of it.</summary>
     public const float LevelM = 0.05f;
 
@@ -156,6 +163,38 @@ public static class GlobeGround
         double r = Math.Sqrt(nadir.X * nadir.X + nadir.Y * nadir.Y + nadir.Z * nadir.Z);
         double h = Math.Max(g.H, 1);
         return Math.Acos(r / (r + h)) + Math.Acos(r / (r + PeakM));
+    }
+
+    /// <summary>
+    /// A tile's missing heights (NaN) taken from its ancestors, nearest first: the vertex (i·stride, j·stride) of
+    /// <paramref name="key"/>'s lattice (<paramref name="bits"/>) is a point of each coarser tile's own lattice, read
+    /// bilinearly from its four samples when all four are there. The pyramid's Swiss levels were built from the leaves
+    /// alone, so past them (the French side of the region) they hold NaN where the global levels above have relief.
+    /// </summary>
+    public static void FillFromAncestors(float[] hs, int n, CubeKey key, int bits, int stride, Func<CubeKey, CubeTile?> load)
+    {
+        for (int level = key.Level - 1; level >= 0; level--)
+        {
+            if (Array.TrueForAll(hs, h => !float.IsNaN(h))) return;
+            var up = key.AncestorAt(level);
+            if (load(up) is not { } tile) continue;
+            int dl = key.Level - level, abits = tile.Bits, side = (1 << abits) + 1;
+            // a vertex's place in the ancestor's lattice, in its samples
+            double scale = Math.Pow(2, abits - bits - dl);
+            double ox = ((key.X - ((long)up.X << dl)) << bits) * scale, oy = ((key.Y - ((long)up.Y << dl)) << bits) * scale;
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    int k = j * n + i;
+                    if (!float.IsNaN(hs[k])) continue;
+                    double fx = ox + i * stride * scale, fy = oy + j * stride * scale;
+                    int x0 = Math.Clamp((int)fx, 0, side - 2), y0 = Math.Clamp((int)fy, 0, side - 2);
+                    float tx = (float)(fx - x0), ty = (float)(fy - y0);
+                    float a = tile.HeightAt(x0, y0), b = tile.HeightAt(x0 + 1, y0), c = tile.HeightAt(x0, y0 + 1), d = tile.HeightAt(x0 + 1, y0 + 1);
+                    float h = (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+                    if (!float.IsNaN(h)) hs[k] = h;
+                }
+        }
     }
 
     /// <summary>

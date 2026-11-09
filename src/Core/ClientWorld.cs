@@ -795,9 +795,22 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
                     ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
                     : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
-                // the globe steps aside where a leaf is drawn whole (#1629)
+                // the globe steps aside where a leaf is drawn whole, and is the far view at every altitude (#1629): the
+                // region's leaves furnished out to the flat world's rings, in the world's own materials
                 if (_earth != null)
                 {
+                    var globeTerrain = StyleKit.Material(MaterialRole.Terrain);
+                    FogUniforms.Apply(globeTerrain);
+                    _worldMaterials = [.. _worldMaterials, globeTerrain];
+                    g.TerrainMaterial = globeTerrain;
+                    if (_chunks is { } flat)
+                    {
+                        var (_, building, tree, _, _) = flat.FurnishMaterials;
+                        (g.BuildingMaterial, g.TreeMaterial) = (building, tree);
+                        g.FarLeafM = (flat.Lod.Rings[^1].MaxDist + 0.5) * 1000;
+                        g.FarBuildingsM = (flat.Lod.BuildingMaxDist + 0.5) * 1000;
+                        g.FarTreeShare = flat.Lod.TreeDensity(3);
+                    }
                     _earth.TileEntered += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, true); };
                     _earth.TileUnloaded += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, false); };
                 }

@@ -89,15 +89,30 @@ public sealed class LeafStore : ILeafSource
     }
 
     /// <summary>
-    /// A leaf's still water alone (the globe's last level lifts the lake beds the heights hold to it, #1629), decoded
-    /// from its entry without the other sections and not kept; the decoded leaf's own when it is held. Null where the
-    /// region holds none or the leaf has no water section.
+    /// Some of a leaf's sections alone (the globe's far leaves: heights, water, cover, trees, buildings, #1629), decoded
+    /// from its entry without the rest and not kept, so the near leaves' cache is not churned; the decoded leaf itself
+    /// when it is held. Null where the region holds none.
     /// </summary>
-    public CubeWater? WaterOf(CubeKey key)
+    public CubeLeafContent? Sections(CubeKey key, params LeafKind[] kinds)
     {
-        if (Cached(key) is { } held) return held.Water;
+        if (Cached(key) is { } held) return held;
         if (!_index.ContainsKey(key)) return null;
-        return CubeLeafCodec.ReadSection(Entry(key), LeafKind.Water) is { } s ? LeafWater.Decode(s) : null;
+        var bytes = Entry(key);
+        var c = new CubeLeafContent { Key = key };
+        foreach (var kind in kinds)
+        {
+            if (CubeLeafCodec.ReadSection(bytes, kind) is not { } s) continue;
+            switch (kind)
+            {
+                case LeafKind.Heights: c.Heights = LeafHeights.Decode(s); break;
+                case LeafKind.Cover: c.Cover = LeafCover.Decode(s); break;
+                case LeafKind.Water: c.Water = LeafWater.Decode(s); break;
+                case LeafKind.Buildings: c.Buildings = LeafBuildings.Decode(s); break;
+                case LeafKind.Trees: c.Trees = LeafTrees.Decode(s); break;
+                default: throw new ArgumentException($"{kind} is not read alone", nameof(kinds));
+            }
+        }
+        return c;
     }
 
     private byte[] Entry(CubeKey key)
