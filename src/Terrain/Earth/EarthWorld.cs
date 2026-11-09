@@ -19,7 +19,9 @@ namespace UnitSport.Terrain.Earth;
 /// to the leaf it lies in, to that leaf's anchor frame, down to its mesh, and back. The mesh is the collision's
 /// (<see cref="LeafCollision.Prepare"/>, the road blend at clearance 0), so what is drawn is what is stood on.
 /// Collision is C2's <see cref="CollisionPatches"/> round the collision anchors: trimesh patches placed by their
-/// leaf's transform. Roads, buildings and trees on leaves are PR 2; the far ground is the <c>Globe</c>'s.
+/// leaf's transform. The drawn ground is the bare lattice blended at the visual clearance under the roads; roads,
+/// buildings, doors, trees and water are furnished on each leaf's stand-in tile (<c>EarthWorld.Furnish.cs</c>). The far
+/// ground is the <c>Globe</c>'s.
 /// </para>
 /// </summary>
 public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftAware
@@ -84,6 +86,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public LeafTransform? Lattice;
         public (int I, int J) Hint;
         public MeshInstance3D? Mesh;
+        public Furniture? Furniture;
+        public ChunkNode? Node;
     }
 
     public EarthWorld(LeafStore store, WorldOrigin origin)
@@ -257,6 +261,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         if (_collisionSource.Prepared(key) is not { } prepared) return null;
         var vertices = prepared.Vertices.ToArray();
         int side = prepared.Side;
+        // drawn: the bare lattice blended under the roads at the visual clearance, as a tile's mesh (stood on: the collision's)
+        var drawn = (float[])prepared.Bare.Clone();
+        if (prepared.Bands is { } bands) LeafRoadBlend.Apply(drawn, bands, TerrainMeshBuilder.VisualBlendClearance);
         return new Near
         {
             Key = key,
@@ -264,7 +271,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             Anchor = key.Anchor,
             Vertices = vertices,
             Side = side,
-            Arrays = Mesh(vertices, side, content),
+            Arrays = Mesh(drawn, side, content),
+            Furniture = Furnish(prepared.Stand, content, side),
             Bores = content.Roads is { } roads ? RoadTunnels.Bores(roads) : null,
             Lattice = LeafFrames.Swiss.TransformOf(key),
         };
@@ -285,12 +293,18 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             leaf.Mesh.Transform = LeafToWorld(leaf.Anchor);
         }
         TileEntered?.Invoke(GroundTile.FromLeaf(leaf.Key));
+        if (leaf.Furniture is { } f)
+        {
+            leaf.Node = Commit(leaf.Key, f);
+            leaf.Furniture = null;
+        }
     }
 
     private void Remove(CubeKey key)
     {
         if (!_near.Remove(key, out var leaf)) return;
         leaf.Mesh?.QueueFree();
+        if (leaf.Node != null) Unfurnish(key, leaf.Node);
         TileUnloaded?.Invoke(GroundTile.FromLeaf(key));
     }
 
@@ -319,9 +333,14 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void OnOriginShifted(OriginShift shift)
     {
         foreach (var leaf in _near.Values)
+        {
             if (leaf.Mesh != null) leaf.Mesh.Transform = LeafToWorld(leaf.Anchor);
+            if (leaf.Node != null) leaf.Node.Transform = StandInToWorld(leaf.Key);
+        }
         foreach (var (key, body) in _bodies)
             body.Transform = LeafToWorld(LeafCollision.Split(key).Leaf.Anchor);
+        // what the flat streamer keeps in world space: the door index, the building shader's door boxes
+        Flat?.OnOriginShifted(shift);
     }
 
     /// <summary>
@@ -493,9 +512,19 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             remove => w.TileUnloaded -= value;
         }
 
-        // furnishing and replacement come with PR 2 and PR 3: never raised yet
-        public event Action<GroundTile, ChunkNode, Interiors.DoorSpot[]>? TileFurnished { add { } remove { } }
-        public event Action<GroundTile, ChunkNode>? TileUnfurnished { add { } remove { } }
+        public event Action<GroundTile, ChunkNode, Interiors.DoorSpot[]>? TileFurnished
+        {
+            add => w.TileFurnished += value;
+            remove => w.TileFurnished -= value;
+        }
+
+        public event Action<GroundTile, ChunkNode>? TileUnfurnished
+        {
+            add => w.TileUnfurnished += value;
+            remove => w.TileUnfurnished -= value;
+        }
+
+        // replacement comes with PR 3 (generated leaves): never raised yet
         public event Action<Func<GroundTile, bool>?>? TerrainReplaced { add { } remove { } }
     }
 }
