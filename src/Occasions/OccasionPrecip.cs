@@ -23,7 +23,7 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
     private readonly Func<Vector3, float?>? _groundHeight;
 
     /// <param name="origin">The world's frame: the camera's altitude is read through it.</param>
-    /// <param name="groundHeight">The ground's world Y under a point, where a tile is loaded.</param>
+    /// <param name="groundHeight">The ground's (or still water's) world Y under a point, where a tile is loaded.</param>
     public OccasionPrecip(WorldOrigin? origin = null, Func<Vector3, float?>? groundHeight = null)
     {
         Name = "OccasionPrecip";
@@ -127,8 +127,14 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
     private void Refresh()
     {
         if (_snow == null) return;
-        float density = Snowfall * CameraShare();
-        _snow.Visible = density > 0.001f;
+        float snowfall = Snowfall;
+        float density = snowfall * CameraShare();
+        bool shown = density > 0.001f;
+        // the cloud layer crossed (not the occasion starting or ending): logged, it is rare
+        if (shown != _snow.Visible && snowfall > 0f && GetViewport()?.GetCamera3D() is { } cam)
+            GD.Print(FormattableString.Invariant(
+                $"[snow] {(shown ? "under" : "above")} the clouds at {_origin?.AltitudeOf(cam.GlobalPosition) ?? cam.GlobalPosition.Y:F0} m, ground {_groundAlt:F0} m"));
+        _snow.Visible = shown;
         if (_snow.Visible && Mathf.Abs(density - _pushed) > 0.002f)
         {
             _pushed = density;
