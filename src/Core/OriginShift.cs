@@ -32,12 +32,31 @@ public readonly struct OriginShift
     /// <summary>A placement (a node's global transform, a door's frame) in the new world space.</summary>
     public Transform3D Apply(Transform3D t) => Transform * t;
 
-    /// <summary>An axis-aligned box in the new world space (exact while the rotation is the identity).</summary>
-    public Aabb Apply(Aabb box) => Transform * box;
+    /// <summary>
+    /// An axis-aligned box in the new world space: the smallest one holding the old box's eight corners moved
+    /// (#1512). Exact while the shift does not turn; under a turn it grows by the turn's sine times the box's size
+    /// (0.05 mm on a 1 m box per 3 km re-anchor), so a box kept across many turning shifts is better built again
+    /// from what it bounds.
+    /// </summary>
+    public Aabb Apply(Aabb box)
+    {
+        var a = box.Position;
+        var b = box.End;
+        var first = Transform * a;
+        var min = first;
+        var max = first;
+        for (int k = 1; k < 8; k++)
+        {
+            var corner = Transform * new Vector3((k & 1) != 0 ? b.X : a.X, (k & 2) != 0 ? b.Y : a.Y, (k & 4) != 0 ? b.Z : a.Z);
+            min = min.Min(corner);
+            max = max.Max(corner);
+        }
+        return new Aabb(min, max - min);
+    }
 
     /// <summary>
     /// How far the shift turns headings about the world's up, radians (#1430 H3): what a heading kept as
-    /// an angle (a view yaw, a flight heading) adds. 0 for every ground shift.
+    /// an angle (a view yaw, a flight heading) adds. 0 for every flat ground shift.
     /// </summary>
     public float Yaw
     {
@@ -48,8 +67,12 @@ public readonly struct OriginShift
         }
     }
 
-    /// <summary>Whether the shift turns the world at all (an anchor frame's, #1430 H3).</summary>
-    public bool Turns => !Transform.Basis.IsEqualApprox(Basis.Identity);
+    /// <summary>
+    /// Whether the shift turns the world at all (an anchor frame's, #1430 H3). Exactly: a ground shift's basis is
+    /// the identity bit for bit, and the earth world's turn under a 20 m stress shift (3·10⁻⁶ rad, #1512) is below
+    /// <c>IsEqualApprox</c>'s tolerance but still a turn the velocities must follow.
+    /// </summary>
+    public bool Turns => Transform.Basis != Basis.Identity;
 
     /// <summary>The way back: from the new world space to the old.</summary>
     public OriginShift Inverse => new(Transform.AffineInverse());

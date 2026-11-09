@@ -454,7 +454,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
         // --frame earth (#1510): offline only until the server stands on leaves (C4); the world is the ENU frame at the
-        // start, which moves with the camera without turning (C3 turns it)
+        // start, re-anchored under the camera as it goes, turning with the Earth (#1512, C3)
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !fixture;
         if (earth && Launch.Networked)
         {
@@ -462,6 +462,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             earth = false;
         }
         if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
+        // round leaves fall away by themselves: the shaders only add refraction's lift (#1512)
+        Curvature.RoundGeometry = earth;
 
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
