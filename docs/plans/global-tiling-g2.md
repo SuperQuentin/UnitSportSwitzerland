@@ -267,6 +267,19 @@ cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook u
   check on leaves. **Decided with the user (Nov 8 2026)**: the generators land here and C1's PR 2 calls them when
   it furnishes leaves (`core/earth-ids`, "What C1 PR 2 wires").
 
+### C6: visual parity (a gate before D; decided with the user, Nov 9 2026)
+
+The before/after film (D:/UnitSportSwitzerland/films/g2/) showed `--frame earth` looking worse than the flat
+world in almost every shot, space included: C was checked for correctness, never for looks. D does not start
+until earth looks at least as good as flat.
+- **Ground look**: the style kit's terrain materials on leaves instead of `CoverPalette` vertex colours (#1634);
+  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635).
+- **Far view** below 5 km: terrain, mountains and far trees to the horizon, as `HorizonLayer` gives flat (#1629).
+- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631).
+- **Life**: traffic and cyclists on leaves (#1636).
+- **The gate**: reference shots under `--frame earth` against the flat library, every style, `near` to `space`,
+  each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user.
+
 ### D: the flip (one PR)
 
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
