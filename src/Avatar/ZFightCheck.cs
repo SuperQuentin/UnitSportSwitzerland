@@ -22,6 +22,24 @@ public static class ZFightCheck
 
     public static bool Requested => CmdArgs.Has("--zfightcheck");
 
+    /// <summary>A model drawn with more triangles than this is not scanned: the largest interiors (164k) take a minute and a half.</summary>
+    private const int MaxTriangles = 200_000;
+
+    /// <summary>A model wider than this, m, is not scanned: the scan's grid is sized by the mean triangle (the globe is the Earth).</summary>
+    private const float MaxExtentM = 5_000f;
+
+    private static float Extent(IReadOnlyList<ZFight.Tri> tris)
+    {
+        if (tris.Count == 0) return 0f;
+        Vector3 lo = tris[0].A, hi = tris[0].A;
+        foreach (var t in tris)
+        {
+            lo = lo.Min(t.A).Min(t.B).Min(t.C);
+            hi = hi.Max(t.A).Max(t.B).Max(t.C);
+        }
+        return (hi - lo).Length();
+    }
+
     public static int Run(Node host)
     {
         var ci = CultureInfo.InvariantCulture;
@@ -32,14 +50,34 @@ public static class ZFightCheck
         string? only = update ? null : arg;
         var baseline = Load();
         var now = new SortedDictionary<string, float>(StringComparer.Ordinal);
-        int models = 0, threw = 0, worse = 0, better = 0, fresh = 0;
+        int models = 0, threw = 0, worse = 0, better = 0, fresh = 0, skipped = 0;
         long tris = 0;
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        // --zfighttrace: each model's name before it is built, to find the one a run hangs on
+        bool trace = CmdArgs.Has("--zfighttrace");
 
+        string category = "";
+        double categoryFrom = 0;
+        int categoryModels = 0;
+        void CategoryDone()
+        {
+            if (category.Length > 0 && clock.Elapsed.TotalSeconds - categoryFrom > 5.0)
+                GD.Print(string.Create(ci, $"[{Tag}]   category {category}: {categoryModels} models in {clock.Elapsed.TotalSeconds - categoryFrom:0.0} s"));
+        }
         foreach (var entry in ModelViewer.Discover())
         {
             string key = $"{entry.Category} / {entry.Name}";
+            if (entry.Category != category)
+            {
+                CategoryDone();
+                category = entry.Category;
+                categoryFrom = clock.Elapsed.TotalSeconds;
+                categoryModels = 0;
+            }
+            categoryModels++;
             if (only != null && !key.Contains(only, StringComparison.OrdinalIgnoreCase)) continue;
+            double started = clock.Elapsed.TotalSeconds;
+            if (trace) GD.Print($"[{Tag}]   building {key}");
             Node3D model;
             try
             {
@@ -52,6 +90,16 @@ public static class ZFightCheck
             }
             host.AddChild(model);   // some models build their meshes in _Ready
             var scene = ZFightScan.Gather(model, model.GlobalTransform.AffineInverse());
+            float extent = Extent(scene.Tris);
+            if (scene.Tris.Count > MaxTriangles || extent > MaxExtentM)
+            {
+                // the whole-Earth globe (#1430 H4): the scan's grid never ended and the check timed out (G2 step 0, #1501)
+                GD.Print(string.Create(ci, $"[{Tag}]   skipped: {key}, {scene.Tris.Count} triangles over {extent:0} m (scanned: up to {MaxTriangles} over {MaxExtentM:0} m)"));
+                host.RemoveChild(model);
+                model.Free();
+                skipped++;
+                continue;
+            }
             var hits = ZFight.Find(scene.Tris, visibleOnly: !CmdArgs.Has("--zfighthidden"));
             host.RemoveChild(model);
             model.Free();
@@ -75,10 +123,13 @@ public static class ZFightCheck
             }
             if (hits.Count > 0 || verdict.Length > 0)
                 GD.Print($"[{Tag}] {key}: {ZFightScan.Describe(scene, hits, CmdArgs.Int("--zfightplaces") ?? 3)}{verdict}");
+            double took = clock.Elapsed.TotalSeconds - started;
+            if (took > 2.0) GD.Print(string.Create(ci, $"[{Tag}]   slow: {key} took {took:0.0} s ({scene.Tris.Count} triangles)"));
         }
 
+        CategoryDone();
         GD.Print(string.Create(ci,
-            $"[{Tag}] {models} models, {tris} triangles in {clock.Elapsed.TotalSeconds:0.0} s; {now.Count} fight, {now.Values.Sum():0} cm² in all; {threw} threw"));
+            $"[{Tag}] {models} models, {tris} triangles in {clock.Elapsed.TotalSeconds:0.0} s; {now.Count} fight, {now.Values.Sum():0} cm² in all; {threw} threw, {skipped} too big to scan"));
         foreach (var (key, area) in now.OrderByDescending(p => p.Value).Take(15))
             GD.Print(string.Create(ci, $"[{Tag}]   {area,8:0.#} cm²  {key}"));
 

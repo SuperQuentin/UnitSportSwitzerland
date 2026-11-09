@@ -40,7 +40,8 @@ public partial class InteriorManager
             // shoe counter, ball rack, hood and approach (#1323); a pinball machine (#1325)
             return InsideInteraction(p) ?? ChurchRadios.InteractionFor(p) ?? CinemaBooths.InteractionFor(p) ?? BowlingLanes.InteractionFor(p)
                 ?? Pinball.PinballTables.InteractionFor(p) ?? Games.TableGames.InteractionFor(p) ?? Games.ArcadeCounters.InteractionFor(p) ?? Occasions.Birthdays.BirthdayService.InteractionFor(p)
-                ?? (ExitAt(p) is { } exit ? ExitInteraction(exit) : p.SeatInteraction() ?? Loot.LootService.Instance?.InteractionFor(p));
+                ?? (ExitAt(p) is { } exit ? ExitInteraction(exit)
+                    : Loot.LootService.Instance?.ServiceInteractionFor(p) ?? p.SeatInteraction() ?? Loot.LootService.Instance?.InteractionFor(p));
         }
         // a building site crane's ladder or its remote's box (#618); a farm stand or a buyer (#494); a
         // chest, a seal's stack, a burrow (#1227); a summit cross, a board (#1224): all before a vehicle

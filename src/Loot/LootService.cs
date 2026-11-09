@@ -200,6 +200,22 @@ public partial class LootService : Node
         return new(empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}", piece);
     }
 
+    /// <summary>
+    /// A bank counter, a shop's counter or a PAUSA machine in reach (nothing open): what a chair beside it must
+    /// not take E from (a lobby's machine stood by a chair, and E sat down). Cupboards still come after seats.
+    /// </summary>
+    public Interaction? ServiceInteractionFor(FootPlayer p)
+    {
+        if (_ui?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true || _lockUi?.IsOpen == true || ShopService.Instance?.IsOpen == true) return null;
+        if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
+        if (NearestCounter(p, layout, node) is var counter and >= 0)
+            return new($"{InputHints.Tag(PlayerInput.InteractMount)} Bank counter: deposit or withdraw", Outline.Piece(node, counter));
+        return ShopService.Instance?.InteractionFor(p);
+    }
+
+    /// <summary>E at a bank counter, a shop's counter or a PAUSA machine (<see cref="ServiceInteractionFor"/>): opens it, else false.</summary>
+    public bool TryService(FootPlayer p) => ServiceInteractionFor(p) != null && TrySearch(p);
+
     /// <summary>E indoors. Toggles the panel on the facing container; false when there is nothing to search.</summary>
     public bool TrySearch(FootPlayer p)
     {
