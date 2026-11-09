@@ -88,3 +88,40 @@ The coverage map found far rendering, GPX and the origin under load with no chec
   needs its source pinned, not a bigger threshold.
 - Reading a diff after a rendering change: `near` and `models` should stay under their floors;
   what the change is about shows in `far`/`edge`/`night`, and is judged by eye in the report.
+
+## Earth against flat: G2 C6's gate (#1639, #1500)
+
+`--frame earth` must look at least as good as the flat world before D flips it on. Measured, not eyeballed:
+
+```bash
+tools/refshot-parity.sh c6-<commit>
+```
+
+- One heavy-run slot, ~50 min for three styles. It takes the flat library (`ANCHORS=1`), then the earth one
+  (`tools/refshots.sh --frame earth`, B4's leaves and pyramid from `D:/UnitSportSwitzerland/test_b3/b4/`), then
+  the diff: `D:/UnitSportSwitzerland/refshots/<tag>-earth/diff-<tag>-flat/` with `summary.md` (within the floor,
+  over it, judged), `report.html` and `sheet-<style>.png` (A flat | B earth | difference, by class). Exit 1 when a
+  shot not judged is over its floor. `SKIP=flat` retakes only earth against the same `<tag>-flat` (a fix that
+  touches earth alone), `SKIP=shots` only the diff; `STYLES`, `VIEWS` as `refshots.sh`.
+- **Same place, same direction** (`tools/refshot-poses.py`): the views go in groups round an anchor on a whole km
+  (each within 6 km), one launch per group started there (`--at`, `--origin`), in both worlds. Under earth the
+  world is the east-up-south frame at the anchor; each view's place goes LV95 + height -> ECEF -> that frame, its
+  direction is taken in the flat world's axes at the place (grid east, up, grid north: `FrameAxes.GroundAt`) and
+  turned into it. Geneva's views turn ~0.95° (the grid's convergence), the 400 km pitch stays -15°. A `g` view
+  stands at the altitude its flat shot logged (`HEIGHTS=<flat library>`), so a wrong earth ground shows as a
+  difference instead of moving the camera.
+- **1/8 scale** (`refshot-diff.py --scale 8`): both pictures box-shrunk to 200 x 112 cells, so the leaves' tile
+  patterns at another phase (#1512) do not count, and a wrong colour, a missing forest or a void do. Its floor is
+  `D:/UnitSportSwitzerland/baselines/dd6b7207/noise-s8.json` (two flat runs of one commit at that scale).
+- **Expected differences** are lines of `tests/refshots/earth-vs-flat.txt` (`refshot-diff.py --expect`): `judge`
+  takes a view or `class:<c>` out of the count into "judged by eye" (`far` and `edge`: curvature is geometry on
+  earth, #187; `space` until #1630/#1631), `mask x0,y0,x1,y1` leaves a part of the picture out of the numbers
+  (grey on the heatmap). Each line says why; remove it once its difference is gone.
+- **A fresh worktree** needs `git lfs pull` and a headless `--import` (with `dotnet build`) before any windowed
+  shot: without them the fonts and the space and realistic textures are missing from every picture (the import
+  marks an LFS pointer file `valid=false` and rewrites its `.import`; `git checkout -- assets` after a pull).
+- `space` views (60 and 400 km, the limb and the ground straight down) are in the catalogue for both worlds.
+  Both get the same pyramid (`GLOBE`, B4's `cube_global`).
+- The gate holds when `summary.md` has no shot over its floor and a person has looked at every judged sheet and
+  found earth no worse. Each C6 fix session reruns it (`SKIP=flat` against the last flat library of the same
+  commit is enough when only earth changed); D records the last run in its PR.

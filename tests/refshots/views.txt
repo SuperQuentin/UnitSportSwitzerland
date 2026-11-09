@@ -5,8 +5,9 @@
 #
 #   name  class  E  N  height  pitch  bearing  [hour]  [date]
 #
-# class    near (< 1 km), mid (1-5 km), far (20 km and more), edge (the frustum's edges), night:
-#          the diff report groups by it, and a curvature change (#187) should leave near and mid alone
+# class    near (< 1 km), mid (1-5 km), far (20 km and more), edge (the frustum's edges), night, space (60 and
+#          400 km up, #1430: the limb and Switzerland from above): the diff report groups by it, and a curvature
+#          change (#187) should leave near and mid alone
 # height   metres above sea level, "g<m>" above the ground once it streamed in, or "i<m>" through the
 #          door in front of the point, into the house (src/Core/ShotRunner.cs)
 # pitch    degrees up from the horizontal (negative looks down)
@@ -44,6 +45,13 @@ lake_air5k        far    2525000 1140000 5000    -6  130
 dole_alps         far    2497800 1142800 g150    -3  139
 geneva_quai       near   2500300 1118450 g1.7   -20  207
 geneva_alps       far    2500600 1118300 g30      0  120
+
+# --- space (G2 C6, #1500): the limb (the horizon dips 7.9 deg at 60 km, 19.8 deg at 400 km) and the ground
+# straight down (-89: Euler angles have no bearing at -90). Each is its own launch's anchor under --frame earth.
+space60_limb      space  2538000 1140000 60000   -6  120
+space60_down      space  2540000 1140000 60000  -89  0
+space400_limb     space  2600000 1100000 400000 -15  60
+space400_down     space  2600000 1180000 400000 -89  0
 
 # --- inside last: it leaves its door open
 riddes_interior   near   2583390 1113097 i1.6    -8  168
