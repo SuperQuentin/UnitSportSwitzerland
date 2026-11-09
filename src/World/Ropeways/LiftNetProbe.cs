@@ -26,13 +26,20 @@ public partial class LiftNetProbe : Core.ChatProbe
         if (Me is not { Terrain.Origin: { } origin } me || RopewayService.Instance is not { } lifts) return "no player or no lifts";
         var (e, n) = origin.ToLv95(me.GlobalPosition);
         var near = lifts.Near(e, n);
-        var best = near.OrderBy(l => (l.E[0] - e) * (l.E[0] - e) + (l.N[0] - n) * (l.N[0] - n)).FirstOrDefault();
+        double Dist(RopewayLine l) { var (le, ln) = l.Point(0); return System.Math.Sqrt((le - e) * (le - e) + (ln - n) * (ln - n)); }
+        var best = near.OrderBy(Dist).FirstOrDefault();
         string where = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"at {e:F0}/{n:F0}, on the floor {me.IsOnFloor()}, {near.Count} lines near");
         foreach (var l in near)
             GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"[liftnet {_role}]   line {l.Id} {l.Kind} '{l.Name}': {l.E[0]:F0}/{l.N[0]:F0} -> {l.E[^1]:F0}/{l.N[^1]:F0}"));
+                $"[liftnet {_role}]   line {l.Id} {l.Kind} '{l.Name}': {Lv95(l.Point(0))} -> {Lv95(l.Point(^1))}"));
         return best == null ? where : string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{where}, nearest bottom station {best.E[0]:F0}/{best.N[0]:F0} ({System.Math.Sqrt((best.E[0] - e) * (best.E[0] - e) + (best.N[0] - n) * (best.N[0] - n)):F1} m, reach {RopewayService.BoardReach})");
+            $"{where}, nearest bottom station {Lv95(best.Point(0))} ({Dist(best):F1} m, reach {RopewayService.BoardReach})");
+    }
+
+    private static string Lv95((double, double) p)
+    {
+        var (e, n) = p;
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{e:F0}/{n:F0}");
     }
 
     public LiftNetProbe(ItemController items) : base(items, "liftnet", "LN") { }
