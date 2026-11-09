@@ -413,6 +413,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         return true;
     }
 
+    /// <summary>
+    /// The ground's ellipsoidal height under an Earth position on the loaded leaves (its own height ignored), false off
+    /// them: in doubles from the leaf's anchor frame, never through the world's floats (#1513: the server's line of sight).
+    /// Main thread.
+    /// </summary>
+    public bool EllipsoidalHeightAt(EcefPos p, out double height)
+    {
+        height = 0;
+        if (!_near.TryGetValue(CubeKey.FromEcef(p, LeafFrames.LeafLevel), out var leaf)) return false;
+        var (x, _, z) = leaf.Anchor.ToLocal(p);
+        double h = CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref leaf.Hint);
+        if (double.IsNaN(h)) return false;
+        height = Ellipsoid.Wgs84.ToGeodetic(leaf.Anchor.ToEcef(x, h, z)).H;
+        return true;
+    }
+
     private bool WaterAt(Vector3 worldPos, out float stillLevel, out float waveScale)
     {
         stillLevel = 0f;

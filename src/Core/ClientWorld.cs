@@ -143,6 +143,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Player.WheelProbe.CheckRequested, () => Player.WheelProbe.Check(GetParent())),
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
+        // --frame earth's line of sight on the real cube pyramid (#1513): Mont Blanc from La Dôle, valley floors hidden
+        (() => Has("--earthsightcheck"), () => Verdict("earthsightcheck", EarthSight.RealCheck(World.Globe.DataDir))),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck() & Audio.Cd.VocalSeparator.SelfCheck())),
         // a real song's vocal separated both ways, written to test_output/vocal (#1153)
