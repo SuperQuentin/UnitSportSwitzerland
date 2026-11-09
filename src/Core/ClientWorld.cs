@@ -453,14 +453,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             : new WorldOrigin(startE, startN);
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
-        // --frame earth (#1510): offline only until the server stands on leaves (C4); the world is the ENU frame at the
-        // start, which moves with the camera without turning (C3 turns it)
+        // --frame earth (#1510): the world is the ENU frame at the start, which moves with the camera without turning (C3
+        // turns it). Online too since the server stands on leaves (#1513): the wire carries Earth positions, so this
+        // frame is the client's own and need not match the server's (its leaves are read from this copy's disk)
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !fixture;
-        if (earth && Launch.Networked)
-        {
-            GD.PushWarning("[world] --frame earth is offline only until the server stands on leaves (G2 C4): flat");
-            earth = false;
-        }
         if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
 
         _worldOrigin = origin;
@@ -577,7 +573,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         else AddChild(_chunks);
         // the water (#299): queries on these tiles, waves pushed to the shaders, the underwater look;
         // --sea-state for an offline world (online the server's replaces it on join)
-        World.WaterField.Bind(_chunks);
+        World.WaterField.Bind(Ground);
         if (World.SeaStateCommand.FromArgs(OS.GetCmdlineUserArgs(), out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
         else if (seaError.Length > 0) GD.PushWarning($"[water] {seaError}");
         AddChild(new World.WaterSurface { Name = "WaterSurface" });
