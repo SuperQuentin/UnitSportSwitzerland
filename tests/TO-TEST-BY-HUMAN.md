@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The earth world's ground frame turns ([#1612](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1612), [#1512](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1512))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva), in a window. Each re-anchor (every 3 km) prints `[origin] shift N ... turned 0.0269°`.
+
+- [ ] Walk, then drive a car, NE for 4 km across a re-anchor → no jump, no hitch in the view or the steering, the body stays on the ground, the horizon stays level.
+- [ ] Fly the spectator 2 km up across two re-anchors, looking at the far ground → the far ground falls away smoothly (round leaves plus refraction's small lift), no step at the re-anchor.
+
 ## Maps and GPX on the oblique stereographic ([#1581](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1581), [#1514](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1514))
 
 On the real map (`--chunks D:/UnitSportSwitzerland/terrain_chunks`), at Scuol, where LV95's grid north is 2° off true north.

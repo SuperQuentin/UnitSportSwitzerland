@@ -29,8 +29,11 @@ public partial class EarthCheck : Node3D
     private static double TimeoutS => 240 + TravelM / Speed;
     private const int Half = 10;
     private const float Step = 20f;
-    private const float Speed = 30f;
-    /// <summary>How far the body travels, metres: 4.5 km (one re-anchor), or <c>--earthtravel &lt;m&gt;</c> for a long drive across several.</summary>
+    private const float Speed = 30f, LegM = 4500f;
+    /// <summary>
+    /// How far the body travels, metres: 4.5 km (one re-anchor), or <c>--earthtravel &lt;m&gt;</c> for a long drive across
+    /// several: back and forth along the same 4.5 km (<see cref="LegM"/>), where the region's leaves are known to be.
+    /// </summary>
     private static readonly float TravelM = CmdArgs.Float("--earthtravel") is float m && m > 0 ? m : 4500f;
 
     private readonly IWorldGround _ground;
@@ -42,7 +45,7 @@ public partial class EarthCheck : Node3D
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
     private int _phase, _shifts, _rays, _hits, _above, _below;
-    private float _travelled;
+    private float _travelled, _legEnd = LegM;
     private Vector3 _dir;
     private double _worstRay;
     // the ground under the body just before a re-anchor, by its Earth position, and the worst seen at the re-anchors
@@ -205,6 +208,12 @@ public partial class EarthCheck : Node3D
         var step = _dir * Speed * delta;
         Position += step;
         _travelled += step.Length();
+        // a long drive turns back at each end of the leg (the leaves of a sparse region lie along it)
+        if (_travelled >= _legEnd && _travelled < TravelM)
+        {
+            _legEnd += LegM;
+            _dir = -_dir;
+        }
         if (_ground.TryGetHeight(Position, out float h) && _ground.HasCollisionAt(Position))
         {
             Position = Position with { Y = h + 2f };

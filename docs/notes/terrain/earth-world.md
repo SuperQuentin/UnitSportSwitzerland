@@ -45,7 +45,7 @@ decisions were made with the user on 2026-11-08.
   - 4.5 km at 30 m/s with the ground never missing over 2 s.
   - At every re-anchor (C3): the ground under the body asked again by its Earth position within 1 cm (no pop), up the ellipsoid's within 0.03°, the turn the arc over R within 10 %.
   - Marks asked again after the run within 1 cm.
-  - `TRAVEL=<m>` (`--earthtravel`): a long drive across several re-anchors.
+  - `TRAVEL=<m>` (`--earthtravel`): a long drive across several re-anchors, back and forth along the same 4.5 km (the D: leaf set is sparse: 9 km NE of Geneva its edge leaves have NaN vertices).
 - Geneva (2026-11-08):
   - the ground under the start in 15-30 s;
   - 441 rays: 235 on the ground at 0.0 cm, 206 on roofs, 0 under;

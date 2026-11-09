@@ -3,7 +3,8 @@
 # --frame earth on a region's built cube leaves (B4's): collision against the height queries, a dropped ball, the
 # ground streaming under a body at 30 m/s for 4.5 km, and heights across the origin's re-anchors. Needs the leaves:
 #   GODOT=<exe> LEAVES=D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube [CHUNKS=] [AT=E,N] [TRAVEL=m] tools/earthcheck.sh
-# TRAVEL: a long drive across several of the frame's turning re-anchors (#1512, one every 3 km; default 4.5 km, one)
+# TRAVEL: a long drive across several of the frame's turning re-anchors (#1512, one every 3 km; default 4.5 km, one),
+# back and forth along the same 4.5 km
 # output in test_output/earthcheck.log
 . "$(dirname "$0")/lib/guard.sh"
 GODOT=${GODOT:-godot}
