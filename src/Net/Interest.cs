@@ -147,6 +147,8 @@ public static class Interest
         // 90 km as clear): 61 m halfway at 60 km leaves eyes 100 m up in sight, 138 m at 90 km hides them
         Expect(Clear(new Vector3(0, 100, 0), new Vector3(60_000, 100, 0), _ => 0f), true, "60 km over a level plain, 100 m up");
         Expect(Clear(new Vector3(0, 100, 0), new Vector3(90_000, 100, 0), _ => 0f), false, "90 km over a level plain: behind the Earth's bulge");
+        // the same in true Earth positions (--frame earth, #1513): the curve in the ray's geometry, refraction as a lift
+        EarthSight.SelfCheck(Expect);
         return ok;
     }
 }

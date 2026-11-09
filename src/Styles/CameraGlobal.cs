@@ -78,13 +78,15 @@ public partial class CameraGlobal : Node
         // fades out from 5 to 20 km, the drop gives way to the exact sphere from 20 to 50 km. Pushed when it changes.
         var camera = GetViewport()?.GetCamera3D();
         double altitude = camera == null ? 0 : Origin?.AltitudeOf(camera.GlobalPosition) ?? camera.GlobalPosition.Y;
-        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2At(altitude) : 0f;
+        // the earth world's geometry is round (#1512): only refraction's lift, and no sphere wrap
+        bool round = Core.Curvature.RoundGeometry;
+        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.CurvaturePerM2At(altitude, round) : 0f;
         if (curvature != _curvature)
         {
             _curvature = curvature;
             RenderingServer.GlobalShaderParameterSet(CurvatureParam, curvature);
         }
-        float blend = Core.Curvature.Drawn ? (float)Core.Curvature.SphereBlendAt(altitude) : 0f;
+        float blend = Core.Curvature.Drawn ? (float)Core.Curvature.CurveBlendAt(altitude, round) : 0f;
         if (blend != _curveBlend)
         {
             _curveBlend = blend;

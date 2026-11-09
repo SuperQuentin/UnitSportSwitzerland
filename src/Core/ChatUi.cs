@@ -393,7 +393,7 @@ public partial class ChatUi : CanvasLayer
 
     public void Append(string line, ChatKind kind)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = RealClock.Now;
         bool stay = !IsTyping || AtBottom();
 
         // grouped: the same player talking again shortly after keeps the name out of the way

@@ -16,6 +16,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private InterestService? _interest;
     private Vehicles.PassengerService? _passengers;
     private ChunkManager? _chunks;
+    /// <summary>
+    /// The leaves under <c>--frame earth</c> (#1513, G2 C4): the main region's ground. The flat <see cref="_chunks"/> is
+    /// still built for the LV95 services that hold it, out of the tree: it loads nothing.
+    /// </summary>
+    private Terrain.Earth.EarthWorld? _earth;
+    /// <summary>What the server's own frame stands on and asks: the leaves under <c>--frame earth</c>, else the flat tiles.</summary>
+    private IWorldGround? Ground => _earth?.Ground ?? _chunks?.Ground;
     private Node3D? _players;
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
@@ -104,9 +111,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // it (#185): what it measures and relays is LV95, whatever its origin
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
+        // --frame earth (#1513, G2 C4): the server's world is the ENU frame on the manifest origin at height 0, standing on
+        // the region's leaves; its far regions are ENU frames too (ServerRegions.Enu). Not on a fixture course (no leaves).
+        // From the command line alone: a server never reads the machine's settings file (a client's choice)
+        if (Enum.TryParse<WorldFrame>(CmdArgs.Value("--frame"), true, out var frame)) GameSettings.Current.Frame = frame;
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth && Systems.FixtureCourse == null;
+        if (earth) origin = new WorldOrigin(FrameAxes.Enu(origin.ToGlobal(Vector3.Zero).Ecef));   // the flat origin's point at height 0
         _origin = origin;
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
-            + (manifest.Tiles.Count == 0 ? " (generated world)" : ""));
+            + (manifest.Tiles.Count == 0 ? " (generated world)" : "") + (earth ? ", frame earth (ENU, on leaves)" : ""));
 
         // The same generated fill as every client's, anchored at the same point, so height
         // queries, interiors and loot work on generated ground and agree with what players see.
@@ -139,11 +152,23 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
         // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
         World.Landings.Use(await World.Landings.LoadAsync(source));
-        AddChild(_chunks);
-        // solid trunks around the bots, the same pool the clients keep round their own body (#837)
-        AddChild(new World.TreeColliders(_chunks, origin));
+        // --frame earth: the leaves instead, nothing drawn; the flat streamer stays built for the LV95 services that hold
+        // it (the dormant fleets, the steamer, the airports, the herds, the slopes), out of the tree: they wait for the
+        // leaves to be furnished (C1 PR 2), as on an earth client
+        var leaves = earth ? Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir()) : null;
+        if (leaves != null)
+        {
+            _earth = new Terrain.Earth.EarthWorld(leaves, origin) { BuildMeshes = false, CommitBudgetMs = _chunks.CommitBudgetMs };
+            AddChild(_earth);
+        }
+        else
+        {
+            AddChild(_chunks);
+            // solid trunks around the bots, the same pool the clients keep round their own body (#837); on leaves with PR 2
+            AddChild(new World.TreeColliders(_chunks, origin));
+        }
         // the water (#299): the server answers water queries too, and owns the sea state
-        World.WaterField.Bind(_chunks);
+        World.WaterField.Bind(Ground);
         if (World.SeaStateCommand.FromArgs(args, out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
         else if (seaError.Length > 0) GD.PushWarning($"[water] {seaError}");
         GD.Print($"[server] sea state {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
@@ -153,24 +178,38 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(_players);
         // the server's local frames (#1456): this world is the main region; a cluster of bodies far from it
         // gets a frame and a physics space of its own, with its own collision round its bots
+        // (under --frame earth each is an ENU frame on its own EarthWorld over the same leaves, #1513)
         var chunks = _chunks;
-        AddChild(new Net.Regions.ServerRegions(new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, chunks, GetWorld3D(), null), _players)
+        var main = _earth != null
+            ? new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, _earth, _earth.Ground, GetWorld3D(), null)
+            : new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, chunks, GetWorld3D(), null);
+        AddChild(new Net.Regions.ServerRegions(main, _players)
         {
-            MakeChunks = frame =>
+            MakeGround = frame =>
             {
+                if (leaves != null)
+                {
+                    var e = new Terrain.Earth.EarthWorld(leaves, frame) { BuildMeshes = false, CommitBudgetMs = chunks.CommitBudgetMs };
+                    return (e, e.Ground);
+                }
                 var c = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
                     FillFollowsAnchors = true, CommitBudgetMs = chunks.CommitBudgetMs };
                 c.Initialize(source, frame, manifest, null);
                 if (fallback != null) c.UseFallback(fallback, source.Invalidate);
-                return c;
+                return (c, c.Ground);
             },
-            MakeExtras = (c, frame) => new World.TreeColliders(c, frame),
+            MakeExtras = (terrain, frame) => terrain is ChunkManager c ? new World.TreeColliders(c, frame) : null,
         });
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
-        var horizon = await source.LoadHorizonAsync();
-        _interest = InterestService.CreateServer(this, _players,
-            horizon != null ? InterestService.HorizonGround(horizon) : null);
+        // Under --frame earth (#1513): the ray between Earth positions over the loaded leaves, the cube pyramid beyond.
+        if (_earth != null) _interest = CreateEarthInterest(_earth);
+        else
+        {
+            var horizon = await source.LoadHorizonAsync();
+            _interest = InterestService.CreateServer(this, _players,
+                horizon != null ? InterestService.HorizonGround(horizon) : null);
+        }
 
         _spawner = PlayerReplication.CreateSpawner(origin);
         AddChild(_spawner);
@@ -216,6 +255,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
+        // From here to the UFOs, the services placed from LV95 tiles hold the flat streamer: under --frame earth it is out
+        // of the tree and loads nothing, so they wait, as on an earth client, for the leaves to be furnished (C1 PR 2).
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
         // the cars already standing in the car parks (#499); the server promotes one when it is
@@ -363,7 +404,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         });
         // Versteckis (#1268): World/Versteckis, hide-and-seek as village props; its Rounds mode after the Battle Royale's
         var vs = _vs = Adventure.Versteckis.VersteckisManager.CreateServer(_chat, _players, origin, () => source, places?.Places ?? new());
-        vs.GroundWorld = p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null;
+        vs.GroundWorld = p => Ground is { } g && g.TryGetHeight(p, out float h) ? h : null;
         AddChild(vs);
         _chat.Versteckis = vs;
         if (_interest != null)
@@ -419,7 +460,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat.Arrival = _arrival;
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
-        _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.Ground.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+        _sleepers.GroundAt = (e, n) => Ground is { } g && g.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
         _sleepers.Proven += (peer, _) => ids.Refresh(peer);
         // the Adventure layer (#1223): progress per proven identity (an account on --accounts required), quests;
         // off for a player in a Battle Royale round
@@ -436,7 +477,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             _sleepers.Proven += adventure.PeerProven;
             // places (#1224): discovery, fog and viewpoints for every adventuring peer, from its proxy's published state
             Player.FootPlayer? PlayerOf(long peer) => _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString());
-            Func<double, double, float?> ground = (e, n) => _chunks != null && _chunks.Ground.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
+            Func<double, double, float?> ground = (e, n) => Ground is { } g && g.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
             Adventure.Places.PlacesService.Create(adventure, server: true, networked: true).BodyOf = peer =>
                 PlayerOf(peer) is { } body ? Adventure.Places.PlacesBodies.Of(body, body.NetGlobal, PlayerOf, ground) : null;
             // rewards (#1227): chests, edelweiss, seals, guides, trials and photos, checked against this server's own placement
@@ -505,7 +546,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             _structures.NameOf = _chat.NameOfPeer;
             _structures.InMatch = Rounds.Playing;
             _structures.MatchRunning = () => br.State.Running;
-            _structures.GroundAt = p => _chunks != null && _chunks.Ground.TryGetHeight(p, out float h) ? h : null;
+            _structures.GroundAt = p => Ground is { } g && g.TryGetHeight(p, out float h) ? h : null;
             // a match piece that comes down leaves a pile of some of its materials (#276)
             var crates = _brCrates;
             _structures.Rubble = (at, stacks) =>
@@ -702,8 +743,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 // the ground this server holds under them: what any server-side check would use
                 var at = _origin!.ToWorld(p.Global);
-                string ground = _chunks != null && _chunks.Ground.TryGetHeight(at, out float h)
-                    ? $"ground {h:F1} m" + (_chunks.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
+                // under --frame earth the world's Y is the ENU frame's, not an altitude: the ground point's own altitude
+                string ground = Ground is { } g && g.TryGetHeight(at, out float h)
+                    ? $"ground {(_earth != null ? _origin.ToGlobal(new Vector3(at.X, h, at.Z)).Alt : h):F1} m" + (_earth == null && _chunks!.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
                     : "ground not loaded";
                 GD.Print($"[server] player {p.Name} at {p.Global}, {ground}");
             }
@@ -752,7 +794,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
-            _chunks!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
+            Ground!.AddAnchor(player, collision: false);   // a proxy: height queries only, no collision (#837)
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
         _cinemaBooths?.SendTo(id);
@@ -819,9 +861,30 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
         {
-            _chunks!.RemoveAnchor(player);
+            Ground!.RemoveAnchor(player);
             player.QueueFree();
         }
+    }
+
+    /// <summary>
+    /// The interest of an earth server (#1513, G2 C4): the ground's ellipsoidal height from the main earth world's loaded
+    /// leaves (round every body, shadows included), else the <c>cube_global</c> pyramid (<see cref="World.Globe.DataDir"/>);
+    /// line of sight by <see cref="EarthSight.Clear"/>, heights above ground in LHN95 as <see cref="GlobalPos.Alt"/>.
+    /// With no pyramid, sight is free (as a flat server with no horizon file).
+    /// </summary>
+    private InterestService CreateEarthInterest(Terrain.Earth.EarthWorld earth)
+    {
+        var pyramid = World.Globe.DataDir is { } dir ? new PyramidGround(dir) : null;
+        GD.Print($"[interest] earth: line of sight over the leaves and {(pyramid != null ? $"the pyramid in {pyramid.Dir} ({pyramid.Count} tiles, level {pyramid.Level})" : "no pyramid")}");
+        double? Ellipsoidal(EcefPos p) => earth.EllipsoidalHeightAt(p, out double h) ? h : pyramid?.HeightAt(p);
+        var interest = InterestService.CreateServer(this, _players!, at =>
+        {
+            var g = at.Geodetic;
+            return Ellipsoidal(at.Ecef) is { } h
+                ? (float)GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(g with { H = h })).Alt : null;
+        });
+        if (pyramid != null) interest.Sight = (a, b) => EarthSight.Clear(a.Ecef, b.Ecef, Ellipsoidal);
+        return interest;
     }
 
     /// <summary>

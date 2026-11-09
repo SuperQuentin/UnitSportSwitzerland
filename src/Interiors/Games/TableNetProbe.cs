@@ -107,33 +107,46 @@ public partial class TableNetProbe : ChatProbe
         }
         var rng = new Random(_role == "A" ? 1 : 2);
         int mine = 0, compared = 0;
-        string last = State(Game());
+        // every state this peer holds, recorded each frame: waiting on the other's echo must not skip one,
+        // or the numbering slips and every later change compares against the wrong one (#1501, flaky under load)
+        var states = new List<string> { State(Game()) };
+        bool recording = true;
+        _ = Record();
+        async Task Record()
+        {
+            while (recording && IsInsideTree())
+            {
+                if (Game() is { } now && State(now) is var s && s != states[^1]) states.Add(s);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+        }
         double until = Time.GetTicksMsec() / 1000.0 + 300;
         string other = _role == "A" ? "B" : "A";
         while (compared < Changes && Time.GetTicksMsec() / 1000.0 < until)
         {
-            var g = Game();
-            if (g == null) { await Seconds(0.2); continue; }
-            string now = State(g);
-            if (now != last)
+            if (compared + 1 < states.Count)
             {
-                last = now;
                 compared++;
+                string now = states[compared];
                 Say($"state {compared} {now}");
                 string? heard = await HeardStarting(other, $"state {compared} ", 20);
                 Expect(heard == $"state {compared} {now}", $"both hold the same game after change {compared}");
                 continue;
             }
+            var g = Game();
+            if (g == null) { await Seconds(0.2); continue; }
             int seat = g.SeatOf(myId);
             if (seat >= 0 && g.Up == seat && !g.Busy(games.ClockNow + 0.1) && g.Bot(seat, double.MaxValue, rng) is { } move)
             {
                 games.AskAct(key, index, move.Action, move.Args);
                 mine++;
-                await Until(() => State(Game()) != last, 10);
+                int seen = states.Count;
+                await Until(() => states.Count > seen, 10);
                 continue;
             }
             await Seconds(0.2);
         }
+        recording = false;
         Expect(mine >= 2 && compared >= 4, $"{_role} played and watched ({mine} moves, {compared} changes compared)");
         Say("done turns");
         await Heard(other, "done turns", 60);

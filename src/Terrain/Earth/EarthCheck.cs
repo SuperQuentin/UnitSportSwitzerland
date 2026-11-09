@@ -13,10 +13,12 @@ namespace UnitSport.Terrain.Earth;
 /// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> or on a feature over it (a roof, a bridge), under it at
 /// most 1 % of the rays (road holes), and at least 100 reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
-/// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km along a line (the camera with it, so the origin
+/// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km (<c>--earthtravel &lt;m&gt;</c>) along a line (the camera with it, so the origin
 /// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer;</item>
-/// <item>the re-anchor moves nothing: a point's height asked before and after (by its Earth position) is the same
-/// within 1 cm, and the shift turned nothing.</item>
+/// <item>the re-anchors turn the world with the Earth (#1512, G2 C3) and move nothing: at every re-anchor the
+/// ground under the body, asked again by its Earth position, is where it was within 1 cm (no pop); the world's up at
+/// the body is the ellipsoid's within 0.03°; each turn is the arc moved over R within 10 %; and the marks asked
+/// after the whole run are the same within 1 cm.</item>
 /// <item>(PR 2) the leaves round the start are furnished: roads, buildings, trees and water drawn in their nodes;
 /// the doors in the door index stand on the ground (the sill within 1.5 m of the height query, the median within
 /// 0.3 m); a door's building plans an interior through its stand-in tile, whose entrance is at that door (1 m).</item>
@@ -27,10 +29,15 @@ public partial class EarthCheck : Node3D
 {
     public static bool Requested() => CmdArgs.Has("--earthcheck");
 
-    private const double TimeoutS = 240;
+    private static double TimeoutS => 240 + TravelM / Speed;
     private const int Half = 10;
     private const float Step = 20f;
-    private const float Speed = 30f, TravelM = 4500f;
+    private const float Speed = 30f, LegM = 4500f;
+    /// <summary>
+    /// How far the body travels, metres: 4.5 km (one re-anchor), or <c>--earthtravel &lt;m&gt;</c> for a long drive across
+    /// several: back and forth along the same 4.5 km (<see cref="LegM"/>), where the region's leaves are known to be.
+    /// </summary>
+    private static readonly float TravelM = CmdArgs.Float("--earthtravel") is float m && m > 0 ? m : 4500f;
 
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
@@ -41,9 +48,13 @@ public partial class EarthCheck : Node3D
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
     private int _phase, _shifts, _rays, _hits, _above, _below;
-    private float _travelled;
+    private float _travelled, _legEnd = LegM;
     private Vector3 _dir;
     private double _worstRay;
+    // the ground under the body just before a re-anchor, by its Earth position, and the worst seen at the re-anchors
+    private GlobalPos? _under;
+    private double _worstPop, _worstTilt, _worstTurnError, _turnSum;
+    private int _turns, _popsAsked;
 
     /// <summary>The earth world (its furniture) and the chunk source that answers its stand-in tiles; the furniture phase is skipped without.</summary>
     public EarthWorld? Earth { get; init; }
@@ -81,7 +92,34 @@ public partial class EarthCheck : Node3D
     private void OnShifted(OriginShift shift)
     {
         _shifts++;
-        if (shift.Turns) _faults.Add($"shift {_shifts} turned the world: the earth frame moves without turning until C3");
+        // the heading is a world direction: it turns with the world, kept level
+        _dir = shift.Direction(_dir) with { Y = 0 };
+        if (_dir != Vector3.Zero) _dir = _dir.Normalized();
+        // the tilt of up (the least rotation has no yaw), from the sine: an acos of a float near 1 loses it
+        double turn = System.Math.Asin(System.Math.Min(1.0, Vector3.Up.Cross(shift.Direction(Vector3.Up)).Length()));
+        if (shift.Turns) _turns++;
+        _turnSum += turn;
+        // the arc moved since the last anchor (the shift's translation, horizontal) over R: the Earth's own turn
+        var t = shift.Transform.Origin;
+        double arc = new Vector2(t.X, t.Z).Length();
+        if (arc > 100)
+        {
+            double expected = arc / 6_371_000.0;
+            _worstTurnError = System.Math.Max(_worstTurnError, System.Math.Abs(turn - expected) / expected);
+        }
+        // up at the body is the ellipsoid's
+        var up = _origin.Frame.UpAt(Position);
+        _worstTilt = System.Math.Max(_worstTilt, Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(up.Y, -1f, 1f))));
+        // no pop: the ground under the body, asked again by its Earth position in the new frame
+        if (_under is { } g)
+        {
+            var p = _origin.ToWorld(g);
+            if (_ground.TryGetHeight(p, out float h))
+            {
+                _popsAsked++;
+                _worstPop = System.Math.Max(_worstPop, Mathf.Abs(h - p.Y));
+            }
+        }
     }
 
     // the wall clock: leaves load and patches build on threads, which --fixed-fps would outrun
@@ -182,9 +220,16 @@ public partial class EarthCheck : Node3D
         var step = _dir * Speed * delta;
         Position += step;
         _travelled += step.Length();
+        // a long drive turns back at each end of the leg (the leaves of a sparse region lie along it)
+        if (_travelled >= _legEnd && _travelled < TravelM)
+        {
+            _legEnd += LegM;
+            _dir = -_dir;
+        }
         if (_ground.TryGetHeight(Position, out float h) && _ground.HasCollisionAt(Position))
         {
             Position = Position with { Y = h + 2f };
+            _under = _origin.ToGlobal(Position with { Y = h });
             _missingS = 0;
         }
         else
@@ -194,7 +239,14 @@ public partial class EarthCheck : Node3D
         }
         if (_travelled < TravelM) return;
         Log($"travelled {_travelled:F0} m at {Speed:F0} m/s: {_shifts} re-anchors, the ground missing at most {_worstMissingS:F1} s at once");
-        if (_shifts == 0) _faults.Add("no re-anchor in 4.5 km");
+        if (_shifts == 0) _faults.Add($"no re-anchor in {TravelM / 1000:F1} km");
+        Log($"re-anchors: {_turns} of {_shifts} turned, {Mathf.RadToDeg((float)_turnSum):F4}° in all, each within {_worstTurnError * 100:F1} % of arc / R; "
+            + $"up at the body within {_worstTilt:F4}° of the ellipsoid's; the ground under the body moved {_worstPop * 100:F2} cm at most ({_popsAsked} asked)");
+        if (OriginShifter.GroundMode.Rotates && _turns < _shifts) _faults.Add($"only {_turns} of {_shifts} re-anchors turned the world (C3: the ground frame turns)");
+        if (_worstTurnError > 0.1) _faults.Add($"a re-anchor turned {_worstTurnError * 100:F0} % off the arc moved over R (bar 10 %)");
+        if (_worstTilt > 0.03) _faults.Add($"the world's up at the body was {_worstTilt:F3}° off the ellipsoid's after a re-anchor (bar 0.03°)");
+        if (_popsAsked < _shifts) _faults.Add($"the ground under the body was known again at only {_popsAsked} of {_shifts} re-anchors");
+        if (_worstPop > 0.01) _faults.Add($"the ground under the body popped {_worstPop * 100:F2} cm at a re-anchor (bar 1 cm)");
         if (_worstMissingS > 2) _faults.Add($"the ground was missing {_worstMissingS:F1} s at once under a body at {Speed} m/s (bar 2 s)");
         _phase = 4;
         _phaseS = Now;

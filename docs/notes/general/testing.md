@@ -41,6 +41,10 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   render scale 0.5, no AA, 256 px concert screens, no mirrors, 640x360), the same on every machine, and
   the process runs below normal priority. A check that needs more says so on its command line (`--rings`,
   `--horizon`, `--detail`, `--render-scale`, `--aa`, `--mirrors`), never by changing the profile.
+  The calendar is pinned too: a test run is on `Calendar.TestDate` (Wed 2026-06-17, outside every
+  occasion, #1501), so a season never breaks a check (Christmas snow under the tyres, Nov 2026). A check
+  of an occasion or a season passes its own `--date YYYY-MM-DD` (`--huntcheck --date 2026-11-15`);
+  `--date today` keeps the real date.
   `lootsynccheck` on real terrain: 978 MB per client, 2.4 GB in all (3.4 GB per client on the defaults).
 - **A windowed check by hand** (a session running one probe straight from Godot) gets none of that on
   its own: `. tools/lib/guard.sh; guard_test_userdata test_output/userdata_<x>` first (then
