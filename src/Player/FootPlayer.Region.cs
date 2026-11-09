@@ -46,8 +46,8 @@ public partial class FootPlayer
     public Vector3 WhereIs(Vehicles.VehicleBody v) =>
         Origin is { } mine && v.Origin is { } theirs && mine != theirs ? mine.ToWorld(v.Global) : v.GlobalPosition;
 
-    /// <summary>The terrain of the region this body is in when that is not the main one (the statics bound to the main terrain step aside for it), else null.</summary>
-    public ChunkManager? RegionTerrain => Region is { IsMain: false } r ? r.Chunks : null;
+    /// <summary>The ground of the region this body is in when that is not the main one (the statics bound to the main terrain step aside for it), else null.</summary>
+    public IWorldGround? RegionTerrain => Region is { IsMain: false } r ? r.Ground : null;
 
     /// <summary>Whether this body is in the server's main frame (always on a client): where parked vehicles, crates and stops are placed.</summary>
     public bool InMainFrame => Region is null or { IsMain: true };
@@ -63,7 +63,7 @@ public partial class FootPlayer
         Terrain?.RemoveAnchor(this);
         Region = target;
         Origin = target.Origin;
-        Terrain = target.Chunks?.Ground;
+        Terrain = target.Ground;
         ApplyRegionSpace();
         if (from != null)
         {

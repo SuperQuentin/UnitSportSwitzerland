@@ -39,6 +39,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Main-thread time a frame spends adding what the workers built, ms (the flat world's <c>CommitBudgetMs</c>).</summary>
     public double CommitBudgetMs { get; set; } = 4;
 
+    /// <summary>
+    /// Whether leaves are meshed and drawn: off on the dedicated server (#1513), which asks the leaves' heights and stands
+    /// its bots on the collision patches, but draws nothing.
+    /// </summary>
+    public bool BuildMeshes { get; init; } = true;
+
     public LeafStore Store { get; }
 
     public WorldOrigin Origin { get; }
@@ -264,7 +270,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             Anchor = key.Anchor,
             Vertices = vertices,
             Side = side,
-            Arrays = Mesh(vertices, side, content),
+            Arrays = BuildMeshes ? Mesh(vertices, side, content) : null,
             Bores = content.Roads is { } roads ? RoadTunnels.Bores(roads) : null,
             Lattice = LeafFrames.Swiss.TransformOf(key),
         };
