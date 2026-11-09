@@ -743,8 +743,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 // the ground this server holds under them: what any server-side check would use
                 var at = _origin!.ToWorld(p.Global);
+                // under --frame earth the world's Y is the ENU frame's, not an altitude: the ground point's own altitude
                 string ground = Ground is { } g && g.TryGetHeight(at, out float h)
-                    ? $"ground {h:F1} m" + (_earth == null && _chunks!.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
+                    ? $"ground {(_earth != null ? _origin.ToGlobal(new Vector3(at.X, h, at.Z)).Alt : h):F1} m" + (_earth == null && _chunks!.IsGenerated(_origin.TileAt(at)) ? " (generated)" : "")
                     : "ground not loaded";
                 GD.Print($"[server] player {p.Name} at {p.Global}, {ground}");
             }
