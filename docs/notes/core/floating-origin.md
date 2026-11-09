@@ -87,12 +87,29 @@
     `OriginShifter.Turned`), where no flat tile is drawn any more: every 20 km the anchor is
     `FrameAxes.Tangent` under the camera, built in ECEF (the previous axes turned by the least rotation, no
     LV95). From 60 to 250 km the Space frame stays flat: the flat tiles are still drawn there, and the
-    curvature shader wraps them as one plane. The ground keeps its flat frame until #1443 G2.
+    curvature shader wraps them as one plane. The flat world's ground keeps its flat frame until G2 D.
+  - **The earth world's ground turns** (#1512, G2 C3, `--frame earth`, `OriginShifter.GroundMode`): past 3 km
+    (horizontally) from the anchor, the world moves to `FrameAxes.Tangent` under the camera at altitude 0 (the
+    camera's LHN95 height as the drop, as the Space anchor's), its axes the old ones turned by the least rotation:
+    0.027° each 3 km, no yaw. Up and gravity (−Y) are then the ellipsoid's under the camera, never more than
+    0.027° off. No snap: everything placed from doubles (leaves, patches, the globe) is placed again from the
+    frame; what is moved in floats drifts by the float basis (0.1 mm 30 m out, ~2 cm on a body left 57 km away
+    over 19 shifts: such a body is dormant, kept by its Earth place). One frame at every altitude: above 60 km it
+    re-anchors past `SpaceMode`'s 20 km, with no handover (the flat world's band and its two rigid moves exist
+    because its tiles are flat). A teleport (`ShiftTo(e, n)`) lands on the tangent anchor under the point.
+    The shift log line says how a shift turned (`turned: tilt 0.0269°, yaw 0.0000°`). `OriginShift.Turns` is exact
+    (a 20 m stress shift turns 3·10⁻⁶ rad, under `IsEqualApprox`); `Apply(Aabb)` bounds the moved corners.
+    `--originstress <m> --originyaw <deg>` there turns the tangent anchor by ±deg, one way then back.
     `--orbitcheck` flies a polar orbit through ~2,080 turned shifts; `--spacebandcheck` the band.
   `--originstress <m> --originyaw <deg>` sends every shift to an anchor frame at altitude 0 turned
   ±deg about up, so every handler meets a rotation: the car ride, the A320 and the hairpin drive
-  pass at 2° (check map). Known gap: the speedboat's beach landing (`--boatcheck`) stops 3 m
-  further out and keeps creeping at 1.2 m/s in a turned frame, everything else on the boat passes.
+  pass at 2° (check map; but see `--world flat` below). Known gap: the speedboat's beach landing
+  (`--boatcheck speedboat --chunks fixture:lake --originstress 20 --originyaw 2`) stops short and keeps creeping at
+  1.2 m/s in a turned frame, everything else on the boat passes: 3 m short at H3, 17.1 m on Nov 9 2026 (17.2 m with
+  `Turns` as it was before #1512, so not C3's). On leaves (#1512): the car (`--ride car,25 --at 2496957,1122352
+  --heading 35`, open ground by Geneva airport) through 23 turning shifts.
+- **`--world flat` has no shifter**: its probes' `--originstress` changes nothing (no `[origin]` line). Stress a
+  handler on real terrain (`--chunks`) or under `--frame earth --leaves`.
 - **Checks**: `--origincheck` (headless: frames, lane keys, the wire between two origins, a race
   road followed across a shift, a remote interpolated 3,600 km out, the node walk, the kinematic
   case; RESULT line). Multiplayer: the `tools/*check.sh` loopback scripts with `--originstress` on

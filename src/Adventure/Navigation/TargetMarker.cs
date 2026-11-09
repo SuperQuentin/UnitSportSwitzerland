@@ -98,8 +98,8 @@ public partial class TargetMarker : CanvasLayer
         double d = at.HorizontalDistanceTo(GlobalPos.FromLv95(t.E, t.N, at.Alt));
         float alt = NavTarget.Alt ?? (float)at.Alt;
         var world = origin.ToWorld(t.E, t.N, alt + HeightM);
-        // where the place is drawn: lower by the Earth's drop round the camera (#187, 61 m at 30 km)
-        if (Curvature.Drawn) world.Y -= (float)Curvature.Drop(d);
+        // where the place is drawn: lower by the Earth's drop round the camera (#187, 61 m at 30 km), or on round leaves higher by refraction's lift (#1512)
+        if (Curvature.Drawn) world.Y -= (float)Curvature.DrawnDrop(d);
         UpdateText(t.Label, d, alt - at.Alt, t.RadiusM);
         Arrival(t, d);
         if (XR.XrSession.Active)

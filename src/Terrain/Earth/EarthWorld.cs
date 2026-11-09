@@ -347,7 +347,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
                 int k = j * n + i;
                 var dx = pos[j * n + Math.Min(i + 1, n - 1)] - pos[j * n + Math.Max(i - 1, 0)];
                 var dz = pos[Math.Min(j + 1, n - 1) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
-                var normal = dz.Cross(dx).Normalized();
+                var normal = dz.Cross(dx);
+                // a no-data (NaN) neighbour at the leaf set's edge: up, not a NaN normal (85k warnings a drive, #1512)
+                normal = normal.IsFinite() && normal.LengthSquared() > 0 ? normal.Normalized() : Vector3.Up;
                 normals[k] = normal.Y < 0 ? -normal : normal;
                 var c = cover != null && k < cover.Length ? (CoverClass)cover[k] : CoverClass.Open;
                 colours[k] = CoverPalette.ColorFor(c, pos[k].Y, ((i * 73856093) ^ (j * 19349663)) * (1f / int.MaxValue));

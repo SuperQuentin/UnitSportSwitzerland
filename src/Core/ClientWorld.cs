@@ -455,11 +455,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             : new WorldOrigin(startE, startN);
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
-        // --frame earth (#1510): the world is the ENU frame at the start, which moves with the camera without turning (C3
-        // turns it). Online too since the server stands on leaves (#1513): the wire carries Earth positions, so this
-        // frame is the client's own and need not match the server's (its leaves are read from this copy's disk)
+        // --frame earth (#1510): the world is the ENU frame at the start, re-anchored under the camera as it goes, turning
+        // with the Earth (#1512, C3). Online too since the server stands on leaves (#1513): the wire carries Earth positions,
+        // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk)
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !fixture;
         if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
+        // round leaves fall away by themselves: the shaders only add refraction's lift (#1512)
+        Curvature.RoundGeometry = earth;
 
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
@@ -882,7 +884,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => FlightCheckProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
             {
                 var f = FlightCheckProbe.ParseArgs()!.Value;
-                return new FlightCheckProbe(chunks, origin, f.Kind, f.Shot);
+                return new FlightCheckProbe(chunks, origin, f.Kind, f.Shot, Ground);
             }),
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
@@ -925,7 +927,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
             {
                 var r = RideProbe.ParseArgs()!.Value;
-                return new RideProbe(chunks, origin, r.Kind, r.Seconds, r.Shot);
+                return new RideProbe(chunks, origin, r.Kind, r.Seconds, r.Shot, Ground);
             }),
             new(() => TunnelProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
