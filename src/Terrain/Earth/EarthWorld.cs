@@ -41,6 +41,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Main-thread time a frame spends adding what the workers built, ms (the flat world's <c>CommitBudgetMs</c>).</summary>
     public double CommitBudgetMs { get; set; } = 4;
 
+    /// <summary>
+    /// Whether leaves are meshed and drawn: off on the dedicated server (#1513), which asks the leaves' heights and stands
+    /// its bots on the collision patches, but draws nothing.
+    /// </summary>
+    public bool BuildMeshes { get; init; } = true;
+
     /// <summary>Every leaf this world stands on: the region's, the fill's, a fixture course's.</summary>
     public EarthLeaves Leaves { get; }
 
@@ -274,7 +280,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             Anchor = key.Anchor,
             Vertices = vertices,
             Side = side,
-            Arrays = Mesh(vertices, side, content),
+            Arrays = BuildMeshes ? Mesh(vertices, side, content) : null,
             Bores = content.Roads is { } roads ? RoadTunnels.Bores(roads) : null,
             Lattice = LeafFrames.Swiss.TransformOf(key),
         };
@@ -351,7 +357,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
                 int k = j * n + i;
                 var dx = pos[j * n + Math.Min(i + 1, n - 1)] - pos[j * n + Math.Max(i - 1, 0)];
                 var dz = pos[Math.Min(j + 1, n - 1) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
-                var normal = dz.Cross(dx).Normalized();
+                var normal = dz.Cross(dx);
+                // a no-data (NaN) neighbour at the leaf set's edge: up, not a NaN normal (85k warnings a drive, #1512)
+                normal = normal.IsFinite() && normal.LengthSquared() > 0 ? normal.Normalized() : Vector3.Up;
                 normals[k] = normal.Y < 0 ? -normal : normal;
                 var c = cover != null && k < cover.Length ? (CoverClass)cover[k] : CoverClass.Open;
                 colours[k] = CoverPalette.ColorFor(c, pos[k].Y, ((i * 73856093) ^ (j * 19349663)) * (1f / int.MaxValue));
@@ -414,6 +422,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         double h = CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref leaf.Hint);
         if (double.IsNaN(h)) return false;
         height = ToWorld(leaf, x, h, z).Y;
+        return true;
+    }
+
+    /// <summary>
+    /// The ground's ellipsoidal height under an Earth position on the loaded leaves (its own height ignored), false off
+    /// them: in doubles from the leaf's anchor frame, never through the world's floats (#1513: the server's line of sight).
+    /// Main thread.
+    /// </summary>
+    public bool EllipsoidalHeightAt(EcefPos p, out double height)
+    {
+        height = 0;
+        if (!_near.TryGetValue(CubeKey.FromEcef(p, LeafFrames.LeafLevel), out var leaf)) return false;
+        var (x, _, z) = leaf.Anchor.ToLocal(p);
+        double h = CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref leaf.Hint);
+        if (double.IsNaN(h)) return false;
+        height = Ellipsoid.Wgs84.ToGeodetic(leaf.Anchor.ToEcef(x, h, z)).H;
         return true;
     }
 

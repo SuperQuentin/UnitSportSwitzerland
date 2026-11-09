@@ -22,6 +22,8 @@ public sealed class RopewayLine
     public double[] E { get; }
     public double[] N { get; }
     public float[] Alt { get; }
+    /// <summary>Point <paramref name="i"/> of the cable in LV95 (0 = the bottom station, ^1 = the top).</summary>
+    public (double E, double N) Point(Index i) => (E[i], N[i]);
     /// <summary>Distance along the cable, flat, from the bottom station.</summary>
     public float[] Arc { get; }
     public float Length => Arc[^1];

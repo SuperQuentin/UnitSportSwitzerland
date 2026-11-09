@@ -4,13 +4,27 @@
 # collision, walks up to it and shoots it down with a pistol (the server takes the hits itself), then
 # sees it stand up again (free roam knocks out); B sees the same bot, and sees it go down.
 #   GODOT=<exe> [WINDOWED=1 CLIENT_ARGS="--screen 1"] tools/botcheck.sh   screenshots: test_output/bots_a_{bots,down}.png (windowed)
+# EARTH=1 plays it under --frame earth on built leaves (#1513, G2 C4): the server's frame ENU on EarthWorld, its bots on
+# the leaves' collision patches, each client in an ENU frame of its own on the same leaves (default Geneva).
+#   EARTH=1 [LEAVES=<dir>] [CHUNKS=<dir>] [AT=E,N] tools/botcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" bots
-AT=2583250,1113250
-AT_B=2583262,1113250   # never on top of A
+WORLD=(--generated-world)
+CWORLD=()
+if [ -n "${EARTH:-}" ]; then
+  LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
+  CHUNKS=${CHUNKS:-D:/UnitSportSwitzerland/terrain_chunks}
+  AT=${AT:-2500956,1117569}   # Geneva, the densest leaf of the D: region
+  if [ ! -d "$LEAVES" ]; then echo "[botcheck] no LEAVES with built leaves: skipped"; echo "[botcheck] RESULT: ok (skipped)"; exit 0; fi
+  WORLD=(--frame earth --leaves "$LEAVES" --chunks "$CHUNKS")
+  CWORLD=("${WORLD[@]}")
+else
+  AT=2583250,1113250
+fi
+AT_B="$(( ${AT%,*} + 12 )),${AT#*,}"   # never on top of A
 PORT=7836
-tc_server 560 120 "$OUT/bots_server.log" --server --generated-world --port $PORT --no-query --admin-password botcheck --bots 3 --botsat $AT --botlog
+tc_server 560 120 "$OUT/bots_server.log" --server "${WORLD[@]}" --port $PORT --no-query --admin-password botcheck --bots 3 --botsat $AT --botlog
 client() { tc_client 480 "$OUT/bots_$1.log" --connect 127.0.0.1:$PORT --name "Bot$1" --cache "$OUT/bots_cache_$1" \
-    --at "$2" --view first --botcheck "$1" ${CLIENT_ARGS:-}; }
+    ${CWORLD[@]+"${CWORLD[@]}"} --at "$2" --view first --botcheck "$1" ${CLIENT_ARGS:-}; }
 client A "$AT" & A=$!
 client B "$AT_B"
 wait $A

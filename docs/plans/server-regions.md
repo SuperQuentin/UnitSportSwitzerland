@@ -115,9 +115,9 @@ The position half, built in PR #1584:
 - **Entity interest** buckets by level-13 `CubeKey` (~1.2 km), neighbours through `CubeKey.Neighbour` across face
   edges (seven at a cube corner).
 
-Left for the follow-up, now that C1's earth streamer (#1576) is on main: the server under `--frame earth`, the main
-region and each ENU region on `EarthWorld`'s leaves (their `ChunkManager` is still the flat one), and `InterestService`'s line of sight over the pyramid with
-refraction and Earth occlusion (still the 100 m horizon lattice).
+The server under `--frame earth`, the main region and each ENU region on `EarthWorld`'s leaves: built in #1610
+(`net/server-regions`). `InterestService`'s line of sight over the pyramid with refraction and Earth occlusion: built in
+#1617 (`net/vision-interest`). C4 is complete.
 
 ## Out of scope
 

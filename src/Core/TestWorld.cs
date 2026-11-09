@@ -23,6 +23,20 @@ public partial class TestWorld : Node3D
         return chunks == null || chunks.TryGetHeight(at, out y);
     }
 
+    /// <summary>
+    /// The earth world streams leaves only within 900 m of a focus (#1510), and a probe's camera hovers 1.2 km over
+    /// its target: an anchor 500 m up over the target (a collision one) brings the ground there in. Nothing in the
+    /// flat world, whose rings already reach it. The probe registers its body as an anchor when it spawns.
+    /// </summary>
+    public static void AnchorEarthTarget(Node parent, IWorldGround? ground, WorldOrigin origin, double e, double n)
+    {
+        if (ground == null || !origin.Frame.IsAnchor) return;
+        var seed = new Node3D { Name = "EarthTarget" };
+        parent.AddChild(seed);
+        seed.GlobalPosition = origin.ToWorld(e, n, 500);
+        ground.AddAnchor(seed, collision: true);
+    }
+
     public override void _Ready()
     {
         GameSettings.Load();

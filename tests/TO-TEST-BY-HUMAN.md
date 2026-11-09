@@ -7,6 +7,20 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The earth world's ground frame turns ([#1612](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1612), [#1512](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1512))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva), in a window. Each re-anchor (every 3 km) prints `[origin] shift N ... turned: tilt 0.0269°`.
+
+- [ ] Walk, then drive a car, NE for 4 km across a re-anchor → no jump, no hitch in the view or the steering, the body stays on the ground, the horizon stays level.
+- [ ] Fly the spectator 2 km up across two re-anchors, looking at the far ground → the far ground falls away smoothly (round leaves plus refraction's small lift), no step at the re-anchor.
+
+## The server on leaves under `--frame earth` ([#1610](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1610), [#1513](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1513))
+
+A server and two windowed clients, all with `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, both clients `--at 2500956,1117569` (Geneva).
+
+- [ ] Walk, run and jump beside the other player, with the server also given `--bots 3 --botsat 2500956,1117569` → each sees the other and the bots standing on the drawn leaves (no hovering, no sinking), turning the way they walk.
+- [ ] One client teleports to Riddes (`--at 2581500,1113300` on a rejoin) and back → the other sees it go and come back, on the ground both times.
+
 ## The fill and fixture courses on leaves, `--frame earth` ([#1614](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1614), [#1510](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1510))
 
 B4's leaves: `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`.

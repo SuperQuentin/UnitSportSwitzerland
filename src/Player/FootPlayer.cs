@@ -1590,7 +1590,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // and the decks of walkable vehicles (#162), which only exist on a walking player's own peer
         CollisionMask |= DeckLayer;
         _walkMask = CollisionMask;
-        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain")?.Ground;
+        // the world's ground: the flat tiles, or the leaves under --frame earth (#1513: the flat streamer is out of the tree)
+        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain")?.Ground
+            ?? GetNodeOrNull<UnitSport.Terrain.Earth.EarthWorld>("/root/Main/World/Earth")?.Ground;
         if (Origin is { } start)
         {
             NetGlobal = start.ToGlobal(Position);

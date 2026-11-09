@@ -7,7 +7,7 @@ namespace UnitSport.World;
 /// <summary>
 /// The water, for everything that needs it (#299): swimmers, boats, birds, audio, loot, vehicles.
 /// Static, one per process, no node: it reads the loaded tiles' still water
-/// (<see cref="ChunkManager.TryGetWater"/>) and adds the deterministic waves of
+/// (<see cref="IWorldGround.TryGetWater"/>) and adds the deterministic waves of
 /// <see cref="WaveSpectrum"/> on the synchronized server clock, so every peer, headless ones
 /// included, gets the same surface with nothing replicated but <see cref="SeaState"/>. The shader
 /// draws the same function from the globals <see cref="PushGlobals"/> writes.
@@ -26,7 +26,8 @@ namespace UnitSport.World;
 /// </summary>
 public static class WaterField
 {
-    private static ChunkManager? _chunks;
+    /// <summary>The ground whose water is read: the flat tiles' or the earth world's leaves (#1513).</summary>
+    private static IWorldGround? _ground;
     private static float _seaState;
     private static readonly float[] Amp = new float[WaveSpectrum.Count];
 
@@ -53,31 +54,34 @@ public static class WaterField
         SeaStateChanged?.Invoke(state);
     }
 
-    /// <summary>The tiles whose water is queried; null when there are none (a flat test world, teardown).</summary>
-    public static void Bind(ChunkManager? chunks) => _chunks = chunks;
+    /// <summary>
+    /// The ground whose water is queried: the flat tiles' or the earth world's leaves (<c>--frame earth</c>, #1513); null
+    /// when there is none (a flat test world, teardown).
+    /// </summary>
+    public static void Bind(IWorldGround? ground) => _ground = ground;
 
     /// <summary>
     /// The water of another terrain, while a scope lasts: a body in a server region of its own steps in
     /// that region's frame (#1456), so its water comes from the region's terrain, not the one bound.
-    /// Null changes nothing.
+    /// Null changes nothing. A region on leaves (<c>--frame earth</c>, #1513) passes its earth world's ground.
     /// </summary>
-    public static Scope In(ChunkManager? chunks) => new(chunks);
+    public static Scope In(IWorldGround? ground) => new(ground);
 
     public readonly struct Scope : IDisposable
     {
-        private readonly ChunkManager? _was;
+        private readonly IWorldGround? _was;
         private readonly bool _set;
 
-        public Scope(ChunkManager? chunks)
+        public Scope(IWorldGround? ground)
         {
-            _set = chunks != null;
-            _was = _chunks;
-            if (_set) _chunks = chunks;
+            _set = ground != null;
+            _was = _ground;
+            if (_set) _ground = ground;
         }
 
         public void Dispose()
         {
-            if (_set) _chunks = _was;
+            if (_set) _ground = _was;
         }
     }
 
@@ -100,7 +104,7 @@ public static class WaterField
     {
         still = 0f;
         scale = 0f;
-        return _chunks != null && _chunks.Ground.TryGetWater(world, out still, out scale);
+        return _ground != null && _ground.TryGetWater(world, out still, out scale);
     }
 
     // ---- the surface -----------------------------------------------------------------------
@@ -202,7 +206,7 @@ public static class WaterField
     public static bool TryWorld(double lv95E, double lv95N, out Vector3 world)
     {
         world = Vector3.Zero;
-        if (_chunks?.Origin is not { } origin) return false;
+        if (_ground?.Origin is not { } origin) return false;
         world = origin.ToWorld(lv95E, lv95N, 0);
         return true;
     }
@@ -211,7 +215,7 @@ public static class WaterField
     public static bool TryLv95(Vector3 world, out double lv95E, out double lv95N)
     {
         lv95E = lv95N = 0;
-        if (_chunks?.Origin is not { } origin) return false;
+        if (_ground?.Origin is not { } origin) return false;
         (lv95E, lv95N) = origin.ToLv95(world);
         return true;
     }
@@ -240,7 +244,7 @@ public static class WaterField
     private static bool Pattern(Vector3 world, out double px, out double pz)
     {
         px = pz = 0;
-        if (_chunks?.Origin is not { } origin) return false;
+        if (_ground?.Origin is not { } origin) return false;
         var (e, n) = origin.ToLv95(world);
         px = WaveSpectrum.PatternX(e);
         pz = WaveSpectrum.PatternZ(n);
