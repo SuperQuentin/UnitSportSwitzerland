@@ -191,10 +191,13 @@ public static class LeafStandIn
     /// A leaf's still water as its stand-in tile's 2 m water layer: each sample takes the level of the leaf's water
     /// sample nearest it (the lattice vertex <paramref name="nearestVertex"/> gives, rounded to the water's every second
     /// vertex), as an anchor-frame height; its wave scale from the fetch and the depth over <paramref name="bed"/>.
-    /// Null when the leaf is dry.
+    /// Null when the leaf is dry. The samples reach <see cref="WaterMarginSamples"/> past the leaf, taking the nearest
+    /// sample's vertex on it, so the surface covers the leaf to its edges once clipped there (#1632,
+    /// <c>Earth/LeafWaterClip</c>); a sample off the leaf further out stays dry.
     /// </summary>
     public static WaterLayer? Water(CubeWater water, LeafTransform t, int side, int[] nearestVertex, ChunkGrid bed)
     {
+        nearestVertex = Grown(nearestVertex, WaterMarginSamples);
         int ws = water.Side;
         // each wet water sample's level as a local height, once
         float[]? local = null;
@@ -228,6 +231,35 @@ public static class LeafStandIn
             any = true;
         }
         return any ? WaterLayer.Create(new WaterTile { Level = level, FetchM = fetch }, bed) : null;
+    }
+
+    /// <summary>How far a leaf's water samples reach past it, in 2 m samples.</summary>
+    public const int WaterMarginSamples = 2;
+
+    /// <summary>The samples' vertices grown outward by <paramref name="rings"/> samples: an unset one takes a set 8-neighbour's.</summary>
+    internal static int[] Grown(int[] nearest, int rings)
+    {
+        const int m = WaterTile.Size;
+        var cur = nearest;
+        for (int ring = 0; ring < rings; ring++)
+        {
+            var next = (int[])cur.Clone();
+            for (int r = 0; r < m; r++)
+                for (int c = 0; c < m; c++)
+                {
+                    if (cur[r * m + c] >= 0) continue;
+                    for (int dr = -1; dr <= 1 && next[r * m + c] < 0; dr++)
+                        for (int dc = -1; dc <= 1; dc++)
+                        {
+                            int rr = r + dr, cc = c + dc;
+                            if ((uint)rr >= m || (uint)cc >= m || cur[rr * m + cc] < 0) continue;
+                            next[r * m + c] = cur[rr * m + cc];
+                            break;
+                        }
+                }
+            cur = next;
+        }
+        return cur;
     }
 
     /// <summary>Anchor frame to stand-in tile: a shift along x and z, headings unchanged.</summary>

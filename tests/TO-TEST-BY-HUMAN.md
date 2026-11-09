@@ -16,6 +16,14 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 - [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
 - [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
 
+## The earth ground's look (PR [#1642](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1642), [#1634](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1634), [#1632](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1632), [#1633](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1633), [#1635](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1635))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500300,1117900` (Geneva), in a window, against the same without `--frame`/`--leaves`.
+
+- [ ] Walk the Jardin Anglais and the Rhône's banks in Cartoon, PS1, Realistic− and Realistic+ (`/style`) → grass, paving and stone banks look as in the flat world (painted grass, textures in Realistic), never pale mint or white.
+- [ ] Fly 150 m over the lake for 5 km → no straight light lines across the water at the leaves' joins.
+- [ ] In the headset (PC VR, then the Quest at Very low): the same lawn and lake → the ground in the standalone look, no seam lines.
+
 ## The earth world's ground frame turns ([#1612](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1612), [#1512](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1512))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva), in a window. Each re-anchor (every 3 km) prints `[origin] shift N ... turned: tilt 0.0269°`.
@@ -867,6 +875,14 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 
 - [ ] `--occasion christmas`, take off in a plane and climb: the snow thins out about 2 km over the valley floor and is gone above it, no pop; coming back down, it returns.
 - [ ] Inside a house with a door open: the street's snow still shows through the doorway.
+
+## Space under `--frame earth` (PR [#1638](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1638), [#1630](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1630), [#1631](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1631))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2026-06-21 --time 11`, in a window; beside it the same without `--frame`/`--leaves`.
+
+- [ ] Fly the spectator straight up to 400 km and back down, by keyboard, then by pad → the sky goes black past ~60 km (`[origin] the earth frame re-anchors every 20 km from 60.x km`), the limb, the Alps and the Mediterranean as in the flat run; back below 50 km the 3 km re-anchors resume, and on the ground the town is there at once.
+- [ ] The UFO, `/orbit 400`, a few minutes, then thrust down and land → the orbit looks as on flat, the ground loads under the landing.
+- [ ] The shuttle: the `--shuttlefilm` command line of `tools/shuttlefilm.sh` plus `--frame earth --leaves ...` → the climb to black and the landing on 22 look as the flat film's.
 
 ## The cloud deck while it snows (PR [#1644](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1644), [#1643](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1643))
 

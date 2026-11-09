@@ -45,8 +45,10 @@ public static class WaterMeshBuilder
     /// no waves (wave scale 0): the source layer's lakes would otherwise be pits from afar.
     /// </summary>
     /// <param name="detail">The visual style's mesh detail; only <see cref="Styles.MeshDetail.Low"/> exists so far.</param>
+    /// <param name="channelsOnly">The watercourses alone, the layer only telling where water is already mapped (a leaf's
+    /// still water is built and clipped apart, #1632).</param>
     public static MeshData? Build(WaterLayer? layer, RoadTile? roads, int terrainStride,
-        Styles.MeshDetail detail = Styles.MeshDetail.Low)
+        Styles.MeshDetail detail = Styles.MeshDetail.Low, bool channelsOnly = false)
     {
         bool far = terrainStride >= ChunkFormat.CoarseStride;
         int step = terrainStride <= 2 ? 1 : far ? Math.Max(1, terrainStride / WaterLayer.Stride) : 2;
@@ -58,7 +60,7 @@ public static class WaterMeshBuilder
         var uvs = new List<Vector2>();
         var indices = new List<int>();
 
-        if (layer != null)
+        if (layer != null && !channelsOnly)
         {
             // vertex index per lattice position, -1 until first used
             var lookup = new int[m * m];

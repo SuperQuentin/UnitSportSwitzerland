@@ -123,6 +123,8 @@
     <Compile Include="..\..\src\Terrain\LeafCollision\CollisionPatches.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <!-- #1512 G2 C3: patterns from tile coordinates (the bake and pattern space; Godot maths only) -->
     <Compile Include="..\..\src\Terrain\Earth\LeafPattern.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1632 G2 C6: a leaf's lake cut at its edges (Godot maths only) -->
+    <Compile Include="..\..\src\Terrain\Earth\LeafWaterClip.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeTargets.cs" Link="Game\%(Filename)%(Extension)" />
