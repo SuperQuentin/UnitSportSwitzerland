@@ -74,6 +74,8 @@
     <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1636: where the traffic's graphs put a tile's or a leaf's records, and their join keys -->
+    <Compile Include="..\..\src\World\TilePlace.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1503 G2 A2b: GlobalPos's JSON shape in the saves (on the type) and the stores' in-place migrations -->
     <Compile Include="..\..\src\Core\SavedPlace.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />

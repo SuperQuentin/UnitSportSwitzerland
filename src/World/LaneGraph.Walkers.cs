@@ -105,7 +105,11 @@ public sealed partial class LaneGraph
         var tileList = tiles.ToList();
 
         // ---- sidewalks and paths
+        bool onLeaves = false;
         foreach (var tile in tileList)
+        {
+            var place = TilePlace.Of(origin, tile);
+            onLeaves |= place.OnLeaf;
             foreach (var seg in tile.Segments)
             {
                 segId++;
@@ -120,8 +124,7 @@ public sealed partial class LaneGraph
                 var line = new Vector3[n];
                 for (int i = 0; i < n; i++)
                 {
-                    var (e, nn) = seg.Lv95(tile.Id, i);
-                    line[i] = origin.ToWorld(e, nn, seg.Points[i * 3 + 1]);
+                    line[i] = place.World(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
                 }
                 if (!Near(line[0]) && !Near(line[^1]) && !Near(line[n / 2])) continue;
                 if (path)
@@ -155,6 +158,7 @@ public sealed partial class LaneGraph
                     protos.Add(new WalkProto { P = pts, Kind = WalkKind.Sidewalk, Class = seg.Class, Width = width, Segment = segId });
                 }
             }
+        }
         int walkways = protos.Count;
 
         // ---- the crossings at the lights: their walker lines (CPAR), each half of a two-stage crossing its own group
@@ -382,7 +386,7 @@ public sealed partial class LaneGraph
         // ---- stray ends: a sidewalk that stops at a junction's corner or a tile seam, a path that ends beside a street. Each ties
         // to the nearest walkway within reach that it reaches without crossing a carriageway (not the other side of its own street)
         var endCount = new Dictionary<long, int>();
-        long Cell(Vector3 p) { var (e, nn) = origin.ToLv95(p); return Key(e, nn); }
+        long Cell(Vector3 p) => TilePlace.KeyOfWorld(origin, p, onLeaves);
         int Meeting(Vector3 p)
         {
             long key = Cell(p);
@@ -524,7 +528,7 @@ public sealed partial class LaneGraph
         // half a bar and a step on past the outer bars: onto the kerb
         var a = centres[ilo] - across * 0.6f;
         var bEnd = centres[ihi] + across * 0.6f;
-        Vector3 World(Vector3 p) => origin.TileToWorld(tile.Id, p);
+        Vector3 World(Vector3 p) => TilePlace.Of(origin, tile).World(p);
         return (World(a), World(bEnd));
     }
 

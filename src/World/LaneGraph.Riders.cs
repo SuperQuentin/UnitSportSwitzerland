@@ -78,6 +78,8 @@ public sealed partial class LaneGraph
         int site0 = 0;
         foreach (var tile in near)
         {
+            var place = TilePlace.Of(origin, tile);
+            g.OnLeaves |= place.OnLeaf;
             Dictionary<RoadSegment, RoadTransition>? transitionOf = null;
             foreach (var t in tile.Transitions) (transitionOf ??= new(ReferenceEqualityComparer.Instance))[t.Segment] = t;
             foreach (var seg in tile.Segments)
@@ -89,11 +91,11 @@ public sealed partial class LaneGraph
                 long keyStart = 0, keyEnd = 0;
                 for (int i = 0; i < pts.Length; i++)
                 {
-                    var (e, n) = seg.Lv95(tile.Id, i);
-                    pts[i] = origin.ToWorld(e, n, seg.Points[i * 3 + 1]);
+                    float x = seg.Points[i * 3], y = seg.Points[i * 3 + 1], z = seg.Points[i * 3 + 2];
+                    pts[i] = place.World(x, y, z);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
-                    if (i == 0) keyStart = Key(e, n);
-                    if (i == pts.Length - 1) keyEnd = Key(e, n);
+                    if (i == 0) keyStart = place.Key(x, y, z);
+                    if (i == pts.Length - 1) keyEnd = place.Key(x, y, z);
                 }
                 if (cum[^1] < 1f) continue;
                 var at = seg.Attributes;
@@ -159,9 +161,10 @@ public sealed partial class LaneGraph
         int n = jpath.PointCount;
         var pts = new Vector3[n];
         var cum = new float[n];
+        var place = TilePlace.Of(origin, tile);
         for (int i = 0; i < n; i++)
         {
-            pts[i] = origin.TileToWorld(tile.Id, new Vector3(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]));
+            pts[i] = place.World(jpath.Points[i * 3], jpath.Points[i * 3 + 1], jpath.Points[i * 3 + 2]);
             if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
         }
         if (cum[^1] < 0.5f) return null;
@@ -169,7 +172,7 @@ public sealed partial class LaneGraph
         {
             Points = pts, Cumulative = cum, Class = jpath.Junction.Class, Width = Math.Max(jpath.Width, jpath.ToWidth), OneWay = 1, Connector = true,
             Kind = MoverKind.Rider,
-            KeyStart = Key(tile.Id.Global(jpath.From.X, jpath.From.Z)), KeyEnd = Key(tile.Id.Global(jpath.To.X, jpath.To.Z)),
+            KeyStart = place.Key(jpath.From.X, jpath.From.Y, jpath.From.Z), KeyEnd = place.Key(jpath.To.X, jpath.To.Y, jpath.To.Z),
             Path = info,
         };
     }
