@@ -334,7 +334,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <summary>
     /// On a worker: the graphs from the road tiles read (<paramref name="tiles"/> the wide set for rails, trams and the modes,
     /// <paramref name="near"/> the roads'), handed to the main thread in its current frame; <paramref name="built"/> there records
-    /// what they were built around. A build that throws is logged and let go, so the next frame tries again.
+    /// what they were built around. A build that throws is logged and counts as built there: it is tried again once the view
+    /// moves on (before, the exception was lost and the traffic never rebuilt again).
     /// </summary>
     private void BuildGraphs(List<RoadTile> tiles, List<RoadTile> near, OriginFrame origin, uint wanted, int epoch, string here,
         Vector3? around, Action built)
