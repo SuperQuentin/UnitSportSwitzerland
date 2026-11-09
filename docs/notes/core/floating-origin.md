@@ -97,7 +97,7 @@
     over 19 shifts: such a body is dormant, kept by its Earth place). One frame at every altitude: above 60 km it
     re-anchors past `SpaceMode`'s 20 km, with no handover (the flat world's band and its two rigid moves exist
     because its tiles are flat). A teleport (`ShiftTo(e, n)`) lands on the tangent anchor under the point.
-    The shift log line says how a shift turned (`turned 0.0269° tilt 0.0000° yaw`). `OriginShift.Turns` is exact
+    The shift log line says how a shift turned (`turned: tilt 0.0269°, yaw 0.0000°`). `OriginShift.Turns` is exact
     (a 20 m stress shift turns 3·10⁻⁶ rad, under `IsEqualApprox`); `Apply(Aabb)` bounds the moved corners.
     `--originstress <m> --originyaw <deg>` there turns the tangent anchor by ±deg, one way then back.
     `--orbitcheck` flies a polar orbit through ~2,080 turned shifts; `--spacebandcheck` the band.

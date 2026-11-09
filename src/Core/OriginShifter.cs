@@ -298,7 +298,7 @@ public partial class OriginShifter : Node
     {
         var up = shift.Direction(Vector3.Up);
         double tilt = Math.Asin(Math.Min(1.0, Vector3.Up.Cross(up).Length()));
-        return string.Create(CultureInfo.InvariantCulture, $", turned {tilt * 180 / Math.PI:F4}° tilt {shift.Yaw * 180 / Math.PI:F4}° yaw");
+        return string.Create(CultureInfo.InvariantCulture, $", turned: tilt {tilt * 180 / Math.PI:F4}°, yaw {shift.Yaw * 180 / Math.PI:F4}°");
     }
 
     /// <summary>
