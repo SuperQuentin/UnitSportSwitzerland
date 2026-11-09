@@ -548,7 +548,7 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>The Map's place rows, for the checks.</summary>
-    internal bool HasPlaces => _places() != null;
+    internal bool HasPlaces => _places() is { All.Count: > 0 };   // an index with no places.json lists nothing to pick
 
     internal int MapRowCount => _results.GetChildren().OfType<Button>().Count();
 
