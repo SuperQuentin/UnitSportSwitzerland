@@ -122,6 +122,7 @@ varying vec3 v_col;
 #endif
 
 void vertex() {
+    PATTERN_VERTEX
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 #ifdef NO_DISCARD
     // a standalone headset (#1112): no discard anywhere in the terrain, which turned a Quest's early

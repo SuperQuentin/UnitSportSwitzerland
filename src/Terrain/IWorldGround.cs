@@ -18,6 +18,12 @@ public interface IWorldGround
     WorldOrigin? Origin { get; }
 
     /// <summary>
+    /// Whether surface patterns (and the waves) come from the cube face's (u, v) (<see cref="Earth.PatternSpace"/>,
+    /// the round world's, #1512) rather than LV95 modulo 9.6 km (the flat world's).
+    /// </summary>
+    bool PatternsOnFaces => false;
+
+    /// <summary>
     /// The terrain's height under a point, of the surface on screen (its flat-shaded triangles), on a
     /// tile that is loaded. Under a lake it is the bed: see <see cref="TryGetSurface"/>.
     /// </summary>
