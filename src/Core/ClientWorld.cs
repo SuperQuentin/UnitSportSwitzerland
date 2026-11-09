@@ -731,8 +731,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // …the creatures in the air around the camera, and their sounds
             AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
-            // …and snow falling round the camera, except indoors
-            AddChild(new Occasions.OccasionPrecip());
+            // …and snow falling round the camera, except indoors and above the cloud layer (#1637)
+            AddChild(new Occasions.OccasionPrecip(origin, at => Ground is { } gr && gr.TryGetSurface(at, out float y) ? y : null));
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock

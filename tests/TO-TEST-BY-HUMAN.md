@@ -862,3 +862,14 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] Land from space at Geneva or Zurich: from 15 km down the ground and the Alps show out to the horizon, no haze-coloured plane with lakes on it.
 - [ ] The same in VR (a standalone headset sinks the faded edge instead of discarding it).
 - [ ] From orbit and on the way down, the atmosphere's haze and limb glow cover the whole view (no clear disc round where you look).
+
+## No snow above the clouds (PR [#1641](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1641), [#1637](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1637))
+
+- [ ] `--occasion christmas`, take off in a plane and climb: the snow thins out about 2 km over the valley floor and is gone above it, no pop; coming back down, it returns.
+- [ ] Inside a house with a door open: the street's snow still shows through the doorway.
+
+## The cloud deck while it snows (PR [#1644](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1644), [#1643](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1643))
+
+- [ ] `--occasion christmas`, fly a plane up through the deck: grey overcast under it, a white-out inside, a sea of cloud under you above it; frame rate unchanged.
+- [ ] Over a lake from above the deck, and under it: no water surface drawn over the cloud or through it.
+- [ ] In VR: the deck is the same in both eyes.
