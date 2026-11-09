@@ -128,7 +128,8 @@ for style in $STYLES; do
       --chunks "$CHUNKS" --shot-queue "$q" "${at[@]}" --nohud --nocapture --date "$date" --time "$HOUR0" \
       --style "$(style_flag "$style")" --systems "$SYSTEMS" --watertime 100 --title "refshots $tag $style" "${render[@]}" ${extra[@]+"${extra[@]}"} < /dev/null || echo "[refshots] exit $?"
     keep_caches "$prof"
-    grep -aE '\[shot\] (wrote|FAILED)|WARNING' "$log" | sed 's/^/  /' | tail -40
+    # || true: a launch killed before its first shot has none, and pipefail would end the run
+    grep -aE '\[shot\] (wrote|FAILED)|WARNING' "$log" | sed 's/^/  /' | tail -40 || true
     grep -aE 'SHADER ERROR|ERROR:' "$log" | head -5 | sed 's/^/  /' || true
   done <<< "$launches"
   if [ "${MODELS:-0}" = 1 ]; then
