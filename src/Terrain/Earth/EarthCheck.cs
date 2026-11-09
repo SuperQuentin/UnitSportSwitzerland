@@ -14,7 +14,9 @@ namespace UnitSport.Terrain.Earth;
 /// most 1 % of the rays (road holes), and at least 100 reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
 /// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km along a line (the camera with it, so the origin
-/// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer;</item>
+/// re-anchors past 3 km), the ground under it is known within 2 s of its arrival, nowhere missing longer. On a fixture
+/// course (PR 3: <c>--chunks fixture:straight</c>, the quick tier) along the course's longest reach from the start and
+/// 300 m into its margin, at 60 m/s;</item>
 /// <item>the re-anchor moves nothing: a point's height asked before and after (by its Earth position) is the same
 /// within 1 cm, and the shift turned nothing.</item>
 /// </list>
@@ -27,7 +29,10 @@ public partial class EarthCheck : Node3D
     private const double TimeoutS = 240;
     private const int Half = 10;
     private const float Step = 20f;
-    private const float Speed = 30f, TravelM = 4500f;
+    /// <summary>The run's line: north-east by default; a fixture course's longest reach (see ClientWorld).</summary>
+    public Vector3 Direction { get; init; } = new Vector3(1, 0, -1).Normalized();
+    public float TravelM { get; init; } = 4500f;
+    public float Speed { get; init; } = 30f;
 
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
@@ -160,7 +165,7 @@ public partial class EarthCheck : Node3D
             var p = Position + new Vector3(k * 37, 0, -k * 23);
             if (_ground.TryGetHeight(p, out float y)) _marks.Add((_origin.ToGlobal(p with { Y = y }), y));
         }
-        _dir = new Vector3(1, 0, -1).Normalized();
+        _dir = Direction;
         _phase = 3;
         _phaseS = Now;
     }
@@ -182,7 +187,7 @@ public partial class EarthCheck : Node3D
         }
         if (_travelled < TravelM) return;
         Log($"travelled {_travelled:F0} m at {Speed:F0} m/s: {_shifts} re-anchors, the ground missing at most {_worstMissingS:F1} s at once");
-        if (_shifts == 0) _faults.Add("no re-anchor in 4.5 km");
+        if (_shifts == 0) _faults.Add($"no re-anchor in {TravelM / 1000:F1} km");
         if (_worstMissingS > 2) _faults.Add($"the ground was missing {_worstMissingS:F1} s at once under a body at {Speed} m/s (bar 2 s)");
         _phase = 4;
         _phaseS = Now;

@@ -454,8 +454,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
         // --frame earth (#1510): offline only until the server stands on leaves (C4); the world is the ENU frame at the
-        // start, which moves with the camera without turning (C3 turns it)
-        bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !fixture;
+        // start, which moves with the camera without turning (C3 turns it). A fixture course stands on its own leaves.
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth;
         if (earth && Launch.Networked)
         {
             GD.PushWarning("[world] --frame earth is offline only until the server stands on leaves (G2 C4): flat");
@@ -570,7 +570,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (earth)
         {
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
-            _earth = new Terrain.Earth.EarthWorld(Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir()), origin)
+            _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition };
             AddChild(_earth);
         }
@@ -888,7 +888,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }),
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
-            new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.EarthCheck(Ground!, origin)),
+            new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
@@ -1796,6 +1796,47 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The generated fill is on regardless of its setting: offline with no terrain data, it is the only ground.</summary>
     private bool _fillForced;
     private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
+
+    /// <summary>
+    /// <c>--earthcheck</c>: on a fixture course along its longest reach from the start, 300 m into the leaves' margin
+    /// (on <c>straight</c> past the 3 km re-anchor), at 60 m/s; on a region north-east for 4.5 km.
+    /// </summary>
+    private Terrain.Earth.EarthCheck EarthCheckFor(WorldOrigin origin)
+    {
+        if (_earth?.Leaves.IsFixture != true || Systems.FixtureCourse is not { } name || Terrain.Fixture.FixtureCourse.Create(name) is not { } course)
+            return new Terrain.Earth.EarthCheck(Ground!, origin);
+        var (minX, minY, maxX, maxY) = course.Bounds(0);
+        // course metres east and north; the world's x east, -z north
+        var (reach, dir) = new[] { (maxX, Vector3.Right), (-minX, Vector3.Left), (maxY, Vector3.Forward), (-minY, Vector3.Back) }.MaxBy(r => r.Item1);
+        return new Terrain.Earth.EarthCheck(Ground!, origin) { Direction = dir, TravelM = (float)reach + 300f, Speed = 60f };
+    }
+
+    /// <summary>
+    /// The earth world's leaves (#1510, G2 C1 PR 3): a fixture course's alone, or the region's and, with the generator,
+    /// the fill round them (its domain round the start, as the flat world's), blended into them.
+    /// </summary>
+    private Terrain.Leaves.EarthLeaves EarthLeaves(bool fixture, IChunkSource source, ProceduralWorld? generated, double startE, double startN)
+    {
+        Terrain.Leaves.EarthLeaves leaves;
+        if (fixture && source is Terrain.Fixture.FixtureChunkSource course)
+        {
+            var built = Terrain.Fixture.FixtureLeaves.At(course);
+            leaves = Terrain.Leaves.EarthLeaves.Fixture(built.Leaves.Contains, built.Build);
+            GD.Print($"[earth] fixture course {course.Course.Name} on {built.Leaves.Count} leaves");
+        }
+        else
+        {
+            var real = Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir());
+            if (generated != null)
+            {
+                var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
+                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn);
+            }
+            else leaves = Terrain.Leaves.EarthLeaves.Region(real);
+        }
+        leaves.Log = s => GD.Print(s);
+        return leaves;
+    }
 
     private void OnSettingsChanged()
     {

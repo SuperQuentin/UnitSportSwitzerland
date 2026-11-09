@@ -9,7 +9,7 @@ namespace UnitSport.Terrain.Leaves;
 /// oldest dropped first. What the earth ground, the globe's leaves and the collision patches read. Thread-safe;
 /// a leaf asked from two threads at once is decoded once.
 /// </summary>
-public sealed class LeafStore
+public sealed class LeafStore : ILeafSource
 {
     /// <summary>Decoded leaves held (a leaf with roads and buildings is a few MB).</summary>
     public const int DefaultKept = 96;
@@ -30,6 +30,9 @@ public sealed class LeafStore
         Kept = Math.Max(1, kept);
     }
 
+    /// <summary>No leaves (a fixture course's world).</summary>
+    public static LeafStore Empty { get; } = new("", new Dictionary<CubeKey, (string, long, int)>(), 1);
+
     /// <summary>Every <c>.cubl</c> bundle in <paramref name="dir"/>, indexed. Empty if it holds none.</summary>
     public static LeafStore Open(string dir, int kept = DefaultKept)
     {
@@ -49,6 +52,8 @@ public sealed class LeafStore
     public int Count => _index.Count;
 
     public bool Has(CubeKey key) => _index.ContainsKey(key);
+
+    public bool IsReal(CubeKey key) => _index.ContainsKey(key);
 
     /// <summary>A leaf's entry size on disk, bytes (0 where the region holds none): the densest leaf has the most.</summary>
     public int Bytes(CubeKey key) => _index.TryGetValue(key, out var at) ? at.Length : 0;
@@ -71,13 +76,27 @@ public sealed class LeafStore
     public CubeLeafContent? Cached(CubeKey key) =>
         _cache.TryGetValue(key, out var lazy) && lazy.IsValueCreated ? lazy.Value : null;
 
-    private CubeLeafContent? Read(CubeKey key)
+    /// <summary>
+    /// A leaf's heights alone, decoded from its entry without the other sections and not kept (the blend's summaries
+    /// read every real leaf near the fill once); the decoded leaf's own when it is held. Null where the region holds none.
+    /// </summary>
+    public CubeTile? HeightsOf(CubeKey key)
+    {
+        if (Cached(key) is { } held) return held.Heights;
+        if (!_index.ContainsKey(key)) return null;
+        var bytes = Entry(key);
+        return CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null;
+    }
+
+    private byte[] Entry(CubeKey key)
     {
         var at = _index[key];
         using var fs = File.OpenRead(at.Path);
         fs.Position = at.Offset;
         var bytes = new byte[at.Length];
         fs.ReadExactly(bytes);
-        return CubeLeafContent.Decode(bytes);
+        return bytes;
     }
+
+    private CubeLeafContent? Read(CubeKey key) => CubeLeafContent.Decode(Entry(key));
 }
