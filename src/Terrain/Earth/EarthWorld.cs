@@ -394,9 +394,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             for (int i = 0; i < n; i++)
             {
                 int k = j * n + i;
-                var dx = pos[j * n + Math.Min(i + 1, n - 1)] - pos[j * n + Math.Max(i - 1, 0)];
-                var dz = pos[Math.Min(j + 1, n - 1) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
-                var normal = dz.Cross(dx);
+                var normal = BoxNormal(pos, n, i, j);
                 // a no-data (NaN) neighbour at the leaf set's edge: up, not a NaN normal (85k warnings a drive, #1512)
                 normal = normal.IsFinite() && normal.LengthSquared() > 0 ? normal.Normalized() : Vector3.Up;
                 normals[k] = normal.Y < 0 ? -normal : normal;
@@ -437,6 +435,28 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         arrays[(int)Godot.Mesh.ArrayType.Custom2] = custom2;
         arrays[(int)Godot.Mesh.ArrayType.Index] = indices.ToArray();
         return arrays;
+    }
+
+    /// <summary>How far either side of a vertex its normal's box of slopes reaches, lattice steps (~1.2 m each): the flat
+    /// world's ±3 m (<c>TerrainMeshBuilder.SmoothNormal</c>, #883), or a cliff's facets light up as vertical stripes.</summary>
+    private const int NormalReach = 3;
+
+    /// <summary>
+    /// The normal at lattice vertex (i, j) from the slopes across ±<see cref="NormalReach"/> on three rows and three
+    /// columns through it, as <c>TerrainMeshBuilder.SmoothNormal</c> does on a tile, in 3-D (the lattice is not square
+    /// in the anchor frame). Clamped at the leaf's edges; a NaN (no data) slope is left out.
+    /// </summary>
+    private static Vector3 BoxNormal(Vector3[] pos, int n, int i, int j)
+    {
+        int i0 = Math.Max(i - NormalReach, 0), i1 = Math.Min(i + NormalReach, n - 1);
+        int j0 = Math.Max(j - NormalReach, 0), j1 = Math.Min(j + NormalReach, n - 1);
+        Vector3 dx = Vector3.Zero, dz = Vector3.Zero;
+        ReadOnlySpan<int> rows = [j0, j, j1], cols = [i0, i, i1];
+        foreach (int jj in rows)
+            if (pos[jj * n + i1] - pos[jj * n + i0] is var d && d.IsFinite()) dx += d;
+        foreach (int ii in cols)
+            if (pos[j1 * n + ii] - pos[j0 * n + ii] is var d && d.IsFinite()) dz += d;
+        return dz.Cross(dx);
     }
 
     /// <summary>
