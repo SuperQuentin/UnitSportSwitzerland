@@ -241,10 +241,13 @@ cells, the road blend on a leaf, a provider round bodies for C1 and C4 to hook u
   H1's sphere blend off for real geometry.
 - Check: `--originstress` with rotation (every handler, the boat's known gap), reference shots
   either side of a re-anchor (no pattern jump).
-- **Status: the turning frame and the refraction built** (PR #1612: `core/floating-origin`, "The earth world's
-  ground turns"; `world/earth-curvature`, "On round geometry"). **Patterns from tile coordinates wait for C1
-  PR 2's furnished meshes** (decided with the coordinator, 2026-11-09): the leaves' drawn mesh is plain cover
-  colours until then, so nothing reads `world_origin_offset` on leaves yet.
+- **Status: C3 built.** The turning frame and the refraction in PR #1612 (`core/floating-origin`, "The earth
+  world's ground turns"; `world/earth-curvature`, "On round geometry"); the patterns from tile coordinates in
+  PR #1627 (`core/floating-origin`, "Patterns on the round world"): a leaf's roads, paint, buildings and water
+  carry their cube-face (u, v) in metres, a face edge blends the two faces by a noise, and `WaterField` reads
+  the same places so hulls float on the drawn waves. `world_origin_offset` stays for the flat world, snow and
+  wake foam until D deletes it. The leaves' own ground keeps `CoverPalette`'s vertex colours: the style kit's
+  terrain material wants the flat tile's cover attributes (D).
 
 **C4 The server and interest** (one PR)
 - Server regions anchored as ENU frames (rotating handovers, mirrors, shadows); `RegionPlanner` in
