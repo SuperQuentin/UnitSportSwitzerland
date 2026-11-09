@@ -42,6 +42,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ChunkStreamer? _streamer;
     private NetworkChunkSource? _chunkSource;
     private CachingChunkSource? _cache;
+
+    /// <summary>The chunk source the world's systems load a tile by name from: in the earth world it also answers the leaves' stand-in tiles (#1510).</summary>
+    private IChunkSource? WorldSource => _earth is { } e && _cache != null ? _worldSource ??= e.Source(_cache) : _cache;
+
+    private IChunkSource? _worldSource;
     private ClientTerrainSync? _terrainSync;
     private Handshake? _handshake;
     private Net.Accounts.AccountGate? _accountGate;
@@ -572,7 +577,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
             _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
-                { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition };
+                { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
             AddChild(_earth);
         }
         else AddChild(_chunks);
@@ -676,7 +681,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // server's, which plans and stores them; offline this client does both.
         if (Systems.On(Systems.Interiors))
         {
-            var interiors = Interiors.InteriorManager.Create(this, _cache, origin);
+            // a leaf's buildings load by their stand-in tile's name in the earth world (#1510)
+            var interiors = Interiors.InteriorManager.Create(this, WorldSource!, origin);
             interiors.LocalPlayer = () => _onFoot ? LocalPlayer : null;
             // --enter: straight into a building once spawned, or at once for a shot run's free camera (#1244)
             if (Interiors.InteriorManager.EnterTarget is { } enter)
@@ -758,7 +764,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueFronts(_chunks));   // glazed fronts of shop units and venues (#1292)
-        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, _cache!));   // tables out front (#1243)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, WorldSource!));   // tables out front (#1243)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
         // tonight's concert in each stadium (#885)
@@ -1805,11 +1811,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private Terrain.Earth.EarthCheck EarthCheckFor(WorldOrigin origin)
     {
         if (_earth?.Leaves.IsFixture != true || Systems.FixtureCourse is not { } name || Terrain.Fixture.FixtureCourse.Create(name) is not { } course)
-            return new Terrain.Earth.EarthCheck(Ground!, origin);
+            return new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource };
         var (minX, minY, maxX, maxY) = course.Bounds(0);
         // course metres east and north; the world's x east, -z north
         var (reach, dir) = new[] { (maxX, Vector3.Right), (-minX, Vector3.Left), (maxY, Vector3.Forward), (-minY, Vector3.Back) }.MaxBy(r => r.Item1);
-        return new Terrain.Earth.EarthCheck(Ground!, origin) { Direction = dir, TravelM = (float)reach + 300f, LegM = (float)reach + 300f, Speed = 60f };
+        return new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource, ExpectTown = false, Direction = dir, TravelM = (float)reach + 300f, LegM = (float)reach + 300f, Speed = 60f };
     }
 
     /// <summary>
@@ -1922,7 +1928,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _nearTrees = new NearTrees(CatalogueTree(ModelCatalog.TreeConifer) ?? cone,
             CatalogueTree(ModelCatalog.TreeBroadleaf) ?? crown, StyleKit.TreeReach);
         // under the terrain, an origin container: the floating origin moves it with the tiles
-        _chunks!.AddChild(_nearTrees);
+        // the earth world's leaves draw theirs there (#1510): the flat streamer is out of the tree
+        ((Node?)_earth ?? _chunks!).AddChild(_nearTrees);
         // the debug menu may have hidden the trees before this style made its own
         _nearTrees.Visible = (_chunks.HiddenLayers & TileLayers.Trees) == 0;
     }

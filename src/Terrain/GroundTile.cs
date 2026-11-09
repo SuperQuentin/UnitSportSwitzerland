@@ -31,8 +31,11 @@ public readonly record struct GroundTile
     /// <summary>The flat world's tile for an LV95 tile key (counted by the ratchet).</summary>
     public static GroundTile FromLv95(TileId id) => new(id);
 
-    /// <summary>The LV95 tile key of a flat world's tile (counted by the ratchet).</summary>
-    public TileId Lv95Tile => _lv95;
+    /// <summary>
+    /// The LV95 tile key of a flat world's tile (counted by the ratchet); for an earth world's leaf, its stand-in tile's name
+    /// (<see cref="Leaves.LeafStandIn"/>, #1510), which the origin places and the earth world's chunk source loads.
+    /// </summary>
+    public TileId Lv95Tile => !_isLeaf ? _lv95 : _leaf.Level == Leaves.LeafFrames.LeafLevel ? Leaves.LeafStandIn.Id(_leaf) : default;
 
     /// <summary>The earth world's tile: a cube leaf (#1510).</summary>
     public static GroundTile FromLeaf(CubeKey key) => new(key);

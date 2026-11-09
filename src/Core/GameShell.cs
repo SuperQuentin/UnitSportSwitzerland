@@ -89,7 +89,7 @@ public partial class GameShell : Node
         string[] harmless =
         {
             "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
-            "--generated", "--generated-roads", "--no-fill-roads", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
+            "--generated", "--generated-roads", "--no-fill-roads", "--earthbare", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             // (not --at: a spawn point on the command line means "put me there", straight into the world, the user;
             // PlayAt sends that run through the loading screen, #1296)
             "--traffic", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",

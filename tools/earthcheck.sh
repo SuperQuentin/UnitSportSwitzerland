@@ -13,13 +13,14 @@ LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
 CHUNKS=${CHUNKS:-D:/UnitSportSwitzerland/terrain_chunks}
 AT=${AT:-2500956,1117569}   # Geneva, the densest leaf of the D: region
 TRAVEL=${TRAVEL:-4500}
+# BARE=1 (--earthbare): a start with no town round it (mountains, the region's border): the leaves need roads, not buildings, trees, water and doors
 if [ ! -d "$LEAVES" ]; then echo "[earthcheck] no LEAVES with built leaves: skipped"; echo "[earthcheck] RESULT: ok (skipped)"; exit 0; fi
 mkdir -p "$OUT"
 UD="$OUT/userdata_earthcheck"
 ( guard_test_userdata "$UD" ) >/dev/null 2>&1
 if _guard_windows; then UDENV=(env APPDATA="$(cygpath -w "$(cd "$UD" && pwd)")"); else UDENV=(env XDG_DATA_HOME="$(cd "$UD" && pwd)"); fi
 guard_run $((420 + TRAVEL / 30)) "$OUT/earthcheck.log" "${UDENV[@]}" "$GODOT" --headless --path . -- --frame earth --earthcheck \
-  --leaves "$LEAVES" --chunks "$CHUNKS" --at "$AT" --earthtravel "$TRAVEL"
+  --leaves "$LEAVES" --chunks "$CHUNKS" --at "$AT" --earthtravel "$TRAVEL" ${BARE:+--earthbare}
 code=$?
 grep -a "\[earthcheck\]" "$OUT/earthcheck.log" | tail -20
 exit $code

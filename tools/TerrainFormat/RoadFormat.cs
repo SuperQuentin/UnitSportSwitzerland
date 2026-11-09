@@ -491,6 +491,15 @@ public sealed class RoadTile
     /// <summary>#1052: overhead lines' supports and contact wires (section <c>CTNY</c>).</summary>
     public List<CatenarySupport> CatenarySupports { get; init; } = new();
     public List<CatenaryWire> CatenaryWires { get; init; } = new();
+
+    /// <summary>The same records (shared, not copied) under another tile name: a leaf's stand-in tile (#1510). A new list goes here too.</summary>
+    public RoadTile WithId(TileId id) => new()
+    {
+        Id = id, Segments = Segments, Junctions = Junctions, Version = Version, Flags = Flags, Paint = Paint,
+        PointProps = PointProps, LinearProps = LinearProps, AreaProps = AreaProps, Signals = Signals, Approaches = Approaches,
+        Transitions = Transitions, Parking = Parking, JunctionPaths = JunctionPaths, CatenarySupports = CatenarySupports,
+        CatenaryWires = CatenaryWires,
+    };
 }
 
 public static class RoadFormat

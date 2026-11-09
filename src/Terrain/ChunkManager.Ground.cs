@@ -14,6 +14,14 @@ public partial class ChunkManager
     public static ChunkManager? Of(IWorldGround? ground) => (ground as FlatGround)?.Owner;
 
     /// <summary>
+    /// The earth world's leaves furnished and shed (#1510), told to whoever listens on this streamer's ground too: the
+    /// systems that dress a tile (signs, terraces, decorations) are wired to it, and it is empty in the earth world.
+    /// </summary>
+    internal void RaiseFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] doors) => _tileFurnished?.Invoke(tile, node, doors);
+
+    internal void RaiseUnfurnished(GroundTile tile, ChunkNode node) => _tileUnfurnished?.Invoke(tile, node);
+
+    /// <summary>
     /// The flat world's <see cref="IWorldGround"/> (#1532): this streamer's LV95 tiles, answered by the
     /// streamer's own methods (the same code as before the interface, the same values). A class of its own,
     /// not the streamer, so a <see cref="ChunkManager"/> cannot be handed over where the ground is wanted:
