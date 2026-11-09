@@ -334,7 +334,7 @@ public partial class ShotRunner : Node
             _frameMs += delta * 1000.0;
             _frames++;
         }
-        if (_shot.Value.AboveGround is { } above && GroundHeight?.Invoke(_camera.Position) is { } ground)
+        if (_shot.Value.AboveGround is { } above && GroundUnder(_camera.Position, above) is { } ground)
             _camera.Position = _camera.Position with { Y = ground + above };
         if (_elapsed < _shot.Value.SettleSeconds) return;
         if (!GroundComplete(delta)) return;
@@ -376,7 +376,8 @@ public partial class ShotRunner : Node
         {
             // above the ground: hold the height until the ground under the camera has streamed in
             float y = _camera.Position.Y;
-            if (GroundHeight?.Invoke(world) is { } ground) y = ground + (exp ? Geometric(_glideFromAbove, to, k) : Mathf.Lerp(_glideFromAbove, to, k));
+            float above = exp ? Geometric(_glideFromAbove, to, k) : Mathf.Lerp(_glideFromAbove, to, k);
+            if (GroundUnder(world, above) is { } ground) y = ground + above;
             world = world with { Y = y };
         }
         _camera.Position = world;
@@ -387,6 +388,24 @@ public partial class ShotRunner : Node
             _shot = null;
         }
     }
+
+    /// <summary>The last ground height a "g" line found, world Y: what a high one stands on where none is streamed.</summary>
+    private float? _lastGround;
+
+    /// <summary>
+    /// A "g" line's ground under a point: the streamed ground's height, or, for a camera <see cref="HighAboveM"/> or
+    /// more over it, the last one found. The earth world streams no leaves under a camera in Space (#1630/#1631), and
+    /// leaves under a fast climb come in late: from there a few metres of ground are nothing, and holding the camera
+    /// until they load kept a climb to 400 km at 2 km.
+    /// </summary>
+    private float? GroundUnder(Vector3 world, float above)
+    {
+        if (GroundHeight?.Invoke(world) is { } ground) return _lastGround = ground;
+        return above >= HighAboveM ? _lastGround ?? 0f : null;
+    }
+
+    /// <summary>A "g" height from which the ground under it need not be streamed, m.</summary>
+    private const float HighAboveM = 2000;
 
     /// <summary>From <paramref name="a"/> to <paramref name="b"/> by a constant factor (both above a metre), at <paramref name="k"/> 0..1.</summary>
     private static float Geometric(float a, float b, float k) =>

@@ -465,7 +465,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk).
         // A fixture course stands on its own leaves offline (C1 PR 3); online it stays flat, as the server does on one
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !(fixture && Launch.Networked);
-        if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
+        // --origin pins it as on the flat world, so a shot queue's places mean the same in both (#1630's film)
+        if (earth)
+        {
+            var (anchorE, anchorN) = SpawnPoint.ParseOrigin() ?? (startE, startN);
+            origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(anchorE, anchorN, 0)));
+        }
         // round leaves fall away by themselves: the shaders only add refraction's lift (#1512)
         Curvature.RoundGeometry = earth;
 
