@@ -212,7 +212,10 @@ frame; the fill domain as discs; the blend against real leaves left to C1, which
      - Done when you can walk and drive on the bare real ground of the D: region.
   2. **Furnishing.** Roads, buildings, trees, water and doors on leaves, from their sections.
   3. **Generated leaves.** Generated and fixture leaves, and their blend against real ones (B5's
-     `correction` seam, as a convex blend).
+     `correction` seam, as a convex blend). **Built** (PR #1614, `terrain/earth-world`): `EarthLeaves` (the region,
+     the fill on `LeafFillDomain`, part-real border leaves merged, fixture courses), `LeafBlend` (the flat fill's blend
+     on the face's global lattice over `RealLeaf`'s 8-vertex real cells, handed convexly to the real surface over
+     60 m; `correction` removed), `BlendCheck --leaf-blend`, `--earthcheck` on `fixture:straight` in the quick tier.
 - **The frame until C3**: the world is the ENU frame on the tangent plane at spawn (`FrameAxes`).
   `OriginShifter` re-anchors it every 3 km by translation only (a `ReanchorMode` with `Rotates`
   false). Leaves are placed rigidly, as in `--cubeharness`. Gravity is the anchor's up, so it tilts

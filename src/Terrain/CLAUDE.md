@@ -112,6 +112,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `commit-loop-gate-budget-result` — The commit loop must gate on the budget the result actually needs
 - `tile-loads-chains-unordered-concurrency` — Tile loads are CHAINS, and unordered concurrency starves them
 - `tile-worker-create-godot-object` — A tile worker must not create a Godot object after the engine starts tearing down
+- `border-leaves-partial` — a built region's border leaves hold NaN past its sources (434 of B4's 462): real vs generated is per lattice cell, not per leaf (`RealLeaf`'s 8-vertex cells)
 - `blend-convex-not-additive` — Blend two terrains with a convex mix, never an additive correction: the additive one dug a trench 150 m below the Rhône
 - `judge-terrain-blend-shaded-relief` — Judge a terrain blend by shaded relief, and turn what the eye finds into a BlendCheck number
 - `saved-max-builds-one-looks-broken` — A saved `maxConcurrentBuilds: 1` makes the loader look broken: check settings.json, pass `--builds 0` to probes

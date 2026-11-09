@@ -6,16 +6,20 @@ namespace UnitSport.Terrain.Leaves;
 
 /// <summary>
 /// Generated ground bent to meet the real leaves (#1510, G2 C1 PR 3): the flat world's fill blend
-/// (<c>ProceduralWorld.Blend</c>, <c>terrain/generated-fill</c>) on the cube lattice, a convex mix:
+/// (<c>ProceduralWorld.Blend</c>, <c>terrain/generated-fill</c>) on the cube lattice, convex all the way:
 ///
-///     h(p) = (1 - W(p)) G(p) + W(p) R(p) + D(p)
+///     M(p) = (1 - W(p)) G(p) + W(p) R(p)
+///     h(p) = (1 - F(p)) M(p) + F(p) C(p)
 ///
 /// G is the generator's height above sea level; R the real ground's low-pass carried outward, inverse-distance weighted
 /// over every real <see cref="RealLeaf.Block"/> within <see cref="Band"/>, each read at its nearest point q, coarser the
 /// further it is carried (<see cref="RealLeaf.Low"/>); W = 1 - smoothstep(0, Band, a soft minimum of the distances)
-/// hands the ground from one to the other; D, within <see cref="DetailBand"/>, continues the real surface to first
-/// order (its residual over the knots and its slope across the edge), so the seam is neither a step nor a crease.
-/// A mix of two heights lies between them: never the additive correction that dug a trench under the Rhône
+/// hands the ground from one to the other. Near the seam C is the real surface continued to first order from q (its
+/// height there and its slope across the edge), and F = 1 - smoothstep(0, <see cref="DetailBand"/>, a soft minimum of
+/// the distances) hands M over to it: at a block F = 1 and h is the real ground, with zero slope in F, so the seam is
+/// neither a step nor a crease. (The flat world adds a detail term D to M instead; handing over convexly lets R be
+/// smoothed, <see cref="SoftenR"/>, so the border's cells are not carried outward as fingers.) A mix of two heights
+/// lies between them: never the additive correction that dug a trench under the Rhône
 /// (<c>terrain/blend-convex-not-additive</c>).
 ///
 /// <para>
@@ -43,7 +47,7 @@ public sealed class LeafBlend
     /// <summary>Width of the band across which generated ground bends to meet real ground (the flat world's).</summary>
     public const double Band = 3000;
 
-    /// <summary>Distance over which the real ground's fine detail carries into generated ground.</summary>
+    /// <summary>Width of the hand-over from the band's mix to the real surface continued, metres (the flat world's D reaches 40).</summary>
     public const double DetailBand = 60;
 
     /// <summary>Width of the soft minimum the hand-over takes of the distances to the blocks, metres: rounds the staircase's corners.</summary>
