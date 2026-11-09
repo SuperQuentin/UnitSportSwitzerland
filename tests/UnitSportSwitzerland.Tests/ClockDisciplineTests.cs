@@ -102,6 +102,7 @@ public class ClockDisciplineTests
         ["src/Playtest/PlaytestDirector.cs"] = "plumbing: the live listener's poll liveness, and a ledger entry's date",
         ["src/Playtest/Recording/PlaytestRecorder.cs"] = "plumbing: a session folder's date stamp",
         ["src/Core/PerfRecorder.cs"] = "plumbing: a perf log's file name and header date",
+        ["src/Core/ChatUi.cs"] = "plumbing: a chat line's optional HH:mm timestamp is the reader's local time of day",
         ["src/Gpx/GpxSession.cs"] = "plumbing: a recorded track's file name",
         ["src/Items/PhotoStore.cs"] = "plumbing: when a photo was taken, as metadata",
         ["src/Movie/MovieStudio.cs"] = "plumbing: an export's file name",
