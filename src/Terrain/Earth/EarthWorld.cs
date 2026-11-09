@@ -66,7 +66,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private IWorldGround? _ground;
     private readonly LeafCollisionSource _collisionSource;
     private readonly CollisionPatches _patches;
-    private readonly Material _material;
+    private ShaderMaterial? _material;
 
     private readonly Dictionary<CubeKey, Near> _near = new();
     private readonly HashSet<CubeKey> _loading = new();
@@ -112,7 +112,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         {
             Failed = (key, e) => GD.PushError($"[earth] collision patch {key}: {e.Message}"),
         };
-        _material = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 1f };
+    }
+
+    /// <summary>
+    /// The leaves' ground material: the style kit's terrain one, as the flat world's tiles (#1634), restyled with them.
+    /// Its own, not the flat streamer's: that one dissolves at the flat tiles' square (<c>flat_edge</c>). Main thread.
+    /// </summary>
+    public ShaderMaterial GroundMaterial => _material ??= NewGroundMaterial();
+
+    private static readonly StringName GivesWay = "gives_way";
+
+    private static ShaderMaterial NewGroundMaterial()
+    {
+        var m = Styles.StyleKit.Material(Styles.MaterialRole.Terrain);
+        // the leaves are the globe's last level: they never dissolve into it as the flat tiles do
+        m.SetShaderParameter(GivesWay, false);
+        return m;
     }
 
     public override void _Ready()
@@ -302,8 +317,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         if (leaf.Arrays is { } arrays)
         {
             var mesh = new ArrayMesh();
-            mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays);
-            leaf.Mesh = new MeshInstance3D { Name = leaf.Key.FileStem, Mesh = mesh, MaterialOverride = _material };
+            mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays, flags: LeafPattern.Flags);
+            leaf.Mesh = new MeshInstance3D { Name = leaf.Key.FileStem, Mesh = mesh, MaterialOverride = GroundMaterial };
             leaf.Arrays = null;
             AddChild(leaf.Mesh);
             leaf.Mesh.Transform = LeafToWorld(leaf.Anchor);
@@ -360,7 +375,10 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     }
 
     /// <summary>
-    /// A leaf's mesh for drawing, every lattice vertex (the collision's), coloured by its cover, hole quads left out.
+    /// A leaf's mesh for drawing, every lattice vertex (the collision's), hole quads left out, for the style kit's
+    /// terrain material (#1634) as a flat tile's: coloured by its cover through <see cref="CoverPalette"/> at the
+    /// vertex's altitude, blended with differing neighbours (<see cref="TerrainMeshBuilder"/>'s boundary blend), in
+    /// linear colour, the pattern code in alpha; the leaf's pattern points in CUSTOM1/CUSTOM2 (<see cref="LeafPattern"/>).
     /// Triangles split as the collision's: along (i, j)–(i+1, j+1), front faces up.
     /// </summary>
     private static Godot.Collections.Array? Mesh(float[] v, int n, CubeLeafContent content)
@@ -369,7 +387,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         for (int k = 0; k < pos.Length; k++) pos[k] = new Vector3(v[3 * k], v[3 * k + 1], v[3 * k + 2]);
         var normals = new Vector3[n * n];
         var colours = new Color[n * n];
-        var cover = content.Cover;
+        var cover = content.Cover is { } cells && cells.Length >= n * n ? cells : null;
+        // the anchor is on the ellipsoid: a height in its frame less the geoid is an altitude (the palette bands by it)
+        float geoid = (float)-SwissGeodesy.FromEcef(content.Key.Anchor.Origin).H;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -380,8 +400,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
                 // a no-data (NaN) neighbour at the leaf set's edge: up, not a NaN normal (85k warnings a drive, #1512)
                 normal = normal.IsFinite() && normal.LengthSquared() > 0 ? normal.Normalized() : Vector3.Up;
                 normals[k] = normal.Y < 0 ? -normal : normal;
-                var c = cover != null && k < cover.Length ? (CoverClass)cover[k] : CoverClass.Open;
-                colours[k] = CoverPalette.ColorFor(c, pos[k].Y, ((i * 73856093) ^ (j * 19349663)) * (1f / int.MaxValue));
+                float alt = float.IsNaN(pos[k].Y) ? 0f : pos[k].Y - geoid;
+                colours[k] = ColourAt(cover, n, i, j, alt).SrgbToLinear();
             }
 
         var holes = content.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
@@ -401,13 +421,44 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         for (int k = 0; k < pos.Length; k++)
             if (float.IsNaN(pos[k].Y)) pos[k] = Vector3.Zero;
 
+        // patterns (cover patterns, Cartoon's paint, Realistic's textures) from the leaf's place on the Earth (#1512):
+        // the pattern is baked in the stand-in tile's frame, the anchor's shifted
+        var standIn = new Vector3[pos.Length];
+        var shift = new Vector3((float)LeafStandIn.Offset, 0, (float)LeafStandIn.Offset);
+        for (int k = 0; k < pos.Length; k++) standIn[k] = pos[k] + shift;
+        var (custom1, custom2) = LeafPattern.For(content.Key).Bake(standIn);
+
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Godot.Mesh.ArrayType.Max);
         arrays[(int)Godot.Mesh.ArrayType.Vertex] = pos;
         arrays[(int)Godot.Mesh.ArrayType.Normal] = normals;
         arrays[(int)Godot.Mesh.ArrayType.Color] = colours;
+        arrays[(int)Godot.Mesh.ArrayType.Custom1] = custom1;
+        arrays[(int)Godot.Mesh.ArrayType.Custom2] = custom2;
         arrays[(int)Godot.Mesh.ArrayType.Index] = indices.ToArray();
         return arrays;
+    }
+
+    /// <summary>
+    /// A lattice vertex's ground colour (sRGB), as <see cref="TerrainMeshBuilder"/>'s boundary blend at stride 1: its
+    /// cover's, averaged with each 4-neighbour's of another class, so a class edge is a soft step, not a hard line.
+    /// </summary>
+    internal static Color ColourAt(byte[]? cover, int n, int i, int j, float alt)
+    {
+        if (cover == null) return CoverPalette.ColorFor(CoverClass.Open, alt, CoverPalette.Hash(i, j));
+        byte centre = cover[j * n + i];
+        var sum = CoverPalette.ColorFor((CoverClass)centre, alt, CoverPalette.Hash(i, j));
+        int count = 1;
+        for (int q = 0; q < 4; q++)
+        {
+            int ni = i + (q == 0 ? 1 : q == 1 ? -1 : 0), nj = j + (q == 2 ? 1 : q == 3 ? -1 : 0);
+            if ((uint)ni >= n || (uint)nj >= n) continue;
+            byte other = cover[nj * n + ni];
+            if (other == centre) continue;
+            sum += CoverPalette.ColorFor((CoverClass)other, alt, CoverPalette.Hash(ni, nj));
+            count++;
+        }
+        return count == 1 ? sum : sum / count;
     }
 
     // --- the queries -------------------------------------------------------------------------------------------

@@ -132,13 +132,25 @@ public sealed partial class EarthWorld
         if (m.Water is { } waterMaterial && content.Water is { } water)
         {
             var layer = LeafStandIn.Water(water, LeafFrames.Swiss.TransformOf(content.Key), side, stand.Nearest, grid);
-            if (WaterMeshBuilder.Build(layer, stand.Roads, 1, detail) is { } waterData && !_gone)
+            // the still water cut at the leaf's edges, where the neighbour's takes over (#1632); the streams in the roads as they are
+            var lake = WaterMeshBuilder.Build(layer, null, 1, detail) is { } still
+                ? LeafWaterClip.Clip(still, LeafWaterClip.EdgePlanes(content.Key)) : null;
+            var streams = stand.Roads != null ? WaterMeshBuilder.Build(layer, stand.Roads, 1, detail, channelsOnly: true) : null;
+            if (Merge(lake, streams) is { } waterData && !_gone)
                 f.Water = ChunkNode.ToArrayMesh(waterData, waterMaterial, pattern);
         }
         else if (m.Water is { } streamMaterial && stand.Roads != null
             && WaterMeshBuilder.Build(null, stand.Roads, 1, detail) is { } streams && !_gone)
             f.Water = ChunkNode.ToArrayMesh(streams, streamMaterial, pattern);
         return f;
+    }
+
+    private static WaterMeshBuilder.MeshData? Merge(WaterMeshBuilder.MeshData? a, WaterMeshBuilder.MeshData? b)
+    {
+        if (a == null || b == null) return a ?? b;
+        int n = a.Vertices.Length;
+        return new WaterMeshBuilder.MeshData([.. a.Vertices, .. b.Vertices], [.. a.Uvs, .. b.Uvs],
+            [.. a.Indices, .. b.Indices.Select(i => i + n)]);
     }
 
     /// <summary>A leaf's furniture into its node, on the main thread, as the flat world commits a tile's tail.</summary>
