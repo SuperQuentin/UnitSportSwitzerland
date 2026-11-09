@@ -109,7 +109,8 @@ t_all=$SECONDS
 for style in $STYLES; do
   mkdir -p "$out/$style"
   dirw=$(cd "$out/$style" && { pwd -W 2>/dev/null || pwd; })
-  launches=$(poses "$style" "$dirw") || { echo "[refshots] no queues" >&2; exit 2; }
+  # Python prints CRLF on Windows: a "1\r" is no number to [ ]
+  launches=$(poses "$style" "$dirw" | tr -d '\r') || { echo "[refshots] no queues" >&2; exit 2; }
   while read -r q date ae an shots; do
     [ "$shots" -gt 0 ] || continue
     prof=$scratch/profile_$style

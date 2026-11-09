@@ -152,7 +152,7 @@ def font(size):
         return ImageFont.load_default()
 
 
-def contact_sheet(style, rows, a_pics, b_pics, maps, a_name, b_name, out_path, tw=480):
+def contact_sheet(style, rows, a_pics, b_pics, heatmap, a_name, b_name, out_path, tw=480):
     """A | B | difference for every view of one style, grouped by class, each row labelled with its verdict."""
     rows = [r for r in rows if r["rel"].startswith(style + "/") and r["group"] != "models" and r["stats"]]
     if not rows:
@@ -177,7 +177,7 @@ def contact_sheet(style, rows, a_pics, b_pics, maps, a_name, b_name, out_path, t
             d.text((gap, y + 5), txt[:150], fill=colour[r["verdict"]], font=small)
             y += label
             ims = [Image.open(a_pics[r["rel"]]).convert("RGB"), Image.open(b_pics[r["rel"]]).convert("RGB"),
-                   heat(*maps[r["rel"]])]
+                   heat(*heatmap(r["rel"]))]
             for i, im in enumerate(ims):
                 sheet.paste(im.resize((tw, th), Image.LANCZOS), (gap + i * (tw + gap), y))
             y += th + gap
@@ -225,10 +225,16 @@ def main(argv):
                     masks += rects
         return view, group, judge, masks
 
+    # the numbers only: a full-size map per shot is 6 MB, ~3000 shots with the models (the map is made again for a sheet)
     results = {}
     for rel in both:
         _, _, _, masks = expected(rel)
-        results[rel] = compare(a_pics[rel], b_pics[rel], scale, masks)
+        stats, _, keep = compare(a_pics[rel], b_pics[rel], scale, masks)
+        results[rel] = (stats, keep, masks)
+
+    def heatmap(rel):
+        _, full, keep = compare(a_pics[rel], b_pics[rel], scale, results[rel][2])
+        return full, keep
 
     if "--write-noise" in opts:
         floor = {rel: s["changed"] for rel, (s, _, _) in results.items() if s}
@@ -242,9 +248,9 @@ def main(argv):
 
     out = opts.get("--out") or os.path.join(b_root, "diff-" + a_name)
     os.makedirs(out, exist_ok=True)
-    rows, maps = [], {}
+    rows = []
     for rel in both:
-        stats, per_pixel, keep = results[rel]
+        stats = results[rel][0]
         view, group, judge, masks = expected(rel)
         if stats is None:
             rows.append({"group": group, "rel": rel, "stats": None, "limit": 0, "verdict": "over", "why": "picture sizes differ",
@@ -256,8 +262,8 @@ def main(argv):
         sheet = None
         if over or "--all-sheets" in opts or (group != "models" and stats["changed"] > 0):
             sheet = rel.replace("/", "__").replace(".png", ".diff.png")
-            composite(a_pics[rel], b_pics[rel], per_pixel, os.path.join(out, sheet), keep)
-        maps[rel] = (per_pixel, keep)
+            full, keep = heatmap(rel)
+            composite(a_pics[rel], b_pics[rel], full, os.path.join(out, sheet), keep)
         rows.append({"group": group, "rel": rel, "stats": stats, "limit": limit, "verdict": verdict,
                      "why": judge or ("masked: " + " ".join(",".join(f"{c:g}" for c in r) for r in masks) if masks else ""),
                      "sheet": sheet})
@@ -273,7 +279,7 @@ def main(argv):
     if "--sheets" in opts:
         for style in sorted({r["rel"].split("/")[0] for r in rows}):
             p = os.path.join(out, f"sheet-{style}.png")
-            if contact_sheet(style, rows, a_pics, b_pics, maps, a_name, b_name, p):
+            if contact_sheet(style, rows, a_pics, b_pics, heatmap, a_name, b_name, p):
                 sheets.append(p)
 
     def pct(r):
