@@ -862,3 +862,8 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] Land from space at Geneva or Zurich: from 15 km down the ground and the Alps show out to the horizon, no haze-coloured plane with lakes on it.
 - [ ] The same in VR (a standalone headset sinks the faded edge instead of discarding it).
 - [ ] From orbit and on the way down, the atmosphere's haze and limb glow cover the whole view (no clear disc round where you look).
+
+## No snow above the clouds (PR [#1641](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1641), [#1637](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1637))
+
+- [ ] `--occasion christmas`, take off in a plane and climb: the snow thins out about 2 km over the valley floor and is gone above it, no pop; coming back down, it returns.
+- [ ] Inside a house with a door open: the street's snow still shows through the doorway.

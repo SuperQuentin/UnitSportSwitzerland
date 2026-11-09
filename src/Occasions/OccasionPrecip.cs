@@ -6,8 +6,10 @@ namespace UnitSport.Occasions;
 /// <summary>
 /// Falling snow around the camera while the top occasion's <see cref="OccasionAtmosphere.Snowfall"/>
 /// is above zero (Christmas). One static mesh animated entirely by <c>snowfall.gdshader</c>;
-/// this node only builds it once and sets its density. The shader thins it at low altitude and
-/// draws nothing indoors, per camera, so a door portal looking out shows the street's snow. Client only.
+/// this node only builds it once and sets its density: thinner in the low valleys and none above the
+/// cloud layer (<see cref="SnowCeiling"/>, #1637), by the camera's altitude through the world's frame
+/// (in the earth frame and in space world Y is not the altitude). The shader draws nothing indoors,
+/// per camera, so a door portal looking out shows the street's snow. Client only.
 /// </summary>
 public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 {
@@ -17,7 +19,17 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
     private MeshInstance3D _snow = null!;
     private ShaderMaterial _material = null!;
 
-    public OccasionPrecip() => Name = "OccasionPrecip";
+    private readonly WorldOrigin? _origin;
+    private readonly Func<Vector3, float?>? _groundHeight;
+
+    /// <param name="origin">The world's frame: the camera's altitude is read through it.</param>
+    /// <param name="groundHeight">The ground's (or still water's) world Y under a point, where a tile is loaded.</param>
+    public OccasionPrecip(WorldOrigin? origin = null, Func<Vector3, float?>? groundHeight = null)
+    {
+        Name = "OccasionPrecip";
+        _origin = origin;
+        _groundHeight = groundHeight;
+    }
 
     public override void _Ready()
     {
@@ -64,14 +76,70 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
         if (_instance == this) _instance = null;
     }
 
-    public override void _Process(double delta) => Refresh();
+    public override void _Process(double delta)
+    {
+        if (Snowfall > 0f) TrackGround((float)delta);
+        Refresh();
+    }
+
+    // the ground's altitude the cloud layer sits on: NaN until one is known
+    private double _groundAlt = double.NaN;
+    private float _groundSampleIn;
+    private float _pushed = -1f;
+
+    /// <summary>The share of <see cref="Snowfall"/> drawn now, by the camera's height (<see cref="SnowCeiling"/>).</summary>
+    public static float Share => _instance?.CameraShare() ?? 1f;
+
+    private float CameraShare()
+    {
+        if (GetViewport()?.GetCamera3D() is not { } cam) return 1f;
+        var at = cam.GlobalPosition;
+        // indoors (3 km down) the shader hides the flakes itself; a door portal looks out at street level
+        if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return 1f;
+        double altitude = _origin?.AltitudeOf(at) ?? at.Y;
+        return SnowCeiling.Share(altitude, double.IsNaN(_groundAlt) ? 0 : _groundAlt);
+    }
+
+    /// <summary>
+    /// The lowest ground round the camera (under it and 1.5 km out on eight sides), as an altitude,
+    /// sampled twice a second and eased, like the occasion mist's top: the cloud layer pools over the
+    /// valley rather than jumping over every ridge. Far up, where no tile under the camera is loaded,
+    /// the last one is kept (0 m before any, which only matters in space, far above every cloud).
+    /// </summary>
+    private void TrackGround(float delta)
+    {
+        _groundSampleIn -= delta;
+        if (_groundSampleIn > 0f || _groundHeight == null || GetViewport()?.GetCamera3D() is not { } cam) return;
+        _groundSampleIn = 0.5f;
+        var c = cam.GlobalPosition;
+        if (c.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
+        double? lowest = null;
+        for (int i = -1; i < 8; i++)
+        {
+            var at = i < 0 ? c : c + new Vector3(Mathf.Cos(i * Mathf.Pi / 4f), 0, Mathf.Sin(i * Mathf.Pi / 4f)) * 1500f;
+            if (_groundHeight(at) is not { } y) continue;
+            double alt = _origin?.AltitudeOf(new Vector3(at.X, y, at.Z)) ?? y;
+            if (lowest == null || alt < lowest) lowest = alt;
+        }
+        if (lowest is { } floor) _groundAlt = double.IsNaN(_groundAlt) ? floor : _groundAlt + (floor - _groundAlt) * 0.25;
+    }
 
     private void Refresh()
     {
         if (_snow == null) return;
         float snowfall = Snowfall;
-        _snow.Visible = snowfall > 0f;
-        if (_snow.Visible) _material.SetShaderParameter(Density, snowfall);
+        float density = snowfall * CameraShare();
+        bool shown = density > 0.001f;
+        // the cloud layer crossed (not the occasion starting or ending): logged, it is rare
+        if (shown != _snow.Visible && snowfall > 0f && GetViewport()?.GetCamera3D() is { } cam)
+            GD.Print(FormattableString.Invariant(
+                $"[snow] {(shown ? "under" : "above")} the clouds at {_origin?.AltitudeOf(cam.GlobalPosition) ?? cam.GlobalPosition.Y:F0} m, ground {_groundAlt:F0} m"));
+        _snow.Visible = shown;
+        if (_snow.Visible && Mathf.Abs(density - _pushed) > 0.002f)
+        {
+            _pushed = density;
+            _material.SetShaderParameter(Density, density);
+        }
     }
 
     /// <summary>Every flake a quad whose corners carry its home, its corner and its hash; placed by the shader.</summary>
