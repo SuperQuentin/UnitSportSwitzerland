@@ -32,14 +32,19 @@ public partial class Traffic
     private static LaneGraph? BuildWalkGraph(ModeTiles tiles)
     {
         if (tiles.Near.Count == 0) return null;
-        // the view's tile: the middle of the 5 x 5 the roads were built from
-        int e = (tiles.Near.Min(t => t.Id.E) + tiles.Near.Max(t => t.Id.E) + 1) / 2;
-        int n = (tiles.Near.Min(t => t.Id.N) + tiles.Near.Max(t => t.Id.N) + 1) / 2;
-        var around = tiles.Origin.ToWorld(e * 1000.0 + 500.0, n * 1000.0 + 500.0, 0.0);
+        // the view's tile: the middle of the 5 x 5 the roads were built from (on leaves the view's own place, #1636)
+        var around = tiles.Around ?? MiddleOf(tiles);
         var g = LaneGraph.BuildWalks(tiles.Near, tiles.Origin, tiles.Roads, around, WalkReach);
         GD.Print($"[traffic] walk graph: {g.Edges.Count} edges from {g.WalkSidewalks} sidewalks, {g.WalkPaths} paths, {g.WalkLit} lit crossings "
             + $"({g.WalkIslands} islands), {g.WalkZebras} zebras ({g.ZebraHits?.Count ?? 0} car edges they cross), {g.WalkUnmarked} unmarked, {g.WalkLinks} links; {g.WalkDropped} crossings left out (no walkway at an end)");
         return g.Edges.Count == 0 ? null : g;
+    }
+
+    private static Vector3 MiddleOf(ModeTiles tiles)
+    {
+        int e = (tiles.Near.Min(t => t.Id.E) + tiles.Near.Max(t => t.Id.E) + 1) / 2;
+        int n = (tiles.Near.Min(t => t.Id.N) + tiles.Near.Max(t => t.Id.N) + 1) / 2;
+        return tiles.Origin.ToWorld(e * 1000.0 + 500.0, n * 1000.0 + 500.0, 0.0);
     }
 
     /// <summary>How likely a walker spawns on an edge: never on a crossing or a link, mostly on sidewalks, seldom on a track.</summary>

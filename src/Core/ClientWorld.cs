@@ -836,6 +836,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     return obstacles;
                 },
             };
+            // the earth world (#1636): its graphs from the leaves round the view
+            if (_earth != null) _traffic.LeafRoads = _earth.Leaves.RoadsOf;
             AddChild(_traffic);
         }
         // traffic endpoints (#971): the server's list (same node path as its), every client running them on its own cars; the

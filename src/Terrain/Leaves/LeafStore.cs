@@ -88,6 +88,17 @@ public sealed class LeafStore : ILeafSource
         return CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null;
     }
 
+    /// <summary>
+    /// A leaf's roads alone (#1636: the traffic's graphs read a few km of leaves), decoded from its entry without the other
+    /// sections and not kept; the decoded leaf's own when it is held. Null where the region holds none or the leaf has no roads.
+    /// </summary>
+    public RoadTile? RoadsOf(CubeKey key)
+    {
+        if (Cached(key) is { } held) return held.Roads;
+        if (!_index.ContainsKey(key)) return null;
+        return CubeLeafCodec.ReadSection(Entry(key), LeafKind.Roads) is { } s ? LeafRoads.Decode(s) : null;
+    }
+
     private byte[] Entry(CubeKey key)
     {
         var at = _index[key];

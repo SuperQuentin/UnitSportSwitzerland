@@ -51,12 +51,14 @@ public sealed partial class LaneGraph
     private void FindTramStops(IReadOnlyList<RoadTile> tiles, OriginFrame origin)
     {
         foreach (var tile in tiles)
+        {
+            var place = TilePlace.Of(origin, tile);
             foreach (var p in tile.PointProps)
             {
                 if (p.Type != PointPropType.TramStop) continue;
-                var at = origin.TileToWorld(tile.Id, new Vector3(p.X, p.Y, p.Z));
+                var at = place.World(p.X, p.Y, p.Z);
                 // the trams it serves come toward its face: they run along -front
-                var run = new Vector3(Mathf.Sin(p.Heading), 0f, Mathf.Cos(p.Heading));
+                var run = place.Turn(new Vector3(Mathf.Sin(p.Heading), 0f, Mathf.Cos(p.Heading)));
                 TramStop? best = null;
                 float near = TramStopSide;
                 foreach (var e in Edges)
@@ -75,6 +77,7 @@ public sealed partial class LaneGraph
                 if (!_tramStops.TryGetValue(best.Edge, out var list)) _tramStops[best.Edge] = list = new();
                 list.Add(best);
             }
+        }
     }
 
     /// <summary>A tram path's end lies on its track's line within this (m): the track is cut there.</summary>
@@ -97,6 +100,9 @@ public sealed partial class LaneGraph
         var lines = new List<(double E, double N)[]>();
         var doubles = new List<bool>();
         foreach (var tile in tiles)
+        {
+            var place = TilePlace.Of(origin, tile);
+            g.OnLeaves |= place.OnLeaf;
             foreach (var seg in tile.Segments)
             {
                 if (seg.PointCount < 2 || !IsTramTrack(seg)) continue;
@@ -104,23 +110,27 @@ public sealed partial class LaneGraph
                 var cum = new float[seg.PointCount];
                 var plan = new (double E, double N)[seg.PointCount];
                 // (a tram is a box standing on its track's line: on an embedded track the road's surface, no rail sink as a train's)
+                // (on leaves the plan is the build frame's x and -z: one plane for the whole graph, as LV95 is for tiles)
                 for (int i = 0; i < pts.Length; i++)
                 {
-                    plan[i] = seg.Lv95(tile.Id, i);
-                    pts[i] = origin.ToWorld(plan[i].E, plan[i].N, seg.Points[i * 3 + 1]);
+                    float x = seg.Points[i * 3], y = seg.Points[i * 3 + 1], z = seg.Points[i * 3 + 2];
+                    pts[i] = place.World(x, y, z);
+                    plan[i] = place.OnLeaf ? (pts[i].X, -pts[i].Z) : seg.Lv95(tile.Id, i);
                     if (i > 0) cum[i] = cum[i - 1] + pts[i].DistanceTo(pts[i - 1]);
                 }
                 if (cum[^1] < 0.5f) continue;
                 var edge = new LaneEdge
                 {
                     Points = pts, Cumulative = cum, Class = seg.Class, Flags = seg.Flags, Kind = MoverKind.Tram, Width = seg.Width,
-                    KeyStart = Key(plan[0].E, plan[0].N), KeyEnd = Key(plan[^1].E, plan[^1].N),
+                    KeyStart = place.Key(seg.Points[0], seg.Points[1], seg.Points[2]),
+                    KeyEnd = place.Key(seg.Points[^3], seg.Points[^2], seg.Points[^1]),
                 };
                 g.Edges.Add(edge);
                 if (seg.Attributes.Has(RoadAttrFlags.Embedded)) g._inStreet.Add(edge);
                 lines.Add(plan);
                 doubles.Add((seg.Flags & RoadFlags.DoubleTrack) != 0);
             }
+        }
         var ways = TramTracks.Directions(lines, doubles);
         for (int i = 0; i < g.Edges.Count; i++) g.Edges[i].OneWay = ways[i];
         g.SpliceTramPaths(tiles, origin);
@@ -144,9 +154,10 @@ public sealed partial class LaneGraph
         foreach (var tile in tiles)
         {
             if (!tile.JunctionPaths.Any(p => p.Kind == JunctionPathKind.Tram)) continue;
-            Vector3 World(float x, float y, float z) => origin.TileToWorld(tile.Id, new Vector3(x, y, z));
+            var place = TilePlace.Of(origin, tile);
+            Vector3 World(float x, float y, float z) => place.World(x, y, z);
             // the lights as the trams see them (the plans the lamps and the cars read: the same objects)
-            var sites = tile.Signals.Select(s => new SignalSite { Plan = s.Plan, Out = s.Plan.Arms.Select(a => OutOf(a.Heading)).ToArray() }).ToArray();
+            var sites = tile.Signals.Select(s => new SignalSite { Plan = s.Plan, Out = s.Plan.Arms.Select(a => place.Out(a.Heading)).ToArray() }).ToArray();
             foreach (var jp in tile.JunctionPaths)
             {
                 if (jp.Kind != JunctionPathKind.Tram || jp.PointCount < 2) continue;
@@ -160,7 +171,7 @@ public sealed partial class LaneGraph
                 }
                 if (cum[^1] < 0.5f) continue;
                 var site = jp.Signal >= 0 && jp.Signal < sites.Length ? sites[jp.Signal] : null;
-                long from = Key(tile.Id.Global(jp.From.X, jp.From.Z)), to = Key(tile.Id.Global(jp.To.X, jp.To.Z));
+                long from = place.Key(jp.From.X, jp.From.Y, jp.From.Z), to = place.Key(jp.To.X, jp.To.Y, jp.To.Z);
                 var edge = new LaneEdge
                 {
                     Points = pts, Cumulative = cum, Class = RoadClass.Railway, Flags = RoadFlags.Tramway, Kind = MoverKind.Tram,
@@ -176,7 +187,7 @@ public sealed partial class LaneGraph
                 foreach (var r in tile.Approaches)
                 {
                     if (r.Signal != jp.Signal || !r.Lanes.Any(l => l.Kind == ApproachLaneKind.Tram)) continue;
-                    var into = -OutOf(r.Heading);
+                    var into = -place.Out(r.Heading);
                     if (into.Dot(start) < 0.7f) continue;
                     float back = (World(jp.From.X, jp.From.Y, jp.From.Z) - World(r.X, r.Y, r.Z)).Dot(into);
                     if (back >= 0f && back < TramStopReach) { _tramStopBack[edge] = back; break; }
