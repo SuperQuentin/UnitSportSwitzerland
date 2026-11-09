@@ -15,7 +15,9 @@ using static System.Console;
 /// plus 5 cm);</item>
 /// <item>shared leaf edges agree (within 1 cm, the frames' bar);</item>
 /// <item>a part-real leaf has ground everywhere the generator does (no NaN left);</item>
-/// <item>the blend is convex: the fill's ground lies between the generator's and the real low-pass's range round it.</item>
+/// <item>the blend is convex: the fill's ground lies between the generator's and the real low-pass's range round it;</item>
+/// <item>a part-real leaf's own road points on the cells the fill took stand on the fill's ground (they ran on past the
+/// region's heights and hung over the fill).</item>
 /// </list>
 /// A shaded relief of each block (the fill tinted) into <c>--out</c> as PPM.
 ///
@@ -65,7 +67,7 @@ internal static class LeafBlendCheck
 
         var seam = new List<double>();
         var rough = new List<double>();
-        long keptWrong = 0, keptAll = 0, nanLeft = 0, edgePairs = 0, edgeBad = 0, convexBad = 0;
+        long keptWrong = 0, keptAll = 0, nanLeft = 0, edgePairs = 0, edgeBad = 0, convexBad = 0, roadsOnFill = 0, roadsHanging = 0;
         double edgeWorst = 0;
         var times = new List<double>();
         foreach (var centre in centres)
@@ -80,6 +82,28 @@ internal static class LeafBlendCheck
                     if (leaves.Get(k) is not { Heights: not null } leaf) continue;
                     if (!store.Has(k) || blend.Summary(k) is not { Full: true }) times.Add(sw.Elapsed.TotalSeconds);
                     block[k] = leaf;
+                    if (args.Contains("--buildings") && leaf.Roads is { Segments.Count: > 0 } rs)
+                    {
+                        // the highest road point over the leaf's ground (a bridge deck): its local point and the gap
+                        var tr = frames.TransformOf(k);
+                        double gap = double.MinValue;
+                        (float X, float Z, int Class) top = default;
+                        foreach (var seg in rs.Segments)
+                            for (int q = 0; q + 2 < seg.Points.Length; q += 3)
+                            {
+                                var (li, lj, hEll) = tr.LocalToLattice(seg.Points[q], seg.Points[q + 1], seg.Points[q + 2]);
+                                int a = Math.Clamp((int)Math.Round(li), 0, tr.Cells), b = Math.Clamp((int)Math.Round(lj), 0, tr.Cells);
+                                double ground = leaf.Heights.Heights[b * (tr.Cells + 1) + a];
+                                if (hEll - ground > gap) { gap = hEll - ground; top = (seg.Points[q], seg.Points[q + 2], (int)seg.Class); }
+                            }
+                        WriteLine($"  {k}: {rs.Segments.Count} road segments, the highest {gap:F1} m over the ground at {top.X:F0},{top.Z:F0} (class {top.Class})");
+                    }
+                    if (args.Contains("--buildings") && leaf.Buildings is { Buildings.Count: > 0 } bs)
+                    {
+                        var tall = bs.Buildings.MaxBy(b => b.MaxY - b.MinY)!;
+                        var (mx, mz) = SourceTileToLeaf.Middle(tall);
+                        WriteLine($"  {k}: {bs.Buildings.Count} buildings, the tallest {tall.MaxY - tall.MinY:F1} m ({tall.Kind}) at {mx:F0},{mz:F0}");
+                    }
                     int n = leaf.Heights.Side;
                     var mask = new bool[n * n];
                     if (blend.Summary(k) is { } real)
@@ -95,6 +119,20 @@ internal static class LeafBlendCheck
                             }
                     }
                     kept[k] = mask;
+                    // the region's road points on the cells the fill took stand on the fill's ground
+                    if (store.Has(k) && leaf.Roads is { } lr && blend.Summary(k) is { Full: false })
+                    {
+                        var tr = frames.TransformOf(k);
+                        foreach (var seg in lr.Segments)
+                            for (int q = 0; q + 2 < seg.Points.Length; q += 3)
+                            {
+                                var (li, lj, hEll) = tr.LocalToLattice(seg.Points[q], seg.Points[q + 1], seg.Points[q + 2]);
+                                int a = Math.Clamp((int)Math.Round(li), 0, n - 1), b = Math.Clamp((int)Math.Round(lj), 0, n - 1);
+                                if (mask[b * n + a]) continue;
+                                roadsOnFill++;
+                                if (Math.Abs(hEll - leaf.Heights.Heights[b * n + a]) > 2) roadsHanging++;
+                            }
+                    }
                     var g = world.Height;
                     var on = new SourceOnLeaf(frames, k, Lv95Source.Instance);
                     for (int j = 0; j < n; j++)
@@ -185,6 +223,8 @@ internal static class LeafBlendCheck
             + $"real {rough.Count} p50 {P(rough, 0.5) * 100:F1} cm p99 {P(rough, 0.99) * 100:F1} cm max {(rough.Count > 0 ? rough[^1] : 0) * 100:F1} cm");
         Check("no step at the seam", seam.Count > 0 && P(seam, 0.99) <= 2 * P(rough, 0.99) + 0.05,
             $"seam p99 {P(seam, 0.99) * 100:F1} cm, bar {(2 * P(rough, 0.99) + 0.05) * 100:F1} cm");
+        Check("the region's roads on the fill's cells stand on its ground (within 2 m of the nearest vertex)", roadsHanging == 0,
+            $"{roadsHanging} of {roadsOnFill} points off it");
         Check("shared leaf edges agree within 1 cm", edgeBad == 0, $"{edgePairs} pairs, worst {edgeWorst * 100:F2} cm");
         Check("the fill lies between the generator's and the real ground", convexBad == 0, $"{convexBad} vertices outside");
         WriteLine(fails == 0 ? "RESULT: ok" : $"RESULT: FAILED ({fails})");

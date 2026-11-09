@@ -362,11 +362,22 @@ public sealed class LeafBlend
             Trees = new(),
             Buildings = new BuildingTile { Buildings = new() },
         };
-        if (real?.Trees is { } rt) content.Trees.AddRange(rt);
+        // what the region put on the cells the fill took (its roads, buildings and trees run on past its heights) is
+        // seated on the fill's ground there: left at the region's heights it hung over the fill, its bridge faces
+        // colliding 27 m up north of Riddes
+        var seat = r.Kept is null ? null : new Seat(t, r.Heights, r.Kept, n);
+        if (real?.Trees is { } rt)
+            foreach (var tree in rt)
+                content.Trees.Add(seat is null ? tree : tree with { Y = seat.Ground(tree.X, tree.Y, tree.Z) ?? tree.Y });
         if (generated.Trees is { } gt)
             foreach (var tree in gt)
                 if (InFill(tree.X, tree.Y, tree.Z)) content.Trees.Add(tree with { Y = tree.Y + (float)lift.At(tree.X, tree.Y, tree.Z) });
-        if (real?.Buildings is { } rb) content.Buildings.Buildings.AddRange(rb.Buildings);
+        if (real?.Buildings is { } rb)
+            foreach (var b in rb.Buildings)
+            {
+                var (mx, mz) = SourceTileToLeaf.Middle(b);
+                content.Buildings.Buildings.Add(seat?.Ground(mx, b.MinY, mz) is float y ? Lifted(b, y - b.MinY) : b);
+            }
         if (generated.Buildings is { } gb)
             foreach (var b in gb.Buildings)
             {
@@ -376,7 +387,17 @@ public sealed class LeafBlend
                 content.Buildings.Buildings.Add(Lifted(b, (float)lift.At(mx, b.MinY, mz)));
             }
         // a part-real leaf keeps its real roads; the fill's roads are those of the leaves the region does not hold
-        if (real != null) content.Roads = real.Roads;
+        if (real?.Roads is { } realRoads)
+        {
+            if (seat is null) content.Roads = realRoads;
+            else
+            {
+                // a copy: the store keeps its own
+                var copy = LeafRoads.Decode(LeafRoads.Encode(realRoads));
+                LeafRecords.Map(copy, seat);
+                content.Roads = copy;
+            }
+        }
         else if (generated.Roads is { } roads)
         {
             LeafRecords.Map(roads, lift);
@@ -439,6 +460,31 @@ public sealed class LeafBlend
                 any |= !float.IsNaN(w.Level[s]);
             }
         return any ? w : null;
+    }
+
+    /// <summary>
+    /// Seats a part-real leaf's own records on the fill's ground where they stand on a cell the fill took (each point
+    /// draped, a building by its base); those on its real cells stay. Headings stay.
+    /// </summary>
+    private sealed class Seat(LeafTransform t, float[] heights, bool[] kept, int n) : LeafRecords.IMap
+    {
+        /// <summary>The fill's ground (local y) under a point on a cell the fill took; null on a real cell.</summary>
+        public float? Ground(float x, float y, float z)
+        {
+            var (i, j, _) = t.LocalToLattice(x, y, z);
+            double fi = System.Math.Clamp(i, 0, n - 1), fj = System.Math.Clamp(j, 0, n - 1);
+            int a = (int)System.Math.Round(fi), b = (int)System.Math.Round(fj);
+            if (kept[b * n + a]) return null;
+            int a0 = System.Math.Min((int)fi, n - 2), b0 = System.Math.Min((int)fj, n - 2);
+            int k = b0 * n + a0;
+            double h = Bilerp(heights[k], heights[k + 1], heights[k + n], heights[k + n + 1], fi - a0, fj - b0);
+            if (double.IsNaN(h)) return null;
+            return (float)t.LatticeToLocal(fi, fj, h).Y;
+        }
+
+        public (float X, float Y, float Z) Point(float x, float y, float z) => (x, Ground(x, y, z) ?? y, z);
+        public float Godot(float heading, float x, float y, float z) => heading;
+        public float Math(float angle, float x, float y, float z) => angle;
     }
 
     /// <summary>Moves a record up by the blend's change at its place; headings stay.</summary>

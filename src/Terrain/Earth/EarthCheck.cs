@@ -42,7 +42,9 @@ public partial class EarthCheck : Node3D
     private RigidBody3D? _ball;
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
-    private int _phase, _shifts, _rays, _hits, _above, _below;
+    private int _phase, _shifts, _rays, _hits, _above, _below, _missed;
+    private List<(int I, int J)>? _points;
+    private double _ballS;
     private float _travelled;
     private Vector3 _dir;
     private double _worstRay;
@@ -94,7 +96,7 @@ public partial class EarthCheck : Node3D
         {
             case 0: WaitForGround(); break;
             case 1: Rays(); break;
-            case 2: Ball(); break;
+            case 2: Ball(delta); break;
             case 3: Travel((float)delta); break;
             case 4: Marks(); break;
         }
@@ -113,27 +115,47 @@ public partial class EarthCheck : Node3D
     {
         // a frame for the bodies to enter the physics space
         if (Now - _phaseS < 0.5) return;
-        var space = GetWorld3D().DirectSpaceState;
-        for (int j = -Half; j <= Half; j++)
-            for (int i = -Half; i <= Half; i++)
-            {
-                var p = Position + new Vector3(i * Step, 0, j * Step);
-                if (!_ground.HasCollisionAt(p) || !_ground.TryGetHeight(p, out float h)) continue;
-                _rays++;
-                var q = PhysicsRayQueryParameters3D.Create(p with { Y = h + 50 }, p with { Y = h - 50 });
-                var hit = space.IntersectRay(q);
-                if (hit.Count == 0) continue;
-                _hits++;
-                // over the ground: a roof, a bridge, a wall (the patches carry the leaf's features); under it: a hole
-                double off = ((Vector3)hit["position"]).Y - h;
-                if (off > 0.05) { _above++; continue; }
-                if (off < -0.05)
+        // the points are taken a physics frame before their rays: a patch counted the frame it stood up was not in
+        // the space's queries yet, and a whole patch's rays (52 of 308 at the region's border) found nothing
+        if (_points is null)
+        {
+            _points = new();
+            for (int j = -Half; j <= Half; j++)
+                for (int i = -Half; i <= Half; i++)
                 {
-                    _below++;
-                    if (_below <= 5) Log($"  under the query at {i * Step:F0},{j * Step:F0} m: {off:F2} m");
+                    var p = Position + new Vector3(i * Step, 0, j * Step);
+                    if (_ground.HasCollisionAt(p)) _points.Add((i, j));
                 }
-                _worstRay = System.Math.Max(_worstRay, System.Math.Abs(off));
+            return;
+        }
+        var space = GetWorld3D().DirectSpaceState;
+        foreach (var (i, j) in _points)
+        {
+            var p = Position + new Vector3(i * Step, 0, j * Step);
+            if (!_ground.HasCollisionAt(p) || !_ground.TryGetHeight(p, out float h)) continue;
+            _rays++;
+            var q = PhysicsRayQueryParameters3D.Create(p with { Y = h + 50 }, p with { Y = h - 50 });
+            var hit = space.IntersectRay(q);
+            if (hit.Count == 0)
+            {
+                if (++_missed <= 5) Log($"  no hit at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)})");
+                continue;
             }
+            _hits++;
+            // over the ground: a roof, a bridge, a wall (the patches carry the leaf's features); under it: a hole
+            double off = ((Vector3)hit["position"]).Y - h;
+            if (off > 0.05)
+            {
+                if (++_above <= 5) Log($"  on a feature {off:F2} m over the ground at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)})");
+                continue;
+            }
+            if (off < -0.05)
+            {
+                _below++;
+                if (_below <= 5) Log($"  under the query at {i * Step:F0},{j * Step:F0} m: {off:F2} m");
+            }
+            _worstRay = System.Math.Max(_worstRay, System.Math.Abs(off));
+        }
         int ground = _hits - _above;
         Log($"rays: {_hits} of {_rays} hit; {_above} on a feature over the ground, {_below} under the query; on the ground worst {_worstRay * 100:F1} cm");
         if (_rays < 100) _faults.Add($"only {_rays} grid points had ground and collision");
@@ -150,9 +172,11 @@ public partial class EarthCheck : Node3D
         _phaseS = Now;
     }
 
-    private void Ball()
+    private void Ball(double delta)
     {
-        if (Now - _phaseS < 3) return;
+        // three seconds of physics, not of the wall clock: on a loaded machine the ball had hardly fallen
+        _ballS += delta;
+        if (_ballS < 3) return;
         var at = _ball!.GlobalPosition;
         float rest = _ground.TryGetHeight(at, out float h) ? at.Y - 0.5f - h : float.NaN;
         Log($"the ball after 3 s: {rest * 100:F1} cm over the ground");
