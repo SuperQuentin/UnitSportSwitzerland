@@ -36,6 +36,38 @@ decisions were made with the user on 2026-11-08.
   - commits under a 3 ms budget.
   - The near leaves are drawn whole in front of its tiles (the shader's push).
 
+## Furnishing (PR 2, #1613)
+
+- **The stand-in tile** (`Leaves/LeafStandIn`, Godot-free, `LeafStandInTests`): a leaf as an LV95-shaped tile, so
+  today's builders, the door index, interiors and the tile events run on it unchanged.
+  - Its frame is the leaf's anchor frame shifted 500 m along x and z (C2's road-blend square): the leaf lies in the
+    middle of the 1000 m tile. A `ChunkNode` drawn there is placed by `EarthWorld.StandInToWorld(leaf)`.
+  - Its name is a `TileId` no LV95 tile has: E = 100,000 + face · 20,000 + X, N = 100,000 + Y (`Id`, `TryLeaf`).
+    `BuildingKey`/`DoorKey` built on it name a leaf's buildings, stable across runs (interior layouts are stored
+    under it). D re-keys them with C5's `BuildingId`.
+  - Its ground is a 1 m `ChunkGrid` rasterised from the leaf's bare lattice (the same triangle split as the mesh,
+    within the height quantum, 7 cm); off the leaf, the nearest height on the row. Water: each 2 m sample takes the
+    leaf's nearest water sample, as an anchor-frame height.
+  - Records are copied and shifted (`Roads` via `LeafRecords.Map` and `RoadTile.WithId`, `Buildings`, `Trees`).
+- **`LeafCollision/LeafStand`**: made once per leaf with its collision (`LeafCollision.Prepare`, every peer alike):
+  the grid, the shifted records, the building sites and the doors (`BuildingFootprint.ComputeDoors` on the grid).
+  The collision now carries what C2 left to C1: garage links, stoops, the sites' shells, yards and offices, and the
+  buildings' footings on the grid.
+- **`EarthWorld.Furnish.cs`**: on the worker that loads a leaf, the flat world's near-tile build on its stand-in:
+  roads and paint (cells when lean), lamps and sign names, building cells with occluders and box proxies, site
+  shells and cranes, trees (none in a pit), water (the still layer and the streams). Committed into a `ChunkNode`;
+  the doors go into `DoorIndex` under the stand-in name through the node's whole transform
+  (`DoorIndex.SetTile(id, Transform3D, …)`); `TileFurnished`/`TileUnfurnished` are raised on the earth ground and
+  on the flat streamer's (the dressing systems listen there).
+- **The drawn ground** is the bare lattice blended at `VisualBlendClearance` (0.35 m under the roads), from the same
+  bands as the collision's (`LeafCollision.Bands`); heights and collision stay at clearance 0.
+- **Interiors**: `WorldOrigin.StandIns` places a stand-in tile (`TileTransform`, `TileToWorld`, `TileLocal`), and
+  `LeafCollision/StandInChunkSource` loads its grid, roads, buildings and trees by name (`ClientWorld.WorldSource`,
+  given to `InteriorManager` and `VenueTerraces`). `GroundTile.Lv95Tile` of a leaf is its stand-in name.
+- **Left out** (PR 3 or later): ground cut at tunnel portals and site pits (the leaf's holes are still cut), piers and
+  stadiums (their catalogues are LV95), castles and venues matched by LV95 position, C5's per-leaf ids, rewards and
+  fields.
+
 ## Checks
 
 - `tools/earthcheck.sh` (full tier; `LEAVES=`, skipped without them; Geneva by default): `--frame earth --earthcheck`.
@@ -53,6 +85,5 @@ decisions were made with the user on 2026-11-08.
 
 ## Not yet
 
-- PR 2: roads, buildings, trees, water and doors drawn on leaves, through a leaf-frame grid standing in for `ChunkGrid`.
 - PR 3: generated and fixture leaves and their blend against real ones.
 - C3: the frame turns; C4: the server on leaves.

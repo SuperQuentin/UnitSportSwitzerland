@@ -894,7 +894,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }),
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
-            new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.EarthCheck(Ground!, origin)),
+            new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource }),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
