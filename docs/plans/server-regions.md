@@ -116,8 +116,8 @@ The position half, built in PR #1584:
   edges (seven at a cube corner).
 
 The server under `--frame earth`, the main region and each ENU region on `EarthWorld`'s leaves: built in #1610
-(`net/server-regions`). Left: `InterestService`'s line of sight over the pyramid with refraction and Earth occlusion
-(still the 100 m horizon lattice).
+(`net/server-regions`). `InterestService`'s line of sight over the pyramid with refraction and Earth occlusion: built in
+#1617 (`net/vision-interest`). C4 is complete.
 
 ## Out of scope
 

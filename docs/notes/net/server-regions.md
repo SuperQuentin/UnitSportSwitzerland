@@ -84,5 +84,5 @@ G2a of global tiling (#1443); design and audit in `docs/plans/server-regions.md`
   - A replicated player finds its ground at `World/Terrain`, else `World/Earth` (`FootPlayer._Ready`).
 - **Not yet**: a bot's drive (`BotDriving`) plans its road route from the flat tiles' source, so under `--frame earth`
   it gets out at once ("no terrain") until roads stand on leaves (C1 PR 2): `EARTH=1 tools/botcheck.sh` fails only
-  its "drove off" step. Interiors on the server (`bots/server-collision`); `InterestService`'s line of sight over the
-  pyramid.
+  its "drove off" step. Interiors on the server (`bots/server-collision`).
+- An earth server's line of sight: `net/vision-interest` ("Under `--frame earth`").

@@ -13,7 +13,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `chat-commands` — Chat and commands: (`Net/ChatManager`, `Core/ChatUi`): one class runs on both sides at `World/Chat` — the path must...
 - `admin` — Admin: (`Net/PlayerRegistry`): identity is the ENet peer id, which a client cannot forge; the display name is a...
 - `despawn` — `/despawn <vehicles | items | all> [radius | everywhere]` (admin online, offline free) and the F9 Despawn buttons: `VehicleManager`/`DroppedItems.Despawn` on the server through `Removing` + the spawner, claims and proxies skipped; `tools/econcheck.sh` (#1200)
-- `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned
+- `vision-interest` — Vision-based interest: the server decides who sees whom (size at render resolution, sky, line of sight, race); out of view = despawned; under `--frame earth` the ray between Earth positions over leaves and the cube pyramid (`EarthSight`, refraction, #1513)
 - `entity-interest` — Vehicles, dropped items and radios exist on a peer only within the range they stay 1.5 px wide at its lens (hysteresis, look-ahead, 32 spawns a round, fade before the edge); `Vis` + server `Relay` per entity (`EntityNet`), the awake slot set sent to all (#689)
 - `perf-visibility-on-change` — Player synchronizers keep `VisibilityUpdateMode.None`: every change to what a peer may see must call `UpdateVisibility` (`RefreshNetVisibility`/`RefreshRelays`) where it happens
 - `remote-interpolation` — Remote players are interpolated (NetGlobal/NetVel/NetTime at 30 Hz, Hermite on GlobalPos, bounded extrapolation, smooth render clock)
