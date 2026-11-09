@@ -103,8 +103,11 @@
     `--orbitcheck` flies a polar orbit through ~2,080 turned shifts; `--spacebandcheck` the band.
   `--originstress <m> --originyaw <deg>` sends every shift to an anchor frame at altitude 0 turned
   ±deg about up, so every handler meets a rotation: the car ride, the A320 and the hairpin drive
-  pass at 2° (check map). Known gap: the speedboat's beach landing (`--boatcheck`) stops 3 m
-  further out and keeps creeping at 1.2 m/s in a turned frame, everything else on the boat passes.
+  pass at 2° (check map; but see `--world flat` below). Known gap: the speedboat's beach landing
+  (`--boatcheck speedboat --chunks fixture:lake --originstress 20 --originyaw 2`) stops short and keeps creeping at
+  1.2 m/s in a turned frame, everything else on the boat passes: 3 m short at H3, 17.1 m on Nov 9 2026 (17.2 m with
+  `Turns` as it was before #1512, so not C3's). On leaves (#1512): the car (`--ride car,25 --at 2496957,1122352
+  --heading 35`, open ground by Geneva airport) through 23 turning shifts.
 - **`--world flat` has no shifter**: its probes' `--originstress` changes nothing (no `[origin]` line). Stress a
   handler on real terrain (`--chunks`) or under `--frame earth --leaves`.
 - **Checks**: `--origincheck` (headless: frames, lane keys, the wire between two origins, a race
