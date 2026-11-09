@@ -284,8 +284,24 @@ until earth looks at least as good as flat.
 - **The gate**: reference shots under `--frame earth` against the flat library, every style, `near` to `space`,
   each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user.
 
+### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
+
+D deletes the LV95 runtime, so every world the game can run must already work under `--frame earth`:
+- **The traffic-lights test region** (#1647): `RoadGen --test-region` and `WorldChoice.Prepare` build it only as
+  LV95 `.terr` tiles; it also builds cube leaves, compared with the LV95 build, and `WorldChoice` picks them under earth.
+- **The fun world's extras** (#1648): `FunBackdrop` (LV95 tile ids, `ToWorld(E, N)`), `FunRings`, the PvP zone and
+  its LV95 start move to Earth positions; its course is already on leaves (#1614).
+- **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
+  under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
+  (`Core/TestWorld`) checked.
+- **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
+  Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
+
+Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
+
 ### D: the flip (one PR)
 
+- Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
   path, `HorizonLayer`, `.terr` and the other LV95 readers, `FallbackChunkSource`'s LV95 path);
   tile-keyed stores re-keyed by leaf; the ratchet's counts at 0 and the test retired; a second
