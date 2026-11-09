@@ -42,6 +42,6 @@
   mesh of 4k quads that `snowfall.gdshader` drops and wraps round the camera in **world**
   space, offset by `world_origin_offset` so a floating-origin shift does not reshuffle the flakes
   (the 60 m box divides its 9.6 km period, `core/floating-origin`) (`OccasionPrecip`, zero CPU per frame; the shader draws nothing for a camera
-  under -2000 m, i.e. indoors, per camera so a door portal looking out still shows it). Props are a 12 m fir per town
+  under -2000 m, i.e. indoors, per camera so a door portal looking out still shows it). None above the cloud layer (#1637, `SnowCeiling`): the game has no cloud height, so its base is 2,000 m over the lowest ground round the camera (sampled twice a second, eased, like the mist top) and the snow fades across 1,800-2,200 m over it; the valley thinning (45 % under 700 m) went from the shader's `cam.y` to there. Both read the camera's altitude through `WorldOrigin.AltitudeOf`, right in the flat world, in space and under `--frame earth`. Crossing it logs `[snow] above/under the clouds at <alt> m, ground <alt> m`. Props are a 12 m fir per town
   (`TreeSpot` nudges it off roads and doorsteps; tree and gifts agree by recomputing it) with
   five hunt gifts under it, plus a gift at ~1 door in 20.
