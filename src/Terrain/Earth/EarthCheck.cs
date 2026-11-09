@@ -185,7 +185,9 @@ public partial class EarthCheck : Node3D
             double off = ((Vector3)hit["position"]).Y - h;
             if (off > 0.05)
             {
-                if (++_above <= 5) Log($"  on a feature {off:F2} m over the ground at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)})");
+                if (++_above <= 5)
+                    Log($"  on a feature {off:F2} m over the ground at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)}): "
+                        + $"{(hit["collider"].AsGodotObject() as Node)?.GetPath()} shape {hit["shape"]}");
                 continue;
             }
             if (off < -0.05)
