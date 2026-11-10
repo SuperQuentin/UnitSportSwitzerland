@@ -84,11 +84,12 @@ public sealed class LeafCoverLattice : ICoverLattice
 /// The cover passes that read the network stage's final roads (#1507, G2 B3 PR 5c; docs/notes/tools/cube-cover.md):
 /// <see cref="CoverStage.PaveStreets"/>, <see cref="CoverStage.RoofTunnels"/> and <see cref="CoverStage.LaidOutLots"/>
 /// on each leaf that has both a <see cref="LeafKind.Cover"/> and the network's <see cref="LeafKind.Roads"/>, through
-/// <see cref="LeafCoverLattice"/>; the urban field from the LV95 build's buildings (<c>--facades</c>, until stage 3 writes
-/// buildings per leaf). The planters' trees come with the trees (5b): counted here, not planted.
+/// <see cref="LeafCoverLattice"/>; the urban field from the region's own buildings (#1711: the leaves' sections in LV95 notation,
+/// <see cref="RegionBuildings"/>; <c>--facades</c> reads an LV95 build's <c>.bldg</c> instead, a check until D4).
+/// The planters' trees come with the trees (5b): counted here, not planted.
 ///
 /// <code>
-/// --cube-cover-network --cube-out REGION --facades LV95_CHUNKS [--cube-box minE,minN,maxE,maxN] [--jobs N]
+/// --cube-cover-network --cube-out REGION [--facades LV95_CHUNKS] [--cube-box minE,minN,maxE,maxN] [--jobs N]
 /// </code>
 /// </summary>
 public static class CubeCoverNetworkStage
@@ -118,13 +119,13 @@ public static class CubeCoverNetworkStage
                 default: Console.Error.WriteLine($"--cube-cover-network: unknown option {args[i]}"); return 2;
             }
         }
-        if (region == null || facades == null) { Console.Error.WriteLine("--cube-cover-network needs --cube-out REGION (with its cover and network roads) and --facades LV95_CHUNKS"); return 2; }
+        if (region == null) { Console.Error.WriteLine("--cube-cover-network needs --cube-out REGION (with its cover, buildings and network roads)"); return 2; }
 
         var clock = Stopwatch.StartNew();
         var heights = new RegionHeights(region);
         var wanted = heights.Leaves.Where(k => box is not { } b || CubeRoadStage.InBox(k, b)).ToList();
         var driver = new FrameDriver(wanted, 0, SwissSeaLevel.Instance, heights.FrameLevel);
-        var field = new UrbanField(new Facades(facades));
+        var field = new UrbanField(facades != null ? new Facades(facades) : new Facades(new RegionBuildings(heights).Lv95Tile));
         var fieldLock = new object();
         double Density(double e, double n) { lock (fieldLock) return field.Density(e, n); }
         var writer = new LeafWriter(region, driver.FrameLevel, [LeafKind.Cover], [LatticeKind.Cover]);
@@ -160,6 +161,7 @@ public static class CubeCoverNetworkStage
             });
             if (sections.IsEmpty) continue;
             var seams = writer.WriteFrame(plan.Cell, new Dictionary<CubeKey, List<LeafSection>>(sections));
+            heights.Reload(plan.Cell);   // its entries moved: the urban field reads the buildings from it
             Console.WriteLine($"  frame {plan.Cell.Describe()}: {done} leaves with network roads so far; "
                 + string.Join(", ", seams.Select(st => $"seam {st.Copied} of {st.Samples} copied ({st.CopiedAcrossFrames} across frames)")) + $"; {clock.Elapsed.TotalSeconds:F0} s");
         }

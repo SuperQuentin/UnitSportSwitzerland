@@ -239,6 +239,29 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Where the cars' line stands back behind a crosswalk, both poles stand by the crosswalk on its
   near side, `PoleBehindCrosswalk` 0.4 m behind its edge, not by the cars' line (the user's
   review, #711); with no room for that line they stay on its far side (`PoleAlong`).
+- **Every approach has its main head; the lanes agree with the plan** (#1709, real Geneva).
+  - **Run it on real data.** `RoadGen --signal-check` on Geneva had failed all along. It had only ever run on the synthetic region. Use `--cube-test-region DIR --cube-out REGION --signal-check [--list]` for the leaves.
+  - **What blocks a main pole.** The rewrite log names it per main pole: `main poles by what blocked them`, giving a road's class, `junction`, `building`, `widening` or `core` (`PoleBlock`, `Clearance.Blocking`).
+  - **Tram tracks** keep a pole off by `TramPoleHalf` 1.5 m from their axis, not by the railway profile's 4.5 m. In Geneva's streets the 4.5 m reached over the kerb onto every spot a main pole had: 164 rejected spots fell to 92 on four tiles.
+  - **No clear spot on the right.** The main head goes on the approach's left (`SignalPoleFlags.Second`, whose head is the main head). That is the left pole already planned, else a pole of its own at the left kerb. Last, it goes on the clear spot nearest the right kerb's, within `NearReach` 4 m (a median, a shared corner).
+    - SSV Art. 68: heads stand on the right and may be repeated on the left. A head on neither side leaves the drivers without one.
+    - The check accepts a main head on the left only, and counts it.
+  - **Accepted by name:** an approach with no main head whose stop line lies inside its own junction's core. That is the core's fault: merged cores spanning both kerbs, and even buildings, as at Cornavin.
+  - **Lane records.** Each car lane takes its moves from the arm's own mouth, lane by lane.
+    - Before, a transition the street shares with the junction at its other end was read mirrored. That junction's lanes there carry no arrows, so a left pocket's lane read every move while its plan had a left arrow. This was #1676's picture 5.
+    - A lane never names a move its plan has no green for, nor every move by default.
+    - The check now also wants an arrow group's lane, and every car lane's moves served by a group of its arm.
+  - **Geneva box (2499300,1116800 - 2501200,1118700), leaves rebuilt:**
+
+    | Finding | Before | After |
+    |---|---|---|
+    | bad lane records | 8 | 1 |
+    | approaches with no main head | 6 | 3 |
+    | approaches with their line inside the core | 21 | 14 |
+    | main heads on the left only | 6 | 12 |
+
+    The remaining lane record is an OSM left pocket into a street the network has one-way in, which its plan rightly never lets go. The 3 without a head stand at corners of cores that swallow the kerb.
+  - The whole region still fails on junction paths (`JPTH`, #818), which are out of #1709's scope.
 - **Riders turn right on red** (the user's rule, #711; SSV Art. 69a, signal 5.18 "Rechtsabbiegen
   für Radfahrer gestattet": yellow bike and arrow on black, beside the red lamp, right of it; the
   red then means "no priority" for riders turning right). An approach gets it

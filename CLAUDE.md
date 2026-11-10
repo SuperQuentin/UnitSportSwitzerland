@@ -22,7 +22,7 @@ occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
-`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard; heavy checks side by side in lock slots, `TEST_JOBS`),
+`testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard; every tier side by side, longest first, admitted by each check's measured peak RAM, `TEST_JOBS`/`TEST_QUICK_JOBS`),
 `regression-net` (before a coordinate or rendering change: `tools/test.sh coords` + `results.csv` + `tools/test-compare.py` against a `main` baseline; reference screenshots on D: with `tools/refshots.sh` and `tools/refshot-diff.py`, noise floor first),
 `fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock; net checks at `/speed` with `--checkspeed`),
 `check-waits` (wait for the event, never a fixed time: `Until`, `LogIn`, `Finish` ends with the peers, 0.2 s polls, `REAL=1` for the flat-world scripts),
