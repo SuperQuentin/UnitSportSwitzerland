@@ -37,6 +37,8 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
 
     private Products Tile(TileId id)
     {
+        // read per lattice vertex: a held tile is a lookup alone (ConcurrentDictionary.Count takes every lock, #1699)
+        if (_tiles.TryGetValue(id, out var held)) return held.Value;
         if (_tiles.Count > KeptTiles) _tiles.Clear();
         return _tiles.GetOrAdd(id, t => new Lazy<Products>(() =>
             new Products(world.BuildCover(t), world.BuildWater(t), world.BuildTrees(t), world.BuildBuildings(t)))).Value;

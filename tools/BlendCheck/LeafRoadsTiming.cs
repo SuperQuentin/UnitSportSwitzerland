@@ -6,7 +6,7 @@ using UnitSport.Terrain.Leaves;
 using static System.Console;
 
 /// <summary>
-/// "--leaf-roads-time [--at E,N] [--side 3] [--digest file]" (#1699): the time a generated fill leaf's roads take
+/// "--leaf-roads-time [--at E,N] [--side 3] [--digest file] [--parallel N] [--flat]" (#1699): the time a generated fill leaf's roads take
 /// (<see cref="GeneratedLeafRoads"/>) on a block of leaves round a point (default the brsquad village), and a digest
 /// of every leaf's finished roads (their codec bytes), written to a file or compared with one: the speed-ups keep
 /// every leaf's roads byte-identical.
@@ -30,6 +30,19 @@ static class LeafRoadsTiming
                 if (centre.Neighbour(dx, dy) is { } k) block.Add(k);
         var lines = new List<string>();
         var all = Stopwatch.StartNew();
+        // --parallel N: N leaves at once, as the earth world's workers make them (the digests must not change)
+        if (Arg(args, "--parallel") is { } p && int.Parse(p) > 1)
+        {
+            var digests = new string[block.Count];
+            Parallel.For(0, block.Count, new ParallelOptions { MaxDegreeOfParallelism = int.Parse(p) }, i =>
+            {
+                leaves.Build(block[i]);
+                digests[i] = Digest(roads.Build(block[i]));
+            });
+            for (int i = 0; i < block.Count; i++) lines.Add($"{block[i]} {digests[i]}");
+            WriteLine($"{block.Count} leaves on {p} workers in {all.Elapsed.TotalSeconds:F1} s");
+            return Compare(args, lines);
+        }
         foreach (var k in block)
         {
             var c = Stopwatch.StartNew();
@@ -38,17 +51,24 @@ static class LeafRoadsTiming
             c.Restart();
             var t = roads.Build(k);
             double r = c.Elapsed.TotalSeconds;
-            string digest = "none";
-            if (t != null)
-            {
-                using var ms = new MemoryStream();
-                RoadCodec.Encode(t, ms);
-                digest = Convert.ToHexString(SHA256.HashData(ms.ToArray()))[..16];
-            }
+            string digest = Digest(t);
             WriteLine($"  {k}: content {content:F2} s, roads {r:F2} s, {t?.Segments.Count ?? 0} segments, {digest}");
             lines.Add($"{k} {digest}");
         }
         WriteLine($"{block.Count} leaves in {all.Elapsed.TotalSeconds:F1} s");
+        return Compare(args, lines);
+    }
+
+    static string Digest(RoadTile? t)
+    {
+        if (t is null) return "none";
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(t, ms);
+        return Convert.ToHexString(SHA256.HashData(ms.ToArray()))[..16];
+    }
+
+    static int Compare(string[] args, List<string> lines)
+    {
         if (Arg(args, "--digest") is { } file)
         {
             if (!File.Exists(file)) { File.WriteAllLines(file, lines); WriteLine($"digest written to {file}"); return 0; }
