@@ -1068,7 +1068,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget(Launch);
-            AddChild(_spawn = new SpawnPoint(_spectator, Ground!, origin, spawnE, spawnN));
+            AddChild(_spawn = new SpawnPoint(_spectator, Ground!, origin, spawnE, spawnN) { StillLoading = EarthLoading });
         }
 
         // The teleporter resolves what to move at the moment of the jump — fly camera, local
@@ -1132,6 +1132,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
+        if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: false, fillE, fillN));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.BoatTrailerCheck.Role is { } trailerRole) AddChild(new Player.BoatTrailerCheck(trailerRole, () => LocalPlayer));
         if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));
@@ -1757,7 +1758,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (LocalPlayer == null || !_onFoot)
             {
                 Report(LoadStage.WaitingForPlayer, 0.28f);
-                if (_loadClock > 45) Fail("The server never spawned your player.");
+                // an earth world's first fill leaves can take most of a minute (#1682): not while they still load
+                if (_loadClock > 45 && (_loadClock > SpawnPoint.LoadingWaitS || !EarthLoading())) Fail("The server never spawned your player.");
                 return;
             }
         }
@@ -1849,6 +1851,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
 
+    /// <summary>An earth world still loading leaves round its foci (the spawn's among them).</summary>
+    private bool EarthLoading() => _earth is { Idle: false };
+
     private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
 
     /// <summary>The generated fill is on regardless of its setting: offline with no terrain data, it is the only ground.</summary>
@@ -1888,22 +1893,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             leaves = Terrain.Leaves.EarthLeaves.Fixture(built.Leaves.Contains, built.Build);
             GD.Print($"[earth] fixture course {course.Course.Name} on {built.Leaves.Count} leaves");
         }
-        else
-        {
-            var real = Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir());
-            if (generated != null)
-            {
-                var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
-                // --no-fill-roads: the fill's leaves without RoadGen's stage (~0.5 s a leaf instead of ~2 s)
-                // the fill on the globe's pyramid where the game has the full one (#1678); the shipped levels are coarser
-                // than the generator's own relief, which it keeps then
-                var pyramid = Terrain.Leaves.PyramidBase.Open(World.Globe.DataDir);
-                GD.Print($"[earth] the fill on {(pyramid != null ? $"the pyramid (to level {pyramid.FinestLevel}, {pyramid.Lakes.Length} lake(s))" : "the generator's own relief")}");
-                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"),
-                    pyramid: pyramid);
-            }
-            else leaves = Terrain.Leaves.EarthLeaves.Region(real);
-        }
+        // the region's and the fill, as the server builds them (#1682): --no-fill-roads leaves RoadGen's stage out
+        else return Terrain.Earth.GameLeaves.Region(generated, startE, startN, () => FillOn);
         leaves.Log = s => GD.Print(s);
         return leaves;
     }

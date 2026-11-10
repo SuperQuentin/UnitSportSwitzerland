@@ -89,6 +89,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private readonly List<CollisionPatches.Body> _bodyList = new();
     private readonly List<EcefPos> _foci = new();
     private readonly HashSet<CubeKey> _want = new();
+    /// <summary>The leaves a plan asks for, nearest a focus first (reused).</summary>
+    private readonly List<(double Distance, CubeKey Key)> _asks = new();
     private readonly Queue<CubeKey> _walk = new();
     private readonly List<CubeKey> _drop = new();
     /// <summary>Loaded leaves to read again (<see cref="Refresh"/>): each stays until its new read replaces it.</summary>
@@ -293,8 +295,18 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
                     if (seen.Add(next)) _walk.Enqueue(next);
             }
         }
+        // nearest a focus first (#1682): a fill leaf with roads takes ~2 s and they are made one at a time, so a set in
+        // hash order kept the leaf under a spawn waiting behind a dozen others (40 s and more on a generated world)
+        _asks.Clear();
         foreach (var key in _want)
-            if ((!_near.ContainsKey(key) || _stale.Contains(key)) && Leaves.Has(key)) Request(key);
+            if ((!_near.ContainsKey(key) || _stale.Contains(key)) && Leaves.Has(key))
+            {
+                double nearest = double.MaxValue;
+                foreach (var focus in _foci) nearest = Math.Min(nearest, Distance(key, focus));
+                _asks.Add((nearest, key));
+            }
+        _asks.Sort(static (a, b) => a.Distance.CompareTo(b.Distance));
+        foreach (var (_, key) in _asks) Request(key);
         // what is still queued but no longer wanted (the camera flew on, or up into Space) is skipped by the workers
         foreach (var key in _loading)
             if (!_want.Contains(key)) _cancelled.TryAdd(key, 0);
