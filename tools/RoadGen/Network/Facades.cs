@@ -36,7 +36,7 @@ public sealed class Facades(Func<TileId, BuildingTile?> source, IUnits? units = 
         var id = _units.TileAt(e, n);
         var bits = Tile(id);
         if (bits == null) return false;
-        int c = (int)((e - _units.West(id)) / Cell), r = (int)((_units.North(id) - n) / Cell);
+        int c = (int)Math.Floor((e - _units.West(id)) / Cell), r = (int)Math.Floor((_units.North(id) - n) / Cell);
         if ((uint)c >= Side || (uint)r >= Side) return false;
         int i = r * Side + c;
         return (bits[i >> 6] & (1UL << (i & 63))) != 0;
@@ -123,7 +123,8 @@ public sealed class Facades(Func<TileId, BuildingTile?> source, IUnits? units = 
         for (int s = 0; s <= steps; s++)
         {
             double f = (double)s / steps;
-            int c = (int)((ax + (bx - ax) * f) / Cell), r = (int)((az + (bz - az) * f) / Cell);
+            // (#1691: floored; truncated, a wall up to a cell past the tile's west or north edge marked its first column or row too)
+            int c = (int)Math.Floor((ax + (bx - ax) * f) / Cell), r = (int)Math.Floor((az + (bz - az) * f) / Cell);
             if ((uint)c >= Side || (uint)r >= Side) continue;
             int i = r * Side + c;
             bits[i >> 6] |= 1UL << (i & 63);

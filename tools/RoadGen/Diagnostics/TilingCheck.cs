@@ -169,9 +169,12 @@ public static class TilingCheck
                         (x0, x1, y0, y1) = (Math.Min(x0, x), Math.Max(x1, x), Math.Min(y0, y), Math.Max(y1, y));
                     }
                     if (x1 < west || x0 > west + GridUnits.Box || y1 < north - GridUnits.Box || y0 > north) continue;
+                    // (#1691) the walls on the plane's lattice as the lines are: exact in every cell's frame, so a wall rasterises
+                    // into the same 0.5 m cells under every tiling (a float's rounding put one a cell apart: a sidewalk 0.5 m wider)
                     var moved = new float[t.Length];
                     for (int q = 0; q + 2 < t.Length; q += 3)
-                        (moved[q], moved[q + 1], moved[q + 2]) = ((float)(id.MinE + t[q] - west), t[q + 1], (float)(north - (id.MaxN - t[q + 2])));
+                        (moved[q], moved[q + 1], moved[q + 2]) = ((float)(LineJoin.OnLattice(id.MinE + t[q]) - west), t[q + 1],
+                            (float)(north - LineJoin.OnLattice(id.MaxN - t[q + 2])));
                     list.Add(new Building { Kind = b.Kind, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = b.Floors, MinY = b.MinY, MaxY = b.MaxY, Triangles = moved });
                 }
             }
