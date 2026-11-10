@@ -299,6 +299,8 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   (`Core/TestWorld`) checked.
 - **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
   Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
+- **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,
+  cached, counted in Data): joining players and the phone get their ground from it, or D leaves them with none.
 
 Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
 
@@ -310,6 +312,20 @@ Already ported: the open world (B4 + C1), the generated world and the fill (B5, 
   tile-keyed stores re-keyed by leaf; the ratchet's counts at 0 and the test retired; a second
   protocol bump only if an RPC carried a `TileId`.
 - The bar, recorded in this PR (below); G2 marked built in `global-tiling.md`; #1443 commented.
+
+### After D (follow-ups, not prerequisites)
+
+- **Terrain delivery** (#1656, the user's design, Nov 10 2026): the game ships only a coarse globe and a coarse
+  Switzerland (about `horizon.bin`'s size) as the offline fallback and the base for terrain generation; with a server
+  or local data, every level is streamed when available (the pyramid by quadtree request beside the leaves); every
+  level is built from the finest geometry the builder has (as `--cube-swiss` does over Switzerland); no hard-coded
+  data path; blending between levels so a tile never pops into the planet.
+- **Everything visible from far away baked into the coarser levels** (#1657, the user's idea, Nov 10 2026): the build
+  stage simplifies buildings, trees, roads, railways, bridges, lifts, pylons and large structures into each level's
+  colours and basic geometry (merged blocks, canopy heights, road lines), so the
+  far view keeps towns and forests and the detailed tiles' render distance can drop aggressively and dynamically at no
+  cost to the client.
+- **Junctions independent of tile edges** is not here but in C7: see its issue once filed (#1647's follow-up).
 
 ## The bar, and what it runs on
 
