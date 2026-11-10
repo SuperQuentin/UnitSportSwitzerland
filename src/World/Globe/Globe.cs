@@ -615,14 +615,14 @@ public partial class Globe : Node
         if (water != null && water.Bits == bits)
         {
             wet = new bool[n * n];
-            int side = water.Side;
             for (int j = 0; j < n; j++)
                 for (int i = 0; i < n; i++)
                 {
-                    float level = water.Level[(j * stride / CubeWater.Stride) * side + i * stride / CubeWater.Stride];
-                    if (float.IsNaN(level)) continue;
+                    // as the pyramid is built from it (#1654): a bed the water stage left dry by the leaf's edge is water too
+                    float ground = hs[j * n + i], surface = CubeSurface.SurfaceAt(water, i * stride, j * stride, ground);
+                    if (surface == ground && float.IsNaN(CubeSurface.LevelAt(water.Level, water.Side, i * stride, j * stride))) continue;
                     wet[j * n + i] = true;
-                    hs[j * n + i] = Math.Max(hs[j * n + i], level);
+                    hs[j * n + i] = surface;
                 }
         }
         if (leaf && under != null && !Array.Exists(under, float.IsNaN))

@@ -63,9 +63,11 @@ public static class CubeSwiss
         var leafManifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(leavesDir, CubeManifest.FileName)));
         int leafLevel = leafManifest.LeafLevel;
         if (maxLevel >= leafLevel) { Console.Error.WriteLine($"--cube-levels must stay above the leaves' level {leafLevel}"); return 2; }
-        // the finer level's heights, level by level: the leaves first, from their .cubl bundles (#1507; G1's .cubb read too)
-        var finer = CubeCheck.ReadLeafHeights(leavesDir, jobs);
-        Console.WriteLine($"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s");
+        // the finer level's heights, level by level: the leaves first, from their .cubl bundles (#1507; G1's .cubb read too),
+        // each at its surface: a lake's still water over its bed (#1654)
+        var (finer, wet, lakes) = ReadLeafSurfaces(leavesDir, jobs);
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s, {wet} with water at its surface; lakes at {string.Join(", ", lakes.Select(l => l.ToString("F1", CultureInfo.InvariantCulture)))} m"));
         var grid = EtopoGrid.Load(etopo, jobs);
 
         // the tiles of each level: every ancestor of a leaf, and its siblings
@@ -90,7 +92,7 @@ public static class CubeSwiss
             long fromLeaves = 0, fromEtopo = 0;
             Parallel.ForEach(keys, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, key =>
             {
-                var (h, own, etopoCount) = Averaged(source, grid, key, bits, finerBits);
+                var (h, own, etopoCount) = Averaged(source, grid, key, bits, finerBits, lakes);
                 Interlocked.Add(ref fromLeaves, own);
                 Interlocked.Add(ref fromEtopo, etopoCount);
                 var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(level), Heights = h };
@@ -135,12 +137,67 @@ public static class CubeSwiss
         return check ? CubeGlobal.CheckEdges(built) : 0;
     }
 
+    /// <summary>A region's leaves at their surface (<see cref="CubeSurface"/>): heights, the water over them; G1's <c>.cubb</c> as they are.</summary>
+    private static (ConcurrentDictionary<CubeKey, CubeTile> Leaves, int Wet, float[] Lakes) ReadLeafSurfaces(string dir, int jobs)
+    {
+        var leaves = Directory.GetFiles(dir, "*.cubl");
+        if (leaves.Length == 0) return (CubeCheck.ReadLeafHeights(dir, jobs), 0, []);
+        var tiles = new ConcurrentDictionary<CubeKey, CubeTile>();
+        // still levels to the decimetre and how many samples stand at each: a big lake is one level over many leaves
+        var levels = new ConcurrentDictionary<int, long>();
+        int wet = 0;
+        Parallel.ForEach(leaves, new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        {
+            foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+            {
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is not { } s) continue;
+                var heights = LeafHeights.Decode(s);
+                var water = CubeLeafCodec.ReadSection(bytes, LeafKind.Water) is { } w ? LeafWater.Decode(w) : null;
+                if (water != null)
+                    foreach (var g in water.Level.Where(l => !float.IsNaN(l)).GroupBy(l => (int)MathF.Round(l * 10)))
+                        levels.AddOrUpdate(g.Key, g.Count(), (_, c) => c + g.Count());
+                var surface = CubeSurface.Of(heights, water);
+                if (!ReferenceEquals(surface, heights)) Interlocked.Increment(ref wet);
+                tiles[key] = surface;
+            }
+        });
+        var lakes = levels.Where(l => l.Value >= LakeSamples).Select(l => l.Key / 10f).OrderBy(l => l).ToArray();
+        return (tiles, wet, lakes);
+    }
+
+    /// <summary>Samples at one level that make a lake whose surface ETOPO's is snapped to (Lake Geneva: millions).</summary>
+    private const long LakeSamples = 200_000;
+
+    /// <summary>How far ETOPO's surface may stand from the leaves' lake (Lake Geneva: 418.3 against 422.3 m, #1654).</summary>
+    private const float LakeSnapM = 6f;
+
+    /// <summary>How flat ETOPO must be about a vertex for it to be that lake: metres, over <see cref="LakeFlatDeg"/> each way.</summary>
+    private const float LakeFlatM = 0.3f;
+
+    private const double LakeFlatDeg = 0.004;
+
+    /// <summary>
+    /// The leaves' lake level for an ETOPO height at a lattice point, where ETOPO holds a lake there: near one of the
+    /// leaves' lakes and level for ~400 m each way (ETOPO draws a lake flat, a few metres off the survey); else NaN.
+    /// A function of the point, so tiles sharing it agree.
+    /// </summary>
+    private static float LakeAt(EtopoGrid grid, float[] lakes, double lat, double lon, float etopo)
+    {
+        float lake = float.NaN;
+        foreach (float l in lakes)
+            if (Math.Abs(etopo - l) <= LakeSnapM) { lake = l; break; }
+        if (float.IsNaN(lake)) return lake;
+        foreach (var (dlat, dlon) in new[] { (LakeFlatDeg, 0.0), (-LakeFlatDeg, 0.0), (0.0, LakeFlatDeg), (0.0, -LakeFlatDeg) })
+            if (Math.Abs(grid.Footprint(lat + dlat, lon + dlon, 1) - etopo) > LakeFlatM) return float.NaN;
+        return lake;
+    }
+
     /// <summary>
     /// A tile's heights from the finer level: each vertex the tent mean of the nine finer lattice
     /// points round it (when all nine exist), else ETOPO's footprint mean. Also how many came from each.
     /// </summary>
     private static (float[] Heights, long Own, long Etopo) Averaged(ConcurrentDictionary<CubeKey, CubeTile> finer, EtopoGrid grid,
-        CubeKey key, int bits, int finerBits)
+        CubeKey key, int bits, int finerBits, float[] lakes)
     {
         int n = (1 << bits) + 1;
         var h = new float[n * n];
@@ -172,11 +229,64 @@ public static class CubeSwiss
                 else
                 {
                     etopoHeights ??= CubeGlobal.Heights(grid, key, bits);
-                    h[j * n + i] = etopoHeights[j * n + i];
+                    float e = etopoHeights[j * n + i];
+                    if (lakes.Length > 0)
+                    {
+                        // a lake beside the leaves stands at their level, not ETOPO's few metres off (#1654)
+                        var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, gi0 + i), CubeSphere.Lattice(key.Level + bits, gj0 + j));
+                        double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
+                        double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
+                        if (LakeAt(grid, lakes, lat, lon, e) is var lake && !float.IsNaN(lake)) e = lake;
+                    }
+                    // past the leaves' edge, from their nearest height into ETOPO's over BlendM: ETOPO's 1.8 km cells
+                    // blur a steep shore, and a hard switch stood a wall up to 120 m along the region's edge (#1654)
+                    if (NearestFiner(finer, key.Face, key.Level + 1, finerBits, finerSide, fi, fj) is var (near, t) && t < 1)
+                    {
+                        float s = t * t * (3 - 2 * t);
+                        e = near + (e - near) * s;
+                    }
+                    h[j * n + i] = e;
                     etopo++;
                 }
             }
         return (h, own, etopo);
+    }
+
+    /// <summary>How far past the leaves their heights blend into ETOPO's, metres.</summary>
+    private const double BlendM = 1500;
+
+    /// <summary>Rings searched out to <see cref="BlendM"/>, and directions on each.</summary>
+    private const int BlendRings = 16, BlendDirections = 12;
+
+    private static readonly (double X, double Y)[] Directions = Enumerable.Range(0, BlendDirections)
+        .Select(d => (Math.Cos(2 * Math.PI * d / BlendDirections), Math.Sin(2 * Math.PI * d / BlendDirections))).ToArray();
+
+    /// <summary>
+    /// The finer level's nearest height round its point (gi, gj), searched ring by ring out to <see cref="BlendM"/>, and
+    /// how far, 0..1 of it (1: none). Rings and directions are fixed, so the answer is a function of the point.
+    /// </summary>
+    private static (float Height, float T) NearestFiner(ConcurrentDictionary<CubeKey, CubeTile> finer, int face, int level, int bits,
+        long side, long gi, long gj)
+    {
+        // a lattice step at this level, metres (a face is ~10,000 km across)
+        double stepM = 6_371_000 * Math.PI / 2 / side;
+        if (BlendM / stepM < 1) return (0, 1);
+        for (int ring = 1; ring <= BlendRings; ring++)
+        {
+            // rings close together near the leaves (the first a lattice step out), wider further: a vertex beside them
+            // takes the height beside it
+            double f = ring / (double)BlendRings, rM = Math.Max(stepM, BlendM * f * f), r = rM / stepM;
+            double sum = 0;
+            int found = 0;
+            foreach (var (dx, dy) in Directions)
+                if (FinerAt(finer, face, level, bits, side, gi + (long)Math.Round(dx * r), gj + (long)Math.Round(dy * r)) is { } v)
+                {
+                    sum += v;
+                    found++;
+                }
+            if (found > 0) return ((float)(sum / found), (float)(rM / BlendM));
+        }
+        return (0, 1);
     }
 
     /// <summary>The finer level's height at its face lattice point (gi, gj), or null when no finer tile holds it (or it has no data there).</summary>

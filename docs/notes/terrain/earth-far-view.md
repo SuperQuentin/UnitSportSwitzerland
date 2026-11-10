@@ -44,9 +44,9 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   hold the surface; there a vertex whose eight neighbours are level within 5 cm, and whose cover reads at least a little
   water (`WaterHint`), is water (`GlobeGround.Level`: Blue Marble draws inland lakes black, near-black reads as water).
   Past the near leaves a lake is palette ground, not the water shader (#1669).
-- **Data seen in the far view** (not fixed here): the pyramid's Swiss levels (`cube_global`, built by `--cube-swiss`
-  from G1's `region14` leaves) stand the lake 3.8 m apart in places (418.4 / 422.2 m ellipsoidal) and hold a straight
-  trench ~1.5 km long by the shore east of Lavaux (at levels 12 and 13, any shader): to rebuild from B4's leaves (#1654).
+- **The pyramid's Swiss levels** are built from B4's leaves at their surface, ETOPO's lakes at the leaves' level and a
+  1.5 km blend past the region's edge (#1654, `tools/cube-tiles`): the trench east of Lavaux and the lake at two levels
+  are gone. A far leaf takes the same surface (`CubeSurface.SurfaceAt`: a bed left dry by the leaf's edge is water).
 - **Holes**: NaN heights (past the data a level was built from) come from the coarser levels first
   (`GlobeGround.FillFromAncestors`, bilinear in each ancestor's lattice), then from their neighbours
   (`GlobeGround.FillHoles`, never taken for water); they drew at 0 m. A tile with no height at all is not built.
