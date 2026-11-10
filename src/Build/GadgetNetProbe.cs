@@ -67,8 +67,8 @@ public partial class GadgetNetProbe : Node
         var low = me.GlobalPosition;
         var lowGlobal = placed.Origin.ToGlobal(low);
         var high = low + new Vector3(-30f, 8f, 0);
-        var (e, n) = placed.Origin.ToLv95(high);
-        long zip = await Place(placed, PlacedKind.Zipline, new Transform3D(Basis.Identity, low), Gadgets.ZipPayload(e, n, high.Y));
+        // the top's own Earth place: world y is its altitude on the flat world only, not in --frame earth's ENU (#1683)
+        long zip = await Place(placed, PlacedKind.Zipline, new Transform3D(Basis.Identity, low), Gadgets.ZipPayload(placed.Origin.ToGlobal(high)));
         long tramp = await Place(placed, PlacedKind.Trampoline, new Transform3D(Basis.Identity, low + new Vector3(4f, 0, 4f)), "");
         Expect(zip > 0 && tramp > 0, "a zipline and a trampoline set down");
 

@@ -8,7 +8,7 @@
   (`CourseSource`, what `FixtureLeaves` builds the leaves on). The two part by the grid's convergence and scale:
   ~3.5 m a km near Riddes. `CoursePlace.Active` is the course being played (set by `FixtureChunkSource`, cleared by
   `ForgetWorld`); `FixtureChunkSource.Place` is its own.
-- **The tiles are laid where the leaves are**: under earth (`ClientWorld.CourseOnLeaves`: `--frame earth`, offline),
+- **The tiles are laid where the leaves are**: under earth (`ClientWorld.CourseOnLeaves`: `--frame earth`; the server too),
   `FixtureChunkSource` lays every record through the placement (roads, car parks, paint, blocks turned by
   `Place.Turn`, trees, pistes, cover, water, landings, the airport, venues, the arena), and maps tile points back
   (`CourseOf`). So every reader of the course's tiles (a race route, the dormant fleet, airport stands, a probe's
@@ -17,7 +17,10 @@
 - **The map is linear about the start** (a turn and a scale fitted to the plane by central differences over ±1 km):
   2.6 mm off the plane at worst across the fun world (the grid's scale changes ~6 ppm across 3 km near Riddes), and
   cheap enough for every vertex of a tile. `CoursePlace.Exact` is the plane itself.
-- **Online a course stays flat** on both sides (the server plays it flat), so a networked client lays it flat too.
+- **Online too** (#1683): the server lays the course on its tangent plane and stands on the course's leaves (built
+  there by `FixtureLeaves`, `ServerWorld.EarthLeaves`), its far regions on the same leaves; each client builds its
+  own copy, as offline (nothing of the course crosses the wire). The server's line of sight on a course skips the
+  real cube pyramid. Every server and client prints `[frame] earth|flat`.
 - **Ski slopes on leaves**: `FixtureLeaves` writes `LeafKind.Pistes` as the cube piste stage does (a record per slope
   whose box reaches the leaf, outline in the anchor frame, slot and edge mask at every lattice vertex inside it,
   row-major from the south-west). Nothing in the game reads a leaf's pistes yet (the real region's neither): the snow
@@ -32,4 +35,5 @@
   stand-in tiles (`Surfaces.Source`): without it a car on a leaf road had grass grip and left the hairpin.
 - **Building-site pits** (`site`, #1653): cut into the leaves from their stand-ins' own site plans, `terrain/pits-on-leaves`.
 - **Checks**: `FunCourseTests` (the fleet on the plane, its headings, the tiles on it; the slope on its leaves, its
-  area, through the codec); the course rows in `tools/lib/checkmap.txt` with `--frame earth`.
+  area, through the codec); the course rows in `tools/lib/checkmap.txt` with `--frame earth`; online, the net tier under
+  `TEST_FRAME=earth` (`general/twoclient-checks`).

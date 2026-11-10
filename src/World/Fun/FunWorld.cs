@@ -39,7 +39,7 @@ public static class FunWorld
     /// The world boots in the fun world (both sides, as <see cref="WorldChoice.Active"/> is set, before the occasions,
     /// the festivals and the concerts are made): what those read is set here.
     /// </summary>
-    /// <param name="onLeaves">The course is played on its leaves (a client under <c>--frame earth</c>, offline).</param>
+    /// <param name="onLeaves">The course is played on its leaves (under <c>--frame earth</c>, on every peer: #1683).</param>
     public static void Enter(bool onLeaves = false)
     {
         _entered = true;

@@ -20,6 +20,8 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
   `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
   instead, which does all of that (`twoclient-checks`).
+- **The net tier under earth** (#1683): `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full`; every net check's server
+  and clients get `--frame earth` and a log not stating `[frame] earth` fails the check (`twoclient-checks`).
 - **A test window never takes focus or the mouse and never makes a sound (#1378)**: a person works at
   the machine while a tier runs. Every windowed Godot a check starts runs in a fresh `user://` of its own
   (`guard_test_userdata <dir>`, or `twoclient.sh`'s `tc_userdata`) holding `test_window.cfg`, which
