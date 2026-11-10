@@ -685,7 +685,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the cars already standing in the car parks (#499); the server promotes one when it is
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
-            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin, Ground));
+            AddChild(new Vehicles.DormantVehicles(Ground!, dormantOrigin));
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
@@ -754,7 +754,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // …and snow falling round the camera, except indoors and above the cloud layer (#1637)
             AddChild(new Occasions.OccasionPrecip(origin, at => Ground is { } gr && gr.TryGetSurface(at, out float y) ? y : null));
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
-            Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
+            Occasions.UfoSightings.Create(this, Ground!, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
             Occasions.Festivals.Sechselaeuten.BooggStage.Create(this, _chunks, origin);
@@ -765,7 +765,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the slopes drawn on the terrain material near the camera
         if (Systems.On(Systems.Snow))
         {
-            var snow = World.Snow.SnowService.Create(this, _chunks);
+            var snow = World.Snow.SnowService.Create(this, Ground!);
             if (_worldMaterials.Length > 0)
             {
                 _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
@@ -776,7 +776,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the ski lifts (#912): the lines from the road tiles, the carriers on the shared clock
         if (Systems.On(Systems.Lifts))
         {
-            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, _chunks);
+            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, Ground!);
             AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
             AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
@@ -1556,7 +1556,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
             // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
-            Farming.Herds.Create(this, _chunks, origin, dedicated: false);
+            Farming.Herds.Create(this, Ground!, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
             if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
             if (Farming.HandFarmCheck.Requested) AddChild(new Farming.HandFarmCheck(items, origin));
@@ -1566,7 +1566,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Birds.BirdLife birds = null!;
         if (Systems.On(Systems.Birds))
         {
-            AddChild(birds = new Birds.BirdLife(_chunks, origin, items));
+            AddChild(birds = new Birds.BirdLife(Ground!, origin, items));
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
         }
