@@ -14,6 +14,7 @@ namespace UnitSport.Tests;
 /// True north against the game's axes (#1504, G2 A3): the meridian convergence on the LV95 grid, true north in a
 /// frame's world axes, and each kind of data stored from grid north read into true north at load.
 /// </summary>
+[Collection(FixtureWorld.Collection)]
 public class TrueNorthTests
 {
     private const double Deg = Math.PI / 180;

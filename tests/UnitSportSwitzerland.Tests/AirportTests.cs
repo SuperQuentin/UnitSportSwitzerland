@@ -5,6 +5,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The airport stand planner, runway profiles and the airports file (#422).</summary>
+[Collection(FixtureWorld.Collection)]
 public class AirportTests
 {
     private static readonly List<IReadOnlyList<(double E, double N)>> Taxiway = new() { new List<(double, double)> { (-1000, 100), (1000, 100) } };
