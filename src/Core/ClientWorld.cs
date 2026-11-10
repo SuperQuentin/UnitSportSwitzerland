@@ -1144,6 +1144,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
         if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: false, fillE, fillN));
+        if (_earth != null && Terrain.Earth.DressCheck.Stop is var (dressE, dressN)) AddChild(new Terrain.Earth.DressCheck(_earth, server: false, dressE, dressN));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.BoatTrailerCheck.Role is { } trailerRole) AddChild(new Player.BoatTrailerCheck(trailerRole, () => LocalPlayer));
         if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));

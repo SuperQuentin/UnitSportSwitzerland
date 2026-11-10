@@ -266,6 +266,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // the fill's heights against a client's (#1682, tools/fillagreenetcheck.sh)
         if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: true, fillE, fillN));
+        if (_earth != null && Terrain.Earth.DressCheck.Stop is var (dressE, dressN)) AddChild(new Terrain.Earth.DressCheck(_earth, server: true, dressE, dressN));
         // two bots far apart on one server, each in a frame of its own (#1456, tools/regioncheck.sh)
         if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)

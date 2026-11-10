@@ -202,7 +202,7 @@ public partial class OccasionDecor : Node
     /// <summary>Re-dresses the tile under a world point — after a hunt claim, so the prop goes.</summary>
     public void Refresh(Vector3 world)
     {
-        var id = _origin.TileAt(world);
+        var id = _ground.ContentName(_ground.TileAt(world));   // the ground's names (#1704): a leaf's stand-in too
         if (_tiles.TryGetValue(id, out var tile) && tile.RoadsReady) Decorate(id, tile);
     }
 
@@ -235,7 +235,7 @@ public partial class OccasionDecor : Node
             Roads = tile.Roads,
             HeightAtWorld = p => _ground.TryGetSurface(p, out float h) ? h : null,
             CoverAtWorld = p => _ground.TryGetCover(p, out var c) ? c : null,
-            Towns = OccasionTowns.Near(id.Centre.E, id.Centre.N, 3000).ToList(),
+            Towns = TownsNear(id),
         };
         var into = new DecorBuilder { IsClaimed = IsClaimed };
         foreach (var a in running)
@@ -331,12 +331,19 @@ public partial class OccasionDecor : Node
         foreach (var list in cells.Values) yield return list;
     }
 
+    /// <summary>The towns within 3 km of a tile's middle, by its place on the Earth (#1704: a leaf's stand-in has no LV95 centre).</summary>
+    private static List<OccasionTowns.Town> TownsNear(TileId id)
+    {
+        var (e, n, _) = SwissGeodesy.FromEcef(GlobalPos.OfTile(id, 500, 0, 500).Ecef);
+        return OccasionTowns.Near(e, n, 3000).ToList();
+    }
+
     // ---- queries -------------------------------------------------------------------------------
 
     /// <summary>Unclaimed hunt spots within <paramref name="reach"/> of a world point, nearest first.</summary>
     public IEnumerable<(HuntSpot Spot, Vector3 World)> SpotsNear(Vector3 world, float reach)
     {
-        var id = _origin.TileAt(world);
+        var id = _ground.ContentName(_ground.TileAt(world));   // the ground's names (#1704): a leaf's stand-in too
         var found = new List<(HuntSpot, Vector3, float)>();
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = 1; dz >= -1; dz--)
@@ -361,7 +368,7 @@ public partial class OccasionDecor : Node
     /// <summary>True inside one of the pumpkin patches currently drawn.</summary>
     public bool InPatch(Vector3 world)
     {
-        var id = _origin.TileAt(world);
+        var id = _ground.ContentName(_ground.TileAt(world));   // the ground's names (#1704): a leaf's stand-in too
         if (!_tiles.TryGetValue(id, out var tile) || !IsInstanceValid(tile.Node)) return false;
         var local = world - tile.Node.GlobalPosition;
         var p = new Vector2(local.X, local.Z);
