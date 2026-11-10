@@ -43,6 +43,8 @@ public static partial class CubeTestRegion
         string? chunks = null, region = null;
         bool lv95 = true, compare = false, compareOnly = false;
         (double E, double N, double R)? dump = null;
+        bool signalCheck = false;
+        string? at = null;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -52,6 +54,9 @@ public static partial class CubeTestRegion
                 case "--no-lv95": lv95 = false; break;
                 case "--compare": compare = true; break;
                 case "--verbose": Verbose = true; break;
+                // RoadGen's signal and lane check (--signal-check) on the leaves' records
+                case "--signal-check": signalCheck = true; lv95 = false; break;
+                case "--at": at = args[++i]; break;
                 case "--dump-near":
                     var v = args[++i].Split(',').Select(x => double.Parse(x, CultureInfo.InvariantCulture)).ToArray();
                     dump = (v[0], v[1], v[2]);
@@ -64,6 +69,7 @@ public static partial class CubeTestRegion
         if (chunks == null) { Console.Error.WriteLine("--cube-test-region DIR [--cube-out REGION] [--no-lv95] [--compare]"); return 2; }
         region ??= RegionOf(chunks);
         if (dump is { } d) { DumpNear(chunks, region, d.E, d.N, d.R, Console.WriteLine); return 0; }
+        if (signalCheck) return SignalCheckLeaves(region, at, Console.WriteLine);
         string temp = RawRoads.DefaultTempDir(chunks);
         if (lv95)
         {
@@ -73,6 +79,30 @@ public static partial class CubeTestRegion
         int built = compareOnly ? 0 : Build(chunks, temp, region, Console.WriteLine);
         if (built != 0 || !compare) return built;
         return Compare(chunks, region, Console.WriteLine);
+    }
+
+    /// <summary>
+    /// RoadGen's signal and lane check (<see cref="RoadGen.Diagnostics.SignalCheck"/>: every plan valid, every approach's poles,
+    /// lane records against their pockets and arrows, junction paths) over the leaves' network, positions printed as LV95.
+    /// </summary>
+    public static int SignalCheckLeaves(string region, string? at, Action<string> log)
+    {
+        var heights = new RegionHeights(region);
+        var anchors = new Dictionary<RoadTile, EnuFrame>(ReferenceEqualityComparer.Instance);
+        var tiles = new List<RoadTile>();
+        foreach (var leaf in heights.Leaves)
+        {
+            if (heights.ReadKind(leaf, LeafKind.Roads) is not { } sec) continue;
+            var tile = LeafRoads.Decode(sec);
+            anchors[tile] = leaf.Anchor;
+            tiles.Add(tile);
+        }
+        log($"signal check on {tiles.Count} leaves with roads in {region}");
+        return RoadGen.Diagnostics.SignalCheck.Run(tiles, (t, x, z) =>
+        {
+            var (e, n, _) = SwissGeodesy.FromEcef(anchors[t].ToEcef(x, 0, z));
+            return (e, n);
+        }, at, log);
     }
 
     /// <summary>The region's LV95 km tiles.</summary>
