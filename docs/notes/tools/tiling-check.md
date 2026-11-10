@@ -18,7 +18,9 @@ RoadGen --tiling-check --chunks DIR [--temp DIR] --box minE,minN,maxE,maxN
   (`Geometry/GridUnits`: an origin, an angle, a cell size; each cell's frame a plane-aligned 1 km square centred on it and
   snapped to 2 m, exactly like `FrameUnits` for a leaf). The stage runs on them through `RegionData.On` (the LV95 plane, so the
   OSM, canton, gantry and tram inputs are the LV95 build's), in blocks of about `--block-m` and a halo of about `--halo-m`.
-  The ground is the LV95 `.terr`, the walls the LV95 `.bldg` moved into each cell's square.
+  The ground is the LV95 `.terr`, the walls the LV95 `.bldg` moved into each cell's square. The joined lines and the walls are
+  put on the plane's 2^-10 m lattice first (`LineJoin.OnLattice`, #1691): a source's points must be, so that every cell's
+  float frame holds a point at one place on the plane.
 - **Default tilings**: `0,0,0,1000` (the km grid, the reference), shifted by 250 m east, 500 m north, (334, 666) m, turned
   28.5째 in 610 m cells (like level-14 leaves), turned 45째 in 400 m cells from (100, 200).
 - **Compared** in the box, each tiling against the first (`Diagnostics/RecordMarks`, shared with `CubeTestRegion`'s leaf
@@ -47,7 +49,30 @@ A merged core's representative (its class and layer) was the member nearest the 
 no member there was refused. Now the nearest member stands for it, whatever the tiles.
 
 **Geneva** (box 2499300,1116800,2501200,1118700; 1,170 junctions, 99 signals, 346 approaches; 17 min for four tilings on a quiet
-machine, from `D:/UnitSportSwitzerland/test1647/lv95`): the 500 m shift differs in 1 junction (a small roundabout) and 4 paint
-bins; the turned tilings in about 15 junctions (6 cm to 2.3 m, areas 2-20 %), 9 poles, 1 signal plan, 2 approaches and about
-100 of 7,660 paint bins. None of them is at a cut: a narrow run of the same tiling matches. What the block holds decides them.
-Open in #1691 (blocks D). `--debug-junction E,N` prints the plans there under each tiling.
+machine, from `D:/UnitSportSwitzerland/test1647/lv95`). After #1666 the 500 m shift differed in 1 junction (a small roundabout)
+and 4 paint bins; the turned tilings in about 15 junctions (6 cm to 2.3 m, areas 2-20 %), 9 poles, 1 signal plan, 2 approaches
+and about 100 of 7,660 paint bins. None of them was at a cut: a narrow run of the same tiling matched. #1691 found the rules:
+
+- **A block's frame rounded by where its centre was.** Bisecting the roundabout cell by cell: its core was 65 m� with its own
+  cell alone, or with the cell north or south added, and 105 m� with the cell west of it (700 m away), which moves the block's
+  centre 500 m west. The same tiling against itself with every frame moved 6 m changed 5 junctions where a frame coordinate
+  crosses 1024 m (a float's step doubles there). Now `BlockFrame.Centre` = 12,288: every point within 4 km of a block's centre
+  has both coordinates in [8192, 16384), one binade (floats 2^-10 m apart), and frames are on the 2 m lattice, so a point, and
+  a sum or difference of points, rounds alike in every block. A probe giving every block one frame took the turned tilings to
+  3-7 junctions and 32-45 paint bins.
+- **Joined lines kept each tiling's cut points** as vertices. `LineJoin` now drops a joint the two pieces run straight on
+  through (within 1 mm, `StraightM`); whole lines are sorted by their points (`LineOrder`), not by the order the tiles were read.
+- **A street's dashes from a junction the block did not plan**: the paint along a link is laid from its junction's mouth, so
+  its dashes' phase anywhere along it is that junction's. A junction now reaches a block all along its arm's own link, not only
+  within `JunctionReach` (300 m) of it (the test region's one bin: a 355 m street, 3.6 m of phase, a block 333 m off).
+- **A band junction's trams' stop lines**: a lit junction homed in another block found no signal record (looked up through its
+  cap), so its trams' stop lines past a cut were laid by no block that writes them.
+- **Walls past a tile's west or north edge**: `Facades.Mark` truncated a cell index toward zero, so a wall up to 0.5 m beyond
+  the edge marked the tile's first column or row too (a sidewalk 0.5 m narrower beside every km line, in every LV95 build).
+
+With these (PR #1700), **Geneva passes every tiling** (`RESULT: ok`: every record, paint bin and centreline within its bar
+under the 500 m shift and both turned tilings; centrelines within 0.07 cm), and so does the test region under all six.
+
+`--debug-junction E,N` prints the plans there under each tiling; a narrow box (400 m) around a difference reproduces it in a
+few minutes. D's raw road stage must put its points on the same lattice of the plane (else each leaf's float rounding reaches
+the block as noise); between frames' planes (#1676) the walls' rasters are still each plane's own.
