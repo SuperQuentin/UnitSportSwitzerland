@@ -1,5 +1,4 @@
 using UnitSport.Terrain.Format;
-using UnitSport.Tools.Preprocessor;
 using Xunit;
 
 namespace UnitSport.Tests;
@@ -57,5 +56,29 @@ public class CubeSurfaceTests
         Assert.Equal(11, CubeSurface.LevelAt(level, side, 1, 1));   // inside: the wet of the four round it
         Assert.Equal(10, CubeSurface.LevelAt(level, side, 0, 1));
         Assert.True(float.IsNaN(CubeSurface.LevelAt(level, side, 3, 3)));
+    }
+
+    [Fact]
+    public void A_bed_left_dry_by_the_water_is_its_surface()
+    {
+        // the water stage leaves a lake leaf's outer samples dry over the bed: the edge row stood 300 m down
+        var t = Ground(120);
+        var w = CubeWater.Dry(Bits);
+        int side = w.Side;
+        for (int r = 1; r < side; r++)
+            for (int c = 0; c < side; c++) w.Level[r * side + c] = 422.3f;
+        var s = CubeSurface.Of(t, w);
+        Assert.All(s.Heights, h => Assert.Equal(422.3f, h));
+    }
+
+    [Fact]
+    public void Ground_by_water_but_not_under_it_stays()
+    {
+        // a bank a few metres under a pond (or a reach below a weir) is not a bed
+        var w = CubeWater.Dry(Bits);
+        w.Level[0] = 430f;
+        Assert.Equal(415f, CubeSurface.SurfaceAt(w, 4, 4, 415f));
+        Assert.Equal(400f, CubeSurface.SurfaceAt(w, 8, 8, 400f));   // too far from it
+        Assert.Equal(430f, CubeSurface.SurfaceAt(w, 4, 4, 300f));   // a bed, within reach
     }
 }

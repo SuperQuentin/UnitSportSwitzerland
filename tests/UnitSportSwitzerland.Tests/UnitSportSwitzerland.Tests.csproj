@@ -262,8 +262,6 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- the cube comparer's pure half (#1507): statistics, matching, bars -->
     <Compile Include="..\..\tools\TerrainPreprocessor\CubeCompareCore.cs" Link="Tools\%(Filename)%(Extension)" />
-    <!-- #1654: the pyramid averaged from the leaves at their surface -->
-    <Compile Include="..\..\tools\TerrainPreprocessor\CubeSurface.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- and the LV95 build's rigorous way in for latitudes and longitudes -->
     <Compile Include="..\..\tools\TerrainPreprocessor\GeoInput.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
