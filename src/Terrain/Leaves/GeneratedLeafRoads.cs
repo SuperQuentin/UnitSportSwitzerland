@@ -16,7 +16,8 @@ namespace UnitSport.Terrain.Leaves;
 /// tiles under it, cut at its edges (<see cref="LeafSplit"/>), each piece keyed by its line and the metre along it it
 /// starts at (the stage hashes per-street choices on them, so a street is laid out the same from every leaf that sees
 /// it), moved onto the frame's plane. The ground is the generator's function at a plane point; the walls are its
-/// buildings moved onto the plane. One leaf at a time (the stage's caches are not shared across threads).
+/// buildings moved onto the plane. One leaf at a time (the stage's caches are not shared across threads); the leaves of a
+/// frame share its raw roads, walls and RoadGen's walls and density (#1699: a village leaf ~5 s before, ~1.5 s after).
 /// </para>
 /// </summary>
 public sealed class GeneratedLeafRoads(ProceduralWorld world, LeafFrames? frames = null)
@@ -37,9 +38,10 @@ public sealed class GeneratedLeafRoads(ProceduralWorld world, LeafFrames? frames
         lock (_gate)
         {
             var frame = _frames.FrameOf(leaf);
-            var units = new FrameUnits(frame, k => _frames.TransformIn(frame, k), LeafFrames.LeafLevel);
+            var state = StateOf(frame);
+            var units = state.Units;
             var id = units.Tile(leaf);
-            var (own, _) = Raw(units, id);
+            var (own, _) = state.Raw(id);
             if (own is null) return null;
             RoadTile tile;
             try
@@ -47,19 +49,114 @@ public sealed class GeneratedLeafRoads(ProceduralWorld world, LeafFrames? frames
                 var built = TileRewriter.Rewrite([id], Stage, new TileRewriter.Inputs
                 {
                     Units = units,
-                    Roads = t => Raw(units, t),
+                    Roads = state.Raw,
                     Ground = _ => new Ground(world, frame),
-                    Buildings = t => Walls(units, t),
+                    Buildings = state.Walls,
+                    Facades = state.Facades,
+                    Field = state.Field,
                 });
                 tile = built.Count > 0 ? built[0] : own;
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
+                // the shared pair may hold a half-built tile: start the frame over
+                _states.Remove(frame.Cell);
                 Failed?.Invoke(leaf, e);
-                tile = Raw(units, id).Tile!;
+                tile = state.Raw(id).Tile!;
             }
             LeafRecords.ToLeaf(tile, units);
             return tile;
+        }
+    }
+
+    /// <summary>Frames whose shared stage state is held (a frame is ~19 km: the play area is one or two).</summary>
+    private const int KeptFrames = 2;
+
+    /// <summary>
+    /// Tiles a frame's shared walls and density may hold before they start over (~1.5 MB a tile), as the LV95 source's
+    /// (<c>StageSharedTiles</c>). Both are pure functions of position and walls, so starting over changes no output.
+    /// </summary>
+    private const int SharedTiles = 64;
+
+    private readonly Dictionary<CubeKey, FrameState> _states = new();
+    private readonly Queue<CubeKey> _stateOrder = new();
+
+    private FrameState StateOf(WorkFrame frame)
+    {
+        if (_states.TryGetValue(frame.Cell, out var state) && state.Fresh <= SharedTiles) return state;
+        _states.Remove(frame.Cell);
+        state = new FrameState(this, frame);
+        _states[frame.Cell] = state;
+        if (!_stateOrder.Contains(frame.Cell)) _stateOrder.Enqueue(frame.Cell);
+        while (_states.Count > KeptFrames && _stateOrder.TryDequeue(out var old))
+            if (old == frame.Cell) _stateOrder.Enqueue(old);
+            else _states.Remove(old);
+        return state;
+    }
+
+    /// <summary>
+    /// What the stage shares across the leaves of one frame (#1699): its units, its tiles' walls, and RoadGen's walls and
+    /// density over them (<see cref="Facades"/>, <see cref="UrbanField"/>), as the LV95 source shares them across tiles.
+    /// A frame's tiles are its leaves, so each is a pure function of the frame and the tile: every leaf's roads stay the
+    /// same whichever leaves were built before it.
+    /// </summary>
+    private sealed class FrameState
+    {
+        public readonly FrameUnits Units;
+        public readonly Facades Facades;
+        public readonly UrbanField Field;
+        private readonly GeneratedLeafRoads _owner;
+        private readonly Dictionary<TileId, BuildingTile?> _walls = new();
+        private readonly Queue<TileId> _wallOrder = new();
+
+        /// <summary>Walls' tiles the shared pair asked for (it loads a tile's bits once), whether or not they had walls.</summary>
+        public int Fresh => _asked.Count;
+        private readonly HashSet<TileId> _asked = new();
+
+        public FrameState(GeneratedLeafRoads owner, WorkFrame frame)
+        {
+            _owner = owner;
+            Units = new FrameUnits(frame, k => owner._frames.TransformIn(frame, k), LeafFrames.LeafLevel);
+            Facades = new Facades(t => { _asked.Add(t); return Walls(t); }, Units);
+            Field = new UrbanField(Facades);
+        }
+
+        private readonly Dictionary<TileId, (RoadTile? Tile, RawRoads.Key?[]? Keys)> _raw = new();
+        private readonly Queue<TileId> _rawOrder = new();
+
+        /// <summary>
+        /// A tile's raw roads and keys on the frame's plane, a fresh copy (the stage writes into the segments it is given),
+        /// the last <see cref="SharedTiles"/> kept: every leaf is read by the 25 rewrites round it.
+        /// </summary>
+        public (RoadTile? Tile, RawRoads.Key?[]? Keys) Raw(TileId id)
+        {
+            if (!_raw.TryGetValue(id, out var held))
+            {
+                held = _owner.Raw(Units, id);
+                _raw[id] = held;
+                _rawOrder.Enqueue(id);
+                while (_rawOrder.Count > SharedTiles) _raw.Remove(_rawOrder.Dequeue());
+            }
+            if (held.Tile is not { } tile) return (null, null);
+            var segments = new List<RoadSegment>(tile.Segments.Count);
+            foreach (var seg in tile.Segments)
+                segments.Add(new RoadSegment
+                {
+                    Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width,
+                    Attributes = seg.Attributes, Points = (float[])seg.Points.Clone(),
+                });
+            return (new RoadTile { Id = tile.Id, Segments = segments }, (RawRoads.Key?[])held.Keys!.Clone());
+        }
+
+        /// <summary>A tile's walls on the frame's plane, the last <see cref="SharedTiles"/> kept (every leaf reads its 5 x 5).</summary>
+        public BuildingTile? Walls(TileId id)
+        {
+            if (_walls.TryGetValue(id, out var held)) return held;
+            var built = _owner.Walls(Units, id);
+            _walls[id] = built;
+            _wallOrder.Enqueue(id);
+            while (_wallOrder.Count > SharedTiles) _walls.Remove(_wallOrder.Dequeue());
+            return built;
         }
     }
 

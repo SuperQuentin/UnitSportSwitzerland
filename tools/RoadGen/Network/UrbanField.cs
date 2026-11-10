@@ -112,8 +112,34 @@ public sealed class UrbanField(Facades facades)
     private long WestNode(TileId id) => (long)Math.Round(_units.West(id) / Cell);
     private long SouthNode(TileId id) => (long)Math.Round(_units.South(id) / Cell);
 
-    /// <summary>Whether a wall stands in the global 2 m cell [gx, gx+1) x [gy, gy+1) (gy counting north).</summary>
+    /// <summary>
+    /// Whether a wall stands in the global 2 m cell [gx, gx+1) x [gy, gy+1) (gy counting north), memoised in blocks of
+    /// 64 x 64 cells (#1699): neighbouring tiles' margins read the same cells, and on a frame's plane (FrameUnits) the
+    /// tile holding a cell costs a cube projection, every leaf's 1 km square overlapping its neighbours'.
+    /// </summary>
     private bool WallAt(long gx, long gy)
+    {
+        var key = (gx >> BlockBits, gy >> BlockBits);
+        if (!_walls.TryGetValue(key, out var bits))
+        {
+            bits = new ulong[BlockCells];
+            long x0 = key.Item1 << BlockBits, y0 = key.Item2 << BlockBits;
+            for (int r = 0; r < BlockCells; r++)
+            {
+                ulong row = 0;
+                for (int c = 0; c < BlockCells; c++)
+                    if (ComputeWallAt(x0 + c, y0 + r)) row |= 1UL << c;
+                bits[r] = row;
+            }
+            _walls[key] = bits;
+        }
+        return (bits[(int)(gy & (BlockCells - 1))] & (1UL << (int)(gx & (BlockCells - 1)))) != 0;
+    }
+
+    private const int BlockBits = 6, BlockCells = 1 << BlockBits;
+    private readonly Dictionary<(long, long), ulong[]> _walls = new();
+
+    private bool ComputeWallAt(long gx, long gy)
     {
         var id = _units.TileAt(gx * Cell, gy * Cell);
         if (facades.Coarse(id) is not { } mask) return false;
