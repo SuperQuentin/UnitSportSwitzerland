@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# The server streams cube leaves to a client that has none (#1655, G2 C7, docs/notes/net/terrain-streaming.md): a
+# The server streams cube leaves to a client that has none (#1655, G2 C7, docs/notes/net/leaf-streaming.md): a
 # dedicated server under --frame earth on B4's built leaves; client A joins with the same leaves on its disk, client B
 # with no leaves, no tiles and an empty cache. Both run --earthcheck (src/Terrain/Earth/EarthCheck) at Geneva: the
 # ground under the start, collision against the height queries, a dropped ball, the ground streaming ahead of a body
-# moving TRAVEL m, the leaves furnished (roads, buildings, doors). B must get every leaf from the server (its log:
+# moving TRAVEL m, the leaves furnished (roads, buildings, doors). B (the generated fill off: no ground but the server's)
+# must get every leaf from the server (its log:
 # "streamed on arrival: N MB, M leaves from the server's index, 0 on this copy's disk"), A none.
-# Then B runs again on the cache it filled: the same check with (almost) nothing streamed. Skipped without the leaves.
+# Then B runs again on the cache it filled, the fill on: the fill stands first and the real leaves replace it in place
+# when the index lands (EarthWorld.Refresh), nothing streamed but the index. Skipped without the leaves.
 #   GODOT=<exe> [LEAVES=<dir>] [AT=E,N] [TRAVEL=m] [PORT=] tools/leafstreamcheck.sh      logs: test_output/leafstream_*.log
 . "$(dirname "$0")/lib/twoclient.sh" leafstream
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
@@ -21,7 +23,7 @@ tc_server 900 180 "$OUT/leafstream_server.log" --server --port $PORT --no-query 
 tc_client 600 "$OUT/leafstream_A.log" --connect 127.0.0.1:$PORT --name Owner "${EARTH[@]}" --leaves "$LEAVES" "${CHECK[@]}" &
 A=$!
 ( tc_userdata "$(mkdir -p "$OUT/userdata_leafstream_B" && cd "$OUT/userdata_leafstream_B" && pwd)"
-  tc_client 600 "$OUT/leafstream_B.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES" --cache "$CACHE" "${CHECK[@]}" )
+  tc_client 600 "$OUT/leafstream_B.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES" --cache "$CACHE" "${CHECK[@]}" --generated off )
 wait $A
 # B again, from the cache it filled
 ( tc_userdata "$OUT/userdata_leafstream_B"

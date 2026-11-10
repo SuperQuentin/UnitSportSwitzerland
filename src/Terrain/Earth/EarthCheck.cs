@@ -141,6 +141,13 @@ public partial class EarthCheck : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        // online (#1655) the player spawned after the check takes the view: the origin must follow this body, not it
+        if (_camera != null && !_camera.Current) _camera.MakeCurrent();
+        Phase(delta);
+    }
+
+    private void Phase(double delta)
+    {
         if (Now > TimeoutS)
         {
             _faults.Add($"timed out in phase {_phase}");
