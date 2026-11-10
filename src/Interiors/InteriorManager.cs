@@ -909,7 +909,11 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
         // through a door that is open, or has just shut behind them
-        if (!_planKeys.TryGetValue(door, out var plan)) return;
+        if (!_planKeys.TryGetValue(door, out var plan))
+        {
+            GD.Print($"[interior] {sender}'s crossing of {door} ignored: no plan known for that door here");
+            return;
+        }
         Broadcast(sender, inward ? plan : "");
     }
 
