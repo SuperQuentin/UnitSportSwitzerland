@@ -139,6 +139,8 @@ extra=()
 engine=()
 [ -n "${GODOT_ARGS:-}" ] && read -r -a engine <<< "$GODOT_ARGS"
 game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" "${pins[@]}" ${log[@]+"${log[@]}"} ${extra[@]+"${extra[@]}"})
+# TEST_FRAME=earth|flat (#1710, as tools/test.sh passes it): the film in that frame
+[ -n "${TEST_FRAME:-}" ] && game+=(--frame "$TEST_FRAME")
 
 # the newest version's number, 0 when there is none yet
 newest() {

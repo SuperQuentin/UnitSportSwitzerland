@@ -487,7 +487,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
         // the frame this world plays in, every run: a net check under --frame earth fails on a silent flat fallback (#1683)
-        GD.Print($"[frame] {(earth ? "earth" : "flat")}");
+        FrameReport.Say(earth);
 
         // The floating origin (#185): world space follows the camera, so float32 stays precise
         // however far it goes. Online too: positions on the wire are LV95, never world space.

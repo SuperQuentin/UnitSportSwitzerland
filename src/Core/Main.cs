@@ -222,5 +222,9 @@ public partial class Main : Node
 	}
 
 	// after every child's _ExitTree (Godot exits children first): saves still queued reach the disk
-	public override void _ExitTree() => SaveQueue.Flush();
+	public override void _ExitTree()
+	{
+		SaveQueue.Flush();
+		FrameReport.AtExit();
+	}
 }

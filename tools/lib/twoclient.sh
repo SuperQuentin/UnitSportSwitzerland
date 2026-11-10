@@ -109,8 +109,10 @@ _tc_ports() {
     fi
     _tc_args+=("$a"); prev=$a
   done
-  # TEST_FRAME=earth (G2 D0, #1682): every Godot of the check under that frame; a script's own --frame comes first and wins
-  [ -n "${TEST_FRAME:-}" ] && _tc_args+=(--frame "$TEST_FRAME")
+  # TEST_FRAME=earth (G2 D0, #1682): every Godot of the check under that frame. A script's own --frame is kept and
+  # none added (GameSettings reads the last, ServerWorld the first: two would split the frame); the log check still
+  # holds it to TEST_FRAME (#1710)
+  [ -n "${TEST_FRAME:-}" ] && [[ " $* " != *" --frame "* ]] && _tc_args+=(--frame "$TEST_FRAME")
   return 0
 }
 
@@ -145,6 +147,7 @@ tc_client() {
 
 tc_godot() {
   local timeout_s=$1 log=$2; shift 2
+  echo "$log" >> "$_tc_logs"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" "$@"
 }

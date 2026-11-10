@@ -21,9 +21,11 @@
 #      test_output/tests/results.csv; tools/test-compare.py compares two), TEST_LIST (1: print the checks
 #      it would run, then stop), TEST_USERDATA (real: the Godot checks run on the real user://, not a
 #      fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1: skip what results.tsv
-#      already holds as PASS, to go on after a run that died, #1409), TEST_FRAME (earth|flat: the net checks'
-#      servers and clients play in that frame, and a log that does not state it fails its check, #1683;
-#      `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full` is the earth net bar).
+#      already holds as PASS, to go on after a run that died, #1409), TEST_FRAME (earth|flat: every Godot of
+#      every row plays in that frame, quick, net, full and coords alike: a row without its own --frame gets
+#      `--frame <it>`, the tools/*.sh scripts pass it to theirs, and a log that does not state it ("[frame] earth",
+#      or "[frame] none" from a process with no world) fails its row, so a silent flat fallback never passes;
+#      #1683, #1710; `TEST_FRAME=earth tools/test.sh coords` is G2 D's bar).
 # Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log):
 # a run that dies keeps what it had.
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
@@ -89,6 +91,11 @@ TIMEOUT=${TEST_TIMEOUT:-600}
 FAST=--fixed-fps\ 60
 [ "${TEST_REALTIME:-}" = 1 ] && FAST=
 BASE=${TEST_BASE:-origin/main}
+case ${TEST_FRAME:-} in
+  '' | earth | flat) ;;
+  *) echo "[test] TEST_FRAME=$TEST_FRAME: earth or flat" >&2; exit 2 ;;
+esac
+[ -n "${TEST_FRAME:-}" ] && export TEST_FRAME && echo "[test] every Godot row in frame $TEST_FRAME"
 mkdir -p "$OUT"
 export TEST_RUN="$$.$RANDOM$RANDOM"   # every process of this run inherits it: what `stop` sweeps for
 printf '%s\n%s\n' $$ "$TEST_RUN" > "$PIDFILE"
@@ -303,16 +310,35 @@ log_of() {
   echo "$OUT/$name.log"
 }
 
+# TEST_FRAME (#1710): a direct Godot row's frame arguments. A row with its own --frame keeps it (two would be read
+# differently: GameSettings takes the last, ServerWorld the first); its log is still checked against TEST_FRAME,
+# so a deliberately flat row shows up in an earth run
+row_frame() { # check: sets FRAME_ARGS
+  guard_frame_args
+  [[ " $1 " == *" --frame "* ]] && FRAME_ARGS=()
+  return 0
+}
+
 run_one() { # tier check log: runs one check, its exit code
-  local tier=$1 check=$2 log=$3 eng=
+  local tier=$1 check=$2 log=$3 eng= code
   # shellcheck disable=SC2086  # the map's check is split into words on purpose
   case $check in
     @netsmoke) netsmoke "$log" ;;
+    # a script passes TEST_FRAME (exported) to its own Godots and checks their logs (twoclient.sh, guard_frame_check)
     tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
-    @realtime\ *) ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ;;
+    @realtime\ *) ud "$log"; row_frame "$check"
+       guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
+       code=$?; guard_frame_check "$(row_name "$check")" "$log" >> "$log" || code=1; return $code ;;
     *) if [ "$tier" = quick ]; then eng=$FAST; elif [ -n "${TC_MAX_FPS:-}" ]; then eng="--max-fps $TC_MAX_FPS"; fi
-       ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ;;
+       ud "$log"; row_frame "$check"
+       guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
+       code=$?; guard_frame_check "$(row_name "$check")" "$log" >> "$log" || code=1; return $code ;;
   esac
+}
+row_name() { # the check's flag, for its RESULT line: the first word ending in "check", else the first word
+  local w
+  for w in ${1#@realtime }; do [[ $w == --*check ]] && { echo "${w#--}"; return; }; done
+  w=${1#@realtime }; w=${w%% *}; echo "${w#--}"
 }
 
 # --- the net and full tiers side by side (#1008) ----------------------------------------------

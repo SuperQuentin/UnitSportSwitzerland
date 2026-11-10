@@ -48,6 +48,7 @@ public partial class TestWorld : Node3D
         var origin = GameSettings.Current.Frame == WorldFrame.Earth
             ? new WorldOrigin(FrameAxes.Enu(Terrain.Format.SwissGeodesy.ToEcef(e, n, 0)))
             : new WorldOrigin(e, n);
+        FrameReport.Say(GameSettings.Current.Frame == WorldFrame.Earth, "the flat test world");
 
         // 20 km square, its top at GroundY: a box, which every physics engine collides with alike
         var ground = new StaticBody3D { Name = "Ground", Position = new Vector3(0, GroundY - 0.5f, 0) };
