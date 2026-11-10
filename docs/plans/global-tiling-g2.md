@@ -286,6 +286,10 @@ until earth looks at least as good as flat.
   (#1639, PR #1640): `tools/refshot-parity.sh <tag>` (`general/regression-net`); first run on `82e03ec5`, before
   #1634/#1630/#1636 merged: 48 of 84 shots over the floor (the ground's colours, the void past the leaves, trees, a
   different room in `riddes_interior`, B4's pyramid white west of Switzerland), 36 judged; posted on #1500.
+- **Accepted differences** (decided with the user, Nov 10 2026), judged by eye, not gating D: trees placed from
+  the leaves' own seeds (same forests, other individual trees); invented fill where no data exists (the forest
+  above Lavaux) as earth's generator makes it; no far villages, rivers or roads past the near leaves until #1657,
+  after D.
 
 ### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
 
