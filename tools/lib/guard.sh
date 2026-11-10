@@ -350,7 +350,27 @@ guard_run() {
   kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
   [ -s "$why" ] && code=$(cat "$why")
   rm -f "$why"
+  _guard_note_peak "$log"
   return "$code"
+}
+
+# GUARD_PEAK_FILE (#1702): every guard_run appends the peak its Godot printed as it quit ("[mem] peak N MB",
+# GameSettings.PrintTestPeakMemory), one line in MB. tools/test.sh sets it per check, so a two-client script's
+# server and clients add up there: their sum, an upper bound of the check's peak, admits its next run.
+_guard_note_peak() {
+  # a script's own log may hold its Godots' lines too: test.sh sets _guard_no_peak (not exported) around it
+  [ -n "${GUARD_PEAK_FILE:-}" ] && [ -f "$1" ] && [ "${_guard_no_peak:-0}" != 1 ] || return 0
+  local line mb=
+  while read -r line; do mb=${line#*peak }; mb=${mb%% *}; done < <(grep -a '^\[mem\] peak [0-9]* MB' "$1" 2>/dev/null)
+  [ -n "$mb" ] && echo "$mb" >> "$GUARD_PEAK_FILE"
+  return 0
+}
+
+# guard_peak_sum <file>: the MB the file's lines add up to, 0 when there are none
+guard_peak_sum() {
+  local s=0 l
+  [ -f "$1" ] && while read -r l; do [ -n "$l" ] && s=$(( s + l )); done < "$1"
+  echo "$s"
 }
 
 guard_watch() {

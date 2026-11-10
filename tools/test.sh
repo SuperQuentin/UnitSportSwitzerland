@@ -35,8 +35,16 @@ case $TIER in
   *) echo "usage: tools/test.sh unit|quick|net|full [area] | coords | lock | stop" >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/.."
+_slots_given=${GUARD_SLOTS:-}
 . tools/lib/guard.sh
 [ "$TIER" = lock ] && { guard_status; exit 0; }
+# Net/full slots (#1702): the runner admits each job by its measured peak (need_mb below), so it takes one slot per
+# 8 GB, 1 to 4 (32 GB: 4), not guard.sh's one per 14 GB for scripts run by hand; GUARD_SLOTS given wins.
+# Exported: a script it starts sees the same slot count.
+if [ -z "$_slots_given" ]; then
+  GUARD_SLOTS=$(( $(_guard_total_gb) / 8 )); [ "$GUARD_SLOTS" -lt 1 ] && GUARD_SLOTS=1; [ "$GUARD_SLOTS" -gt 4 ] && GUARD_SLOTS=4
+fi
+export GUARD_SLOTS
 OUT=test_output/tests
 PIDFILE=$OUT/test.pid
 # stop (#1409): the run's whole tree from its PID file, never by name; stopping the shell that started it
@@ -91,22 +99,23 @@ mkdir -p "$OUT"
 export TEST_RUN="$$.$RANDOM$RANDOM"   # every process of this run inherits it: what `stop` sweeps for
 printf '%s\n%s\n' $$ "$TEST_RUN" > "$PIDFILE"
 RESULTS=$OUT/results.tsv
-[ "${TEST_RESUME:-}" = 1 ] && [ -f "$RESULTS" ] || printf 'time\tcheck\tverdict\tseconds\tlog\n' > "$RESULTS"
+[ "${TEST_RESUME:-}" = 1 ] && [ -f "$RESULTS" ] || printf 'time\tcheck\tverdict\tseconds\tlog\tpeak_mb\n' > "$RESULTS"
 
 ROWS=()
-LEDGER=()   # one CSV line per check: tier,check,result,seconds,log,note
+LEDGER=()   # one CSV line per check: tier,check,result,seconds,log,note,peak_mb
 FAILED=0
 SERVER=
 cleanup() {
   [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"
+  [ -n "${UNIT_PID:-}" ] && _guard_kill_tree "$UNIT_PID"
   guard_unlock
   [ "$(sed -n 1p "$PIDFILE" 2>/dev/null)" = $$ ] && rm -f "$PIDFILE"
 }
 trap cleanup EXIT
 
 # one line of results.tsv, appended as it lands (from heavy jobs too: one short line, one write)
-result_line() { # name verdict seconds log
-  printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%F %T')" "$1" "$2" "$3" "$4" >> "$RESULTS"
+result_line() { # name verdict seconds log [peak MB]
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date '+%F %T')" "$1" "$2" "$3" "$4" "${5:-}" >> "$RESULTS"
 }
 # TEST_RESUME=1: this check passed earlier in the results.tsv being continued
 passed_before() {
@@ -128,16 +137,41 @@ verdict() {
 }
 
 csv() { printf '"%s"' "${1//\"/\"\"}"; }   # one quoted CSV field: checks hold commas
-ledger() { # tier name verdict seconds log [note]
-  LEDGER+=("$1,$(csv "$2"),$3,$4,$(csv "$5"),$(csv "${6:-}")")
+ledger() { # tier name verdict seconds log [note] [peak MB]
+  LEDGER+=("$1,$(csv "$2"),$3,$4,$(csv "$5"),$(csv "${6:-}"),${7:-}")
+}
+# one table row: check, verdict, seconds, peak MB (blank when none was printed), log or note
+row() { local p=${4:-}; [ "$p" = 0 ] && p=; printf '%-30s %-8s %6s %7s  %s' "$1" "$2" "$3" "$p" "$5"; }
+# a row of the table and the ledger, without results.tsv (a job wrote that as it landed)
+add_row() { # name verdict seconds log tier [peak] [note]
+  ROWS+=("$(row "$1" "$2" "$3" "${6:-}" "$4${7:+  ($7)}")")
+  ledger "$5" "$1" "$2" "$3" "$4" "${7:-}" "${6:-}"
+  [ "$2" = PASS ] || FAILED=1
+}
+record() { # name verdict seconds log [tier] [peak]
+  result_line "$1" "$2" "$3" "$4" "${6:-}"
+  add_row "$1" "$2" "$3" "$4" "${5:-build}" "${6:-}"
+  echo "[test] $1: $2 (${3}s${6:+, peak ${6} MB})"
 }
 
-record() { # name verdict seconds log [tier]
-  result_line "$1" "$2" "$3" "$4"
-  ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" "$2" "$3" "$4")")
-  ledger "${5:-build}" "$1" "$2" "$3" "$4"
-  [ "$2" = PASS ] || FAILED=1
-  echo "[test] $1: $2 (${3}s)"
+# --- peak RAM per check (#1702) ----------------------------------------------------------------
+# Every Godot of a test run prints its OS peak working set as it quits; guard_run adds them up per check in
+# GUARD_PEAK_FILE (tools/lib/guard.sh). The sum is kept machine-wide, beside the heavy lock, so every worktree's
+# next run of that check is admitted by what it really took instead of a flat TEST_RAM_GB / TEST_HEAVY_RAM_GB.
+PEAKS=${TEST_PEAKS:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-check-peaks.tsv}
+# kept short: the last 3000 lines once it passes 6000 (a few full runs)
+if [ -f "$PEAKS" ] && [ "$(wc -l < "$PEAKS")" -gt 6000 ]; then
+  tail -n 3000 "$PEAKS" > "$PEAKS.$$" && mv -f "$PEAKS.$$" "$PEAKS"
+fi
+peak_of() { [ -f "$PEAKS" ] && awk -F'\t' -v c="$1" '$2 == c { m = $1 } END { print m }' "$PEAKS"; }
+need_mb() { # check default_gb: MB a check needs free to start, its last peak and a quarter more, else the default
+  local p; p=$(peak_of "$1")
+  if [ -n "$p" ] && [ "$p" -gt 0 ] 2>/dev/null; then echo $(( p + p / 4 + 256 )); else echo $(( $2 * 1024 )); fi
+}
+note_peak() { # check file: the file's peaks summed (MB, 0 for none), kept in $PEAKS for the next run
+  local s; s=$(guard_peak_sum "$2"); rm -f "$2"
+  [ "$s" -gt 0 ] && printf '%s\t%s\n' "$s" "$1" >> "$PEAKS"
+  echo "$s"
 }
 
 # --- which checks -----------------------------------------------------------------------------
@@ -239,22 +273,39 @@ fi
 
 # --- tier 0 -----------------------------------------------------------------------------------
 # a row TEST_RESUME skips: in the table as passed earlier, not again in results.tsv
-resumed() { ROWS+=("$(printf '%-30s %-8s %6s  %s' "$1" PASS 0 "(passed earlier, TEST_RESUME)")"); echo "[test] $1: passed earlier, skipped"; }
-if passed_before "unit (dotnet test)"; then resumed "unit (dotnet test)"; else
-  t0=$SECONDS
+resumed() { ROWS+=("$(row "$1" PASS 0 "" "(passed earlier, TEST_RESUME)")"); echo "[test] $1: passed earlier, skipped"; }
+# The unit stage, its rows in $OUT/.unit.rows (name, verdict, seconds, log; "resumed" and the name for a skip) and
+# results.tsv as each lands. With Godot checks to run it goes beside them, started once the game is built (#1702):
+# 4-5 min of dotnet test no longer come before the first check. TEST_UNIT_BESIDE=0 keeps it first.
+unit_one() { # name log args...: one dotnet test run
+  local name=$1 log=$2 t0=$SECONDS v; shift 2
+  if passed_before "$name"; then printf 'resumed\t%s\n' "$name" >> "$OUT/.unit.rows"; return; fi
+  guard_run "$TIMEOUT" "$log" dotnet test "$@"
+  v=$(verdict $? "$log")
+  result_line "$name" "$v" $((SECONDS - t0)) "$log"
+  printf '%s\t%s\t%s\t%s\n' "$name" "$v" $((SECONDS - t0)) "$log" >> "$OUT/.unit.rows"
+  echo "[test] $name: $v ($((SECONDS - t0))s) $(grep -aE "^(Passed|Failed)!" "$log" | tail -1)"
+}
+unit_stage() {
+  : > "$OUT/.unit.rows"
   # [Trait("Speed", "Slow")] tests run in the full tier only (#1407): the signal test region's build alone was
   # 556 s of a 14 min unit stage
-  SLOW=(--filter "Speed!=Slow"); [ "$TIER" = full ] && SLOW=()
-  guard_run "$TIMEOUT" "$OUT/unit.log" dotnet test tests/UnitSportSwitzerland.Tests ${SLOW[@]+"${SLOW[@]}"}
-  record "unit (dotnet test)" "$(verdict $? "$OUT/unit.log")" $((SECONDS - t0)) "$OUT/unit.log" unit
-  grep -aE "^(Passed|Failed)!" "$OUT/unit.log" | tail -1
-fi
-# RideLink (#901, tools/RideLink): the trainer library's own tests (parsers, the FTMS handshake, the router)
-if passed_before "unit RideLink (dotnet test)"; then resumed "unit RideLink (dotnet test)"; else
-  t0=$SECONDS
-  guard_run "$TIMEOUT" "$OUT/ridelink.log" dotnet test tools/RideLink/tests/RideLink.Tests
-  record "unit RideLink (dotnet test)" "$(verdict $? "$OUT/ridelink.log")" $((SECONDS - t0)) "$OUT/ridelink.log" unit
-fi
+  local slow=(--filter "Speed!=Slow"); [ "$TIER" = full ] && slow=()
+  unit_one "unit (dotnet test)" "$OUT/unit.log" tests/UnitSportSwitzerland.Tests ${slow[@]+"${slow[@]}"}
+  # RideLink (#901, tools/RideLink): the trainer library's own tests (parsers, the FTMS handshake, the router)
+  unit_one "unit RideLink (dotnet test)" "$OUT/ridelink.log" tools/RideLink/tests/RideLink.Tests
+}
+unit_rows() { # the unit stage's rows into the table, first
+  local a b c d before=("${ROWS[@]+"${ROWS[@]}"}")
+  ROWS=()
+  while IFS=$'\t' read -r a b c d; do
+    if [ "$a" = resumed ]; then resumed "$b"; else add_row "$a" "$b" "$c" "$d" unit; fi
+  done < "$OUT/.unit.rows"
+  ROWS+=("${before[@]+"${before[@]}"}")
+  rm -f "$OUT/.unit.rows"
+}
+UNIT_PID=
+if [ ${#CHECKS[@]} -eq 0 ] || [ "${TEST_UNIT_BESIDE:-1}" = 0 ]; then unit_stage; unit_rows; fi
 
 # --- Godot tiers ------------------------------------------------------------------------------
 # Every Godot here runs in a fresh user:// of its own check (#1403): the player's settings, CDs and placed
@@ -304,20 +355,101 @@ run_one() { # tier check log: runs one check, its exit code
   # shellcheck disable=SC2086  # the map's check is split into words on purpose
   case $check in
     @netsmoke) netsmoke "$log" ;;
-    tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
+    # the script's own log can hold its Godots' peak lines: only its inner guard_runs count them (GUARD_PEAK_FILE)
+    tools/*) _guard_no_peak=1; guard_run "$TIMEOUT" "$log" bash $check; local c=$?; _guard_no_peak=0; return $c ;;
     @realtime\ *) ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ;;
     *) if [ "$tier" = quick ]; then eng=$FAST; elif [ -n "${TC_MAX_FPS:-}" ]; then eng="--max-fps $TC_MAX_FPS"; fi
        ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ;;
   esac
 }
 
-# --- the net and full tiers side by side (#1008) ----------------------------------------------
-# Up to TEST_JOBS checks at once (default: the heavy lock's slot count, GUARD_SLOTS), each in its own slot,
-# so its ports are moved by GUARD_SLOT * 1000 (tools/lib/twoclient.sh). Two scripts that write the same
-# logs (one execs the other) never run together, and the load test and the trailer run alone.
-# A job starts only with TEST_HEAVY_RAM_GB (6) free and TEST_JOB_STAGGER (40) s after the last one (its Godots grow
-# for that long). Beside others every headless Godot runs at TEST_MAX_FPS (60), and a check that failed or hit the RAM
-# floor runs again alone at the end, uncapped; a pass alone says it failed beside others (#1081).
+# --- side by side, admitted by measured RAM (#1008, #1702) ---------------------------------------
+# A check starts when the RAM it needs is free: its last measured peak and a quarter (need_mb), else TEST_RAM_GB
+# (3, quick) or TEST_HEAVY_RAM_GB (6, net/full), over the watchdog's floor, counting the full need of every job
+# started less than the grow time ago (TEST_QUICK_GROW 15 s, TEST_JOB_STAGGER 40 s): their Godots have not reached
+# their size yet. Older jobs are in the free RAM already. A check that failed or hit the RAM floor beside others
+# runs again alone at the end, as a serial run would; a pass alone says it failed beside others (#1081).
+# TEST_RETRY_ALONE=0: again alone only after the RAM floor.
+admit() { # need_mb reserved_mb: room for one more job now
+  _guard_free_into
+  [ $(( GUARD_FREE - $2 )) -ge $(( $1 + GUARD_MIN_FREE_MB )) ]
+}
+
+# Quick checks (one headless Godot, no ports) up to TEST_QUICK_JOBS at once: by default a quarter of the cores and
+# one per 5 GB of RAM, 1 to 6 (16 threads and 32 GB: 4). Two rows of one flag never run together (they write the same
+# files: --zfightcheck and --zfightcheck Pinball); @netsmoke (ports) and the tools/ scripts run one at a time after.
+_cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+QJOBS=$(( _cores / 4 )); _q=$(( $(_guard_total_gb) / 5 )); [ "$_q" -lt "$QJOBS" ] && QJOBS=$_q
+[ "$QJOBS" -lt 1 ] && QJOBS=1; [ "$QJOBS" -gt 6 ] && QJOBS=6
+QJOBS=${TEST_QUICK_JOBS:-$QJOBS}
+quick_alone() { case $1 in @netsmoke | tools/*) return 0 ;; esac; return 1; }
+quick_group() { local c=${1#@realtime }; echo "${c%% *}"; }
+
+quick_job() { # index check: one quick check, its row in $OUT/.qrow.<index>: verdict, seconds, peak, RAM-floor stop, note
+  local i=$1 check=$2 log t0=$SECONDS v peak ram=0
+  log=$(log_of "$check")
+  export GUARD_PEAK_FILE="$OUT/.peak.q$i"; rm -f "$GUARD_PEAK_FILE"
+  run_one quick "$check" "$log"
+  v=$(verdict $? "$log")
+  peak=$(note_peak "$check" "$GUARD_PEAK_FILE")
+  grep -aq "RAM floor\|MB free (floor" "$log" && ram=1
+  result_line "$check" "$v" $((SECONDS - t0)) "$log" "$peak"
+  printf '%s\n%s\n%s\n%s\n\n' "$v" $((SECONDS - t0)) "$peak" "$ram" > "$OUT/.qrow.$i"
+  echo "[test] $check: $v ($((SECONDS - t0))s, peak ${peak} MB$([ $ram = 1 ] && echo ", stopped at the RAM floor"))"
+}
+
+run_quick() {
+  local n=${#QUICK[@]} i k check g need reserved running same pids=() groups=() starts=() needs=() all=() t0=$SECONDS again=()
+  echo "[test] ${n} quick checks, up to $QJOBS at once"
+  rm -f "$OUT"/.qrow.*
+  for (( i = 0; i < n; i++ )); do
+    check=${QUICK[$i]}; g=$(quick_group "$check"); need=$(need_mb "$check" "${TEST_RAM_GB:-3}")
+    while :; do
+      running=0; same=0; reserved=0
+      for k in ${!pids[@]}; do
+        if kill -0 "${pids[$k]}" 2>/dev/null; then
+          running=$(( running + 1 ))
+          [ "${groups[$k]}" = "$g" ] && same=1
+          [ $(( SECONDS - starts[k] )) -lt "${TEST_QUICK_GROW:-15}" ] && reserved=$(( reserved + needs[k] ))
+        else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]'; fi
+      done
+      [ "$same" = 0 ] && [ "$running" -lt "$QJOBS" ] && { [ "$running" = 0 ] || admit "$need" "$reserved"; } && break
+      guard_nap 0.5
+    done
+    # alone, as before: wait for TEST_RAM_GB free, then go
+    if [ "$running" = 0 ] && ! guard_wait_ram "${TEST_RAM_GB:-3}"; then
+      printf 'FAIL\n0\n0\n0\nnot enough RAM\n' > "$OUT/.qrow.$i"; continue
+    fi
+    ( quick_job "$i" "$check" ) &
+    pids+=($!); all+=($!); groups+=("$g"); starts+=($SECONDS); needs+=("$need")
+  done
+  [ ${#all[@]} -gt 0 ] && wait "${all[@]}" 2>/dev/null   # these jobs only: the unit stage may still be going
+  if [ "$QJOBS" -gt 1 ]; then
+    for (( i = 0; i < n; i++ )); do
+      [ -f "$OUT/.qrow.$i" ] || continue
+      [ "$(sed -n 4p "$OUT/.qrow.$i")" = 1 ] && { again+=("$i"); continue; }
+      [ "${TEST_RETRY_ALONE:-1}" != 0 ] && [ "$(sed -n 1p "$OUT/.qrow.$i")" != PASS ] && [ -z "$(sed -n 5p "$OUT/.qrow.$i")" ] && again+=("$i")
+    done
+  fi
+  for i in ${again[@]+"${again[@]}"}; do
+    echo "[test] again, alone: ${QUICK[$i]}"
+    ( quick_job "$i" "${QUICK[$i]}" )
+    [ "$(sed -n 1p "$OUT/.qrow.$i")" = PASS ] && sed -i '5s|^$|passed alone, failed beside others|' "$OUT/.qrow.$i"
+  done
+  for (( i = 0; i < n; i++ )); do
+    if [ -f "$OUT/.qrow.$i" ]; then
+      add_row "${QUICK[$i]}" "$(sed -n 1p "$OUT/.qrow.$i")" "$(sed -n 2p "$OUT/.qrow.$i")" "$(log_of "${QUICK[$i]}")" quick \
+        "$(sed -n 3p "$OUT/.qrow.$i")" "$(sed -n 5p "$OUT/.qrow.$i")"
+    else add_row "${QUICK[$i]}" FAIL 0 "" quick "" "no result"; fi
+  done
+  rm -f "$OUT"/.qrow.*
+  echo "[test] the quick checks took $((SECONDS - t0))s side by side (${#again[@]} run again alone)"
+}
+
+# The net and full tiers: up to TEST_JOBS at once (default: the heavy lock's slot count), each in its own slot, so its
+# ports are moved by GUARD_SLOT * 1000 (tools/lib/twoclient.sh). Two scripts that write the same logs (one execs the
+# other) never run together, and the load test and the trailer run alone. Beside others every headless Godot runs at
+# TEST_MAX_FPS (60).
 JOBS=${TEST_JOBS:-$GUARD_SLOTS}
 
 group_of() { # the twoclient name a script logs under (rampalong execs rampnet: both "rampnet"), or the check
@@ -331,58 +463,54 @@ group_of() { # the twoclient name a script logs under (rampalong execs rampnet: 
 }
 alone() { case $1 in tools/loadtest.sh* | tools/trailer.sh*) return 0 ;; esac; return 1; }
 
-heavy_job() { # index tier check: one check in a slot of its own, its row in $OUT/.row.<index>
-  local i=$1 tier=$2 check=$3 log t0=$SECONDS res v= ram=0
+heavy_job() { # index tier check need_mb: one check in a slot of its own, its row in $OUT/.row.<index>
+  local i=$1 tier=$2 check=$3 need=$4 log t0=$SECONDS res v= ram=0 peak=
   trap guard_unlock EXIT
   log=$(log_of "$check")
-  if ! guard_lock; then res="$(printf '%-30s %-8s %6s  %s' "$check" FAIL 0 "(lock)")"
-  elif ! guard_wait_ram "${TEST_HEAVY_RAM_GB:-6}"; then res="$(printf '%-30s %-8s %6s  %s' "$check" FAIL 0 "(not enough RAM)")"
+  if ! guard_lock; then res="$(row "$check" FAIL 0 "" "(lock)")"
+  elif ! guard_wait_ram $(( (need + 1023) / 1024 )); then res="$(row "$check" FAIL 0 "" "(not enough RAM)")"
   else
-    export GUARD_LOCK_HELD=1
+    export GUARD_LOCK_HELD=1 GUARD_PEAK_FILE="$OUT/.peak.h$i"
+    rm -f "$GUARD_PEAK_FILE"
     t0=$SECONDS
     run_one "$tier" "$check" "$log"
     v=$(verdict $? "$log")
+    peak=$(note_peak "$check" "$GUARD_PEAK_FILE")
     # stopped by the RAM watchdog, not by what it checks: run again alone at the end
     grep -aq "RAM floor\|MB free (floor" "$log" && ram=1
-    res="$(printf '%-30s %-8s %6s  %s' "$check" "$v" $((SECONDS - t0)) "$log")"
-    result_line "$check" "$v" $((SECONDS - t0)) "$log"
-    echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT$([ $ram = 1 ] && echo ", stopped at the RAM floor"))"
+    res="$(row "$check" "$v" $((SECONDS - t0)) "$peak" "$log")"
+    result_line "$check" "$v" $((SECONDS - t0)) "$log" "$peak"
+    echo "[test] $check: $v ($((SECONDS - t0))s, slot $GUARD_SLOT, peak ${peak} MB$([ $ram = 1 ] && echo ", stopped at the RAM floor"))"
   fi
-  # verdict, table row, RAM-floor stop, the ledger's line without its note, the note
-  printf '%s\n%s\n%s\n%s,%s,%s,%s,%s\n\n' "${v:-FAIL}" "$res" "$ram" \
-    "$tier" "$(csv "$check")" "${v:-FAIL}" $((SECONDS - t0)) "$(csv "$log")" > "$OUT/.row.$i"
+  # verdict, table row, RAM-floor stop, the ledger's line without its note, the note, the peak
+  printf '%s\n%s\n%s\n%s,%s,%s,%s,%s\n\n%s\n' "${v:-FAIL}" "$res" "$ram" \
+    "$tier" "$(csv "$check")" "${v:-FAIL}" $((SECONDS - t0)) "$(csv "$log")" "$peak" > "$OUT/.row.$i"
 }
 
-# room for one more job: free RAM for it, and the last one started TEST_JOB_STAGGER s ago (40), so its Godots
-# have grown to their size before the next is weighed against what is left
-room() { [ $(( SECONDS - last_start )) -ge "${TEST_JOB_STAGGER:-40}" ] && _guard_free_into && [ "$GUARD_FREE" -ge $(( ${TEST_HEAVY_RAM_GB:-6} * 1024 )) ]; }
-
 run_heavy() {
-  local i n=${#HEAVY[@]} pids=() groups=() k busy running entry tier check g t0=$SECONDS last_start=-999 again=()
+  local i n=${#HEAVY[@]} pids=() groups=() starts=() needs=() all=() k busy running reserved entry tier check g need t0=$SECONDS again=()
   echo "[test] ${n} net/full checks, up to $JOBS at once"
   rm -f "$OUT"/.row.*
   for (( i = 0; i < n; i++ )); do
-    entry=${HEAVY[$i]}; tier=${entry%% *}; check=${entry#* }; g=$(group_of "$check")
+    entry=${HEAVY[$i]}; tier=${entry%% *}; check=${entry#* }; g=$(group_of "$check"); need=$(need_mb "$check" "${TEST_HEAVY_RAM_GB:-6}")
     # wait for a free job and room for it, for the job of the same group, and for every job before one that runs alone
     while :; do
-      busy=0; running=0
+      busy=0; running=0; reserved=0
       for k in ${!pids[@]}; do
         if kill -0 "${pids[$k]}" 2>/dev/null; then
           running=$(( running + 1 ))
           if alone "$check" || [ "${groups[$k]}" = "$g" ] || alone "${groups[$k]}"; then busy=$JOBS; fi
           busy=$(( busy + 1 ))
-        else unset 'pids[k]' 'groups[k]'; fi
+          [ $(( SECONDS - starts[k] )) -lt "${TEST_JOB_STAGGER:-40}" ] && reserved=$(( reserved + needs[k] ))
+        else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]'; fi
       done
-      [ "$busy" -lt "$JOBS" ] && { [ "$running" = 0 ] || room; } && break
+      [ "$busy" -lt "$JOBS" ] && { [ "$running" = 0 ] || admit "$need" "$reserved"; } && break
       guard_nap 1
     done
-    last_start=$SECONDS
-    # beside others, every headless Godot at TEST_MAX_FPS (60): one frame per physics tick, about half the CPU of
-    # an uncapped real-time run, the physics the same (#1081)
-    ( export TC_MAX_FPS=${TEST_MAX_FPS:-60}; heavy_job "$i" "$tier" "$check" ) &
-    pids+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")")
+    ( export TC_MAX_FPS=${TEST_MAX_FPS:-60}; heavy_job "$i" "$tier" "$check" "$need" ) &
+    pids+=($!); all+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")"); starts+=($SECONDS); needs+=("$need")
   done
-  wait
+  [ ${#all[@]} -gt 0 ] && wait "${all[@]}" 2>/dev/null
   # stopped at the RAM floor, or failed beside others: again alone at the end, uncapped, as a serial run would (#1081).
   # A pass alone is reported as one, saying it failed beside others; a fail alone is a fail. TEST_RETRY_ALONE=0: RAM only
   local why
@@ -394,16 +522,16 @@ run_heavy() {
     entry=${HEAVY[$i]}
     why="failed beside the others"; [ "$(sed -n 3p "$OUT/.row.$i")" = 1 ] && why="stopped at the RAM floor beside the others"
     echo "[test] again, alone: ${entry#* } ($why)"
-    ( heavy_job "$i" "${entry%% *}" "${entry#* }" )   # a subshell: its EXIT trap must not replace the runner's
+    ( heavy_job "$i" "${entry%% *}" "${entry#* }" "$(need_mb "${entry#* }" "${TEST_HEAVY_RAM_GB:-6}")" )   # a subshell: its EXIT trap must not replace the runner's
     [ "$why" = "failed beside the others" ] && [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] &&
       sed -i -e '2s|$|  (passed alone, failed beside others)|' -e '5s|^$|passed alone, failed beside others|' "$OUT/.row.$i"
   done
   for (( i = 0; i < n; i++ )); do
     if [ -f "$OUT/.row.$i" ]; then
       ROWS+=("$(sed -n 2p "$OUT/.row.$i")"); [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] || FAILED=1
-      LEDGER+=("$(sed -n 4p "$OUT/.row.$i"),$(csv "$(sed -n 5p "$OUT/.row.$i")")")
+      LEDGER+=("$(sed -n 4p "$OUT/.row.$i"),$(csv "$(sed -n 5p "$OUT/.row.$i")"),$(sed -n 6p "$OUT/.row.$i")")
     else
-      ROWS+=("$(printf '%-30s %-8s %6s  %s' "${HEAVY[$i]#* }" FAIL 0 "(no result)")"); FAILED=1
+      ROWS+=("$(row "${HEAVY[$i]#* }" FAIL 0 "" "(no result)")"); FAILED=1
       ledger "${HEAVY[$i]%% *}" "${HEAVY[$i]#* }" FAIL 0 "" "no result"
     fi
   done
@@ -411,10 +539,12 @@ run_heavy() {
   echo "[test] the net/full checks took $((SECONDS - t0))s side by side (${#again[@]} run again alone)"
 }
 
+T_GODOT=$SECONDS
 if [ ${#CHECKS[@]} -gt 0 ]; then
   if ! command -v "$GODOT" > /dev/null; then
     echo "[test] no Godot at '$GODOT': set GODOT (docs/notes/general/godot-exe.md)" >&2
     record "godot" FAIL 0 "-"
+    [ "${TEST_UNIT_BESIDE:-1}" != 0 ] && { unit_stage; unit_rows; }
   else
     t0=$SECONDS
     guard_run "$TIMEOUT" "$OUT/build.log" dotnet build UnitSportSwitzerland.csproj
@@ -425,36 +555,56 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
       code=$?
     fi
     record "build" "$(verdict $code "$OUT/build.log")" $((SECONDS - t0)) "$OUT/build.log"
+    # the unit stage beside the Godot checks, from here: the game's build is done, so the two builds never meet
+    [ "${TEST_UNIT_BESIDE:-1}" != 0 ] && { unit_stage & UNIT_PID=$!; }
     if [ $code = 0 ]; then
       locked=0
-      HEAVY=()
+      QUICK=(); SERIAL=(); HEAVY=()
       for entry in "${CHECKS[@]}"; do
         tier=${entry%% *}
         check=${entry#* }
-        log=$(log_of "$check")
         passed_before "$check" && { resumed "$check"; continue; }
         if [ "$tier" = quick ]; then
-          guard_wait_ram "${TEST_RAM_GB:-3}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
-        elif [ "$JOBS" -gt 1 ]; then
-          HEAVY+=("$entry"); continue   # side by side below
+          if quick_alone "$check" || [ "$QJOBS" -le 1 ]; then SERIAL+=("$entry"); else QUICK+=("$check"); fi
+        elif [ "$JOBS" -gt 1 ]; then HEAVY+=("$entry")   # side by side below
+        else SERIAL+=("$entry"); fi
+      done
+      [ ${#QUICK[@]} -gt 0 ] && run_quick
+      for entry in ${SERIAL[@]+"${SERIAL[@]}"}; do
+        tier=${entry%% *}
+        check=${entry#* }
+        log=$(log_of "$check")
+        need=$(need_mb "$check" "${TEST_RAM_GB:-3}")
+        if [ "$tier" = quick ]; then
+          guard_wait_ram $(( (need + 1023) / 1024 )) || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         else
           # tier 2/3, TEST_JOBS=1: one at a time, in one slot held for the whole run
+          need=$(need_mb "$check" "${TEST_HEAVY_RAM_GB:-6}")
           [ $locked = 1 ] || { guard_lock && locked=1 && export GUARD_LOCK_HELD=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
-          guard_wait_ram "${TEST_HEAVY_RAM_GB:-6}" || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
+          guard_wait_ram $(( (need + 1023) / 1024 )) || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         fi
         t0=$SECONDS
+        export GUARD_PEAK_FILE="$OUT/.peak.serial"; rm -f "$GUARD_PEAK_FILE"
         run_one "$tier" "$check" "$log"
-        record "$check" "$(verdict $? "$log")" $((SECONDS - t0)) "$log" "$tier"
+        code=$?
+        record "$check" "$(verdict $code "$log")" $((SECONDS - t0)) "$log" "$tier" "$(note_peak "$check" "$GUARD_PEAK_FILE")"
       done
+      unset GUARD_PEAK_FILE
       [ ${#HEAVY[@]} -gt 0 ] && run_heavy
+    fi
+    if [ -n "$UNIT_PID" ]; then
+      kill -0 "$UNIT_PID" 2>/dev/null && echo "[test] waiting for the unit stage"
+      wait "$UNIT_PID"; UNIT_PID=
+      unit_rows
     fi
   fi
 elif [ "$TIER" != unit ]; then
   echo "[test] no Godot check matches ${AREA:-the changed files}"
 fi
+[ ${#CHECKS[@]} -gt 0 ] && echo "[test] the Godot part took $((SECONDS - T_GODOT))s"
 
 echo
-printf '%-30s %-8s %6s  %s\n' CHECK RESULT SECONDS LOG
+printf '%-30s %-8s %6s %7s  %s\n' CHECK RESULT SECONDS PEAK_MB LOG
 printf '%s\n' "${ROWS[@]}"
 
 # the results as CSV, to keep beside a baseline and compare with tools/test-compare.py (#1429)
@@ -462,7 +612,7 @@ LEDGER_FILE=${TEST_LEDGER:-$OUT/results.csv}
 mkdir -p "$(dirname "$LEDGER_FILE")"
 {
   echo "# tools/test.sh $TIER ${AREA} commit $(git rev-parse --short HEAD 2>/dev/null) $(date -u +%Y-%m-%dT%H:%MZ)"
-  echo "tier,check,result,seconds,log,note"
+  echo "tier,check,result,seconds,log,note,peak_mb"
   printf '%s\n' ${LEDGER[@]+"${LEDGER[@]}"}
 } > "$LEDGER_FILE"
 echo "[test] results: $LEDGER_FILE"
