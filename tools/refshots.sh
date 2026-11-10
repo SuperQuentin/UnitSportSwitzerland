@@ -21,7 +21,8 @@
 #   ANCHORS   1: one launch per date and anchor (views within 6 km of a whole km, tools/refshot-poses.py), the game
 #             started there (--at, --origin): the flat side of an earth comparison. Always so under --frame earth
 #   LEAVES    --frame earth: the cube leaves (D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube)
-#   GLOBE     the cube_global pyramid (--globe); --frame earth: B4's (D:/UnitSportSwitzerland/test_b3/b4/cube_global)
+#   GLOBE     the cube_global pyramid (--globe); unset, both frames take the game's (Globe.DefaultDir,
+#             D:/UnitSportSwitzerland/cube_global: built from B4's leaves since #1654, test_b3/b4/cube_global is older)
 #   RESUME    1: only the views with no picture yet in <tag> (a launch the RAM guard killed); a kept log stays
 #   HEIGHTS   --frame earth: a flat library (<root>/<tag>) whose logs give each "g" view's altitude, so both worlds
 #             stand at the same point (without it a "g" view stands above the earth ground)
@@ -43,7 +44,6 @@ tag=${1:?usage: tools/refshots.sh [--frame flat|earth] <tag>}
 case $FRAME in flat|earth) ;; *) echo "--frame flat or earth, not $FRAME" >&2; exit 2 ;; esac
 [ "$FRAME" = earth ] && ANCHORS=1
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
-[ "$FRAME" = earth ] && GLOBE=${GLOBE:-D:/UnitSportSwitzerland/test_b3/b4/cube_global}
 ROOT=${REFSHOTS:-D:/UnitSportSwitzerland/refshots}
 CHUNKS=${CHUNKS:-D:/UnitSportSwitzerland/terrain_chunks}
 STYLES=${STYLES:-cartoon ps1 real-}
