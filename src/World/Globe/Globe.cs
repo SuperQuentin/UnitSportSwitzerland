@@ -548,7 +548,9 @@ public partial class Globe : Node
                         var (palette, rect) = Earth ? AncestorPalette(key) : (null, default);
                         // the heights hold the lake's bed (#298): the surface over it, as the leaf draws its water
                         bool isReal = leaves is Terrain.Leaves.EarthLeaves { Real: var real } && real.Has(key);
-                        var water = isReal ? ((Terrain.Leaves.EarthLeaves)leaves).Real.Sections(key, Terrain.Format.LeafKind.Water)?.Water : null;
+                        // a fill leaf's too (#1678): the pyramid's lakes it stands on, over the fill's bed
+                        // none: the leaf is dry, and its colour's water weight is not drawn either
+                        var water = leaves is Terrain.Leaves.EarthLeaves earthLeaves ? earthLeaves.WaterOf(key) ?? CubeWater.Dry(tile.Bits) : null;
                         var lakes = Earth ? new WaterOut() : null;
                         if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves,
                             lakes: _lakeLevels) is { } arrays)
@@ -730,6 +732,9 @@ public partial class Globe : Node
                         isWater = onLake || weights.X > GlobeGround.LakeWeight;
                         weights = new Vector4(1, 0, 0, 0);
                     }
+                    // the pyramid knows its lakes (#1678): ground that is none of them is dry, whatever the colour image
+                    // says (Blue Marble's 500 m lake pixels painted a pale band of water 200 m up the Lavaux shore)
+                    else if (lakes != null) weights = GlobeGround.Dry(weights);
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);
                     if (cover != null)
                     {
@@ -744,6 +749,13 @@ public partial class Globe : Node
                 }
             }
 
+        // Godot's front faces wind clockwise as seen; whether (i, j) runs clockwise from above depends on the face
+        var a0 = pos[0];
+        bool flip = (pos[1] - a0).Cross(pos[n] - a0).Dot(up[0]) > 0;
+        // before the skirts: they hang from the ground the lakes sank (#1678), not from the surface, where every
+        // tile edge stood a wall a few metres under the water and drew a pale line
+        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM);
+
         // the edge ring, counter-clockwise in (i, j), then its lowered copy
         var ring = new int[edge];
         int r = 0;
@@ -754,16 +766,12 @@ public partial class Globe : Node
         for (int e = 0; e < edge; e++)
         {
             int k = ring[e];
-            verts[n * n + e] = pos[k] - up[k] * skirt;
+            verts[n * n + e] = verts[k] - up[k] * skirt;
             norms[n * n + e] = norms[k];
             uvs[n * n + e] = uvs[k];
             if (colours != null) colours[n * n + e] = colours[k];
         }
 
-        // Godot's front faces wind clockwise as seen; whether (i, j) runs clockwise from above depends on the face
-        var a0 = pos[0];
-        bool flip = (pos[1] - a0).Cross(pos[n] - a0).Dot(up[0]) > 0;
-        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM);
         var idx = new List<int>(m * m * 6 + edge * 12);
         void Tri(int a, int b, int c)
         {
@@ -867,10 +875,12 @@ public partial class Globe : Node
             {
                 int k = j * n + i;
                 if (map[k] < 0) continue;
-                bool inside = i > 0 && j > 0 && i < m && j < m;
+                // a vertex on the tile's edge by its neighbours on this side (#1678): counted as a shore it sank 3 m,
+                // and every leaf edge across a lake drew a pale shallow line
+                bool inside = true;
                 for (int b = -1; b <= 1 && inside; b++)
                     for (int a = -1; a <= 1; a++)
-                        if (!lakeAt[k + b * n + a]) { inside = false; break; }
+                        if (!lakeAt[Math.Clamp(j + b, 0, m) * n + Math.Clamp(i + a, 0, m)]) { inside = false; break; }
                 verts[k] = pos[k] - up[k] * (inside ? LakeDeepM : LakeSinkM);
             }
         return new Terrain.WaterMeshBuilder.MeshData(vs.ToArray(), uvs.ToArray(), idx.ToArray());

@@ -12,7 +12,7 @@ namespace UnitSport.Tools.Preprocessor;
 /// pyramid runs from the leaves to the whole Earth (agreed with #1443's coordinator).
 ///
 /// <code>
-/// --cube-swiss --cube-leaves DIR --etopo DIR --cube-out GLOBAL_DIR [--cube-levels 5-13] [--jobs N] [--cube-check]
+/// --cube-swiss --cube-leaves DIR --etopo DIR --cube-out GLOBAL_DIR [--cube-levels 5-13] [--jobs N] [--cube-check] [--tlm GPKG]
 /// </code>
 ///
 /// <para>
@@ -30,7 +30,7 @@ public static class CubeSwiss
 
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
-        string? leavesDir = null, etopo = null, outDir = null;
+        string? leavesDir = null, etopo = null, outDir = null, tlm = null;
         int minLevel = 5, maxLevel = 13, jobs = Environment.ProcessorCount;
         bool check = false;
         for (int i = 0; i < args.Count; i++)
@@ -48,6 +48,7 @@ public static class CubeSwiss
                     break;
                 case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--cube-check": check = true; break;
+                case "--tlm": tlm = args[++i]; break;
                 default: Console.Error.WriteLine($"--cube-swiss: unknown option {args[i]}"); return 2;
             }
         }
@@ -80,6 +81,22 @@ public static class CubeSwiss
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s, {wet} with water at its surface; lakes at {string.Join(", ", lakes.Select(l => l.ToString("F1", CultureInfo.InvariantCulture)))} m"));
         var grid = EtopoGrid.Load(etopo, jobs);
+        // swissTLM3D's big lakes past the leaves (#1678): ETOPO smears a steep shore kilometres into them
+        SwissLakeMask? lakeMask = null;
+        if (tlm != null)
+        {
+            double minE = double.MaxValue, minN = double.MaxValue, maxE = double.MinValue, maxN = double.MinValue;
+            foreach (var leaf in finer.Keys)
+            {
+                var c = leaf.Centre;
+                var (e, n) = Lv95Source.Instance.FromLatLon(c.LatDeg, c.LonDeg);
+                minE = Math.Min(minE, e); maxE = Math.Max(maxE, e);
+                minN = Math.Min(minN, n); maxN = Math.Max(maxN, n);
+            }
+            lakeMask = SwissLakeMask.Build(tlm, minE - LakeMarginM, minN - LakeMarginM, maxE + LakeMarginM, maxN + LakeMarginM, lakes,
+                (lat, lon) => grid.At(lat, lon));
+            Console.WriteLine($"cube-swiss: TLM lakes read in {sw.Elapsed.TotalSeconds:F0} s");
+        }
 
         // the tiles of each level: every ancestor of a leaf, and its siblings
         var leafKeys = finer.Keys.ToList();
@@ -103,7 +120,7 @@ public static class CubeSwiss
             long fromLeaves = 0, fromEtopo = 0;
             Parallel.ForEach(keys, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, key =>
             {
-                var (h, own, etopoCount) = Averaged(source, grid, key, bits, finerBits, lakes, blend: level + 1 == leafLevel);
+                var (h, own, etopoCount) = Averaged(source, grid, key, bits, finerBits, lakes, blend: level + 1 == leafLevel, lakeMask);
                 Interlocked.Add(ref fromLeaves, own);
                 Interlocked.Add(ref fromEtopo, etopoCount);
                 var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(level), Heights = h };
@@ -177,6 +194,9 @@ public static class CubeSwiss
         return (tiles, wet, lakes);
     }
 
+    /// <summary>How far past the leaves' box TLM's lakes are read, metres.</summary>
+    private const double LakeMarginM = 15_000;
+
     /// <summary>Samples at one level that make a lake whose surface ETOPO's is snapped to (Lake Geneva: millions).</summary>
     private const long LakeSamples = 200_000;
 
@@ -218,7 +238,7 @@ public static class CubeSwiss
     /// points round it (when all nine exist), else ETOPO's footprint mean. Also how many came from each.
     /// </summary>
     private static (float[] Heights, long Own, long Etopo) Averaged(ConcurrentDictionary<CubeKey, CubeTile> finer, EtopoGrid grid,
-        CubeKey key, int bits, int finerBits, float[] lakes, bool blend)
+        CubeKey key, int bits, int finerBits, float[] lakes, bool blend, SwissLakeMask? lakeMask = null)
     {
         int n = (1 << bits) + 1;
         var h = new float[n * n];
@@ -229,6 +249,8 @@ public static class CubeSwiss
         long gi0 = (long)key.X << bits, gj0 = (long)key.Y << bits;
         long finerSide = 1L << (key.Level + 1 + finerBits);
         float[]? etopoHeights = null;
+        // the blend past the leaves, made on the first vertex that needs it (#1678)
+        float[]? blendField = null;
         Span<float> w = stackalloc float[] { 0.25f, 0.5f, 0.25f };
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
@@ -263,7 +285,7 @@ public static class CubeSwiss
                         var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, gi0 + i), CubeSphere.Lattice(key.Level + bits, gj0 + j));
                         double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
                         double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
-                        if (LakeAt(grid, lakes, lat, lon, e) is var lake && !float.IsNaN(lake)) { e = lake; snapped = true; }
+                        e = Shaped(grid, lakes, lakeMask, lat, lon, e, out snapped);
                     }
                     // past the leaves' edge, ETOPO corrected by how far it misses the nearest leaves, the correction fading
                     // over BlendM: ETOPO's 1.8 km cells blur a steep shore, and a hard switch stood a wall up to 120 m along
@@ -271,10 +293,12 @@ public static class CubeSwiss
                     // from the leaves alone: a coarser level's finer one already holds ETOPO past them, and blending into its
                     // edge again at each level carried the leaves' foothills over the Salève (889 m down to 485)
                     // a lake snapped to the leaves' level is theirs already: ETOPO's miss there (+4 m) stood humps on it
-                    if (blend && !snapped && NearestFiner(finer, grid, key.Face, key.Level + 1, finerBits, finerSide, fi, fj) is var (miss, t) && t < 1)
+                    // (#1678) a continuous field, no longer 16 rings: each ring's own correction stood a step up to 40 m
+                    // high along the leaves' edge east of Lavaux, and the fill built on the pyramid drew them as terraces
+                    if (blend && !snapped)
                     {
-                        float s = t * t * (3 - 2 * t);
-                        e += miss * (1 - s);
+                        blendField ??= BlendField(finer, grid, key, bits, finerBits, lakes, lakeMask);
+                        e += blendField[j * n + i];
                     }
                     h[j * n + i] = e;
                     etopo++;
@@ -283,44 +307,120 @@ public static class CubeSwiss
         return (h, own, etopo);
     }
 
-    /// <summary>How far past the leaves their heights blend into ETOPO's, metres.</summary>
-    private const double BlendM = 1500;
+    /// <summary>
+    /// ETOPO's height at a point as the levels take it: a leaves' lake where TLM has one (<see cref="SwissLakeMask"/>,
+    /// <paramref name="snapped"/>), its shore brought down to it, or where ETOPO itself stands at one (<see cref="LakeAt"/>).
+    /// </summary>
+    private static float Shaped(EtopoGrid grid, float[] lakes, SwissLakeMask? lakeMask, double lat, double lon, float e, out bool snapped)
+    {
+        snapped = false;
+        if (lakeMask != null)
+        {
+            e = lakeMask.Apply(lat, lon, e, out snapped);
+            if (snapped) return e;
+        }
+        if (LakeAt(grid, lakes, lat, lon, e) is var lake && !float.IsNaN(lake))
+        {
+            snapped = true;
+            return lake;
+        }
+        return e;
+    }
 
-    /// <summary>Rings searched out to <see cref="BlendM"/>, and directions on each.</summary>
-    private const int BlendRings = 16, BlendDirections = 12;
+    /// <summary>The blend field's window spacing, lattice vertices of the level (~9.5 m at level 13).</summary>
+    private const int FieldStep = 4;
 
-    private static readonly (double X, double Y)[] Directions = Enumerable.Range(0, BlendDirections)
-        .Select(d => (Math.Cos(2 * Math.PI * d / BlendDirections), Math.Sin(2 * Math.PI * d / BlendDirections))).ToArray();
+    /// <summary>The box blur's radius over the field, window cells, applied twice (~110 m across).</summary>
+    private const int FieldBlur = 6;
 
     /// <summary>
-    /// How far ETOPO misses the finer level's nearest heights round its point (gi, gj) (their mean less ETOPO's there),
-    /// searched ring by ring out to <see cref="BlendM"/>, and how far, 0..1 of it (1: none). Rings and directions are
-    /// fixed, so the answer is a function of the point.
+    /// The correction past the leaves at each vertex of a level's tile (#1678): on a window round the tile, every
+    /// <see cref="FieldStep"/> vertices, the finer level's points (the leaves) and how far ETOPO (as <see cref="Shaped"/>
+    /// has it) misses them; past them each point takes the miss of the nearest one (an exact distance transform), fading
+    /// out over <see cref="BlendM"/>; the whole smoothed by two box blurs (each value a sum in one order over the same
+    /// cells, so tiles sharing a vertex agree to the bit), bilinear at the vertex. The ring search before it stood a step
+    /// at every ring.
     /// </summary>
-    private static (float Miss, float T) NearestFiner(ConcurrentDictionary<CubeKey, CubeTile> finer, EtopoGrid grid, int face, int level, int bits,
-        long side, long gi, long gj)
+    private static float[] BlendField(ConcurrentDictionary<CubeKey, CubeTile> finer, EtopoGrid grid, CubeKey key, int bits, int finerBits,
+        float[] lakes, SwissLakeMask? lakeMask)
     {
-        // a lattice step at this level, metres (a face is ~10,000 km across)
-        double stepM = 6_371_000 * Math.PI / 2 / side;
-        if (BlendM / stepM < 1) return (0, 1);
-        for (int ring = 1; ring <= BlendRings; ring++)
+        int n = (1 << bits) + 1, lv = key.Level + bits, scale = (key.Level + 1 + finerBits) - lv;
+        long gi0 = (long)key.X << bits, gj0 = (long)key.Y << bits, finerSide = 1L << (key.Level + 1 + finerBits);
+        double stepM = 6_371_000 * Math.PI / 2 / (1L << lv), cellM = FieldStep * stepM;
+        double half = 0.5 * 1.22 * Math.Pow(2, Math.Max(0, 23 - lv));
+        int margin = (int)Math.Ceiling(BlendM / cellM) + 4 * FieldBlur + 2;
+        long wx0 = gi0 / FieldStep - margin, wy0 = gj0 / FieldStep - margin;
+        int side = (n - 1) / FieldStep + 1 + 2 * margin;
+        var own = new bool[side * side];
+        var miss = new float[side * side];
+        bool any = false;
+        Parallel.For(0, side, y =>
         {
-            // rings close together near the leaves (the first a lattice step out), wider further: a vertex beside them
-            // takes the height beside it
-            double f = ring / (double)BlendRings, rM = Math.Max(stepM, BlendM * f * f), r = rM / stepM;
-            double sum = 0;
-            int found = 0;
-            foreach (var (dx, dy) in Directions)
+            for (int x = 0; x < side; x++)
             {
-                long pi = gi + (long)Math.Round(dx * r), pj = gj + (long)Math.Round(dy * r);
-                if (FinerAt(finer, face, level, bits, side, pi, pj) is not { } v) continue;
-                sum += v - EtopoAt(grid, face, level + bits, pi, pj, stepM);
-                found++;
+                long pi = (wx0 + x) * FieldStep, pj = (wy0 + y) * FieldStep;
+                if (FinerAt(finer, key.Face, key.Level + 1, finerBits, finerSide, pi << scale, pj << scale) is not { } v) continue;
+                var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(lv, pi), CubeSphere.Lattice(lv, pj));
+                double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
+                double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
+                float e = Shaped(grid, lakes, lakeMask, lat, lon, (float)grid.Footprint(lat, lon, half), out _);
+                own[y * side + x] = true;
+                miss[y * side + x] = v - e;
+                any = true;
             }
-            if (found > 0) return ((float)(sum / found), (float)(rM / BlendM));
+        });
+        var field = new float[n * n];
+        if (!any) return field;
+        var dist = new float[side * side];
+        var site = new int[side * side];
+        DistanceTransform.Run(own, side, side, dist, site);
+        var c = new float[side * side];
+        for (int k = 0; k < c.Length; k++)
+        {
+            if (own[k]) { c[k] = miss[k]; continue; }
+            if (site[k] < 0) continue;
+            double t = Math.Min(1, dist[k] * cellM / BlendM);
+            c[k] = (float)(miss[site[k]] * (1 - t * t * (3 - 2 * t)));
         }
-        return (0, 1);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            c = Blur(c, side, 1, 0);
+            c = Blur(c, side, 0, 1);
+        }
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                double fx = (double)(gi0 + i) / FieldStep - wx0, fy = (double)(gj0 + j) / FieldStep - wy0;
+                int x0 = (int)fx, y0 = (int)fy;
+                double u = fx - x0, v = fy - y0;
+                int k = y0 * side + x0;
+                field[j * n + i] = (float)((1 - v) * ((1 - u) * c[k] + u * c[k + 1]) + v * ((1 - u) * c[k + side] + u * c[k + side + 1]));
+            }
+        return field;
     }
+
+    /// <summary>A box blur of radius <see cref="FieldBlur"/> along one axis, each value summed afresh in one order (edges clamped).</summary>
+    private static float[] Blur(float[] f, int side, int dx, int dy)
+    {
+        var o = new float[f.Length];
+        Parallel.For(0, side, y =>
+        {
+            for (int x = 0; x < side; x++)
+            {
+                double sum = 0;
+                for (int r = -FieldBlur; r <= FieldBlur; r++)
+                {
+                    int xx = Math.Clamp(x + r * dx, 0, side - 1), yy = Math.Clamp(y + r * dy, 0, side - 1);
+                    sum += f[yy * side + xx];
+                }
+                o[y * side + x] = (float)(sum / (2 * FieldBlur + 1));
+            }
+        });
+        return o;
+    }
+
+    /// <summary>How far past the leaves their heights blend into ETOPO's, metres.</summary>
+    private const double BlendM = 1500;
 
     /// <summary>Whether the nine finer points round (fi, fj) all stand within <see cref="LakeOnM"/> of a lake's level.</summary>
     private static bool OnLake(ConcurrentDictionary<CubeKey, CubeTile> finer, int face, int level, int bits, long side, long fi, long fj, float lake)
@@ -329,15 +429,6 @@ public static class CubeSwiss
             for (int a = -1; a <= 1; a++)
                 if (FinerAt(finer, face, level, bits, side, fi + a, fj + b) is not { } v || Math.Abs(v - lake) > LakeOnM) return false;
         return true;
-    }
-
-    /// <summary>ETOPO's footprint mean at a face lattice point (as <see cref="CubeGlobal.Heights"/> takes it).</summary>
-    private static double EtopoAt(EtopoGrid grid, int face, int lv, long gi, long gj, double stepM)
-    {
-        var normal = CubeSphere.Normal(face, CubeSphere.Lattice(lv, gi), CubeSphere.Lattice(lv, gj));
-        double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
-        double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
-        return grid.Footprint(lat, lon, stepM / 2);
     }
 
     /// <summary>The finer level's height at its face lattice point (gi, gj), or null when no finer tile holds it (or it has no data there).</summary>

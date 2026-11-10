@@ -78,21 +78,49 @@ public sealed class LeafBlend
     /// <summary>Real leaves' heights kept for the detail term (1 MB each).</summary>
     public const int DetailKept = 48;
 
+    /// <summary>
+    /// On the pyramid (#1678): the width of the hand-over from the fill to the real ground, metres. The fill stands on
+    /// the pyramid, which over the region is the real leaves' own surface and carries it on for 1.5 km (#1654), so no
+    /// 3 km band of the real low-pass is needed: within this the generator's detail fades out and the real ground's own
+    /// difference from the pyramid fades in (a lake's bed under its surface among it), wide and smooth enough that the
+    /// real data's edge leaves no hole, step or trench (the user's ask on #1678).
+    /// </summary>
+    public const double HandOverM = 400;
+
+    /// <summary>On the pyramid: the soft minimum the hand-over takes of the distances to the blocks, metres.</summary>
+    public const double SoftHandOverM = 40;
+
+    /// <summary>
+    /// On the pyramid: within this of the real ground the hand-over's target is that ground continued (its slope carried
+    /// as far), handing over to the pyramid's relief past it, metres.
+    /// </summary>
+    public const double NearM = 60;
+
     private readonly Func<CubeKey, bool> _isReal;
     private readonly Func<CubeKey, CubeTile?> _heights;
     private readonly LeafFrames _frames;
+    private readonly PyramidBase? _pyramid;
     private readonly ConcurrentDictionary<CubeKey, Lazy<RealLeaf?>> _summaries = new();
     private readonly ConcurrentDictionary<CubeKey, Lazy<float[]?>> _detail = new();
     private readonly ConcurrentQueue<CubeKey> _detailOrder = new();
 
     /// <param name="isReal">Whether the region holds a leaf.</param>
     /// <param name="heights">A real leaf's heights (ellipsoidal, NaN where none).</param>
-    public LeafBlend(Func<CubeKey, bool> isReal, Func<CubeKey, CubeTile?> heights, LeafFrames? frames = null)
+    /// <param name="pyramid">The ground the fill stands on (#1678, <see cref="PyramidFill"/>): the hand-over is then
+    /// <see cref="HandOverM"/> wide and built on it; null, the generator's own ground and the 3 km band.</param>
+    public LeafBlend(Func<CubeKey, bool> isReal, Func<CubeKey, CubeTile?> heights, LeafFrames? frames = null, PyramidBase? pyramid = null)
     {
         _isReal = isReal;
         _heights = heights;
         _frames = frames ?? LeafFrames.Swiss;
+        _pyramid = pyramid;
     }
+
+    /// <summary>The pyramid the fill stands on, null without one.</summary>
+    public PyramidBase? Pyramid => _pyramid;
+
+    /// <summary>How far from the real ground the blend reaches, metres.</summary>
+    public double Reach => _pyramid != null ? HandOverM : Band;
 
     /// <summary>Everything read from the real leaves dropped (#1655: the server's leaves arrived): read again on the next ask.</summary>
     public void Forget()
@@ -100,6 +128,54 @@ public sealed class LeafBlend
         _summaries.Clear();
         _detail.Clear();
         while (_detailOrder.TryDequeue(out _)) { }
+        _resid.Clear();
+        while (_residOrder.TryDequeue(out _)) { }
+    }
+
+    /// <summary>A real leaf against the pyramid: its heights less the pyramid's, and where the pyramid holds a lake.</summary>
+    private sealed record ResidLeaf(float[] R, bool[] Lake);
+
+    private readonly ConcurrentDictionary<CubeKey, Lazy<ResidLeaf?>> _resid = new();
+    private readonly ConcurrentQueue<CubeKey> _residOrder = new();
+
+    /// <summary>
+    /// On the pyramid: a real leaf's heights less the pyramid's at each vertex (NaN where it has none), the last
+    /// <see cref="DetailKept"/> held. Over land the real ground's finer relief, a few centimetres; over a lake its bed
+    /// under the pyramid's surface.
+    /// </summary>
+    private ResidLeaf? Resid(CubeKey key)
+    {
+        bool added = false;
+        var lazy = _resid.GetOrAdd(key, k =>
+        {
+            added = true;
+            return new Lazy<ResidLeaf?>(() =>
+            {
+                if (Detail(k) is not { } h) return null;
+                var t = _frames.TransformOf(k);
+                int n = t.Cells + 1, level = k.Level + t.Bits;
+                long gi0 = (long)k.X << t.Bits, gj0 = (long)k.Y << t.Bits;
+                var r = new float[h.Length];
+                var lake = new bool[h.Length];
+                Parallel.For(0, n, j =>
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        float real = h[j * n + i];
+                        double p = _pyramid!.HeightAt(k.Face, gi0 + i, gj0 + j, level);
+                        r[j * n + i] = float.IsNaN(real) ? float.NaN : (float)(real - p);
+                        lake[j * n + i] = !double.IsNaN(p) && !float.IsNaN(_pyramid.LakeAt(p));
+                    }
+                });
+                return new ResidLeaf(r, lake);
+            });
+        });
+        if (added)
+        {
+            _residOrder.Enqueue(key);
+            while (_resid.Count > DetailKept && _residOrder.TryDequeue(out var old)) _resid.TryRemove(old, out _);
+        }
+        return lazy.Value;
     }
 
     /// <summary>
@@ -183,7 +259,7 @@ public sealed class LeafBlend
     }
 
     /// <summary>Whether any real ground lies within the band of a leaf: else the fill is the generator's alone there.</summary>
-    public bool Reaches(CubeKey leaf) => PiecesNear(leaf, Band).Count > 0;
+    public bool Reaches(CubeKey leaf) => PiecesNear(leaf, Reach).Count > 0;
 
     // ---- W, W R and D ------------------------------------------------------------------------------------------
 
@@ -211,7 +287,7 @@ public sealed class LeafBlend
     }
 
     /// <summary>A block near enough for the detail term, with its leaf's heights and transform at hand.</summary>
-    private sealed record Near(Piece Piece, float[] H, LeafTransform T);
+    private sealed record Near(Piece Piece, float[] H, LeafTransform T, ResidLeaf? R = null);
 
     /// <summary>
     /// The real surface near a global lattice point: every block within <see cref="DetailBand"/> continued to first
@@ -269,6 +345,77 @@ public sealed class LeafBlend
         return false;
     }
 
+    /// <summary>
+    /// On the pyramid (#1678): the hand-over at a global lattice point. <paramref name="f"/> is 1 at a block and 0 from
+    /// <see cref="HandOverM"/> out, flat at both ends; <paramref name="target"/> what it hands over to: within
+    /// <see cref="NearM"/> of the real ground that ground continued to first order from each block's nearest point (as
+    /// <see cref="Continued"/>, its slope carried over <see cref="NearM"/>), past it the pyramid plus the real ground's
+    /// difference from it there, each inverse-distance weighted over the blocks. The pyramid steps a little at the leaves'
+    /// edge (the leaves inside, ETOPO blended outside), so near the seam the real ground itself is continued; further
+    /// out the pyramid carries the relief. A lake's bed is carried into the fill's lake only (<paramref name="lake"/>):
+    /// on the fill's land beside it the real lake counts as the pyramid's surface, so a shore never dips towards the bed.
+    /// True with the block's own height (ellipsoidal) when the point lies on one.
+    /// </summary>
+    private static bool HandOver(Near[] near, long gi, long gj, bool lake, double pyramid, out double f, out double target, out float onReal)
+    {
+        double sw = 0, swr = 0, swc = 0, soft = 0;
+        f = target = 0;
+        onReal = float.NaN;
+        foreach (var x in near)
+        {
+            var p = x.Piece;
+            double dist = p.Nearest(gi, gj, out long qi, out long qj);
+            if (dist >= HandOverM) continue;
+            var leaf = p.Leaf;
+            int n = leaf.Cells + 1, q = (int)(qj - leaf.Gj0) * n + (int)(qi - leaf.Gi0);
+            if (dist == 0)
+            {
+                onReal = x.H[q];
+                return true;
+            }
+            var rl = x.R!;
+            double r = rl.R[q], c;
+            if (double.IsNaN(r)) continue;
+            if (!lake && rl.Lake[q])
+            {
+                r = 0;
+                c = pyramid;
+            }
+            else
+            {
+                // the real ground continued from q, its slope from inside the block over NearM (whole cells: a
+                // neighbour inside is real)
+                var h = x.H;
+                c = h[q];
+                long di = gi - qi, dj = gj - qj;
+                if (di != 0)
+                {
+                    double s = di < 0 ? h[q + 1] - h[q] : h[q] - h[q - 1];
+                    c += di * s * (1 - SmoothStep(0, NearM, Math.Abs(di) * leaf.ScaleI));
+                }
+                if (dj != 0)
+                {
+                    double s = dj < 0 ? h[q + n] - h[q] : h[q] - h[q - n];
+                    c += dj * s * (1 - SmoothStep(0, NearM, Math.Abs(dj) * leaf.ScaleJ));
+                }
+            }
+            double fd = 1 - SmoothStep(0, HandOverM, dist);
+            soft += Math.Exp(-dist / SoftHandOverM) * fd;
+            double w = fd / (dist * dist + Soften);
+            sw += w;
+            swr += w * r;
+            swc += w * c;
+        }
+        if (sw == 0) return false;
+        double reach = soft <= 0 ? HandOverM : Math.Clamp(-SoftHandOverM * Math.Log(soft), 0, HandOverM);
+        f = 1 - SmoothStep(0, HandOverM, reach);
+        // the nearest distance's soft minimum is at most the nearest distance: a block's own edge is the real ground
+        double g = SmoothStep(0, NearM, reach);
+        double far = double.IsNaN(pyramid) ? swc / sw : pyramid + swr / sw;
+        target = (1 - g) * (swc / sw) + g * far;
+        return false;
+    }
+
     // ---- a leaf's heights --------------------------------------------------------------------------------------
 
     /// <summary>A leaf's blended heights, and what the blend changed.</summary>
@@ -280,12 +427,13 @@ public sealed class LeafBlend
     /// </summary>
     public Result? Heights(CubeKey leaf, float[] generated, float[]? ownReal = null)
     {
-        var all = PiecesNear(leaf, Band);
+        var all = PiecesNear(leaf, Reach);
         if (all.Count == 0) return null;
         var own = ownReal != null ? Summary(leaf) : null;
         var t = _frames.TransformOf(leaf);
         int cells = t.Cells, n = cells + 1;
         long gi0 = (long)leaf.X << t.Bits, gj0 = (long)leaf.Y << t.Bits;
+        if (_pyramid != null) return OnPyramid(leaf, t, all, generated, ownReal, own);
         var near = all
             .Where(p => p.Gap(gi0, gj0, gi0 + cells, gj0 + cells) < DetailBand)
             .Select(p => Detail(p.Leaf.Key) is { } h ? new Near(p, h, _frames.TransformOf(p.Leaf.Key)) : null)
@@ -347,6 +495,68 @@ public sealed class LeafBlend
         return new Result(heights, kept, delta);
     }
 
+    /// <summary>
+    /// <see cref="Heights"/> on the pyramid (#1678): the fill (already on it, <see cref="PyramidFill"/>) handed over to
+    /// the real ground within <see cref="HandOverM"/>, convexly, both sides standing on the pyramid:
+    ///
+    ///     h = (1 - F) g + F T
+    ///
+    /// g the fill's height; T the real ground continued near it, then the pyramid's height P plus the real ground's
+    /// difference from it carried out from the blocks (<see cref="HandOver"/>). At a block F = 1 and T is the real
+    /// ground, so h is; the generator's detail fades in over the band on the pyramid's relief, which already continues
+    /// the real ground (#1654).
+    /// </summary>
+    private Result OnPyramid(CubeKey leaf, LeafTransform t, List<Piece> all, float[] generated, float[]? ownReal, RealLeaf? own)
+    {
+        int cells = t.Cells, n = cells + 1, latticeLevel = leaf.Level + t.Bits;
+        long gi0 = (long)leaf.X << t.Bits, gj0 = (long)leaf.Y << t.Bits;
+        var near = all
+            .Select(p => Detail(p.Leaf.Key) is { } h && Resid(p.Leaf.Key) is { } r ? new Near(p, h, _frames.TransformOf(p.Leaf.Key), r) : null)
+            .OfType<Near>().ToArray();
+        var pyramid = _pyramid!;
+        var heights = new float[n * n];
+        var delta = new double[n * n];
+        var kept = own != null ? new bool[n * n] : null;
+        Parallel.For(0, n, j =>
+        {
+            long gj = gj0 + j;
+            var nearRow = near.Where(x => Math.Max(0, Math.Max(x.Piece.J0 - gj, gj - x.Piece.J1)) * x.Piece.Leaf.ScaleJ < HandOverM).ToArray();
+            for (int i = 0; i < n; i++)
+            {
+                int k = j * n + i;
+                float g = generated[k];
+                if (own != null && own.Kept(i, j) && !float.IsNaN(ownReal![k]))
+                {
+                    heights[k] = ownReal[k];
+                    kept![k] = true;
+                    delta[k] = float.IsNaN(g) ? 0 : ownReal[k] - g;
+                    continue;
+                }
+                if (float.IsNaN(g) || nearRow.Length == 0)
+                {
+                    heights[k] = g;
+                    continue;
+                }
+                double p = pyramid.HeightAt(leaf.Face, gi0 + i, gj, latticeLevel);
+                bool lake = !double.IsNaN(p) && !float.IsNaN(pyramid.LakeAt(p));
+                if (HandOver(nearRow, gi0 + i, gj, lake, p, out double f, out double target, out float onReal))
+                {
+                    heights[k] = onReal;
+                    delta[k] = onReal - g;
+                    continue;
+                }
+                if (f <= 0)
+                {
+                    heights[k] = g;
+                    continue;
+                }
+                heights[k] = (float)((1 - f) * g + f * target);
+                delta[k] = heights[k] - g;
+            }
+        });
+        return new Result(heights, kept, delta);
+    }
+
     // ---- a whole leaf ------------------------------------------------------------------------------------------
 
     /// <summary>
@@ -376,7 +586,7 @@ public sealed class LeafBlend
             Key = key,
             Heights = new CubeTile { Key = key, Bits = gh.Bits, Heights = r.Heights, Quantum = gh.Quantum },
             Cover = Merge(generated.Cover, real?.Cover, r.Kept),
-            Water = Water(generated.Water, real?.Water, r, t),
+            Water = Water(generated.Water, real?.Water, r, t, _pyramid),
             Holes = real?.Holes,
             Fields = real?.Fields,
             Pistes = real?.Pistes,
@@ -428,7 +638,7 @@ public sealed class LeafBlend
         return content;
     }
 
-    private static Building Lifted(Building b, float dy)
+    internal static Building Lifted(Building b, float dy)
     {
         var tri = (float[])b.Triangles.Clone();
         for (int k = 1; k < tri.Length; k += 3) tri[k] += dy;
@@ -449,7 +659,8 @@ public sealed class LeafBlend
     /// Still water: the real samples on the real cells, the fill's elsewhere moved with its bed, and dropped where the
     /// blend tilts the bed past <see cref="MaxWaterTilt"/>.
     /// </summary>
-    private static CubeWater? Water(CubeWater? generated, CubeWater? real, Result r, LeafTransform t)
+    /// <remarks>On the pyramid a lake's surface is its level whatever the bed under it (#1678): kept as it is.</remarks>
+    private static CubeWater? Water(CubeWater? generated, CubeWater? real, Result r, LeafTransform t, PyramidBase? pyramid)
     {
         if (generated is null) return r.Kept is null ? null : real;
         int bits = generated.Bits, side = generated.Side, n = t.Cells + 1;
@@ -472,6 +683,13 @@ public sealed class LeafBlend
                 {
                     float level = generated.Level[s];
                     if (float.IsNaN(level)) continue;
+                    if (pyramid != null && !float.IsNaN(pyramid.LakeAt(level)))
+                    {
+                        w.Level[s] = level;
+                        w.Fetch[s] = generated.Fetch[s];
+                        any = true;
+                        continue;
+                    }
                     double D(int a, int b) => r.Delta[Math.Clamp(b, 0, n - 1) * n + Math.Clamp(a, 0, n - 1)];
                     double gx = (D(i + CubeWater.Stride, j) - D(i - CubeWater.Stride, j)) / stepM;
                     double gy = (D(i, j + CubeWater.Stride) - D(i, j - CubeWater.Stride)) / stepM;
@@ -510,7 +728,7 @@ public sealed class LeafBlend
     }
 
     /// <summary>Moves a record up by the blend's change at its place; headings stay.</summary>
-    private sealed class Lift(LeafTransform t, double[] delta, int n) : LeafRecords.IMap
+    internal sealed class Lift(LeafTransform t, double[] delta, int n) : LeafRecords.IMap
     {
         public double At(float x, float y, float z)
         {

@@ -920,3 +920,12 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] Drive 5 km out of town at speed → the ground keeps up (a few seconds' wait at most at the 3 MB/s cap), the far view under the globe fills in.
 - [ ] Settings → Data: the cache grows, Clear empties it, the session's MB count rises; Low data on → near ground still comes, the far view past it stays coarser.
 - [ ] On the phone over mobile data, the metered warning, then the same join → ground arrives; note the MB on arrival.
+
+## The earth fill on the globe's pyramid (PR [#1688](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1688), [#1678](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1678))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2546600,1148700` (Lavaux, by B4's staircase at E ≈ 2547), in a window, against the same without `--frame`/`--leaves`.
+
+- [ ] Walk, then drive east along the shore road from the real leaves into the fill → no hole, step or trench where the real ground ends; the lake runs on as one water, never a grey band or green land on it.
+- [ ] Fly at 300 m along the shore from Cully to Vevey, then from 12 km up over the staircase → one shoreline, no squares, seams or pale lines on the water.
+- [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
+- [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
