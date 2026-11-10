@@ -195,7 +195,23 @@ public partial class ChunkStreamer : Node
         return await FetchEnetAsync(kind, id, ct).ConfigureAwait(false);
     }
 
-    private Task<AssetResult> FetchEnetAsync(AssetKind kind, TileId id, CancellationToken ct)
+    private Task<AssetResult> FetchEnetAsync(AssetKind kind, TileId id, CancellationToken ct) =>
+        SendAsync(kind, id, id.ToString(), requestId => RpcId(1, MethodName.RequestAsset, requestId, (int)kind, id.E, id.N), ct);
+
+    /// <summary>
+    /// Asks the server for a cube tile's asset by its key (#1655): a leaf's entry (<see cref="AssetKind.Leaf"/>), whole
+    /// (<paramref name="section"/> 0) or holding one <see cref="LeafKind"/> section. The pyramid's tiles (#1656) take the
+    /// same request with their own kind. Metered, answered and failed as <see cref="FetchAsync"/>; ENet only (the HTTP
+    /// mirror holds files, not entries). Any thread.
+    /// </summary>
+    public Task<AssetResult> FetchCubeAsync(AssetKind kind, CubeKey key, int section, CancellationToken ct = default)
+    {
+        if (IsServing) return Task.FromResult(new AssetResult(null, true));
+        return SendAsync(kind, default, section == 0 ? key.ToString() : $"{key} section {section}",
+            requestId => RpcId(1, MethodName.RequestCubeAsset, requestId, (int)kind, key.Face, key.Level, key.X, key.Y, section), ct);
+    }
+
+    private Task<AssetResult> SendAsync(AssetKind kind, TileId id, string label, Action<uint> send, CancellationToken ct)
     {
         // Quitting while tiles are still in flight used to take the process down with an access
         // violation inside CallDeferred: the worker threads outlive the tree, and deferring onto
@@ -209,7 +225,7 @@ public partial class ChunkStreamer : Node
         lock (_pending)
         {
             requestId = _nextRequestId++;
-            pending = new PendingRequest(kind, id, DateTime.UtcNow);
+            pending = new PendingRequest(kind, id, label, DateTime.UtcNow);
             _pending[requestId] = pending;
         }
 
@@ -233,7 +249,7 @@ public partial class ChunkStreamer : Node
 
             // the clock starts now: the deferred call may have waited behind a slow frame
             lock (_pending) pending.StartedAt = DateTime.UtcNow;
-            RpcId(1, MethodName.RequestAsset, requestId, (int)kind, id.E, id.N);
+            send(requestId);
         }).CallDeferred();
 
         return pending.Completion.Task;
@@ -262,7 +278,7 @@ public partial class ChunkStreamer : Node
         // rings ask for tiles before the link is up. Logging it would bury the failures that
         // actually mean something.
         if (!why.StartsWith("not connected", StringComparison.Ordinal))
-            GD.Print($"[stream] request {requestId} {pending.Kind} {pending.Tile} {why}");
+            GD.Print($"[stream] request {requestId} {pending.Kind} {pending.Label} {why}");
 
         pending.Completion.TrySetResult(new AssetResult(null, permanent));
     }
@@ -307,6 +323,7 @@ public partial class ChunkStreamer : Node
         {
             AssetKind.Landings => LandingsOverride,
             AssetKind.HttpBase => TilesUrl is { } url ? System.Text.Encoding.UTF8.GetBytes(url) : null,
+            AssetKind.LeafIndex => LeafIndexBytes,
             _ => ManifestOverride,
         };
         var digestManifest = ManifestOverride;
@@ -314,6 +331,69 @@ public partial class ChunkStreamer : Node
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
             ? PrepareDigest(peer, requestId, directory, digestManifest, digestLandings)
             : Prepare(peer, requestId, assetKind, path, manifestOverride)));
+    }
+
+    /// <summary>
+    /// Server, under <c>--frame earth</c> (#1655): the leaves it serves to clients that lack them (<see cref="AssetKind.Leaf"/>,
+    /// <see cref="AssetKind.LeafIndex"/>), those on its own disk. Null: it serves none.
+    /// </summary>
+    public Terrain.Leaves.LeafStore? Leaves { get; set; }
+
+    private byte[]? _leafIndexBytes;
+
+    /// <summary>The served leaves' index, built on the first ask; null with no leaves.</summary>
+    private byte[]? LeafIndexBytes => Leaves is { Count: > 0 } leaves
+        ? _leafIndexBytes ??= Terrain.Leaves.LeafIndex.Of(leaves).ToBytes()
+        : null;
+
+    /// <summary>
+    /// A cube tile's asset by its key (#1655): a leaf's entry from the server's own bundles, whole (<paramref name="section"/>
+    /// 0) or cut down to that one section. The pyramid's tiles (#1656) take the same request with their own kind; a kind
+    /// this server does not serve by key is "missing". Metered and answered as <see cref="RequestAsset"/>.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable,
+        TransferChannel = AssetStream.Channel)]
+    private void RequestCubeAsset(uint requestId, int kind, int face, int level, int x, int y, int section)
+    {
+        if (!IsServing) return;
+
+        long peer = Multiplayer.GetRemoteSenderId();
+        var key = new CubeKey(face, level, x, y);
+        if ((AssetKind)kind != AssetKind.Leaf || !key.IsValid || Leaves is not { } leaves || !leaves.IsLocal(key))
+        {
+            RpcId(peer, MethodName.AssetMissing, requestId, true);
+            return;
+        }
+
+        var queue = GetQueue(peer);
+        if (queue.Transfers.Count + queue.Preparing >= MaxQueuedPerPeer)
+        {
+            RpcId(peer, MethodName.AssetBusy, requestId);
+            return;
+        }
+
+        queue.Preparing++;
+        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PrepareLeaf(peer, requestId, leaves, key, section)));
+    }
+
+    /// <summary>A leaf's entry read off the bundle, cut to one section when asked, deflated as the files are.</summary>
+    private static Prepared PrepareLeaf(long peer, uint requestId, Terrain.Leaves.LeafStore leaves, CubeKey key, int section)
+    {
+        try
+        {
+            if (leaves.LocalEntry(key) is not { } entry) return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            byte[] payload = section == 0 ? entry : Terrain.Leaves.LeafStore.OneSection(entry, (LeafKind)section);
+            uint crc = AssetStream.Crc32(payload);
+            if (AssetStream.TryCompress(payload) is { } smaller)
+                return new Prepared(peer, requestId, smaller, payload.Length, crc, true, false);
+            return new Prepared(peer, requestId, payload, payload.Length, crc, false, false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] cannot read leaf {key}: {e.Message}");
+            return new Prepared(peer, requestId, null, 0, 0, false, Missing: false);
+        }
     }
 
     private readonly System.Collections.Concurrent.ConcurrentQueue<Prepared> _prepared = new();
@@ -347,9 +427,9 @@ public partial class ChunkStreamer : Node
         try
         {
             byte[] payload;
-            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase && manifestOverride is { } manifest)
+            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase or AssetKind.LeafIndex && manifestOverride is { } manifest)
                 payload = manifest;
-            else if (kind == AssetKind.HttpBase)
+            else if (kind is AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.Leaf)
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             else if (!System.IO.File.Exists(path))
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
@@ -415,7 +495,7 @@ public partial class ChunkStreamer : Node
         if (result is null)
         {
             GD.PushWarning(
-                $"[stream] {pending.Kind} {pending.Tile} failed its integrity check; discarded");
+                $"[stream] {pending.Kind} {pending.Label} failed its integrity check; discarded");
             // A corrupt payload is not the server saying "absent", so allow a retry.
             pending.Completion.TrySetResult(new AssetResult(null, false));
             return;
@@ -555,7 +635,7 @@ public partial class ChunkStreamer : Node
         public int Offset { get; set; }
     }
 
-    private sealed class PendingRequest(AssetKind kind, TileId tile, DateTime startedAt)
+    private sealed class PendingRequest(AssetKind kind, TileId tile, string label, DateTime startedAt)
     {
         private byte[]? _buffer;
         private int _filled;
@@ -565,6 +645,8 @@ public partial class ChunkStreamer : Node
 
         public AssetKind Kind { get; } = kind;
         public TileId Tile { get; } = tile;
+        /// <summary>What was asked, for the log: a tile, or a cube key (#1655).</summary>
+        public string Label { get; } = label;
         /// <summary>When the request went out (or was queued, until it does); moved on past a stall.</summary>
         public DateTime StartedAt { get; set; } = startedAt;
 
@@ -606,7 +688,7 @@ public partial class ChunkStreamer : Node
             }
             catch (Exception e)
             {
-                GD.PushWarning($"[stream] {Kind} {Tile} failed to decompress: {e.Message}");
+                GD.PushWarning($"[stream] {Kind} {Label} failed to decompress: {e.Message}");
                 return null;
             }
 

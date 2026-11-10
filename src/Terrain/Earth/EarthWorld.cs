@@ -91,7 +91,29 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private readonly HashSet<CubeKey> _want = new();
     private readonly Queue<CubeKey> _walk = new();
     private readonly List<CubeKey> _drop = new();
+    /// <summary>Loaded leaves to read again (<see cref="Refresh"/>): each stays until its new read replaces it.</summary>
+    private readonly HashSet<CubeKey> _stale = new();
+    /// <summary>Bumped by each <see cref="Refresh"/>: a read begun before it is dropped as it lands.</summary>
+    private volatile int _generation;
     private double _nextPlan;
+
+    /// <summary>
+    /// The leaves changed under this world (#1655: the server's leaf index arrived, <see cref="LeafStore.UseRemote"/>, with
+    /// <paramref name="changed"/> the leaves it added, dropped or rebuilt). Everything made from the old view is read again:
+    /// the fill and its blend (<see cref="EarthLeaves.Refresh"/>), every loaded leaf (in place: the old one stays until the
+    /// new one lands, so nobody falls through) and every collision patch (the new faces replace the old body). Main thread.
+    /// </summary>
+    public void Refresh(IReadOnlyCollection<CubeKey> changed)
+    {
+        if (changed.Count == 0) return;
+        _generation++;
+        Leaves.Refresh(changed);
+        _collisionSource.Forget();
+        foreach (var key in _near.Keys) _stale.Add(key);
+        _patches.Rebuild(_ => true);
+        _nextPlan = 0;
+        GD.Print($"[earth] {changed.Count} leaves changed ({Store.RemoteCount} from the server): {_near.Count} loaded leaves read again");
+    }
 
     public event Action<GroundTile>? TileEntered;
     public event Action<GroundTile>? TileUnloaded;
@@ -100,6 +122,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private sealed class Near
     {
         public required CubeKey Key;
+        /// <summary>The <see cref="Refresh"/> it was read under.</summary>
+        public int Generation;
         public required CubeLeafContent Content;
         public required EnuFrame Anchor;
         public required float[] Vertices;
@@ -194,6 +218,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         {
             _loading.Remove(gone);
             _cancelled.TryRemove(gone, out _);
+            // a leaf to load again that the region no longer holds (the server's index dropped it): its old one goes
+            if (_stale.Contains(gone) && !Leaves.Has(gone)) Remove(gone);
         }
 
         _nextPlan -= delta;
@@ -260,7 +286,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             }
         }
         foreach (var key in _want)
-            if (!_near.ContainsKey(key) && Leaves.Has(key)) Request(key);
+            if ((!_near.ContainsKey(key) || _stale.Contains(key)) && Leaves.Has(key)) Request(key);
         // what is still queued but no longer wanted (the camera flew on, or up into Space) is skipped by the workers
         foreach (var key in _loading)
             if (!_want.Contains(key)) _cancelled.TryAdd(key, 0);
@@ -301,6 +327,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         // wanted again while still queued: no longer skipped
         _cancelled.TryRemove(key, out _);
         if (!_loading.Add(key)) return;
+        int generation = _generation;
         _ = Task.Run(async () =>
         {
             await _workers.WaitAsync().ConfigureAwait(false);
@@ -310,6 +337,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
                 if (_cancelled.TryRemove(key, out _)) return;
                 if (Load(key) is { } leaf)
                 {
+                    leaf.Generation = generation;
                     _ready.Enqueue(leaf);
                     built = true;
                 }
@@ -357,7 +385,16 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         _loading.Remove(leaf.Key);
         // cancelled while it was being built: it is here now, and the next plan drops it if nothing wants it
         _cancelled.TryRemove(leaf.Key, out _);
-        if (_near.ContainsKey(leaf.Key)) return;
+        // read before a Refresh: from the old view, asked again by the next plan
+        if (leaf.Generation != _generation) return;
+        if (_near.ContainsKey(leaf.Key))
+        {
+            // a leaf loaded again in place (#1655): the old one goes as the new one comes, so the ground never gaps
+            if (!_stale.Contains(leaf.Key)) return;
+            Remove(leaf.Key);
+        }
+        // patches built while this leaf had not come stood on nothing: built again now it has
+        if (!Store.IsLocal(leaf.Key)) _patches.Rebuild(p => LeafCollision.Split(p).Leaf == leaf.Key, emptyOnly: true);
         _near[leaf.Key] = leaf;
         if (leaf.Arrays is { } arrays)
         {
@@ -378,6 +415,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private void Remove(CubeKey key)
     {
+        _stale.Remove(key);
         if (!_near.Remove(key, out var leaf)) return;
         leaf.Mesh?.QueueFree();
         if (leaf.Node != null) Unfurnish(key, leaf.Node);
@@ -386,7 +424,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private void AddBody(CubeKey key, Vector3[]? faces)
     {
-        if (faces is not { Length: >= 3 } || _bodies.ContainsKey(key)) return;
+        // a patch built again (CollisionPatches.Rebuild): the new faces replace the old body
+        if (_bodies.Remove(key, out var old)) old.QueueFree();
+        if (faces is not { Length: >= 3 }) return;
         var (leaf, _, _) = LeafCollision.Split(key);
         var body = new StaticBody3D { Name = key.FileStem };
         body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });

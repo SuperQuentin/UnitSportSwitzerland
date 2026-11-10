@@ -94,10 +94,32 @@ public sealed class LeafBlend
         _frames = frames ?? LeafFrames.Swiss;
     }
 
-    /// <summary>The blend's view of a real leaf, made on the first ask and kept; null for a leaf with no real cell.</summary>
-    public RealLeaf? Summary(CubeKey key) =>
-        !_isReal(key) ? null : _summaries.GetOrAdd(key, k => new Lazy<RealLeaf?>(() =>
-            _heights(k) is { } h ? RealLeaf.Of(h, _frames.TransformOf(k)) : null)).Value;
+    /// <summary>Everything read from the real leaves dropped (#1655: the server's leaves arrived): read again on the next ask.</summary>
+    public void Forget()
+    {
+        _summaries.Clear();
+        _detail.Clear();
+        while (_detailOrder.TryDequeue(out _)) { }
+    }
+
+    /// <summary>
+    /// The blend's view of a real leaf, made on the first ask and kept; null for a leaf with no real cell. A leaf whose
+    /// heights did not come (a streamed one, #1655) is not kept: asked again next time.
+    /// </summary>
+    public RealLeaf? Summary(CubeKey key)
+    {
+        if (!_isReal(key)) return null;
+        bool none = false;
+        var lazy = _summaries.GetOrAdd(key, k => new Lazy<RealLeaf?>(() =>
+        {
+            if (_heights(k) is { } h) return RealLeaf.Of(h, _frames.TransformOf(k));
+            none = true;
+            return null;
+        }));
+        var value = lazy.Value;
+        if (none) _summaries.TryRemove(new KeyValuePair<CubeKey, Lazy<RealLeaf?>>(key, lazy));
+        return value;
+    }
 
     /// <summary>A real leaf's heights for the detail term, the last <see cref="DetailKept"/> held.</summary>
     private float[]? Detail(CubeKey key)

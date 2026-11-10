@@ -59,6 +59,24 @@ public sealed class EarthLeaves : ILeafSource
     public static EarthLeaves Fixture(Func<CubeKey, bool> has, Func<CubeKey, CubeLeafContent?> build) =>
         new(LeafStore.Empty, null, null, null, null, has, build);
 
+    /// <summary>
+    /// The server's leaves arrived or changed (#1655, <see cref="LeafStore.UseRemote"/>): every leaf made from the old view
+    /// (the fill where a real leaf now stands, a blend against what was not real) and the blend's summaries are dropped, and
+    /// the fill's domain takes in the new real leaves. Whoever holds leaves reads them again (<c>EarthWorld.Refresh</c>).
+    /// </summary>
+    public void Refresh(IReadOnlyCollection<CubeKey> changed)
+    {
+        if (changed.Count == 0) return;
+        _made.Clear();
+        _heightsMade.Clear();
+        Blend?.Forget();
+        if (_domain is { } d)
+        {
+            var grown = d.WithReal(changed.Where(Real.Has));
+            Interlocked.CompareExchange(ref _domain, grown, d);
+        }
+    }
+
     /// <summary>The region's leaves and the fill round them, its domain a disc round the start and round the region.</summary>
     /// <param name="fillOn">The fill's setting, asked whenever a leaf is: off, only real leaves are served.</param>
     /// <param name="roads">Whether the fill's leaves carry roads (RoadGen's stage, ~2 s a leaf, one at a time).</param>
@@ -101,8 +119,11 @@ public sealed class EarthLeaves : ILeafSource
         if (Real.Has(key))
         {
             // a leaf the region holds whole is the region's; one it holds in part is merged with the fill
-            if (!Filled(key) || Blend!.Summary(key) is { Full: true }) return Real.Get(key);
-            return Made(key, k => Blend.Apply(Generated(k, roads: false), Real.Get(k)));
+            if (!Filled(key)) return Real.Get(key);
+            // a streamed leaf that did not come yet (#1655) is asked again later, never merged as if it had no real cell
+            if (Real.Get(key) is not { } real) return null;
+            if (Blend!.Summary(key) is { Full: true }) return real;
+            return Made(key, k => Blend.Apply(Generated(k, roads: false), real));
         }
         if (_fixtureHas?.Invoke(key) == true) return Made(key, _fixture!);
         if (Filled(key)) return Made(key, k => Blend!.Apply(Generated(k, roads: true)));
@@ -136,7 +157,14 @@ public sealed class EarthLeaves : ILeafSource
     public CubeTile? HeightsOf(CubeKey key)
     {
         if (Cached(key) is { Heights: { } held }) return held;
-        if (Real.Has(key) && (!Filled(key) || Blend!.Summary(key) is { Full: true })) return Real.HeightsOf(key);
+        float[]? realHeights = null;
+        if (Real.Has(key))
+        {
+            // a streamed leaf whose heights did not come yet (#1655): asked again later, never blended as if it had none
+            if (Real.HeightsOf(key) is not { } own) return null;
+            if (!Filled(key) || Blend!.Summary(key) is { Full: true }) return own;
+            realHeights = own.Heights;
+        }
         if (_fixtureHas?.Invoke(key) == true) return Get(key)?.Heights;
         if (!Filled(key)) return null;
         bool added = false;
@@ -148,7 +176,7 @@ public sealed class EarthLeaves : ILeafSource
                 try
                 {
                     var g = _generated!.Heights(k, GlobeStride);
-                    var r = Blend!.Heights(k, g.Heights, Real.Has(k) ? Real.HeightsOf(k)?.Heights : null);
+                    var r = Blend!.Heights(k, g.Heights, realHeights);
                     return r is null ? g : new CubeTile { Key = k, Bits = g.Bits, Heights = r.Heights, Quantum = g.Quantum };
                 }
                 catch (Exception e) when (e is not OperationCanceledException)

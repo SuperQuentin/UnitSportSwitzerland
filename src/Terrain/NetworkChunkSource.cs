@@ -34,10 +34,16 @@ public sealed class NetworkChunkSource : IChunkSource
     private readonly ChunkStreamer _streamer;
 
     /// <summary>In-flight fetches, so two LOD rings asking for the same tile share one transfer.</summary>
-    private readonly Dictionary<(AssetKind, TileId), Task<AssetResult>> _inFlight = new();
+    private readonly Dictionary<Ask, Task<AssetResult>> _inFlight = new();
 
     /// <summary>Tiles the server has already said it does not have, so we stop asking.</summary>
-    private readonly HashSet<(AssetKind, TileId)> _knownMissing = new();
+    private readonly HashSet<Ask> _knownMissing = new();
+
+    /// <summary>What one transfer asks for: a tile's file, or a cube key's entry and section (#1655).</summary>
+    private readonly record struct Ask(AssetKind Kind, TileId Tile, CubeKey Cube = default, int Section = 0)
+    {
+        public override string ToString() => Kind == AssetKind.Leaf ? $"{Kind} {Cube}" : $"{Kind} {Tile}";
+    }
 
     /// <summary>
     /// Ceiling on transfers in flight from this client.
@@ -223,6 +229,47 @@ public sealed class NetworkChunkSource : IChunkSource
         await _local.LoadLandingsAsync(ct).ConfigureAwait(false)
         ?? await LocalChunkSource.ReadLandingsAsync(_cacheDirectory, ct).ConfigureAwait(false);
 
+    // ---- leaves (#1655) --------------------------------------------------------------------
+
+    /// <summary>
+    /// The earth world's leaves the server holds and this copy lacks (#1655, <see cref="Leaves.LeafStore.UseRemote"/>'s
+    /// <see cref="Leaves.LeafFetch"/>): the cache first (<see cref="AssetStream.LeafCacheName"/>: the whole entry serves a
+    /// section too), else the stream, with the tiles' retries, coalescing, request slots and "the server has none"
+    /// memory; written into the cache, counted in <see cref="ChunkStreamer.SessionBytes"/>. Called on a worker: blocks for
+    /// the transfer. Null when it did not come (the caller asks again later) or did not check out.
+    /// </summary>
+    public byte[]? FetchLeaf(CubeKey key, Leaves.LeafIndex.Entry entry, LeafKind? section)
+    {
+        string wholePath = Path.Combine(_cacheDirectory, AssetStream.LeafCacheName(key, entry.Stamp, null));
+        if (ReadCache(wholePath) is { } whole && Fits(whole, null)) return whole;
+        string path = section == null ? wholePath : Path.Combine(_cacheDirectory, AssetStream.LeafCacheName(key, entry.Stamp, section));
+        if (section != null && ReadCache(path) is { } part && Fits(part, section)) return part;
+
+        var ask = new Ask(AssetKind.Leaf, default, key, (int)(section ?? 0));
+        lock (_gate)
+        {
+            if (_knownMissing.Contains(ask)) return null;
+        }
+        if (!_streamer.ServerReachable) return null;
+        var bytes = FetchWithRetryAsync(ask, CancellationToken.None).GetAwaiter().GetResult();
+        if (bytes == null) return null;
+        if (!Fits(bytes, section))
+        {
+            GD.PushWarning($"[stream] leaf {key} came as {bytes.Length} bytes, not the index's {entry.Length}: not used");
+            return null;
+        }
+        WriteCache(path, bytes);
+        StreamedFiles++;
+        return bytes;
+
+        // a whole entry is the index's size; any entry is this leaf's
+        bool Fits(byte[] b, LeafKind? s)
+        {
+            try { return (s != null || b.Length == entry.Length) && CubeLeafCodec.ReadTable(b).Key == key; }
+            catch (InvalidDataException) { return false; }
+        }
+    }
+
     // ---- cache and fetch ------------------------------------------------------------------
 
     /// <summary>
@@ -232,7 +279,7 @@ public sealed class NetworkChunkSource : IChunkSource
     private async Task<T?> ObtainAsync<T>(
         AssetKind kind, TileId id, CancellationToken ct, Func<byte[], T> decode) where T : class
     {
-        var key = (kind, id);
+        var key = new Ask(kind, id);
         lock (_gate)
         {
             if (_knownMissing.Contains(key)) return null;
@@ -275,7 +322,7 @@ public sealed class NetworkChunkSource : IChunkSource
             // able to ask for exactly these files.
             if (!_streamer.ServerReachable) return null;
 
-            bytes = await FetchWithRetryAsync(kind, id, key, ct).ConfigureAwait(false);
+            bytes = await FetchWithRetryAsync(key, ct).ConfigureAwait(false);
             if (bytes is null) return null;
 
             WriteCache(cachePath, bytes);
@@ -319,7 +366,7 @@ public sealed class NetworkChunkSource : IChunkSource
     ];
 
     private async Task<byte[]?> FetchWithRetryAsync(
-        AssetKind kind, TileId id, (AssetKind, TileId) key, CancellationToken ct)
+        Ask key, CancellationToken ct)
     {
         try
         {
@@ -332,7 +379,7 @@ public sealed class NetworkChunkSource : IChunkSource
 
         try
         {
-            return await FetchLoopAsync(kind, id, key, ct).ConfigureAwait(false);
+            return await FetchLoopAsync(key, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -341,11 +388,11 @@ public sealed class NetworkChunkSource : IChunkSource
     }
 
     private async Task<byte[]?> FetchLoopAsync(
-        AssetKind kind, TileId id, (AssetKind, TileId) key, CancellationToken ct)
+        Ask key, CancellationToken ct)
     {
         for (int attempt = 0; ; attempt++)
         {
-            var result = await FetchSharedAsync(kind, id, ct).ConfigureAwait(false);
+            var result = await FetchSharedAsync(key, ct).ConfigureAwait(false);
             if (result.Data is { } data) return data;
 
             // The server said it genuinely does not have this file. Remember it: with the LOD
@@ -373,14 +420,15 @@ public sealed class NetworkChunkSource : IChunkSource
     /// Coalesces concurrent requests for the same file. The LOD rings ask for a tile from
     /// several distances at once, and without this each would open its own transfer.
     /// </summary>
-    private Task<AssetResult> FetchSharedAsync(AssetKind kind, TileId id, CancellationToken ct)
+    private Task<AssetResult> FetchSharedAsync(Ask key, CancellationToken ct)
     {
-        var key = (kind, id);
         lock (_gate)
         {
             if (_inFlight.TryGetValue(key, out var existing)) return existing;
 
-            var task = _streamer.FetchAsync(kind, id, ct);
+            var task = key.Kind == AssetKind.Leaf
+                ? _streamer.FetchCubeAsync(key.Kind, key.Cube, key.Section, ct)
+                : _streamer.FetchAsync(key.Kind, key.Tile, ct);
             _inFlight[key] = task;
 
             _ = task.ContinueWith(_ =>

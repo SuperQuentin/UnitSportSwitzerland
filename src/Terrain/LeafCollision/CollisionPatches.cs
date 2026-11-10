@@ -28,6 +28,8 @@ public sealed class CollisionPatches(Func<CubeKey, Vector3[]?> build, int worker
 
     private readonly object _gate = new();
     private readonly HashSet<CubeKey> _held = new(), _building = new(), _dropped = new();
+    /// <summary>Held patches with no faces; patches handed out and waiting to be built again; builds begun before a <see cref="Rebuild"/>.</summary>
+    private readonly HashSet<CubeKey> _empty = new(), _rebuilding = new(), _stale = new();
     private readonly List<(CubeKey Key, double Distance)> _waiting = new();
     private readonly ConcurrentQueue<(CubeKey Key, Vector3[]? Faces)> _ready = new();
     private readonly ConcurrentQueue<CubeKey> _released = new();
@@ -51,6 +53,26 @@ public sealed class CollisionPatches(Func<CubeKey, Vector3[]?> build, int worker
 
     public bool TryTakeReleased(out CubeKey key) => _released.TryDequeue(out key);
 
+    /// <summary>
+    /// Held patches built again on the next <see cref="Update"/> that still wants them, without being released first: the
+    /// new faces come out of <see cref="TryTakeReady"/> for a key already handed out, and replace the old ones (#1655: a
+    /// streamed leaf arrived, or the server's leaves changed what was built). <paramref name="emptyOnly"/>: only those
+    /// built with no ground (their leaf had not come).
+    /// </summary>
+    public void Rebuild(Func<CubeKey, bool> which, bool emptyOnly = false)
+    {
+        lock (_gate)
+        {
+            foreach (var k in _held.Where(k => which(k) && (!emptyOnly || _empty.Contains(k))).ToList())
+            {
+                _held.Remove(k);
+                _rebuilding.Add(k);
+            }
+            if (!emptyOnly)
+                foreach (var k in _building) if (which(k)) _stale.Add(k);
+        }
+    }
+
     /// <summary>The bodies now: asks for the patches they want, releases those none holds.</summary>
     public void Update(IReadOnlyList<Body> bodies)
     {
@@ -73,6 +95,14 @@ public sealed class CollisionPatches(Func<CubeKey, Vector3[]?> build, int worker
             foreach (var k in _held.Where(k => !keep.Contains(k)).ToList())
             {
                 _held.Remove(k);
+                _empty.Remove(k);
+                _released.Enqueue(k);
+            }
+            // a patch waiting to be built again whose body went away: its old faces are released
+            foreach (var k in _rebuilding.Where(k => !keep.Contains(k)).ToList())
+            {
+                _rebuilding.Remove(k);
+                _empty.Remove(k);
                 _released.Enqueue(k);
             }
             foreach (var k in _building) if (!keep.Contains(k)) _dropped.Add(k);
@@ -109,9 +139,15 @@ public sealed class CollisionPatches(Func<CubeKey, Vector3[]?> build, int worker
                     _building.Remove(key);
                     if (!_dropped.Remove(key))
                     {
-                        _held.Add(key);
+                        _rebuilding.Remove(key);
+                        // built from what a Rebuild replaced: handed out, and built again on the next update
+                        if (_stale.Remove(key)) _rebuilding.Add(key);
+                        else _held.Add(key);
+                        if (faces == null) _empty.Add(key);
+                        else _empty.Remove(key);
                         _ready.Enqueue((key, faces));
                     }
+                    else _stale.Remove(key);
                     Pump();
                 }
             });

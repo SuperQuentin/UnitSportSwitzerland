@@ -576,6 +576,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
         _streamer = ChunkStreamer.CreateServer(chunkDir);
+        // --frame earth (#1655): the leaves on this server's disk, streamed by key to clients that lack them
+        if (_earth != null) _streamer.Leaves = _earth.Store;
         _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)
