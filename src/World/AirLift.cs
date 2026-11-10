@@ -37,6 +37,10 @@ public readonly record struct Thermal(double E, double N, float Ground, float St
 {
     /// <summary>The altitude where the column ends.</summary>
     public float TopAltitude => Ground + Top;
+
+    /// <summary>Two answers about one thermal: a source stays put, only its strength breathes.</summary>
+    public static bool SameSource(in Thermal a, in Thermal b) =>
+        a is var (ae, an, _, _, _, _) && b is var (be, bn, _, _, _, _) && ae == be && an == bn;
 }
 
 /// <summary>The wind of one day: where it blows from and how fast, m/s.</summary>
