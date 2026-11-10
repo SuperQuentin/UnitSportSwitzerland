@@ -136,6 +136,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public required int Side;
         public required Godot.Collections.Array? Arrays;
         public List<(float[] Points, int Count, float Half, float Height)>? Bores;
+        /// <summary>The building sites' pits in its anchor frame (#1653), null without any.</summary>
+        public List<Construction.PitCut>? Pits;
         public LeafTransform? Lattice;
         public (int I, int J) Hint;
         public MeshInstance3D? Mesh;
@@ -372,6 +374,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         // drawn: the bare lattice blended under the roads at the visual clearance, as a tile's mesh (stood on: the collision's)
         var drawn = (float[])prepared.Bare.Clone();
         if (prepared.Bands is { } bands) LeafRoadBlend.Apply(drawn, bands, TerrainMeshBuilder.VisualBlendClearance);
+        // the building sites' pits, cut into the drawn ground as into the collision (#1653)
+        var pits = prepared.Stand.Pits.Count > 0 ? prepared.Stand.PitsInAnchor() : null;
         return new Near
         {
             Key = key,
@@ -379,10 +383,11 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             Anchor = key.Anchor,
             Vertices = vertices,
             Side = side,
-            Arrays = BuildMeshes ? Mesh(drawn, side, content) : null,
+            Arrays = BuildMeshes ? Mesh(drawn, side, content, pits) : null,
             Furniture = BuildMeshes ? Furnish(prepared.Stand, content, side) : null,
             Bores = content.Roads is { } roads ? RoadTunnels.Bores(roads) : null,
             Lattice = LeafFrames.Swiss.TransformOf(key),
+            Pits = pits,
         };
     }
 
@@ -471,9 +476,10 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// terrain material (#1634) as a flat tile's: coloured by its cover through <see cref="CoverPalette"/> at the
     /// vertex's altitude, blended with differing neighbours (<see cref="TerrainMeshBuilder"/>'s boundary blend), in
     /// linear colour, the pattern code in alpha; the leaf's pattern points in CUSTOM1/CUSTOM2 (<see cref="LeafPattern"/>).
-    /// Triangles split as the collision's: along (i, j)–(i+1, j+1), front faces up.
+    /// Triangles split as the collision's: along (i, j)–(i+1, j+1), front faces up. The building sites' pits are cut
+    /// out and lined (<see cref="Construction.PitTerrain.CutMesh"/>, #1653), as the collision's patches are.
     /// </summary>
-    private static Godot.Collections.Array? Mesh(float[] v, int n, CubeLeafContent content)
+    private static Godot.Collections.Array? Mesh(float[] v, int n, CubeLeafContent content, List<Construction.PitCut>? pits = null)
     {
         var pos = new Vector3[n * n];
         for (int k = 0; k < pos.Length; k++) pos[k] = new Vector3(v[3 * k], v[3 * k + 1], v[3 * k + 2]);
@@ -510,6 +516,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         if (indices.Count == 0) return null;
         for (int k = 0; k < pos.Length; k++)
             if (float.IsNaN(pos[k].Y)) pos[k] = Vector3.Zero;
+        int[] index = indices.ToArray();
+        if (pits is { Count: > 0 })
+            (pos, colours, normals, index) = Construction.PitTerrain.CutMesh(pos, colours, normals, index, pits);
 
         // patterns (cover patterns, Cartoon's paint, Realistic's textures) from the leaf's place on the Earth (#1512):
         // the pattern is baked in the stand-in tile's frame, the anchor's shifted
@@ -525,7 +534,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         arrays[(int)Godot.Mesh.ArrayType.Color] = colours;
         arrays[(int)Godot.Mesh.ArrayType.Custom1] = custom1;
         arrays[(int)Godot.Mesh.ArrayType.Custom2] = custom2;
-        arrays[(int)Godot.Mesh.ArrayType.Index] = indices.ToArray();
+        arrays[(int)Godot.Mesh.ArrayType.Index] = index;
         return arrays;
     }
 
@@ -647,6 +656,19 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         && leaf.Bores is { Count: > 0 } bores && RoadTunnels.Inside(bores, x, y, z)
         && HasCollisionAt(worldPos);
 
+    /// <summary>
+    /// Down in a building site's pit (#619) on a loaded leaf (#1653): within half a metre of its rectangle, no lower than
+    /// 1.5 m under its floor, as the flat world's <c>ChunkManager.InPitAt</c>; the height queries answer the ground at its top.
+    /// </summary>
+    private bool InPitAt(Vector3 worldPos)
+    {
+        if (!LeafAt(worldPos, out var leaf, out double x, out double y, out double z) || leaf.Pits is not { } pits) return false;
+        var at = new Vector2((float)x, (float)z);
+        foreach (var pit in pits)
+            if (pit.Rect.Contains(at, 0.5f) && y > pit.Floor - 1.5f) return true;
+        return false;
+    }
+
     private bool CoverAt(Vector3 worldPos, out CoverClass cover)
     {
         cover = default;
@@ -686,8 +708,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public bool TryGetWater(Vector3 worldPos, out float stillLevel, out float waveScale) => w.WaterAt(worldPos, out stillLevel, out waveScale);
         public bool PatternsOnFaces => true;
         public bool InTunnel(Vector3 worldPos) => w.InTunnelAt(worldPos);
-        // building sites stand on leaves with PR 2
-        public bool InPit(Vector3 worldPos) => false;
+        public bool InPit(Vector3 worldPos) => w.InPitAt(worldPos);
         public bool FloorBelow(Node3D body, Vector3 worldPos, Rid self, float depth = 4f) => ChunkManager.RayFloorBelow(body, worldPos, self, depth);
         public bool HasCollisionAt(Vector3 worldPos) => w.HasCollisionAt(worldPos);
         // no buildings on leaves until PR 2: nothing to wait for

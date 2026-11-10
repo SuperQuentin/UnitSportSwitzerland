@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Godot;
+using UnitSport.Terrain.Construction;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain.Leaves;
@@ -25,15 +26,17 @@ public sealed class LeafCollision
     private readonly int _n, _cells;
     private readonly float[] _vertices;
     private readonly HashSet<int>? _holes;
+    /// <summary>The cells reaching into a building site's pit: their ground comes as faces, cut (#1653).</summary>
+    private readonly HashSet<int>? _pitCells;
     private readonly List<Vector3>[] _faces;
 
     public CubeKey Leaf { get; }
 
-    private LeafCollision(CubeKey leaf, int n, float[] vertices, HashSet<int>? holes, List<Vector3>[] faces,
+    private LeafCollision(CubeKey leaf, int n, float[] vertices, HashSet<int>? holes, HashSet<int>? pitCells, List<Vector3>[] faces,
         LeafRoadBlend.Bands? bands, LeafStand stand, float[] bare)
     {
         Leaf = leaf;
-        (_n, _cells, _vertices, _holes, _faces) = (n, n - 1, vertices, holes, faces);
+        (_n, _cells, _vertices, _holes, _pitCells, _faces) = (n, n - 1, vertices, holes, pitCells, faces);
         (Bands, Stand, Bare) = (bands, stand, bare);
     }
 
@@ -79,6 +82,16 @@ public sealed class LeafCollision
         var tileFaces = new List<Vector3>(stand.ExtraFaces);
         if (stand.Buildings != null) tileFaces.AddRange(BuildingMeshBuilder.BuildCollisionFaces(stand.Buildings, stand.Grid));
         foreach (var p in tileFaces) all.Add(LeafStand.ToAnchor(p));
+        // the building sites' pits (#619): the cells reaching into one leave the lattice, their ground outside the pit
+        // and the pit's lining come back as faces (#1653), as the drawn mesh is cut
+        var holes = leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
+        HashSet<int>? pitCells = null;
+        if (stand.Pits.Count > 0)
+        {
+            var (cells, pitFaces) = PitFaces(vertices, n, holes, stand.PitsInAnchor());
+            pitCells = cells;
+            all.AddRange(pitFaces);
+        }
         if (all.Count > 0)
         {
             var t = (frames ?? LeafFrames.Swiss).TransformOf(leaf.Key);
@@ -94,7 +107,41 @@ public sealed class LeafCollision
                 list.Add(all[k + 2]);
             }
         }
-        return new LeafCollision(leaf.Key, n, vertices, leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null, faces, bands, stand, bare);
+        return new LeafCollision(leaf.Key, n, vertices, holes, pitCells, faces, bands, stand, bare);
+    }
+
+    /// <summary>
+    /// The lattice cells (i + (j &lt;&lt; bits), as the holes) whose box meets a pit's, and their triangles with the pits cut out
+    /// and lined (<see cref="PitTerrain.CutFaces"/>), front faces up, in the anchor frame.
+    /// </summary>
+    public static (HashSet<int> Cells, List<Vector3> Faces) PitFaces(float[] v, int n, HashSet<int>? holes, IReadOnlyList<PitCut> pits)
+    {
+        int bits = System.Numerics.BitOperations.Log2((uint)(n - 1));
+        var bounds = pits.Select(p => PitTerrain.Bounds(p.Rect)).ToArray();
+        var cells = new HashSet<int>();
+        var soup = new List<Vector3>();
+        for (int j = 0; j + 1 < n; j++)
+            for (int i = 0; i + 1 < n; i++)
+            {
+                int key = i + (j << bits);
+                if (holes?.Contains(key) == true) continue;
+                int a = j * n + i, b = a + 1, c = a + n, d = c + 1;
+                float x0 = Math.Min(Math.Min(v[a * 3], v[b * 3]), Math.Min(v[c * 3], v[d * 3]));
+                float x1 = Math.Max(Math.Max(v[a * 3], v[b * 3]), Math.Max(v[c * 3], v[d * 3]));
+                float z0 = Math.Min(Math.Min(v[a * 3 + 2], v[b * 3 + 2]), Math.Min(v[c * 3 + 2], v[d * 3 + 2]));
+                float z1 = Math.Max(Math.Max(v[a * 3 + 2], v[b * 3 + 2]), Math.Max(v[c * 3 + 2], v[d * 3 + 2]));
+                bool near = false;
+                foreach (var (bx0, bz0, bx1, bz1) in bounds)
+                    if (x1 > bx0 && x0 < bx1 && z1 > bz0 && z0 < bz1) { near = true; break; }
+                if (!near) continue;
+                if (float.IsNaN(v[a * 3 + 1]) || float.IsNaN(v[b * 3 + 1]) || float.IsNaN(v[c * 3 + 1]) || float.IsNaN(v[d * 3 + 1])) continue;
+                cells.Add(key);
+                soup.Add(V(a)); soup.Add(V(d)); soup.Add(V(b));
+                soup.Add(V(a)); soup.Add(V(c)); soup.Add(V(d));
+            }
+        return (cells, PitTerrain.CutFaces(soup, pits));
+
+        Vector3 V(int k) => new(v[k * 3], v[k * 3 + 1], v[k * 3 + 2]);
     }
 
     /// <summary>Which patch of its leaf a patch key is (0..<see cref="PerSide"/> − 1 along u and v).</summary>
@@ -127,7 +174,7 @@ public sealed class LeafCollision
         for (int j = j0; j < j0 + per; j++)
             for (int i = i0; i < i0 + per; i++)
             {
-                if (_holes?.Contains(i + (j << Bits)) == true) continue;
+                if (_holes?.Contains(i + (j << Bits)) == true || _pitCells?.Contains(i + (j << Bits)) == true) continue;
                 int a = j * _n + i, b = a + 1, c = a + _n, d = c + 1;
                 if (float.IsNaN(v[a * 3 + 1]) || float.IsNaN(v[b * 3 + 1]) || float.IsNaN(v[c * 3 + 1]) || float.IsNaN(v[d * 3 + 1])) continue;
                 // clockwise seen from above, as the drawn mesh: Godot's front faces, and a trimesh collides with those only
