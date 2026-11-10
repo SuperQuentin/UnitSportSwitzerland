@@ -406,8 +406,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
             AddChild(new World.Fun.FunCrates(_brCrates));
         }
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
-            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
+            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), _earth != null ? content : source, _brCrates);
         br.Origin = origin;
+        // on leaves the match square's roads are the leaves' (#1704): the flat world holds none under earth
+        if (_earth is { } brEarth)
+        {
+            br.TilesOf = BattleRoyale.BrLoot.LeafTiles;
+            br.LeafRoads = key => brEarth.Leaves.Get(key)?.Roads;
+        }
         AddChild(br);
         _chat.BattleRoyale = br;
         // one "in a round" registry (#1268, Core/Rounds): the Battle Royale first, so it keeps its own answers

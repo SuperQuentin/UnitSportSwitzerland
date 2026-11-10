@@ -45,6 +45,16 @@ public partial class BrManager : Node
 
     // ---- server: the match's loot (#194) ----
     private Terrain.IChunkSource? _source;
+
+    /// <summary>
+    /// Server: the ground's names for the tiles over a match square when they are not its LV95 tiles (#1704): under
+    /// <c>--frame earth</c> the leaves' stand-ins (<see cref="BrLoot.LeafTiles"/>), read through the ground's own files.
+    /// Null in the flat world.
+    /// </summary>
+    public Func<BrArea, IEnumerable<TileId>>? TilesOf { get; set; }
+
+    /// <summary>Server, with <see cref="TilesOf"/>: a leaf's own roads (its anchor frame), made or read without its collision.</summary>
+    public Func<CubeKey, RoadTile?>? LeafRoads { get; set; }
     private BrCrates? _crates;
     private readonly HashSet<int> _dropped = new();
     private int _match;
@@ -590,7 +600,7 @@ public partial class BrManager : Node
         if (_source == null || Origin == null) return;
         try
         {
-            var roads = await BrLoot.RoadPoints(_source, area);
+            var roads = await BrLoot.RoadPoints(_source, area, TilesOf?.Invoke(area), LeafRoads);
             if (match != _match || _state.Phase != BrPhase.Playing) return;
             // the Postauto stops for recalls (#480), squads only
             if (_state.TeamSize > 1)
