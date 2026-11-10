@@ -26,6 +26,13 @@ public static class TramStopStage
         var manifestPath = Path.Combine(outDir, "manifest.json");
         if (!File.Exists(manifestPath)) { Console.Error.WriteLine($"--tram-stops needs a built region: no {manifestPath}"); return 2; }
         var tiles = TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet();
+        return Run(tiles, tlmPath, outDir.TrimEnd('/', '\\') + "_temp");
+    }
+
+    /// <summary>The stops in the region's LV95 km cells into <paramref name="temp"/> (a cube region's, #1711, or an LV95 build's).</summary>
+    public static int Run(HashSet<TileId> tiles, string tlmPath, string temp)
+    {
+        if (!File.Exists(tlmPath)) { Console.Error.WriteLine($"swissTLM3D GeoPackage not found: {tlmPath}"); return 1; }
         if (tiles.Count == 0) return 0;
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MaxN) - ChunkFormat.TileSizeM, maxN = tiles.Max(t => t.MaxN);
@@ -56,7 +63,6 @@ public static class TramStopStage
         var sb = new StringBuilder("name\te\tn\n");
         foreach (var (name, e, n) in stops)
             sb.Append(CultureInfo.InvariantCulture, $"{name.Replace('\t', ' ')}\t{e:F2}\t{n:F2}\n");
-        string temp = outDir.TrimEnd('/', '\\') + "_temp";
         Directory.CreateDirectory(temp);
         File.WriteAllText(Path.Combine(temp, FileName), sb.ToString());
         Console.WriteLine($"[tram-stops] {stops.Count} stops by {segments.Count:N0} tram track segments -> {Path.Combine(temp, FileName)}");

@@ -26,9 +26,13 @@ public sealed class GeoInput
     private const int Side = (ChunkFormat.GridSize - 1) / Stride + 1;
 
     private readonly string? _dir;
+    private readonly Func<double, double, double>? _ground;
     private readonly ConcurrentDictionary<TileId, float[]?> _tiles = new();
 
-    private GeoInput(string? dir) => _dir = dir;
+    private GeoInput(string? dir, Func<double, double, double>? ground = null) => (_dir, _ground) = (dir, ground);
+
+    /// <summary>Points on any ground (LHN95 at an LV95 point, NaN off it): a cube region's leaves (#1711, <see cref="BuiltLeaves"/>).</summary>
+    public static GeoInput On(Func<double, double, double> ground) => new(null, ground);
 
     /// <summary>Points on the ground of the tiles built in <paramref name="chunkDir"/> (<c>.terrc</c>, else <c>.terr</c>), where there are any.</summary>
     public static GeoInput Over(string? chunkDir) => chunkDir != null && Directory.Exists(chunkDir) ? new GeoInput(chunkDir) : NoGround;
@@ -53,6 +57,7 @@ public sealed class GeoInput
     /// <summary>The tiles' ground (LHN95) at an LV95 point, bilinear over the kept heights; NaN off the tiles.</summary>
     public double Ground(double e, double n)
     {
+        if (_ground != null) return _ground(e, n);
         if (_dir == null) return double.NaN;
         var id = TileId.FromLv95(e, n);
         if (_tiles.GetOrAdd(id, Load) is not { } h) return double.NaN;

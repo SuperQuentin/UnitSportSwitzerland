@@ -25,6 +25,9 @@ Flickering faces have two causes, and each test catches what the other cannot.
   `tests/zfight-baseline.txt` (cm² per model). A model over its line, or a new model that fights,
   fails. `--zfightcheck update` rewrites the baseline: do it after fixing faces, and commit it.
   `--zfightcheck <text>` narrows the run; `--zfighthidden` keeps the hidden faces.
+  `--zfightshard K/N` scans every Nth model from the Kth (#1702): `checkmap.txt` runs four parts that
+  `tools/test.sh` starts side by side. One whole run took 629 s and ended a quick tier on its own.
+  `update` rewrites the whole baseline, so it refuses a shard.
   A model over 200,000 triangles or 5 km across is skipped and named (`skipped:`): the scan's grid
   is sized by the mean triangle, and the whole-Earth globe (#1430 H4) hung the check from 3 November
   until #1501's fix. A model over 2 s is named (`slow:`), a category over 5 s too; `--zfighttrace`

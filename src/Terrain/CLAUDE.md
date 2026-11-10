@@ -121,4 +121,4 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `judge-terrain-blend-shaded-relief` — Judge a terrain blend by shaded relief, and turn what the eye finds into a BlendCheck number
 - `saved-max-builds-one-looks-broken` — A saved `maxConcurrentBuilds: 1` makes the loader look broken: check settings.json, pass `--builds 0` to probes
 - `heightfield-pow2` — ground collision cells are 256² height maps with NaN holes past the data: Jolt walked past a 251² one and crashed `MoveAndSlide` now and then (#812)
-- `collision-patches` — G2 C2 (#1511): trimesh patches (level-16 cube cells, 128² cells) of a leaf's triangles plus road and building faces, the road blend on a leaf, the provider round bodies (`CollisionPatches`, reach in metres), `--cubeharness --cubepatches`
+- `collision-patches` — G2 C2 (#1511): trimesh patches (level-16 cube cells, 128² cells) of a leaf's triangles plus road and building faces, the road blend on a leaf, the provider round bodies (`CollisionPatches`, reach in metres), `--cubeharness --cubepatches`; a loaded leaf's preparation pinned so patches and its height query agree (#1626, `earthcheck.sh border`)

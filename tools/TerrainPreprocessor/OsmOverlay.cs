@@ -69,7 +69,7 @@ public static class OsmOverlay
 
     // ---- stage entry point -------------------------------------------------------------------
 
-    public static int Run(string pbfPath, string tlmGpkg, string tempDir, IReadOnlyCollection<TileId> tiles, int jobs, string? chunkDir = null)
+    public static int Run(string pbfPath, string tlmGpkg, string tempDir, IReadOnlyCollection<TileId> tiles, int jobs, string? chunkDir = null, GeoInput? geo = null)
     {
         if (!File.Exists(pbfPath)) { Console.Error.WriteLine($"--osm-overlay: {pbfPath} not found"); return 2; }
         if (tiles.Count == 0) { Console.Error.WriteLine("--osm-overlay: no tiles"); return 2; }
@@ -88,7 +88,7 @@ public static class OsmOverlay
         double tlmSec = clock.Elapsed.TotalSeconds;
         Console.WriteLine($"  {tlm.Count:N0} TLM line parts in {tlmSec:F0} s; reading {Path.GetFileName(pbfPath)} "
             + $"({new FileInfo(pbfPath).Length / 1e6:N0} MB)...");
-        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, near, jobs, GeoInput.Over(chunkDir));
+        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, near, jobs, geo ?? GeoInput.Over(chunkDir));
         double osmSec = clock.Elapsed.TotalSeconds - tlmSec;
         Console.WriteLine($"  {osm.Count:N0} OSM way pieces in {osmSec:F0} s; matching them to the TLM lines, then signals and turn restrictions...");
         var result = Conflate(tlm, osm);

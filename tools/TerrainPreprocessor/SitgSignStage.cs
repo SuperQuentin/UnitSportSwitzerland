@@ -39,10 +39,15 @@ public static class SitgSignStage
     {
         var manifestPath = Path.Combine(outDir, "manifest.json");
         if (!File.Exists(manifestPath)) { Console.Error.WriteLine($"--sitg-signs needs a built region: no {manifestPath}"); return 2; }
-        string temp = tempDir ?? outDir.TrimEnd('/', '\\') + "_temp";
+        return Run(TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToList(),
+            tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", force);
+    }
+
+    /// <summary>The signs over the region's LV95 km cells into <paramref name="temp"/> (a cube region's, #1711, or an LV95 build's).</summary>
+    public static int Run(IReadOnlyList<TileId> tiles, string temp, bool force)
+    {
         string file = Path.Combine(temp, FileName);
         if (File.Exists(file) && !force) { Console.WriteLine($"[sitg-signs] kept {file} (--force to fetch again)"); return 0; }
-        var tiles = TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToList();
         if (tiles.Count == 0) return 0;
         double minE = Math.Max(tiles.Min(t => t.MinE), CantonMinE), maxE = Math.Min(tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM, CantonMaxE);
         double minN = Math.Max(tiles.Min(t => t.MaxN) - ChunkFormat.TileSizeM, CantonMinN), maxN = Math.Min(tiles.Max(t => t.MaxN), CantonMaxN);

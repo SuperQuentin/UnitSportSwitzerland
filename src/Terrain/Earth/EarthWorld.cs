@@ -90,6 +90,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private readonly ConcurrentQueue<CubeKey> _abandoned = new();
     private readonly SemaphoreSlim _workers = new(Workers);
     private readonly Dictionary<CubeKey, StaticBody3D> _bodies = new();
+    /// <summary>
+    /// The leaf preparation each standing body was cut from (#1626): a loaded leaf answers its heights from its own, and
+    /// a body cut from another is built again. Main thread; <see cref="_cutFrom"/> carries it from the patch's worker.
+    /// </summary>
+    private readonly Dictionary<CubeKey, LeafCollision> _bodyFrom = new();
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Vector3[], LeafCollision> _cutFrom = new();
     private readonly List<Node3D> _anchors = new();
     private readonly HashSet<Node3D> _collisionAnchors = new();
     private readonly List<CollisionPatches.Body> _bodyList = new();
@@ -141,6 +147,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public required CubeLeafContent Content;
         public required EnuFrame Anchor;
         public required float[] Vertices;
+        /// <summary>What its vertices and its patches come from, pinned in the collision source while it is loaded (#1626).</summary>
+        public required LeafCollision Prepared;
         public required int Side;
         public required Godot.Collections.Array? Arrays;
         public List<(float[] Points, int Count, float Half, float Height)>? Bores;
@@ -159,7 +167,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         Origin = origin;
         Name = "Earth";
         _collisionSource = new LeafCollisionSource(leaves.Get);
-        _patches = new CollisionPatches(_collisionSource.Build)
+        _patches = new CollisionPatches(CutPatch)
         {
             Failed = (key, e) => GD.PushError($"[earth] collision patch {key}: {e.Message}"),
         };
@@ -269,7 +277,11 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         // a few patches a frame: each is one trimesh shape
         for (int k = 0; k < 2 && _patches.TryTakeReady(out var key, out var faces); k++) AddBody(key, faces);
         while (_patches.TryTakeReleased(out var gone))
-            if (_bodies.Remove(gone, out var body)) body.QueueFree();
+            if (_bodies.Remove(gone, out var body))
+            {
+                body.QueueFree();
+                _bodyFrom.Remove(gone);
+            }
     }
 
     /// <summary>Which leaves are wanted: every leaf within <see cref="NearM"/> of a focus, by a walk over cube neighbours.</summary>
@@ -400,6 +412,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             Content = content,
             Anchor = key.Anchor,
             Vertices = vertices,
+            Prepared = prepared,
             Side = side,
             Arrays = BuildMeshes ? Mesh(drawn, side, content, pits) : null,
             Furniture = BuildMeshes ? Furnish(prepared.Stand, content, side) : null,
@@ -425,6 +438,18 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         // patches built while this leaf had not come stood on nothing: built again now it has
         if (!Store.IsLocal(leaf.Key)) _patches.Rebuild(p => LeafCollision.Split(p).Leaf == leaf.Key, emptyOnly: true);
         _near[leaf.Key] = leaf;
+        // its heights are answered from this preparation from now on: the patches are cut from it alone (#1626), and those
+        // standing already from another (the source's cache dropped and the leaf prepared again from a later view of the
+        // fill, its neighbours' roads) are built again
+        _collisionSource.Pin(leaf.Prepared);
+        int other = 0;
+        foreach (var (p, from) in _bodyFrom)
+            if (from.Leaf == leaf.Key && from != leaf.Prepared) other++;
+        if (other > 0)
+        {
+            GD.Print($"[earth] {leaf.Key}: {other} patches cut from another preparation of it, built again (#1626)");
+            _patches.Rebuild(p => _bodyFrom.TryGetValue(p, out var from) && from.Leaf == leaf.Key && from != leaf.Prepared);
+        }
         if (leaf.Arrays is { } arrays)
         {
             var mesh = new ArrayMesh();
@@ -446,26 +471,88 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     {
         _stale.Remove(key);
         if (!_near.Remove(key, out var leaf)) return;
+        if (_collisionSource.PinnedOf(key) == leaf.Prepared) _collisionSource.Unpin(key);
         leaf.Mesh?.QueueFree();
         if (leaf.Node != null) Unfurnish(key, leaf.Node);
         TileUnloaded?.Invoke(GroundTile.FromLeaf(key));
     }
 
-    private void AddBody(CubeKey key, PatchFaces? faces)
+    /// <summary>
+    /// Every standing patch built again, the produced leaves (<see cref="EarthLeaves.DropMade"/>) and the preparations of
+    /// the leaves not loaded (<see cref="LeafCollisionSource.Trim"/>) dropped first, as their trims do on a long journey:
+    /// <c>--earthcheck</c>'s stress of #1626. The count of standing patches. Main thread.
+    /// </summary>
+    internal int RecutPatches()
+    {
+        Leaves.DropMade();
+        _collisionSource.Trim();
+        _patches.Rebuild(_ => true);
+        return _bodies.Count;
+    }
+
+    /// <summary>No patch waiting, building or built and not yet standing.</summary>
+    internal bool CollisionSettled => !_patches.Busy && !_patches.HasReady;
+
+    /// <summary>A patch's faces, on a patch worker, with the preparation they were cut from noted for <see cref="AddBody"/>.</summary>
+    private Vector3[]? CutPatch(CubeKey key)
+    {
+        var faces = _collisionSource.Build(key, out var from);
+        if (faces != null && from != null) _cutFrom.AddOrUpdate(faces, from);
+        return faces;
+    }
+
+    /// <summary>
+    /// The shape index of a patch body's roads and buildings (<see cref="GroundShape"/> its ground): a ray's
+    /// <c>shape</c> tells which it hit (#1626: the ground off the height query is a fault, a roof over it is not).
+    /// </summary>
+    public const int GroundShape = 0, FeatureShape = 1;
+
+    private static readonly StringName FeaturesOnly = "features_only";
+
+    /// <summary>Whether a ray's hit (its <c>collider</c> and <c>shape</c>) is a leaf's ground, not a road or building on it.</summary>
+    public static bool IsGroundHit(GodotObject? collider, int shape) =>
+        collider is StaticBody3D body && body.IsInGroup(GroundGroup) && shape == GroundShape && !body.HasMeta(FeaturesOnly);
+
+    private void AddBody(CubeKey key, Vector3[]? faces)
     {
         // a patch built again (CollisionPatches.Rebuild): the new faces replace the old body
         if (_bodies.Remove(key, out var old)) old.QueueFree();
-        if (faces is not { Ground.Length: >= 3 }) return;
+        _bodyFrom.Remove(key);
+        if (faces is not { Length: >= 3 }) return;
         var (leaf, _, _) = LeafCollision.Split(key);
+        if (_cutFrom.TryGetValue(faces, out var from))
+        {
+            _cutFrom.Remove(faces);
+            _bodyFrom[key] = from;
+            // cut from another preparation than the loaded leaf answers from (begun before it was pinned): built again
+            if (_near.TryGetValue(leaf, out var near) && near.Prepared != from)
+            {
+                GD.Print($"[earth] {key}: cut from another preparation of {leaf} than it answers from, built again (#1626)");
+                _patches.Rebuild(p => p == key);
+            }
+        }
         var body = new StaticBody3D { Name = key.FileStem };
         body.AddToGroup(GroundGroup);
-        body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces.Ground } });
-        // its buildings in a body of their own, placed with it (#1704): an open doorway lets a walker through them alone
-        if (faces.Buildings.Length >= 3)
+        // the ground first, then the roads and buildings as a second shape (the patch lists them last)
+        int features = from?.FeatureVertices(key) ?? 0;
+        int ground = faces.Length - features;
+        if (features <= 0 || ground < 3)
         {
-            var shells = new StaticBody3D { Name = BuildingBodyName };
-            shells.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces.Buildings } });
-            body.AddChild(shells);
+            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
+            // one shape: the ground's when the patch has no features, else theirs (its ground all holes)
+            if (features > 0) body.SetMeta(FeaturesOnly, true);
+        }
+        else
+        {
+            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces[..ground] } });
+            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces[ground..] } });
+        }
+        // its buildings in a body of their own, placed with it (#1704): an open doorway lets a walker through them alone
+        if (from?.Buildings(key) is { Length: >= 3 } shells)
+        {
+            var buildings = new StaticBody3D { Name = BuildingBodyName };
+            buildings.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = shells } });
+            body.AddChild(buildings);
         }
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);

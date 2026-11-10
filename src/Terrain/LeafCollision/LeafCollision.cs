@@ -213,6 +213,16 @@ public sealed class LeafCollision
         return _buildings[pi + pj * PerSide].ToArray();
     }
 
+    /// <summary>
+    /// How many of a patch's vertices (<see cref="Patch"/>, features on, buildings off) are its roads' and the sites' pits':
+    /// the last ones. The buildings are a body of their own (<see cref="Buildings"/>, #1704).
+    /// </summary>
+    public int FeatureVertices(CubeKey patch)
+    {
+        var (_, pi, pj) = Split(patch);
+        return _faces[pi + pj * PerSide].Count;
+    }
+
     private int Bits => System.Numerics.BitOperations.Log2((uint)_cells);
 }
 
@@ -220,24 +230,37 @@ public sealed class LeafCollision
 /// The patch builder over leaves (#1511): a patch's leaf prepared once (<see cref="LeafCollision.Prepare"/>, its
 /// neighbours' roads for the blend at its edges) and kept for the last <see cref="KeptLeaves"/> leaves, then cut. The
 /// leaves come from whoever holds them (C1's earth streamer; a region's <c>.cubl</c> in the harness).
+/// A leaf whose heights someone answers from (the earth world's loaded leaves) is <see cref="Pin"/>ned: it is never
+/// dropped nor prepared again while pinned, so its patches and its height query stand on the same vertices (#1626: a
+/// leaf prepared again from a later view of the fill, its neighbours' roads or the fill's domain grown, stood 27 m off).
 /// </summary>
 public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, LeafFrames? frames = null)
 {
     public const int KeptLeaves = 32;
 
     private readonly ConcurrentDictionary<CubeKey, Lazy<LeafCollision?>> _prepared = new();
+    private readonly ConcurrentDictionary<CubeKey, LeafCollision> _pinned = new();
 
     /// <summary>A patch's faces; null when its leaf has no ground.</summary>
-    public PatchFaces? Build(CubeKey patch)
+    public Vector3[]? Build(CubeKey patch) => Build(patch, out _);
+
+    /// <summary>
+    /// A patch's faces and the leaf's preparation they were cut from (null with them). Its buildings are not in them: they
+    /// are a body of their own (<see cref="LeafCollision.Buildings"/>, #1704).
+    /// </summary>
+    public Vector3[]? Build(CubeKey patch, out LeafCollision? from)
     {
         var (leaf, _, _) = LeafCollision.Split(patch);
-        return Prepared(leaf) is { } c ? new PatchFaces(c.Patch(patch, buildings: false), c.Buildings(patch)) : null;
+        from = Prepared(leaf);
+        return from?.Patch(patch, buildings: false);
     }
 
     /// <summary>A leaf prepared, kept; a leaf that gave nothing (a streamed one not come yet, #1655) is asked again next time.</summary>
     public LeafCollision? Prepared(CubeKey leaf)
     {
-        if (_prepared.Count > KeptLeaves) _prepared.Clear();
+        if (_pinned.TryGetValue(leaf, out var pinned)) return pinned;
+        // the unpinned ones past the kept: dropped together (a pinned leaf is held by its own entry)
+        if (_prepared.Count - _pinned.Count > KeptLeaves) Trim();
         var lazy = _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
             leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames) : null));
         var value = lazy.Value;
@@ -245,6 +268,29 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
         return value;
     }
 
-    /// <summary>Every prepared leaf dropped (#1655: the server's leaves changed what they were prepared from).</summary>
-    public void Forget() => _prepared.Clear();
+    /// <summary>
+    /// A leaf's preparation held as it is until <see cref="Unpin"/> (or <see cref="Forget"/>): every later
+    /// <see cref="Prepared"/> and patch of that leaf is cut from it.
+    /// </summary>
+    public void Pin(LeafCollision prepared) => _pinned[prepared.Leaf] = prepared;
+
+    /// <summary>Every preparation but the pinned ones dropped: the next ask of such a leaf prepares it again.</summary>
+    public void Trim()
+    {
+        foreach (var k in _prepared.Keys)
+            if (!_pinned.ContainsKey(k)) _prepared.TryRemove(k, out _);
+    }
+
+    /// <summary>A leaf no longer held as pinned (its preparation may be dropped and made again).</summary>
+    public void Unpin(CubeKey leaf) => _pinned.TryRemove(leaf, out _);
+
+    /// <summary>The leaf's pinned preparation, null when it is not pinned.</summary>
+    public LeafCollision? PinnedOf(CubeKey leaf) => _pinned.GetValueOrDefault(leaf);
+
+    /// <summary>Every prepared leaf dropped, the pinned ones too (#1655: the server's leaves changed what they were prepared from).</summary>
+    public void Forget()
+    {
+        _pinned.Clear();
+        _prepared.Clear();
+    }
 }

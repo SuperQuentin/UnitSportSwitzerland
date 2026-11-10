@@ -4,9 +4,6 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain.Leaves;
 
-/// <summary>A patch's faces (anchor frame): the ground with roads and pits, and its buildings' for a body of their own (#1704).</summary>
-public sealed record PatchFaces(Vector3[] Ground, Vector3[] Buildings);
-
 /// <summary>
 /// Collision patches round bodies, on client and server alike (#1511, G2 C2): every patch (a level-16 cube cell, ~150 m, <c>LeafCollision</c>) a body or its look-ahead point is within <see cref="CollisionReach.RadiusM"/> of is built
 /// on a worker; a patch is released once every body is past <see cref="CollisionReach.ReleaseM"/>; an airborne body wants
@@ -21,7 +18,7 @@ public sealed record PatchFaces(Vector3[] Ground, Vector3[] Buildings);
 /// that order. Thread-safe.
 /// </para>
 /// </summary>
-public sealed class CollisionPatches(Func<CubeKey, PatchFaces?> build, int workers = 2)
+public sealed class CollisionPatches(Func<CubeKey, Vector3[]?> build, int workers = 2)
 {
     /// <summary>A patch's level: two below a leaf's, 128 of its 512 lattice cells a side (~150 m).</summary>
     public const int PatchLevel = LeafFrames.LeafLevel + 2;
@@ -34,7 +31,7 @@ public sealed class CollisionPatches(Func<CubeKey, PatchFaces?> build, int worke
     /// <summary>Held patches with no faces; patches handed out and waiting to be built again; builds begun before a <see cref="Rebuild"/>.</summary>
     private readonly HashSet<CubeKey> _empty = new(), _rebuilding = new(), _stale = new();
     private readonly List<(CubeKey Key, double Distance)> _waiting = new();
-    private readonly ConcurrentQueue<(CubeKey Key, PatchFaces? Faces)> _ready = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Vector3[]? Faces)> _ready = new();
     private readonly ConcurrentQueue<CubeKey> _released = new();
     private int _running;
 
@@ -47,7 +44,10 @@ public sealed class CollisionPatches(Func<CubeKey, PatchFaces?> build, int worke
     /// <summary>Whether a build is running or waiting.</summary>
     public bool Busy { get { lock (_gate) return _running > 0 || _waiting.Count > 0; } }
 
-    public bool TryTakeReady(out CubeKey key, out PatchFaces? faces)
+    /// <summary>Built patches not taken yet (<see cref="TryTakeReady"/>).</summary>
+    public bool HasReady => !_ready.IsEmpty;
+
+    public bool TryTakeReady(out CubeKey key, out Vector3[]? faces)
     {
         bool ok = _ready.TryDequeue(out var r);
         (key, faces) = r;
@@ -133,7 +133,7 @@ public sealed class CollisionPatches(Func<CubeKey, PatchFaces?> build, int worke
             _running++;
             Task.Run(() =>
             {
-                PatchFaces? faces = null;
+                Vector3[]? faces = null;
                 try { faces = build(key); }
                 catch (Exception e) { Failed?.Invoke(key, e); }
                 lock (_gate)
