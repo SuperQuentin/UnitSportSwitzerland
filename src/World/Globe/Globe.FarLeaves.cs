@@ -35,6 +35,12 @@ public partial class Globe
 
     public Material? TreeMaterial { get; set; }
 
+    /// <summary>The world's water material (the flat streamer's), for the lakes past the near leaves (#1669).</summary>
+    public Material? WaterMaterial { get; set; }
+
+    // each tile's lakes, shown with the terrain material (below TerrainBelowM)
+    private readonly Dictionary<CubeKey, MeshInstance3D> _lakes = new();
+
     private HashSet<CubeKey>? _realAncestors;
     private readonly Dictionary<CubeKey, double> _distance = new();
     private readonly Dictionary<CubeKey, MeshInstance3D> _buildings = new();
@@ -61,11 +67,12 @@ public partial class Globe
         Earth && FarLeafM > 0 && key.Level == LeafFrames.LeafLevel && RealLeaves is { } real && real.IsLocal(key);
 
     /// <summary>A far leaf's mesh and trees, on a worker: heights, water, cover and trees read alone.</summary>
-    private (Godot.Collections.Array Arrays, ChunkNode.TreeMeshes? Trees)? BuildFarLeaf(CubeKey key, LeafStore real)
+    private (Godot.Collections.Array Arrays, ChunkNode.TreeMeshes? Trees, WaterMeshBuilder.MeshData? Water)? BuildFarLeaf(CubeKey key, LeafStore real)
     {
         if (real.Sections(key, LeafKind.Heights, LeafKind.Water, LeafKind.Cover, LeafKind.Trees) is not { Heights: { } heights } content)
             return null;
-        if (Build(heights, null, default, content.Water, LeafStride, content.Cover, AncestorTile) is not { } arrays) return null;
+        var lakes = new WaterOut();
+        if (Build(heights, null, default, content.Water, LeafStride, content.Cover, AncestorTile, lakes) is not { } arrays) return null;
         ChunkNode.TreeMeshes? trees = null;
         if (content.Trees is { Count: > 0 } all && TreeMaterial is { } treeMaterial)
         {
@@ -87,7 +94,7 @@ public partial class Globe
                 trees = ChunkNode.BuildTreeMeshes(ChunkNode.BuildTreeBuffers(kept), treeMaterial, bounds, Styles.StyleKit.Detail);
             }
         }
-        return (arrays, trees);
+        return (arrays, trees, lakes.Mesh);
     }
 
     /// <summary>A far leaf's trees under its tile's node: the billboards (all 3D where the style has none), no shadow.</summary>

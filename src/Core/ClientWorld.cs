@@ -820,8 +820,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     g.TerrainMaterial = globeTerrain;
                     if (_chunks is { } flat)
                     {
-                        var (_, building, tree, _, _) = flat.FurnishMaterials;
-                        (g.BuildingMaterial, g.TreeMaterial) = (building, tree);
+                        var (_, building, tree, water, _) = flat.FurnishMaterials;
+                        (g.BuildingMaterial, g.TreeMaterial, g.WaterMaterial) = (building, tree, water);
                         g.FarLeafM = (flat.Lod.Rings[^1].MaxDist + 0.5) * 1000;
                         g.FarBuildingsM = (flat.Lod.BuildingMaxDist + 0.5) * 1000;
                         g.FarTreeShare = flat.Lod.TreeDensity(3);
