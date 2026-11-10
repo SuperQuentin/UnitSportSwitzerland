@@ -9,6 +9,7 @@
 #   NOTERRAIN (--chunks $OUT/no_terrain), an empty folder: for a check of the GENERATED world, on its
 #           server and every client, so a terrain_location.json or UNITSPORT_CHUNKS pointing at real
 #           tiles (the main checkout's) never puts real ground under its generated sites (#943)
+#   TEST_FRAME=earth (env): every Godot run here takes --frame earth after its own args (G2 D0)
 #   user:// a fresh $OUT/userdata_<name> for every Godot started here (APPDATA on Windows,
 #           XDG_DATA_HOME on Linux, HOME of the Godot runs only on macOS), so loot, bank, placed,
 #           birds, identity... are never the real ones; USERDATA=<dir> picks another, USERDATA=real
@@ -97,6 +98,9 @@ _tc_ports() {
     fi
     _tc_args+=("$a"); prev=$a
   done
+  # TEST_FRAME=earth (G2 D0, #1682): every Godot of the check under that frame; a script's own --frame comes first and wins
+  [ -n "${TEST_FRAME:-}" ] && _tc_args+=(--frame "$TEST_FRAME")
+  return 0
 }
 
 tc_server() {

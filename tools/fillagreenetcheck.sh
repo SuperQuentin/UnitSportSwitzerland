@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# The earth server builds the clients' fill (#1682, G2 D gap): a dedicated server and a client under --frame earth read
+# the ground's ellipsoidal height at the same 5 x 5 Earth points 150 m apart (--fillagree, src/Terrain/Earth/FillAgreeProbe)
+# and must agree to the centimetre on every point, the fill's leaves among them.
+#   1. the generated world (--generated-world, NOTERRAIN): every point on the fill;
+#   2. with LEAVES (B4's built leaves on D:, skipped without them): the fill past the region's edge, where it blends into
+#      the real leaves (some points real, some fill).
+#   GODOT=<exe> [AT=E,N] [LEAVES=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh      logs: test_output/fillagree_*.log
+. "$(dirname "$0")/lib/twoclient.sh" fillagree
+AT=${AT:-2600500,1199500}
+LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
+EDGE=${EDGE:-2503600,1117600}   # past the east edge of B4's Geneva leaves
+PORT=${PORT:-7893}
+fail=
+
+compare() { # name: the server's and the client's points, line by line
+  local s="$OUT/fillagree_$1_server.log" c="$OUT/fillagree_$1_client.log"
+  grep -h "RESULT: FAILED" "$s" "$c" && { fail="${fail:+$fail; }$1: a side had no ground"; return; }
+  grep -h "points on the fill" "$s" "$c" | sed "s/^/$1: /"
+  local out
+  out=$(paste <(grep -o "\[fillagree server\] point .*" "$s" | awk '{print $3, $4, $5}') \
+              <(grep -o "\[fillagree client\] point .*" "$c" | awk '{print $3, $4, $5}') | awk -v n="$1" '
+    NF == 6 { rows++; d = $3 - $6; if (d < 0) d = -d; if (d > worst) worst = d; if ($2 == "fill") fill++
+              if ($1 != $4 || $2 != $5 || d > 0.01) { bad++; print n ": point " $1 " server " $2 " " $3 " vs client " $5 " " $6 } }
+    END { printf "%s: %d points compared, %d on the fill, worst %.3f m\n", n, rows, fill, worst
+          if (rows != 25 || bad > 0 || fill == 0) print "MISMATCH" }')
+  echo "$out"
+  grep -q MISMATCH <<< "$out" && fail="${fail:+$fail; }$1: the server and the client disagree"
+}
+
+run() { # name at args...
+  local name=$1 at=$2; shift 2
+  tc_server 600 180 "$OUT/fillagree_${name}_server.log" --server --port $PORT --no-query --frame earth --player-status \
+    --fillagree "$at" "$@" || { fail="${fail:+$fail; }$name: the server did not start"; return; }
+  tc_client 400 "$OUT/fillagree_${name}_client.log" --connect 127.0.0.1:$PORT --name Agree --frame earth --at "$at" \
+    --fillagree "$at" "$@"
+  # the server prints its points once the client's body brought its leaves in: give it a moment past the client
+  for _ in $(seq 1 100); do grep -q "points on the fill\|RESULT: FAILED" "$OUT/fillagree_${name}_server.log" && break; guard_nap 0.2; done
+  tc_stop
+  compare "$name"
+}
+
+run generated "$AT" --generated-world "${NOTERRAIN[@]}"
+if [ -d "$LEAVES" ]; then run edge "$EDGE" "${NOTERRAIN[@]}" --leaves "$LEAVES"
+else echo "[fillagreenetcheck] no LEAVES: the region's edge skipped"; fi
+
+if [ -z "$fail" ]; then echo "[fillagreenetcheck] RESULT: ok"; exit 0; fi
+echo "[fillagreenetcheck] RESULT: FAILED ($fail; see $OUT/fillagree_*.log)"; exit 1
