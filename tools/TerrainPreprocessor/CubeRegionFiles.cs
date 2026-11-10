@@ -41,6 +41,7 @@ public static class CubeRegionFiles
     {
         string? region = null, temp = null, tlm = null, pbf = null, gwr = null, boundaries = null, cards = null, mode = null;
         bool sitg = false;
+        string? probe = null;
         int jobs = Math.Max(1, Environment.ProcessorCount / 2);
         for (int i = 0; i < args.Count; i++)
         {
@@ -56,6 +57,8 @@ public static class CubeRegionFiles
                 case "--atlas-cards": cards = args[++i]; break;
                 case "--sitg": sitg = true; break;
                 case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+                // a diagnostic: the leaves' ground and still water at an LV95 point
+                case "--ground-at": probe = args[++i]; break;
                 case "--chunks":
                     Console.Error.WriteLine($"{mode}: --chunks is gone (#1711): the region files come from the sources and the region's leaves");
                     return 2;
@@ -73,6 +76,12 @@ public static class CubeRegionFiles
         var tiles = leaves.Tiles;
         Console.WriteLine($"{mode}: {leaves.Heights.Leaves.Count} leaves over {tiles.Count} LV95 km cells");
         if (tiles.Count == 0) return 2;
+        if (probe != null)
+        {
+            var v = probe.Split(',').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"at {v[0]:F1},{v[1]:F1}: in a leaf {leaves.Contains(v[0], v[1])}, ground {leaves.Ground(v[0], v[1]):F3}, still water {leaves.Level(v[0], v[1]):F3}"));
+            return 0;
+        }
 
         if (mode == "--cube-sources")
         {
@@ -113,7 +122,8 @@ public static class CubeRegionFiles
         }
 
         var check = new Check();
-        int files = AddEarthPositions(region, (e, n) => leaves.Ground(e, n) is var g && double.IsNaN(g) ? 0 : g, check, placesOnly: mode == "--cube-places");
+        // off the leaves (a source point in a km cell they reach), the Plateau's height, as GeoInput places such a point
+        int files = AddEarthPositions(region, (e, n) => leaves.Ground(e, n) is var g && double.IsNaN(g) ? SwissGeodesy.GroundH - 50 : g, check, placesOnly: mode == "--cube-places");
         Console.WriteLine($"{mode}: {files} files in Earth positions in {region}, {sw.Elapsed.TotalSeconds:F1} s");
         return check.Report() ? 0 : 1;
     }
