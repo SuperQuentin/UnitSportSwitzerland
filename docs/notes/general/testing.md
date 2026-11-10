@@ -215,8 +215,12 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
     `test.sh` one slot per 8 GB, 1 to 4, since #1702 admits each job by its peak), each job in its own slot.
     A job starts when its need (last peak and a quarter, else `TEST_HEAVY_RAM_GB`, 6) is free over the floor,
     counting every job started less than `TEST_JOB_STAGGER` (40) s ago at its full need: it has not grown to
-    its size yet. A job the RAM watchdog stopped runs
-    again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
+    its size yet. **Machine-wide**: every job started leaves `start grow_s need_mb` in
+    `$TEMP/unitsport-check-peaks-reserved/<runner pid>.<n>` (`TEST_RESERVED_DIR`), and `admit` also subtracts the
+    jobs of other runners (worktrees, sessions) still inside their grow time; a runner with nothing running waits
+    only while such a job grows. Without it, a Player net run beside another session's checks had 11 of 36 checks
+    fail or stop at the floor (some run alone), 3,666 s instead of ~2,900 s serial (Nov 10). A job the RAM
+    watchdog stopped runs again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
     another session's run, a qemu VM (8 GB) and an idle dotnet build server (3 GB). The table keeps the map's
     order. Two scripts logging under one twoclient name never run together (`rampalongnetcheck` execs
     `rampnetcheck`), and `loadtest.sh` / `trailer.sh` run alone.
@@ -228,13 +232,16 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
     (15 s). Quick checks are small (Nov 2026: 250-480 MB the self-checks and `--world flat`, ~630 MB
     `--world fixture`, ~1.1 GB the lake), so the CPU, not the RAM, sets the count: on the Avatar area 6 jobs
     took 678 s, 4 jobs 809 s, for 10 % more CPU seconds per check.
-  - Any row runs beside any other (two `--collidecheck` rows, which write nothing, held 361 s in a row while
-    one flag at a time was the rule). Flags whose rows must not overlap go in `TEST_QUICK_SERIAL`. `@netsmoke`
+  - Any row runs beside any other: with one flag at a time the rule, two `--collidecheck` rows (which write
+    nothing) held 361 s in a row, and dropping the rule took the Avatar area from 1,363 s to 835 s (4 jobs).
+    Flags whose rows must not overlap go in `TEST_QUICK_SERIAL`. `@netsmoke`
     (ports) and the quick `tools/` scripts run one at a time after. A check that fails beside others runs
     again alone; a pass alone says "passed alone, failed beside others": that is how a clash shows.
   - **Longest first**: each check starts in the order of its last seconds in the peak store (never run:
-    `TEST_UNKNOWN_SECONDS`, 120), the first one the RAM admits; the net tier likewise. A long check started
-    last ran on alone: the Avatar area took 1,363 s in map order, 835 s longest first (4 jobs).
+    `TEST_UNKNOWN_SECONDS`, 120), the first one the RAM admits; the net tier likewise, so a long check never
+    starts last and runs on alone (`orbitnetcheck`, 250 s, came last in map order). The store's path goes to
+    awk through `ENVIRON`: `awk -v` reads backslash escapes, mangled `C:\Users\...`, and until Nov 10 every
+    check counted as unknown, so the order was the map's on Windows.
   - **A long check is split, not waited for**: `--zfightcheck` (502-629 s) runs as four `--zfightshard` parts.
     A new check over ~5 min in the quick tier gets a shard flag the same way.
   - **The unit stage runs beside the Godot checks**, started once the game is built (the two builds never
