@@ -110,9 +110,13 @@ public partial class AirportStands : Node
     /// Whether a stand stands on a tile of the ground: its LV95 tile on the flat world; on the earth world's leaves the
     /// tile the ground has under it (#1649).
     /// </summary>
-    private bool On(AirportStand stand, GroundTile tile) => _chunks?.Ground is { } flat && ReferenceEquals(_ground, flat)
-        ? TileId.FromLv95(stand.E, stand.N) == tile.Lv95Tile
-        : _chunks?.Origin is { } origin && _ground.TileAt(origin.ToWorld(stand.E, stand.N, 0)) == tile;
+    private bool On(AirportStand stand, GroundTile tile)
+    {
+        double e = stand.E, n = stand.N;
+        return _chunks?.Ground is { } flat && ReferenceEquals(_ground, flat)
+            ? TileId.FromLv95(e, n) == tile.Lv95Tile
+            : _chunks?.Origin is { } origin && _ground.TileAt(origin.ToWorld(e, n, 0)) == tile;
+    }
 
     public override void _Process(double delta)
     {
