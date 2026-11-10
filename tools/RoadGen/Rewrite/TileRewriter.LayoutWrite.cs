@@ -827,8 +827,13 @@ public static partial class TileRewriter
             var tramWays = capHere is null && !jp.Beyond ? [] : TramWays(jp, tramNet ??= new TramNet(result), jp.Beyond ? new LayoutWriteStats() : stats);
             var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear, buildings is null ? null : buildings.Contains,
                 tramWays.Count > 0 ? TramArms(jp, tramWays) : null, gantries, areas) : null;
-            short signalIndex = plan is null || !capOfPlan.TryGetValue(jp, out var hs) ? (short)-1 : (short)(Get(signals, hs.Home).Count - 1);
-            if (plan is not null && tramWays.Count > 0) TramLanes(jp, tramWays, Get(approaches, Plane.TileAt(jp.Centre.X, jp.Centre.Y)), signalIndex, stats, paint);
+            // (#1691) a band junction's record too, filed under its centre's tile as WriteSignals files it: its trams' stop lines
+            // lie where they lie, maybe in this block's tiles (the home block's, past a cut, were never written)
+            short signalIndex = plan is null ? (short)-1
+                : capOfPlan.TryGetValue(jp, out var hs) ? (short)(Get(signals, hs.Home).Count - 1)
+                : jp.Beyond ? (short)(Get(signals, Plane.TileAt(jp.Centre.X, jp.Centre.Y)).Count - 1) : (short)-1;
+            if (plan is not null && tramWays.Count > 0)
+                TramLanes(jp, tramWays, Get(approaches, Plane.TileAt(jp.Centre.X, jp.Centre.Y)), signalIndex, jp.Beyond ? new LayoutWriteStats() : stats, paint);
             var tramLines = plan is not null && tramWays.Count > 0 ? TramLines(jp, plan, tramWays) : null;
             if (capHere is not null && capOfPlan.TryGetValue(jp, out var hp))
             {

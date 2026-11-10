@@ -16,6 +16,22 @@ public static class LineJoin
     /// <summary>Two piece ends this close on the plane are one point (the pieces' float frames, ~0.1 mm).</summary>
     public const double MeetM = 0.005;
 
+    /// <summary>
+    /// A cut point this close to the straight line between its neighbours is no point of the line (#1691): the cut put it
+    /// there, so the joined line drops it, and every tiling's line has the same vertices (m; a cut point is off the straight
+    /// line by its frame's rounding, ~0.1 mm).
+    /// </summary>
+    public const double StraightM = 0.001;
+
+    /// <summary>
+    /// The lattice a source's points lie on (#1691), m: 2^-10, so a point is exact as a float in any frame snapped to 2 m within
+    /// 16 km of it, and every tile, leaf or block frame reads it at the same place on the plane.
+    /// </summary>
+    public const double Lattice = 1.0 / 1024;
+
+    /// <summary>A plane coordinate on <see cref="Lattice"/>.</summary>
+    public static double OnLattice(double v) => Math.Round(v / Lattice) * Lattice;
+
     /// <summary>A line's point on the plane: x, y and its height (the segment's y).</summary>
     public readonly record struct Point(double X, double Y, float H);
 
@@ -148,6 +164,8 @@ public static class LineJoin
                 parts.Add(pieces[k]);
                 last = k;
                 var p = points[k];
+                // (#1691) the cut point the two pieces share is dropped where they run straight on through it
+                if (pts.Count >= 2 && p.Count >= 2 && Straight(pts[^2], pts[^1], p[1])) pts.RemoveAt(pts.Count - 1);
                 pts.AddRange(pts.Count == 0 ? p : p.Skip(1));
             }
             if (pts.Count == 0) return;
@@ -186,6 +204,17 @@ public static class LineJoin
             Class = template.Class, Surface = template.Surface, Flags = template.Flags, Width = template.Width,
             Points = xyz, Attributes = template.Attributes,
         };
+    }
+
+    /// <summary>Whether <paramref name="j"/> lies between <paramref name="a"/> and <paramref name="b"/> within <see cref="StraightM"/> of the line through them.</summary>
+    private static bool Straight(Point a, Point j, Point b)
+    {
+        double dx = b.X - a.X, dy = b.Y - a.Y, len2 = dx * dx + dy * dy;
+        if (len2 < 1e-12) return false;
+        double t = ((j.X - a.X) * dx + (j.Y - a.Y) * dy) / len2;
+        if (t <= 0 || t >= 1) return false;
+        double ox = a.X + dx * t - j.X, oy = a.Y + dy * t - j.Y;
+        return ox * ox + oy * oy <= StraightM * StraightM;
     }
 
     private static double Sq(double v) => v * v;

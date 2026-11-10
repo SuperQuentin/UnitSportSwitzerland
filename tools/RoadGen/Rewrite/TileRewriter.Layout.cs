@@ -481,13 +481,16 @@ public static partial class TileRewriter
                     if (block.Contains(Plane.TileAt(q.X + dx * WriteReach, q.Y + dy * WriteReach))) return true;
             return false;
         }
+        // (#1691) and all along the arm's own link: its paint is laid from the junction's mouth, so the dashes' phase anywhere on
+        // the street is the junction's (a 355 m street's dashes 3.6 m apart in a block 333 m from the junction)
         bool Reaches(int linkId, bool atEnd)
         {
             double gone = 0;
             foreach (var (link, end) in StreetOn(net, linkId, atEnd).Links.Prepend((linkId, atEnd)))
             {
                 var c = net.Links[link].Centreline;
-                for (int i = 1; i < c.Count && gone <= JunctionReach; i++)
+                bool own = link == linkId;
+                for (int i = 1; i < c.Count && (own || gone <= JunctionReach); i++)
                 {
                     var (a, b) = end ? (c[c.Count - i], c[c.Count - 1 - i]) : (c[i - 1], c[i]);
                     double len = a.DistanceTo(b);

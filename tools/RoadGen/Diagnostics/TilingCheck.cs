@@ -79,6 +79,10 @@ public static class TilingCheck
             others += tile.Junctions.Count + tile.Paint.Count + tile.PointProps.Count + tile.LinearProps.Count + tile.AreaProps.Count;
         }
         var lines = LineJoin.Join(pieces, Lv95Units.Instance);
+        // the source on the plane's lattice (#1691: as a source's points must be, so that every cell reads them at one place)
+        foreach (var line in lines)
+            for (int i = 0; i < line.Points.Count; i++)
+                line.Points[i] = line.Points[i] with { X = LineJoin.OnLattice(line.Points[i].X), Y = LineJoin.OnLattice(line.Points[i].Y) };
         log(string.Create(CultureInfo.InvariantCulture,
             $"tiling check (#1660): {lv95.Count} raw LV95 tiles, {pieces.Count:N0} pieces joined into {lines.Count:N0} lines "
             + $"({lines.Count(l => l.Parts.Count > 1):N0} across cuts), {lines.Count(l => l.OpenStart || l.OpenEnd):N0} with an end on a km line; "
@@ -165,9 +169,12 @@ public static class TilingCheck
                         (x0, x1, y0, y1) = (Math.Min(x0, x), Math.Max(x1, x), Math.Min(y0, y), Math.Max(y1, y));
                     }
                     if (x1 < west || x0 > west + GridUnits.Box || y1 < north - GridUnits.Box || y0 > north) continue;
+                    // (#1691) the walls on the plane's lattice as the lines are: exact in every cell's frame, so a wall rasterises
+                    // into the same 0.5 m cells under every tiling (a float's rounding put one a cell apart: a sidewalk 0.5 m wider)
                     var moved = new float[t.Length];
                     for (int q = 0; q + 2 < t.Length; q += 3)
-                        (moved[q], moved[q + 1], moved[q + 2]) = ((float)(id.MinE + t[q] - west), t[q + 1], (float)(north - (id.MaxN - t[q + 2])));
+                        (moved[q], moved[q + 1], moved[q + 2]) = ((float)(LineJoin.OnLattice(id.MinE + t[q]) - west), t[q + 1],
+                            (float)(north - LineJoin.OnLattice(id.MaxN - t[q + 2])));
                     list.Add(new Building { Kind = b.Kind, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = b.Floors, MinY = b.MinY, MaxY = b.MaxY, Triangles = moved });
                 }
             }
