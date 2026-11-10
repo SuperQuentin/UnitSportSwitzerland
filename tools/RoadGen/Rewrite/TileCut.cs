@@ -115,12 +115,31 @@ public static class TileCut
             }
         }
 
+        // paint along a segment no tile holds (a street's copy its lines are laid on, the urban one): that segment cut as well,
+        // its pieces only referenced (the file writes such a line as geometry), moved with their tile below
+        var unheld = new List<Piece>();
+        foreach (var (_, p) in along)
+            if (p.Transition is null && p.Segment is { } ps && !piecesOf.ContainsKey(ps))
+            {
+                var pieces = CutSegment(ps, frame);
+                if (pieces.Count == 1) pieces = [pieces[0] with { Segment = CopyOf(ps) }];   // never move a record another holds
+                piecesOf[ps] = pieces;
+                unheld.AddRange(pieces);
+            }
+
         // 4. every tile into its own frame (a translation: every tile frame is one of the plane), then the paint along its pieces
         foreach (var (id, tile) in outTiles)
         {
             LeafRecords.Map(tile, new Translate(frame.West(BlockFrame.Lines) - real.West(id), real.North(id) - frame.North(BlockFrame.Lines)));
             if (tile.Segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) tile.Flags |= RoadTileFlags.Osm;
         }
+        foreach (var piece in unheld)
+            if (outTiles.ContainsKey(piece.Tile))
+            {
+                var m = new Translate(frame.West(BlockFrame.Lines) - real.West(piece.Tile), real.North(piece.Tile) - frame.North(BlockFrame.Lines));
+                var pts = piece.Segment.Points;
+                for (int k = 0; k + 2 < pts.Length; k += 3) (pts[k], pts[k + 1], pts[k + 2]) = m.Point(pts[k], pts[k + 1], pts[k + 2]);
+            }
         foreach (var (key, p) in along)
         {
             if (p.Transition is { } t)
@@ -130,7 +149,7 @@ public static class TileCut
                     if (outTiles.TryGetValue(tile, out var into))
                         foreach (var q in Slice(p, from, to, len => RoadPaint.AlongTransition(piece, p.Boundary, p.Type, p.Rgba, p.Width, p.Dash, p.Gap, p.Offset, len.From, len.To),
                                      (f, e) => RoadPaint.AlongTransition(piece, p.Boundary, p.Type, p.Rgba, p.Width, 0, 0, p.Offset, f, e), p.From, p.To))
-                            into.Paint.Add(q);
+                            if (q.Vertices.Length >= 6) into.Paint.Add(q);
                 if (tps.Count > 1) stats.PaintCut++;
                 continue;
             }
@@ -272,6 +291,11 @@ public static class TileCut
         }
         return result;
     }
+
+    private static RoadSegment CopyOf(RoadSegment seg) => new()
+    {
+        Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = (float[])seg.Points.Clone(), Attributes = seg.Attributes,
+    };
 
     /// <summary>The segment's record over a run of its points (stations <c>S</c> on the whole of length <paramref name="total"/>).</summary>
     private static RoadSegment PieceOf(RoadSegment seg, List<(float X, float Y, float Z, double S)> run, double total)

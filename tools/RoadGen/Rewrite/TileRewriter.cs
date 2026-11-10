@@ -972,7 +972,7 @@ public static partial class TileRewriter
             foreach (var k in caps.Keys.Concat(paint.Keys).Concat(signs.Keys).Concat(islands.Keys).Concat(signalRecords.Keys).Concat(approachRecords.Keys)
                          .Concat(parkAreas.Keys).Concat(parkPoints.Keys).Concat(parkBays.Keys).Concat(pathsOf.Keys).Concat(catenarySupports.Keys)
                          .Concat(catenaryWires.Keys).Concat(bikeBridges.Keys).Concat(coreCorners.Keys).Concat(kerbArcs.Keys).Concat(pathEnds.Keys))
-                keyed.Add(k);
+                if (k != BlockFrame.Band) keyed.Add(k);   // the band's streets and their paint: planned, never written
             var sources = new Dictionary<TileId, RoadTile>();
             foreach (var key in keyed)
             {

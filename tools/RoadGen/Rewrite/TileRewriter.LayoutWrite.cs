@@ -765,7 +765,7 @@ public static partial class TileRewriter
             Vec2? EndOf(ArmPlan a)
             {
                 var street = Street(a);
-                if (street.Count == 0 || street[0].Tile != home) return null;
+                if (street.Count == 0) return null;   // (any tile: a block has one frame, #1660)
                 var p = street[0].Piece.Points;
                 int at = street[0].TowardJunction ? p.Length - 3 : 0;
                 return new Vec2(p[at], -p[at + 2]);
