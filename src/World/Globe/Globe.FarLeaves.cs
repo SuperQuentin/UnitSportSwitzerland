@@ -129,7 +129,7 @@ public partial class Globe
             if (key.Level != LeafFrames.LeafLevel || _buildings.ContainsKey(key) || _buildingsLoading.Contains(key)) continue;
             if (_distance.GetValueOrDefault(key, double.MaxValue) > FarBuildingsM || !real.IsLocal(key)) continue;
             _buildingsLoading.Add(key);
-            _ = Task.Run(async () =>
+            _ = Spawn(async () =>
             {
                 await _workers.WaitAsync().ConfigureAwait(false);
                 try
@@ -147,7 +147,7 @@ public partial class Globe
                 }
                 finally
                 {
-                    _workers.Release();
+                    Done();
                 }
             });
         }
@@ -157,6 +157,7 @@ public partial class Globe
     private void CommitBuildings(CubeKey key, ArrayMesh? mesh)
     {
         _buildingsLoading.Remove(key);
+        _quiet = false;
         if (!_patches.TryGetValue(key, out var tile) || _buildings.ContainsKey(key)) return;
         var node = new MeshInstance3D { Name = "Buildings", Mesh = mesh };
         tile.AddChild(node);

@@ -30,6 +30,22 @@ public sealed class LeafStand
     /// <summary>The building sites (#605) planned from the buildings and roads; empty without any.</summary>
     public List<ConstructionSite> Sites { get; init; } = new();
 
+    /// <summary>
+    /// The pits the sites dig (#619), in the tile's frame (<see cref="PitsInAnchor"/> in the leaf's): cut into the leaf's
+    /// drawn mesh and its collision patches alike (#1653). Empty without any.
+    /// </summary>
+    public List<PitCut> Pits { get; init; } = new();
+
+    /// <summary>The pits in the leaf's anchor frame, where its lattice is.</summary>
+    public List<PitCut> PitsInAnchor()
+    {
+        var shift = new Vector2((float)LeafStandIn.Offset, (float)LeafStandIn.Offset);
+        return Pits.Select(p => p with
+        {
+            Rect = p.Rect with { Center = p.Rect.Center - shift }, TopOuter = p.TopOuter - shift, TopInner = p.TopInner - shift,
+        }).ToList();
+    }
+
     /// <summary>The doors of the buildings (in the tile's frame), as <c>BuildingFootprint.ComputeDoors</c> gives a tile's; null without buildings.</summary>
     public DoorSpot[]? Doors { get; init; }
 
@@ -51,6 +67,7 @@ public sealed class LeafStand
         var sites = new List<ConstructionSite>();
         DoorSpot[]? doors = null;
         var extra = new List<Vector3>();
+        var pits = new List<PitCut>();
         if (buildings != null)
         {
             if (SitePlans.HasSite(buildings))
@@ -58,9 +75,12 @@ public sealed class LeafStand
                 sites = SitePlans.For(buildings, roads);
                 if (SiteShellBuilder.Build(buildings, sites, grid, mesh: false, collision: true) is { } shells)
                 {
-                    extra.AddRange(shells.Faces);
+                    // slabs, flights, lifts and footbridges go both ways round (#1653): the flat world's road cells
+                    // that hold them collide with back faces too, a patch with front faces only
+                    extra.AddRange(BothWindings(shells.Faces));
                     // the site offices' walls are a building's (#822)
                     extra.AddRange(shells.OfficeFaces);
+                    pits = shells.Pits;
                 }
             }
             doors = BuildingFootprint.ComputeDoors(buildings, roads, grid, sites);
@@ -71,8 +91,20 @@ public sealed class LeafStand
         return new LeafStand
         {
             Leaf = leaf.Key, Id = id, Grid = grid, Nearest = nearest, Roads = roads, Buildings = buildings,
-            Sites = sites, Doors = doors, ExtraFaces = extra.ToArray(),
+            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(),
         };
+    }
+
+    /// <summary>Every triangle twice, once each way round: a one-sided body collides with it from both sides.</summary>
+    public static Vector3[] BothWindings(Vector3[] faces)
+    {
+        var both = new Vector3[faces.Length * 2];
+        for (int k = 0; k + 2 < faces.Length; k += 3)
+        {
+            both[2 * k] = faces[k]; both[2 * k + 1] = faces[k + 1]; both[2 * k + 2] = faces[k + 2];
+            both[2 * k + 3] = faces[k]; both[2 * k + 4] = faces[k + 2]; both[2 * k + 5] = faces[k + 1];
+        }
+        return both;
     }
 
     /// <summary>A point of the tile's frame in the leaf's anchor frame.</summary>

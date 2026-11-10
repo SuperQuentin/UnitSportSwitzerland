@@ -87,6 +87,7 @@ public partial class ShotRunner : Node
     /// <summary>How long the ground must have stayed complete, s; how long to wait for it at most, wall s.</summary>
     public const double CompleteHold = 1.0, CompleteTimeout = 150;
     private double _completeFor, _settleWall = -1;
+    private string? _waitedOn;
 
     /// <summary>What the ground is still busy with, for the log when <see cref="TilesComplete"/> never held.</summary>
     public System.Func<string?>? TilesStatus { get; set; }
@@ -202,9 +203,20 @@ public partial class ShotRunner : Node
     {
         // inside, the rooms are built whole: the tiles round a camera 3 km under them never come in (#1306)
         if (TilesComplete == null || _shot!.Value.SettleSeconds <= 0 || _plan != null) return true;
-        if (_settleWall < 0) _settleWall = RealClock.Now;
-        _completeFor = TilesComplete(_camera.GlobalPosition) ? _completeFor + delta : 0;
-        if (_completeFor >= CompleteHold) return true;
+        bool complete = TilesComplete(_camera.GlobalPosition);
+        if (_settleWall < 0)
+        {
+            _settleWall = RealClock.Now;
+            // what the wait is for, logged once it is over (#1679: the earth world's near and far leaves)
+            _waitedOn = complete ? null : TilesStatus?.Invoke();
+        }
+        _completeFor = complete ? _completeFor + delta : 0;
+        if (_completeFor >= CompleteHold)
+        {
+            if (_waitedOn != null)
+                GD.Print(FormattableString.Invariant($"[shot] {_shot.Value.OutPath}: waited {RealClock.Now - _settleWall:F1} s for the ground (at first: {_waitedOn})"));
+            return true;
+        }
         if (RealClock.Now - _settleWall < CompleteTimeout) return false;
         GD.PrintErr($"[shot] {_shot.Value.OutPath}: the ground round the camera was not complete after {CompleteTimeout:F0} s; taken as it is"
             + (TilesStatus?.Invoke() is { } status ? $" ({status})" : ""));

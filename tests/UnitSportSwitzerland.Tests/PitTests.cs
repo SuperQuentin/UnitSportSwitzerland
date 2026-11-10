@@ -422,6 +422,79 @@ public class PitTests
         Assert.Equal(4.6f * 18f, ramp, 0);
     }
 
+    /// <summary>A leaf's lattice as a triangle soup (#1653): ~1.2 m, sheared, not square to the axes, split as the drawn mesh.</summary>
+    private static List<Vector3> Lattice(int n, Func<float, float, float> height)
+    {
+        Vector3 P(int i, int j)
+        {
+            float x = 1.19f * i + 0.02f * j, z = 110f - 1.21f * j + 0.015f * i;
+            return new Vector3(x, height(x, z), z);
+        }
+        var soup = new List<Vector3>();
+        for (int j = 0; j + 1 < n; j++)
+            for (int i = 0; i + 1 < n; i++)
+            {
+                Vector3 a = P(i, j), b = P(i + 1, j), c = P(i, j + 1), d = P(i + 1, j + 1);
+                soup.AddRange([a, d, b, a, c, d]);
+            }
+        return soup;
+    }
+
+    [Theory]
+    [InlineData(0.53f)]
+    [InlineData(-1.1f)]
+    [InlineData(2.2f)]
+    public void A_leafs_lattice_is_cut_exactly_round_the_pit_and_lined_to_its_edge(float turn)
+    {
+        Func<float, float, float> slope = (x, z) => 500f + 0.07f * x - 0.04f * z;
+        var soup = Lattice(90, slope);
+        var pit = Cut(turn, floor: 494f);
+        var faces = PitTerrain.CutFaces(soup, new[] { pit });
+        Assert.Equal(0, faces.Count % 3);
+        // summed in doubles: some 16,000 pieces
+        double ground = 0, floorArea = 0;
+        for (int t = 0; t < faces.Count; t += 3)
+        {
+            var a = faces[t]; var b = faces[t + 1]; var d = faces[t + 2];
+            float area = PlanArea(a, b, d);
+            if (area < 1e-7f) continue;
+            // front faces: up for the ground and the floor (clockwise seen from above)
+            bool flatFloor = new[] { a, b, d }.All(p => MathF.Abs(p.Y - pit.Floor) < 1e-3f);
+            bool onGround = new[] { a, b, d }.All(p => MathF.Abs(p.Y - slope(p.X, p.Z)) < 3e-3f);
+            if (flatFloor || onGround) Assert.True((b - a).Cross(d - a).Y < 0, $"a face at {a} faces down");
+            if (flatFloor) { floorArea += area; continue; }
+            if (!onGround) continue;
+            var centre = (a + b + d) / 3;
+            Assert.False(pit.Rect.Contains(new Vector2(centre.X, centre.Z), -0.01f), $"ground in the pit at {centre}");
+            ground += area;
+        }
+        float total = 89f * 89f * MathF.Abs(1.19f * -1.21f - 0.015f * 0.02f);
+        float pitArea = pit.Rect.Width * pit.Rect.Depth;
+        // every square metre is ground or pit: no gap round it, no overlap
+        Assert.Equal(total - pitArea, ground, 1);
+        Assert.Equal(pitArea, floorArea, 1);
+        // the walls' tops on the ground's own surface, where the clipped ground ends
+        int tops = 0;
+        for (int t = 0; t < faces.Count; t += 3)
+            foreach (var p in new[] { faces[t], faces[t + 1], faces[t + 2] })
+                if (p.Y > pit.Floor + 1e-3f && pit.Rect.Contains(new Vector2(p.X, p.Z), 0.01f) && !pit.Rect.Contains(new Vector2(p.X, p.Z), -0.01f)
+                    && !RampSide(pit, p))
+                {
+                    Assert.True(MathF.Abs(slope(p.X, p.Z) - p.Y) < 2e-3f, $"a wall's top at {p} is off the ground ({slope(p.X, p.Z):F4})");
+                    tops++;
+                }
+        Assert.True(tops > 20, $"{tops} wall tops");
+    }
+
+    [Fact]
+    public void A_lattice_far_from_the_pit_comes_back_as_it_was()
+    {
+        var soup = Lattice(12, (_, _) => 500f);
+        var faces = PitTerrain.CutFaces(soup, new[] { Cut(0.3f) with { Rect = new SiteRect(new Vector2(500, 500), Vector2.Right, 10, 10) } });
+        // the lining is drawn whatever the ground (it has none there: walls of nothing, a floor): the soup itself first
+        for (int k = 0; k < soup.Count; k++) Assert.Equal(soup[k], faces[k]);
+    }
+
     /// <summary>Whether a point is on the ramp's open side (its top edge descends: not the ground's height).</summary>
     private static bool RampSide(PitCut pit, Vector3 p)
     {

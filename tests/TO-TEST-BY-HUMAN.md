@@ -16,6 +16,13 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 - [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
 - [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
 
+## Building-site pits on leaves ([#1687](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1687), [#1653](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1653))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, at a real site at its foundations (`--constructioncheck` lists them), in a window.
+
+- [ ] Walk to the pit's edge, look in, climb down the ramp, walk round the floor → the ground ends on a straight line at the sheet piles, brown walls down to a gravel floor, no ground over the pit and no gap round it (on a fixture course the real ground can show in it: #1686).
+- [ ] Mount the excavator, drive down the ramp and back up → it drives on the ramp and the floor, never falls through.
+
 ## The earth ground's look (PR [#1642](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1642), [#1634](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1634), [#1632](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1632), [#1633](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1633), [#1635](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1635))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500300,1117900` (Geneva), in a window, against the same without `--frame`/`--leaves`.
