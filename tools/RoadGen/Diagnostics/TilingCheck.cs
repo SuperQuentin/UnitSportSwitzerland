@@ -79,6 +79,10 @@ public static class TilingCheck
             others += tile.Junctions.Count + tile.Paint.Count + tile.PointProps.Count + tile.LinearProps.Count + tile.AreaProps.Count;
         }
         var lines = LineJoin.Join(pieces, Lv95Units.Instance);
+        // the source on the plane's lattice (#1691: as a source's points must be, so that every cell reads them at one place)
+        foreach (var line in lines)
+            for (int i = 0; i < line.Points.Count; i++)
+                line.Points[i] = line.Points[i] with { X = LineJoin.OnLattice(line.Points[i].X), Y = LineJoin.OnLattice(line.Points[i].Y) };
         log(string.Create(CultureInfo.InvariantCulture,
             $"tiling check (#1660): {lv95.Count} raw LV95 tiles, {pieces.Count:N0} pieces joined into {lines.Count:N0} lines "
             + $"({lines.Count(l => l.Parts.Count > 1):N0} across cuts), {lines.Count(l => l.OpenStart || l.OpenEnd):N0} with an end on a km line; "
