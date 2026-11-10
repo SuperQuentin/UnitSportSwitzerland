@@ -1067,7 +1067,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget(Launch);
-            AddChild(_spawn = new SpawnPoint(_spectator, Ground!, origin, spawnE, spawnN));
+            AddChild(_spawn = new SpawnPoint(_spectator, Ground!, origin, spawnE, spawnN) { StillLoading = EarthLoading });
         }
 
         // The teleporter resolves what to move at the moment of the jump — fly camera, local
@@ -1757,7 +1757,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (LocalPlayer == null || !_onFoot)
             {
                 Report(LoadStage.WaitingForPlayer, 0.28f);
-                if (_loadClock > 45) Fail("The server never spawned your player.");
+                // an earth world's first fill leaves can take most of a minute (#1682): not while they still load
+                if (_loadClock > 45 && (_loadClock > SpawnPoint.LoadingWaitS || !EarthLoading())) Fail("The server never spawned your player.");
                 return;
             }
         }
@@ -1846,6 +1847,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
+
+    /// <summary>An earth world still loading leaves round its foci (the spawn's among them).</summary>
+    private bool EarthLoading() => _earth is { Idle: false };
 
     private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
 
