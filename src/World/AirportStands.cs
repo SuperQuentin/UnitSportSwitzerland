@@ -33,7 +33,6 @@ public partial class AirportStands : Node
     /// <summary>A stand is filled only with a player within this, m (vehicles further off are cleared as lonely anyway).</summary>
     public static readonly float PlaceRadius = VehicleManager.LonelyDistance - 200f;
 
-    private readonly ChunkManager _chunks;
 
     /// <summary>The world's ground: the streamer's, or the earth world's leaves (#1649), whose tile events say where the ground is.</summary>
     private readonly IWorldGround _ground;
@@ -50,14 +49,14 @@ public partial class AirportStands : Node
     /// <summary>The airports read at boot (empty, never null, before or without any).</summary>
     public AirportIndex Index => _index;
 
-    public AirportStands(ChunkManager chunks, IWorldGround? ground = null)
+    /// <param name="ground">The world's ground: its tiles' events, its origin, and the airports' file (<see cref="IWorldGround.Content"/>).</param>
+    public AirportStands(IWorldGround ground)
     {
         Name = "AirportStands";
-        _chunks = chunks;
-        _ground = ground ?? chunks?.Ground!;
+        _ground = ground;
     }
 
-    public AirportStands() : this(null!, null) { }
+    public AirportStands() : this(null!) { }
 
     public override void _EnterTree() => Instance = this;
 
@@ -67,15 +66,16 @@ public partial class AirportStands : Node
         // a check's server refills sooner (tools/airportnetcheck.sh)
         if (double.TryParse(CmdArgs.Value("--standrespawn"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double respawn))
             RespawnSeconds = respawn;
-        var index = await LoadAsync(_chunks.Source);
+        var index = await LoadAsync(_ground.Content);
         if (!IsInsideTree()) return;
         _index = index ?? new AirportIndex();
         if (_index.Airports.Count > 0)
             GD.Print($"[airports] {_index.Airports.Count} airports, {_index.Stands().Count()} stands ({string.Join(", ", _index.Airports.Select(a => $"{a.Code} {a.Stands.Count}"))})");
-        // tiles that entered before the file was read
-        var seen = new List<(TileId Id, int Stride)>();
-        _chunks.ListTiles(seen);
-        foreach (var (id, _) in seen) OnTileEntered(GroundTile.FromLv95(id));
+        // the stands whose ground entered before the file was read: the ground already has a height under them
+        if (Decides && _ground.Origin is { } origin)
+            foreach (var (_, stand) in _index.Stands())
+                if (!_stands.ContainsKey(stand.Id) && _ground.TryGetHeight(origin.ToWorld(stand.E, stand.N, 0), out _))
+                    _stands[stand.Id] = (stand, double.NegativeInfinity);
     }
 
     public override void _ExitTree()
@@ -106,17 +106,9 @@ public partial class AirportStands : Node
         _sinceCheck = double.MaxValue;
     }
 
-    /// <summary>
-    /// Whether a stand stands on a tile of the ground: its LV95 tile on the flat world; on the earth world's leaves the
-    /// tile the ground has under it (#1649).
-    /// </summary>
-    private bool On(AirportStand stand, GroundTile tile)
-    {
-        double e = stand.E, n = stand.N;
-        return _chunks?.Ground is { } flat && ReferenceEquals(_ground, flat)
-            ? TileId.FromLv95(e, n) == tile.Lv95Tile
-            : _chunks?.Origin is { } origin && _ground.TileAt(origin.ToWorld(e, n, 0)) == tile;
-    }
+    /// <summary>Whether a stand stands on a tile of the ground: the tile the ground has under it, flat or a leaf (#1649, #1684).</summary>
+    private bool On(AirportStand stand, GroundTile tile) =>
+        _ground.Origin is { } origin && _ground.TileAt(origin.ToWorld(stand.E, stand.N, 0)) == tile;
 
     public override void _Process(double delta)
     {
@@ -124,7 +116,7 @@ public partial class AirportStands : Node
         _sinceCheck += delta;
         if (_sinceCheck < 3.0) return;
         _sinceCheck = 0;
-        if (!Decides || VehicleManager.Instance is not { } vehicles || _chunks.Origin is not { } origin) return;
+        if (!Decides || VehicleManager.Instance is not { } vehicles || _ground.Origin is not { } origin) return;
         Review(vehicles, origin);
     }
 

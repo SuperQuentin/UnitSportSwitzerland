@@ -10,7 +10,7 @@ namespace UnitSport.World.Snow;
 
 /// <summary>
 /// The poles along a ski slope's edges (#887), on the tiles near the camera (those
-/// <see cref="ChunkManager.TileFurnished"/> dresses). One every <see cref="Spacing"/> m on both edges, just inside them,
+/// <see cref="IWorldGround.TileFurnished"/> dresses). One every <see cref="Spacing"/> m on both edges, just inside them,
 /// of a line slope, and round an area's outline. The pole is painted in the slope's colour: blue,
 /// red, black, or yellow for an itinerary. The pole on the right-hand edge going down also has an
 /// orange top, as on Swiss slopes. Drawn only: no collision, a skier goes through them as through a twig.
@@ -24,7 +24,7 @@ public partial class SlopeMarkers : Node
     /// <summary>How far outside the slope's edge a pole stands: a little inside it, in front of the trees that line the run.</summary>
     private const float Outside = -0.4f;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly SnowService _snow;
     private readonly Dictionary<TileId, ChunkNode> _waiting = new();
     private readonly List<TileId> _done = new();
@@ -34,10 +34,10 @@ public partial class SlopeMarkers : Node
     private static readonly Color Orange = new(1f, 0.42f, 0.05f);
     private static readonly Dictionary<(int Level, bool Right), ArrayMesh> Meshes = new();
 
-    public SlopeMarkers(ChunkManager chunks, SnowService snow)
+    public SlopeMarkers(IWorldGround ground, SnowService snow)
     {
         Name = NodeName;
-        _chunks = chunks;
+        _ground = ground;
         _snow = snow;
     }
 
@@ -45,21 +45,21 @@ public partial class SlopeMarkers : Node
     {
         _material = StyleKit.Material(MaterialRole.Prop);
         _material.SetShaderParameter("flicker", 0f);
-        _chunks.Ground.TileFurnished += OnFurnished;
-        _chunks.Ground.TileUnfurnished += OnUnfurnished;
+        _ground.TileFurnished += OnFurnished;
+        _ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
-        _chunks.Ground.TileFurnished -= OnFurnished;
-        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
+        _ground.TileFurnished -= OnFurnished;
+        _ground.TileUnfurnished -= OnUnfurnished;
     }
 
-    private void OnFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] _) => _waiting[tile.Lv95Tile] = node;
+    private void OnFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] _) => _waiting[_ground.ContentName(tile)] = node;
 
     private void OnUnfurnished(GroundTile tile, ChunkNode node)
     {
-        var id = tile.Lv95Tile;
+        var id = _ground.ContentName(tile);
         _waiting.Remove(id);
         node.GetNodeOrNull(NodeName)?.QueueFree();
     }
@@ -163,7 +163,7 @@ public partial class SlopeMarkers : Node
     private float Ground(ChunkNode node, float east, float north)
     {
         var world = node.ToGlobal(new Vector3(east, 0, 1000 - north));
-        return _chunks.Ground.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : float.NaN;
+        return _ground.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : float.NaN;
     }
 
     /// <summary>0 blue, 1 red, 2 black, 3 yellow (itinerary).</summary>

@@ -28,7 +28,7 @@ public partial class Herds : Node3D, IOriginContainer
 
     public static Herds? Instance { get; private set; }
 
-    private readonly ChunkManager? _chunks;
+    private readonly IWorldGround? _terrain;
     private readonly WorldOrigin _origin;
     private readonly bool _dedicated;
 
@@ -71,17 +71,17 @@ public partial class Herds : Node3D, IOriginContainer
         public double Epoch;
     }
 
-    public Herds(ChunkManager? chunks, WorldOrigin origin, bool dedicated)
+    public Herds(IWorldGround? chunks, WorldOrigin origin, bool dedicated)
     {
         Name = NodeName;
-        _chunks = chunks;
+        _terrain = chunks;
         _origin = origin;
         _dedicated = dedicated;
     }
 
     public Herds() : this(null, WorldOrigin.SwissDefault(), false) { }
 
-    public static Herds Create(Node world, ChunkManager? chunks, WorldOrigin origin, bool dedicated)
+    public static Herds Create(Node world, IWorldGround? chunks, WorldOrigin origin, bool dedicated)
     {
         var herds = new Herds(chunks, origin, dedicated);
         world.AddChild(herds);
@@ -141,7 +141,7 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>A tile with no farm layer: its herds from the land cover (<see cref="HerdPlan.FromLand"/>), worked out on a worker.</summary>
     private void OnTileNoFields(TileId id)
     {
-        if (_byTile.ContainsKey(id) || !_landPending.Add(id) || _chunks?.Source is not { } source) return;
+        if (_byTile.ContainsKey(id) || !_landPending.Add(id) || _terrain?.Content is not { } source) return;
         Task.Run(async () =>
         {
             try
@@ -299,10 +299,10 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>The terrain's height at an LV95 point on this peer, NaN where it is not loaded.</summary>
     private float GroundAt(double e, double n)
     {
-        if (_chunks == null) return float.NaN;
+        if (_terrain == null) return float.NaN;
         var at = _origin.ToWorld(e, n, 0);
-        if (!_dedicated && _chunks.Ground.TryGetSurface(at, out float s)) return s;
-        return _chunks.Ground.TryGetHeight(at, out float h) ? h : float.NaN;
+        if (!_dedicated && _terrain.TryGetSurface(at, out float s)) return s;
+        return _terrain.TryGetHeight(at, out float h) ? h : float.NaN;
     }
 
     // ---- the authority: beams, and what it sends -------------------------------------------------

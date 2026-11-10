@@ -42,6 +42,16 @@ public partial class SpawnPoint : Node
     /// Height above ground to settle at. A free camera wants a viewpoint; a walking body
     /// wants to land, so <see cref="Teleporter"/> passes a couple of metres instead.
     /// </param>
+    /// <summary>
+    /// Whether the ground is still being made round the spawn (an earth world's leaves loading, #1682): the wait goes on
+    /// past 15 s while it is, up to <see cref="LoadingWaitS"/>. A generated fill leaf under a village takes 10-45 s on a
+    /// busy machine, the first ones the longest.
+    /// </summary>
+    public Func<bool>? StillLoading { get; init; }
+
+    /// <summary>The longest wait for ground that is still being made.</summary>
+    public const double LoadingWaitS = 180;
+
     public SpawnPoint(Node3D target, IWorldGround ground, WorldOrigin origin,
         double lv95E, double lv95N, float arrivalHeight = ViewHeight)
     {
@@ -114,7 +124,7 @@ public partial class SpawnPoint : Node
             if (_target is UnitSport.Player.FootPlayer { Indoors: false } walker) _clear = new GroundStart(_ground, walker);
             else Finish();
         }
-        else if (_waited > 15.0)
+        else if (_waited > 15.0 && (_waited > LoadingWaitS || StillLoading?.Invoke() != true))
         {
             // no terrain here at all — leave the camera high rather than dropping it
             // through empty space, and say so

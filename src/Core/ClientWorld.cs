@@ -559,7 +559,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         long cacheBytes = Platform.IsMobile ? 96L * 1024 * 1024 : 256L * 1024 * 1024;
         _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
-        _chunks = new ChunkManager { Name = "Terrain" };
+        // under earth the flat streamer draws nothing: no horizon, whose lattice is 40,401 generated tiles (#1699)
+        _chunks = new ChunkManager { Name = "Terrain", WithHorizon = !earth };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
@@ -593,6 +594,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
             _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
+            // what its tiles hold, by name (#1684): the leaves' stand-ins over the region's files
+            _earth.Content = WorldSource;
             // the leaves' ground in the style kit's terrain material (#1634): fog and the settings reach it as the tiles'
             FogUniforms.Apply(_earth.GroundMaterial);
             _worldMaterials = [.. _worldMaterials, _earth.GroundMaterial];
@@ -612,8 +615,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
         AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
-        // under earth the wheels find their roads on the leaves' stand-in tiles (#1649)
-        Audio.Surfaces.Source = _earth != null ? WorldSource : null;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
         {
@@ -681,16 +682,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: false) is { } webRadioOffline) AddChild(webRadioOffline);
         }
         // the Africa Twin at Riddes: placed here offline, by the server online
-        AddChild(new World.AfricaTwinEgg(_chunks));
+        AddChild(new World.AfricaTwinEgg(Ground!));
         // the cars already standing in the car parks (#499); the server promotes one when it is
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
-            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin, Ground));
+            AddChild(new Vehicles.DormantVehicles(Ground!, dormantOrigin));
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
-        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks, Ground));
+        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(Ground!));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -747,14 +748,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             Occasions.OccasionManager.Create(this);
             // their props, dressed onto each tile as its buildings load
-            AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+            AddChild(new Occasions.OccasionDecor(Ground!, origin));
             // …the creatures in the air around the camera, and their sounds
             AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
             // …and snow falling round the camera, except indoors and above the cloud layer (#1637)
             AddChild(new Occasions.OccasionPrecip(origin, at => Ground is { } gr && gr.TryGetSurface(at, out float y) ? y : null));
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
-            Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
+            Occasions.UfoSightings.Create(this, Ground!, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
             Occasions.Festivals.Fireworks.Create(this, _chunks, origin);
             Occasions.Festivals.Sechselaeuten.BooggStage.Create(this, _chunks, origin);
@@ -765,30 +766,30 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the slopes drawn on the terrain material near the camera
         if (Systems.On(Systems.Snow))
         {
-            var snow = World.Snow.SnowService.Create(this, _chunks);
+            var snow = World.Snow.SnowService.Create(this, Ground!);
             if (_worldMaterials.Length > 0)
             {
                 _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
                 AddChild(_pistes);
             }
-            AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
+            AddChild(new World.Snow.SlopeMarkers(Ground!, snow));
         }
         // the ski lifts (#912): the lines from the road tiles, the carriers on the shared clock
         if (Systems.On(Systems.Lifts))
         {
-            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, _chunks);
+            var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, Ground!);
             AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
             AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
-        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(Ground!));   // neon over every venue (#1232)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueFronts(_chunks));   // glazed fronts of shop units and venues (#1292)
-        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, WorldSource!));   // tables out front (#1243)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(Ground!, WorldSource!));   // tables out front (#1243)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
         // tonight's concert in each stadium (#885)
-        AddChild(new Concert.ConcertDirector(_chunks));
+        AddChild(new Concert.ConcertDirector(Ground!));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.
@@ -1067,7 +1068,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!placedByTool)
         {
             var (spawnE, spawnN) = SpawnPoint.ParseTarget(Launch);
-            AddChild(_spawn = new SpawnPoint(_spectator, Ground!, origin, spawnE, spawnN));
+            AddChild(_spawn = new SpawnPoint(_spectator, Ground!, origin, spawnE, spawnN) { StillLoading = EarthLoading });
         }
 
         // The teleporter resolves what to move at the moment of the jump — fly camera, local
@@ -1131,6 +1132,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
+        if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: false, fillE, fillN));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.BoatTrailerCheck.Role is { } trailerRole) AddChild(new Player.BoatTrailerCheck(trailerRole, () => LocalPlayer));
         if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));
@@ -1555,7 +1557,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
             // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
-            Farming.Herds.Create(this, _chunks, origin, dedicated: false);
+            Farming.Herds.Create(this, Ground!, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
             if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
             if (Farming.HandFarmCheck.Requested) AddChild(new Farming.HandFarmCheck(items, origin));
@@ -1565,7 +1567,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Birds.BirdLife birds = null!;
         if (Systems.On(Systems.Birds))
         {
-            AddChild(birds = new Birds.BirdLife(_chunks, origin, items));
+            AddChild(birds = new Birds.BirdLife(Ground!, origin, items));
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
         }
@@ -1756,7 +1758,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (LocalPlayer == null || !_onFoot)
             {
                 Report(LoadStage.WaitingForPlayer, 0.28f);
-                if (_loadClock > 45) Fail("The server never spawned your player.");
+                // an earth world's first fill leaves can take most of a minute (#1682): not while they still load
+                if (_loadClock > 45 && (_loadClock > SpawnPoint.LoadingWaitS || !EarthLoading())) Fail("The server never spawned your player.");
                 return;
             }
         }
@@ -1809,7 +1812,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var horizon = _chunks.Horizon?.Progress();
         bool nearReady = total > 0 && done >= total;
         bool horizonBehind = Launch.Mode == GameMode.Multiplayer || !Launch.FromCommandLine;
-        if (horizonBehind)
+        // the earth world has no flat horizon (#1699): its far ground is the globe's
+        if (_earth != null) { }
+        else if (horizonBehind)
         {
             // only when nothing near is ready and the horizon is still unknown is there nothing to show yet
             if (!timedOut && horizon == null && !nearReady)
@@ -1845,6 +1850,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
+
+    /// <summary>An earth world still loading leaves round its foci (the spawn's among them).</summary>
+    private bool EarthLoading() => _earth is { Idle: false };
 
     private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
 
@@ -1885,22 +1893,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             leaves = Terrain.Leaves.EarthLeaves.Fixture(built.Leaves.Contains, built.Build);
             GD.Print($"[earth] fixture course {course.Course.Name} on {built.Leaves.Count} leaves");
         }
-        else
-        {
-            var real = Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir());
-            if (generated != null)
-            {
-                var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
-                // --no-fill-roads: the fill's leaves without RoadGen's stage (~0.5 s a leaf instead of ~2 s)
-                // the fill on the globe's pyramid where the game has the full one (#1678); the shipped levels are coarser
-                // than the generator's own relief, which it keeps then
-                var pyramid = Terrain.Leaves.PyramidBase.Open(World.Globe.DataDir);
-                GD.Print($"[earth] the fill on {(pyramid != null ? $"the pyramid (to level {pyramid.FinestLevel}, {pyramid.Lakes.Length} lake(s))" : "the generator's own relief")}");
-                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"),
-                    pyramid: pyramid);
-            }
-            else leaves = Terrain.Leaves.EarthLeaves.Region(real);
-        }
+        // the region's and the fill, as the server builds them (#1682): --no-fill-roads leaves RoadGen's stage out
+        else return Terrain.Earth.GameLeaves.Region(generated, startE, startN, () => FillOn);
         leaves.Log = s => GD.Print(s);
         return leaves;
     }

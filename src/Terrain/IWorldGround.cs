@@ -62,6 +62,20 @@ public interface IWorldGround
     /// <summary>The tile under a world point, loaded or not (the default tile before the world is set up).</summary>
     GroundTile TileAt(Vector3 worldPos);
 
+    /// <summary>
+    /// The name what a tile holds is filed under (#1684): what <see cref="Content"/> loads it by, what its doors and
+    /// buildings are keyed by (<c>DoorIndex</c>, <c>BuildingKey</c>). The flat world's LV95 tile; an earth leaf's
+    /// stand-in (<see cref="Leaves.LeafStandIn"/>, #1510). Step D re-keys what is keyed by it (C5's <c>BuildingId</c>).
+    /// </summary>
+    TileId ContentName(GroundTile tile) => tile.ContentName;
+
+    /// <summary>
+    /// What the world's tiles hold, loaded by <see cref="ContentName"/> (#1684): roads, buildings, trees, the 1 m grid;
+    /// the region-wide files (landings, airports, ropeways) too. The flat world's chunk source; an earth world's
+    /// stand-ins over its leaves (<c>StandInChunkSource</c>) with the region's files beneath. Null before it is wired.
+    /// </summary>
+    IChunkSource? Content { get; }
+
     /// <summary>A loaded tile's ground mesh, for per-tile shader parameters; null when not drawn.</summary>
     MeshInstance3D? GroundAt(GroundTile tile);
 

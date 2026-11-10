@@ -496,6 +496,12 @@ public sealed partial class ProceduralWorld
     private readonly Queue<TileId> _latticeOrder = new();
 
     /// <summary>
+    /// Tiles whose lattices are kept (~0.35 MB each with the fine one): a fill leaf's roads read the ground over a 5 x 5
+    /// leaves' halo, ~25 tiles, beside the leaves' own and the globe's far heights; 16 rebuilt them constantly (#1699).
+    /// </summary>
+    private const int KeptLattices = 64;
+
+    /// <summary>
     /// A tile's lattices, kept for a few tiles: its grid, cover, trees, roads and buildings all
     /// read them. The coarse one is cheap and always there; the fine one only when asked for.
     /// </summary>
@@ -526,7 +532,7 @@ public sealed partial class ProceduralWorld
                 {
                     _lattices[id] = lattice;
                     _latticeOrder.Enqueue(id);
-                    while (_latticeOrder.Count > 16) _lattices.Remove(_latticeOrder.Dequeue());
+                    while (_latticeOrder.Count > KeptLattices) _lattices.Remove(_latticeOrder.Dequeue());
                 }
             }
         }
