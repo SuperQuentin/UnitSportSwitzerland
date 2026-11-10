@@ -186,6 +186,7 @@ else if (args.Contains("--tiling-check"))
 {
     // #1660: the network stage under several tilings of the same raw lines, every record compared (the bar)
     string chunks = ArgValue("--chunks") ?? "terrain_chunks";
+    DebugJunctionArg();   // the plans there under each tiling
     var b = (ArgValue("--box") ?? throw new ArgumentException("--tiling-check needs --box minE,minN,maxE,maxN"))
         .Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
     var tilings = (ArgValue("--tilings") ?? UnitSport.Tools.RoadGen.Diagnostics.TilingCheck.DefaultTilings)
