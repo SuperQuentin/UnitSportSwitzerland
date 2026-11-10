@@ -896,3 +896,11 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 
 - [ ] Drive a car through Geneva's centre for 5 km, across two re-anchors and several graph rebuilds (every 800 m) → cars, trams, walkers and riders much as dense as in flat; cars stop at red and go on green; no car, tram or walker jumps, turns round on the spot or vanishes at a rebuild or a re-anchor.
 - [ ] Stand at the Pont du Mont-Blanc lights for two cycles → walkers cross on green only, riders wait at their line, trams run their lines over the bridge.
+
+## The traffic-lights region under `--frame earth` (PR [#1651](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1651), [#1647](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1647))
+
+With "World frame" set to earth (or `--frame earth`): Play solo, World: Traffic lights region.
+
+- [ ] Start it the first time → the loading screen says the region and its leaves are being built (up to two minutes), then you stand at J1's south-west corner on flat grass.
+- [ ] Tab to J2, J12-GE and J14 and watch a cycle at each → lights, poles, paint and traffic as on flat. Where a leaf edge crosses an arm, a pocket or a bike lane may be missing ([#1660](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1660)).
+- [ ] Host a game in that world and join from a second copy → the host builds the leaves before the server starts, and both stand on the same junctions.
