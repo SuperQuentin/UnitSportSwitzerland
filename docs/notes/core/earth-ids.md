@@ -30,7 +30,9 @@ generators as tested code; **C1's PR 2 (furnishing leaves, #1510) calls them** w
   goes through ECEF in a non-flat frame).
 - **What C1 PR 2 wires** (none of it reachable before buildings and fields exist on leaves in the game):
   - a leaf's buildings keyed by `BuildingId.Assign(buildings, b => BuildingId.OnLeaf(leaf, b))` wherever the flat world
-    uses `BuildingKey` text (interiors' layouts, loot, shop, locks, Christmas claims);
+    uses `BuildingKey` text (interiors' layouts, loot, shop, locks, Christmas claims). **Seeds wired** (#1658): the
+    stand-in key stays the store and door key, and `Core.Fnv` hashes it as its `BuildingId` (`Fnv.Alias`, registered
+    in `LeafStandIn.Buildings`); the stores move to the id at D;
   - `RewardPlacer`'s cell lotteries over `EarthCells.LotteryCells(leaf)` with `Chance`, spot ids from `SpotId`;
   - the farm's fields from the leaf's `Fields` section through the leaf-frame grid (`FieldTile.Build` unchanged on it),
     worked cells keyed by the leaf (`CubeKey.FileStem`) until D re-keys `user://farm/E_N.json`.

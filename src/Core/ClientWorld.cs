@@ -170,7 +170,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         // which world this is (#999): every path, course and save below reads it
         WorldChoice.Active = Launch.World;
-        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
+        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter(CourseOnLeaves);
         Audio.SfxBus.Ensure();
         foreach (var (requested, run) in QuickChecks)
             if (requested())
@@ -430,7 +430,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _fixtureStart = (fE, fN);
             // on its leaves under earth offline (below): what stands on it outside them is placed as they are (#1649)
             source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN,
-                    earth: GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked)
+                    earth: CourseOnLeaves)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
         }
@@ -800,7 +800,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.SkyBodies());
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
-            if (World.Globe.DataDir is { } globe)
+            // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
+            if (World.Globe.DataDir is { } globe && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
                 AddChild(_earth != null
@@ -816,7 +817,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (WorldChoice.FunActive)
         {
             if (_dayNight != null) _dayNight.HourOverride = World.Fun.FunWorld.DuskHour;
-            AddChild(new World.Fun.FunBackdrop(_chunks, origin, environment));
+            AddChild(new World.Fun.FunBackdrop(origin, environment));
             AddChild(new World.Fun.FunRings(origin, () => LocalPlayer));
         }
 
@@ -1818,6 +1819,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The generated fill is on regardless of its setting: offline with no terrain data, it is the only ground.</summary>
     private bool _fillForced;
     private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
+
+    /// <summary>
+    /// A fixture course (the fun world among them) is played on its own leaves: under <c>--frame earth</c>, offline
+    /// (online it stays flat, as the server does on one). What stands on it is laid as the leaves are (#1649, #1648).
+    /// </summary>
+    private bool CourseOnLeaves => GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked;
 
     /// <summary>
     /// <c>--earthcheck</c>: on a fixture course along its longest reach from the start, 300 m into the leaves' margin

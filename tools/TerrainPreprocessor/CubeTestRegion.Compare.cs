@@ -1,14 +1,12 @@
 using System.Globalization;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.TestRegion;
+using Mark = UnitSport.Tools.RoadGen.Diagnostics.RecordMarks.Mark;
 
 namespace UnitSport.Tools.Preprocessor;
 
 public static partial class CubeTestRegion
 {
-    /// <summary>A record compared, at its LV95 position (E, N, height above sea level), with what must be equal in both builds.</summary>
-    private readonly record struct Mark(double E, double N, double H, string Look);
-
     /// <summary>
     /// The bars (#1647, B3's restated bar: <c>roadgen-units</c>, #1546): every count equal, every record matched within
     /// <see cref="MatchM"/> with the same look (a signal's canton look and plan size, a pole's flags, an approach's lanes, a
@@ -57,13 +55,13 @@ public static partial class CubeTestRegion
             if (!File.Exists(path)) continue;
             RoadTile tile;
             using (var fs = File.OpenRead(path)) tile = RoadCodec.Decode(fs);
-            Collect(tile, lv, (x, y, z) => (id.MinE + x, id.MaxN - z, y));
+            UnitSport.Tools.RoadGen.Diagnostics.RecordMarks.Collect(tile, lv, (x, y, z) => (id.MinE + x, id.MaxN - z, y));
         }
         foreach (var leaf in heights.Leaves)
         {
             if (heights.ReadKind(leaf, LeafKind.Roads) is not { } sec) continue;
             var anchor = leaf.Anchor;
-            Collect(LeafRoads.Decode(sec), cube, (x, y, z) => SwissGeodesy.FromEcef(anchor.ToEcef(x, y, z)));
+            UnitSport.Tools.RoadGen.Diagnostics.RecordMarks.Collect(LeafRoads.Decode(sec), cube, (x, y, z) => SwissGeodesy.FromEcef(anchor.ToEcef(x, y, z)));
         }
         if (real)
             foreach (var into in new[] { lv, cube })
@@ -239,46 +237,5 @@ public static partial class CubeTestRegion
     {
         double km = KmLineM(e, n);
         return string.Create(CultureInfo.InvariantCulture, $"{km:F0} m from a km line, ~{LeafEdgeM(e, n):F0} m from a leaf edge");
-    }
-
-    /// <summary>
-    /// A tile's records compared, by kind, at LV95 positions through <paramref name="lv95"/> (a record's x, y, z). Arm numbers are
-    /// left out of the looks: a plan numbers its arms by heading, and the two builds' headings differ by the grid's convergence.
-    /// </summary>
-    private static void Collect(RoadTile tile, Dictionary<string, List<Mark>> into, Func<double, double, double, (double E, double N, double H)> lv95)
-    {
-        void Add(string kind, double x, double y, double z, string look)
-        {
-            var (e, n, h) = lv95(x, y, z);
-            if (!into.TryGetValue(kind, out var list)) into[kind] = list = new();
-            list.Add(new Mark(e, n, h, look));
-        }
-        foreach (var j in tile.Junctions)
-        {
-            double x = 0, y = 0, z = 0;
-            int count = j.Vertices.Length / 3;
-            if (count == 0) continue;
-            for (int k = 0; k < j.Vertices.Length; k += 3) { x += j.Vertices[k]; y += j.Vertices[k + 1]; z += j.Vertices[k + 2]; }
-            Add("junction", x / count, y / count, z / count, j.Class.ToString());
-        }
-        foreach (var s in tile.Signals)
-        {
-            var p = s.Plan;
-            Add("signal", s.X, s.Y, s.Z, $"{p.Arms.Count} arms {p.Groups.Count} groups, peds {(p.PedestrianAmber ? "3" : "2")}-lens, "
-                + $"plates {p.ArrowPlates}, tram T {p.TramTHead}, poles {p.PoleColour}, {s.Overheads.Count} overheads, {s.Gantries.Count} gantries");
-            for (int k = 0; k + 2 < s.Stops.Length; k += 3)
-                if (!float.IsNaN(s.Stops[k])) Add("stop line", s.Stops[k], s.Stops[k + 1], s.Stops[k + 2], "");
-            foreach (var pole in s.Poles) Add("pole", pole.X, pole.Y, pole.Z, pole.Flags.ToString());
-        }
-        foreach (var a in tile.Approaches)
-            Add("approach", a.X, a.Y, a.Z, string.Join(" | ", a.Lanes.Select(l => $"{l.Kind}:{l.Moves}")) + (a.Signal >= 0 ? " lit" : ""));
-        foreach (var pp in tile.PointProps)
-            if (pp.Type == PointPropType.CantonSign) Add("canton sign", pp.X, pp.Y, pp.Z, $"variant {pp.Variant}");
-        foreach (var paint in tile.Paint)
-            if (paint.Rgba == SignalTestRegion.BorderRgba && paint.Vertices.Length >= 6)
-            {
-                var v = paint.Vertices;
-                Add("border stripe", (v[0] + v[^3]) / 2, (v[1] + v[^2]) / 2, (v[2] + v[^1]) / 2, "");
-            }
     }
 }
