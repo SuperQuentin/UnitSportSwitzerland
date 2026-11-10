@@ -444,6 +444,14 @@ public sealed partial class ProceduralWorld
     public double Height(double e, double n) => Height(null, e, n);
 
     /// <summary>
+    /// The generator's base at a point (#1678): its 500 m macro relief, above sea level, which its height adds its relief
+    /// to, and how far into one of its lakes the point is (0..1, water above 0.5). The earth world's fill swaps that base
+    /// for the globe's pyramid and keeps the rest of the height as detail (<c>Leaves/PyramidFill</c>).
+    /// </summary>
+    public static (double Macro, double Lake) BaseAt(double e, double n) =>
+        (Relief.Instance.Macro(e, n), LakeField(e, n, out _, out _));
+
+    /// <summary>
     /// <see cref="Height(double, double)"/> through <paramref name="tile"/>'s cached lattices, for many points in or round
     /// it (a cube leaf's vertices, #1509): the same arithmetic on the same corners.
     /// </summary>

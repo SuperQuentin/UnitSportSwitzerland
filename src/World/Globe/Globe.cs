@@ -516,7 +516,8 @@ public partial class Globe : Node
                         var (palette, rect) = Earth ? AncestorPalette(key) : (null, default);
                         // the heights hold the lake's bed (#298): the surface over it, as the leaf draws its water
                         bool isReal = leaves is Terrain.Leaves.EarthLeaves { Real: var real } && real.Has(key);
-                        var water = isReal ? ((Terrain.Leaves.EarthLeaves)leaves).Real.Sections(key, Terrain.Format.LeafKind.Water)?.Water : null;
+                        // a fill leaf's too (#1678): the pyramid's lakes it stands on, over the fill's bed
+                        var water = leaves is Terrain.Leaves.EarthLeaves earthLeaves ? earthLeaves.WaterOf(key) : null;
                         var lakes = Earth ? new WaterOut() : null;
                         if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves,
                             lakes: _lakeLevels) is { } arrays)

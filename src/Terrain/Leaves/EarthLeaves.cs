@@ -49,7 +49,7 @@ public sealed class EarthLeaves : ILeafSource
         _fillOn = fillOn ?? (() => true);
         _fixtureHas = fixtureHas;
         _fixture = fixture;
-        if (generated != null) Blend = new LeafBlend(real.IsReal, real.HeightsOf);
+        if (generated != null) Blend = new LeafBlend(real.IsReal, real.HeightsOf, pyramid: generated.Pyramid);
     }
 
     /// <summary>The region's leaves alone.</summary>
@@ -80,9 +80,11 @@ public sealed class EarthLeaves : ILeafSource
     /// <summary>The region's leaves and the fill round them, its domain a disc round the start and round the region.</summary>
     /// <param name="fillOn">The fill's setting, asked whenever a leaf is: off, only real leaves are served.</param>
     /// <param name="roads">Whether the fill's leaves carry roads (RoadGen's stage, ~2 s a leaf, one at a time).</param>
+    /// <param name="pyramid">The globe's pyramid the fill is built on (#1678, <see cref="PyramidFill"/>); null, the
+    /// generator's own ground, blended over the 3 km band.</param>
     public static EarthLeaves WithFill(LeafStore real, ProceduralWorld world, double startLatDeg, double startLonDeg,
-        Func<bool>? fillOn = null, bool roads = true) =>
-        new(real, new GeneratedLeaves(world), roads ? new GeneratedLeafRoads(world) : null,
+        Func<bool>? fillOn = null, bool roads = true, PyramidBase? pyramid = null) =>
+        new(real, new GeneratedLeaves(world, pyramid: pyramid), roads ? new GeneratedLeafRoads(world) : null,
             LeafFillDomain.At(startLatDeg, startLonDeg).WithReal(real.Keys), fillOn, null, null);
 
     /// <summary>The fill's domain now; null without a fill.</summary>
@@ -151,7 +153,7 @@ public sealed class EarthLeaves : ILeafSource
     /// <summary>Generator vertices a side between the globe's heights-only samples (it draws every 8th).</summary>
     public const int GlobeStride = 8;
 
-    private readonly ConcurrentDictionary<CubeKey, Lazy<CubeTile?>> _heightsMade = new();
+    private readonly ConcurrentDictionary<CubeKey, Lazy<(CubeTile? Heights, CubeWater? Lakes)>> _heightsMade = new();
     private readonly ConcurrentQueue<CubeKey> _heightsOrder = new();
 
     public CubeTile? HeightsOf(CubeKey key)
@@ -167,22 +169,40 @@ public sealed class EarthLeaves : ILeafSource
         }
         if (_fixtureHas?.Invoke(key) == true) return Get(key)?.Heights;
         if (!Filled(key)) return null;
+        return FarMade(key, realHeights).Heights;
+    }
+
+    /// <summary>
+    /// A leaf's still water for the globe's far ground (#1678): the region's own on a real leaf, a fill leaf's when it is
+    /// made, else the pyramid's lakes over it (made with its far heights, <see cref="HeightsOf"/>); null when dry.
+    /// </summary>
+    public CubeWater? WaterOf(CubeKey key)
+    {
+        if (Real.Has(key) && !Filled(key)) return Real.Sections(key, LeafKind.Water)?.Water;
+        if (Cached(key) is { } made) return made.Water;
+        if (Real.Has(key)) return Real.Sections(key, LeafKind.Water)?.Water;
+        if (!Filled(key)) return null;
+        return FarMade(key, null).Lakes;
+    }
+
+    private (CubeTile? Heights, CubeWater? Lakes) FarMade(CubeKey key, float[]? realHeights)
+    {
         bool added = false;
         var lazy = _heightsMade.GetOrAdd(key, k =>
         {
             added = true;
-            return new Lazy<CubeTile?>(() =>
+            return new Lazy<(CubeTile?, CubeWater?)>(() =>
             {
                 try
                 {
-                    var g = _generated!.Heights(k, GlobeStride);
+                    var (g, lakes) = _generated!.Far(k, GlobeStride);
                     var r = Blend!.Heights(k, g.Heights, realHeights);
-                    return r is null ? g : new CubeTile { Key = k, Bits = g.Bits, Heights = r.Heights, Quantum = g.Quantum };
+                    return (r is null ? g : new CubeTile { Key = k, Bits = g.Bits, Heights = r.Heights, Quantum = g.Quantum }, lakes);
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
                     Log?.Invoke($"[earth] heights {k}: {e.GetType().Name}: {e.Message}");
-                    return null;
+                    return (null, null);
                 }
             });
         });
@@ -200,7 +220,8 @@ public sealed class EarthLeaves : ILeafSource
         if (roads && _roads != null)
             try { content.Roads = _roads.Build(key); }
             catch (Exception e) when (e is not OperationCanceledException) { Log?.Invoke($"[earth] fill roads {key}: {e.Message}"); }
-        return content;
+        // on the globe's pyramid (#1678), its roads moved with the ground
+        return _generated.OnPyramid(content);
     }
 
     private CubeLeafContent? Made(CubeKey key, Func<CubeKey, CubeLeafContent?> make)

@@ -19,7 +19,9 @@ namespace UnitSport.Terrain.Leaves;
 /// Thread-safe; a leaf costs ~0.5 s of one core, most of it the tiles' products, kept for the
 /// last <see cref="KeptTiles"/> tiles (a leaf reads one to four).
 /// </summary>
-public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = null)
+/// <param name="pyramid">The globe's pyramid the earth world's fill stands on (#1678, <see cref="PyramidFill"/>):
+/// <see cref="OnPyramid"/> moves a built leaf onto it; null, the generator's own ground.</param>
+public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = null, PyramidBase? pyramid = null)
 {
     /// <summary>LV95 tiles whose products are held.</summary>
     public const int KeptTiles = 24;
@@ -28,6 +30,8 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
     private readonly ConcurrentDictionary<TileId, Lazy<Products>> _tiles = new();
 
     public ProceduralWorld World => world;
+
+    public PyramidBase? Pyramid => pyramid;
 
     private sealed record Products(byte[] Cover, WaterTile? Water, List<TreeInstance> Trees, BuildingTile? Buildings);
 
@@ -78,6 +82,38 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
     {
         var on = new SourceOnLeaf(_frames, leaf, Lv95Source.Instance);
         return LeafLattice.Heights(on, (e, n) => world.HeightIn(TileId.FromLv95(e, n), e, n), stride);
+    }
+
+    /// <summary>The generator's base (macro relief above sea level, lake weight) at a leaf's lattice points.</summary>
+    private static Func<int, int, (double, double)> BaseOn(SourceOnLeaf on) => (i, j) =>
+    {
+        var (e, n) = on.SourceAt(i, j);
+        return ProceduralWorld.BaseAt(e, n);
+    };
+
+    /// <summary>
+    /// A built leaf (<see cref="Build"/>, its roads among it) moved onto the pyramid (#1678, <see cref="PyramidFill"/>);
+    /// unchanged without one, or where the pyramid holds no height over it.
+    /// </summary>
+    public CubeLeafContent OnPyramid(CubeLeafContent content)
+    {
+        if (pyramid is null || content.Heights is not { } h) return content;
+        var on = new SourceOnLeaf(_frames, content.Key, Lv95Source.Instance);
+        if (PyramidFill.Build(pyramid, on.Transform, h.Heights, BaseOn(on)) is { } ground) PyramidFill.Apply(content, ground, on.Transform);
+        return content;
+    }
+
+    /// <summary>
+    /// The globe's far ground of a fill leaf (<see cref="Heights(CubeKey, int)"/>), on the pyramid when there is one, and
+    /// the pyramid's lakes on it (the globe draws them as the leaf's own water).
+    /// </summary>
+    public (CubeTile Heights, CubeWater? Lakes) Far(CubeKey leaf, int stride)
+    {
+        var g = Heights(leaf, stride);
+        if (pyramid is null) return (g, null);
+        var on = new SourceOnLeaf(_frames, leaf, Lv95Source.Instance);
+        if (PyramidFill.Build(pyramid, on.Transform, g.Heights, BaseOn(on)) is not { } ground) return (g, null);
+        return (new CubeTile { Key = leaf, Bits = g.Bits, Heights = ground.Heights, Quantum = g.Quantum }, PyramidFill.Lakes(ground, g.Bits));
     }
 
     /// <summary>The LV95 tiles a leaf's box reaches.</summary>

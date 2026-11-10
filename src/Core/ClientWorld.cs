@@ -1882,7 +1882,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             {
                 var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
                 // --no-fill-roads: the fill's leaves without RoadGen's stage (~0.5 s a leaf instead of ~2 s)
-                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"));
+                // the fill on the globe's pyramid where the game has the full one (#1678); the shipped levels are coarser
+                // than the generator's own relief, which it keeps then
+                var pyramid = Terrain.Leaves.PyramidBase.Open(World.Globe.DataDir);
+                GD.Print($"[earth] the fill on {(pyramid != null ? $"the pyramid (to level {pyramid.FinestLevel}, {pyramid.Lakes.Length} lake(s))" : "the generator's own relief")}");
+                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"),
+                    pyramid: pyramid);
             }
             else leaves = Terrain.Leaves.EarthLeaves.Region(real);
         }

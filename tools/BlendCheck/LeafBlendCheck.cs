@@ -40,7 +40,10 @@ internal static class LeafBlendCheck
         }
         var world = new ProceduralWorld(AnchorE, AnchorN);
         var (lat, lon) = Lv95Source.Instance.ToLatLon(AnchorE, AnchorN);
-        var leaves = EarthLeaves.WithFill(store, world, lat, lon, roads: false);
+        // --pyramid DIR: the fill on the globe's pyramid (#1678), as the game builds it where the full one is on disk
+        var pyramid = PyramidBase.Open(Value(args, "--pyramid"));
+        if (Value(args, "--pyramid") != null) WriteLine(pyramid != null ? $"the fill on the pyramid (to level {pyramid.FinestLevel}, lakes {string.Join(", ", pyramid.Lakes)})" : "no pyramid there");
+        var leaves = EarthLeaves.WithFill(store, world, lat, lon, roads: false, pyramid: pyramid);
         leaves.Log = WriteLine;
         var blend = leaves.Blend!;
         var frames = LeafFrames.Swiss;
@@ -189,7 +192,8 @@ internal static class LeafBlendCheck
                 foreach (var (k, leaf) in block)
                 {
                     if (store.Has(k) && blend.Summary(k) is { Full: true }) continue;
-                    var gen = new GeneratedLeaves(world).Build(k).Heights!.Heights;
+                    var generator = new GeneratedLeaves(world, pyramid: pyramid);
+                    var gen = generator.OnPyramid(generator.Build(k)).Heights!.Heights;
                     var h = leaf.Heights!.Heights;
                     var m = kept[k];
                     for (int q = 0; q < h.Length; q += 3)
@@ -256,6 +260,15 @@ internal static class LeafBlendCheck
                     double shade = double.IsNaN(hz) ? 0 : Math.Clamp((nx * -0.5 + ny * 0.5 + nz * 0.707) / len, 0, 1);
                     bool real = m[j * n + i];
                     int o = ((oy + y) * size + ox + x) * 3;
+                    // still water (the nearest sample of the leaf's own) blue, over its bed's shading
+                    bool wet = leaf.Water is { } w && !float.IsNaN(w.Level[Math.Min(j / CubeWater.Stride, w.Side - 1) * w.Side + Math.Min(i / CubeWater.Stride, w.Side - 1)]);
+                    if (wet)
+                    {
+                        rgb[o] = (byte)(60 * shade + 20);
+                        rgb[o + 1] = (byte)(110 * shade + 30);
+                        rgb[o + 2] = (byte)(200 * shade + 50);
+                        continue;
+                    }
                     rgb[o] = (byte)(255 * shade * (real ? 0.85 : 1.0));
                     rgb[o + 1] = (byte)(255 * shade * (real ? 0.9 : 0.85));
                     rgb[o + 2] = (byte)(255 * shade * (real ? 1.0 : 0.7));
