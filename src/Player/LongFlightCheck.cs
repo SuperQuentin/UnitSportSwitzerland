@@ -22,7 +22,7 @@ namespace UnitSport.Player;
 /// <item>the far view missing: one of 8 points round it at 70 % of the horizon (at most 150 km) drawn by nothing for
 /// 10 s;</item>
 /// <item>under 300 m over the pyramid's ground, a crash, or out of the aircraft;</item>
-/// <item>a jump at a re-anchor (<see cref="ReanchorWatch"/>: the aircraft and the chase camera);</item>
+/// <item>a jump at a re-anchor (<see cref="ReanchorWatch"/>: the aircraft and the chase camera; not the ground, km under it);</item>
 /// <item>with the destination's leaves (<c>--leaves</c> on Brest's): none drawn under it once down at 1,500 m.</item>
 /// </list>
 /// <c>--flightkm</c> stops after that many km (a shorter run); <c>--flightwarp</c> (4) is the engine's time scale for
@@ -118,22 +118,42 @@ public partial class LongFlightCheck : Node
         _phase = 1;
     }
 
+    // a pilot boards on a floor only (SetRide): a platform under it at the start's altitude, gone once aboard
+    private StaticBody3D? _platform;
+
     private void Launch()
     {
-        var p = new FootPlayer { Name = "Pilot", Terrain = _ground };
-        AddChild(p);
-        p.GlobalPosition = _camera.GlobalPosition;
+        if (_player == null)
+        {
+            _platform = new StaticBody3D { Name = "Platform" };
+            _platform.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(60, 1, 60) } });
+            AddChild(_platform);
+            _platform.GlobalPosition = _camera.GlobalPosition + Vector3.Down * 0.5f;
+            _player = new FootPlayer { Name = "Pilot", Terrain = _ground };
+            AddChild(_player);
+            _player.GlobalPosition = _camera.GlobalPosition + Vector3.Up * 1.2f;
+            _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // placed by hand: no terrain to wait for
+            return;
+        }
+        var p = _player;
+        if (!p.IsOnFloor()) { if (Now > 90) { _faults.Add("the pilot never stood on the platform"); Finish(); } return; }
         if (!p.SetRide(RideKind.A320) || p.Vehicle is not Airliner jet) { _faults.Add("could not board an A320"); Finish(); return; }
-        _player = p;
+        _platform!.QueueFree();
+        _platform = null;
         _jet = jet;
         float yaw = YawToward(p.GlobalPosition);
         p.Rotation = new Vector3(0, yaw, 0);
         jet.State.Yaw = yaw;
-        p.DebugLaunch(p.GlobalPosition, AirlinerFlight.Heading(yaw) * 150f);
+        // in the light sim an airliner boards cold (Parked with no engines): put in the air with every engine lit
+        jet.State.Battery = true;
+        jet.State.Starting = true;
+        jet.State.Lit = jet.Spec.Engines;
+        p.DebugLaunch(p.GlobalPosition + Vector3.Up * 5f, AirlinerFlight.Heading(yaw) * 150f);
         _ground?.AddAnchor(p, collision: true);
         _watch.Watch("aircraft", () => _player);
         _watch.Watch("camera", () => _camera);
-        _watch.WatchGround(() => _player?.GlobalPosition);
+        // not the ground: kilometres under it (the fill's at Geneva moved 3.3 cm at a re-anchor, #1710); the drive and
+        // --reanchorcheck ask it on the region's leaves
         _last = _origin.ToGlobal(p.GlobalPosition);
         Engine.TimeScale = _warp;
         _phase = 2;
@@ -271,7 +291,7 @@ public partial class LongFlightCheck : Node
         _watch.Judge();
         var lv = new List<string>();
         foreach (var (k, v) in _levels) lv.Add(Inv($"{(k == World.Globe.LeafLevelDrawn ? "leaf" : k.ToString(CultureInfo.InvariantCulture))}:{v}"));
-        Log(Inv($"flew {_flown / 1000:F0} km in {_t:F0} s of game time; {_samples} checks, the ground under it by level {string.Join(" ", lv)}; worst hole {_worstHoleS:F1} s; far view {_farSamples - _farMissed} of {_farSamples} points drawn, worst gap {_worstFarHoleS:F1} s; lowest {_lowestAgl:F0} m over the ground"));
+        Log(Inv($"flew {_flown / 1000:F0} km in {_t:F0} s of game time; {_samples} checks, the ground under it by level {string.Join(" ", lv)}; worst hole {_worstHoleS:F1} s; far view {_farSamples - _farMissed} of {_farSamples} points drawn, worst gap {_worstFarHoleS:F1} s; lowest {(_lowestAgl < double.MaxValue ? _lowestAgl : double.NaN):F0} m over the ground"));
         Log(_watch.Summary().Replace("[longflight] ", ""));
         _faults.AddRange(_watch.Faults);
         if (_leafSeen == 0) _faults.Add("no leaf drawn under the aircraft over the destination (its leaves missing, or not in --leaves)");
