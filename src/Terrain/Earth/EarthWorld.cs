@@ -478,12 +478,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     }
 
     /// <summary>
-    /// Every standing patch built again, the preparations of the leaves not loaded dropped first (<see
-    /// cref="LeafCollisionSource.Trim"/>), as the source's trim does by chance: <c>--earthcheck</c>'s stress of #1626. The
-    /// count of standing patches. Main thread.
+    /// Every standing patch built again, the produced leaves (<see cref="EarthLeaves.DropMade"/>) and the preparations of
+    /// the leaves not loaded (<see cref="LeafCollisionSource.Trim"/>) dropped first, as their trims do on a long journey:
+    /// <c>--earthcheck</c>'s stress of #1626. The count of standing patches. Main thread.
     /// </summary>
     internal int RecutPatches()
     {
+        Leaves.DropMade();
         _collisionSource.Trim();
         _patches.Rebuild(_ => true);
         return _bodies.Count;

@@ -179,8 +179,8 @@ public partial class EarthCheck : Node3D
         _turnSum = _worstTurnError = _worstTilt = 0;
         _phase = 1;
         _phaseS = Now;
-        // every patch cut again from a fresh preparation of each leaf no loaded leaf holds, as the source's trim did by
-        // chance (#1626: a leaf prepared again from a later view of the fill stood 27 m over its height query); the rays
+        // every patch cut again from a fresh preparation of each leaf no loaded leaf holds, the fill's leaves made again,
+        // as their trims did by chance (#1626: a leaf prepared again from a later view of the fill stood 27 m over its height query); the rays
         // then judge the patches cut again, and the loaded leaves' must still agree with their queries
         if (Earth is { } earth) Log($"patches cut again: {earth.RecutPatches()} standing");
     }
