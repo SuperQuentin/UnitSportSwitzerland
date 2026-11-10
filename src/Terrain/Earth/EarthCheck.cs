@@ -10,7 +10,8 @@ namespace UnitSport.Terrain.Earth;
 /// earth world on a region's real leaves. Waits for the ground under the start, then:
 /// <list type="number">
 /// <item>collision and the height query agree: over a 21 × 21 grid 20 m apart, a ray down onto the patches lands
-/// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> or on a feature over it (a roof, a bridge), under it at
+/// within 5 cm of <see cref="IWorldGround.TryGetHeight"/> or on a feature over it (a roof, a bridge; never the leaf's
+/// own ground off it, #1626), under it at
 /// most 1 % of the rays (road holes), and at least 100 reach the ground;</item>
 /// <item>a ball dropped 3 m stands on the ground 3 s later (no fall through a patch);</item>
 /// <item>the ground streams ahead of a body at 30 m/s: moving 4.5 km (<c>--earthtravel &lt;m&gt;</c>) along a line (the camera with it, so the origin
@@ -53,7 +54,8 @@ public partial class EarthCheck : Node3D
     private RigidBody3D? _ball;
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
-    private int _phase, _shifts, _rays, _hits, _above, _below, _missed;
+    private int _phase, _shifts, _rays, _hits, _above, _below, _missed, _groundOff;
+    private double _worstGroundOff;
     private List<(int I, int J)>? _points;
     private double _ballS;
     private float _travelled, _legEnd;
@@ -212,6 +214,15 @@ public partial class EarthCheck : Node3D
             _hits++;
             // over the ground: a roof, a bridge, a wall (the patches carry the leaf's features); under it: a hole
             double off = ((Vector3)hit["position"]).Y - h;
+            // a leaf's own ground off its height query: the patch and the query stand on two different versions of the leaf (#1626)
+            if (System.Math.Abs(off) > 0.05 && EarthWorld.IsGroundHit(hit["collider"].AsGodotObject(), hit["shape"].AsInt32()))
+            {
+                if (++_groundOff <= 5)
+                    Log($"  the ground {off:F2} m off the height query at {i * Step:F0},{j * Step:F0} m (tile {_ground.TileAt(p)}): "
+                        + $"{(hit["collider"].AsGodotObject() as Node)?.GetPath()}");
+                _worstGroundOff = System.Math.Max(_worstGroundOff, System.Math.Abs(off));
+                continue;
+            }
             if (off > 0.05)
             {
                 if (++_above <= 5)
@@ -227,7 +238,9 @@ public partial class EarthCheck : Node3D
             _worstRay = System.Math.Max(_worstRay, System.Math.Abs(off));
         }
         int ground = _hits - _above;
-        Log($"rays: {_hits} of {_rays} hit; {_above} on a feature over the ground, {_below} under the query; on the ground worst {_worstRay * 100:F1} cm");
+        Log($"rays: {_hits} of {_rays} hit; {_above} on a feature over the ground, {_below} under the query, {_groundOff} on the ground off it; "
+            + $"on the ground worst {_worstRay * 100:F1} cm");
+        if (_groundOff > 0) _faults.Add($"{_groundOff} of {_rays} rays hit a leaf's ground off the height query by over 5 cm (worst {_worstGroundOff:F2} m; #1626)");
         if (_rays < 100) _faults.Add($"only {_rays} grid points had ground and collision");
         if (_hits < _rays * 0.99) _faults.Add($"rays missed the patches: {_rays - _hits} of {_rays}");
         // in a city centre half the grid is roofs: enough rays on the ground to judge, whatever stands on it

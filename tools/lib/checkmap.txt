@@ -330,6 +330,10 @@ src/Terrain/WorldGroundCheck quick --worldgroundcheck --chunks fixture:lake
 src/Terrain/Earth        full   tools/earthcheck.sh
 src/Terrain/Leaves/LeafStore full tools/earthcheck.sh
 src/Terrain/LeafCollision full  tools/earthcheck.sh
+# #1626: from the region's border, the leaves' own ground on the height query (a leaf prepared again stood 27 m off)
+src/Terrain/LeafCollision full  tools/earthcheck.sh border
+src/Terrain/Earth/EarthWorld full tools/earthcheck.sh border
+src/Terrain/Leaves/EarthLeaves full tools/earthcheck.sh border
 # the server streams leaves to a client with none (#1655): real leaves on D:, so full only
 src/Net/ChunkStreamer    full   tools/leafstreamcheck.sh
 src/Net/ClientTerrainSync full  tools/leafstreamcheck.sh
