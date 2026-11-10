@@ -125,6 +125,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// <summary>The 100 m far-horizon lattice drawn past the last ring. Null on a server.</summary>
     public HorizonLayer? Horizon { get; private set; }
 
+    /// <summary>Whether <see cref="Initialize"/> builds the far horizon; off under earth, whose globe is its far ground (#1699).</summary>
+    public bool WithHorizon { get; init; } = true;
+
     private IChunkSource? _source;
 
     /// <summary>
@@ -489,7 +492,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _waterMaterial = waterMaterial;
         _available = manifest.Tiles.Select(t => t.Id).ToHashSet();
 
-        if (BuildMeshes && material is ShaderMaterial)
+        if (BuildMeshes && WithHorizon && material is ShaderMaterial)
         {
             // its own material instance: the discard rectangle must not touch the tiles
             var horizonMaterial = Styles.StyleKit.Material(Styles.MaterialRole.Terrain);

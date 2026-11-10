@@ -35,7 +35,7 @@ public sealed class UrbanField(Facades facades)
     private const int Window = (int)(WindowM / Cell);       // 12: +-24 m
     private const int City = (int)(CityWindowM / Cell);       // 75: +-150 m
     private const int Margin = Near + City;
-    private readonly Dictionary<TileId, float[]> _density = new();
+    private readonly Dictionary<(long, long), float[]> _density = new();
 
     /// <summary>Density at a plane point, bilinear between lattice nodes.</summary>
     public double Density(double e, double n)
@@ -54,28 +54,33 @@ public sealed class UrbanField(Facades facades)
         return t * t * (3 - 2 * t);
     }
 
-    /// <summary>The density at global lattice node (x east, y north), each node computed in the tile that holds it.</summary>
+    /// <summary>
+    /// The density at global lattice node (x east, y north). It is a function of the node and the walls round it alone,
+    /// so it is computed in square blocks of <see cref="NodeBlock"/> nodes, where a line asks for it (#1699): a tile's
+    /// whole square with its 168 m margin cost the frame's leaves, whose 1 km squares overlap, ~5 times the ground.
+    /// </summary>
     private double Node(long x, long y)
     {
-        // node (x, y) sits at E = x * Cell, N = y * Cell; its tile: the one whose cell [x, x+1) x [y, y+1) it opens
-        var id = _units.TileAt(x * Cell, y * Cell);
-        if (!_density.TryGetValue(id, out var d)) _density[id] = d = Build(id);
-        int c = (int)(x - WestNode(id)), r = (int)(y - SouthNode(id));   // r counts north
-        return d[r * PerTile + c];
+        var key = (x >> NodeBlockBits, y >> NodeBlockBits);
+        if (!_density.TryGetValue(key, out var d))
+            _density[key] = d = Build(key.Item1 << NodeBlockBits, key.Item2 << NodeBlockBits, NodeBlock);
+        return d[(int)(y & (NodeBlock - 1)) * NodeBlock + (int)(x & (NodeBlock - 1))];
     }
 
-    /// <summary>Densities of a tile's nodes (row r north of its south edge, column c east of its west edge).</summary>
-    private float[] Build(TileId id)
+    private const int NodeBlockBits = 7, NodeBlock = 1 << NodeBlockBits;   // 256 m
+
+    /// <summary>Densities of a square of <paramref name="side"/> nodes from (<paramref name="westNode"/>, <paramref name="southNode"/>) (row r north, column c east).</summary>
+    private float[] Build(long westNode, long southNode, int side)
     {
-        int size = PerTile + 2 * Margin;
+        int size = side + 2 * Margin;
         // wall[] over the tile and its margin; index (row north, column east)
         var wall = new int[(size + 1) * (size + 1)];   // summed-area table, one row/column of zeros
         for (int r = 0; r < size; r++)
         {
-            long gy = SouthNode(id) - Margin + r;
+            long gy = southNode - Margin + r;
             for (int c = 0; c < size; c++)
             {
-                long gx = WestNode(id) - Margin + c;
+                long gx = westNode - Margin + c;
                 int w = WallAt(gx, gy) ? 1 : 0;
                 wall[(r + 1) * (size + 1) + c + 1] = w + wall[r * (size + 1) + c + 1] + wall[(r + 1) * (size + 1) + c] - wall[r * (size + 1) + c];
             }
@@ -84,7 +89,7 @@ public sealed class UrbanField(Facades facades)
             sat[(r1 + 1) * stride + c1 + 1] - sat[r0 * stride + c1 + 1] - sat[(r1 + 1) * stride + c0] + sat[r0 * stride + c0];
 
         // near over the tile and a City margin
-        int inner = PerTile + 2 * City;
+        int inner = side + 2 * City;
         var near = new int[(inner + 1) * (inner + 1)];
         for (int r = 0; r < inner; r++)
             for (int c = 0; c < inner; c++)
@@ -94,16 +99,16 @@ public sealed class UrbanField(Facades facades)
                 near[(r + 1) * (inner + 1) + c + 1] = v + near[r * (inner + 1) + c + 1] + near[(r + 1) * (inner + 1) + c] - near[r * (inner + 1) + c];
             }
 
-        var density = new float[PerTile * PerTile];
+        var density = new float[side * side];
         float all = (2 * Window + 1) * (2 * Window + 1), allCity = (2 * City + 1) * (2 * City + 1);
         float scale = (float)(UrbanAt / CityAt);
-        for (int r = 0; r < PerTile; r++)
-            for (int c = 0; c < PerTile; c++)
+        for (int r = 0; r < side; r++)
+            for (int c = 0; c < side; c++)
             {
                 int rr = r + City, cc = c + City;
                 float local = Box(near, inner + 1, rr - Window, cc - Window, rr + Window, cc + Window) / all;
                 float city = Box(near, inner + 1, rr - City, cc - City, rr + City, cc + City) / allCity;
-                density[r * PerTile + c] = Math.Max(local, city * scale);
+                density[r * side + c] = Math.Max(local, city * scale);
             }
         return density;
     }
@@ -112,14 +117,39 @@ public sealed class UrbanField(Facades facades)
     private long WestNode(TileId id) => (long)Math.Round(_units.West(id) / Cell);
     private long SouthNode(TileId id) => (long)Math.Round(_units.South(id) / Cell);
 
-    /// <summary>Whether a wall stands in the global 2 m cell [gx, gx+1) x [gy, gy+1) (gy counting north).</summary>
+    /// <summary>
+    /// Whether a wall stands in the global 2 m cell [gx, gx+1) x [gy, gy+1) (gy counting north), memoised in blocks of
+    /// 64 x 64 cells (#1699): neighbouring tiles' margins read the same cells, and on a frame's plane (FrameUnits) the
+    /// tile holding a cell costs a cube projection, every leaf's 1 km square overlapping its neighbours'.
+    /// </summary>
     private bool WallAt(long gx, long gy)
     {
+        var key = (gx >> BlockBits, gy >> BlockBits);
+        if (!_walls.TryGetValue(key, out var bits))
+        {
+            bits = new ulong[BlockCells];
+            long x0 = key.Item1 << BlockBits, y0 = key.Item2 << BlockBits;
+            for (int r = 0; r < BlockCells; r++)
+            {
+                ulong row = 0;
+                for (int c = 0; c < BlockCells; c++)
+                    if (ComputeWallAt(x0 + c, y0 + r)) row |= 1UL << c;
+                bits[r] = row;
+            }
+            _walls[key] = bits;
+        }
+        return (bits[(int)(gy & (BlockCells - 1))] & (1UL << (int)(gx & (BlockCells - 1)))) != 0;
+    }
+
+    private const int BlockBits = 6, BlockCells = 1 << BlockBits;
+    private readonly Dictionary<(long, long), ulong[]> _walls = new();
+
+    private bool ComputeWallAt(long gx, long gy)
+    {
         var id = _units.TileAt(gx * Cell, gy * Cell);
-        if (facades.Coarse(id) is not { } mask) return false;
         int c = (int)(gx - WestNode(id));
         int rNorth = (int)(gy - SouthNode(id));
         int r = PerTile - 1 - rNorth;   // Coarse rows count south from the north edge
-        return mask[r * PerTile + c];
+        return facades.CoarseAt(id, r, c);
     }
 }

@@ -559,7 +559,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         long cacheBytes = Platform.IsMobile ? 96L * 1024 * 1024 : 256L * 1024 * 1024;
         _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
-        _chunks = new ChunkManager { Name = "Terrain" };
+        // under earth the flat streamer draws nothing: no horizon, whose lattice is 40,401 generated tiles (#1699)
+        _chunks = new ChunkManager { Name = "Terrain", WithHorizon = !earth };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
@@ -1811,7 +1812,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var horizon = _chunks.Horizon?.Progress();
         bool nearReady = total > 0 && done >= total;
         bool horizonBehind = Launch.Mode == GameMode.Multiplayer || !Launch.FromCommandLine;
-        if (horizonBehind)
+        // the earth world has no flat horizon (#1699): its far ground is the globe's
+        if (_earth != null) { }
+        else if (horizonBehind)
         {
             // only when nothing near is ready and the horizon is still unknown is there nothing to show yet
             if (!timedOut && horizon == null && !nearReady)
