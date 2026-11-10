@@ -7,9 +7,11 @@ namespace UnitSport.Terrain.Leaves;
 /// The earth world's fill built on the globe's pyramid (#1678): the generator's leaf (<see cref="GeneratedLeaves"/>) moved
 /// onto the best ground the game knows, as the user decided on #1678:
 /// <list type="bullet">
-/// <item>its base relief is the pyramid's heights (<see cref="PyramidBase"/>), and the generator's relief over its own
-/// 500 m macro relief rides on it as detail: <c>h = P + (G - M)</c>, so its valleys, ridges, roads and villages stay
-/// where it put them, on the pyramid's ground;</item>
+/// <item>its base relief is the pyramid's heights (<see cref="PyramidBase"/>), and the generator's own short relief rides
+/// on it as detail: <c>h = P + D(G - L)</c>, L the generator's ground smoothed over ~150 m (<see cref="LowStep"/>), D a
+/// soft clamp to <see cref="DetailClampM"/>. Its broad shapes are left out: its valleys, pressed flat along its own
+/// rivers, are not the pyramid's, and <c>G</c> less its 500 m macro relief dug a trench 50-70 m deep along the Lavaux
+/// shore (the additive correction of <c>terrain/blend-convex-not-additive</c>);</item>
 /// <item>the pyramid's lakes (<see cref="CubeManifest.Lakes"/>) are water at their level, over a bed shelving from the
 /// pyramid's shore (<see cref="WaterBed.OpenDepth"/>); the generator's own lakes are not: none of its lake or its land
 /// where the pyramid says what is there, and its detail fades out over its lakes and near the pyramid's shores;</item>
@@ -17,8 +19,9 @@ namespace UnitSport.Terrain.Leaves;
 /// trees and buildings standing in a lake are dropped, everything else moves with the ground's change under it.</item>
 /// </list>
 /// Every quantity is a function of a vertex's place on its face's global lattice: the pyramid read there, the
-/// generator's base on a 16-vertex control lattice, the distances to the shore exact within <see cref="MarginVertices"/>
-/// on a window round the leaf. Leaves agree on their edges without coordinating. Godot-free.
+/// generator's low-pass on a window of the global lattice (each value summed in one order over the same samples), the
+/// distances to the shore exact within <see cref="MarginVertices"/> on a window round the leaf. Leaves agree on their
+/// edges without coordinating. Godot-free.
 /// </summary>
 public static class PyramidFill
 {
@@ -28,14 +31,23 @@ public static class PyramidFill
     /// <summary>The window's spacing, lattice vertices (~4.8 m: the pyramid's level 13 has a sample every 2).</summary>
     public const int WindowStep = 4;
 
-    /// <summary>The generator's base is read every this many vertices and bilinear between (~19 m; its macro is a 500 m spline).</summary>
-    public const int ControlUnits = 16;
+    /// <summary>The generator's low-pass samples, lattice vertices apart (~38 m), on the face's global lattice.</summary>
+    public const int LowStep = 32;
+
+    /// <summary>The low-pass's box radius, samples, applied twice each way (~150 m each side).</summary>
+    public const int LowBlur = 4;
+
+    /// <summary>The generator's detail is softly clamped to this, metres (its roughness and channels are a few metres).</summary>
+    public const double DetailClampM = 12;
 
     /// <summary>Over this distance from a pyramid shore the generator's detail fades in, metres: the shore is the pyramid's.</summary>
-    public const double ShoreDetailM = 60;
+    public const double ShoreDetailM = 150;
 
     /// <summary>The deepest the fill's lake bed gets, metres (the shelf reaches it ~600 m out).</summary>
     public const double MaxBedM = WaterBed.MaxMaxDepthM;
+
+    /// <summary>The generator's lake weight past which its water and its Water cover are its lake's, not a river's.</summary>
+    public const float GeneratorLakeRim = 0.05f;
 
     /// <summary>The fetch the pyramid's lakes are given (their waves): the most the format holds.</summary>
     public const byte LakeFetch = 255;
@@ -45,11 +57,12 @@ public static class PyramidFill
 
     /// <summary>
     /// The fill's heights on the pyramid from the generator's (<paramref name="generated"/>, ellipsoidal, n x n);
-    /// <paramref name="baseAt"/> is the generator's macro relief above sea level and its lake weight at a lattice point.
+    /// <paramref name="generatorAt"/> is the generator's ground above sea level (its lakes' surface, not their bed) and its
+    /// lake weight at a point of the face's global lattice (the leaf's level and bits), inside the leaf or round it.
     /// Null where the pyramid holds no height over the leaf. With <paramref name="surface"/> a lake stands at its level
     /// (no bed), as the globe draws a far leaf's lakes.
     /// </summary>
-    public static Ground? Build(PyramidBase pyramid, LeafTransform t, float[] generated, Func<int, int, (double MacroSea, double Lake)> baseAt,
+    public static Ground? Build(PyramidBase pyramid, LeafTransform t, float[] generated, Func<long, long, (double HSea, double Lake)> generatorAt,
         bool surface = false)
     {
         var leaf = t.Key;
@@ -71,17 +84,25 @@ public static class PyramidFill
         });
         if (!any) return null;
 
-        // the generator's base on the control lattice
-        int cs = cells / ControlUnits + 1;
-        var macro = new double[cs * cs];
-        var genLake = new double[cs * cs];
-        for (int cj = 0; cj < cs; cj++)
-            for (int ci = 0; ci < cs; ci++)
+        // the generator on a window of the global lattice round the leaf, and its ground's low-pass
+        int margin = 2 * LowBlur + 1, ls = cells / LowStep + 1 + 2 * margin;
+        long lx0 = gi0 / LowStep - margin, ly0 = gj0 / LowStep - margin;
+        var low = new double[ls * ls];
+        var genLake = new double[ls * ls];
+        Parallel.For(0, ls, y =>
+        {
+            for (int x = 0; x < ls; x++)
             {
-                var (m, l) = baseAt(ci * ControlUnits, cj * ControlUnits);
-                macro[cj * cs + ci] = m;
-                genLake[cj * cs + ci] = l;
+                var (h, l) = generatorAt((lx0 + x) * LowStep, (ly0 + y) * LowStep);
+                low[y * ls + x] = h;
+                genLake[y * ls + x] = l;
             }
+        });
+        for (int pass = 0; pass < 2; pass++)
+        {
+            low = Box(low, ls, 1, 0);
+            low = Box(low, ls, 0, 1);
+        }
 
         // the shores round the leaf: the pyramid's lakes on a window, and the distance to the other side from each sample
         var shores = Shores(pyramid, face, gi0, gj0, cells, latticeLevel, cellM);
@@ -92,15 +113,17 @@ public static class PyramidFill
         var generatorLake = new float[n * n];
         Parallel.For(0, n, j =>
         {
-            int cj = Math.Min(j / ControlUnits, cs - 2);
-            double v = (j - cj * ControlUnits) / (double)ControlUnits;
+            double fy = (double)(gj0 + j) / LowStep - ly0;
+            int cj = Math.Min((int)fy, ls - 2);
+            double v = fy - cj;
             for (int i = 0; i < n; i++)
             {
                 int k = j * n + i;
-                int ci = Math.Min(i / ControlUnits, cs - 2);
-                double u = (i - ci * ControlUnits) / (double)ControlUnits;
-                int c = cj * cs + ci;
-                double gl = LeafBlend.Bilerp(genLake[c], genLake[c + 1], genLake[c + cs], genLake[c + cs + 1], u, v);
+                double fx = (double)(gi0 + i) / LowStep - lx0;
+                int ci = Math.Min((int)fx, ls - 2);
+                double u = fx - ci;
+                int c = cj * ls + ci;
+                double gl = LeafBlend.Bilerp(genLake[c], genLake[c + 1], genLake[c + ls], genLake[c + ls + 1], u, v);
                 generatorLake[k] = (float)gl;
                 float g = generated[k];
                 double ph = p[k];
@@ -119,9 +142,10 @@ public static class PyramidFill
                 else
                 {
                     double und = t.UndulationAt(i, j);
-                    double m = LeafBlend.Bilerp(macro[c], macro[c + 1], macro[c + cs], macro[c + cs + 1], u, v) + und;
-                    // the generator's relief over its macro; none over its own lakes (their bed), fading in from the pyramid's shore
-                    double detail = (g - m) * (1 - LeafBlend.SmoothStep(0.2, 0.5, gl));
+                    double m = LeafBlend.Bilerp(low[c], low[c + 1], low[c + ls], low[c + ls + 1], u, v) + und;
+                    // the generator's short relief, softly clamped; none over its own lakes (their bed), fading in from the
+                    // pyramid's shore
+                    double detail = DetailClampM * Math.Tanh((g - m) / DetailClampM) * (1 - LeafBlend.SmoothStep(0.2, 0.5, gl));
                     if (shores != null) detail *= LeafBlend.SmoothStep(0, ShoreDetailM, shores.ToWet(i, j));
                     h = ph + detail;
                 }
@@ -142,7 +166,9 @@ public static class PyramidFill
         var gh = content.Heights!;
         content.Heights = new CubeTile { Key = gh.Key, Bits = gh.Bits, Heights = ground.Heights, Quantum = gh.Quantum };
         bool Wet(int k) => !float.IsNaN(ground.Lake[k]);
-        bool GeneratorLake(int k) => ground.GeneratorLake[k] >= 0.5f;
+        // the generator's lake and its ragged rim: its shore noise puts water where the smooth weight is well under a
+        // half, and kept as a river there it stood over the pyramid's ground, dropped and drawn as a pale band
+        bool GeneratorLake(int k) => ground.GeneratorLake[k] > GeneratorLakeRim;
 
         if (content.Cover is { } cover)
             for (int k = 0; k < cover.Length && k < n * n; k++)
@@ -208,6 +234,21 @@ public static class PyramidFill
         var (ax, ay, az) = t.LatticeToLocal(0, t.Cells / 2, 0);
         var (bx, by, bz) = t.LatticeToLocal(t.Cells, t.Cells / 2, 0);
         return Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az)) / t.Cells;
+    }
+
+    /// <summary>A box mean of radius <see cref="LowBlur"/> along one axis, each value summed afresh in one order (edges clamped).</summary>
+    private static double[] Box(double[] f, int side, int dx, int dy)
+    {
+        var o = new double[f.Length];
+        for (int y = 0; y < side; y++)
+            for (int x = 0; x < side; x++)
+            {
+                double sum = 0;
+                for (int r = -LowBlur; r <= LowBlur; r++)
+                    sum += f[Math.Clamp(y + r * dy, 0, side - 1) * side + Math.Clamp(x + r * dx, 0, side - 1)];
+                o[y * side + x] = sum / (2 * LowBlur + 1);
+            }
+        return o;
     }
 
     /// <summary>Lakes only, from a ground (the globe's far fill leaf, which draws its water from it); null when dry.</summary>

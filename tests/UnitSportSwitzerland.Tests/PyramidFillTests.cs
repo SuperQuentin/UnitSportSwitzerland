@@ -83,16 +83,20 @@ public class PyramidFillTests
     /// <summary>The generator's macro relief (above sea level) and its detail over it, as functions of the global lattice.</summary>
     private static double Macro(long gi, long gj) => 600 + 0.01 * (gi - ((long)Fill.X << 9));
 
-    private static double Detail(long gi, long gj) => 4 * Math.Sin(gi * 0.03) * Math.Cos(gj * 0.02);
+    // short relief, nought at the low-pass's samples (every 32 vertices): what survives the low-pass whole
+    private static double Detail(long gi, long gj) => 4 * Math.Sin(gi * Math.PI / 16) * Math.Cos(gj * 0.2);
 
-    private static (float[] Generated, Func<int, int, (double, double)> BaseAt, LeafTransform T) Generator(CubeKey leaf, double lake = 0)
+    /// <summary>The detail as the fill takes it: softly clamped.</summary>
+    private static double Clamped(double d) => PyramidFill.DetailClampM * Math.Tanh(d / PyramidFill.DetailClampM);
+
+    private static (float[] Generated, Func<long, long, (double, double)> GeneratorAt, LeafTransform T) Generator(CubeKey leaf, double lake = 0)
     {
         var t = LeafFrames.Swiss.TransformOf(leaf);
         var g = new float[N * N];
         for (int j = 0; j < N; j++)
             for (int i = 0; i < N; i++)
                 g[j * N + i] = (float)(Macro(Gi(leaf, i), Gj(leaf, j)) + Detail(Gi(leaf, i), Gj(leaf, j)) + t.UndulationAt(i, j));
-        return (g, (i, j) => (Macro(Gi(leaf, i), Gj(leaf, j)), lake), t);
+        return (g, (gi, gj) => (Macro(gi, gj) + Detail(gi, gj), lake), t);
     }
 
     [Fact]
@@ -103,8 +107,10 @@ public class PyramidFillTests
         var ground = PyramidFill.Build(p, t, g, baseAt)!;
         // far into the ground: the pyramid's height plus the generator's detail over its macro (to its control lattice)
         int i = 480, j = 256;
-        double expect = p.HeightAt(Fill.Face, Gi(Fill, i), Gj(Fill, j), 23) + Detail(Gi(Fill, i), Gj(Fill, j));
-        Assert.Equal(expect, ground.Heights[j * N + i], 1);
+        int i2 = 484;
+        double expect = p.HeightAt(Fill.Face, Gi(Fill, i2), Gj(Fill, j), 23) + Clamped(Detail(Gi(Fill, i2), Gj(Fill, j)));
+        Assert.Equal(expect, ground.Heights[j * N + i2], 1);
+        Assert.True(Math.Abs(Detail(Gi(Fill, i2), Gj(Fill, j))) > 1);
         Assert.True(float.IsNaN(ground.Lake[j * N + i]));
         // in the lake: its level, over a bed shelving down from the shore
         Assert.Equal(Lake, ground.Lake[j * N + 10]);
@@ -125,9 +131,31 @@ public class PyramidFillTests
         var (g, _, t) = Generator(Fill);
         // the generator holds a lake over the whole leaf, its bed 30 m under its macro
         for (int k = 0; k < g.Length; k++) g[k] -= 30;
-        var ground = PyramidFill.Build(p, t, g, (i, j) => (Macro(Gi(Fill, i), Gj(Fill, j)), 1.0))!;
+        var ground = PyramidFill.Build(p, t, g, (gi, gj) => (Macro(gi, gj), 1.0))!;
         int i = 480, j = 256;
         Assert.Equal(p.HeightAt(Fill.Face, Gi(Fill, i), Gj(Fill, j), 23), ground.Heights[j * N + i], 0.01);
+    }
+
+    [Fact]
+    public void A_broad_valley_the_pyramid_lacks_digs_no_trench()
+    {
+        // the generator's valley pressed 60 m into the ground along a line through the leaf's ground (#1678: along the
+        // Lavaux shore its river valley dug a trench 50-70 m deep on the pyramid's slope)
+        long axis = Gi(Fill, 400);
+        double Valley(long gi) => -60 * Math.Exp(-Math.Pow((gi - axis) / 150.0, 2));
+        var p = Pyramid();
+        var t = LeafFrames.Swiss.TransformOf(Fill);
+        var g = new float[N * N];
+        for (int j = 0; j < N; j++)
+            for (int i = 0; i < N; i++)
+                g[j * N + i] = (float)(Macro(Gi(Fill, i), Gj(Fill, j)) + Valley(Gi(Fill, i)) + t.UndulationAt(i, j));
+        var ground = PyramidFill.Build(p, t, g, (gi, gj) => (Macro(gi, gj) + Valley(gi), 0))!;
+        for (int j = 0; j < N; j += 16)
+            for (int i = 240; i < N; i += 4)
+            {
+                double ph = p.HeightAt(Fill.Face, Gi(Fill, i), Gj(Fill, j), 23);
+                Assert.InRange(ground.Heights[j * N + i] - ph, -PyramidFill.DetailClampM - 0.01, PyramidFill.DetailClampM + 0.01);
+            }
     }
 
     [Fact]

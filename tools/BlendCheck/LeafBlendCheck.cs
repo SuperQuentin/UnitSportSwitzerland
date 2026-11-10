@@ -262,6 +262,14 @@ internal static class LeafBlendCheck
                     int o = ((oy + y) * size + ox + x) * 3;
                     // still water (the nearest sample of the leaf's own) blue, over its bed's shading
                     bool wet = leaf.Water is { } w && !float.IsNaN(w.Level[Math.Min(j / CubeWater.Stride, w.Side - 1) * w.Side + Math.Min(i / CubeWater.Stride, w.Side - 1)]);
+                    // ground the cover calls water with no water over it (drawn pale, a band of nothing): magenta
+                    if (!wet && leaf.Cover is { } cv && cv[j * n + i] == (byte)CoverClass.Water)
+                    {
+                        rgb[o] = 230;
+                        rgb[o + 1] = 40;
+                        rgb[o + 2] = 200;
+                        continue;
+                    }
                     if (wet)
                     {
                         rgb[o] = (byte)(60 * shade + 20);

@@ -8,20 +8,26 @@ untouched (`FallbackChunkSource` / `ProceduralWorld.Blend` on LV95).
   point with all four samples, NaN-safe) and its lakes (`CubeManifest.Lakes`, a height within 2 cm of one is that lake).
   Godot-free, thread-safe. `Open` refuses a pyramid whose finest level is under 9 (the shipped levels 0-2 know less than
   the generator's own 500 m relief) and `res://`: then the fill is the generator's, blended over the old 3 km band.
-- **`Leaves/PyramidFill`** moves a generated leaf onto it: `h = P + (G - M)`, `M` the generator's 500 m macro relief
-  (`ProceduralWorld.BaseAt`), so its valleys, roads and villages keep their places on the pyramid's relief. The detail
-  is dropped over the generator's own lakes (its bed) and fades in over 60 m from the pyramid's shore. A pyramid lake
-  is water at its level over a bed `WaterBed.OpenDepth(distance to the shore)`; the distances are exact (a distance
-  transform) on a window 305 m round the leaf, so neighbours agree; beyond that the bed stays at ~71 m. Cover is Water
-  there and the generator's lake becomes Open; trees and buildings in a lake are dropped, everything else (roads too)
-  moves with the ground. Forest, rock and snow stay the generator's: the pyramid's colour past the leaves is Blue
-  Marble's 500 m pixel, which reads a dark shore as forest (#1677), and the generator's classes go with its trees.
+- **`Leaves/PyramidFill`** moves a generated leaf onto it: `h = P + D(G - L)`, `L` the generator's ground smoothed over
+  ~150 m on a window of the global lattice (samples every 32 vertices, two box passes; a lake's surface, not its bed),
+  `D` a soft clamp to 12 m. Only its short relief rides on the pyramid: `G` less its 500 m macro relief kept the
+  valleys it presses flat along its own rivers, which are not the pyramid's, and dug a trench 50-70 m deep along the
+  Lavaux shore (the additive trap of `blend-convex-not-additive`). The detail is dropped over the generator's own
+  lakes and fades in over 150 m from the pyramid's shore. A pyramid lake is water at its level over a bed
+  `WaterBed.OpenDepth(distance to the shore)`; the distances are exact (a distance transform) on a window 305 m round
+  the leaf, so neighbours agree; beyond that the bed stays at ~71 m. Cover is Water there and the generator's lake
+  (weight over 0.05: its ragged rim too) becomes Open; trees and buildings in a lake are dropped, everything else
+  (roads too) moves with the ground. Forest, rock and snow stay the generator's: the pyramid's colour past the leaves
+  is Blue Marble's 500 m pixel, which reads a dark shore as forest (#1677), and the generator's classes go with its trees.
 - **`LeafBlend` on the pyramid**: no 3 km band; a 400 m convex hand-over `h = (1 - F) g + F T`. `T` is the real ground
   continued from each block's nearest point (slope carried over 60 m) near the seam, then the pyramid plus the real
   ground's difference from it (`Resid`, a lake's bed among it). A lake bed is carried into the fill's lake only: on
   the fill's land the real lake counts as the pyramid's surface. Pyramid lake water keeps its level whatever the bed.
-- **The globe** draws a fill leaf's lakes from its own water (`EarthLeaves.WaterOf`): the made leaf's, or the
-  pyramid's lakes over the far heights (`GeneratedLeaves.Far`). A fill leaf still draws no bed lake (`beds:` off, #1669).
+- **The globe** draws a fill leaf's lakes from its own water (`EarthLeaves.WaterOf`, a dry one when it has none): the
+  made leaf's, or the pyramid's lakes over the far heights (`GeneratedLeaves.Far`). A fill leaf still draws no bed lake
+  (`beds:` off, #1669). With the pyramid's lake levels known, ground that is none of them drops the colour image's
+  water weight. Under a tile's lake an edge vertex sinks as deep as its neighbours on its side, and the skirts hang from
+  the sunk ground: as a shore 3 m under the surface, every leaf edge across a lake drew a pale line.
 - **The pyramid had to be fixed first** (`tools/cube-tiles`): past B4's leaves its level 13 blended into ETOPO in 16
   rings, each a step (13-40 m east of Lavaux, the fill drew them as terraces), and ETOPO's 1.8 km cells left 1.5-2 km
   of ground 3-35 m over Léman below Lavaux. `--cube-swiss` now blends with a continuous field and snaps swissTLM3D's

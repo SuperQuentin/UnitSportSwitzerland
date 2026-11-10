@@ -84,12 +84,21 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
         return LeafLattice.Heights(on, (e, n) => world.HeightIn(TileId.FromLv95(e, n), e, n), stride);
     }
 
-    /// <summary>The generator's base (macro relief above sea level, lake weight) at a leaf's lattice points.</summary>
-    private static Func<int, int, (double, double)> BaseOn(SourceOnLeaf on) => (i, j) =>
+    /// <summary>
+    /// The generator at a point of a face's global lattice (the leaves' level and bits): its ground above sea level, a
+    /// lake's surface rather than its bed, and its lake weight; for <see cref="PyramidFill"/>'s low-pass round a leaf.
+    /// </summary>
+    private Func<long, long, (double, double)> GeneratorOn(CubeKey leaf)
     {
-        var (e, n) = on.SourceAt(i, j);
-        return ProceduralWorld.BaseAt(e, n);
-    };
+        int level = leaf.Level + CubeKey.LatticeBits(leaf.Level), face = leaf.Face;
+        return (gi, gj) =>
+        {
+            var g = CubeSphere.ToGeodetic(face, CubeSphere.Lattice(level, gi), CubeSphere.Lattice(level, gj));
+            var (e, n) = Lv95Source.Instance.FromLatLon(g.LatDeg, g.LonDeg);
+            var (lake, lakeLevel) = ProceduralWorld.LakeAt(e, n);
+            return (lake >= 0.5 ? lakeLevel : world.HeightIn(TileId.FromLv95(e, n), e, n), lake);
+        };
+    }
 
     /// <summary>
     /// A built leaf (<see cref="Build"/>, its roads among it) moved onto the pyramid (#1678, <see cref="PyramidFill"/>);
@@ -99,7 +108,7 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
     {
         if (pyramid is null || content.Heights is not { } h) return content;
         var on = new SourceOnLeaf(_frames, content.Key, Lv95Source.Instance);
-        if (PyramidFill.Build(pyramid, on.Transform, h.Heights, BaseOn(on)) is { } ground) PyramidFill.Apply(content, ground, on.Transform);
+        if (PyramidFill.Build(pyramid, on.Transform, h.Heights, GeneratorOn(content.Key)) is { } ground) PyramidFill.Apply(content, ground, on.Transform);
         return content;
     }
 
@@ -112,7 +121,7 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
         var g = Heights(leaf, stride);
         if (pyramid is null) return (g, null);
         var on = new SourceOnLeaf(_frames, leaf, Lv95Source.Instance);
-        if (PyramidFill.Build(pyramid, on.Transform, g.Heights, BaseOn(on)) is not { } ground) return (g, null);
+        if (PyramidFill.Build(pyramid, on.Transform, g.Heights, GeneratorOn(leaf)) is not { } ground) return (g, null);
         return (new CubeTile { Key = leaf, Bits = g.Bits, Heights = ground.Heights, Quantum = g.Quantum }, PyramidFill.Lakes(ground, g.Bits));
     }
 
