@@ -10,7 +10,7 @@
 . "$(dirname "$0")/lib/twoclient.sh" leafstream
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
 AT=${AT:-2500956,1117569}   # Geneva, the densest leaf of the D: region
-TRAVEL=${TRAVEL:-1500}
+TRAVEL=${TRAVEL:-4500}
 PORT=${PORT:-7891}
 if [ ! -d "$LEAVES" ]; then echo "[leafstreamcheck] no LEAVES with built leaves: skipped"; echo "[leafstreamcheck] RESULT: ok (skipped)"; exit 0; fi
 NOLEAVES="$OUT/no_leaves"; CACHE="$OUT/leafstream_cache"

@@ -62,6 +62,12 @@ public sealed class NetworkChunkSource : IChunkSource
     /// </summary>
     private readonly SemaphoreSlim _slots = new(6, 6);
 
+    /// <summary>
+    /// A leaf's one section (the globe's far heights, the traffic's roads, #1655) takes one of these too: two at most, so
+    /// hundreds of far asks never queue the near ground (whole entries) behind them on the server's metered link.
+    /// </summary>
+    private readonly SemaphoreSlim _sectionSlots = new(2, 2);
+
     private readonly object _gate = new();
     private bool _trimming;
     private long _lastTrim = -1;   // Stopwatch timestamp of the last trim, -1 = never
@@ -374,7 +380,9 @@ public sealed class NetworkChunkSource : IChunkSource
     {
         try
         {
-            await _slots.WaitAsync(ct).ConfigureAwait(false);
+            if (key.Section != 0) await _sectionSlots.WaitAsync(ct).ConfigureAwait(false);
+            try { await _slots.WaitAsync(ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { if (key.Section != 0) _sectionSlots.Release(); throw; }
         }
         catch (OperationCanceledException)
         {
@@ -388,6 +396,7 @@ public sealed class NetworkChunkSource : IChunkSource
         finally
         {
             _slots.Release();
+            if (key.Section != 0) _sectionSlots.Release();
         }
     }
 

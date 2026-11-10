@@ -165,6 +165,9 @@ public partial class EarthCheck : Node3D
         Position = Position with { Y = h + 2f };
         Log($"ground under the start at {Now:F1} s: {h:F2} m, tile {_ground.TileAt(Position)}");
         LogStreamed("on arrival");
+        // re-anchors before the ground came (a joining client's first frames, #1655) had no ground under the body to ask again
+        _shifts = _turns = 0;
+        _turnSum = _worstTurnError = _worstTilt = 0;
         _phase = 1;
         _phaseS = Now;
     }
