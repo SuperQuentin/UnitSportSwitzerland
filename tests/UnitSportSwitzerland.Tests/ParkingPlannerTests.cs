@@ -473,6 +473,7 @@ public class ParkingPlannerTests
 
 
 /// <summary>The <c>parking</c> fixture course (#499): the real planner over a course with no terrain data.</summary>
+[Collection(FixtureWorld.Collection)]
 public class ParkingFixtureTests
 {
     private const double StartE = 2_600_000, StartN = 1_120_000;

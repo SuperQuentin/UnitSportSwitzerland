@@ -6,6 +6,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The pier planner and the landings file (#377).</summary>
+[Collection(FixtureWorld.Collection)]
 public class LandingTests
 {
     private const double Water = 372.14;

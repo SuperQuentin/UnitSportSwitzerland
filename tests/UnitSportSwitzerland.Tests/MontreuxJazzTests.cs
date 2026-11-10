@@ -4,6 +4,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The Montreux Jazz festival (#1394): the venue row and its season window (src/Terrain/Stadiums/StadiumCatalog.cs, linked in).</summary>
+[Collection(FixtureWorld.Collection)]
 public class MontreuxJazzTests
 {
     private static readonly StadiumSpec Venue = StadiumCatalog.MontreuxJazzOpenAir;
