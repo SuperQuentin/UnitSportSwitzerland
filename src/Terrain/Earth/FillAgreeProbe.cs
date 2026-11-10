@@ -8,9 +8,10 @@ namespace UnitSport.Terrain.Earth;
 /// <summary>
 /// <c>--fillagree E,N</c> (#1682, <c>tools/fillagreenetcheck.sh</c>): the ground's ellipsoidal height at a 5 × 5 grid of
 /// Earth positions 150 m apart round a point, read off the loaded leaves (<see cref="EarthWorld.EllipsoidalHeightAt"/>, no
-/// frame in it), printed by a client and by the server once every point has ground. The script compares the two: they
+/// frame in it), printed by a client and by the server once every point has ground. The script compares the two (the
+/// client stays, its body holding the server's leaves, until the script stops it): they
 /// stand on the same fill leaves when every point agrees to the centimetre. Each line says whether the point's leaf is
-/// the region's or the fill's. A client quits after printing; the server goes on.
+/// the region's or the fill's.
 /// </summary>
 public partial class FillAgreeProbe : Node
 {
@@ -54,7 +55,6 @@ public partial class FillAgreeProbe : Node
             if (_since < TimeoutS) return;
             _done = true;
             GD.Print($"[fillagree {Role}] RESULT: FAILED (point {k} has no ground after {TimeoutS:F0} s; {_earth.Status})");
-            if (!_server) GetTree().Quit(1);
             return;
         }
         _done = true;
@@ -66,6 +66,5 @@ public partial class FillAgreeProbe : Node
             GD.Print(FormattableString.Invariant($"[fillagree {Role}] point {k} {(real ? "real" : "fill")} {heights[k]:F3}"));
         }
         GD.Print($"[fillagree {Role}] {fill} of {_points.Length} points on the fill's leaves, after {_since:F1} s");
-        if (!_server) GetTree().Quit(0);
     }
 }

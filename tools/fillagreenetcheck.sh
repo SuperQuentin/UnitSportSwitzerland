@@ -9,7 +9,7 @@
 . "$(dirname "$0")/lib/twoclient.sh" fillagree
 AT=${AT:-2600500,1199500}
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
-EDGE=${EDGE:-2503600,1117600}   # past the east edge of B4's Geneva leaves
+EDGE=${EDGE:-2500956,1107300}   # across the south edge of B4's Geneva leaves
 PORT=${PORT:-7893}
 fail=
 
@@ -32,10 +32,16 @@ run() { # name at args...
   local name=$1 at=$2; shift 2
   tc_server 600 180 "$OUT/fillagree_${name}_server.log" --server --port $PORT --no-query --frame earth --player-status \
     --fillagree "$at" "$@" || { fail="${fail:+$fail; }$name: the server did not start"; return; }
-  tc_client 400 "$OUT/fillagree_${name}_client.log" --connect 127.0.0.1:$PORT --name Agree --frame earth --at "$at" \
-    --fillagree "$at" "$@"
-  # the server prints its points once the client's body brought its leaves in: give it a moment past the client
-  for _ in $(seq 1 100); do grep -q "points on the fill\|RESULT: FAILED" "$OUT/fillagree_${name}_server.log" && break; guard_nap 0.2; done
+  tc_client 600 "$OUT/fillagree_${name}_client.log" --connect 127.0.0.1:$PORT --name Agree --frame earth --at "$at" --fillagree "$at" "$@" &
+  local client=$! i
+  # both print once their leaves round the client's body are in (the server's only while that body is there): the
+  # client stays until both have
+  for i in $(seq 1 3000); do
+    [ "$(grep -h "points on the fill\|RESULT: FAILED" "$OUT/fillagree_${name}_server.log" "$OUT/fillagree_${name}_client.log" 2>/dev/null | wc -l)" -ge 2 ] && break
+    kill -0 "$client" 2>/dev/null || break
+    guard_nap 0.2
+  done
+  tc_stop "$client"
   tc_stop
   compare "$name"
 }
