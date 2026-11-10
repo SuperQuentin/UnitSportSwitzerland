@@ -53,9 +53,11 @@ the cells in a box (`InBox`, the junction caps' reach) and the urban density at 
   vertex's LV95 position (`UrbanField` over the LV95 build's buildings, until stage 3 writes them per leaf).
 
 ```
-TerrainPreprocessor --cube-cover-network --cube-out REGION --facades LV95_CHUNKS [--cube-box ...] [--lv95-roads LV95_CHUNKS]
+TerrainPreprocessor --cube-cover-network --cube-out REGION [--facades LV95_CHUNKS] [--cube-box ...] [--lv95-roads LV95_CHUNKS]
 ```
 
+- The urban field from the region's own buildings since #1711 (`RegionBuildings`: the leaves' sections in LV95 notation, every
+  building reaching a km tile, not only those whose centre it holds); `--facades` reads an LV95 build's `.bldg` instead (a check).
 - Each leaf with a `Cover` and the network's `Roads`; the others of a bundle keep their cover. The planters are
   counted; their trees come with 5b. `--lv95-roads` (a check) runs the passes on the LV95 build's own network
   roads moved into each leaf, so the passes can be compared apart from the network stage's differences.

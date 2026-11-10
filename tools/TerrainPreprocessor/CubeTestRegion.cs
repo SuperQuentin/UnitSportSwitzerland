@@ -10,23 +10,27 @@ using UnitSport.Tools.RoadGen.TestRegion;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
-/// The traffic-lights test region on cube leaves (#1647, G2 C7; docs/notes/tools/signal-test-region.md): after
-/// <see cref="SignalTestRegion.Run"/> has written the LV95 build, the same region written into <c>.cubl</c> leaves through
-/// the cube stages' pieces, so it plays under <c>--frame earth</c> once D deletes the LV95 runtime:
+/// The traffic-lights test region on cube leaves (#1647, G2 C7; docs/notes/tools/signal-test-region.md): the region's design
+/// (<see cref="SignalTestRegion"/>) written into <c>.cubl</c> leaves through the cube stages' pieces, so it plays under
+/// <c>--frame earth</c> once D deletes the LV95 runtime. Since #1711 (D1) it reads nothing of the LV95 build:
 /// <list type="bullet">
 /// <item>heights flat at <see cref="SignalTestRegion.Ground"/> metres <b>above sea level</b> (the leaf's undulation added at
 /// every vertex: the ellipsoidal heights a leaf holds), the same ground every stage drapes on in the LV95 build;</item>
 /// <item>cover at every leaf vertex (<see cref="SignalTestRegion.CoverAt"/>: open grass, the canton borders' band);</item>
-/// <item>the box houses, the LV95 build's <c>.bldg</c> moved rigorously into the leaf that holds their middle;</item>
+/// <item>the box houses (<see cref="SignalTestRegion.BuildingTiles"/>, the floats the LV95 build writes) moved rigorously into
+/// the leaf that holds their middle;</item>
+/// <item>the source files (<see cref="SignalTestRegion.WriteSources"/>: OSM overlay and nodes, tram stops) in the region's temp;</item>
 /// <item>the raw lines cut at leaf edges on each frame's plane (<see cref="FrameRoadSpace"/>), draped on the leaf mesh, then the
-/// network stage on work frames (4b's <see cref="FrameTileLoop"/>), the canton zones and border marks on the plane;</item>
-/// <item>the region files with Earth positions (<see cref="CubeRegionFiles"/>: places, traffic endpoints).</item>
+/// network stage on work frames (4b's <see cref="FrameTileLoop"/>, the buildings from the leaves), the canton zones and
+/// border marks on the plane;</item>
+/// <item>the region files in Earth positions: the junctions as places, and the traffic endpoints from the leaves' own lights
+/// (<see cref="SignalTestRegion.Endpoints"/>).</item>
 /// </list>
 /// <see cref="Compare"/> holds it against the LV95 build: junctions, signals, approaches, poles, canton looks and border marks.
 /// <code>
 /// --cube-test-region DIR [--cube-out REGION] [--no-lv95] [--compare] [--signal-check [--list]]
 /// </code>
-/// DIR is the LV95 build's (RoadGen's <c>--test-region</c>, built first unless <c>--no-lv95</c>); REGION defaults to
+/// DIR is the LV95 build's (RoadGen's <c>--test-region</c>, built too unless <c>--no-lv95</c>: the comparison's other side); REGION defaults to
 /// <c>DIR_cube</c>, the folder the game's earth world reads beside a chunk folder (<c>TerrainPaths.FindLeafDir</c>).
 /// </summary>
 public static partial class CubeTestRegion
@@ -84,7 +88,7 @@ public static partial class CubeTestRegion
             int lv = SignalTestRegion.Run(chunks, temp, Console.WriteLine);
             if (lv == 1) return 1;
         }
-        int built = compareOnly ? 0 : Build(chunks, temp, region, Console.WriteLine);
+        int built = compareOnly ? 0 : Build(region, Console.WriteLine);
         if (built != 0 || !compare) return built;
         return Compare(chunks, region, Console.WriteLine, real, box);
     }
@@ -114,20 +118,14 @@ public static partial class CubeTestRegion
     }
 
     /// <summary>The region's LV95 km tiles.</summary>
-    public static List<TileId> Tiles()
-    {
-        var tiles = new List<TileId>();
-        for (int e = SignalTestRegion.MinTileE; e <= SignalTestRegion.MaxTileE; e++)
-            for (int n = SignalTestRegion.MinTileN; n <= SignalTestRegion.MaxTileN; n++)
-                tiles.Add(new TileId(e, n));
-        return tiles;
-    }
+    public static List<TileId> Tiles() => SignalTestRegion.Tiles();
 
     /// <summary>
-    /// Writes the leaves into <paramref name="region"/> from the LV95 build in <paramref name="chunks"/> (its raw input in
-    /// <paramref name="temp"/>). Returns 0, or 1 when the folder holds something this did not write.
+    /// Writes the leaves into <paramref name="region"/> from the region's design, its source files into the region's temp
+    /// (#1711: no LV95 build first). Returns 0, 1 when the folder holds something this did not write, 2 when its traffic
+    /// endpoints could not be laid.
     /// </summary>
-    public static int Build(string chunks, string temp, string region, Action<string> log)
+    public static int Build(string region, Action<string> log)
     {
         var sw = Stopwatch.StartNew();
         string regionTemp = region.TrimEnd('/', '\\') + "_temp";
@@ -172,12 +170,12 @@ public static partial class CubeTestRegion
         }
         log(string.Create(CultureInfo.InvariantCulture, $"  heights {SignalTestRegion.Ground} m above sea level, cover: {borderVertices:N0} border vertices; {sw.Elapsed.TotalSeconds:F1} s"));
 
-        // ---- buildings: the LV95 build's boxes, each in the leaf holding its middle, every vertex rigorous
+        // ---- buildings: the design's boxes (the floats the LV95 build writes), each in the leaf holding its middle, every vertex rigorous
         var byLeaf = new Dictionary<CubeKey, List<Building>>();
         int buildingCount = 0;
-        foreach (var id in Tiles())
+        foreach (var tile in SignalTestRegion.BuildingTiles())
         {
-            if (Facades.Read(chunks, id) is not { } tile) continue;
+            var id = tile.Id;
             foreach (var b in tile.Buildings)
             {
                 var t = b.Triangles;
@@ -269,9 +267,10 @@ public static partial class CubeTestRegion
         }
         log($"  {lines.Count} lines as {rawSegments:N0} raw pieces; {sw.Elapsed.TotalSeconds:F1} s");
 
-        // ---- the network stage on work frames, with the LV95 build's options (its overlay, nodes, tram stops, cantons, marks)
+        // ---- the network stage on work frames, with the LV95 build's options (the same overlay, nodes, tram stops, cantons, marks)
+        SignalTestRegion.WriteSources(regionTemp);
         var options = new TileRewriter.Options(
-            Halo: CubeNetworkStage.DefaultHalo, OsmOverlay: Path.Combine(temp, "osm_overlay.tsv"), TramStops: Path.Combine(temp, "tram_stops.tsv"),
+            Halo: CubeNetworkStage.DefaultHalo, OsmOverlay: Path.Combine(regionTemp, "osm_overlay.tsv"), TramStops: Path.Combine(regionTemp, "tram_stops.tsv"),
             Cantons: TileRewriter.Cantons.Of(SignalTestRegion.CantonTiles), GantryFacts: Path.Combine(regionTemp, "gantry_facts.tsv"));
         var data = RegionData.Load(options, log);
         var gantries = data.LoadGantries(options, log);
@@ -289,7 +288,7 @@ public static partial class CubeTestRegion
                     return SwissGeodesy.ToLv95(lat, lon);
                 }),
             };
-            var loop = new FrameTileLoop(plan, LeafLevel, heightsRead, raw, chunks, data, gantries, frameOptions, CubeNetworkStage.DefaultBlock, totals);
+            var loop = new FrameTileLoop(plan, LeafLevel, heightsRead, raw, null, data, gantries, frameOptions, CubeNetworkStage.DefaultBlock, totals);
             var stats = TileRewriter.Run(loop, frameOptions, _ => { });
             roadWriter.WriteFrame(plan.Cell, loop.Sections);
             heightsRead.Reload(plan.Cell);
@@ -297,9 +296,8 @@ public static partial class CubeTestRegion
         }
         log($"  network: {totals.Tiles} leaves with roads, {totals.Segments:N0} segments, {totals.Junctions} junction records, {totals.Signals} signals, {totals.Approaches} approaches");
 
-        // ---- the region files with Earth positions (places, traffic endpoints), then the manifest
-        int files = CubeRegionFiles.Run(["--cube-region-files", "--chunks", chunks, "--cube-out", region]);
-        if (files != 0) log($"  region files: exit {files}");
+        // ---- the region files in Earth positions (places, traffic endpoints), then the manifest
+        int files = WriteRegionFiles(region, heightsRead, log);
         LeafWriter.WriteManifest(region, LeafLevel, frameLevel, [
             "the traffic-lights test region (#386, #1647): flat at 500 m above sea level, RoadGen's design through the cube stages",
         ]);
@@ -310,6 +308,70 @@ public static partial class CubeTestRegion
         }
         log(string.Create(CultureInfo.InvariantCulture, $"cube test region: {sw.Elapsed.TotalSeconds:F1} s, leaves in {region}"));
         return files == 0 ? 0 : 2;
+    }
+
+    /// <summary>
+    /// The region files in Earth positions (#1711: written here, nothing converted from an LV95 build): the junctions as places
+    /// and the traffic endpoints (#1134) from the leaves' own lights, each at the region's ground (<see cref="SignalTestRegion.Ground"/>
+    /// above sea level, the height every leaf vertex holds), headings also from true north. Returns 0, or 2 with no endpoint.
+    /// </summary>
+    private static int WriteRegionFiles(string region, RegionHeights heights, Action<string> log)
+    {
+        const double h = SignalTestRegion.Ground;
+        var places = SignalTestRegion.Places();
+        foreach (var p in places.Places) p.Geo = GeoPoint.FromLv95(p.E, p.N, h);
+        File.WriteAllText(Path.Combine(region, PlaceIndex.FileName), places.ToJson());
+
+        var lights = LightsOnLeaves(heights, SignalTestRegion.Junctions);
+        var endpoints = SignalTestRegion.Endpoints(lights, log).Select(x =>
+        {
+            // the heading: radians counter-clockwise from grid east; as a grid bearing, then true
+            double grid = 90 - x.Heading * 180 / Math.PI;
+            return x with { Geo = GeoPoint.FromLv95(x.E, x.N, h), GeoHeading = GeoPoint.TrueBearing(grid, x.E, x.N, h) };
+        }).ToList();
+        TrafficEndpointsFile.Write(Path.Combine(region, TrafficEndpointsFile.FileName), endpoints);
+        log($"  region files: {places.Places.Count} places, {endpoints.Count} traffic endpoints at {lights.Count} lit junctions");
+        return endpoints.Count > 0 ? 0 : 2;
+    }
+
+    /// <summary>
+    /// Every lit junction in the leaves' network as <see cref="SignalTestRegion.ReadLights"/> reads the LV95 build's: its place,
+    /// stop lines and arm headings taken to LV95 (anchor frame to ECEF to LV95, a heading by a metre along it), its plan and lanes as built.
+    /// </summary>
+    public static List<SignalTestRegion.Lights> LightsOnLeaves(RegionHeights heights, IReadOnlyList<SignalTestRegion.Junction> junctions)
+    {
+        var list = new List<SignalTestRegion.Lights>();
+        foreach (var leaf in heights.Leaves.OrderBy(k => k.Face).ThenBy(k => k.Y).ThenBy(k => k.X))
+        {
+            if (heights.ReadKind(leaf, LeafKind.Roads) is not { } sec) continue;
+            var tile = LeafRoads.Decode(sec);
+            var anchor = leaf.Anchor;
+            (double E, double N) Lv95(double x, double y, double z)
+            {
+                var (e, n, _) = SwissGeodesy.FromEcef(anchor.ToEcef(x, y, z));
+                return (e, n);
+            }
+            double Heading(double x, double y, double z, double heading)
+            {
+                // plan headings: east 0, north π/2; the anchor frame's x east, z south
+                var a = Lv95(x, y, z);
+                var b = Lv95(x + Math.Cos(heading), y, z - Math.Sin(heading));
+                return Math.Atan2(b.N - a.N, b.E - a.E);
+            }
+            for (int k = 0; k < tile.Signals.Count; k++)
+            {
+                var s = tile.Signals[k];
+                var (e, n) = Lv95(s.X, s.Y, s.Z);
+                for (int arm = 0; arm < s.Plan.Arms.Count; arm++)
+                    s.Plan.Arms[arm] = s.Plan.Arms[arm] with { Heading = Heading(s.X, s.Y, s.Z, s.Plan.Arms[arm].Heading) };
+                var named = junctions.Where(j => Math.Abs(j.E - e) < 20 && Math.Abs(j.N - n) < 20).MinBy(j => Math.Abs(j.E - e) + Math.Abs(j.N - n));
+                var approaches = new Dictionary<int, RoadApproach>();
+                foreach (var a in tile.Approaches.Where(a => a.Signal == k)) approaches[a.SignalArm] = a;
+                var stops = approaches.ToDictionary(x => x.Key, x => Lv95(x.Value.X, x.Value.Y, x.Value.Z));
+                list.Add(new SignalTestRegion.Lights(named?.Name ?? string.Create(CultureInfo.InvariantCulture, $"L{e:F0},{n:F0}"), e, n, s.Plan, approaches, stops));
+            }
+        }
+        return list;
     }
 
     /// <summary>A leaf's cover lattice (j·side + i): LV95 at every 32nd vertex rigorously, bilinear between (a millimetre).</summary>

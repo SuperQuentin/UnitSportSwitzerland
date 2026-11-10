@@ -27,10 +27,24 @@ public static class LandingStage
             Console.Error.WriteLine($"--landings needs a built region: no {manifestPath}");
             return 2;
         }
-        var sw = Stopwatch.StartNew();
         var tiles = TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet();
+        return Run(tiles, new TileSampler(outDir, tiles), (e, n) => RoadsAround(outDir, e, n), tlmPath, file ?? Path.Combine(outDir, LandingIndex.FileName));
+    }
+
+    /// <summary>
+    /// The landings of a built region: its LV95 km cells, its ground and still water, its network's roads round a point (an LV95
+    /// build's tiles, or a cube region's leaves, #1711 <see cref="BuiltLeaves"/>), into <paramref name="file"/>.
+    /// </summary>
+    public static int Run(HashSet<TileId> tiles, IShoreSampler sampler, Func<double, double, IEnumerable<(TileId, RoadSegment)>> roadsAround,
+        string tlmPath, string file)
+    {
+        if (!File.Exists(tlmPath))
+        {
+            Console.Error.WriteLine($"swissTLM3D GeoPackage not found: {tlmPath}");
+            return 1;
+        }
+        var sw = Stopwatch.StartNew();
         if (tiles.Count == 0) return 0;
-        var sampler = new TileSampler(outDir, tiles);
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MaxN) - ChunkFormat.TileSizeM, maxN = tiles.Max(t => t.MaxN);
         bool InRegion(double e, double n) => tiles.Contains(TileId.FromLv95(e, n));
@@ -70,7 +84,7 @@ public static class LandingStage
         foreach (var (name, e, n, source) in stops)
         {
             // a pier swissTLM3D maps (a Steg the roads draw) ending at the stop
-            var road = LandingPlanner.FindRoadEnd(e, n, RoadsAround(outDir, e, n), sampler);
+            var road = LandingPlanner.FindRoadEnd(e, n, roadsAround(e, n), sampler);
             if (road != null) surveyed++;
             if (LandingPlanner.PlanLanding(name, e, n, sampler, source: source, road: road) is { } landing) index.Landings.Add(landing);
             else skipped++;
@@ -94,7 +108,7 @@ public static class LandingStage
             }
         index.Jetties.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
 
-        file ??= Path.Combine(outDir, LandingIndex.FileName);
+
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
         File.WriteAllText(file, index.ToJson());
         Console.WriteLine($"Landings: {index.Landings.Count} landings ({surveyed} at a surveyed pier, {skipped} stops with no water or shore by them), "

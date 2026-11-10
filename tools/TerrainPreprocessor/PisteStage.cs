@@ -540,19 +540,24 @@ public static class PisteStage
 
     // ---- the stage ---------------------------------------------------------------------------
 
-    public static int Run(string osmPbf, string outDir, IReadOnlySet<TileId> region, int jobs)
+    /// <summary>A latitude and longitude box round the region's LV95 km cells, 3 km wider, so slopes and lifts crossing its edge come whole.</summary>
+    public static (double Lat0, double Lat1, double Lon0, double Lon1) LatLonBox(IReadOnlySet<TileId> region)
     {
-        var clock = Stopwatch.StartNew();
-        if (region.Count == 0) { Console.Error.WriteLine("pistes: no manifest tiles (--tiles-file or <out>/manifest.json)"); return 2; }
-        // a lat/lon box round the region, 3 km wider, so slopes crossing its edge come whole
         double minE = region.Min(t => t.MinE) - 3000, maxE = region.Max(t => t.MinE) + 4000;
         double minN = region.Min(t => t.MinN) - 3000, maxN = region.Max(t => t.MaxN) + 3000;
         var (la0, lo0) = GeoInput.ToLatLon(minE, minN);
         var (la1, lo1) = GeoInput.ToLatLon(maxE, maxN);
         var (la2, lo2) = GeoInput.ToLatLon(minE, maxN);
         var (la3, lo3) = GeoInput.ToLatLon(maxE, minN);
-        var box = (Math.Min(Math.Min(la0, la1), Math.Min(la2, la3)), Math.Max(Math.Max(la0, la1), Math.Max(la2, la3)),
-                   Math.Min(Math.Min(lo0, lo1), Math.Min(lo2, lo3)), Math.Max(Math.Max(lo0, lo1), Math.Max(lo2, lo3)));
+        return (Math.Min(Math.Min(la0, la1), Math.Min(la2, la3)), Math.Max(Math.Max(la0, la1), Math.Max(la2, la3)),
+                Math.Min(Math.Min(lo0, lo1), Math.Min(lo2, lo3)), Math.Max(Math.Max(lo0, lo1), Math.Max(lo2, lo3)));
+    }
+
+    public static int Run(string osmPbf, string outDir, IReadOnlySet<TileId> region, int jobs)
+    {
+        var clock = Stopwatch.StartNew();
+        if (region.Count == 0) { Console.Error.WriteLine("pistes: no manifest tiles (--tiles-file or <out>/manifest.json)"); return 2; }
+        var box = LatLonBox(region);
         var geo = GeoInput.Over(outDir);
         var slopes = Load(osmPbf, jobs, box, geo);
         Console.WriteLine($"Pistes: {slopes.Count} slopes read from {Path.GetFileName(osmPbf)} in {clock.Elapsed.TotalSeconds:F1}s");

@@ -724,15 +724,14 @@ public static partial class SignalTestRegion
                 tiles.Add(new TileId(e, nn));
 
         WriteTerrain(chunkDir, tiles);
-        WriteBuildings(chunkDir, tiles, design.Buildings);
-        WritePlaces(chunkDir, design.Junctions);
+        foreach (var tile in BuildingTiles(tiles, design.Buildings))
+        {
+            using var fs = File.Create(Path.Combine(chunkDir, BuildingFormat.FileName(tile.Id)));
+            BuildingCodec.Encode(tile, fs);
+        }
+        File.WriteAllText(Path.Combine(chunkDir, PlaceIndex.FileName), Places(design.Junctions).ToJson());
         var roadTiles = WriteRawRoads(RawRoads.DirFor(tempDir), design.Lines);
-        WriteOverlay(tempDir, design.Lines);
-        // J14's tram stops (#1057): two stops on the artery, 150 m either side of the junction, as swissTLM3D gives a stop: one point
-        File.WriteAllText(Path.Combine(tempDir, "tram_stops.tsv"), string.Create(CultureInfo.InvariantCulture,
-            $"name\te\tn\nJ14 west\t{OverheadE - 150:F2}\t{BetweenN:F2}\nJ14 east\t{OverheadE + 150:F2}\t{BetweenN:F2}\n"
-            + $"J15 west\t{GenevaTramE - 100:F2}\t{GenevaTramN:F2}\nJ15 east\t{GenevaTramE + 100:F2}\t{GenevaTramN:F2}\n"));
-        WriteSignals(tempDir, design);
+        WriteSources(tempDir, design);
         string about = About(design);
         foreach (string dir in new[] { chunkDir, tempDir })
         {
@@ -954,9 +953,42 @@ public static partial class SignalTestRegion
             (float)Math.Atan2(dx, dz), RoadSigns.LowerEdge + RoadSigns.CantonSignHeight);
     }
 
-    /// <summary>Box buildings (walls and a flat roof) as the building stage writes them: tile-local triangles, X east, Y up, Z south.</summary>
-    private static void WriteBuildings(string dir, List<TileId> tiles, List<Box> boxes)
+    /// <summary>
+    /// The region's source files beside its raw roads (#1711, D1: the LV95 build and the leaves' read the same ones): the OSM
+    /// overlay, J14's and J15's tram stops and the signal and crossing nodes.
+    /// </summary>
+    public static void WriteSources(string tempDir) => WriteSources(tempDir, Build());
+
+    private static void WriteSources(string tempDir, Design design)
     {
+        WriteOverlay(tempDir, design.Lines);
+        // J14's tram stops (#1057): two stops on the artery, 150 m either side of the junction, as swissTLM3D gives a stop: one point
+        File.WriteAllText(Path.Combine(tempDir, "tram_stops.tsv"), string.Create(CultureInfo.InvariantCulture,
+            $"name\te\tn\nJ14 west\t{OverheadE - 150:F2}\t{BetweenN:F2}\nJ14 east\t{OverheadE + 150:F2}\t{BetweenN:F2}\n"
+            + $"J15 west\t{GenevaTramE - 100:F2}\t{GenevaTramN:F2}\nJ15 east\t{GenevaTramE + 100:F2}\t{GenevaTramN:F2}\n"));
+        WriteSignals(tempDir, design);
+    }
+
+    /// <summary>The region's LV95 km tiles (its design's notation).</summary>
+    public static List<TileId> Tiles()
+    {
+        var tiles = new List<TileId>();
+        for (int e = MinTileE; e <= MaxTileE; e++)
+            for (int n = MinTileN; n <= MaxTileN; n++)
+                tiles.Add(new TileId(e, n));
+        return tiles;
+    }
+
+    /// <summary>The box buildings per km tile, as the LV95 build writes them (the leaves take the same floats, #1711).</summary>
+    public static List<BuildingTile> BuildingTiles() => BuildingTiles(Tiles(), Build().Buildings);
+
+    /// <summary>The junctions as places, in the LV95 build's <c>places.json</c> and the leaves' (#1711).</summary>
+    public static PlaceIndex Places() => Places(Build().Junctions);
+
+    /// <summary>Box buildings (walls and a flat roof) as the building stage writes them: tile-local triangles, X east, Y up, Z south.</summary>
+    private static List<BuildingTile> BuildingTiles(List<TileId> tiles, List<Box> boxes)
+    {
+        var result = new List<BuildingTile>();
         foreach (var id in tiles)
         {
             var list = new List<Building>();
@@ -979,18 +1011,18 @@ public static partial class SignalTestRegion
                 t.AddRange([x0, y1, z0, x1, y1, z1, x1, y1, z0]);
                 list.Add(new Building { Kind = BuildingKind.Apartment, Floors = (byte)Math.Round(b.Height / 3), MinY = y0, MaxY = y1, Triangles = [.. t] });
             }
-            using var fs = File.Create(Path.Combine(dir, BuildingFormat.FileName(id)));
-            BuildingCodec.Encode(new BuildingTile { Id = id, Buildings = list }, fs);
+            result.Add(new BuildingTile { Id = id, Buildings = list });
         }
+        return result;
     }
 
     /// <summary>The junctions as places: Tab (or <c>--goto J3</c>) finds them. No buildings counted, so no occasion or town sound picks them.</summary>
-    private static void WritePlaces(string dir, List<Junction> junctions)
+    private static PlaceIndex Places(List<Junction> junctions)
     {
         var index = new PlaceIndex();
         foreach (var j in junctions)
             index.Places.Add(new Place { Name = j.Name, Canton = CantonAt(j.E, j.N) ?? "", E = j.E, N = j.N, Kind = PlaceKind.Town });
-        File.WriteAllText(Path.Combine(dir, PlaceIndex.FileName), index.ToJson());
+        return index;
     }
 
     /// <summary>
