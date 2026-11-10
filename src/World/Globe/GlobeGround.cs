@@ -110,6 +110,19 @@ public static class GlobeGround
         return true;
     }
 
+    /// <summary>
+    /// Whether a height stands at one of the pyramid's lake levels (<see cref="CubeManifest.Lakes"/>), within the tile's
+    /// stored quantum: <c>--cube-swiss</c> puts a lake there exactly, so a level vertex at one is that lake (#1669).
+    /// </summary>
+    public static bool OnLake(float[]? lakes, float h, float quantum)
+    {
+        if (lakes == null) return false;
+        float within = Math.Max(quantum, 0.01f);
+        foreach (float l in lakes)
+            if (Math.Abs(h - l) <= within) return true;
+        return false;
+    }
+
     /// <summary>Weights where a leaf's own water says it is dry: no water, the rest scaled up to fill its share.</summary>
     public static Vector4 Dry(Vector4 w)
     {

@@ -134,4 +134,16 @@ public class GlobeGroundTests
         Assert.True(west.X > 0.9f && east.X < 0.1f, $"{west} {east}");
         Assert.Equal(0, GlobeGround.Dry(new Vector4(1, 0, 0, 0)).Length(), 3);
     }
+
+    [Fact]
+    public void A_height_at_a_pyramid_lake_level_is_that_lake()
+    {
+        // within the stored quantum (1 cm at least), never with no lakes
+        float[] lakes = { 422.2f };
+        Assert.True(GlobeGround.OnLake(lakes, 422.2f, 0.0024f));
+        Assert.True(GlobeGround.OnLake(lakes, 422.21f, 0.0024f));
+        Assert.False(GlobeGround.OnLake(lakes, 422.25f, 0.0024f));
+        Assert.True(GlobeGround.OnLake(lakes, 422.23f, 0.039f));
+        Assert.False(GlobeGround.OnLake(null, 422.2f, 0.01f));
+    }
 }

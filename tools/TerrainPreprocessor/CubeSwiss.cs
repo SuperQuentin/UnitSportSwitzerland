@@ -134,6 +134,7 @@ public static class CubeSwiss
             finer = made;
         }
         manifest.Levels.Sort((a, b) => a.Level.CompareTo(b.Level));
+        manifest.Lakes = lakes.Length > 0 ? lakes.ToList() : null;
         manifest.LeafLevel = manifest.Levels[^1].Level;
         manifest.Bits = manifest.Levels[^1].Bits;
         manifest.BundleLevel = manifest.Levels[^1].BundleLevel;
@@ -172,7 +173,7 @@ public static class CubeSwiss
                 tiles[key] = surface;
             }
         });
-        var lakes = levels.Where(l => l.Value >= LakeSamples).Select(l => l.Key / 10f).OrderBy(l => l).ToArray();
+        var lakes = CubeSurface.LakeLevels(levels, LakeSamples);
         return (tiles, wet, lakes);
     }
 
@@ -182,25 +183,34 @@ public static class CubeSwiss
     /// <summary>How far ETOPO's surface may stand from the leaves' lake (Lake Geneva: 418.3 against 422.3 m, #1654).</summary>
     private const float LakeSnapM = 6f;
 
-    /// <summary>How flat ETOPO must be about a vertex for it to be that lake: metres, over <see cref="LakeFlatDeg"/> each way.</summary>
-    private const float LakeFlatM = 0.3f;
-
+    /// <summary>How far round a vertex ETOPO must stay within <see cref="LakeSnapM"/> of the lake too, degrees (~400 m): a basin, not a slope.</summary>
     private const double LakeFlatDeg = 0.004;
+
+    /// <summary>How close a finer level's tent mean must stand to a lake's level, all nine points, to be that lake, metres.</summary>
+    private const float LakeOnM = 0.3f;
 
     /// <summary>
     /// The leaves' lake level for an ETOPO height at a lattice point, where ETOPO holds a lake there: near one of the
-    /// leaves' lakes and level for ~400 m each way (ETOPO draws a lake flat, a few metres off the survey); else NaN.
+    /// leaves' lakes, and so for ~400 m each way (ETOPO draws a lake a few metres off the survey, and its 1.8 km cells
+    /// rise towards a shore, so no flatness test: one left strips 4 m low and green bands across Léman, #1669); else NaN.
     /// A function of the point, so tiles sharing it agree.
     /// </summary>
     private static float LakeAt(EtopoGrid grid, float[] lakes, double lat, double lon, float etopo)
     {
-        float lake = float.NaN;
-        foreach (float l in lakes)
-            if (Math.Abs(etopo - l) <= LakeSnapM) { lake = l; break; }
+        float lake = Nearest(lakes, etopo, LakeSnapM);
         if (float.IsNaN(lake)) return lake;
         foreach (var (dlat, dlon) in new[] { (LakeFlatDeg, 0.0), (-LakeFlatDeg, 0.0), (0.0, LakeFlatDeg), (0.0, -LakeFlatDeg) })
-            if (Math.Abs(grid.Footprint(lat + dlat, lon + dlon, 1) - etopo) > LakeFlatM) return float.NaN;
+            if (Math.Abs(grid.Footprint(lat + dlat, lon + dlon, 1) - lake) > LakeSnapM) return float.NaN;
         return lake;
+    }
+
+    /// <summary>The lake level nearest a height, within <paramref name="within"/> metres; else NaN.</summary>
+    private static float Nearest(float[] lakes, float h, float within)
+    {
+        float best = float.NaN, d = within;
+        foreach (float l in lakes)
+            if (Math.Abs(h - l) <= d) { best = l; d = Math.Abs(h - l); }
+        return best;
     }
 
     /// <summary>
@@ -234,27 +244,34 @@ public static class CubeSwiss
                     }
                 if (all)
                 {
-                    h[j * n + i] = (float)sum;
+                    // the leaves' lake to one level: their own water stands a few centimetres apart from leaf to leaf,
+                    // and ETOPO's lake beside them snaps to the level exactly (the globe draws water where it is level)
+                    float mean = (float)sum;
+                    if (lakes.Length > 0 && Nearest(lakes, mean, LakeOnM) is var on && !float.IsNaN(on) && OnLake(finer, key.Face, key.Level + 1, finerBits, finerSide, fi, fj, on))
+                        mean = on;
+                    h[j * n + i] = mean;
                     own++;
                 }
                 else
                 {
                     etopoHeights ??= CubeGlobal.Heights(grid, key, bits);
                     float e = etopoHeights[j * n + i];
+                    bool snapped = false;
                     if (lakes.Length > 0)
                     {
                         // a lake beside the leaves stands at their level, not ETOPO's few metres off (#1654)
                         var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, gi0 + i), CubeSphere.Lattice(key.Level + bits, gj0 + j));
                         double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
                         double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
-                        if (LakeAt(grid, lakes, lat, lon, e) is var lake && !float.IsNaN(lake)) e = lake;
+                        if (LakeAt(grid, lakes, lat, lon, e) is var lake && !float.IsNaN(lake)) { e = lake; snapped = true; }
                     }
                     // past the leaves' edge, ETOPO corrected by how far it misses the nearest leaves, the correction fading
                     // over BlendM: ETOPO's 1.8 km cells blur a steep shore, and a hard switch stood a wall up to 120 m along
                     // the region's edge (#1654); a correction, not the leaves' height, so a mountain beside them keeps its shape
                     // from the leaves alone: a coarser level's finer one already holds ETOPO past them, and blending into its
                     // edge again at each level carried the leaves' foothills over the Salève (889 m down to 485)
-                    if (blend && NearestFiner(finer, grid, key.Face, key.Level + 1, finerBits, finerSide, fi, fj) is var (miss, t) && t < 1)
+                    // a lake snapped to the leaves' level is theirs already: ETOPO's miss there (+4 m) stood humps on it
+                    if (blend && !snapped && NearestFiner(finer, grid, key.Face, key.Level + 1, finerBits, finerSide, fi, fj) is var (miss, t) && t < 1)
                     {
                         float s = t * t * (3 - 2 * t);
                         e += miss * (1 - s);
@@ -303,6 +320,15 @@ public static class CubeSwiss
             if (found > 0) return ((float)(sum / found), (float)(rM / BlendM));
         }
         return (0, 1);
+    }
+
+    /// <summary>Whether the nine finer points round (fi, fj) all stand within <see cref="LakeOnM"/> of a lake's level.</summary>
+    private static bool OnLake(ConcurrentDictionary<CubeKey, CubeTile> finer, int face, int level, int bits, long side, long fi, long fj, float lake)
+    {
+        for (int b = -1; b <= 1; b++)
+            for (int a = -1; a <= 1; a++)
+                if (FinerAt(finer, face, level, bits, side, fi + a, fj + b) is not { } v || Math.Abs(v - lake) > LakeOnM) return false;
+        return true;
     }
 
     /// <summary>ETOPO's footprint mean at a face lattice point (as <see cref="CubeGlobal.Heights"/> takes it).</summary>
