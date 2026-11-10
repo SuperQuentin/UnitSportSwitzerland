@@ -30,5 +30,6 @@
   `DormantVehicles`; `RideProbe` and `FlightCheckProbe` since C3). `AirportStands` matches a stand to an entered tile
   by the ground's own tile under it (`TileAt`). `Audio/Surfaces` finds the road under a wheel on the leaves'
   stand-in tiles (`Surfaces.Source`): without it a car on a leaf road had grass grip and left the hairpin.
+- **Building-site pits** (`site`, #1653): cut into the leaves from their stand-ins' own site plans, `terrain/pits-on-leaves`.
 - **Checks**: `FunCourseTests` (the fleet on the plane, its headings, the tiles on it; the slope on its leaves, its
   area, through the codec); the course rows in `tools/lib/checkmap.txt` with `--frame earth`.

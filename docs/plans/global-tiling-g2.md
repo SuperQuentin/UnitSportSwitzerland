@@ -312,6 +312,9 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
   (`Core/TestWorld`) checked. **Built** (#1652): the course's tiles laid where its leaves are (`CoursePlace`), every course's
   rows pass under earth but `site` (no pit on leaves: #1653); the slopes are leaf data only (nothing reads leaf pistes yet).
+  **`site` built** (#1653): the pits each leaf's stand-in plans are cut into its drawn mesh and its collision patches and
+  lined (`PitTerrain.CutMesh`/`CutFaces`), `InPit` answers on leaves; `--pitcheck` passes under earth. Open: a pit reaching
+  past its leaf's edge is cut on its own leaf only (#1685).
 - **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
   Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
 - **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,

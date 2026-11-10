@@ -361,6 +361,10 @@ src/Terrain/Fixture/CoursePlace quick  --frame earth --flycheck thermal --time 1
 src/Terrain/Fixture/CoursePlace quick  --frame earth --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
 src/Terrain/Fixture/CoursePlace quick  --frame earth --wakecheck --wakekind car --chunks fixture:parking --traffic 0
 src/Terrain/Fixture/CoursePlace quick  --frame earth --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+# #1653: building-site pits on the leaves (mesh, collision patches, InPit), the sites their stand-ins plan
+src/Terrain/Fixture/CoursePlace quick  --frame earth --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/LeafCollision quick  --frame earth --pitcheck --chunks fixture:site --traffic 0
+src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site --traffic 0
 # the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
