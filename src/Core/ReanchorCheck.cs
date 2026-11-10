@@ -79,7 +79,7 @@ public partial class ReanchorCheck : Node
         _watch = new ReanchorWatch(_origin, _ground, "reanchor") { Shots = windowed, JumpTolM = 0.04f };
         AddChild(_watch);
         Log($"start LV95 {e:F0}/{n:F0}, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}, {(windowed ? "windowed: the picture judged too" : "headless")}");
-        if (!_origin.Frame.IsAnchor) _faults.Add("the world is not an anchor frame: run with --frame earth");
+        if (!_origin.Frame.IsAnchor) Fault("the world is not an anchor frame: run with --frame earth");
     }
 
     public override void _ExitTree()
@@ -111,7 +111,7 @@ public partial class ReanchorCheck : Node
     public override void _PhysicsProcess(double delta)
     {
         if (!_camera.Current) _camera.MakeCurrent();
-        if (Now > TimeoutS) { _faults.Add($"timed out in phase {_phase}"); Finish(); return; }
+        if (Now > TimeoutS) { Fault($"timed out in phase {_phase}"); Finish(); return; }
         switch (_phase)
         {
             case 0: WaitForGround(); break;
@@ -199,7 +199,7 @@ public partial class ReanchorCheck : Node
         }
         else if ((_missingS += dt) > 2.0 && _faults.Count < 20)
         {
-            _faults.Add($"no ground under the camera for 2 s at {_travelled:F0} m ({(fly ? "flying" : "driving")})");
+            Fault($"no ground under the camera for 2 s at {_travelled:F0} m ({(fly ? "flying" : "driving")})");
             _missingS = double.NegativeInfinity;
         }
         _rover.GlobalPosition = next;
@@ -228,21 +228,27 @@ public partial class ReanchorCheck : Node
         {
             double moved = _origin.ToGlobal(_boxes[k].GlobalPosition).DistanceTo(_restAt[k]);
             Log($"box{k}: {moved * 100:F1} cm from where it came to rest, {_boxes[k].LinearVelocity.Length():F2} m/s");
-            if (moved > 0.05) _faults.Add($"box{k} moved {moved * 100:F0} cm over the run (at rest, across {_watch.Shifts} re-anchors)");
+            if (moved > 0.05) Fault($"box{k} moved {moved * 100:F0} cm over the run (at rest, across {_watch.Shifts} re-anchors)");
         }
         if (_marker != null)
         {
             double m = _origin.ToGlobal(_marker.GlobalPosition).DistanceTo(_markerAt);
             Log($"marker: {m * 100:F2} cm from where it stood");
-            if (m > 0.01) _faults.Add($"the marker moved {m * 100:F1} cm over the run");
+            if (m > 0.01) Fault($"the marker moved {m * 100:F1} cm over the run");
         }
         _watch.Judge();
         Log(_watch.Summary().Replace("[reanchor] ", ""));
-        _faults.AddRange(_watch.Faults);
-        if (_watch.Shifts < 3) _faults.Add($"only {_watch.Shifts} re-anchors: the run must cross several (--originshift)");
-        foreach (var f in _faults) Log($"FAULT: {f}");
+        foreach (var f in _watch.Faults) Fault(f);
+        if (_watch.Shifts < 3) Fault($"only {_watch.Shifts} re-anchors: the run must cross several (--originshift)");
         Log(_faults.Count == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_faults.Count}: {_faults[0]})");
         GetTree().Quit(_faults.Count == 0 ? 0 : 1);
+    }
+
+    // logged as it happens: a run stopped by the RAM floor or a timeout still says what it found
+    private void Fault(string f)
+    {
+        _faults.Add(f);
+        Log($"FAULT: {f}");
     }
 
     private static void Log(string s) => GD.Print("[reanchorcheck] " + s);

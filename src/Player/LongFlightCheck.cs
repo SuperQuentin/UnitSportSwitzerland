@@ -46,6 +46,9 @@ public partial class LongFlightCheck : Node
     private Camera3D _camera = null!;
     private ReanchorWatch _watch = null!;
     private PyramidGround? _pyramid;
+    private Terrain.Leaves.LeafStore? _real;
+
+    private static CubeKey LeafUnder(GlobalPos p) { var g = p.Geodetic; return Terrain.Leaves.LeafFrames.LeafAt(g.LatDeg, g.LonDeg); }
     private int _phase, _samples, _farSamples, _farMissed, _leafSeen = -1;
     private double _t, _steer, _check, _holeS, _worstHoleS, _worstFarHoleS, _lowestAgl = double.MaxValue, _flown, _startKm;
     private readonly double[] _farHoleS = new double[8];
@@ -85,9 +88,12 @@ public partial class LongFlightCheck : Node
         AddChild(_watch);
         _startKm = GlobalPos.FromLv95(e, n, 0).HorizontalDistanceTo(_to) / 1000;
         Log(Inv($"start LV95 {e:F0}/{n:F0} at {StartAltM:F0} m, to {lat:F4},{lon:F4}: {_startKm:F0} km, cruise {_cruise:F0} m, warp {_warp:F1}x, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}"));
-        if (!_origin.Frame.IsAnchor) _faults.Add("the world is not an anchor frame: run with --frame earth");
+        if (!_origin.Frame.IsAnchor) Fault("the world is not an anchor frame: run with --frame earth");
+        // the destination's own leaves (--leaves): the end needs one of them drawn under it, not a generated fill leaf
+        _real = Terrain.Leaves.LeafStore.Open(Core.TerrainPaths.FindLeafDir());
+        Log($"{_real.LocalKeys.Count} real leaves in {Core.TerrainPaths.FindLeafDir()}; the destination's leaf {(_real.IsLocal(LeafUnder(_to)) ? "among them" : "NOT among them")}");
         if (World.Globe.DataDir is { } dir) _pyramid = new PyramidGround(dir);
-        else _faults.Add("no globe pyramid (cube_global, --globe)");
+        else Fault("no globe pyramid (cube_global, --globe)");
     }
 
     public override void _ExitTree() => Engine.TimeScale = 1.0;
@@ -99,7 +105,7 @@ public partial class LongFlightCheck : Node
     {
         if (_phase < 0) return;
         if (!_camera.Current) _camera.MakeCurrent();
-        if (Now > TimeoutS) { _faults.Add(Inv($"timed out after {_flown / 1000:F0} km")); Finish(); return; }
+        if (Now > TimeoutS) { Fault(Inv($"timed out after {_flown / 1000:F0} km")); Finish(); return; }
         if (_faults.Count > 0 && _phase == 0) { Finish(); return; }
         switch (_phase)
         {
@@ -112,7 +118,7 @@ public partial class LongFlightCheck : Node
     // the globe under the start, drawn
     private void Wait()
     {
-        if (World.Globe.Current is not { } globe) { if (Now > 60) { _faults.Add("no globe in the world"); Finish(); } return; }
+        if (World.Globe.Current is not { } globe) { if (Now > 60) { Fault("no globe in the world"); Finish(); } return; }
         if (globe.DrawnLevelAt(_origin.ToEcef(_camera.GlobalPosition)) < 0) return;
         Log($"the globe draws under the start at {Now:F1} s ({globe.PatchCount} tiles)");
         _phase = 1;
@@ -136,8 +142,8 @@ public partial class LongFlightCheck : Node
             return;
         }
         var p = _player;
-        if (!p.IsOnFloor()) { if (Now > 90) { _faults.Add("the pilot never stood on the platform"); Finish(); } return; }
-        if (!p.SetRide(RideKind.A320) || p.Vehicle is not Airliner jet) { _faults.Add("could not board an A320"); Finish(); return; }
+        if (!p.IsOnFloor()) { if (Now > 90) { Fault("the pilot never stood on the platform"); Finish(); } return; }
+        if (!p.SetRide(RideKind.A320) || p.Vehicle is not Airliner jet) { Fault("could not board an A320"); Finish(); return; }
         _platform!.QueueFree();
         _platform = null;
         _jet = jet;
@@ -179,7 +185,7 @@ public partial class LongFlightCheck : Node
         _last = here;
         double toGo = here.HorizontalDistanceTo(_to);
         Chase(p, jet);
-        if (p.Vehicle != jet) { _faults.Add(Inv($"out of the aircraft at {_flown / 1000:F0} km")); Finish(); return; }
+        if (p.Vehicle != jet) { Fault(Inv($"out of the aircraft at {_flown / 1000:F0} km")); Finish(); return; }
 
         // the autopilot on after 2 s of flight, then the knobs: heading every second, the altitudes
         if (!_apOn && _t > 2)
@@ -198,7 +204,7 @@ public partial class LongFlightCheck : Node
                 jet.State.ApAltitude = _descending ? DescendM : _cruise;
             }
         }
-        else if (_apOn && _t > 6) { _faults.Add(Inv($"the autopilot is off at {_flown / 1000:F0} km")); Finish(); return; }
+        else if (_apOn && _t > 6) { Fault(Inv($"the autopilot is off at {_flown / 1000:F0} km")); Finish(); return; }
 
         if (!_descending && toGo < DescendFromKm * 1000)
         {
@@ -216,8 +222,8 @@ public partial class LongFlightCheck : Node
         if (_stopKm is { } km && _flown / 1000 >= km) { Log(Inv($"{km:F0} km flown: stopping (--flightkm)")); Finish(); return; }
         if (down && _t > 0)
         {
-            // over the destination, low: its leaves under it (when they are in the leaf set)
-            if (World.Globe.Current?.DrawnLevelAt(here.Ecef) == World.Globe.LeafLevelDrawn || _ground?.TryGetHeight(p.GlobalPosition, out _) == true)
+            // over the destination, low: one of its real leaves drawn under it (a generated fill leaf does not count)
+            if (_real?.IsLocal(LeafUnder(here)) == true && World.Globe.Current?.DrawnLevelAt(here.Ecef) == World.Globe.LeafLevelDrawn)
             {
                 _leafSeen = 1;
                 Log(Inv($"the destination's leaves are drawn under the aircraft, {toGo / 1000:F1} km out at {alt:F0} m"));
@@ -231,7 +237,7 @@ public partial class LongFlightCheck : Node
     private void Check(GlobalPos here, double dt)
     {
         var globe = World.Globe.Current;
-        if (globe == null) { _faults.Add("the globe left the world"); Finish(); return; }
+        if (globe == null) { Fault("the globe left the world"); Finish(); return; }
         _samples++;
         int level = globe.DrawnLevelAt(here.Ecef);
         _levels[level] = _levels.GetValueOrDefault(level) + 1;
@@ -239,7 +245,7 @@ public partial class LongFlightCheck : Node
         {
             _holeS += dt;
             _worstHoleS = Math.Max(_worstHoleS, _holeS);
-            if (_holeS > HoleS && _faults.Count < 20) { _faults.Add(Inv($"no ground drawn under the aircraft for {_holeS:F0} s at {_flown / 1000:F0} km")); _holeS = double.NegativeInfinity; }
+            if (_holeS > HoleS && _faults.Count < 20) { Fault(Inv($"no ground drawn under the aircraft for {_holeS:F0} s at {_flown / 1000:F0} km")); _holeS = double.NegativeInfinity; }
         }
         else _holeS = 0;
 
@@ -249,9 +255,9 @@ public partial class LongFlightCheck : Node
         {
             double agl = alt - g;
             _lowestAgl = Math.Min(_lowestAgl, agl);
-            if (agl < ClearanceM && _faults.Count < 20) _faults.Add(Inv($"{agl:F0} m over the ground at {_flown / 1000:F0} km"));
+            if (agl < ClearanceM && _faults.Count < 20) Fault(Inv($"{agl:F0} m over the ground at {_flown / 1000:F0} km"));
         }
-        else if (_faults.Count < 20) _faults.Add(Inv($"the pyramid holds no height under the aircraft at {_flown / 1000:F0} km"));
+        else if (_faults.Count < 20) Fault(Inv($"the pyramid holds no height under the aircraft at {_flown / 1000:F0} km"));
 
         // the far view: 8 points round it at 70 % of the horizon, at most 150 km
         double horizon = Math.Sqrt(2 * 6_371_000.0 * Math.Max(alt, 10) + alt * alt);
@@ -267,7 +273,7 @@ public partial class LongFlightCheck : Node
             _worstFarHoleS = Math.Max(_worstFarHoleS, _farHoleS[k]);
             if (_farHoleS[k] > FarHoleS && _faults.Count < 20)
             {
-                _faults.Add(Inv($"the far view missing {r / 1000:F0} km out at bearing {k * 45}° for {_farHoleS[k]:F0} s, at {_flown / 1000:F0} km"));
+                Fault(Inv($"the far view missing {r / 1000:F0} km out at bearing {k * 45}° for {_farHoleS[k]:F0} s, at {_flown / 1000:F0} km"));
                 _farHoleS[k] = double.NegativeInfinity;
             }
         }
@@ -293,13 +299,19 @@ public partial class LongFlightCheck : Node
         foreach (var (k, v) in _levels) lv.Add(Inv($"{(k == World.Globe.LeafLevelDrawn ? "leaf" : k.ToString(CultureInfo.InvariantCulture))}:{v}"));
         Log(Inv($"flew {_flown / 1000:F0} km in {_t:F0} s of game time; {_samples} checks, the ground under it by level {string.Join(" ", lv)}; worst hole {_worstHoleS:F1} s; far view {_farSamples - _farMissed} of {_farSamples} points drawn, worst gap {_worstFarHoleS:F1} s; lowest {(_lowestAgl < double.MaxValue ? _lowestAgl : double.NaN):F0} m over the ground"));
         Log(_watch.Summary().Replace("[longflight] ", ""));
-        _faults.AddRange(_watch.Faults);
-        if (_leafSeen == 0) _faults.Add("no leaf drawn under the aircraft over the destination (its leaves missing, or not in --leaves)");
-        foreach (var f in _faults) Log($"FAULT: {f}");
+        foreach (var f in _watch.Faults) Fault(f);
+        if (_leafSeen == 0) Fault("no real leaf of the destination drawn under the aircraft over it (its leaves missing, or not in --leaves)");
         Log(_faults.Count == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_faults.Count}: {_faults[0]})");
         GetTree().Quit(_faults.Count == 0 ? 0 : 1);
     }
 
     private static string Inv(FormattableString s) => s.ToString(CultureInfo.InvariantCulture);
+    // logged as it happens: a run stopped by the RAM floor or a timeout still says what it found
+    private void Fault(string f)
+    {
+        _faults.Add(f);
+        Log($"FAULT: {f}");
+    }
+
     private static void Log(string s) => GD.Print("[longflightcheck] " + s);
 }

@@ -88,7 +88,7 @@ public partial class LongDriveCheck : Node
     {
         if (_phase < 0) return;
         if (!_camera.Current) _camera.MakeCurrent();
-        if (Now > TimeoutS) { _faults.Add($"timed out after {_driven / 1000:F1} km, leg {_legs}"); Finish(); return; }
+        if (Now > TimeoutS) { Fault($"timed out after {_driven / 1000:F1} km, leg {_legs}"); Finish(); return; }
         switch (_phase)
         {
             case 0: FirstLeg(); break;
@@ -124,7 +124,7 @@ public partial class LongDriveCheck : Node
         if (!_next.IsCompleted) return;
         var route = _next.IsCompletedSuccessfully ? _next.Result : null;
         _next = null;
-        if (route == null) { _faults.Add("no road near the start"); Finish(); return; }
+        if (route == null) { Fault("no road near the start"); Finish(); return; }
         route.Follow(_origin.Frame);
         var line = route.Line;
         var p = line.PointAt(10f);
@@ -145,7 +145,7 @@ public partial class LongDriveCheck : Node
     {
         if (_player is not { } p || !p.IsOnFloor()) return;
         var spec = CarCatalog.All[Mathf.Clamp(_car, 0, CarCatalog.All.Count - 1)];
-        if (!p.SetRide(spec.Kind)) { _faults.Add($"could not get into car {_car}"); Finish(); return; }
+        if (!p.SetRide(spec.Kind)) { Fault($"could not get into car {_car}"); Finish(); return; }
         TakeLeg(_pending!);
         _pending = null;
         _watch.Watch("car", () => _player);
@@ -161,7 +161,7 @@ public partial class LongDriveCheck : Node
         _legs++;
         route.Follow(_origin.Frame);
         var pilot = AutoPilot.For(route, _player!);
-        if (pilot == null) { _faults.Add("no pilot for the car"); Finish(); return; }
+        if (pilot == null) { Fault("no pilot for the car"); Finish(); return; }
         pilot.Temperament(0.9f, 0f, 1);
         pilot.Go = true;
         _pilot = pilot;
@@ -181,11 +181,11 @@ public partial class LongDriveCheck : Node
         _top = Mathf.Max(_top, speed);
         Chase(p);
 
-        if (p.Ride == RideKind.OnFoot) { _faults.Add($"out of the car at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
+        if (p.Ride == RideKind.OnFoot) { Fault($"out of the car at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
         // a fall: under the ground's height (through a patch, off the data's edge)
         if (_ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f)
         {
-            if ((_belowS += dt) > 0.5) { _faults.Add($"fell under the ground ({g - p.GlobalPosition.Y:F1} m) at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
+            if ((_belowS += dt) > 0.5) { Fault($"fell under the ground ({g - p.GlobalPosition.Y:F1} m) at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
         }
         else _belowS = 0;
 
@@ -193,7 +193,7 @@ public partial class LongDriveCheck : Node
         double toGo = _to is { } to ? here.HorizontalDistanceTo(to) : pilot.Route.Length - pilot.Arc;
         bool won = _to != null ? toGo < _bestToGo - StallM : pilot.Arc > _bestArc + StallM;
         if (won || _stallT == 0) { _stallT = _t; _bestToGo = Math.Min(_bestToGo, toGo); _bestArc = Math.Max(_bestArc, pilot.Arc); }
-        if (_t - _stallT > StallS) { _faults.Add($"stalled: {StallS:F0} s without {StallM:F0} m won, at {_driven / 1000:F2} km ({LvAt(p)}), {speed * 3.6f:F0} km/h"); Finish(); return; }
+        if (_t - _stallT > StallS) { Fault($"stalled: {StallS:F0} s without {StallM:F0} m won, at {_driven / 1000:F2} km ({LvAt(p)}), {speed * 3.6f:F0} km/h"); Finish(); return; }
 
         _report += dt;
         if (_report >= 10)
@@ -213,7 +213,7 @@ public partial class LongDriveCheck : Node
             var route = task.IsCompletedSuccessfully ? task.Result : null;
             if (route == null || route.Length < 200f)
             {
-                if (left < 60f) { _faults.Add($"no road on toward the destination from {LvAt(p)} ({toGo / 1000:F1} km to go)"); Finish(); return; }
+                if (left < 60f) { Fault($"no road on toward the destination from {LvAt(p)} ({toGo / 1000:F1} km to go)"); Finish(); return; }
             }
             else
             {
@@ -245,12 +245,18 @@ public partial class LongDriveCheck : Node
         _watch.Judge();
         Log(Inv($"drove {_driven / 1000:F2} km in {_t:F0} s ({(_t > 0 ? _driven / _t * 3.6 : 0):F0} km/h on average, top {_top * 3.6f:F0}) over {_legs} legs"));
         Log(_watch.Summary().Replace("[longdrive] ", ""));
-        _faults.AddRange(_watch.Faults);
-        foreach (var f in _faults) Log($"FAULT: {f}");
+        foreach (var f in _watch.Faults) Fault(f);
         Log(_faults.Count == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_faults.Count}: {_faults[0]})");
         GetTree().Quit(_faults.Count == 0 ? 0 : 1);
     }
 
     private static string Inv(FormattableString s) => s.ToString(CultureInfo.InvariantCulture);
+    // logged as it happens: a run stopped by the RAM floor or a timeout still says what it found
+    private void Fault(string f)
+    {
+        _faults.Add(f);
+        Log($"FAULT: {f}");
+    }
+
     private static void Log(string s) => GD.Print("[longdrivecheck] " + s);
 }
