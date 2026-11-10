@@ -14,13 +14,14 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
   re-anchor against its four neighbours (a spike over 3x and 2 grey levels is a pop). The viewport's texture is the
   frame drawn before this `_Process`: the re-anchor shows one frame later. `ProcessPriority` is `int.MaxValue` (after
   the shifter's `int.MinValue` and every mover).
-- **`--reanchorcheck`** (`Core/ReanchorCheck`): a camera driven at 30 m/s then flown at 80 m/s 300 m up, back and
-  forth along legs, four rigid boxes asleep by the start (the shifter's teleport) and a plain marker (a node the shift
+- **`--reanchorcheck`** (`Core/ReanchorCheck`): a camera driven at 30 m/s then flown at 80 m/s 300 m up, round an
+  oval of legs with 100 m U-turns (a reversal on the spot reads as a jump of one tick's step: 1.33 m at 80 m/s), four rigid boxes asleep by the start (the shifter's teleport) and a plain marker (a node the shift
   moves); boxes and marker must not move over the run, the camera and the ground must not jump. On a fixture course
   along its longest reach (`ClientWorld.ReanchorCheckFor`), `--originshift 400` for many re-anchors in a short run;
   `tools/reanchorcheck.sh` windowed on the D: region at Geneva. `--reanchorinject <m>` puts the camera and the marker
-  that far aside at the 3rd re-anchor: 0.3 m fails three ways (marker moved, both tracks jumped 0.19 m), the proof
-  the check sees a pop; never in a map row.
+  that far aside at the 3rd re-anchor: 0.1 m fails (the marker moved, the marker's track 5 cm against a 4 cm
+  tolerance), the proof the check sees a pop; never in a map row. Samples are taken on the physics tick (a car sampled
+  per frame had 40 cm of noise: a frame holds 0-2 ticks); a jump of d reads as d/2.
 - **`--longdrivecheck`** (`Player/LongDriveCheck`): a `RaceRoute` reads roads only 4 tiles round where it is built,
   so the drive is chained legs: each toward a point `--legm` (3 km) on toward `--to` (LV95 notation; the leg target
   is `GlobalPos` maths), the next built 1.2 km before the current one ends, from just ahead of the car, and a new

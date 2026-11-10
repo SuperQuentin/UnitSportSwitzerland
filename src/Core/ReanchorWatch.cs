@@ -26,7 +26,10 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class ReanchorWatch : Node
 {
-    /// <summary>A track's jump at a re-anchor past this, metres, beyond its own noise, is a pop.</summary>
+    /// <summary>
+    /// A track's error at a re-anchor past this, metres, beyond its own noise, is a pop. The error is the middle sample's
+    /// distance from its neighbours' line: a jump of d between two samples reads as d/2.
+    /// </summary>
     public float JumpTolM { get; init; } = 0.10f;
     /// <summary>The ground under the camera asked again after a re-anchor, metres.</summary>
     public float GroundTolM { get; init; } = 0.02f;
@@ -40,7 +43,7 @@ public partial class ReanchorWatch : Node
     private readonly string _tag;
     private readonly List<Track> _tracks = new();
     private readonly List<string> _faults = new();
-    private bool _shifted, _pictureShift;
+    private bool _shifted, _shiftedPicture, _pictureShift;
     private double _clock;
     private int _shifts, _groundAsked;
     private double _worstGround;
@@ -102,7 +105,7 @@ public partial class ReanchorWatch : Node
     private void OnShifted(OriginShift shift)
     {
         _shifts++;
-        _shifted = true;
+        _shifted = _shiftedPicture = true;
         // the ground under the camera, asked again by its Earth position in the new frame
         if (_ground != null && _groundBefore is { } g)
         {
@@ -119,7 +122,9 @@ public partial class ReanchorWatch : Node
         _groundBefore = null;
     }
 
-    public override void _Process(double delta)
+    // the tracks on the physics tick: what moves (a car, a body, the probes' cameras) moves there, and a rendered
+    // frame holds 0, 1 or 2 ticks (40 cm of noise at 50 m/s sampled per frame)
+    public override void _PhysicsProcess(double delta)
     {
         // game time: what the movers step by (a time-warped flight, --fixed-fps)
         double now = _clock += delta;
@@ -129,9 +134,15 @@ public partial class ReanchorWatch : Node
         // the ground under the camera now, for the next re-anchor
         if (_ground != null && _groundAt?.Invoke() is { } foot && _ground.TryGetHeight(foot, out float h))
             _groundBefore = _origin.ToGlobal(foot with { Y = h });
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!Shots) return;
         // the viewport's texture is the frame drawn before this _Process: a re-anchor shows in the next one's
-        if (Shots) Picture(_pictureShift);
-        _pictureShift = shifted;
+        Picture(_pictureShift);
+        _pictureShift = _shiftedPicture;
+        _shiftedPicture = false;
     }
 
     private void Sample(Track t, double now, bool shifted)

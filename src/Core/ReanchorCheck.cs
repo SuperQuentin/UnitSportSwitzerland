@@ -40,9 +40,12 @@ public partial class ReanchorCheck : Node
     private GlobalPos _markerAt;
     private Camera3D _camera = null!;
     private ReanchorWatch _watch = null!;
-    private Vector3 _dir;
+    private Vector3 _dir, _axis;
     private int _phase, _seen;
-    private float _travelled, _legPos, _height;
+    private float _travelled, _along, _height;
+    private bool _turning, _turnOut;
+    /// <summary>The turn at each end of a leg, metres: a car's U-turn, never a reversal on the spot (one tick's whole step would read as a jump).</summary>
+    public const float TurnRadiusM = 100f;
     private double _phaseS, _missingS;
     private ulong _startMs;
 
@@ -62,6 +65,7 @@ public partial class ReanchorCheck : Node
         var (e, n) = SpawnPoint.ParseTarget();
         _dir = Direction with { Y = 0 };
         _dir = _dir.Normalized();
+        _axis = _dir;
         _rover = new Node3D { Name = "Rover" };
         AddChild(_rover);
         _rover.GlobalPosition = _origin.ToWorld(e, n, 0);
@@ -71,7 +75,8 @@ public partial class ReanchorCheck : Node
         _camera.MakeCurrent();
         _origin.Shifted += OnShifted;
         bool windowed = DisplayServer.GetName() != "headless";
-        _watch = new ReanchorWatch(_origin, _ground, "reanchor") { Shots = windowed };
+        // a jump of d reads as d/2 in the watch's midpoint error: 4 cm is an 8 cm pop
+        _watch = new ReanchorWatch(_origin, _ground, "reanchor") { Shots = windowed, JumpTolM = 0.04f };
         AddChild(_watch);
         Log($"start LV95 {e:F0}/{n:F0}, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}, {(windowed ? "windowed: the picture judged too" : "headless")}");
         if (!_origin.Frame.IsAnchor) _faults.Add("the world is not an anchor frame: run with --frame earth");
@@ -98,9 +103,12 @@ public partial class ReanchorCheck : Node
         }
         _dir = shift.Direction(_dir) with { Y = 0 };
         if (_dir != Vector3.Zero) _dir = _dir.Normalized();
+        _axis = shift.Direction(_axis) with { Y = 0 };
+        if (_axis != Vector3.Zero) _axis = _axis.Normalized();
     }
 
-    public override void _Process(double delta)
+    // on the physics tick, as a vehicle moves (ReanchorWatch samples there)
+    public override void _PhysicsProcess(double delta)
     {
         if (!_camera.Current) _camera.MakeCurrent();
         if (Now > TimeoutS) { _faults.Add($"timed out in phase {_phase}"); Finish(); return; }
@@ -164,9 +172,22 @@ public partial class ReanchorCheck : Node
         float speed = fly ? FlySpeed : DriveSpeed;
         float step = speed * dt;
         // back at each end of the leg: the leaves along it are known to be there
-        float ahead = _legOut ? _legPos + step : _legPos - step;
-        if (ahead > LegM || ahead < 0) { _dir = -_dir; _legOut = !_legOut; }
-        _legPos += _legOut ? step : -step;
+        // an oval: out along the leg, a left U-turn of TurnRadiusM, back beside it, a left U-turn, out again
+        float out_ = _dir.Dot(_axis);
+        if (!_turning && ((_along > LegM && out_ > 0) || (_along < 0 && out_ < 0)))
+        {
+            _turning = true;
+            _turnOut = out_ > 0;
+        }
+        if (_turning)
+        {
+            // the way back, fixed when the turn began (the axis turns with a re-anchor)
+            var target = _turnOut ? -_axis : _axis;
+            float turn = step / TurnRadiusM;
+            if (_dir.AngleTo(target) <= turn) { _dir = target; _turning = false; }
+            else _dir = _dir.Rotated(Vector3.Up, turn).Normalized();
+        }
+        _along += step * _dir.Dot(_axis);
         var next = _rover.GlobalPosition + _dir * step;
         if (_ground.TryGetHeight(next, out float h))
         {
@@ -198,8 +219,6 @@ public partial class ReanchorCheck : Node
         Finish();
     }
 
-    // out along the leg from the start, or back toward it
-    private bool _legOut = true;
 
     private void Finish()
     {
