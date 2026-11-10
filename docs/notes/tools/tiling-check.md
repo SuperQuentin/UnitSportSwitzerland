@@ -29,6 +29,17 @@ RoadGen --tiling-check --chunks DIR [--temp DIR] --box minE,minN,maxE,maxN
   its distance to either tiling's nearest cut. `[tilingcheck] RESULT: ok` when every bar holds.
 - **Cost**: the traffic-lights test region (31 tiles) about 4 min per tiling at low priority, ~1 GB.
 
-## Measured before the fix (Nov 10 2026)
+## Measured (Nov 10 2026)
 
-Test region (`RoadGen --test-region`, box 2910100,1320100,2917900,1324900): see #1660's PR A for the table.
+Test region (`RoadGen --test-region`, box 2910100,1320100,2917900,1324900), each tiling against the km grid:
+
+- **Before #1660's fix** (PR #1665): approaches changed 3-31 of 109, signals 3-17 of 29 (the leaf-like tiling 20 and 9; the 500 m
+  shift north, cutting through the junctions, 30 and 17); centrelines up to 3.2 m.
+- **After** (PR #1666): every approach, signal, stop line, pole and junction record the same under all six tilings, centrelines
+  within 0.02 cm; paint within its bar but for one bin (0.59 m, a dash moved by the offset step at a cut on a curve, before the
+  bar was 1 m).
+
+Things the check found on the way, each a rule that read further than a block (fixed in #1666): a merged core's member caps
+kept by the block homing the member; a merge group planned whole only where it lay in one block; walkers' crossings (the paved
+tram bed, #1179) from the owner's signal record only; poles kept clear only of the strips keyed by the tile under them; bike
+path layouts from a chain running past the block; grooves beside a track on a tile edge, in a block that did not write it.

@@ -173,7 +173,16 @@ signal plan and the poles changed with it, and the smoothing held the cut (#1546
   - Records under a real tile stay there whole, as a junction's core always did.
   - Every tile is then moved into its own frame by `LeafRecords.Map` with a translation (every tile frame is a
     translation of the plane).
-- **Room beside an arm** (`PlanLayouts`): one index over the block's and the band's whole lines. The old layout's pockets
-  (`EmitTurnLanes`, almost no junction since #854) still see the written lines only.
+- **What a block writes and plans**: every line with a part in the block or passing within `WriteReach` (50 m) of it (a line's
+  own paint, walls, sidewalks lie beside it); every junction whose arms run into that reach within `JunctionReach` (300 m) of
+  it (150 m moved dashes: a street's paint is laid again past a transition); and on along streets shorter than `MergeReach`
+  (80 m), so a merge group is planned whole. A merged core's members drop their own caps in every block.
+- **Room beside an arm** (`PlanLayouts`): one index over the block's and the band's whole lines; a pole keeps clear of every
+  strip of the block. The old layout's pockets (`EmitTurnLanes`, almost no junction since #854) still see the written lines only.
+- **Cost**: Geneva's 25 tiles under the same load, main 4,723 s, this 3,521 s (the blocks' junction planning dominates: 92 %).
+- **LV95 bytes change** wherever a km line crossed a line (`RoadGen --diff-builds`, 4b's 41 tiles against main): most changes
+  lie within 100 m of a km line; past 300 m, junction centres move 5-70 cm (one smoothing per whole line, #1546) and a few
+  layouts follow the bike layout window and the merged-core fix. Leaves against LV95 no longer depend on a leaf edge; what is
+  left is the plane and the ground (#1676).
 - **The bar**: `RoadGen --tiling-check` (`tiling-check`). `RoadGen --diff-builds A B --box ...` compares two LV95 builds
   record by record.
