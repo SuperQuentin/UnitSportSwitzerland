@@ -193,8 +193,12 @@ public sealed class EarthLeaves : ILeafSource
             added = true;
             return new Lazy<(CubeTile?, CubeWater?)>(() =>
             {
+                // below the near leaves (#1699): the globe's own workers make these, on the same cores as the leaves under a view
+                var thread = Thread.CurrentThread;
+                var priority = thread.Priority;
                 try
                 {
+                    thread.Priority = ThreadPriority.BelowNormal;
                     var (g, lakes) = _generated!.Far(k, GlobeStride);
                     var r = Blend!.Heights(k, g.Heights, realHeights);
                     return (r is null ? g : new CubeTile { Key = k, Bits = g.Bits, Heights = r.Heights, Quantum = g.Quantum }, lakes);
@@ -203,6 +207,10 @@ public sealed class EarthLeaves : ILeafSource
                 {
                     Log?.Invoke($"[earth] heights {k}: {e.GetType().Name}: {e.Message}");
                     return (null, null);
+                }
+                finally
+                {
+                    thread.Priority = priority;
                 }
             });
         });
