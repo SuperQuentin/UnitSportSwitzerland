@@ -93,6 +93,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private readonly List<CubeKey> _drop = new();
     private double _nextPlan;
 
+    /// <summary>
+    /// The group of the leaves' collision patches (their ground with its roads and buildings): what a climb reads the cover
+    /// of, as a flat chunk's own body (#1649).
+    /// </summary>
+    public const string GroundGroup = "leaf_ground";
+
     public event Action<GroundTile>? TileEntered;
     public event Action<GroundTile>? TileUnloaded;
 
@@ -389,6 +395,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         if (faces is not { Length: >= 3 } || _bodies.ContainsKey(key)) return;
         var (leaf, _, _) = LeafCollision.Split(key);
         var body = new StaticBody3D { Name = key.FileStem };
+        body.AddToGroup(GroundGroup);
         body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);
