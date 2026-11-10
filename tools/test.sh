@@ -112,6 +112,7 @@ cleanup() {
   [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"
   [ -n "${UNIT_PID:-}" ] && _guard_kill_tree "$UNIT_PID"
   guard_unlock
+  [ -n "${RESV:-}" ] && rm -f "$RESV/$$".*
   [ "$(sed -n 1p "$PIDFILE" 2>/dev/null)" = $$ ] && rm -f "$PIDFILE"
 }
 trap cleanup EXIT
@@ -181,8 +182,9 @@ note_peak() { # check file seconds: the file's peaks summed (MB, 0 for none), ke
 # 120), so a 10 min check never starts last and holds the run up alone. Prints the indexes 0..n-1.
 longest_first() { # check...
   [ $# -eq 0 ] && return
-  printf '%s\n' "$@" | awk -F'\t' -v peaks="$PEAKS" -v unknown="${TEST_UNKNOWN_SECONDS:-120}" '
-    BEGIN { while ((getline l < peaks) > 0) { split(l, f, "\t"); if (f[3] != "") s[f[2]] = f[3] } }
+  # the path through ENVIRON, never -v: -v reads backslash escapes and mangles C:\Users\... (every check unknown)
+  printf '%s\n' "$@" | LF_PEAKS="$PEAKS" awk -F'\t' -v unknown="${TEST_UNKNOWN_SECONDS:-120}" '
+    BEGIN { peaks = ENVIRON["LF_PEAKS"]; while ((getline l < peaks) > 0) { split(l, f, "\t"); if (f[3] != "") s[f[2]] = f[3] } }
     { t = ($0 in s) ? s[$0] : unknown; printf "%d\t%d\n", t, NR - 1 }' | sort -t$'\t' -k1,1nr -k2,2n | cut -f2
 }
 
@@ -382,9 +384,34 @@ run_one() { # tier check log: runs one check, its exit code
 # their size yet. Older jobs are in the free RAM already. A check that failed or hit the RAM floor beside others
 # runs again alone at the end, as a serial run would; a pass alone says it failed beside others (#1081).
 # TEST_RETRY_ALONE=0: again alone only after the RAM floor.
+# Machine-wide: every job started leaves "start grow_s need_mb" in $RESV (named <runner pid>.<n>), and admit also
+# counts the jobs other runners (other worktrees, other sessions) started within their grow time. Without it, two
+# runners each saw the RAM free and admitted into it, and their checks stopped at the floor, even ones run alone.
+RESV=${TEST_RESERVED_DIR:-${PEAKS%.tsv}-reserved}
+mkdir -p "$RESV" 2> /dev/null
+_resv_n=0
+reserve() { # need_mb grow_s: a job of this runner just started
+  _resv_n=$(( _resv_n + 1 ))
+  printf '%s %s %s\n' "${EPOCHSECONDS:-$(date +%s)}" "$2" "$1" > "$RESV/$$.$_resv_n" 2> /dev/null || true
+}
+_foreign_into() { # FOREIGN: MB that other runners' jobs still growing will take; expired files deleted
+  local f t g m now=${EPOCHSECONDS:-$(date +%s)}
+  FOREIGN=0
+  for f in "$RESV"/*; do
+    [ -f "$f" ] || continue
+    read -r t g m < "$f" 2> /dev/null || continue
+    if [ $(( now - t )) -ge "${g:-0}" ] 2> /dev/null; then rm -f "$f"; continue; fi
+    case ${f##*/} in "$$".*) continue ;; esac   # this runner's own: counted from its job list
+    FOREIGN=$(( FOREIGN + ${m:-0} ))
+  done
+}
 admit() { # need_mb reserved_mb: room for one more job now
-  _guard_free_into
-  [ $(( GUARD_FREE - $2 )) -ge $(( $1 + GUARD_MIN_FREE_MB )) ]
+  _guard_free_into; _foreign_into
+  [ $(( GUARD_FREE - $2 - FOREIGN )) -ge $(( $1 + GUARD_MIN_FREE_MB )) ]
+}
+admit_first() { # need_mb: this runner has nothing running: wait only while other runners' jobs are still growing
+  _foreign_into
+  [ "$FOREIGN" = 0 ] || admit "$1" 0
 }
 
 # Quick checks (one headless Godot, no ports) up to TEST_QUICK_JOBS at once: by default 3/8 of the cores and one per
@@ -438,6 +465,7 @@ run_quick() {
         i=${pending[$p]}
         [[ $busy == *" ${qgroup[i]} "* ]] && continue
         if [ "$running" = 0 ]; then
+          admit_first "${qneed[i]}" || break   # another runner's job still growing
           # alone, as before: wait for TEST_RAM_GB free, then go
           if ! guard_wait_ram "${TEST_RAM_GB:-3}"; then
             printf 'FAIL\n0\n0\n0\nnot enough RAM\n' > "$OUT/.qrow.$i"; unset 'pending[p]'; started=1; break
@@ -446,6 +474,7 @@ run_quick() {
         fi
         ( quick_job "$i" "${QUICK[$i]}" ) &
         pids+=($!); all+=($!); groups+=("${qgroup[i]}"); starts+=($SECONDS); needs+=("${qneed[i]}")
+        reserve "${qneed[i]}" "${TEST_QUICK_GROW:-15}"
         unset 'pending[p]'; started=1; break
       done
     fi
@@ -461,6 +490,7 @@ run_quick() {
   fi
   for i in ${again[@]+"${again[@]}"}; do
     echo "[test] again, alone: ${QUICK[$i]}"
+    reserve "${qneed[i]}" "${TEST_QUICK_GROW:-15}"
     ( quick_job "$i" "${QUICK[$i]}" )
     [ "$(sed -n 1p "$OUT/.qrow.$i")" = PASS ] && sed -i '5s|^$|passed alone, failed beside others|' "$OUT/.qrow.$i"
   done
@@ -535,11 +565,12 @@ run_heavy() {
           [ $(( SECONDS - starts[k] )) -lt "${TEST_JOB_STAGGER:-40}" ] && reserved=$(( reserved + needs[k] ))
         else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]'; fi
       done
-      [ "$busy" -lt "$JOBS" ] && { [ "$running" = 0 ] || admit "$need" "$reserved"; } && break
+      [ "$busy" -lt "$JOBS" ] && { if [ "$running" = 0 ]; then admit_first "$need"; else admit "$need" "$reserved"; fi; } && break
       guard_nap 1
     done
     ( export TC_MAX_FPS=${TEST_MAX_FPS:-60}; heavy_job "$i" "$tier" "$check" "$need" ) &
     pids+=($!); all+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")"); starts+=($SECONDS); needs+=("$need")
+    reserve "$need" "${TEST_JOB_STAGGER:-40}"
   done
   [ ${#all[@]} -gt 0 ] && wait "${all[@]}" 2>/dev/null
   # stopped at the RAM floor, or failed beside others: again alone at the end, uncapped, as a serial run would (#1081).
@@ -553,6 +584,7 @@ run_heavy() {
     entry=${HEAVY[$i]}
     why="failed beside the others"; [ "$(sed -n 3p "$OUT/.row.$i")" = 1 ] && why="stopped at the RAM floor beside the others"
     echo "[test] again, alone: ${entry#* } ($why)"
+    reserve "$(need_mb "${entry#* }" "${TEST_HEAVY_RAM_GB:-6}")" "${TEST_JOB_STAGGER:-40}"
     ( heavy_job "$i" "${entry%% *}" "${entry#* }" "$(need_mb "${entry#* }" "${TEST_HEAVY_RAM_GB:-6}")" )   # a subshell: its EXIT trap must not replace the runner's
     [ "$why" = "failed beside the others" ] && [ "$(sed -n 1p "$OUT/.row.$i")" = PASS ] &&
       sed -i -e '2s|$|  (passed alone, failed beside others)|' -e '5s|^$|passed alone, failed beside others|' "$OUT/.row.$i"
