@@ -65,6 +65,17 @@ public partial class ReanchorWatch : Node
         public readonly (EcefPos P, double T, bool Shift)[] Last = new (EcefPos, double, bool)[3];
         public int Count;
         public double WorstAtShift, WorstElse;
+        // every error with no re-anchor by it: its 95th percentile is the noise (a turn, a bump, a leg's end)
+        public readonly List<float> Else = new();
+        public double Noise
+        {
+            get
+            {
+                if (Else.Count == 0) return 0;
+                Else.Sort();
+                return Else[(int)(0.95 * (Else.Count - 1))];
+            }
+        }
         public int AtShift;
         public string? WorstWhere;
     }
@@ -144,7 +155,11 @@ public partial class ReanchorWatch : Node
             t.AtShift++;
             if (err > t.WorstAtShift) { t.WorstAtShift = err; t.WorstWhere = Inv($"re-anchor {_shifts}"); }
         }
-        else if (err > t.WorstElse) t.WorstElse = err;
+        else
+        {
+            if (err > t.WorstElse) t.WorstElse = err;
+            t.Else.Add((float)err);
+        }
     }
 
     private void Picture(bool shifted)
@@ -179,22 +194,22 @@ public partial class ReanchorWatch : Node
         }
     }
 
-    /// <summary>Judges the tracks (once, at the end): a jump at a re-anchor past the tolerance and twice the noise.</summary>
+    /// <summary>Judges the tracks (once, at the end): a jump at a re-anchor past the tolerance and twice the noise (95th percentile).</summary>
     public void Judge()
     {
         if (_shifts == 0) _faults.Add("no re-anchor happened");
         foreach (var t in _tracks)
         {
-            double tol = JumpTolM + 2 * t.WorstElse;
+            double tol = JumpTolM + 2 * t.Noise;
             if (t.AtShift > 0 && t.WorstAtShift > tol)
-                _faults.Add(Inv($"{t.Name} jumped {t.WorstAtShift:F2} m at {t.WorstWhere} (noise elsewhere {t.WorstElse:F2} m)"));
+                _faults.Add(Inv($"{t.Name} jumped {t.WorstAtShift:F2} m at {t.WorstWhere} (noise elsewhere {t.Noise:F2} m, worst {t.WorstElse:F2} m)"));
         }
     }
 
     public string Summary()
     {
         var parts = new List<string> { Inv($"{_shifts} re-anchors") };
-        foreach (var t in _tracks) parts.Add(Inv($"{t.Name} worst {t.WorstAtShift * 100:F1} cm at {t.AtShift} samples by a re-anchor (else {t.WorstElse * 100:F1} cm)"));
+        foreach (var t in _tracks) parts.Add(Inv($"{t.Name} worst {t.WorstAtShift * 100:F1} cm at {t.AtShift} samples by a re-anchor (else {t.Noise * 100:F1} cm at the 95th percentile, {t.WorstElse * 100:F1} cm worst)"));
         if (_ground != null) parts.Add(Inv($"ground asked again {_groundAsked} times, worst {_worstGround * 100:F2} cm"));
         if (Shots) parts.Add(Inv($"{_shotsJudged} frames judged, worst change {_worstShotRatio:F1}x its neighbours, {_shotSpikes} spikes"));
         return $"[{_tag}] re-anchors: " + string.Join("; ", parts);

@@ -41,7 +41,7 @@ public partial class ReanchorCheck : Node
     private Camera3D _camera = null!;
     private ReanchorWatch _watch = null!;
     private Vector3 _dir;
-    private int _phase;
+    private int _phase, _seen;
     private float _travelled, _legPos, _height;
     private double _phaseS, _missingS;
     private ulong _startMs;
@@ -87,6 +87,15 @@ public partial class ReanchorCheck : Node
     // the heading is a world direction: it turns with the world, kept level
     private void OnShifted(OriginShift shift)
     {
+        // --reanchorinject <m>: a pop on purpose at the 3rd re-anchor (the marker and the camera put that far aside), to
+        // show the check catches one (#1710); never in a map row
+        if (++_seen == 3 && CmdArgs.Float("--reanchorinject") is float pop && _marker != null)
+        {
+            var aside = _dir.Cross(Vector3.Up) * pop;
+            _marker.GlobalPosition += aside;
+            _rover.GlobalPosition += aside;
+            Log($"injected a {pop:F2} m pop at re-anchor 3");
+        }
         _dir = shift.Direction(_dir) with { Y = 0 };
         if (_dir != Vector3.Zero) _dir = _dir.Normalized();
     }

@@ -8,8 +8,8 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
 
 - **`Core/ReanchorWatch`**: what a re-anchor must not show. `Watch(name, node)` samples a node's Earth position (ECEF)
   every frame in game time (a time-warped flight, `--fixed-fps`); across a frame interval holding a re-anchor the
-  middle sample is compared with the line through its neighbours, and fails past `JumpTolM` plus twice the same error
-  elsewhere (bumps, braking). `WatchGround(at)` asks the ground under a point again by its Earth position in the new
+  middle sample is compared with the line through its neighbours, and fails past `JumpTolM` plus twice the same error's
+  95th percentile elsewhere (the worst is a leg's turnaround: 55 cm on `straight`, which would hide a pop). `WatchGround(at)` asks the ground under a point again by its Earth position in the new
   frame (`GroundTolM`, 2 cm). `Shots` (windowed only): a 160 × 90 grey copy of every frame, the change across a
   re-anchor against its four neighbours (a spike over 3x and 2 grey levels is a pop). The viewport's texture is the
   frame drawn before this `_Process`: the re-anchor shows one frame later. `ProcessPriority` is `int.MaxValue` (after
@@ -18,7 +18,9 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
   forth along legs, four rigid boxes asleep by the start (the shifter's teleport) and a plain marker (a node the shift
   moves); boxes and marker must not move over the run, the camera and the ground must not jump. On a fixture course
   along its longest reach (`ClientWorld.ReanchorCheckFor`), `--originshift 400` for many re-anchors in a short run;
-  `tools/reanchorcheck.sh` windowed on the D: region at Geneva.
+  `tools/reanchorcheck.sh` windowed on the D: region at Geneva. `--reanchorinject <m>` puts the camera and the marker
+  that far aside at the 3rd re-anchor: 0.3 m fails three ways (marker moved, both tracks jumped 0.19 m), the proof
+  the check sees a pop; never in a map row.
 - **`--longdrivecheck`** (`Player/LongDriveCheck`): a `RaceRoute` reads roads only 4 tiles round where it is built,
   so the drive is chained legs: each toward a point `--legm` (3 km) on toward `--to` (LV95 notation; the leg target
   is `GlobalPos` maths), the next built 1.2 km before the current one ends, from just ahead of the car, and a new
