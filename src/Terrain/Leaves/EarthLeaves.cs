@@ -77,6 +77,16 @@ public sealed class EarthLeaves : ILeafSource
         }
     }
 
+    /// <summary>
+    /// Every produced leaf dropped (the fill's, the merged ones; the blend's summaries and the far heights kept): made again
+    /// on the next ask, as the <see cref="Kept"/> trim does on a long journey. <c>--earthcheck</c>'s stress of #1626.
+    /// </summary>
+    public void DropMade()
+    {
+        _made.Clear();
+        while (_order.TryDequeue(out _)) { }
+    }
+
     /// <summary>The region's leaves and the fill round them, its domain a disc round the start and round the region.</summary>
     /// <param name="fillOn">The fill's setting, asked whenever a leaf is: off, only real leaves are served.</param>
     /// <param name="roads">Whether the fill's leaves carry roads (RoadGen's stage, ~2 s a leaf, one at a time).</param>

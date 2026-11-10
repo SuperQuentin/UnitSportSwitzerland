@@ -43,6 +43,15 @@ second half wires the provider to the earth streamer, and C4 wires it to the ser
   faces (`LeafCollision.PitFaces`); the site shells' faces go in both ways round (`terrain/pits-on-leaves`).
 - **`LeafCollisionSource(leaves)`**: the builder the provider takes. Prepared leaves are kept (32); the leaves come
   from whoever holds them.
+- **One preparation per loaded leaf (#1626)**: a leaf prepared a second time can differ. A border leaf's merge with the
+  fill depends on the fill's domain at that moment, and its edge blend on the neighbours' roads that are there.
+  - When patches were cut from one version and the height query read another, a patch stood 27 m off the query.
+  - `EarthWorld` now pins a loaded leaf's preparation (`Pin`/`Unpin`): every patch of it is cut from that one, and the
+    trim never drops it. `Forget` (#1655) drops the pins too.
+  - A body cut from another preparation is built again, with an `[earth] ... built again (#1626)` line.
+  - A body holds its ground as shape 0 and its roads and buildings as shape 1 (`EarthWorld.IsGroundHit`).
+    `--earthcheck` fails on a ray that lands on a leaf's *ground* off the query, and `tools/earthcheck.sh border`
+    starts where the bug was found.
 
 ## Check: `--cubeharness <region> --cubepatches [--cubeat lat,lon]`
 
