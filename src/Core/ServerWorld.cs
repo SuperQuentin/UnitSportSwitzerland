@@ -289,14 +289,16 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Combat.CombatManager.Create(this, null, origin, server: true);
 
         // building interiors: planned here on first entry, stored under user://interiors, and
-        // handed to everyone who walks in afterwards
-        _interiors = Interiors.InteriorManager.Create(this, source, origin);
+        // handed to everyone who walks in afterwards. Under --frame earth a building is named by its leaf's stand-in tile, as
+        // on the clients (ClientWorld.WorldSource): the source answers those tiles too (#1683)
+        IChunkSource buildingSource = _earth != null ? _earth.Source(source) : source;
+        _interiors = Interiors.InteriorManager.Create(this, buildingSource, origin);
         _interiors.Players = _players;
         // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the clients are given the same
         Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
-        Loot.LootService.Create(this).Source = () => source;
+        Loot.LootService.Create(this).Source = () => buildingSource;
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
         // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
