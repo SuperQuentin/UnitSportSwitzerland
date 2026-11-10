@@ -82,7 +82,6 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>How often the anchors' tiles are looked at, in seconds.</summary>
     private const double CheckEvery = 0.5;
 
-    private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
 
     /// <summary>
@@ -111,12 +110,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private readonly List<TileId> _drop = new();
     private double _sinceCheck = CheckEvery;
 
-    public DormantVehicles(ChunkManager chunks, WorldOrigin origin, IWorldGround? ground = null)
+    /// <param name="ground">The world's ground, flat or leaves (#1684): its anchors, collision and tile files (<see cref="IWorldGround.Content"/>).</param>
+    public DormantVehicles(IWorldGround ground, WorldOrigin origin)
     {
         Name = "DormantVehicles";
-        _chunks = chunks;
         _origin = origin;
-        _ground = ground ?? chunks.Ground;
+        _ground = ground;
     }
 
     public override void _Ready()
@@ -598,7 +597,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 var id = _pending[0];
                 _pending.RemoveAt(0);
                 if (_slots.ContainsKey(id) || !Within(id, KeepRings)) continue;
-                if (_chunks.Source is not { } source) return;
+                if (_ground.Content is not { } source) return;
 
                 // The provider seam. Nothing below this line knows what a bay is: a provider's only
                 // job is to append `VehicleSlot`s, and the draw, the collision, the wake path and

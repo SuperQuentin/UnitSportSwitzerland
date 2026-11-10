@@ -9,9 +9,11 @@ namespace UnitSport.Terrain;
 /// name in a log: nothing else is read off it.
 ///
 /// <para>
-/// Code that still needs the LV95 tile (a <see cref="IChunkSource"/> load, a <c>BuildingKey</c> made of its
-/// kilometres) crosses with <see cref="FromLv95"/> and <see cref="Lv95Tile"/>, the flat world's escape
-/// hatch: <c>FlatLv95RatchetTests</c> counts both (with <c>ChunkManager.Of</c>), and step D takes the count to 0.
+/// What a tile holds (roads, buildings, doors, interiors) is filed under a <see cref="TileId"/> name: the flat world's
+/// LV95 tile, a leaf's stand-in (<see cref="Leaves.LeafStandIn"/>). Gameplay asks the ground for it
+/// (<see cref="IWorldGround.ContentName"/>, <see cref="IWorldGround.Content"/>, #1684); only the flat world itself
+/// (<c>ChunkManager</c>) makes a tile from its LV95 key or reads that key back (<see cref="Flat"/>, <see cref="FlatId"/>,
+/// held there by <c>GroundTileContainmentTests</c>), and step D deletes both with it.
 /// </para>
 /// </summary>
 public readonly record struct GroundTile
@@ -28,14 +30,17 @@ public readonly record struct GroundTile
         _isLeaf = true;
     }
 
-    /// <summary>The flat world's tile for an LV95 tile key (counted by the ratchet).</summary>
-    public static GroundTile FromLv95(TileId id) => new(id);
+    /// <summary>The flat world's tile for its LV95 tile key: the flat world's own (<c>ChunkManager</c>), nobody else's.</summary>
+    internal static GroundTile Flat(TileId id) => new(id);
+
+    /// <summary>The LV95 tile key of a flat world's tile (default for a leaf): the flat world's own, nobody else's.</summary>
+    internal TileId FlatId => _isLeaf ? default : _lv95;
 
     /// <summary>
-    /// The LV95 tile key of a flat world's tile (counted by the ratchet); for an earth world's leaf, its stand-in tile's name
-    /// (<see cref="Leaves.LeafStandIn"/>, #1510), which the origin places and the earth world's chunk source loads.
+    /// The name what this tile holds is filed under: a flat tile's LV95 key, a leaf's stand-in tile (#1510). Through
+    /// <see cref="IWorldGround.ContentName"/>.
     /// </summary>
-    public TileId Lv95Tile => !_isLeaf ? _lv95 : _leaf.Level == Leaves.LeafFrames.LeafLevel ? Leaves.LeafStandIn.Id(_leaf) : default;
+    internal TileId ContentName => !_isLeaf ? _lv95 : _leaf.Level == Leaves.LeafFrames.LeafLevel ? Leaves.LeafStandIn.Id(_leaf) : default;
 
     /// <summary>The earth world's tile: a cube leaf (#1510).</summary>
     public static GroundTile FromLeaf(CubeKey key) => new(key);

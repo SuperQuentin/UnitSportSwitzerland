@@ -107,7 +107,7 @@ public static class BotDriving
         {
             if (drive.Planning == null)
             {
-                if (Terrain.ChunkManager.Of(body.Terrain)?.Source is not { } source || body.Origin is not { } origin) return Stop(drive, Progress.Failed, "no terrain");
+                if (body.Terrain?.Content is not { } source || body.Origin is not { } origin) return Stop(drive, Progress.Failed, "no terrain");
                 drive.Goal = goal;
                 drive.Planning = RaceRoute.BuildAsync(source, origin, body.GlobalPosition, default, RoadClass.Minor, goal);
                 return Progress.Planning;

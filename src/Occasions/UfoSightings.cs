@@ -40,7 +40,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
 
     public static UfoSightings? Instance { get; private set; }
 
-    private readonly ChunkManager? _chunks;
+    private readonly IWorldGround? _terrain;
     private readonly WorldOrigin _origin;
     private readonly bool _dedicated;
 
@@ -64,17 +64,17 @@ public partial class UfoSightings : Node3D, IOriginContainer
     /// <summary>The frame the saucers are played in (the server's main one).</summary>
     public WorldOrigin Origin => _origin;
 
-    public UfoSightings(ChunkManager? chunks, WorldOrigin origin, bool dedicated)
+    public UfoSightings(IWorldGround? chunks, WorldOrigin origin, bool dedicated)
     {
         Name = NodeName;
-        _chunks = chunks;
+        _terrain = chunks;
         _origin = origin;
         _dedicated = dedicated;
     }
 
     public UfoSightings() : this(null, WorldOrigin.SwissDefault(), false) { }
 
-    public static UfoSightings Create(Node world, ChunkManager? chunks, WorldOrigin origin, bool dedicated)
+    public static UfoSightings Create(Node world, IWorldGround? chunks, WorldOrigin origin, bool dedicated)
     {
         var s = new UfoSightings(chunks, origin, dedicated);
         world.AddChild(s);
@@ -351,8 +351,8 @@ public partial class UfoSightings : Node3D, IOriginContainer
     /// <summary>The terrain's height at an LV95 point on this peer, NaN where it is not loaded.</summary>
     private float Ground(double e, double n)
     {
-        if (_chunks == null) return float.NaN;
-        return _chunks.Ground.TryGetHeight(_origin.ToWorld(e, n, 0), out float h) ? h : float.NaN;
+        if (_terrain == null) return float.NaN;
+        return _terrain.TryGetHeight(_origin.ToWorld(e, n, 0), out float h) ? h : float.NaN;
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public partial class UfoSightings : Node3D, IOriginContainer
             }
             else if (farm.HasFields(TileId.FromLv95(e, n))) return null;   // off the fields where there are fields: a road, a yard
         }
-        if (_chunks != null && _chunks.Ground.TryGetCover(_origin.ToWorld(e, n, g), out var cover) && cover != CoverClass.Open) return null;
+        if (_terrain != null && _terrain.TryGetCover(_origin.ToWorld(e, n, g), out var cover) && cover != CoverClass.Open) return null;
         float lo = g, hi = g;
         for (int i = 0; i < 6; i++)
         {

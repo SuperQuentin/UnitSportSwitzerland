@@ -17,8 +17,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Vehicles.PassengerService? _passengers;
     private ChunkManager? _chunks;
     /// <summary>
-    /// The leaves under <c>--frame earth</c> (#1513, G2 C4): the main region's ground. The flat <see cref="_chunks"/> is
-    /// still built for the LV95 services that hold it, out of the tree: it loads nothing.
+    /// The leaves under <c>--frame earth</c> (#1513, G2 C4): the main region's ground. No flat <see cref="_chunks"/> is
+    /// built then (#1684): every service asks <see cref="Ground"/>.
     /// </summary>
     private Terrain.Earth.EarthWorld? _earth;
     /// <summary>What the server's own frame stands on and asks: the leaves under <c>--frame earth</c>, else the flat tiles.</summary>
@@ -145,39 +145,41 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // allows. 60 matches the physics tick and every client's send rate is well under it.
         Engine.MaxFps = 60;
 
-        // Collision only around server-run bots (#837), within a few hundred metres of each: players'
-        // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
-        // The fill follows the players (#937): each client fills round its own start, which can be anywhere
-        _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
-            FillFollowsAnchors = true };
-        _chunks.Initialize(source, origin, manifest, null);
         // the bots' collision pieces (#837) commit within 2 ms a frame, not a client's 4: a server frame
         // carries every player's relays, and the build of a spread field landing at once is many pieces
-        _chunks.CommitBudgetMs = 2;
-        if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
+        const double commitBudgetMs = 2;
         // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
         World.Landings.Use(await World.Landings.LoadAsync(source));
-        // --frame earth: the leaves instead, nothing drawn; the flat streamer stays built for the LV95 services that hold
-        // it (the dormant fleets, the steamer, the airports, the herds, the slopes), out of the tree: they wait for the
-        // leaves to be furnished (C1 PR 2), as on an earth client
-        // the region's leaves and the generated fill round them (#1682), the clients' own: the same generator anchored at the
-        // same point, the same pyramid; its domain round the default spawn and every body the server holds (EarthWorld's
-        // foci). --generated-world with no leaves: the generated world is all there is. "--generated off" leaves it out.
+        // --frame earth: the region's leaves and the generated fill round them (#1682), the clients' own: the same generator
+        // anchored at the same point, the same pyramid; its domain round the default spawn and every body the server holds
+        // (EarthWorld's foci). --generated-world with no leaves: the generated world is all there is. "--generated off"
+        // leaves it out. Nothing drawn, and no flat streamer at all (#1684): every service below asks the leaves' ground.
         var leaves = earth
             ? Terrain.Earth.GameLeaves.Region(fallback?.World, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
                 () => generatedWorld || !GeneratedOff(args))
             : null;
         if (leaves != null)
         {
-            _earth = new Terrain.Earth.EarthWorld(leaves, origin) { BuildMeshes = false, CommitBudgetMs = _chunks.CommitBudgetMs };
+            _earth = new Terrain.Earth.EarthWorld(leaves, origin) { BuildMeshes = false, CommitBudgetMs = commitBudgetMs };
+            // what its tiles hold by name: the leaves' stand-ins over the region's files (interiors, the dressing services)
+            _earth.Content = _earth.Source(source);
             AddChild(_earth);
         }
         else
         {
+            // Collision only around server-run bots (#837), within a few hundred metres of each: players'
+            // proxies are plain anchors and keep coarse, collision-less tiles (net/lean-dedicated-server).
+            // The fill follows the players (#937): each client fills round its own start, which can be anywhere
+            _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
+                FillFollowsAnchors = true, CommitBudgetMs = commitBudgetMs };
+            _chunks.Initialize(source, origin, manifest, null);
+            if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
             AddChild(_chunks);
             // solid trunks around the bots, the same pool the clients keep round their own body (#837); on leaves with PR 2
             AddChild(new World.TreeColliders(_chunks, origin));
         }
+        // what the world's tiles hold, by name (#1684): the flat streamer's source, or the leaves' stand-ins over it
+        var content = Ground!.Content ?? source;
         // the water (#299): the server answers water queries too, and owns the sea state
         World.WaterField.Bind(Ground);
         if (World.SeaStateCommand.FromArgs(args, out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
@@ -190,21 +192,21 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // the server's local frames (#1456): this world is the main region; a cluster of bodies far from it
         // gets a frame and a physics space of its own, with its own collision round its bots
         // (under --frame earth each is an ENU frame on its own EarthWorld over the same leaves, #1513)
-        var chunks = _chunks;
         var main = _earth != null
             ? new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, _earth, _earth.Ground, GetWorld3D(), null)
-            : new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, chunks, GetWorld3D(), null);
+            : new Net.Regions.ServerRegion(Net.Regions.RegionPlanner.Main, origin, _chunks!, GetWorld3D(), null);
         AddChild(new Net.Regions.ServerRegions(main, _players)
         {
             MakeGround = frame =>
             {
                 if (leaves != null)
                 {
-                    var e = new Terrain.Earth.EarthWorld(leaves, frame) { BuildMeshes = false, CommitBudgetMs = chunks.CommitBudgetMs };
+                    var e = new Terrain.Earth.EarthWorld(leaves, frame) { BuildMeshes = false, CommitBudgetMs = commitBudgetMs };
+                    e.Content = e.Source(source);
                     return (e, e.Ground);
                 }
                 var c = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = true, CollisionByRadius = true,
-                    FillFollowsAnchors = true, CommitBudgetMs = chunks.CommitBudgetMs };
+                    FillFollowsAnchors = true, CommitBudgetMs = commitBudgetMs };
                 c.Initialize(source, frame, manifest, null);
                 if (fallback != null) c.UseFallback(fallback, source.Invalidate);
                 return (c, c.Ground);
@@ -268,54 +270,52 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
-        // From here to the UFOs, the services placed from LV95 tiles hold the flat streamer: under --frame earth it is out
-        // of the tree and loads nothing, so they wait, as on an earth client, for the leaves to be furnished (C1 PR 2).
+        // From here to the UFOs, the services placed from the tiles ask the world's ground, flat or leaves (#1684).
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
-        AddChild(new World.AfricaTwinEgg(_chunks));
+        AddChild(new World.AfricaTwinEgg(Ground!));
         // the cars already standing in the car parks (#499); the server promotes one when it is
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
-        if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
-            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
+        if (Systems.On(Systems.Dormant)) AddChild(new Vehicles.DormantVehicles(Ground!, origin));
         // vehicles and items far from everyone go to sleep in their tile's container and come back
         // when someone does, and after a restart (#689); after the dormant fleets, whose woken
         // slots it keeps awake
         World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _radios, _players);
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
-        AddChild(new World.SteamerBerth(_chunks?.Ground));
+        AddChild(new World.SteamerBerth(Ground!));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
-        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
+        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(Ground!));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);
 
         // building interiors: planned here on first entry, stored under user://interiors, and
         // handed to everyone who walks in afterwards
-        _interiors = Interiors.InteriorManager.Create(this, source, origin);
+        _interiors = Interiors.InteriorManager.Create(this, content, origin);
         _interiors.Players = _players;
         // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the clients are given the same
         Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
-        Loot.LootService.Create(this).Source = () => source;
+        Loot.LootService.Create(this).Source = () => content;
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
         // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
         if (Systems.On(Systems.Farming))
         {
-            Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
+            Farming.FarmField.Create(this, source, origin, null, dedicated: true);
             // the herds on those fields (#863): the server's, so a tractor beam lifts the same cow for everyone
-            Farming.Herds.Create(this, _chunks, origin, dedicated: true);
+            Farming.Herds.Create(this, Ground!, origin, dedicated: true);
         }
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
         // the ski slopes' weather and the wear real skiers put on them (#887)
-        if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, _chunks!);
+        if (Systems.On(Systems.Snow)) _snow = World.Snow.SnowService.Create(this, Ground!);
         // the ski lifts (#912): the same lines, for bots that ride them
-        if (Systems.On(Systems.Lifts)) World.Ropeways.RopewayService.Create(this, () => source, _chunks!);
+        if (Systems.On(Systems.Lifts)) World.Ropeways.RopewayService.Create(this, () => source, Ground!);
         // the UFO sightings (#863): planned here, played back by every peer from the shared clock
-        Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: true);
+        Occasions.UfoSightings.Create(this, Ground!, origin, dedicated: true);
 
         // The server owns the place index too, so /city and /tpall resolve against the same
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
@@ -439,7 +439,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Combat.SwordService.Create(this, origin, server: true);   // #1371
 
         // the birds everybody shares (#143): simulated here around every player, sent to those near
-        var birds = new Birds.BirdLife(_chunks, origin, null)
+        var birds = new Birds.BirdLife(Ground!, origin, null)
         {
             Headless = true,
             // fills the birds' reused list: no allocation per frame (GC pauses at 16 players)
@@ -523,7 +523,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             travel.GroundAt = ground;
             // festivals (#1269): which festival runs and on which day, held where, Batzen and the party board
             var festivals = Occasions.Festivals.FestivalService.Create(adventure, server: true, networked: true);
-            festivals.InRegion = (e, n) => _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
+            festivals.InRegion = InRegion;
             festivals.PartyOf = rewards.PartyOf;
             festivals.Start = () => SpawnPoint.ParseTarget();
             Occasions.Festivals.SteinService.Create(festivals, adventure, server: true, networked: true);   // Steinstossen (#1269 part 3)
@@ -901,6 +901,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (pyramid != null) interest.Sight = (a, b) => EarthSight.Clear(a.Ecef, b.Ecef, Ellipsoidal);
         return interest;
     }
+
+    /// <summary>
+    /// Whether a place (LV95 notation) stands on the region's own data, not the generated fill: a real leaf under
+    /// <c>--frame earth</c> (#1684), else a real LV95 tile.
+    /// </summary>
+    private bool InRegion(double e, double n) => _earth != null
+        ? _earth.Leaves.IsReal(Terrain.Format.CubeKey.FromEcef(GlobalPos.FromLv95(e, n, 0).ToEcef(), Terrain.Leaves.LeafFrames.LeafLevel))
+        : _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
 
     /// <summary>
     /// Reads places.json from the chunk directory. Absent is not fatal — chat still works,

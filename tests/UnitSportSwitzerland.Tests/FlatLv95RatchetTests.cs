@@ -51,11 +51,12 @@ public class FlatLv95RatchetTests
             // interest buckets by cube cell
             Baseline: 4037, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
         // the flat world's escape hatches out of IWorldGround (#1532, G2 C1): an LV95 tile key read off a
-        // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; counted
-        // after #1532, lowered as the IChunkSource users move (C1's leaf half, C5) and to 0 by D
+        // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; 32 after #1532,
+        // 0 since #1684: gameplay asks IWorldGround.ContentName / Content, and the flat world's own Flat / FlatId stay
+        // in ChunkManager (Flat_tile_keys_stay_in_the_flat_world)
         new("flat ground escape hatch",
             new(@"\.Lv95Tile\b|\bGroundTile\.FromLv95\(|\bChunkManager\.Of\(", RegexOptions.Compiled),
-            Baseline: 32, Instead: "the GroundTile itself, or IWorldGround's own queries (TileAt, GroundAt)"),
+            Baseline: 0, Instead: "the GroundTile itself, or IWorldGround's own queries (TileAt, GroundAt, ContentName, Content)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);
@@ -97,6 +98,27 @@ public class FlatLv95RatchetTests
                 _out.WriteLine($"  fewer than the baseline: lower it to {counts[i]} in this commit");
         }
         Assert.True(grown.Count == 0, "Flat LV95 arithmetic grew (#1443):\n" + string.Join("\n", grown));
+    }
+
+    /// <summary>
+    /// #1684: a <c>GroundTile</c> is made from an LV95 tile key, or read back to one, by the flat world alone
+    /// (<c>ChunkManager</c>, which step D deletes); everything else asks the ground.
+    /// </summary>
+    [Fact]
+    public void Flat_tile_keys_stay_in_the_flat_world()
+    {
+        string root = Root();
+        var flat = new Regex(@"\bGroundTile\.Flat\(|\.FlatId\b", RegexOptions.Compiled);
+        var outside = new List<string>();
+        foreach (string file in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            if (relative is "src/Terrain/GroundTile.cs" || relative.StartsWith("src/Terrain/ChunkManager", StringComparison.Ordinal)) continue;
+            string text = Strings.Replace(Comment.Replace(File.ReadAllText(file), ""), "\"\"");
+            if (flat.IsMatch(text)) outside.Add(relative);
+        }
+        Assert.True(outside.Count == 0, "GroundTile.Flat / FlatId outside the flat world (#1684): " + string.Join(", ", outside)
+            + "; ask the ground (IWorldGround.TileAt, ContentName, Content) instead");
     }
 
     private static string Root()

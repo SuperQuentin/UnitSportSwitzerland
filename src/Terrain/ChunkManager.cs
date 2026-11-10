@@ -657,9 +657,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public StaticBody3D? BuildingBodyAt(TileId id) =>
         _chunks.TryGetValue(id, out var state) ? state.Node?.BuildingBody : null;
 
-    /// <summary>A loaded tile's ground mesh, for per-tile shader parameters (<see cref="PhotoLayer"/>).</summary>
-    private MeshInstance3D? GroundMeshAt(GroundTile tile) =>
-        _chunks.TryGetValue(tile.Lv95Tile, out var state) ? state.Node?.Ground : null;
+    private MeshInstance3D? GroundMeshAt(GroundTile tile) => GroundMeshAt(tile.FlatId);
+
+    /// <summary>
+    /// A loaded LV95 tile's ground mesh, for the flat world's per-tile shader parameters (<see cref="PhotoLayer"/>, the ski
+    /// slopes' layer, #887): the flat streamer's own, as <see cref="RoadsAt"/> (#1684).
+    /// </summary>
+    public MeshInstance3D? GroundMeshAt(TileId id) =>
+        _chunks.TryGetValue(id, out var state) ? state.Node?.Ground : null;
 
     /// <summary>A loaded tile's road mesh, for per-tile shader parameters (the ski slopes, #887).</summary>
     public MeshInstance3D? RoadsAt(TileId id) =>
@@ -945,7 +950,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _sinceEval = double.MaxValue;
         FitHorizonCoverage();
         Horizon?.Reload();
-        _terrainReplaced?.Invoke(tile => affected(tile.Lv95Tile));
+        _terrainReplaced?.Invoke(tile => affected(tile.FlatId));
     }
 
     /// <summary>
@@ -1638,7 +1643,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 state.BuildingCells = state.PendingCells;
                 if (result.Doors != null)
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.TileTransform(result.Id).Origin, result.Doors);
-                _tileFurnished?.Invoke(GroundTile.FromLv95(result.Id), EnsureNode(result.Id, state), result.Doors ?? []);
+                _tileFurnished?.Invoke(GroundTile.Flat(result.Id), EnsureNode(result.Id, state), result.Doors ?? []);
                 if (result.Trees != null)
                 {
                     var node = EnsureNode(result.Id, state);
@@ -1890,7 +1895,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (!_chunks.TryGetValue(id, out var state))
             {
                 _chunks[id] = state = new ChunkState();
-                _tileEntered?.Invoke(GroundTile.FromLv95(id));
+                _tileEntered?.Invoke(GroundTile.Flat(id));
             }
 
             bool needMesh = BuildMeshes && state.ActiveStride != want.Stride;
@@ -2071,7 +2076,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 shedNode.ClearBuildings();
                 shed.HasBuildings = false;
                 Interiors.DoorIndex.ClearTile(id);
-                _tileUnfurnished?.Invoke(GroundTile.FromLv95(id), shedNode);
+                _tileUnfurnished?.Invoke(GroundTile.Flat(id), shedNode);
             }
             if (shed.HasRoads && !shed.PendingRoads && want.Dist > Lod.RoadMaxDist + Lod.UnloadSlack)
             {
@@ -2173,7 +2178,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _chunks.Remove(id);
         Horizon?.SetCovered(id, false);
         Interiors.DoorIndex.ClearTile(id);
-        _tileUnloaded?.Invoke(GroundTile.FromLv95(id));
+        _tileUnloaded?.Invoke(GroundTile.Flat(id));
     }
 
     /// <summary>
