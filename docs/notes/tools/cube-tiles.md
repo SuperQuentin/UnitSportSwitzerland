@@ -196,6 +196,12 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   1.5-2 km of ground 3-35 m over Léman below Lavaux. The command above plus
   `--tlm D:/UnitSportSwitzerland/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg`: Nov 10 2026, 83-114 s, peak 12-13 GB,
   0 of 2.7 M edge vertices differ; the previous pyramid kept as `cube_global.pre1678`.
+- **On TLM's mask, TLM alone says where the lakes are (#1696)**: ETOPO's basin test (within 6 m of the level for
+  ~400 m) took the Rhône plain at Villeneuve, 0-6 m over Léman, for lake 2.5-3 km past the shore, and the earth fill,
+  built on the pyramid's lakes since #1678, drew Léman over the meadow (`villeneuve_a9` 12 to 55 %). On the mask
+  that test is skipped, and land within 5 km of a TLM lake stands at least 2 m over its level (the plain is ~3 m up)
+  before the 300 m shore ramp. Nov 10 2026: 145 s, peak 12.5 GB, 0 differ; Lavaux's heights unchanged to the
+  centimetre; the previous pyramid kept as `cube_global.pre1696`.
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client

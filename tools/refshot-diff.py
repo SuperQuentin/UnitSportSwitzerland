@@ -22,7 +22,9 @@ Two different worlds (G2 C6, #1500: --frame earth against the flat library):
              colour, a missing forest or a hole does. The noise floor must be written at the same scale.
 --expect F   the differences expected on purpose (tests/refshots/earth-vs-flat.txt): a "judge" line takes a
              view (or class:<c>) out of the pass/fail count into "judged by eye", a "mask x0,y0,x1,y1" line
-             (fractions of the picture) leaves that part out of the numbers. Each line says why.
+             (fractions of the picture) leaves that part out of the numbers. Each line says why. "judge N%"
+             judges it only while its changed share is at most N %: past that it counts as over (#1696: the
+             tree seeds' 12 % judged, a lake over the meadow's 55 % caught).
 --sheets     a contact sheet per style, sheet-<style>.png: A | B | difference for every view, grouped by class
              (models left out); --all-sheets also a composite for every shot, not only those over.
 summary.md lists the shots within their floor, the ones over it and the judged ones, each with its number.
@@ -58,7 +60,9 @@ def classes():
 
 
 def expectations(path):
-    """[(pattern, verdict, rects, reason)] from an --expect file: "<view|class:c|style/view> judge|mask [x0,y0,x1,y1 ...] -- why"."""
+    """[(pattern, verdict, args, reason)] from an --expect file: "<view|class:c|style/view> judge [N%]|mask [x0,y0,x1,y1 ...] -- why".
+
+    args: a mask's rectangles; a judge's ceiling (a share, or None for none)."""
     out = []
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -69,6 +73,15 @@ def expectations(path):
             p = head.split()
             if len(p) < 2 or p[1] not in ("judge", "mask"):
                 print(f"[refshot-diff] {path}: not '<view> judge|mask ...': {line}", file=sys.stderr)
+                continue
+            if p[1] == "judge":
+                ceiling = None
+                if len(p) > 2:
+                    if len(p) > 3 or not p[2].endswith("%"):
+                        print(f"[refshot-diff] {path}: not '<view> judge [N%]': {line}", file=sys.stderr)
+                        continue
+                    ceiling = float(p[2][:-1]) / 100
+                out.append((p[0], p[1], ceiling, why.strip()))
                 continue
             rects = [tuple(float(c) for c in r.split(",")) for r in p[2:]]
             out.append((p[0], p[1], rects, why.strip()))
@@ -216,19 +229,19 @@ def main(argv):
     def expected(rel):
         view = os.path.splitext(os.path.basename(rel))[0]
         group = "models" if "/models/" in rel else cls.get(view, "other")
-        judge, masks = None, []
-        for pat, verdict, rects, why in expect:
+        judge, ceiling, masks = None, None, []
+        for pat, verdict, args, why in expect:
             if matches(pat, rel, view, group):
                 if verdict == "judge" and judge is None:
-                    judge = why or "judged by eye"
+                    judge, ceiling = why or "judged by eye", args
                 elif verdict == "mask":
-                    masks += rects
-        return view, group, judge, masks
+                    masks += args
+        return view, group, judge, masks, ceiling
 
     # the numbers only: a full-size map per shot is 6 MB, ~3000 shots with the models (the map is made again for a sheet)
     results = {}
     for rel in both:
-        _, _, _, masks = expected(rel)
+        _, _, _, masks, _ = expected(rel)
         stats, _, keep = compare(a_pics[rel], b_pics[rel], scale, masks)
         results[rel] = (stats, keep, masks)
 
@@ -251,13 +264,18 @@ def main(argv):
     rows = []
     for rel in both:
         stats = results[rel][0]
-        view, group, judge, masks = expected(rel)
+        view, group, judge, masks, ceiling = expected(rel)
         if stats is None:
             rows.append({"group": group, "rel": rel, "stats": None, "limit": 0, "verdict": "over", "why": "picture sizes differ",
                          "sheet": None})
             continue
         limit = noise[rel] * 2 + 0.002 if rel in noise else DEFAULT
         over = stats["changed"] > limit
+        # a judged shot past its ceiling counts again: what it excuses cannot be that large
+        past = ""
+        if judge and ceiling is not None and stats["changed"] > ceiling:
+            past = f"past its judged ceiling of {ceiling * 100:g} % ({judge})"
+            judge, limit, over = None, ceiling, True
         verdict = "judged" if judge else ("over" if over else "within")
         sheet = None
         if over or "--all-sheets" in opts or (group != "models" and stats["changed"] > 0):
@@ -265,7 +283,7 @@ def main(argv):
             full, keep = heatmap(rel)
             composite(a_pics[rel], b_pics[rel], full, os.path.join(out, sheet), keep)
         rows.append({"group": group, "rel": rel, "stats": stats, "limit": limit, "verdict": verdict,
-                     "why": judge or ("masked: " + " ".join(",".join(f"{c:g}" for c in r) for r in masks) if masks else ""),
+                     "why": judge or past or ("masked: " + " ".join(",".join(f"{c:g}" for c in r) for r in masks) if masks else ""),
                      "sheet": sheet})
     n_over = sum(r["verdict"] == "over" for r in rows)
     n_judged = sum(r["verdict"] == "judged" for r in rows)

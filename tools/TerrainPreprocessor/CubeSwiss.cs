@@ -316,8 +316,10 @@ public static class CubeSwiss
         snapped = false;
         if (lakeMask != null)
         {
-            e = lakeMask.Apply(lat, lon, e, out snapped);
-            if (snapped) return e;
+            e = lakeMask.Apply(lat, lon, e, out snapped, out bool covered);
+            // on the mask TLM alone says where the leaves' lakes are: ETOPO's basin test took the Rhône plain at
+            // Villeneuve, 0-6 m over Léman, for lake 2.5-3 km past the shore, and the fill drew it as water (#1696)
+            if (snapped || covered) return e;
         }
         if (LakeAt(grid, lakes, lat, lon, e) is var lake && !float.IsNaN(lake))
         {
