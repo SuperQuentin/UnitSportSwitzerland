@@ -181,6 +181,36 @@ public partial class Globe : Node
         _nextPlan = 0;
     }
     private readonly SemaphoreSlim _workers = new(3);
+    // tiles and buildings on a worker; what the last plan asked for; whether a plan has run since the last commit and asked nothing (#1679)
+    private int _inFlight, _asked;
+    private bool _quiet;
+
+    /// <summary>A tile's or buildings' build, on a worker (it waits for one of <see cref="_workers"/>, and calls <see cref="Done"/>); main thread.</summary>
+    private Task Spawn(Func<Task> work)
+    {
+        Interlocked.Increment(ref _inFlight);
+        _asked++;
+        return Task.Run(work);
+    }
+
+    private void Done()
+    {
+        _workers.Release();
+        Interlocked.Decrement(ref _inFlight);
+    }
+
+    /// <summary>
+    /// Nothing more to draw for the camera's view (#1679): no tile or buildings on a worker or waiting to be added, and
+    /// a plan since the last one added asked for nothing. What a shot waits for in the earth world, beside the near
+    /// leaves' <c>EarthWorld.Idle</c>: the far leaves (#1646) are the globe's. A tile the plan asks for again and again
+    /// (a streamed leaf not come yet) keeps it busy; the shot's own timeout bounds that.
+    /// </summary>
+    public bool Idle => _quiet && Volatile.Read(ref _inFlight) == 0 && _ready.IsEmpty && _buildingsReady.IsEmpty && _leafMissed.IsEmpty;
+
+    /// <summary>What the globe is busy with, for a shot's log line.</summary>
+    public string Status => $"globe: {Volatile.Read(ref _inFlight)} building, {_ready.Count} tiles + {_buildingsReady.Count} buildings to add, "
+        + $"last plan asked {_asked}{(_quiet ? "" : ", a plan to come")}, {_patches.Count} tiles";
+
     private Shader _shader = null!;
     private int _month = 7, _epoch = int.MinValue;
     private double _nextPlan;
@@ -422,11 +452,13 @@ public partial class Globe : Node
 
         _want.Clear();
         _distance.Clear();
+        _asked = 0;
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, eyeDir, horizon, focal);
         foreach (var (key, node) in _patches) node.Visible = _want.Contains(key);
         // leaf patches read again after the server's leaves came (#1655), those in view first: the old one stays drawn meanwhile
         foreach (var key in _leafStale) if (_want.Contains(key)) Request(key);
         PlanBuildings();
+        _quiet = _asked == 0;
     }
 
     private void Select(CubeKey key, EcefPos eye, EcefPos eyeDir, double horizon, double focal)
@@ -486,7 +518,7 @@ public partial class Globe : Node
             int leafMonth = _month, generation = _leafGeneration;
             if (IsFarLeaf(key) && RealLeaves is { } real)
             {
-                _ = Task.Run(async () =>
+                _ = Spawn(async () =>
                 {
                     await _workers.WaitAsync().ConfigureAwait(false);
                     try
@@ -500,12 +532,12 @@ public partial class Globe : Node
                     }
                     finally
                     {
-                        _workers.Release();
+                        Done();
                     }
                 });
                 return;
             }
-            _ = Task.Run(async () =>
+            _ = Spawn(async () =>
             {
                 await _workers.WaitAsync().ConfigureAwait(false);
                 try
@@ -531,7 +563,7 @@ public partial class Globe : Node
                 }
                 finally
                 {
-                    _workers.Release();
+                    Done();
                 }
             });
             return;
@@ -540,7 +572,7 @@ public partial class Globe : Node
         _loading.Add(key);
         _albedo.TryGetValue(key, out var colourAt);
         int month = _month;
-        _ = Task.Run(async () =>
+        _ = Spawn(async () =>
         {
             await _workers.WaitAsync().ConfigureAwait(false);
             try
@@ -572,7 +604,7 @@ public partial class Globe : Node
             }
             finally
             {
-                _workers.Release();
+                Done();
             }
         });
     }
@@ -864,6 +896,7 @@ public partial class Globe : Node
     private void Commit(CubeKey key, Godot.Collections.Array arrays, Image? colour, Terrain.ChunkNode.TreeMeshes? trees = null,
         Terrain.WaterMeshBuilder.MeshData? water = null)
     {
+        _quiet = false;
         _loading.Remove(key);
         var node = Patch(key, arrays, colour, _shader);
         var globe = (ShaderMaterial)node.MaterialOverride;

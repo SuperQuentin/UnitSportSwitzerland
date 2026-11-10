@@ -16,6 +16,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ChunkManager? _chunks;
     // the earth world (--frame earth, #1510): the leaves' ground instead of the flat tiles'
     private Terrain.Earth.EarthWorld? _earth;
+    // the earth world's globe: its far leaves (#1646) are part of what a shot waits for (#1679)
+    private World.Globe? _earthGlobe;
+
+    /// <summary>The earth world has nothing more to draw for the view: its near leaves and the globe's far ones (#1679).</summary>
+    private bool EarthIdle => _earth!.Idle && (_earthGlobe == null || !IsInstanceValid(_earthGlobe) || _earthGlobe.Idle);
+
+    private string? EarthStatus => _earth == null ? null
+        : _earth.Status + (_earthGlobe != null && IsInstanceValid(_earthGlobe) ? "; " + _earthGlobe.Status : "");
 
     /// <summary>The ground this world stands on: the earth world's leaves, or the flat world's tiles.</summary>
     private IWorldGround? Ground => _earth?.Ground ?? _chunks?.Ground;
@@ -828,6 +836,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     }
                     _earth.TileEntered += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, true); };
                     _earth.TileUnloaded += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, false); };
+                    _earthGlobe = g;
                 }
                 AddChild(g);
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
@@ -1025,7 +1034,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 {
                     Origin = _worldOrigin,
                     // settled on the tiles, not a fixed time (#924), as the trailer director stages
-                    TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3)),
+                    TilesComplete = at => _earth != null ? EarthIdle : (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3)),
+                    TilesStatus = () => EarthStatus,
                 };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
@@ -1033,8 +1043,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;
-                runner.TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
-                runner.TilesStatus = () => _earth?.Status;
+                runner.TilesComplete = at => _earth != null ? EarthIdle : (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
+                runner.TilesStatus = () => EarthStatus;
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;

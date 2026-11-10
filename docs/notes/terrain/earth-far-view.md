@@ -59,3 +59,7 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
 - Checks: `GlobeGroundTests`; side-by-sides against flat at Geneva (`--origin 2500300,1117900 --at …`) and Lavaux
   (2545000,1149400), street and 600 m, every style, through a `--shot-queue`. A worktree without the LFS assets cannot
   run Realistic (it waits on its textures): copy the main checkout's `.godot/imported` first.
+- Shots wait for the far leaves too (#1679): under `--frame earth` `--shot`/`--shot-queue` (and so the refshots) take
+  the picture once `EarthWorld.Idle` and `Globe.Idle` hold together (`ClientWorld.EarthIdle`): nothing on a globe worker
+  or waiting to be added, and a plan since the last commit asked for nothing. Bounded by `ShotRunner.CompleteTimeout`;
+  a shot that waited logs `[shot] … waited N s for the ground (at first: …)` with both worlds' status.
