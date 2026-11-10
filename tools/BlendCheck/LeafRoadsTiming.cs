@@ -19,6 +19,7 @@ static class LeafRoadsTiming
         double e0 = double.Parse(at[0]), n0 = double.Parse(at[1]);
         int side = int.Parse(Arg(args, "--side") ?? "3");
         var world = new ProceduralWorld(2583250, 1113250);   // SpawnPoint.DefaultLv95E/N, as the game builds it
+        if (args.Contains("--flat")) return Flat(world, e0, n0, side);
         var roads = new GeneratedLeafRoads(world);
         var leaves = new GeneratedLeaves(world);
         var (lat, lon) = Lv95Source.Instance.ToLatLon(e0, n0);
@@ -56,6 +57,34 @@ static class LeafRoadsTiming
             WriteLine($"[leafroadstime] RESULT: {(diff == 0 ? "ok" : $"FAILED {diff} leaves differ from {file}")}");
             return diff == 0 ? 0 : 1;
         }
+        return 0;
+    }
+
+    /// <summary>
+    /// "--flat": the flat world's generated tiles over the same ground (the LV95 tiles under the leaf block), one at a
+    /// time through the game's chain (FallbackChunkSource on an empty region, its fill round the point), as the leaves.
+    /// </summary>
+    static int Flat(ProceduralWorld world, double e0, double n0, int side)
+    {
+        var (lat, lon) = Lv95Source.Instance.ToLatLon(e0, n0);
+        var centre = LeafFrames.LeafAt(lat, lon);
+        var tiles = new HashSet<TileId>();
+        for (int dy = -(side / 2); dy <= side / 2; dy++)
+            for (int dx = -(side / 2); dx <= side / 2; dx++)
+                if (centre.Neighbour(dx, dy) is { } k)
+                    foreach (var t in GeneratedLeaves.TilesUnder(new SourceOnLeaf(LeafFrames.Swiss, k, Lv95Source.Instance))) tiles.Add(t);
+        var source = new FallbackChunkSource(EmptyChunkSource.Instance, world, e0, n0);
+        var all = Stopwatch.StartNew();
+        foreach (var t in tiles.OrderBy(t => t.N).ThenBy(t => t.E))
+        {
+            var c = Stopwatch.StartNew();
+            source.LoadChunkAsync(t).GetAwaiter().GetResult();
+            double content = c.Elapsed.TotalSeconds;
+            c.Restart();
+            var r = source.LoadRoadsAsync(t).GetAwaiter().GetResult();
+            WriteLine($"  {t}: grid {content:F2} s, roads {c.Elapsed.TotalSeconds:F2} s, {r?.Segments.Count ?? 0} segments");
+        }
+        WriteLine($"{tiles.Count} flat tiles (1 km) in {all.Elapsed.TotalSeconds:F1} s");
         return 0;
     }
 
