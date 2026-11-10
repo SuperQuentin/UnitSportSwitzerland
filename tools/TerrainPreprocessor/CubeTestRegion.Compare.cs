@@ -94,6 +94,7 @@ public static partial class CubeTestRegion
             var dh = new List<double>();
             int unmatched = 0, otherLook = 0;
             var bandCounts = new int[bands.Length, 3];   // same, other look, alone
+            var clearCounts = new int[3];   // the same, for records with no cut of either build (leaf edge, km line) within 100 m
             string? worst = null;
             var detail = new List<string>();
             bool placed = kind is "signal" or "pole" or "stop line";
@@ -113,10 +114,12 @@ public static partial class CubeTestRegion
                                 if (d < bestD) (best, bestD) = (k, d);
                             }
                 int band = real ? Array.FindIndex(bands, x => LeafEdgeM(m.E, m.N) < x) : 0;
+                bool clear = real && LeafEdgeM(m.E, m.N) >= 100 && KmLineM(m.E, m.N) >= 100;
                 if (best < 0)
                 {
                     unmatched++;
                     bandCounts[band, 2]++;
+                    if (clear) clearCounts[2]++;
                     worst ??= string.Create(CultureInfo.InvariantCulture, $"alone at {m.E:F1},{m.N:F1}");
                     detail.Add(string.Create(CultureInfo.InvariantCulture, $"LV95 alone at {m.E:F1},{m.N:F1} ({m.Look}), {Cuts(m.E, m.N)}"));
                     continue;
@@ -128,12 +131,14 @@ public static partial class CubeTestRegion
                 {
                     otherLook++;
                     bandCounts[band, 1]++;
+                    if (clear) clearCounts[1]++;
                     worst ??= string.Create(CultureInfo.InvariantCulture, $"at {m.E:F1},{m.N:F1}: LV95 {m.Look}, leaves {b[best].Look}");
                     detail.Add(string.Create(CultureInfo.InvariantCulture, $"at {m.E:F1},{m.N:F1}: LV95 {m.Look}, leaves {b[best].Look}; {Cuts(m.E, m.N)}"));
                 }
                 else
                 {
                     bandCounts[band, 0]++;
+                    if (clear) clearCounts[0]++;
                     if (placed && bestD > PlaceBarM)
                         detail.Add(string.Create(CultureInfo.InvariantCulture, $"at {m.E:F1},{m.N:F1}: {bestD:F2} m apart; {Cuts(m.E, m.N)}"));
                 }
@@ -160,6 +165,13 @@ public static partial class CubeTestRegion
                         $"      {from}-{to} m from a leaf edge: {total}, same {bandCounts[k, 0]}, other look {bandCounts[k, 1]} "
                         + $"({(total == 0 ? 0 : 100.0 * bandCounts[k, 1] / total):F1} %), alone {bandCounts[k, 2]}"));
                 }
+            if (real)
+            {
+                int total = clearCounts[0] + clearCounts[1] + clearCounts[2];
+                log(string.Create(CultureInfo.InvariantCulture,
+                    $"      no cut of either build within 100 m: {total}, same {clearCounts[0]}, other look {clearCounts[1]} "
+                    + $"({(total == 0 ? 0 : 100.0 * clearCounts[1] / total):F1} %), alone {clearCounts[2]}"));
+            }
             if (Verbose) foreach (string d in detail) log("      " + d);
         }
         if (real) return 0;
@@ -218,10 +230,14 @@ public static partial class CubeTestRegion
         return Math.Min(Math.Min(fu, 1 - fu), Math.Min(fv, 1 - fv)) * 610;
     }
 
+    /// <summary>How far an LV95 point lies from the nearest LV95 km line (where the LV95 build cuts), metres.</summary>
+    private static double KmLineM(double e, double n) =>
+        Math.Min(Math.Min(e - Math.Floor(e / 1000) * 1000, Math.Ceiling(e / 1000) * 1000 - e), Math.Min(n - Math.Floor(n / 1000) * 1000, Math.Ceiling(n / 1000) * 1000 - n));
+
     /// <summary>How far an LV95 point is from the nearest LV95 km line and leaf edge (where each build cuts), metres.</summary>
     private static string Cuts(double e, double n)
     {
-        double km = Math.Min(Math.Min(e - Math.Floor(e / 1000) * 1000, Math.Ceiling(e / 1000) * 1000 - e), Math.Min(n - Math.Floor(n / 1000) * 1000, Math.Ceiling(n / 1000) * 1000 - n));
+        double km = KmLineM(e, n);
         return string.Create(CultureInfo.InvariantCulture, $"{km:F0} m from a km line, ~{LeafEdgeM(e, n):F0} m from a leaf edge");
     }
 
