@@ -25,6 +25,9 @@
   `if (Systems.On(Systems.X))`, add its name to `Systems.All`, and make its users null-safe
   (`Instance?.`). Absent `--systems`/`--world`, `Systems.On` is always true: players get everything.
 - Each check in `tools/lib/checkmap.txt` carries its world flags (`--synccheck --world flat`).
+- **A `--world flat` row names a probe `TestWorld` runs** (`CheckMapWorldTests`, #1702): a check from
+  `ClientWorld.QuickChecks` (`--cockpitcheck`, `--meshcheck` …) never runs there and fails in 2 s, every run.
+  Those self-checks build no world anyway (250-480 MB peak): their rows need no world flag.
 
 ## Why
 
