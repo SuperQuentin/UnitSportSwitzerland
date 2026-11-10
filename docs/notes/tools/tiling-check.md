@@ -24,8 +24,8 @@ RoadGen --tiling-check --chunks DIR [--temp DIR] --box minE,minN,maxE,maxN
 - **Compared** in the box, each tiling against the first (`Diagnostics/RecordMarks`, shared with `CubeTestRegion`'s leaf
   compare): junction records (class, area within 2 % or 1 m²), signals (plan size, canton look, poles' colour, overheads,
   gantries), stop lines, poles (flags), approaches (`LANE`: every lane's kind and moves), canton signs; all matched within
-  5 m, placed within 5 cm. Paint: length (lines) and area (triangles) per type on a fixed 25 m lattice, within 0.5 m and
-  0.05 m². Centrelines: every reference vertex to the other tiling's lines, within 1 cm. `--verbose` lists each difference with
+  5 m, placed within 5 cm. Paint: painted length (lines: a dashed line's dashes) and area (triangles) per type on a fixed 25 m lattice, within 1 m
+  and 0.05 m² (a line offset from a curved centreline steps at a cut by its offset times the turn there, as at every seam). Centrelines: every reference vertex to the other tiling's lines, within 1 cm. `--verbose` lists each difference with
   its distance to either tiling's nearest cut. `[tilingcheck] RESULT: ok` when every bar holds.
 - **Cost**: the traffic-lights test region (31 tiles) about 4 min per tiling at low priority, ~1 GB.
 

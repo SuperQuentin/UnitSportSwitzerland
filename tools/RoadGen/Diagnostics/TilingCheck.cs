@@ -20,8 +20,12 @@ public static class TilingCheck
     /// <summary>The km grid (the reference), shifted three ways, turned like leaves, and turned 45° in small cells.</summary>
     public const string DefaultTilings = "0,0,0,1000;250,0,0,1000;0,500,0,1000;334,666,0,1000;0,0,28.5,610;100,200,45,400";
 
-    /// <summary>Bars: positions of the placed records (m), a junction record's area (share and m2), paint per bin and type, centrelines (m).</summary>
-    public const double PlaceBarM = 0.05, AreaShare = 0.02, AreaM2 = 1.0, PaintBarM = 0.5, PaintBarM2 = 0.05, CentrelineBarM = 0.01;
+    /// <summary>
+    /// Bars: positions of the placed records (m), a junction record's area (share and m2), paint per bin and type, centrelines (m).
+    /// Paint 1 m: a line laid off a curved centreline steps at a cut by its offset times the curve's turn there (the format offsets
+    /// a piece's end along its own last stretch, as at every tile seam), so a dash moves across a bin's edge by up to ~0.6 m.
+    /// </summary>
+    public const double PlaceBarM = 0.05, AreaShare = 0.02, AreaM2 = 1.0, PaintBarM = 1.0, PaintBarM2 = 0.05, CentrelineBarM = 0.01;
 
     /// <summary>Paint is summed per type on a fixed lattice of this many metres (the plane's, every tiling alike).</summary>
     public const double PaintBin = 25;

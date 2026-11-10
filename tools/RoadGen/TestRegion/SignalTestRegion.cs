@@ -409,8 +409,10 @@ public static partial class SignalTestRegion
         {
             const double nb = BetweenN;
             double[] at = [CantonDefaultE - 450, CantonDefaultE, CantonGenevaE, CantonVaudE, CantonBaselLandE, CantonBernE, CantonBernE + 450];
+            // (#1660: a street's layout comes from its chain within 500 m, so every piece of the row hashes to 2 on its own)
+            string[] row = ["CN0", "CN1", "CN3", "CN9", "CNA", "CNM"];
             for (int i = 0; i + 1 < at.Length; i++)
-                lines.Add(new Line($"CN{i}", "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
+                lines.Add(new Line(row[i], "10m Strasse", "Durchgangsstrasse", "Kanton", [(at[i], nb), (at[i + 1], nb)], "secondary", "yes"));
             foreach (var (name, id, e) in new[] { ("default", "CA", CantonDefaultE), ("GE", "CB", CantonGenevaE), ("VD", "CI", CantonVaudE),
                          ("BL", "CS", CantonBaselLandE), ("BE", "KA", CantonBernE) })
             {

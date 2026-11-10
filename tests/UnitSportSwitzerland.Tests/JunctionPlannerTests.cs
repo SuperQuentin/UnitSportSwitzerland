@@ -529,7 +529,7 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
                 {
                     transitions++;
                     Assert.True(t.Segment.Attributes.Has(RoadAttrFlags.InTransition));
-                    Assert.Equal(SegmentSections.Stations(t.Segment)[^1], t.Stations[^1], 1);
+                    Assert.InRange(Math.Abs(SegmentSections.Stations(t.Segment)[^1] - t.Stations[^1]), 0, 0.011);   // the file's centimetre
                 }
             }
             Assert.True(transitions >= 20, $"{transitions} transitions written");

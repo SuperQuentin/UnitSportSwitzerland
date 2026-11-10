@@ -956,7 +956,7 @@ public static partial class TileRewriter
             foreach (var list in output.Values) allSegments.AddRange(list);
             // cableways and watercourses go back exactly as they came in (whole, then cut where they were)
             allSegments.AddRange(passthrough.Where(x => x.Write).Select(x => x.Segment));
-            var allTransitions = Placed(BlockFrame.Lines, transitionsOf.Values.SelectMany(x => x).ToList(), allSegments, netStats.LayoutWrite);
+            var allTransitions = Placed(BlockFrame.Lines, transitionsOf.Where(kv => kv.Key != BlockFrame.Band).SelectMany(kv => kv.Value).ToList(), allSegments, netStats.LayoutWrite);   // (the band's: planned, never written)
             var allIslands = islands.Values.SelectMany(x => x).ToList();
             var allBridges = bikeBridges.Values.SelectMany(x => x).ToList();
             var allLights = signalRecords.Values.SelectMany(x => x).Select(x => (x.X, x.Z)).ToList();
