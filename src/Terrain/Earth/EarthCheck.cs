@@ -55,7 +55,7 @@ public partial class EarthCheck : Node3D
     private ulong _startMs;
     private double _phaseS, _missingS, _worstMissingS;
     private int _phase, _shifts, _rays, _hits, _above, _below, _missed, _groundOff;
-    private double _worstGroundOff;
+    private double _worstGroundOff, _settledS;
     private List<(int I, int J)>? _points;
     private double _ballS;
     private float _travelled, _legEnd;
@@ -179,12 +179,18 @@ public partial class EarthCheck : Node3D
         _turnSum = _worstTurnError = _worstTilt = 0;
         _phase = 1;
         _phaseS = Now;
+        // every patch cut again from a fresh preparation of each leaf no loaded leaf holds, as the source's trim did by
+        // chance (#1626: a leaf prepared again from a later view of the fill stood 27 m over its height query); the rays
+        // then judge the patches cut again, and the loaded leaves' must still agree with their queries
+        if (Earth is { } earth) Log($"patches cut again: {earth.RecutPatches()} standing");
     }
 
     private void Rays()
     {
-        // a frame for the bodies to enter the physics space
+        // a frame for the bodies to enter the physics space, and the patches cut again (#1626) built and standing
         if (Now - _phaseS < 0.5) return;
+        if (Earth is { } earth && !earth.CollisionSettled) { _settledS = Now; return; }
+        if (Now - _settledS < 0.5) return;
         // the points are taken a physics frame before their rays: a patch counted the frame it stood up was not in
         // the space's queries yet, and a whole patch's rays (52 of 308 at the region's border) found nothing
         if (_points is null)

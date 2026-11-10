@@ -228,9 +228,7 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
     {
         if (_pinned.TryGetValue(leaf, out var pinned)) return pinned;
         // the unpinned ones past the kept: dropped together (a pinned leaf is held by its own entry)
-        if (_prepared.Count - _pinned.Count > KeptLeaves)
-            foreach (var k in _prepared.Keys)
-                if (!_pinned.ContainsKey(k)) _prepared.TryRemove(k, out _);
+        if (_prepared.Count - _pinned.Count > KeptLeaves) Trim();
         var lazy = _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
             leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames) : null));
         var value = lazy.Value;
@@ -243,6 +241,13 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
     /// <see cref="Prepared"/> and patch of that leaf is cut from it.
     /// </summary>
     public void Pin(LeafCollision prepared) => _pinned[prepared.Leaf] = prepared;
+
+    /// <summary>Every preparation but the pinned ones dropped: the next ask of such a leaf prepares it again.</summary>
+    public void Trim()
+    {
+        foreach (var k in _prepared.Keys)
+            if (!_pinned.ContainsKey(k)) _prepared.TryRemove(k, out _);
+    }
 
     /// <summary>A leaf no longer held as pinned (its preparation may be dropped and made again).</summary>
     public void Unpin(CubeKey leaf) => _pinned.TryRemove(leaf, out _);

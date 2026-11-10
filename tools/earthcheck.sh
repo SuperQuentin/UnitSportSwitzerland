@@ -14,7 +14,7 @@ CHUNKS=${CHUNKS:-D:/UnitSportSwitzerland/terrain_chunks}
 AT=${AT:-2500956,1117569}   # Geneva, the densest leaf of the D: region
 # `tools/earthcheck.sh border`: from the region's border north of Riddes, where a leaf's patch stood 27 m over its
 # height query when the leaf was prepared again (#1626); the check fails on any ray on a leaf's ground off the query
-[ "${1:-}" = border ] && AT=2578113,1115406
+[ "${1:-}" = border ] && { AT=2578113,1115406; BARE=1; }
 TRAVEL=${TRAVEL:-4500}
 # BARE=1 (--earthbare): a start with no town round it (mountains, the region's border): the leaves need roads, not buildings, trees, water and doors
 if [ ! -d "$LEAVES" ]; then echo "[earthcheck] no LEAVES with built leaves: skipped"; echo "[earthcheck] RESULT: ok (skipped)"; exit 0; fi

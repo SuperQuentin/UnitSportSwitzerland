@@ -477,6 +477,21 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         TileUnloaded?.Invoke(GroundTile.FromLeaf(key));
     }
 
+    /// <summary>
+    /// Every standing patch built again, the preparations of the leaves not loaded dropped first (<see
+    /// cref="LeafCollisionSource.Trim"/>), as the source's trim does by chance: <c>--earthcheck</c>'s stress of #1626. The
+    /// count of standing patches. Main thread.
+    /// </summary>
+    internal int RecutPatches()
+    {
+        _collisionSource.Trim();
+        _patches.Rebuild(_ => true);
+        return _bodies.Count;
+    }
+
+    /// <summary>No patch waiting, building or built and not yet standing.</summary>
+    internal bool CollisionSettled => !_patches.Busy && !_patches.HasReady;
+
     /// <summary>A patch's faces, on a patch worker, with the preparation they were cut from noted for <see cref="AddBody"/>.</summary>
     private Vector3[]? CutPatch(CubeKey key)
     {
