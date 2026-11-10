@@ -88,6 +88,9 @@ public static class GlobeGround
     /// <summary>The colour's water weight a level surface needs to be drawn as water (<see cref="Level"/>).</summary>
     public const float WaterHint = 0.2f;
 
+    /// <summary>The water weight above which a coarser level's level vertex is drawn as a lake's surface too (#1669).</summary>
+    public const float LakeWeight = 0.5f;
+
     /// <summary>How level still water is, metres: every neighbour of a vertex within this of it.</summary>
     public const float LevelM = 0.05f;
 

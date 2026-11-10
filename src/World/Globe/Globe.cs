@@ -158,7 +158,7 @@ public partial class Globe : Node
     private Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
     private readonly Dictionary<CubeKey, MeshInstance3D> _patches = new();
     private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
-    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month, Terrain.ChunkNode.TreeMeshes? Trees)> _ready = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month, Terrain.ChunkNode.TreeMeshes? Trees, Terrain.WaterMeshBuilder.MeshData? Water)> _ready = new();
     private readonly HashSet<CubeKey> _loading = new(), _want = new();
     /// <summary>Leaf requests that came back empty (a streamed leaf not come yet, #1655): freed on the main thread, asked again.</summary>
     private readonly ConcurrentQueue<CubeKey> _leafMissed = new();
@@ -306,7 +306,7 @@ public partial class Globe : Node
         // what the workers built, a few a frame (the earth world: under a time budget)
         var clock = Earth ? System.Diagnostics.Stopwatch.StartNew() : null;
         for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _ready.TryDequeue(out var r); k++)
-            if (r.Month == _month && (!_patches.ContainsKey(r.Key) || _leafStale.Remove(r.Key))) Commit(r.Key, r.Arrays, r.Colour, r.Trees);
+            if (r.Month == _month && (!_patches.ContainsKey(r.Key) || _leafStale.Remove(r.Key))) Commit(r.Key, r.Arrays, r.Colour, r.Trees, r.Water);
         while (_leafMissed.TryDequeue(out var missed)) _loading.Remove(missed);
         for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _buildingsReady.TryDequeue(out var b); k++)
             CommitBuildings(b.Key, b.Mesh);
@@ -333,6 +333,7 @@ public partial class Globe : Node
             {
                 _onTerrain = terrain;
                 foreach (var (key, node) in _patches) node.MaterialOverride = MaterialFor(key);
+                foreach (var lake in _lakes.Values) lake.Visible = terrain;
             }
             // the world is the anchor frame itself: placed again at each re-anchor
             if (Origin.Frame.Epoch != _epoch)
@@ -376,6 +377,7 @@ public partial class Globe : Node
         _globeMaterials.Clear();
         _palette.Clear();
         _buildings.Clear();
+        _lakes.Clear();
         _loading.Clear();
         _leafStale.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
@@ -485,7 +487,7 @@ public partial class Globe : Node
                     await _workers.WaitAsync().ConfigureAwait(false);
                     try
                     {
-                        if (BuildFarLeaf(key, real) is { } far) _ready.Enqueue((key, far.Arrays, null, leafMonth, far.Trees));
+                        if (BuildFarLeaf(key, real) is { } far) _ready.Enqueue((key, far.Arrays, null, leafMonth, far.Trees, far.Water));
                         else _leafMissed.Enqueue(key);
                     }
                     catch (Exception e)
@@ -509,8 +511,11 @@ public partial class Globe : Node
                     {
                         var (palette, rect) = Earth ? AncestorPalette(key) : (null, default);
                         // the heights hold the lake's bed (#298): the surface over it, as the leaf draws its water
-                        var water = leaves is Terrain.Leaves.EarthLeaves { Real: var real } && real.Has(key) ? real.Sections(key, Terrain.Format.LeafKind.Water)?.Water : null;
-                        if (Build(tile, palette, rect, water, ancestor: AncestorTile) is { } arrays) _ready.Enqueue((key, arrays, null, leafMonth, null));
+                        bool isReal = leaves is Terrain.Leaves.EarthLeaves { Real: var real } && real.Has(key);
+                        var water = isReal ? ((Terrain.Leaves.EarthLeaves)leaves).Real.Sections(key, Terrain.Format.LeafKind.Water)?.Water : null;
+                        var lakes = Earth ? new WaterOut() : null;
+                        if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves) is { } arrays)
+                            _ready.Enqueue((key, arrays, null, leafMonth, null, lakes?.Mesh));
                         else _leafMissed.Enqueue(key);
                     }
                     else _leafMissed.Enqueue(key);
@@ -553,7 +558,8 @@ public partial class Globe : Node
                 }
                 colour?.GenerateMipmaps();
                 // no height at all: the parent's tile stays (the key stays loading, never asked again)
-                if (Build(tile, palette, rect, ancestor: AncestorTile) is { } arrays) _ready.Enqueue((key, arrays, colour, month, null));
+                var lakes = Earth ? new WaterOut() : null;
+                if (Build(tile, palette, rect, ancestor: AncestorTile, lakesOut: lakes) is { } arrays) _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
             }
             catch (Exception e)
             {
@@ -577,7 +583,7 @@ public partial class Globe : Node
     /// along each edge hanging a third of a drawn cell, so a neighbour drawn a level coarser leaves no crack.
     /// </summary>
     public static Godot.Collections.Array? Build(CubeTile tile, byte[]? palette = null, Vector4 rect = default, CubeWater? water = null,
-        int stride = Stride, byte[]? cover = null, Func<CubeKey, CubeTile?>? ancestor = null)
+        int stride = Stride, byte[]? cover = null, Func<CubeKey, CubeTile?>? ancestor = null, WaterOut? lakesOut = null, bool beds = true)
     {
         var key = tile.Key;
         int bits = tile.Bits, m = (1 << bits) / stride, n = m + 1;
@@ -625,7 +631,9 @@ public partial class Globe : Node
                     hs[j * n + i] = surface;
                 }
         }
-        if (leaf && under != null && !Array.Exists(under, float.IsNaN))
+        // a real leaf's heights only: a generated fill leaf holds no bed, and under a mountain the generator lacks (the
+        // Salève, past its relief) it stood far under the coarser level and drew a lake on the slope (#1669)
+        if (leaf && beds && under != null && !Array.Exists(under, float.IsNaN))
             for (int j = 0; j < n; j++)
                 for (int i = 0; i < n; i++)
                 {
@@ -654,6 +662,8 @@ public partial class Globe : Node
         var norms = new Vector3[total];
         var uvs = new Vector2[total];
         var colours = palette != null || cover != null ? new Color[total] : null;
+        // the vertices painted as water, for the lakes' own surface (#1669)
+        var lakeAt = lakesOut != null && colours != null ? new bool[n * n] : null;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -669,19 +679,28 @@ public partial class Globe : Node
                 {
                     var weights = palette != null ? GlobeGround.Sample(palette, rect.X + uvs[k].X * rect.Z, rect.Y + uvs[k].Y * rect.W) : Vector4.Zero;
                     // a leaf's own water decides wet and dry; the colour image only what the dry ground is
-                    if (wet != null) weights = wet[k] ? new Vector4(1, 0, 0, 0) : GlobeGround.Dry(weights);
+                    bool isWater = false;
+                    if (wet != null) weights = (isWater = wet[k]) ? new Vector4(1, 0, 0, 0) : GlobeGround.Dry(weights);
                     // a coarser level has no water of its own: a lake's surface is level to the centimetre, where the
                     // colour image hints at water too (a flat plateau in the data on the Salève drew a lake)
-                    else if (guessed?[k] != true && weights.X > GlobeGround.WaterHint && GlobeGround.Level(hs, n, i, j)) weights = new Vector4(1, 0, 0, 0);
+                    else if (guessed?[k] != true && weights.X > GlobeGround.WaterHint && GlobeGround.Level(hs, n, i, j))
+                    {
+                        // a lake's surface only where the image says water plainly: a level plateau with a hint of it
+                        // (the Salève's) is painted so, but a water surface there caught the sky (#1669)
+                        isWater = weights.X > GlobeGround.LakeWeight;
+                        weights = new Vector4(1, 0, 0, 0);
+                    }
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);
                     if (cover != null)
                     {
                         // a far leaf: its own cover, as the flat world's tiles are painted (no surface pattern this far)
                         var cls = wet?[k] == true ? CoverClass.Water : (CoverClass)cover[j * stride * ((1 << bits) + 1) + i * stride];
+                        isWater = cls == CoverClass.Water;
                         var c = Terrain.CoverPalette.ColorFor(cls, hs[k], hash).SrgbToLinear();
                         colours[k] = new Color(c.R, c.G, c.B, 0);
                     }
                     else colours[k] = GlobeGround.Colour(weights, hs[k], hash);
+                    if (lakeAt != null) lakeAt[k] = isWater;
                 }
             }
 
@@ -704,6 +723,7 @@ public partial class Globe : Node
         // Godot's front faces wind clockwise as seen; whether (i, j) runs clockwise from above depends on the face
         var a0 = pos[0];
         bool flip = (pos[1] - a0).Cross(pos[n] - a0).Dot(up[0]) > 0;
+        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM);
         var idx = new List<int>(m * m * 6 + edge * 12);
         void Tri(int a, int b, int c)
         {
@@ -737,6 +757,85 @@ public partial class Globe : Node
         return arrays;
     }
 
+    /// <summary>A tile's lakes, built on the worker with its ground (<see cref="Build"/>).</summary>
+    public sealed class WaterOut
+    {
+        public Terrain.WaterMeshBuilder.MeshData? Mesh;
+    }
+
+    /// <summary>How far the ground under a lake's surface sinks by its shore, metres: the water drawn over it, not into it.</summary>
+    public const float LakeSinkM = 3f;
+
+    /// <summary>
+    /// How far it sinks inside the lake (every neighbour water): the water shaders shade by the depth under the surface,
+    /// and flat's lakes stand over their beds (Lake Geneva's 300 m), so a shallow far lake drew lighter than the near one.
+    /// </summary>
+    public const float LakeDeepM = 100f;
+
+    /// <summary>
+    /// A tile's lakes as the world's water (#1669): a quad wherever the four corners of a drawn cell are water, the
+    /// triangle over three (a diagonal shore, as <see cref="Terrain.WaterMeshBuilder"/>), at the surface the ground was drawn
+    /// at; that ground sinks <see cref="LakeSinkM"/> under it. No waves this far (wave scale 0, as flat's far tiles).
+    /// </summary>
+    private static Terrain.WaterMeshBuilder.MeshData? Lakes(Vector3[] pos, Vector3[] up, Vector3[] verts, bool[] lakeAt, int n, bool flip, float cellM)
+    {
+        var map = new int[n * n];
+        Array.Fill(map, -1);
+        var vs = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var idx = new List<int>();
+        int V(int k)
+        {
+            if (map[k] < 0)
+            {
+                map[k] = vs.Count;
+                vs.Add(pos[k]);
+                uvs.Add(new Vector2(0, cellM));
+            }
+            return map[k];
+        }
+        void Tri(int a, int b, int c)
+        {
+            if (flip) { idx.Add(V(a)); idx.Add(V(c)); idx.Add(V(b)); }
+            else { idx.Add(V(a)); idx.Add(V(b)); idx.Add(V(c)); }
+        }
+        int m = n - 1;
+        for (int j = 0; j < m; j++)
+            for (int i = 0; i < m; i++)
+            {
+                int k00 = j * n + i, k10 = k00 + 1, k01 = k00 + n, k11 = k01 + 1;
+                bool w00 = lakeAt[k00], w10 = lakeAt[k10], w01 = lakeAt[k01], w11 = lakeAt[k11];
+                int wet = (w00 ? 1 : 0) + (w10 ? 1 : 0) + (w01 ? 1 : 0) + (w11 ? 1 : 0);
+                if (wet == 4)
+                {
+                    Tri(k00, k10, k11);
+                    Tri(k00, k11, k01);
+                }
+                else if (wet == 3)
+                {
+                    if (!w00) Tri(k10, k11, k01);
+                    else if (!w10) Tri(k00, k11, k01);
+                    else if (!w11) Tri(k00, k10, k01);
+                    else Tri(k00, k10, k11);
+                }
+            }
+        if (idx.Count == 0) return null;
+        // the ground under the water sinks, so the two never fight for a pixel; inside the lake (every neighbour water,
+        // so every cell round it is covered) as deep as a lake looks
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int k = j * n + i;
+                if (map[k] < 0) continue;
+                bool inside = i > 0 && j > 0 && i < m && j < m;
+                for (int b = -1; b <= 1 && inside; b++)
+                    for (int a = -1; a <= 1; a++)
+                        if (!lakeAt[k + b * n + a]) { inside = false; break; }
+                verts[k] = pos[k] - up[k] * (inside ? LakeDeepM : LakeSinkM);
+            }
+        return new Terrain.WaterMeshBuilder.MeshData(vs.ToArray(), uvs.ToArray(), idx.ToArray());
+    }
+
     // each tile's ground cover weights (GlobeGround.Weigh), for its children's vertices too
     private readonly ConcurrentDictionary<CubeKey, byte[]> _palette = new();
 
@@ -754,7 +853,8 @@ public partial class Globe : Node
         return (null, default);
     }
 
-    private void Commit(CubeKey key, Godot.Collections.Array arrays, Image? colour, Terrain.ChunkNode.TreeMeshes? trees = null)
+    private void Commit(CubeKey key, Godot.Collections.Array arrays, Image? colour, Terrain.ChunkNode.TreeMeshes? trees = null,
+        Terrain.WaterMeshBuilder.MeshData? water = null)
     {
         _loading.Remove(key);
         var node = Patch(key, arrays, colour, _shader);
@@ -770,7 +870,14 @@ public partial class Globe : Node
         if (trees != null) AddTrees(node, trees);
         // a leaf patch read again (#1655) takes the old one's place and its visibility
         bool shown = false;
-        if (_patches.Remove(key, out var old)) { shown = old.Visible; old.QueueFree(); _buildings.Remove(key); }
+        if (_patches.Remove(key, out var old)) { shown = old.Visible; old.QueueFree(); _buildings.Remove(key); _lakes.Remove(key); }
+        if (water != null && WaterMaterial is { } waterMaterial)
+        {
+            var lake = new MeshInstance3D { Name = "Lakes", Mesh = Terrain.ChunkNode.ToArrayMesh(water, waterMaterial),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = _onTerrain };
+            node.AddChild(lake);
+            _lakes[key] = lake;
+        }
         node.Visible = shown;
         AddChild(node);
         node.Transform = Place(key);

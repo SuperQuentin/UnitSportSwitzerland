@@ -168,13 +168,13 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   which need the colour bake again. Before #1659 it dropped every rebuilt level's `albedo` from the manifest, and the
   globe drew those levels white (B4's pyramid from level 5 down: a rectangle west of Switzerland from space; its
   manifest repaired on D:, the old one kept as `cube_manifest.json.pre1659`).
-- **From B4's leaves, at their surface (#1654)**: `--cube-leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube`
-  (2,412 leaves, the game's). A leaf is read at its surface (`TerrainFormat/CubeSurface`): its heights hold a lake's
+- **From B4's leaves, at their surface (#1654)**: `--cube-leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube,D:/UnitSportSwitzerland/cube_g1/region14`
+  (B4's 2,412 leaves, the game's, then 135 of G1's where B4 has none: the Salève, which ETOPO blurs from 889 m to 570). A leaf is read at its surface (`TerrainFormat/CubeSurface`): its heights hold a lake's
   bed since the water stage (#298), 300 m under Lavaux, so the still water stands over them, and a bed the water stage
   left dry along a lake leaf's edge (76 leaves, 14,000 vertices) takes the water beside it. Past the leaves two fixes
   meet ETOPO: a vertex where ETOPO holds a lake (within 6 m of a leaves' lake of 200,000+ samples, level to 0.3 m over
   ~400 m each way) stands at the leaves' level (ETOPO's Lake Geneva is 418.3 m against 422.3), and heights blend from
-  the nearest leaf height into ETOPO's over 1.5 km (16 rings, 12 directions, a function of the point): ETOPO's 1.8 km
+  ETOPO corrected by how far it misses the nearest leaves, the correction fading over 1.5 km (at level 13 only) (16 rings, 12 directions, a function of the point): ETOPO's 1.8 km
   cells blur a steep shore, and the hard switch stood a wall up to 120 m along the region's edge east of Lavaux.
   Nov 10 2026: 1,280 tiles, 60-80 s, peak 9.3 GB, 0 of 2.6 M edge vertices differ; G1's pyramid kept as
   `cube_global.pre1654`.

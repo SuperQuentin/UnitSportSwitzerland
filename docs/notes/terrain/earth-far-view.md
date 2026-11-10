@@ -43,7 +43,11 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   more than `BedM` (20 m) under it (shore vertices outside the leaf's water mask drew a wall that deep). Coarser levels
   hold the surface; there a vertex whose eight neighbours are level within 5 cm, and whose cover reads at least a little
   water (`WaterHint`), is water (`GlobeGround.Level`: Blue Marble draws inland lakes black, near-black reads as water).
-  Past the near leaves a lake is palette ground, not the water shader (#1669).
+  Past the near leaves a lake is the world's water too (#1669, `Globe.Lakes`): a surface over every drawn cell of water
+  (a far leaf's own, or a coarser level's level vertex with a plain water weight, `LakeWeight`), the world's water
+  material with no waves (as flat's far tiles), shown below 20 km; the ground under it sinks 3 m by the shore and 100 m
+  inside (the water shaders shade by depth). Only a real leaf's heights are taken for a bed: a generated fill leaf
+  under a mountain the generator lacks (the Salève) drew a lake on its slope.
 - **The pyramid's Swiss levels** are built from B4's leaves at their surface, ETOPO's lakes at the leaves' level and a
   1.5 km blend past the region's edge (#1654, `tools/cube-tiles`): the trench east of Lavaux and the lake at two levels
   are gone. A far leaf takes the same surface (`CubeSurface.SurfaceAt`: a bed left dry by the leaf's edge is water).
