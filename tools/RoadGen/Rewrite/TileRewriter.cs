@@ -419,7 +419,7 @@ public static partial class TileRewriter
             using var blockFrame = Plane.Use(frame);
             foreach (var line in whole)
             {
-                bool write = line.Parts.Any(p => block.Contains(p.Tile));
+                bool write = line.Parts.Any(p => block.Contains(p.Tile)) || Beside(line, block, real);
                 var segment = LineJoin.ToSegment(line, frame, BlockFrame.Lines);
                 // Aerial ropeways and watercourses are carried in the same file but are not
                 // carriageways, and must not enter the graph. A cableway would be snapped to
@@ -1910,6 +1910,34 @@ public static partial class TileRewriter
         if ((segment.Flags & RoadFlags.Divided) != 0) width *= dividedScale;
 
         return profile with { Width = width };
+    }
+
+    /// <summary>
+    /// How far beside its line a line's own records reach (#1660: paint offset from it, sidewalks, walls, signs), m: a block
+    /// writes every line passing this close to it, and keeps of it what lies in its tiles.
+    /// </summary>
+    private const double WriteReach = 50;
+
+    /// <summary>Whether a line passes within <see cref="WriteReach"/> of a tile of the block (sampled every 10 m along it).</summary>
+    private static bool Beside(LineJoin.Line line, HashSet<TileId> block, IUnits real)
+    {
+        var pts = line.Points;
+        bool Near(double x, double y)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    if (block.Contains(real.TileAt(x + dx * WriteReach, y + dy * WriteReach))) return true;
+            return false;
+        }
+        if (pts.Count > 0 && Near(pts[0].X, pts[0].Y)) return true;
+        for (int i = 1; i < pts.Count; i++)
+        {
+            double ax = pts[i - 1].X, ay = pts[i - 1].Y, bx = pts[i].X, by = pts[i].Y;
+            int steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / 10));
+            for (int k = 1; k <= steps; k++)
+                if (Near(ax + (bx - ax) * k / steps, ay + (by - ay) * k / steps)) return true;
+        }
+        return false;
     }
 
     /// <summary>The most rounds a block takes to close its lines (#1660): each reads the tiles across their open ends.</summary>
