@@ -5,68 +5,145 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
-/// The region-wide files in Earth positions (#1507, G2 B3 row 8; docs/notes/tools/cube-region-files.md): the LV95
-/// build's places, POIs, landings, airports, lifts and test-region traffic endpoints, each written into a cube region
-/// with every position also as latitude, longitude and ellipsoidal height (<see cref="GeoPoint"/>) and every grid
-/// heading also from true north, rigorously (<see cref="SwissGeodesy"/>) at the point's own height (a summit's, a
-/// deck's, still water, a stand's ground) or, where the file has none, the LV95 build's ground there. The LV95 fields
-/// stay until D (the game reads them until then). Each stage keeps its maths: this writes their output in Earth
-/// positions. No <c>horizon.bin</c> is written: the cube region's far terrain is its pyramid (<c>--cube-swiss</c>).
+/// The region-wide files of a cube region (#1507, G2 B3 row 8; from the sources and the leaves since #1711, G2 D1;
+/// docs/notes/tools/cube-region-files.md). The region-wide stages run on the region itself, reading of it what they read of an
+/// LV95 build (<see cref="BuiltLeaves"/>: its LV95 km cells, ground, still water, network roads and buildings), and write into it;
+/// then every position also as latitude, longitude and ellipsoidal height (<see cref="GeoPoint"/>) and every grid heading also
+/// from true north, rigorously (<see cref="SwissGeodesy"/>), at the point's own height (a summit's, a deck's, still water, a
+/// stand's ground) or, where the file has none, the leaves' ground there. The LV95 fields stay until D (the game reads them
+/// until then). Each stage keeps its maths. No <c>horizon.bin</c> is written: the region's far terrain is its pyramid.
 ///
 /// <code>
-/// --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
+/// --cube-sources --cube-out REGION --tlm GPKG [--osm-pbf PBF] [--sitg] [--cube-temp DIR] [--jobs N]
+///     the network's source files into the region's temp: the OSM overlay and nodes (with --osm-pbf), tram stops, SITG signs
+///     (--sitg: fetched from the canton's service), before --cube-network
+/// --cube-places --cube-out REGION --gwr DB [--tlm GPKG]
+///     places.json (GWR towns, TLM summits and passes), before --cube-network (its gantries read the towns)
+/// --cube-region-files --cube-out REGION [--tlm GPKG] [--osm-pbf PBF] [--gwr DB] [--boundaries GPKG] [--atlas-cards F] [--jobs N]
+///     after the network and the water: POIs (--tlm), landings (--tlm), airports (--tlm, --osm-pbf), lifts (--osm-pbf), and the
+///     Earth positions of every region file there (places.json too)
 /// </code>
 ///
 /// <para>
-/// The check, at the end of every run: each written file read back, every Earth position taken back to LV95 at its
-/// ellipsoidal height and held to the LV95 fields within 2 cm (the bar of row 8); counts equal file by file.
+/// The check, at the end of every <c>--cube-places</c> and <c>--cube-region-files</c>: each written file read back, every Earth
+/// position taken back to LV95 at its ellipsoidal height and held to the LV95 fields within 2 cm (the bar of row 8).
 /// </para>
 /// </summary>
 public static class CubeRegionFiles
 {
-    public static bool Wants(IReadOnlyList<string> args) => args.Contains("--cube-region-files");
+    public static bool Wants(IReadOnlyList<string> args) =>
+        args.Contains("--cube-region-files") || args.Contains("--cube-places") || args.Contains("--cube-sources");
 
     /// <summary>The bar: an Earth position taken back to LV95 against the LV95 fields (m).</summary>
     public const double Bar = 0.02;
 
     public static int Run(IReadOnlyList<string> args)
     {
-        string? chunks = null, region = null;
+        string? region = null, temp = null, tlm = null, pbf = null, gwr = null, boundaries = null, cards = null, mode = null;
+        bool sitg = false;
+        int jobs = Math.Max(1, Environment.ProcessorCount / 2);
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
             {
-                case "--cube-region-files": break;
-                case "--chunks": chunks = args[++i]; break;
+                case "--cube-region-files" or "--cube-places" or "--cube-sources": mode = args[i]; break;
                 case "--cube-out": region = args[++i]; break;
-                default: Console.Error.WriteLine($"--cube-region-files: unknown option {args[i]}"); return 2;
+                case "--cube-temp": temp = args[++i]; break;
+                case "--tlm": tlm = args[++i]; break;
+                case "--osm-pbf": pbf = args[++i]; break;
+                case "--gwr": gwr = args[++i]; break;
+                case "--boundaries": boundaries = args[++i]; break;
+                case "--atlas-cards": cards = args[++i]; break;
+                case "--sitg": sitg = true; break;
+                case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+                case "--chunks":
+                    Console.Error.WriteLine($"{mode}: --chunks is gone (#1711): the region files come from the sources and the region's leaves");
+                    return 2;
+                default: Console.Error.WriteLine($"{mode}: unknown option {args[i]}"); return 2;
             }
         }
-        if (chunks == null || region == null) { Console.Error.WriteLine("--cube-region-files needs --chunks LV95_CHUNKS and --cube-out REGION"); return 2; }
-        Directory.CreateDirectory(region);
+        if (region == null || !File.Exists(Path.Combine(region, CubeManifest.FileName)))
+        {
+            Console.Error.WriteLine($"{mode} needs --cube-out REGION, a region with leaves (build its heights first: --cube)");
+            return 2;
+        }
+        temp ??= region.TrimEnd('/', '\\') + "_temp";
         var sw = Stopwatch.StartNew();
-        var ground = new LazyGround(chunks);
-        var check = new Check();
-        int files = 0;
+        var leaves = new BuiltLeaves(region);
+        var tiles = leaves.Tiles;
+        Console.WriteLine($"{mode}: {leaves.Heights.Leaves.Count} leaves over {tiles.Count} LV95 km cells");
+        if (tiles.Count == 0) return 2;
 
-        string In(string name) => Path.Combine(chunks, name);
+        if (mode == "--cube-sources")
+        {
+            if (tlm == null) { Console.Error.WriteLine("--cube-sources needs --tlm GPKG"); return 2; }
+            Directory.CreateDirectory(temp);
+            int rc = 0;
+            if (pbf != null) rc = OsmOverlay.Run(pbf, tlm, temp, tiles, jobs, geo: leaves.Geo);
+            if (rc == 0) rc = TramStopStage.Run(tiles, tlm, temp);
+            if (rc == 0 && sitg) rc = SitgSignStage.Run(tiles.ToList(), temp, force: false);
+            Console.WriteLine($"cube sources: into {temp}, {sw.Elapsed.TotalSeconds:F1} s");
+            return rc;
+        }
+
+        string Out(string name) => Path.Combine(region, name);
+        if (mode == "--cube-places")
+        {
+            if (gwr == null) { Console.Error.WriteLine("--cube-places needs --gwr data.sqlite"); return 2; }
+            int rc = PlaceStage.Run(gwr, region, tiles, tlm);
+            if (rc != 0) return rc;
+        }
+        else
+        {
+            int rc = 0;
+            if (tlm != null)
+            {
+                rc = PoiStage.Run(tlm, region, tiles, new PoiStage.Options(boundaries, pbf, gwr, Out(PoiFile.FileName), cards, jobs, leaves, leaves.Geo));
+                if (rc == 0) rc = LandingStage.Run(tiles, leaves, (e, n) => leaves.RoadsAround(e, n, LandingPlanner.RoadEndReach), tlm, Out(LandingIndex.FileName));
+                if (rc == 0 && pbf != null)
+                    rc = AirportStage.Run(tiles, leaves, leaves.Geo, leaves.Buildings.Lv95Tile, tlm, pbf, Out(AirportIndex.FileName), jobs);
+            }
+            if (rc == 0 && pbf != null)
+            {
+                var lifts = PisteStage.LoadAerialways(pbf, jobs, PisteStage.LatLonBox(tiles), leaves.Geo);
+                File.WriteAllText(Out(RopewayInfoIndex.FileName), new RopewayInfoIndex { Ropeways = lifts }.ToJson());
+                Console.WriteLine($"cube region files: {lifts.Count} aerialways written to {RopewayInfoIndex.FileName}");
+            }
+            if (rc != 0) return rc;
+        }
+
+        var check = new Check();
+        int files = AddEarthPositions(region, (e, n) => leaves.Ground(e, n) is var g && double.IsNaN(g) ? 0 : g, check, placesOnly: mode == "--cube-places");
+        Console.WriteLine($"{mode}: {files} files in Earth positions in {region}, {sw.Elapsed.TotalSeconds:F1} s");
+        return check.Report() ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The Earth positions of the region files in <paramref name="region"/>, each file read, given its <see cref="GeoPoint"/>s at
+    /// its own heights (else <paramref name="ground"/>, LHN95 at an LV95 point) and true headings, written back, read again and
+    /// checked. The number of files.
+    /// </summary>
+    public static int AddEarthPositions(string region, Func<double, double, double> ground, Check check, bool placesOnly = false)
+    {
+        int files = 0;
         string Out(string name) => Path.Combine(region, name);
 
-        if (File.Exists(In(PlaceIndex.FileName)))
+        if (File.Exists(Out(PlaceIndex.FileName)))
         {
-            var index = PlaceIndex.FromJson(File.ReadAllText(In(PlaceIndex.FileName)));
+            var index = PlaceIndex.FromJson(File.ReadAllText(Out(PlaceIndex.FileName)));
             foreach (var p in index.Places)
-                p.Geo = GeoPoint.FromLv95(p.E, p.N, p.Elevation != 0 ? p.Elevation : ground.At(p.E, p.N));
+                p.Geo = GeoPoint.FromLv95(p.E, p.N, p.Elevation != 0 ? p.Elevation : ground(p.E, p.N));
             File.WriteAllText(Out(PlaceIndex.FileName), index.ToJson());
             var back = PlaceIndex.FromJson(File.ReadAllText(Out(PlaceIndex.FileName)));
             check.Count("places", index.Places.Count, back.Places.Count);
             foreach (var p in back.Places) check.Point("places", p.Geo, p.E, p.N);
             files++;
         }
+        if (placesOnly) return files;
 
-        if (File.Exists(In(PoiFile.FileName)))
+        if (File.Exists(Out(PoiFile.FileName)))
         {
-            var data = PoiFile.Decode(File.ReadAllBytes(In(PoiFile.FileName)));
+            var data = PoiFile.Decode(File.ReadAllBytes(Out(PoiFile.FileName)));
             foreach (var p in data.Pois)
             {
                 double h = p.Elevation;
@@ -94,13 +171,13 @@ public static class CubeRegionFiles
             files++;
         }
 
-        if (File.Exists(In(LandingIndex.FileName)))
+        if (File.Exists(Out(LandingIndex.FileName)))
         {
-            var index = LandingIndex.FromJson(File.ReadAllText(In(LandingIndex.FileName)));
+            var index = LandingIndex.FromJson(File.ReadAllText(Out(LandingIndex.FileName)));
             void Ribbon(PierRibbon r) => r.GeoPoints = r.Points.Select(q => GeoPoint.FromLv95(q[0], q[1], q[2])).ToList();
             foreach (var l in index.Landings)
             {
-                double h = l.Berth?.Level ?? ground.At(l.E, l.N);
+                double h = l.Berth?.Level ?? ground(l.E, l.N);
                 l.Geo = GeoPoint.FromLv95(l.E, l.N, h);
                 if (l.Berth is { } b)
                 {
@@ -126,20 +203,20 @@ public static class CubeRegionFiles
             files++;
         }
 
-        if (File.Exists(In(AirportIndex.FileName)))
+        if (File.Exists(Out(AirportIndex.FileName)))
         {
-            var index = AirportIndex.FromJson(File.ReadAllText(In(AirportIndex.FileName)));
+            var index = AirportIndex.FromJson(File.ReadAllText(Out(AirportIndex.FileName)));
             foreach (var a in index.Airports)
             {
-                a.Geo = GeoPoint.FromLv95(a.E, a.N, ground.At(a.E, a.N));
+                a.Geo = GeoPoint.FromLv95(a.E, a.N, ground(a.E, a.N));
                 foreach (var r in a.Runways)
                 {
-                    r.Geo1 = GeoPoint.FromLv95(r.E1, r.N1, ground.At(r.E1, r.N1));
-                    r.Geo2 = GeoPoint.FromLv95(r.E2, r.N2, ground.At(r.E2, r.N2));
+                    r.Geo1 = GeoPoint.FromLv95(r.E1, r.N1, ground(r.E1, r.N1));
+                    r.Geo2 = GeoPoint.FromLv95(r.E2, r.N2, ground(r.E2, r.N2));
                 }
                 foreach (var s in a.Stands)
                 {
-                    double h = double.IsNaN(s.Ground) ? ground.At(s.E, s.N) : s.Ground;
+                    double h = double.IsNaN(s.Ground) ? ground(s.E, s.N) : s.Ground;
                     s.Geo = GeoPoint.FromLv95(s.E, s.N, h);
                     s.GeoHeading = GeoPoint.TrueBearing(s.Heading, s.E, s.N, h);
                 }
@@ -156,13 +233,13 @@ public static class CubeRegionFiles
             files++;
         }
 
-        if (File.Exists(In(RopewayInfoIndex.FileName)))
+        if (File.Exists(Out(RopewayInfoIndex.FileName)))
         {
-            var index = RopewayInfoIndex.FromJson(File.ReadAllText(In(RopewayInfoIndex.FileName)));
+            var index = RopewayInfoIndex.FromJson(File.ReadAllText(Out(RopewayInfoIndex.FileName)));
             index.Ropeways = index.Ropeways.Select(r => r with
             {
-                Geo0 = GeoPoint.FromLv95(r.E0, r.N0, ground.At(r.E0, r.N0)),
-                Geo1 = GeoPoint.FromLv95(r.E1, r.N1, ground.At(r.E1, r.N1)),
+                Geo0 = GeoPoint.FromLv95(r.E0, r.N0, ground(r.E0, r.N0)),
+                Geo1 = GeoPoint.FromLv95(r.E1, r.N1, ground(r.E1, r.N1)),
             }).ToList();
             File.WriteAllText(Out(RopewayInfoIndex.FileName), index.ToJson());
             var back = RopewayInfoIndex.FromJson(File.ReadAllText(Out(RopewayInfoIndex.FileName)));
@@ -170,52 +247,11 @@ public static class CubeRegionFiles
             foreach (var r in back.Ropeways) { check.Point("lift ends", r.Geo0, r.E0, r.N0); check.Point("lift ends", r.Geo1, r.E1, r.N1); }
             files++;
         }
-
-        if (File.Exists(In(TrafficEndpointsFile.FileName)))
-        {
-            var list = TrafficEndpointsFile.Read(In(TrafficEndpointsFile.FileName)).Select(x =>
-            {
-                double h = ground.At(x.E, x.N);
-                // the heading: radians counter-clockwise from grid east; as a grid bearing, then true
-                double grid = 90 - x.Heading * 180 / Math.PI;
-                return x with { Geo = GeoPoint.FromLv95(x.E, x.N, h), GeoHeading = GeoPoint.TrueBearing(grid, x.E, x.N, h) };
-            }).ToList();
-            TrafficEndpointsFile.Write(Out(TrafficEndpointsFile.FileName), list);
-            var back = TrafficEndpointsFile.Read(Out(TrafficEndpointsFile.FileName));
-            check.Count("traffic endpoints", list.Count, back.Count);
-            foreach (var x in back) check.Point("traffic endpoints", x.Geo, x.E, x.N);
-            files++;
-        }
-
-        Console.WriteLine($"cube region files: {files} files into {region}, {sw.Elapsed.TotalSeconds:F1} s");
-        return check.Report() ? 0 : 1;
-    }
-
-    /// <summary>The LV95 build's ground (its chunk grids, loaded on first use), 0 where it has none.</summary>
-    private sealed class LazyGround(string dir)
-    {
-        private readonly Dictionary<TileId, ChunkGrid> _grids = new();
-        private readonly HashSet<TileId> _tried = new();
-
-        public double At(double e, double n)
-        {
-            var id = TileId.FromLv95(e, n);
-            foreach (var t in (ReadOnlySpan<TileId>)[id, new TileId(id.E - 1, id.N), new TileId(id.E, id.N - 1), new TileId(id.E - 1, id.N - 1)])
-                if (_tried.Add(t) && TileRewriterGrid(dir, t) is { } g) _grids[t] = g;
-            return new Lv95Ground(_grids).Sample(e, n) ?? 0;
-        }
-
-        private static ChunkGrid? TileRewriterGrid(string dir, TileId id)
-        {
-            string path = Path.Combine(dir, ChunkFormat.ChunkFileName(id));
-            if (!File.Exists(path)) return null;
-            using var fs = File.OpenRead(path);
-            return ChunkCodec.Decode(fs);
-        }
+        return files;
     }
 
     /// <summary>Counts per file and every Earth position against its LV95 fields.</summary>
-    private sealed class Check
+    public sealed class Check
     {
         private readonly SortedDictionary<string, (int Points, double Worst, int Missing)> _points = new(StringComparer.Ordinal);
         private readonly List<string> _failures = new();
@@ -224,7 +260,7 @@ public static class CubeRegionFiles
         public void Count(string what, int lv95, int written)
         {
             _counts.Add($"{what} {written}/{lv95}");
-            if (lv95 != written) _failures.Add($"{what}: {written} written, {lv95} in the LV95 file");
+            if (lv95 != written) _failures.Add($"{what}: {written} read back, {lv95} written");
         }
 
         public void Point(string what, GeoPoint? geo, double e, double n, double bar = Bar)
@@ -250,7 +286,7 @@ public static class CubeRegionFiles
 
         public bool Report()
         {
-            Console.WriteLine("  counts (written/LV95): " + string.Join(", ", _counts));
+            Console.WriteLine("  counts (read back/written): " + string.Join(", ", _counts));
             foreach (var (what, (points, worst, missing)) in _points)
                 Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"  {what}: {points} back to LV95, worst {(what.Contains("heading") ? $"{worst:F5}°" : $"{worst * 100:F3} cm")}{(missing > 0 ? $", {missing} without an Earth position" : "")}"));

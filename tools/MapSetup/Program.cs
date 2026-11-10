@@ -524,8 +524,10 @@ static Layers ParseLayers(string text)
             "osm" => Layers.Osm | Layers.Roads,
             "pistes" => Layers.Pistes,
             "cube" => Layers.Cube,
+            // the cube region alone, no LV95 build (#1711)
+            "cube-only" => Layers.Cube | Layers.CubeOnly,
             "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places | Layers.Fields,
-            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, fields, osm, pistes, all)"),
+            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, fields, osm, pistes, cube, cube-only, all)"),
         };
     return result;
 }

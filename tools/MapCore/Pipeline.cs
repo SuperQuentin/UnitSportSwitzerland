@@ -40,6 +40,12 @@ public enum Layers
     /// latitude and longitude, and the pyramid where a global region is built. Off unless picked by name.
     /// </summary>
     Cube = 512,
+    /// <summary>
+    /// With <see cref="Cube"/>: the cube region alone, from the sources, no LV95 build (#1711, G2 D1): every LV95 step is skipped
+    /// (terrain, the features pass, RoadGen, places, fields, pistes, fingerprints); the downloads and unpacks stay. Off unless
+    /// picked by name (<c>cube-only</c>): the game reads the LV95 build until G2's D3, so a saved state without it keeps building it.
+    /// </summary>
+    CubeOnly = 1024,
 }
 
 /// <summary>What MapSetup remembers between runs, in terrain_chunks_temp/mapsetup.json.</summary>
@@ -101,7 +107,7 @@ public sealed class Step
     public string? DiskPath { get; init; }
     public double Seconds { get; init; }
     /// <summary>Why the step will not run (already done, layer off, GDAL missing); null when it runs.</summary>
-    public string? Skip { get; init; }
+    public string? Skip { get; set; }
     public Func<StepRun, Task<bool>>? Run { get; init; }
 
     /// <summary>The same step, not run, for <paramref name="why"/>.</summary>
@@ -130,9 +136,11 @@ public static partial class Planner
     private static string NationwideBuildingsZip(Paths p) => Path.Combine(p.BuildingsDir, "swissbuildings3d_3_0_2026_2056_5728.gdb.zip");
 
     /// <summary>
-    /// The cube region's steps (#1507, G2 B3 row 8), after the LV95 build they read (its chunk grids, buildings and
-    /// region files): every cube stage over the selection's LV95 box, in their order, each a <c>TerrainPreprocessor</c>
-    /// switch (docs/notes/tools/cube-region-files.md). The leaves' photos are a Godot tool mode (<c>--cubephotos</c>), run apart.
+    /// The cube region's steps (#1507, G2 B3 row 8): every cube stage over the selection's LV95 box, in their order, each a
+    /// <c>TerrainPreprocessor</c> switch (docs/notes/tools/cube-region-files.md), from the sources and the region's own leaves:
+    /// nothing of the LV95 build is read (#1711, G2 D1), so with <see cref="Layers.CubeOnly"/> it is not built at all. The
+    /// network's source files (OSM overlay, tram stops) go into the region's temp. The leaves' photos are a Godot tool mode
+    /// (<c>--cubephotos</c>), run apart.
     /// </summary>
     private static void AddCubeSteps(SetupContext c, List<Step> steps, bool wantFields, bool wantPistes, bool wantBuildings,
         Func<List<string>> buildingSources)
@@ -175,14 +183,27 @@ public static partial class Planner
         int frames = (int)Math.Clamp((free - (6L << 30)) / (5L << 30), 1, 4);
         Add("Cube buildings", "swissBUILDINGS3D with the GWR on the leaves", 20 + tiles * 0.2, !wantBuildings ? "buildings layer off" : null,
             () => ["--cube-buildings", "--cube-out", region, .. buildingSources(), "--cube-box", Box()]);
+        // the network's source files over the region's own extent (#1711): the OSM overlay and nodes (OSM layer), the tram stops
+        bool osm = c.Layers.HasFlag(Layers.Osm) && c.Layers.HasFlag(Layers.Roads);
+        Add("Cube road sources", (osm ? "the OpenStreetMap overlay and nodes, " : "") + "tram stops, into the region's temp", 10 + tiles * 0.01,
+            tlm == null ? "no swissTLM3D" : null,
+            () => osm && p.OsmPbf is { } pbf ? ["--cube-sources", "--cube-out", region, "--tlm", tlm!, "--osm-pbf", pbf] : ["--cube-sources", "--cube-out", region, "--tlm", tlm!]);
+        bool wantPlaces = c.Layers.HasFlag(Layers.Places);
+        Add("Cube places", "places.json from the GWR towns and the TLM's summits and passes, in Earth positions", 6, !wantPlaces ? "places layer off" : null,
+            () =>
+            {
+                var a = new List<string> { "--cube-places", "--cube-out", region, "--gwr", p.GwrSqlite };
+                if (tlm != null) a.AddRange(["--tlm", tlm]);
+                return a;
+            });
         Add("Cube road network", $"RoadGen's network stage on the work frames, {frames} at a time", 30 + tiles * 15.0 / frames, tlm == null ? "no swissTLM3D" : null,
-            () => ["--cube-network", "--cube-out", region, "--chunks", p.Chunks, "--osm", p.Temp, "--cube-box", Box(), "--frames-parallel", frames.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+            () => ["--cube-network", "--cube-out", region, "--cube-box", Box(), "--frames-parallel", frames.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         Add("Cube land cover", "the cover classes at every leaf vertex", 10 + tiles * 0.03, tlm == null ? "no swissTLM3D" : null,
             () => ["--cube-cover", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
         Add("Cube water", "lakes and rivers, beds and still levels on the leaves", 20 + tiles * 0.1, null,
             () => Directory.Exists(p.BathyDir) ? ["--cube-water", "--cube-out", region, "--bathy", p.BathyDir] : ["--cube-water", "--cube-out", region]);
         Add("Cube cover from the network", "street paving, tunnel roofs and laid-out car parks", 10 + tiles * 0.05, null,
-            () => ["--cube-cover-network", "--cube-out", region, "--facades", p.Chunks, "--cube-box", Box()]);
+            () => ["--cube-cover-network", "--cube-out", region, "--cube-box", Box()]);
         Add("Cube trees", "surveyed trees and the scatter, seeded from the global lattice", 10 + tiles * 0.05, tlm == null ? "no swissTLM3D" : null,
             () => ["--cube-trees", "--cube-out", region, "--tlm", tlm!, "--cube-box", Box()]);
         Add("Cube farm fields", "the fields whole into every leaf they touch", 30 + tiles * 0.01, !wantFields ? "fields layer off" : null,
@@ -194,12 +215,29 @@ public static partial class Planner
             });
         Add("Cube ski slopes", "the slopes at every leaf vertex (OSM, ODbL)", 20 + tiles * 0.01, !wantPistes ? "pistes layer off" : p.OsmPbf == null ? "no OpenStreetMap extract" : null,
             () => ["--cube-pistes", "--cube-out", region, "--osm-pbf", p.OsmPbf!, "--cube-box", Box()]);
-        Add("Cube region files", "places, POIs, landings, airports, lifts in latitude, longitude and ellipsoidal height", 5, null,
-            () => ["--cube-region-files", "--chunks", p.Chunks, "--cube-out", region]);
+        Add("Cube region files", "POIs, landings, airports, lifts from the sources on the leaves, in latitude, longitude and ellipsoidal height", 20, null,
+            () =>
+            {
+                var a = new List<string> { "--cube-region-files", "--cube-out", region };
+                if (tlm != null) a.AddRange(["--tlm", tlm]);
+                if (p.OsmPbf is { } pbf) a.AddRange(["--osm-pbf", pbf]);
+                if (File.Exists(p.GwrSqlite)) a.AddRange(["--gwr", p.GwrSqlite]);
+                var bake = Path.Combine(p.Temp, "mapsetup_bake");
+                if (Directory.Exists(bake) && Directory.GetFiles(bake, "swissboundaries3d_*.gpkg").OrderDescending(StringComparer.Ordinal).FirstOrDefault() is { } boundaries)
+                    a.AddRange(["--boundaries", boundaries]);
+                return a;
+            });
         bool global = Directory.Exists(p.CubeGlobal) && Directory.Exists(p.EtopoDir);
         Add("Cube pyramid", "levels 5-13 from the leaves into the global region", 60 + tiles * 0.3, global ? null : "no global region or ETOPO",
             () => ["--cube-swiss", "--cube-leaves", region, "--etopo", p.EtopoDir, "--cube-out", p.CubeGlobal]);
     }
+
+    /// <summary>The steps that build the LV95 tiles, skipped by <see cref="Layers.CubeOnly"/> (#1711).</summary>
+    public static readonly IReadOnlySet<string> Lv95Steps = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "Build terrain", "OpenStreetMap overlay", "Extract roads, cover and buildings", "Road network (RoadGen)", "Place index",
+        "Farm fields", "Ski slopes", "Fingerprint tiles",
+    };
 
     public static List<Step> Build(SetupContext c)
     {
@@ -596,6 +634,11 @@ public static partial class Planner
             Seconds = 3 + toBuild.Count * 0.03 + featureTiles.Count * 0.02,
             Run = r => r.Tool("TerrainPreprocessor", ["--out", p.Chunks, "--temp", p.Temp, "--manifest-hash"], LineProgress.None),
         });
+
+        // the cube region alone (#1711): no LV95 step, the cube steps read the sources and their own leaves
+        if (c.Layers.HasFlag(Layers.CubeOnly) && c.Layers.HasFlag(Layers.Cube))
+            foreach (var st in steps.Where(st => Lv95Steps.Contains(st.Title)))
+                st.Skip = "cube only: no LV95 build (#1711)";
 
         // the C# tools are built once, just before the first step that needs them
         int firstTool = steps.FindIndex(st => st.Title == "Build terrain");
