@@ -351,6 +351,11 @@ src/Terrain/Fixture/CoursePlace quick  --frame earth --locatecheck --world fixtu
 src/Terrain/Fixture/CoursePlace quick  --frame earth --climbcheck --chunks fixture:crag --systems ui,physics,adventure
 src/Terrain/Fixture/CoursePlace quick  --frame earth --flycheck thermal --time 13 --chunks fixture:crag
 src/Terrain/Fixture/CoursePlace quick  --frame earth --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Terrain/Fixture/CoursePlace quick  --frame earth --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Terrain/Fixture/CoursePlace quick  --frame earth --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+# the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
+src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
+src/Core/TestWorld       quick  --frame earth --synccheck --world flat
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 # swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit
