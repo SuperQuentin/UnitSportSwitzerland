@@ -67,7 +67,8 @@ public partial class FunRings : Node3D, IOriginContainer
     private Vector3 Position(int i)
     {
         var (x, y, h) = FunCourse.Rings[i];
-        return _origin.ToWorld(FunWorld.Start.E + x, FunWorld.Start.N + y, FunCourse.Flat + h);
+        // laid as the course is, on the Earth (#1648)
+        return _origin.ToWorld(FunWorld.At(x, y, FunCourse.Flat + h - FunCourse.Ground(x, y)));
     }
 
     private static StandardMaterial3D Neon(Color c, float energy) => new()

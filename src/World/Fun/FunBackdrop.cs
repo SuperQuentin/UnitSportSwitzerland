@@ -18,13 +18,14 @@ public partial class FunBackdrop : Node3D, IOriginContainer
 {
     public static FunBackdrop? Instance { get; private set; }
 
-    private readonly ChunkManager? _chunks;
     private readonly WorldOrigin _origin;
     private readonly Godot.Environment _environment;
     private MeshInstance3D? _floor;
     private Vector3 _holeAt = new(float.NaN, 0, 0);
-    private double _tilesMinE, _tilesMinN, _tilesMaxE, _tilesMaxN;
-    private static readonly double StartE = FunWorld.Start.E, StartN = FunWorld.Start.N;
+
+    /// <summary>The corners of the course's ground the floor has a hole over, on the Earth (#1648).</summary>
+    private GlobalPos[] _ground = [];
+    private Vector2 _floorAt = new(float.NaN, 0);
 
     // the palette: hot pink, cyan, violet, sunset yellow
     public static readonly Color Pink = new(1f, 0.18f, 0.72f), Cyan = new(0.15f, 0.92f, 1f),
@@ -33,15 +34,14 @@ public partial class FunBackdrop : Node3D, IOriginContainer
     /// <summary>The floor's height under the flat course, so the terrain hides it wherever the course is.</summary>
     private const float FloorDrop = 0.8f;
 
-    public FunBackdrop(ChunkManager? chunks, WorldOrigin origin, Godot.Environment environment)
+    public FunBackdrop(WorldOrigin origin, Godot.Environment environment)
     {
         Name = "FunBackdrop";
-        _chunks = chunks;
         _origin = origin;
         _environment = environment;
     }
 
-    public FunBackdrop() : this(null, null!, null!) { }
+    public FunBackdrop() : this(null!, null!) { }
 
     public override void _EnterTree() => Instance = this;
 
@@ -54,13 +54,10 @@ public partial class FunBackdrop : Node3D, IOriginContainer
     {
         Restyle(_environment);
         var course = FunCourse.Create();
-        // the course's tiles, as its source covers them
-        var (minX, minY, maxX, maxY) = course.Bounds(0);
-        var lo = TileId.FromLv95(StartE + minX, StartN + minY);
-        var hi = TileId.FromLv95(StartE + maxX, StartN + maxY);
-        // lo's south-west corner and hi's north-east one, in the tiles' own frames
-        (_tilesMinE, _tilesMinN) = lo.Global(0, ChunkFormat.TileSizeM);
-        (_tilesMaxE, _tilesMaxN) = hi.Global(ChunkFormat.TileSizeM, 0);
+        // the course's ground, inside what its tiles or leaves cover (its box and a 400 m margin round its roads, #1648):
+        // laid as the course is, so the hole is over it in either world
+        var (minX, minY, maxX, maxY) = course.Bounds(course.Roads.Count == 0 ? 50 : 350);
+        _ground = [FunWorld.At(minX, minY, 0), FunWorld.At(maxX, minY, 0), FunWorld.At(minX, maxY, 0), FunWorld.At(maxX, maxY, 0)];
         _floor = new MeshInstance3D
         {
             Name = "GridFloor",
@@ -91,14 +88,31 @@ public partial class FunBackdrop : Node3D, IOriginContainer
         // the floor under the camera, snapped to its own grid so the lines never slide
         if (_floor == null || GetViewport()?.GetCamera3D() is not { } cam) return;
         var p = cam.GlobalPosition;
-        float flat = (float)FunCourse.Flat - FloorDrop;
-        _floor.GlobalPosition = new Vector3(Mathf.Snapped(p.X, 100f), flat, Mathf.Snapped(p.Z, 100f));
-        // the hole where the course's tiles are, in this frame: set again only when the origin moved
-        var corner = _origin.ToWorld(_tilesMinE, _tilesMaxN, 0);
-        if (corner == _holeAt) return;
+        var snapped = new Vector2(Mathf.Snapped(p.X, 100f), Mathf.Snapped(p.Z, 100f));
+        // the hole over the course's ground, in this frame: set again only when the origin moved
+        var corner = _origin.ToWorld(_ground[0]);
+        bool moved = corner != _holeAt;
+        if (snapped != _floorAt || moved)
+        {
+            // the floor's height under the camera in this frame (#1648): the flat world's is the course's height; the earth
+            // world's falls away with the round Earth from its anchor, re-anchored under the camera (C3, every few km)
+            _floorAt = snapped;
+            var under = _origin.ToGlobal(new Vector3(snapped.X, p.Y, snapped.Y));
+            _floor.GlobalPosition = _origin.ToWorld(under.WithAlt(FunCourse.Flat - FloorDrop)) with { X = snapped.X, Z = snapped.Y };
+        }
+        if (!moved) return;
         _holeAt = corner;
-        var far = _origin.ToWorld(_tilesMaxE, _tilesMinN, 0);
-        ((ShaderMaterial)_floor.MaterialOverride).SetShaderParameter("hole", new Vector4(corner.X, corner.Z, far.X, far.Z));
+        float x0 = float.MaxValue, z0 = float.MaxValue, x1 = float.MinValue, z1 = float.MinValue;
+        foreach (var g in _ground)
+        {
+            var w = _origin.ToWorld(g);
+            (x0, z0, x1, z1) = (Mathf.Min(x0, w.X), Mathf.Min(z0, w.Z), Mathf.Max(x1, w.X), Mathf.Max(z1, w.Z));
+        }
+        var material = (ShaderMaterial)_floor.MaterialOverride;
+        material.SetShaderParameter("hole", new Vector4(x0, z0, x1, z1));
+        // the lines laid from the course's start, so a re-anchor that is no whole number of spacings never slides them
+        var start = At(0, 0, 0);
+        material.SetShaderParameter("grid_origin", new Vector2(start.X, start.Z));
     }
 
     /// <summary>
@@ -126,7 +140,7 @@ public partial class FunBackdrop : Node3D, IOriginContainer
 
     /// <summary>A course point (metres from the start) in this world's space, <paramref name="lift"/> over the course's ground.</summary>
     private Vector3 At(double x, double y, float lift) =>
-        _origin.ToWorld(StartE + x, StartN + y, FunCourse.Ground(x, y) + lift);
+        _origin.ToWorld(FunWorld.At(x, y, lift));
 
     private static ShaderMaterial? _tube;
     private static ShaderMaterial TubeMaterial => _tube ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/neon_tube.gdshader") };

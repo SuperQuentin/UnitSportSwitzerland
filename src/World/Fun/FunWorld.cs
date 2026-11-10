@@ -16,8 +16,22 @@ public static class FunWorld
     /// <summary>The hour the sky is held at: the sun just down in the west, the blue hour, the retro sun on the horizon there.</summary>
     public const double DuskHour = 19.6;
 
-    /// <summary>Where the course starts, LV95: the default spawn on every peer (a fixture course is built round it).</summary>
-    public static (double E, double N) Start => (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+    /// <summary>
+    /// Where the course is laid on the Earth (#1648): its metres on the LV95 grid from the default spawn (the flat world,
+    /// and every server: a course online stays flat), or on the plane tangent there (the earth world's leaves, offline).
+    /// The course's own source sets the same one (<see cref="CoursePlace.Active"/>); this is decided as the world is
+    /// entered, before the source exists, for the festival field.
+    /// </summary>
+    public static CoursePlace Place => CoursePlace.Active ?? _place ?? CoursePlace.Flat(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+
+    private static CoursePlace? _place;
+
+    /// <summary>Where the course starts, on its ground: the default spawn on every peer (a fixture course is built round it).</summary>
+    public static GlobalPos Start => At(0, 0, 0);
+
+    /// <summary>A course point (metres east and north of the start) <paramref name="lift"/> metres over the course's ground, on the Earth.</summary>
+    public static GlobalPos At(double x, double y, double lift) => Place.Lv95(x, y) is var (e, n)
+        ? GlobalPos.FromLv95(e, n, FunCourse.Ground(x, y) + lift) : default;
 
     private static bool _entered;
 
@@ -25,15 +39,20 @@ public static class FunWorld
     /// The world boots in the fun world (both sides, as <see cref="WorldChoice.Active"/> is set, before the occasions,
     /// the festivals and the concerts are made): what those read is set here.
     /// </summary>
-    public static void Enter()
+    /// <param name="onLeaves">The course is played on its leaves (a client under <c>--frame earth</c>, offline).</param>
+    public static void Enter(bool onLeaves = false)
     {
         _entered = true;
+        _place = onLeaves
+            ? CoursePlace.OnEarth(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N, FunCourse.Ground(0, 0))
+            : CoursePlace.Flat(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
         Concert.ConcertDirector.WorldSeed = FunCourse.ArenaSeed;
         var (x, y, r) = FunCourse.Festival;
+        var (fe, fn) = Place.Lv95(x, y);
         var alp = FestivalCatalog.Aelplerfest();
         FestivalCatalog.Register(alp with
         {
-            Sites = [new FestivalSite("the neon festival field", Start.E + x, Start.N + y, r)],
+            Sites = [new FestivalSite("the neon festival field", fe, fn, r)],
             Days = [new FestivalDay(1, alp.Games.Select(g => g.Id).ToArray(),
                 "Every game is open on the neon festival field: the flags, the sawdust ring, the alphorns and the stone.")],
         });
@@ -53,6 +72,7 @@ public static class FunWorld
         DayNight.WorldGrade = null;
         Combat.PvpRules.Zone = null;
         Players = null;
+        _place = null;
     }
 
     /// <summary>
@@ -64,19 +84,15 @@ public static class FunWorld
 
     // ---- the PvP block (server) -------------------------------------------------------------------
 
-    /// <summary>Server: where a peer stands, LV95, or null when it has no body here.</summary>
+    /// <summary>Server: where a peer stands, or null when it has no body here.</summary>
     public static Func<long, GlobalPos?>? Players { get; set; }
 
-    /// <summary>Whether an LV95 point is in the PvP block.</summary>
-    public static bool InPvp(double e, double n) => InPvp(GlobalPos.FromLv95(e, n, 0));
-
-    /// <summary>Whether a place is in the PvP block.</summary>
+    /// <summary>Whether a place is in the PvP block: the box in course metres, the place read back onto the course as it is laid.</summary>
     public static bool InPvp(GlobalPos at)
     {
         var (x0, y0, x1, y1) = FunCourse.PvpBox;
-        // the box is in course metres on the LV95 grid (FunCourse), as the festival sites are laid
-        var l = at.Lv95;
-        double x = l.E - Start.E, y = l.N - Start.N;
+        var (e, n, _) = at.Lv95;
+        var (x, y) = Place.Course(e, n);
         return x >= x0 && x <= x1 && y >= y0 && y <= y1;
     }
 
