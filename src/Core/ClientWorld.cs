@@ -604,6 +604,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
         AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
+        // under earth the wheels find their roads on the leaves' stand-in tiles (#1649)
+        Audio.Surfaces.Source = _earth != null ? WorldSource : null;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
         {
@@ -680,7 +682,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.SteamerBerth(Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
-        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
+        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks, Ground));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -938,9 +940,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the pit of a building site driven, walked and dropped into (#619)
             new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
-                _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
+                _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot, Ground)),
             new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
-                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot)),
+                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot, Ground)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
@@ -2905,7 +2907,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _player = player = new FootPlayer { Name = "Player", Terrain = Ground };
                 AddChild(player);
             }
-            EnterFootMode(player);
+            // not before the ground under the camera is in: a toggle while the world still streams (a check pressing it
+            // 2.5 s in, the earth world's leaves slower than the tiles) would drop the body from the 4.8 km preload height
+            EnterFootWhenGrounded(player);
         }
         else
         {
@@ -2986,7 +2990,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void EnterFootWhenGrounded(FootPlayer player)
     {
-        if (SpawnPending || !GroundUnderCamera) { _pendingFoot = player; return; }
+        if (SpawnPending || !GroundUnderCamera)
+        {
+            // offline, a body a toggle just made is parked meanwhile, or it would fall from where it was made
+            if (!_networked) SetBodyParked(player, true);
+            _pendingFoot = player;
+            return;
+        }
         EnterFootMode(player);
     }
 
