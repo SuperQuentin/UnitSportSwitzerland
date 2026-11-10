@@ -34,6 +34,11 @@ public partial class FunBackdrop : Node3D, IOriginContainer
     /// <summary>The floor's height under the flat course, so the terrain hides it wherever the course is.</summary>
     private const float FloorDrop = 0.8f;
 
+    /// <summary>The floor's own size up to this height over it, m (30 km wide, fading out by 16 km): past it, it grows.</summary>
+    private const float FloorFullUpTo = 2500f, FloorFade = 16000f;
+
+    private int _floorStep;
+
     public FunBackdrop(WorldOrigin origin, Godot.Environment environment)
     {
         Name = "FunBackdrop";
@@ -99,6 +104,17 @@ public partial class FunBackdrop : Node3D, IOriginContainer
             _floorAt = snapped;
             var under = _origin.ToGlobal(new Vector3(snapped.X, p.Y, snapped.Y));
             _floor.GlobalPosition = _origin.ToWorld(under.WithAlt(FunCourse.Flat - FloorDrop)) with { X = snapped.X, Z = snapped.Y };
+        }
+        // high up the floor grows with the height, so its edge never shows (#1648): 30 km to 2.5 km up, then 12 times
+        // the height, its fade with it; in steps of a quarter, set only when the step changes
+        float above = p.Y - _floor.GlobalPosition.Y;
+        int step = above <= FloorFullUpTo ? 0 : (int)Math.Ceiling(Math.Log(above / FloorFullUpTo) / Math.Log(1.25));
+        if (step != _floorStep)
+        {
+            _floorStep = step;
+            float grow = Mathf.Pow(1.25f, step);
+            _floor.Scale = new Vector3(grow, 1f, grow);
+            ((ShaderMaterial)_floor.MaterialOverride).SetShaderParameter("fade_floor", FloorFade * grow);
         }
         if (!moved) return;
         _holeAt = corner;

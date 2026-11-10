@@ -800,7 +800,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.SkyBodies());
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
-            if (World.Globe.DataDir is { } globe)
+            // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
+            if (World.Globe.DataDir is { } globe && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
                 AddChild(_earth != null

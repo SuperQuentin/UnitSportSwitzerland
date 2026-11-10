@@ -293,7 +293,8 @@ D deletes the LV95 runtime, so every world the game can run must already work un
 - **The traffic-lights test region** (#1647): `RoadGen --test-region` and `WorldChoice.Prepare` build it only as
   LV95 `.terr` tiles; it also builds cube leaves, compared with the LV95 build, and `WorldChoice` picks them under earth.
 - **The fun world's extras** (#1648): `FunBackdrop` (LV95 tile ids, `ToWorld(E, N)`), `FunRings`, the PvP zone and
-  its LV95 start move to Earth positions; its course is already on leaves (#1614).
+  its LV95 start move to Earth positions; its course is already on leaves (#1614). **Built**: through the course's
+  `CoursePlace` (#1652), the floor following the round Earth and growing with the height, no real-Earth globe there.
 - **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
   under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
   (`Core/TestWorld`) checked. **Built** (#1652): the course's tiles laid where its leaves are (`CoursePlace`), every course's
