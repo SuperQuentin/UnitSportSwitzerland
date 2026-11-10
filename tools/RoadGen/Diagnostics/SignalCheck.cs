@@ -28,7 +28,7 @@ public static class SignalCheck
         var c = CultureInfo.InvariantCulture;
         int tiles = 0, junctions = 0, invalid = 0, overMax = 0;
         // (#711, the user's review) every approach has its main pole, and one with a left pocket its second head (a pole or an island's)
-        int approaches = 0, noMain = 0, pocketArms = 0, noSecond = 0;
+        int approaches = 0, noMain = 0, noHead = 0, innerHead = 0, pocketArms = 0, noSecond = 0;
         var poleMisses = new List<string>();
         var shapes = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var cycles = new SortedDictionary<int, int>();
@@ -95,9 +95,16 @@ public static class SignalCheck
                     bool main = s.Poles.Any(q => q.Arm == a && (q.Flags & SignalPoleFlags.Main) != 0);
                     bool second = s.Poles.Any(q => q.Arm == a && (q.Flags & SignalPoleFlags.Second) != 0);
                     if (!main) noMain++;
+                    // (#1709) where no spot on the right is clear the main head stands on the left (its second head's pole): accepted
+                    // and an approach whose line stands inside its junction's core has no ground beside it for a pole: named, a core's
+                    // fault (a merged core spanning both kerbs), not a head's
+                    bool inner = !main && !second && !float.IsNaN(s.Stops[a * 3])
+                        && tile.Junctions.Any(j => DistanceToCap(j, s.Stops[a * 3], s.Stops[a * 3 + 2]) == 0);
+                    if (inner) innerHead++;
+                    else if (!main && !second) noHead++;
                     if (p.Arms[a].LeftPocket) { pocketArms++; if (!second) noSecond++; }
                     if (!main || p.Arms[a].LeftPocket && !second)
-                        poleMisses.Add(string.Create(c, $"    {where} arm {a} heading {p.Arms[a].Heading * 180 / Math.PI:F0} deg: {(main ? "" : "no main pole")}{(!main && p.Arms[a].LeftPocket && !second ? ", " : "")}{(p.Arms[a].LeftPocket && !second ? "no second head" : "")}"));
+                        poleMisses.Add(string.Create(c, $"    {where} arm {a} heading {p.Arms[a].Heading * 180 / Math.PI:F0} deg: {(main ? "" : second ? "main head on the left only" : inner ? "no main head, its line inside the core" : "no main head")}{(!main && p.Arms[a].LeftPocket && !second ? ", " : "")}{(p.Arms[a].LeftPocket && !second ? "no second head" : "")}"));
                 }
                 int stages = p.Groups.Count(g => g.Kind == SignalGroupKind.Pedestrian && g.Half == CrossingHalf.Arriving);
                 // (and the crossings over a tram reservation in three stages, #1176: their islands' waits)
@@ -182,15 +189,15 @@ public static class SignalCheck
         log("  flasher lamps by pole (#1109, a left turn's by the left crosswalk): " + (sites.Count == 0 ? "none" : string.Join(", ", sites.Select(kv => $"{kv.Key} x{kv.Value}"))));
         foreach (var l in leftAt) log(l);
         if (nearest is { } near) log(near.Text);
-        log(string.Create(c, $"  lane records (#353): {lanes.Approaches} approaches ({lanes.Signalised} signalised, every signalised approach has one: {lanes.Missing == 0}), {lanes.Lanes} lanes, banned turns on {lanes.Banned}, bad {lanes.Bad}"));
+        log(string.Create(c, $"  lane records (#353): {lanes.Approaches} approaches ({lanes.Signalised} signalised, every signalised approach has one: {lanes.Missing == 0}), {lanes.Lanes} lanes, banned turns on {lanes.Banned}, bad {lanes.Bad}{(lanes.Why.Count > 0 ? " (" + string.Join(", ", lanes.Why.Select(kv => $"{kv.Key} x{kv.Value}")) + ")" : "")}"));
         foreach (var (_, text) in nearLanes.OrderBy(x => x.Distance).Take(8)) log(text);
-        log(string.Create(c, $"  poles (#350, #711): {approaches} approaches, {noMain} without a main pole; {pocketArms} with a left pocket, {noSecond} without its second head"));
+        log(string.Create(c, $"  poles (#350, #711): {approaches} approaches, {noMain} without a main pole on their right ({noMain - noHead - innerHead} with it on their left, accepted: no clear spot on the right, #1709; {innerHead} with none, their line inside their junction's core, accepted: the core's fault; {noHead} with no main head); {pocketArms} with a left pocket, {noSecond} without its second head"));
         foreach (var miss in poleMisses.Take(list ? int.MaxValue : 30)) log(miss);
         log(string.Create(c, $"  junction paths (#818, JPTH): {paths.Paths} on {paths.Cores} cores; ends off their lane {paths.OffLane}, points off the core {paths.OffCore}"));
         log(string.Create(c, $"  cycles over 120 s with every green at its minimum (#1161, a warning until #1120): {overMax}"));
-        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noMain == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
+        bool ok = invalid == 0 && lanes.Bad == 0 && lanes.Missing == 0 && noHead == 0 && noSecond == 0 && paths.OffLane == 0 && paths.OffCore == 0;
         log(ok ? "[signalcheck] RESULT: ok"
-            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noMain} approaches without a main pole, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
+            : $"[signalcheck] RESULT: FAILED {invalid} invalid plans, {lanes.Bad} bad lane records, {lanes.Missing} signalised approaches without one, {noHead} approaches without a main head, {noSecond} without a second head, {paths.OffLane + paths.OffCore} bad junction paths");
         return ok ? 0 : 2;
     }
 
@@ -213,7 +220,12 @@ public static class SignalCheck
         return sum;
     }
 
-    private sealed class LaneTally { public int Approaches, Signalised, Lanes, Banned, Bad, Missing; }
+    private sealed class LaneTally
+    {
+        public int Approaches, Signalised, Lanes, Banned, Bad, Missing;
+        /// <summary>The bad records by what is wrong (#1709), lane numbers left out.</summary>
+        public readonly SortedDictionary<string, int> Why = new(StringComparer.Ordinal);
+    }
 
     /// <summary>
     /// A stored plan's phases (#1161: its phases are not stored): the runs of one set of green vehicle groups (cars, riders, trams)
@@ -374,6 +386,19 @@ public static class SignalCheck
                     if (!seen.Add((a.Signal, a.SignalArm))) why.Add("second record");
                     if (arm.LeftPocket && !a.Lanes.Any(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Left)) why.Add("left pocket without its lane");
                     if (arm.RightPocket && !a.Lanes.Any(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Right)) why.Add("right pocket without its lane");
+                    // (#1709) the lanes against the plan: an arrow group's lane turns that way alone, and every car lane's moves have a
+                    // group of the arm that lets them go (its banned turns aside)
+                    var groups = s.Plan.Groups.Where(g => g.Arm == a.SignalArm).ToList();
+                    if (groups.Any(g => g.Kind == SignalGroupKind.LeftArrow) && !a.Lanes.Any(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Left))
+                        why.Add("left arrow without its lane");
+                    if (groups.Any(g => g.Kind == SignalGroupKind.RightArrow) && !a.Lanes.Any(l => l.Kind == ApproachLaneKind.Car && l.Moves == SignalMoves.Right))
+                        why.Add("right arrow without its lane");
+                    var served = SignalMoves.None;
+                    foreach (var g in groups)
+                        if (g.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) served |= g.Moves;
+                    for (int i = 0; i < a.Lanes.Count; i++)
+                        if (a.Lanes[i].Kind == ApproachLaneKind.Car && (a.Lanes[i].Moves & ~a.Banned & ~served) is var unserved && unserved != 0)
+                            why.Add($"lane {i} {unserved} in no group");
                 }
             }
             if (!a.Lanes.Any(l => l.Kind == ApproachLaneKind.Car)) why.Add("no car lane");
@@ -386,7 +411,9 @@ public static class SignalCheck
             }
             if (why.Count == 0) continue;
             t.Bad++;
-            if (t.Bad <= 10)
+            foreach (var w in why.Select(w => System.Text.RegularExpressions.Regex.Replace(w, @"lane \d+", "lane")).Distinct())
+                t.Why[w] = t.Why.GetValueOrDefault(w) + 1;
+            if (list || t.Bad <= 10)
                 log(string.Create(CultureInfo.InvariantCulture, $"  BAD lane record LV95 {lv95(tile, a.X, a.Z).E:F0},{lv95(tile, a.X, a.Z).N:F0}: {string.Join("; ", why)}"));
         }
         for (int k = 0; k < tile.Signals.Count; k++)

@@ -397,7 +397,7 @@ public static class PriorityPlanner
     public sealed class Clearance
     {
         private const double Cell = 20;
-        private readonly Dictionary<(long, long), List<(Vec2 A, Vec2 B, double Half)>> _lines = new();
+        private readonly Dictionary<(long, long), List<(Vec2 A, Vec2 B, double Half, int Link)>> _lines = new();
         private readonly Dictionary<(long, long), List<List<Vec2>>> _rings = new();
 
         public Clearance(IEnumerable<Meshing.Ribbon> ribbons, IEnumerable<Junction> junctions)
@@ -408,7 +408,7 @@ public static class PriorityPlanner
                     var a = r.Stations[i - 1].Position;
                     var b = r.Stations[i].Position;
                     foreach (var key in Cells(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), r.Profile.HalfWidth))
-                        Get(_lines, key).Add((a, b, r.Profile.HalfWidth));
+                        Get(_lines, key).Add((a, b, r.Profile.HalfWidth, r.LinkId));
                 }
             foreach (var j in junctions)
             {
@@ -420,16 +420,22 @@ public static class PriorityPlanner
         }
 
         /// <summary>True when a point (with <paramref name="margin"/> round it) is clear of every surface.</summary>
-        public bool IsClear(Vec2 p, double margin)
+        public bool IsClear(Vec2 p, double margin) => Blocking(p, margin) == Clear;
+
+        /// <summary>What <see cref="Blocking"/> returns for a clear point, and for one inside a junction's ring.</summary>
+        public const int Clear = -1, InRing = -2;
+
+        /// <summary>The link of the first ribbon within <paramref name="margin"/> of the point, <see cref="InRing"/> inside a junction, else <see cref="Clear"/> (#1709: what kept a pole off a spot).</summary>
+        public int Blocking(Vec2 p, double margin)
         {
             var key = ((long)Math.Floor(p.X / Cell), (long)Math.Floor(p.Y / Cell));
             if (_lines.TryGetValue(key, out var lines))
-                foreach (var (a, b, half) in lines)
-                    if (DistanceToSegment(p, a, b) < half + margin) return false;
+                foreach (var (a, b, half, link) in lines)
+                    if (DistanceToSegment(p, a, b) < half + margin) return link;
             if (_rings.TryGetValue(key, out var rings))
                 foreach (var ring in rings)
-                    if (Inside(ring, p)) return false;
-            return true;
+                    if (Inside(ring, p)) return InRing;
+            return Clear;
         }
 
         private static IEnumerable<(long, long)> Cells(double minX, double minY, double maxX, double maxY, double pad)
