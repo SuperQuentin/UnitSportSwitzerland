@@ -115,6 +115,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         GD.Print($"[earth] {changed.Count} leaves changed ({Store.RemoteCount} from the server): {_near.Count} loaded leaves read again");
     }
 
+    /// <summary>
+    /// The group of the leaves' collision patches (their ground with its roads and buildings): what a climb reads the cover
+    /// of, as a flat chunk's own body (#1649).
+    /// </summary>
+    public const string GroundGroup = "leaf_ground";
+
     public event Action<GroundTile>? TileEntered;
     public event Action<GroundTile>? TileUnloaded;
 
@@ -429,6 +435,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         if (faces is not { Length: >= 3 }) return;
         var (leaf, _, _) = LeafCollision.Split(key);
         var body = new StaticBody3D { Name = key.FileStem };
+        body.AddToGroup(GroundGroup);
         body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);
@@ -690,6 +697,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public void AddAnchor(Node3D anchor, bool? collision = null) => w.AddAnchor(anchor, collision);
         public void RemoveAnchor(Node3D anchor) => w.RemoveAnchor(anchor);
         public bool HasAnchor(Node3D anchor) => w.HasAnchor(anchor);
+        public IReadOnlyList<Node3D> Anchors => w._anchors;
 
         public event Action<GroundTile>? TileEntered
         {

@@ -75,6 +75,9 @@ public interface IWorldGround
 
     bool HasAnchor(Node3D anchor);
 
+    /// <summary>What the ground streams round now (for the systems that follow it: the dormant fleets, #1649).</summary>
+    IReadOnlyList<Node3D> Anchors { get; }
+
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
     event Action<GroundTile>? TileEntered;
 

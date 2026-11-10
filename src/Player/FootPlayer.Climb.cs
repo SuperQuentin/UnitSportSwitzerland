@@ -132,6 +132,8 @@ public partial class FootPlayer
         if (parent is World.TreeColliders || parent?.GetParent() is World.TreeColliders) return ClimbBody.Tree;
         // the terrain's own collision: a chunk's unnamed body (its buildings and roads have names)
         if (parent is Terrain.ChunkNode && body.Name != "BuildingBody" && body.Name != "RoadBody") return ClimbBody.Terrain;
+        // a leaf's collision patch under the earth world (#1649): its ground, roads and buildings in one body
+        if (body.IsInGroup(UnitSport.Terrain.Earth.EarthWorld.GroundGroup)) return ClimbBody.Terrain;
         return ClimbBody.Static;
     }
 

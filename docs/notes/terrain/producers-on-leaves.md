@@ -34,7 +34,7 @@ the LV95 tiles they still serve. The game reads none of them until C1 draws leav
 - Ground every 8 vertices (~10 m), bilinear, as the tile source's 10 m lattice; a `Terrain` function at every vertex.
   Roads are the course's lines cut at leaf edges. Car parks, painted lines and blocks come from the tile source's
   own planners, each record filed by its first point or middle. Trees and fields come from the course.
-- Not on leaves: ski slopes (B3 PR 7's piste adapter), the fleet (positions, not leaf data).
+- Ski slopes on leaves since C7 (#1649); the fleet is no leaf data: it is laid by the course's placement (`terrain/fixtures-on-earth`).
 - `FixtureCourseTests`: every course's leaves round-trip; every road point lies in its leaf with the ground within 2 m
   (ski lifts are cables, left out); the start stands on the course's ground; a course placed 180 km away keeps its
   metres (2×10⁻⁵); leaf cuts share ends.

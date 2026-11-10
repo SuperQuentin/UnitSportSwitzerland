@@ -15,8 +15,9 @@ namespace UnitSport.Terrain.Fixture;
 /// ~10 m, bilinear between, as the tile source holds it every 10 m; a <see cref="FixtureCourse.Terrain"/> at every
 /// vertex). Roads are the course's lines cut at leaf edges (<see cref="LeafSplit"/>); car parks, painted lines and
 /// blocks come from the tile source's own planners (the same <c>ParkingPlanner</c>), each record moved into the leaf
-/// its first point or middle lies in (<see cref="SourceTileToLeaf"/>). Trees and fields from the course. Left out:
-/// ski slopes (a piste needs the leaf adapter of B3 PR 7) and the fleet (vehicle slots are positions, not leaf data).
+/// its first point or middle lies in (<see cref="SourceTileToLeaf"/>). Trees, fields and ski slopes from the course
+/// (the slopes as the cube piste stage writes them, #1649). The fleet is no leaf data (vehicle slots are positions):
+/// <see cref="FixtureChunkSource.Place"/> puts it where these leaves have its course points.
 /// </para>
 /// </summary>
 public sealed class FixtureLeaves
@@ -41,17 +42,22 @@ public sealed class FixtureLeaves
     /// <summary>The course of <paramref name="tiles"/> placed where its LV95 start is (a notation for that latitude and longitude).</summary>
     public static FixtureLeaves At(FixtureChunkSource tiles, LeafFrames? frames = null)
     {
+        // the placement what stands on the course outside its leaves follows (the fleet, #1649): one plane for both
+        if (tiles.Place.Earth is { } placed) return new FixtureLeaves(tiles, placed, frames);
         var (e, n) = tiles.Start;
         var (lat, lon) = Lv95Source.Instance.ToLatLon(e, n);
         return new FixtureLeaves(tiles, lat, lon, frames);
     }
 
     public FixtureLeaves(FixtureChunkSource tiles, double startLatDeg, double startLonDeg, LeafFrames? frames = null)
+        : this(tiles, new CourseSource(startLatDeg, startLonDeg, tiles.Course.Ground(0, 0)), frames) { }
+
+    private FixtureLeaves(FixtureChunkSource tiles, CourseSource source, LeafFrames? frames)
     {
         _tiles = tiles;
         _course = tiles.Course;
         _frames = frames ?? LeafFrames.Swiss;
-        Source = new CourseSource(startLatDeg, startLonDeg, _course.Ground(0, 0));
+        Source = source;
         StartLeaf = SourceOnLeaf.LeafOf(Source, 0, 0);
 
         // the leaves under the course's box and its margin, the tile source's (a leaf is ~610 m: a 100 m probe misses none)
@@ -87,6 +93,7 @@ public sealed class FixtureLeaves
             Water = _course.Water is { } water ? LeafLattice.Water(on, (a, b) => water(a, b)) : null,
             Trees = Trees(on),
             Fields = Fields(on),
+            Pistes = Pistes(on),
         };
         var (roads, buildings) = FromTiles(on);
         content.Roads = roads;
@@ -104,6 +111,50 @@ public sealed class FixtureLeaves
             trees.Add(new TreeInstance((float)lx, (float)ly, (float)lz, height, 0));
         }
         return trees;
+    }
+
+    /// <summary>
+    /// The course's ski slopes on the leaf (#1649), as the tile source writes them on a tile and the cube piste stage on
+    /// a leaf (#1548): one area record per slope whose box reaches the leaf (its outline in the anchor frame, on the
+    /// ground), the slot raster at every lattice vertex inside it (row-major from the south-west), the edge mask
+    /// ramping in over <see cref="PisteFormat.EdgeRampM"/>, the groom phase across the slope; null with none.
+    /// </summary>
+    private PisteTile? Pistes(SourceOnLeaf on)
+    {
+        if (_course.Slopes.Count == 0) return null;
+        var (minA, minB, maxA, maxB) = on.Box();
+        int n = on.Side;
+        var records = new List<PisteRecord>();
+        byte[]? slot = null;
+        ushort[]? aux = null;
+        foreach (var slope in _course.Slopes)
+        {
+            double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
+            double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
+            if (maxX < minA || minX > maxA || maxY < minB || minY > maxB) continue;
+            var path = new float[slope.Outline.Length * 2];
+            for (int k = 0; k < slope.Outline.Length; k++)
+            {
+                var (x, _, z) = on.Local(slope.Outline[k].X, slope.Outline[k].Y, _course.Ground(slope.Outline[k].X, slope.Outline[k].Y));
+                (path[k * 2], path[k * 2 + 1]) = ((float)x, (float)z);
+            }
+            var (low, high, sun, steep) = FixtureChunkSource.SlopeTerrain(_course, slope);
+            records.Add(new PisteRecord(0xF0F0_0000UL + (ulong)_course.Slopes.IndexOf(slope), PisteType.Downhill, slope.Difficulty,
+                PisteGrooming.Classic, true, (float)(maxX - minX), slope.Name, "", path, low, high, sun, steep));
+            byte index = (byte)records.Count;
+            slot ??= new byte[n * n];
+            aux ??= new ushort[n * n];
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    var (x, y) = on.SourceAt(i, j);
+                    if (x < minX || x > maxX || y < minY || y > maxY || !FixtureChunkSource.Inside(slope.Outline, x, y)) continue;
+                    double edge = Math.Min(Math.Min(x - minX, maxX - x), Math.Min(y - minY, maxY - y));
+                    slot[i + j * n] = index;
+                    aux[i + j * n] = PisteFormat.PackAux((float)Math.Clamp(edge / PisteFormat.EdgeRampM, 0, 1), x - minX);
+                }
+        }
+        return records.Count == 0 ? null : new PisteTile(default, records, slot!, aux!);
     }
 
     /// <summary>The course's fields, each whole in every leaf its box reaches (as the tile source writes them per tile).</summary>

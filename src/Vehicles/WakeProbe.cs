@@ -29,14 +29,18 @@ public partial class WakeProbe : Node
     private static string Kind => CmdArgs.Value("--wakekind", notFlag: true) ?? "car";
 
     private readonly ChunkManager _chunks;
+
+    /// <summary>The world's ground: the streamer's, or the earth world's leaves (#1649).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly string? _shot;
     private readonly List<string> _fail = new();
 
-    public WakeProbe(ChunkManager chunks, WorldOrigin origin, string? shot)
+    public WakeProbe(ChunkManager chunks, WorldOrigin origin, string? shot, IWorldGround? ground = null)
     {
         Name = "WakeProbe";
         _chunks = chunks;
+        _ground = ground ?? chunks.Ground;
         _origin = origin;
         _shot = shot;
     }
@@ -69,8 +73,8 @@ public partial class WakeProbe : Node
         {
             await Frame();
             if (Time.GetTicksMsec() / 1000.0 - t0 > 90) { Done($"no dormant {Kind} near the spawn"); return; }
-            if (DormantVehicles.Instance is not { } d || _chunks.Anchors.Count == 0) continue;
-            var here = _chunks.Anchors[0].GlobalPosition;
+            if (DormantVehicles.Instance is not { } d || _ground.Anchors.Count == 0) continue;
+            var here = _ground.Anchors[0].GlobalPosition;
             found = d.Slots().Where(s => Wanted(s) && !d.IsAwake(s) && (Kind != "artic" || d.DrawnPoses(s).Length > 1))
                 .OrderBy(s => _origin.ToWorld(s.E, s.N, s.Height).DistanceSquaredTo(here))
                 .Cast<VehicleSlot?>().FirstOrDefault();
@@ -83,11 +87,11 @@ public partial class WakeProbe : Node
 
         // a body beside it, so the ground under it has collision as it has for a player walking up
         var beside = at + side * 6f + Vector3.Up * 1.5f;
-        var player = new FootPlayer { Name = "WakeProbeBody", Terrain = _chunks?.Ground };
+        var player = new FootPlayer { Name = "WakeProbeBody", Terrain = _ground };
         AddChild(player);
         player.DebugLaunch(beside, Vector3.Zero);
         double c0 = Time.GetTicksMsec() / 1000.0;
-        while (!_chunks.Ground.HasCollisionAt(at))
+        while (!_ground.HasCollisionAt(at))
         {
             player.GlobalPosition = beside;
             player.Velocity = Vector3.Zero;
