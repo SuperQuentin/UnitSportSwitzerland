@@ -296,7 +296,8 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   its LV95 start move to Earth positions; its course is already on leaves (#1614).
 - **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
   under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
-  (`Core/TestWorld`) checked.
+  (`Core/TestWorld`) checked. **Built** (#1652): the course's tiles laid where its leaves are (`CoursePlace`), every course's
+  rows pass under earth but `site` (no pit on leaves: #1653); the slopes are leaf data only (nothing reads leaf pistes yet).
 - **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
   Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
 - **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,

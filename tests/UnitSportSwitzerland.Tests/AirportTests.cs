@@ -40,7 +40,7 @@ public class AirportTests
     [Fact]
     public void FixtureAirportParksSixA320sAndTheCargoPair()
     {
-        var index = FixtureAirport.Plan(2600000, 1200000);
+        var index = FixtureAirport.Plan(CoursePlace.Flat(2600000, 1200000));
         var airport = Assert.Single(index.Airports);
         var stands = airport.Stands;
         Assert.Equal(6, stands.Count(s => s.Use == StandUse.Airliner));
@@ -120,7 +120,7 @@ public class AirportTests
     [Fact]
     public void FileRoundTrips()
     {
-        var index = FixtureAirport.Plan(2600000, 1200000);
+        var index = FixtureAirport.Plan(CoursePlace.Flat(2600000, 1200000));
         index.Airports[0].Stands[0].Ground = double.NaN;
         var back = AirportIndex.FromJson(index.ToJson());
         Assert.Equal(index.Stands().Count(), back.Stands().Count());

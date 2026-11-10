@@ -75,12 +75,15 @@ public static class AirLiftField
         return AirLift.At(p.Lv95.E, p.Lv95.N, (float)p.Alt, now, Ground);
     }
 
-    /// <summary>The thermals alive near a world point (the cues), strongest first; how many were written.</summary>
-    public static int ThermalsNear(Vector3 global, double radius, Span<Thermal> into)
+    /// <summary>
+    /// The thermals alive near a world point (the cues), strongest first; how many were written. <paramref name="ahead"/>
+    /// seconds on the clock: as they will be then (a thermal breathes, a check picks one that lasts its sortie).
+    /// </summary>
+    public static int ThermalsNear(Vector3 global, double radius, Span<Thermal> into, double ahead = 0)
     {
         if (!Permissions.LiftOn || Ground.Origin is not { } origin) return 0;
         var p = origin.ToGlobal(global);
-        return AirLift.ThermalsNear(p.Lv95.E, p.Lv95.N, radius, Net.ClockSync.SimNow, Ground, into);
+        return AirLift.ThermalsNear(p.Lv95.E, p.Lv95.N, radius, Net.ClockSync.SimNow + ahead, Ground, into);
     }
 
     /// <summary>A thermal's source as a world point (the cues place their specks there).</summary>
