@@ -35,16 +35,21 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   flat building rings, 3.5 km) its buildings come as boxes (`BuildingMeshBuilder.BuildProxies`, what flat draws past
   1 km), asked after each plan and dropped 500 m past it. Built in the leaf's anchor frame under the tile's node; the
   materials are the flat streamer's (`FurnishMaterials`), the terrain one is the world's (`FogUniforms`, restyled).
-  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes.
+  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes. Only leaves on
+  this copy's disk (`LeafStore.IsLocal`): a leaf the server streams (#1655) is never fetched for the far band, and its
+  spot keeps the coarser level.
 - **Water**: a leaf-level tile's heights are the lake's bed (#298, Lavaux's 310 m down). It is lifted to the leaf's own
   water, and to the coarser level's surface sampled under it (`FillFromAncestors`) where that is level or the leaf lies
   more than `BedM` (20 m) under it (shore vertices outside the leaf's water mask drew a wall that deep). Coarser levels
-  hold the surface; there a vertex whose eight neighbours are level within 5 cm is water (`GlobeGround.Level`: Blue
-  Marble draws inland lakes black).
+  hold the surface; there a vertex whose eight neighbours are level within 5 cm, and whose cover reads at least a little
+  water (`WaterHint`), is water (`GlobeGround.Level`: Blue Marble draws inland lakes black, near-black reads as water).
+  Past the near leaves a lake is palette ground, not the water shader (#1669).
 - **Data seen in the far view** (not fixed here): the pyramid's Swiss levels (`cube_global`, built by `--cube-swiss`
   from G1's `region14` leaves) stand the lake 3.8 m apart in places (418.4 / 422.2 m ellipsoidal) and hold a straight
-  trench ~1.5 km long by the shore east of Lavaux (at levels 12 and 13, any shader): to rebuild from B4's leaves.
+  trench ~1.5 km long by the shore east of Lavaux (at levels 12 and 13, any shader): to rebuild from B4's leaves (#1654).
 - **Holes**: NaN heights (past the data a level was built from) come from the coarser levels first
   (`GlobeGround.FillFromAncestors`, bilinear in each ancestor's lattice), then from their neighbours
   (`GlobeGround.FillHoles`, never taken for water); they drew at 0 m. A tile with no height at all is not built.
-- Checks: `GlobeGroundTests`; side-by-sides at Geneva against flat (`--origin 2500300,1117900 --at …`, a `--shot-queue`).
+- Checks: `GlobeGroundTests`; side-by-sides against flat at Geneva (`--origin 2500300,1117900 --at …`) and Lavaux
+  (2545000,1149400), street and 600 m, every style, through a `--shot-queue`. A worktree without the LFS assets cannot
+  run Realistic (it waits on its textures): copy the main checkout's `.godot/imported` first.
