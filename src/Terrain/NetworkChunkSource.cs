@@ -245,6 +245,10 @@ public sealed class NetworkChunkSource : IChunkSource
         string path = section == null ? wholePath : Path.Combine(_cacheDirectory, AssetStream.LeafCacheName(key, entry.Stamp, section));
         if (section != null && ReadCache(path) is { } part && Fits(part, section)) return part;
 
+        // Low data (#63): the near leaves are the only ground and always come; a leaf's heights alone are the globe's far
+        // view past them (and the blend's, which reads a held leaf's own), so they come from the disk and the cache only
+        if (section == LeafKind.Heights && Core.GameSettings.Current.LowDataActive) return null;
+
         var ask = new Ask(AssetKind.Leaf, default, key, (int)(section ?? 0));
         lock (_gate)
         {
