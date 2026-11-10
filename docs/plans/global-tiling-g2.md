@@ -323,7 +323,13 @@ D deletes the LV95 runtime, so every world the game can run must already work un
 
 Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
 
-### D: the flip (one PR)
+### D: the flip
+
+**Detailed plan: `docs/plans/global-tiling-g2-d.md`** (2026-11-10). From its survey: D is six PRs (D0 the bar's probes, D1
+the tools independent of LV95, D2 the flip with the stores re-keyed and the bar, D3 the game's flat runtime deleted, D4
+the LV95 build deleted, D5 `TileId` to a leaf tile name). The bar compares against flat, so it runs before flat goes. Three
+gaps block it: the earth server's fill (#1682), fixture courses online (#1683), and the server's flat-held services (#1684).
+A protocol bump is needed (RPCs carry tile ints and `BuildingKey` text). The ratchet becomes a fence (authored LV95 is notation).
 
 - Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
