@@ -63,9 +63,10 @@ public static class CubeSwiss
         var leafManifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(leavesDir, CubeManifest.FileName)));
         int leafLevel = leafManifest.LeafLevel;
         if (maxLevel >= leafLevel) { Console.Error.WriteLine($"--cube-levels must stay above the leaves' level {leafLevel}"); return 2; }
-        // the finer level's heights, level by level: the leaves first, from their .cubl bundles (#1507; G1's .cubb read too)
-        var finer = CubeCheck.ReadLeafHeights(leavesDir, jobs);
-        Console.WriteLine($"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s");
+        // the finer level's heights, level by level: the leaves first, from their .cubl bundles (#1507; G1's .cubb read too),
+        // each at its surface: a lake's still water over its bed (#1654)
+        var (finer, wet) = ReadLeafSurfaces(leavesDir, jobs);
+        Console.WriteLine($"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s, {wet} with water at its surface");
         var grid = EtopoGrid.Load(etopo, jobs);
 
         // the tiles of each level: every ancestor of a leaf, and its siblings
@@ -133,6 +134,28 @@ public static class CubeSwiss
             Console.WriteLine($"cube-swiss: {uncoloured} tiles and {colourless} levels without colour: run the colour bake (--globealbedo {outDir}), or the globe draws them white");
         Console.WriteLine($"cube-swiss: {bytes / 1e6:F1} MB in levels {minLevel}-{maxLevel}, {sw.Elapsed.TotalSeconds:F0} s, peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
         return check ? CubeGlobal.CheckEdges(built) : 0;
+    }
+
+    /// <summary>A region's leaves at their surface (<see cref="CubeSurface"/>): heights, the water over them; G1's <c>.cubb</c> as they are.</summary>
+    private static (ConcurrentDictionary<CubeKey, CubeTile> Leaves, int Wet) ReadLeafSurfaces(string dir, int jobs)
+    {
+        var leaves = Directory.GetFiles(dir, "*.cubl");
+        if (leaves.Length == 0) return (CubeCheck.ReadLeafHeights(dir, jobs), 0);
+        var tiles = new ConcurrentDictionary<CubeKey, CubeTile>();
+        int wet = 0;
+        Parallel.ForEach(leaves, new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        {
+            foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+            {
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is not { } s) continue;
+                var heights = LeafHeights.Decode(s);
+                var water = CubeLeafCodec.ReadSection(bytes, LeafKind.Water) is { } w ? LeafWater.Decode(w) : null;
+                var surface = CubeSurface.Of(heights, water);
+                if (!ReferenceEquals(surface, heights)) Interlocked.Increment(ref wet);
+                tiles[key] = surface;
+            }
+        });
+        return (tiles, wet);
     }
 
     /// <summary>
