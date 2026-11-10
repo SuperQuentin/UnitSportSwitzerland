@@ -13,16 +13,19 @@
 # (plus uncommitted and untracked ones); [area] (e.g. Loot, src/Player/) matches it instead.
 # Env: GODOT (the Godot executable; on Windows the full path of the *_console.exe, see
 #      docs/notes/general/godot-exe.md), TEST_BASE (origin/main), TEST_TIMEOUT (600 s per check),
-#      TEST_RAM_GB (3, free RAM before each light Godot run), TEST_HEAVY_RAM_GB (6, before the
-#      net/full tiers), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
+#      TEST_RAM_GB (3, free RAM for a quick check never measured), TEST_HEAVY_RAM_GB (6, for a net/full
+#      one), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
 #      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps), TEST_JOBS (net/full checks at
-#      once, default the heavy lock's slot count; 1 = one at a time), TEST_ONLY (one tier's rows alone:
+#      once, default the heavy lock's slot count; 1 = one at a time), TEST_QUICK_JOBS (quick checks at once,
+#      default a quarter of the cores and one per 5 GB, 1 to 6; 1 = one at a time), TEST_UNIT_BESIDE (0: the unit
+#      stage first, not beside the Godot checks), TEST_PEAKS (the machine-wide store of each check's measured peak
+#      RAM, default $TEMP/unitsport-check-peaks.tsv, #1702), TEST_ONLY (one tier's rows alone:
 #      `TEST_ONLY=net tools/test.sh full` runs the whole net tier), TEST_LEDGER (the results CSV, default
 #      test_output/tests/results.csv; tools/test-compare.py compares two), TEST_LIST (1: print the checks
 #      it would run, then stop), TEST_USERDATA (real: the Godot checks run on the real user://, not a
 #      fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1: skip what results.tsv
 #      already holds as PASS, to go on after a run that died, #1409).
-# Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log):
+# Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log, peak MB):
 # a run that dies keeps what it had.
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
 # (docs/notes/general/fast-checks.md); a map row whose check starts with @realtime opts out.
@@ -163,15 +166,24 @@ PEAKS=${TEST_PEAKS:-${TMPDIR:-${TEMP:-/tmp}}/unitsport-check-peaks.tsv}
 if [ -f "$PEAKS" ] && [ "$(wc -l < "$PEAKS")" -gt 6000 ]; then
   tail -n 3000 "$PEAKS" > "$PEAKS.$$" && mv -f "$PEAKS.$$" "$PEAKS"
 fi
-peak_of() { [ -f "$PEAKS" ] && awk -F'\t' -v c="$1" '$2 == c { m = $1 } END { print m }' "$PEAKS"; }
+# one line per run of a check: peak MB (0: none printed), the check, its seconds
+peak_of() { [ -f "$PEAKS" ] && awk -F'\t' -v c="$1" '$2 == c && $1 > 0 { m = $1 } END { print m }' "$PEAKS"; }
 need_mb() { # check default_gb: MB a check needs free to start, its last peak and a quarter more, else the default
   local p; p=$(peak_of "$1")
   if [ -n "$p" ] && [ "$p" -gt 0 ] 2>/dev/null; then echo $(( p + p / 4 + 256 )); else echo $(( $2 * 1024 )); fi
 }
-note_peak() { # check file: the file's peaks summed (MB, 0 for none), kept in $PEAKS for the next run
+note_peak() { # check file seconds: the file's peaks summed (MB, 0 for none), kept in $PEAKS with the seconds
   local s; s=$(guard_peak_sum "$2"); rm -f "$2"
-  [ "$s" -gt 0 ] && printf '%s\t%s\n' "$s" "$1" >> "$PEAKS"
+  printf '%s\t%s\t%s\n' "$s" "$1" "${3:-}" >> "$PEAKS"
   echo "$s"
+}
+# Longest first (#1702): the order to start checks in, by their last seconds here (never run: TEST_UNKNOWN_SECONDS,
+# 120), so a 10 min check never starts last and holds the run up alone. Prints the indexes 0..n-1.
+longest_first() { # check...
+  [ $# -eq 0 ] && return
+  printf '%s\n' "$@" | awk -F'\t' -v peaks="$PEAKS" -v unknown="${TEST_UNKNOWN_SECONDS:-120}" '
+    BEGIN { while ((getline l < peaks) > 0) { split(l, f, "\t"); if (f[3] != "") s[f[2]] = f[3] } }
+    { t = ($0 in s) ? s[$0] : unknown; printf "%d\t%d\n", t, NR - 1 }' | sort -t$'\t' -k1,1nr -k2,2n | cut -f2
 }
 
 # --- which checks -----------------------------------------------------------------------------
@@ -391,7 +403,7 @@ quick_job() { # index check: one quick check, its row in $OUT/.qrow.<index>: ver
   export GUARD_PEAK_FILE="$OUT/.peak.q$i"; rm -f "$GUARD_PEAK_FILE"
   run_one quick "$check" "$log"
   v=$(verdict $? "$log")
-  peak=$(note_peak "$check" "$GUARD_PEAK_FILE")
+  peak=$(note_peak "$check" "$GUARD_PEAK_FILE" $((SECONDS - t0)))
   grep -aq "RAM floor\|MB free (floor" "$log" && ram=1
   result_line "$check" "$v" $((SECONDS - t0)) "$log" "$peak"
   printf '%s\n%s\n%s\n%s\n\n' "$v" $((SECONDS - t0)) "$peak" "$ram" > "$OUT/.qrow.$i"
@@ -399,29 +411,40 @@ quick_job() { # index check: one quick check, its row in $OUT/.qrow.<index>: ver
 }
 
 run_quick() {
-  local n=${#QUICK[@]} i k check g need reserved running same pids=() groups=() starts=() needs=() all=() t0=$SECONDS again=()
-  echo "[test] ${n} quick checks, up to $QJOBS at once"
+  local n=${#QUICK[@]} i k p check need reserved running busy started order=() pending=() qgroup=() qneed=() pids=() groups=() starts=() needs=() all=() t0=$SECONDS again=()
+  echo "[test] ${n} quick checks, up to $QJOBS at once, longest first"
   rm -f "$OUT"/.qrow.*
   for (( i = 0; i < n; i++ )); do
-    check=${QUICK[$i]}; g=$(quick_group "$check"); need=$(need_mb "$check" "${TEST_RAM_GB:-3}")
-    while :; do
-      running=0; same=0; reserved=0
-      for k in ${!pids[@]}; do
-        if kill -0 "${pids[$k]}" 2>/dev/null; then
-          running=$(( running + 1 ))
-          [ "${groups[$k]}" = "$g" ] && same=1
-          [ $(( SECONDS - starts[k] )) -lt "${TEST_QUICK_GROW:-15}" ] && reserved=$(( reserved + needs[k] ))
-        else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]'; fi
-      done
-      [ "$same" = 0 ] && [ "$running" -lt "$QJOBS" ] && { [ "$running" = 0 ] || admit "$need" "$reserved"; } && break
-      guard_nap 0.5
+    check=${QUICK[$i]}; check=${check#@realtime }; qgroup[i]=${check%% *}
+    qneed[i]=$(need_mb "${QUICK[$i]}" "${TEST_RAM_GB:-3}")
+  done
+  order=($(longest_first "${QUICK[@]}")); pending=("${order[@]}")
+  # start the first pending check, in longest-first order, whose flag is not running and that the RAM admits
+  while [ ${#pending[@]} -gt 0 ]; do
+    running=0; reserved=0; busy=" "; started=0
+    for k in ${!pids[@]}; do
+      if kill -0 "${pids[$k]}" 2>/dev/null; then
+        running=$(( running + 1 )); busy="$busy${groups[$k]} "
+        [ $(( SECONDS - starts[k] )) -lt "${TEST_QUICK_GROW:-15}" ] && reserved=$(( reserved + needs[k] ))
+      else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]'; fi
     done
-    # alone, as before: wait for TEST_RAM_GB free, then go
-    if [ "$running" = 0 ] && ! guard_wait_ram "${TEST_RAM_GB:-3}"; then
-      printf 'FAIL\n0\n0\n0\nnot enough RAM\n' > "$OUT/.qrow.$i"; continue
+    if [ "$running" -lt "$QJOBS" ]; then
+      for p in ${!pending[@]}; do
+        i=${pending[$p]}
+        [[ $busy == *" ${qgroup[i]} "* ]] && continue
+        if [ "$running" = 0 ]; then
+          # alone, as before: wait for TEST_RAM_GB free, then go
+          if ! guard_wait_ram "${TEST_RAM_GB:-3}"; then
+            printf 'FAIL\n0\n0\n0\nnot enough RAM\n' > "$OUT/.qrow.$i"; unset 'pending[p]'; started=1; break
+          fi
+        elif ! admit "${qneed[i]}" "$reserved"; then break   # the longest waits for its RAM: no smaller one jumps it
+        fi
+        ( quick_job "$i" "${QUICK[$i]}" ) &
+        pids+=($!); all+=($!); groups+=("${qgroup[i]}"); starts+=($SECONDS); needs+=("${qneed[i]}")
+        unset 'pending[p]'; started=1; break
+      done
     fi
-    ( quick_job "$i" "$check" ) &
-    pids+=($!); all+=($!); groups+=("$g"); starts+=($SECONDS); needs+=("$need")
+    [ "$started" = 0 ] && guard_nap 0.5
   done
   [ ${#all[@]} -gt 0 ] && wait "${all[@]}" 2>/dev/null   # these jobs only: the unit stage may still be going
   if [ "$QJOBS" -gt 1 ]; then
@@ -475,7 +498,7 @@ heavy_job() { # index tier check need_mb: one check in a slot of its own, its ro
     t0=$SECONDS
     run_one "$tier" "$check" "$log"
     v=$(verdict $? "$log")
-    peak=$(note_peak "$check" "$GUARD_PEAK_FILE")
+    peak=$(note_peak "$check" "$GUARD_PEAK_FILE" $((SECONDS - t0)))
     # stopped by the RAM watchdog, not by what it checks: run again alone at the end
     grep -aq "RAM floor\|MB free (floor" "$log" && ram=1
     res="$(row "$check" "$v" $((SECONDS - t0)) "$peak" "$log")"
@@ -489,9 +512,12 @@ heavy_job() { # index tier check need_mb: one check in a slot of its own, its ro
 
 run_heavy() {
   local i n=${#HEAVY[@]} pids=() groups=() starts=() needs=() all=() k busy running reserved entry tier check g need t0=$SECONDS again=()
-  echo "[test] ${n} net/full checks, up to $JOBS at once"
+  echo "[test] ${n} net/full checks, up to $JOBS at once, longest first"
   rm -f "$OUT"/.row.*
-  for (( i = 0; i < n; i++ )); do
+  local hchecks=() order
+  for entry in "${HEAVY[@]}"; do hchecks+=("${entry#* }"); done
+  order=$(longest_first "${hchecks[@]}")
+  for i in $order; do
     entry=${HEAVY[$i]}; tier=${entry%% *}; check=${entry#* }; g=$(group_of "$check"); need=$(need_mb "$check" "${TEST_HEAVY_RAM_GB:-6}")
     # wait for a free job and room for it, for the job of the same group, and for every job before one that runs alone
     while :; do
@@ -587,7 +613,7 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
         export GUARD_PEAK_FILE="$OUT/.peak.serial"; rm -f "$GUARD_PEAK_FILE"
         run_one "$tier" "$check" "$log"
         code=$?
-        record "$check" "$(verdict $code "$log")" $((SECONDS - t0)) "$log" "$tier" "$(note_peak "$check" "$GUARD_PEAK_FILE")"
+        record "$check" "$(verdict $code "$log")" $((SECONDS - t0)) "$log" "$tier" "$(note_peak "$check" "$GUARD_PEAK_FILE" $((SECONDS - t0)))"
       done
       unset GUARD_PEAK_FILE
       [ ${#HEAVY[@]} -gt 0 ] && run_heavy

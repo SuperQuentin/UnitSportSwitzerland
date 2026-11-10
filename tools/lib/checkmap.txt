@@ -1276,7 +1276,7 @@ src/Player/ShuttlePilot        quick  --shuttlecheck europe --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck glide --world flat
 src/Player/Airliner            quick  --shuttlecheck --world flat
 src/Player/AirlinerFlight      quick  --shuttlecheck --world flat
-src/Avatar/Shuttle             quick  --cockpitcheck --world flat
+src/Avatar/Shuttle             quick  --cockpitcheck
 src/Core/OriginShifter         quick  --orbitcheck --world flat
 src/Core/WorldOrigin           quick  --orbitcheck --world flat
 src/Player/Ufo                 net    tools/orbitnetcheck.sh
