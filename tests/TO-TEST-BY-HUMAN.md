@@ -904,3 +904,12 @@ With "World frame" set to earth (or `--frame earth`): Play solo, World: Traffic 
 - [ ] Start it the first time → the loading screen says the region and its leaves are being built (up to two minutes), then you stand at J1's south-west corner on flat grass.
 - [ ] Tab to J2, J12-GE and J14 and watch a cycle at each → lights, poles, paint and traffic as on flat. Where a leaf edge crosses an arm, a pocket or a bike lane may be missing ([#1660](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1660)).
 - [ ] Host a game in that world and join from a second copy → the host builds the leaves before the server starts, and both stand on the same junctions.
+
+## Leaves streamed from the server under `--frame earth` (PR [#1662](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1662), [#1655](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1655))
+
+A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube`; a client in a window `--connect <host> --frame earth --leaves <an empty folder> --cache <an empty folder> --at 2500956,1117569` (Geneva).
+
+- [ ] Join and look round while the ground arrives → the fill (if on) gives way to the real ground in place, no hole, no fall; roads, buildings and the lake come with it.
+- [ ] Drive 5 km out of town at speed → the ground keeps up (a few seconds' wait at most at the 3 MB/s cap), the far view under the globe fills in.
+- [ ] Settings → Data: the cache grows, Clear empties it, the session's MB count rises; Low data on → near ground still comes, the far view past it stays coarser.
+- [ ] On the phone over mobile data, the metered warning, then the same join → ground arrives; note the MB on arrival.

@@ -52,6 +52,28 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
     public event Action? HorizonReceived;
 
+    /// <summary>
+    /// Under <c>--frame earth</c> (#1655): ask for the server's <see cref="Terrain.Leaves.LeafIndex"/> on join, and raise
+    /// <see cref="LeafIndexReceived"/> with it.
+    /// </summary>
+    public bool WantsLeaves { get; set; }
+
+    /// <summary>The server's leaf index arrived (#1655); fired on the sync task's thread: listeners defer to the main thread.</summary>
+    public event Action<Terrain.Leaves.LeafIndex>? LeafIndexReceived;
+
+    private Task SyncLeafIndexAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.LeafIndex, Terrain.Leaves.LeafIndex.FileName, "leaf index", "the server holds no leaves", ct,
+            bytes =>
+            {
+                if (Terrain.Leaves.LeafIndex.FromBytes(bytes) is not { } index)
+                {
+                    GD.PushWarning("[stream] the server's leaf index did not read: no leaves from it");
+                    return;
+                }
+                GD.Print($"[stream] leaf index received: {index.Count} leaves, {bytes.Length / 1024} KB");
+                LeafIndexReceived?.Invoke(index);
+            });
+
     /// <summary>True once the server manifest has been merged.</summary>
     public bool Synced { get; private set; }
 
@@ -80,11 +102,14 @@ public sealed partial class ClientTerrainSync : Node
         var http = SyncHttpAsync(ct);
         var digest = await FetchDigestAsync(ct).ConfigureAwait(false);
         long digestMs = clock.ElapsedMilliseconds;
+        // the earth world's leaves the server holds (#1655), beside the flat index: its ground waits on it, not on the tiles
+        var leaves = WantsLeaves ? SyncLeafIndexAsync(ct) : Task.CompletedTask;
         bool merged;
         try { merged = await SyncIndex(digest, ct); }
         finally { IndexFinished = true; }
         long indexMs = clock.ElapsedMilliseconds;
         await http.ConfigureAwait(false);
+        await leaves.ConfigureAwait(false);
         if (!merged) return;
         await Task.WhenAll(
             SyncPlacesAsync(digest, ct), SyncLandingsAsync(digest, ct), SyncRopewaysAsync(digest, ct),

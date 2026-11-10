@@ -137,6 +137,23 @@ public partial class Globe : Node
     private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
     private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month)> _ready = new();
     private readonly HashSet<CubeKey> _loading = new(), _want = new();
+    /// <summary>Leaf requests that came back empty (a streamed leaf not come yet, #1655): freed on the main thread, asked again.</summary>
+    private readonly ConcurrentQueue<CubeKey> _leafMissed = new();
+    /// <summary>Leaf patches to read again (<see cref="RefreshLeaves"/>): each drawn until its new one lands.</summary>
+    private readonly HashSet<CubeKey> _leafStale = new();
+    private volatile int _leafGeneration;
+
+    /// <summary>
+    /// The leaves changed under the globe (#1655: the server's leaf index arrived): every leaf patch is read again, the
+    /// old one drawn until the new one lands. Main thread.
+    /// </summary>
+    public void RefreshLeaves()
+    {
+        _leafGeneration++;
+        foreach (var key in _patches.Keys)
+            if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel) _leafStale.Add(key);
+        _nextPlan = 0;
+    }
     private readonly SemaphoreSlim _workers = new(3);
     private Shader _shader = null!;
     private int _month = 7, _epoch = int.MinValue;
@@ -253,7 +270,8 @@ public partial class Globe : Node
         // what the workers built, a few a frame (the earth world: under a time budget)
         var clock = Earth ? System.Diagnostics.Stopwatch.StartNew() : null;
         for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _ready.TryDequeue(out var r); k++)
-            if (r.Month == _month && !_patches.ContainsKey(r.Key)) Commit(r.Key, r.Arrays, r.Colour);
+            if (r.Month == _month && (!_patches.ContainsKey(r.Key) || _leafStale.Remove(r.Key))) Commit(r.Key, r.Arrays, r.Colour);
+        while (_leafMissed.TryDequeue(out var missed)) _loading.Remove(missed);
 
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
         if (!Earth)
@@ -312,6 +330,7 @@ public partial class Globe : Node
         foreach (var node in _patches.Values) node.QueueFree();
         _patches.Clear();
         _loading.Clear();
+        _leafStale.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         GD.Print($"[globe] month {month}: built again");
     }
@@ -352,6 +371,8 @@ public partial class Globe : Node
         _want.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, eyeDir, horizon, focal);
         foreach (var (key, node) in _patches) node.Visible = _want.Contains(key);
+        // leaf patches read again after the server's leaves came (#1655), those in view first: the old one stays drawn meanwhile
+        foreach (var key in _leafStale) if (_want.Contains(key)) Request(key);
     }
 
     private void Select(CubeKey key, EcefPos eye, EcefPos eyeDir, double horizon, double focal)
@@ -391,19 +412,21 @@ public partial class Globe : Node
 
     private void Request(CubeKey key)
     {
-        if (_patches.ContainsKey(key) || _loading.Contains(key)) return;
+        if ((_patches.ContainsKey(key) && !_leafStale.Contains(key)) || _loading.Contains(key)) return;
         // the earth world's last level: a leaf's own heights, no colour of its own yet
         if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel && Leaves is { } leaves)
         {
             if (!leaves.Has(key)) return;   // past the fill's domain: the parent's tile stays
             _loading.Add(key);
-            int leafMonth = _month;
+            int leafMonth = _month, generation = _leafGeneration;
             _ = Task.Run(async () =>
             {
                 await _workers.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    if (leaves.HeightsOf(key) is { } tile) _ready.Enqueue((key, Build(tile), null, leafMonth));
+                    // nothing yet (a streamed leaf not come, #1655), or read before a RefreshLeaves: asked again
+                    if (leaves.HeightsOf(key) is { } tile && generation == _leafGeneration) _ready.Enqueue((key, Build(tile), null, leafMonth));
+                    else _leafMissed.Enqueue(key);
                 }
                 catch (Exception e)
                 {
@@ -547,7 +570,10 @@ public partial class Globe : Node
     {
         _loading.Remove(key);
         var node = Patch(key, arrays, colour, _shader);
-        node.Visible = false;
+        // a leaf patch read again (#1655) takes the old one's place and its visibility
+        bool shown = false;
+        if (_patches.Remove(key, out var old)) { shown = old.Visible; old.QueueFree(); }
+        node.Visible = shown;
         AddChild(node);
         node.Transform = Place(key);
         _patches[key] = node;

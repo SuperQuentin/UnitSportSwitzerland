@@ -2184,6 +2184,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Merges the server's tile list so tiles this client never shipped with become streamable.
         _terrainSync = new ClientTerrainSync(_streamer!, _chunks!) { ServerKey = _serverKey, CachedIndexMerged = _cachedIndexMerged };
+        // the earth world's leaves this copy lacks come from the server (#1655): its index, then each leaf by key through
+        // the tile cache; what was drawn, blended or collided before it came is read again
+        if (_earth is { } earthWorld && _chunkSource is { } leafCache && !earthWorld.Leaves.IsFixture)
+        {
+            _terrainSync.WantsLeaves = true;
+            _terrainSync.LeafIndexReceived += index =>
+                Callable.From(() =>
+                {
+                    if (!IsInstanceValid(earthWorld)) return;
+                    var changed = earthWorld.Store.UseRemote(index, leafCache.FetchLeaf);
+                    GD.Print($"[earth] the server's leaves: {earthWorld.Store.RemoteCount} this copy lacks, {changed.Count} changed");
+                    earthWorld.Refresh(changed);
+                    if (changed.Count > 0) GetNodeOrNull<World.Globe>("Globe")?.RefreshLeaves();
+                }).CallDeferred();
+        }
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>

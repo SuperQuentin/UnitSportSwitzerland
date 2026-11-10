@@ -12,6 +12,7 @@
 - **Android:** `DataWatch` (under `GameShell`) reads `AndroidBridge.NetworkState` every 5 s: `ConnectivityManager.isActiveNetworkMetered` and `getRestrictBackgroundStatus() == 3` (data saver on). A change of data saver raises `GameSettings.NotifyChanged`, so the terrain re-reads its rings mid-session.
 - **Metered warning:** `GameShell.Join` asks once per session: "Use Low data", "Join anyway" or "Never ask" (`Modal.Choose`), with `StreamEstimate`'s numbers.
 - **Counter:** `ChunkStreamer.SessionBytes` is static across every server joined. The log prints `[stream] N MB received this session` every 10 MB, and the perf overlay shows it.
+- **Under `--frame earth`** (#1655, `net/leaf-streaming`): streamed leaves go in the same tile cache (cap, Clear, trim, counter); Low data keeps the near leaves (the only ground) and fetches no far leaf heights for the globe.
 
 ## Measured (Oct 2026)
 
