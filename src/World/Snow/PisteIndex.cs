@@ -14,19 +14,19 @@ namespace UnitSport.World.Snow;
 /// </summary>
 public sealed class PisteIndex
 {
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _terrain;
     private readonly ConcurrentDictionary<TileId, PisteTile?> _tiles = new();
     private readonly HashSet<TileId> _loading = new();
     private readonly Dictionary<TileId, ulong> _lastAsked = new();
     private ulong _frame;
 
-    public PisteIndex(ChunkManager chunks) => _chunks = chunks;
+    public PisteIndex(IWorldGround chunks) => _terrain = chunks;
 
     /// <summary>The slope under a world point, or null (none, or its tile is still loading). Main thread.</summary>
     public PisteRecord? At(Vector3 world, out float mask)
     {
         mask = 0;
-        if (_chunks.Origin is not { } origin) return null;
+        if (_terrain.Origin is not { } origin) return null;
         var (e, n) = origin.ToLv95(world);
         var tile = Tile(TileId.FromLv95(e, n));
         if (tile == null) return null;
@@ -41,7 +41,7 @@ public sealed class PisteIndex
     {
         _lastAsked[id] = _frame;
         if (_tiles.TryGetValue(id, out var tile)) return tile;
-        if (_chunks.Source is { } source && _loading.Add(id))
+        if (_terrain.Content is { } source && _loading.Add(id))
             Task.Run(async () =>
             {
                 PisteTile? t = null;

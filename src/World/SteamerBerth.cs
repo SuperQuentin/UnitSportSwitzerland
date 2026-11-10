@@ -53,8 +53,10 @@ public partial class SteamerBerth : Node
     /// <summary>Nyon's berth alongside its pier, when the landings have one that floats the steamer.</summary>
     public static LandingBerth? PierBerth => Landings.Find(LandingName)?.Berth is { Fits: true } b ? b : null;
 
-    /// <summary>The tile that places it: the berth's, else the old landing point's.</summary>
-    private TileId Tile => PierBerth is { } b ? TileId.FromLv95(b.E, b.N) : TileId.FromLv95(_e, _n);
+    /// <summary>The ground's tile that places it, flat or a leaf (#1684): the berth's, else the old landing point's.</summary>
+    private GroundTile? Tile => _chunks.Origin is { } origin
+        ? _chunks.TileAt(PierBerth is { } b ? origin.ToWorld(b.E, b.N, 0) : origin.ToWorld(_e, _n, 0))
+        : null;
 
     public override void _Ready()
     {
@@ -75,8 +77,7 @@ public partial class SteamerBerth : Node
 
     private async void OnTileEntered(GroundTile tile)
     {
-        var id = tile.Lv95Tile;
-        if (id != Tile || _busy || !Decides) return;
+        if (_busy || !Decides || tile != Tile) return;
         if (VehicleManager.Instance is not { } vehicles || _chunks.Origin is not { } origin) return;
         if (vehicles.GetNodeOrNull<VehicleBody>(BerthName) is { Wrecked: false }) return;
         _busy = true;

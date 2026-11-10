@@ -67,6 +67,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>The world's ground: what gameplay asks.</summary>
     public IWorldGround Ground => _ground ??= new LeafGround(this);
 
+    /// <summary>
+    /// What its tiles hold by name (#1684, <see cref="IWorldGround.Content"/>): the leaves' stand-ins over the region's
+    /// files, <see cref="Source"/> of the world's chunk source; set by whoever builds the world.
+    /// </summary>
+    public IChunkSource? Content { get; set; }
+
     /// <summary>The camera's position, or null: a focus of the streaming besides the anchors.</summary>
     public Func<Vector3?>? Camera { get; set; }
 
@@ -694,6 +700,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private sealed class LeafGround(EarthWorld w) : IWorldGround
     {
         public WorldOrigin? Origin => w.Origin;
+        public IChunkSource? Content => w.Content;
         public bool TryGetHeight(Vector3 worldPos, out float height) => w.HeightAt(worldPos, out height);
 
         public bool TryGetSurface(Vector3 worldPos, out float height)

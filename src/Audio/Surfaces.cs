@@ -34,11 +34,6 @@ public static class Surfaces
     /// </summary>
     public static WorldOrigin? Origin { get; set; }
 
-    /// <summary>
-    /// The world's own tiles when they are not the streamer's: the earth world's leaves as stand-in tiles (#1649), whose
-    /// roads a wheel or a foot is on. Null: the streamer's source.
-    /// </summary>
-    public static IChunkSource? Source { get; set; }
 
     private const float RoadYTolerance = 2.5f;   // a road under a bridge is not the one being walked
     private const float CacheSeconds = 0.25f;
@@ -135,10 +130,10 @@ public static class Surfaces
 
     private static Surface? RoadUnder(IWorldGround chunks, Vector3 feet)
     {
-        if (Origin is not { } origin || (Source ?? ChunkManager.Of(chunks)?.Source) is not { } source) return null;
+        // the ground's own tiles (#1684): an earth leaf's stand-in, placed by the origin's stand-in frames
+        if (Origin is not { } origin || chunks.Content is not { } source) return null;
         Watch(chunks);
-        // a leaf's stand-in tile under the earth world, placed by the origin's stand-in frames
-        var tile = Source != null ? chunks.TileAt(feet).Lv95Tile : origin.TileAt(feet);
+        var tile = chunks.ContentName(chunks.TileAt(feet));
         if (!Roads.TryGetValue(tile, out var index))
         {
             // fetched once through the (cached) chunk source; until it lands there is simply no road
@@ -281,7 +276,8 @@ public static class Surfaces
 
     private static void Evict(GroundTile tile)
     {
-        var id = tile.Lv95Tile;
+        if (_watched is not { } ground) return;
+        var id = ground.ContentName(tile);
         Roads.Remove(id);
         Loading.Remove(id);
     }

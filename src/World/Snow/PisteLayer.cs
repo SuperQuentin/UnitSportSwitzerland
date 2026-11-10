@@ -121,7 +121,7 @@ public partial class PisteLayer : Node
 
     private void Tag(TileId id, int layer)
     {
-        _chunks.Ground.GroundAt(GroundTile.FromLv95(id))?.SetInstanceShaderParameter(PisteLayerParam, layer);
+        _chunks.GroundMeshAt(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
         if (_chunks.RoadsAt(id) is { } roads) TagRoads(roads, layer);
     }
 
@@ -154,7 +154,7 @@ public partial class PisteLayer : Node
                     if (_shown.TryGetValue(id, out var shown))
                     {
                         // a tile rebuilt or reloaded has new ground or road nodes: tell them its layer again
-                        if (_chunks.Ground.GroundAt(GroundTile.FromLv95(id)) is { } ground && ground.GetInstanceId() != shown.Ground)
+                        if (_chunks.GroundMeshAt(id) is { } ground && ground.GetInstanceId() != shown.Ground)
                         {
                             ground.SetInstanceShaderParameter(PisteLayerParam, shown.Layer);
                             _shown[id] = shown = shown with { Ground = ground.GetInstanceId() };

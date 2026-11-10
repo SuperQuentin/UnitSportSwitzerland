@@ -593,6 +593,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
             _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
+            // what its tiles hold, by name (#1684): the leaves' stand-ins over the region's files
+            _earth.Content = WorldSource;
             // the leaves' ground in the style kit's terrain material (#1634): fog and the settings reach it as the tiles'
             FogUniforms.Apply(_earth.GroundMaterial);
             _worldMaterials = [.. _worldMaterials, _earth.GroundMaterial];
@@ -612,8 +614,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
         AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
-        // under earth the wheels find their roads on the leaves' stand-in tiles (#1649)
-        Audio.Surfaces.Source = _earth != null ? WorldSource : null;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
         {
@@ -681,7 +681,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Audio.Live.WebRadioCheck.Create(() => LocalPlayer, () => _players, networked: false) is { } webRadioOffline) AddChild(webRadioOffline);
         }
         // the Africa Twin at Riddes: placed here offline, by the server online
-        AddChild(new World.AfricaTwinEgg(_chunks));
+        AddChild(new World.AfricaTwinEgg(Ground!));
         // the cars already standing in the car parks (#499); the server promotes one when it is
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
@@ -690,7 +690,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.SteamerBerth(Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
-        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks, Ground));
+        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(Ground!));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -747,7 +747,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             Occasions.OccasionManager.Create(this);
             // their props, dressed onto each tile as its buildings load
-            AddChild(new Occasions.OccasionDecor(_chunks, origin, _cache));
+            AddChild(new Occasions.OccasionDecor(Ground!, origin));
             // …the creatures in the air around the camera, and their sounds
             AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
@@ -771,7 +771,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
                 AddChild(_pistes);
             }
-            AddChild(new World.Snow.SlopeMarkers(_chunks, snow));
+            AddChild(new World.Snow.SlopeMarkers(Ground!, snow));
         }
         // the ski lifts (#912): the lines from the road tiles, the carriers on the shared clock
         if (Systems.On(Systems.Lifts))
@@ -782,13 +782,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
-        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(_chunks));   // neon over every venue (#1232)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueSigns(Ground!));   // neon over every venue (#1232)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueFronts(_chunks));   // glazed fronts of shop units and venues (#1292)
-        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(_chunks, WorldSource!));   // tables out front (#1243)
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.VenueTerraces(Ground!, WorldSource!));   // tables out front (#1243)
         // the IKEA totem out by the road (#501), the same tile hook as the door signs
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
         // tonight's concert in each stadium (#885)
-        AddChild(new Concert.ConcertDirector(_chunks));
+        AddChild(new Concert.ConcertDirector(Ground!));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.

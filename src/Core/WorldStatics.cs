@@ -23,7 +23,6 @@ public static class WorldStatics
         Interiors.DoorIndex.Clear();
         Vehicles.GarageUi.GarageNear = null;
         Audio.Surfaces.Origin = null;
-        Audio.Surfaces.Source = null;
         Audio.Surfaces.Forget();
         Occasions.OccasionTowns.UseGenerated(null);
         WorldChoice.Active = null;   // back to the open world for the title (#999)
