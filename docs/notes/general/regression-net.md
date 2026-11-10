@@ -116,7 +116,9 @@ tools/refshot-parity.sh c6-<commit>
 - **Expected differences** are lines of `tests/refshots/earth-vs-flat.txt` (`refshot-diff.py --expect`): `judge`
   takes a view or `class:<c>` out of the count into "judged by eye" (`far` and `edge`: curvature is geometry on
   earth, #187; `space` until #1630/#1631), `mask x0,y0,x1,y1` leaves a part of the picture out of the numbers
-  (grey on the heatmap). Each line says why; remove it once its difference is gone.
+  (grey on the heatmap). Each line says why; remove it once its difference is gone. `judge N%` judges a view only
+  while its changed share is at most N %, so a new difference in a judged view still fails: `villeneuve_a9`'s
+  tree seeds are 12.5 % under `judge 20%`, and Léman over its meadow (55 %, #1696) had slipped through a bare `judge`.
 - **A fresh worktree** needs `git lfs pull` and a headless `--import` (with `dotnet build`) before any windowed
   shot: without them the fonts and the space and realistic textures are missing from every picture (the import
   marks an LFS pointer file `valid=false` and rewrites its `.import`; `git checkout -- assets` after a pull).

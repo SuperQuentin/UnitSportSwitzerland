@@ -2,10 +2,11 @@
 # tools/refshot-diff.py --expect (tools/refshot-parity.sh). Everything not named here must be within its noise
 # floor at 1/8 scale (the scale already forgives the leaves' tile patterns drawn at another phase, #1512).
 #
-#   <view | class:<class> | <style>/<view>>  judge | mask x0,y0,x1,y1 [...]  -- why
+#   <view | class:<class> | <style>/<view>>  judge [N%] | mask x0,y0,x1,y1 [...]  -- why
 #
 # judge  the shot is left out of the pass/fail count and listed as judged by eye, its numbers and sheet shown:
-#        "no worse than flat" is a person's call there
+#        "no worse than flat" is a person's call there; with N% only while its changed share is at most N %, past
+#        that it counts as over (a ceiling over what the line excuses, so a new difference in the view still fails)
 # mask   that part of the picture (fractions of its width and height, from the top left) is left out of the
 #        numbers and drawn grey on the heatmap; the rest still has to be within the floor
 # Keep each line's reason. A line goes once the difference it excuses is gone or measured another way.
@@ -31,7 +32,7 @@ jorat_forest      judge  -- trees seeded per cube lattice vertex on earth, per L
 sauvabelin_town   judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551)
 sauvabelin_night  judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551)
 riddes_top        judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551): the slope's forest
-villeneuve_a9     judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551): the meadow's trees
+villeneuve_a9     judge 20%  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551): the meadow's trees (12.5 %; Léman over the plain was 55 %, #1696)
 # - invented fill: ground past the real tiles (2548/1148 has no LV95 tile) is generated on both sides, each its own way;
 #   the lake band at its back is #1669's, still looked at by eye on each run
 lavaux_bonfires   judge  -- invented fill past the real tiles on both sides (flat's generated forest, earth's fill); the lake band is #1669
