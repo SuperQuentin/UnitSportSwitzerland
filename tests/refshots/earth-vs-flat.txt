@@ -39,3 +39,8 @@ lavaux_bonfires   judge  -- invented fill past the real tiles on both sides (fla
 riddes_aerial     judge  -- the far valley without villages, rivers or roads until #1657
 riddes_valley     judge  -- the far valley without villages, rivers or roads until #1657
 riddes_low        judge  -- the far valley without villages, rivers or roads until #1657
+riddes_house      judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
+riddes_street     judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
+riddes_chase      judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
+riddes_night      judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
+geneva_quai       judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
