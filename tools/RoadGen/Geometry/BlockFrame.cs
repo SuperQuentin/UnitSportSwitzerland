@@ -22,6 +22,19 @@ public sealed class BlockFrame : IUnits
 
     private readonly double _west, _north;
 
+    /// <summary>
+    /// Where the frame's centre lies in its own coordinates, m (#1691): every point within <see cref="Reach"/> of it has both
+    /// coordinates in [8192, 16384), one binade, where a float is a multiple of 2^-10 m (~1 mm) and a double of 2^-39 m. The
+    /// frame's corner is on the 2 m lattice, so a point rounds to the same place on the plane in every block's frame, and sums
+    /// and differences of such points round alike too: a block plans the same numbers wherever its centre is. Centred on 0
+    /// instead, a float's step doubled at every power of two out from a centre that moved with the block (a junction 1,020 m
+    /// from one block's centre and 300 m from another's rounded differently, and a 6 m shift of a frame changed cores by 25 m2).
+    /// </summary>
+    public const double Centre = 12288;
+
+    /// <summary>How far from the centre a point keeps the frame's one rounding (<see cref="Centre"/>), m.</summary>
+    public const double Reach = 4096;
+
     public IUnits Real { get; }
 
     /// <param name="centre">The frame's centre on the plane (snapped to 2 m: the km caches' lattices stay where they are).</param>
@@ -29,8 +42,8 @@ public sealed class BlockFrame : IUnits
     {
         Real = real;
         double cx = 2 * Math.Round(centreX / 2), cy = 2 * Math.Round(centreY / 2);
-        _west = cx - real.TileSizeM / 2;
-        _north = cy + real.TileSizeM / 2;
+        _west = cx - Centre;
+        _north = cy + Centre;
     }
 
     /// <summary>The frame centred on a block: the middle of its tiles' squares.</summary>

@@ -12,7 +12,7 @@ namespace UnitSport.Interiors;
 /// (<see cref="PlankSign"/>), or nothing here when their name is on their awning's valance
 /// (<see cref="VenueTerraces.HasAwning"/>). A hall that takes its whole building gets its glazed front
 /// and canopy (<see cref="HallFront"/>), its name over the canopy and its big word near the roof.
-/// Client only, on <see cref="ChunkManager.TileFurnished"/> like <see cref="BankSigns"/> (which leaves a
+/// Client only, on <see cref="IWorldGround.TileFurnished"/> like <see cref="BankSigns"/> (which leaves a
 /// venue's door to this one); parented to the tile's node, so the signs unload with it.
 /// </summary>
 public partial class VenueSigns : Node
@@ -22,13 +22,13 @@ public partial class VenueSigns : Node
     /// <summary>A hall's big sign: its letters, and how far over the name sign it hangs (clear of the name's icon).</summary>
     private const float BigLetters = 1.2f, BigAbove = 2.4f;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private ShaderMaterial _material = null!;
 
-    public VenueSigns(ChunkManager chunks)
+    public VenueSigns(IWorldGround ground)
     {
         Name = "VenueSigns";
-        _chunks = chunks;
+        _ground = ground;
     }
 
     public VenueSigns() : this(null!) { }
@@ -39,8 +39,8 @@ public partial class VenueSigns : Node
         _material.SetShaderParameter("flicker", 0f);
         FogUniforms.Apply(_material);
         GameSettings.Changed += ApplyFog;
-        _chunks.Ground.TileFurnished += OnFurnished;
-        _chunks.Ground.TileUnfurnished += OnUnfurnished;
+        _ground.TileFurnished += OnFurnished;
+        _ground.TileUnfurnished += OnUnfurnished;
     }
 
     private void ApplyFog() => FogUniforms.Apply(_material);
@@ -48,9 +48,9 @@ public partial class VenueSigns : Node
     public override void _ExitTree()
     {
         GameSettings.Changed -= ApplyFog;
-        if (_chunks == null) return;
-        _chunks.Ground.TileFurnished -= OnFurnished;
-        _chunks.Ground.TileUnfurnished -= OnUnfurnished;
+        if (_ground == null) return;
+        _ground.TileFurnished -= OnFurnished;
+        _ground.TileUnfurnished -= OnUnfurnished;
     }
 
     private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
@@ -60,7 +60,7 @@ public partial class VenueSigns : Node
 
     private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
-        var id = tile.Lv95Tile;
+        var id = _ground.ContentName(tile);
         node.GetNodeOrNull(NodeName)?.QueueFree();
         Node3D? root = null;
         foreach (var d in doors)

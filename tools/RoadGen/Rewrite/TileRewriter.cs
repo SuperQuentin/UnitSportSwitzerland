@@ -415,6 +415,8 @@ public static partial class TileRewriter
                 for (int si = 0; si < tile.Segments.Count; si++) rawPieces.Add(new LineJoin.Piece(id, si, tile.Segments[si], rawKeys?[si]));
             }
             var whole = Close(rawPieces, context, real, inputs.Roads, options.CloseTiles, netStats);
+            // (#1691) in one order whatever the block: by their points on the plane, not by the order the block read its tiles in
+            whole.Sort(LineOrder);
             var frame = BlockFrame.Over(real, block);
             using var blockFrame = Plane.Use(frame);
             foreach (var line in whole)
@@ -1946,6 +1948,20 @@ public static partial class TileRewriter
                 if (Near(ax + (bx - ax) * k / steps, ay + (by - ay) * k / steps)) return true;
         }
         return false;
+    }
+
+    /// <summary>Whole lines by their first points, last point and count (#1691: a block's lines in an order no tile decides).</summary>
+    private static int LineOrder(LineJoin.Line a, LineJoin.Line b)
+    {
+        var (p, q) = (a.Points, b.Points);
+        int c;
+        for (int i = 0; i < Math.Min(2, Math.Min(p.Count, q.Count)); i++)
+        {
+            if ((c = p[i].X.CompareTo(q[i].X)) != 0 || (c = p[i].Y.CompareTo(q[i].Y)) != 0) return c;
+        }
+        if ((c = p.Count.CompareTo(q.Count)) != 0) return c;
+        if (p.Count > 0 && ((c = p[^1].X.CompareTo(q[^1].X)) != 0 || (c = p[^1].Y.CompareTo(q[^1].Y)) != 0)) return c;
+        return ((int)a.Template.Class).CompareTo((int)b.Template.Class);
     }
 
     /// <summary>The most rounds a block takes to close its lines (#1660): each reads the tiles across their open ends.</summary>
