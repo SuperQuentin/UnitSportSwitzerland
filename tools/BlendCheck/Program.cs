@@ -16,6 +16,7 @@ if (args.Contains("--roads")) return RoadBlendCheck.Run(args);
 if (args.Contains("--generated-water")) return GeneratedWaterCheck.Run(args);
 if (args.Contains("--generated-roads")) return await GeneratedRoadsCheck.Run(args);
 if (args.Contains("--leaves")) return GeneratedLeavesCheck.Run(args);
+if (args.Contains("--leaf-roads-time")) return LeafRoadsTiming.Run(args);
 if (args.Contains("--leaf-roads")) return GeneratedLeafRoadsCheck.Run(args);
 if (args.Contains("--leaf-blend")) return LeafBlendCheck.Run(args);
 

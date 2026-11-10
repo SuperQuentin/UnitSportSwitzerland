@@ -11,7 +11,7 @@ namespace UnitSport.Occasions;
 /// off again. Client only.
 ///
 /// <para>
-/// Driven by <see cref="ChunkManager.TileFurnished"/>, which fires beside
+/// Driven by <see cref="IWorldGround.TileFurnished"/>, which fires beside
 /// <see cref="DoorIndex.SetTile"/>: the doors a jack-o'-lantern stands at are exactly the doors
 /// the player can walk up to. Props are MultiMeshes <b>parented to the tile's own node</b>, so
 /// they unload with it and cost nothing to forget. The tile's road file is read too (from the
@@ -28,9 +28,8 @@ public partial class OccasionDecor : Node
 {
     public static OccasionDecor? Instance { get; private set; }
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
-    private readonly IChunkSource _source;
     private readonly Dictionary<TileId, Tile> _tiles = new();
     private ShaderMaterial _candle = null!, _steady = null!;
     private int _epoch;
@@ -44,6 +43,7 @@ public partial class OccasionDecor : Node
 
     private sealed class Tile
     {
+        public required GroundTile Ground;
         public required ChunkNode Node;
         public required DoorSpot[] Doors;
         public RoadTile? Roads;
@@ -53,15 +53,15 @@ public partial class OccasionDecor : Node
         public List<Rect2> Patches = new();
     }
 
-    public OccasionDecor(ChunkManager chunks, WorldOrigin origin, IChunkSource source)
+    /// <param name="ground">The world's ground: its tiles' events, and their roads by name (<see cref="IWorldGround.Content"/>).</param>
+    public OccasionDecor(IWorldGround ground, WorldOrigin origin)
     {
         Name = "OccasionDecor";
-        _chunks = chunks;
+        _ground = ground;
         _origin = origin;
-        _source = source;
     }
 
-    public OccasionDecor() : this(null!, null!, null!) { }
+    public OccasionDecor() : this(null!, null!) { }
 
     public override void _EnterTree() => Instance = this;
 
@@ -71,10 +71,10 @@ public partial class OccasionDecor : Node
         _steady = MakeMaterial(candle: false);
         GameSettings.Changed += ApplyFog;
 
-        _chunks.Ground.TileFurnished += OnFurnished;
-        _chunks.Ground.TileUnloaded += OnUnloaded;
-        _chunks.Ground.TileUnfurnished += OnUnfurnished;
-        _chunks.Ground.TerrainReplaced += OnReplaced;
+        _ground.TileFurnished += OnFurnished;
+        _ground.TileUnloaded += OnUnloaded;
+        _ground.TileUnfurnished += OnUnfurnished;
+        _ground.TerrainReplaced += OnReplaced;
         OccasionManager.Changed += RedecorateAll;
         OccasionTowns.Changed += RedecorateAll;
     }
@@ -85,12 +85,12 @@ public partial class OccasionDecor : Node
         GameSettings.Changed -= ApplyFog;
         OccasionManager.Changed -= RedecorateAll;
         OccasionTowns.Changed -= RedecorateAll;
-        if (_chunks != null)
+        if (_ground != null)
         {
-            _chunks.Ground.TileFurnished -= OnFurnished;
-            _chunks.Ground.TileUnloaded -= OnUnloaded;
-            _chunks.Ground.TileUnfurnished -= OnUnfurnished;
-            _chunks.Ground.TerrainReplaced -= OnReplaced;
+            _ground.TileFurnished -= OnFurnished;
+            _ground.TileUnloaded -= OnUnloaded;
+            _ground.TileUnfurnished -= OnUnfurnished;
+            _ground.TerrainReplaced -= OnReplaced;
         }
         if (Instance == this) Instance = null;
     }
@@ -133,7 +133,7 @@ public partial class OccasionDecor : Node
 
     private void OnFurnished(GroundTile ground, ChunkNode node, DoorSpot[] doors)
     {
-        var id = ground.Lv95Tile;
+        var id = _ground.ContentName(ground);
         // a tile rebuilt at another stride commits its buildings again: same doors, same roads
         if (_tiles.TryGetValue(id, out var existing) && existing.Node == node && existing.RoadsReady)
         {
@@ -145,10 +145,10 @@ public partial class OccasionDecor : Node
         // a tile furnished again before its roads came back, or on a new node: the props drawn for
         // the old entry go now, or nothing would ever take them off (a /occasion stop left them, #881)
         if (existing != null) Drop(existing);
-        var tile = new Tile { Node = node, Doors = doors };
+        var tile = new Tile { Ground = ground, Node = node, Doors = doors };
         _tiles[id] = tile;
         int epoch = _epoch;
-        _source.LoadRoadsAsync(id).ContinueWith(task =>
+        (_ground.Content?.LoadRoadsAsync(id) ?? Task.FromResult<RoadTile?>(null)).ContinueWith(task =>
         {
             if (_closing) return;
             var roads = task.IsCompletedSuccessfully ? task.Result : null;
@@ -162,12 +162,12 @@ public partial class OccasionDecor : Node
         });
     }
 
-    private void OnUnloaded(GroundTile tile) => _tiles.Remove(tile.Lv95Tile);   // the props went with the tile's node
+    private void OnUnloaded(GroundTile tile) => _tiles.Remove(_ground.ContentName(tile));   // the props went with the tile's node
 
     /// <summary>The tile shed its buildings (#553): the decorations at their doors go, back with the next furnishing.</summary>
     private void OnUnfurnished(GroundTile ground, ChunkNode node)
     {
-        if (_tiles.Remove(ground.Lv95Tile, out var tile)) Drop(tile);
+        if (_tiles.Remove(_ground.ContentName(ground), out var tile)) Drop(tile);
     }
 
     private static void Drop(Tile tile)
@@ -189,7 +189,7 @@ public partial class OccasionDecor : Node
         // real tiles merged into the generated fill: only the tiles whose ground changed were
         // unloaded (TileUnloaded has dropped them already); a decoration still waiting for one
         // finds its entry gone and gives up, the rest carry on
-        foreach (var id in _tiles.Keys.Where(id => affected(GroundTile.FromLv95(id))).ToList())
+        foreach (var id in _tiles.Where(kv => affected(kv.Value.Ground)).Select(kv => kv.Key).ToList())
             if (_tiles.Remove(id, out var tile)) Drop(tile);
     }
 
@@ -233,8 +233,8 @@ public partial class OccasionDecor : Node
             // doorsteps on the ground only: a lantern or a gift at a raised door (#827) stood on the walkway
             Doors = Array.FindAll(tile.Doors, d => d.Level == 0),
             Roads = tile.Roads,
-            HeightAtWorld = p => _chunks.Ground.TryGetSurface(p, out float h) ? h : null,
-            CoverAtWorld = p => _chunks.Ground.TryGetCover(p, out var c) ? c : null,
+            HeightAtWorld = p => _ground.TryGetSurface(p, out float h) ? h : null,
+            CoverAtWorld = p => _ground.TryGetCover(p, out var c) ? c : null,
             Towns = OccasionTowns.Near(id.Centre.E, id.Centre.N, 3000).ToList(),
         };
         var into = new DecorBuilder { IsClaimed = IsClaimed };

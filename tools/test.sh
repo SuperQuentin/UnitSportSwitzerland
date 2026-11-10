@@ -84,8 +84,6 @@ if [ -z "${GODOT:-}" ] && _guard_windows; then
 fi
 GODOT=${GODOT:-godot}
 export GODOT
-# the net checks' frame (#1683): tools/lib/twoclient.sh and buildnetcheck read TC_FRAME
-[ -n "${TEST_FRAME:-}" ] && export TC_FRAME=$TEST_FRAME
 TIMEOUT=${TEST_TIMEOUT:-600}
 # one physics tick (project default 60 Hz) per frame, no real-time sync; net/full stay real time
 FAST=--fixed-fps\ 60

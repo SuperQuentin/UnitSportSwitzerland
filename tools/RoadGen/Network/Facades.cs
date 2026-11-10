@@ -36,7 +36,7 @@ public sealed class Facades(Func<TileId, BuildingTile?> source, IUnits? units = 
         var id = _units.TileAt(e, n);
         var bits = Tile(id);
         if (bits == null) return false;
-        int c = (int)((e - _units.West(id)) / Cell), r = (int)((_units.North(id) - n) / Cell);
+        int c = (int)Math.Floor((e - _units.West(id)) / Cell), r = (int)Math.Floor((_units.North(id) - n) / Cell);
         if ((uint)c >= Side || (uint)r >= Side) return false;
         int i = r * Side + c;
         return (bits[i >> 6] & (1UL << (i & 63))) != 0;
@@ -66,6 +66,25 @@ public sealed class Facades(Func<TileId, BuildingTile?> source, IUnits? units = 
         }
         _coarse[id] = mask;
         return mask;
+    }
+
+    /// <summary>
+    /// One 2 m cell of <see cref="Coarse"/> (row 0 north, column 0 west), from the 0.5 m cells without building the
+    /// tile's whole mask (#1699: the urban field reads the cells round the roads, once each).
+    /// </summary>
+    public bool CoarseAt(TileId id, int row, int col)
+    {
+        if (_coarse.TryGetValue(id, out var mask)) return mask != null && mask[row * (Side / 4) + col];
+        var bits = Tile(id);
+        if (bits == null) return false;
+        int r1 = Math.Min(Side, row * 4 + 4), c1 = Math.Min(Side, col * 4 + 4);
+        for (int r = row * 4; r < r1; r++)
+            for (int c = col * 4; c < c1; c++)
+            {
+                int i = r * Side + c;
+                if ((bits[i >> 6] & (1UL << (i & 63))) != 0) return true;
+            }
+        return false;
     }
 
     private ulong[]? Tile(TileId id)
@@ -123,7 +142,8 @@ public sealed class Facades(Func<TileId, BuildingTile?> source, IUnits? units = 
         for (int s = 0; s <= steps; s++)
         {
             double f = (double)s / steps;
-            int c = (int)((ax + (bx - ax) * f) / Cell), r = (int)((az + (bz - az) * f) / Cell);
+            // (#1691: floored; truncated, a wall up to a cell past the tile's west or north edge marked its first column or row too)
+            int c = (int)Math.Floor((ax + (bx - ax) * f) / Cell), r = (int)Math.Floor((az + (bz - az) * f) / Cell);
             if ((uint)c >= Side || (uint)r >= Side) continue;
             int i = r * Side + c;
             bits[i >> 6] |= 1UL << (i & 63);

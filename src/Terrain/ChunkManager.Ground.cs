@@ -7,13 +7,6 @@ namespace UnitSport.Terrain;
 public partial class ChunkManager
 {
     /// <summary>
-    /// The streamer behind a flat world's ground, for what still loads LV95 tiles through its
-    /// <see cref="Source"/> (#1532: they move with G2 C1's leaf half). Null for any other ground.
-    /// Counted by <c>FlatLv95RatchetTests</c> with the other flat-world escape hatches.
-    /// </summary>
-    public static ChunkManager? Of(IWorldGround? ground) => (ground as FlatGround)?.Owner;
-
-    /// <summary>
     /// The earth world's leaves furnished and shed (#1510), told to whoever listens on this streamer's ground too: the
     /// systems that dress a tile (signs, terraces, decorations) are wired to it, and it is empty in the earth world.
     /// </summary>
@@ -29,9 +22,9 @@ public partial class ChunkManager
     /// </summary>
     private sealed class FlatGround(ChunkManager m) : IWorldGround
     {
-        public ChunkManager Owner => m;
-
         public WorldOrigin? Origin => m._origin;
+
+        public IChunkSource? Content => m.Source;
 
         public bool TryGetHeight(Vector3 worldPos, out float height) => m.HeightAt(worldPos, out height);
 
@@ -56,7 +49,7 @@ public partial class ChunkManager
         public bool BuildingCollisionDoneAt(Vector3 worldPos) => m.BuildingCollisionAt(worldPos);
 
         public GroundTile TileAt(Vector3 worldPos) =>
-            m._origin is { } origin ? GroundTile.FromLv95(origin.TileAt(worldPos)) : default;
+            m._origin is { } origin ? GroundTile.Flat(origin.TileAt(worldPos)) : default;
 
         public MeshInstance3D? GroundAt(GroundTile tile) => m.GroundMeshAt(tile);
 

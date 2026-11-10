@@ -37,8 +37,9 @@
   `GlobalPos` lost `E`/`N`; what is left reads `.Lv95.E` (notation) or a record's own LV95 fields.
 - **Flat ground escape hatches** (#1532, G2 C1): gameplay asks the ground through `IWorldGround`
   (`terrain/world-ground`), whose tiles are opaque `GroundTile`s. `GroundTile.FromLv95(id)`, `tile.Lv95Tile`
-  and `ChunkManager.Of(ground)` cross back to the LV95 tile or the streamer's `IChunkSource`; counted (32),
-  lowered as the `IChunkSource` users move in C1's leaf half and C5, 0 at D.
+  and `ChunkManager.Of(ground)` crossed back to the LV95 tile or the streamer's `IChunkSource`: 32 after #1532,
+  **0 since #1684** (`IWorldGround.ContentName` / `Content`); the flat world's own `GroundTile.Flat` / `FlatId` may
+  appear in `ChunkManager` alone (`Flat_tile_keys_stay_in_the_flat_world`).
 - A change that removes some lowers the baseline in the same commit (the test prints the new
   count): the baselines are the migration's progress. `src/Core/GlobalPos.cs` and `src/Core/WorldOrigin.cs`
   are the seam and are not counted, nor is `src/Terrain/ProceduralWorld.Network.cs`, the generated

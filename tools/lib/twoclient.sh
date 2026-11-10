@@ -9,6 +9,9 @@
 #   NOTERRAIN (--chunks $OUT/no_terrain), an empty folder: for a check of the GENERATED world, on its
 #           server and every client, so a terrain_location.json or UNITSPORT_CHUNKS pointing at real
 #           tiles (the main checkout's) never puts real ground under its generated sites (#943)
+#   TEST_FRAME=earth (env): every Godot run here takes --frame earth after its own args (G2 D0), and at exit the
+#           check fails ("RESULT: FAILED", exit 1) if a server's or client's log does not state that frame
+#           ("[frame] earth", #1683): a world that silently fell back to flat never passes
 #   user:// a fresh $OUT/userdata_<name> for every Godot started here (APPDATA on Windows,
 #           XDG_DATA_HOME on Linux, HOME of the Godot runs only on macOS), so loot, bank, placed,
 #           birds, identity... are never the real ones; USERDATA=<dir> picks another, USERDATA=real
@@ -25,9 +28,6 @@
 #                                    ( tc_userdata "$C_UD"; tc_client ... ) & for a client of its own
 #   tc_stop [pid]                    kill a server (default $SERVER) and every process under it, by PID
 #   tc_ok <n> <logs...>              true when the logs hold exactly n "RESULT: ok" lines
-# TC_FRAME=earth|flat (#1683; tools/test.sh passes TEST_FRAME): every server and client started here gets
-# --frame <frame>, and at exit the check fails ("RESULT: FAILED", exit 1) if one of their logs does not state
-# that frame ("[frame] earth"), so a world that silently fell back to the other frame never passes.
 # Every run goes through guard_run (timeout and RAM floor, tree kill by PID); the servers left at
 # exit are killed by the EXIT trap. If the script's own RAM watchdog fires, it prints
 # "[<name>] RESULT: FAILED (stopped by a TERM ...)" and exits 143. A headless Godot may exit 139 after its result: read RESULT lines.
@@ -80,7 +80,6 @@ _tc_servers=()
 # ($$ is this script's PID in them too)
 _tc_logs=$OUT/.tc_logs.$$
 : > "$_tc_logs"
-guard_frame_args
 _tc_cleanup() {
   local p
   # only the ones still up: a tree walk costs ~0.5 s on Git Bash, for a server tc_stop already took down
@@ -110,6 +109,9 @@ _tc_ports() {
     fi
     _tc_args+=("$a"); prev=$a
   done
+  # TEST_FRAME=earth (G2 D0, #1682): every Godot of the check under that frame; a script's own --frame comes first and wins
+  [ -n "${TEST_FRAME:-}" ] && _tc_args+=(--frame "$TEST_FRAME")
+  return 0
 }
 
 tc_server() {
@@ -117,7 +119,7 @@ tc_server() {
   shift 3
   : > "$log"
   echo "$log" >> "$_tc_logs"
-  _tc_ports "$@" ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}; set -- ${_tc_args[@]+"${_tc_args[@]}"}
+  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --headless --path . -- "$@" &
   SERVER=$!
   _tc_servers+=("$SERVER")
@@ -137,7 +139,7 @@ tc_client() {
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=
   echo "$log" >> "$_tc_logs"
-  _tc_ports "$@" ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}; set -- ${_tc_args[@]+"${_tc_args[@]}"}
+  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} $headless --path . -- "$@"
 }
 

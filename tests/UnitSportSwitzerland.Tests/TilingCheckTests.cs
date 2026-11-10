@@ -173,4 +173,53 @@ public class TilingCheckTests
         var back = LineJoin.Join(pieces.Select((p, k) => new LineJoin.Piece(p.Cell, k, p.Segment, p.Key)).ToList(), u);
         Assert.Single(back);
     }
+
+    [Theory]
+    [InlineData(0, 0, 0, 1000)]
+    [InlineData(0, 500, 0, 1000)]
+    [InlineData(0, 0, 28.5, 610)]
+    [InlineData(100, 200, 45, 400)]
+    public void A_line_joined_back_has_its_own_vertices_whatever_the_tiling(double x, double y, double angle, double cell)
+    {
+        // (#1691) a source on the lattice, cut at a tiling's cells and joined back: the cut points are gone, the vertices exact
+        var u = new GridUnits(x, y, angle, cell);
+        var source = Wavy().Select(p => new LineJoin.Point(LineJoin.OnLattice(p.X), LineJoin.OnLattice(p.Y), 400)).ToList();
+        var whole = new LineJoin.Line { Template = Template, Key = new RawRoads.Key("{tlm}", 1, 0), Parts = [], Points = source };
+        var pieces = TilingCheck.Cut(whole, u);
+        Assert.True(pieces.Count > 3);
+        var back = Assert.Single(LineJoin.Join(pieces.Select((p, k) => new LineJoin.Piece(p.Cell, k, p.Segment, p.Key)).ToList(), u));
+        Assert.Equal(source.Count, back.Points.Count);
+        for (int i = 0; i < source.Count; i++)
+        {
+            Assert.Equal(source[i].X, back.Points[i].X);
+            Assert.Equal(source[i].Y, back.Points[i].Y);
+        }
+    }
+
+    [Fact]
+    public void A_point_rounds_to_one_place_in_every_blocks_frame()
+    {
+        // (#1691) two blocks' frames, their centres 3 km and 500 m apart: a lattice point is exact in both, and a point computed
+        // from two (a cut, a trim) rounds to the same place on the plane in both
+        var frames = new[] { new BlockFrame(Lv95Units.Instance, 2601000, 1200500), new BlockFrame(Lv95Units.Instance, 2598000, 1201000),
+            new BlockFrame(Lv95Units.Instance, 2601500, 1199500) };
+        var rng = new Random(1691);
+        for (int k = 0; k < 2000; k++)
+        {
+            double ax = LineJoin.OnLattice(2599000 + rng.NextDouble() * 3000), ay = LineJoin.OnLattice(1199000 + rng.NextDouble() * 3000);
+            double bx = LineJoin.OnLattice(ax + rng.NextDouble() * 40), by = LineJoin.OnLattice(ay + rng.NextDouble() * 40);
+            double t = rng.NextDouble();
+            var seen = new HashSet<(double, double, double, double)>();
+            foreach (var f in frames)
+            {
+                double w = f.West(BlockFrame.Lines), n = f.North(BlockFrame.Lines);
+                float x = (float)(ax - w), z = (float)(n - ay), x2 = (float)(bx - w), z2 = (float)(n - by);
+                Assert.Equal(ax, w + x);
+                Assert.Equal(ay, n - z);
+                double mx = x + (x2 - x) * t, mz = z + (z2 - z) * t;
+                seen.Add((w + (float)mx, n - (float)mz, w + mx, n - mz));
+            }
+            Assert.Single(seen);
+        }
+    }
 }

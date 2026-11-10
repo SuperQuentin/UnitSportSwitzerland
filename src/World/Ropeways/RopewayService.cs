@@ -27,17 +27,16 @@ public partial class RopewayService : Node
     public static RopewayService? Instance { get; private set; }
 
     private Func<IChunkSource?> _source = () => null;
-    private ChunkManager? _chunks;
+    private IWorldGround? _ground;
     private readonly ConcurrentDictionary<(int, int), IReadOnlyList<RopewayLine>> _blocks = new();
     private readonly HashSet<(int, int)> _loading = new();
     private RopewayInfoIndex? _info;
     private bool _infoAsked;
 
-    public ChunkManager? Chunks => _chunks;
-
-    public static RopewayService Create(Node world, Func<IChunkSource?> source, ChunkManager chunks)
+    /// <param name="ground">The world's ground (#1684): its origin places the lines.</param>
+    public static RopewayService Create(Node world, Func<IChunkSource?> source, IWorldGround ground)
     {
-        var s = new RopewayService { Name = NodeName, _source = source, _chunks = chunks };
+        var s = new RopewayService { Name = NodeName, _source = source, _ground = ground };
         world.AddChild(s);
         return s;
     }
@@ -132,7 +131,7 @@ public partial class RopewayService : Node
     /// <summary>The bottom station within <see cref="BoardReach"/> m of a world point, if any (its block loaded).</summary>
     public RopewayLine? StationNear(Vector3 world)
     {
-        if (_chunks?.Origin is not { } origin) return null;
+        if (_ground?.Origin is not { } origin) return null;
         var (e, n) = origin.ToLv95(world);
         RopewayLine? best = null;
         double bestD = BoardReach * BoardReach;

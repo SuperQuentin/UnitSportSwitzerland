@@ -24,7 +24,7 @@ guard_wait_ram 4 600 || exit 1
 # the flat test world (#992): building needs no real or generated ground; REAL=1 boots the generated world as before
 SW=(--world fixture); CW=(--world fixture)
 [ -n "${REAL:-}" ] && { SW=(--generated-world); CW=(); }
-# TC_FRAME (#1683, tools/lib/guard.sh): the frame every Godot here plays in, checked in their logs at the end
+# TEST_FRAME (#1683, tools/lib/guard.sh): the frame every Godot here plays in, checked in their logs at the end
 guard_frame_args
 SW+=(${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}); CW+=(${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"})
 

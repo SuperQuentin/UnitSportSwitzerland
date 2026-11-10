@@ -11,7 +11,7 @@
   a kill stops only the `timeout` wrapper and the server keeps the port until its timeout; the
   winget `godot` link hangs. The lib kills by PID tree (`guard.sh`) and finds the console exe.
 - Ports stay per script and passed in (`PORT=...`); keep them distinct from the other checks.
-- **The frame** (#1683): `TC_FRAME=earth|flat` gives every `tc_server`/`tc_client` `--frame <frame>`, and at exit
+- **The frame** (#1683): `TEST_FRAME=earth|flat` gives every `tc_server`/`tc_client` `--frame <frame>`, and at exit
   the check prints `[<x>] RESULT: FAILED (... is not in frame earth ...)` and exits 1 if one of their logs lacks
   `[frame] <frame>` (printed by `ServerWorld` and `ClientWorld` on every run): a silent fallback to flat never
   passes. `tools/test.sh` passes `TEST_FRAME` on; the earth net bar is `TEST_FRAME=earth TEST_ONLY=net tools/test.sh

@@ -20,13 +20,22 @@
   `SteamerBerth`, `AirLiftField`, `TestWorld.TryGround`. Code that holds a `ChunkManager` for other
   things too (probes, `ClientWorld`) writes `_chunks.Ground.TryGetHeight(...)`; a possibly null streamer
   handed on as a value is `_chunks?.Ground` (the flat test world has none: `TryGround(null)` is its plane).
-- **`GroundTile`** (`src/Terrain/GroundTile.cs`): an opaque key, equal exactly when its LV95 tile is, named
-  like it in logs. Code that still needs the LV95 tile crosses with `GroundTile.FromLv95(id)` /
-  `tile.Lv95Tile`, and code that still loads LV95 tiles through the streamer's `IChunkSource` with
-  `ChunkManager.Of(ground)?.Source`. `FlatLv95RatchetTests` counts the three as "flat ground escape hatch"
-  (32). `IChunkSource` stays keyed by `TileId` until the leaf half: its data (`RoadTile.Id` and the other
-  format ids) and the helpers it feeds are LV95-keyed too, so it moves with B's leaf sections and C5;
-  step D takes the count to 0.
+- **`GroundTile`** (`src/Terrain/GroundTile.cs`): an opaque key, equal exactly when its LV95 tile (or its leaf) is,
+  named like it in logs.
+- **A tile's content** (#1684): what a tile holds (roads, buildings, trees, the grid, doors) is filed under a `TileId`
+  name, the flat world's LV95 tile or an earth leaf's stand-in (`terrain/earth-world`). Gameplay asks the ground for
+  both: `ground.ContentName(tile)` (what `BuildingKey`, `DoorIndex` and loads key by) and `ground.Content`, an
+  `IChunkSource` (the flat streamer's source; under earth `EarthWorld.Content`, the leaves' `StandInChunkSource` over
+  the region's files, set by `ClientWorld` and `ServerWorld`). Region-wide files (airports, landings, ropeways) come
+  through it too. Step D re-keys what is keyed by the name (C5's `BuildingId`).
+- **The flat world's own keys**: only `ChunkManager` makes a `GroundTile` from an LV95 key or reads it back
+  (`GroundTile.Flat`, `FlatId`, internal; `FlatLv95RatchetTests.Flat_tile_keys_stay_in_the_flat_world`). The old
+  escape hatches (`GroundTile.FromLv95`, `tile.Lv95Tile`, `ChunkManager.Of(ground)`) are gone: the ratchet's count is
+  0 (it was 32 after #1532). Flat-only drawing that walks LV95 tiles round the camera (`PhotoLayer`, `PisteLayer`,
+  `DebugMenuCheck`) asks the streamer itself (`ChunkManager.GroundMeshAt(TileId)`, as `RoadsAt`).
+- **Services on the ground** (#1684): the dormant fleets, the steamer, the airports' stands, the Africa Twin, the
+  herds, the slopes' index, the lifts, the UFOs, the birds, the occasion decorations, venue signs and terraces, the
+  slope markers and the concerts take an `IWorldGround`, so the earth server builds no `ChunkManager` at all.
 - **Cost**: `--worldgroundcheck --chunks fixture:lake` times `TryGetHeight` through the interface against
   the direct call (best of 7 x 400 000): 242.8 ns against 240.5 ns (+0.9 %), 0 bytes allocated. A height
   query is ~240 ns because `ToLv95` runs the rigorous projection (G2 A1), not because of the interface.
