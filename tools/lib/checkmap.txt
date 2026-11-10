@@ -375,6 +375,22 @@ src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site -
 # the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
+# G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
+# the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
+src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
+src/Core/ReanchorWatch    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
+src/Core/OriginShifter    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
+src/Player/LongDriveCheck quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
+src/Core/ReanchorWatch    quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
+src/Core/ReanchorCheck    full   tools/reanchorcheck.sh
+src/Core/ReanchorWatch    full   tools/reanchorcheck.sh
+src/Core/OriginShifter    full   tools/reanchorcheck.sh
+src/Player/LongDriveCheck full   @timeout=3700 tools/longdrivecheck.sh
+src/Player/AutoPilot      full   @timeout=3700 tools/longdrivecheck.sh
+src/Player/RaceRoute      full   @timeout=3700 tools/longdrivecheck.sh
+src/Player/LongFlightCheck full  @timeout=3700 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=3700 tools/longflightcheck.sh
+tools/lib/barprobe        full   tools/reanchorcheck.sh
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 # swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit

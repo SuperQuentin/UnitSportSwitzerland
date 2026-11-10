@@ -310,29 +310,45 @@ log_of() {
   echo "$OUT/$name.log"
 }
 
-# TEST_FRAME (#1710): a direct Godot row's frame arguments. A row with its own --frame keeps it (two would be read
-# differently: GameSettings takes the last, ServerWorld the first); its log is still checked against TEST_FRAME,
-# so a deliberately flat row shows up in an earth run
-row_frame() { # check: sets FRAME_ARGS
+# TEST_FRAME (#1710): a direct Godot row's frame arguments and the frame its log must state. A row with its own --frame
+# keeps it and is held to it (two would be read differently: GameSettings takes the last, ServerWorld the first): the
+# earth-only rows stay earth in a flat run. A row's own --frame flat in an earth run fails: every row plays earth there
+row_frame() { # check: sets FRAME_ARGS and ROW_FRAME
   guard_frame_args
-  [[ " $1 " == *" --frame "* ]] && FRAME_ARGS=()
+  ROW_FRAME=${TEST_FRAME:-}
+  if [[ " $1 " =~ \ --frame\ ([a-z]+)\  ]]; then FRAME_ARGS=(); ROW_FRAME=${BASH_REMATCH[1]}; fi
   return 0
+}
+row_frame_check() { # check log: the log states the row's frame; a flat row in an earth run fails
+  local name code=0
+  name=$(row_name "$1")
+  [ -z "${TEST_FRAME:-}" ] && return 0
+  if [ "$TEST_FRAME" = earth ] && [ "$ROW_FRAME" = flat ]; then
+    echo "[$name] RESULT: FAILED (the row plays --frame flat in a TEST_FRAME=earth run)"; return 1
+  fi
+  local keep=$TEST_FRAME
+  TEST_FRAME=$ROW_FRAME
+  guard_frame_check "$name" "$2" || code=1
+  TEST_FRAME=$keep
+  return $code
 }
 
 run_one() { # tier check log: runs one check, its exit code
-  local tier=$1 check=$2 log=$3 eng= code
+  local tier=$1 check=$2 log=$3 eng= code to=$TIMEOUT
+  # "@timeout=<s> <check>": a row longer than TEST_TIMEOUT (600 s) says so (the long drive, the long flight, #1710)
+  if [[ $check == @timeout=* ]]; then to=${check%% *}; to=${to#@timeout=}; check=${check#* }; fi
   # shellcheck disable=SC2086  # the map's check is split into words on purpose
   case $check in
     @netsmoke) netsmoke "$log" ;;
     # a script passes TEST_FRAME (exported) to its own Godots and checks their logs (twoclient.sh, guard_frame_check)
-    tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
+    tools/*) guard_run "$to" "$log" bash $check ;;
     @realtime\ *) ud "$log"; row_frame "$check"
-       guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
-       code=$?; guard_frame_check "$(row_name "$check")" "$log" >> "$log" || code=1; return $code ;;
+       guard_run "$to" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
+       code=$?; row_frame_check "$check" "$log" >> "$log" || code=1; return $code ;;
     *) if [ "$tier" = quick ]; then eng=$FAST; elif [ -n "${TC_MAX_FPS:-}" ]; then eng="--max-fps $TC_MAX_FPS"; fi
        ud "$log"; row_frame "$check"
-       guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
-       code=$?; guard_frame_check "$(row_name "$check")" "$log" >> "$log" || code=1; return $code ;;
+       guard_run "$to" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
+       code=$?; row_frame_check "$check" "$log" >> "$log" || code=1; return $code ;;
   esac
 }
 row_name() { # the check's flag, for its RESULT line: the first word ending in "check", else the first word

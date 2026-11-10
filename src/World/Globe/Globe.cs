@@ -128,6 +128,31 @@ public partial class Globe : Node
     public Terrain.Leaves.ILeafSource? Leaves { get; set; }
 
     private readonly HashSet<CubeKey> _drawnLeaves = new();
+
+    /// <summary>The globe in the world, for a probe's read-outs (<c>--longflightcheck</c>, #1710); null with none.</summary>
+    public static Globe? Current { get; private set; }
+
+    /// <summary>Tiles built and kept (drawn or held for a split).</summary>
+    public int PatchCount => _patches.Count;
+
+    /// <summary>
+    /// What draws the ground at <paramref name="p"/> (#1710, the far view "present all the way"): the level of the
+    /// globe's visible tile over it, <see cref="LeafLevelDrawn"/> where the earth world draws the leaf itself, or -1
+    /// where nothing does (a hole in the far view). Deepest first; a probe's read-out, not per frame.
+    /// </summary>
+    public int DrawnLevelAt(EcefPos p)
+    {
+        for (int level = _maxLevel; level >= 0; level--)
+        {
+            var key = CubeKey.FromEcef(p, level);
+            if (_drawnLeaves.Contains(key)) return LeafLevelDrawn;
+            if (_patches.TryGetValue(key, out var node) && node.Visible) return level;
+        }
+        return -1;
+    }
+
+    /// <summary><see cref="DrawnLevelAt"/>'s answer where the earth world draws the leaf whole.</summary>
+    public const int LeafLevelDrawn = 99;
     // every ancestor of a drawn leaf, with how many drawn leaves it holds: such a tile always splits
     private readonly Dictionary<CubeKey, int> _holdsDrawn = new();
 
@@ -242,11 +267,13 @@ public partial class Globe : Node
         GD.Print($"[globe] {_heights.Count} tiles to level {_maxLevel}, {_albedo.Count} coloured, month {_month}, from {Dir}");
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         Present = true;
+        Current = this;
     }
 
     public override void _ExitTree()
     {
         Present = false;
+        if (Current == this) Current = null;
         Axes = null;
         RenderingServer.GlobalShaderParameterSet(FillHide, 0f);
         RenderingServer.GlobalShaderParameterSet(FlatHide, 0f);
