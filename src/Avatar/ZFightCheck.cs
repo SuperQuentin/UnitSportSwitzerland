@@ -48,6 +48,25 @@ public static class ZFightCheck
         string? arg = CmdArgs.Value("--zfightcheck", notFlag: true);
         bool update = arg == "update";
         string? only = update ? null : arg;
+        // --zfightshard K/N (#1702): only every Nth model of the catalog from the Kth, so tools/test.sh runs the
+        // N parts side by side (one run took 629 s and held a quick tier up alone)
+        int shard = 0, shards = 1;
+        if (CmdArgs.Value("--zfightshard") is { } part)
+        {
+            var kn = part.Split('/');
+            if (kn.Length != 2 || !int.TryParse(kn[0], out shard) || !int.TryParse(kn[1], out shards) || shards < 1 || shard < 1 || shard > shards)
+            {
+                GD.Print($"[{Tag}] RESULT: FAILED (--zfightshard {part}: K/N with 1 <= K <= N)");
+                return 1;
+            }
+            if (update)
+            {
+                GD.Print($"[{Tag}] RESULT: FAILED (--zfightcheck update rewrites the whole baseline: run it without --zfightshard)");
+                return 1;
+            }
+            shard--;
+        }
+        int index = -1;
         var baseline = Load();
         var now = new SortedDictionary<string, float>(StringComparer.Ordinal);
         int models = 0, threw = 0, worse = 0, better = 0, fresh = 0, skipped = 0;
@@ -75,6 +94,7 @@ public static class ZFightCheck
                 categoryModels = 0;
             }
             categoryModels++;
+            if (++index % shards != shard) continue;
             if (only != null && !key.Contains(only, StringComparison.OrdinalIgnoreCase)) continue;
             double started = clock.Elapsed.TotalSeconds;
             if (trace) GD.Print($"[{Tag}]   building {key}");
