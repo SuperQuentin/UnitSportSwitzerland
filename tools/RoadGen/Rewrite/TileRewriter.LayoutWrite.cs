@@ -365,7 +365,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>> coreCorners, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds,
         Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadJunctionPath>> pathsOf,
-        Footprints? buildings = null, GantryContext? gantries = null)
+        Func<TileId, bool> writes, Footprints? buildings = null, GantryContext? gantries = null)
     {
         // a signal pole's spot is clear of every road's carriageway, the cores, the widening strips and the buildings (the old
         // layout's PlacePole, #350/#711; #1000)
@@ -451,18 +451,32 @@ public static partial class TileRewriter
         }
 
         // 0. a merged core's other members have no cap of their own: the core covers them, whichever block writes it (#1660: a
-        // member homed in another block's tile lost its cap only where the core's own block held it)
+        // member homed in another block's tile lost its cap only where the core's own block held it); nor has the one standing for
+        // it where the core lies in another tile
         foreach (var jp in plans.Where(p => p.Merged is not null && written.Contains(p.Node) && p.Core is { } c && Writable(c)))
             foreach (int node in jp.Nodes)
-                if (node != jp.Node && capOf.TryGetValue(node, out var member)) caps[member.Home].Remove(member.Cap);
+                if (capOf.TryGetValue(node, out var member) && (node != jp.Node || member.Home != Plane.TileAt(jp.Centre.X, jp.Centre.Y)))
+                    caps[member.Home].Remove(member.Cap);
         static bool Writable(Layout.JunctionCore c) => c.Outline.Count >= 3 && c.Outline.Count <= ushort.MaxValue && c.Triangles.Count >= 3;
 
         // 1. the cores as caps
+        Dictionary<int, Junctions.Junction>? junctionOf = null;
         foreach (var jp in mine)
         {
             var core = jp.Core!;
-            if (!capOf.TryGetValue(jp.Node, out var old) || !Writable(core)) continue;
-            var home = old.Home;
+            if (!Writable(core)) continue;
+            bool hasOld = capOf.TryGetValue(jp.Node, out var old);
+            // a merged core in its centre's tile, written by the block holding that tile, as its member nearest the centre (#1660:
+            // wherever the tile edges run between its members); a junction of one node where its cap is
+            var home = jp.Merged is null ? old.Home : Plane.TileAt(jp.Centre.X, jp.Centre.Y);
+            if (jp.Merged is null ? !hasOld : !writes(home)) continue;
+            if (!hasOld || old.Home != home)
+            {
+                junctionOf ??= result.Junctions.ToDictionary(j => j.NodeId);
+                if (!junctionOf.TryGetValue(jp.Node, out var rep)) continue;
+                old = (home, new RoadJunction { Class = CapClass(rep, net), Layer = CapLayer(rep), Vertices = [], Indices = [] });
+                Get(caps, home).Add(old.Cap);
+            }
             // the outline as the cap keeps it: its kerbs sampled every half metre simplified to the tolerance of the sides (the
             // mouths' corners kept, where the ribbons meet it), triangulated again
             var keep = SimplifiedRing(core.Outline, core.Heights, core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToList());

@@ -329,7 +329,9 @@ off, `--junctions new` plans and reports without writing.
   `Junction.Holds` (`EndAt`, `Internal`); arms sort round the core by `ArmPlan.Ring` (where they leave it, seen from its
   centre); the line-up distance adds the way between two arms' nodes. Written: every member counts as written (the old
   layout skips them), the other members' caps go, the streets between them are emptied. Not merged: a roundabout member, a
-  street of 30 m or more between two members, a centre outside every member's tile. A merged core follows the planner's
+  street of 30 m or more between two members. The member nearest the centre stands for the core (its class and layer), and
+  the core goes in its centre's tile, whatever tiles the members are in (#1660: a tile edge between members chose another
+  one, or refused the merge, "a centre outside every member's tile"). A merged core follows the planner's
   rules as any crossroads (the user, Oct 15: pockets even where they push the side roads out). 168 real tiles: 501 groups
   merged of 1,126 junctions, 2,734 cores written (226 merged, of 481 nodes), `JPTH` 18,343 paths, 67 ends off their lane;
   kerb check 33. Test region: the 8 m pair one core, traffic 371 paths taken, no step, no red run.

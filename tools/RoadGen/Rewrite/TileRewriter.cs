@@ -870,7 +870,7 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings,
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, t => block.Contains(t) && wanted.Contains(t), buildings,
                         inputs.Gantries);
                 // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
                 if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
@@ -1825,21 +1825,6 @@ public static partial class TileRewriter
         if (junction.Vertices.Count > ushort.MaxValue) return null;
 
         var anchors = CapAnchors(junction, net);
-        RoadClass dominant = RoadClass.Unknown;
-        int bestPriority = int.MinValue;
-
-        foreach (var arm in junction.Arms)
-        {
-            var link = net.Links[arm.LinkId];
-            if (link.Tag is not Source source) continue;
-
-            if (link.Profile.Priority > bestPriority)
-            {
-                bestPriority = link.Profile.Priority;
-                dominant = source.Segment.Class;
-            }
-        }
-
         if (anchors.Count == 0) return null;
 
         var vertices = new float[junction.Vertices.Count * 3];
@@ -1857,12 +1842,33 @@ public static partial class TileRewriter
 
         return new RoadJunction
         {
-            Class = dominant,
-            Layer = (sbyte)(junction.Layer > RailLayer / 2 ? junction.Layer - RailLayer : junction.Layer),
+            Class = CapClass(junction, net),
+            Layer = CapLayer(junction),
             Vertices = vertices,
             Indices = indices,
         };
     }
+
+    /// <summary>A cap's class: its arm of the highest priority's (the first of them round the node).</summary>
+    private static RoadClass CapClass(Junction junction, RoadNetwork net)
+    {
+        RoadClass dominant = RoadClass.Unknown;
+        int bestPriority = int.MinValue;
+        foreach (var arm in junction.Arms)
+        {
+            var link = net.Links[arm.LinkId];
+            if (link.Tag is not Source source) continue;
+            if (link.Profile.Priority > bestPriority)
+            {
+                bestPriority = link.Profile.Priority;
+                dominant = source.Segment.Class;
+            }
+        }
+        return dominant;
+    }
+
+    /// <summary>A cap's layer as the file keeps it (a rail layer back below zero).</summary>
+    private static sbyte CapLayer(Junction junction) => (sbyte)(junction.Layer > RailLayer / 2 ? junction.Layer - RailLayer : junction.Layer);
 
     /// <summary>Each arm end's middle with its road's height there: what a cap's heights blend (<see cref="HeightAt"/>).</summary>
     private static List<(Vec2 At, float Height)> CapAnchors(Junction junction, RoadNetwork net)

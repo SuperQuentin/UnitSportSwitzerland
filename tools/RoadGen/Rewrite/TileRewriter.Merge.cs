@@ -145,8 +145,7 @@ public static partial class TileRewriter
     /// One junction of <paramref name="nodes"/> with its priority plan: the members' arms but the streets between two members (each
     /// under <see cref="InternalLink"/>), their signs and give-way rows on those arms, lit where any member is. Null (and why)
     /// where it cannot be: a member without its plan, not planned with the block, a roundabout, a longer street between two members,
-    /// streets between members closing a loop (an island), or a centre outside every member's tile (the core's records go in
-    /// one tile).
+    /// or streets between members closing a loop (an island). No tile decides it (#1660).
     /// </summary>
     private static (Junction Junction, PriorityPlanner.Plan Plan)? Merge(PriorityResult priority, HashSet<int> nodes, RoadNetwork net,
         HashSet<int> planned, out string? no, RoundaboutShaper.Ring? ring = null)
@@ -171,9 +170,9 @@ public static partial class TileRewriter
         // members stay as they are (the user, Oct 16, against the aerials); a tree of them (a pair, a chain) is one junction
         if (ring is null && inner.Count >= nodes.Count) { no = "streets between members enclose an island"; return null; }
         var centre = ring?.Centre ?? new Vec2(members.Average(p => p.Junction.Centre.X), members.Average(p => p.Junction.Centre.Y));
-        var home = Plane.TileAt(centre.X, centre.Y);
-        var rep = members.Where(p => Home(p.Junction) == home).OrderBy(p => p.Junction.Centre.DistanceTo(centre)).FirstOrDefault();
-        if (rep.Junction is null) { no = "a centre outside its members' tiles"; return null; }
+        // the member nearest the centre stands for it, whatever tile each member is in (#1660: a tile edge between two members
+        // chose another one, or refused the merge); the core's records go in its centre's tile (WriteLayouts)
+        var rep = members.OrderBy(p => p.Junction.Centre.DistanceTo(centre)).ThenBy(p => p.Junction.Centre.X).ThenBy(p => p.Junction.Centre.Y).First();
 
         var junction = new Junction { NodeId = rep.Junction.NodeId, Centre = centre, Layer = rep.Junction.Layer, Members = nodes, Ring = ring };
         var plan = new PriorityPlanner.Plan
