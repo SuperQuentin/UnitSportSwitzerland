@@ -28,7 +28,7 @@ public static class TilingCheck
 
     public sealed record Settings(
         string Chunks, string Temp, (double MinE, double MinN, double MaxE, double MaxN) Box, IReadOnlyList<GridUnits> Tilings,
-        double BlockM = 4000, double HaloM = 1000, bool Verbose = false, bool Smooth = true);
+        double BlockM = 4000, double HaloM = 1000, bool Verbose = false, bool Smooth = true, (double E, double N, double R)? DumpNear = null);
 
     /// <summary>One tiling's run: its records by kind, its centrelines and paint, in plane coordinates.</summary>
     private sealed class Build
@@ -209,6 +209,24 @@ public static class TilingCheck
         TileRewriter.Run(loop, options, _ => { });
 
         foreach (var (id, tile) in loop.Tiles) Collect(build, tile, units.West(id), units.North(id), s.Box);
+        if (s.DumpNear is { } dn)
+            foreach (var (id, tile) in loop.Tiles.OrderBy(t => t.Key.E).ThenBy(t => t.Key.N))
+            {
+                double w = units.West(id), nn = units.North(id);
+                bool Near(double x, double z) => Math.Abs(w + x - dn.E) < dn.R && Math.Abs(nn - z - dn.N) < dn.R;
+                foreach (var seg in tile.Segments)
+                    if (Enumerable.Range(0, seg.PointCount).Any(i => Near(seg.Points[i * 3], seg.Points[i * 3 + 2])))
+                        log(string.Create(CultureInfo.InvariantCulture,
+                            $"    [{units}] cell {id.E},{id.N} {seg.Class} w {seg.Width:F1} {seg.Flags} {w + seg.Points[0]:F2},{nn - seg.Points[2]:F2} -> {w + seg.Points[^3]:F2},{nn - seg.Points[^1]:F2} ({seg.PointCount} pts) {seg.Attributes.Flags}"));
+                foreach (var j in tile.Junctions)
+                {
+                    double cx = 0, cz = 0;
+                    int c = j.Vertices.Length / 3;
+                    for (int q = 0; q < c; q++) { cx += j.Vertices[q * 3]; cz += j.Vertices[q * 3 + 2]; }
+                    if (c > 0 && Near(cx / c, cz / c))
+                        log(string.Create(CultureInfo.InvariantCulture, $"    [{units}] cell {id.E},{id.N} junction {j.Class} at {w + cx / c:F2},{nn - cz / c:F2}, {c} vertices, {RecordMarks.Area(j):F1} m2"));
+                }
+            }
         build.Cells = cells.Count;
         build.Blocks = blocks.Count;
         build.Tiles = loop.Tiles.Count;
@@ -286,6 +304,9 @@ public static class TilingCheck
         }
         if (paint.Shape == PaintShape.Polyline)
         {
+            // the length painted: a dashed line's dashes only (its pattern starts with a dash at its first point), so a line cut
+            // anywhere in its pattern measures the same
+            double period = paint.Dash + paint.Gap, at = 0;
             for (int i = 3; i + 2 < v.Length; i += 3)
             {
                 double ax = west + v[i - 3], ay = north - v[i - 1], bx = west + v[i], by = north - v[i + 2];
@@ -294,8 +315,11 @@ public static class TilingCheck
                 for (int q = 0; q < steps; q++)
                 {
                     double t = (q + 0.5) / steps;
+                    double s = at + len * t;
+                    if (paint.Dash > 0 && period > 0 && s % period >= paint.Dash) continue;
                     Add(ax + (bx - ax) * t, ay + (by - ay) * t, len / steps);
                 }
+                at += len;
             }
             return;
         }

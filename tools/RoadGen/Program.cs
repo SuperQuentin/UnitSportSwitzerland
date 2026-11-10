@@ -194,7 +194,8 @@ else if (args.Contains("--tiling-check"))
         chunks, ArgValue("--temp") ?? RawRoads.DefaultTempDir(chunks), (b[0], b[1], b[2], b[3]), tilings,
         BlockM: double.Parse(ArgValue("--block-m") ?? "4000", CultureInfo.InvariantCulture),
         HaloM: double.Parse(ArgValue("--halo-m") ?? "1000", CultureInfo.InvariantCulture),
-        Verbose: args.Contains("--verbose"), Smooth: !args.Contains("--no-smooth")), Console.WriteLine);
+        Verbose: args.Contains("--verbose"), Smooth: !args.Contains("--no-smooth"),
+        DumpNear: ArgValue("--dump-near") is { } dn ? (double.Parse(dn.Split(',')[0], CultureInfo.InvariantCulture), double.Parse(dn.Split(',')[1], CultureInfo.InvariantCulture), double.Parse(dn.Split(',')[2], CultureInfo.InvariantCulture)) : null), Console.WriteLine);
 }
 else if (args.Contains("--rewrite"))
 {

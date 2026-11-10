@@ -760,8 +760,9 @@ public static partial class TileRewriter
     /// <summary>Whether a point stands on a widening strip (#123/#348) of its tile.</summary>
     private static bool OnPavement(Vec2 p, Dictionary<TileId, List<RoadAreaProp>> areas)
     {
-        var tile = Plane.TileAt(p.X, p.Y);
-        if (!areas.TryGetValue(tile, out var list)) return false;
+        // every strip of the block, whoever owns it (#1660: one frame for the block; a strip is keyed by its owner, not by where it lies)
+        foreach (var (tile, list) in areas)
+        {
         double x = p.X - Plane.West(tile), z = Plane.North(tile) - p.Y;
         foreach (var a in list)
         {
@@ -772,6 +773,7 @@ public static partial class TileRewriter
                 int i0 = a.Indices[t] * 3, i1 = a.Indices[t + 1] * 3, i2 = a.Indices[t + 2] * 3;
                 if (InTriangle2(x, z, v[i0], v[i0 + 2], v[i1], v[i1 + 2], v[i2], v[i2 + 2])) return true;
             }
+        }
         }
         return false;
     }

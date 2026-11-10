@@ -432,6 +432,12 @@ public static partial class TileRewriter
         return junction ? length * 0.5 : double.MaxValue;
     }
 
+    /// <summary>
+    /// Junctions this close along their street may become one core (#818 phase 5c: overlapping cores, a tram between them, a
+    /// node short of a mouth): the band follows such streets on, so every block plans a group whole (#1660), m.
+    /// </summary>
+    private const double MergeReach = 80;
+
     /// <summary>A transition runs on along its street at most this far past its own link (m).</summary>
     private const double StreetOnMost = 150;
 
@@ -469,13 +475,15 @@ public static partial class TileRewriter
                 var on = StreetOn(net, arm.LinkId, arm.End == LinkEnd.End).Links;
                 foreach (var (l, _) in on) links.Add(l);
                 if (!onward) continue;
-                // the junction where the street on ends: a transition may be shared with it
+                // the junction where the street on ends: a transition may be shared with it; and (#1660) on past it while the
+                // street is short enough to make the two one core (a merged group is planned whole by every block it reaches)
                 var (last, atEnd) = on.Count > 0 ? on[^1] : (arm.LinkId, arm.End == LinkEnd.End);
                 int node = atEnd ? net.Links[last].StartNode : net.Links[last].EndNode;
                 if (planOf.TryGetValue(node, out var far) && planned.Add(node))
                 {
                     near.Add(node);
-                    Arms(far.Plan, false);
+                    double street = PolylineLength(net.Links[arm.LinkId].Centreline) + on.Sum(x => PolylineLength(net.Links[x.Link].Centreline));
+                    Arms(far.Plan, street < MergeReach);
                 }
             }
         }

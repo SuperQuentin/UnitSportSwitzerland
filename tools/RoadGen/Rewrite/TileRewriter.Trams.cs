@@ -331,6 +331,9 @@ public static partial class TileRewriter
         return runs;
     }
 
+    /// <summary>The walkers' crossings of every junction the block planned (#1660), gathered by the layout writer for <see cref="PaveTrackCrossings"/>.</summary>
+    [ThreadStatic] private static List<(Vec2 A, Vec2 B)>? _walkerCrossings;
+
     /// <summary>
     /// Paves the tram beds under the walkers' crossings at lights (#1179): every tram track on its own bed (not embedded, not a
     /// paved bed already) that a crossing's walkers' line crosses is cut there, the piece under it a paved bed (flush, its rails as
@@ -343,11 +346,9 @@ public static partial class TileRewriter
         finally { KeepStopLinesOnPavedTrack(output, paint, stats); }
         void Pave()
         {
-        var crossings = new List<(Vec2 A, Vec2 B)>();
-        foreach (var (tile, list) in signals)
-            foreach (var s in list)
-                foreach (var l in s.ConflictLines.Where(l => l.Mover == ConflictMover.Walker && l.Points.Length >= 6))
-                    crossings.Add((new Vec2(Plane.West(tile) + l.Points[0], Plane.North(tile) - l.Points[2]), new Vec2(Plane.West(tile) + l.Points[^3], Plane.North(tile) - l.Points[^1])));
+        // every planned junction's walkers' lines (#1660: a signal record is its owner block's only, a track its every block's)
+        var crossings = _walkerCrossings ?? [];
+        _walkerCrossings = null;
         if (crossings.Count == 0) return;
         foreach (var (tile, segments) in output)
             for (int i = segments.Count - 1; i >= 0; i--)
