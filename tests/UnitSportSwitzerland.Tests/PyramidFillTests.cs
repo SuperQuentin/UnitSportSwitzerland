@@ -192,14 +192,21 @@ public class PyramidFillTests
         var r = blend.Heights(Fill, fill.Heights)!;
         for (int j = 0; j < N; j++)
             Assert.Equal(BitConverter.SingleToInt32Bits(real[j * N]), BitConverter.SingleToInt32Bits(r.Heights[j * N + N - 1]));
-        // convex: between the fill and the real ground on the pyramid at every vertex
+        // convex: between the fill and the real ground on the pyramid, give or take what carrying the real ripple's
+        // slope over NearM adds (its 0.15 m a vertex fading over 60 m), never a trench or a hump past both
         for (int j = 0; j < N; j += 7)
             for (int i = 0; i < N - 1; i += 7)
             {
                 double ph = p.HeightAt(Fill.Face, Gi(Fill, i), Gj(Fill, j), 23);
                 float h = r.Heights[j * N + i], f = fill.Heights[j * N + i];
-                Assert.InRange(h, Math.Min(f, ph - 0.5) - 0.01, Math.Max(f, ph + 0.5) + 0.01);
+                Assert.InRange(h, Math.Min(f, ph - 0.5) - 4, Math.Max(f, ph + 0.5) + 4);
             }
+        // the first fill vertex beside the real leaf continues its ground: no step at the seam
+        for (int j = 8; j < N - 8; j += 16)
+        {
+            double carried = 2.0 * real[j * N] - real[j * N + 1];
+            Assert.InRange(r.Heights[j * N + N - 2], carried - 0.05, carried + 0.05);
+        }
         // the lake west of the shore keeps the fill's bed far from the real leaf
         Assert.Equal(fill.Heights[256 * N + 10], r.Heights[256 * N + 10], 2);
     }

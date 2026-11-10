@@ -836,10 +836,12 @@ public partial class Globe : Node
             {
                 int k = j * n + i;
                 if (map[k] < 0) continue;
-                bool inside = i > 0 && j > 0 && i < m && j < m;
+                // a vertex on the tile's edge by its neighbours on this side (#1678): counted as a shore it sank 3 m,
+                // and every leaf edge across a lake drew a pale shallow line
+                bool inside = true;
                 for (int b = -1; b <= 1 && inside; b++)
                     for (int a = -1; a <= 1; a++)
-                        if (!lakeAt[k + b * n + a]) { inside = false; break; }
+                        if (!lakeAt[Math.Clamp(j + b, 0, m) * n + Math.Clamp(i + a, 0, m)]) { inside = false; break; }
                 verts[k] = pos[k] - up[k] * (inside ? LakeDeepM : LakeSinkM);
             }
         return new Terrain.WaterMeshBuilder.MeshData(vs.ToArray(), uvs.ToArray(), idx.ToArray());

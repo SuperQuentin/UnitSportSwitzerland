@@ -185,6 +185,17 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   The levels go in the manifest (`lakes`), which the globe reads to draw water where Blue Marble's shore colour does not
   say so. Before: green bands and puddles over the south half of Léman from 5 km (`lake_air5k`); kept as
   `cube_global.pre1669b`.
+- **Past the leaves, smooth and with TLM's lakes (#1678)**: the 16 rings of the edge blend each stood a step (13-40 m
+  east of Lavaux, terraces under the earth fill built on it). Level 13 now takes a continuous field: on a window round
+  the tile (every 4 vertices, 1.5 km and the blur's reach of margin) the leaves' points and ETOPO's miss at each, each
+  point past them the miss of the nearest one (`DistanceTransform`, exact) fading over 1.5 km, the field smoothed by two
+  box blurs (each value summed afresh, so shared vertices agree to the bit), bilinear at the vertex. `--tlm GPKG`
+  (`SwissLakeMask`) rasterises swissTLM3D's standing waters over 2 km² (10 m cells, the shore at the half of a ~50 m
+  smoothing) over the leaves' box and 15 km, matches each to a leaves' lake by ETOPO's median over it (Léman: 418.6 to
+  422.2; others left), stands ETOPO at the level inside and brings it down to it over 300 m outside: ETOPO's cells had
+  1.5-2 km of ground 3-35 m over Léman below Lavaux. The command above plus
+  `--tlm D:/UnitSportSwitzerland/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg`: Nov 10 2026, 83-114 s, peak 12-13 GB,
+  0 of 2.7 M edge vertices differ; the previous pyramid kept as `cube_global.pre1678`.
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
