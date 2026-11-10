@@ -196,15 +196,28 @@ public sealed class SwissLakeMask
     }
 
     /// <summary>
-    /// ETOPO's height <paramref name="etopo"/> at a latitude and longitude as the mask has it: a lake's level inside one
-    /// (<paramref name="snapped"/>), brought down towards it within <see cref="ShoreM"/> of one, else as it is.
+    /// How far from a lake the land past it is kept over its level, metres: ETOPO's cells stand a low plain beside a lake
+    /// at its level or under it (the Rhône's at Villeneuve 0-6 m over Léman, #1696).
     /// </summary>
-    public float Apply(double latDeg, double lonDeg, float etopo, out bool snapped)
+    public const double LandFloorReachM = 5000;
+
+    /// <summary>The least a land vertex within <see cref="LandFloorReachM"/> of a lake stands over its level, metres (the Rhône plain: ~3).</summary>
+    public const float LandOverM = 2f;
+
+    /// <summary>
+    /// ETOPO's height <paramref name="etopo"/> at a latitude and longitude as the mask has it: a lake's level inside one
+    /// (<paramref name="snapped"/>); land within <see cref="LandFloorReachM"/> of one at least <see cref="LandOverM"/>
+    /// over its level, brought down towards it within <see cref="ShoreM"/>; else as it is. <paramref name="covered"/>: the
+    /// point is on the mask, where TLM alone says where its lakes are (no lake of the leaves' levels from ETOPO's basins).
+    /// </summary>
+    public float Apply(double latDeg, double lonDeg, float etopo, out bool snapped, out bool covered)
     {
         snapped = false;
+        covered = false;
         var (e, n) = Lv95Source.Instance.FromLatLon(latDeg, lonDeg);
         double fx = (e - _minE) / CellM, fy = (n - _minN) / CellM;
         if (fx < 0 || fy < 0 || fx > _w - 1 || fy > _h - 1) return etopo;
+        covered = true;
         // wet where the bilinear of the four cells' wetness is past a half: a shore smoother than the cells
         int x0 = Math.Min((int)fx, _w - 2), y0 = Math.Min((int)fy, _h - 2);
         double u = fx - x0, v = fy - y0;
@@ -223,9 +236,11 @@ public sealed class SwissLakeMask
             return _levels[near - 1];
         }
         double dist = (1 - sv) * ((1 - su) * _shore[q] + su * _shore[q + 1]) + sv * ((1 - su) * _shore[q + _sw] + su * _shore[q + _sw + 1]);
+        float level = _levels[near - 1];
+        // land beside a lake over its level: ETOPO's low plain is no lake where TLM has none
+        if (dist < LandFloorReachM) etopo = Math.Max(etopo, level + LandOverM);
         if (dist >= ShoreM) return etopo;
         double t = Math.Clamp(dist / ShoreM, 0, 1), s = t * t * (3 - 2 * t);
-        float level = _levels[near - 1];
         return (float)(level + (etopo - level) * s);
     }
 

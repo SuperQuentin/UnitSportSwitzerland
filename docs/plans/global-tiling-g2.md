@@ -289,7 +289,7 @@ until earth looks at least as good as flat.
 - **Accepted differences** (decided with the user, Nov 10 2026), judged by eye, not gating D: trees placed from
   the leaves' own seeds (same forests, other individual trees); invented fill where no data exists (the forest
   above Lavaux) as earth's generator makes it; no far villages, rivers or roads past the near leaves until #1657,
-  after D.
+  after D; the slightly different near-ground shading at Riddes and Geneva (15 shots, a follow-up in #1695).
 
 ### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
 
