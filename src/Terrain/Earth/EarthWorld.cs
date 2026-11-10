@@ -451,18 +451,37 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         TileUnloaded?.Invoke(GroundTile.FromLeaf(key));
     }
 
-    private void AddBody(CubeKey key, Vector3[]? faces)
+    private void AddBody(CubeKey key, PatchFaces? faces)
     {
         // a patch built again (CollisionPatches.Rebuild): the new faces replace the old body
         if (_bodies.Remove(key, out var old)) old.QueueFree();
-        if (faces is not { Length: >= 3 }) return;
+        if (faces is not { Ground.Length: >= 3 }) return;
         var (leaf, _, _) = LeafCollision.Split(key);
         var body = new StaticBody3D { Name = key.FileStem };
         body.AddToGroup(GroundGroup);
-        body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
+        body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces.Ground } });
+        // its buildings in a body of their own, placed with it (#1704): an open doorway lets a walker through them alone
+        if (faces.Buildings.Length >= 3)
+        {
+            var shells = new StaticBody3D { Name = BuildingBodyName };
+            shells.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces.Buildings } });
+            body.AddChild(shells);
+        }
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);
         _bodies[key] = body;
+    }
+
+    private const string BuildingBodyName = "Buildings";
+
+    /// <summary>
+    /// The buildings' collision bodies of the patches within <paramref name="radius"/> m of a world point (#1704): what an
+    /// open doorway lets a walker through (<c>InteriorManager.BuildingBodies</c>), as a flat tile's <c>BuildingBody</c>.
+    /// </summary>
+    public void BuildingBodiesNear(Vector3 world, List<StaticBody3D> into, double radius = 30)
+    {
+        foreach (var key in CollisionPatches.Near(Origin.ToEcef(world), radius).Keys)
+            if (_bodies.TryGetValue(key, out var body) && body.GetNodeOrNull<StaticBody3D>(BuildingBodyName) is { } shells) into.Add(shells);
     }
 
     /// <summary>A leaf's anchor frame in the world: one rigid transform, composed in doubles.</summary>

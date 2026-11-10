@@ -92,8 +92,11 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public Node3D? Players { get; set; }
     /// <summary>Client: the player this client controls, resolved when asked.</summary>
     public Func<FootPlayer?>? LocalPlayer { get; set; }
-    /// <summary>Client: a tile's building collision, which a player in an open doorway is let through.</summary>
-    public Func<TileId, StaticBody3D?>? BuildingBodies { get; set; }
+    /// <summary>
+    /// Client: the building collision a player in an open doorway of a tile, at a world point, is let through, added to the
+    /// list: a flat tile's one body, an earth leaf's buildings' bodies of the patches round the doorway (#1704).
+    /// </summary>
+    public Action<TileId, Vector3, List<StaticBody3D>>? BuildingBodies { get; set; }
     /// <summary>Client: where the facade shader's occupancy cues go (<c>ChunkManager.SetOccupancy</c>).</summary>
     public Action<Vector4[], Vector4[], int>? OccupancySink { get; set; }
     /// <summary>Client: where the facade shader's open doors go (<c>ChunkManager.SetOpenDoors</c>, see <see cref="DoorPortals.OpenDoors"/>).</summary>
@@ -135,7 +138,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private DoorPortals? _portals;
     private BuildingSounds? _sounds;
     /// <summary>The building collision the local player is currently let through, standing in a doorway.</summary>
-    private StaticBody3D? _passing;
+    private readonly List<StaticBody3D> _passing = new();
+    /// <summary>This move's, to compare with <see cref="_passing"/> (kept: no list per frame).</summary>
+    private readonly List<StaticBody3D> _pass = new();
     private bool _outsideShown = true;
     private double _maintain;
     private string? _requestingDoor;
@@ -802,7 +807,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// </summary>
     public void BeforeMove(FootPlayer p)
     {
-        StaticBody3D? pass = null;
+        _pass.Clear();
         if (!p.Indoors)
             foreach (var link in _links.Values)
             {
@@ -811,13 +816,16 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                     ? link.InOutsideDoorway(p.GlobalPosition, -p.GlobalTransform.Basis.Z, box.HalfWidth, box.HalfLength)
                     : link.InOutsideDoorway(p.GlobalPosition, 0.32f);
                 if (!inDoorway) continue;
-                pass = BuildingBodies?.Invoke(link.Tile);
+                BuildingBodies?.Invoke(link.Tile, p.GlobalPosition, _pass);
                 break;
             }
-        if (pass == _passing) return;
-        if (_passing != null && IsInstanceValid(_passing)) p.RemoveCollisionExceptionWith(_passing);
-        _passing = pass;
-        if (pass != null) p.AddCollisionExceptionWith(pass);
+        if (_pass.Count == 0 && _passing.Count == 0) return;
+        foreach (var old in _passing)
+            if (!_pass.Contains(old) && IsInstanceValid(old)) p.RemoveCollisionExceptionWith(old);
+        foreach (var body in _pass)
+            if (!_passing.Contains(body)) p.AddCollisionExceptionWith(body);
+        _passing.Clear();
+        _passing.AddRange(_pass);
     }
 
     /// <summary>
@@ -929,7 +937,10 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             if (Mathf.Abs(at.X) > link.HalfPass || at.Y < 0.1f || at.Y > link.PassHeight - 0.1f) continue;
             t = s;
             map = inside ? link.ToOutside : link.ToInside;
-            pass = BuildingBodies?.Invoke(link.Tile)?.GetRid() ?? default;
+            _pass.Clear();
+            BuildingBodies?.Invoke(link.Tile, link.Outside.Origin, _pass);
+            pass = _pass.Count > 0 ? _pass[0].GetRid() : default;
+            _pass.Clear();
             return true;
         }
         return false;

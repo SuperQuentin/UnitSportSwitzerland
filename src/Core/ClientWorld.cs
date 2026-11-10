@@ -730,7 +730,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 }
             }
             var chunksForDoors = _chunks;
-            interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
+            interiors.BuildingBodies = (tile, at, into) =>
+            {
+                // an earth leaf's buildings are bodies of their own per collision patch (#1704)
+                if (_earth != null && Terrain.Leaves.LeafStandIn.IsStandIn(tile)) _earth.BuildingBodiesNear(at, into);
+                else if (chunksForDoors.BuildingBodyAt(tile) is { } body) into.Add(body);
+            };
             interiors.OccupancySink = chunksForDoors.SetOccupancy;
             interiors.OpenDoorsSink = chunksForDoors.SetOpenDoors;
             interiors.OutsideShownChanged += shown =>

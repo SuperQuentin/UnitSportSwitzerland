@@ -38,7 +38,7 @@ public class CollisionPatchesTests
     public async Task A_body_gets_its_patches_built_and_released_when_it_leaves()
     {
         int built = 0;
-        var provider = new CollisionPatches(k => { Interlocked.Increment(ref built); return [Vector3.Zero, Vector3.Right, Vector3.Back]; });
+        var provider = new CollisionPatches(k => { Interlocked.Increment(ref built); return new PatchFaces([Vector3.Zero, Vector3.Right, Vector3.Back], []); });
         var here = At(46.2, 6.14);
         provider.Update([new CollisionPatches.Body(here, here, false)]);
         await Idle(provider);
