@@ -154,6 +154,9 @@ public partial class Globe : Node
     public double CommitBudgetMs { get; set; } = 3;
 
     private CubeManifest _manifest = null!;
+
+    // the pyramid's lake levels (#1669), null for one built before them
+    private float[]? _lakeLevels;
     private int _maxLevel;
     private Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
     private readonly Dictionary<CubeKey, MeshInstance3D> _patches = new();
@@ -200,6 +203,7 @@ public partial class Globe : Node
     {
         var files = new GlobeFiles(Dir);
         _manifest = files.Manifest();
+        _lakeLevels = _manifest.Lakes?.ToArray();
         _maxLevel = _manifest.LevelsOrLeaf.Max(l => l.Level);
         if (Leaves != null) _maxLevel = Math.Max(_maxLevel, Terrain.Leaves.LeafFrames.LeafLevel);
         (_heights, _albedo) = files.Index(_manifest);
@@ -514,7 +518,8 @@ public partial class Globe : Node
                         bool isReal = leaves is Terrain.Leaves.EarthLeaves { Real: var real } && real.Has(key);
                         var water = isReal ? ((Terrain.Leaves.EarthLeaves)leaves).Real.Sections(key, Terrain.Format.LeafKind.Water)?.Water : null;
                         var lakes = Earth ? new WaterOut() : null;
-                        if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves) is { } arrays)
+                        if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves,
+                            lakes: _lakeLevels) is { } arrays)
                             _ready.Enqueue((key, arrays, null, leafMonth, null, lakes?.Mesh));
                         else _leafMissed.Enqueue(key);
                     }
@@ -559,7 +564,7 @@ public partial class Globe : Node
                 colour?.GenerateMipmaps();
                 // no height at all: the parent's tile stays (the key stays loading, never asked again)
                 var lakes = Earth ? new WaterOut() : null;
-                if (Build(tile, palette, rect, ancestor: AncestorTile, lakesOut: lakes) is { } arrays) _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
+                if (Build(tile, palette, rect, ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels) is { } arrays) _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
             }
             catch (Exception e)
             {
@@ -583,7 +588,8 @@ public partial class Globe : Node
     /// along each edge hanging a third of a drawn cell, so a neighbour drawn a level coarser leaves no crack.
     /// </summary>
     public static Godot.Collections.Array? Build(CubeTile tile, byte[]? palette = null, Vector4 rect = default, CubeWater? water = null,
-        int stride = Stride, byte[]? cover = null, Func<CubeKey, CubeTile?>? ancestor = null, WaterOut? lakesOut = null, bool beds = true)
+        int stride = Stride, byte[]? cover = null, Func<CubeKey, CubeTile?>? ancestor = null, WaterOut? lakesOut = null, bool beds = true,
+        float[]? lakes = null)
     {
         var key = tile.Key;
         int bits = tile.Bits, m = (1 << bits) / stride, n = m + 1;
@@ -683,11 +689,13 @@ public partial class Globe : Node
                     if (wet != null) weights = (isWater = wet[k]) ? new Vector4(1, 0, 0, 0) : GlobeGround.Dry(weights);
                     // a coarser level has no water of its own: a lake's surface is level to the centimetre, where the
                     // colour image hints at water too (a flat plateau in the data on the Salève drew a lake)
-                    else if (guessed?[k] != true && weights.X > GlobeGround.WaterHint && GlobeGround.Level(hs, n, i, j))
+                    else if (guessed?[k] != true && GlobeGround.Level(hs, n, i, j)
+                        && (GlobeGround.OnLake(lakes, hs[k], tile.Quantum) is var onLake && onLake || weights.X > GlobeGround.WaterHint))
                     {
                         // a lake's surface only where the image says water plainly: a level plateau with a hint of it
-                        // (the Salève's) is painted so, but a water surface there caught the sky (#1669)
-                        isWater = weights.X > GlobeGround.LakeWeight;
+                        // (the Salève's) is painted so, but a water surface there caught the sky (#1669); or at one of the
+                        // pyramid's lake levels, where Blue Marble's dark shore read as forest and left 2 km of Léman ground
+                        isWater = onLake || weights.X > GlobeGround.LakeWeight;
                         weights = new Vector4(1, 0, 0, 0);
                     }
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);

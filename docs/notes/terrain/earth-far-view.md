@@ -44,7 +44,9 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   hold the surface; there a vertex whose eight neighbours are level within 5 cm, and whose cover reads at least a little
   water (`WaterHint`), is water (`GlobeGround.Level`: Blue Marble draws inland lakes black, near-black reads as water).
   Past the near leaves a lake is the world's water too (#1669, `Globe.Lakes`): a surface over every drawn cell of water
-  (a far leaf's own, or a coarser level's level vertex with a plain water weight, `LakeWeight`), the world's water
+  (a far leaf's own, or a coarser level's level vertex with a plain water weight, `LakeWeight`, or standing at one of
+  the pyramid's lake levels, `CubeManifest.Lakes` / `GlobeGround.OnLake`: Blue Marble's dark shore read as forest and
+  left 2 km of Léman ground), the world's water
   material with no waves (as flat's far tiles), shown below 20 km; the ground under it sinks 3 m by the shore and 100 m
   inside (the water shaders shade by depth). Only a real leaf's heights are taken for a bed: a generated fill leaf
   under a mountain the generator lacks (the Salève) drew a lake on its slope.
