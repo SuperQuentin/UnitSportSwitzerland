@@ -320,6 +320,10 @@ Already ported: the open world (B4 + C1), the generated world and the fill (B5, 
   or local data, every level is streamed when available (the pyramid by quadtree request beside the leaves); every
   level is built from the finest geometry the builder has (as `--cube-swiss` does over Switzerland); no hard-coded
   data path; blending between levels so a tile never pops into the planet.
+- **Buildings and trees baked into the coarser levels** (#1657, the user's idea, Nov 10 2026): the build stage
+  simplifies buildings and trees into each level's colours and basic geometry (merged blocks, canopy heights), so the
+  far view keeps towns and forests and the detailed tiles' render distance can drop aggressively and dynamically at no
+  cost to the client.
 - **Junctions independent of tile edges** is not here but in C7: see its issue once filed (#1647's follow-up).
 
 ## The bar, and what it runs on
