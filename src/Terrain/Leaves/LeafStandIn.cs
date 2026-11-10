@@ -165,6 +165,14 @@ public static class LeafStandIn
     /// <summary>A leaf's buildings in its stand-in tile (a copy; the solids in the leaf's order, so an index names the same solid).</summary>
     public static BuildingTile Buildings(BuildingTile leafBuildings, TileId id)
     {
+        // every choice seeded from a building's key seeds from its Earth identity instead (#1658, C5's BuildingId),
+        // registered before any footprint, door or plan of this tile can exist
+        if (TryLeaf(id, out var leaf))
+        {
+            var ids = BuildingId.Assign(leafBuildings.Buildings, b => BuildingId.OnLeaf(leaf, b));
+            for (int i = 0; i < ids.Length; i++)
+                if (ids[i] is { } bid) Core.Fnv.Alias($"{id.E}_{id.N}_{i}", bid.ToString());
+        }
         var list = new List<Building>(leafBuildings.Buildings.Count);
         foreach (var b in leafBuildings.Buildings)
         {

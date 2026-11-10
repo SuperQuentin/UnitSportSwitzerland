@@ -14,6 +14,9 @@
 # them in its shaders; the gate is "no worse", not "the same pixels"
 class:far     judge  -- curvature in geometry (#187): far ridges and the horizon line move by design
 class:edge    judge  -- the frustum's edges look at far peaks and the horizon: curvature in geometry, as far
+# a house seeds its plan, shop and cellar from its BuildingKey on flat and from its BuildingId on earth (#1658, decided
+# Nov 10 2026): the same house legitimately has another room until D re-keys flat away
+riddes_interior  judge  -- flat seeds from its LV95 BuildingKey, earth from the BuildingId (#1658) until D
 # space: the earth world shows the cube_global pyramid as the ground itself, the flat world its globe beside a
 # flat region; both are judged until #1630/#1631 make them the same picture
 class:space   judge  -- the round ground against the flat world's globe (#1630, #1631)

@@ -320,7 +320,8 @@ Already ported: the open world (B4 + C1), the generated world and the fill (B5, 
 - Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
   path, `HorizonLayer`, `.terr` and the other LV95 readers, `FallbackChunkSource`'s LV95 path);
-  tile-keyed stores re-keyed by leaf; the ratchet's counts at 0 and the test retired; a second
+  tile-keyed stores re-keyed by leaf, buildings by C5's `BuildingId` (the identity every per-building seed on leaves
+  has used since #1658: `Fnv.Alias`; flat's `BuildingKey` seeds go with the LV95 runtime); the ratchet's counts at 0 and the test retired; a second
   protocol bump only if an RPC carried a `TileId`.
 - The bar, recorded in this PR (below); G2 marked built in `global-tiling.md`; #1443 commented.
 

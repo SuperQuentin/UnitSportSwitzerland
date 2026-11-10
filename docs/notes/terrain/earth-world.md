@@ -51,7 +51,10 @@ decisions were made with the user on 2026-11-08.
     middle of the 1000 m tile. A `ChunkNode` drawn there is placed by `EarthWorld.StandInToWorld(leaf)`.
   - Its name is a `TileId` no LV95 tile has: E = 100,000 + face · 20,000 + X, N = 100,000 + Y (`Id`, `TryLeaf`).
     `BuildingKey`/`DoorKey` built on it name a leaf's buildings, stable across runs (interior layouts are stored
-    under it). D re-keys them with C5's `BuildingId`.
+    under it). D re-keys them with C5's `BuildingId`. Every seed hashed from such a key (plan, shop, bank, cellar,
+    locks, loot, a site's crane: `Core.Fnv`) already hashes as from the building's `BuildingId` (#1658):
+    `Buildings` registers each solid's id with `Fnv.Alias`, so the same house seeds alike in any leaf build. The flat
+    world's seeds are untouched (its LV95 keys never match), so flat and earth houses differ until D.
   - Its ground is a 1 m `ChunkGrid` rasterised from the leaf's bare lattice (the same triangle split as the mesh,
     within the height quantum, 7 cm); off the leaf, the nearest height on the row. Water: each 2 m sample takes the
     leaf's nearest water sample, as an anchor-frame height.
