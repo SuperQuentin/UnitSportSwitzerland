@@ -433,10 +433,10 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// How far along its arms a junction's own records reach (#1660: its core, pockets, transitions, poles; as far as a transition
-    /// runs on, <see cref="StreetOnMost"/>), m; with <see cref="WriteReach"/> beside them.
+    /// How far along its arms a junction's own records reach (#1660: its core, pockets, transitions, poles, and the street's paint
+    /// laid again past a transition; at 150 m the tiling check found dashes moved), m; with <see cref="WriteReach"/> beside them.
     /// </summary>
-    private const double JunctionReach = StreetOnMost;
+    private const double JunctionReach = 300;
 
     /// <summary>
     /// Junctions this close along their street may become one core (#818 phase 5c: overlapping cores, a tram between them, a
