@@ -81,4 +81,14 @@ public class CubeSurfaceTests
         Assert.Equal(400f, CubeSurface.SurfaceAt(w, 8, 8, 400f));   // too far from it
         Assert.Equal(430f, CubeSurface.SurfaceAt(w, 4, 4, 300f));   // a bed, within reach
     }
+
+    [Fact]
+    public void A_lake_is_one_level_its_busiest_decimetre()
+    {
+        // Léman's leaves at 422.2 and 422.3 (#1669), a small lake at 429.3 and a pond too small to count
+        var levels = new Dictionary<int, long> { [4222] = 900_000, [4223] = 300_000, [4293] = 250_000, [5101] = 1_000 };
+        Assert.Equal(new[] { 422.2f, 429.3f }, CubeSurface.LakeLevels(levels, 200_000));
+        // two bins under the bar each, one lake over it together
+        Assert.Equal(new[] { 372.1f }, CubeSurface.LakeLevels(new Dictionary<int, long> { [3721] = 150_000, [3720] = 100_000 }, 200_000));
+    }
 }

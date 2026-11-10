@@ -39,6 +39,8 @@ second half wires the provider to the earth streamer, and C4 wires it to the ser
     walk over cube neighbours, so across face edges too.
   - The owner takes `TryTakeReady` (faces, null for no ground) then `TryTakeReleased`.
   - `CollisionReach.Wants(distanceM, aheadM, airborne, holding)` is the rule in metres; the tile form calls it.
+- **Building-site pits** (#1653): the lattice cells reaching a pit leave the grid and come back cut and lined, as
+  faces (`LeafCollision.PitFaces`); the site shells' faces go in both ways round (`terrain/pits-on-leaves`).
 - **`LeafCollisionSource(leaves)`**: the builder the provider takes. Prepared leaves are kept (32); the leaves come
   from whoever holds them.
 

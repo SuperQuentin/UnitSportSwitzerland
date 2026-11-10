@@ -531,6 +531,8 @@ walls a heightfield cannot hold. The ground is cut from its own lattice and heig
   and collision, and filter the trees out of them. The interim collision is left whole: its holes
   without the lining (which comes with the tail's road cells) would be a hole. The server cuts its
   collision too.
+- **On the earth terrain** (#1653): each leaf cuts the pits its stand-in plans, mesh and patches alike
+  (`terrain/pits-on-leaves`).
 - **`ChunkManager.InPit`**: the height queries answer the ground at a pit's top, so the void rescue,
   the vehicle safety net and getting out of a vehicle treat a pit as they treat a tunnel bore.
 

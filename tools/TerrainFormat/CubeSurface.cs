@@ -82,4 +82,22 @@ public static class CubeSurface
             }
         return best;
     }
+
+    /// <summary>
+    /// Still levels to the decimetre with their sample counts into one level per lake: within a metre of a busier
+    /// level, a level is that lake's (Léman's leaves hold 422.2 and 422.3: two snaps left a 0.3 m step, which the globe's
+    /// still-water test drew as a green line, #1669).
+    /// </summary>
+    public static float[] LakeLevels(IEnumerable<KeyValuePair<int, long>> levels, long minSamples)
+    {
+        var kept = new List<(float Level, long Count)>();
+        foreach (var (dm, count) in levels.OrderByDescending(l => l.Value).ThenBy(l => l.Key))
+        {
+            float level = dm / 10f;
+            int at = kept.FindIndex(k => Math.Abs(k.Level - level) <= 1f);
+            if (at >= 0) kept[at] = (kept[at].Level, kept[at].Count + count);
+            else kept.Add((level, count));
+        }
+        return kept.Where(k => k.Count >= minSamples).Select(k => k.Level).OrderBy(l => l).ToArray();
+    }
 }

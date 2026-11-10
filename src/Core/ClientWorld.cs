@@ -16,6 +16,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private ChunkManager? _chunks;
     // the earth world (--frame earth, #1510): the leaves' ground instead of the flat tiles'
     private Terrain.Earth.EarthWorld? _earth;
+    // the earth world's globe: its far leaves (#1646) are part of what a shot waits for (#1679)
+    private World.Globe? _earthGlobe;
+
+    /// <summary>The earth world has nothing more to draw for the view: its near leaves and the globe's far ones (#1679).</summary>
+    private bool EarthIdle => _earth!.Idle && (_earthGlobe == null || !IsInstanceValid(_earthGlobe) || _earthGlobe.Idle);
+
+    private string? EarthStatus => _earth == null ? null
+        : _earth.Status + (_earthGlobe != null && IsInstanceValid(_earthGlobe) ? "; " + _earthGlobe.Status : "");
 
     /// <summary>The ground this world stands on: the earth world's leaves, or the flat world's tiles.</summary>
     private IWorldGround? Ground => _earth?.Ground ?? _chunks?.Ground;
@@ -828,6 +836,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     }
                     _earth.TileEntered += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, true); };
                     _earth.TileUnloaded += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, false); };
+                    _earthGlobe = g;
                 }
                 AddChild(g);
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
@@ -961,7 +970,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _ => new World.TreeCheck(chunks, origin, World.TreeCheck.ParseArgs().Shot)),
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
             // the pit of a building site driven, walked and dropped into (#619)
-            new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin)),
+            new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin, Ground, _earth)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot, Ground)),
             new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
@@ -1025,7 +1034,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 {
                     Origin = _worldOrigin,
                     // settled on the tiles, not a fixed time (#924), as the trailer director stages
-                    TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3)),
+                    TilesComplete = at => _earth != null ? EarthIdle : (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3)),
+                    TilesStatus = () => EarthStatus,
                 };
             }),
             new(() => ShotRunner.ParseQueueArg() != null, ToolAnchor.Own, _ =>
@@ -1033,8 +1043,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;
-                runner.TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
-                runner.TilesStatus = () => _earth?.Status;
+                runner.TilesComplete = at => _earth != null ? EarthIdle : (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
+                runner.TilesStatus = () => EarthStatus;
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;
@@ -1882,7 +1892,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
             {
                 var (lat, lon) = UnitSport.Terrain.Format.Lv95Source.Instance.ToLatLon(startE, startN);
                 // --no-fill-roads: the fill's leaves without RoadGen's stage (~0.5 s a leaf instead of ~2 s)
-                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"));
+                // the fill on the globe's pyramid where the game has the full one (#1678); the shipped levels are coarser
+                // than the generator's own relief, which it keeps then
+                var pyramid = Terrain.Leaves.PyramidBase.Open(World.Globe.DataDir);
+                GD.Print($"[earth] the fill on {(pyramid != null ? $"the pyramid (to level {pyramid.FinestLevel}, {pyramid.Lakes.Length} lake(s))" : "the generator's own relief")}");
+                leaves = Terrain.Leaves.EarthLeaves.WithFill(real, generated, lat, lon, () => FillOn, roads: !CmdArgs.Has("--no-fill-roads"),
+                    pyramid: pyramid);
             }
             else leaves = Terrain.Leaves.EarthLeaves.Region(real);
         }

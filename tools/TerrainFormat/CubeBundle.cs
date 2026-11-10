@@ -193,6 +193,12 @@ public sealed class CubeManifest
 
     /// <summary>A leaf region's (<c>.cubl</c>, #1507): every kind some leaf holds; null (not written) for a pyramid.</summary>
     [JsonPropertyName("kinds"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? Kinds { get; set; }
+    /// <summary>
+    /// A pyramid's lakes (#1669): the still levels its Swiss levels stand their lakes at, metres (<c>--cube-swiss</c> snaps the
+    /// leaves' water and ETOPO's lake beside them to these exactly). The globe draws a level vertex at one as water whatever
+    /// its colour says (Blue Marble's shore is too dark to read as water). Null (not written) when none.
+    /// </summary>
+    [JsonPropertyName("lakes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<float>? Lakes { get; set; }
     [JsonPropertyName("tiles")] public List<CubeManifestTile> Tiles { get; set; } = new();
 
     public string ToJson() => JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });

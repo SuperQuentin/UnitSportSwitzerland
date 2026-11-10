@@ -286,6 +286,10 @@ until earth looks at least as good as flat.
   (#1639, PR #1640): `tools/refshot-parity.sh <tag>` (`general/regression-net`); first run on `82e03ec5`, before
   #1634/#1630/#1636 merged: 48 of 84 shots over the floor (the ground's colours, the void past the leaves, trees, a
   different room in `riddes_interior`, B4's pyramid white west of Switzerland), 36 judged; posted on #1500.
+- **Accepted differences** (decided with the user, Nov 10 2026), judged by eye, not gating D: trees placed from
+  the leaves' own seeds (same forests, other individual trees); invented fill where no data exists (the forest
+  above Lavaux) as earth's generator makes it; no far villages, rivers or roads past the near leaves until #1657,
+  after D.
 
 ### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
 
@@ -308,6 +312,9 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
   (`Core/TestWorld`) checked. **Built** (#1652): the course's tiles laid where its leaves are (`CoursePlace`), every course's
   rows pass under earth but `site` (no pit on leaves: #1653); the slopes are leaf data only (nothing reads leaf pistes yet).
+  **`site` built** (#1653): the pits each leaf's stand-in plans are cut into its drawn mesh and its collision patches and
+  lined (`PitTerrain.CutMesh`/`CutFaces`), `InPit` answers on leaves; `--pitcheck` passes under earth. Open: a pit reaching
+  past its leaf's edge is cut on its own leaf only (#1685).
 - **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
   Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
 - **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,
@@ -319,7 +326,13 @@ D deletes the LV95 runtime, so every world the game can run must already work un
 
 Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
 
-### D: the flip (one PR)
+### D: the flip
+
+**Detailed plan: `docs/plans/global-tiling-g2-d.md`** (2026-11-10). From its survey: D is six PRs (D0 the bar's probes, D1
+the tools independent of LV95, D2 the flip with the stores re-keyed and the bar, D3 the game's flat runtime deleted, D4
+the LV95 build deleted, D5 `TileId` to a leaf tile name). The bar compares against flat, so it runs before flat goes. Three
+gaps block it: the earth server's fill (#1682), fixture courses online (#1683), and the server's flat-held services (#1684).
+A protocol bump is needed (RPCs carry tile ints and `BuildingKey` text). The ratchet becomes a fence (authored LV95 is notation).
 
 - Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95

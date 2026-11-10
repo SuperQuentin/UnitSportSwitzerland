@@ -105,7 +105,7 @@ public static class PitTerrain
         }
         var sampler = new Sampler(1f, QuadsPerSide + 1, height);
         foreach (var pit in pits)
-            Lining(pit, sampler, (a, b, d, _, _) => { faces.Add(a); faces.Add(b); faces.Add(d); });
+            Lining(pit, sampler.Profile, (a, b, d, _, _) => { faces.Add(a); faces.Add(b); faces.Add(d); });
         return faces;
     }
 
@@ -120,29 +120,74 @@ public static class PitTerrain
         Vector3[] normals, int[] indices, int m, float quad, IReadOnlyList<PitCut> pits)
     {
         if (pits.Count == 0) return (vertices, colors, normals, indices);
-        var bounds = pits.Select(p => Bounds(p.Rect)).ToArray();
         // the lattice rows any pit reaches, so most triangles are passed over with one division
         int rowLo = int.MaxValue, rowHi = int.MinValue;
-        foreach (var (_, z0, _, z1) in bounds)
+        foreach (var pit in pits)
         {
+            var (_, z0, _, z1) = Bounds(pit.Rect);
             rowLo = Math.Min(rowLo, (int)MathF.Floor(z0 / quad) - 1);
             rowHi = Math.Max(rowHi, (int)MathF.Floor(z1 / quad) + 1);
         }
+        int grid = m * m;
+        var sampler = new Sampler(quad, m, (c, r) => vertices[r * m + c].Y);
+        return CutCore(vertices, colors, normals, indices, pits,
+            (i0, i1, i2) => i0 / m >= rowLo && i0 / m <= rowHi && i0 < grid && i1 < grid && i2 < grid,
+            _ => sampler.Profile);
+    }
+
+    /// <summary>
+    /// <see cref="Cut"/> for a mesh of any triangles (a cube leaf's lattice, #1653): every triangle whose box meets a
+    /// pit's is looked at, and the lining follows the ground those triangles make (<see cref="MeshProfile"/>), so the
+    /// walls' tops meet the clipped ground's edge exactly.
+    /// </summary>
+    public static (Vector3[] Vertices, Color[] Colors, Vector3[] Normals, int[] Indices) CutMesh(Vector3[] vertices, Color[] colors,
+        Vector3[] normals, int[] indices, IReadOnlyList<PitCut> pits)
+    {
+        if (pits.Count == 0) return (vertices, colors, normals, indices);
+        return CutCore(vertices, colors, normals, indices, pits, (_, _, _) => true, near => new MeshProfile(near).Profile);
+    }
+
+    /// <summary>
+    /// A triangle soup (three points a triangle, front faces up) with the pits cut out and lined, as faces: the
+    /// collision of ground whose triangles reach into a pit (a cube leaf's patches, #1653). Triangles that do not
+    /// reach in come back as they were.
+    /// </summary>
+    public static List<Vector3> CutFaces(IReadOnlyList<Vector3> triangles, IReadOnlyList<PitCut> pits)
+    {
+        var v = triangles.ToArray();
+        var idx = new int[v.Length];
+        for (int k = 0; k < idx.Length; k++) idx[k] = k;
+        var up = new Vector3[v.Length];
+        Array.Fill(up, Vector3.Up);
+        var (cv, _, _, ci) = CutMesh(v, new Color[v.Length], up, idx, pits);
+        var faces = new List<Vector3>(ci.Length);
+        foreach (int k in ci) faces.Add(cv[k]);
+        return faces;
+    }
+
+    /// <summary>
+    /// The cut: <paramref name="mayReach"/> passes over the triangles (by their indices) that cannot reach a pit;
+    /// <paramref name="profileOf"/> gives the ground's profile for the lining from the triangles whose box met a pit's.
+    /// </summary>
+    private static (Vector3[] Vertices, Color[] Colors, Vector3[] Normals, int[] Indices) CutCore(Vector3[] vertices, Color[] colors,
+        Vector3[] normals, int[] indices, IReadOnlyList<PitCut> pits, Func<int, int, int, bool> mayReach,
+        Func<List<Vector3>, Func<Vector2, Vector2, List<Vector3>>> profileOf)
+    {
+        var bounds = pits.Select(p => Bounds(p.Rect)).ToArray();
         var verts = new List<Vector3>();
         var cols = new List<Color>();
         var norms = new List<Vector3>();
         var idx = new List<int>();
+        var nearTris = new List<Vector3>();
         // the triangles kept as they were, in runs copied whole
         var kept = new int[indices.Length];
         int keptCount = 0;
-        int grid = m * m;
         var tri = new List<Corner>(3);
         for (int t = 0; t + 2 < indices.Length; t += 3)
         {
             int i0 = indices[t], i1 = indices[t + 1], i2 = indices[t + 2];
             bool near = false;
-            int row = i0 / m;
-            if (row >= rowLo && row <= rowHi && i0 < grid && i1 < grid && i2 < grid)
+            if (mayReach(i0, i1, i2))
             {
                 var a = vertices[i0]; var b = vertices[i1]; var c = vertices[i2];
                 float tx0 = Math.Min(a.X, Math.Min(b.X, c.X)), tx1 = Math.Max(a.X, Math.Max(b.X, c.X));
@@ -155,6 +200,7 @@ public static class PitTerrain
                 kept[keptCount++] = i0; kept[keptCount++] = i1; kept[keptCount++] = i2;
                 continue;
             }
+            nearTris.Add(vertices[i0]); nearTris.Add(vertices[i1]); nearTris.Add(vertices[i2]);
             tri.Clear();
             tri.Add(new Corner(vertices[i0], colors[i0], normals[i0]));
             tri.Add(new Corner(vertices[i1], colors[i1], normals[i1]));
@@ -176,9 +222,9 @@ public static class PitTerrain
                 for (int k = 1; k + 1 < piece.Count; k++) { idx.Add(first); idx.Add(first + k); idx.Add(first + k + 1); }
             }
         }
-        var sampler = new Sampler(quad, m, (c, r) => vertices[r * m + c].Y);
+        var profile = profileOf(nearTris);
         foreach (var pit in pits)
-            Lining(pit, sampler, (a, b, d, col, facing) =>
+            Lining(pit, profile, (a, b, d, col, facing) =>
             {
                 // the ground's front face: clockwise from where it is seen (BuildSurfaceCore's winding)
                 if ((b - a).Cross(d - a).Dot(facing) > 0) (b, d) = (d, b);
@@ -201,6 +247,69 @@ public static class PitTerrain
         Array.Copy(kept, outI, keptCount);
         idx.CopyTo(outI, keptCount);
         return (outV, outC, outN, outI);
+    }
+
+    /// <summary>
+    /// The ground made by any triangles (#1653: a leaf's lattice, which is not square in its anchor frame): heights
+    /// under a point and profiles along a segment, bending where it crosses a triangle's edge.
+    /// </summary>
+    public sealed class MeshProfile(List<Vector3> triangles)
+    {
+        private static float Cross(Vector2 a, Vector2 b) => a.X * b.Y - a.Y * b.X;
+
+        /// <summary>The height of the triangle over a point (the one it is most inside), or NaN off them all.</summary>
+        public float At(Vector2 p)
+        {
+            float best = float.NegativeInfinity, h = float.NaN;
+            for (int k = 0; k + 2 < triangles.Count; k += 3)
+            {
+                var a = triangles[k]; var b = triangles[k + 1]; var c = triangles[k + 2];
+                float det = (b.Z - c.Z) * (a.X - c.X) + (c.X - b.X) * (a.Z - c.Z);
+                if (MathF.Abs(det) < 1e-9f) continue;
+                float wa = ((b.Z - c.Z) * (p.X - c.X) + (c.X - b.X) * (p.Y - c.Z)) / det;
+                float wb = ((c.Z - a.Z) * (p.X - c.X) + (a.X - c.X) * (p.Y - c.Z)) / det;
+                float wc = 1 - wa - wb;
+                float min = Math.Min(wa, Math.Min(wb, wc));
+                if (min <= best) continue;
+                best = min;
+                h = wa * a.Y + wb * b.Y + wc * c.Y;
+                if (min >= 0) break;
+            }
+            return best > -0.05f ? h : float.NaN;
+        }
+
+        /// <summary>As <see cref="Sampler.Profile"/>: the segment's points where the ground bends, the ends included.</summary>
+        public List<Vector3> Profile(Vector2 from, Vector2 to)
+        {
+            var ts = new List<float> { 0f, 1f };
+            var d = to - from;
+            for (int k = 0; k + 2 < triangles.Count; k += 3)
+                for (int e = 0; e < 3; e++)
+                {
+                    var p = triangles[k + e];
+                    var q = triangles[k + (e + 1) % 3];
+                    var p2 = new Vector2(p.X, p.Z);
+                    var edge = new Vector2(q.X, q.Z) - p2;
+                    float den = Cross(d, edge);
+                    if (MathF.Abs(den) < 1e-9f) continue;
+                    var w = p2 - from;
+                    float t = Cross(w, edge) / den, s = Cross(w, d) / den;
+                    if (t > 0 && t < 1 && s >= -1e-5f && s <= 1 + 1e-5f) ts.Add(t);
+                }
+            ts.Sort();
+            var pts = new List<Vector3>(ts.Count);
+            float last = -1f;
+            foreach (float t in ts)
+            {
+                if (t - last < 1e-5f) continue;
+                last = t;
+                var p = from.Lerp(to, t);
+                float h = At(p);
+                if (float.IsNaN(h)) continue;
+                pts.Add(new Vector3(p.X, h, p.Y));
+            }
+            return pts;
+        }
     }
 
     /// <summary>
@@ -258,7 +367,11 @@ public static class PitTerrain
     /// from the ground's edge down to the floor (but across the ramp's mouth), the floor, the ramp
     /// from the ground at its mouth down to the floor, and the ramp's open side.
     /// </summary>
-    public static void Lining(PitCut pit, Sampler ground, Action<Vector3, Vector3, Vector3, Color, Vector3> emit)
+    public static void Lining(PitCut pit, Sampler ground, Action<Vector3, Vector3, Vector3, Color, Vector3> emit) =>
+        Lining(pit, ground.Profile, emit);
+
+    /// <summary>As <see cref="Lining(PitCut, Sampler, Action{Vector3, Vector3, Vector3, Color, Vector3})"/>, on any ground's profile.</summary>
+    public static void Lining(PitCut pit, Func<Vector2, Vector2, List<Vector3>> profile, Action<Vector3, Vector3, Vector3, Color, Vector3> emit)
     {
         var k = pit.Rect.Corners();
         float floor = pit.Floor;
@@ -277,7 +390,7 @@ public static class PitTerrain
             var e = (b - a).Normalized();
             var n = new Vector3(-e.Y, 0, e.X);
             if (n.Dot(inward) < 0) n = -n;
-            var pts = ground.Profile(a, b);
+            var pts = profile(a, b);
             for (int i = 0; i + 1 < pts.Count; i++)
             {
                 var p0 = pts[i]; var p1 = pts[i + 1];
@@ -310,7 +423,8 @@ public static class PitTerrain
 
         if (pit.RampLength <= 0) return;
         // the ramp: from the ground's own profile across its mouth, straight down to the floor
-        var top = ground.Profile(pit.TopOuter, pit.TopInner);
+        var top = profile(pit.TopOuter, pit.TopInner);
+        if (top.Count == 0) return;
         var down = new Vector3(pit.Down.X, 0, pit.Down.Y) * pit.RampLength;
         for (int i = 0; i + 1 < top.Count; i++)
         {

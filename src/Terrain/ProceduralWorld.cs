@@ -444,6 +444,17 @@ public sealed partial class ProceduralWorld
     public double Height(double e, double n) => Height(null, e, n);
 
     /// <summary>
+    /// How far into one of the generator's lakes a point is (0..1, water above 0.5) and that lake's level above sea level
+    /// (#1678: the earth world's fill on the globe's pyramid keeps the generator's relief but not its lakes,
+    /// <c>Leaves/PyramidFill</c>).
+    /// </summary>
+    public static (double Lake, double Level) LakeAt(double e, double n)
+    {
+        double lake = LakeField(e, n, out double level, out _);
+        return (lake, level);
+    }
+
+    /// <summary>
     /// <see cref="Height(double, double)"/> through <paramref name="tile"/>'s cached lattices, for many points in or round
     /// it (a cube leaf's vertices, #1509): the same arithmetic on the same corners.
     /// </summary>
