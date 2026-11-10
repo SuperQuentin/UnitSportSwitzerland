@@ -407,7 +407,7 @@ public static partial class TileRewriter
                 bool paved = false;
                 foreach (var (segTile, segments) in output)
                 {
-                    if (Math.Abs(Plane.West(segTile) + Plane.TileSizeM / 2 - mid.X) > 600 || Math.Abs(Plane.North(segTile) - Plane.TileSizeM / 2 - mid.Y) > 600) continue;
+                    // (every frame of a block is one since #1660: no tile is nearer than another)
                     foreach (var seg in segments)
                     {
                         if (seg.Class != RoadClass.Railway || !TramStopLinePainted(seg.Attributes.Flags)) continue;

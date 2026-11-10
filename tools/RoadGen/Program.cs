@@ -28,6 +28,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
               --divided-scale F  width multiplier for direction-separated lines (default 1.0)
 
           --rewrite             the road network stage: raw extractor output -> .road v3 tiles
+          --diff-builds A B --box minE,minN,maxE,maxN [--verbose]
+                                (#1660) two LV95 builds' .road tiles compared record by record (as --tiling-check compares tilings)
           --tiling-check --box minE,minN,maxE,maxN [--tilings "x,y,angle,cell;..."] [--block-m 4000] [--halo-m 1000] [--verbose]
                                 (#1660) the network stage on --chunks' raw lines under several tilings (the first the reference),
                                 every record, the paint and the centrelines compared in the box; nothing written
@@ -171,6 +173,14 @@ else if (ArgValue("--gantry-benchmark") is { } benchTemp)
 {
     // #1110: the gantry inference rule against SITG's real gantries, from a rewrite's gantry_facts.tsv
     return UnitSport.Tools.RoadGen.Diagnostics.GantryBenchmark.Run(benchTemp, Console.WriteLine);
+}
+else if (ArgValue("--diff-builds") is { } diffA)
+{
+    // #1660: two LV95 builds compared record by record, each difference with its distance to the nearest km line
+    var b = (ArgValue("--box") ?? throw new ArgumentException("--diff-builds needs --box minE,minN,maxE,maxN"))
+        .Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+    string diffB = args[Array.IndexOf(args, "--diff-builds") + 2];
+    return UnitSport.Tools.RoadGen.Diagnostics.TilingCheck.Diff(diffA, diffB, (b[0], b[1], b[2], b[3]), args.Contains("--verbose"), Console.WriteLine);
 }
 else if (args.Contains("--tiling-check"))
 {

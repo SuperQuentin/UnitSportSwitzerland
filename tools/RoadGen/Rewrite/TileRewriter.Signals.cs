@@ -453,7 +453,7 @@ public static partial class TileRewriter
                 if (back > 0 && approach) stats.StopsBack++;
                 if (Math.Abs(back) > 0.05 && Math.Abs(back - StopBehindCrosswalk) > 0.05 && approach) stats.StopsAtCurve++;
                 var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + back + SignalStopLine * 0.5);
-                if (approach && !pocket && block.Contains(source.Tile))
+                if (approach && !pocket && source.Line.Write)
                 {
                     // across the approach's own lane: a right pocket and the bike lane beside it have their own
                     double through = layout is null ? half : half + layout.Through().To - layout.Half - layout.Shift;
@@ -495,7 +495,7 @@ public static partial class TileRewriter
                 var leftSide = drawnRight ? sides.Left : sides.Right;
                 // the yellow crossing behind the stop line (#682), over the paths beside the carriageway too
                 bool crosswalk = false;   // the arm has a sidewalk or path: a crosswalk (#682)
-                if (!inside && block.Contains(source.Tile))
+                if (!inside && source.Line.Write)
                 {
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
@@ -513,7 +513,7 @@ public static partial class TileRewriter
                 }
                 // none on a link inside a junction of several nodes: its ends are the junction's own. Pedestrian heads only
                 // where the arm has a crosswalk (#711); an arm whose street is in another block keeps them
-                bool pedestrians = inside || crosswalk || !block.Contains(source.Tile);
+                bool pedestrians = inside || crosswalk || !source.Line.Write;
                 var pedFlag = pedestrians ? SignalPoleFlags.Pedestrian : 0;
                 if (!pedestrians) stats.ArmsWithoutPedestrians++;
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | pedFlag;

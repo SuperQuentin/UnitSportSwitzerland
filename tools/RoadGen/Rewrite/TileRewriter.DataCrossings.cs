@@ -92,7 +92,7 @@ public static partial class TileRewriter
                 var arm = junction.Arms[i];
                 var link = net.Links[arm.LinkId];
                 if (link.Tag is not Source source || InfoOf(link) is not { } info || !PriorityPlanner.IsCarRoad(info.Class)) continue;
-                if (crossings.OnArm(junction, i, net) is not { } at || !block.Contains(source.Tile)) continue;
+                if (crossings.OnArm(junction, i, net) is not { } at || !source.Line.Write) continue;
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right
                 var mid = (arm.Left + arm.Right) * 0.5;

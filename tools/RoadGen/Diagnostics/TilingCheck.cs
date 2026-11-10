@@ -208,26 +208,7 @@ public static class TilingCheck
         var loop = new MemoryLoop(blocks, wanted, inputs);
         TileRewriter.Run(loop, options, _ => { });
 
-        foreach (var (id, tile) in loop.Tiles)
-        {
-            double west = units.West(id), north = units.North(id);
-            (double, double, double) Place(double x, double y, double z) => (west + x, north - z, y);
-            var marks = new Dictionary<string, List<RecordMarks.Mark>>();
-            RecordMarks.Collect(tile, marks, Place);
-            foreach (var (kind, list) in marks)
-            {
-                if (!build.Marks.TryGetValue(kind, out var into)) build.Marks[kind] = into = new();
-                into.AddRange(list.Where(m => In(s.Box, m.E, m.N)));
-            }
-            foreach (var seg in tile.Segments)
-            {
-                if (RoadFormat.IsAerial(seg.Class) || RoadFormat.IsWatercourse(seg.Class) || RoadFormat.IsWall(seg.Class)) continue;
-                var pts = new (double, double)[seg.PointCount];
-                for (int i = 0; i < seg.PointCount; i++) pts[i] = (west + seg.Points[i * 3], north - seg.Points[i * 3 + 2]);
-                build.Lines.Add(pts);
-            }
-            foreach (var paint in tile.Paint) AddPaint(build, paint, west, north, s.Box);
-        }
+        foreach (var (id, tile) in loop.Tiles) Collect(build, tile, units.West(id), units.North(id), s.Box);
         build.Cells = cells.Count;
         build.Blocks = blocks.Count;
         build.Tiles = loop.Tiles.Count;
@@ -237,6 +218,57 @@ public static class TilingCheck
             + $"{build.Marks.GetValueOrDefault("junction")?.Count ?? 0} junctions, {build.Marks.GetValueOrDefault("signal")?.Count ?? 0} signals, "
             + $"{build.Marks.GetValueOrDefault("approach")?.Count ?? 0} approaches in the box; {build.Seconds:F0} s"));
         return build;
+    }
+
+    /// <summary>A finished tile's records, lines and paint into <paramref name="build"/>, those in the box (its frame at west, north).</summary>
+    private static void Collect(Build build, RoadTile tile, double west, double north, (double MinE, double MinN, double MaxE, double MaxN) box)
+    {
+        (double, double, double) Place(double x, double y, double z) => (west + x, north - z, y);
+        var marks = new Dictionary<string, List<RecordMarks.Mark>>();
+        RecordMarks.Collect(tile, marks, Place);
+        foreach (var (kind, list) in marks)
+        {
+            if (!build.Marks.TryGetValue(kind, out var into)) build.Marks[kind] = into = new();
+            into.AddRange(list.Where(m => In(box, m.E, m.N)));
+        }
+        foreach (var seg in tile.Segments)
+        {
+            if (RoadFormat.IsAerial(seg.Class) || RoadFormat.IsWatercourse(seg.Class) || RoadFormat.IsWall(seg.Class)) continue;
+            var pts = new (double, double)[seg.PointCount];
+            for (int i = 0; i < seg.PointCount; i++) pts[i] = (west + seg.Points[i * 3], north - seg.Points[i * 3 + 2]);
+            build.Lines.Add(pts);
+        }
+        foreach (var paint in tile.Paint) AddPaint(build, paint, west, north, box);
+    }
+
+    /// <summary>
+    /// Two LV95 builds of the same region compared record by record (#1660: what the whole-line stage changed against main's),
+    /// as the tiling check compares two tilings: <c>RoadGen --diff-builds A B --box ...</c>. Each difference with its distance to
+    /// the nearest km line, where the LV95 build cut its lines.
+    /// </summary>
+    public static int Diff(string a, string b, (double MinE, double MinN, double MaxE, double MaxN) box, bool verbose, Action<string> log)
+    {
+        var km = new GridUnits(0, 0, 0, 1000);
+        Build Read(string dir)
+        {
+            var build = new Build { Units = km };
+            foreach (string path in Directory.EnumerateFiles(dir, "roads_*.road"))
+            {
+                RoadTile tile;
+                using (var fs = File.OpenRead(path)) tile = RoadCodec.Decode(fs);
+                var bits = Path.GetFileNameWithoutExtension(path).Split('_');
+                var id = new TileId(int.Parse(bits[1], CultureInfo.InvariantCulture), int.Parse(bits[2], CultureInfo.InvariantCulture));
+                Collect(build, tile, id.MinE, id.MinN + 1000, box);
+                build.Tiles++;
+            }
+            return build;
+        }
+        var ba = Read(a);
+        var bb = Read(b);
+        log($"builds {a} ({ba.Tiles} tiles) and {b} ({bb.Tiles} tiles), box {box.MinE},{box.MinN},{box.MaxE},{box.MaxN}");
+        int failed = Compare(ba, bb, new Settings(a, a, box, [km], Verbose: verbose), log);
+        log(failed == 0 ? "[diffbuilds] RESULT: the same" : $"[diffbuilds] RESULT: {failed} kinds differ");
+        return failed == 0 ? 0 : 2;
     }
 
     private static bool In((double MinE, double MinN, double MaxE, double MaxN) box, double e, double n) =>
