@@ -89,6 +89,8 @@ public sealed class LeafCollision
         if (stand.Buildings != null) tileFaces.AddRange(BuildingMeshBuilder.BuildCollisionFaces(stand.Buildings, stand.Grid));
         var shells = new List<Vector3>(tileFaces.Count);
         foreach (var p in tileFaces) shells.Add(LeafStand.ToAnchor(p));
+        // the sites' slabs, stairs and walkways stay with the ground: underfoot at a raised door
+        foreach (var p in stand.SiteFaces) all.Add(LeafStand.ToAnchor(p));
         // the building sites' pits (#619): the cells reaching into one leave the lattice, their ground outside the pit
         // and the pit's lining come back as faces (#1653), as the drawn mesh is cut
         var holes = leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
