@@ -43,8 +43,9 @@ public static partial class CubeTestRegion
         string? chunks = null, region = null;
         bool lv95 = true, compare = false, compareOnly = false;
         (double E, double N, double R)? dump = null;
-        bool signalCheck = false;
+        bool signalCheck = false, real = false;
         string? at = null;
+        (double MinE, double MinN, double MaxE, double MaxN)? box = null;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -63,6 +64,12 @@ public static partial class CubeTestRegion
                     break;
                 // only the comparison, of a region built before
                 case "--compare-only": compare = true; lv95 = false; compareOnly = true; break;
+                // a real region's LV95 build (DIR) against its leaves (--cube-out): how often the leaf cut changes a junction
+                case "--compare-real": compare = true; lv95 = false; compareOnly = true; real = true; break;
+                case "--compare-box":
+                    var bx = args[++i].Split(',').Select(x => double.Parse(x, CultureInfo.InvariantCulture)).ToArray();
+                    box = (bx[0], bx[1], bx[2], bx[3]);
+                    break;
                 default: Console.Error.WriteLine($"--cube-test-region: unknown option {args[i]}"); return 2;
             }
         }
@@ -78,7 +85,7 @@ public static partial class CubeTestRegion
         }
         int built = compareOnly ? 0 : Build(chunks, temp, region, Console.WriteLine);
         if (built != 0 || !compare) return built;
-        return Compare(chunks, region, Console.WriteLine);
+        return Compare(chunks, region, Console.WriteLine, real, box);
     }
 
     /// <summary>
