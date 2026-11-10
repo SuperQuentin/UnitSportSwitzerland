@@ -24,3 +24,18 @@ ouchy_shore      judge  -- Leman's ripples on the Earth-fixed pattern turned 29 
 # space: the earth world shows the cube_global pyramid as the ground itself, the flat world its globe beside a
 # flat region; both are judged until #1630/#1631 make them the same picture
 class:space   judge  -- the round ground against the flat world's globe (#1630, #1631)
+# accepted by the user (Nov 10 2026, #1500): three differences that are by design or wait for later work, judged by eye
+# - tree seeds: leaves seed their scatter per cube lattice vertex (#1551), flat per LV95 tile: the same forest, other
+#   trees; only views where the trees are the difference left (ground-shading differences stay counted)
+jorat_forest      judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551): the same forest, other trees
+sauvabelin_town   judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551)
+sauvabelin_night  judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551)
+riddes_top        judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551): the slope's forest
+villeneuve_a9     judge  -- trees seeded per cube lattice vertex on earth, per LV95 tile on flat (#1551): the meadow's trees
+# - invented fill: ground past the real tiles (2548/1148 has no LV95 tile) is generated on both sides, each its own way;
+#   the lake band at its back is #1669's, still looked at by eye on each run
+lavaux_bonfires   judge  -- invented fill past the real tiles on both sides (flat's generated forest, earth's fill); the lake band is #1669
+# - far villages: past the near leaves the far valley has no villages, rivers or roads until #1657 bakes them in
+riddes_aerial     judge  -- the far valley without villages, rivers or roads until #1657
+riddes_valley     judge  -- the far valley without villages, rivers or roads until #1657
+riddes_low        judge  -- the far valley without villages, rivers or roads until #1657
