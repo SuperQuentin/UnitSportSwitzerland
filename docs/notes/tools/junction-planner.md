@@ -20,7 +20,7 @@ off, `--junctions new` plans and reports without writing.
   (3) pocket sizes per arm (`PocketSizes`, right pocket at most `RightEarlier` past the left's storage), the street shared
   with the junction at its other end (its exit hatch keeps `TurnExit + TurnRejoin`; too short for both: **merged**, #325);
   an exit shorter than `TurnExit + TurnClear` feeds no pocket; (4) room per arm (`MeasureRoom`: every 2.5 m out to the
-  longest transition, each side to the first building, other line, ground step > 1.2 m or tile edge, 20 m max);
+  longest transition, each side to the first building, other line, ground step > 1.2 m, 20 m max; no tile edge since #1660: the block's whole lines, `roadgen-units`);
   (5) rounds: align from the base sections, fit with the size search, align again from the fitted lanes, fit again; an exit
   that cannot hold its hatch (fit step "7 the pocket feeding this exit") drops its feeder's pocket, all again.
 - **Room order** (`MouthPlanner.Fit`): 1 bike right-turn lane, verge and buffer, 2 island, left-turn bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,

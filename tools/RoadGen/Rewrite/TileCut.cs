@@ -202,11 +202,12 @@ public static class TileCut
     /// <summary>A transition's share over a piece of its segment: its stations within the piece, widths and centre carried.</summary>
     private static RoadTransition Slice(RoadTransition t, Piece p)
     {
+        // every number rounded to the centimetre the file keeps, so the decoder rebuilds the lines along it exactly
         var stations = new List<float> { 0 };
         foreach (float s in t.Stations)
-            if (s > p.From + 1e-3 && s < p.To - 1e-3) stations.Add((float)(s - p.From));
-        stations.Add((float)(p.To - p.From));
-        float[] Values(Func<double, float> at) => stations.Select(s => at(s + p.From)).ToArray();
+            if (s > p.From + 1e-2 && s < p.To - 1e-2) stations.Add(RoadTransition.Cm(s - p.From));
+        stations.Add(RoadTransition.Cm(p.To - p.From));
+        float[] Values(Func<double, float> at) => stations.Select(s => RoadTransition.Cm(at(s + p.From))).ToArray();
         return new RoadTransition
         {
             Segment = p.Segment, Stations = stations.ToArray(), Centre = Values(s => t.CentreAt(s)), Anchor = t.Anchor,

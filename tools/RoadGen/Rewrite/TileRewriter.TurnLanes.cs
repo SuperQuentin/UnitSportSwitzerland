@@ -1727,7 +1727,6 @@ public static partial class TileRewriter
                 foreach (double o in (ReadOnlySpan<double>)[_half + BaseAt(dist) + w * 0.5, _half + BaseAt(dist) + w + 0.5])
                 {
                     double px = x + sx * o, pz = z + sz * o;
-                    if (!Plane.Inside(_tile, px, pz)) return "seam";
                     var lv95 = new Vec2(Plane.West(_tile) + px, Plane.North(_tile) - pz);
                     if (buildings.Contains(lv95)) return "building";
                     if (lines.Covering(px, pz, _self, x, z, _half + 1.0) is not null) return "line";

@@ -873,7 +873,7 @@ public static partial class TileRewriter
     /// <summary>
     /// The room beside an arm (#818): at every <see cref="TurnStation"/> from its junction end out to <paramref name="reach"/>,
     /// the first offset from the axis on each side where a building stands, another line's ribbon lies, the ground is
-    /// more than <see cref="TurnGroundStep"/> off the road or the tile ends; per station (the transition checks its own width there).
+    /// more than <see cref="TurnGroundStep"/> off the road (never a tile edge: the arm is a whole line, #1660); per station (the transition checks its own width there).
     /// </summary>
     private static ArmRoom MeasureRoom(RoadSegment seg, TileId tile, int self, bool atEnd, double from, double reach, EmbankmentPlanner.LineIndex lines,
         IGround? grids, Footprints buildings)
@@ -894,8 +894,7 @@ public static partial class TileRewriter
                 {
                     double px = x + rx * o * side, pz = z + rz * o * side;
                     var lv95 = new Vec2(Plane.West(tile) + px, Plane.North(tile) - pz);
-                    bool blocked = !Plane.Inside(tile, px, pz)
-                        || buildings.Contains(lv95)
+                    bool blocked = buildings.Contains(lv95)
                         || lines.Covering(px, pz, self, x, z, half + 1.0) is not null
                         || grids is not null && SampleGround(grids, lv95.X, lv95.Y) is var g && !double.IsNaN(g) && Math.Abs(g - y) > TurnGroundStep;
                     if (!blocked) continue;

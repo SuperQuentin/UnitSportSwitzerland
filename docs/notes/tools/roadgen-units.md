@@ -134,3 +134,46 @@ LV95 references: main's `RoadGen --rewrite` of the same raw input (`test_b3/road
   holds (5 GB a frame, 1-4).
 - Versoix (2 frames, 24 leaves): `--frames-parallel 2` writes **byte-identical** bundles to one at a time, 48 s against
   80 s (frames of 17 and 7 leaves), peak 4.6 GB against 3.2 GB.
+
+# Whole lines: the stage never sees a tile cut (#1660)
+
+The user's rule: "junctions should be generated the same, no matter where the tile edges are". Before, the stage planned
+per raw piece, and pieces are cut wherever the tiling cuts. A cut on an arm shortened it, so the pockets, the core, the
+signal plan and the poles changed with it, and the smoothing held the cut (#1546).
+
+- **Order in `Session.Block`**:
+  1. **Read** the block and its halo.
+  2. **Join** (`LineJoin`): pieces that continue each other across a tile edge become one line again. They must meet on
+     the edge within 5 mm, carry the same segment record, and have agreeing keys where both have one; keys only confirm,
+     so BD TOPO and generated lines join too.
+  3. **Close** (`Close`, `Options.CloseTiles`, 64; 0 for the game's generated leaves, made on demand): a line still
+     ending on the context's edge is followed tile by tile to its end. Lines found only in those tiles are dropped.
+  4. **Plan** everything as before, in one frame (below).
+  5. **Assemble once for the block**: walls, railings, signs off paths and sidewalk corners from every line at once.
+  6. **Cut** (`TileCut`).
+- **`BlockFrame`** (`Geometry/BlockFrame.cs`) is the `IUnits` a block runs on:
+  - The real tiles answer `TileAt` and `Around`.
+  - Every tile's local frame is one frame centred on the block (snapped to 2 m).
+  - Whole lines live under `BlockFrame.Lines`, and the band's (planned, never written) under `BlockFrame.Band`. Both have
+    no edges: `Inside` is always true and `OnEdge`/`OnAnyEdge` always false. So the old seam rules go quiet with no code
+    of their own: the pocket's "seam" reject, the room stopping at the tile edge, the paint's dash restart and the rail's
+    seam blend.
+  - Inputs that come per real tile keep the real units: `Facades`, `UrbanField`, and `Footprints`, which now takes its
+    units.
+  - "In the block" for a line is its `Line.Write` (a part in the block), never its tile. A junction's home is still
+    `TileAt` of its centre, and its records are produced by that block only.
+- **`TileCut`** (`Rewrite/TileCut.cs`):
+  - Segments are cut where they cross a real tile edge: the tile is found by halving along each stretch to a
+    micrometre, and heights and side shifts are carried. A yield stays only at the line's own ends.
+  - Paint along a segment or transition is laid again on each piece: by stations on the offset line, a dashed line
+    keeping its phase, and a dash the cut halves going on as a solid lead, as at a seam before. A segment only paint
+    refers to (the street's urban copy) is cut too and written as geometry.
+  - Transitions are sliced, with widths and centre lerped at the cut. Walls and railings are cut.
+  - A line's other records (geometry paint, signs, area props, supports, wires) go to the tile they stand in.
+  - Records under a real tile stay there whole, as a junction's core always did.
+  - Every tile is then moved into its own frame by `LeafRecords.Map` with a translation (every tile frame is a
+    translation of the plane).
+- **Room beside an arm** (`PlanLayouts`): one index over the block's and the band's whole lines. The old layout's pockets
+  (`EmitTurnLanes`, almost no junction since #854) still see the written lines only.
+- **The bar**: `RoadGen --tiling-check` (`tiling-check`). `RoadGen --diff-builds A B --box ...` compares two LV95 builds
+  record by record.
