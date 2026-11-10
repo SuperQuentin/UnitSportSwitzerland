@@ -856,6 +856,25 @@ public static partial class SignalTestRegion
         return cells;
     }
 
+    /// <summary>
+    /// The cover at an LV95 point (#1647, the leaves' lattice): <see cref="CoverClass.Border"/> within <see cref="BorderBandHalf"/>
+    /// of a border, as <see cref="BorderBand"/> gives a tile's vertices, else open grass.
+    /// </summary>
+    public static CoverClass CoverAt(double e, double n, IReadOnlyList<(bool AlongN, double At, double From, double To)> borders)
+    {
+        foreach (var b in borders)
+        {
+            var (across, along) = b.AlongN ? (e, n) : (n, e);
+            if (Math.Abs(across - b.At) <= BorderBandHalf && along >= b.From - BorderBandHalf && along <= b.To + BorderBandHalf)
+                return CoverClass.Border;
+        }
+        return CoverClass.Open;
+    }
+
+    /// <summary>The borders between zones (<see cref="CoverAt"/>'s input), LV95.</summary>
+    public static List<(bool AlongN, double At, double From, double To)> BorderLines() =>
+        Borders().Select(b => (b.AlongN, b.At, b.From, b.To)).ToList();
+
     // a canton sign stands this far past the border along the road, this far out from everything beside the carriageway
     private const double SignPast = 0.5, SignClear = 0.6;
 
@@ -865,16 +884,26 @@ public static partial class SignalTestRegion
     /// on the right of the traffic entering that canton and facing it, each in the tile its side lies in. The ground band is in
     /// the cover (<see cref="BorderBand"/>): the terrain blends up to the roads, a line painted at the ground's height would sink.
     /// </summary>
-    private static void MarkBorders(RoadTile tile)
+    private static void MarkBorders(RoadTile tile) => MarkBorders(tile, null);
+
+    /// <summary>
+    /// <see cref="MarkBorders(RoadTile)"/> on any plane (#1647): the tile's records in <see cref="Geometry.Plane"/>'s tile-local
+    /// frame, <paramref name="toLv95"/> a plane point to LV95, where the borders are (null: the plane is LV95's, as the LV95 build).
+    /// The crossing is found in LV95 and placed on the plane by the same fraction along the piece (4 m pieces: well under a mm).
+    /// </summary>
+    public static void MarkBorders(RoadTile tile, Func<double, double, (double E, double N)>? toLv95)
     {
         const double eps = 1e-3;
         var borders = Borders();
+        double west = Geometry.Plane.West(tile.Id), north = Geometry.Plane.North(tile.Id);
         foreach (var seg in tile.Segments)
         {
             if (seg.Class is not (RoadClass.Major or RoadClass.Road or RoadClass.Minor or RoadClass.Lane)) continue;
             for (int i = 1; i < seg.PointCount; i++)
             {
-                var (p0, p1) = (seg.Lv95(tile.Id, i - 1), seg.Lv95(tile.Id, i));
+                (double E, double N) q0 = (west + seg.Points[(i - 1) * 3], north - seg.Points[(i - 1) * 3 + 2]);
+                (double E, double N) q1 = (west + seg.Points[i * 3], north - seg.Points[i * 3 + 2]);
+                var (p0, p1) = toLv95 is null ? (q0, q1) : (toLv95(q0.E, q0.N), toLv95(q1.E, q1.N));
                 foreach (var b in borders)
                 {
                     double c0 = (b.AlongN ? p0.E : p0.N) - b.At, c1 = (b.AlongN ? p1.E : p1.N) - b.At;
@@ -889,10 +918,11 @@ public static partial class SignalTestRegion
 
                     // tile-local: x east, z south; the way to the high side and its right
                     bool forward = c1 > c0;
-                    double dx = (p1.E - p0.E) * (forward ? 1 : -1), dz = -(p1.N - p0.N) * (forward ? 1 : -1), length = Math.Sqrt(dx * dx + dz * dz);
+                    double dx = (q1.E - q0.E) * (forward ? 1 : -1), dz = -(q1.N - q0.N) * (forward ? 1 : -1), length = Math.Sqrt(dx * dx + dz * dz);
                     dx /= length; dz /= length;
                     double rx = -dz, rz = dx;
-                    float x = (float)(e - tile.Id.MinE), z = (float)(tile.Id.MaxN - n);
+                    double qe = q0.E + (q1.E - q0.E) * t, qn = q0.N + (q1.N - q0.N) * t;
+                    float x = (float)(qe - west), z = (float)(north - qn);
                     float y = seg.Points[(i - 1) * 3 + 1] + (seg.Points[i * 3 + 1] - seg.Points[(i - 1) * 3 + 1]) * (float)t;
                     float half = seg.Width * 0.5f;
 
@@ -971,21 +1001,7 @@ public static partial class SignalTestRegion
         var segments = new SortedDictionary<(int E, int N), (List<RoadSegment> Segments, List<RawRoads.Key?> Keys)>();
         foreach (var line in lines)
         {
-            var cls = line.Rail is null ? RoadFormat.ParseClass(line.Objektart) : RoadClass.Railway;
-            var surface = line.Rail is null ? RoadFormat.ParseSurface("Hart") : RoadSurface.Unknown;
-            var flags = line.Rail ?? RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
-            // a rail line as the extractor writes it (#1052): its formation's width, auf_strasse
-            var attr = line.Rail is not null
-                ? new RoadAttributes(Flags: line.OnStreet ? RoadAttrFlags.OnStreet : RoadAttrFlags.None, Layer: RoadFormat.LayerFor(null, flags))
-                : new RoadAttributes(
-                    Flags: RoadFormat.ParseAttrFlags(line.Ring ? "Wahr" : "Falsch", line.Eigentuemer),
-                    Layer: RoadFormat.LayerFor("0", flags),
-                    Priority: RoadFormat.PriorityFor(cls, line.Verkehrsbedeutung),
-                    WidthCm: RoadFormat.NominalWidthCm(line.Objektart));
-            float width = line.Rail is not null
-                ? (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f
-                : RoadFormat.WidthFor(cls, flags);
-            float y = (float)(Ground + DrapeOffset + (12 - (int)cls) * 0.012);
+            var (cls, surface, flags, attr, width, y) = Template(line);
             double along = 0;
             foreach (var (tile, piece) in SplitAtTiles(line.Points))
             {
@@ -1014,6 +1030,45 @@ public static partial class SignalTestRegion
             ids.Add(id);
         }
         return ids;
+    }
+
+    /// <summary>
+    /// A line of the region as the road extractor reads it (#1647, the leaves' raw roads): its uuid, its LV95 points, and the
+    /// segment every piece of it gets (class, surface, flags, attributes, width; <see cref="RoadSegment.Points"/> empty), draped
+    /// <see cref="RawLine.Height"/> metres above sea level. The LV95 build cuts the same lines at its km tiles.
+    /// </summary>
+    public sealed record RawLine(string Uuid, (double E, double N)[] Points, RoadSegment Template, double Height);
+
+    /// <summary>The region's lines as <see cref="RawLine"/>s, in the order the LV95 build writes them.</summary>
+    public static List<RawLine> RawLines() => Build().Lines.Select(line =>
+    {
+        var (cls, surface, flags, attr, width, y) = Template(line);
+        return new RawLine(line.Uuid, line.Points,
+            new RoadSegment { Class = cls, Surface = surface, Flags = flags, Width = width, Points = [], Attributes = attr },
+            y);
+    }).ToList();
+
+    /// <summary>At most this far between a raw line's points: the extractor's drape spacing.</summary>
+    public const double RawSpacing = MaxDrapeSpacing;
+
+    private static (RoadClass Class, RoadSurface Surface, RoadFlags Flags, RoadAttributes Attr, float Width, float Y) Template(Line line)
+    {
+        var cls = line.Rail is null ? RoadFormat.ParseClass(line.Objektart) : RoadClass.Railway;
+        var surface = line.Rail is null ? RoadFormat.ParseSurface("Hart") : RoadSurface.Unknown;
+        var flags = line.Rail ?? RoadFormat.ParseFlags(null, null, null, line.Divided ? "Wahr" : "Falsch");
+        // a rail line as the extractor writes it (#1052): its formation's width, auf_strasse
+        var attr = line.Rail is not null
+            ? new RoadAttributes(Flags: line.OnStreet ? RoadAttrFlags.OnStreet : RoadAttrFlags.None, Layer: RoadFormat.LayerFor(null, flags))
+            : new RoadAttributes(
+                Flags: RoadFormat.ParseAttrFlags(line.Ring ? "Wahr" : "Falsch", line.Eigentuemer),
+                Layer: RoadFormat.LayerFor("0", flags),
+                Priority: RoadFormat.PriorityFor(cls, line.Verkehrsbedeutung),
+                WidthCm: RoadFormat.NominalWidthCm(line.Objektart));
+        float width = line.Rail is not null
+            ? (flags & RoadFlags.DoubleTrack) != 0 ? 9.0f : (flags & RoadFlags.NarrowGauge) != 0 ? 3.6f : 4.6f
+            : RoadFormat.WidthFor(cls, flags);
+        float y = (float)(Ground + DrapeOffset + (12 - (int)cls) * 0.012);
+        return (cls, surface, flags, attr, width, y);
     }
 
     private static double Dist((double E, double N) a, (double E, double N) b) =>

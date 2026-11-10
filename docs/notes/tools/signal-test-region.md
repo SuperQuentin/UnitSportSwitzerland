@@ -86,7 +86,44 @@
   it gave the north arm's through group a flasher with no plate (fixed in #1192, `traffic-signals`). Front-lit shot: `--origin
   2912500,1320380 --time 17`, `--shot -45,g1.6,5,3,-90,4,out.png` (J21's eastbound gantry).
 
-## Junctions (designed vs built)
+## On cube leaves (#1647, G2 C7)
+
+- **Command**: `TerrainPreprocessor --cube-test-region DIR [--compare] [--verbose]` runs `RoadGen --test-region DIR`, then
+  writes the region's leaves into `DIR_cube` (`tools/TerrainPreprocessor/CubeTestRegion.cs`, ~40 s in Release). `--no-lv95`
+  reuses an LV95 build; `--compare-only` compares a built pair; `--signal-check [--at E,N]` runs RoadGen's `--signal-check` on
+  the leaves' records; `--dump-near E,N,R` lists both builds' segments near a point. The region lies at 47.9° N, 11.6° E
+  (130 leaves in 4 level-9 frames).
+- **What it writes**, each through the cube stages' pieces:
+  - heights flat at **500 m above sea level**, the ellipsoidal height being 500 plus the leaf's `UndulationAt` at every vertex. Every
+    stage drapes on heights above sea level, so the LV95 build's ground and the leaves' are the same (decided, #1647).
+  - cover at every vertex: open grass and the canton borders' band (`SignalTestRegion.CoverAt`);
+  - the LV95 `.bldg` boxes, each moved rigorously into the leaf that holds its middle;
+  - raw lines (`SignalTestRegion.RawLines`) on each frame's plane, cut at leaf edges (`FrameRoadSpace.Split`), densified to
+    4 m and draped on the leaf mesh, into `DIR_cube_temp/roads_raw`;
+  - the network through 4b's `FrameTileLoop`, with the LV95 run's overlay, nodes, tram stops and cantons. The border marks come
+    from `SignalTestRegion.MarkBorders(tile, toLv95)` on the plane.
+  - places and traffic endpoints with Earth positions (`--cube-region-files`).
+- **In the game**: under `--frame earth`, `WorldChoice.Prepare` builds the leaves too, into `user://worlds/signals/chunks_cube`.
+  That is where `TerrainPaths.FindLeafDir` looks. They are stamped with RoadGen's and the preprocessor's module ids, and the LV95
+  copy is kept until D. `--worldpickcheck --world fixture --frame earth` checks the leaves are there (217 s to build them in the
+  editor's debug build). `--frame` is a setting for the title screen (`GameShell.UseTitle`), like `--style`.
+- **Compared** (Nov 10 2026, `--compare`). The bars: counts equal, matched within 5 m with the same look, and signals, stop
+  lines and poles within 0.5 m.
+  - **Held**: the region files back to LV95 (places 0.000 cm, 382 endpoints 0.007 cm), the border stripes (4, 0.14 cm) and
+    the canton signs (8, same variants). The signs stand 5 m further out: the LV95 build stops sidewalks short of the km line
+    the border is.
+  - **Signals that match are exact**: p95 0.00 cm.
+  - **Not held, where a leaf edge crosses an arm** (#1660): approaches 109 / 113, 11 alone, 17 with other lanes; signals
+    29 / 31, 8 with another plan. J1's west arm `L|bL|T|R|bTR` becomes `LT|R|bTR`. J18 and J20 split in two at an edge 2 m
+    from their centre, so `--signal-check` on the leaves fails there (4 approaches without a main pole).
+  - Real Geneva: 40 % of signalised junctions differ. Numbers in #1660; `--compare-real --compare-box` measures them.
+- **Checks under earth**: `--trafficcheck --frame earth --at 2910500,1322500` gives no red run, nothing stuck, 68 cars made.
+  Pictures: `--origin` at the junction for both frames (true north turns the earth view ~2°), and `--date 2026-06-17`
+  (November snows).
+- **Height**: 500 m above sea level, not above the ellipsoid (decided, #1647). The stages drape on sea-level heights, so
+  both builds stand on the same ground and the region files' Earth positions (made on the LV95 ground) lie on the leaves.
+  The region is at 47.9° N, 11.6° E, where the LV95 grid's scale is 1 + 1.8e-4.
+
 
 Lanes per approach as the `LANE` record has them, left to right (`b` a bike lane, `[box]` behind
 a bike box, `[adv]` an advanced bike line); the approach is named by where it comes from.

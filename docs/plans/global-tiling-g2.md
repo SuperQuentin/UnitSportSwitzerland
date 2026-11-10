@@ -292,6 +292,15 @@ until earth looks at least as good as flat.
 D deletes the LV95 runtime, so every world the game can run must already work under `--frame earth`:
 - **The traffic-lights test region** (#1647): `RoadGen --test-region` and `WorldChoice.Prepare` build it only as
   LV95 `.terr` tiles; it also builds cube leaves, compared with the LV95 build, and `WorldChoice` picks them under earth.
+  **Built** (#1651): `TerrainPreprocessor --cube-test-region` builds the leaves (flat 500 m above sea level, ~40 s) and
+  `--compare` checks them; `WorldChoice` builds them under earth; world-pick, signal and traffic checks pass on them.
+  Where a leaf edge crosses an arm, the junction differs from the LV95 build (#1660 below); merged with those differences listed.
+- **Junctions the same wherever the tile edges are** (#1660): the user's requirement (Nov 10 2026), "junctions should be
+  generated the same, no matter where the tile edges are". The same junction must give the same lanes, pockets, cores,
+  paint and signals on LV95 km tiles, on leaves, or on leaves shifted or turned. The test is to shift the tiling over the
+  test region and compare. Today the network stage plans per raw piece: on Geneva's leaves 40 % of signalised junctions
+  and 22 % of approaches differ from LV95 (74 % of signals within 30 m of a leaf edge). Plan junctions on whole lines and
+  cut only when writing (#1546's direction). This changes the LV95 bytes on purpose.
 - **The fun world's extras** (#1648): `FunBackdrop` (LV95 tile ids, `ToWorld(E, N)`), `FunRings`, the PvP zone and
   its LV95 start move to Earth positions; its course is already on leaves (#1614).
 - **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
