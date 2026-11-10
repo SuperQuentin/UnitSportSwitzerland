@@ -50,6 +50,12 @@ public static class LeafStandIn
     public static bool IsStandIn(TileId id) => TryLeaf(id, out _);
 
     /// <summary>
+    /// The first E a stand-in tile's records are named by (metres, its kilometre times 1000): no LV95 place comes near it,
+    /// so a place named at or past it is a stand-in record (<c>GlobalPos.FromLv95</c>, <c>OriginFrame.ToWorld</c>, #1704).
+    /// </summary>
+    public const double FirstPlaceE = BaseE * 1000.0;
+
+    /// <summary>
     /// The 1 m grid of a leaf's ground (its lattice vertices in its anchor frame, x y z a vertex, row-major, NaN where
     /// it has none): each grid vertex takes the height of the mesh triangle over it (split as the drawn mesh and
     /// <see cref="CubeGeometry.MeshHeightAt"/> split it). Grid vertices off the leaf take the nearest height on their

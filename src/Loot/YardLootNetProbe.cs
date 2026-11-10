@@ -62,9 +62,11 @@ public partial class YardLootNetProbe : ChatProbe
         YardStock? any = null;
         foreach (var site in sites)
         {
-            var tile = TileId.FromLv95(site.E, site.N);
+            // the ground's name for the site's tile: LV95, or an earth leaf's stand-in (#1704)
+            var tile = SiteTiles.TileOf(me, site.E, site.N);
+            var (siteE, siteN, _) = GlobalPos.FromLv95(site.E, site.N, at.Alt).InTileEn(tile);
             var yard = await Task.Run(() => SitePlans.YardOfTile(source, tile));
-            var near = yard.OrderBy(c => Sq(c.E - site.E) + Sq(c.N - site.N)).ToList();
+            var near = yard.OrderBy(c => Sq(c.E - siteE) + Sq(c.N - siteN)).ToList();
             foreach (var c in near.Where(c => c.Kind == SiteStockKind.Skip))
             {
                 var stacks = LootTables.YardContents(c.Building, c.Index, c.Kind, LootTables.Epoch(c.Building, Now));
@@ -94,7 +96,7 @@ public partial class YardLootNetProbe : ChatProbe
             // the tile frame is the world's: x east, z south
             var along = new Vector2(-outward.Y, outward.X).Normalized() * off;
             double e = c.E + outward.X + along.X, n = c.N - (outward.Y + along.Y);
-            var at = me.Origin!.ToWorld(e, n, c.Bottom + 0.6f);
+            var at = SiteTiles.World(me, LootService.TileOf(c), e, n, c.Bottom + 0.6f);
             var face = -new Vector3(outward.X, 0, outward.Y).Normalized();
             me.PlaceAt(at, Mathf.Atan2(-face.X, -face.Z));
             me.Velocity = Vector3.Zero;
@@ -102,7 +104,7 @@ public partial class YardLootNetProbe : ChatProbe
             await Seconds(0.6);
             if (Loot.NearestYard(me, out var faced) && faced.Index == c.Index && faced.Building == c.Building)
             {
-                GD.Print($"{Log} standing {F(SiteLoot.EdgeDistance(c, me.Global.Lv95.E, me.Global.Lv95.N))} m from the {SiteLoot.Describe(c.Kind)}, feet {F(me.Global.Alt - c.Bottom)} m over its foot");
+                GD.Print($"{Log} standing {F(LootService.EdgeDistance(c, me.Global))} m from the {SiteLoot.Describe(c.Kind)}, feet {F(me.Global.Alt - c.Bottom)} m over its foot");
                 return true;
             }
         }
@@ -223,15 +225,15 @@ public partial class YardLootNetProbe : ChatProbe
         var askId = stacks.Count > 0 ? stacks[0].Stack.Id : ItemId.None;
         Loot.Close();
         var outward = skip.AxisV * (skip.HalfV + 15f);
-        var away = me.Origin!.ToWorld(skip.E + outward.X, skip.N - outward.Y, skip.Bottom + 1f);
+        var away = SiteTiles.World(me, LootService.TileOf(skip), skip.E + outward.X, skip.N - outward.Y, skip.Bottom + 1f);
         if (me.Terrain != null && me.Terrain.TryGetHeight(away, out float g)) away.Y = g + 0.5f;
         me.PlaceAt(away, me.Rotation.Y);
         await Seconds(2.5);   // the server has the body where it is now
         int before = askId == ItemId.None ? 0 : CountOf(askId);
         Loot.TakeUnchecked(skip.Building, skip.Index, ask);
         await Seconds(2.0);
-        Expect(SiteLoot.EdgeDistance(skip, me.Global.Lv95.E, me.Global.Lv95.N) > 10 && (askId == ItemId.None || CountOf(askId) == before),
-            $"a take of stack {ask} from {F(SiteLoot.EdgeDistance(skip, me.Global.Lv95.E, me.Global.Lv95.N))} m away is refused");
+        Expect(LootService.EdgeDistance(skip, me.Global) > 10 && (askId == ItemId.None || CountOf(askId) == before),
+            $"a take of stack {ask} from {F(LootService.EdgeDistance(skip, me.Global))} m away is refused");
         if (askId != ItemId.None)
         {
             // back at it: still there, and granted

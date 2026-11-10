@@ -535,10 +535,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
-        _pallets.Source = () => source;
+        _pallets.Source = () => content;
         // cranes players work (#618): who works which, and where one was let go
         _cranes = Terrain.Construction.CraneService.Create(this, server: true);
-        _cranes.Source = () => source;
+        _cranes.Source = () => content;
         // concerts (#885): who hosts which stadium's set, its cues, the operator's DMX relayed
         _concerts = Concert.ConcertService.Create(this, server: true);
         _concerts.Chat = _chat;
@@ -550,7 +550,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             Farming.FarmSales.Create(this, origin, server: true).NameOf = _chat.NameOfPeer;
             _farmStands = Farming.FarmStands.Create(this, origin, server: true);
             _farmStands.NameOf = _chat.NameOfPeer;
-            _farmStands.Source = () => source;
+            _farmStands.Source = () => content;
         }
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))

@@ -264,8 +264,13 @@ public sealed class OriginFrame
         return Anchor(System.Math.Round(l.E / 1000) * 1000, System.Math.Round(l.N / 1000) * 1000);
     }
 
+    /// <summary>
+    /// A place in LV95 notation in this world; until G2's step D a place named in an earth leaf's stand-in tile (past
+    /// <see cref="Terrain.Leaves.LeafStandIn.FirstPlaceE"/>) goes by that tile's frame (<see cref="GlobalPos.FromLv95"/>, #1704).
+    /// </summary>
     public Vector3 ToWorld(double lv95E, double lv95N, double altitude)
     {
+        if (lv95E >= Terrain.Leaves.LeafStandIn.FirstPlaceE) return ToWorld(GlobalPos.FromLv95(lv95E, lv95N, altitude));
         if (Axes == null) return new((float)(lv95E - E), (float)(altitude - Alt0), (float)-(lv95N - N));
         var (x, y, z) = Axes.FromEcef(SwissGeodesy.ToEcef(lv95E, lv95N, altitude));
         return new((float)x, (float)y, (float)z);
