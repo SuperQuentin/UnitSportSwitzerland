@@ -88,8 +88,10 @@ decisions were made with the user on 2026-11-08.
     rest the fill's (cover, still water, trees and buildings standing in it; its roads stay the region's);
   - a fixture course (`--chunks fixture:<course>`) on its own leaves (`FixtureLeaves`), all there is; the earth world
     no longer falls back to `flat` on one;
-  - produced leaves are kept 64 at a time; a fill leaf takes ~0.5 s of a worker, ~2 s with roads (RoadGen's stage, one
-    leaf at a time).
+  - produced leaves are kept 64 at a time; a fill leaf takes ~0.5 s of a worker, ~0.2-1.5 s more with roads (RoadGen's
+    stage, one leaf at a time, #1699); the globe's far fill heights run below normal thread priority, behind them;
+  - the flat `ChunkManager` an earth client still holds builds no horizon (`WithHorizon`: 40,401 generated tiles for
+    nothing, #1699).
 - **`Leaves/LeafBlend`**: the flat fill's blend on the face's global lattice, a convex mix all the way
   (`M = (1 - W) G + W R`, then `h = (1 - F) M + F C`, C the real surface continued from the nearest real cell over
   60 m). The real ground is `RealLeaf`'s 8-vertex cells with ground everywhere, as quadtree blocks; their heights are

@@ -49,7 +49,13 @@ the LV95 tiles they still serve. The game reads none of them until C1 draws leav
 - Roads: RoadGen's stage on the leaf's work frame (`FrameUnits`), halo 2 leaves, one leaf at a time. The raw input is
   the generator's keyed segments of the LV95 tiles under a leaf, cut at its edges, each keyed by its line and the
   metre it starts at. The ground is the generator's at a plane point; the walls are its buildings on the plane.
-  ~2 s a leaf with roads.
+  The leaves of a work frame share its units, raw roads, walls and RoadGen's `Facades`/`UrbanField` (64 tiles, 2
+  frames; #1699): without them each leaf rebuilt the urban field over its 5 x 5 halo, a cube projection per 2 m cell.
+  A village leaf ~1.5 s (was ~5 s), a rural one 0.1-0.8 s; the first leaf of a process adds the generator's river
+  network (2-4 s).
+- `BlendCheck --leaf-roads-time [--at E,N] [--side N] [--digest file]`: each leaf's time round a point (the brsquad
+  village by default), and a SHA-256 of each leaf's roads, written to the file or compared with it: build a baseline
+  on `main`, then a speed-up must give `RESULT: ok`.
 - `BlendCheck --leaves`:
   - heights are the function within 0.03 mm;
   - shared edges are equal within a frame, and within 1 cm across one;
