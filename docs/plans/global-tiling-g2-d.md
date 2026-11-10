@@ -277,21 +277,20 @@ State on 2026-11-10.
 
 | Item | Issue / PR | State | Blocks |
 |---|---|---|---|
-| C6: the fill's lake below Lavaux, the fill from the pyramid | #1678 | open; brief in the shared notes; session working | D2 (gate shots `lavaux_*`, `lake_air5k`) |
-| C6: shots wait for the globe's far leaves | #1679, PR #1681 (draft) | open, session working | the gate's `riddes_aerial` |
-| C6: the gate itself, rerun after #1678/#1679 | #1639's tool, #1500 comments | last run `4068dd8f`: 42 over, 42 judged, 0 within; the three accepted differences decided Nov 10 | D2 |
-| C6: a stepped patch where the region meets the fill east of Lavaux | #1673 | open | probably closed by #1678 |
-| C7: site pits on leaves | #1653 | open, session working | D2 (`--pitcheck` under earth) |
-| C7: the shipping pipeline on cube data | #1650 | open, nobody on it | D3 |
-| C7: junctions the same wherever the tile edges are | #1660, PR #1666 (draft, mergeable) | PR B open; #1676 (three tram cores and three signal plans from plane and ground) filed apart | D1 (the network stage it changes) |
-| C7: the test region's leaf build against LV95 | #1676 | open | judged, not blocking (differences from the plane, not the cuts) |
-| Collision patch 27 m over the height at the region's border | #1626 | open | D2 (a fall-through at the data edge would be a flip regression) |
+| C6: visual parity | #1678, #1679, #1696, gate PRs #1690, #1697, #1698 | **done** (Nov 10): 0 over the floor, the rest judged; accepted differences in the G2 plan, near-ground shading follow-up #1695 | — |
+| C7: site pits on leaves | #1653 | **done** (#1687) | — |
+| C7: junctions the same wherever the tile edges are | #1660, #1691 | **done** (#1666, #1700): Geneva and the test region pass every tiling | — |
+| C7: the leaf build against LV95 | #1676 | judged by the user, not blocking: half the differences are an LV95 wall bug (filed only), the rest thresholds; a junction sanity check follows, not blocking | — |
+| C7: the shipping pipeline on cube data | #1650 | open, waits on G3's nationwide data | D3 |
+| **G1**: the earth server builds the fill and generated world | #1682 | **done** (#1693); fill leaves made fast (#1699, #1701) | — |
+| **G2**: fixture courses online on leaves | #1683, PR #1692 | code done, the full earth net tier running | D2 and the net bar |
+| **G3**: the server's flat-held services | #1684 | **done** (#1694): no `ChunkManager` on the earth server, escape hatches 0 | — |
+| Generated-world gameplay under earth | #1704, PR #1707 | session working | D2 |
+| Collision patch 27 m over the height at the region's border | #1626 | session working | D2 (a fall-through at the data edge would be a flip regression) |
 | Net checks failing on `main` | #1628 | open (orbit and movespeed, flat) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
-| **G1**: the earth server builds the fill and generated world | #1682 | not started | D2 |
-| **G2**: fixture courses online on leaves | #1683 | not started | D2 and the net bar |
-| **G3**: the server's flat-held services | #1684 | not started | D3 (D2 can flip with them still flat-held, since `--frame flat` stays) |
-| **D0**: the bar's probes and `TEST_FRAME` | #1515 | not started | D2 |
+| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1515 | session working | D2 |
+| **D1**: the build tools independent of LV95 | #1515 | session working | D4 |
 
 ## Decided without the user
 
