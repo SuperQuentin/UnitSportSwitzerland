@@ -41,7 +41,7 @@ decisions were made with the user on 2026-11-08.
   - drawn at every altitude, placed in the anchor frame;
   - its quadtree goes down to level 14 from the leaves' heights (every 8th vertex);
   - commits under a 3 ms budget.
-  - The near leaves are drawn whole in front of its tiles (the shader's push).
+  - The far view at every altitude (#1629, C6): `terrain/earth-far-view`.
 
 ## Furnishing (PR 2, #1613)
 

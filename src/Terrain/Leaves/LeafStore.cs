@@ -146,6 +146,32 @@ public sealed class LeafStore : ILeafSource
     }
 
     /// <summary>
+    /// Some of a leaf's sections alone (the globe's far leaves: heights, water, cover, trees, buildings, #1629), decoded
+    /// from its entry without the rest and not kept, so the near leaves' cache is not churned; the decoded leaf itself
+    /// when it is held. Null where the region holds none.
+    /// </summary>
+    public CubeLeafContent? Sections(CubeKey key, params LeafKind[] kinds)
+    {
+        if (Cached(key) is { } held) return held;
+        if (Entry(key) is not { } bytes) return null;
+        var c = new CubeLeafContent { Key = key };
+        foreach (var kind in kinds)
+        {
+            if (CubeLeafCodec.ReadSection(bytes, kind) is not { } s) continue;
+            switch (kind)
+            {
+                case LeafKind.Heights: c.Heights = LeafHeights.Decode(s); break;
+                case LeafKind.Cover: c.Cover = LeafCover.Decode(s); break;
+                case LeafKind.Water: c.Water = LeafWater.Decode(s); break;
+                case LeafKind.Buildings: c.Buildings = LeafBuildings.Decode(s); break;
+                case LeafKind.Trees: c.Trees = LeafTrees.Decode(s); break;
+                default: throw new ArgumentException($"{kind} is not read alone", nameof(kinds));
+            }
+        }
+        return c;
+    }
+
+    /// <summary>
     /// A leaf's roads alone (#1636: the traffic's graphs read a few km of leaves), decoded from its entry without the other
     /// sections and not kept; the decoded leaf's own when it is held. Null where the region holds none or the leaf has no roads.
     /// </summary>
