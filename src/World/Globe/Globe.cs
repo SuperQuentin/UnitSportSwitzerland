@@ -645,9 +645,9 @@ public partial class Globe : Node
                     var weights = palette != null ? GlobeGround.Sample(palette, rect.X + uvs[k].X * rect.Z, rect.Y + uvs[k].Y * rect.W) : Vector4.Zero;
                     // a leaf's own water decides wet and dry; the colour image only what the dry ground is
                     if (wet != null) weights = wet[k] ? new Vector4(1, 0, 0, 0) : GlobeGround.Dry(weights);
-                    // a coarser level has no water of its own: a lake's surface is level to the centimetre (Blue
-                    // Marble draws inland lakes black, and the region's colour fades out toward its edge)
-                    else if (guessed?[k] != true && GlobeGround.Level(hs, n, i, j)) weights = new Vector4(1, 0, 0, 0);
+                    // a coarser level has no water of its own: a lake's surface is level to the centimetre, where the
+                    // colour image hints at water too (a flat plateau in the data on the Salève drew a lake)
+                    else if (guessed?[k] != true && weights.X > GlobeGround.WaterHint && GlobeGround.Level(hs, n, i, j)) weights = new Vector4(1, 0, 0, 0);
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);
                     if (cover != null)
                     {

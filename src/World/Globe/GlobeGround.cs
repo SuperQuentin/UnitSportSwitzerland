@@ -70,7 +70,8 @@ public static class GlobeGround
         var s = new Vector3(srgb.R, srgb.G, srgb.B);
         float luma = (s.X + s.Y + s.Z) / 3f;
         float sat = Math.Max(s.X, Math.Max(s.Y, s.Z)) - Math.Min(s.X, Math.Min(s.Y, s.Z));
-        float water = Smooth(0.02f, 0.07f, s.Z - s.Y) * Smooth(0.7f, 0.55f, luma);
+        // bluer than green, or near black (Blue Marble draws inland lakes black)
+        float water = Math.Max(Smooth(0.02f, 0.07f, s.Z - s.Y) * Smooth(0.7f, 0.55f, luma), Smooth(0.12f, 0.06f, luma));
         float snow = Smooth(0.62f, 0.78f, luma) * (1 - water);
         float forest = Smooth(0.30f, 0.24f, luma) * Smooth(0.0f, 0.04f, s.Y - s.Z) * (1 - water - snow);
         float rock = Smooth(0.12f, 0.07f, sat) * Smooth(0.30f, 0.40f, luma) * (1 - water - snow - forest);
@@ -83,6 +84,9 @@ public static class GlobeGround
     /// Well over what the region's two builds differ by on land (the lake stands 3.8 m apart in places).
     /// </summary>
     public const float BedM = 20f;
+
+    /// <summary>The colour's water weight a level surface needs to be drawn as water (<see cref="Level"/>).</summary>
+    public const float WaterHint = 0.2f;
 
     /// <summary>How level still water is, metres: every neighbour of a vertex within this of it.</summary>
     public const float LevelM = 0.05f;
