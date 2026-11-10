@@ -289,7 +289,7 @@ State on 2026-11-10.
 | Collision patch 27 m over the height at the region's border | #1626 | session working | D2 (a fall-through at the data edge would be a flip regression) |
 | Net checks failing on `main` | #1628 | open (orbit and movespeed, flat) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
-| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1515 | session working | D2 |
+| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | probes and `TEST_FRAME` built (`core/earth-bar-probes`); the long drive is Geneva → Nyon inside the Geneva patch (two leaf sets at once is not built: Val Müstair waits for it); the flight reads Brest's leaves alone (`--leaves`), Geneva on the pyramid; dry run running | D2 |
 | **D1**: the build tools independent of LV95 | #1515 | session working | D4 |
 
 ## Decided without the user

@@ -20,8 +20,14 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
   `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
   instead, which does all of that (`twoclient-checks`).
-- **The net tier under earth** (#1683): `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full`; every net check's server
-  and clients get `--frame earth` and a log not stating `[frame] earth` fails the check (`twoclient-checks`).
+- **Every tier in a frame** (#1683 net, #1710 the rest): `TEST_FRAME=earth|flat tools/test.sh <tier>`. Every Godot of
+  every row plays in it: a direct row gets `--frame <it>` unless it has its own (then it is held to its own, and a
+  `--frame flat` row fails an earth run), a `tools/*.sh` script passes it to its Godots (`twoclient.sh` does,
+  `guard_frame_args` for the others), and a log not stating the frame fails its row. Every run says it once
+  (`Core/FrameReport`): `[frame] earth|flat` from the world that decided it (client, server, `TestWorld`), `[frame]
+  none (...)` at exit from a process that built no world. `TEST_FRAME=earth tools/test.sh full` is G2 D's dry run;
+  the earth net bar alone is `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full`. The unit tier has no frame.
+- **A row longer than `TEST_TIMEOUT`** (600 s) starts with `@timeout=<s>` (the long drive and flight, `core/earth-bar-probes`).
 - **A test window never takes focus or the mouse and never makes a sound (#1378)**: a person works at
   the machine while a tier runs. Every windowed Godot a check starts runs in a fresh `user://` of its own
   (`guard_test_userdata <dir>`, or `twoclient.sh`'s `tc_userdata`) holding `test_window.cfg`, which
