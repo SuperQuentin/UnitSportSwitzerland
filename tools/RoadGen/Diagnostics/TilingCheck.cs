@@ -218,6 +218,10 @@ public static class TilingCheck
                     if (Enumerable.Range(0, seg.PointCount).Any(i => Near(seg.Points[i * 3], seg.Points[i * 3 + 2])))
                         log(string.Create(CultureInfo.InvariantCulture,
                             $"    [{units}] cell {id.E},{id.N} {seg.Class} w {seg.Width:F1} {seg.Flags} {w + seg.Points[0]:F2},{nn - seg.Points[2]:F2} -> {w + seg.Points[^3]:F2},{nn - seg.Points[^1]:F2} ({seg.PointCount} pts) {seg.Attributes.Flags}"));
+                foreach (var pt in tile.Paint)
+                    if (pt.Vertices.Length >= 6 && Enumerable.Range(0, pt.Vertices.Length / 3).Any(i => Near(pt.Vertices[i * 3], pt.Vertices[i * 3 + 2])))
+                        log(string.Create(CultureInfo.InvariantCulture,
+                            $"    [{units}] cell {id.E},{id.N} paint {pt.Type} {pt.Shape} dash {pt.Dash}/{pt.Gap} ref {(pt.Segment is null ? "-" : tile.Segments.Contains(pt.Segment) ? "held" : "unheld")} {w + pt.Vertices[0]:F2},{nn - pt.Vertices[2]:F2} -> {w + pt.Vertices[^3]:F2},{nn - pt.Vertices[^1]:F2} ({pt.Vertices.Length / 3} pts)"));
                 foreach (var j in tile.Junctions)
                 {
                     double cx = 0, cz = 0;

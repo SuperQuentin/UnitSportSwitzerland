@@ -95,6 +95,14 @@ public static class TileCut
             foreach (var p in src.Paint)
             {
                 if (p.Segment is not null || p.Transition is not null) { along.Add((key, p)); continue; }
+                if (lines && p.Shape == PaintShape.Polyline && p.Vertices.Length >= 6)
+                {
+                    // a line drawn as geometry (rail grooves, ...) is a line: cut where it crosses an edge, keeping its dashes' phase
+                    var cut = CutPolyline(p, frame);
+                    if (cut.Count > 1) stats.PaintCut++;
+                    foreach (var (tile, piece) in cut) Into(tile)?.Paint.Add(piece);
+                    continue;
+                }
                 Into(lines ? Centroid(p.Vertices) : key)?.Paint.Add(p);
             }
             foreach (var j in src.Junctions) Into(lines ? Centroid(j.Vertices) : key)?.Junctions.Add(j);
@@ -317,6 +325,89 @@ public static class TileCut
             Class = seg.Class, Surface = seg.Surface, Flags = seg.Flags, Width = seg.Width, Points = pts,
             Attributes = at with { Flags = flags, Left = Side(at.Left), Right = Side(at.Right) },
         };
+    }
+
+    /// <summary>A polyline paint drawn as geometry cut at real tile edges: a dashed one keeps its pattern (a dash the cut halves goes on solid).</summary>
+    private static List<(TileId Tile, RoadPaint Paint)> CutPolyline(RoadPaint p, BlockFrame frame)
+    {
+        var real = frame.Real;
+        double west = frame.West(BlockFrame.Lines), north = frame.North(BlockFrame.Lines);
+        var v = p.Vertices;
+        int n = v.Length / 3;
+        // stations of every vertex and every edge crossing, with the tile after each
+        var stations = new List<double> { 0 };
+        var tiles = new List<TileId>();
+        double s = 0;
+        for (int i = 1; i < n; i++)
+        {
+            double ax = west + v[i * 3 - 3], ay = north - v[i * 3 - 1], bx = west + v[i * 3], by = north - v[i * 3 + 2];
+            double len = Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+            double e = len < 1e-9 ? 0.5 : Math.Min(0.5, 1e-5 / len);
+            var ta = real.TileAt(ax + (bx - ax) * e, ay + (by - ay) * e);
+            var tb = real.TileAt(bx - (bx - ax) * e, by - (by - ay) * e);
+            var cuts = new List<(double T, TileId From, TileId To)>();
+            Crossings(real, ax, ay, bx, by, e, 1 - e, ta, tb, len, cuts);
+            tiles.Add(ta);
+            foreach (var (t, _, to) in cuts) { stations.Add(s + len * t); tiles.Add(to); }
+            s += len;
+            stations.Add(s);
+        }
+        var runs = new List<(TileId Tile, double From, double To)>();
+        int start = 0;
+        for (int k = 1; k <= tiles.Count; k++)
+        {
+            if (k < tiles.Count && tiles[k] == tiles[start]) continue;
+            runs.Add((tiles[start], stations[start], stations[k]));
+            start = k;
+        }
+        if (runs.Count == 1) return [(runs[0].Tile, p)];
+        RoadPaint Piece(double a, double b, bool solid) => new()
+        {
+            Shape = p.Shape, Type = p.Type, Variant = p.Variant, Rgba = p.Rgba, Width = p.Width,
+            Dash = solid ? 0 : p.Dash, Gap = solid ? 0 : p.Gap, Vertices = SubLine(v, a, b),
+        };
+        var result = new List<(TileId, RoadPaint)>();
+        double period = p.Dash + p.Gap;
+        foreach (var (tile, a0, b) in runs)
+        {
+            double a = a0;
+            if (b - a < 0.01) continue;
+            if (p.Dash > 0 && period > 0 && a > 1e-6)
+            {
+                double phase = a % period;
+                if (phase < p.Dash - 1e-6) result.Add((tile, Piece(a, Math.Min(a + p.Dash - phase, b), true)));
+                a += period - phase;
+                if (b - a < 0.01) continue;
+            }
+            result.Add((tile, Piece(a, b, false)));
+        }
+        return result;
+    }
+
+    /// <summary>The vertices of a polyline (xyz triples) between two stations along it in plan, the ends interpolated.</summary>
+    private static float[] SubLine(float[] v, double a, double b)
+    {
+        var o = new List<float>();
+        double s = 0;
+        void Add(int i, int j, double t)
+        {
+            o.Add(v[i] + (v[j] - v[i]) * (float)t);
+            o.Add(v[i + 1] + (v[j + 1] - v[i + 1]) * (float)t);
+            o.Add(v[i + 2] + (v[j + 2] - v[i + 2]) * (float)t);
+        }
+        for (int k = 3; k + 2 < v.Length; k += 3)
+        {
+            double len = Math.Sqrt((v[k] - v[k - 3]) * (v[k] - v[k - 3]) + (v[k + 2] - v[k - 1]) * (v[k + 2] - v[k - 1]));
+            double s1 = s + len;
+            if (s1 > a && s <= b && len > 1e-9)
+            {
+                if (o.Count == 0) Add(k - 3, k, Math.Clamp((a - s) / len, 0, 1));
+                if (s1 <= b) { o.Add(v[k]); o.Add(v[k + 1]); o.Add(v[k + 2]); }
+                else { Add(k - 3, k, Math.Clamp((b - s) / len, 0, 1)); break; }
+            }
+            s = s1;
+        }
+        return o.ToArray();
     }
 
     /// <summary>A linear prop (x, foot y, z, height per point) cut at real tile edges.</summary>
