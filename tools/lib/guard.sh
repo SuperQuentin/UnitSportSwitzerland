@@ -383,3 +383,22 @@ guard_watch() {
   ) > /dev/null &   # never hold the caller's $(...) pipe open, or `w=$(guard_watch ...)` hangs
   echo $!
 }
+
+# TC_FRAME=earth|flat (#1683): the frame a net check's Godots play in. guard_frame_args sets FRAME_ARGS
+# (--frame <frame>, empty when unset) for each server and client; guard_frame_check <name> <logs...> prints a
+# FAILED RESULT line and returns 1 for every log that does not state that frame ("[frame] <frame>", printed by
+# ServerWorld and ClientWorld on every run), so a silent fallback to the other frame never reads as a pass
+guard_frame_args() { FRAME_ARGS=(); [ -n "${TC_FRAME:-}" ] && FRAME_ARGS=(--frame "$TC_FRAME"); return 0; }
+guard_frame_check() {
+  [ -z "${TC_FRAME:-}" ] && return 0
+  local name=$1 log said bad=0
+  shift
+  for log; do
+    [ -f "$log" ] || continue
+    grep -aq "\[frame\] $TC_FRAME" "$log" && continue
+    said=$(grep -a '\[frame\]' "$log" | head -1 | tr -d '\r')
+    echo "[$name] RESULT: FAILED ($log is not in frame $TC_FRAME: ${said:-no [frame] line})"
+    bad=1
+  done
+  return $bad
+}

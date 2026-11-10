@@ -25,6 +25,9 @@
 #                                    ( tc_userdata "$C_UD"; tc_client ... ) & for a client of its own
 #   tc_stop [pid]                    kill a server (default $SERVER) and every process under it, by PID
 #   tc_ok <n> <logs...>              true when the logs hold exactly n "RESULT: ok" lines
+# TC_FRAME=earth|flat (#1683; tools/test.sh passes TEST_FRAME): every server and client started here gets
+# --frame <frame>, and at exit the check fails ("RESULT: FAILED", exit 1) if one of their logs does not state
+# that frame ("[frame] earth"), so a world that silently fell back to the other frame never passes.
 # Every run goes through guard_run (timeout and RAM floor, tree kill by PID); the servers left at
 # exit are killed by the EXIT trap. If the script's own RAM watchdog fires, it prints
 # "[<name>] RESULT: FAILED (stopped by a TERM ...)" and exits 143. A headless Godot may exit 139 after its result: read RESULT lines.
@@ -73,11 +76,21 @@ if [ "${USERDATA:-}" != real ]; then
 fi
 
 _tc_servers=()
+# every server's and client's log, for the frame check at exit: a file, as background clients run in subshells
+# ($$ is this script's PID in them too)
+_tc_logs=$OUT/.tc_logs.$$
+: > "$_tc_logs"
+guard_frame_args
 _tc_cleanup() {
   local p
   # only the ones still up: a tree walk costs ~0.5 s on Git Bash, for a server tc_stop already took down
   for p in ${_tc_servers[@]+"${_tc_servers[@]}"}; do kill -0 "$p" 2>/dev/null && _guard_kill_tree "$p"; done
   [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock
+  # last, after the check's own RESULT line: tools/test.sh reads the last one
+  local logs=()
+  while IFS= read -r p; do [ -n "$p" ] && logs+=("$p"); done < "$_tc_logs"
+  rm -f "$_tc_logs"
+  guard_frame_check "$_tc_name" ${logs[@]+"${logs[@]}"} || exit 1
 }
 trap _tc_cleanup EXIT
 # under tools/test.sh the runner already holds the lock: taking it again would wait forever
@@ -103,7 +116,8 @@ tc_server() {
   local timeout_s=$1 wait_s=$2 log=$3 i
   shift 3
   : > "$log"
-  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
+  echo "$log" >> "$_tc_logs"
+  _tc_ports "$@" ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --headless --path . -- "$@" &
   SERVER=$!
   _tc_servers+=("$SERVER")
@@ -122,7 +136,8 @@ tc_client() {
   shift 2
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=
-  _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
+  echo "$log" >> "$_tc_logs"
+  _tc_ports "$@" ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} $headless --path . -- "$@"
 }
 

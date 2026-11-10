@@ -65,6 +65,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     public override async void _Ready()
     {
         if (ServerStats.Requested) AddChild(new ServerStats { Name = "ServerStats" });
+        // --frame from the command line alone: a server never reads the machine's settings file (a client's choice)
+        if (Enum.TryParse<WorldFrame>(CmdArgs.Value("--frame"), true, out var frame)) GameSettings.Current.Frame = frame;
         // --test-world (#999, a game hosted from the menu on a test world): its tiles, course and saves
         if ((WorldChoice.Active = WorldChoice.FromArgs()) is { } testWorld)
         {
@@ -75,14 +77,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 return;
             }
             GD.Print($"[server] test world {testWorld.Id}: {testWorld.Title}");
-            if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
+            // on its leaves under earth, as the clients' (#1683)
+            if (WorldChoice.FunActive) World.Fun.FunWorld.Enter(onLeaves: GameSettings.Current.Frame == WorldFrame.Earth);
         }
         // the account step of a join (#1123): checked before anything is loaded, so a typo never serves a world
         if (ParseAccounts() is not { } accounts) { GetTree().Quit(1); return; }
         string chunkDir = TerrainPaths.FindChunkDir();
-        // a test course built in code instead of the map (#221, Core/Systems): the same as the clients'
+        // a test course built in code instead of the map (#221, Core/Systems): the same as the clients', on its leaves
+        // under earth as theirs are (#1683): every record laid where the leaves are
         IChunkSource local = Systems.FixtureCourse is { } course
-            ? Terrain.Fixture.FixtureChunkSource.Create(course, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N)
+            ? Terrain.Fixture.FixtureChunkSource.Create(course, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
+                    earth: GameSettings.Current.Frame == WorldFrame.Earth)
                 ?? throw new ArgumentException($"no fixture course '{course}'")
             : new LocalChunkSource(chunkDir);
         var manifest = await local.LoadManifestAsync();
@@ -117,14 +122,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (SpawnPoint.ParseOrigin() is var (pinE, pinN))
             origin = new WorldOrigin(pinE, pinN);
         // --frame earth (#1513, G2 C4): the server's world is the ENU frame on the manifest origin at height 0, standing on
-        // the region's leaves; its far regions are ENU frames too (ServerRegions.Enu). Not on a fixture course (no leaves).
-        // From the command line alone: a server never reads the machine's settings file (a client's choice)
-        if (Enum.TryParse<WorldFrame>(CmdArgs.Value("--frame"), true, out var frame)) GameSettings.Current.Frame = frame;
-        bool earth = GameSettings.Current.Frame == WorldFrame.Earth && Systems.FixtureCourse == null;
+        // the region's leaves, or a fixture course's own (#1683); its far regions are ENU frames too (ServerRegions.Enu)
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth;
         if (earth) origin = new WorldOrigin(FrameAxes.Enu(origin.ToGlobal(Vector3.Zero).Ecef));   // the flat origin's point at height 0
         _origin = origin;
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
             + (manifest.Tiles.Count == 0 ? " (generated world)" : "") + (earth ? ", frame earth (ENU, on leaves)" : ""));
+        // the frame this world plays in, every run: a net check under --frame earth fails on a silent flat fallback (#1683)
+        GD.Print($"[frame] {(earth ? "earth" : "flat")}");
 
         // The same generated fill as every client's, anchored at the same point, so height
         // queries, interiors and loot work on generated ground and agree with what players see.
@@ -162,7 +167,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // leaves to be furnished (C1 PR 2), as on an earth client
         // the region's leaves alone: the fill and the generated world round them are the clients' until the server builds
         // them too (C1 PR 3 follow-up)
-        var leaves = earth ? Terrain.Leaves.EarthLeaves.Region(Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir())) : null;
+        var leaves = earth ? EarthLeaves(local) : null;
         if (leaves != null)
         {
             _earth = new Terrain.Earth.EarthWorld(leaves, origin) { BuildMeshes = false, CommitBudgetMs = _chunks.CommitBudgetMs };
@@ -881,9 +886,25 @@ public partial class ServerWorld : Node3D, IOriginContainer
     /// line of sight by <see cref="EarthSight.Clear"/>, heights above ground in LHN95 as <see cref="GlobalPos.Alt"/>.
     /// With no pyramid, sight is free (as a flat server with no horizon file).
     /// </summary>
+    /// <summary>
+    /// The server's leaves under <c>--frame earth</c>: the region's, or a fixture course's alone, built here as every client
+    /// builds its own copy (#1683, <c>FixtureLeaves</c>), so nothing of the course crosses the wire.
+    /// </summary>
+    private static Terrain.Leaves.EarthLeaves EarthLeaves(IChunkSource local)
+    {
+        if (local is not Terrain.Fixture.FixtureChunkSource course)
+            return Terrain.Leaves.EarthLeaves.Region(Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir()));
+        var built = Terrain.Fixture.FixtureLeaves.At(course);
+        GD.Print($"[earth] fixture course {course.Course.Name} on {built.Leaves.Count} leaves");
+        var leaves = Terrain.Leaves.EarthLeaves.Fixture(built.Leaves.Contains, built.Build);
+        leaves.Log = s => GD.Print(s);
+        return leaves;
+    }
+
     private InterestService CreateEarthInterest(Terrain.Earth.EarthWorld earth)
     {
-        var pyramid = World.Globe.DataDir is { } dir ? new PyramidGround(dir) : null;
+        // a fixture course is all the ground there is: the real pyramid's mountains round it would hide it from itself
+        var pyramid = !earth.Leaves.IsFixture && World.Globe.DataDir is { } dir ? new PyramidGround(dir) : null;
         GD.Print($"[interest] earth: line of sight over the leaves and {(pyramid != null ? $"the pyramid in {pyramid.Dir} ({pyramid.Count} tiles, level {pyramid.Level})" : "no pyramid")}");
         double? Ellipsoidal(EcefPos p) => earth.EllipsoidalHeightAt(p, out double h) ? h : pyramid?.HeightAt(p);
         var interest = InterestService.CreateServer(this, _players!, at =>
