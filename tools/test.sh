@@ -389,13 +389,14 @@ admit() { # need_mb reserved_mb: room for one more job now
 
 # Quick checks (one headless Godot, no ports) up to TEST_QUICK_JOBS at once: by default a quarter of the cores and
 # one per 5 GB of RAM, 1 to 6 (16 threads and 32 GB: 4). Two rows of one flag never run together (they write the same
-# files: --zfightcheck and --zfightcheck Pinball); @netsmoke (ports) and the tools/ scripts run one at a time after.
+# files: --zfightcheck and --zfightcheck Pinball), except the parts of a sharded one (--zfightshard K/N, made to run
+# together); @netsmoke (ports) and the tools/ scripts run one at a time after.
 _cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 QJOBS=$(( _cores / 4 )); _q=$(( $(_guard_total_gb) / 5 )); [ "$_q" -lt "$QJOBS" ] && QJOBS=$_q
 [ "$QJOBS" -lt 1 ] && QJOBS=1; [ "$QJOBS" -gt 6 ] && QJOBS=6
 QJOBS=${TEST_QUICK_JOBS:-$QJOBS}
 quick_alone() { case $1 in @netsmoke | tools/*) return 0 ;; esac; return 1; }
-quick_group() { local c=${1#@realtime }; echo "${c%% *}"; }
+quick_group() { local c=${1#@realtime }; case $c in *shard\ *) echo "$c" ;; *) echo "${c%% *}" ;; esac; }
 
 quick_job() { # index check: one quick check, its row in $OUT/.qrow.<index>: verdict, seconds, peak, RAM-floor stop, note
   local i=$1 check=$2 log t0=$SECONDS v peak ram=0
@@ -415,7 +416,7 @@ run_quick() {
   echo "[test] ${n} quick checks, up to $QJOBS at once, longest first"
   rm -f "$OUT"/.qrow.*
   for (( i = 0; i < n; i++ )); do
-    check=${QUICK[$i]}; check=${check#@realtime }; qgroup[i]=${check%% *}
+    qgroup[i]=$(quick_group "${QUICK[$i]}")
     qneed[i]=$(need_mb "${QUICK[$i]}" "${TEST_RAM_GB:-3}")
   done
   order=($(longest_first "${QUICK[@]}")); pending=("${order[@]}")
