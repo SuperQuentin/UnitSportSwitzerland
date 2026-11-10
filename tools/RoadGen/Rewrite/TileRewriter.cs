@@ -1005,7 +1005,9 @@ public static partial class TileRewriter
             var finished = TileCut.Cut(sources, frame, t => block.Contains(t) && wanted.Contains(t) && loaded.ContainsKey(t), netStats.Cut);
             foreach (var id in block)
             {
-                if (!finished.TryGetValue(id, out var tile)) continue;
+                if (!loaded.ContainsKey(id) || !wanted.Contains(id)) continue;
+                // a tile read with no roads left in it is still written: the stage's output, empty (as before #1660)
+                if (!finished.TryGetValue(id, out var tile)) tile = new RoadTile { Id = id, Segments = [], Flags = RoadTileFlags.Network | RoadTileFlags.Bikes };
                 streetStats.Tiles++;
                 built.Add(tile);
             }

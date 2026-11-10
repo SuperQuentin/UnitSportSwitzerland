@@ -433,6 +433,12 @@ public static partial class TileRewriter
     }
 
     /// <summary>
+    /// How far along its arms a junction's own records reach (#1660: its core, pockets, transitions, poles; as far as a transition
+    /// runs on, <see cref="StreetOnMost"/>), m; with <see cref="WriteReach"/> beside them.
+    /// </summary>
+    private const double JunctionReach = StreetOnMost;
+
+    /// <summary>
     /// Junctions this close along their street may become one core (#818 phase 5c: overlapping cores, a tram between them, a
     /// node short of a mouth): the band follows such streets on, so every block plans a group whole (#1660), m.
     /// </summary>
@@ -460,11 +466,39 @@ public static partial class TileRewriter
         {
             var home = Home(p.Junction);
             if (block.Contains(home) && wanted.Contains(home)) planned.Add(p.Junction.NodeId);
-            else if (p.Plan.Arms.Any(arm => InBlock(arm.LinkId) || StreetOn(net, arm.LinkId, arm.End == LinkEnd.End).Links.Any(x => InBlock(x.Link))))
+            else if (p.Plan.Arms.Any(arm => Reaches(arm.LinkId, arm.End == LinkEnd.End)))
             {
                 near.Add(p.Junction.NodeId);
                 planned.Add(p.Junction.NodeId);
             }
+        }
+        // (#1660) a junction reaches the block where its arm runs into it (or past it within WriteReach) within JunctionReach of
+        // the junction: what it writes lies there (core, pockets, transitions, poles); an arm is a whole line, often far longer
+        bool Near(Vec2 q)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    if (block.Contains(Plane.TileAt(q.X + dx * WriteReach, q.Y + dy * WriteReach))) return true;
+            return false;
+        }
+        bool Reaches(int linkId, bool atEnd)
+        {
+            double gone = 0;
+            foreach (var (link, end) in StreetOn(net, linkId, atEnd).Links.Prepend((linkId, atEnd)))
+            {
+                var c = net.Links[link].Centreline;
+                for (int i = 1; i < c.Count && gone <= JunctionReach; i++)
+                {
+                    var (a, b) = end ? (c[c.Count - i], c[c.Count - 1 - i]) : (c[i - 1], c[i]);
+                    double len = a.DistanceTo(b);
+                    int steps = Math.Max(1, (int)Math.Ceiling(len / 10));
+                    for (int k = 0; k <= steps; k++)
+                        if (Near(a + (b - a) * ((double)k / steps))) return true;
+                    gone += len;
+                }
+                if (gone > JunctionReach) break;
+            }
+            return false;
         }
         var links = new HashSet<int>();
         void Arms(PriorityPlanner.Plan plan, bool onward)
