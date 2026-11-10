@@ -43,3 +43,11 @@ Things the check found on the way, each a rule that read further than a block (f
 kept by the block homing the member; a merge group planned whole only where it lay in one block; walkers' crossings (the paved
 tram bed, #1179) from the owner's signal record only; poles kept clear only of the strips keyed by the tile under them; bike
 path layouts from a chain running past the block; grooves beside a track on a tile edge, in a block that did not write it.
+A merged core's representative (its class and layer) was the member nearest the centre in the centre's own tile; a merge with
+no member there was refused. Now the nearest member stands for it, whatever the tiles.
+
+**Geneva** (box 2499300,1116800,2501200,1118700; 1,170 junctions, 99 signals, 346 approaches; 17 min for four tilings on a quiet
+machine, from `D:/UnitSportSwitzerland/test1647/lv95`): the 500 m shift differs in 1 junction (a small roundabout) and 4 paint
+bins; the turned tilings in about 15 junctions (6 cm to 2.3 m, areas 2-20 %), 9 poles, 1 signal plan, 2 approaches and about
+100 of 7,660 paint bins. None of them is at a cut: a narrow run of the same tiling matches. What the block holds decides them.
+Open in #1691 (blocks D). `--debug-junction E,N` prints the plans there under each tiling.
