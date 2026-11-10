@@ -334,6 +334,13 @@ src/Terrain/LeafCollision full  tools/earthcheck.sh
 src/Net/ChunkStreamer    full   tools/leafstreamcheck.sh
 src/Net/ClientTerrainSync full  tools/leafstreamcheck.sh
 src/Terrain/NetworkChunkSource full tools/leafstreamcheck.sh
+# the earth server's fill against a client's (#1682): the same leaves, the same heights
+src/Terrain/Earth/GameLeaves net   tools/fillagreenetcheck.sh
+src/Terrain/Earth/FillAgreeProbe net tools/fillagreenetcheck.sh
+src/Terrain/Leaves/EarthLeaves net tools/fillagreenetcheck.sh
+src/Terrain/Leaves/GeneratedLeaves net tools/fillagreenetcheck.sh
+src/Terrain/Leaves/LeafBlend net   tools/fillagreenetcheck.sh
+src/Terrain/Leaves/PyramidFill net tools/fillagreenetcheck.sh
 src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
 src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh

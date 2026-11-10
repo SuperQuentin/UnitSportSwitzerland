@@ -160,9 +160,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // --frame earth: the leaves instead, nothing drawn; the flat streamer stays built for the LV95 services that hold
         // it (the dormant fleets, the steamer, the airports, the herds, the slopes), out of the tree: they wait for the
         // leaves to be furnished (C1 PR 2), as on an earth client
-        // the region's leaves alone: the fill and the generated world round them are the clients' until the server builds
-        // them too (C1 PR 3 follow-up)
-        var leaves = earth ? Terrain.Leaves.EarthLeaves.Region(Terrain.Leaves.LeafStore.Open(TerrainPaths.FindLeafDir())) : null;
+        // the region's leaves and the generated fill round them (#1682), the clients' own: the same generator anchored at the
+        // same point, the same pyramid; its domain round the default spawn and every body the server holds (EarthWorld's
+        // foci). --generated-world with no leaves: the generated world is all there is. "--generated off" leaves it out.
+        var leaves = earth
+            ? Terrain.Earth.GameLeaves.Region(fallback?.World, SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N,
+                () => generatedWorld || !GeneratedOff(args))
+            : null;
         if (leaves != null)
         {
             _earth = new Terrain.Earth.EarthWorld(leaves, origin) { BuildMeshes = false, CommitBudgetMs = _chunks.CommitBudgetMs };
@@ -258,6 +262,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (WorldChoice.FunActive) World.WorldClock.Start(World.Fun.FunWorld.DuskHour, 0);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
+        // the fill's heights against a client's (#1682, tools/fillagreenetcheck.sh)
+        if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: true, fillE, fillN));
         // two bots far apart on one server, each in a frame of its own (#1456, tools/regioncheck.sh)
         if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
