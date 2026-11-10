@@ -17,7 +17,7 @@
 #      one), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
 #      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps), TEST_JOBS (net/full checks at
 #      once, default the heavy lock's slot count; 1 = one at a time), TEST_QUICK_JOBS (quick checks at once,
-#      default a quarter of the cores and one per 5 GB, 1 to 6; 1 = one at a time), TEST_UNIT_BESIDE (0: the unit
+#      default 3/8 of the cores and one per 5 GB, 1 to 8; 1 = one at a time; TEST_QUICK_SERIAL: flags whose rows never overlap), TEST_UNIT_BESIDE (0: the unit
 #      stage first, not beside the Godot checks), TEST_PEAKS (the machine-wide store of each check's measured peak
 #      RAM, default $TEMP/unitsport-check-peaks.tsv, #1702), TEST_ONLY (one tier's rows alone:
 #      `TEST_ONLY=net tools/test.sh full` runs the whole net tier), TEST_LEDGER (the results CSV, default
@@ -387,16 +387,20 @@ admit() { # need_mb reserved_mb: room for one more job now
   [ $(( GUARD_FREE - $2 )) -ge $(( $1 + GUARD_MIN_FREE_MB )) ]
 }
 
-# Quick checks (one headless Godot, no ports) up to TEST_QUICK_JOBS at once: by default a quarter of the cores and
-# one per 5 GB of RAM, 1 to 6 (16 threads and 32 GB: 4). Two rows of one flag never run together (they write the same
-# files: --zfightcheck and --zfightcheck Pinball), except the parts of a sharded one (--zfightshard K/N, made to run
-# together); @netsmoke (ports) and the tools/ scripts run one at a time after.
+# Quick checks (one headless Godot, no ports) up to TEST_QUICK_JOBS at once: by default 3/8 of the cores and one per
+# 5 GB of RAM, 1 to 8 (16 threads and 32 GB: 6; measured on the Avatar area, 6 beat 4 by 16 % for 10 % more CPU time
+# per check). Every row runs beside any other (two --collidecheck rows held 361 s in a row, and they write nothing);
+# one that clashes shows as "passed alone, failed beside others" below. TEST_QUICK_SERIAL lists the flags whose rows
+# must never run together (space separated). @netsmoke (ports) and the tools/ scripts run one at a time after.
 _cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
-QJOBS=$(( _cores / 4 )); _q=$(( $(_guard_total_gb) / 5 )); [ "$_q" -lt "$QJOBS" ] && QJOBS=$_q
-[ "$QJOBS" -lt 1 ] && QJOBS=1; [ "$QJOBS" -gt 6 ] && QJOBS=6
+QJOBS=$(( _cores * 3 / 8 )); _q=$(( $(_guard_total_gb) / 5 )); [ "$_q" -lt "$QJOBS" ] && QJOBS=$_q
+[ "$QJOBS" -lt 1 ] && QJOBS=1; [ "$QJOBS" -gt 8 ] && QJOBS=8
 QJOBS=${TEST_QUICK_JOBS:-$QJOBS}
 quick_alone() { case $1 in @netsmoke | tools/*) return 0 ;; esac; return 1; }
-quick_group() { local c=${1#@realtime }; case $c in *shard\ *) echo "$c" ;; *) echo "${c%% *}" ;; esac; }
+quick_group() { # the flag for one listed in TEST_QUICK_SERIAL, else the row itself
+  local c=${1#@realtime }
+  case " ${TEST_QUICK_SERIAL:-} " in *" ${c%% *} "*) echo "${c%% *}" ;; *) echo "$c" ;; esac
+}
 
 quick_job() { # index check: one quick check, its row in $OUT/.qrow.<index>: verdict, seconds, peak, RAM-floor stop, note
   local i=$1 check=$2 log t0=$SECONDS v peak ram=0
@@ -420,7 +424,7 @@ run_quick() {
     qneed[i]=$(need_mb "${QUICK[$i]}" "${TEST_RAM_GB:-3}")
   done
   order=($(longest_first "${QUICK[@]}")); pending=("${order[@]}")
-  # start the first pending check, in longest-first order, whose flag is not running and that the RAM admits
+  # start the first pending check, in longest-first order, whose group is not running (quick_group) and that the RAM admits
   while [ ${#pending[@]} -gt 0 ]; do
     running=0; reserved=0; busy=" "; started=0
     for k in ${!pids[@]}; do

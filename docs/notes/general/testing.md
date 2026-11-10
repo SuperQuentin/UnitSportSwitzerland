@@ -223,16 +223,17 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   - `TEST_JOBS=1` is the old serial run, holding one slot throughout. `TEST_ONLY=net tools/test.sh full`
     runs every net row and nothing else.
 - **The quick tier runs side by side too, longest first (#1702).**
-  - Up to `TEST_QUICK_JOBS` headless Godots at once: a quarter of the cores and one per 5 GB, 1 to 6 (4 on
+  - Up to `TEST_QUICK_JOBS` headless Godots at once: 3/8 of the cores and one per 5 GB, 1 to 8 (6 on
     16 threads and 32 GB). Admitted like the net tier, by need, counting jobs younger than `TEST_QUICK_GROW`
     (15 s). Quick checks are small (Nov 2026: 250-480 MB the self-checks and `--world flat`, ~630 MB
-    `--world fixture`, ~1.1 GB the lake), so the CPU, not the RAM, sets the count.
-  - Two rows of one flag never run together (they can write the same files), except the parts of a sharded
-    check (`--zfightcheck --zfightshard K/N`). `@netsmoke` (ports) and the quick `tools/` scripts run one at a
-    time after. A check that fails beside others runs again alone; a pass alone says "passed alone, failed
-    beside others".
+    `--world fixture`, ~1.1 GB the lake), so the CPU, not the RAM, sets the count: on the Avatar area 6 jobs
+    took 678 s, 4 jobs 809 s, for 10 % more CPU seconds per check.
+  - Any row runs beside any other (two `--collidecheck` rows, which write nothing, held 361 s in a row while
+    one flag at a time was the rule). Flags whose rows must not overlap go in `TEST_QUICK_SERIAL`. `@netsmoke`
+    (ports) and the quick `tools/` scripts run one at a time after. A check that fails beside others runs
+    again alone; a pass alone says "passed alone, failed beside others": that is how a clash shows.
   - **Longest first**: each check starts in the order of its last seconds in the peak store (never run:
-    `TEST_UNKNOWN_SECONDS`, 120), the first one whose flag is free; the net tier likewise. A long check started
+    `TEST_UNKNOWN_SECONDS`, 120), the first one the RAM admits; the net tier likewise. A long check started
     last ran on alone: the Avatar area took 1,363 s in map order, 835 s longest first (4 jobs).
   - **A long check is split, not waited for**: `--zfightcheck` (502-629 s) runs as four `--zfightshard` parts.
     A new check over ~5 min in the quick tier gets a shard flag the same way.
