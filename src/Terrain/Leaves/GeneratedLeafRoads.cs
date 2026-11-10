@@ -24,7 +24,7 @@ public sealed class GeneratedLeafRoads(ProceduralWorld world, LeafFrames? frames
     /// <summary>Leaves of halo round the leaf rewritten.</summary>
     public const int Halo = 2;
 
-    private static readonly TileRewriter.Options Stage = new(BlockSize: 1, Halo: Halo);
+    private static readonly TileRewriter.Options Stage = new(BlockSize: 1, Halo: Halo, CloseTiles: 0);   // the generator makes leaves on demand: no reads past the halo (#1660)
 
     private readonly LeafFrames _frames = frames ?? LeafFrames.Swiss;
     private readonly object _gate = new();

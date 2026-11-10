@@ -86,7 +86,7 @@ public static partial class TileRewriter
 
             foreach (var row in plan.Teeth)
             {
-                if (net.Links[row.LinkId].Tag is not Source source || !block.Contains(source.Tile)) continue;
+                if (net.Links[row.LinkId].Tag is not Source source || !source.Line.Write) continue;
                 float lift = (source.Segment.Flags & RoadFlags.Bridge) != 0 ? PaintBridgeLift : 0f;
                 var vertices = Local(source.Tile, [row.From, row.To], source.SampleHeight, lift);
                 Get(paint, source.Tile).Add(new RoadPaint
@@ -138,7 +138,7 @@ public static partial class TileRewriter
 
             foreach (var sign in plan.Signs)
             {
-                if (net.Links[sign.LinkId].Tag is not Source source || !block.Contains(source.Tile)) continue;
+                if (net.Links[sign.LinkId].Tag is not Source source || !source.Line.Write) continue;
                 clearance ??= new PriorityPlanner.Clearance(result.Ribbons, result.Junctions);
                 float road = source.SampleHeight(sign.RoadPoint);
                 string? why = null;
@@ -207,8 +207,9 @@ public static partial class TileRewriter
     /// plan (the roof always does). Loaded lazily per tile, each tile's roof triangles in <see cref="Cell"/> m cells (#854: a
     /// junction's corner asks thousands of points; scanning every building of nine tiles made planning the cores slow).
     /// </summary>
-    private sealed class Footprints(Func<TileId, BuildingTile?> source)
+    private sealed class Footprints(Func<TileId, BuildingTile?> source, IUnits units)
     {
+        // the buildings' own tiles, whatever frame the block's records are in (#1660)
         private const double Cell = 10;
         // per cell its roof triangles in plan, each as its box then its corners (10 numbers): a big building's box held a point
         // that was then tried against every triangle of its roof
@@ -226,10 +227,10 @@ public static partial class TileRewriter
 
         private bool Scan(Vec2 p)
         {
-            var at = Plane.TileAt(p.X, p.Y);
-            foreach (var id in Plane.Around(at, 1))
+            var at = units.TileAt(p.X, p.Y);
+            foreach (var id in units.Around(at, 1))
             {
-                double x = p.X - Plane.West(id), z = Plane.North(id) - p.Y;
+                double x = p.X - units.West(id), z = units.North(id) - p.Y;
                 if (!Load(id).TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var here)) continue;
                 for (int t = 0; t + 9 < here.Count; t += 10)
                 {

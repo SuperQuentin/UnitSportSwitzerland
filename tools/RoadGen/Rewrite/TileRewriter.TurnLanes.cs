@@ -587,7 +587,7 @@ public static partial class TileRewriter
                 var arm = plan.Arms[i];
                 if (!arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes) || leftPocketAt.ContainsKey((junction.NodeId, i))
                     || solidDone.Contains((junction.NodeId, i)) || InfoOf(net.Links[arm.LinkId]) is not { Attributes.OneWay: 0 }
-                    || !segmentOf.TryGetValue(arm.LinkId, out var so) || !block.Contains(so.Tile)) continue;
+                    || !segmentOf.TryGetValue(arm.LinkId, out var so)) continue;   // (segmentOf holds the written lines only)
                 bool atEnd = arm.End == LinkEnd.End;
                 var way = new Widening(so.Segment, so.Painted, so.Tile, 0, atEnd, atEnd ? 1 : -1, 1, 0);
                 double stopEdge = MouthSkew(junction, junction.Arms[i]) + SignalStopSetback + StopBack(junction.NodeId, i);
@@ -610,7 +610,7 @@ public static partial class TileRewriter
                 if (!arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes)
                     || pockets.Any(pk => !pk.Dropped && pk.Node == junction.NodeId && pk.ExitArm == i)
                     || InfoOf(net.Links[arm.LinkId]) is not { Attributes.OneWay: 0 }
-                    || !segmentOf.TryGetValue(arm.LinkId, out var so) || !block.Contains(so.Tile)) continue;
+                    || !segmentOf.TryGetValue(arm.LinkId, out var so)) continue;   // (segmentOf holds the written lines only)
                 bool atEnd = arm.End == LinkEnd.End;
                 int exitSide = atEnd ? -1 : 1;
                 var bike = exitSide > 0 ? so.Painted.Attributes.Right : so.Painted.Attributes.Left;
@@ -1727,7 +1727,6 @@ public static partial class TileRewriter
                 foreach (double o in (ReadOnlySpan<double>)[_half + BaseAt(dist) + w * 0.5, _half + BaseAt(dist) + w + 0.5])
                 {
                     double px = x + sx * o, pz = z + sz * o;
-                    if (!Plane.Inside(_tile, px, pz)) return "seam";
                     var lv95 = new Vec2(Plane.West(_tile) + px, Plane.North(_tile) - pz);
                     if (buildings.Contains(lv95)) return "building";
                     if (lines.Covering(px, pz, _self, x, z, _half + 1.0) is not null) return "line";

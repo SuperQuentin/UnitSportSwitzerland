@@ -24,11 +24,30 @@ RoadGen --tiling-check --chunks DIR [--temp DIR] --box minE,minN,maxE,maxN
 - **Compared** in the box, each tiling against the first (`Diagnostics/RecordMarks`, shared with `CubeTestRegion`'s leaf
   compare): junction records (class, area within 2 % or 1 m²), signals (plan size, canton look, poles' colour, overheads,
   gantries), stop lines, poles (flags), approaches (`LANE`: every lane's kind and moves), canton signs; all matched within
-  5 m, placed within 5 cm. Paint: length (lines) and area (triangles) per type on a fixed 25 m lattice, within 0.5 m and
-  0.05 m². Centrelines: every reference vertex to the other tiling's lines, within 1 cm. `--verbose` lists each difference with
+  5 m, placed within 5 cm. Paint: painted length (lines: a dashed line's dashes) and area (triangles) per type on a fixed 25 m lattice, within 1 m
+  and 0.05 m² (a line offset from a curved centreline steps at a cut by its offset times the turn there, as at every seam). Centrelines: every reference vertex to the other tiling's lines, within 1 cm. `--verbose` lists each difference with
   its distance to either tiling's nearest cut. `[tilingcheck] RESULT: ok` when every bar holds.
 - **Cost**: the traffic-lights test region (31 tiles) about 4 min per tiling at low priority, ~1 GB.
 
-## Measured before the fix (Nov 10 2026)
+## Measured (Nov 10 2026)
 
-Test region (`RoadGen --test-region`, box 2910100,1320100,2917900,1324900): see #1660's PR A for the table.
+Test region (`RoadGen --test-region`, box 2910100,1320100,2917900,1324900), each tiling against the km grid:
+
+- **Before #1660's fix** (PR #1665): approaches changed 3-31 of 109, signals 3-17 of 29 (the leaf-like tiling 20 and 9; the 500 m
+  shift north, cutting through the junctions, 30 and 17); centrelines up to 3.2 m.
+- **After** (PR #1666): every approach, signal, stop line, pole and junction record the same under all six tilings, centrelines
+  within 0.02 cm; paint within its bar but for one bin (0.59 m, a dash moved by the offset step at a cut on a curve, before the
+  bar was 1 m).
+
+Things the check found on the way, each a rule that read further than a block (fixed in #1666): a merged core's member caps
+kept by the block homing the member; a merge group planned whole only where it lay in one block; walkers' crossings (the paved
+tram bed, #1179) from the owner's signal record only; poles kept clear only of the strips keyed by the tile under them; bike
+path layouts from a chain running past the block; grooves beside a track on a tile edge, in a block that did not write it.
+A merged core's representative (its class and layer) was the member nearest the centre in the centre's own tile; a merge with
+no member there was refused. Now the nearest member stands for it, whatever the tiles.
+
+**Geneva** (box 2499300,1116800,2501200,1118700; 1,170 junctions, 99 signals, 346 approaches; 17 min for four tilings on a quiet
+machine, from `D:/UnitSportSwitzerland/test1647/lv95`): the 500 m shift differs in 1 junction (a small roundabout) and 4 paint
+bins; the turned tilings in about 15 junctions (6 cm to 2.3 m, areas 2-20 %), 9 poles, 1 signal plan, 2 approaches and about
+100 of 7,660 paint bins. None of them is at a cut: a narrow run of the same tiling matches. What the block holds decides them.
+Open in #1691 (blocks D). `--debug-junction E,N` prints the plans there under each tiling.

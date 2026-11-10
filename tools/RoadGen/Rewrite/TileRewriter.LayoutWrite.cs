@@ -365,7 +365,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSignal>> signals, Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, Dictionary<RoadJunction, List<CornerPlanner.CornerInput>>> coreCorners, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds,
         Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadJunctionPath>> pathsOf,
-        Footprints? buildings = null, GantryContext? gantries = null)
+        Func<TileId, bool> writes, Footprints? buildings = null, GantryContext? gantries = null)
     {
         // a signal pole's spot is clear of every road's carriageway, the cores, the widening strips and the buildings (the old
         // layout's PlacePole, #350/#711; #1000)
@@ -450,12 +450,33 @@ public static partial class TileRewriter
             }
         }
 
+        // 0. a merged core's other members have no cap of their own: the core covers them, whichever block writes it (#1660: a
+        // member homed in another block's tile lost its cap only where the core's own block held it); nor has the one standing for
+        // it where the core lies in another tile
+        foreach (var jp in plans.Where(p => p.Merged is not null && written.Contains(p.Node) && p.Core is { } c && Writable(c)))
+            foreach (int node in jp.Nodes)
+                if (capOf.TryGetValue(node, out var member) && (node != jp.Node || member.Home != Plane.TileAt(jp.Centre.X, jp.Centre.Y)))
+                    caps[member.Home].Remove(member.Cap);
+        static bool Writable(Layout.JunctionCore c) => c.Outline.Count >= 3 && c.Outline.Count <= ushort.MaxValue && c.Triangles.Count >= 3;
+
         // 1. the cores as caps
+        Dictionary<int, Junctions.Junction>? junctionOf = null;
         foreach (var jp in mine)
         {
             var core = jp.Core!;
-            if (!capOf.TryGetValue(jp.Node, out var old) || core.Outline.Count < 3 || core.Outline.Count > ushort.MaxValue || core.Triangles.Count < 3) continue;
-            var home = old.Home;
+            if (!Writable(core)) continue;
+            bool hasOld = capOf.TryGetValue(jp.Node, out var old);
+            // a merged core in its centre's tile, written by the block holding that tile, as its member nearest the centre (#1660:
+            // wherever the tile edges run between its members); a junction of one node where its cap is
+            var home = jp.Merged is null ? old.Home : Plane.TileAt(jp.Centre.X, jp.Centre.Y);
+            if (jp.Merged is null ? !hasOld : !writes(home)) continue;
+            if (!hasOld || old.Home != home)
+            {
+                junctionOf ??= result.Junctions.ToDictionary(j => j.NodeId);
+                if (!junctionOf.TryGetValue(jp.Node, out var rep)) continue;
+                old = (home, new RoadJunction { Class = CapClass(rep, net), Layer = CapLayer(rep), Vertices = [], Indices = [] });
+                Get(caps, home).Add(old.Cap);
+            }
             // the outline as the cap keeps it: its kerbs sampled every half metre simplified to the tolerance of the sides (the
             // mouths' corners kept, where the ribbons meet it), triangulated again
             var keep = SimplifiedRing(core.Outline, core.Heights, core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToList());
@@ -477,9 +498,6 @@ public static partial class TileRewriter
             writtenCaps.Add(cap);
             capOfPlan[jp] = (home, cap);
             if (jp.Merged is not null) stats.MergedAt.Add((jp.Centre, jp.Nodes.Count()));
-            // a merged core's other members have no cap of their own: the core covers them
-            foreach (int node in jp.Nodes)
-                if (node != jp.Node && capOf.TryGetValue(node, out var member)) caps[member.Home].Remove(member.Cap);
             stats.Junctions++;
             // a roundabout laid whole (#854): its splitter islands on the cap, its central island for the ring as laid (wider than
             // TLM's line, so the shaper's island is replaced)
@@ -765,7 +783,7 @@ public static partial class TileRewriter
             Vec2? EndOf(ArmPlan a)
             {
                 var street = Street(a);
-                if (street.Count == 0 || street[0].Tile != home) return null;
+                if (street.Count == 0) return null;   // (any tile: a block has one frame, #1660)
                 var p = street[0].Piece.Points;
                 int at = street[0].TowardJunction ? p.Length - 3 : 0;
                 return new Vec2(p[at], -p[at + 2]);
@@ -805,7 +823,8 @@ public static partial class TileRewriter
             var capHere = capOfPlan.TryGetValue(jp, out var hc2) ? hc2.Cap : null;
             WriteCoreLines(jp, result, capHere, paint, stats);
             // the trams' ways through the core (#1057): their approaches' tram groups, lanes and heads, their paths
-            var tramWays = capHere is null ? [] : TramWays(jp, tramNet ??= new TramNet(result), stats);
+            // (#1660: a junction of the band too, whose core another block writes: its signal plan, and so its walkers' lines, as that block's)
+            var tramWays = capHere is null && !jp.Beyond ? [] : TramWays(jp, tramNet ??= new TramNet(result), jp.Beyond ? new LayoutWriteStats() : stats);
             var plan = jp.Lights ? WriteSignals(jp, result, signals, approaches, cantons, signalStats, stats, signs, PoleClear, buildings is null ? null : buildings.Contains,
                 tramWays.Count > 0 ? TramArms(jp, tramWays) : null, gantries, areas) : null;
             short signalIndex = plan is null || !capOfPlan.TryGetValue(jp, out var hs) ? (short)-1 : (short)(Get(signals, hs.Home).Count - 1);
@@ -882,11 +901,15 @@ public static partial class TileRewriter
                 SignalPlan.DebugTiming = false;
                 // its movements and the pairs that set each green start and end, for the debug view's trails and movers (#979, the user)
                 // (not timed from them: its walkers' lines all the same, the walk graph's crossings, #1176)
+                var movements = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way, tramLines);
+                if (!retimed) movements = movements.Where(l => l.Mover == ConflictTimes.Mover.Walker).ToList();
+                // every planned junction's walkers' crossings, whichever block writes its signal (#1660): the tram beds under them (#1179)
+                foreach (var l in movements.Where(l => l.Mover == ConflictTimes.Mover.Walker && l.Points.Count >= 2)) (_walkerCrossings ??= []).Add((l.Points[0], l.Points[^1]));
+                if (UnlitStages.TryGetValue(plan, out var unlitWalkers)) foreach (var (ua, ub) in unlitWalkers) (_walkerCrossings ??= []).AddRange([(ua, ub), (ub, ua)]);
                 if (signalIndex >= 0 && capOfPlan.TryGetValue(jp, out var hc))
                 {
                     var record = Get(signals, hc.Home)[signalIndex];
-                    var lines = ConflictTimes.Lines(jp, plan, rides, c => PathGroup(plan, jp.Arms.FindIndex(x => x.Arm == c.FromArm), c.Move, c.Kind), c => OntoPath(jp, c)?.Way, tramLines);
-                    if (!retimed) lines = lines.Where(l => l.Mover == ConflictTimes.Mover.Walker).ToList();
+                    var lines = movements;
                     var timedLines = new Dictionary<ConflictTimes.Line, RoadConflictLine>(ReferenceEqualityComparer.Instance);
                     foreach (var l in lines)
                         record.ConflictLines.Add(timedLines[l] = new RoadConflictLine

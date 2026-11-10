@@ -20,15 +20,19 @@ public static class TilingCheck
     /// <summary>The km grid (the reference), shifted three ways, turned like leaves, and turned 45° in small cells.</summary>
     public const string DefaultTilings = "0,0,0,1000;250,0,0,1000;0,500,0,1000;334,666,0,1000;0,0,28.5,610;100,200,45,400";
 
-    /// <summary>Bars: positions of the placed records (m), a junction record's area (share and m2), paint per bin and type, centrelines (m).</summary>
-    public const double PlaceBarM = 0.05, AreaShare = 0.02, AreaM2 = 1.0, PaintBarM = 0.5, PaintBarM2 = 0.05, CentrelineBarM = 0.01;
+    /// <summary>
+    /// Bars: positions of the placed records (m), a junction record's area (share and m2), paint per bin and type, centrelines (m).
+    /// Paint 1 m: a line laid off a curved centreline steps at a cut by its offset times the curve's turn there (the format offsets
+    /// a piece's end along its own last stretch, as at every tile seam), so a dash moves across a bin's edge by up to ~0.6 m.
+    /// </summary>
+    public const double PlaceBarM = 0.05, AreaShare = 0.02, AreaM2 = 1.0, PaintBarM = 1.0, PaintBarM2 = 0.05, CentrelineBarM = 0.01;
 
     /// <summary>Paint is summed per type on a fixed lattice of this many metres (the plane's, every tiling alike).</summary>
     public const double PaintBin = 25;
 
     public sealed record Settings(
         string Chunks, string Temp, (double MinE, double MinN, double MaxE, double MaxN) Box, IReadOnlyList<GridUnits> Tilings,
-        double BlockM = 4000, double HaloM = 1000, bool Verbose = false, bool Smooth = true);
+        double BlockM = 4000, double HaloM = 1000, bool Verbose = false, bool Smooth = true, (double E, double N, double R)? DumpNear = null);
 
     /// <summary>One tiling's run: its records by kind, its centrelines and paint, in plane coordinates.</summary>
     private sealed class Build
@@ -208,26 +212,29 @@ public static class TilingCheck
         var loop = new MemoryLoop(blocks, wanted, inputs);
         TileRewriter.Run(loop, options, _ => { });
 
-        foreach (var (id, tile) in loop.Tiles)
-        {
-            double west = units.West(id), north = units.North(id);
-            (double, double, double) Place(double x, double y, double z) => (west + x, north - z, y);
-            var marks = new Dictionary<string, List<RecordMarks.Mark>>();
-            RecordMarks.Collect(tile, marks, Place);
-            foreach (var (kind, list) in marks)
+        foreach (var (id, tile) in loop.Tiles) Collect(build, tile, units.West(id), units.North(id), s.Box);
+        if (s.DumpNear is { } dn)
+            foreach (var (id, tile) in loop.Tiles.OrderBy(t => t.Key.E).ThenBy(t => t.Key.N))
             {
-                if (!build.Marks.TryGetValue(kind, out var into)) build.Marks[kind] = into = new();
-                into.AddRange(list.Where(m => In(s.Box, m.E, m.N)));
+                double w = units.West(id), nn = units.North(id);
+                bool Near(double x, double z) => Math.Abs(w + x - dn.E) < dn.R && Math.Abs(nn - z - dn.N) < dn.R;
+                foreach (var seg in tile.Segments)
+                    if (Enumerable.Range(0, seg.PointCount).Any(i => Near(seg.Points[i * 3], seg.Points[i * 3 + 2])))
+                        log(string.Create(CultureInfo.InvariantCulture,
+                            $"    [{units}] cell {id.E},{id.N} {seg.Class} w {seg.Width:F1} {seg.Flags} {w + seg.Points[0]:F2},{nn - seg.Points[2]:F2} -> {w + seg.Points[^3]:F2},{nn - seg.Points[^1]:F2} ({seg.PointCount} pts) {seg.Attributes.Flags}"));
+                foreach (var pt in tile.Paint)
+                    if (pt.Vertices.Length >= 6 && Enumerable.Range(0, pt.Vertices.Length / 3).Any(i => Near(pt.Vertices[i * 3], pt.Vertices[i * 3 + 2])))
+                        log(string.Create(CultureInfo.InvariantCulture,
+                            $"    [{units}] cell {id.E},{id.N} paint {pt.Type} {pt.Shape} dash {pt.Dash}/{pt.Gap} ref {(pt.Segment is null ? "-" : tile.Segments.Contains(pt.Segment) ? "held" : "unheld")} {w + pt.Vertices[0]:F2},{nn - pt.Vertices[2]:F2} -> {w + pt.Vertices[^3]:F2},{nn - pt.Vertices[^1]:F2} ({pt.Vertices.Length / 3} pts)"));
+                foreach (var j in tile.Junctions)
+                {
+                    double cx = 0, cz = 0;
+                    int c = j.Vertices.Length / 3;
+                    for (int q = 0; q < c; q++) { cx += j.Vertices[q * 3]; cz += j.Vertices[q * 3 + 2]; }
+                    if (c > 0 && Near(cx / c, cz / c))
+                        log(string.Create(CultureInfo.InvariantCulture, $"    [{units}] cell {id.E},{id.N} junction {j.Class} at {w + cx / c:F2},{nn - cz / c:F2}, {c} vertices, {RecordMarks.Area(j):F1} m2"));
+                }
             }
-            foreach (var seg in tile.Segments)
-            {
-                if (RoadFormat.IsAerial(seg.Class) || RoadFormat.IsWatercourse(seg.Class) || RoadFormat.IsWall(seg.Class)) continue;
-                var pts = new (double, double)[seg.PointCount];
-                for (int i = 0; i < seg.PointCount; i++) pts[i] = (west + seg.Points[i * 3], north - seg.Points[i * 3 + 2]);
-                build.Lines.Add(pts);
-            }
-            foreach (var paint in tile.Paint) AddPaint(build, paint, west, north, s.Box);
-        }
         build.Cells = cells.Count;
         build.Blocks = blocks.Count;
         build.Tiles = loop.Tiles.Count;
@@ -237,6 +244,57 @@ public static class TilingCheck
             + $"{build.Marks.GetValueOrDefault("junction")?.Count ?? 0} junctions, {build.Marks.GetValueOrDefault("signal")?.Count ?? 0} signals, "
             + $"{build.Marks.GetValueOrDefault("approach")?.Count ?? 0} approaches in the box; {build.Seconds:F0} s"));
         return build;
+    }
+
+    /// <summary>A finished tile's records, lines and paint into <paramref name="build"/>, those in the box (its frame at west, north).</summary>
+    private static void Collect(Build build, RoadTile tile, double west, double north, (double MinE, double MinN, double MaxE, double MaxN) box)
+    {
+        (double, double, double) Place(double x, double y, double z) => (west + x, north - z, y);
+        var marks = new Dictionary<string, List<RecordMarks.Mark>>();
+        RecordMarks.Collect(tile, marks, Place);
+        foreach (var (kind, list) in marks)
+        {
+            if (!build.Marks.TryGetValue(kind, out var into)) build.Marks[kind] = into = new();
+            into.AddRange(list.Where(m => In(box, m.E, m.N)));
+        }
+        foreach (var seg in tile.Segments)
+        {
+            if (RoadFormat.IsAerial(seg.Class) || RoadFormat.IsWatercourse(seg.Class) || RoadFormat.IsWall(seg.Class)) continue;
+            var pts = new (double, double)[seg.PointCount];
+            for (int i = 0; i < seg.PointCount; i++) pts[i] = (west + seg.Points[i * 3], north - seg.Points[i * 3 + 2]);
+            build.Lines.Add(pts);
+        }
+        foreach (var paint in tile.Paint) AddPaint(build, paint, west, north, box);
+    }
+
+    /// <summary>
+    /// Two LV95 builds of the same region compared record by record (#1660: what the whole-line stage changed against main's),
+    /// as the tiling check compares two tilings: <c>RoadGen --diff-builds A B --box ...</c>. Each difference with its distance to
+    /// the nearest km line, where the LV95 build cut its lines.
+    /// </summary>
+    public static int Diff(string a, string b, (double MinE, double MinN, double MaxE, double MaxN) box, bool verbose, Action<string> log)
+    {
+        var km = new GridUnits(0, 0, 0, 1000);
+        Build Read(string dir)
+        {
+            var build = new Build { Units = km };
+            foreach (string path in Directory.EnumerateFiles(dir, "roads_*.road"))
+            {
+                RoadTile tile;
+                using (var fs = File.OpenRead(path)) tile = RoadCodec.Decode(fs);
+                var bits = Path.GetFileNameWithoutExtension(path).Split('_');
+                var id = new TileId(int.Parse(bits[1], CultureInfo.InvariantCulture), int.Parse(bits[2], CultureInfo.InvariantCulture));
+                Collect(build, tile, id.MinE, id.MinN + 1000, box);
+                build.Tiles++;
+            }
+            return build;
+        }
+        var ba = Read(a);
+        var bb = Read(b);
+        log($"builds {a} ({ba.Tiles} tiles) and {b} ({bb.Tiles} tiles), box {box.MinE},{box.MinN},{box.MaxE},{box.MaxN}");
+        int failed = Compare(ba, bb, new Settings(a, a, box, [km], Verbose: verbose), log);
+        log(failed == 0 ? "[diffbuilds] RESULT: the same" : $"[diffbuilds] RESULT: {failed} kinds differ");
+        return failed == 0 ? 0 : 2;
     }
 
     private static bool In((double MinE, double MinN, double MaxE, double MaxN) box, double e, double n) =>
@@ -254,6 +312,9 @@ public static class TilingCheck
         }
         if (paint.Shape == PaintShape.Polyline)
         {
+            // the length painted: a dashed line's dashes only (its pattern starts with a dash at its first point), so a line cut
+            // anywhere in its pattern measures the same
+            double period = paint.Dash + paint.Gap, at = 0;
             for (int i = 3; i + 2 < v.Length; i += 3)
             {
                 double ax = west + v[i - 3], ay = north - v[i - 1], bx = west + v[i], by = north - v[i + 2];
@@ -262,8 +323,11 @@ public static class TilingCheck
                 for (int q = 0; q < steps; q++)
                 {
                     double t = (q + 0.5) / steps;
+                    double s = at + len * t;
+                    if (paint.Dash > 0 && period > 0 && s % period >= paint.Dash) continue;
                     Add(ax + (bx - ax) * t, ay + (by - ay) * t, len / steps);
                 }
+                at += len;
             }
             return;
         }

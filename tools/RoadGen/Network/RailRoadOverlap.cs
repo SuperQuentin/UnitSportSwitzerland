@@ -391,16 +391,29 @@ public sealed class RailRoadOverlap
     public void ClearTrackZones(List<RoadPaint> paint, TileId tile, IReadOnlyList<(float X, float Z)>? lights = null)
     {
         if (_zones.Count == 0 || paint.Count == 0) return;
-        var near = _zones.Where(z => z.Line.Any(p =>
+        // (a block's whole lines, #1660: one frame for the whole block, every zone near; its pieces looked up in 10 m cells)
+        var near = tile == BlockFrame.Lines ? _zones : _zones.Where(z => z.Line.Any(p =>
             p.X > Plane.West(tile) - 50 && p.X < Plane.West(tile) + TileSize + 50 && p.Y > Plane.South(tile) - 50 && p.Y < Plane.North(tile) + 50)).ToList();
         if (near.Count == 0) return;
+        const double cell = 10;
+        var cells = new Dictionary<(long, long), List<(Vec2 A, Vec2 B, double Half)>>();
+        foreach (var (line, half) in near)
+            for (int i = 1; i < line.Length; i++)
+            {
+                var (a, b) = (line[i - 1], line[i]);
+                long x0 = (long)Math.Floor((Math.Min(a.X, b.X) - half) / cell), x1 = (long)Math.Floor((Math.Max(a.X, b.X) + half) / cell);
+                long y0 = (long)Math.Floor((Math.Min(a.Y, b.Y) - half) / cell), y1 = (long)Math.Floor((Math.Max(a.Y, b.Y) + half) / cell);
+                for (long x = x0; x <= x1; x++)
+                    for (long y = y0; y <= y1; y++)
+                        (cells.TryGetValue((x, y), out var list) ? list : cells[(x, y)] = []).Add((a, b, half));
+            }
 
         bool InZone(float x, float z)
         {
             var p = new Vec2(Plane.West(tile) + x, Plane.North(tile) - z);
-            foreach (var (line, half) in near)
-                for (int i = 1; i < line.Length; i++)
-                    if (Polyline.PointSegmentDistance(p, line[i - 1], line[i]) < half) return true;
+            if (!cells.TryGetValue(((long)Math.Floor(p.X / cell), (long)Math.Floor(p.Y / cell)), out var here)) return false;
+            foreach (var (a, b, half) in here)
+                if (Polyline.PointSegmentDistance(p, a, b) < half) return true;
             return false;
         }
 

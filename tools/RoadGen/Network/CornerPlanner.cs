@@ -82,7 +82,8 @@ public static class CornerPlanner
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
         Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null, IReadOnlyList<KerbArc>? arcs = null,
         IReadOnlyList<PathEnd>? pathEnds = null, IEnumerable<RoadAreaProp>? bands = null,
-        IReadOnlyDictionary<RoadJunction, List<CornerInput>>? cores = null, IReadOnlyList<RoadTransition>? transitions = null)
+        IReadOnlyDictionary<RoadJunction, List<CornerInput>>? cores = null, IReadOnlyList<RoadTransition>? transitions = null,
+        bool bends = true)
     {
         _pathEnds = pathEnds;
         // a transition's piece (#818): its kerb and its sides from its own section per point
@@ -157,8 +158,8 @@ public static class CornerPlanner
             Corners(id, segments, ends, arms, ring, cap, facades, stats, props, capArcs);
         }
 
-        // bare bends: two street ends sharing a point, no cap
-        foreach (var list in ends.Values)
+        // bare bends: two street ends sharing a point, no cap (#1660: laid once per block, apart from the caps' corners)
+        foreach (var list in bends ? ends.Values : Enumerable.Empty<List<End>>())
         {
             if (list.Count != 2 || claimed.Contains(list[0]) || claimed.Contains(list[1])) continue;
             var a = Outward(segments[list[0].Seg], list[0].AtStart);

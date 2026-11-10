@@ -305,27 +305,24 @@ public static class BikePlanner
     // ---- path layouts per street ---------------------------------------------------------
 
     /// <summary>
-    /// The path layout (1..5) of every link that may carry a path, the same along a street:
-    /// links are chained through each node with the straightest partner (turning less than 30
-    /// degrees, best first), and a chain takes the layout hashed from its smallest key (TLM uuid
-    /// and part; the first point where there is none). Deterministic, and two blocks seeing the
-    /// same street agree as long as both see that key.
+    /// The path layout (1..5) of every link that may carry a path, the same along a street: links are chained through each node
+    /// with the straightest partner (turning less than 30 degrees, best first), and each link takes the layout hashed from the
+    /// smallest key (TLM uuid and part; the first point where there is none) among the links of its chain within
+    /// <see cref="StrokeWindow"/> metres of its middle along the chain (#1660: a chain may run on far past what a block reads; the window
+    /// is inside every block that writes the link, so every block agrees). A street up to a kilometre long has one layout; a
+    /// longer one may change layout at a junction.
     /// </summary>
     public static Dictionary<int, int> StrokeLayouts(RoadNetwork net, Func<RoadLink, string?> keyOf)
     {
-        var parent = new Dictionary<int, int>();
-        int Find(int x)
-        {
-            while (parent[x] != x) x = parent[x] = parent[parent[x]];
-            return x;
-        }
         var keys = new Dictionary<int, string>();
         foreach (var link in net.Links)
-            if (keyOf(link) is { } key) { parent[link.Id] = link.Id; keys[link.Id] = key; }
+            if (keyOf(link) is { } key) keys[link.Id] = key;
+        var next = new Dictionary<int, List<int>>();
+        foreach (var id in keys.Keys) next[id] = [];
 
         foreach (var node in net.Nodes)
         {
-            var arms = node.Approaches.Where(a => parent.ContainsKey(a.LinkId)).ToList();
+            var arms = node.Approaches.Where(a => keys.ContainsKey(a.LinkId)).ToList();
             if (arms.Count < 2) continue;
             var pairs = new List<(double Straight, int A, int B)>();
             for (int i = 0; i < arms.Count; i++)
@@ -341,21 +338,43 @@ public static class BikePlanner
             {
                 if (!used.Add(a)) continue;
                 if (!used.Add(b)) { used.Remove(a); continue; }
-                int ra = Find(arms[a].LinkId), rb = Find(arms[b].LinkId);
-                if (ra != rb) parent[Math.Max(ra, rb)] = Math.Min(ra, rb);
+                next[arms[a].LinkId].Add(arms[b].LinkId);
+                next[arms[b].LinkId].Add(arms[a].LinkId);
             }
         }
 
-        var smallest = new Dictionary<int, string>();
-        foreach (var (id, key) in keys)
+        double Length(int id)
         {
-            int root = Find(id);
-            if (!smallest.TryGetValue(root, out var s) || string.CompareOrdinal(key, s) < 0) smallest[root] = key;
+            var c = net.Links[id].Centreline;
+            double s = 0;
+            for (int i = 1; i < c.Count; i++) s += c[i].DistanceTo(c[i - 1]);
+            return s;
         }
+        var lengths = keys.Keys.ToDictionary(id => id, Length);
         var result = new Dictionary<int, int>();
-        foreach (var id in keys.Keys) result[id] = 1 + (int)(Fnv(smallest[Find(id)]) % 5);
+        foreach (var id in keys.Keys)
+        {
+            // the chain's links within the window, measured from this link's ends
+            string smallest = keys[id];
+            var seen = new HashSet<int> { id };
+            var front = new Queue<(int Link, double At)>();
+            // (from the link's middle: the window ends within 500 m + half the link of it, under a kilometre from any block that
+            // writes it, inside its halo; a link over a kilometre long keeps its own key)
+            foreach (int n in next[id]) front.Enqueue((n, lengths[id] / 2));
+            while (front.Count > 0)
+            {
+                var (link, at) = front.Dequeue();
+                if (at > StrokeWindow || !seen.Add(link)) continue;
+                if (string.CompareOrdinal(keys[link], smallest) < 0) smallest = keys[link];
+                foreach (int n in next[link]) front.Enqueue((n, at + lengths[link]));
+            }
+            result[id] = 1 + (int)(Fnv(smallest) % 5);
+        }
         return result;
     }
+
+    /// <summary>A link's path layout is decided by its chain's links within this far of it (m, <see cref="StrokeLayouts"/>).</summary>
+    public const double StrokeWindow = 500;
 
     /// <summary>A street carries on through a node where it turns less than 30 degrees.</summary>
     private const double ParallelCosStroke = 0.866;
