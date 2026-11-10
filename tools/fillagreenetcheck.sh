@@ -5,11 +5,11 @@
 #   1. the generated world (--generated-world, NOTERRAIN): every point on the fill;
 #   2. with LEAVES (B4's built leaves on D:, skipped without them): the fill past the region's edge, where it blends into
 #      the real leaves (some points real, some fill).
-#   GODOT=<exe> [AT=E,N] [LEAVES=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh      logs: test_output/fillagree_*.log
+#   GODOT=<exe> [RUNS="generated edge"] [AT=E,N] [LEAVES=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh      logs: test_output/fillagree_*.log
 . "$(dirname "$0")/lib/twoclient.sh" fillagree
 AT=${AT:-2600500,1199500}
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
-EDGE=${EDGE:-2500956,1107300}   # across the south edge of B4's Geneva leaves
+EDGE=${EDGE:-2499550,1112700}   # across the south-west edge of B4's Geneva leaves: 20 points fill, 5 real
 PORT=${PORT:-7893}
 fail=
 
@@ -18,14 +18,14 @@ compare() { # name: the server's and the client's points, line by line
   grep -h "RESULT: FAILED" "$s" "$c" && { fail="${fail:+$fail; }$1: a side had no ground"; return; }
   grep -h "points on the fill" "$s" "$c" | sed "s/^/$1: /"
   local out
-  out=$(paste <(grep -o "\[fillagree server\] point .*" "$s" | awk '{print $3, $4, $5}') \
-              <(grep -o "\[fillagree client\] point .*" "$c" | awk '{print $3, $4, $5}') | awk -v n="$1" '
-    NF == 6 { rows++; d = $3 - $6; if (d < 0) d = -d; if (d > worst) worst = d; if ($2 == "fill") fill++
+  out=$(paste <(grep -o "\[fillagree server\] point .*" "$s" | awk '{print $4, $5, $6}') \
+              <(grep -o "\[fillagree client\] point .*" "$c" | awk '{print $4, $5, $6}') | awk -v n="$1" '
+    NF == 6 { rows++; d = $3 - $6; if (d < 0) d = -d; if (d > worst) worst = d; if ($2 == "fill") fill++; else real++
               if ($1 != $4 || $2 != $5 || d > 0.01) { bad++; print n ": point " $1 " server " $2 " " $3 " vs client " $5 " " $6 } }
-    END { printf "%s: %d points compared, %d on the fill, worst %.3f m\n", n, rows, fill, worst
-          if (rows != 25 || bad > 0 || fill == 0) print "MISMATCH" }')
+    END { printf "%s: %d points compared, %d on the fill, %d real, worst %.3f m\n", n, rows, fill, real, worst + 0
+          if (rows != 25 || bad > 0 || fill == 0 || (n == "edge" && real == 0)) print "MISMATCH" }')
   echo "$out"
-  grep -q MISMATCH <<< "$out" && fail="${fail:+$fail; }$1: the server and the client disagree"
+  { grep -q MISMATCH <<< "$out" || ! grep -q "points compared" <<< "$out"; } && fail="${fail:+$fail; }$1: the server and the client disagree"
 }
 
 run() { # name at args...
@@ -46,9 +46,12 @@ run() { # name at args...
   compare "$name"
 }
 
-run generated "$AT" --generated-world "${NOTERRAIN[@]}"
-if [ -d "$LEAVES" ]; then run edge "$EDGE" "${NOTERRAIN[@]}" --leaves "$LEAVES"
-else echo "[fillagreenetcheck] no LEAVES: the region's edge skipped"; fi
+RUNS=${RUNS:-generated edge}   # RUNS=edge: the region's edge alone
+[[ " $RUNS " == *" generated "* ]] && run generated "$AT" --generated-world "${NOTERRAIN[@]}"
+if [[ " $RUNS " == *" edge "* ]]; then
+  if [ -d "$LEAVES" ]; then run edge "$EDGE" "${NOTERRAIN[@]}" --leaves "$LEAVES"
+  else echo "[fillagreenetcheck] no LEAVES: the region's edge skipped"; fi
+fi
 
 if [ -z "$fail" ]; then echo "[fillagreenetcheck] RESULT: ok"; exit 0; fi
 echo "[fillagreenetcheck] RESULT: FAILED ($fail; see $OUT/fillagree_*.log)"; exit 1
