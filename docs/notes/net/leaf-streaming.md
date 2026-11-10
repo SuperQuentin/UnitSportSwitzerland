@@ -55,7 +55,17 @@ D (#1500, earth by default, the LV95 runtime deleted) would leave them with no g
 
 ## Numbers
 
-See the PR of #1655.
+Geneva (B4's 2,412 leaves, the densest of the D: region), `tools/leafstreamcheck.sh`, three Godots and a server on one PC
+(Nov 10 2026):
+- The index: 42 KB.
+- Client B with nothing (fill off): ground under the start at 20.8 s against 18.3 s for A on its own leaves; 16.3 MB on
+  arrival; 94.9 MB in all over 4.5 km at 30 m/s, the ground never missing (0.0 s), the same rays, ball, re-anchor and
+  furniture (roads in 16 leaves, 788 doors) as A.
+- B again from its cache, fill on: whole leaves all from the cache; 133 heights sections (16 MB) the fill's blend reads
+  round the real leaves.
+- A whole Geneva leaf is ~2 MB raw; a heights section ~120 KB raw.
+- An earlier run, before the two section slots and with the fill on: 194 heights asks (the globe, the blend) shared the
+  slots with the near ground, arrival at 100 s for 57.5 MB.
 
 ## Not done
 

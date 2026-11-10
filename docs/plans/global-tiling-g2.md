@@ -311,6 +311,10 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
 - **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,
   cached, counted in Data): joining players and the phone get their ground from it, or D leaves them with none.
+  **Built** (#1662, `net/leaf-streaming`): the server's `LeafIndex` on join, entries by `CubeKey` and section
+  (`RequestCubeAsset`, protocol 95) into the tile cache, `LeafStore`'s chain disk → cache → server, what stood before the
+  index read again in place; a server starts on leaves alone. `tools/leafstreamcheck.sh`: a client with no data at Geneva
+  stands on the server's ground in 20.8 s (16.3 MB; 18.3 s with its own leaves), `--earthcheck` passes as on its own leaves.
 
 Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
 
