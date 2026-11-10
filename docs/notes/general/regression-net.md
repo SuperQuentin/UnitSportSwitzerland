@@ -121,7 +121,9 @@ tools/refshot-parity.sh c6-<commit>
   shot: without them the fonts and the space and realistic textures are missing from every picture (the import
   marks an LFS pointer file `valid=false` and rewrites its `.import`; `git checkout -- assets` after a pull).
 - `space` views (60 and 400 km, the limb and the ground straight down) are in the catalogue for both worlds.
-  Both get the same pyramid (`GLOBE`, B4's `cube_global`).
+  Both get the same pyramid, the game's (`Globe.DefaultDir`, `D:/UnitSportSwitzerland/cube_global`, rebuilt from B4's
+  leaves by #1654); `GLOBE` overrides it. Until Nov 10 2026 earth took `test_b3/b4/cube_global`, older, and missed
+  #1654/#1669's fixes.
 - The gate holds when `summary.md` has no shot over its floor and a person has looked at every judged sheet and
   found earth no worse. Each C6 fix session reruns it (`SKIP=flat` against the last flat library of the same
   commit is enough when only earth changed); D records the last run in its PR.

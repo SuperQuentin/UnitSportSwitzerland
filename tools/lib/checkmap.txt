@@ -330,6 +330,12 @@ src/Terrain/WorldGroundCheck quick --worldgroundcheck --chunks fixture:lake
 src/Terrain/Earth        full   tools/earthcheck.sh
 src/Terrain/Leaves/LeafStore full tools/earthcheck.sh
 src/Terrain/LeafCollision full  tools/earthcheck.sh
+# the server streams leaves to a client with none (#1655): real leaves on D:, so full only
+src/Net/ChunkStreamer    full   tools/leafstreamcheck.sh
+src/Net/ClientTerrainSync full  tools/leafstreamcheck.sh
+src/Terrain/NetworkChunkSource full tools/leafstreamcheck.sh
+src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
+src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake

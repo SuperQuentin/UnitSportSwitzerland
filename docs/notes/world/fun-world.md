@@ -46,6 +46,19 @@
 - **Air rings** (`World/Fun/FunRings`, client only, no network): 15 rings (`FunCourse.Rings`); the first starts (and
   restarts) the clock, the next one is pink and larger, a panel on the right shows ring and time and the session's best.
   Passing = the body within ring radius + 2 m of its centre. Nothing to press: any device.
+- **On the Earth** (#1648, G2 C7): everything placed outside the course's tiles goes through `FunWorld.Place` (the
+  course's `CoursePlace`: LV95 grid metres on the flat world, the plane tangent at the spawn on the earth world's leaves,
+  `terrain/fixtures-on-earth`), decided at `Enter(onLeaves)` before the source exists (the festival field) and the
+  source's own once it does. `FunWorld.Start` / `At(x, y, lift)` are `GlobalPos`es; the PvP block reads a place back
+  onto the course (`Place.Course`), the crates, rings, neon, palms, lamps, sign and mountains are laid by it.
+  - The grid floor: its height under the camera through the frame (the earth world's falls away with the round Earth
+    from its anchor), its hole over the course's ground box (four Earth points, not LV95 tiles), its lines laid from
+    the start (`grid_origin`: an earth re-anchor is no whole number of 20 m spacings); past 2.5 km up it grows with
+    the height (12 times it, in quarter steps), so its edge never shows, from 20 km up as from the ground.
+  - No `Globe` or `Atmosphere` in the fun world, flat or earth: under earth the globe drew the real Swiss relief round
+    the course and over the floor; the floor and the mountain ring are its horizon at any height.
+  - Checked side by side, flat and earth, from the plaza, 900 m, 4 km and 20 km up: the same picture, but the earth
+    world draws only the leaves within ~900 m of the camera (leaf streaming, #1655).
 - **Bots**: nothing new to do; the race track, the festival games, the bowling lanes and the PvP block are the existing
   activities' own bot seams. A bot is fair game anywhere, as everywhere (`PvpRules.Allows`).
 - **Checks**: `FunCourseTests` (venues in their blocks, fleet clear of blocks and water, slope and lift, rings, PvP block,

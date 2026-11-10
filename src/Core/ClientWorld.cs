@@ -170,7 +170,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         // which world this is (#999): every path, course and save below reads it
         WorldChoice.Active = Launch.World;
-        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
+        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter(CourseOnLeaves);
         Audio.SfxBus.Ensure();
         foreach (var (requested, run) in QuickChecks)
             if (requested())
@@ -430,7 +430,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _fixtureStart = (fE, fN);
             // on its leaves under earth offline (below): what stands on it outside them is placed as they are (#1649)
             source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN,
-                    earth: GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked)
+                    earth: CourseOnLeaves)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
         }
@@ -800,13 +800,36 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.SkyBodies());
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
-            if (World.Globe.DataDir is { } globe)
+            // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
+            if (World.Globe.DataDir is { } globe && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
-                AddChild(_earth != null
+                var g = _earth != null
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
                     ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
-                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe });
+                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
+                // the globe steps aside where a leaf is drawn whole, and is the far view at every altitude (#1629): the
+                // region's leaves furnished out to the flat world's rings, in the world's own materials
+                if (_earth != null)
+                {
+                    var globeTerrain = StyleKit.Material(MaterialRole.Terrain);
+                    // the globe is the last of the earth world: it never dissolves into anything (as the leaves, #1634)
+                    globeTerrain.SetShaderParameter("gives_way", false);
+                    FogUniforms.Apply(globeTerrain);
+                    _worldMaterials = [.. _worldMaterials, globeTerrain];
+                    g.TerrainMaterial = globeTerrain;
+                    if (_chunks is { } flat)
+                    {
+                        var (_, building, tree, water, _) = flat.FurnishMaterials;
+                        (g.BuildingMaterial, g.TreeMaterial, g.WaterMaterial) = (building, tree, water);
+                        g.FarLeafM = (flat.Lod.Rings[^1].MaxDist + 0.5) * 1000;
+                        g.FarBuildingsM = (flat.Lod.BuildingMaxDist + 0.5) * 1000;
+                        g.FarTreeShare = flat.Lod.TreeDensity(3);
+                    }
+                    _earth.TileEntered += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, true); };
+                    _earth.TileUnloaded += t => { if (t.IsLeaf) g.SetLeafDrawn(t.Leaf, false); };
+                }
+                AddChild(g);
                 AddChild(new World.Atmosphere { Name = "Atmosphere", Origin = origin });
                 if (World.AltitudeReadout.Requested) AddChild(new World.AltitudeReadout { Name = "AltitudeReadout", Origin = origin });
             }
@@ -816,7 +839,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (WorldChoice.FunActive)
         {
             if (_dayNight != null) _dayNight.HourOverride = World.Fun.FunWorld.DuskHour;
-            AddChild(new World.Fun.FunBackdrop(_chunks, origin, environment));
+            AddChild(new World.Fun.FunBackdrop(origin, environment));
             AddChild(new World.Fun.FunRings(origin, () => LocalPlayer));
         }
 
@@ -1820,6 +1843,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
 
     /// <summary>
+    /// A fixture course (the fun world among them) is played on its own leaves: under <c>--frame earth</c>, offline
+    /// (online it stays flat, as the server does on one). What stands on it is laid as the leaves are (#1649, #1648).
+    /// </summary>
+    private bool CourseOnLeaves => GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked;
+
+    /// <summary>
     /// <c>--earthcheck</c>: on a fixture course along its longest reach from the start, 300 m into the leaves' margin
     /// (on <c>straight</c> past the 3 km re-anchor), at 60 m/s; on a region north-east for 4.5 km.
     /// </summary>
@@ -2177,6 +2206,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Merges the server's tile list so tiles this client never shipped with become streamable.
         _terrainSync = new ClientTerrainSync(_streamer!, _chunks!) { ServerKey = _serverKey, CachedIndexMerged = _cachedIndexMerged };
+        // the earth world's leaves this copy lacks come from the server (#1655): its index, then each leaf by key through
+        // the tile cache; what was drawn, blended or collided before it came is read again
+        if (_earth is { } earthWorld && _chunkSource is { } leafCache && !earthWorld.Leaves.IsFixture)
+        {
+            _terrainSync.WantsLeaves = true;
+            _terrainSync.LeafIndexReceived += index =>
+                Callable.From(() =>
+                {
+                    if (!IsInstanceValid(earthWorld)) return;
+                    var changed = earthWorld.Store.UseRemote(index, leafCache.FetchLeaf);
+                    GD.Print($"[earth] the server's leaves: {earthWorld.Store.RemoteCount} this copy lacks, {changed.Count} changed");
+                    earthWorld.Refresh(changed);
+                    if (changed.Count > 0) GetNodeOrNull<World.Globe>("Globe")?.RefreshLeaves();
+                }).CallDeferred();
+        }
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>

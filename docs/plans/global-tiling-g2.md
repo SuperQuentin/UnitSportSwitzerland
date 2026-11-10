@@ -302,7 +302,8 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   and 22 % of approaches differ from LV95 (74 % of signals within 30 m of a leaf edge). Plan junctions on whole lines and
   cut only when writing (#1546's direction). This changes the LV95 bytes on purpose.
 - **The fun world's extras** (#1648): `FunBackdrop` (LV95 tile ids, `ToWorld(E, N)`), `FunRings`, the PvP zone and
-  its LV95 start move to Earth positions; its course is already on leaves (#1614).
+  its LV95 start move to Earth positions; its course is already on leaves (#1614). **Built**: through the course's
+  `CoursePlace` (#1652), the floor following the round Earth and growing with the height, no real-Earth globe there.
 - **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
   under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
   (`Core/TestWorld`) checked. **Built** (#1652): the course's tiles laid where its leaves are (`CoursePlace`), every course's
@@ -311,6 +312,10 @@ D deletes the LV95 runtime, so every world the game can run must already work un
   Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
 - **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,
   cached, counted in Data): joining players and the phone get their ground from it, or D leaves them with none.
+  **Built** (#1662, `net/leaf-streaming`): the server's `LeafIndex` on join, entries by `CubeKey` and section
+  (`RequestCubeAsset`, protocol 95) into the tile cache, `LeafStore`'s chain disk → cache → server, what stood before the
+  index read again in place; a server starts on leaves alone. `tools/leafstreamcheck.sh`: a client with no data at Geneva
+  stands on the server's ground in 20.8 s (16.3 MB; 18.3 s with its own leaves), `--earthcheck` passes as on its own leaves.
 
 Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
 
@@ -319,7 +324,8 @@ Already ported: the open world (B4 + C1), the generated world and the fill (B5, 
 - Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
   path, `HorizonLayer`, `.terr` and the other LV95 readers, `FallbackChunkSource`'s LV95 path);
-  tile-keyed stores re-keyed by leaf; the ratchet's counts at 0 and the test retired; a second
+  tile-keyed stores re-keyed by leaf, buildings by C5's `BuildingId` (the identity every per-building seed on leaves
+  has used since #1658: `Fnv.Alias`; flat's `BuildingKey` seeds go with the LV95 runtime); the ratchet's counts at 0 and the test retired; a second
   protocol bump only if an RPC carried a `TileId`.
 - The bar, recorded in this PR (below); G2 marked built in `global-tiling.md`; #1443 commented.
 

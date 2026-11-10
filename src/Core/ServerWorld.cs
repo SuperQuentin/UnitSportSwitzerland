@@ -92,8 +92,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // Unlike a client, a server cannot shrug this off: it is the authority on where the
         // world is and the only source of terrain for clients that lack it. Starting anyway
         // would hand every client an origin of 0/0 and a world with nothing in it — unless it
-        // is asked to serve a generated world, which is then all there is (and says so).
-        if (manifest.Tiles.Count == 0 && !generatedWorld)
+        // is asked to serve a generated world, which is then all there is (and says so). Under --frame earth built leaves
+        // are terrain enough (#1655): they are what it serves, and the wire carries Earth positions, not its origin.
+        // (--frame is taken into the settings below)
+        var askedFrame = Enum.TryParse<WorldFrame>(CmdArgs.Value("--frame"), true, out var argFrame) ? argFrame : GameSettings.Current.Frame;
+        bool earthLeaves = askedFrame == WorldFrame.Earth && Directory.Exists(TerrainPaths.FindLeafDir())
+            && Directory.EnumerateFiles(TerrainPaths.FindLeafDir(), "*.cubl").Any();
+        if (manifest.Tiles.Count == 0 && !generatedWorld && !earthLeaves)
         {
             GD.PushError(
                 $"[server] no terrain data in {chunkDir}. A server has nothing to serve and no "
@@ -576,6 +581,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // Serves generated terrain files to clients that lack them. Reads raw bytes straight
         // off disk, so it costs the server no decoding work.
         _streamer = ChunkStreamer.CreateServer(chunkDir);
+        // --frame earth (#1655): the leaves on this server's disk, streamed by key to clients that lack them
+        if (_earth != null) _streamer.Leaves = _earth.Store;
         _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)

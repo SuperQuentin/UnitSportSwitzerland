@@ -8,6 +8,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The jazz night, the set's clock, the rules and the festival def (#1394).</summary>
+[Collection(FixtureWorld.Collection)]
 public class MontreuxJazzRulesTests
 {
     private static readonly StadiumSpec Venue = StadiumCatalog.MontreuxJazzOpenAir;

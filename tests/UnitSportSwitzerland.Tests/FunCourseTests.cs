@@ -9,6 +9,7 @@ namespace UnitSport.Tests;
 /// The fun world's course (#1396, src/Terrain/Fixture/FunCourse.cs): what the game reads off it must stand where it
 /// is meant to, and the source must hand the venues, the arena, the fleet and the slope to the game as it reads them.
 /// </summary>
+[Collection(FixtureWorld.Collection)]
 public class FunCourseTests
 {
     private const double StartE = 2583250, StartN = 1113250;

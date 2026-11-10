@@ -10,6 +10,7 @@ namespace UnitSport.Tests;
 /// terrain format asks a tile instead of doing LV95 kilometre arithmetic. Today each answer is that
 /// arithmetic, exactly; these tests pin them to it so moving a call site changes nothing.
 /// </summary>
+[Collection(FixtureWorld.Collection)]
 public class TileKeyTests
 {
     private static readonly TileId T = new(2583, 1113);
