@@ -289,8 +289,27 @@ public partial class FlightCheckProbe : Node
             int n = World.AirLiftField.ThermalsNear(ground, 1500, found);
             if (n > 0)
             {
-                _liftStrength = found[0].Strength;
-                _liftAt = World.AirLiftField.ToWorld(found[0]) ?? ground;
+                // the one that stays strongest through the 90 s sortie: a thermal breathes, and the strongest now may be
+                // about to die (the earth world boots slower, so its clock met one at its end, #1649)
+                Span<World.Thermal> mid = stackalloc World.Thermal[8], end = stackalloc World.Thermal[8];
+                int nMid = World.AirLiftField.ThermalsNear(ground, 1500, mid, 45), nEnd = World.AirLiftField.ThermalsNear(ground, 1500, end, 90);
+                int best = 0;
+                float bestScore = -1f;
+                for (int i = 0; i < n; i++)
+                {
+                    float score = Mathf.Min(found[i].Strength, Mathf.Min(Later(found[i], mid[..nMid]), Later(found[i], end[..nEnd])));
+                    if (score > bestScore) (best, bestScore) = (i, score);
+                }
+                _liftStrength = found[best].Strength;
+                _liftAt = World.AirLiftField.ToWorld(found[best]) ?? ground;
+
+                // the same thermal's strength later (its source stays put): 0 once it is gone
+                static float Later(in World.Thermal t, ReadOnlySpan<World.Thermal> then)
+                {
+                    foreach (var o in then)
+                        if (World.Thermal.SameSource(t, o)) return o.Strength;
+                    return 0f;
+                }
             }
             else _liftAt = ground;
             GD.Print($"[flycheck] {_kind} at {hour:F1} h: {n} thermals within 1.5 km, the strongest {_liftStrength:F2} "

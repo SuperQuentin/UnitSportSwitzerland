@@ -9,6 +9,8 @@ namespace UnitSport.Terrain.Fixture;
 /// start at <c>--at</c> start on it) and covers the tiles round its roads; nothing exists outside
 /// them. Every tile it has answers every asset, empty rather than null, so nothing above it (the
 /// streaming cache) fills a gap with real data. No horizon, no buildings, open ground cover.
+/// Under <c>--frame earth</c> the tiles are laid where the course's leaves are (<see cref="Place"/>, #1649): the
+/// course's metres turned by the grid's convergence, so what reads the tiles meets what the leaves draw.
 /// </summary>
 public sealed class FixtureChunkSource : IChunkSource
 {
@@ -37,23 +39,44 @@ public sealed class FixtureChunkSource : IChunkSource
     public Func<double, double, (double X, double Y)> CourseOf(TileId tile) => (x, z) =>
     {
         var (e, n) = tile.Global(x, z);
-        return (e - _startE, n - _startN);
+        return Place.Course(e, n);
     };
 
     /// <summary>The course's tiles a box of course metres reaches (#1509).</summary>
     public IEnumerable<TileId> TilesUnder(double minX, double minY, double maxX, double maxY) =>
-        TileRect.Covering(_startE + minX, _startN + minY, _startE + maxX, _startN + maxY).Tiles().Where(_tiles.Contains);
+        Extent(minX, minY, maxX, maxY) is var (e0, n0, e1, n1) ? TileRect.Covering(e0, n0, e1, n1).Tiles().Where(_tiles.Contains) : [];
 
     /// <summary>The course's ground height at an LV95 point, m.</summary>
-    public double GroundAt(double e, double n) => _course.Ground(e - _startE, n - _startN);
+    public double GroundAt(double e, double n) => Place.Course(e, n) is var (x, y) ? _course.Ground(x, y) : 0;
 
-    public FixtureChunkSource(FixtureCourse course, double startE, double startN)
+    /// <summary>
+    /// Where the course's metres are on the Earth (#1649): the flat world's LV95 grid metres, or the earth world's
+    /// tangent plane (<see cref="CoursePlace.OnEarth"/>). Every record of the tiles is laid through it, so under earth a
+    /// reader of the tiles (a route, a car park, a stand, the fleet) finds each thing where the course's leaves have it.
+    /// </summary>
+    public CoursePlace Place { get; }
+
+    /// <summary>The LV95 box (notation) round a box of course metres: its four corners, laid as the course is.</summary>
+    private (double MinE, double MinN, double MaxE, double MaxN) Extent(double minX, double minY, double maxX, double maxY)
+    {
+        var (ae, an) = Place.Lv95(minX, minY);
+        var (be, bn) = Place.Lv95(maxX, minY);
+        var (ce, cn) = Place.Lv95(minX, maxY);
+        var (de, dn) = Place.Lv95(maxX, maxY);
+        return (Math.Min(Math.Min(ae, be), Math.Min(ce, de)), Math.Min(Math.Min(an, bn), Math.Min(cn, dn)),
+                Math.Max(Math.Max(ae, be), Math.Max(ce, de)), Math.Max(Math.Max(an, bn), Math.Max(cn, dn)));
+    }
+
+    public FixtureChunkSource(FixtureCourse course, double startE, double startN, bool earth = false)
     {
         _course = course;
         (_startE, _startN) = (startE, startN);
+        Place = earth ? CoursePlace.OnEarth(startE, startN, course.Ground(0, 0)) : CoursePlace.Flat(startE, startN);
+        CoursePlace.Active = Place;
         var (minX, minY, maxX, maxY) = course.Bounds(course.Roads.Count == 0 ? 100 : 400);
-        var lo = TileId.FromLv95(startE + minX, startN + minY);
-        var hi = TileId.FromLv95(startE + maxX, startN + maxY);
+        var (loE, loN, hiE, hiN) = Extent(minX, minY, maxX, maxY);
+        var lo = TileId.FromLv95(loE, loN);
+        var hi = TileId.FromLv95(hiE, hiN);
         for (int e = lo.E; e <= hi.E; e++)
             for (int n = lo.N; n <= hi.N; n++)
                 _tiles.Add(new TileId(e, n));
@@ -62,7 +85,7 @@ public sealed class FixtureChunkSource : IChunkSource
         {
             var (cls, pts) = course.Roads[road];
             float width = course.RoadWidths.TryGetValue(road, out float w) ? w : RoadFormat.DefaultWidth(cls);
-            foreach (var (tile, piece) in SplitAtTiles(pts.Select(p => (startE + p.X, startN + p.Y, p.Z)).ToList()))
+            foreach (var (tile, piece) in SplitAtTiles(pts.Select(p => Place.Lv95(p.X, p.Y) is var (e, n) ? (e, n, p.Z) : default).ToList()))
             {
                 var xyz = new float[piece.Count * 3];
                 for (int i = 0; i < piece.Count; i++)
@@ -85,27 +108,28 @@ public sealed class FixtureChunkSource : IChunkSource
         // the course's venues (#1396) are the venue list while it is played, on the server and every client alike
         if (course.Venues.Count > 0)
         {
-            Interiors.Venues.Override = course.Venues.Select((v, i) => new VenueRecord($"fixture-{course.Name}-{i}", v.Type,
-                startE + v.X, startN + v.Y, VenueFix.Inside, v.Flags, v.Count, "", v.Name)).ToList();
+            Interiors.Venues.Override = course.Venues.Select((v, i) => Place.Lv95(v.X, v.Y) is var (ve, vn) ? new VenueRecord($"fixture-{course.Name}-{i}", v.Type,
+                ve, vn, VenueFix.Inside, v.Flags, v.Count, "", v.Name) : null!).ToList();
             _overrodeVenues = true;
         }
         if (course.StadiumAt is { } stadium)
         {
-            Stadiums.StadiumCatalog.UseWorld(stadium(startE, startN));
+            Stadiums.StadiumCatalog.UseWorld(stadium(Place));
             _addedStadium = true;
         }
         // buildings (#558), filed by the tile their middle is in
         Interiors.GarageRule.AlwaysRolls = course.AlwaysGarage;
         foreach (var block in course.Blocks)
         {
-            double e = startE + block.X, n = startN + block.Y;
+            var (e, n) = Place.Lv95(block.X, block.Y);
             var tile = TileId.FromLv95(e, n);
             var (bx, bz) = tile.Local(e, n);
-            Add(_buildings, tile, FixtureBlocks.Solid(block, (float)bx, (float)bz));
+            // square to the course, which the earth world turns on the grid by the convergence
+            Add(_buildings, tile, FixtureBlocks.Solid(block with { Turn = block.Turn - (float)(Place.Turn * 180 / Math.PI) }, (float)bx, (float)bz));
         }
         foreach (var (x, y, _, height) in course.Trees)
         {
-            double e = startE + x, n = startN + y;
+            var (e, n) = Place.Lv95(x, y);
             var tile = TileId.FromLv95(e, n);
             var (tx, tz) = tile.Local(e, n);
             Add(_trees, tile, new TreeInstance((float)tx, (float)course.Ground(x, y), (float)tz, height, 0));
@@ -125,6 +149,7 @@ public sealed class FixtureChunkSource : IChunkSource
         if (_addedStadium) Stadiums.StadiumCatalog.UseWorld(null);
         _overrodeVenues = _addedStadium = false;
         Fleet = new Dictionary<TileId, List<Vehicles.VehicleSlot>>();
+        CoursePlace.Active = null;
     }
 
     /// <summary>
@@ -139,9 +164,9 @@ public sealed class FixtureChunkSource : IChunkSource
         for (int i = 0; i < _course.Fleet.Count; i++)
         {
             var p = _course.Fleet[i];
-            double e = _startE + p.X, n = _startN + p.Y;
-            // a heading is clockwise from north, a yaw turns the other way
-            float yaw = (float)Math.IEEERemainder(-p.HeadingDeg * Math.PI / 180, 2 * Math.PI);
+            // the course point on the Earth in either world (#1649): its LV95 notation, the heading on the grid there
+            var (e, n) = Place.Lv95(p.X, p.Y);
+            float yaw = Place.GridYaw(p.HeadingDeg);
             Add(fleet, TileId.FromLv95(e, n), new Vehicles.VehicleSlot($"fix_{_course.Name}", i, e, n, _course.Ground(p.X, p.Y), yaw,
                 p.Kind, (byte)(i * 37 % 8), false, p.Train, p.Load, Respawns: true));
         }
@@ -153,7 +178,8 @@ public sealed class FixtureChunkSource : IChunkSource
     {
         foreach (var (x0, y0, x1, y1) in _course.Lines)
         {
-            double e0 = _startE + x0, n0 = _startN + y0, e1 = _startE + x1, n1 = _startN + y1;
+            var (e0, n0) = Place.Lv95(x0, y0);
+            var (e1, n1) = Place.Lv95(x1, y1);
             var at = TileId.FromLv95((e0 + e1) / 2, (n0 + n1) / 2);
             if (!_tiles.Contains(at)) continue;
             float Y(double x, double y) => (float)_course.Ground(x, y) + 0.02f;
@@ -190,23 +216,22 @@ public sealed class FixtureChunkSource : IChunkSource
             {
                 double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
                 double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
-                if (!tile.Touches(_startE + minX, _startN + minY, _startE + maxX, _startN + maxY)) continue;
+                var (minE, minN, maxE, maxN) = Extent(minX, minY, maxX, maxY);
+                if (!tile.Touches(minE, minN, maxE, maxN)) continue;
                 var path = slope.Outline.SelectMany(p =>
                 {
-                    var (x, y) = FromSouthWest(tile, _startE + p.X, _startN + p.Y);
+                    var (x, y) = Place.Lv95(p.X, p.Y) is var (pe, pn) ? FromSouthWest(tile, pe, pn) : default;
                     return new[] { (float)x, (float)y };
                 }).ToArray();
-                double low = _course.Ground((minX + maxX) / 2, minY), high = _course.Ground((minX + maxX) / 2, maxY);
-                double steep = Math.Atan2(Math.Abs(high - low), maxY - minY) * 180 / Math.PI;
+                var (low, high, sun, steep) = SlopeTerrain(_course, slope);
                 records.Add(new PisteRecord(0xF0F0_0000UL + (ulong)_course.Slopes.IndexOf(slope), PisteType.Downhill, slope.Difficulty,
-                    PisteGrooming.Classic, true, (float)(maxX - minX), slope.Name, "", path, (float)Math.Min(low, high), (float)Math.Max(low, high),
-                    high > low ? 0.85f : 0.15f, (float)steep));
+                    PisteGrooming.Classic, true, (float)(maxX - minX), slope.Name, "", path, low, high, sun, steep));
                 byte index = (byte)records.Count;
                 for (int r = 0; r < size; r++)
                     for (int col = 0; col < size; col++)
                     {
                         var (ce, cn) = tile.Global(col, r);
-                        double x = ce - _startE, y = cn - _startN;
+                        var (x, y) = Place.Course(ce, cn);
                         if (!Inside(slope.Outline, x, y)) continue;
                         double edge = Math.Min(Math.Min(x - minX, maxX - x), Math.Min(y - minY, maxY - y));
                         slot[r * size + col] = index;
@@ -215,23 +240,35 @@ public sealed class FixtureChunkSource : IChunkSource
             }
             if (records.Count > 0) _pistes[tile] = new PisteTile(tile, records, slot, aux);
         }
+    }
 
-        static bool Inside((double X, double Y)[] ring, double x, double y)
-        {
-            bool inside = false;
-            for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
-                if ((ring[i].Y > y) != (ring[j].Y > y) && x < (ring[j].X - ring[i].X) * (y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
-                    inside = !inside;
-            return inside;
-        }
+    /// <summary>Whether a course point is inside a slope's outline (even-odd); its leaves rasterise the same (#1649).</summary>
+    internal static bool Inside((double X, double Y)[] ring, double x, double y)
+    {
+        bool inside = false;
+        for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+            if ((ring[i].Y > y) != (ring[j].Y > y) && x < (ring[j].X - ring[i].X) * (y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
+                inside = !inside;
+        return inside;
+    }
+
+    /// <summary>A slope's record fields from the course's ground: its altitudes, sun side and steepness (as <see cref="PlanSlopes"/>).</summary>
+    internal static (float Low, float High, float Sun, float Steep) SlopeTerrain(FixtureCourse course, FixtureCourse.Slope slope)
+    {
+        double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
+        double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
+        double low = course.Ground((minX + maxX) / 2, minY), high = course.Ground((minX + maxX) / 2, maxY);
+        double steep = Math.Atan2(Math.Abs(high - low), maxY - minY) * 180 / Math.PI;
+        return ((float)Math.Min(low, high), (float)Math.Max(low, high), high > low ? 0.85f : 0.15f, (float)steep);
     }
 
     public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
         Task.FromResult(_pistes.TryGetValue(id, out var t) ? t : null);
 
     /// <summary>The course <c>--chunks fixture:&lt;name&gt;</c> names, starting at the spawn; null for an unknown name.</summary>
-    public static FixtureChunkSource? Create(string name, double startE, double startN) =>
-        FixtureCourse.Create(name) is { } course ? new FixtureChunkSource(course, startE, startN) : null;
+    /// <param name="earth">The course is played on its leaves (<see cref="Place"/>).</param>
+    public static FixtureChunkSource? Create(string name, double startE, double startN, bool earth = false) =>
+        FixtureCourse.Create(name) is { } course ? new FixtureChunkSource(course, startE, startN, earth) : null;
 
     public IReadOnlyCollection<TileId> Tiles => _tiles;
 
@@ -295,7 +332,8 @@ public sealed class FixtureChunkSource : IChunkSource
             for (int c = 0; c < LatticeSize; c++)
             {
                 var (e, n) = t.Global(c * LatticeStride, r * LatticeStride);
-                h[r * LatticeSize + c] = _course.Ground(e - _startE, n - _startN);
+                var (x, y) = Place.Course(e, n);
+                h[r * LatticeSize + c] = _course.Ground(x, y);
             }
         return h;
     })).Value;
@@ -337,7 +375,8 @@ public sealed class FixtureChunkSource : IChunkSource
                 for (int c = 0; c < size; c++)
                 {
                     var (e, n) = id.Global(c, r);
-                    q[r * size + c] = ChunkFormat.Quantize(terrain(e - _startE, n - _startN));
+                    var (x, y) = Place.Course(e, n);
+                    q[r * size + c] = ChunkFormat.Quantize(terrain(x, y));
                 }
             return Task.FromResult<ChunkGrid?>(Grid(id, q, 1));
         }
@@ -368,13 +407,13 @@ public sealed class FixtureChunkSource : IChunkSource
 
 
     /// <summary>Flat ground over the course, and nothing standing on it but its own roads.</summary>
-    private sealed class CourseGround(FixtureCourse course, double startE, double startN) : IParkingGround
+    private sealed class CourseGround(FixtureCourse course, CoursePlace place) : IParkingGround
     {
-        public double Ground(double e, double n) => course.Ground(e - startE, n - startN);
+        public double Ground(double e, double n) => place.Course(e, n) is var (x, y) ? course.Ground(x, y) : 0;
 
         public bool Occupied(double e, double n)
         {
-            double x = e - startE, y = n - startN;
+            var (x, y) = place.Course(e, n);
             foreach (var (cls, pts) in course.Roads)
             {
                 double half = RoadFormat.DefaultWidth(cls) * 0.5 + 2.0;
@@ -400,11 +439,11 @@ public sealed class FixtureChunkSource : IChunkSource
     private void PlanCarParks()
     {
         if (_course.CarParks.Count == 0) return;
-        var ground = new CourseGround(_course, _startE, _startN);
+        var ground = new CourseGround(_course, Place);
 
         foreach (var ring in _course.CarParks)
         {
-            var lv95 = ring.Select(p => (E: _startE + p.X, N: _startN + p.Y)).ToList();
+            var lv95 = ring.Select(p => Place.Lv95(p.X, p.Y)).ToList();
             var borders = new List<ParkingPlanner.Border>();
             foreach (var (cls, pts) in _course.Roads)
             {
@@ -414,8 +453,8 @@ public sealed class FixtureChunkSource : IChunkSource
                 double best = double.MaxValue, bE = 0, bN = 0, heading = 0;
                 for (int i = 0; i < pts.Count - 1; i++)
                 {
-                    double ax = _startE + pts[i].X, ay = _startN + pts[i].Y;
-                    double bx = _startE + pts[i + 1].X, by = _startN + pts[i + 1].Y;
+                    var (ax, ay) = Place.Lv95(pts[i].X, pts[i].Y);
+                    var (bx, by) = Place.Lv95(pts[i + 1].X, pts[i + 1].Y);
                     double dx = bx - ax, dy = by - ay;
                     double len2 = dx * dx + dy * dy;
                     double t = len2 < 1e-9 ? 0 : Math.Clamp(((cE - ax) * dx + (cN - ay) * dy) / len2, 0, 1);
@@ -428,8 +467,8 @@ public sealed class FixtureChunkSource : IChunkSource
                     cls <= RoadClass.Major ? 3 : 1, RoadFormat.DefaultWidth(cls) * 0.5, false));
             }
 
-            ParkingPlanner.Frontage? frontage = _course.Store is { } st
-                ? new ParkingPlanner.Frontage(_startE + st.DoorX, _startN + st.DoorY, st.FloorAreaM2, st.Retail)
+            ParkingPlanner.Frontage? frontage = _course.Store is { } st && Place.Lv95(st.DoorX, st.DoorY) is var (doorE, doorN)
+                ? new ParkingPlanner.Frontage(doorE, doorN, st.FloorAreaM2, st.Retail)
                 : null;
 
             var lot = ParkingPlanner.Plan(lv95, borders, ground, frontage);
@@ -552,7 +591,8 @@ public sealed class FixtureChunkSource : IChunkSource
                 for (int c = 0; c < CoverFormat.Size; c++)
                 {
                     var (e, n) = id.Global(c, r);
-                    cover[r * CoverFormat.Size + c] = (byte)fn(e - _startE, n - _startN);
+                    var (x, y) = Place.Course(e, n);
+                    cover[r * CoverFormat.Size + c] = (byte)fn(x, y);
                 }
         return Task.FromResult<byte[]?>(cover);
     }
@@ -569,7 +609,8 @@ public sealed class FixtureChunkSource : IChunkSource
             for (int c = 0; c < n; c++)
             {
                 var (e, nn) = id.Global(c * WaterTile.Stride, r * WaterTile.Stride);
-                var (l, f) = water(e - _startE, nn - _startN);
+                var (wx, wy) = Place.Course(e, nn);
+                var (l, f) = water(wx, wy);
                 level[r * n + c] = (float)l;
                 fetch[r * n + c] = (float)f;
                 any |= !double.IsNaN(l);
@@ -591,13 +632,12 @@ public sealed class FixtureChunkSource : IChunkSource
         var fields = new List<FieldPolygon>();
         foreach (var (fid, crop, outline) in _course.Fields)
         {
-            double minE = outline.Min(p => p.X) + _startE, maxE = outline.Max(p => p.X) + _startE;
-            double minN = outline.Min(p => p.Y) + _startN, maxN = outline.Max(p => p.Y) + _startN;
+            var (minE, minN, maxE, maxN) = Extent(outline.Min(p => p.X), outline.Min(p => p.Y), outline.Max(p => p.X), outline.Max(p => p.Y));
             if (!id.Touches(minE, minN, maxE, maxN)) continue;
             var ring = new float[outline.Length * 2];
             for (int i = 0; i < outline.Length; i++)
             {
-                var (x, y) = FromSouthWest(id, _startE + outline[i].X, _startN + outline[i].Y);
+                var (x, y) = Place.Lv95(outline[i].X, outline[i].Y) is var (oe, on) ? FromSouthWest(id, oe, on) : default;
                 ring[i * 2] = (float)x;
                 ring[i * 2 + 1] = (float)y;
             }
@@ -613,13 +653,13 @@ public sealed class FixtureChunkSource : IChunkSource
         if (_course.Stops.Count == 0 && _course.Jetties.Count == 0) return Task.FromResult<LandingIndex?>(null);
         return Task.Run(() =>
         {
-            var shore = new Shore(_course, _startE, _startN);
+            var shore = new Shore(_course, Place);
             var index = new LandingIndex();
             foreach (var (name, x, y) in _course.Stops)
-                if (LandingPlanner.PlanLanding(name, _startE + x, _startN + y, shore) is { } landing) index.Landings.Add(landing);
+                if (Place.Lv95(x, y) is var (le, ln) && LandingPlanner.PlanLanding(name, le, ln, shore) is { } landing) index.Landings.Add(landing);
             int k = 0;
             foreach (var line in _course.Jetties)
-                if (LandingPlanner.PlanJetty($"fixture-{k++}", line.Select(p => (_startE + p.X, _startN + p.Y, p.Z)).ToList(), shore) is { } jetty)
+                if (LandingPlanner.PlanJetty($"fixture-{k++}", line.Select(p => Place.Lv95(p.X, p.Y) is var (je, jn) ? (je, jn, p.Z) : default).ToList(), shore) is { } jetty)
                     index.Jetties.Add(jetty);
             return (LandingIndex?)index;
         }, ct);
@@ -627,14 +667,14 @@ public sealed class FixtureChunkSource : IChunkSource
 
     /// <summary>The course's airports (#422), planned as the preprocessor plans the real ones.</summary>
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) =>
-        Task.FromResult(_course.Airports?.Invoke(_startE, _startN));
+        Task.FromResult(_course.Airports?.Invoke(Place));
 
     /// <summary>The course's ground and water for the pier planner, in LV95.</summary>
-    private sealed class Shore(FixtureCourse course, double startE, double startN) : IShoreSampler
+    private sealed class Shore(FixtureCourse course, CoursePlace place) : IShoreSampler
     {
-        public double Ground(double e, double n) => course.Ground(e - startE, n - startN);
+        public double Ground(double e, double n) => place.Course(e, n) is var (x, y) ? course.Ground(x, y) : 0;
 
         public double Level(double e, double n) =>
-            course.Water is { } water ? water(e - startE, n - startN).Level : double.NaN;
+            course.Water is { } water && place.Course(e, n) is var (x, y) ? water(x, y).Level : double.NaN;
     }
 }

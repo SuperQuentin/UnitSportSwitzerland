@@ -163,7 +163,11 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   vertex, ETOPO's footprint where the nine are not all there; every tile over the leaves and its three
   siblings (so a parent can always split). Nov 3 2026, below-normal priority, 12 threads: 39 s,
   1,340 tiles, 136 MB, peak 9.6 GB (the 2,547 leaves held at once); 0 of 2.7 M edge vertices differ.
-  Run the colour bake again after it.
+  A level it rebuilds keeps its colour (`CubeColourCarry`, #1659): colour is Blue Marble over a tile's footprint, never
+  its heights, so the `.cuba` bundles still hold; it prints the new tiles with none and the levels left colourless,
+  which need the colour bake again. Before #1659 it dropped every rebuilt level's `albedo` from the manifest, and the
+  globe drew those levels white (B4's pyramid from level 5 down: a rectangle west of Switzerland from space; its
+  manifest repaired on D:, the old one kept as `cube_manifest.json.pre1659`).
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client

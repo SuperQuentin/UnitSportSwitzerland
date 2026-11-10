@@ -23,7 +23,12 @@ decisions were made with the user on 2026-11-08.
   - The shaders' curvature is refraction's lift only (`Curvature.RoundGeometry`, `world/earth-curvature`).
 - **`Earth/EarthWorld`** serves `IWorldGround` (`chunks.Ground`'s twin; `ClientWorld.Ground` picks one).
   - Leaves within 900 m along the ground of the camera or an anchor are loaded on 3 workers and committed under a 4 ms budget; they are dropped 300 m further out.
-  - A leaf's mesh is its collision's (`LeafCollision.Prepare`, road blend at clearance 0): what is drawn is what is stood on. It is coloured by cover through `CoverPalette`.
+  - **Not under a camera in Space** (#1631): above 60 km (`CameraCeilingM`, the Space regime's entry) the camera is no
+    focus; the globe draws the ground. A queued leaf no focus wants any more is skipped when a worker reaches it, and a
+    request that comes back with nothing frees its slot, so `Idle` holds again. Before, a fast climb or orbit over the
+    fill queued hundreds of leaves (~2 s each with roads, one at a time) and the ground under the landing waited
+    behind them for minutes. `Status` says what it is busy with (a shot's timeout line prints it).
+  - A leaf's mesh is its collision's (`LeafCollision.Prepare`, road blend at clearance 0): what is drawn is what is stood on. Its look: "The ground's look (C6)" below.
   - Each leaf is placed by one rigid transform from its anchor (`LeafToWorld`) and placed again from the frame at each shift, never accumulated.
   - Queries compose in doubles: world → ECEF → the leaf it lies in → that leaf's anchor frame → its mesh (`CubeGeometry.MeshHeightAt`) → back.
   - Water comes from `CubeWater` (ellipsoidal level, every second vertex) with the flat world's wave scale, cover from the lattice byte, tunnels from the leaf's road bores.
@@ -46,7 +51,10 @@ decisions were made with the user on 2026-11-08.
     middle of the 1000 m tile. A `ChunkNode` drawn there is placed by `EarthWorld.StandInToWorld(leaf)`.
   - Its name is a `TileId` no LV95 tile has: E = 100,000 + face · 20,000 + X, N = 100,000 + Y (`Id`, `TryLeaf`).
     `BuildingKey`/`DoorKey` built on it name a leaf's buildings, stable across runs (interior layouts are stored
-    under it). D re-keys them with C5's `BuildingId`.
+    under it). D re-keys them with C5's `BuildingId`. Every seed hashed from such a key (plan, shop, bank, cellar,
+    locks, loot, a site's crane: `Core.Fnv`) already hashes as from the building's `BuildingId` (#1658):
+    `Buildings` registers each solid's id with `Fnv.Alias`, so the same house seeds alike in any leaf build. The flat
+    world's seeds are untouched (its LV95 keys never match), so flat and earth houses differ until D.
   - Its ground is a 1 m `ChunkGrid` rasterised from the leaf's bare lattice (the same triangle split as the mesh,
     within the height quantum, 7 cm); off the leaf, the nearest height on the row. Water: each 2 m sample takes the
     leaf's nearest water sample, as an anchor-frame height.
@@ -115,8 +123,27 @@ decisions were made with the user on 2026-11-08.
   - 1 re-anchor, marks 0.00 cm.
 - The flat world: `--worldgroundcheck --chunks fixture:lake` (quick).
 
+## The ground's look (G2 C6, #1634, #1632)
+
+- **The style kit's terrain material** (`EarthWorld.GroundMaterial`, `MaterialRole.Terrain`, restyled with the
+  rest; `ClientWorld` adds it to the fog list): every style and its standalone variants, as a flat tile's.
+  - The mesh carries what a flat tile's does: `CoverPalette` colours in **linear** (`SrgbToLinear`; raw sRGB read
+    as linear was the "mint lawns, white banks"), blended with differing 4-neighbours (`ColourAt`, the flat
+    builder's boundary blend at stride 1), the pattern code in alpha, at the vertex's **altitude** (the anchor frame
+    is on the ellipsoid: height less the geoid, `SwissGeodesy.FromEcef(anchor).H`), and C3's pattern points
+    (`LeafPattern`, baked in the stand-in frame) for Cartoon's paint and Realistic's textures.
+  - **`gives_way = false`** on the leaves' material: the globe sets `world_fill_hide = 1` under earth, and the
+    terrain body dissolves anything off the flat world's real-tile mask, which leaves are never on. Without it
+    every leaf fragment was discarded and the globe's blurred tile showed instead.
+- **Lakes cut at leaf edges** (`Earth/LeafWaterClip`, `LeafWaterClipTests`): a leaf's 2 m water samples stopped
+  up to a sample short of its edge, so the lake bed showed in lines between leaves. The samples now reach two
+  samples past the leaf (`LeafStandIn.WaterMarginSamples`) and the still water is clipped by the leaf's four edge
+  planes, each through the edge's two corners and the vertical over the first in a fixed order, so both
+  neighbours build the same plane (within a millimetre): no gap, and no translucent overlap. The streams in the
+  roads are built apart (`WaterMeshBuilder.Build(..., channelsOnly)`) and not clipped.
+
 ## Not yet
 
-- The leaves' own ground in the style kit's terrain material (it keeps `CoverPalette`'s vertex colours: the material wants the flat tile's cover attributes). C3's patterns are on the furniture (#1627, `core/floating-origin`). (C4's server on leaves: `net/server-regions`.)
+- C3's patterns are on the furniture and the ground (#1627, `core/floating-origin`). (C4's server on leaves: `net/server-regions`.)
 - The server on the fill: it stands on the region's leaves alone (PR 3 follow-up).
 - `--ride` and `--flycheck` run on leaves (they take the world's ground and anchor their target, `TestWorld.AnchorEarthTarget`).

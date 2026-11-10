@@ -130,4 +130,37 @@ public class CubePyramidTests
         }
         finally { Directory.Delete(dir, true); }
     }
+
+    [Fact]
+    public void A_rebuilt_level_keeps_its_colour_and_names_the_tiles_it_lacks()
+    {
+        // #1659: --cube-swiss rebuilt levels 5-13's heights and dropped their colour, though the .cuba bundles were
+        // still there: the globe drew B4's pyramid white from level 5 down
+        string dir = Path.Combine(Path.GetTempPath(), "cubecolour_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var bundle = new CubeKey(0, 3, 3, 3);
+            var children = bundle.Children().SelectMany(c => c.Children()).Take(5).ToList();   // level 5
+            var coloured = children.Take(4).Select(k => (k, new byte[] { 1, 2, 3 })).ToList();
+            CubeBundle.Write(Path.Combine(dir, CubeBundle.AlbedoFileName(bundle)), bundle, coloured, CubeBundle.AlbedoMagic);
+            var before = new CubeManifestLevel { Level = 5, Bits = 9, BundleLevel = 2, Albedo = 256, AlbedoBundleLevel = 3 };
+            var rebuilt = new CubeManifestLevel { Level = 5, Bits = 9, BundleLevel = 2 };
+
+            var missing = CubeColourCarry.Carry(dir, before, rebuilt, children);
+
+            Assert.Equal(256, rebuilt.Albedo);
+            Assert.Equal(3, rebuilt.AlbedoBundleLevel);
+            Assert.Equal(new[] { children[4] }, missing);
+
+            // no colour before, or its bundles gone: none after, every tile to bake
+            var bare = new CubeManifestLevel { Level = 5, Bits = 9, BundleLevel = 2 };
+            Assert.Equal(5, CubeColourCarry.Carry(dir, null, bare, children).Count);
+            Assert.Equal(0, bare.Albedo);
+            File.Delete(Path.Combine(dir, CubeBundle.AlbedoFileName(bundle)));
+            Assert.Equal(5, CubeColourCarry.Carry(dir, before, bare, children).Count);
+            Assert.Equal(0, bare.Albedo);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

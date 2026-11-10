@@ -76,17 +76,17 @@ public static class FunCourse
     public const double ArenaX = 420, ArenaY = 230;
 
     /// <summary>The neon arena at the origin, for the model viewer.</summary>
-    public static readonly StadiumSpec Arena = ArenaAt(-ArenaX, -ArenaY);
+    public static readonly StadiumSpec Arena = ArenaAt(CoursePlace.Flat(-ArenaX, -ArenaY));
 
     /// <summary>
-    /// The neon arena (#1396) for a course started at <paramref name="startE"/> / <paramref name="startN"/>: a one-tier bowl
+    /// The neon arena (#1396) where the course is laid (<paramref name="at"/>, LV95 notation; square to the course): a one-tier bowl
     /// round a pitch, its concert stage always playing in the fun world (<c>Concert.ConcertDirector.WorldSeed</c>). A
     /// stadium row like the catalogue's, but only listed while the fun world is played (<see cref="StadiumCatalog.UseWorld"/>).
     /// </summary>
-    public static StadiumSpec ArenaAt(double startE, double startN) => new()
+    public static StadiumSpec ArenaAt(CoursePlace at) => at.Lv95(ArenaX, ArenaY) is var (centreE, centreN) ? new()
     {
         Name = "Neon Arena", Town = "Fun world",
-        E = startE + ArenaX, N = startN + ArenaY, GridAzimuthDeg = 0f,
+        E = centreE, N = centreN, GridAzimuthDeg = (float)(-at.Turn * 180 / Math.PI),
         PitchWidth = 68f, PitchLength = 105f,
         FrontHalfU = 37f, FrontHalfV = 53f, FrontCorner = 6f,
         Tiers = new[] { new StadiumTier(Rows: 16, RowDepth: 0.8f, Riser: 0.4f, Gap: 0f, Step: 1f) },
@@ -97,7 +97,7 @@ public static class FunCourse
         VomitoryRows = new[] { 5 },
         Seat = new(0.95f, 0.15f, 0.65f), SeatAlt = new(0.1f, 0.85f, 0.95f), Facade = new(0.16f, 0.1f, 0.26f), Roof = new(0.22f, 0.12f, 0.32f),
         ConcertCapacity = 9000,
-    };
+    } : null!;
 
     /// <summary>The set the arena plays (a seed of <c>ConcertPlanner.Plan</c>).</summary>
     public const int ArenaSeed = 1984;

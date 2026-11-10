@@ -40,6 +40,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Leaves read and meshed on workers at once.</summary>
     public const int Workers = 3;
 
+    /// <summary>
+    /// A camera or anchor higher than this streams no leaves under it, metres (#1631): from Space a leaf is under a pixel, the globe
+    /// draws the ground, and a fast orbit or climb over the fill would queue hundreds of leaves (~2 s each with roads)
+    /// that the ground under the landing waits behind. <see cref="Curvature.SpaceEnterM"/>, the Space regime.
+    /// </summary>
+    public const double CameraCeilingM = Curvature.SpaceEnterM;
+
     /// <summary>Main-thread time a frame spends adding what the workers built, ms (the flat world's <c>CommitBudgetMs</c>).</summary>
     public double CommitBudgetMs { get; set; } = 4;
 
@@ -66,11 +73,15 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private IWorldGround? _ground;
     private readonly LeafCollisionSource _collisionSource;
     private readonly CollisionPatches _patches;
-    private readonly Material _material;
+    private ShaderMaterial? _material;
 
     private readonly Dictionary<CubeKey, Near> _near = new();
     private readonly HashSet<CubeKey> _loading = new();
     private readonly ConcurrentQueue<Near> _ready = new();
+    /// <summary>Requests no focus wants any more: a worker skips them (main thread marks, workers take).</summary>
+    private readonly ConcurrentDictionary<CubeKey, byte> _cancelled = new();
+    /// <summary>Requests that came back with nothing (skipped, or no ground): main thread frees them from <see cref="_loading"/>.</summary>
+    private readonly ConcurrentQueue<CubeKey> _abandoned = new();
     private readonly SemaphoreSlim _workers = new(Workers);
     private readonly Dictionary<CubeKey, StaticBody3D> _bodies = new();
     private readonly List<Node3D> _anchors = new();
@@ -80,7 +91,35 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private readonly HashSet<CubeKey> _want = new();
     private readonly Queue<CubeKey> _walk = new();
     private readonly List<CubeKey> _drop = new();
+    /// <summary>Loaded leaves to read again (<see cref="Refresh"/>): each stays until its new read replaces it.</summary>
+    private readonly HashSet<CubeKey> _stale = new();
+    /// <summary>Bumped by each <see cref="Refresh"/>: a read begun before it is dropped as it lands.</summary>
+    private volatile int _generation;
     private double _nextPlan;
+
+    /// <summary>
+    /// The leaves changed under this world (#1655: the server's leaf index arrived, <see cref="LeafStore.UseRemote"/>, with
+    /// <paramref name="changed"/> the leaves it added, dropped or rebuilt). Everything made from the old view is read again:
+    /// the fill and its blend (<see cref="EarthLeaves.Refresh"/>), every loaded leaf (in place: the old one stays until the
+    /// new one lands, so nobody falls through) and every collision patch (the new faces replace the old body). Main thread.
+    /// </summary>
+    public void Refresh(IReadOnlyCollection<CubeKey> changed)
+    {
+        if (changed.Count == 0) return;
+        _generation++;
+        Leaves.Refresh(changed);
+        _collisionSource.Forget();
+        foreach (var key in _near.Keys) _stale.Add(key);
+        _patches.Rebuild(_ => true);
+        _nextPlan = 0;
+        GD.Print($"[earth] {changed.Count} leaves changed ({Store.RemoteCount} from the server): {_near.Count} loaded leaves read again");
+    }
+
+    /// <summary>
+    /// The group of the leaves' collision patches (their ground with its roads and buildings): what a climb reads the cover
+    /// of, as a flat chunk's own body (#1649).
+    /// </summary>
+    public const string GroundGroup = "leaf_ground";
 
     public event Action<GroundTile>? TileEntered;
     public event Action<GroundTile>? TileUnloaded;
@@ -89,6 +128,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private sealed class Near
     {
         public required CubeKey Key;
+        /// <summary>The <see cref="Refresh"/> it was read under.</summary>
+        public int Generation;
         public required CubeLeafContent Content;
         public required EnuFrame Anchor;
         public required float[] Vertices;
@@ -112,7 +153,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         {
             Failed = (key, e) => GD.PushError($"[earth] collision patch {key}: {e.Message}"),
         };
-        _material = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 1f };
+    }
+
+    /// <summary>
+    /// The leaves' ground material: the style kit's terrain one, as the flat world's tiles (#1634), restyled with them.
+    /// Its own, not the flat streamer's: that one dissolves at the flat tiles' square (<c>flat_edge</c>). Main thread.
+    /// </summary>
+    public ShaderMaterial GroundMaterial => _material ??= NewGroundMaterial();
+
+    private static readonly StringName GivesWay = "gives_way";
+
+    private static ShaderMaterial NewGroundMaterial()
+    {
+        var m = Styles.StyleKit.Material(Styles.MaterialRole.Terrain);
+        // the leaves are the globe's last level: they never dissolve into it as the flat tiles do
+        m.SetShaderParameter(GivesWay, false);
+        return m;
     }
 
     public override void _Ready()
@@ -156,10 +212,21 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Nothing loading, waiting to be added, or building collision.</summary>
     public bool Idle => _loading.Count == 0 && _ready.IsEmpty && !_patches.Busy;
 
+    /// <summary>What the world is busy with, for a log line when something waited on <see cref="Idle"/> too long.</summary>
+    public string Status => $"{_loading.Count} leaves loading ({_cancelled.Count} skipped), {_ready.Count} to add, {_near.Count} loaded, "
+        + $"{_anchors.Count} anchors, collision {(_patches.Busy ? "busy" : "idle")}";
+
     public override void _Process(double delta)
     {
         var clock = Stopwatch.StartNew();
         while (clock.Elapsed.TotalMilliseconds < CommitBudgetMs && _ready.TryDequeue(out var leaf)) Add(leaf);
+        while (_abandoned.TryDequeue(out var gone))
+        {
+            _loading.Remove(gone);
+            _cancelled.TryRemove(gone, out _);
+            // a leaf to load again that the region no longer holds (the server's index dropped it): its old one goes
+            if (_stale.Contains(gone) && !Leaves.Has(gone)) Remove(gone);
+        }
 
         _nextPlan -= delta;
         if (_nextPlan > 0) return;
@@ -199,10 +266,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private void Plan()
     {
         _foci.Clear();
-        if (Camera?.Invoke() is { } cam && cam.IsFinite()) _foci.Add(Origin.ToEcef(cam));
+        bool lifted = false;
+        if (Camera?.Invoke() is { } cam && cam.IsFinite()) AddFocus(cam, ref lifted);
+        // an anchor in Space (the spectator camera is one, so is a craft in orbit) streams nothing either
         foreach (var a in _anchors)
-            if (IsInstanceValid(a) && a.IsInsideTree()) _foci.Add(Origin.ToEcef(a.GlobalPosition));
-        if (_foci.Count == 0) return;
+            if (IsInstanceValid(a) && a.IsInsideTree()) AddFocus(a.GlobalPosition, ref lifted);
+        // no focus at all (between a probe's bodies): keep what is loaded; only Space lets it all go
+        if (_foci.Count == 0 && !lifted) return;
 
         _want.Clear();
         foreach (var focus in _foci)
@@ -222,7 +292,10 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             }
         }
         foreach (var key in _want)
-            if (!_near.ContainsKey(key) && Leaves.Has(key)) Request(key);
+            if ((!_near.ContainsKey(key) || _stale.Contains(key)) && Leaves.Has(key)) Request(key);
+        // what is still queued but no longer wanted (the camera flew on, or up into Space) is skipped by the workers
+        foreach (var key in _loading)
+            if (!_want.Contains(key)) _cancelled.TryAdd(key, 0);
 
         _drop.Clear();
         foreach (var key in _near.Keys)
@@ -232,6 +305,13 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             if (nearest > NearM + ReleaseM) _drop.Add(key);
         }
         foreach (var key in _drop) Remove(key);
+    }
+
+    /// <summary>A focus of the streaming, unless it is in Space (<see cref="CameraCeilingM"/>): then <paramref name="lifted"/>.</summary>
+    private void AddFocus(Vector3 at, ref bool lifted)
+    {
+        if (Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
+        else _foci.Add(Origin.ToEcef(at));
     }
 
     /// <summary>
@@ -250,13 +330,23 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private void Request(CubeKey key)
     {
+        // wanted again while still queued: no longer skipped
+        _cancelled.TryRemove(key, out _);
         if (!_loading.Add(key)) return;
+        int generation = _generation;
         _ = Task.Run(async () =>
         {
             await _workers.WaitAsync().ConfigureAwait(false);
+            bool built = false;
             try
             {
-                if (Load(key) is { } leaf) _ready.Enqueue(leaf);
+                if (_cancelled.TryRemove(key, out _)) return;
+                if (Load(key) is { } leaf)
+                {
+                    leaf.Generation = generation;
+                    _ready.Enqueue(leaf);
+                    built = true;
+                }
                 else GD.PushWarning($"[earth] {key}: no ground");
             }
             catch (Exception e)
@@ -265,6 +355,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             }
             finally
             {
+                // a leaf that never comes is not loading any more: Idle may hold again, and a later plan asks again
+                if (!built) _abandoned.Enqueue(key);
                 _workers.Release();
             }
         });
@@ -297,13 +389,24 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private void Add(Near leaf)
     {
         _loading.Remove(leaf.Key);
-        if (_near.ContainsKey(leaf.Key)) return;
+        // cancelled while it was being built: it is here now, and the next plan drops it if nothing wants it
+        _cancelled.TryRemove(leaf.Key, out _);
+        // read before a Refresh: from the old view, asked again by the next plan
+        if (leaf.Generation != _generation) return;
+        if (_near.ContainsKey(leaf.Key))
+        {
+            // a leaf loaded again in place (#1655): the old one goes as the new one comes, so the ground never gaps
+            if (!_stale.Contains(leaf.Key)) return;
+            Remove(leaf.Key);
+        }
+        // patches built while this leaf had not come stood on nothing: built again now it has
+        if (!Store.IsLocal(leaf.Key)) _patches.Rebuild(p => LeafCollision.Split(p).Leaf == leaf.Key, emptyOnly: true);
         _near[leaf.Key] = leaf;
         if (leaf.Arrays is { } arrays)
         {
             var mesh = new ArrayMesh();
-            mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays);
-            leaf.Mesh = new MeshInstance3D { Name = leaf.Key.FileStem, Mesh = mesh, MaterialOverride = _material };
+            mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays, flags: LeafPattern.Flags);
+            leaf.Mesh = new MeshInstance3D { Name = leaf.Key.FileStem, Mesh = mesh, MaterialOverride = GroundMaterial };
             leaf.Arrays = null;
             AddChild(leaf.Mesh);
             leaf.Mesh.Transform = LeafToWorld(leaf.Anchor);
@@ -318,6 +421,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private void Remove(CubeKey key)
     {
+        _stale.Remove(key);
         if (!_near.Remove(key, out var leaf)) return;
         leaf.Mesh?.QueueFree();
         if (leaf.Node != null) Unfurnish(key, leaf.Node);
@@ -326,9 +430,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private void AddBody(CubeKey key, Vector3[]? faces)
     {
-        if (faces is not { Length: >= 3 } || _bodies.ContainsKey(key)) return;
+        // a patch built again (CollisionPatches.Rebuild): the new faces replace the old body
+        if (_bodies.Remove(key, out var old)) old.QueueFree();
+        if (faces is not { Length: >= 3 }) return;
         var (leaf, _, _) = LeafCollision.Split(key);
         var body = new StaticBody3D { Name = key.FileStem };
+        body.AddToGroup(GroundGroup);
         body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);
@@ -360,7 +467,10 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     }
 
     /// <summary>
-    /// A leaf's mesh for drawing, every lattice vertex (the collision's), coloured by its cover, hole quads left out.
+    /// A leaf's mesh for drawing, every lattice vertex (the collision's), hole quads left out, for the style kit's
+    /// terrain material (#1634) as a flat tile's: coloured by its cover through <see cref="CoverPalette"/> at the
+    /// vertex's altitude, blended with differing neighbours (<see cref="TerrainMeshBuilder"/>'s boundary blend), in
+    /// linear colour, the pattern code in alpha; the leaf's pattern points in CUSTOM1/CUSTOM2 (<see cref="LeafPattern"/>).
     /// Triangles split as the collision's: along (i, j)–(i+1, j+1), front faces up.
     /// </summary>
     private static Godot.Collections.Array? Mesh(float[] v, int n, CubeLeafContent content)
@@ -369,19 +479,19 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         for (int k = 0; k < pos.Length; k++) pos[k] = new Vector3(v[3 * k], v[3 * k + 1], v[3 * k + 2]);
         var normals = new Vector3[n * n];
         var colours = new Color[n * n];
-        var cover = content.Cover;
+        var cover = content.Cover is { } cells && cells.Length >= n * n ? cells : null;
+        // the anchor is on the ellipsoid: a height in its frame less the geoid is an altitude (the palette bands by it)
+        float geoid = (float)-SwissGeodesy.FromEcef(content.Key.Anchor.Origin).H;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
                 int k = j * n + i;
-                var dx = pos[j * n + Math.Min(i + 1, n - 1)] - pos[j * n + Math.Max(i - 1, 0)];
-                var dz = pos[Math.Min(j + 1, n - 1) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
-                var normal = dz.Cross(dx);
+                var normal = BoxNormal(pos, n, i, j);
                 // a no-data (NaN) neighbour at the leaf set's edge: up, not a NaN normal (85k warnings a drive, #1512)
                 normal = normal.IsFinite() && normal.LengthSquared() > 0 ? normal.Normalized() : Vector3.Up;
                 normals[k] = normal.Y < 0 ? -normal : normal;
-                var c = cover != null && k < cover.Length ? (CoverClass)cover[k] : CoverClass.Open;
-                colours[k] = CoverPalette.ColorFor(c, pos[k].Y, ((i * 73856093) ^ (j * 19349663)) * (1f / int.MaxValue));
+                float alt = float.IsNaN(pos[k].Y) ? 0f : pos[k].Y - geoid;
+                colours[k] = ColourAt(cover, n, i, j, alt).SrgbToLinear();
             }
 
         var holes = content.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
@@ -401,13 +511,66 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         for (int k = 0; k < pos.Length; k++)
             if (float.IsNaN(pos[k].Y)) pos[k] = Vector3.Zero;
 
+        // patterns (cover patterns, Cartoon's paint, Realistic's textures) from the leaf's place on the Earth (#1512):
+        // the pattern is baked in the stand-in tile's frame, the anchor's shifted
+        var standIn = new Vector3[pos.Length];
+        var shift = new Vector3((float)LeafStandIn.Offset, 0, (float)LeafStandIn.Offset);
+        for (int k = 0; k < pos.Length; k++) standIn[k] = pos[k] + shift;
+        var (custom1, custom2) = LeafPattern.For(content.Key).Bake(standIn);
+
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Godot.Mesh.ArrayType.Max);
         arrays[(int)Godot.Mesh.ArrayType.Vertex] = pos;
         arrays[(int)Godot.Mesh.ArrayType.Normal] = normals;
         arrays[(int)Godot.Mesh.ArrayType.Color] = colours;
+        arrays[(int)Godot.Mesh.ArrayType.Custom1] = custom1;
+        arrays[(int)Godot.Mesh.ArrayType.Custom2] = custom2;
         arrays[(int)Godot.Mesh.ArrayType.Index] = indices.ToArray();
         return arrays;
+    }
+
+    /// <summary>How far either side of a vertex its normal's box of slopes reaches, lattice steps (~1.2 m each): the flat
+    /// world's ±3 m (<c>TerrainMeshBuilder.SmoothNormal</c>, #883), or a cliff's facets light up as vertical stripes.</summary>
+    private const int NormalReach = 3;
+
+    /// <summary>
+    /// The normal at lattice vertex (i, j) from the slopes across ±<see cref="NormalReach"/> on three rows and three
+    /// columns through it, as <c>TerrainMeshBuilder.SmoothNormal</c> does on a tile, in 3-D (the lattice is not square
+    /// in the anchor frame). Clamped at the leaf's edges; a NaN (no data) slope is left out.
+    /// </summary>
+    private static Vector3 BoxNormal(Vector3[] pos, int n, int i, int j)
+    {
+        int i0 = Math.Max(i - NormalReach, 0), i1 = Math.Min(i + NormalReach, n - 1);
+        int j0 = Math.Max(j - NormalReach, 0), j1 = Math.Min(j + NormalReach, n - 1);
+        Vector3 dx = Vector3.Zero, dz = Vector3.Zero;
+        ReadOnlySpan<int> rows = [j0, j, j1], cols = [i0, i, i1];
+        foreach (int jj in rows)
+            if (pos[jj * n + i1] - pos[jj * n + i0] is var d && d.IsFinite()) dx += d;
+        foreach (int ii in cols)
+            if (pos[j1 * n + ii] - pos[j0 * n + ii] is var d && d.IsFinite()) dz += d;
+        return dz.Cross(dx);
+    }
+
+    /// <summary>
+    /// A lattice vertex's ground colour (sRGB), as <see cref="TerrainMeshBuilder"/>'s boundary blend at stride 1: its
+    /// cover's, averaged with each 4-neighbour's of another class, so a class edge is a soft step, not a hard line.
+    /// </summary>
+    internal static Color ColourAt(byte[]? cover, int n, int i, int j, float alt)
+    {
+        if (cover == null) return CoverPalette.ColorFor(CoverClass.Open, alt, CoverPalette.Hash(i, j));
+        byte centre = cover[j * n + i];
+        var sum = CoverPalette.ColorFor((CoverClass)centre, alt, CoverPalette.Hash(i, j));
+        int count = 1;
+        for (int q = 0; q < 4; q++)
+        {
+            int ni = i + (q == 0 ? 1 : q == 1 ? -1 : 0), nj = j + (q == 2 ? 1 : q == 3 ? -1 : 0);
+            if ((uint)ni >= n || (uint)nj >= n) continue;
+            byte other = cover[nj * n + ni];
+            if (other == centre) continue;
+            sum += CoverPalette.ColorFor((CoverClass)other, alt, CoverPalette.Hash(ni, nj));
+            count++;
+        }
+        return count == 1 ? sum : sum / count;
     }
 
     // --- the queries -------------------------------------------------------------------------------------------
@@ -534,6 +697,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public void AddAnchor(Node3D anchor, bool? collision = null) => w.AddAnchor(anchor, collision);
         public void RemoveAnchor(Node3D anchor) => w.RemoveAnchor(anchor);
         public bool HasAnchor(Node3D anchor) => w.HasAnchor(anchor);
+        public IReadOnlyList<Node3D> Anchors => w._anchors;
 
         public event Action<GroundTile>? TileEntered
         {

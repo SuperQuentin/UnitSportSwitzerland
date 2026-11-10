@@ -1,0 +1,22 @@
+# Differences expected on purpose between --frame earth and the flat world (G2 C6, #1500), read by
+# tools/refshot-diff.py --expect (tools/refshot-parity.sh). Everything not named here must be within its noise
+# floor at 1/8 scale (the scale already forgives the leaves' tile patterns drawn at another phase, #1512).
+#
+#   <view | class:<class> | <style>/<view>>  judge | mask x0,y0,x1,y1 [...]  -- why
+#
+# judge  the shot is left out of the pass/fail count and listed as judged by eye, its numbers and sheet shown:
+#        "no worse than flat" is a person's call there
+# mask   that part of the picture (fractions of its width and height, from the top left) is left out of the
+#        numbers and drawn grey on the heatmap; the rest still has to be within the floor
+# Keep each line's reason. A line goes once the difference it excuses is gone or measured another way.
+
+# curvature is geometry on earth (#187): far ridges stand where the round Earth puts them, the flat world bends
+# them in its shaders; the gate is "no worse", not "the same pixels"
+class:far     judge  -- curvature in geometry (#187): far ridges and the horizon line move by design
+class:edge    judge  -- the frustum's edges look at far peaks and the horizon: curvature in geometry, as far
+# a house seeds its plan, shop and cellar from its BuildingKey on flat and from its BuildingId on earth (#1658, decided
+# Nov 10 2026): the same house legitimately has another room until D re-keys flat away
+riddes_interior  judge  -- flat seeds from its LV95 BuildingKey, earth from the BuildingId (#1658) until D
+# space: the earth world shows the cube_global pyramid as the ground itself, the flat world its globe beside a
+# flat region; both are judged until #1630/#1631 make them the same picture
+class:space   judge  -- the round ground against the flat world's globe (#1630, #1631)

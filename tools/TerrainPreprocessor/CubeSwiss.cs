@@ -71,7 +71,10 @@ public static class CubeSwiss
         // the tiles of each level: every ancestor of a leaf, and its siblings
         var leafKeys = finer.Keys.ToList();
         manifest.Tiles.RemoveAll(t => CubeKey.Parse(t.Key).Level is var l && l >= minLevel && l <= maxLevel);
+        // each level's colour before the rebuild: it depends on the footprint alone, so it carries over (#1659)
+        var colourBefore = manifest.Levels.Where(l => l.Level >= minLevel && l.Level <= maxLevel).ToDictionary(l => l.Level);
         manifest.Levels.RemoveAll(l => l.Level >= minLevel && l.Level <= maxLevel);
+        int uncoloured = 0;
         long bytes = 0;
         var built = new ConcurrentDictionary<CubeKey, CubeTile>();
         for (int level = maxLevel; level >= minLevel; level--)
@@ -105,7 +108,12 @@ public static class CubeSwiss
                     bytes += bb.Length;
                 }
             }
-            manifest.Levels.Add(new CubeManifestLevel { Level = level, Bits = bits, BundleLevel = CubeKey.PyramidBundleLevel(level) });
+            var rebuilt = new CubeManifestLevel { Level = level, Bits = bits, BundleLevel = CubeKey.PyramidBundleLevel(level) };
+            var noColour = CubeColourCarry.Carry(outDir, colourBefore.GetValueOrDefault(level), rebuilt, made.Keys);
+            if (rebuilt.Albedo > 0 && noColour.Count > 0)
+                Console.WriteLine($"cube-swiss: level {level}: {noColour.Count} new tiles have no colour yet (first {noColour[0]})");
+            uncoloured += rebuilt.Albedo > 0 ? noColour.Count : 0;
+            manifest.Levels.Add(rebuilt);
             if (check) foreach (var (k, t) in made) built[k] = t;
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"cube-swiss: level {level}: {made.Count} tiles, {100.0 * fromLeaves / Math.Max(1, fromLeaves + fromEtopo):F1} % of vertices from the finer level (the rest ETOPO), {sw.Elapsed.TotalSeconds:F0} s"));
@@ -120,6 +128,9 @@ public static class CubeSwiss
         manifest.Sources.RemoveAll(s => s.StartsWith("levels ", StringComparison.Ordinal));
         manifest.Sources.Add($"levels {minLevel}-{maxLevel}: averaged from {leafManifest.Tiles.Count} level-{leafLevel} leaves ({leafSources}), ETOPO past them");
         File.WriteAllText(manifestPath, manifest.ToJson());
+        int colourless = manifest.Levels.Count(l => l.Level >= minLevel && l.Level <= maxLevel && l.Albedo == 0);
+        if (uncoloured > 0 || colourless > 0)
+            Console.WriteLine($"cube-swiss: {uncoloured} tiles and {colourless} levels without colour: run the colour bake (--globealbedo {outDir}), or the globe draws them white");
         Console.WriteLine($"cube-swiss: {bytes / 1e6:F1} MB in levels {minLevel}-{maxLevel}, {sw.Elapsed.TotalSeconds:F0} s, peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
         return check ? CubeGlobal.CheckEdges(built) : 0;
     }

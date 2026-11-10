@@ -141,6 +141,15 @@ public partial class WorldPickCheck : Node
         if (tiles < 24) return $"{tiles} tiles in the region";
         if (Systems.FixtureCourse != null) return $"a fixture course ({Systems.FixtureCourse}) instead of the region";
         if (Systems.On(Systems.Generated)) return "the generated fill is on";
+        // under --frame earth the region stands on its own leaves (#1647), built beside the tiles
+        if (GameSettings.Current.Frame == WorldFrame.Earth)
+        {
+            string leafDir = TerrainPaths.FindLeafDir();
+            if (leafDir != WorldChoice.SignalsLeafDir) return $"leaves from {leafDir}, not {WorldChoice.SignalsLeafDir}";
+            int leaves = Terrain.Leaves.LeafStore.Open(leafDir).Count;
+            GD.Print($"[worldpick] the region's leaves: {leaves} in {leafDir}");
+            if (leaves < 100) return $"{leaves} leaves in the region";
+        }
         return null;
     }
 

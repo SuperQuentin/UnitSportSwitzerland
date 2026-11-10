@@ -161,10 +161,17 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
         return Prepared(leaf)?.Patch(patch);
     }
 
+    /// <summary>A leaf prepared, kept; a leaf that gave nothing (a streamed one not come yet, #1655) is asked again next time.</summary>
     public LeafCollision? Prepared(CubeKey leaf)
     {
         if (_prepared.Count > KeptLeaves) _prepared.Clear();
-        return _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
-            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames) : null)).Value;
+        var lazy = _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
+            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames) : null));
+        var value = lazy.Value;
+        if (value == null) _prepared.TryRemove(new KeyValuePair<CubeKey, Lazy<LeafCollision?>>(leaf, lazy));
+        return value;
     }
+
+    /// <summary>Every prepared leaf dropped (#1655: the server's leaves changed what they were prepared from).</summary>
+    public void Forget() => _prepared.Clear();
 }

@@ -16,6 +16,14 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 - [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
 - [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
 
+## The earth ground's look (PR [#1642](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1642), [#1634](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1634), [#1632](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1632), [#1633](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1633), [#1635](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1635))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500300,1117900` (Geneva), in a window, against the same without `--frame`/`--leaves`.
+
+- [ ] Walk the Jardin Anglais and the Rhône's banks in Cartoon, PS1, Realistic− and Realistic+ (`/style`) → grass, paving and stone banks look as in the flat world (painted grass, textures in Realistic), never pale mint or white.
+- [ ] Fly 150 m over the lake for 5 km → no straight light lines across the water at the leaves' joins.
+- [ ] In the headset (PC VR, then the Quest at Very low): the same lawn and lake → the ground in the standalone look, no seam lines.
+
 ## The earth world's ground frame turns ([#1612](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1612), [#1512](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1512))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva), in a window. Each re-anchor (every 3 km) prints `[origin] shift N ... turned: tilt 0.0269°`.
@@ -862,3 +870,46 @@ Normal play, a clear night (`--occasion none` in December: the snowfall hides th
 - [ ] Land from space at Geneva or Zurich: from 15 km down the ground and the Alps show out to the horizon, no haze-coloured plane with lakes on it.
 - [ ] The same in VR (a standalone headset sinks the faded edge instead of discarding it).
 - [ ] From orbit and on the way down, the atmosphere's haze and limb glow cover the whole view (no clear disc round where you look).
+
+## No snow above the clouds (PR [#1641](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1641), [#1637](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1637))
+
+- [ ] `--occasion christmas`, take off in a plane and climb: the snow thins out about 2 km over the valley floor and is gone above it, no pop; coming back down, it returns.
+- [ ] Inside a house with a door open: the street's snow still shows through the doorway.
+
+## Space under `--frame earth` (PR [#1638](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1638), [#1630](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1630), [#1631](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1631))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2026-06-21 --time 11`, in a window; beside it the same without `--frame`/`--leaves`.
+
+- [ ] Fly the spectator straight up to 400 km and back down, by keyboard, then by pad → the sky goes black past ~60 km (`[origin] the earth frame re-anchors every 20 km from 60.x km`), the limb, the Alps and the Mediterranean as in the flat run; back below 50 km the 3 km re-anchors resume, and on the ground the town is there at once.
+- [ ] The UFO, `/orbit 400`, a few minutes, then thrust down and land → the orbit looks as on flat, the ground loads under the landing.
+- [ ] The shuttle: the `--shuttlefilm` command line of `tools/shuttlefilm.sh` plus `--frame earth --leaves ...` → the climb to black and the landing on 22 look as the flat film's.
+
+## The cloud deck while it snows (PR [#1644](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1644), [#1643](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1643))
+
+- [ ] `--occasion christmas`, fly a plane up through the deck: grey overcast under it, a white-out inside, a sea of cloud under you above it; frame rate unchanged.
+- [ ] Over a lake from above the deck, and under it: no water surface drawn over the cloud or through it.
+- [ ] In VR: the deck is the same in both eyes.
+
+## Traffic on leaves under `--frame earth` (PR [#1645](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1645), [#1636](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1636))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --walkers 80 --bikes 40 --trams 6`, in a window, against the same without `--frame`/`--leaves`. The graphs take ~40 s to build at first (`[traffic] built around`).
+
+- [ ] Drive a car through Geneva's centre for 5 km, across two re-anchors and several graph rebuilds (every 800 m) → cars, trams, walkers and riders much as dense as in flat; cars stop at red and go on green; no car, tram or walker jumps, turns round on the spot or vanishes at a rebuild or a re-anchor.
+- [ ] Stand at the Pont du Mont-Blanc lights for two cycles → walkers cross on green only, riders wait at their line, trams run their lines over the bridge.
+
+## The traffic-lights region under `--frame earth` (PR [#1651](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1651), [#1647](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1647))
+
+With "World frame" set to earth (or `--frame earth`): Play solo, World: Traffic lights region.
+
+- [ ] Start it the first time → the loading screen says the region and its leaves are being built (up to two minutes), then you stand at J1's south-west corner on flat grass.
+- [ ] Tab to J2, J12-GE and J14 and watch a cycle at each → lights, poles, paint and traffic as on flat. Where a leaf edge crosses an arm, a pocket or a bike lane may be missing ([#1660](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1660)).
+- [ ] Host a game in that world and join from a second copy → the host builds the leaves before the server starts, and both stand on the same junctions.
+
+## Leaves streamed from the server under `--frame earth` (PR [#1662](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1662), [#1655](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1655))
+
+A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube`; a client in a window `--connect <host> --frame earth --leaves <an empty folder> --cache <an empty folder> --at 2500956,1117569` (Geneva).
+
+- [ ] Join and look round while the ground arrives → the fill (if on) gives way to the real ground in place, no hole, no fall; roads, buildings and the lake come with it.
+- [ ] Drive 5 km out of town at speed → the ground keeps up (a few seconds' wait at most at the 3 MB/s cap), the far view under the globe fills in.
+- [ ] Settings → Data: the cache grows, Clear empties it, the session's MB count rises; Low data on → near ground still comes, the far view past it stays coarser.
+- [ ] On the phone over mobile data, the metered warning, then the same join → ground arrives; note the MB on arrival.

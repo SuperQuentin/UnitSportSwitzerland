@@ -273,20 +273,75 @@ The before/after film (D:/UnitSportSwitzerland/films/g2/) showed `--frame earth`
 world in almost every shot, space included: C was checked for correctness, never for looks. D does not start
 until earth looks at least as good as flat.
 - **Ground look**: the style kit's terrain materials on leaves instead of `CoverPalette` vertex colours (#1634);
-  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635).
+  lake seams (#1632); the fill's checkerboard at the data edge (#1633); water up the quay wall (#1635). **Built** (#1642):
+  the leaves in the kit's terrain material (`gives_way` off), lakes clipped at leaf edges, the flat world's ±3 m normals.
 - **Far view** below 5 km: terrain, mountains and far trees to the horizon, as `HorizonLayer` gives flat (#1629).
-- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631).
+- **Space**: the climb enters the Space regime (#1630); the ground reloads after space (#1631). **Built** (PR #1638): the
+  film's climb never left 2 km (its glide waited for leaves under a fast climb); no leaves under any focus above 60 km,
+  stale leaf requests skipped; flat and earth side by side match from 30 to 400 km and back; `--orbitcheck` and
+  `--shuttlecheck` under `--frame earth`.
 - **Life**: traffic and cyclists on leaves (#1636).
 - **The gate**: reference shots under `--frame earth` against the flat library, every style, `near` to `space`,
-  each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user.
+  each within its noise floor or judged by eye as no worse; the film re-shot and seen by the user. **Tool built**
+  (#1639, PR #1640): `tools/refshot-parity.sh <tag>` (`general/regression-net`); first run on `82e03ec5`, before
+  #1634/#1630/#1636 merged: 48 of 84 shots over the floor (the ground's colours, the void past the leaves, trees, a
+  different room in `riddes_interior`, B4's pyramid white west of Switzerland), 36 judged; posted on #1500.
+
+### C7: every world ported (a prerequisite for D; decided with the user, Nov 10 2026)
+
+D deletes the LV95 runtime, so every world the game can run must already work under `--frame earth`:
+- **The traffic-lights test region** (#1647): `RoadGen --test-region` and `WorldChoice.Prepare` build it only as
+  LV95 `.terr` tiles; it also builds cube leaves, compared with the LV95 build, and `WorldChoice` picks them under earth.
+  **Built** (#1651): `TerrainPreprocessor --cube-test-region` builds the leaves (flat 500 m above sea level, ~40 s) and
+  `--compare` checks them; `WorldChoice` builds them under earth; world-pick, signal and traffic checks pass on them.
+  Where a leaf edge crosses an arm, the junction differs from the LV95 build (#1660 below); merged with those differences listed.
+- **Junctions the same wherever the tile edges are** (#1660): the user's requirement (Nov 10 2026), "junctions should be
+  generated the same, no matter where the tile edges are". The same junction must give the same lanes, pockets, cores,
+  paint and signals on LV95 km tiles, on leaves, or on leaves shifted or turned. The test is to shift the tiling over the
+  test region and compare. Today the network stage plans per raw piece: on Geneva's leaves 40 % of signalised junctions
+  and 22 % of approaches differ from LV95 (74 % of signals within 30 m of a leaf edge). Plan junctions on whole lines and
+  cut only when writing (#1546's direction). This changes the LV95 bytes on purpose.
+- **The fun world's extras** (#1648): `FunBackdrop` (LV95 tile ids, `ToWorld(E, N)`), `FunRings`, the PvP zone and
+  its LV95 start move to Earth positions; its course is already on leaves (#1614). **Built**: through the course's
+  `CoursePlace` (#1652), the floor following the round Earth and growing with the height, no real-Earth globe there.
+- **Every fixture course under earth** (#1649): only `straight` is checked today; all twelve courses' checks run
+  under `--frame earth`; the ski slopes and the parked fleet B5 left out are added; the `--world flat` probe plane
+  (`Core/TestWorld`) checked. **Built** (#1652): the course's tiles laid where its leaves are (`CoursePlace`), every course's
+  rows pass under earth but `site` (no pit on leaves: #1653); the slopes are leaf data only (nothing reads leaf pistes yet).
+- **The shipping pipeline on cube data** (#1650): the release download, the phone's copy, the Quest build, the
+  Linux server deploy and MapSetup's defaults ship leaves, not `.terr` (the nationwide data is G3's NAS run).
+- **The server streams leaves** (#1655) to clients that lack them, as `ChunkStreamer` streams flat tiles today (metered,
+  cached, counted in Data): joining players and the phone get their ground from it, or D leaves them with none.
+  **Built** (#1662, `net/leaf-streaming`): the server's `LeafIndex` on join, entries by `CubeKey` and section
+  (`RequestCubeAsset`, protocol 95) into the tile cache, `LeafStore`'s chain disk → cache → server, what stood before the
+  index read again in place; a server starts on leaves alone. `tools/leafstreamcheck.sh`: a client with no data at Geneva
+  stands on the server's ground in 20.8 s (16.3 MB; 18.3 s with its own leaves), `--earthcheck` passes as on its own leaves.
+
+Already ported: the open world (B4 + C1), the generated world and the fill (B5, C1 PR 3).
 
 ### D: the flip (one PR)
 
+- Starts only once C6 (visual parity) and C7 (every world ported) are done.
 - `--frame earth` the default; the LV95 runtime deleted (`TileId` in the game, `ChunkManager`'s LV95
   path, `HorizonLayer`, `.terr` and the other LV95 readers, `FallbackChunkSource`'s LV95 path);
-  tile-keyed stores re-keyed by leaf; the ratchet's counts at 0 and the test retired; a second
+  tile-keyed stores re-keyed by leaf, buildings by C5's `BuildingId` (the identity every per-building seed on leaves
+  has used since #1658: `Fnv.Alias`; flat's `BuildingKey` seeds go with the LV95 runtime); the ratchet's counts at 0 and the test retired; a second
   protocol bump only if an RPC carried a `TileId`.
 - The bar, recorded in this PR (below); G2 marked built in `global-tiling.md`; #1443 commented.
+
+### After D (follow-ups, not prerequisites)
+
+- **Terrain delivery** (#1656, the user's design, Nov 10 2026): the game ships only a coarse globe and a coarse
+  Switzerland (about `horizon.bin`'s size) as the offline fallback and the base for terrain generation; with a server
+  or local data, every level is streamed when available (the pyramid by quadtree request beside the leaves); every
+  level is built from the finest geometry the builder has (as `--cube-swiss` does over Switzerland); no hard-coded
+  data path; blending between levels so a tile never pops into the planet.
+- **Everything visible from far away baked into the coarser levels** (#1657, the user's idea, Nov 10 2026): the build
+  stage simplifies buildings, trees, roads, railways, bridges, lifts, pylons and large structures into each level's
+  colours and basic geometry (merged blocks, canopy heights, road lines), so the
+  far view keeps towns and forests and the detailed tiles' render distance can drop aggressively and dynamically at no
+  cost to the client.
+- **Junctions independent of tile edges** is not here but in C7: see its issue once filed (#1647's follow-up).
 
 ## The bar, and what it runs on
 

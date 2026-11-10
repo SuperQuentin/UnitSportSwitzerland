@@ -4,6 +4,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary><c>/stadium</c> finding a venue (src/Terrain/Stadiums/StadiumLookup.cs, linked in, #994).</summary>
+[Collection(FixtureWorld.Collection)]
 public class StadiumLookupTests
 {
     private static string[] Names(string query) => StadiumLookup.Find(query).Select(v => v.Name).ToArray();

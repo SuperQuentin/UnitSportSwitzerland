@@ -50,15 +50,15 @@ public partial class Globe
         {
             _realAncestors = new HashSet<CubeKey>();
             if (RealLeaves is { } real)
-                foreach (var leaf in real.Keys)
+                foreach (var leaf in real.LocalKeys)
                     for (var k = leaf; k.Level > 0 && _realAncestors.Add(k.Parent);) k = k.Parent;
         }
         return _realAncestors.Contains(key);
     }
 
-    /// <summary>Whether <paramref name="key"/> is drawn as a far leaf: a real leaf, the band on.</summary>
+    /// <summary>Whether <paramref name="key"/> is drawn as a far leaf: a real leaf on this copy's disk (never fetched from the server for the far band), the band on.</summary>
     private bool IsFarLeaf(CubeKey key) =>
-        Earth && FarLeafM > 0 && key.Level == LeafFrames.LeafLevel && RealLeaves is { } real && real.Has(key);
+        Earth && FarLeafM > 0 && key.Level == LeafFrames.LeafLevel && RealLeaves is { } real && real.IsLocal(key);
 
     /// <summary>A far leaf's mesh and trees, on a worker: heights, water, cover and trees read alone.</summary>
     private (Godot.Collections.Array Arrays, ChunkNode.TreeMeshes? Trees)? BuildFarLeaf(CubeKey key, LeafStore real)
@@ -120,7 +120,7 @@ public partial class Globe
         foreach (var key in _want)
         {
             if (key.Level != LeafFrames.LeafLevel || _buildings.ContainsKey(key) || _buildingsLoading.Contains(key)) continue;
-            if (_distance.GetValueOrDefault(key, double.MaxValue) > FarBuildingsM || !real.Has(key)) continue;
+            if (_distance.GetValueOrDefault(key, double.MaxValue) > FarBuildingsM || !real.IsLocal(key)) continue;
             _buildingsLoading.Add(key);
             _ = Task.Run(async () =>
             {

@@ -283,6 +283,8 @@ src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
 src/Core/WorldChoice     quick  --worldpickcheck --world fixture
+src/Core/WorldChoice     quick  --worldpickcheck --world fixture --frame earth
+tools/TerrainPreprocessor/CubeTestRegion quick --worldpickcheck --world fixture --frame earth
 src/Ui/WorldPick         quick  --worldpickcheck --world fixture
 src/Ui/SoloScreen        quick  --worldpickcheck --world fixture
 src/Core/TerrainPaths    quick  --worldpickcheck --world fixture
@@ -328,6 +330,12 @@ src/Terrain/WorldGroundCheck quick --worldgroundcheck --chunks fixture:lake
 src/Terrain/Earth        full   tools/earthcheck.sh
 src/Terrain/Leaves/LeafStore full tools/earthcheck.sh
 src/Terrain/LeafCollision full  tools/earthcheck.sh
+# the server streams leaves to a client with none (#1655): real leaves on D:, so full only
+src/Net/ChunkStreamer    full   tools/leafstreamcheck.sh
+src/Net/ClientTerrainSync full  tools/leafstreamcheck.sh
+src/Terrain/NetworkChunkSource full tools/leafstreamcheck.sh
+src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
+src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
@@ -337,6 +345,25 @@ src/Terrain/Leaves       quick  @realtime --frame earth --earthcheck --chunks fi
 src/Terrain/Fixture/FixtureLeaves quick @realtime --frame earth --earthcheck --chunks fixture:straight
 src/Terrain/LeafCollision quick @realtime --frame earth --earthcheck --chunks fixture:straight
 src/Core/ClientWorld     quick  @realtime --frame earth --earthcheck --chunks fixture:straight
+# #1649 G2 C7: every fixture course under --frame earth, on its own leaves (the tiles laid where the leaves are, CoursePlace)
+src/Terrain/Fixture/CoursePlace quick  --frame earth --tractorcheck --chunks fixture:flat --traffic 0
+src/Terrain/Fixture/CoursePlace quick  --frame earth --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+src/Terrain/Fixture/CoursePlace quick  --frame earth --drivecheck --chunks fixture:narrow --traffic 0 --car 4
+src/Terrain/Fixture/CoursePlace quick  --frame earth --drivecheck --chunks fixture:verge --traffic 0 --car 4
+src/Terrain/Fixture/CoursePlace quick  --frame earth --trafficcheck --chunks fixture:junction
+src/Terrain/Fixture/CoursePlace quick  --frame earth --airportcheck --chunks fixture:airport --traffic 0
+src/Terrain/Fixture/CoursePlace quick  --frame earth --watercheck --chunks fixture:lake
+src/Terrain/Fixture/CoursePlace quick  --frame earth --boatcheck speedboat --chunks fixture:lake
+src/Terrain/Fixture/CoursePlace quick  --frame earth --parkingcheck --chunks fixture:parking
+src/Terrain/Fixture/CoursePlace quick  --frame earth --locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui
+src/Terrain/Fixture/CoursePlace quick  --frame earth --climbcheck --chunks fixture:crag --systems ui,physics,adventure
+src/Terrain/Fixture/CoursePlace quick  --frame earth --flycheck thermal --time 13 --chunks fixture:crag
+src/Terrain/Fixture/CoursePlace quick  --frame earth --versteckischeck --chunks fixture:hamlet --systems ui,physics,farming,adventure
+src/Terrain/Fixture/CoursePlace quick  --frame earth --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Terrain/Fixture/CoursePlace quick  --frame earth --flycheck pigeon-thermal --time 13 --chunks fixture:crag
+# the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
+src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
+src/Core/TestWorld       quick  --frame earth --synccheck --world flat
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 # swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit

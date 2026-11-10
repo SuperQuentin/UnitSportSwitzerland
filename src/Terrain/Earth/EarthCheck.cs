@@ -141,6 +141,13 @@ public partial class EarthCheck : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        // online (#1655) the player spawned after the check takes the view: the origin must follow this body, not it
+        if (_camera != null && !_camera.Current) _camera.MakeCurrent();
+        Phase(delta);
+    }
+
+    private void Phase(double delta)
+    {
         if (Now > TimeoutS)
         {
             _faults.Add($"timed out in phase {_phase}");
@@ -164,6 +171,10 @@ public partial class EarthCheck : Node3D
         if (!_ground.HasCollisionAt(Position) || !_ground.TryGetHeight(Position, out float h)) return;
         Position = Position with { Y = h + 2f };
         Log($"ground under the start at {Now:F1} s: {h:F2} m, tile {_ground.TileAt(Position)}");
+        LogStreamed("on arrival");
+        // re-anchors before the ground came (a joining client's first frames, #1655) had no ground under the body to ask again
+        _shifts = _turns = 0;
+        _turnSum = _worstTurnError = _worstTilt = 0;
         _phase = 1;
         _phaseS = Now;
     }
@@ -406,9 +417,18 @@ public partial class EarthCheck : Node3D
     private void Finish()
     {
         _phase = -1;
+        LogStreamed("in all");
         foreach (var f in _faults) Log("FAIL " + f);
         Log(_faults.Count == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_faults.Count})");
         GetTree().Quit(_faults.Count == 0 ? 0 : 1);
+    }
+
+    /// <summary>What came over the network (#1655: a client with no leaves of its own streams them): the session's bytes, the server's leaves.</summary>
+    private void LogStreamed(string when)
+    {
+        if (Earth == null) return;
+        Log($"streamed {when}: {Net.ChunkStreamer.SessionBytes / (1024.0 * 1024):F1} MB, {Earth.Store.RemoteCount} leaves from the server's index, "
+            + $"{Earth.Store.LocalKeys.Count} on this copy's disk");
     }
 
     private static void Log(string s) => GD.Print($"[earthcheck] {s}");

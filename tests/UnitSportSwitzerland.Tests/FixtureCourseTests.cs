@@ -9,6 +9,7 @@ namespace UnitSport.Tests;
 /// The synthetic driving courses (src/Terrain/Fixture, linked in): the tiles they serve must be
 /// valid data the game reads like real tiles.
 /// </summary>
+[Collection(FixtureWorld.Collection)]
 public class FixtureCourseTests
 {
     private const double StartE = 2583250, StartN = 1113250;

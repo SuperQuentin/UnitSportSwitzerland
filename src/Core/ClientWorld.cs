@@ -170,7 +170,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         // which world this is (#999): every path, course and save below reads it
         WorldChoice.Active = Launch.World;
-        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter();
+        if (WorldChoice.FunActive) World.Fun.FunWorld.Enter(CourseOnLeaves);
         Audio.SfxBus.Ensure();
         foreach (var (requested, run) in QuickChecks)
             if (requested())
@@ -428,7 +428,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var (fE, fN) = SpawnPoint.ParseTarget(Launch);
             _fixtureStart = (fE, fN);
-            source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN)
+            // on its leaves under earth offline (below): what stands on it outside them is placed as they are (#1649)
+            source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN,
+                    earth: CourseOnLeaves)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
         }
@@ -465,7 +467,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk).
         // A fixture course stands on its own leaves offline (C1 PR 3); online it stays flat, as the server does on one
         bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !(fixture && Launch.Networked);
-        if (earth) origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(startE, startN, 0)));
+        // --origin pins it as on the flat world, so a shot queue's places mean the same in both (#1630's film)
+        if (earth)
+        {
+            var (anchorE, anchorN) = SpawnPoint.ParseOrigin() ?? (startE, startN);
+            origin = new WorldOrigin(FrameAxes.Enu(UnitSport.Terrain.Format.SwissGeodesy.ToEcef(anchorE, anchorN, 0)));
+        }
         // round leaves fall away by themselves: the shaders only add refraction's lift (#1512)
         Curvature.RoundGeometry = earth;
 
@@ -578,6 +585,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the flat streamer stays built for what still holds it, but out of the tree: it loads and draws nothing
             _earth = new Terrain.Earth.EarthWorld(EarthLeaves(fixture, source, generated, startE, startN), origin)
                 { Camera = () => GetViewport().GetCamera3D()?.GlobalPosition, Flat = _chunks };
+            // the leaves' ground in the style kit's terrain material (#1634): fog and the settings reach it as the tiles'
+            FogUniforms.Apply(_earth.GroundMaterial);
+            _worldMaterials = [.. _worldMaterials, _earth.GroundMaterial];
             AddChild(_earth);
         }
         else AddChild(_chunks);
@@ -594,6 +604,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
         AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
+        // under earth the wheels find their roads on the leaves' stand-in tiles (#1649)
+        Audio.Surfaces.Source = _earth != null ? WorldSource : null;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
         {
@@ -665,12 +677,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the cars already standing in the car parks (#499); the server promotes one when it is
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
-            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
+            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin, Ground));
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(Ground));
         // jetskis and speedboats along the harbour jetties (#383): likewise
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
-        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
+        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks, Ground));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -731,8 +743,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // …the creatures in the air around the camera, and their sounds
             AddChild(new Occasions.OccasionCreatures(_chunks, origin, () => GetViewport().GetCamera3D()));
             AddChild(new Occasions.OccasionAmbience(_chunks, origin, EarNode));
-            // …and snow falling round the camera, except indoors
-            AddChild(new Occasions.OccasionPrecip());
+            // …and snow falling round the camera, except indoors and above the cloud layer (#1637)
+            AddChild(new Occasions.OccasionPrecip(origin, at => Ground is { } gr && gr.TryGetSurface(at, out float y) ? y : null));
             // the UFO sightings (#863): the server's plans played back here, their beams, their landings
             Occasions.UfoSightings.Create(this, _chunks, origin, dedicated: false);
             // the festivals' closing shows (#1269 part 2): the server's start and seed played from the shared clock
@@ -788,7 +800,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.SkyBodies());
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
-            if (World.Globe.DataDir is { } globe)
+            // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
+            if (World.Globe.DataDir is { } globe && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
                 var g = _earth != null
@@ -800,6 +813,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (_earth != null)
                 {
                     var globeTerrain = StyleKit.Material(MaterialRole.Terrain);
+                    // the globe is the last of the earth world: it never dissolves into anything (as the leaves, #1634)
+                    globeTerrain.SetShaderParameter("gives_way", false);
                     FogUniforms.Apply(globeTerrain);
                     _worldMaterials = [.. _worldMaterials, globeTerrain];
                     g.TerrainMaterial = globeTerrain;
@@ -824,7 +839,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (WorldChoice.FunActive)
         {
             if (_dayNight != null) _dayNight.HourOverride = World.Fun.FunWorld.DuskHour;
-            AddChild(new World.Fun.FunBackdrop(_chunks, origin, environment));
+            AddChild(new World.Fun.FunBackdrop(origin, environment));
             AddChild(new World.Fun.FunRings(origin, () => LocalPlayer));
         }
 
@@ -848,6 +863,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     return obstacles;
                 },
             };
+            // the earth world (#1636): its graphs from the leaves round the view
+            if (_earth != null) _traffic.LeafRoads = _earth.Leaves.RoadsOf;
             AddChild(_traffic);
         }
         // traffic endpoints (#971): the server's list (same node path as its), every client running them on its own cars; the
@@ -936,7 +953,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => DriveProbe.ParseArgs().Requested, ToolAnchor.AtTarget, _ =>
             {
                 var d = DriveProbe.ParseArgs();
-                return new DriveProbe(chunks, origin, d.Shot, d.Car, d.Seconds);
+                return new DriveProbe(chunks, origin, d.Shot, d.Car, d.Seconds, Ground);
             }),
             new(() => World.ArrivalProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new World.ArrivalProbe(chunks, origin, World.ArrivalProbe.ParseArgs().Prefix)),
@@ -946,9 +963,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the pit of a building site driven, walked and dropped into (#619)
             new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
-                _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
+                _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot, Ground)),
             new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
-                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot)),
+                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot, Ground)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
@@ -1017,6 +1034,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var runner = ShotRunner.ForQueue(_spectator!, ShotRunner.ParseQueueArg()!, _worldOrigin);
                 runner.GroundHeight = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;
                 runner.TilesComplete = at => _earth?.Idle ?? (chunks.SettledNear(at, 3) && chunks.CompleteNear(at, 3));
+                runner.TilesStatus = () => _earth?.Status;
                 runner.RunCommand = line => _chat?.Send(line);
                 runner.SpawnPuppet = spec => { if (_worldOrigin != null) Movie.FilmPuppet.Spawn(this, _worldOrigin, spec); };
                 return runner;
@@ -1825,6 +1843,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
 
     /// <summary>
+    /// A fixture course (the fun world among them) is played on its own leaves: under <c>--frame earth</c>, offline
+    /// (online it stays flat, as the server does on one). What stands on it is laid as the leaves are (#1649, #1648).
+    /// </summary>
+    private bool CourseOnLeaves => GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked;
+
+    /// <summary>
     /// <c>--earthcheck</c>: on a fixture course along its longest reach from the start, 300 m into the leaves' margin
     /// (on <c>straight</c> past the 3 km re-anchor), at 60 m/s; on a region north-east for 4.5 km.
     /// </summary>
@@ -2182,6 +2206,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Merges the server's tile list so tiles this client never shipped with become streamable.
         _terrainSync = new ClientTerrainSync(_streamer!, _chunks!) { ServerKey = _serverKey, CachedIndexMerged = _cachedIndexMerged };
+        // the earth world's leaves this copy lacks come from the server (#1655): its index, then each leaf by key through
+        // the tile cache; what was drawn, blended or collided before it came is read again
+        if (_earth is { } earthWorld && _chunkSource is { } leafCache && !earthWorld.Leaves.IsFixture)
+        {
+            _terrainSync.WantsLeaves = true;
+            _terrainSync.LeafIndexReceived += index =>
+                Callable.From(() =>
+                {
+                    if (!IsInstanceValid(earthWorld)) return;
+                    var changed = earthWorld.Store.UseRemote(index, leafCache.FetchLeaf);
+                    GD.Print($"[earth] the server's leaves: {earthWorld.Store.RemoteCount} this copy lacks, {changed.Count} changed");
+                    earthWorld.Refresh(changed);
+                    if (changed.Count > 0) GetNodeOrNull<World.Globe>("Globe")?.RefreshLeaves();
+                }).CallDeferred();
+        }
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>
@@ -2906,7 +2945,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _player = player = new FootPlayer { Name = "Player", Terrain = Ground };
                 AddChild(player);
             }
-            EnterFootMode(player);
+            // not before the ground under the camera is in: a toggle while the world still streams (a check pressing it
+            // 2.5 s in, the earth world's leaves slower than the tiles) would drop the body from the 4.8 km preload height
+            EnterFootWhenGrounded(player);
         }
         else
         {
@@ -2987,7 +3028,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void EnterFootWhenGrounded(FootPlayer player)
     {
-        if (SpawnPending || !GroundUnderCamera) { _pendingFoot = player; return; }
+        if (SpawnPending || !GroundUnderCamera)
+        {
+            // offline, a body a toggle just made is parked meanwhile, or it would fall from where it was made
+            if (!_networked) SetBodyParked(player, true);
+            _pendingFoot = player;
+            return;
+        }
         EnterFootMode(player);
     }
 

@@ -12,7 +12,18 @@ using UnitSport.Terrain.Format;
 /// </summary>
 public static class SignalCheck
 {
-    public static int Run(string chunkDir, string? at, Action<string> log, bool list = false)
+    public static int Run(string chunkDir, string? at, Action<string> log, bool list = false) =>
+        Run(Directory.EnumerateFiles(chunkDir, "roads_*.road").Order(StringComparer.Ordinal).Select(path =>
+        {
+            using var stream = File.OpenRead(path);
+            return RoadCodec.Decode(stream);
+        }), (tile, x, z) => (tile.Id.MinE + x, tile.Id.MaxN - z), at, log, list);
+
+    /// <summary>
+    /// The check over any tiles (#1647: a cube region's leaves too), <paramref name="lv95"/> a record's tile-local x, z as LV95
+    /// (where it is printed and what <paramref name="at"/> is measured against).
+    /// </summary>
+    public static int Run(IEnumerable<RoadTile> roadTiles, Func<RoadTile, double, double, (double E, double N)> lv95, string? at, Action<string> log, bool list = false)
     {
         var c = CultureInfo.InvariantCulture;
         int tiles = 0, junctions = 0, invalid = 0, overMax = 0;
@@ -44,16 +55,15 @@ public static class SignalCheck
             atN = double.Parse(en[1], c);
         }
 
-        foreach (string path in Directory.EnumerateFiles(chunkDir, "roads_*.road").Order(StringComparer.Ordinal))
+        foreach (var tile in roadTiles)
         {
-            RoadTile tile;
-            using (var stream = File.OpenRead(path)) tile = RoadCodec.Decode(stream);
-            CheckLanes(tile, lanes, log, list);
-            CheckPaths(tile, paths, log, list);
+            CheckLanes(tile, lanes, log, list, lv95);
+            CheckPaths(tile, paths, log, list, lv95);
             if (at is not null)
                 foreach (var a in tile.Approaches)
                 {
-                    double e = tile.Id.MinE + a.X, n = tile.Id.MaxN - a.Z, d = Math.Sqrt((e - atE) * (e - atE) + (n - atN) * (n - atN));
+                    var (e, n) = lv95(tile, a.X, a.Z);
+                    double d = Math.Sqrt((e - atE) * (e - atE) + (n - atN) * (n - atN));
                     if (d < 60) nearLanes.Add((d, Describe(a, e, n)));
                 }
             if (tile.Signals.Count == 0) continue;
@@ -62,7 +72,7 @@ public static class SignalCheck
             {
                 junctions++;
                 var p = s.Plan;
-                double e = tile.Id.MinE + s.X, n = tile.Id.MaxN - s.Z;
+                var (e, n) = lv95(tile, s.X, s.Z);
                 string where = string.Create(c, $"LV95 {e:F0},{n:F0}");
                 string shape = string.Create(c, $"{p.Arms.Count} arms, {p.Arms.Count(a => a.In)} in, {p.Arms.Count(a => a.LeftPocket)} left pockets");
                 shapes[shape] = shapes.GetValueOrDefault(shape) + 1;
@@ -152,9 +162,9 @@ public static class SignalCheck
                     {
                         string arms = string.Join("\n", p.Arms.Select((a, i) => string.Create(c,
                             $"    arm {i}: heading {a.Heading * 180 / Math.PI:F0} deg, in {a.In}, out {a.Out}, left pocket {a.LeftPocket}, right pocket {a.RightPocket}, peds {a.Pedestrians}, {a.SpeedKmh:F0} km/h, crossing {a.CrossingM:F1} m, rank {a.Rank}")));
-                        var tileId = tile.Id;
+                        var poleTile = tile;
                         string poles = string.Join("\n", s.Poles.Select(q => string.Create(c,
-                            $"    pole arm {q.Arm} {q.Flags}: LV95 {tileId.MinE + q.X:F1},{tileId.MaxN - q.Z:F1} y {q.Y:F2}, cars face {q.CarHeading * 180 / Math.PI:F0} deg, pedestrians {q.PedHeading * 180 / Math.PI:F0} deg")));
+                            $"    pole arm {q.Arm} {q.Flags}: LV95 {lv95(poleTile, q.X, q.Z).E:F1},{lv95(poleTile, q.X, q.Z).N:F1} y {q.Y:F2}, cars face {q.CarHeading * 180 / Math.PI:F0} deg, pedestrians {q.PedHeading * 180 / Math.PI:F0} deg")));
                         nearest = (d, $"  nearest to {at}: {where} ({d:F0} m away), {shape}\n{arms}\n{poles}\n{p.Describe()}");
                     }
                 }
@@ -232,7 +242,7 @@ public static class SignalCheck
     /// (the end's point and offset; on a road of the tile ending there, the offset on a lane: a lane strip of a transition piece,
     /// within the carriageway of a plain segment), and every point lies on its core's cap.
     /// </summary>
-    private static void CheckPaths(RoadTile tile, PathTally t, Action<string> log, bool list)
+    private static void CheckPaths(RoadTile tile, PathTally t, Action<string> log, bool list, Func<RoadTile, double, double, (double E, double N)> lv95)
     {
         var c = CultureInfo.InvariantCulture;
         t.Cores += tile.JunctionPaths.Select(p => p.Junction).Distinct().Count();
@@ -304,7 +314,7 @@ public static class SignalCheck
                     break;
                 }
             if (bad is not null && (list || t.OffLane + t.OffCore <= 20))
-                log(string.Create(c, $"  junction path at LV95 {tile.Id.MinE + p.Points[0]:F1},{tile.Id.MaxN - p.Points[2]:F1} ({p.Move}, {p.Kind}): {bad}"));
+                log(string.Create(c, $"  junction path at LV95 {lv95(tile, p.Points[0], p.Points[2]).E:F1},{lv95(tile, p.Points[0], p.Points[2]).N:F1} ({p.Move}, {p.Kind}): {bad}"));
         }
     }
 
@@ -340,7 +350,7 @@ public static class SignalCheck
     /// full before the line and opening no later than it is full, a movement each; a pocket in the
     /// plan has its lane. And every signalised approach has exactly one record.
     /// </summary>
-    private static void CheckLanes(RoadTile tile, LaneTally t, Action<string> log, bool list)
+    private static void CheckLanes(RoadTile tile, LaneTally t, Action<string> log, bool list, Func<RoadTile, double, double, (double E, double N)> lv95)
     {
         var seen = new HashSet<(int, int)>();
         foreach (var a in tile.Approaches)
@@ -349,7 +359,7 @@ public static class SignalCheck
             t.Lanes += a.Lanes.Count;
             if (a.Banned != 0) t.Banned++;
             if (list && a.Lanes.Count(l => l.Kind == ApproachLaneKind.Car) > 1)
-                log(string.Create(CultureInfo.InvariantCulture, $"  pockets LV95 {tile.Id.MinE + a.X:F0},{tile.Id.MaxN - a.Z:F0} {(a.Signal >= 0 ? "lights" : "no lights")}: {string.Join(" | ", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => l.Moves))}, banned {a.Banned}"));
+                log(string.Create(CultureInfo.InvariantCulture, $"  pockets LV95 {lv95(tile, a.X, a.Z).E:F0},{lv95(tile, a.X, a.Z).N:F0} {(a.Signal >= 0 ? "lights" : "no lights")}: {string.Join(" | ", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => l.Moves))}, banned {a.Banned}"));
             var why = new List<string>();
             if (a.Signal >= 0)
             {
@@ -377,7 +387,7 @@ public static class SignalCheck
             if (why.Count == 0) continue;
             t.Bad++;
             if (t.Bad <= 10)
-                log(string.Create(CultureInfo.InvariantCulture, $"  BAD lane record LV95 {tile.Id.MinE + a.X:F0},{tile.Id.MaxN - a.Z:F0}: {string.Join("; ", why)}"));
+                log(string.Create(CultureInfo.InvariantCulture, $"  BAD lane record LV95 {lv95(tile, a.X, a.Z).E:F0},{lv95(tile, a.X, a.Z).N:F0}: {string.Join("; ", why)}"));
         }
         for (int k = 0; k < tile.Signals.Count; k++)
             for (int i = 0; i < tile.Signals[k].Plan.Arms.Count; i++)

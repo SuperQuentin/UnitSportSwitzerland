@@ -116,6 +116,19 @@ public enum AssetKind
     /// know the kind and answers "missing" (no protocol bump): the client fetches everything.
     /// </summary>
     Digest = 19,
+
+    /// <summary>
+    /// The server's <see cref="Terrain.Leaves.LeafIndex"/> under <c>--frame earth</c> (#1655): every leaf it holds, its entry's
+    /// size and its bundle's stamp. Not tile-scoped; asked once per join. Built in memory from the server's leaves, never read
+    /// from the chunk directory; a server with no leaves (or an older one) answers "missing".
+    /// </summary>
+    LeafIndex = 20,
+
+    /// <summary>
+    /// One leaf's <c>.cubl</c> entry (#1655), keyed by its <c>CubeKey</c> through <c>RequestCubeAsset</c>, not by a tile:
+    /// the whole entry, or an entry holding only the section asked for. Cached as <see cref="AssetStream.LeafCacheName"/>.
+    /// </summary>
+    Leaf = 21,
 }
 
 /// <summary>
@@ -172,6 +185,8 @@ public static class AssetStream
         AssetKind.Pois => PoiFile.FileName,
         AssetKind.AtlasFacts => "atlas_facts.json",
         AssetKind.Digest => "",
+        AssetKind.LeafIndex => Terrain.Leaves.LeafIndex.FileName,
+        AssetKind.Leaf => "",   // by CubeKey: LeafCacheName
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -181,13 +196,22 @@ public static class AssetStream
     /// nor CDs (another directory).
     /// </summary>
     public static bool ServedOverHttp(AssetKind kind) =>
-        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase or AssetKind.Digest);
+        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase or AssetKind.Digest
+            or AssetKind.LeafIndex or AssetKind.Leaf);
 
     /// <summary>
     /// True for kinds whose format already compresses its own payload, so deflating again
     /// only burns CPU to add a few bytes.
     /// </summary>
     public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd or AssetKind.Water or AssetKind.Pistes;
+
+    /// <summary>
+    /// The client's cache file for a streamed leaf entry (#1655), in the tile cache beside the flat tiles (the same cap,
+    /// Clear and trim): its key, its bundle's stamp (a rebuilt bundle's leaves miss and are fetched again; the old files
+    /// age out), and the section when only one was fetched.
+    /// </summary>
+    public static string LeafCacheName(CubeKey key, uint stamp, LeafKind? section) =>
+        $"leaf_{key.FileStem}_{stamp:x8}{(section is { } s ? $".s{(int)s}" : "")}.culf";
 
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)

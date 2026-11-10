@@ -32,6 +32,7 @@
     <Compile Include="..\..\src\World\Snow\SnowWeather.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\SnowCeiling.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SkiDynamics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\MoveSpeedCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the road bike spec and the fit derived from it (#1124): Godot maths only -->
@@ -74,6 +75,8 @@
     <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1636: where the traffic's graphs put a tile's or a leaf's records, and their join keys -->
+    <Compile Include="..\..\src\World\TilePlace.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1503 G2 A2b: GlobalPos's JSON shape in the saves (on the type) and the stores' in-place migrations -->
     <Compile Include="..\..\src\Core\SavedPlace.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />
@@ -123,6 +126,8 @@
     <!-- #1629 G2 C6: the globe as the earth world's far view: its horizon, holes and ground in the palette (Godot maths only) -->
     <Compile Include="..\..\src\World\Globe\GlobeGround.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CoverPalette.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1632 G2 C6: a leaf's lake cut at its edges (Godot maths only) -->
+    <Compile Include="..\..\src\Terrain\Earth\LeafWaterClip.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeTargets.cs" Link="Game\%(Filename)%(Extension)" />

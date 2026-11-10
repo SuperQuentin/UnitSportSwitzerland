@@ -34,6 +34,9 @@ public partial class AirportStands : Node
     public static readonly float PlaceRadius = VehicleManager.LonelyDistance - 200f;
 
     private readonly ChunkManager _chunks;
+
+    /// <summary>The world's ground: the streamer's, or the earth world's leaves (#1649), whose tile events say where the ground is.</summary>
+    private readonly IWorldGround _ground;
     /// <summary>The stands whose tiles have been seen, and since when each stood empty (NaN: filled; -inf: never filled).</summary>
     private readonly Dictionary<string, (AirportStand Stand, double EmptySince)> _stands = new();
     private AirportIndex _index = new();
@@ -47,19 +50,20 @@ public partial class AirportStands : Node
     /// <summary>The airports read at boot (empty, never null, before or without any).</summary>
     public AirportIndex Index => _index;
 
-    public AirportStands(ChunkManager chunks)
+    public AirportStands(ChunkManager chunks, IWorldGround? ground = null)
     {
         Name = "AirportStands";
         _chunks = chunks;
+        _ground = ground ?? chunks?.Ground!;
     }
 
-    public AirportStands() : this(null!) { }
+    public AirportStands() : this(null!, null) { }
 
     public override void _EnterTree() => Instance = this;
 
     public override async void _Ready()
     {
-        _chunks.Ground.TileEntered += OnTileEntered;
+        _ground.TileEntered += OnTileEntered;
         // a check's server refills sooner (tools/airportnetcheck.sh)
         if (double.TryParse(CmdArgs.Value("--standrespawn"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double respawn))
             RespawnSeconds = respawn;
@@ -76,7 +80,7 @@ public partial class AirportStands : Node
 
     public override void _ExitTree()
     {
-        _chunks.Ground.TileEntered -= OnTileEntered;
+        _ground.TileEntered -= OnTileEntered;
         if (Instance == this) Instance = null;
     }
 
@@ -95,12 +99,23 @@ public partial class AirportStands : Node
 
     private void OnTileEntered(GroundTile tile)
     {
-        var id = tile.Lv95Tile;
         if (!Decides) return;
         foreach (var (_, stand) in _index.Stands())
-            if (TileId.FromLv95(stand.E, stand.N) == id && !_stands.ContainsKey(stand.Id))
+            if (!_stands.ContainsKey(stand.Id) && On(stand, tile))
                 _stands[stand.Id] = (stand, double.NegativeInfinity);   // never filled: as soon as the ground is here
         _sinceCheck = double.MaxValue;
+    }
+
+    /// <summary>
+    /// Whether a stand stands on a tile of the ground: its LV95 tile on the flat world; on the earth world's leaves the
+    /// tile the ground has under it (#1649).
+    /// </summary>
+    private bool On(AirportStand stand, GroundTile tile)
+    {
+        double e = stand.E, n = stand.N;
+        return _chunks?.Ground is { } flat && ReferenceEquals(_ground, flat)
+            ? TileId.FromLv95(e, n) == tile.Lv95Tile
+            : _chunks?.Origin is { } origin && _ground.TileAt(origin.ToWorld(e, n, 0)) == tile;
     }
 
     public override void _Process(double delta)
@@ -163,7 +178,7 @@ public partial class AirportStands : Node
             if (!double.IsNegativeInfinity(empty) && now - empty < RespawnSeconds) continue;
             var at = origin.ToWorld(stand.E, stand.N, 0);
             if (_players.Count > 0 && !_players.Any(p => MathX.FlatDistance(p, at) < PlaceRadius)) continue;
-            if (!_chunks.Ground.TryGetHeight(at, out float ground)) continue;
+            if (!_ground.TryGetHeight(at, out float ground)) continue;
             var size = AirportPlanner.SizeOf(stand.Use);
             if (!double.IsNegativeInfinity(empty) && !Clear(vehicles, at, name, (float)(size.Span / 2 + 3))) continue;
             if (Fill(vehicles, origin, stand, at with { Y = ground }) == 0) continue;
