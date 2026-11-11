@@ -30,13 +30,15 @@ internal static class SiteTiles
     /// its site's materials pallets under its jib (#1704): planned from the tiles' files, drawn or not. The generator plans
     /// other sites on an earth world's leaves than on the flat world's tiles, so a check cannot name one.
     /// </summary>
-    public static async System.Threading.Tasks.Task<GlobalPos?> CraneWithPalletNear(FootPlayer me, int rings = 4)
+    public static async System.Threading.Tasks.Task<GlobalPos?> CraneWithPalletNear(FootPlayer me, int rings = 4, Action<string>? log = null)
     {
         if (me.Terrain is not { } ground || ground.Content is not { } source) return null;
         var here = ground.ContentName(ground.TileAt(me.GlobalPosition));
         var at = me.Global;
         GlobalPos? best = null;
         double nearest = double.MaxValue;
+        int tiles = 0, withSites = 0, sitesSeen = 0, cranes = 0, palletsSeen = 0;
+        float closest = float.MaxValue;
         // ring by ring, nearest first: the first ring that has one ends the search (each leaf asked is made, ~2 s)
         for (int ring = 0; ring <= rings && best == null; ring++)
         for (int dx = -ring; dx <= ring; dx++)
@@ -44,15 +46,21 @@ internal static class SiteTiles
             {
                 if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != ring) continue;
                 var id = here.Neighbour(dx, dz);
+                tiles++;
                 if (await source.LoadBuildingsAsync(id) is not { } tile || !SitePlans.HasSite(tile)) continue;
+                withSites++;
                 var roads = await source.LoadRoadsAsync(id);
                 var grid = await source.LoadChunkAsync(id);
                 foreach (var site in SitePlans.For(tile, roads))
                 {
                     var pallets = SitePlans.PalletsOf(tile, site, grid).Select(p => id.Local(p.E, p.N))
                         .Select(l => new Vector2((float)l.X, (float)l.Z)).ToList();
+                    sitesSeen++;
+                    palletsSeen += pallets.Count;
                     foreach (var crane in site.Cranes)
                     {
+                        cranes++;
+                        foreach (var p in pallets) closest = Math.Min(closest, p.DistanceTo(crane.Base));
                         if (!pallets.Any(p => p.DistanceTo(crane.Base) is var d && d > CraneMotion.MinTrolley + 1f && d < crane.JibLength - 2f)) continue;
                         var (e, n) = id.Global(crane.Base.X, crane.Base.Y);
                         var foot = GlobalPos.OfTileEn(id, e, n, (grid?.SampleMeshHeight(e, n) ?? 0) + 2);
@@ -61,6 +69,7 @@ internal static class SiteTiles
                     }
                 }
             }
+        log?.Invoke($"{tiles} tiles, {withSites} with sites, {sitesSeen} sites, {cranes} cranes, {palletsSeen} pallets, the closest pallet {closest:F1} m from a crane's foot");
         return best;
     }
 

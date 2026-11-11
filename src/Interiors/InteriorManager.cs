@@ -1040,8 +1040,13 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         // peer puts it at the same place on the Earth. A world Y is a height over the frame's own tangent plane there, and
         // a client's frame (re-anchored under its camera) and the server's tilt by the arc between their anchors: 3 km
         // down, 2 km apart, the interior was ~1 m off from one to the other, and the server saw a rider out of the cabin
+        // It goes down to InteriorBaseY above sea level (LHN95, as the flat world's world Y): the leaf's anchor plane is the
+        // ellipsoid's, ~50 m under it in Switzerland, and an interior 50 m low tripped the indoor fall rescue
         if (Terrain.Leaves.LeafStandIn.IsStandIn(tile))
-            return origin.TileTransform(tile) * new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(l.CenterX, InteriorBaseY, l.CenterZ));
+        {
+            double anchorAlt = GlobalPos.OfTile(tile, l.CenterX, 0, l.CenterZ).Alt;
+            return origin.TileTransform(tile) * new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(l.CenterX, (float)(InteriorBaseY - anchorAlt), l.CenterZ));
+        }
         var at = origin.TileTransform(tile) * new Vector3(l.CenterX, 0, l.CenterZ);
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }

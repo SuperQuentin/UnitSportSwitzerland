@@ -95,7 +95,7 @@ public partial class CraneNetProbe : ChatProbe
 
         // the site's cranes are drawn with its buildings, its pallets with its machines
         bool found = await Until(() => CraneWithPallet(me.GlobalPosition) != null, 40);
-        if (!found && await SiteTiles.CraneWithPalletNear(me) is { } elsewhere)
+        if (!found && await SiteTiles.CraneWithPalletNear(me, log: line => GD.Print($"{Log}   searched: {line}")) is { } elsewhere)
         {
             // none at the spawn (an earth world's leaves plan other sites): to the nearest that has one, B after A (#1704)
             var (x, y, z) = elsewhere.ToWire();
