@@ -54,6 +54,7 @@ public partial class YardLootNetProbe : ChatProbe
     {
         var source = Loot.Source!.Invoke()!;
         var at = me.Global;
+        if (Systems.FixtureCourse != null && me.Terrain is { } ground) return await FixtureSkip(me, source, ground);
         var world = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
         var sites = world.SitesNear(at.Lv95.E, at.Lv95.N, 4000).OrderBy(s => at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt))).Take(6).ToList();
         GD.Print($"{Log} {sites.Count} generated sites within 4 km");
@@ -73,6 +74,40 @@ public partial class YardLootNetProbe : ChatProbe
                 if (stacks.Count > 0) any ??= c;
             }
             if (any != null) return any;
+        }
+        return any;
+    }
+
+    /// <summary>How far east and west of the player a fixture course's tiles are read for sites, m (fixture:site's reach 300 m east).</summary>
+    private const float FixtureReach = 400f;
+
+    /// <summary>
+    /// On a fixture course (#1718): its sites are whatever its UnderConstruction blocks plan, filed under the ground's own
+    /// tile names, so the yards of the tiles along the course near the player stand in for the generator's site list.
+    /// The nearest site's skip with two stacks or more, else the nearest skip holding anything.
+    /// </summary>
+    private async Task<YardStock?> FixtureSkip(FootPlayer me, IChunkSource source, IWorldGround ground)
+    {
+        var tiles = new List<TileId>();
+        for (float dx = -FixtureReach; dx <= FixtureReach; dx += 100f)
+        {
+            var tile = ground.ContentName(ground.TileAt(me.GlobalPosition + new Vector3(dx, 0, 0)));
+            if (!tiles.Contains(tile)) tiles.Add(tile);
+        }
+        var skips = new List<YardStock>();
+        foreach (var tile in tiles)
+            skips.AddRange((await Task.Run(() => SitePlans.YardOfTile(source, tile))).Where(c => c.Kind == SiteStockKind.Skip));
+        float Away(YardStock c) => me.Origin!.ToWorld(c.E, c.N, c.Bottom).DistanceSquaredTo(me.GlobalPosition);
+        skips.Sort((a, b) => Away(a).CompareTo(Away(b)));
+        GD.Print($"{Log} {skips.Count} skips on {tiles.Count} fixture tiles");
+        YardStock? any = null;
+        string? nearest = skips.Count > 0 ? skips[0].Building : null;
+        foreach (var c in skips)
+        {
+            var stacks = LootTables.YardContents(c.Building, c.Index, c.Kind, LootTables.Epoch(c.Building, Now));
+            GD.Print($"{Log} {c.Building} #{c.Index} skip at {F(c.E)},{F(c.N)}: {stacks.Count} stacks");
+            if (stacks.Count >= 2 && c.Building == nearest) return c;
+            if (stacks.Count > 0) any ??= c;
         }
         return any;
     }

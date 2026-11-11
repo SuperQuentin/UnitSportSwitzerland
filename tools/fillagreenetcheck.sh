@@ -5,6 +5,7 @@
 #   1. the generated world (--generated-world, NOTERRAIN): every point on the fill;
 #   2. with LEAVES (B4's built leaves on D:, skipped without them): the fill past the region's edge, where it blends into
 #      the real leaves (some points real, some fill).
+# Stays on the generated world (#1718): the generated fill is what it checks.
 #   GODOT=<exe> [RUNS="generated edge"] [AT=E,N] [LEAVES=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh      logs: test_output/fillagree_*.log
 . "$(dirname "$0")/lib/twoclient.sh" fillagree
 AT=${AT:-2600500,1199500}

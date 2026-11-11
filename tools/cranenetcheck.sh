@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A building site's crane worked over loopback (#618, src/Terrain/Construction/CraneNetProbe): a
-# headless dedicated server on the GENERATED world, which puts a building site in every village
+# headless dedicated server on the site fixture (fixture:site, #1718), which puts a building site in every village
 # (#607), with an admin password, and two headless clients at a site. A takes the nearest crane's
 # radio remote, slews it onto one of the site's pallets on the real levers, hooks it on, lifts it
 # onto the top slab and sets it down, then lets go and speeds the simulation up. B passes only on
@@ -11,10 +11,9 @@
 . "$(dirname "$0")/lib/twoclient.sh" cranenet
 PORT=${PORT:-7893}
 # a generated site with pallets of materials and a crane (--constructioncheck lists each site's)
-AT=${AT:-2588796,1118441}
-# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
-WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
-tc_server 480 120 "$OUT/cranenet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --admin-password test
+# fixture:site (#1718): its sites stand within 300 m east of the start; AT=E,N puts the clients elsewhere on it
+WORLD="--world fixture --chunks fixture:site --traffic 0${AT:+ --at $AT}"
+tc_server 480 120 "$OUT/cranenet_server.log" --server --port $PORT --world fixture --chunks fixture:site --admin-password test
 tc_client 360 "$OUT/cranenet_A.log" --connect 127.0.0.1:$PORT --name CraneA $WORLD --cranenet A & A=$!
 tc_client 360 "$OUT/cranenet_B.log" --connect 127.0.0.1:$PORT --name CraneB $WORLD --cranenet B & B=$!
 wait $A $B

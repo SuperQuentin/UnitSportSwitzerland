@@ -6,6 +6,8 @@
 # Postauto stop when A is out: A is recalled.
 # At /speed 4: the probe's waits are simulated seconds, so the check keeps its proportions in a quarter of the
 # time (the runner's per-check limit cut it at 766 s at normal speed).
+# Stays on the generated world (#1718): the recall needs a village's Postauto stops inside a 5-7 km match square,
+# and a fixture course is about a kilometre with nothing round it.
 #   GODOT=<exe> tools/brsquadcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" brsquad
 AT=2642075,1129346   # a generated village of 173 buildings, 59 km from the spawn: the server's fill reaches it (#937)

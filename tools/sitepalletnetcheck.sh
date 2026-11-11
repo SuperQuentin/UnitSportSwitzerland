@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A building site's pallet of materials forked over loopback (#615, src/Items/SitePalletNetProbe):
-# a headless dedicated server on the GENERATED world, which puts a building site in every village
+# a headless dedicated server on the site fixture (fixture:site, #1718), which puts a building site in every village
 # (#607), with an admin password, and two headless clients at the site. A (admin) takes a
 # telehandler and lifts the nearest site pallet, then sets it down; B passes only on what reached
 # it: the pallet taken (the server worked it out from the tile's own files), on A's telehandler in
@@ -12,10 +12,9 @@ PORT=${PORT:-7887}
 # and whether they have a way in): the foundations site it used, 2588796,1118441, has its pit (#619)
 # where a telehandler came from, and its yard no room left for another way in; this topped-out one keeps
 # its materials an 8 m way in on the side their pallets face
-AT=${AT:-2582832,1102441}
-# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
-WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
-tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" --admin-password test
+# fixture:site (#1718): its sites stand within 300 m east of the start; AT=E,N puts the clients elsewhere on it
+WORLD="--world fixture --chunks fixture:site --traffic 0${AT:+ --at $AT}"
+tc_server 420 120 "$OUT/sitepalletnet_server.log" --server --port $PORT --world fixture --chunks fixture:site --admin-password test
 tc_client 300 "$OUT/sitepalletnet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --sitepalletnet A & A=$!
 tc_client 300 "$OUT/sitepalletnet_B.log" --connect 127.0.0.1:$PORT --name SiteB $WORLD --sitepalletnet B & B=$!
 wait $A $B
