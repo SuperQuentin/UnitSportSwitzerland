@@ -927,8 +927,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
     /// <c>--frame earth</c> (#1684), else a real LV95 tile.
     /// </summary>
     private bool InRegion(double e, double n) => _earth != null
-        ? _earth.Leaves.IsReal(Terrain.Format.CubeKey.FromEcef(GlobalPos.FromLv95(e, n, 0).ToEcef(), Terrain.Leaves.LeafFrames.LeafLevel))
+        ? InRegion(_earth.Leaves, Terrain.Format.CubeKey.FromEcef(GlobalPos.FromLv95(e, n, 0).ToEcef(), Terrain.Leaves.LeafFrames.LeafLevel))
         : _chunks != null && _chunks.AvailableTiles.Contains(Terrain.Format.TileId.FromLv95(e, n));
+
+    /// <summary>A real leaf, or a fixture course's own (the course is the region, as its tile is on the flat world: #1683).</summary>
+    private static bool InRegion(Terrain.Leaves.EarthLeaves leaves, Terrain.Format.CubeKey key) =>
+        leaves.IsReal(key) || (leaves.IsFixture && leaves.Has(key));
 
     /// <summary>
     /// Reads places.json from the chunk directory. Absent is not fatal — chat still works,

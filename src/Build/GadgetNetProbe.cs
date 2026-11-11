@@ -133,10 +133,21 @@ public partial class GadgetNetProbe : Node
 
     private async Task<long> Place(PlacedObjects placed, PlacedKind kind, Transform3D at, string payload)
     {
+        // the server judges reach from the body it last heard of: on a slow join (a loaded machine,
+        // seconds of round trip) A's first pose may not have reached it yet, so "too far" is asked again
         PlacedResult? result = null;
-        placed.RequestPlace(kind, at, payload, r => result = r);
-        await Until(() => result != null, 5);
-        if (result is { Ok: false } r) GD.Print($"[gadgetnet {_role}] refused: {r.Refused}");
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            result = null;
+            placed.RequestPlace(kind, at, payload, r => result = r);
+            await Until(() => result != null, 5);
+            if (result is { Ok: false } r)
+            {
+                GD.Print($"[gadgetnet {_role}] refused: {r.Refused}");
+                if (r.Refused == "Too far away.") { await Until(() => false, 1); continue; }
+            }
+            break;
+        }
         return result?.Object?.Id ?? 0;
     }
 
