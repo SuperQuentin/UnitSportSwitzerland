@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.World;
 
@@ -24,6 +25,12 @@ public sealed record ContainerRecord(long Oid, int Gen, string Kind, string Name
     public const string Vehicle = "v", Item = "i", Radio = "r";
 
     public TileId Tile => TileId.FromLv95(E, N);
+
+    /// <summary>The leaf it stands on, as its tile name (<see cref="LeafTileName"/>): its container under <c>--frame earth</c> (#1726).</summary>
+    public TileId Leaf => LeafTileName.At(GlobalPos.FromLv95(E, N, 0));
+
+    /// <summary>Which container a record goes in: its LV95 tile under flat, its leaf under earth.</summary>
+    public static Func<ContainerRecord, TileId> CellOf(bool earth) => earth ? r => r.Leaf : r => r.Tile;
 }
 
 /// <summary>Where the containers live: one file per tile, plus the checkpoint of what is live.</summary>
@@ -46,6 +53,8 @@ public interface IContainerDisk
 
 /// <summary>
 /// The containers on disk: <c>&lt;dir&gt;/E_N.json</c> per tile and <c>&lt;dir&gt;/checkpoint.json</c>,
+/// or under <c>--frame earth</c> (#1726) <c>&lt;dir&gt;/F_L14_X_Y.json</c> per leaf
+/// (<see cref="LeafTileName.FileStem"/>), each record's place an Earth position (<see cref="EarthRecord"/>),
 /// each written whole through <see cref="SaveQueue.WriteAtomic"/>, synchronously: the order of the
 /// writes is what keeps an entity in exactly one place (<see cref="ContainerBook"/>), and a queued
 /// write could land after a later one.
@@ -54,39 +63,126 @@ public sealed class ContainerFileDisk : IContainerDisk
 {
     private const string CheckpointName = "checkpoint.json";
     private readonly string _dir;
+    private readonly bool _earth;
 
-    public ContainerFileDisk(string dir) => _dir = dir;
+    public ContainerFileDisk(string dir, bool earth = false)
+    {
+        _dir = dir;
+        _earth = earth;
+    }
 
     public IEnumerable<TileId> Tiles()
     {
         if (!Directory.Exists(_dir)) yield break;
         foreach (var path in Directory.EnumerateFiles(_dir, "*.json"))
-        {
-            var parts = Path.GetFileNameWithoutExtension(path).Split('_');
-            if (parts.Length == 2 && int.TryParse(parts[0], out int e) && int.TryParse(parts[1], out int n))
-                yield return new TileId(e, n);
-        }
+            if (LeafTileName.TryParseStem(Path.GetFileNameWithoutExtension(path), out var id)) yield return id;
     }
 
-    public List<ContainerRecord> ReadTile(TileId id) => Read(Path.Combine(_dir, $"{id}.json"));
+    private string PathOf(TileId id) => Path.Combine(_dir, LeafTileName.FileStem(id) + ".json");
 
-    public void WriteTile(TileId id, List<ContainerRecord> records) => Write(Path.Combine(_dir, $"{id}.json"), records);
+    public List<ContainerRecord> ReadTile(TileId id) => Read(PathOf(id));
+
+    public void WriteTile(TileId id, List<ContainerRecord> records) => Write(PathOf(id), records);
 
     public List<ContainerRecord> ReadCheckpoint() => Read(Path.Combine(_dir, CheckpointName));
 
     public void WriteCheckpoint(List<ContainerRecord> records) => Write(Path.Combine(_dir, CheckpointName), records);
 
-    private static List<ContainerRecord> Read(string path)
+    private List<ContainerRecord> Read(string path)
     {
         if (!File.Exists(path)) return new List<ContainerRecord>();
-        try { return JsonSerializer.Deserialize<List<ContainerRecord>>(File.ReadAllText(path)) ?? new List<ContainerRecord>(); }
+        try
+        {
+            string text = File.ReadAllText(path);
+            return _earth ? EarthRecord.Parse(text) : JsonSerializer.Deserialize<List<ContainerRecord>>(text) ?? new List<ContainerRecord>();
+        }
         catch (JsonException) { return new List<ContainerRecord>(); }
     }
 
-    private static void Write(string path, List<ContainerRecord> records)
+    private void Write(string path, List<ContainerRecord> records)
     {
         if (records.Count == 0) { if (File.Exists(path)) File.Delete(path); return; }
-        SaveQueue.WriteAtomic(path, JsonSerializer.Serialize(records));
+        SaveQueue.WriteAtomic(path, _earth ? EarthRecord.Text(records) : JsonSerializer.Serialize(records));
+    }
+}
+
+/// <summary>
+/// A container record as an earth container file holds it (#1726, G2 D2): <c>{"version": 3, "records": [...]}</c>, each
+/// record's place an Earth position (<c>at</c>, ECEF, <see cref="GlobalPos"/>'s JSON), never LV95; the rest as
+/// <see cref="ContainerRecord"/>. The record in memory keeps LV95 metres until D3 rewrites it.
+/// </summary>
+public sealed class EarthRecord
+{
+    public const int Version = 3;
+
+    [JsonPropertyName("oid")] public long Oid { get; set; }
+    [JsonPropertyName("gen")] public int Gen { get; set; }
+    [JsonPropertyName("kind")] public string Kind { get; set; } = "";
+    [JsonPropertyName("name")] public string Name { get; set; } = "";
+    [JsonPropertyName("at")] public GlobalPos At { get; set; }
+    [JsonPropertyName("savedAt")] public double SavedAt { get; set; }
+    [JsonPropertyName("data")] public string Data { get; set; } = "";
+
+    private sealed class Book
+    {
+        [JsonPropertyName("version")] public int Version { get; set; } = EarthRecord.Version;
+        [JsonPropertyName("records")] public List<EarthRecord> Records { get; set; } = new();
+    }
+
+    public static EarthRecord Of(ContainerRecord r) =>
+        new() { Oid = r.Oid, Gen = r.Gen, Kind = r.Kind, Name = r.Name, At = GlobalPos.FromLv95(r.E, r.N, 0), SavedAt = r.SavedAt, Data = r.Data };
+
+    public ContainerRecord ToRecord()
+    {
+        var (e, n, _) = At.Lv95;
+        return new ContainerRecord(Oid, Gen, Kind, Name, e, n, SavedAt, Data);
+    }
+
+    public static string Text(IEnumerable<ContainerRecord> records) =>
+        JsonSerializer.Serialize(new Book { Records = records.Select(Of).ToList() });
+
+    public static List<ContainerRecord> Parse(string json) =>
+        (JsonSerializer.Deserialize<Book>(json) ?? new Book()).Records.Select(r => r.ToRecord()).ToList();
+}
+
+/// <summary>
+/// The flat containers moved to earth (#1726, G2 D2): every record of the flat folder (each tile and the checkpoint)
+/// filed by its place into the earth folder's leaves, and the woken slots whose owner is a leaf's
+/// (<see cref="AwakeSlots.ToEarth"/>). Runs once: the earth folder's <see cref="Marker"/> says it ran, so a second start
+/// changes nothing. The flat folder is only read, so a rollback to <c>--frame flat</c> finds it as it was. Two copies of
+/// one entity keep the higher generation, as <see cref="ContainerBook.Load"/> would.
+/// </summary>
+public static class ContainerMigration
+{
+    public const string Marker = "earth.json";
+
+    /// <summary>How many records it moved; -1 when the earth folder was migrated already.</summary>
+    public static int FlatToEarth(string flatDir, string earthDir)
+    {
+        string marker = Path.Combine(earthDir, Marker);
+        if (File.Exists(marker)) return -1;
+        Directory.CreateDirectory(earthDir);
+        var flat = new ContainerFileDisk(flatDir);
+        var best = new Dictionary<long, ContainerRecord>();
+        foreach (var r in flat.Tiles().ToList().SelectMany(flat.ReadTile).Concat(flat.ReadCheckpoint()))
+            if (!best.TryGetValue(r.Oid, out var had) || r.Gen > had.Gen) best[r.Oid] = r;
+        var earth = new ContainerFileDisk(earthDir, earth: true);
+        foreach (var group in best.Values.GroupBy(r => r.Leaf))
+        {
+            var list = earth.ReadTile(group.Key);
+            list.RemoveAll(r => best.ContainsKey(r.Oid));
+            list.AddRange(group.OrderBy(r => r.Oid));
+            ContainerBook.Cap(list);
+            earth.WriteTile(group.Key, list);
+        }
+        string flatAwake = Path.Combine(flatDir, AwakeSlots.FileName), earthAwake = Path.Combine(earthDir, AwakeSlots.FileName);
+        if (File.Exists(flatAwake) && !File.Exists(earthAwake))
+        {
+            try { SaveQueue.WriteAtomic(earthAwake, AwakeSlots.ToEarth(File.ReadAllText(flatAwake))); }
+            catch (JsonException) { }
+        }
+        SaveQueue.WriteAtomic(marker, JsonSerializer.Serialize(new Dictionary<string, object> { ["version"] = EarthRecord.Version, ["from"] = "flat", ["records"] = best.Count }));
+        return best.Count;
     }
 }
 
@@ -128,7 +224,14 @@ public sealed class ContainerBook
     /// <summary>Name → oid of everything asleep: a vehicle by that name must not be placed again meanwhile.</summary>
     private readonly Dictionary<string, long> _filedNames = new();
 
-    public ContainerBook(IContainerDisk disk) => _disk = disk;
+    private readonly Func<ContainerRecord, TileId> _cellOf;
+
+    /// <param name="cellOf">Which container a record goes in (<see cref="ContainerRecord.CellOf"/>): its LV95 tile by default.</param>
+    public ContainerBook(IContainerDisk disk, Func<ContainerRecord, TileId>? cellOf = null)
+    {
+        _disk = disk;
+        _cellOf = cellOf ?? (r => r.Tile);
+    }
 
     public int LiveCount => _live.Count;
     public int FiledCount => _filedNames.Count;
@@ -168,7 +271,8 @@ public sealed class ContainerBook
         foreach (var (rec, _) in best.Values)
         {
             if (rec.Kind == ContainerRecord.Item && now - rec.SavedAt > ItemLifetime) continue;
-            if (!after.TryGetValue(rec.Tile, out var list)) after[rec.Tile] = list = new List<ContainerRecord>();
+            var cell = _cellOf(rec);
+            if (!after.TryGetValue(cell, out var list)) after[cell] = list = new List<ContainerRecord>();
             list.Add(rec);
         }
         foreach (var (id, list) in after) Cap(list);
@@ -258,7 +362,8 @@ public sealed class ContainerBook
             if (!_live.TryGetValue(r.Oid, out var had)) continue;
             if (_filedNames.TryGetValue(r.Name, out long other) && other != r.Oid) continue;
             var rec = r with { Gen = had.Gen + 1, SavedAt = now };
-            if (!byTile.TryGetValue(rec.Tile, out var list)) byTile[rec.Tile] = list = new List<ContainerRecord>();
+            var cell = _cellOf(rec);
+            if (!byTile.TryGetValue(cell, out var list)) byTile[cell] = list = new List<ContainerRecord>();
             list.Add(rec);
         }
         var filed = new HashSet<long>();
@@ -335,6 +440,12 @@ public sealed record AwakeSlot(double Since, double? E = null, double? N = null,
 /// </summary>
 public static class AwakeSlots
 {
+    /// <summary>The file in the containers' folder.</summary>
+    public const string FileName = "awake.json";
+
+    /// <summary>The earth file's version (#1726, G2 D2): its owners are leaves' (a stand-in tile, a leaf's building), never an LV95 tile's.</summary>
+    public const int EarthVersion = 3;
+
     private sealed class Saved
     {
         [JsonPropertyName("since")] public double Since { get; set; }
@@ -351,15 +462,33 @@ public static class AwakeSlots
         [JsonPropertyName("slots")] public Dictionary<string, Saved> Slots { get; set; } = new();
     }
 
-    public static string ToJson(IReadOnlyDictionary<string, AwakeSlot> awake)
+    public static string ToJson(IReadOnlyDictionary<string, AwakeSlot> awake, bool earth = false)
     {
-        var file = new SavedFile();
+        var file = new SavedFile { Version = earth ? EarthVersion : 2 };
         foreach (var (key, s) in awake)
         {
             GlobalPos? at = s.E is { } e && s.N is { } n ? GlobalPos.FromLv95(e, n, 0) : null;
             file.Slots[key] = new Saved { Since = s.Since, At = at, YawTrue = at is { } g ? Lv95Grid.TrueYaw(g, s.Yaw) : s.Yaw, KindId = s.KindId, Train = s.Train, Load = s.Load };
         }
         return JsonSerializer.Serialize(file);
+    }
+
+    /// <summary>
+    /// A flat <c>awake.json</c> (any version) as the earth folder's (#1726, version 3): the slots whose owner is a leaf's
+    /// kept (a run under <c>--frame earth</c> before the flip wrote them there), the LV95 owners dropped. A car park's
+    /// ordinal counts its bays in the tile, a yard's owner is the tile's building index: neither names a slot of a leaf,
+    /// so the slot fills its bay again and the car a player woke stays theirs, under its own name (the plan's section 2).
+    /// </summary>
+    public static string ToEarth(string flatJson)
+    {
+        var kept = new Dictionary<string, AwakeSlot>();
+        foreach (var (key, slot) in FromJson(flatJson, out _))
+        {
+            var p = key.Split('|')[0].Split('_');
+            if (p.Length >= 2 && int.TryParse(p[0], out int e) && int.TryParse(p[1], out int n) && LeafTileName.TryLeaf(new TileId(e, n), out _))
+                kept[key] = slot;
+        }
+        return ToJson(kept, earth: true);
     }
 
     /// <summary>The slots a file holds; <paramref name="old"/> when it is the form before A2b (write it back).</summary>
@@ -442,8 +571,8 @@ public static class ContainerRules
     /// <summary>Moving less than this (m) between two looks is standing still.</summary>
     public const double StillWithin = 0.05;
 
-    /// <summary>Tiles apart, the larger of the two axes (a ring).</summary>
-    public static int Rings(TileId a, TileId b) => Math.Max(Math.Abs(a.E - b.E), Math.Abs(a.N - b.N));
+    /// <summary>Tiles apart, the larger of the two axes (a ring); leaves apart under earth, across a face edge too (<see cref="LeafTileName.Rings"/>).</summary>
+    public static int Rings(TileId a, TileId b) => LeafTileName.Rings(a, b, SleepRings + 1);
 
     /// <summary>True when some player tile is within <paramref name="rings"/> of <paramref name="tile"/>.</summary>
     public static bool Near(TileId tile, IReadOnlyList<TileId> players, int rings)
@@ -458,12 +587,8 @@ public static class ContainerRules
     {
         var wake = new List<TileId>();
         foreach (var p in players)
-            for (int dx = -WakeRings; dx <= WakeRings; dx++)
-                for (int dz = WakeRings; dz >= -WakeRings; dz--)
-                {
-                    var id = p.Neighbour(dx, dz);
-                    if (hasFile(id) && !wake.Contains(id)) wake.Add(id);
-                }
+            foreach (var id in LeafTileName.Around(p, WakeRings))
+                if (hasFile(id) && !wake.Contains(id)) wake.Add(id);
         return wake;
     }
 

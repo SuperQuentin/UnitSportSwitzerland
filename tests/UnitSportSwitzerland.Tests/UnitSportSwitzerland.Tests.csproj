@@ -118,6 +118,8 @@
     <Compile Include="..\..\src\Terrain\BuildPolicy.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1726 G2 D2: the earth stores' paths and keys (leaf file names, building names), what the migrations write -->
+    <Compile Include="..\..\src\Core\EarthStores.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's, and EarthLeaves over it, are checked by BlendCheck, which builds ProceduralWorld) -->

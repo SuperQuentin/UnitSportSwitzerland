@@ -563,23 +563,38 @@ public partial class PhoneScreens : Node
     private const int RecentsShown = 3, NearShown = 4, TownsShown = 8;
 
     private const string RecentsFile = "user://phone_recents.json";
+    /// <summary>The recents under earth (#1726, G2 D2): the places as ECEF triples, converted from the flat file's LV95 pairs once.</summary>
+    private static string EarthRecentsFile => EarthStores.Earth(RecentsFile);
+    private static bool Earth => GameSettings.Current.Frame == WorldFrame.Earth;
     private static bool _recentsLoaded;
 
-    /// <summary>Recents kept between sessions: the places' LV95 coordinates, matched back to the index.</summary>
+    /// <summary>A place as the earth file names it: its ECEF on the ground (altitude 0).</summary>
+    private static GlobalPos EarthOf(Place p) => GlobalPos.FromLv95(p.E, p.N, 0);
+
+    /// <summary>Recents kept between sessions: the places' coordinates, matched back to the index within a metre.</summary>
     private static void LoadRecents(PlaceSearchUi places)
     {
         if (_recentsLoaded) return;
         _recentsLoaded = true;
         try
         {
-            if (!Godot.FileAccess.FileExists(RecentsFile)) return;
-            using var f = Godot.FileAccess.Open(RecentsFile, Godot.FileAccess.ModeFlags.Read);
+            bool earth = Earth, convert = earth && !Godot.FileAccess.FileExists(EarthRecentsFile);
+            string file = earth && !convert ? EarthRecentsFile : RecentsFile;
+            if (!Godot.FileAccess.FileExists(file)) return;
+            using var f = Godot.FileAccess.Open(file, Godot.FileAccess.ModeFlags.Read);
             if (Json.ParseString(f.GetAsText()).Obj is not Godot.Collections.Array list) return;
             foreach (var item in list)
-                if (item.Obj is Godot.Collections.Array pair && pair.Count == 2
-                    && places.All.FirstOrDefault(p => Math.Abs(p.E - (double)pair[0]) < 1 && Math.Abs(p.N - (double)pair[1]) < 1) is { } place
-                    && !Recents.Contains(place))
-                    Recents.Add(place);
+            {
+                if (item.Obj is not Godot.Collections.Array a) continue;
+                Place? place = a.Count == 2
+                    ? places.All.FirstOrDefault(p => Math.Abs(p.E - (double)a[0]) < 1 && Math.Abs(p.N - (double)a[1]) < 1)
+                    : a.Count == 3 && GlobalPos.FromWire((double)a[0], (double)a[1], (double)a[2]) is var at
+                        ? places.All.FirstOrDefault(p => EarthOf(p).DistanceTo(at) < 1) : null;
+                if (place != null && !Recents.Contains(place)) Recents.Add(place);
+            }
+            f.Close();
+            // the flat file's LV95 pairs, read once into the earth file; the flat one stays for a rollback
+            if (convert) SaveRecents();
         }
         catch (Exception e) { GD.PushWarning($"[phone] recents not read: {e.Message}"); }
     }
@@ -588,9 +603,17 @@ public partial class PhoneScreens : Node
     {
         try
         {
+            bool earth = Earth;
             var list = new Godot.Collections.Array();
-            foreach (var p in Recents.Take(RecentsShown)) list.Add(new Godot.Collections.Array { p.E, p.N });
-            using var f = Godot.FileAccess.Open(RecentsFile, Godot.FileAccess.ModeFlags.Write);
+            foreach (var p in Recents.Take(RecentsShown))
+            {
+                if (!earth) { list.Add(new Godot.Collections.Array { p.E, p.N }); continue; }
+                var (x, y, z) = EarthOf(p).ToWire();
+                list.Add(new Godot.Collections.Array { x, y, z });
+            }
+            string file = earth ? EarthRecentsFile : RecentsFile;
+            DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath(file.GetBaseDir()));
+            using var f = Godot.FileAccess.Open(file, Godot.FileAccess.ModeFlags.Write);
             f.StoreString(Json.Stringify(list));
         }
         catch (Exception e) { GD.PushWarning($"[phone] recents not saved: {e.Message}"); }

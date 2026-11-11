@@ -49,11 +49,15 @@ public partial class ObjectContainers : Node
     private readonly HashSet<string> _carriers = new();
     private double _sinceLook, _sinceCheckpoint;
 
-    private ObjectContainers(string dir, VehicleManager vehicles, DroppedItems items, RadioManager? radios, Node players)
+    /// <summary>Under <c>--frame earth</c> (#1726): containers per leaf, records in Earth places, players placed by their leaf.</summary>
+    private readonly bool _earth;
+
+    private ObjectContainers(string dir, bool earth, VehicleManager vehicles, DroppedItems items, RadioManager? radios, Node players)
     {
         Name = NodeName;
         _dir = dir;
-        _book = new ContainerBook(new ContainerFileDisk(dir));
+        _earth = earth;
+        _book = new ContainerBook(new ContainerFileDisk(dir, earth), ContainerRecord.CellOf(earth));
         _vehicles = vehicles;
         _items = items;
         _radios = radios;
@@ -66,7 +70,20 @@ public partial class ObjectContainers : Node
         if (!Systems.On(Systems.Containers)) return null;
         string? dir = CmdArgs.Value("--containers-dir");
         if (dir == null && Systems.FixtureCourse != null) return null;
-        var containers = new ObjectContainers(ProjectSettings.GlobalizePath(dir ?? Core.WorldChoice.SavePath("user://containers/server")), vehicles, items, radios, players);
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth;
+        const string store = "user://containers/server";
+        string path = ProjectSettings.GlobalizePath(dir ?? Core.WorldChoice.StorePath(store));
+        // the flip (#1726, G2 D2): the flat containers filed by place into the earth folder, once; the flat folder stays
+        if (earth && dir == null)
+        {
+            try
+            {
+                int moved = ContainerMigration.FlatToEarth(ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath(store)), path);
+                if (moved >= 0) GD.Print($"[containers] {moved} records moved from the flat containers into {path}");
+            }
+            catch (Exception e) { GD.PushError($"[containers] moving the flat containers to earth: {e.Message}"); }
+        }
+        var containers = new ObjectContainers(path, earth, vehicles, items, radios, players);
         world.AddChild(containers);
         return containers;
     }
@@ -124,7 +141,7 @@ public partial class ObjectContainers : Node
 
     // ---- the dormant slots woken (#499), kept across restarts --------------------------------
 
-    private string AwakePath => System.IO.Path.Combine(_dir, "awake.json");
+    private string AwakePath => System.IO.Path.Combine(_dir, AwakeSlots.FileName);
 
     /// <summary>The woken slots the last run left (<c>owner|ordinal</c> → when, and where its car stood), or none.</summary>
     public Dictionary<string, AwakeSlot> LoadAwake()
@@ -150,7 +167,7 @@ public partial class ObjectContainers : Node
     /// </summary>
     public void SaveAwake(IReadOnlyDictionary<string, AwakeSlot> awake)
     {
-        try { SaveQueue.WriteAtomic(AwakePath, AwakeSlots.ToJson(awake)); }
+        try { SaveQueue.WriteAtomic(AwakePath, AwakeSlots.ToJson(awake, _earth)); }
         catch (Exception e) { GD.PushError($"[containers] could not write {AwakePath}: {e.Message}"); }
     }
 
@@ -288,8 +305,7 @@ public partial class ObjectContainers : Node
         foreach (var child in _players.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is > 0)
             {
-                var at = p.Global;
-                var tile = at.Tile;
+                var tile = CellAt(p.Global);
                 if (!_playerTiles.Contains(tile)) _playerTiles.Add(tile);
             }
     }
@@ -331,13 +347,16 @@ public partial class ObjectContainers : Node
         {
             ulong id = node.GetInstanceId();
             var at = ((Net.IInterestEntity)node).InterestAt;
-            var tile = at.Tile;
+            var tile = CellAt(at);
             if (!_watch.TryGetValue(id, out var w)) w = (0, 0, at);
             double lonely = ContainerRules.Lonely(w.Lonely, step, tile, _playerTiles);
             double still = ContainerRules.Still(w.Still, step, at.DistanceTo(w.At));
             _watch[id] = (lonely, still, at);
         }
     }
+
+    /// <summary>The container a place is in: its LV95 tile under flat, its leaf under earth (#1726).</summary>
+    private TileId CellAt(GlobalPos at) => _earth ? Terrain.Leaves.LeafTileName.At(at) : at.Tile;
 
     private IEnumerable<Node> Entities()
     {

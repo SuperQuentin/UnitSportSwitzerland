@@ -46,6 +46,9 @@ public static class Fnv
         _aliased = true;
     }
 
+    /// <summary>The name <paramref name="key"/> (a whole stand-in building key, <c>E_N_I</c>) is aliased to; null when none is.</summary>
+    public static string? NameOf(string key) => _aliased && Aliases.TryGetValue(key, out var name) ? name : null;
+
     /// <summary>The name a seed stands for: null when it does not start with an aliased key.</summary>
     internal static string? StandIn(string s)
     {

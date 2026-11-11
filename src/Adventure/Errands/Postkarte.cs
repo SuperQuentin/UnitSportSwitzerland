@@ -39,7 +39,20 @@ public static class Postkarte
 
     public static (int E, int N) CellOf(double e, double n) => ((int)Math.Floor(e / CellM), (int)Math.Floor(n / CellM));
 
-    public static string IdOf(int day, int cellE, int cellN, int slot) => $"{Prefix}{day}:{cellE}_{cellN}:{slot}";
+    /// <summary>The cube level a card id names its cell by (#1726, ~1.2 km): the cell under the 5 km lottery cell's centre.</summary>
+    public const int IdLevel = 13;
+
+    /// <summary>
+    /// A card's id (#1726, G2 D2): <c>pk:20261027:F4_L13_6512_3021:3</c>, the day, the Earth cell under the centre of the 5 km
+    /// lottery cell (the givers' LV95 catalogue lattice, a source), the slot. Level 13 and not 11: a level-13 cell's centre
+    /// lies within ~0.9 km of the lottery cell's, so the id names exactly one lottery cell (<see cref="TryParse"/>). Cards
+    /// taken before D2 (<c>pk:20261027:517_102:3</c>) still parse and expire as every card does.
+    /// </summary>
+    public static string IdOf(int day, int cellE, int cellN, int slot)
+    {
+        var key = CubeKey.FromEcef(GlobalPos.FromLv95((cellE + 0.5) * CellM, (cellN + 0.5) * CellM, 0).Ecef, IdLevel);
+        return $"{Prefix}{day}:{key.FileStem}:{slot}";
+    }
 
     public static bool IsCard(string id) => id.StartsWith(Prefix, StringComparison.Ordinal);
 
@@ -50,9 +63,21 @@ public static class Postkarte
         if (!IsCard(id)) return false;
         var parts = id.Split(':');
         if (parts.Length != 4) return false;
+        if (!int.TryParse(parts[1], out day) || day <= 20000101 || !int.TryParse(parts[3], out slot) || slot is < 0 or >= PerCell) return false;
+        if (parts[2].StartsWith('F'))
+        {
+            try
+            {
+                var key = CubeKey.Parse(parts[2]);
+                if (key.Level != IdLevel) return false;
+                var (e, n, _) = GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(key.Centre with { H = 0 })).Lv95;
+                (cellE, cellN) = CellOf(e, n);
+                return true;
+            }
+            catch (Exception ex) when (ex is FormatException or OverflowException) { return false; }
+        }
         var cell = parts[2].Split('_');
-        return int.TryParse(parts[1], out day) && day > 20000101 && cell.Length == 2 && int.TryParse(cell[0], out cellE) && int.TryParse(cell[1], out cellN)
-            && int.TryParse(parts[3], out slot) && slot is >= 0 and < PerCell;
+        return cell.Length == 2 && int.TryParse(cell[0], out cellE) && int.TryParse(cell[1], out cellN);
     }
 
     public static int? DayOf(string id) => TryParse(id, out int d, out _, out _, out _) ? d : null;

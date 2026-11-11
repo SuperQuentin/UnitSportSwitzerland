@@ -128,7 +128,7 @@ public partial class FarmField : Node
         // --farmdir: the checks keep their cells out of the real user://farm
         var args = OS.GetCmdlineUserArgs();
         int dirAt = Array.IndexOf(args, "--farmdir");
-        _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://farm"));
+        _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath(Core.WorldChoice.StorePath("user://farm"));   // user://earth/farm under earth (#1726): the flat cells dropped
         // --farmfresh (checks, with --farmdir): start from untouched fields
         if (dirAt >= 0 && Array.IndexOf(args, "--farmfresh") >= 0 && Directory.Exists(_storeDir)) Directory.Delete(_storeDir, true);
         _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
@@ -288,7 +288,8 @@ public partial class FarmField : Node
 
     // ---- the store (authority) --------------------------------------------------------------------
 
-    private string PathFor(TileId id) => Path.Combine(_storeDir, $"{id.E}_{id.N}.json");
+    /// <summary>A tile's cells: <c>E_N.json</c>, a leaf's by its cube key (<c>F4_L14_X_Y.json</c>, #1726).</summary>
+    private string PathFor(TileId id) => Path.Combine(_storeDir, $"{Terrain.Leaves.LeafTileName.FileStem(id)}.json");
 
     /// <summary>The stored cells of a tile, read from disk the first time (a few KB at most).</summary>
     private FieldCells Store(TileId id)
