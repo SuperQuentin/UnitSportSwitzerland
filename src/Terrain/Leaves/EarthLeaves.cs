@@ -43,6 +43,8 @@ public sealed class EarthLeaves : ILeafSource
         Func<CubeKey, bool>? fixtureHas, Func<CubeKey, CubeLeafContent?>? fixture)
     {
         Real = real;
+        // the data inside a stadium's facade goes as a region's leaf is read (#1723), as an LV95 tile's (StadiumClip)
+        real.Dress ??= Stadiums.StadiumLeaves.Clip;
         _generated = generated;
         _roads = roads;
         _domain = domain;

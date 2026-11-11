@@ -97,7 +97,7 @@ public static class StadiumBuilder
     public static Vector2[] Outline(StadiumSpec s, TileId id)
     {
         var frame = Frame(s, id, 0f);
-        return Stations(s).Select(st => { var p = frame(st.P + st.N * st.Depth, 0); return new Vector2(p.X, p.Z); }).ToArray();
+        return OutlineUv(s).Select(uv => { var p = frame(uv, 0); return new Vector2(p.X, p.Z); }).ToArray();
     }
 
     /// <summary>A seat found in the stadium frame: the hip's place, the way it faces, and heights (<see cref="StadiumSeats"/>).</summary>
