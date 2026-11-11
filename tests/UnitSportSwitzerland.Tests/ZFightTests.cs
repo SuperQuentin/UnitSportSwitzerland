@@ -140,4 +140,25 @@ public class ZFightTests
         var cap = Square(0.4f, 0.4f, 0.2f, 0.5f, look: 3, down: true);
         Assert.NotEmpty(ZFight.Find(fight.Concat(cap).ToList(), visibleOnly: true));
     }
+
+    /// <summary>
+    /// Stacked copies (a MultiMesh read headless, #1717): each copy fights the floor once, copies of
+    /// one look never fight each other, and a lid hides every copy as it hides one.
+    /// </summary>
+    [Fact]
+    public void Stacked_copies_each_count_and_a_lid_hides_them_all()
+    {
+        const int copies = 20;
+        var floor = Square(0, 0, 1, 0, look: 1).ToList();
+        var stack = Enumerable.Range(0, copies).SelectMany(_ => Square(0.25f, 0.25f, 0.5f, 0.002f, look: 2)).ToList();
+        var lid = Square(-1.5f, -1.5f, 4, 1, look: 3, down: true).ToList();
+        var one = ZFight.Find(floor.Concat(Square(0.25f, 0.25f, 0.5f, 0.002f, look: 2)).ToList(), visibleOnly: true);
+        var all = ZFight.Find(floor.Concat(stack).ToList(), visibleOnly: true);
+        Assert.NotEmpty(one);
+        Assert.Equal(one.Count * copies, all.Count);
+        Assert.Equal(ZFight.AreaCm2(one) * copies, ZFight.AreaCm2(all), 1);
+        Assert.Empty(ZFight.Find(floor.Concat(stack).Concat(lid).ToList(), visibleOnly: true));
+        // a lid stacked twice still hides, and its own copies do not fight each other
+        Assert.Empty(ZFight.Find(floor.Concat(stack).Concat(lid).Concat(lid).ToList(), visibleOnly: true));
+    }
 }

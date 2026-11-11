@@ -69,7 +69,19 @@ public static class ZFight
         var index = new Index(tris, maxGap);
         if (index.Live < 2) return hits;
         index.Pairs((i, j) => Test(tris, index.Normals, i, j, maxGap, minArea, hits));
-        if (visibleOnly) hits.RemoveAll(h => !index.Seen(h, maxGap));
+        if (visibleOnly)
+        {
+            // a pair of the same two faces as one already cast (the copies of a MultiMesh read headless,
+            // stacked at its origin: 20 pins a lane rig, #1717) gets the same region and the same answer
+            var cast = new Dictionary<(Vector3, Vector3, Vector3, bool, Vector3, Vector3, Vector3, bool), bool>();
+            hits.RemoveAll(h =>
+            {
+                Tri a = tris[h.First], b = tris[h.Second];
+                var key = (a.A, a.B, a.C, a.TwoSided, b.A, b.B, b.C, b.TwoSided);
+                if (!cast.TryGetValue(key, out bool seen)) cast[key] = seen = index.Seen(h, maxGap);
+                return !seen;
+            });
+        }
         hits.Sort((x, y) => y.Area.CompareTo(x.Area));
         return hits;
     }
@@ -86,6 +98,15 @@ public static class ZFight
         private readonly bool[] _ok, _big;
         private readonly List<int> _bigList = new();
         private readonly Dictionary<(int, int, int), List<int>> _grid = new();
+        /// <summary>
+        /// What the visibility rays test: the opaque triangles only, and each exact copy once (#1717). A
+        /// MultiMesh read headless stacks every instance at its origin (zfight.md): a bowling lane rig's
+        /// pins put ~6,200 triangles in one cell, and every ray through it tested them all. A copy blocks
+        /// a ray exactly when its original does, and a copy of the pair's own faces lies behind the ray's
+        /// start like those faces, so the answers do not change.
+        /// </summary>
+        private readonly Dictionary<(int, int, int), List<int>> _blockGrid = new();
+        private readonly List<int> _bigBlockers = new();
         private readonly float _cell;
         private Vector3I _cellLo = new(int.MaxValue, int.MaxValue, int.MaxValue), _cellHi = new(int.MinValue, int.MinValue, int.MinValue);
         public readonly int Live;
@@ -117,16 +138,20 @@ public static class ZFight
             }
             if (Live < 2) return;
             _cell = Mathf.Clamp((float)(extent / Live) * 2f, 0.05f, 200f);
+            var seen = new HashSet<(Vector3, Vector3, Vector3)>();
             for (int i = 0; i < n; i++)
             {
                 if (!_ok[i]) continue;
                 var a = Cell(_lo[i]);
                 var b = Cell(_hi[i]);
                 long cells = (long)(b.X - a.X + 1) * (b.Y - a.Y + 1) * (b.Z - a.Z + 1);
+                var t = tris[i];
+                bool blocker = t.Opaque && seen.Add((t.A, t.B, t.C));
                 if (cells > MaxCells)
                 {
                     _bigList.Add(i);
                     _big[i] = true;
+                    if (blocker) _bigBlockers.Add(i);
                     continue;
                 }
                 _cellLo = _cellLo.Min(a);
@@ -137,9 +162,14 @@ public static class ZFight
                         {
                             if (!_grid.TryGetValue((x, y, z), out var list)) _grid[(x, y, z)] = list = new List<int>();
                             list.Add(i);
+                            if (!blocker) continue;
+                            if (!_blockGrid.TryGetValue((x, y, z), out var blocks)) _blockGrid[(x, y, z)] = blocks = new List<int>();
+                            blocks.Add(i);
                         }
             }
         }
+
+        private bool SameKind(int i, int j) => _tris[i].Depth == _tris[j].Depth && _tris[i].Look == _tris[j].Look;
 
         private Vector3I Cell(Vector3 p) =>
             new(Mathf.FloorToInt(p.X / _cell), Mathf.FloorToInt(p.Y / _cell), Mathf.FloorToInt(p.Z / _cell));
@@ -149,19 +179,38 @@ public static class ZFight
             _lo[i].Y <= _hi[j].Y && _lo[j].Y <= _hi[i].Y &&
             _lo[i].Z <= _hi[j].Z && _lo[j].Z <= _hi[i].Z;
 
-        /// <summary>Every pair whose boxes touch, once: in the cell holding the low corner of their overlap.</summary>
+        /// <summary>
+        /// Every pair whose boxes touch and that could fight (same depth class, different looks: <see
+        /// cref="Test"/> drops the rest), once: in the cell holding the low corner of their overlap. A cell
+        /// is sorted by depth class and look, so a run of one look (a lane rig's stacked pins, #1717) is
+        /// never paired with itself. Each pair is tested lower index first, as before the sort.
+        /// </summary>
         public void Pairs(Action<int, int> test)
         {
+            var runEnd = new List<int>();
             foreach (var (key, list) in _grid)
+            {
+                if (list.Count < 2) continue;
+                list.Sort((x, y) => _tris[x].Depth != _tris[y].Depth ? _tris[x].Depth.CompareTo(_tris[y].Depth)
+                    : _tris[x].Look != _tris[y].Look ? _tris[x].Look.CompareTo(_tris[y].Look) : x.CompareTo(y));
+                // runEnd[p]: the first entry after p with another depth class or look
+                runEnd.Clear();
+                for (int p = 0; p < list.Count; p++) runEnd.Add(list.Count);
+                for (int p = list.Count - 2; p >= 0; p--)
+                    runEnd[p] = SameKind(list[p], list[p + 1]) ? runEnd[p + 1] : p + 1;
                 for (int p = 0; p < list.Count; p++)
-                    for (int q = p + 1; q < list.Count; q++)
+                {
+                    int depth = _tris[list[p]].Depth;
+                    for (int q = runEnd[p]; q < list.Count && _tris[list[q]].Depth == depth; q++)
                     {
-                        int i = list[p], j = list[q];
+                        int i = Math.Min(list[p], list[q]), j = Math.Max(list[p], list[q]);
                         if (!Touch(i, j)) continue;
                         var owner = Cell(_lo[i].Max(_lo[j]));
                         if ((owner.X, owner.Y, owner.Z) != key) continue;
                         test(i, j);
                     }
+                }
+            }
             foreach (int i in _bigList)
                 for (int j = 0; j < _ok.Length; j++)
                     if (_ok[j] && j != i && (!_big[j] || j > i) && Touch(i, j))
@@ -199,7 +248,7 @@ public static class ZFight
 
         private bool Escapes(Vector3 origin, Vector3 dir, Hit hit)
         {
-            foreach (int i in _bigList)
+            foreach (int i in _bigBlockers)
                 if (Blocks(i, origin, dir, hit)) return false;
             // Amanatides-Woo through the grid until the ray leaves the cells in use
             var c = Cell(origin);
@@ -210,7 +259,7 @@ public static class ZFight
             float dz = dir.Z == 0 ? float.PositiveInfinity : _cell / Mathf.Abs(dir.Z);
             for (int guard = 0; guard < 100_000; guard++)
             {
-                if (_grid.TryGetValue((c.X, c.Y, c.Z), out var list))
+                if (_blockGrid.TryGetValue((c.X, c.Y, c.Z), out var list))
                     foreach (int i in list)
                         if (Blocks(i, origin, dir, hit)) return false;
                 if (tx <= ty && tx <= tz) { c.X += sx; tx += dx; }

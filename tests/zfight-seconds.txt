@@ -1,0 +1,13 @@
+# --zfightcheck seconds (#1717): the models that took a second or more, so --zfightshard deals them out evenly.
+# Rewritten by --zfightcheck update; a model not listed counts 0.1 s. Hand edits are fine.
+2.7	Concert / Stage - Center: Remy Rossi (Pop, screens CenterAndSides)
+2.2	Concert / Stage - EndNorth: Silent Echoes (HipHop, screens None)
+2.7	Concert / Stage - EndSouth: Paper Foxes (Pop, screens Center)
+2.8	Concert / Stage - SideEast: Kai Duval (Pop, screens Sides)
+2.9	Concert / Stage - SideWest: The Electric Glaciers (Ballad, screens Sides)
+13.6	Interiors / Arcade
+5.2	Interiors / Bowling centre - Bowl bar
+12.2	Interiors / Bowling centre - Two levels
+2.2	Interiors / Dining - Café
+6.4	Terrain / Building site - topped out, a six-floor block
+13.5	Terrain / Garage ramp
