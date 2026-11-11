@@ -17,6 +17,17 @@
   Mollendruz** (or any real course): `--drivecheck --chunks fixture:hairpin --traffic 0`. Courses:
   `flat straight hairpin narrow junction verge lake` (`FixtureCourse`). A real course is an optional
   final tier-3 check on a racing change.
+- **Net checks run on a fixture too (#1718)**: a server and its clients all take the same `--world fixture --chunks
+  fixture:<course>` (no `--at`: the course starts at the spawn). Buildings, sites and shops come from a course's
+  `Blocks` (kind, size, storeys), planned as on the map: `town` (shops, a public building, industrial halls with bays:
+  shop, bay, pallet), `site` (sites with cranes, offices, yards: the six site checks), `garage` (blocks of flats with
+  lifts: liftsync), `hamlet` (houses: cinema), `flat` (debug, pigeon). Peak per check ~1.3-2.1 GB, against 2-4.4 GB on
+  the generated world. A probe that listed the generator's own places (`ProceduralWorld.SitesNear`) asks the ground's
+  tiles instead under `Systems.FixtureCourse` (`YardLootNetProbe.FixtureSkip`). Plans are hashes of building keys: a
+  new block changes the set, so rerun that course's checks. Still on the generated world, with the reason in the
+  script: `brbotcheck`, `brsquadcheck` (a 5-7 km match square with towns and stops), `fillagreenetcheck` (the fill
+  itself). A light world makes clients join faster: a chat handshake that relied on a slow join needs a "ready" first
+  (`PigeonNetProbe`).
 - **A probe that runs on `--world flat`** takes a nullable `ChunkManager`, asks the ground through
   `TestWorld.TryGround(_chunks, at, out y)` (the plane when null), places its `FootPlayer` with
   `player.DebugLaunch(pos, Vector3.Zero)` when `_chunks == null` (a body with no `Terrain` otherwise
