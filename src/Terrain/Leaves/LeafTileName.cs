@@ -22,7 +22,8 @@ public static class LeafTileName
     public static TileId Id(CubeKey leaf)
     {
         if (leaf.Level != Level) throw new ArgumentException($"{leaf} is not a level-{Level} leaf");
-        return new TileId(BaseE + leaf.Face * FaceStrideE + leaf.X, BaseN + leaf.Y);
+        int e = BaseE + leaf.Face * FaceStrideE + leaf.X, n = BaseN + leaf.Y;
+        return new TileId(e, n);
     }
 
     /// <summary>The leaf a stand-in tile names; false for a real LV95 tile.</summary>

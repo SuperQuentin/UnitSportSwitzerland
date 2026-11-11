@@ -586,10 +586,10 @@ public partial class PhoneScreens : Node
             foreach (var item in list)
             {
                 if (item.Obj is not Godot.Collections.Array a) continue;
-                Place? place = a.Count == 2
-                    ? places.All.FirstOrDefault(p => Math.Abs(p.E - (double)a[0]) < 1 && Math.Abs(p.N - (double)a[1]) < 1)
-                    : a.Count == 3 && GlobalPos.FromWire((double)a[0], (double)a[1], (double)a[2]) is var at
-                        ? places.All.FirstOrDefault(p => EarthOf(p).DistanceTo(at) < 1) : null;
+                // a flat pair (LV95, the flat file and its conversion) or an earth triple (ECEF)
+                GlobalPos? at = a.Count == 2 ? GlobalPos.FromLv95((double)a[0], (double)a[1], 0)
+                    : a.Count == 3 ? GlobalPos.FromWire((double)a[0], (double)a[1], (double)a[2]) : null;
+                Place? place = at is { } g ? places.All.FirstOrDefault(p => EarthOf(p).DistanceTo(g) < 1) : null;
                 if (place != null && !Recents.Contains(place)) Recents.Add(place);
             }
             f.Close();
@@ -607,7 +607,12 @@ public partial class PhoneScreens : Node
             var list = new Godot.Collections.Array();
             foreach (var p in Recents.Take(RecentsShown))
             {
-                if (!earth) { list.Add(new Godot.Collections.Array { p.E, p.N }); continue; }
+                if (!earth)
+                {
+                    var (e, n, _) = EarthOf(p).Lv95;   // the flat file's pair, to the millimetre
+                    list.Add(new Godot.Collections.Array { e, n });
+                    continue;
+                }
                 var (x, y, z) = EarthOf(p).ToWire();
                 list.Add(new Godot.Collections.Array { x, y, z });
             }

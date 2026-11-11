@@ -27,7 +27,10 @@ public sealed record ContainerRecord(long Oid, int Gen, string Kind, string Name
     public TileId Tile => TileId.FromLv95(E, N);
 
     /// <summary>The leaf it stands on, as its tile name (<see cref="LeafTileName"/>): its container under <c>--frame earth</c> (#1726).</summary>
-    public TileId Leaf => LeafTileName.At(GlobalPos.FromLv95(E, N, 0));
+    public TileId Leaf => LeafTileName.At(At);
+
+    /// <summary>Where it stands, an Earth place on the ground (what an earth container file keeps, #1726).</summary>
+    public GlobalPos At => GlobalPos.FromLv95(E, N, 0);
 
     /// <summary>Which container a record goes in: its LV95 tile under flat, its leaf under earth.</summary>
     public static Func<ContainerRecord, TileId> CellOf(bool earth) => earth ? r => r.Leaf : r => r.Tile;
@@ -130,7 +133,7 @@ public sealed class EarthRecord
     }
 
     public static EarthRecord Of(ContainerRecord r) =>
-        new() { Oid = r.Oid, Gen = r.Gen, Kind = r.Kind, Name = r.Name, At = GlobalPos.FromLv95(r.E, r.N, 0), SavedAt = r.SavedAt, Data = r.Data };
+        new() { Oid = r.Oid, Gen = r.Gen, Kind = r.Kind, Name = r.Name, At = r.At, SavedAt = r.SavedAt, Data = r.Data };
 
     public ContainerRecord ToRecord()
     {
