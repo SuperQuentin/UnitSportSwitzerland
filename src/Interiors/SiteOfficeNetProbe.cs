@@ -71,7 +71,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             await Until(() => me.IsOnFloor(), 10);
             // B is waiting to see it open: it starts shut
             Expect(!interiors.IsOpen(doorKey), $"{doorKey} starts shut");
-            if (!await Heard("B", "watching", 120)) { Fail("B never came to watch"); return; }
+            if (!await Heard("B", "watching", 300)) { Fail("B never came to watch"); return; }   // on earth B stands on its own fill leaves first (#1704)
             me.TryInteract();
             if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
             { Fail($"the door {doorKey} never opened"); return; }

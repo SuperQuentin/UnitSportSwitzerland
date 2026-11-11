@@ -94,7 +94,19 @@ public partial class CraneNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         // the site's cranes are drawn with its buildings, its pallets with its machines
-        if (!await Until(() => CraneWithPallet(me.GlobalPosition) != null, 90)) { Fail("no crane with a site pallet in its reach near the spawn"); return; }
+        if (!await Until(() => CraneWithPallet(me.GlobalPosition) != null, 90))
+        {
+            // what there was: the cranes near, the site pallets near each, and whether it has a drop on a slab
+            foreach (var c in SiteCranes.All.Values.OrderBy(c => c.Foot.DistanceSquaredTo(me.GlobalPosition)).Take(4))
+            {
+                int near = PalletNode.All.Values.Count(p => p.IsInsideTree() && Pallets.TryParse(p.Id, out var r) && r.Source == PalletSource.Site
+                    && new Vector2(p.GlobalPosition.X - c.Foot.X, p.GlobalPosition.Z - c.Foot.Z).Length() < c.Job.JibLength);
+                GD.Print($"[cranenet A]   crane {c.Key} {c.Foot.DistanceTo(me.GlobalPosition):F0} m away, jib {c.Job.JibLength:F0} m: {near} site pallets under it, drop on a slab {CraneDriver.DropOnSlab(c) != null}");
+            }
+            GD.Print($"[cranenet A]   {SiteCranes.All.Count} cranes, {PalletNode.All.Count} pallets drawn");
+            Fail("no crane with a site pallet in its reach near the spawn");
+            return;
+        }
         var (crane, pallet) = CraneWithPallet(me.GlobalPosition)!.Value;
         var (at, yaw) = crane.AtRemote;
         me.PlaceAt(at + Vector3.Up * 0.3f, yaw);

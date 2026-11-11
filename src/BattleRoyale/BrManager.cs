@@ -759,7 +759,7 @@ public partial class BrManager : Node
             if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, wx, wy, wz, !double.IsFinite(alt));
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
         // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
-        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.Global.Alt), Now, peer);
         return true;
     }
 
@@ -796,7 +796,7 @@ public partial class BrManager : Node
         if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
         var (pe, pn) = (body.Global.Lv95.E, body.Global.Lv95.N);
-        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
+        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = (float)body.Global.Alt, Label = $"{e.Name}'s things" };
         box.SetStacks(stacks);
         _crates.Spawn(new[] { box });
     }
