@@ -20,6 +20,8 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
   `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
   instead, which does all of that (`twoclient-checks`).
+- **The net tier under earth** (#1683): `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full`; every net check's server
+  and clients get `--frame earth` and a log not stating `[frame] earth` fails the check (`twoclient-checks`).
 - **A test window never takes focus or the mouse and never makes a sound (#1378)**: a person works at
   the machine while a tier runs. Every windowed Godot a check starts runs in a fresh `user://` of its own
   (`guard_test_userdata <dir>`, or `twoclient.sh`'s `tc_userdata`) holding `test_window.cfg`, which
@@ -67,7 +69,7 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 
 | Tier | What | Command | Measured (Windows, 4.7.1) |
 |---|---|---|---|
-| 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | 72 tests in ~1 s, ~3 s with the build |
+| 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | ~4,650 tests in ~70 s, ~90 s with the build (#1716) |
 | 0.5 quick | unit + the headless checks on `--world flat` (TestWorld) or `--systems ui`: no map, no generated world | `tools/test.sh quick [area]` | most 1-25 s at 170-430 MB; `--synccheck --world flat` 56 s / 210 MB |
 | 1 quick | the same runner: checks on a fixture world or course (`--world fixture`, `--chunks fixture:<course>`) | `tools/test.sh quick [area]` | `--leavecheck --world fixture` 23 s / 540 MB; `--drivecheck --chunks fixture:hairpin` 94 s / 690 MB; `--huntcheck` 10 s / 770 MB, `--lootchancecheck` 20 s (no world flags yet) |
 | 2 net | quick + a headless dedicated server and a headless `--leavecheck connect` client that joins it twice, both `--world fixture` | `tools/test.sh net [area]` | `@netsmoke` 41 s, client 750 MB + server 210 MB |
@@ -131,6 +133,11 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   `/time` parsing (also under a French locale), the fixture courses (`FixtureCourseTests`: tile
   splits, valid tiles, ground under the road, hairpin grade).
 - The game csproj excludes `tests/**`; `tests/.gdignore` keeps it out of the Godot import.
+- Fast because optimized (#1716): the test project and `tools/RoadGen` build with `<Optimize>true</Optimize>` in Debug
+  too (DEBUG asserts kept). Unoptimized, the signal test region took 175 s to build against 29 s, and the stage
+  319 s against ~90 s (4,655 tests, 16 threads). A fixture several classes read is built once per run through a
+  static `Lazy` (`TestRegionBuilds`), never an `IClassFixture` per class: seven classes built that region seven times.
+  Profile with `dotnet test ... --logger "trx;LogFileName=x.trx"`: each test's start and end show what waits on what.
 
 ## Path-to-check map: `tools/lib/checkmap.txt`
 

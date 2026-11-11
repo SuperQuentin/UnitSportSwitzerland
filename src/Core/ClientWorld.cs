@@ -442,7 +442,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var (fE, fN) = SpawnPoint.ParseTarget(Launch);
             _fixtureStart = (fE, fN);
-            // on its leaves under earth offline (below): what stands on it outside them is placed as they are (#1649)
+            // on its leaves under earth (below): what stands on it outside them is placed as they are (#1649)
             source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN,
                     earth: CourseOnLeaves)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
@@ -479,8 +479,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // --frame earth (#1510): the world is the ENU frame at the start, re-anchored under the camera as it goes, turning
         // with the Earth (#1512, C3). Online too since the server stands on leaves (#1513): the wire carries Earth positions,
         // so this frame is the client's own and need not match the server's (its leaves are read from this copy's disk).
-        // A fixture course stands on its own leaves offline (C1 PR 3); online it stays flat, as the server does on one
-        bool earth = GameSettings.Current.Frame == WorldFrame.Earth && !(fixture && Launch.Networked);
+        // A fixture course stands on its own leaves (C1 PR 3), online too: each peer builds its own copy, the server as well (#1683)
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth;
         // --origin pins it as on the flat world, so a shot queue's places mean the same in both (#1630's film)
         if (earth)
         {
@@ -492,6 +492,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
+        // the frame this world plays in, every run: a net check under --frame earth fails on a silent flat fallback (#1683)
+        GD.Print($"[frame] {(earth ? "earth" : "flat")}");
 
         // The floating origin (#185): world space follows the camera, so float32 stays precise
         // however far it goes. Online too: positions on the wire are LV95, never world space.
@@ -1873,10 +1875,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private bool FillOn => GameSettings.Current.GeneratedFill || _fillForced;
 
     /// <summary>
-    /// A fixture course (the fun world among them) is played on its own leaves: under <c>--frame earth</c>, offline
-    /// (online it stays flat, as the server does on one). What stands on it is laid as the leaves are (#1649, #1648).
+    /// A fixture course (the fun world among them) is played on its own leaves under <c>--frame earth</c>, offline and
+    /// online (the server stands on its own copy, #1683). What stands on it is laid as the leaves are (#1649, #1648).
     /// </summary>
-    private bool CourseOnLeaves => GameSettings.Current.Frame == WorldFrame.Earth && !Launch.Networked;
+    private bool CourseOnLeaves => GameSettings.Current.Frame == WorldFrame.Earth;
 
     /// <summary>
     /// <c>--earthcheck</c>: on a fixture course along its longest reach from the start, 300 m into the leaves' margin

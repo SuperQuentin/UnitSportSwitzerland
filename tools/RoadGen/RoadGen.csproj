@@ -9,6 +9,9 @@
     <RootNamespace>UnitSport.Tools.RoadGen</RootNamespace>
     <!-- French locale machine: never let the current culture near a float. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- optimized in Debug too (#1716): the unit tests build the signal test region with it, 175 s unoptimized against
+         29 s; Debug keeps its DEBUG asserts and full PDBs. Its commands already run with -c Release. -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
   <ItemGroup>

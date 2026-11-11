@@ -10,6 +10,9 @@
     <IsPackable>false</IsPackable>
     <!-- the linked game files' doc comments cref Godot types this project does not compile -->
     <NoWarn>CS1574;CS1584;CS1581;CS1580</NoWarn>
+    <!-- optimized in Debug too (#1716): the simulations and planners linked in here ran several times slower
+         unoptimized; the DEBUG constant and its asserts stay -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
   <ItemGroup>
