@@ -104,6 +104,8 @@ public partial class CraneNetProbe : ChatProbe
                 GD.Print($"[cranenet A]   crane {c.Key} {c.Foot.DistanceTo(me.GlobalPosition):F0} m away, jib {c.Job.JibLength:F0} m: {near} site pallets under it, drop on a slab {CraneDriver.DropOnSlab(c) != null}");
             }
             GD.Print($"[cranenet A]   {SiteCranes.All.Count} cranes, {PalletNode.All.Count} pallets drawn");
+            foreach (var p in PalletNode.All.Values.OrderBy(p => p.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(6))
+                GD.Print($"[cranenet A]   pallet {p.Id} {p.GlobalPosition.DistanceTo(me.GlobalPosition):F0} m away at {p.GlobalPosition}, in the tree {p.IsInsideTree()}, taken {p.Taken}");
             Fail("no crane with a site pallet in its reach near the spawn");
             return;
         }

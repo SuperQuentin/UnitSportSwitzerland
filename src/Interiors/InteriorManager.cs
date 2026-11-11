@@ -1036,6 +1036,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         BuildingKey.TryParse(l.Key, out var key);
         var tile = key.Tile;
+        // an earth leaf's building (#1704): InteriorBaseY under the leaf's own anchor plane, turned with its axes, so every
+        // peer puts it at the same place on the Earth. A world Y is a height over the frame's own tangent plane there, and
+        // a client's frame (re-anchored under its camera) and the server's tilt by the arc between their anchors: 3 km
+        // down, 2 km apart, the interior was ~1 m off from one to the other, and the server saw a rider out of the cabin
+        if (Terrain.Leaves.LeafStandIn.IsStandIn(tile))
+            return origin.TileTransform(tile) * new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(l.CenterX, InteriorBaseY, l.CenterZ));
         var at = origin.TileTransform(tile) * new Vector3(l.CenterX, 0, l.CenterZ);
         return new Transform3D(new Basis(Vector3.Up, l.Yaw), new Vector3(at.X, InteriorBaseY, at.Z));
     }
