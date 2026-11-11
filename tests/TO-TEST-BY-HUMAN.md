@@ -7,6 +7,15 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The flip to earth: an old save's stores ([#1727](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1727), [#1726](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1726))
+
+On a copy of a real player's `user://` from before the flip (containers with parked cars, an adventure file with opened chests, the phone's recents), host a game with no `--frame`.
+
+- [ ] Walk to where you left a car and a dropped item → they are there (`[containers] N records moved from the flat containers` in the log once, never on the next start).
+- [ ] Open the adventure journal's Collection tab and walk to a chest you had opened → it stays opened; an edelweiss you took stays taken.
+- [ ] Open the phone's map → the recent places are the ones you travelled to before.
+- [ ] Quit, start again with `--frame flat` → the flat world comes back with the flat saves as they were.
+
 ## Furnished leaves under `--frame earth` ([#1613](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1613), [#1510](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1510))
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva's centre).

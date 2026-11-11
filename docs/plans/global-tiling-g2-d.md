@@ -291,6 +291,7 @@ State on 2026-11-10.
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
 | **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1515 | session working | D2 |
 | **D1**: the build tools independent of LV95 | #1711, PR #1714 | **done**: the cube build from the sources and its leaves (`cube-only` in MapSetup); test region leaves byte-identical, Geneva differs only by the LV95 detour (`cube-region-files` note); castles, venues, givers still read `.bldg` (D4) | D4 |
+| **D2**: the flip | #1726, PR #1727 | code done (Nov 12): earth the default, stores at `user://earth/` with their migrations (`core/earth-stores` note), protocol 96; fog, the `/locate` cache and the flat terrain caches left to D3; the bar waits for #1707, #1725, #1712 | D3 |
 
 ## Decided without the user
 
