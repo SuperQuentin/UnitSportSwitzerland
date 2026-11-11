@@ -13,13 +13,14 @@ namespace UnitSport.Tools.Preprocessor;
 /// through the frame instance of its seams: <see cref="FrameUnits"/> (each leaf a tile, a plane-aligned square round
 /// it), <see cref="FrameGround"/> over the region's heights, and <see cref="FrameTileLoop"/>. It reads the raw kinds
 /// the road stage left in the temporary <c>.cubl</c> (<c>--cube-roads</c>: <see cref="LeafKind.Roads"/>,
-/// <see cref="LeafKind.RoadKeys"/>, <see cref="LeafKind.Parking"/>), the LV95 build's buildings (until stage 3 writes
-/// them per leaf) and the region's OSM, SITG, tram stop and place files, moved onto each frame's plane, and writes
+/// <see cref="LeafKind.RoadKeys"/>, <see cref="LeafKind.Parking"/>), the buildings stage's buildings from the region's leaves
+/// (#1711: no LV95 build read) and the region's OSM, SITG, tram stop and place files (its own <c>places.json</c>,
+/// <c>--cube-places</c>), moved onto each frame's plane, and writes
 /// the network's <see cref="LeafKind.Roads"/> into the region's <c>.cubl</c>, each record in its leaf's anchor frame
 /// (<see cref="LeafRecords"/>).
 ///
 /// <code>
-/// --cube-network --cube-out REGION [--cube-temp DIR] --chunks LV95_CHUNKS [--osm DIR] [--cube-box minE,minN,maxE,maxN]
+/// --cube-network --cube-out REGION [--cube-temp DIR] [--osm DIR] [--cube-box minE,minN,maxE,maxN]
 ///   [--block N] [--halo N]
 /// </code>
 /// </summary>
@@ -70,7 +71,8 @@ public static class CubeNetworkStage
                 default: Console.Error.WriteLine($"--cube-network: unknown option {args[i]}"); return 2;
             }
         }
-        if (region == null || chunks == null) { Console.Error.WriteLine("--cube-network needs --cube-out REGION (heights, raw roads in its temp) and --chunks LV95_CHUNKS (buildings, places)"); return 2; }
+        if (region == null) { Console.Error.WriteLine("--cube-network needs --cube-out REGION (heights, buildings and places.json; raw roads in its temp)"); return 2; }
+        if (lv95Ground && chunks == null) { Console.Error.WriteLine("--lv95-ground needs --chunks LV95_CHUNKS (the .terr it drapes on)"); return 2; }
         temp ??= region.TrimEnd('/', '\\') + "_temp";
         osm ??= temp;
         string rawDir = CubeRoadStage.RawDir(temp);
@@ -96,7 +98,7 @@ public static class CubeNetworkStage
         string Beside(string name) => Path.Combine(osm, name);
         var options = new TileRewriter.Options(
             Halo: halo, Smooth: smooth, OsmOverlay: Beside("osm_overlay.tsv"), TramStops: Beside("tram_stops.tsv"),
-            SitgSigns: Beside("sitg_signs.tsv"), Places: Path.Combine(chunks, PlaceIndex.FileName), KeepPlans: false);
+            SitgSigns: Beside("sitg_signs.tsv"), Places: Path.Combine(region, PlaceIndex.FileName), KeepPlans: false);
         Console.WriteLine($"cube network: {wanted.Count} leaves in {driver.Frames.Count} frames, blocks of {block}x{block} leaves, halo {halo}");
         var data = RegionData.Load(options, Console.WriteLine);
         var gantries = data.LoadGantries(options, Console.WriteLine);
@@ -174,7 +176,7 @@ public sealed class FrameTileLoop : ITileLoop
     /// <summary>This frame's counts.</summary>
     public Counts Frame { get; } = new();
 
-    public FrameTileLoop(FramePlan plan, int leafLevel, RegionHeights heights, RegionHeights raw, string lv95Chunks,
+    public FrameTileLoop(FramePlan plan, int leafLevel, RegionHeights heights, RegionHeights raw, string? lv95Chunks,
         RegionData data, GantryContext? gantries, TileRewriter.Options options, int block, Counts totals, bool lv95Ground = false)
     {
         Plan = plan;
@@ -182,7 +184,7 @@ public sealed class FrameTileLoop : ITileLoop
         _units = new FrameUnits(plan.Frame, plan.Transform, leafLevel);
         var units = _units;
         var frame = plan.Frame;
-        IGround ground = lv95Ground ? new Lv95OnPlane(frame, lv95Chunks) : new FrameGround(frame, heights.Read, leafLevel);
+        IGround ground = lv95Ground ? new Lv95OnPlane(frame, lv95Chunks!) : new FrameGround(frame, heights.Read, leafLevel);
 
         foreach (var leaf in plan.Core) Sections[leaf] = new List<LeafSection>();
         Wanted = plan.Core.Select(units.Tile).ToHashSet();
@@ -213,7 +215,7 @@ public sealed class FrameTileLoop : ITileLoop
             return SwissGeodesy.ToLv95(lat, lon);
         }
 
-        var buildings = new FrameBuildings(lv95Chunks, frame, units);
+        var buildings = new FrameBuildings(heights, frame, units);
         Inputs = data.On(units, FromLv95, Bearing, ToLv95,
             roads: id => RawRoads(raw, units, id),
             ground: _ => ground,
@@ -282,36 +284,39 @@ public sealed class FrameTileLoop : ITileLoop
 }
 
 /// <summary>
-/// The LV95 build's buildings (<c>.bldg</c>) as the network stage reads them on a work frame (#1507), until stage 3
-/// writes them per leaf: every triangle moved onto the frame's plane rigorously (<see cref="WorkFrame.FromSource"/>),
-/// each LV95 tile once (the last <see cref="Cached"/> kept: a block reads a few km round itself); a leaf's tile is every
-/// building whose plane box reaches its <see cref="FrameUnits.Box"/> square, in that square's tile-local frame (the walls
-/// the street planner stops at, the footprints poles keep off). Plane positions are kept as floats: a millimetre at
-/// 15 km from the frame's centre, against the walls' 0.5 m raster.
+/// The region's buildings as the network stage reads them on a work frame (#1507; from the leaves since #1711, D1): each
+/// leaf's <see cref="LeafKind.Buildings"/> section (the buildings stage's, in the leaf's anchor frame) moved onto the frame's
+/// plane rigorously (through ECEF, <see cref="WorkFrame.FromEcef"/>), each leaf once (the last <see cref="Cached"/> kept: a
+/// block reads a few km round itself). A leaf owns a building whole by its centre, as an LV95 tile did, so a tile's square
+/// (<see cref="FrameUnits.Box"/>, 1 km round a ~610 m leaf) is reached by the buildings of the leaves within
+/// <see cref="Rings"/> of its own; a tile's buildings are every one whose plane box reaches the square, in that square's
+/// tile-local frame (the walls the street planner stops at, the footprints poles keep off), heights above sea level as the
+/// stage reads them. Plane positions are kept as floats: a millimetre at 15 km from the frame's centre, against the walls'
+/// 0.5 m raster.
 /// </summary>
-public sealed class FrameBuildings(string lv95Chunks, WorkFrame frame, FrameUnits units)
+public sealed class FrameBuildings(RegionHeights region, WorkFrame frame, FrameUnits units)
 {
-    public const int Cached = 100;
+    public const int Cached = 200;
+
+    /// <summary>Rings of leaves read round a tile's own: its square reaches ~200 m past the leaf, a building a few hundred more.</summary>
+    public const int Rings = 2;
 
     /// <summary>A building on the plane: x, height above sea level, y per vertex, and its plane box.</summary>
     private sealed record Moved(Building Source, float[] Plane, double MinX, double MinY, double MaxX, double MaxY);
 
-    private readonly Dictionary<TileId, List<Moved>> _lv95 = new();
+    private readonly Dictionary<CubeKey, List<Moved>> _leaves = new();
+    private readonly object _lock = new();
 
     public BuildingTile? For(TileId id)
     {
         double west = units.West(id), north = units.North(id), east = west + FrameUnits.Box, south = north - FrameUnits.Box;
-        double minE = double.MaxValue, minN = double.MaxValue, maxE = double.MinValue, maxN = double.MinValue;
-        foreach (var (x, y) in (ReadOnlySpan<(double, double)>)[(west, north), (east, north), (west, south), (east, south)])
-        {
-            var (lat, lon) = frame.Plane.FromPlane(x, y);
-            var (e, n) = SwissGeodesy.ToLv95(lat, lon);
-            (minE, minN, maxE, maxN) = (Math.Min(minE, e), Math.Min(minN, n), Math.Max(maxE, e), Math.Max(maxN, n));
-        }
+        var own = units.Leaf(id);
         var list = new List<Building>();
-        for (int te = (int)Math.Floor((minE - 50) / 1000); te <= (int)Math.Floor((maxE + 50) / 1000); te++)
-            for (int tn = (int)Math.Floor((minN - 50) / 1000); tn <= (int)Math.Floor((maxN + 50) / 1000); tn++)
-                foreach (var m in Tile(new TileId(te, tn)))
+        for (int dy = -Rings; dy <= Rings; dy++)
+            for (int dx = -Rings; dx <= Rings; dx++)
+            {
+                if ((dx == 0 && dy == 0 ? own : own.Neighbour(dx, dy)) is not { } leaf) continue;
+                foreach (var m in Leaf(leaf))
                 {
                     if (m.MaxX < west || m.MinX > east || m.MaxY < south || m.MinY > north) continue;
                     var tris = new float[m.Plane.Length];
@@ -320,30 +325,41 @@ public sealed class FrameBuildings(string lv95Chunks, WorkFrame frame, FrameUnit
                     var b = m.Source;
                     list.Add(new Building { Kind = b.Kind, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = b.Floors, MinY = b.MinY, MaxY = b.MaxY, Triangles = tris });
                 }
+            }
         return list.Count == 0 ? null : new BuildingTile { Id = id, Buildings = list };
     }
 
-    private List<Moved> Tile(TileId lv95)
+    private List<Moved> Leaf(CubeKey key)
     {
-        if (_lv95.TryGetValue(lv95, out var list)) return list;
-        if (_lv95.Count >= Cached) _lv95.Clear();
-        list = new List<Moved>();
-        if (Facades.Read(lv95Chunks, lv95) is { } tile)
-            foreach (var b in tile.Buildings)
+        lock (_lock)
+        {
+            if (_leaves.TryGetValue(key, out var list)) return list;
+            if (_leaves.Count >= Cached) _leaves.Clear();
+            list = new List<Moved>();
+            if (region.Has(key) && region.ReadKind(key, LeafKind.Buildings) is { } sec)
             {
-                var t = b.Triangles;
-                var plane = new float[t.Length];
-                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-                for (int k = 0; k + 2 < t.Length; k += 3)
+                var anchor = key.Anchor;
+                foreach (var b in LeafBuildings.Decode(sec).Buildings)
                 {
-                    var (x, y, h) = frame.FromSource(Lv95Source.Instance, lv95.MinE + t[k], lv95.MaxN - t[k + 2], t[k + 1]);
-                    (plane[k], plane[k + 1], plane[k + 2]) = ((float)x, (float)h, (float)y);
-                    (minX, minY, maxX, maxY) = (Math.Min(minX, x), Math.Min(minY, y), Math.Max(maxX, x), Math.Max(maxY, y));
+                    var t = b.Triangles;
+                    var plane = new float[t.Length];
+                    double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                    double minH = double.MaxValue, maxH = double.MinValue;
+                    for (int k = 0; k + 2 < t.Length; k += 3)
+                    {
+                        var (x, y, h) = frame.FromEcef(anchor.ToEcef(t[k], t[k + 1], t[k + 2]));
+                        (plane[k], plane[k + 1], plane[k + 2]) = ((float)x, (float)h, (float)y);
+                        (minX, minY, maxX, maxY) = (Math.Min(minX, x), Math.Min(minY, y), Math.Max(maxX, x), Math.Max(maxY, y));
+                        (minH, maxH) = (Math.Min(minH, h), Math.Max(maxH, h));
+                    }
+                    // the leaf's MinY/MaxY are its anchor frame's; the stage's, as an LV95 tile held them, above sea level
+                    var source = new Building { Kind = b.Kind, Egid = b.Egid, YearBuilt = b.YearBuilt, Floors = b.Floors, MinY = (float)minH, MaxY = (float)maxH, Triangles = [] };
+                    list.Add(new Moved(source, plane, minX, minY, maxX, maxY));
                 }
-                list.Add(new Moved(b, plane, minX, minY, maxX, maxY));
             }
-        _lv95[lv95] = list;
-        return list;
+            _leaves[key] = list;
+            return list;
+        }
     }
 }
 
