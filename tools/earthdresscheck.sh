@@ -38,7 +38,7 @@ for s in $STOPS; do
   case $s in
     geneva)  stop geneva  2500956,1117569 fleet,birds ;;
     nyon)    stop nyon    2508092,1137444 steamer ;;
-    airport) stop airport 2497653,1121360 stands ;;
+    airport) stop airport 2497653,1121360 stands@server,fleet ;;
     riddes)  stop riddes  2581500,1113300 herds ;;
   esac
 done

@@ -44,15 +44,48 @@ public partial class DressCheck : Node
         if ((_poll += delta) < 1.0 || _since < SettleS) return;
         _poll = 0;
         var found = Count(out float worst, out string worstWhat);
-        bool all = _expect.All(k => found.TryGetValue(k, out int c) && c > 0);
+        bool all = Expected().All(k => found.TryGetValue(k, out int c) && c > 0);
         if (!all && _since < TimeoutS) return;
         _done = true;
         foreach (var (k, c) in found) GD.Print($"{Log} {k}: {c}");
         GD.Print(FormattableString.Invariant($"{Log} worst height off the ground: {worst:F2} m ({worstWhat}), after {_since:F0} s; {_earth.Status}"));
-        var missing = _expect.Where(k => !found.TryGetValue(k, out int c) || c == 0).ToList();
+        var missing = Expected().Where(k => !found.TryGetValue(k, out int c) || c == 0).ToList();
         if (missing.Count > 0) GD.Print($"{Log} RESULT: FAILED (nothing from {string.Join(", ", missing)} within reach)");
         else if (worst > MaxOffM) GD.Print(FormattableString.Invariant($"{Log} RESULT: FAILED ({worstWhat} is {worst:F2} m off the ground)"));
         else GD.Print($"{Log} RESULT: ok");
+    }
+
+    /// <summary>The services expected here: <c>name</c> on both sides, <c>name@server</c> / <c>name@client</c> on one (the airport's stands are filled on the server).</summary>
+    private IEnumerable<string> Expected()
+    {
+        string side = _server ? "server" : "client";
+        foreach (var k in _expect)
+        {
+            int at = k.IndexOf('@');
+            if (at < 0) yield return k;
+            else if (k[(at + 1)..] == side) yield return k[..at];
+        }
+    }
+
+    /// <summary>How far a point is from what stands under it (the ground, a car park's deck): a ray down; null with no collision there yet.</summary>
+    private float? OffWhatIsUnder(Vector3 at)
+    {
+        var space = GetViewport()?.World3D?.DirectSpaceState;
+        if (space == null) return null;
+        var q = PhysicsRayQueryParameters3D.Create(at + Vector3.Up * 3f, at + Vector3.Down * 8f);
+        // the leaves' ground and buildings only: not the parked car's own body or a passer-by
+        for (int k = 0; k < 6; k++)
+        {
+            var hit = space.IntersectRay(q);
+            if (hit.Count == 0) return null;
+            var body = hit["collider"].AsGodotObject() as Node;
+            if (body is StaticBody3D s && (s.IsInGroup(EarthWorld.GroundGroup) || s.GetParent() is StaticBody3D g && g.IsInGroup(EarthWorld.GroundGroup)))
+                return Mathf.Abs(((Vector3)hit["position"]).Y - at.Y);
+            var ex = q.Exclude;
+            ex.Add((Rid)hit["rid"]);
+            q.Exclude = ex;
+        }
+        return null;
     }
 
     private Dictionary<string, int> Count(out float worst, out string worstWhat)
@@ -71,7 +104,7 @@ public partial class DressCheck : Node
                 if (at.HorizontalDistanceTo(_stop) > Reach) continue;
                 fleet++;
                 var world = origin.ToWorld(at);
-                if (ground.TryGetHeight(world, out float h) && Mathf.Abs(world.Y - h) > w) (w, ww) = (Mathf.Abs(world.Y - h), $"slot {s.Owner}#{s.Ordinal}");
+                if (OffWhatIsUnder(world) is { } off && off > w) (w, ww) = (off, $"slot {s.Owner}#{s.Ordinal}");
             }
         found["fleet"] = fleet;
 
@@ -96,7 +129,8 @@ public partial class DressCheck : Node
         found["herds"] = herds;
         found["cows"] = cows;
 
-        found["birds"] = Birds.BirdLife.Instance?.Birds.Count ?? 0;
+        // the server's birds are its own headless BirdLife's (no Instance there)
+        found["birds"] = (Birds.BirdLife.Instance ?? FindBirds(GetTree().Root))?.Birds.Count ?? 0;
 
         int steamer = 0;
         foreach (var node in GetTree().Root.FindChildren(World.SteamerBerth.BerthName, "", true, false))
@@ -109,6 +143,13 @@ public partial class DressCheck : Node
             }
         found["steamer"] = steamer;
         worst = w;
+        static Birds.BirdLife? FindBirds(Node n)
+        {
+            if (n is Birds.BirdLife b) return b;
+            foreach (var c in n.GetChildren())
+                if (FindBirds(c) is { } f) return f;
+            return null;
+        }
         worstWhat = ww;
         return found;
     }
