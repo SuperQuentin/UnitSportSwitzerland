@@ -753,6 +753,28 @@ public sealed class GameSettings
         catch (Exception e) { GD.Print($"[settings] could not lower the test run's priority: {e.Message}"); }
     }
 
+    private static long _printedPeakMb;
+
+    /// <summary>
+    /// A test run's peak resident memory (#1702): the OS's own peak working set of this process (Windows, Linux
+    /// and macOS alike), printed as it quits and, with <paramref name="whenGrown"/>, whenever it grew 64 MB since
+    /// the last line (a two-client script kills its server: it never quits). <c>tools/lib/guard.sh</c> reads the
+    /// log's last line so <c>tools/test.sh</c> admits the check's next run by what it really took.
+    /// </summary>
+    public static void PrintTestPeakMemory(bool whenGrown = false)
+    {
+        if (!TestRun) return;
+        try
+        {
+            using var self = System.Diagnostics.Process.GetCurrentProcess();
+            long mb = self.PeakWorkingSet64 / (1024 * 1024);
+            if (whenGrown && mb < _printedPeakMb + 64) return;
+            _printedPeakMb = mb;
+            GD.Print($"[mem] peak {mb} MB");
+        }
+        catch (Exception) { }
+    }
+
     /// <summary>
     /// What a phone starts with (#63), and what Settings → Performance → "Use phone defaults" puts
     /// back: about a third of the desktop's world in view, a low LOD table, a shorter horizon, a

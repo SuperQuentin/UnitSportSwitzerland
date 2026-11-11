@@ -44,6 +44,9 @@ public sealed class CollisionPatches(Func<CubeKey, Vector3[]?> build, int worker
     /// <summary>Whether a build is running or waiting.</summary>
     public bool Busy { get { lock (_gate) return _running > 0 || _waiting.Count > 0; } }
 
+    /// <summary>Built patches not taken yet (<see cref="TryTakeReady"/>).</summary>
+    public bool HasReady => !_ready.IsEmpty;
+
     public bool TryTakeReady(out CubeKey key, out Vector3[]? faces)
     {
         bool ok = _ready.TryDequeue(out var r);

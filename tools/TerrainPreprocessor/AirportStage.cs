@@ -20,23 +20,39 @@ public static class AirportStage
 
     public static int Run(string outDir, string tlmPath, string pbf, string? file = null, int jobs = 8)
     {
-        foreach (var (path, what) in new[] { (tlmPath, "swissTLM3D GeoPackage"), (pbf, "OpenStreetMap PBF") })
-            if (!File.Exists(path))
-            {
-                Console.Error.WriteLine($"{what} not found: {path}");
-                return 1;
-            }
         var manifestPath = Path.Combine(outDir, "manifest.json");
         if (!File.Exists(manifestPath))
         {
             Console.Error.WriteLine($"--airports needs a built region: no {manifestPath}");
             return 2;
         }
-        var sw = Stopwatch.StartNew();
         var tiles = TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet();
+        BuildingTile? Bldg(TileId id)
+        {
+            string path = Path.Combine(outDir, BuildingFormat.FileName(id));
+            if (!tiles.Contains(id) || !File.Exists(path)) return null;
+            using var fs = File.OpenRead(path);
+            return BuildingCodec.Decode(fs);
+        }
+        return Run(tiles, new LandingStage.TileSampler(outDir, tiles), GeoInput.Over(outDir), Bldg, tlmPath, pbf,
+            file ?? Path.Combine(outDir, AirportIndex.FileName), jobs);
+    }
+
+    /// <summary>
+    /// The airports of a built region: its LV95 km cells, ground, OSM positions and buildings per LV95 km tile (an LV95 build's
+    /// tiles, or a cube region's leaves, #1711 <see cref="BuiltLeaves"/>), into <paramref name="file"/>.
+    /// </summary>
+    public static int Run(HashSet<TileId> tiles, IShoreSampler sampler, GeoInput geo, Func<TileId, BuildingTile?> buildings,
+        string tlmPath, string pbf, string file, int jobs = 8)
+    {
+        foreach (var (path, what) in new[] { (tlmPath, "swissTLM3D GeoPackage"), (pbf, "OpenStreetMap PBF") })
+            if (!File.Exists(path))
+            {
+                Console.Error.WriteLine($"{what} not found: {path}");
+                return 1;
+            }
+        var sw = Stopwatch.StartNew();
         if (tiles.Count == 0) return 0;
-        var sampler = new LandingStage.TileSampler(outDir, tiles);
-        var geo = GeoInput.Over(outDir);
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MaxN) - ChunkFormat.TileSizeM, maxN = tiles.Max(t => t.MaxN);
 
@@ -158,7 +174,7 @@ public static class AirportStage
             airport.Runways.Sort((x, y) => y.Length.CompareTo(x.Length));
             bool big = airport.Runways.Any(r => r.Usable && r.Length >= AirportPlanner.MinRunway);
             // paved and free of buildings (terminals, docks, hangars, jet bridges: swissBUILDINGS3D in the tiles)
-            var built = new BuildingRaster(outDir, tiles, area.Box.E0 - 100, area.Box.N0 - 100, area.Box.E1 + 100, area.Box.N1 + 100);
+            var built = new BuildingRaster(buildings, area.Box.E0 - 100, area.Box.N0 - 100, area.Box.E1 + 100, area.Box.N1 + 100);
             bool Free(double e, double n) => Paved(e, n) && !built.At(e, n);
             airport.Stands = AirportPlanner.Choose(code, candidates, Free, sampler.Ground, big);
             var cargoAprons = string.Join(", ", candidates.Where(c => c.Cargo).Select(c => c.Apron).Distinct());
@@ -171,7 +187,7 @@ public static class AirportStage
             if (airport.Stands.Count > 0) index.Airports.Add(airport);
         }
 
-        file ??= Path.Combine(outDir, AirportIndex.FileName);
+
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
         File.WriteAllText(file, index.ToJson());
         Console.WriteLine($"Airports: {index.Airports.Count} with parked aircraft ({index.Stands().Count()} stands) of {areas.Count} airport areas, "
@@ -187,7 +203,7 @@ public static class AirportStage
         private readonly int _w, _h;
         private readonly bool[] _cells;
 
-        public BuildingRaster(string dir, HashSet<TileId> tiles, double e0, double n0, double e1, double n1)
+        public BuildingRaster(Func<TileId, BuildingTile?> source, double e0, double n0, double e1, double n1)
         {
             (_e0, _n1) = (e0, n1);
             _w = (int)Math.Ceiling((e1 - e0) / Cell);
@@ -199,10 +215,7 @@ public static class AirportStage
                 for (int tn = Math.Min(a.N, b.N); tn <= Math.Max(a.N, b.N); tn++)
                 {
                     var id = new TileId(te, tn);
-                    string path = Path.Combine(dir, BuildingFormat.FileName(id));
-                    if (!tiles.Contains(id) || !File.Exists(path)) continue;
-                    BuildingTile tile;
-                    using (var fs = File.OpenRead(path)) tile = BuildingCodec.Decode(fs);
+                    if (source(id) is not { } tile) continue;
                     foreach (var bld in tile.Buildings)
                         for (int t = 0; t + 8 < bld.Triangles.Length; t += 9)
                             Fill(id.MinE + bld.Triangles[t], id.MaxN - bld.Triangles[t + 2], id.MinE + bld.Triangles[t + 3], id.MaxN - bld.Triangles[t + 5],

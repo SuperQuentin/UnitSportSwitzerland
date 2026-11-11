@@ -56,6 +56,13 @@ public partial class Main : Node
 		SetWindowTitle(GetWindow());
 		MouseCapture.PassTestWindowThrough();
 		GameSettings.LowerTestPriority();
+		// a test run's peak memory as it grows (#1702): a killed server never reaches _ExitTree
+		if (GameSettings.TestRun)
+		{
+			var peak = new Godot.Timer { WaitTime = 5, Autostart = true, Name = "TestPeakMemory" };
+			peak.Timeout += () => GameSettings.PrintTestPeakMemory(whenGrown: true);
+			AddChild(peak);
+		}
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
 
@@ -226,5 +233,6 @@ public partial class Main : Node
 	{
 		SaveQueue.Flush();
 		FrameReport.AtExit();
+		GameSettings.PrintTestPeakMemory();
 	}
 }

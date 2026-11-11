@@ -290,7 +290,7 @@ State on 2026-11-10.
 | Net checks failing on `main` | #1628 | open (orbit and movespeed, flat) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
 | **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | probes and `TEST_FRAME` built (`core/earth-bar-probes`); the long drive is Geneva → Nyon inside the Geneva patch (two leaf sets at once is not built: Val Müstair waits for it); the flight reads Brest's leaves alone (`--leaves`), Geneva on the pyramid; dry run running | D2 |
-| **D1**: the build tools independent of LV95 | #1515 | session working | D4 |
+| **D1**: the build tools independent of LV95 | #1711, PR #1714 | **done**: the cube build from the sources and its leaves (`cube-only` in MapSetup); test region leaves byte-identical, Geneva differs only by the LV95 detour (`cube-region-files` note); castles, venues, givers still read `.bldg` (D4) | D4 |
 
 ## Decided without the user
 

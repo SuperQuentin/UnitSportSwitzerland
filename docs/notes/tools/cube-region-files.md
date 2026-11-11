@@ -6,16 +6,31 @@
 The last row of the B3 table (`docs/plans/global-tiling-g2.md`). Code: `tools/TerrainFormat/GeoPoint.cs`,
 `tools/TerrainPreprocessor/CubeRegionFiles.cs`, `tools/MapCore/Pipeline.cs` (`AddCubeSteps`).
 
-## The files: `--cube-region-files`
+## The files: `--cube-places`, `--cube-region-files` (from the sources and the leaves since #1711, G2 D1)
 
 ```
-TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
+TerrainPreprocessor --cube-sources --cube-out REGION --tlm GPKG [--osm-pbf PBF] [--sitg] [--cube-temp DIR]
+TerrainPreprocessor --cube-places --cube-out REGION --gwr DB [--tlm GPKG]
+TerrainPreprocessor --cube-region-files --cube-out REGION [--tlm GPKG] [--osm-pbf PBF] [--gwr DB] [--boundaries GPKG] [--atlas-cards F]
 ```
 
-- Each stage keeps its maths. This step writes the stages' output into the cube region with every position also as
-  `GeoPoint` (WGS84 latitude, longitude, ellipsoidal height), rigorously (`SwissGeodesy`). Each point goes at its own
-  height (a summit's, a deck's, still water, a stand's ground), or the LV95 build's ground where the file has none.
-  Every grid heading is also given from true north. The LV95 fields stay until D, since the game reads them until then.
+- **The region-wide stages run on the cube region itself** (#1711). They work in LV95 notation, the swisstopo sources' own,
+  and read of a built region what they read of an LV95 build. `BuiltLeaves` gives it from the leaves:
+  - its extent: the LV95 km cells any leaf with heights reaches;
+  - its ground above sea level (`FrameGround` on the level-9 frame's plane, the bed under a lake) and still water (the nearest
+    `Water` sample), as `IShoreSampler`;
+  - `GeoInput.On(ground)` for OSM's latitudes and longitudes;
+  - the network's roads near a point, in an LV95 km tile's frame (landings' surveyed piers);
+  - the buildings stage's buildings per LV95 km tile (`RegionBuildings`: airports' stands, the cover's urban field).
+- `--cube-sources` (before the network): the OSM overlay and nodes (`--osm-pbf`), the tram stops, the SITG signs (`--sitg`,
+  fetched from the canton's service) into the region's temp, where `--cube-network` reads them.
+- `--cube-places` (before the network, whose gantries read the towns): `PlaceStage` (GWR towns, TLM summits and passes).
+- `--cube-region-files` (after the network and the water): `PoiStage`, `LandingStage`, `AirportStage` (with `--osm-pbf`), the
+  lifts (`PisteStage.LoadAerialways`).
+- Each stage keeps its maths. Every file is then given its Earth positions: `GeoPoint` (WGS84 latitude, longitude, ellipsoidal
+  height), rigorously (`SwissGeodesy`), at the point's own height (a summit's, a deck's, still water, a stand's ground), or
+  the leaves' ground where the file has none. Every grid heading is also given from true north. The LV95 fields stay until
+  D, since the game reads them until then. Before #1711 this step converted an LV95 build's files (`--chunks`, gone).
 - Formats: optional members, null and not written in the LV95 build's files, which are byte-identical.
 
 | File | Earth members |
@@ -25,7 +40,7 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
 | `landings.json` | `Landing.Geo` (still water), `LandingBerth.Geo` + `GeoHeading`, `PierRibbon.GeoPoints`, `Landing.GeoBollards` |
 | `airports.json` | `Airport.Geo`, `AirportRunway.Geo1/Geo2`, `AirportStand.Geo` + `GeoHeading` |
 | `ropeways.json` | `RopewayInfo.Geo0/Geo1` |
-| `traffic_endpoints.tsv` (the test region) | four trailing columns `lat lon h true_heading` (the reader ignored extra columns before) |
+| `traffic_endpoints.tsv` (the test region, `--cube-test-region`) | four trailing columns `lat lon h true_heading` (the reader ignored extra columns before) |
 
 - **Not here**:
   - **Wikidata's `atlas_facts.json`**: it carries no positions, only a match distance and an elevation.
@@ -37,14 +52,18 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
 
 ## MapSetup: the `cube` layer
 
-- `--layers ...,cube` (off unless picked) adds, after the LV95 steps (which they read), the cube steps over the
-  selection's LV95 box into `<chunks>_cube`, in order:
+- `--layers ...,cube` (off unless picked) adds the cube steps over the selection's LV95 box into `<chunks>_cube`. They read
+  nothing of the LV95 build (#1711): `--layers ...,cube-only` skips every LV95 step (terrain, the features pass, RoadGen,
+  places, fields, pistes, fingerprints; the downloads and unpacks stay). A saved state without it keeps the LV95 build,
+  which the game reads until D3; making the cube layer the default is #1650's. In order:
   1. `--cube` (heights): every source present (#1578): swissALTI3D 0.5 m (`swiss_chunks`), 2 m where 0.5 m has none
      (`<data>/swissalti3d_2m`, the corridor), IGN RGE ALTI where swissALTI3D has nothing (`<data>/france/rgealti`, or
      MapSetup's `--rgealti DIR` for a sample). The plan's detail names them. Before #1578 only 0.5 m was read, so B4 ran the
      corridor and France by hand.
   2. `--cube-roads`
   2b. `--cube-buildings` (buildings layer; the LV95 pass's sources: the GeoPackage or the selection's newest sheet zips, the GWR)
+  2c. `--cube-sources` (the overlay with the OSM layer, the tram stops)
+  2d. `--cube-places` (places layer)
   3. `--cube-network`
   4. `--cube-cover`
   5. `--cube-water`
@@ -56,7 +75,34 @@ TerrainPreprocessor --cube-region-files --chunks LV95_CHUNKS --cube-out REGION
   11. **the pyramid levels 5-13 from the leaves**, `--cube-swiss`. It is skipped without a global region beside the
      chunks (`cube_global`) and ETOPO (`data/global/etopo2022`). It reads `.cubl` leaves since PR 1.
 - The leaves' photos are a Godot tool mode (`--cubephotos`, row 7), run apart from MapSetup.
-- `MapSetup --bbox 2499,1116,2501,1118 --layers terrain,roads,cube --plan-only` lists the eleven steps.
+- `MapSetup --bbox 2499,1116,2501,1118 --layers roads,buildings,places,osm,cube-only --plan-only` lists the cube steps with
+  every LV95 step skipped.
+## D1's checks (#1711, Nov 10 2026): the cube build from the sources against the one that read the LV95 build
+
+`TerrainPreprocessor --cube-digest A B [--verbose]` holds two regions section by section (SHA-256 of every leaf's every
+section; the region files by their bytes; where the network's roads differ, their records matched as the tiling check does).
+
+- **The test region** (`--cube-test-region`): all 350 leaf sections byte-identical to main's (130 heights, 130 cover, 85 roads, 5
+  buildings): the buildings are the same floats, so reading them from the leaves instead of the `.bldg` changes nothing.
+  `places.json`: heights 1.37 cm lower (main's carried the `.terr` quantum; now the design's 500 m). `traffic_endpoints.tsv`:
+  the same 382 endpoints at the same places; the rates of 70 of 266 car and bike ones differ (mostly 1-6 %) because they now
+  follow the leaves' own lights (#1676's plan differences) instead of the LV95 build's. The LV95 `--test-region` is
+  byte-identical to main's.
+- **Geneva** (box 2499800,1117300,2501000,1118500: 9 leaves, 4 with roads): heights, holes, water and buildings
+  byte-identical. Roads, the cover after the network and the trees (masked by the network) differ:
+  - main's network read the LV95 build's `.bldg` (`test1647`): the same walls in plan (matched buildings within 0.16 cm, p99
+    0.15 cm) but seated on the `.terr` (heights up to 1.77 m apart, p95 20 cm), and buildings beyond the 9 leaves;
+  - with main's overlay and places, junctions 544/544 matched, 33 moved over 5 cm (p95 28 cm, max 1.8 m); signals 55/55, 6
+    with another plan size; approaches 192/192, 7 with other lanes;
+  - the same run with the LV95 `.bldg` moved into the leaves (an uncommitted experiment): 7 junctions, 2 signals, 2 approaches,
+    all within ~250 m of the region's west or east edge, where main also saw LV95 buildings outside the leaves. What is left is
+    the LV95 detour itself.
+- Region files from the leaves: places 1, POIs 146, landings 5 (4 at a surveyed pier), jetties 13; every point back to LV95
+  0.000 cm. A source point in a km cell the leaves reach but off every leaf takes the Plateau's height (`--ground-at E,N`
+  prints the leaves' ground and still water at a point).
+- `RoadGen --tiling-check` passes on the test region (all six tilings) and Geneva, unchanged: it reads an LV95 build.
+- Not moved here: `--castles`, `--venues`, `--givers` still read an LV95 build's `.bldg`; they write committed nationwide files,
+  not a cube region's, and move with D4.
 
 ## Checks (Nov 5 2026)
 

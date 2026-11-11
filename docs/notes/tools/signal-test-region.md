@@ -88,16 +88,22 @@
 
 ## On cube leaves (#1647, G2 C7)
 
-- **Command**: `TerrainPreprocessor --cube-test-region DIR [--compare] [--verbose]` runs `RoadGen --test-region DIR`, then
-  writes the region's leaves into `DIR_cube` (`tools/TerrainPreprocessor/CubeTestRegion.cs`, ~40 s in Release). `--no-lv95`
-  reuses an LV95 build; `--compare-only` compares a built pair; `--signal-check [--at E,N]` runs RoadGen's `--signal-check` on
+- **Command**: `TerrainPreprocessor --cube-test-region DIR [--compare] [--verbose]` runs `RoadGen --test-region DIR` (the LV95 side of
+  `--compare`), then
+  writes the region's leaves into `DIR_cube` (`tools/TerrainPreprocessor/CubeTestRegion.cs`, ~40 s in Release). Since #1711 the
+  leaves read nothing of the LV95 build: `--no-lv95` builds them alone (the game under `--frame earth` calls `CubeTestRegion.Build(leafDir)`)
+  and skips the LV95 build; `--compare-only` compares a built pair; `--signal-check [--at E,N]` runs RoadGen's `--signal-check` on
   the leaves' records; `--dump-near E,N,R` lists both builds' segments near a point. The region lies at 47.9° N, 11.6° E
   (130 leaves in 4 level-9 frames).
 - **What it writes**, each through the cube stages' pieces:
   - heights flat at **500 m above sea level**, the ellipsoidal height being 500 plus the leaf's `UndulationAt` at every vertex. Every
     stage drapes on heights above sea level, so the LV95 build's ground and the leaves' are the same (decided, #1647).
   - cover at every vertex: open grass and the canton borders' band (`SignalTestRegion.CoverAt`);
-  - the LV95 `.bldg` boxes, each moved rigorously into the leaf that holds its middle;
+  - the design's boxes (`SignalTestRegion.BuildingTiles`, the floats the LV95 build writes), each moved rigorously into the leaf
+    that holds its middle; the overlay, nodes and tram stops (`SignalTestRegion.WriteSources`) into `DIR_cube_temp`;
+  - the region files: the junctions as places and the traffic endpoints from the leaves' own lights (`LightsOnLeaves`; before
+    #1711 from the LV95 build's lights: the same 382 endpoints at the same places, the rates of 70 of 266 car and bike ones
+    1-30 % apart where the leaves' plans differ, #1676);
   - raw lines (`SignalTestRegion.RawLines`) on each frame's plane, cut at leaf edges (`FrameRoadSpace.Split`), densified to
     4 m and draped on the leaf mesh, into `DIR_cube_temp/roads_raw`;
   - the network through 4b's `FrameTileLoop`, with the LV95 run's overlay, nodes, tram stops and cantons. The border marks come

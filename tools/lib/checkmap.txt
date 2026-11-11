@@ -56,13 +56,34 @@ src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --skincheck
 src/Avatar/MeshScratch   quick  --skincheck
 # #788: every model of the model viewer scanned for faces that z-fight, against tests/zfight-baseline.txt
-src/Avatar/              quick  --zfightcheck
-src/Build/               quick  --zfightcheck
-src/Items/               quick  --zfightcheck
-src/Interiors/           quick  --zfightcheck
-src/Terrain/BuildingMeshBuilder quick --zfightcheck
-src/Core/ZFight          quick  --zfightcheck
-tests/zfight-baseline    quick  --zfightcheck
+src/Avatar/              quick  --zfightcheck --zfightshard 1/4
+src/Avatar/              quick  --zfightcheck --zfightshard 2/4
+src/Avatar/              quick  --zfightcheck --zfightshard 3/4
+src/Avatar/              quick  --zfightcheck --zfightshard 4/4
+src/Build/               quick  --zfightcheck --zfightshard 1/4
+src/Build/               quick  --zfightcheck --zfightshard 2/4
+src/Build/               quick  --zfightcheck --zfightshard 3/4
+src/Build/               quick  --zfightcheck --zfightshard 4/4
+src/Items/               quick  --zfightcheck --zfightshard 1/4
+src/Items/               quick  --zfightcheck --zfightshard 2/4
+src/Items/               quick  --zfightcheck --zfightshard 3/4
+src/Items/               quick  --zfightcheck --zfightshard 4/4
+src/Interiors/           quick  --zfightcheck --zfightshard 1/4
+src/Interiors/           quick  --zfightcheck --zfightshard 2/4
+src/Interiors/           quick  --zfightcheck --zfightshard 3/4
+src/Interiors/           quick  --zfightcheck --zfightshard 4/4
+src/Terrain/BuildingMeshBuilder quick  --zfightcheck --zfightshard 1/4
+src/Terrain/BuildingMeshBuilder quick  --zfightcheck --zfightshard 2/4
+src/Terrain/BuildingMeshBuilder quick  --zfightcheck --zfightshard 3/4
+src/Terrain/BuildingMeshBuilder quick  --zfightcheck --zfightshard 4/4
+src/Core/ZFight          quick  --zfightcheck --zfightshard 1/4
+src/Core/ZFight          quick  --zfightcheck --zfightshard 2/4
+src/Core/ZFight          quick  --zfightcheck --zfightshard 3/4
+src/Core/ZFight          quick  --zfightcheck --zfightshard 4/4
+tests/zfight-baseline    quick  --zfightcheck --zfightshard 1/4
+tests/zfight-baseline    quick  --zfightcheck --zfightshard 2/4
+tests/zfight-baseline    quick  --zfightcheck --zfightshard 3/4
+tests/zfight-baseline    quick  --zfightcheck --zfightshard 4/4
 src/Avatar/              quick  --emotecheck
 src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
 src/Core/Touch           quick  --touchcheck --mobile --world fixture
@@ -330,6 +351,10 @@ src/Terrain/WorldGroundCheck quick --worldgroundcheck --chunks fixture:lake
 src/Terrain/Earth        full   tools/earthcheck.sh
 src/Terrain/Leaves/LeafStore full tools/earthcheck.sh
 src/Terrain/LeafCollision full  tools/earthcheck.sh
+# #1626: from the region's border, the leaves' own ground on the height query (a leaf prepared again stood 27 m off)
+src/Terrain/LeafCollision full  tools/earthcheck.sh border
+src/Terrain/Earth/EarthWorld full tools/earthcheck.sh border
+src/Terrain/Leaves/EarthLeaves full tools/earthcheck.sh border
 # the server streams leaves to a client with none (#1655): real leaves on D:, so full only
 src/Net/ChunkStreamer    full   tools/leafstreamcheck.sh
 src/Net/ClientTerrainSync full  tools/leafstreamcheck.sh
@@ -1292,7 +1317,7 @@ src/Player/ShuttlePilot        quick  --shuttlecheck europe --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck glide --world flat
 src/Player/Airliner            quick  --shuttlecheck --world flat
 src/Player/AirlinerFlight      quick  --shuttlecheck --world flat
-src/Avatar/Shuttle             quick  --cockpitcheck --world flat
+src/Avatar/Shuttle             quick  --cockpitcheck
 src/Core/OriginShifter         quick  --orbitcheck --world flat
 src/Core/WorldOrigin           quick  --orbitcheck --world flat
 src/Player/Ufo                 net    tools/orbitnetcheck.sh

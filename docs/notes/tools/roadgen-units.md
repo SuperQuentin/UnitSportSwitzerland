@@ -70,14 +70,15 @@ The frame instance of the three seams, and `--cube-network`, which runs the stag
 - **`--cube-network`** (`tools/TerrainPreprocessor/CubeNetworkStage.cs`):
 
 ```
-TerrainPreprocessor --cube-network --cube-out REGION [--cube-temp DIR] --chunks LV95_CHUNKS [--osm DIR]
+TerrainPreprocessor --cube-network --cube-out REGION [--cube-temp DIR] [--osm DIR]
     [--cube-box minE,minN,maxE,maxN] [--block 8] [--halo 2] [--frames-parallel N] [--plan-only] [--no-smooth] [--lv95-ground]
 ```
 
   Frames in the driver's order; per frame a `FrameTileLoop`: blocks of 8 × 8 core leaves, halo 2 leaves (~1.2 km,
   read from any frame), the raw kinds of stage 2 (`<temp>/roads_raw`: `Roads`, `RoadKeys`, `Parking`), `FrameGround`
-  over the region's heights, the LV95 build's `.bldg` moved onto the plane (`FrameBuildings`, until stage 3 writes
-  buildings per leaf), the region's OSM files (`--osm`, default the temp dir). It writes `LeafKind.Roads` (the
+  over the region's heights, the buildings stage's leaves moved onto the plane through ECEF (`FrameBuildings`; the LV95
+  `.bldg` until #1711), the region's own `places.json` (`--cube-places`) and OSM files (`--osm`, default the temp dir, written by
+  `--cube-sources`). It writes `LeafKind.Roads` (the
   network, Network flag) into the region's `.cubl`. A `--cube-box` run rewrites the Roads of every leaf of the frames
   it touches (leaves of those frames outside the box lose theirs, as for every stage). `--plan-only` lists the frames
   a box makes; `--no-smooth` and `--lv95-ground` are diagnostics (below).
