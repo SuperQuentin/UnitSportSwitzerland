@@ -122,8 +122,9 @@ public partial class ConcertDirector : Node
     private void OnFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] doors)
     {
         var id = _ground.ContentName(tile);
+        bool leaf = Terrain.Leaves.LeafStandIn.IsStandIn(id);
         for (int i = 0; i < StadiumCatalog.All.Length; i++)
-            if (StadiumCatalog.Owner(StadiumCatalog.All[i]) == id)
+            if (leaf ? OwnsOnLeaf(tile, StadiumCatalog.All[i]) : StadiumCatalog.Owner(StadiumCatalog.All[i]) == id)
             {
                 _tiles[i] = (id, node);
                 // the bowl hides the city round it (occlusion culling), show or no show
@@ -139,9 +140,17 @@ public partial class ConcertDirector : Node
             }
     }
 
+    /// <summary>
+    /// Under <c>--frame earth</c> a leaf holds a stadium when its centre spot lies on it (the leaf the ground names
+    /// there): the LV95 owner tile is the flat world's alone.
+    /// </summary>
+    private bool OwnsOnLeaf(GroundTile tile, StadiumSpec s) =>
+        _ground.Origin is { } origin && _ground.TileAt(origin.ToWorld(s.Centre)) == tile;
+
     /// <summary>The stadium frame on the tile's node: the centre spot on the ground, turned to the pitch's azimuth (u, y, v).</summary>
     private Transform3D? Frame(TileId id, ChunkNode node, StadiumSpec s)
     {
+        if (Terrain.Leaves.LeafStandIn.IsStandIn(id)) return LeafFrame(node, s);
         var (lx, lz) = id.Local(s.E, s.N);
         var local = new Vector3((float)lx, 0, (float)lz);
         var world = node.ToGlobal(local);
@@ -150,6 +159,27 @@ public partial class ConcertDirector : Node
         float a = Mathf.DegToRad(s.LocalAzimuthDeg);
         var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
         return new Transform3D(basis, local);
+    }
+
+    /// <summary>
+    /// The stadium frame on a leaf's node (#1684 follow-up): the centre spot placed through the world's origin, its axes
+    /// the pitch's true azimuth in the east-up-south there (<see cref="WorldOrigin.WorldOfEnu(Vector3, Vector3)"/>), into the
+    /// leaf's own frame.
+    /// </summary>
+    private Transform3D? LeafFrame(ChunkNode node, StadiumSpec s)
+    {
+        if (_ground.Origin is not { } origin) return null;
+        var world = origin.ToWorld(s.Centre);
+        if (!_ground.TryGetSurface(world, out float ground)) return null;
+        // u across the pitch: east when the true azimuth is 0, in the east-up-south there
+        float a = Mathf.DegToRad(s.AzimuthDeg);
+        var inNode = node.GlobalBasis.Inverse();
+        var u = (inNode * origin.WorldOfEnu(world, new Vector3(MathF.Cos(a), 0, MathF.Sin(a)))).Normalized();
+        var up = (inNode * origin.WorldOfEnu(world, Vector3.Up)).Normalized();
+        // u level in the leaf's frame and v along the pitch: it lies level, as on a tile
+        u = (u - up * u.Dot(up)).Normalized();
+        var basis = new Basis(u, up, u.Cross(up));
+        return new Transform3D(basis, node.ToLocal(world with { Y = ground }));
     }
 
     /// <summary>
