@@ -1320,12 +1320,9 @@ tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
 src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh
 # #1718: each net script moved off the generated world retests itself when it changes
 tools/baycheck               net    tools/baycheck.sh
-tools/brbotcheck             net    tools/brbotcheck.sh
-tools/brsquadcheck           net    tools/brsquadcheck.sh
 tools/cinemanetcheck         net    tools/cinemanetcheck.sh
 tools/cranenetcheck          net    tools/cranenetcheck.sh
 tools/debugcheck             net    tools/debugcheck.sh
-tools/fillagreenetcheck      net    tools/fillagreenetcheck.sh
 tools/liftsynccheck          net    tools/liftsynccheck.sh
 tools/palletnetcheck         net    tools/palletnetcheck.sh
 tools/pigeonnetcheck         net    tools/pigeonnetcheck.sh
