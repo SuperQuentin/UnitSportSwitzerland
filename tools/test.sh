@@ -311,8 +311,8 @@ unit_one() { # name log args...: one dotnet test run
 }
 unit_stage() {
   : > "$OUT/.unit.rows"
-  # [Trait("Speed", "Slow")] tests run in the full tier only (#1407): the signal test region's build alone was
-  # 556 s of a 14 min unit stage
+  # [Trait("Speed", "Slow")] tests run in the full tier only (#1407). None is left: the signal test region it was
+  # for builds once per run in ~30 s since RoadGen is optimized in Debug too (#1716)
   local slow=(--filter "Speed!=Slow"); [ "$TIER" = full ] && slow=()
   unit_one "unit (dotnet test)" "$OUT/unit.log" tests/UnitSportSwitzerland.Tests ${slow[@]+"${slow[@]}"}
   # RideLink (#901, tools/RideLink): the trainer library's own tests (parsers, the FTMS handshake, the router)

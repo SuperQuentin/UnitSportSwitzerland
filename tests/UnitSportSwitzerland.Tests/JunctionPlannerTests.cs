@@ -6,19 +6,12 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The test region built once with the junction planner (#818, <c>--junctions new</c>).</summary>
-public sealed class JunctionPlannerFixture : IDisposable
+public sealed class JunctionPlannerFixture
 {
-    public readonly string Dir = Path.Combine(Path.GetTempPath(), "unitsport-818-" + Guid.NewGuid().ToString("N"));
-    public readonly int Code;
-    public readonly List<string> Log = new();
-
-    public JunctionPlannerFixture() => Code = SignalTestRegion.Run(Dir, null, Log.Add, newJunctions: true, writeJunctions: false);
-
-    public void Dispose()
-    {
-        if (Directory.Exists(Dir)) Directory.Delete(Dir, recursive: true);
-        if (Directory.Exists(Dir + "_temp")) Directory.Delete(Dir + "_temp", recursive: true);
-    }
+    private readonly TestRegionBuilds.Build build = TestRegionBuilds.Get(writeJunctions: false);
+    public string Dir => build.Dir;
+    public int Code => build.Code;
+    public IReadOnlyList<string> Log => build.Log;
 }
 
 /// <summary>
@@ -507,40 +500,31 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
         Assert.Equal(7.5f + 1.5f, s.OuterRight(0), 3);
     }
 
-    // builds the whole signal test region: 556 s of a 14 min unit run (#1407), so only the full tier runs it
-    [Fact, Trait("Speed", "Slow")]
+    [Fact]
     public void The_written_test_region_holds_its_cores_and_transitions_and_decodes_them_alike()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "unitsport-818w-" + Guid.NewGuid().ToString("N"));
-        var log = new List<string>();
-        try
+        // the region as the game writes it, shared with the signal region classes (#1716); was its own Slow build (#1407)
+        var (dir, code, log) = TestRegionBuilds.Get(writeJunctions: true);
+        Assert.Equal(0, code);
+        var written = log.FirstOrDefault(l => l.Contains("junction planner written (#818 phase 3)", StringComparison.Ordinal));
+        Assert.NotNull(written);
+        Assert.Contains("pieces lost by a later cut 0", written);
+        Assert.Contains(log, l => l.Contains("paint encoding", StringComparison.Ordinal) && l.Contains(" 0 decoded differently", StringComparison.Ordinal));
+        int transitions = 0;
+        foreach (var file in Directory.EnumerateFiles(dir, "roads_*.road"))
         {
-            Assert.Equal(0, SignalTestRegion.Run(dir, null, log.Add, newJunctions: true, writeJunctions: true));
-            var written = log.FirstOrDefault(l => l.Contains("junction planner written (#818 phase 3)", StringComparison.Ordinal));
-            Assert.NotNull(written);
-            Assert.Contains("pieces lost by a later cut 0", written);
-            Assert.Contains(log, l => l.Contains("paint encoding", StringComparison.Ordinal) && l.Contains(" 0 decoded differently", StringComparison.Ordinal));
-            int transitions = 0;
-            foreach (var file in Directory.EnumerateFiles(dir, "roads_*.road"))
+            using var fs = File.OpenRead(file);
+            var tile = RoadCodec.Decode(fs);
+            foreach (var t in tile.Transitions)
             {
-                using var fs = File.OpenRead(file);
-                var tile = RoadCodec.Decode(fs);
-                foreach (var t in tile.Transitions)
-                {
-                    transitions++;
-                    Assert.True(t.Segment.Attributes.Has(RoadAttrFlags.InTransition));
-                    Assert.InRange(Math.Abs(SegmentSections.Stations(t.Segment)[^1] - t.Stations[^1]), 0, 0.011);   // the file's centimetre
-                }
+                transitions++;
+                Assert.True(t.Segment.Attributes.Has(RoadAttrFlags.InTransition));
+                Assert.InRange(Math.Abs(SegmentSections.Stations(t.Segment)[^1] - t.Stations[^1]), 0, 0.011);   // the file's centimetre
             }
-            Assert.True(transitions >= 20, $"{transitions} transitions written");
-            // every kerb a zebra or bike crossing meets is still sloped
-            Assert.Equal(0, UnitSport.Tools.RoadGen.Diagnostics.KerbCheck.Run(dir, null, false, _ => { }));
         }
-        finally
-        {
-            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
-            if (Directory.Exists(dir + "_temp")) Directory.Delete(dir + "_temp", recursive: true);
-        }
+        Assert.True(transitions >= 20, $"{transitions} transitions written");
+        // every kerb a zebra or bike crossing meets is still sloped
+        Assert.Equal(0, UnitSport.Tools.RoadGen.Diagnostics.KerbCheck.Run(dir, null, false, _ => { }));
     }
 
     [Fact]
