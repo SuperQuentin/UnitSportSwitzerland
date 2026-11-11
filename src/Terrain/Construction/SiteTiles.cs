@@ -30,16 +30,19 @@ internal static class SiteTiles
     /// its site's materials pallets under its jib (#1704): planned from the tiles' files, drawn or not. The generator plans
     /// other sites on an earth world's leaves than on the flat world's tiles, so a check cannot name one.
     /// </summary>
-    public static async System.Threading.Tasks.Task<GlobalPos?> CraneWithPalletNear(FootPlayer me, int rings = 2)
+    public static async System.Threading.Tasks.Task<GlobalPos?> CraneWithPalletNear(FootPlayer me, int rings = 4)
     {
         if (me.Terrain is not { } ground || ground.Content is not { } source) return null;
         var here = ground.ContentName(ground.TileAt(me.GlobalPosition));
         var at = me.Global;
         GlobalPos? best = null;
         double nearest = double.MaxValue;
-        for (int dx = -rings; dx <= rings; dx++)
-            for (int dz = rings; dz >= -rings; dz--)
+        // ring by ring, nearest first: the first ring that has one ends the search (each leaf asked is made, ~2 s)
+        for (int ring = 0; ring <= rings && best == null; ring++)
+        for (int dx = -ring; dx <= ring; dx++)
+            for (int dz = ring; dz >= -ring; dz--)
             {
+                if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != ring) continue;
                 var id = here.Neighbour(dx, dz);
                 if (await source.LoadBuildingsAsync(id) is not { } tile || !SitePlans.HasSite(tile)) continue;
                 var roads = await source.LoadRoadsAsync(id);

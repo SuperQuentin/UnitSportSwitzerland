@@ -175,7 +175,7 @@ public partial class CraneNetProbe : ChatProbe
 
         // A may send B to a crane elsewhere first (#1704)
         bool working = false, went = false;
-        for (int t = 0; t < 360 && !working; t++)
+        for (int t = 0; t < 720 && !working; t++)
         {
             if (!went && Words("A", "go") is { Length: >= 3 } g && me.Origin is { } o)
             {

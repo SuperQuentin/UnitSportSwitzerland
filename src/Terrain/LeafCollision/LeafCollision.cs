@@ -69,10 +69,12 @@ public sealed class LeafCollision
         var heights = leaf.Heights ?? throw new ArgumentException($"leaf {leaf.Key} has no heights");
         int n = (1 << heights.Bits) + 1;
         var bare = CubeGeometry.Vertices(leaf.Key, heights.Bits, heights.Heights);
-        var stand = LeafStand.Make(leaf, bare, n);
         var vertices = (float[])bare.Clone();
         var bands = LeafRoadBlend.For(leaf.Key, leaf.Roads, neighbourRoads);
         if (bands != null) LeafRoadBlend.Apply(vertices, bands, 0);
+        // the stand-in's grid from the ground as walked on (#1704): what stands on it (buildings, doors, the sites' offices
+        // and yards, parked vehicles) is planned on it, and beside a road the bare lattice is metres off the blended one
+        var stand = LeafStand.Make(leaf, vertices, n);
 
         var faces = new List<Vector3>[PerSide * PerSide];
         var buildingFaces = new List<Vector3>[PerSide * PerSide];
