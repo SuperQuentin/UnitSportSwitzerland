@@ -61,6 +61,20 @@ public partial class SitePalletNetProbe : ChatProbe
     /// <summary>Half the telehandler's width and a margin, m: how far either side of a pallet's centreline the way in must be clear.</summary>
     private const float MachineHalfWidth = 1.3f;
 
+    /// <summary>The most the floor may rise or fall along the way in, m.</summary>
+    private const float MaxStep = 0.12f;
+
+    /// <summary>The keys of the topped-out sites on these tiles (off the main thread: it plans them).</summary>
+    private static HashSet<string> ToppedOutSites(IEnumerable<Terrain.Format.TileId> tiles)
+    {
+        var keys = new HashSet<string>();
+        if (Loot.LootService.Instance?.Source?.Invoke() is not { } source) return keys;
+        foreach (var tile in tiles)
+            foreach (var site in Terrain.Construction.SitePlans.OfTile(source, tile).Sites)
+                if (site.Phase == Terrain.Construction.SitePhase.ToppedOut) keys.Add(site.Key);
+        return keys;
+    }
+
     private static float Yaw(Vector3 toward) => Mathf.Atan2(-toward.X, -toward.Z);
 
     private static string F(float v) => v.ToString("F3", CultureInfo.InvariantCulture);
@@ -109,7 +123,20 @@ public partial class SitePalletNetProbe : ChatProbe
                 // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
                 bool overPit = false;
                 for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
-                if (hit.Count == 0 && !overPit) { side = dir; break; }
+                // and level all the way in, at the pallet's own floor: a slab's edge or a kerb stops the machine short of it
+                bool step = false;
+                float floor = float.NaN;
+                for (float k = 1f; k <= 7.5f && !step; k += 0.5f)
+                {
+                    var top = pallet.GlobalPosition + dir * k + Vector3.Up * 3f;
+                    var down = Ray(top, top - Vector3.Up * 6f);
+                    if (down.Count == 0) continue;
+                    float y = down["position"].AsVector3().Y;
+                    if (float.IsNaN(floor)) floor = y;
+                    step = Math.Abs(y - floor) > MaxStep;
+                }
+                if (hit.Count == 0 && !overPit && !step) { side = dir; break; }
+                if (step) GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: a step on the way in"));
                 GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: {(hit.Count == 0 ? "clear" : $"hits {(hit["collider"].AsGodotObject() as Node)?.GetPath()} at {hit["position"]}")}{(overPit ? ", over the pit" : "")}"));
             }
             return side;
@@ -117,11 +144,19 @@ public partial class SitePalletNetProbe : ChatProbe
 
         // the nearest site pallet a machine can come at: one beside a pit or hemmed in by a slab is passed over (#1718:
         // on the fixture the nearest stands by the foundations' pit)
+        // a topped-out site's first, as on the generated world: its materials lie on level ground with a way in, where a
+        // shell's or a foundations' may lie by the pit or the slab's edge
+        var palletTiles = new HashSet<Terrain.Format.TileId>();
+        foreach (var n in PalletNode.All.Values)
+            if (Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site && Interiors.BuildingKey.TryParse(r.Building, out var b))
+                palletTiles.Add(b.Tile);
+        var topped = await Task.Run(() => ToppedOutSites(palletTiles));
         PalletNode? pallet = null;
         Vector3? clear = null;
         foreach (var candidate in PalletNode.All.Values
                      .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
-                     .OrderBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(40).ToList())
+                     .OrderBy(n => Pallets.TryParse(n.Id, out var r) && topped.Contains(r.Building) ? 0 : 1)
+                     .ThenBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(40).ToList())
         {
             GD.Print($"[sitepalletnet A]   trying {candidate.Id}");
             if (ClearSide(candidate) is { } found) { pallet = candidate; clear = found; break; }
