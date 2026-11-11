@@ -168,6 +168,22 @@ public static class LeafStandIn
         return copy.WithId(id);
     }
 
+    /// <summary>
+    /// For <see cref="Core.Fnv.Resolve"/> (#1704): registers the aliases of the leaf a stand-in building key (<c>E_N_I</c>)
+    /// names, from its buildings (<paramref name="buildingsOf"/>: the leaf's own, read or made); false for no stand-in.
+    /// </summary>
+    public static bool RegisterAliases(string key, Func<CubeKey, BuildingTile?> buildingsOf)
+    {
+        var parts = key.Split('_');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out int e) || !int.TryParse(parts[1], out int n)) return false;
+        var id = new TileId(e, n);
+        if (!TryLeaf(id, out var leaf) || buildingsOf(leaf) is not { } buildings) return false;
+        var ids = BuildingId.Assign(buildings.Buildings, b => BuildingId.OnLeaf(leaf, b));
+        for (int i = 0; i < ids.Length; i++)
+            if (ids[i] is { } bid) Core.Fnv.Alias($"{id.E}_{id.N}_{i}", bid.ToString());
+        return true;
+    }
+
     /// <summary>A leaf's buildings in its stand-in tile (a copy; the solids in the leaf's order, so an index names the same solid).</summary>
     public static BuildingTile Buildings(BuildingTile leafBuildings, TileId id)
     {
