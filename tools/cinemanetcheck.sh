@@ -7,12 +7,12 @@
 # Then the hall's video (#1298): A plays VIDEO, B is refused one, all three decode it and must show the
 # frame due on the shared clock: A through the server's relay (--cinemanodecode), B from the link itself. VIDEO=<link> (a web link: internet), none, or by default a 60 s test film
 # made with ffmpeg in the temp folder (never under the project) played as a local file (--cinemavideolocal).
-#   GODOT=<exe> [PORT=] [AT=E,N] [VIDEO=] tools/cinemanetcheck.sh      output in test_output/cinemanet_*.log
+#   GODOT=<exe> [PORT=] [VIDEO=] tools/cinemanetcheck.sh      output in test_output/cinemanet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" cinemanet
 PORT=${PORT:-7947}
 # the hamlet fixture: seven houses round its chapel, within 200 m of the start (#1718; the generated world cost
-# three times the RAM); AT=E,N puts the clients elsewhere on it
-WORLD="--world fixture --chunks fixture:hamlet --traffic 0${AT:+ --at $AT}"
+# three times the RAM). Never --at on a fixture: a client lays the course at its --at, the server at the default spawn
+WORLD="--world fixture --chunks fixture:hamlet --traffic 0"
 VIDEO=${VIDEO:-local}
 VARGS=()
 if [ "$VIDEO" = local ]; then
