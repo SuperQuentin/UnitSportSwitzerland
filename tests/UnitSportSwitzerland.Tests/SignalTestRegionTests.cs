@@ -5,14 +5,13 @@ using Xunit;
 
 namespace UnitSport.Tests;
 
-/// <summary>The test region built once into a temp dir for every test of the class (~2 s).</summary>
-public sealed class SignalTestRegionFixture : IDisposable
+/// <summary>The test region as the game builds it, built once per test run and shared by every class (<see cref="TestRegionBuilds"/>).</summary>
+public sealed class SignalTestRegionFixture
 {
-    public readonly string Dir = Path.Combine(Path.GetTempPath(), "unitsport-386-" + Guid.NewGuid().ToString("N"));
-    public readonly int Code;
-    public readonly List<string> Log = new();
-
-    public SignalTestRegionFixture() => Code = SignalTestRegion.Run(Dir, null, Log.Add);
+    private readonly TestRegionBuilds.Build build = TestRegionBuilds.Get(writeJunctions: true);
+    public string Dir => build.Dir;
+    public int Code => build.Code;
+    public IReadOnlyList<string> Log => build.Log;
 
     public IEnumerable<(string Path, RoadTile Tile)> Tiles()
     {
@@ -39,12 +38,6 @@ public sealed class SignalTestRegionFixture : IDisposable
     /// <summary>The junction whose id (its name up to the first dash) is <paramref name="id"/>: "J1" is not J10's.</summary>
     public SignalTestRegion.Junction Junction(string id) =>
         SignalTestRegion.Junctions.Single(j => j.Name.Split('-')[0] == id.TrimEnd('-'));
-
-    public void Dispose()
-    {
-        if (Directory.Exists(Dir)) Directory.Delete(Dir, recursive: true);
-        if (Directory.Exists(Dir + "_temp")) Directory.Delete(Dir + "_temp", recursive: true);
-    }
 }
 
 /// <summary>
