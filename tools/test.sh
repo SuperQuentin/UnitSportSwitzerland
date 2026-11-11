@@ -24,7 +24,9 @@
 #      test_output/tests/results.csv; tools/test-compare.py compares two), TEST_LIST (1: print the checks
 #      it would run, then stop), TEST_USERDATA (real: the Godot checks run on the real user://, not a
 #      fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1: skip what results.tsv
-#      already holds as PASS, to go on after a run that died, #1409).
+#      already holds as PASS, to go on after a run that died, #1409), TEST_FRAME (earth|flat: the net checks'
+#      servers and clients play in that frame, and a log that does not state it fails its check, #1683;
+#      `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full` is the earth net bar).
 # Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log, peak MB):
 # a run that dies keeps what it had.
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
@@ -340,15 +342,17 @@ ud() { # log path: sets UD
 netsmoke() { # headless dedicated server on the flat fixture world + a headless client joining and leaving it
   local port=$(( ${TEST_PORT:-7821} + ${GUARD_SLOT:-0} * 1000 )) slog=$OUT/netsmoke_server.log
   ud "$1"   # the server and the client share one user://, as a twoclient check's do
-  ${UD[@]+"${UD[@]}"} "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port "$port" --world fixture > "$slog" 2>&1 < /dev/null &
+  guard_frame_args   # TEST_FRAME (#1683)
+  ${UD[@]+"${UD[@]}"} "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port "$port" --world fixture ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"} > "$slog" 2>&1 < /dev/null &
   SERVER=$!
   for _ in $(seq 1 600); do
     grep -q "server listening" "$slog" 2>/dev/null && break
     kill -0 "$SERVER" 2>/dev/null || break
     guard_nap 0.2
   done
-  guard_run "$TIMEOUT" "$1" ${UD[@]+"${UD[@]}"} "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture
+  guard_run "$TIMEOUT" "$1" ${UD[@]+"${UD[@]}"} "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --leavecheck connect "127.0.0.1:$port" --world fixture ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
   local code=$?
+  guard_frame_check netsmoke "$slog" "$1" >> "$1" || code=1
   _guard_kill_tree "$SERVER"
   wait "$SERVER" 2>/dev/null
   SERVER=

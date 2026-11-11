@@ -9,7 +9,9 @@
 #   NOTERRAIN (--chunks $OUT/no_terrain), an empty folder: for a check of the GENERATED world, on its
 #           server and every client, so a terrain_location.json or UNITSPORT_CHUNKS pointing at real
 #           tiles (the main checkout's) never puts real ground under its generated sites (#943)
-#   TEST_FRAME=earth (env): every Godot run here takes --frame earth after its own args (G2 D0)
+#   TEST_FRAME=earth (env): every Godot run here takes --frame earth after its own args (G2 D0), and at exit the
+#           check fails ("RESULT: FAILED", exit 1) if a server's or client's log does not state that frame
+#           ("[frame] earth", #1683): a world that silently fell back to flat never passes
 #   user:// a fresh $OUT/userdata_<name> for every Godot started here (APPDATA on Windows,
 #           XDG_DATA_HOME on Linux, HOME of the Godot runs only on macOS), so loot, bank, placed,
 #           birds, identity... are never the real ones; USERDATA=<dir> picks another, USERDATA=real
@@ -74,11 +76,20 @@ if [ "${USERDATA:-}" != real ]; then
 fi
 
 _tc_servers=()
+# every server's and client's log, for the frame check at exit: a file, as background clients run in subshells
+# ($$ is this script's PID in them too)
+_tc_logs=$OUT/.tc_logs.$$
+: > "$_tc_logs"
 _tc_cleanup() {
   local p
   # only the ones still up: a tree walk costs ~0.5 s on Git Bash, for a server tc_stop already took down
   for p in ${_tc_servers[@]+"${_tc_servers[@]}"}; do kill -0 "$p" 2>/dev/null && _guard_kill_tree "$p"; done
   [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock
+  # last, after the check's own RESULT line: tools/test.sh reads the last one
+  local logs=()
+  while IFS= read -r p; do [ -n "$p" ] && logs+=("$p"); done < "$_tc_logs"
+  rm -f "$_tc_logs"
+  guard_frame_check "$_tc_name" ${logs[@]+"${logs[@]}"} || exit 1
 }
 trap _tc_cleanup EXIT
 # under tools/test.sh the runner already holds the lock: taking it again would wait forever
@@ -107,6 +118,7 @@ tc_server() {
   local timeout_s=$1 wait_s=$2 log=$3 i
   shift 3
   : > "$log"
+  echo "$log" >> "$_tc_logs"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --headless --path . -- "$@" &
   SERVER=$!
@@ -126,6 +138,7 @@ tc_client() {
   shift 2
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=
+  echo "$log" >> "$_tc_logs"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} $headless --path . -- "$@"
 }
