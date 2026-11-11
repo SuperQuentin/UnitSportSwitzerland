@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A cinema's booth over loopback (#1238, src/Interiors/CinemaNetProbe): a headless dedicated server on
-# the GENERATED world and three headless clients at a village. A walks into a house and asks for the
+# the hamlet fixture (fixture:hamlet) and three headless clients at its houses. A walks into a house and asks for the
 # lights off and the cat on (the booth's rule is "only from inside", whatever the building); B, outside,
 # must see it arrive and be refused when it asks the opposite; C joins only after A's ask and must find
 # the state from the table the server sends a newcomer.
@@ -10,10 +10,9 @@
 #   GODOT=<exe> [PORT=] [AT=E,N] [VIDEO=] tools/cinemanetcheck.sh      output in test_output/cinemanet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" cinemanet
 PORT=${PORT:-7947}
-# a generated village with houses round it (the site office check's village)
-AT=${AT:-2586561,1115543}
-# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
-WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT"
+# the hamlet fixture: seven houses round its chapel, within 200 m of the start (#1718; the generated world cost
+# three times the RAM); AT=E,N puts the clients elsewhere on it
+WORLD="--world fixture --chunks fixture:hamlet --traffic 0${AT:+ --at $AT}"
 VIDEO=${VIDEO:-local}
 VARGS=()
 if [ "$VIDEO" = local ]; then
@@ -32,7 +31,7 @@ elif [ "$VIDEO" != none ]; then
 fi
 # C starts on A's "set" line: never on an earlier run's log
 rm -f "$OUT"/cinemanet_A.log "$OUT"/cinemanet_B.log "$OUT"/cinemanet_C.log
-tc_server 560 120 "$OUT/cinemanet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}" ${VARGS[@]+"${VARGS[@]}"}
+tc_server 560 120 "$OUT/cinemanet_server.log" --server --port $PORT --world fixture --chunks fixture:hamlet ${VARGS[@]+"${VARGS[@]}"}
 # A cannot decode (a phone's way): its video comes through the server's relay (#1298 phase 2); B decodes the link
 tc_client 480 "$OUT/cinemanet_A.log" --connect 127.0.0.1:$PORT --name CinemaA $WORLD --cinemanet A ${VARGS[@]+"${VARGS[@]}" --cinemanodecode} & A=$!
 tc_client 480 "$OUT/cinemanet_B.log" --connect 127.0.0.1:$PORT --name CinemaB $WORLD --cinemanet B ${VARGS[@]+"${VARGS[@]}"} & B=$!

@@ -31,7 +31,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site", "crag", "hamlet", "fun" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage", "site", "crag", "hamlet", "fun", "town" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -191,6 +191,7 @@ public sealed class FixtureCourse
         "crag" => Crag.Create(),
         "hamlet" => Hamlet(),
         "fun" => FunCourse.Create(),
+        "town" => Town(),
         _ => null,
     };
 
@@ -214,6 +215,36 @@ public sealed class FixtureCourse
             c.Blocks.Add(new Block(x, y, 9, 8, 6, Kind: BuildingKind.House, Floors: 2));
         c.Blocks.Add(new Block(-240, -165, 18, 12, 7, Kind: BuildingKind.Agricultural, Floors: 1));
         c.Blocks.Add(new Block(-160, -26, 18, 12, 7, Kind: BuildingKind.Agricultural, Floors: 1));
+        return c;
+    }
+
+    /// <summary>
+    /// A small town's street (#1718), flat: a minor road east from the start, a row of shops and a public building
+    /// along its north side, then three industrial halls set back behind a 16 m yard, each big enough for loading
+    /// bays. What the net checks of shops (<c>tools/shopcheck.sh</c>: a counter taking the card, a PAUSA machine),
+    /// loading bays (<c>tools/baycheck.sh</c>) and hall pallets (<c>tools/palletnetcheck.sh</c>) looked for in the
+    /// generated world's villages, within a few hundred metres of the start. Every plan is a hash of its building's
+    /// key, so the set is sized to hold each kind the checks ask for: change it and run those three again.
+    /// </summary>
+    private static FixtureCourse Town()
+    {
+        var c = new FixtureCourse
+        {
+            Name = "town",
+            Terrain = (_, _) => FlatHeight,
+            Extent = (-150, -150, 750, 200),
+        }.Road(RoadClass.Minor, new Pen(-120, 0, FlatHeight, 0, 0).Straight(840));
+        // the shops: two storeys, fronts 6 m from the road's middle
+        foreach (var (x, w) in new[] { (30.0, 14f), (52.0, 16f), (76.0, 18f), (100.0, 14f), (122.0, 16f), (146.0, 18f), (170.0, 14f), (192.0, 16f) })
+            c.Blocks.Add(new Block(x, 6 + 7, w, 14, 7, Kind: BuildingKind.Commercial, Floors: 2));
+        // a public building (a third of them hold a PAUSA machine) and an office block
+        c.Blocks.Add(new Block(225, 6 + 9, 24, 18, 10, Kind: BuildingKind.Civic, Floors: 3));
+        c.Blocks.Add(new Block(260, 6 + 9, 22, 18, 10, Kind: BuildingKind.Commercial, Floors: 3));
+        // the industrial estate: halls with room in front to turn a lorry
+        c.Blocks.Add(new Block(330, 16 + 13, 44, 26, 9, Kind: BuildingKind.Industrial, Floors: 1));
+        c.Blocks.Add(new Block(420, 16 + 15, 52, 30, 10, Kind: BuildingKind.Industrial, Floors: 1));
+        c.Blocks.Add(new Block(510, 16 + 12, 40, 24, 8, Kind: BuildingKind.Industrial, Floors: 1));
+        c.Blocks.Add(new Block(600, 16 + 15, 56, 30, 10, Kind: BuildingKind.Industrial, Floors: 1));
         return c;
     }
 
