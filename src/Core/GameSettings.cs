@@ -161,10 +161,13 @@ public sealed class GameSettings
     public bool GeneratedFill { get; set; } = true;
 
     /// <summary>
-    /// The world the game stands on (#1510, G2 C1): today's flat LV95 tiles, or the cube leaves in true Earth
-    /// positions. <c>--frame flat|earth</c>; flat until G2's last step flips it.
+    /// The world the game stands on (#1510, G2 C1): the cube leaves in true Earth positions, the default since G2 D2
+    /// (#1726), or the flat LV95 tiles. <c>--frame earth|flat</c> on the command line only: flat is D2's hidden rollback
+    /// until D3 deletes it, so it is never saved (a settings file from before the flip said <c>"frame": "Flat"</c>, the
+    /// old default, and must not keep a player on it).
     /// </summary>
-    public WorldFrame Frame { get; set; } = WorldFrame.Flat;
+    [JsonIgnore]
+    public WorldFrame Frame { get; set; } = WorldFrame.Earth;
 
     /// <summary>Tile builds allowed in flight at once; 0 picks by whether a server is involved.</summary>
     public int MaxConcurrentBuilds { get; set; }
