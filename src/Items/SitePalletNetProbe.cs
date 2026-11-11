@@ -75,12 +75,6 @@ public partial class SitePalletNetProbe : ChatProbe
 
         // the dormant layer draws the site's pallets with its machines, round the spawn
         if (!await Until(() => NearestSitePallet(me.GlobalPosition) != null, 60)) { Fail("no site pallet drawn near the spawn"); return; }
-        var pallet = NearestSitePallet(me.GlobalPosition)!;
-        Expect(me.SetRide(RideKind.Telehandler) && me.Vehicle is Telehandler, $"A takes a telehandler for {pallet.Id}");
-        if (me.Vehicle is not Telehandler th) { Fail("not a telehandler"); return; }
-
-        // across its runners (they run along the row of materials), from whichever side is clear
-        var across = (pallet.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
         var space = me.GetWorld3D().DirectSpaceState;
         // A's own body aside: it spawns at the site, and is placed at the side found anyway
         Godot.Collections.Dictionary Ray(Vector3 a, Vector3 b)
@@ -89,21 +83,41 @@ public partial class SitePalletNetProbe : ChatProbe
             q.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
             return space.IntersectRay(q);
         }
-        Vector3? side = null;
-        foreach (var dir in new[] { across, -across })
+        // across its runners (they run along the row of materials), from whichever side is clear
+        Vector3? ClearSide(PalletNode pallet)
         {
-            var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
-            var hit = Ray(from, from + dir * 7.5f);
-            // nothing low either: the materials' rebar bundle is 0.35 m high (#619 turns it to the building)
-            var low = from - Vector3.Up * 0.95f;
-            if (hit.Count == 0) hit = Ray(low, low + dir * 7.5f);
-            // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
-            bool overPit = false;
-            for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
-            if (hit.Count == 0 && !overPit) { side = dir; break; }
-            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: {(hit.Count == 0 ? "clear" : $"hits {(hit["collider"].AsGodotObject() as Node)?.GetPath()} at {hit["position"]}")}{(overPit ? ", over the pit" : "")}"));
+            var across = (pallet.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            Vector3? side = null;
+            foreach (var dir in new[] { across, -across })
+            {
+                var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
+                var hit = Ray(from, from + dir * 7.5f);
+                // nothing low either: the materials' rebar bundle is 0.35 m high (#619 turns it to the building)
+                var low = from - Vector3.Up * 0.95f;
+                if (hit.Count == 0) hit = Ray(low, low + dir * 7.5f);
+                // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
+                bool overPit = false;
+                for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
+                if (hit.Count == 0 && !overPit) { side = dir; break; }
+                GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: {(hit.Count == 0 ? "clear" : $"hits {(hit["collider"].AsGodotObject() as Node)?.GetPath()} at {hit["position"]}")}{(overPit ? ", over the pit" : "")}"));
+            }
+            return side;
         }
-        if (side is not { } outward) { Fail($"no clear side to come at {pallet.Id} from"); return; }
+
+        // the nearest site pallet a machine can come at: one beside a pit or hemmed in by a slab is passed over (#1718:
+        // on the fixture the nearest stands by the foundations' pit)
+        PalletNode? pallet = null;
+        Vector3? clear = null;
+        foreach (var candidate in PalletNode.All.Values
+                     .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
+                     .OrderBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(12).ToList())
+        {
+            GD.Print($"[sitepalletnet A]   trying {candidate.Id}");
+            if (ClearSide(candidate) is { } found) { pallet = candidate; clear = found; break; }
+        }
+        if (pallet == null || clear is not { } outward) { Fail("no site pallet with a clear side to come at near the spawn"); return; }
+        Expect(me.SetRide(RideKind.Telehandler) && me.Vehicle is Telehandler, $"A takes a telehandler for {pallet.Id}");
+        if (me.Vehicle is not Telehandler th) { Fail("not a telehandler"); return; }
         var tines = th.TinesFrame.Origin;
         var right = new Vector3(outward.Z, 0, -outward.X);
         var at = pallet.GlobalPosition + outward * (-tines.Z + Pallets.LoadAhead + 3f) - right * tines.X;

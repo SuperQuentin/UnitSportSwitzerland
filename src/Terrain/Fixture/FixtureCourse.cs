@@ -263,11 +263,15 @@ public sealed class FixtureCourse
         {
             Name = "site",
             Terrain = (_, _) => FlatHeight,
-            Extent = (-150, -150, 450, 200),
-        }.Road(RoadClass.Minor, new Pen(-120, 0, FlatHeight, 0, 0).Straight(560));
+            Extent = (-150, -150, 550, 200),
+        }.Road(RoadClass.Minor, new Pen(-120, 0, FlatHeight, 0, 0).Straight(660));
         course.Blocks.Add(new Block(60, 24, 24, 15, 1.3f, Kind: BuildingKind.UnderConstruction, Floors: 4));
         course.Blocks.Add(new Block(160, 24, 24, 15, 6.3f, Kind: BuildingKind.UnderConstruction, Floors: 4));
         course.Blocks.Add(new Block(255, 22, 14, 11, 1.0f, 25f, BuildingKind.UnderConstruction, 2));
+        // past the pits (#1718): a block topped out at four storeys, no pit, whose pallets a machine can come at from
+        // either side (tools/sitepalletnetcheck.sh); added after the first three so their keys, and so their plans, stay
+        // as they were, and topped out so --pitcheck (a Foundations and a Shell site) never picks it
+        course.Blocks.Add(new Block(380, 24, 26, 15, 12.0f, Kind: BuildingKind.UnderConstruction, Floors: 4));
         return course;
     }
 

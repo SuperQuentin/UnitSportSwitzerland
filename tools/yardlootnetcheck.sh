@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # A building site's skip searched over loopback (#627, src/Loot/YardLootNetProbe): a headless
-# dedicated server on the site fixture (fixture:site, #1718), which puts a building site in every village (#607), and
+# dedicated server on the site fixture (fixture:site, #1718), and
 # headless clients at the site. A finds the nearest site whose skip holds something this restock
 # period and opens it outdoors with E; B, there already with it open, must see the stack A takes
 # drop out of its panel by itself; then C joins late (B gone, A still online) and must find that
 # stack gone and the rest there. The server works every container out from the tile's own files.
-#   GODOT=<exe> [PORT=] [AT=E,N] [WINDOWED=1] tools/yardlootnetcheck.sh    output in test_output/yardlootnet_*.log
+#   GODOT=<exe> [PORT=] [WINDOWED=1] tools/yardlootnetcheck.sh    output in test_output/yardlootnet_*.log
 #   WINDOWED=1: A also saves the prompt and the open panel to test_output/yardloot_{prompt,panel}.png
 . "$(dirname "$0")/lib/twoclient.sh" yardlootnet
 PORT=${PORT:-7893}
-# the generated Foundations site --constructioncheck lists by the spawn
-# fixture:site (#1718): its sites stand within 300 m east of the start; AT=E,N puts the clients elsewhere on it
-WORLD="--world fixture --chunks fixture:site --traffic 0${AT:+ --at $AT}"
+# fixture:site (#1718): its sites stand within 400 m east of the start. Never --at on a fixture: a client lays the
+# course at its --at, the server at the default spawn
+WORLD="--world fixture --chunks fixture:site --traffic 0"
 tc_server 480 120 "$OUT/yardlootnet_server.log" --server --port $PORT --world fixture --chunks fixture:site
 tc_client 360 "$OUT/yardlootnet_A.log" --connect 127.0.0.1:$PORT --name YardA $WORLD --yardlootnet A & A=$!
 tc_client 240 "$OUT/yardlootnet_B.log" --connect 127.0.0.1:$PORT --name YardB $WORLD --yardlootnet B & B=$!

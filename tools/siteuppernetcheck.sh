@@ -5,14 +5,14 @@
 # walks in onto the plan's floor 1 and takes a stack; B, on the walkway from the start, sees the door
 # open, its portal and A inside, then walks in and finds the stack gone; C joins only after A's
 # take, finds the door open, climbs the stair, finds the stack gone and walks out onto the walkway.
-#   GODOT=<exe> [PORT=] [AT=E,N] [EPOCH=N] tools/siteuppernetcheck.sh      output in test_output/siteuppernet_*.log
+#   GODOT=<exe> [PORT=] [EPOCH=N] tools/siteuppernetcheck.sh      output in test_output/siteuppernet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" siteuppernet
 PORT=${PORT:-7893}
-# a generated topped-out site whose office has its gallery (--constructioncheck prints its stair foot)
-# fixture:site (#1718): its sites stand within 300 m east of the start; AT=E,N puts the clients elsewhere on it
+# fixture:site (#1718): its sites stand within 400 m east of the start. Never --at on a fixture: a client lays the
+# course at its --at, the server at the default spawn
 # a restock period in which an upper room has something to take (the server remembers takes per run)
 EPOCH=${EPOCH:-424242}
-WORLD="--world fixture --chunks fixture:site --traffic 0${AT:+ --at $AT} --lootepoch $EPOCH"
+WORLD="--world fixture --chunks fixture:site --traffic 0 --lootepoch $EPOCH"
 # C starts on A's "took" line: never on an earlier run's log
 rm -f "$OUT"/siteuppernet_A.log "$OUT"/siteuppernet_B.log "$OUT"/siteuppernet_C.log
 tc_server 480 120 "$OUT/siteuppernet_server.log" --server --port $PORT --world fixture --chunks fixture:site --lootepoch $EPOCH
