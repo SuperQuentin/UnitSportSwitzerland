@@ -24,6 +24,9 @@ guard_wait_ram 4 600 || exit 1
 # the flat test world (#992): building needs no real or generated ground; REAL=1 boots the generated world as before
 SW=(--world fixture); CW=(--world fixture)
 [ -n "${REAL:-}" ] && { SW=(--generated-world); CW=(); }
+# TEST_FRAME (#1683, tools/lib/guard.sh): the frame every Godot here plays in, checked in their logs at the end
+guard_frame_args
+SW+=(${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}); CW+=(${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"})
 
 guard_test_userdata $OUT/userdata_buildnet_server || exit 1
 "$GODOT" --headless ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --path . -- --server --port $PORT "${SW[@]}" > $OUT/buildnet_server.log 2>&1 < /dev/null &
@@ -48,4 +51,5 @@ for c in A B; do grep "RESULT" $OUT/buildnet_$c.log | tail -1 | grep -q "RESULT:
 grep -h "\[buildnet" $OUT/buildnet_A.log $OUT/buildnet_B.log
 grep -h "\[build\]" $OUT/buildnet_server.log
 echo "[buildnetcheck] RESULT: $([ $code = 0 ] && echo ok || echo FAILED)"
+guard_frame_check buildnetcheck $OUT/buildnet_server.log $OUT/buildnet_A.log $OUT/buildnet_B.log || code=1
 exit $code
