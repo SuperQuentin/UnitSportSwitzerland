@@ -168,6 +168,8 @@ public sealed class LeafStore : ILeafSource
                 default: throw new ArgumentException($"{kind} is not read alone", nameof(kinds));
             }
         }
+        // the data inside a stadium's facade goes as it is read (#1723), as an LV95 tile's (StadiumClip)
+        Stadiums.StadiumLeaves.Clip(c);
         return c;
     }
 
@@ -206,5 +208,12 @@ public sealed class LeafStore : ILeafSource
         return _remote is { } r && r.Index.TryGetValue(key, out var e) ? r.Fetch(key, e, section) : null;
     }
 
-    private CubeLeafContent? Read(CubeKey key) => Entry(key) is { } bytes ? CubeLeafContent.Decode(bytes) : null;
+    private CubeLeafContent? Read(CubeKey key)
+    {
+        if (Entry(key) is not { } bytes) return null;
+        var c = CubeLeafContent.Decode(bytes);
+        // the data inside a stadium's facade goes as it is read (#1723), as an LV95 tile's (StadiumClip)
+        Stadiums.StadiumLeaves.Clip(c);
+        return c;
+    }
 }
