@@ -65,7 +65,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
 
         if (_role == "A")
         {
-            Doorstep(1.2f);
+            Doorstep(DoorstepOut);
             me.Velocity = Vector3.Zero;
             await Seconds(1.5);   // the server checks the doorstep against its relayed copy
             await Until(() => me.IsOnFloor(), 10);
@@ -74,7 +74,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             if (!await Heard("B", "watching", 120)) { Fail("B never came to watch"); return; }
             me.TryInteract();
             if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
-            { Fail($"the door {doorKey} never opened"); return; }
+            { Fail($"the door {doorKey} never opened (E took the loot panel {loot.IsOpen}, a machine {Vehicles.VehicleReach.Find(me)?.Vehicle.Name})"); return; }
             Say("opened");
             if (!await WalkIn(me, interiors, doorKey)) return;
 
@@ -141,7 +141,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             var parts = took[(took.IndexOf("took", StringComparison.Ordinal) + 5)..].Split(' ');
             int index = int.Parse(parts[0]), gone = int.Parse(parts[1]);
 
-            Doorstep(1.2f);
+            Doorstep(DoorstepOut);
             me.Velocity = Vector3.Zero;
             await Seconds(1.0);
             if (!await WalkIn(me, interiors, doorKey)) return;
@@ -268,24 +268,33 @@ public partial class SiteOfficeNetProbe : ChatProbe
         return true;
     }
 
-    /// <summary>Office doors seen to have a yard container beside them, by key (planned once each).</summary>
+    /// <summary>Office doors seen to have a yard container by their doorstep, by key (planned once each).</summary>
     private readonly Dictionary<DoorKey, bool> _yardBeside = new();
 
-    /// <summary>How near an office door a yard container takes E from it, m: the panel opens on it, not the door.</summary>
-    private const float YardClear = 6f;
+    /// <summary>Where A stands to work the door, m out from it (<c>Doorstep</c>).</summary>
+    private const float DoorstepOut = 1.2f;
 
     /// <summary>
-    /// Whether a site's skip or materials stand within <see cref="YardClear"/> of the office door (#1718): E at the door
-    /// searches a yard container faced before it works a door, so the check takes an office with nothing of the yard
-    /// beside it. Every peer asks the same of the same plans, so A, B and C still pick the same door. The generated
-    /// world's office at 2586561,1115543 had none; the site fixture's nearest one has.
+    /// Whether a site's skip or materials stand within E's reach of the office's doorstep (#1718): E outdoors searches a
+    /// yard container within <see cref="Terrain.Construction.SiteLoot.SearchReach"/> of its edge before it works a door,
+    /// so the check takes an office with nothing of the yard by its door (to <see cref="Terrain.Construction.SiteLoot.CloseReach"/>,
+    /// a margin). Every peer asks the same of the same plans, so A, B and C still pick the same door. The generated
+    /// world's office at 2586561,1115543 had none; the site fixture's nearest two have.
     /// </summary>
     private bool YardBeside(FootPlayer me, DoorIndex.Entry door)
     {
         if (_yardBeside.TryGetValue(door.Key, out bool beside)) return beside;
         if (LootService.Instance?.Source?.Invoke() is not { } source || me.Origin is not { } origin) return false;
-        var yard = Terrain.Construction.SitePlans.YardOfTile(source, door.Key.Tile);
-        beside = yard.Any(c => origin.ToWorld(c.E, c.N, c.Bottom).DistanceTo(door.World) < YardClear);
+        var step = door.World + door.Outward * DoorstepOut;
+        beside = false;
+        foreach (var c in Terrain.Construction.SitePlans.YardOfTile(source, door.Key.Tile))
+        {
+            // the tile frame is the world's: x east, z south
+            var middle = origin.ToWorld(c.E, c.N, c.Bottom);
+            var rel = new Vector2(step.X - middle.X, step.Z - middle.Z);
+            float du = Math.Max(0, Math.Abs(rel.Dot(c.AxisU)) - c.HalfU), dv = Math.Max(0, Math.Abs(rel.Dot(c.AxisV)) - c.HalfV);
+            if (MathF.Sqrt(du * du + dv * dv) < Terrain.Construction.SiteLoot.CloseReach) { beside = true; break; }
+        }
         _yardBeside[door.Key] = beside;
         return beside;
     }

@@ -105,7 +105,7 @@ public partial class YardLootNetProbe : ChatProbe
         foreach (var c in skips)
         {
             var stacks = LootTables.YardContents(c.Building, c.Index, c.Kind, LootTables.Epoch(c.Building, Now));
-            GD.Print($"{Log} {c.Building} #{c.Index} skip at {F(c.E)},{F(c.N)}: {stacks.Count} stacks");
+            GD.Print($"{Log} {c.Building} #{c.Index} skip: {stacks.Count} stacks");
             if (stacks.Count >= 2 && c.Building == nearest) return c;
             if (stacks.Count > 0) any ??= c;
         }
