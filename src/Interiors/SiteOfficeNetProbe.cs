@@ -46,7 +46,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
         me.RequestReplacement();
         DoorIndex.Entry? found = null;
         if (!await Until(() => me.IsOnFloor() && !me.KnockedOut
-                && (found = DoorIndex.NearestOfKind(me.GlobalPosition, 200f, BuildingKind.UnderConstruction, also: d => d.Key.Slot == 0)) != null, 90))
+                && (found = DoorIndex.NearestOfKind(me.GlobalPosition, 200f, BuildingKind.UnderConstruction, also: d => d.Key.Slot == 0 && !YardBeside(me, d))) != null, 90))
         { Fail("no site office door near the spot"); return; }
         await Seconds(1.0);
         var door = found!.Value;
@@ -266,5 +266,27 @@ public partial class SiteOfficeNetProbe : ChatProbe
         Expect(loot.TrySearch(me) && loot.IsOpen, $"opened the {f.Type}");
         if (!await Until(() => !loot.Waiting, 10)) { Fail("its contents never arrived"); return false; }
         return true;
+    }
+
+    /// <summary>Office doors seen to have a yard container beside them, by key (planned once each).</summary>
+    private readonly Dictionary<DoorKey, bool> _yardBeside = new();
+
+    /// <summary>How near an office door a yard container takes E from it, m: the panel opens on it, not the door.</summary>
+    private const float YardClear = 6f;
+
+    /// <summary>
+    /// Whether a site's skip or materials stand within <see cref="YardClear"/> of the office door (#1718): E at the door
+    /// searches a yard container faced before it works a door, so the check takes an office with nothing of the yard
+    /// beside it. Every peer asks the same of the same plans, so A, B and C still pick the same door. The generated
+    /// world's office at 2586561,1115543 had none; the site fixture's nearest one has.
+    /// </summary>
+    private bool YardBeside(FootPlayer me, DoorIndex.Entry door)
+    {
+        if (_yardBeside.TryGetValue(door.Key, out bool beside)) return beside;
+        if (LootService.Instance?.Source?.Invoke() is not { } source || me.Origin is not { } origin) return false;
+        var yard = Terrain.Construction.SitePlans.YardOfTile(source, door.Key.Tile);
+        beside = yard.Any(c => origin.ToWorld(c.E, c.N, c.Bottom).DistanceTo(door.World) < YardClear);
+        _yardBeside[door.Key] = beside;
+        return beside;
     }
 }

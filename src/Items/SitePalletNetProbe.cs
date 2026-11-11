@@ -58,6 +58,9 @@ public partial class SitePalletNetProbe : ChatProbe
         .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
         .OrderBy(n => n.GlobalPosition.DistanceSquaredTo(from)).FirstOrDefault();
 
+    /// <summary>Half the telehandler's width and a margin, m: how far either side of a pallet's centreline the way in must be clear.</summary>
+    private const float MachineHalfWidth = 1.3f;
+
     private static float Yaw(Vector3 toward) => Mathf.Atan2(-toward.X, -toward.Z);
 
     private static string F(float v) => v.ToString("F3", CultureInfo.InvariantCulture);
@@ -91,10 +94,18 @@ public partial class SitePalletNetProbe : ChatProbe
             foreach (var dir in new[] { across, -across })
             {
                 var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
-                var hit = Ray(from, from + dir * 7.5f);
-                // nothing low either: the materials' rebar bundle is 0.35 m high (#619 turns it to the building)
-                var low = from - Vector3.Up * 0.95f;
-                if (hit.Count == 0) hit = Ray(low, low + dir * 7.5f);
+                // the machine's width, not a line (#1718: a ray down the middle passed a way the telehandler stuck in):
+                // its centre and either side, high and low (the materials' rebar bundle is 0.35 m high, #619 turns it
+                // to the building)
+                var aside = new Vector3(-dir.Z, 0, dir.X) * MachineHalfWidth;
+                var hit = new Godot.Collections.Dictionary();
+                foreach (var off in new[] { Vector3.Zero, aside, -aside })
+                    foreach (var up in new[] { 0f, -0.95f })
+                    {
+                        if (hit.Count > 0) break;
+                        var at = from + off + Vector3.Up * up;
+                        hit = Ray(at, at + dir * 7.5f);
+                    }
                 // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
                 bool overPit = false;
                 for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
@@ -110,7 +121,7 @@ public partial class SitePalletNetProbe : ChatProbe
         Vector3? clear = null;
         foreach (var candidate in PalletNode.All.Values
                      .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
-                     .OrderBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(12).ToList())
+                     .OrderBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(40).ToList())
         {
             GD.Print($"[sitepalletnet A]   trying {candidate.Id}");
             if (ClearSide(candidate) is { } found) { pallet = candidate; clear = found; break; }
