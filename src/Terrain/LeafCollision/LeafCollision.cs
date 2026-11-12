@@ -64,7 +64,8 @@ public sealed class LeafCollision
     /// A leaf's collision from its content (heights needed; roads, holes and buildings when it has them) and its
     /// neighbours' roads (for the blend at its edges; null: its own only).
     /// </summary>
-    public static LeafCollision Prepare(CubeLeafContent leaf, Func<CubeKey, RoadTile?>? neighbourRoads, LeafFrames? frames = null)
+    public static LeafCollision Prepare(CubeLeafContent leaf, Func<CubeKey, RoadTile?>? neighbourRoads, LeafFrames? frames = null,
+        Stadiums.StadiumLeaves? stadiums = null)
     {
         var heights = leaf.Heights ?? throw new ArgumentException($"leaf {leaf.Key} has no heights");
         int n = (1 << heights.Bits) + 1;
@@ -92,6 +93,10 @@ public sealed class LeafCollision
         foreach (var p in tileFaces) shells.Add(LeafStand.ToAnchor(p));
         // the sites' slabs, stairs and walkways stay with the ground: underfoot at a raised door
         foreach (var p in stand.SiteFaces) all.Add(LeafStand.ToAnchor(p));
+        // the stadiums' parts on this leaf (#1723), in its anchor frame: walked on and under like a site's shell, so with the
+        // ground, both ways round as the flat world's road cells hold them
+        if (stadiums?.Build(leaf.Key, mesh: false, collision: true) is { Faces.Length: > 0 } bowl)
+            all.AddRange(LeafStand.BothWindings(bowl.Faces));
         // the building sites' pits (#619): the cells reaching into one leave the lattice, their ground outside the pit
         // and the pit's lining come back as faces (#1653), as the drawn mesh is cut
         var holes = leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
@@ -237,6 +242,9 @@ public sealed class LeafCollision
 /// </summary>
 public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, LeafFrames? frames = null)
 {
+    /// <summary>The stadiums on these leaves (#1723): their bowls' faces join each leaf's ground; null without any.</summary>
+    public Stadiums.StadiumLeaves? Stadiums { get; init; }
+
     public const int KeptLeaves = 32;
 
     private readonly ConcurrentDictionary<CubeKey, Lazy<LeafCollision?>> _prepared = new();
@@ -263,7 +271,7 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
         // the unpinned ones past the kept: dropped together (a pinned leaf is held by its own entry)
         if (_prepared.Count - _pinned.Count > KeptLeaves) Trim();
         var lazy = _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
-            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames) : null));
+            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames, Stadiums) : null));
         var value = lazy.Value;
         if (value == null) _prepared.TryRemove(new KeyValuePair<CubeKey, Lazy<LeafCollision?>>(leaf, lazy));
         return value;

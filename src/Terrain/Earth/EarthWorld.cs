@@ -166,7 +166,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         Leaves = leaves;
         Origin = origin;
         Name = "Earth";
-        _collisionSource = new LeafCollisionSource(leaves.Get);
+        // the stadiums (#1723) on the ground the leaves draw, built leaf by leaf in the collision and the furniture alike
+        _collisionSource = new LeafCollisionSource(leaves.Get) { Stadiums = Stadiums.StadiumLeaves.OnLeaves(leaves.Get) };
         _patches = new CollisionPatches(CutPatch)
         {
             Failed = (key, e) => GD.PushError($"[earth] collision patch {key}: {e.Message}"),

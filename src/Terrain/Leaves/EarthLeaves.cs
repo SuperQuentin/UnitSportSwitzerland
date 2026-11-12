@@ -43,6 +43,8 @@ public sealed class EarthLeaves : ILeafSource
         Func<CubeKey, bool>? fixtureHas, Func<CubeKey, CubeLeafContent?>? fixture)
     {
         Real = real;
+        // the data inside a stadium's facade goes as a region's leaf is read (#1723), as an LV95 tile's (StadiumClip)
+        real.Dress ??= Stadiums.StadiumLeaves.Clip;
         _generated = generated;
         _roads = roads;
         _domain = domain;
@@ -250,7 +252,13 @@ public sealed class EarthLeaves : ILeafSource
             added = true;
             return new Lazy<CubeLeafContent?>(() =>
             {
-                try { return make(k); }
+                try
+                {
+                    // a generated, merged or course leaf loses what stands inside a stadium too (#1723)
+                    if (make(k) is not { } made) return null;
+                    Stadiums.StadiumLeaves.Clip(made);
+                    return made;
+                }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
                     Log?.Invoke($"[earth] {k}: {e.GetType().Name}: {e.Message}");
