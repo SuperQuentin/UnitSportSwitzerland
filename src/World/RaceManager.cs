@@ -120,6 +120,12 @@ public partial class RaceManager : Node, IOriginShiftAware
     private ChatManager? _chat;
     private Node3D? _players;
     private IChunkSource? _source;
+
+    /// <summary>
+    /// Server, under <c>--frame earth</c>: a leaf's own roads (its anchor frame), read or made. A race's road is then the
+    /// leaves' round the start (#1742): the earth server's flat world holds no road tile. Null in the flat world.
+    /// </summary>
+    public System.Func<Terrain.Format.CubeKey, Terrain.Format.RoadTile?>? LeafRoads { get; set; }
     /// <summary>Client: this peer's origin, which the courses the server sends are mapped into.</summary>
     private WorldOrigin? _origin;
     private double _clock;
@@ -267,7 +273,7 @@ public partial class RaceManager : Node, IOriginShiftAware
                 RaceRoute? route = Player.SnowRide.Is(mount) ? await RaceRoute.BuildPisteAsync(source, frame, at, race.Metres + 200f) : null;
                 if (Player.SnowRide.Is(mount) && route == null)
                     Callable.From(() => _chat?.Tell(sender, $"[race] #{raceId} no slope here, racing the road", ChatKind.System)).CallDeferred();
-                route ??= await RaceRoute.BuildAsync(source, frame, at);
+                route ??= await RaceRoute.BuildAsync(source, frame, at, leafRoads: LeafRoads);
                 Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
             }
         });

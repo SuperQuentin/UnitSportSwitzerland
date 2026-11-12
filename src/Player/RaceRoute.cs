@@ -63,19 +63,50 @@ public sealed class RaceRoute
         BuildAsync(source, origin.Frame, at, ct, smallest, toward);
 
     /// <summary>The route from <paramref name="at"/>, a point in <paramref name="frame"/>, which the route is in too (and <paramref name="toward"/>).</summary>
-    public static async Task<RaceRoute?> BuildAsync(IChunkSource source, OriginFrame frame, Vector3 at,
-        CancellationToken ct = default, RoadClass smallest = RoadClass.Minor, Vector3? toward = null)
+    /// <summary>
+    /// An earth world's roads round a point (#1742): the 7 × 7 leaves round it (~4 km across), each leaf's own roads in its
+    /// anchor frame (<see cref="TilePlace.OnAnchor"/>, which the lane graph places through the leaf), read three at a time.
+    /// </summary>
+    private static async Task<List<RoadTile>> LeafTilesAround(System.Func<CubeKey, RoadTile?> leafRoads, OriginFrame frame, Vector3 at, CancellationToken ct)
     {
-        var (e, n) = frame.ToLv95(at);
-        var here = TileId.FromLv95(e, n);
+        var centre = CubeKey.FromEcef(frame.ToGlobal(at).Ecef, Terrain.Leaves.LeafFrames.LeafLevel);
+        var keys = new List<CubeKey>();
+        for (int dx = -3; dx <= 3; dx++)
+            for (int dy = -3; dy <= 3; dy++)
+                if (centre.Neighbour(dx, dy) is { } k) keys.Add(k);
+        using var slots = new SemaphoreSlim(3);
+        var loads = keys.Select(async k =>
+        {
+            await slots.WaitAsync(ct);
+            try { return await Task.Run(() => leafRoads(k), ct); }
+            catch (System.Exception) { return null; }   // a leaf that would not come: no roads there
+            finally { slots.Release(); }
+        }).ToList();
         var tiles = new List<RoadTile>();
-        // west to east, each column south to north (z runs south in the tile's frame): the graph's order
-        for (int dx = -4; dx <= 4; dx++)
-            for (int dz = 4; dz >= -4; dz--)
-            {
-                try { if (await source.LoadRoadsAsync(here.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
-                catch (System.Exception) { /* no roads there */ }
-            }
+        for (int i = 0; i < keys.Count; i++)
+            if (await loads[i] is { } roads) tiles.Add(TilePlace.OnAnchor(roads, keys[i]));
+        return tiles;
+    }
+
+    public static async Task<RaceRoute?> BuildAsync(IChunkSource source, OriginFrame frame, Vector3 at,
+        CancellationToken ct = default, RoadClass smallest = RoadClass.Minor, Vector3? toward = null,
+        System.Func<CubeKey, RoadTile?>? leafRoads = null)
+    {
+        var tiles = new List<RoadTile>();
+        if (leafRoads != null && frame.Axes != null)
+            tiles = await LeafTilesAround(leafRoads, frame, at, ct);
+        else
+        {
+            var (e, n) = frame.ToLv95(at);
+            var here = TileId.FromLv95(e, n);
+            // west to east, each column south to north (z runs south in the tile's frame): the graph's order
+            for (int dx = -4; dx <= 4; dx++)
+                for (int dz = 4; dz >= -4; dz--)
+                {
+                    try { if (await source.LoadRoadsAsync(here.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
+                    catch (System.Exception) { /* no roads there */ }
+                }
+        }
         var graph = LaneGraph.Build(tiles, frame, s =>
             s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
             && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0);

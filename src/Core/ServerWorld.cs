@@ -377,6 +377,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // car races between players: World/Race, like World/Chat, so the RPCs find it
         // the tiles by name (#1737): ski races read the earth leaves through their stand-ins; road races still name LV95 tiles
         var race = World.RaceManager.CreateServer(_chat, _players, content);
+        // on leaves a race's road is the leaves' (#1742)
+        if (_earth is { } raceEarth) race.LeafRoads = key => raceEarth.Leaves.Get(key)?.Roads;
         // racers see each other however far apart the field spreads (Net/InterestService)
         // and everyone aboard one vehicle sees everyone else aboard it, wherever it goes
         var passengers = _passengers;
