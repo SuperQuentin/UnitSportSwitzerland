@@ -24,7 +24,7 @@ public static class Fnv
 {
     public static int Hash(string s)
     {
-        if (_aliased && StandIn(s) is { } seeded) s = seeded;
+        if ((_aliased || Resolve != null) && StandIn(s) is { } seeded) s = seeded;
         uint h = 2166136261;
         foreach (char c in s) { h ^= c; h *= 16777619; }
         return (int)h;
@@ -35,6 +35,18 @@ public static class Fnv
 
     private static readonly ConcurrentDictionary<string, string> Aliases = new();
     private static volatile bool _aliased;
+
+    /// <summary>
+    /// Registers the aliases of a stand-in building key's leaf (<see cref="Alias"/> for each of its buildings) when a seed
+    /// asks for one not registered yet (#1704); true when it did. Set by the earth world. Without it a seed hashed before
+    /// the leaf's buildings were read (a late joiner seeding a cinema's halls from the table the server sent, before it
+    /// had that leaf) hashed from the raw key, and the peers disagreed for good: every seed has to be the same whenever it
+    /// is asked.
+    /// </summary>
+    public static Func<string, bool>? Resolve { get; set; }
+
+    /// <summary>The keys <see cref="Resolve"/> was asked for: each once (a building with no Earth identity has no alias).</summary>
+    private static readonly ConcurrentDictionary<string, byte> Resolved = new();
 
     /// <summary>
     /// Seeds from <paramref name="key"/> (a stand-in building key, <c>E_N_I</c>) hash as from <paramref name="name"/>
@@ -62,7 +74,10 @@ public static class Fnv
         for (int i = 0; i < end; i++)
             if (s[i] == '_' && ++us == 3) { third = i; break; }
         int keyEnd = third >= 0 ? third : end;
-        return Aliases.TryGetValue(s[..keyEnd], out var name) ? name + s[keyEnd..] : null;
+        var key = s[..keyEnd];
+        if (Aliases.TryGetValue(key, out var name)) return name + s[keyEnd..];
+        if (Resolve is { } resolve && Resolved.TryAdd(key, 0) && resolve(key) && Aliases.TryGetValue(key, out name)) return name + s[keyEnd..];
+        return null;
     }
 
     private static readonly char[] Separators = ['|', '#'];

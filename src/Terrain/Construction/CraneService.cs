@@ -391,6 +391,22 @@ public partial class CraneService : Node
     public void Hooked(long peer, int carrying, float rest)
     {
         if (OperatorOf(peer) is not { } key) return;
+        Tell(key, carrying, rest);
+    }
+
+    /// <summary>
+    /// <see cref="Hooked(long, int, float)"/> with the pallet's underside as a place: its height in the crane's own tile
+    /// frame, the frame its hook is in (#1704: an earth leaf's anchor up, not the height above sea level).
+    /// </summary>
+    public void Hooked(long peer, int carrying, GlobalPos rest)
+    {
+        if (OperatorOf(peer) is not { } key) return;
+        var hold = _holds[key];
+        Tell(key, carrying, hold.Stand != null ? (float)rest.InTile(hold.Tile).Y : (float)rest.Alt);
+    }
+
+    private void Tell(string key, int carrying, float rest)
+    {
         if (Online)
             foreach (int other in Multiplayer.GetPeers())
                 RpcId(other, MethodName.Carry, key, carrying, rest);
@@ -411,11 +427,8 @@ public partial class CraneService : Node
         _forget.Clear();
     }
 
-    private static GlobalPos Lv95(TileId tile, Vector3 local)
-    {
-        var (e, n) = tile.Global(local.X, local.Z);
-        return GlobalPos.FromLv95(e, n, local.Y);
-    }
+    /// <summary>A point of a tile's plans as a place, in the tile's own frame (#1704: an earth leaf's stand-in too).</summary>
+    private static GlobalPos Lv95(TileId tile, Vector3 local) => GlobalPos.OfTile(tile, local.X, local.Y, local.Z);
 
     private static double Flat(GlobalPos a, GlobalPos b) => a.HorizontalDistanceTo(b);
 }

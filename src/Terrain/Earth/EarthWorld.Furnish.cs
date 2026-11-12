@@ -207,11 +207,16 @@ public sealed partial class EarthWorld
     {
         _gone = false;
         Origin.StandIns = StandInFrame;
+        // a stand-in building's seeds from its Earth identity whenever they are asked, its leaf read or not yet (#1704)
+        Core.Fnv.Resolve ??= ResolveAliases;
     }
 
     public override void _ExitTree()
     {
         _gone = true;
         if (Origin.StandIns == StandInFrame) Origin.StandIns = null;
+        if (Core.Fnv.Resolve == ResolveAliases) Core.Fnv.Resolve = null;
     }
+
+    private bool ResolveAliases(string key) => LeafStandIn.RegisterAliases(key, leaf => Leaves.Get(leaf)?.Buildings);
 }

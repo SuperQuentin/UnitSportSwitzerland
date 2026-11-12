@@ -76,14 +76,12 @@ public partial class ParkingNetProbe : Node
             case 1:
             {
                 var slot = _slot!.Value;
-                if (_wakes)
-                {
-                    // A asks once, then waits for the server to put the real vehicle there
-                    if (_t < 1) return;
-                    if (_t < 1.2) { dormant.Wake(slot); return; }
-                }
+                if (_wakes && _t < 1) return;
 
                 var live = VehicleManager.Instance?.GetNodeOrNull<VehicleBody>(slot.NodeName);
+                // A asks as a player aiming at it does: every frame, sent again every 2 s until the vehicle is there (the
+                // server may not have worked the tile out yet: an earth leaf's slots come a little later there, #1704)
+                if (_wakes && live == null) dormant.Wake(slot);
                 if (live == null)
                 {
                     // B simply waits: A's wake reaches it as a spawn plus the "woken" broadcast

@@ -32,6 +32,12 @@ public static class LeafStandIn
     public static bool IsStandIn(TileId id) => TryLeaf(id, out _);
 
     /// <summary>
+    /// The first E a stand-in tile's records are named by (metres, its kilometre times 1000): no LV95 place comes near it,
+    /// so a place named at or past it is a stand-in record (<c>GlobalPos.FromLv95</c>, <c>OriginFrame.ToWorld</c>, #1704).
+    /// </summary>
+    public const double FirstPlaceE = BaseE * 1000.0;
+
+    /// <summary>
     /// The 1 m grid of a leaf's ground (its lattice vertices in its anchor frame, x y z a vertex, row-major, NaN where
     /// it has none): each grid vertex takes the height of the mesh triangle over it (split as the drawn mesh and
     /// <see cref="CubeGeometry.MeshHeightAt"/> split it). Grid vertices off the leaf take the nearest height on their
@@ -142,6 +148,22 @@ public static class LeafStandIn
         var copy = LeafRoads.Decode(LeafRoads.Encode(leafRoads));
         LeafRecords.Map(copy, new Shift());
         return copy.WithId(id);
+    }
+
+    /// <summary>
+    /// For <see cref="Core.Fnv.Resolve"/> (#1704): registers the aliases of the leaf a stand-in building key (<c>E_N_I</c>)
+    /// names, from its buildings (<paramref name="buildingsOf"/>: the leaf's own, read or made); false for no stand-in.
+    /// </summary>
+    public static bool RegisterAliases(string key, Func<CubeKey, BuildingTile?> buildingsOf)
+    {
+        var parts = key.Split('_');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out int e) || !int.TryParse(parts[1], out int n)) return false;
+        var id = new TileId(e, n);
+        if (!TryLeaf(id, out var leaf) || buildingsOf(leaf) is not { } buildings) return false;
+        var ids = BuildingId.Assign(buildings.Buildings, b => BuildingId.OnLeaf(leaf, b));
+        for (int i = 0; i < ids.Length; i++)
+            if (ids[i] is { } bid) Core.Fnv.Alias($"{id}_{i}", bid.ToString());
+        return true;
     }
 
     /// <summary>A leaf's buildings in its stand-in tile (a copy; the solids in the leaf's order, so an index names the same solid).</summary>

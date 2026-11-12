@@ -120,6 +120,20 @@ public partial class SitePalletNetProbe : ChatProbe
         await Until(() => Ahead() < Pallets.LoadAhead + 0.05f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
         await BrakeToStop(me);
         GD.Print(FormattableString.Invariant($"[sitepalletnet A]   telehandler stopped: {Ahead():F2} m ahead of the heel"));
+        if (Ahead() > Pallets.LoadAhead + 0.5f)
+        {
+            // what stops it: rays ahead of the machine at a few heights (#1704)
+            var fwd = (-me.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            foreach (float up in new[] { 0.3f, 0.8f, 1.5f, 2.5f })
+            {
+                var from = me.GlobalPosition + Vector3.Up * up;
+                var q = PhysicsRayQueryParameters3D.Create(from, from + fwd * 8f);
+                q.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
+                var hit = space.IntersectRay(q);
+                GD.Print(FormattableString.Invariant($"[sitepalletnet A]   ahead at +{up:F1} m: {(hit.Count == 0 ? "clear" : $"{(hit["collider"].AsGodotObject() as Node)?.GetPath()} shape {hit["shape"]} at {((Vector3)hit["position"] - from).Length():F2} m")}"));
+            }
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   the pallet at {pallet.GlobalPosition}, A at {me.GlobalPosition}"));
+        }
         XrPad.Press(PlayerInput.ArmBoomUp, true);
         bool lifted = await Until(() => th.Carrying != 0, 6);
         await Seconds(1.0);

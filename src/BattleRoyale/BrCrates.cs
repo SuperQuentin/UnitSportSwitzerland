@@ -226,8 +226,13 @@ public partial class BrCrates : Node3D, IOriginContainer
     public Vector3? WorldOf(Crate c, float groundY) => WorldOf(c, groundY, Origin);
 
     /// <summary>The crate in <paramref name="frame"/>: a bot's own, on a server with regions (#1456).</summary>
-    public static Vector3? WorldOf(Crate c, float groundY, WorldOrigin? frame) =>
-        frame?.ToWorld(c.E, c.N, c.Alt == Ground ? groundY : c.Alt);
+    public static Vector3? WorldOf(Crate c, float groundY, WorldOrigin? frame)
+    {
+        if (frame == null) return null;
+        if (c.Alt != Ground) return frame.ToWorld(c.E, c.N, c.Alt);
+        // on the ground wherever this peer has it: at that world height, which is no altitude in an earth frame (#1704)
+        return frame.ToWorld(c.E, c.N, 0) with { Y = groundY };
+    }
 
     /// <summary>The dial's numbers for a locked crate: the same on the server and every client, never sent.</summary>
     public static int[] Combination(long id, int seed) =>
