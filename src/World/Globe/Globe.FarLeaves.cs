@@ -72,7 +72,12 @@ public partial class Globe
         if (real.Sections(key, LeafKind.Heights, LeafKind.Water, LeafKind.Cover, LeafKind.Trees) is not { Heights: { } heights } content)
             return null;
         var lakes = new WaterOut();
-        if (Build(heights, null, default, content.Water, LeafStride, content.Cover, AncestorTile, lakes) is not { } arrays) return null;
+        // a leaf with no cover (heights at the build's edge only: 15 of B4's) is painted from its ancestor's palette as a
+        // globe tile is; with neither it had no vertex colours and drew a white square (#1746)
+        var (palette, rect) = content.Cover == null ? AncestorPalette(key) : (null, default);
+        // no ancestor's palette either (not loaded yet): open ground by its altitude, as the near leaf paints it
+        var cover = content.Cover ?? (palette == null ? new byte[((1 << heights.Bits) + 1) * ((1 << heights.Bits) + 1)] : null);
+        if (Build(heights, palette, rect, content.Water, LeafStride, cover, AncestorTile, lakes) is not { } arrays) return null;
         ChunkNode.TreeMeshes? trees = null;
         if (content.Trees is { Count: > 0 } all && TreeMaterial is { } treeMaterial)
         {

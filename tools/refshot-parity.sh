@@ -7,7 +7,9 @@
 #   tools/refshot-parity.sh <tag>        e.g. tools/refshot-parity.sh c6-82e03ec5
 #
 # Writes $REFSHOTS/<tag>-flat, $REFSHOTS/<tag>-earth and the diff in $REFSHOTS/<tag>-earth/diff-<tag>-flat/
-# (summary.md, report.html, sheet-<style>.png). ~50 min for the three styles on a free machine; one heavy-run slot.
+# (summary.md, report.html, sheet-<style>.png). Cartoon only by default (#1746: the user judges earth against flat in
+# Cartoon; PS1 is defunct and Realistic unfinished), ~18 min on a free machine; STYLES="cartoon ps1 real-" for all three
+# (~50 min). One heavy-run slot.
 # Env: as tools/refshots.sh (STYLES, VIEWS, LEAVES, GLOBE, CHUNKS, GODOT ...): both take the game's pyramid (GLOBE
 # overrides it), the reference as a player sees it today. Plus
 #   NOISE   the floor at 1/8 scale (D:/UnitSportSwitzerland/baselines/dd6b7207/noise-s8.json: two flat runs of one
@@ -17,6 +19,7 @@
 # Exit: refshot-diff.py's, 1 when a shot not judged is over its floor.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+export STYLES=${STYLES:-cartoon}
 . tools/lib/guard.sh
 tag=${1:?usage: tools/refshot-parity.sh <tag>}
 ROOT=${REFSHOTS:-D:/UnitSportSwitzerland/refshots}
@@ -32,7 +35,7 @@ if [ "$SKIP" != shots ]; then
   # (a VIEWS subset: one take, no count)
   views=$(grep -cvE '^\s*(#|$)' tests/refshots/views.txt)
   if [ -n "${VIEWS:-}" ]; then views=$(wc -w <<< "$VIEWS"); fi
-  want=$(( views * $(wc -w <<< "${STYLES:-cartoon ps1 real-}") ))
+  want=$(( views * $(wc -w <<< "$STYLES") ))
   take() { # library, then refshots.sh's arguments
     local lib=$1 try have; shift
     for try in 1 2 3; do
