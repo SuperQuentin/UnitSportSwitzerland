@@ -776,7 +776,7 @@ public partial class LootService : Node
     }
 
     /// <summary>The tile a yard container's site is on: its places are in that tile's frame (#1704, a leaf's stand-in on earth).</summary>
-    internal static TileId TileOf(in YardStock c) => BuildingKey.TryParse(c.Building, out var key) ? key.Tile : TileId.FromLv95(c.E, c.N);
+    internal static TileId TileOf(in YardStock c) => BuildingKey.TryParse(c.Building, out var key) ? key.Tile : default;
 
     /// <summary>The horizontal distance from a place to a yard container's box (<see cref="SiteLoot.EdgeDistance"/>), in its tile's frame.</summary>
     internal static float EdgeDistance(in YardStock c, GlobalPos at)

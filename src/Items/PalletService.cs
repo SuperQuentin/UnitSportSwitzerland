@@ -717,9 +717,8 @@ public partial class PalletService : Node
             if (stack is not { } yard) { Refuse(peer, id, "No such pallet."); return; }
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
             load = yard.Load;
-            // in the site tile's own frame (#1704): an LV95 tile, or an earth leaf's stand-in
-            at = GlobalPos.OfTileEn(Interiors.BuildingKey.TryParse(r.Building, out var site) ? site.Tile : TileId.FromLv95(yard.E, yard.N),
-                yard.E, yard.N, yard.Height);
+            // in the site tile's own frame: an LV95 tile, or an earth leaf's stand-in (FromLv95 places either, #1704)
+            at = GlobalPos.FromLv95(yard.E, yard.N, yard.Height);
         }
 
         if (Forks(peer, null) is { } why) { Refuse(peer, id, why); return; }

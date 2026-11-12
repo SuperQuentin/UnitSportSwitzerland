@@ -180,7 +180,7 @@ public static class LeafStandIn
         if (!TryLeaf(id, out var leaf) || buildingsOf(leaf) is not { } buildings) return false;
         var ids = BuildingId.Assign(buildings.Buildings, b => BuildingId.OnLeaf(leaf, b));
         for (int i = 0; i < ids.Length; i++)
-            if (ids[i] is { } bid) Core.Fnv.Alias($"{id.E}_{id.N}_{i}", bid.ToString());
+            if (ids[i] is { } bid) Core.Fnv.Alias($"{id}_{i}", bid.ToString());
         return true;
     }
 
