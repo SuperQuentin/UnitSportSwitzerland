@@ -36,6 +36,8 @@ villeneuve_a9     judge 20%  -- trees seeded per cube lattice vertex on earth, p
 # - invented fill: ground past the real tiles (2548/1148 has no LV95 tile) is generated on both sides, each its own way;
 #   the lake band at its back is #1669's, still looked at by eye on each run
 lavaux_bonfires   judge  -- invented fill past the real tiles on both sides (flat's generated forest, earth's fill); the lake band is #1669
+#   since #1746 earth's fill stands on the 500 m Swiss relief: the Signal de Chexbres (~655 m), 250-500 m south-east of
+#   the camera, hides Leman as it does from that spot; flat's invented ground there has no hill (31 -> 39 % cartoon)
 # - far villages: past the near leaves the far valley has no villages, rivers or roads until #1657 bakes them in
 riddes_aerial     judge  -- the far valley without villages, rivers or roads until #1657
 riddes_valley     judge  -- the far valley without villages, rivers or roads until #1657
@@ -45,3 +47,10 @@ riddes_street     judge  -- the ground's fine shading differs, houses, roads and
 riddes_chase      judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
 riddes_night      judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
 geneva_quai       judge  -- the ground's fine shading differs, houses, roads and trees match: accepted as very similar, follow-up #1695
+# - La Tzoumaz (#1746): the gate's mountain views. Up close the slope's meadow, forest and pistes match flat; what differs
+#   is the forest's trees (#1551) and, past the real region's south and east edge 1-2 km away, the invented fill on both
+#   sides (flat's generator keeps its crags, earth's rides on the pyramid's 500 m Swiss relief with its detail clamped to
+#   12 m, #1678; follow-up #1748). 15-22 % on Nov 12 2026 (cartoon 15-17, PS1 18-21, realistic 21-22)
+tzoumaz_slope     judge 25%  -- trees seeded per cube lattice vertex (#1551); the fill past the region on both sides (#1748)
+tzoumaz_winter    judge 25%  -- trees seeded per cube lattice vertex (#1551); the fill past the region on both sides (#1748)
+tzoumaz_alps      judge 25%  -- the fill past the region's south-east edge on both sides, flat's generator against earth's (#1748)

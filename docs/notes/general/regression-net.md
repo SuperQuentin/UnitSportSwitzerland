@@ -55,8 +55,8 @@ The coverage map found far rendering, GPX and the origin under load with no chec
 
 ## The pictures: `tools/refshots.sh` and `tools/refshot-diff.py`
 
-- `tests/refshots/views.txt` is the catalogue: ~24 views on the real terrain of D: (Geneva, Jura,
-  Lausanne, Lavaux, Chablais, Riddes), each with a class: `near` (< 1 km), `mid`, `far` (20 km
+- `tests/refshots/views.txt` is the catalogue: ~27 views on the real terrain of D: (Geneva, Jura,
+  Lausanne, Lavaux, Chablais, Riddes, and La Tzoumaz's high slopes in July and January since #1746), each with a class: `near` (< 1 km), `mid`, `far` (20 km
   and more), `edge` (far peaks at the frame's top edge, the horizon at its bottom: frustum
   culling), `night` (lamps; 1 August for the bonfires).
 - `tools/refshots.sh <tag>` takes every view in `STYLES` (cartoon, ps1, real- by default), one

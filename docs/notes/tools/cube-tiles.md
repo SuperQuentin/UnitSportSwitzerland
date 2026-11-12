@@ -202,6 +202,14 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   that test is skipped, and land within 5 km of a TLM lake stands at least 2 m over its level (the plain is ~3 m up)
   before the 300 m shore ramp. Nov 10 2026: 145 s, peak 12.5 GB, 0 differ; Lavaux's heights unchanged to the
   centimetre; the previous pyramid kept as `cube_global.pre1696`.
+- **Past the leaves, the game's 500 m Swiss relief, not ETOPO (#1746)**: every height the levels took from ETOPO's 60"
+  (1.8 km) cells past the leaves now comes from `src/Terrain/swiss_relief.gz` (swissALTIRegio at 500 m, what the flat
+  world's fill stands on; `TerrainFormat/SwissRelief`, Catmull-Rom as `ProceduralWorld.Relief.Macro`, LHN95 + the
+  undulation), ETOPO only beyond its map (550 x 430 km round Switzerland, handed over in its last 5 km): `EtopoGrid.Regional`,
+  so the lake snap, the TLM mask and the edge blend all read it. `--relief FILE|none` (default the repository's file, from
+  the repository root). The earth fill and the far globe had drawn the Alps past the leaves on ETOPO's cells, with the
+  generator's rivers running straight up their slopes (`tzoumaz_alps`). The command above unchanged: Nov 12 2026, 153 s,
+  peak 12.5 GB, 0 of 2.7 M edge vertices differ, colours carried; the previous pyramid kept as `cube_global.pre1746`.
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
