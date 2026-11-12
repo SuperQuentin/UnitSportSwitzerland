@@ -26,7 +26,13 @@ public static class PisteCourse
     /// The line slopes a skier races (downhill, connection) from these tiles, each once: a run's
     /// path is kept whole in every tile it touches, so the same one comes from several.
     /// </summary>
-    public static List<Run> Runs(IEnumerable<PisteTile> tiles)
+    public static List<Run> Runs(IEnumerable<PisteTile> tiles) => Runs(tiles, null);
+
+    /// <summary>
+    /// As <see cref="Runs(IEnumerable{PisteTile})"/>, each point (its tile's E/N) moved by <paramref name="place"/> first:
+    /// earth leaves' stand-ins (#1737) are each in their own frame, and a course is chained in one.
+    /// </summary>
+    public static List<Run> Runs(IEnumerable<PisteTile> tiles, Func<TileId, double, double, (double E, double N)>? place)
     {
         var runs = new List<Run>();
         var seen = new HashSet<(ulong, long, long)>();
@@ -36,10 +42,15 @@ public static class PisteCourse
                 if (r.IsArea || r.Type is not (PisteType.Downhill or PisteType.Connection) || r.Path.Length < 4) continue;
                 // the path is in metres east and north of the tile's south-west corner: z = size - north
                 var (e0, n0) = tile.Id.Global(r.Path[0], ChunkFormat.TileSizeM - r.Path[1]);
+                if (place != null) (e0, n0) = place(tile.Id, e0, n0);
                 // a relation's member ways share its id: tell them apart by where they start
                 if (!seen.Add((r.Id, (long)Math.Round(e0), (long)Math.Round(n0)))) continue;
                 var pts = new double[r.Path.Length];
-                for (int i = 0; i < pts.Length; i += 2) (pts[i], pts[i + 1]) = tile.Id.Global(r.Path[i], ChunkFormat.TileSizeM - r.Path[i + 1]);
+                for (int i = 0; i < pts.Length; i += 2)
+                {
+                    (pts[i], pts[i + 1]) = tile.Id.Global(r.Path[i], ChunkFormat.TileSizeM - r.Path[i + 1]);
+                    if (place != null) (pts[i], pts[i + 1]) = place(tile.Id, pts[i], pts[i + 1]);
+                }
                 runs.Add(new Run(r.Id, pts, r.WidthM));
             }
         return runs;

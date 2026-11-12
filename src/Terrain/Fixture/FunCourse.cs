@@ -118,8 +118,11 @@ public static class FunCourse
         Pvp(c);
         Yard(c);
         Fleet(c);
+        // a line run down its middle (#1737: a ski race chains line runs), the outline its snow
+        const double runX = (HillX0 + 40 + LiftX - 25) / 2;
         c.Slopes.Add(new FixtureCourse.Slope("Neon run", PisteDifficulty.Intermediate,
-            [(HillX0 + 40, SlopeY0 + 10), (LiftX - 25, SlopeY0 + 10), (LiftX - 25, SlopeY1 + 30), (HillX0 + 40, SlopeY1 + 30)]));
+            [(HillX0 + 40, SlopeY0 + 10), (LiftX - 25, SlopeY0 + 10), (LiftX - 25, SlopeY1 + 30), (HillX0 + 40, SlopeY1 + 30)],
+            [(runX, SlopeY1 + 25), (runX, (SlopeY0 + SlopeY1) / 2 + 100), (runX, (SlopeY0 + SlopeY1) / 2), (runX, (SlopeY0 + SlopeY1) / 2 - 100), (runX, SlopeY0 + 15)]));
         // the T-bar up the slope's east edge, valley station at the foot, mountain station on the plateau
         c.Road(RoadClass.SkiLift, [(LiftX, SlopeY0 - 15, Ground(LiftX, SlopeY0 - 15)), (LiftX, SlopeY1 + 25, Ground(LiftX, SlopeY1 + 25))]);
         // a jetty off the beach for the boats

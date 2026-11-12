@@ -112,6 +112,7 @@ public sealed class RaceRoute
     public static async Task<RaceRoute?> BuildPisteAsync(IChunkSource source, OriginFrame frame, Vector3 at, float metres,
         CancellationToken ct = default)
     {
+        if (source is Terrain.Leaves.StandInChunkSource) return await BuildPisteOnLeavesAsync(source, frame, at, metres, ct);
         var (e, n) = frame.ToLv95(at);
         var here = TileId.FromLv95(e, n);
         var tiles = new List<PisteTile>();
@@ -160,6 +161,74 @@ public sealed class RaceRoute
         }
         return route;
     }
+
+    /// <summary>
+    /// <see cref="BuildPisteAsync"/> on earth leaves (#1737): the leaves within <see cref="LeafRings"/> of the start's,
+    /// through their stand-ins; every run moved into the start leaf's stand-in frame (one frame for the whole course,
+    /// its axes the leaf's east and north), the altitude at a point read from the grid of the leaf it is on. The course's
+    /// points are that frame's E/N, which <see cref="OriginFrame.ToWorld(double, double, double)"/> places.
+    /// </summary>
+    private static async Task<RaceRoute?> BuildPisteOnLeavesAsync(IChunkSource source, OriginFrame frame, Vector3 at, float metres,
+        CancellationToken ct)
+    {
+        var start = frame.ToGlobal(at);
+        var centre = Terrain.Leaves.LeafStandIn.Id(CubeKey.FromEcef(start.ToEcef(), Terrain.Leaves.LeafFrames.LeafLevel));
+        var tiles = new List<PisteTile>();
+        for (int dx = -LeafRings; dx <= LeafRings; dx++)
+            for (int dz = LeafRings; dz >= -LeafRings; dz--)
+            {
+                try { if (await source.LoadPistesAsync(centre.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
+                catch (System.Exception) { /* no slopes there */ }
+            }
+        if (tiles.Count == 0) return null;
+        // a point named in one leaf's stand-in, named in the start's
+        (double E, double N) Place(TileId tile, double pe, double pn)
+        {
+            if (tile == centre) return (pe, pn);
+            var (ce, cn, _) = GlobalPos.OfTileEn(tile, pe, pn, 0).InTileEn(centre);
+            return (ce, cn);
+        }
+        var runs = World.Snow.PisteCourse.Runs(tiles, Place);
+
+        // the ground's height in the start's frame: from the grid of the leaf the point is on
+        var grids = new Dictionary<TileId, ChunkGrid?>();
+        float Altitude(double pe, double pn)
+        {
+            var place = GlobalPos.OfTileEn(centre, pe, pn, 0);
+            var id = Terrain.Leaves.LeafStandIn.Id(CubeKey.FromEcef(place.ToEcef(), Terrain.Leaves.LeafFrames.LeafLevel));
+            if (!grids.TryGetValue(id, out var g))
+            {
+                try { g = source.LoadChunkAsync(id, ct).GetAwaiter().GetResult(); }
+                catch (System.Exception) { g = null; }
+                grids[id] = g;
+            }
+            if (g == null) return 0f;
+            var (le, ln, _) = place.InTileEn(id);
+            var ground = GlobalPos.OfTileEn(id, le, ln, g.SampleHeight(le, ln));
+            return (float)ground.InTileEn(centre).H;
+        }
+
+        var (e, n, _) = start.InTileEn(centre);
+        var course = World.Snow.PisteCourse.Chain(runs, e, n, Altitude, metres);
+        if (course == null || course.Count < 2) return null;
+        var points = new List<Vector3>(course.Count);
+        var width = new List<float>(course.Count);
+        foreach (var (pe, pn, w) in course)
+        {
+            points.Add(frame.ToWorld(pe, pn, Altitude(pe, pn)));
+            width.Add(w);
+        }
+        var route = FromPoints(points, width, RoadClass.Minor, frame);
+        foreach (var (pe, pn, w) in World.Snow.PisteCourse.Above(runs, course[0].E, course[0].N, Altitude, 600f))
+        {
+            route.Behind.Add(frame.ToWorld(pe, pn, Altitude(pe, pn)));
+            route.BehindWidth.Add(w);
+        }
+        return route;
+    }
+
+    /// <summary>Leaves round the start a ski race reads on the Earth: ~3.7 km, as the 4 km of LV95 tiles (a leaf is ~610 m).</summary>
+    private const int LeafRings = 6;
 
     /// <summary>A route from a centreline already known (sent by the race server, say), in <paramref name="frame"/>.</summary>
     public static RaceRoute FromPoints(IReadOnlyList<Vector3> centre, IReadOnlyList<float> width, RoadClass cls = RoadClass.Road,

@@ -1327,3 +1327,15 @@ src/Terrain/Leaves/LeafStandIn quick --pistecheck --chunks fixture:fun --traffic
 src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
 src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
 src/Vehicles/VehicleSlot     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+# #1736: piers, landings and jetty decks on earth leaves (drawn, collided), the fixture's landing walked and its marina boats
+src/Terrain/Leaves/LeafPiers quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/LeafCollision/LeafCollision quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/Earth/EarthWorld quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/PierMesh     quick  --frame earth --steamercheck pier --chunks fixture:lake
+src/Vehicles/DormantVehicles quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Player/SteamerCheck  quick  --frame earth --steamercheck pier --chunks fixture:lake
+# #1737: the ski map and a ski race on the fun course's line run, on both frames
+src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Fixture/FunCourse quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15

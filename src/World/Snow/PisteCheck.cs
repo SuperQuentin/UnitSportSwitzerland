@@ -109,6 +109,8 @@ public partial class PisteCheck : Node
             case 1: Drawn(); break;
             case 2: Poles(); break;
             case 3: Boats(); break;
+            case 4: Map(); break;
+            case 5: Race(); break;
         }
     }
 
@@ -171,7 +173,69 @@ public partial class PisteCheck : Node
         Look(_slope + new Vector3(0, _real ? 110 : 35, 0) + Toward(_slope, -1) * (_real ? 320f : 140f), _slope);
         // parked while the shot is taken: Next comes after it
         _phase = -1;
-        Shot("slope", () => { if (_real) Verdict(); else _phase = 3; });
+        Shot("slope", () => _phase = 4);
+    }
+
+    private SlopeMap? _map;
+
+    /// <summary>Phase 4 (#1737): the ski map painted round the slope's middle shows it there, its leaves or tiles all in.</summary>
+    private void Map()
+    {
+        if (_map == null) AddChild(_map = new SlopeMap(() => null, _ground));
+        if (!_map.PaintAt(_slope)) { Wait("the ski map's tiles", 60); return; }
+        int pixels = _map.SlopePixels();
+        GD.Print($"{Tag} the ski map round the slope: {pixels} of {200 * 200} pixels a slope, the middle {(_map.MiddleIsSlope ? "on" : "off")} it");
+        if (!_map.MiddleIsSlope) Fail("the ski map does not show the slope under the skier");
+        if (pixels < 200) Fail($"the ski map shows only {pixels} slope pixels");
+        Next();
+    }
+
+    private System.Threading.Tasks.Task<Player.RaceRoute?>? _race;
+
+    /// <summary>Phase 5 (#1737): a ski race from the slope's top builds down the slopes, its points on them.</summary>
+    private void Race()
+    {
+        if (_ground.Content is not { } source) { Fail("no tile files"); Verdict(); return; }
+        if (_race == null)
+        {
+            // from near the top of the slope, as a race is opened where the skier stands
+            var top = _real ? _slope : _origin.ToWorld(At(CoursePlace.Active!, (FunCourse.HillX0 + FunCourse.LiftX) / 2, FunCourse.SlopeY1 + 10, FunCourse.Flat + FunCourse.HillH));
+            var frame = _origin.Frame;
+            _race = System.Threading.Tasks.Task.Run(() => Player.RaceRoute.BuildPisteAsync(source, frame, top, 300f));
+            return;
+        }
+        if (!_race.IsCompleted) { Wait("the ski race's route", 60); return; }
+        if (_race.Result is not { Centre.Count: > 10 } route) { Fail("no ski race down the slope"); Finish(); return; }
+        int on = 0;
+        float first = 0, last = 0;
+        for (int i = 0; i < route.Centre.Count; i++)
+        {
+            var p = route.Centre[i];
+            if (SnowService.Instance?.Index?.At(p + Vector3.Up * 0.2f, out _) != null) on++;
+            float alt = (float)_origin.AltitudeOf(p);
+            if (i == 0) first = alt;
+            last = alt;
+        }
+        float length = route.Arc[^1];
+        GD.Print($"{Tag} a ski race: {route.Centre.Count} points over {length:F0} m, {on} on a slope, from {first:F0} m down to {last:F0} m");
+        if (on < route.Centre.Count * 0.9f) Fail($"only {on} of {route.Centre.Count} race points lie on a slope");
+        if (last >= first - 10) Fail($"the race does not go down ({first:F0} m to {last:F0} m)");
+        if (length < 100) Fail($"the race is {length:F0} m long");
+        Finish();
+    }
+
+    /// <summary>The slope's phases done: the marina's next on the course, the verdict on a real region.</summary>
+    private void Finish()
+    {
+        if (_real) Verdict();
+        else Next3();
+    }
+
+    private void Next3()
+    {
+        _phase = 3;
+        _t = 0;
+        _since = Time.GetTicksMsec();
     }
 
     /// <summary>A horizontal direction down the slope (toward the course's south) at a point.</summary>

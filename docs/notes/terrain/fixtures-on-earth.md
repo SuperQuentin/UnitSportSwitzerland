@@ -24,7 +24,8 @@
 - **Ski slopes on leaves**: `FixtureLeaves` writes `LeafKind.Pistes` as the cube piste stage does (a record per slope
   whose box reaches the leaf, outline in the anchor frame, slot and edge mask at every lattice vertex inside it,
   row-major from the south-west). The game reads them through the leaf's stand-in since #1735 (`world/ski-snow`,
-  "On earth leaves"), the real region's alike.
+  "On earth leaves"), the real region's alike. A slope with a `Line` is a line slope (#1737: the fun course's run, for
+  ski races).
 - **The parked fleet**: its slots are laid by the placement (`Place.Lv95`, `Place.GridYaw`) and filed by LV95 tile;
   `DormantVehicles` follows the world's ground (`IWorldGround.Anchors`, collision, the ground under a copy), so under
   earth it fills the tiles under the leaves' anchors and the cars stand on the leaves.

@@ -794,7 +794,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, Ground!);
             AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
-            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
+            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, Ground!));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
@@ -2278,6 +2278,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 World.Landings.Use(index);
                 static bool Holds(Terrain.Format.LandingIndex l, Terrain.Format.TileId id) => l.RibbonsOf(id).Any() || l.BollardsOf(id).Any();
                 _chunks?.RebuildPiers(id => Holds(before, id) || Holds(index, id));
+                // on the leaves (#1736): those holding a deck before or now are read again, their furnishing and collision
+                if (_earth != null)
+                    _earth.RefreshFurniture(Terrain.Leaves.LeafPiers.Leaves(before).Union(Terrain.Leaves.LeafPiers.Leaves(index)).ToList());
             }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.
