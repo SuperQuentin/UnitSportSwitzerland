@@ -266,6 +266,46 @@ public static class LeafStandIn
     /// <summary>How far a leaf's water samples reach past it, in 2 m samples.</summary>
     public const int WaterMarginSamples = 2;
 
+    /// <summary>
+    /// A leaf's ski slopes (#1735) as its stand-in tile's: the records with their paths moved from the anchor's (x, z) to
+    /// the tile's (east, north) from its south-west corner; <see cref="PisteTile.Slot"/> and <see cref="PisteTile.Aux"/>
+    /// on the tile's 1 m grid, each vertex taking the leaf vertex nearest its 2 m sample (<paramref name="nearestVertex"/>,
+    /// grown <see cref="WaterMarginSamples"/> past the leaf so the drawn slope runs to its edges). Vertices further off
+    /// the leaf hold no slope. Altitudes stay above sea level. Null when the leaf has no slope. Any thread.
+    /// </summary>
+    public static PisteTile? Pistes(PisteTile? leafPistes, TileId id, int side, int[] nearestVertex)
+    {
+        if (leafPistes is not { Records.Count: > 0 } p || p.Slot.Length != side * side) return null;
+        var records = new List<PisteRecord>(p.Records.Count);
+        foreach (var r in p.Records)
+        {
+            var path = new float[r.Path.Length];
+            for (int k = 0; k + 1 < path.Length; k += 2)
+            {
+                path[k] = (float)(r.Path[k] + Offset);
+                path[k + 1] = (float)(ChunkFormat.TileSizeM - Offset - r.Path[k + 1]);
+            }
+            records.Add(r with { Path = path });
+        }
+        var nearest = Grown(nearestVertex, WaterMarginSamples);
+        const int n = PisteFormat.Size, m = WaterTile.Size;
+        var slot = new byte[n * n];
+        var aux = new ushort[n * n];
+        for (int row = 0; row < n; row++)
+        {
+            int sr = Math.Min(m - 1, (row + 1) >> 1);
+            for (int col = 0; col < n; col++)
+            {
+                int v = nearest[sr * m + Math.Min(m - 1, (col + 1) >> 1)];
+                if ((uint)v >= (uint)p.Slot.Length) continue;
+                int k = row * n + col;
+                slot[k] = p.Slot[v];
+                aux[k] = p.Aux[v];
+            }
+        }
+        return new PisteTile(id, records, slot, aux);
+    }
+
     /// <summary>The samples' vertices grown outward by <paramref name="rings"/> samples: an unset one takes a set 8-neighbour's.</summary>
     internal static int[] Grown(int[] nearest, int rings)
     {
