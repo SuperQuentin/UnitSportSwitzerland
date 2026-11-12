@@ -166,6 +166,12 @@ public sealed class EtopoGrid
     public double Lon0, Lat0, Step;
     public float[] H = Array.Empty<float>();
 
+    /// <summary>
+    /// A finer regional ground over ETOPO where it holds (#1746): the game's 500 m Swiss relief, which the flat world's
+    /// fill stands on, handed over to ETOPO over its edge (<see cref="SwissRelief.EdgeFadeM"/>). Null: ETOPO alone.
+    /// </summary>
+    public SwissRelief? Regional { get; set; }
+
     public static EtopoGrid Load(string dir, int jobs)
     {
         string surface = Directory.GetFiles(dir, "*_surface.tif").Single(), geoid = Directory.GetFiles(dir, "*_geoid.tif").Single();
@@ -198,8 +204,16 @@ public sealed class EtopoGrid
         return grid;
     }
 
-    /// <summary>The bilinear height at a latitude and longitude, degrees.</summary>
+    /// <summary>The height at a latitude and longitude, degrees: <see cref="Regional"/>'s where it holds, else ETOPO's bilinear.</summary>
     public double At(double lat, double lon)
+    {
+        if (Regional != null && Regional.TryAt(lat, lon, out double regional, out double weight))
+            return weight >= 1 ? regional : weight * regional + (1 - weight) * Etopo(lat, lon);
+        return Etopo(lat, lon);
+    }
+
+    /// <summary>ETOPO's own bilinear height at a latitude and longitude, degrees.</summary>
+    public double Etopo(double lat, double lon)
     {
         double fx = (lon - Lon0) / Step, fy = (Lat0 - lat) / Step;
         fy = Math.Clamp(fy, 0, Height - 1);

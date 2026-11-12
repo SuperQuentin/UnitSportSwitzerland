@@ -205,7 +205,7 @@ public partial class RacePlayback : Node3D, Core.IOriginContainer
 
     public Runner Add(GpxTrack track)
     {
-        var runner = Runner.Create(track, _chunks, _origin, Runners.Count);
+        var runner = Runner.Create(track, _chunks.Ground, _origin, Runners.Count);
         Runners.Add(runner);
         AddChild(runner);
 

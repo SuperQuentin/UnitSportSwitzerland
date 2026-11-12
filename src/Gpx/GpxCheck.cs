@@ -20,7 +20,8 @@ public partial class GpxCheck : Node
     private const double TimeoutS = 240, CourseM = 1500, PaceMs = 5;
     private const float TreadLift = 0.28f;
 
-    private readonly ChunkManager _chunks;
+    /// <summary>The world's ground: the flat tiles' or the earth leaves' (#1739).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly List<string> _faults = new();
     private GpxTrack? _track;
@@ -31,9 +32,9 @@ public partial class GpxCheck : Node
     private GlobalPos? _lastFoot;
     private double _maxStep;
 
-    public GpxCheck(ChunkManager chunks, WorldOrigin origin)
+    public GpxCheck(IWorldGround ground, WorldOrigin origin)
     {
-        _chunks = chunks;
+        _ground = ground;
         _origin = origin;
     }
 
@@ -51,10 +52,10 @@ public partial class GpxCheck : Node
         if (_track == null)
         {
             var (e, n) = SpawnPoint.ParseTarget();
-            if (!_chunks.Ground.TryGetHeight(_origin.ToWorld(e, n, 0), out _)) return;
+            if (!_ground.TryGetHeight(_origin.ToWorld(e, n, 0), out _)) return;
             _track = Course(e, n);
-            _ribbon = TrackRibbon.Create(_track, _chunks, _origin);
-            _runner = Runner.Create(_track, _chunks, _origin, 0);
+            _ribbon = TrackRibbon.Create(_track, _ground, _origin);
+            _runner = Runner.Create(_track, _ground, _origin, 0);
             AddChild(_ribbon);
             AddChild(_runner);
             GD.Print($"[gpxcheck] a {CourseM / 1000:F1} km course from LV95 {e:F0}/{n:F0}");
@@ -122,7 +123,7 @@ public partial class GpxCheck : Node
             for (int k = 0; k < 6; k++)
             {
                 var w = xf * verts[i + k];
-                if (!_chunks.Ground.TryGetHeight(w, out float ground)) continue;
+                if (!_ground.TryGetHeight(w, out float ground)) continue;
                 float gap = w.Y - ground - TreadLift;
                 tread++;
                 worst = Mathf.Max(worst, Mathf.Abs(gap));

@@ -28,6 +28,10 @@ untouched (`FallbackChunkSource` / `ProceduralWorld.Blend` on LV95).
   (`beds:` off, #1669). With the pyramid's lake levels known, ground that is none of them drops the colour image's
   water weight. Under a tile's lake an edge vertex sinks as deep as its neighbours on its side, and the skirts hang from
   the sunk ground: as a shore 3 m under the surface, every leaf edge across a lake drew a pale line.
+- **The pyramid past the leaves is the generator's own macro relief since #1746** (the 500 m Swiss relief, no longer
+  ETOPO's 1.8 km cells; `tools/cube-tiles`), so `P` and the generator's `G` share their broad shapes there. The fill still
+  drops `G`'s relief between ~150 m and 500 m and clamps the rest to 12 m: far mountains past the region read smoother
+  than flat's generated ones (#1748, a change to #1678's rule for the user to decide).
 - **The pyramid had to be fixed first** (`tools/cube-tiles`): past B4's leaves its level 13 blended into ETOPO in 16
   rings, each a step (13-40 m east of Lavaux, the fill drew them as terraces), and ETOPO's 1.8 km cells left 1.5-2 km
   of ground 3-35 m over Léman below Lavaux. `--cube-swiss` now blends with a continuous field and snaps swissTLM3D's
