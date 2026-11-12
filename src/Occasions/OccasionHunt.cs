@@ -83,10 +83,9 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
             double waited = (Time.GetTicksMsec() - _probeStartMs) / 1000.0;
             // none round the spawn after a while: go to the nearest town's tree (its five gifts). The earth world
             // furnishes only the leaves within 900 m, short of the generated world's villages (#1729)
-            if (!_wentToTown && waited > 10 && Teleporter.Instance is { } tp && OccasionTowns.All.Count > 0)
+            if (!_wentToTown && waited > 10 && Teleporter.Instance is { } tp
+                && OccasionTowns.Nearest(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N, 20_000) is { } town)
             {
-                double e = SpawnPoint.DefaultLv95E, n = SpawnPoint.DefaultLv95N;
-                var town = OccasionTowns.All.MinBy(t => (t.E - e) * (t.E - e) + (t.N - n) * (t.N - n));
                 _wentToTown = true;
                 GD.Print($"[huntcheck] no spot round the spawn after {waited:F0} s: to {town.Name}");
                 tp.TeleportTo(town.E, town.N, "huntcheck");
