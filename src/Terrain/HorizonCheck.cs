@@ -14,6 +14,9 @@ namespace UnitSport.Terrain;
 /// RESULT ok or FAILED with the first faults. Runs on the generated world (no map), with a horizon the test
 /// profile leaves off (#1411):
 /// <c>--horizon 20 --systems terrain,generated</c>.
+/// Under <c>--frame earth</c> (#1739) there is no <see cref="HorizonLayer"/>: the globe is the far view
+/// (<c>terrain/earth-far-view</c>; its check is <c>--longflightcheck</c>'s far view "present all the way"). The check
+/// then holds that no flat horizon is built to double it, and ends.
 /// </summary>
 public partial class HorizonCheck : Node
 {
@@ -44,6 +47,19 @@ public partial class HorizonCheck : Node
             return;
         }
         var horizon = _chunks.Horizon;
+        if (GameSettings.Current.Frame == WorldFrame.Earth)
+        {
+            // long enough for a flat horizon to have been asked for and built, as it is within seconds on flat
+            if (_t < 10) return;
+            bool none = horizon == null || horizon.GetChildCount() == 0;
+            GD.Print(none
+                ? "[horizoncheck] under --frame earth: no flat horizon built (the globe is the far view: --longflightcheck)"
+                : $"[horizoncheck] under --frame earth a flat horizon is built ({horizon!.GetChildCount()} blocks)");
+            GD.Print(none ? "[horizoncheck] RESULT: ok" : "[horizoncheck] RESULT: FAILED a flat horizon under --frame earth");
+            SetProcess(false);
+            GetTree().Quit(none ? 0 : 1);
+            return;
+        }
         if (horizon == null || !horizon.HasData) return;
         // the test profile has no horizon (#1411): this check asks for one with --horizon
         if (horizon.DistanceM <= 0)
