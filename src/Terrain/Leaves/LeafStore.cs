@@ -39,6 +39,12 @@ public sealed class LeafStore : ILeafSource
 
     public int Kept { get; }
 
+    /// <summary>
+    /// What is done to a leaf as it is decoded, before anyone reads it (the game's: the data inside a stadium's facade goes,
+    /// #1723, as an LV95 tile's at its decode); set before the first read. Nothing in the tools.
+    /// </summary>
+    public Action<CubeLeafContent>? Dress { get; set; }
+
     /// <summary>The folder the bundles were read from.</summary>
     public string Dir { get; }
 
@@ -168,6 +174,7 @@ public sealed class LeafStore : ILeafSource
                 default: throw new ArgumentException($"{kind} is not read alone", nameof(kinds));
             }
         }
+        Dress?.Invoke(c);
         return c;
     }
 
@@ -206,5 +213,11 @@ public sealed class LeafStore : ILeafSource
         return _remote is { } r && r.Index.TryGetValue(key, out var e) ? r.Fetch(key, e, section) : null;
     }
 
-    private CubeLeafContent? Read(CubeKey key) => Entry(key) is { } bytes ? CubeLeafContent.Decode(bytes) : null;
+    private CubeLeafContent? Read(CubeKey key)
+    {
+        if (Entry(key) is not { } bytes) return null;
+        var c = CubeLeafContent.Decode(bytes);
+        Dress?.Invoke(c);
+        return c;
+    }
 }

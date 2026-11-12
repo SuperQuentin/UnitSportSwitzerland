@@ -116,6 +116,16 @@ public sealed partial class EarthWorld
             }
         }
 
+        // the stadiums' parts on this leaf (#1723), drawn with the sites' shells as on a flat tile: anchor frame to stand-in
+        if (m.Prop is { } stadiumProp && _collisionSource.Stadiums?.Build(content.Key, mesh: true, collision: false) is { Mesh: { } bowl })
+        {
+            var shift = new Vector3((float)LeafStandIn.Offset, 0, (float)LeafStandIn.Offset);
+            var inTile = bowl with { Vertices = bowl.Vertices.Select(v => v + shift).ToArray() };
+            if (_gone) return null;
+            if (f.Sites == null) f.Sites = ChunkNode.ToPropMesh(inTile, stadiumProp);
+            else ChunkNode.WithPiers(f.Sites, inTile, stadiumProp);
+        }
+
         if (content.Trees is { Count: > 0 } leafTrees && m.Tree is { } treeMaterial)
         {
             var trees = LeafStandIn.Trees(leafTrees);
