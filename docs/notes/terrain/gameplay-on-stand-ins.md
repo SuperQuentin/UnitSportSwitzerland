@@ -55,7 +55,7 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
   (`StandInChunkSource.LoadPistesAsync`, `LeafStandIn.Pistes`) and its leaf's still water as a 2 m layer
   (`LoadLeafWaterAsync`); a jetty belongs to the leaf its middle is on (`DormantSlots.LeafOf`). `world/ski-snow`,
   `world/landings`.
-- Not on stand-ins yet: concerts (no stadium bowls on leaves, #1723/#1725), the
-  piers and jetties' decks (`PierMeshBuilder`: the marina's boats lie at their berths beside no deck), the ski map
-  and ski races (`SlopeMap`, `RaceRoute.BuildPisteAsync`: LV95 tiles); birds, herds, ropeways, UFO sightings and the
-  egg still read LV95 tiles (the region's real tiles; nothing on the fill).
+- **Piers and jetty decks** (#1736): `LeafPiers`, the landings cut by leaf into stand-in frames (`world/landings`).
+  **The ski map and ski races** (#1737): `SlopeMap` and `RaceRoute.BuildPisteAsync` read the leaves (`world/ski-snow`).
+- Not on stand-ins yet: concerts (no stadium bowls on leaves, #1723/#1725); birds, herds, ropeways, UFO sightings and
+  the egg still read LV95 tiles (the region's real tiles; nothing on the fill).

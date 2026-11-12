@@ -22,7 +22,9 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/row7/cube --chu
 
 - [ ] Ski down a run at La Tzoumaz on skis (keyboard, pad and VR) → the HUD names the run, the snow under you grips as corduroy or ice as on flat, the poles line both edges and none stands doubled where two leaves meet; the corduroy has no seam at a leaf's edge.
 - [ ] The same in a Quest (the standalone shader path) → the slope is drawn where the ground is, not shifted by 500 m.
-- [ ] On `fixture:fun`, walk to the jetty off the beach and aim at a moored boat → it wakes and you can drive it; it comes back at its berth a while after you leave it (no deck under the jetty yet, [#1736](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1736)).
+- [ ] On `fixture:fun`, walk to the jetty off the beach and aim at a moored boat → it wakes and you can drive it; it comes back at its berth a while after you leave it.
+- [ ] Offline at Nyon on earth (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks --at 2507900,1137600`): walk the Steg to the pier head, drive a speedboat along Port de Nyon's jetties and step out onto one ([#1736](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1736)) → the decks are drawn and solid as on flat; nothing falls through the Steg.
+- [ ] On skis at La Tzoumaz on earth (row-7 leaves as above), watch the ski map, then `/race` on skis with a friend online ([#1737](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1737)) → the map shows the runs round you, north up, with no seam where leaves meet; the race goes down the runs.
 
 ## Furnished leaves under `--frame earth` ([#1613](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1613), [#1510](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1510))
 

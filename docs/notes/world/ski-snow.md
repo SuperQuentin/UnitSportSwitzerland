@@ -102,9 +102,16 @@ Under `--frame earth` the slopes come from the leaves' `Pistes` section (`--cube
 - **The poles**: a stand-in's 1000 m square overlaps its neighbours' (a leaf is ~610 m): `SlopeMarkers` keeps only the
   poles whose ground tile is the stand-in's own leaf, so none stands twice. A tile's pole spots are kept as meta
   (`SlopeMarkers.PolesMeta`): a headless MultiMesh keeps no transforms.
-- **Not yet**: the ski map (`SlopeMap`) and ski races (`RaceRoute.BuildPisteAsync`) still read LV95 tiles (the region's
-  `.pst` beneath the leaves, when there).
-- **Check**: `--pistecheck --chunks fixture:fun --frame earth|flat` (the course's slope found, drawn, poled; the
-  jetty's boats afloat), `--pisteat E,N[,ALT]` for a real slope: La Tzoumaz on B3's row-7 leaves
+- **The ski map** (#1737, `SlopeMap.PaintLeaves`): a pixel's place is the skier's local east and north
+  (`GlobalPos.Enu`), its leaf `CubeKey.FromEcef`, its slope the stand-in's at the skier's place in that leaf's frame plus
+  the pixel's offset (a leaf's axes are within ~0.01° of the skier's over the map). Per leaf on the map once a paint.
+- **Ski races** (#1737, `RaceRoute.BuildPisteOnLeavesAsync`, when the source is a `StandInChunkSource`): the leaves
+  within 6 rings of the start's (~3.7 km); every run moved into the start leaf's stand-in frame
+  (`PisteCourse.Runs(tiles, place)`), the height at a point from the grid of the leaf it is on, the course's points
+  placed by that frame's E/N. The server's `RaceManager` reads the ground's content (stand-ins under earth).
+- **Fixture line runs**: `FixtureCourse.Slope.Line` makes a slope a line of its outline's width along it (its raster
+  still the outline's): the fun course's "Neon run" is one, so a ski race has a run to chain.
+- **Check**: `--pistecheck --chunks fixture:fun --frame earth|flat` (the course's slope found, drawn, poled; the ski
+  map shows it under the skier; a 300 m ski race goes down it; the jetty's boats afloat), `--pisteat E,N[,ALT]` for a real slope: La Tzoumaz on B3's row-7 leaves
   (`--leaves D:/UnitSportSwitzerland/test_b3/row7/cube`, the only D: leaves with slopes; `test_b3/row7/lv95` is the
   same region flat) draws the same runs, poles and snow state (corduroy, ice 0.45 on 15 Jan) as flat.
