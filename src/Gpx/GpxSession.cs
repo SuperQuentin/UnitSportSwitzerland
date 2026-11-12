@@ -545,7 +545,7 @@ public partial class GpxSession : Node
         if (_ribbon != null && _ribbon.Track == course) return;
 
         _ribbon?.QueueFree();
-        _ribbon = TrackRibbon.Create(course, _chunks, _origin);
+        _ribbon = TrackRibbon.Create(course, _chunks.Ground, _origin);
         _ribbon.Opacity = _ribbonOpacity;
         AddChild(_ribbon);
     }

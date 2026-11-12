@@ -27,7 +27,10 @@ public partial class WorldGroundCheck : Node3D
     private const float Step = 25f;         // 25 m apart: 2 km across
     private const int Rounds = 7, Queries = 400_000;
 
-    private readonly ChunkManager _chunks;
+    /// <summary>The flat world's streamer, whose own answers the ground is held to; null under <c>--frame earth</c>.</summary>
+    private readonly ChunkManager? _flat;
+    /// <summary>The earth world (#1740): the ground is held to its own height query instead, and there is no tile grid.</summary>
+    private readonly Earth.EarthWorld? _earth;
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly HashSet<GroundTile> _entered = new();
@@ -36,12 +39,16 @@ public partial class WorldGroundCheck : Node3D
     private int _unloaded, _furnished;
     private bool _done;
 
-    public WorldGroundCheck(ChunkManager chunks, WorldOrigin origin)
+    public WorldGroundCheck(IWorldGround ground, ChunkManager? flat, Earth.EarthWorld? earth, WorldOrigin origin)
     {
-        _chunks = chunks;
-        _ground = chunks.Ground;
+        _ground = ground;
+        _flat = earth == null ? flat : null;
+        _earth = earth;
         _origin = origin;
     }
+
+    /// <summary>The world's own height query, under the interface: the streamer's or the earth world's.</summary>
+    private bool Direct(Vector3 p, out float h) => _earth != null ? _earth.HeightAt(p, out h) : _flat!.HeightAt(p, out h);
 
     public override void _Ready()
     {
@@ -103,7 +110,7 @@ public partial class WorldGroundCheck : Node3D
             {
                 var p = here + new Vector3(i * Step, 0, j * Step);
                 bool has = _ground.TryGetHeight(p, out float h);
-                bool direct = _chunks.HeightAt(p, out float hd);
+                bool direct = Direct(p, out float hd);
                 if (has != direct || BitConverter.SingleToInt32Bits(h) != BitConverter.SingleToInt32Bits(hd))
                 {
                     if (mismatched++ < 3) _faults.Add($"height at {p}: {has}/{h} through the ground, {direct}/{hd} direct");
@@ -112,10 +119,13 @@ public partial class WorldGroundCheck : Node3D
                 if (!has) continue;
                 loaded.Add(p);
 
-                // the grid the tile is drawn from, read the way the height query always has
-                var (e, n) = _origin.ToLv95(p);
-                if (_chunks.GridAt(_origin.TileAt(p)) is not { } grid || (float)grid.SampleMeshHeight(e, n) != h)
-                    _faults.Add($"height at {p}: {h}, the tile's mesh height {(_chunks.GridAt(_origin.TileAt(p)) is { } g ? (float)g.SampleMeshHeight(e, n) : float.NaN)}");
+                // the grid the tile is drawn from, read the way the height query always has (the flat world's tiles only)
+                if (_flat != null)
+                {
+                    var (e, n) = _origin.ToLv95(p);
+                    if (_flat.GridAt(_origin.TileAt(p)) is not { } grid || (float)grid.SampleMeshHeight(e, n) != h)
+                        _faults.Add($"height at {p}: {h}, the tile's mesh height {(_flat.GridAt(_origin.TileAt(p)) is { } g ? (float)g.SampleMeshHeight(e, n) : float.NaN)}");
+                }
 
                 bool water = _ground.TryGetWater(p, out float still, out float wave);
                 bool level = _ground.TryGetWaterLevel(p, out float still2);
@@ -158,8 +168,10 @@ public partial class WorldGroundCheck : Node3D
                 clock.Restart();
                 if (viaGround)
                     for (int q = 0; q < Queries; q++) { _ground.TryGetHeight(points[q % points.Length], out float h); sink += h; }
+                else if (_earth != null)
+                    for (int q = 0; q < Queries; q++) { _earth.HeightAt(points[q % points.Length], out float h); sink += h; }
                 else
-                    for (int q = 0; q < Queries; q++) { _chunks.HeightAt(points[q % points.Length], out float h); sink += h; }
+                    for (int q = 0; q < Queries; q++) { _flat!.HeightAt(points[q % points.Length], out float h); sink += h; }
                 clock.Stop();
                 double ns = clock.Elapsed.TotalMilliseconds * 1e6 / Queries;
                 if (viaGround)
