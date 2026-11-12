@@ -76,10 +76,30 @@ public sealed class RaceRoute
                 try { if (await source.LoadRoadsAsync(here.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
                 catch (System.Exception) { /* no roads there */ }
             }
-        var graph = LaneGraph.Build(tiles, frame, s =>
-            s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
-            && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0);
+        var graph = LaneGraph.Build(tiles, frame, s => Drivable(s, smallest));
+        if (StartEdge(graph, at) is not var (best, bestS)) return null;
+        var ends = new EndIndex(graph);
 
+        var a = Walk(graph, ends, best, true, bestS);
+        var b = Walk(graph, ends, best, false, best.Length - bestS);
+        var (pts, back) = a.Count >= b.Count ? (a, b) : (b, a);
+        if (toward is { } to && Towards(graph, ends, best, bestS, to, keepRight: false, null) is { } path)
+        {
+            pts = path;
+            back = Flat(a[Mathf.Min(5, a.Count - 1)].P - path[Mathf.Min(5, path.Count - 1)].P).Length() < 1f ? b : a;
+        }
+        var route = FromPoints(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), best.Class, frame);
+        foreach (var (p, w) in back.Take(300)) { route.Behind.Add(p); route.BehindWidth.Add(w); }   // 600 m is plenty
+        return route;
+    }
+
+    private static bool Drivable(RoadSegment s, RoadClass smallest) =>
+        s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
+        && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0;
+
+    /// <summary>The drivable edge nearest <paramref name="at"/> and how far along it, the bigger road preferred when two are close.</summary>
+    private static (LaneEdge Edge, float S)? StartEdge(LaneGraph graph, Vector3 at)
+    {
         LaneEdge? best = null;
         float bestD = float.MaxValue, bestS = 0;
         foreach (var edge in graph.Edges)
@@ -89,19 +109,88 @@ public sealed class RaceRoute
                 float d = Flat(edge.Points[i] - at).Length() + (int)edge.Class * 4f;
                 if (d < bestD) { bestD = d; best = edge; bestS = edge.Cumulative[i]; }
             }
-        if (best == null) return null;
+        return best == null ? null : (best, bestS);
+    }
 
-        var a = Walk(graph, best, true, bestS);
-        var b = Walk(graph, best, false, best.Length - bestS);
-        var (pts, back) = a.Count >= b.Count ? (a, b) : (b, a);
-        if (toward is { } to && Towards(graph, best, bestS, to) is { } path)
+    /// <summary>
+    /// A drive to a far destination (#1744): the lane graph of the whole corridor from <paramref name="at"/> to
+    /// <paramref name="to"/> (<paramref name="half"/> m each side of the straight line and past both ends), the shortest way
+    /// along it as <see cref="BuildAsync"/>'s <c>toward</c> finds it (one-way streets, junction paths), on the rightmost lane of
+    /// each street (<see cref="Traffic.KeepRight"/>) and as wide as that lane, the road's class at every point
+    /// (<see cref="Classes"/>, for its speed). The roads are the earth world's leaves (<paramref name="leafRoads"/>, as
+    /// <see cref="Traffic"/> reads them) or the LV95 tiles of <paramref name="source"/>. Null when no route joins them.
+    /// </summary>
+    public static async Task<RaceRoute?> ToAsync(IChunkSource source, Func<CubeKey, RoadTile?>? leafRoads, OriginFrame frame,
+        Vector3 at, Vector3 to, double half = 2000, RoadClass smallest = RoadClass.Road, CancellationToken ct = default)
+    {
+        var tiles = new List<RoadTile>();
+        if (leafRoads != null)
         {
-            pts = path;
-            back = Flat(a[Mathf.Min(5, a.Count - 1)].P - path[Mathf.Min(5, path.Count - 1)].P).Length() < 1f ? b : a;
+            foreach (var key in CorridorLeaves(frame.ToGlobal(at), frame.ToGlobal(to), half))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (leafRoads(key) is { Segments.Count: > 0 } roads) tiles.Add(TilePlace.OnAnchor(roads, key));
+            }
         }
-        var route = FromPoints(pts.Select(p => p.P).ToList(), pts.Select(p => p.W).ToList(), best.Class, frame);
-        foreach (var (p, w) in back.Take(300)) { route.Behind.Add(p); route.BehindWidth.Add(w); }   // 600 m is plenty
+        else
+        {
+            foreach (var id in CorridorTiles(frame.ToGlobal(at), frame.ToGlobal(to), half))
+            {
+                try { if (await source.LoadRoadsAsync(id, ct) is { } t) tiles.Add(t); }
+                catch (System.Exception) { /* no roads there */ }
+            }
+        }
+        var graph = LaneGraph.Build(tiles, frame, s => Drivable(s, smallest));
+        if (StartEdge(graph, at) is not var (best, bestS)) return null;
+        var classes = new List<RoadClass>();
+        if (Towards(graph, new EndIndex(graph), best, bestS, to, keepRight: true, classes) is not { Count: > 1 } path) return null;
+        var route = FromPoints(path.Select(p => p.P).ToList(), path.Select(p => p.W).ToList(), best.Class, frame);
+        route.Classes = classes;
         return route;
+    }
+
+    /// <summary>The road's class at each of <see cref="Centre"/>'s points: a route built by <see cref="ToAsync"/>; null otherwise.</summary>
+    public List<RoadClass>? Classes { get; private set; }
+
+    /// <summary>The road's class at arc <paramref name="s"/> (<see cref="Class"/> where none is known per point).</summary>
+    public RoadClass ClassAt(float s) => Classes is { Count: > 0 } c ? c[Mathf.Min(NearestCentreIndexAt(s), c.Count - 1)] : Class;
+
+    private const double CorridorStep = 150;
+
+    // every place on a 150 m grid over the corridor: along the straight line from a to b and half on past each end, half each side
+    private static IEnumerable<GlobalPos> Corridor(GlobalPos a, GlobalPos b, double half)
+    {
+        var (east, north, _) = a.OffsetTo(b);
+        double length = System.Math.Max(1.0, a.HorizontalDistanceTo(b));
+        double ux = east / length, uy = north / length;
+        for (double s = -half; s <= length + half; s += CorridorStep)
+            for (double w = -half; w <= half; w += CorridorStep)
+                yield return a.Moved(ux * s + uy * w, uy * s - ux * w);
+    }
+
+    private static List<CubeKey> CorridorLeaves(GlobalPos a, GlobalPos b, double half)
+    {
+        var seen = new HashSet<CubeKey>();
+        var keys = new List<CubeKey>();
+        foreach (var p in Corridor(a, b, half))
+        {
+            var g = p.Geodetic;
+            var key = Terrain.Leaves.LeafFrames.LeafAt(g.LatDeg, g.LonDeg);
+            if (seen.Add(key)) keys.Add(key);
+        }
+        return keys;
+    }
+
+    private static List<TileId> CorridorTiles(GlobalPos a, GlobalPos b, double half)
+    {
+        var seen = new HashSet<TileId>();
+        var ids = new List<TileId>();
+        foreach (var p in Corridor(a, b, half))
+        {
+            var id = p.Tile;
+            if (seen.Add(id)) ids.Add(id);
+        }
+        return ids;
     }
 
     /// <summary>
@@ -248,7 +337,7 @@ public sealed class RaceRoute
         return r;
     }
 
-    private static List<(Vector3 P, float W)> Walk(LaneGraph graph, LaneEdge edge, bool forward, float from)
+    private static List<(Vector3 P, float W)> Walk(LaneGraph graph, EndIndex ends, LaneEdge edge, bool forward, float from)
     {
         var pts = new List<(Vector3, float)>();
         const float Step = 2f, MaxLength = 8000f;
@@ -272,7 +361,7 @@ public sealed class RaceRoute
             // RoadGen --rewrite trims every road back from its junction polygon, so after it the
             // roads meeting at a junction no longer share an endpoint: take any edge that starts
             // or ends within a junction's reach of where this one stopped
-            foreach (var (cand, candFwd) in graph.Leaving(key).Concat(NearbyStarts(graph, endP)))
+            foreach (var (cand, candFwd) in graph.Leaving(key).Concat(ends.Near(endP)))
             {
                 if (cand == edge || visited.Contains(cand) || cand.Class > edge.Class) continue;
                 var (_, t) = cand.Sample(candFwd ? 1f : cand.Length - 1f);
@@ -290,9 +379,12 @@ public sealed class RaceRoute
     /// <summary>
     /// The shortest way by road from <paramref name="start"/> (at <paramref name="s"/> m along it) to the edge passing
     /// nearest <paramref name="to"/>, then on from there as <see cref="Walk"/> goes (a run-out past the finish). For a
-    /// course between two given points: the straightest-road walk turned off at the first col.
+    /// course between two given points: the straightest-road walk turned off at the first col. <paramref name="keepRight"/>:
+    /// on the rightmost lane of each street rather than its centreline, as wide as that lane (a drive, #1744); the road's
+    /// class at each point into <paramref name="classes"/> when given.
     /// </summary>
-    private static List<(Vector3 P, float W)>? Towards(LaneGraph graph, LaneEdge start, float s, Vector3 to)
+    private static List<(Vector3 P, float W)>? Towards(LaneGraph graph, EndIndex ends, LaneEdge start, float s, Vector3 to,
+        bool keepRight, List<RoadClass>? classes)
     {
         var goal = graph.Edges.MinBy(e => e.Points.Min(p => Flat(p - to).LengthSquared()))!;
         var cost = new Dictionary<(LaneEdge, bool), float>();
@@ -311,7 +403,7 @@ public sealed class RaceRoute
             if (cur.E == goal) { hit = cur; break; }
             var (endP, _) = cur.E.Sample(cur.F ? cur.E.Length : 0);
             long key = cur.F ? cur.E.KeyEnd : cur.E.KeyStart;
-            foreach (var next in graph.Leaving(key).Concat(NearbyStarts(graph, endP)))
+            foreach (var next in graph.Leaving(key).Concat(ends.Near(endP)))
             {
                 if (next.Item1 == cur.E) continue;
                 float nc = c + next.Item1.Length;
@@ -329,20 +421,86 @@ public sealed class RaceRoute
         for (int k = 0; k < chain.Count - 1; k++)
         {
             var (e, f) = chain[k];
+            float right = keepRight ? LaneRight(e, f) : 0f;
+            float width = keepRight ? LaneWidth(e) : e.Width;
             for (float d = k == 0 ? (f ? s : e.Length - s) : 0f; d <= e.Length; d += 2f)
-                pts.Add((e.Sample(f ? d : e.Length - d).Item1, e.Width));
+            {
+                var (p, t) = e.Sample(f ? d : e.Length - d);
+                if (right != 0f) p += Flat(f ? t : -t).Normalized().Cross(Vector3.Up) * right;
+                pts.Add((p, width));
+                classes?.Add(e.Class);
+            }
         }
-        pts.AddRange(Walk(graph, last.E, last.F, chain.Count == 1 ? (last.F ? s : last.E.Length - s) : 0f));
+        // on past the goal: a run-out (a race's), or the destination's street to its end (a drive's)
+        var tail = keepRight ? Along(last.E, last.F, chain.Count == 1 ? (last.F ? s : last.E.Length - s) : 0f)
+            : Walk(graph, ends, last.E, last.F, chain.Count == 1 ? (last.F ? s : last.E.Length - s) : 0f);
+        pts.AddRange(tail);
+        for (int k = 0; k < tail.Count; k++) classes?.Add(last.E.Class);
         return pts;
     }
 
-    private static IEnumerable<(LaneEdge, bool)> NearbyStarts(LaneGraph graph, Vector3 at)
+    // one edge from `from` m along it in its direction of travel, on its rightmost lane
+    private static List<(Vector3 P, float W)> Along(LaneEdge e, bool f, float from)
     {
-        const float Reach = 18f;
-        foreach (var e in graph.Edges)
+        var pts = new List<(Vector3, float)>();
+        float right = LaneRight(e, f), width = LaneWidth(e);
+        for (float d = from; d <= e.Length; d += 2f)
         {
-            if (e.OneWay != -1 && Flat(e.Points[0] - at).Length() < Reach) yield return (e, true);
-            if (e.OneWay != 1 && Flat(e.Points[^1] - at).Length() < Reach) yield return (e, false);
+            var (p, t) = e.Sample(f ? d : e.Length - d);
+            if (right != 0f) p += Flat(f ? t : -t).Normalized().Cross(Vector3.Up) * right;
+            pts.Add((p, width));
+        }
+        return pts;
+    }
+
+    // metres right of the centreline the drive keeps to: the rightmost lane, as traffic does; a junction path is its own line
+    private static float LaneRight(LaneEdge e, bool forward) => e.Path != null || e.Connector ? 0f : Traffic.KeepRight(e, forward, 0);
+
+    // the width the line may use: the lane (and a little), or a narrow street's half where no lane is known
+    private static float LaneWidth(LaneEdge e) => e.LaneWidth > 0f ? e.LaneWidth + 0.6f : Mathf.Clamp(e.Width * 0.5f, 2.6f, 4f);
+
+    /// <summary>
+    /// Where an edge may be taken from at a junction whose ends are not shared (RoadGen trims every road back from its
+    /// junction polygon): every edge starting, or ending if two-way, within <see cref="Reach"/> of a point. A grid of
+    /// the ends, built once per route: the scan over every edge at every junction it replaces was quadratic, minutes on a
+    /// city's graph.
+    /// </summary>
+    private sealed class EndIndex
+    {
+        private const float Reach = 18f;
+        private readonly Dictionary<(int, int), List<(LaneEdge, bool)>> _cells = new();
+
+        public EndIndex(LaneGraph graph)
+        {
+            foreach (var e in graph.Edges)
+            {
+                if (e.OneWay != -1) Add(e.Points[0], (e, true));
+                if (e.OneWay != 1) Add(e.Points[^1], (e, false));
+            }
+        }
+
+        private static (int, int) Cell(Vector3 p) => (Mathf.FloorToInt(p.X / Reach), Mathf.FloorToInt(p.Z / Reach));
+
+        private void Add(Vector3 p, (LaneEdge, bool) end)
+        {
+            var c = Cell(p);
+            if (!_cells.TryGetValue(c, out var list)) _cells[c] = list = new();
+            list.Add(end);
+        }
+
+        public IEnumerable<(LaneEdge, bool)> Near(Vector3 at)
+        {
+            var (cx, cz) = Cell(at);
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (!_cells.TryGetValue((cx + dx, cz + dz), out var list)) continue;
+                    foreach (var end in list)
+                    {
+                        var p = end.Item2 ? end.Item1.Points[0] : end.Item1.Points[^1];
+                        if (Flat(p - at).Length() < Reach) yield return end;
+                    }
+                }
         }
     }
 

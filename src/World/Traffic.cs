@@ -1977,7 +1977,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// direction (#700: where the road has the lanes and a car's habit takes the next lane in: a third of
     /// them on 2+ lanes), clear of a painted bike lane.
     /// </summary>
-    private static float KeepRight(LaneEdge e, bool forward, uint habit)
+    internal static float KeepRight(LaneEdge e, bool forward, uint habit)
     {
         if (e.OneWay != 0) return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0 ? e.RightLane - e.LaneWidth : e.RightLane;
         if ((e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp) return 0f;
