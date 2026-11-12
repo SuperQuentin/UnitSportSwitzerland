@@ -75,7 +75,7 @@ public partial class LongDriveCheck : Node
         _ground.AddAnchor(_camera, collision: true);
         _watch = new ReanchorWatch(_origin, _ground, "longdrive") { Shots = DisplayServer.GetName() != "headless", JumpTolM = 0.25f };
         AddChild(_watch);
-        Log($"start LV95 {se:F0}/{sn:F0}{(_to is { } to ? Inv($", to {to.Lv95.E:F0}/{to.Lv95.N:F0}, {to.HorizontalDistanceTo(GlobalPos.FromLv95(se, sn, 0)) / 1000:F1} km as the crow flies") : ", along the road")}, "
+        Log($"start LV95 {se:F0}/{sn:F0}{(_to is { } to ? Inv($", to {Lv(to)}, {to.HorizontalDistanceTo(GlobalPos.FromLv95(se, sn, 0)) / 1000:F1} km as the crow flies") : ", along the road")}, "
             + $"car {_car}, legs of {_legM:F0} m, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}");
     }
 
@@ -135,7 +135,7 @@ public partial class LongDriveCheck : Node
             {
                 var g0 = _origin.ToGlobal(at);
                 var (de, dn, _) = g0.OffsetTo(dest);
-                double d = Math.Max(1.0, Math.Sqrt(de * de + dn * dn));
+                double d = Math.Max(1.0, g0.HorizontalDistanceTo(dest));
                 _camera.GlobalPosition = _origin.ToWorld(g0.Moved(de / d * StartStepM, dn / d * StartStepM)) with { Y = _camera.GlobalPosition.Y };
                 string why = route == null ? "missing" : route.Length < MinLegM ? Inv($"a {route.Length:F0} m stub")
                     : Inv($"a {1f / TightStart(route)!.Value:F1} m bend in its first {StartBendM:F0} m (a junction's corner)");
@@ -288,6 +288,9 @@ public partial class LongDriveCheck : Node
         for (int i = 0; i < line.Arc.Count && line.Arc[i] < StartBendM; i++) worst = Mathf.Max(worst, Mathf.Abs(line.Curvature[i]));
         return worst > TightK ? worst : null;
     }
+
+    // LV95 as notation only, for the log
+    private static string Lv(GlobalPos p) { var (e, n, _) = p.Lv95; return Inv($"{e:F0}/{n:F0}"); }
 
     private string LvAt(Node3D n) { var (e, nn) = _origin.ToLv95(n.GlobalPosition); return Inv($"LV95 {e:F0}/{nn:F0}"); }
 
