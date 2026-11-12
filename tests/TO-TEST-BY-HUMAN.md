@@ -16,6 +16,15 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 - [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
 - [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
 
+## Sites, yards and walking in on leaves, online ([#1707](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1707), [#1704](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1704))
+
+A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --frame earth --generated-world --at 2588796,1118441`; a second client beside it.
+
+- [ ] Walk up to a building site's skip and press E (pad and VR too) → the panel opens; the other player sees what you take go.
+- [ ] Open a site office's door and walk in; in an apartment block ride the lift with the other player in the cabin → you walk through the doorway (no wall), both ride; nobody is sent back up from inside.
+- [ ] Look at the parked cars and the site machines round you → they stand on the ground, turned as the bays and the road; aiming at one wakes it.
+- [ ] Join a Battle Royale squad with a bot, go down and out → the bot takes your dogtag to a Postauto stop and you come back.
+
 ## Building-site pits on leaves ([#1687](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1687), [#1653](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1653))
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, at a real site at its foundations (`--constructioncheck` lists them), in a window.
@@ -929,3 +938,11 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] Fly at 300 m along the shore from Cully to Vevey, then from 12 km up over the staircase → one shoreline, no squares, seams or pale lines on the water.
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
+
+## Farm fields, Christmas gifts and the trainer under `--frame earth` (PR [#1730](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1730), [#1729](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1729))
+
+Offline, in a window, each against the same without `--frame earth`.
+
+- [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
+- [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
+- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.

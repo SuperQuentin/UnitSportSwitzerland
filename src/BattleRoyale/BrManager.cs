@@ -45,6 +45,16 @@ public partial class BrManager : Node
 
     // ---- server: the match's loot (#194) ----
     private Terrain.IChunkSource? _source;
+
+    /// <summary>
+    /// Server: the ground's names for the tiles over a match square when they are not its LV95 tiles (#1704): under
+    /// <c>--frame earth</c> the leaves' stand-ins (<see cref="BrLoot.LeafTiles"/>), read through the ground's own files.
+    /// Null in the flat world.
+    /// </summary>
+    public Func<BrArea, IEnumerable<TileId>>? TilesOf { get; set; }
+
+    /// <summary>Server, with <see cref="TilesOf"/>: a leaf's own roads (its anchor frame), made or read without its collision.</summary>
+    public Func<CubeKey, RoadTile?>? LeafRoads { get; set; }
     private BrCrates? _crates;
     private readonly HashSet<int> _dropped = new();
     private int _match;
@@ -590,7 +600,7 @@ public partial class BrManager : Node
         if (_source == null || Origin == null) return;
         try
         {
-            var roads = await BrLoot.RoadPoints(_source, area);
+            var roads = await BrLoot.RoadPoints(_source, area, TilesOf?.Invoke(area), LeafRoads);
             if (match != _match || _state.Phase != BrPhase.Playing) return;
             // the Postauto stops for recalls (#480), squads only
             if (_state.TeamSize > 1)
@@ -749,7 +759,7 @@ public partial class BrManager : Node
             if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, wx, wy, wz, !double.IsFinite(alt));
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
         // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
-        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.Global.Alt), Now, peer);
         return true;
     }
 
@@ -786,7 +796,7 @@ public partial class BrManager : Node
         if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
         var (pe, pn) = (body.Global.Lv95.E, body.Global.Lv95.N);
-        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
+        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = (float)body.Global.Alt, Label = $"{e.Name}'s things" };
         box.SetStacks(stacks);
         _crates.Spawn(new[] { box });
     }

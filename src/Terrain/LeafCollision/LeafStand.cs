@@ -50,10 +50,16 @@ public sealed class LeafStand
     public DoorSpot[]? Doors { get; init; }
 
     /// <summary>
-    /// What collides besides the ground, roads and buildings' shells, in the tile's frame: the sites' shells, yards and
-    /// office walls, garage links and stoops (the faces C2 left to C1).
+    /// What collides with the buildings besides their shells, in the tile's frame: the site offices' walls, garage links
+    /// and stoops (the faces C2 left to C1), in the buildings' body an open doorway lets a walker through (#1704).
     /// </summary>
     public Vector3[] ExtraFaces { get; init; } = [];
+
+    /// <summary>
+    /// The building sites' shells, in the tile's frame (slabs, flights, lifts, walkways and footbridges, both windings): with
+    /// the ground, never let through at a door (a raised door's walkway stays underfoot, #1704), as the flat world's.
+    /// </summary>
+    public Vector3[] SiteFaces { get; init; } = [];
 
     /// <summary>The leaf's stand-in from its content and its bare vertices (anchor frame, before any blend).</summary>
     public static LeafStand Make(CubeLeafContent leaf, float[] bareVertices, int side)
@@ -67,6 +73,7 @@ public sealed class LeafStand
         var sites = new List<ConstructionSite>();
         DoorSpot[]? doors = null;
         var extra = new List<Vector3>();
+        var siteFaces = new List<Vector3>();
         var pits = new List<PitCut>();
         if (buildings != null)
         {
@@ -77,7 +84,7 @@ public sealed class LeafStand
                 {
                     // slabs, flights, lifts and footbridges go both ways round (#1653): the flat world's road cells
                     // that hold them collide with back faces too, a patch with front faces only
-                    extra.AddRange(BothWindings(shells.Faces));
+                    siteFaces.AddRange(BothWindings(shells.Faces));
                     // the site offices' walls are a building's (#822)
                     extra.AddRange(shells.OfficeFaces);
                     pits = shells.Pits;
@@ -91,7 +98,7 @@ public sealed class LeafStand
         return new LeafStand
         {
             Leaf = leaf.Key, Id = id, Grid = grid, Nearest = nearest, Roads = roads, Buildings = buildings,
-            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(),
+            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(), SiteFaces = siteFaces.ToArray(),
         };
     }
 

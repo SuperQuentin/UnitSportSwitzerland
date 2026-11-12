@@ -170,14 +170,14 @@ public sealed class ChristmasOccasion : Occasion
 	/// </summary>
 	private static Vector3? TreeSpot(TileContext t, OccasionTowns.Town town)
 	{
-		if (TileId.FromLv95(town.E, town.N) != t.Id) return null;   // each tree belongs to one tile
+		if (!t.Holds(town.E, town.N)) return null;   // each tree belongs to one tile (a leaf's stand-in too, #1729)
 		var centre = t.Local(town.E, town.N);
 		for (int ring = 0; ring <= 15; ring++)
 			for (int k = 0; k < Math.Max(1, ring * 6); k++)
 			{
 				float a = k * Mathf.Tau / Math.Max(1, ring * 6), r = ring * 4f;
 				var p = centre + new Vector3(Mathf.Cos(a) * r, 0, Mathf.Sin(a) * r);
-				if (p.X < 4 || p.X > 996 || p.Z < 4 || p.Z > 996) continue;
+				if (!t.InTile(p, 4f)) continue;
 				if (t.HeightAt(p) is not { } h || t.CoverAt(p) is CoverClass.Water or null) continue;
 				float lo = h, hi = h;
 				foreach (var o in new[] { new Vector3(3, 0, 0), new Vector3(-3, 0, 0), new Vector3(0, 0, 3), new Vector3(0, 0, -3) })
