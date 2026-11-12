@@ -294,7 +294,7 @@ State on 2026-11-10.
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
 | **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | dry run 297/375 before reruns; failures being sorted (many are #1705's doors); long-drive probe being fixed | D2 |
 | **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
-| **D2**: the flip | #1726, PR #1727 | code done (earth default, protocol 96, stores at `user://earth/` with migrations), quick tier green; the bar waits for #1725, #1731 (PR #1732), #1712 | user's merge |
+| **D2**: the flip | #1726, PR #1727 | code done (earth default, protocol 96, stores at `user://earth/` with migrations; pinball scores dropped, the user's call), quick tier green; the bar waits for #1731 (PR #1732), #1712, and the ski slopes and marina boats on leaves | user's merge |
 
 ## Decided without the user
 
