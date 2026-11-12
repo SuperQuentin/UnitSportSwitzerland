@@ -74,7 +74,7 @@ public sealed class LeafCollision
         if (bands != null) LeafRoadBlend.Apply(vertices, bands, 0);
         // the stand-in's grid from the ground as walked on (#1704): what stands on it (buildings, doors, the sites' offices
         // and yards, parked vehicles) is planned on it, and beside a road the bare lattice is metres off the blended one
-        var stand = LeafStand.Make(leaf, vertices, n);
+        var stand = LeafStand.Make(leaf, vertices, n, bare);
 
         var faces = new List<Vector3>[PerSide * PerSide];
         var buildingFaces = new List<Vector3>[PerSide * PerSide];

@@ -405,7 +405,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         var drawn = (float[])prepared.Bare.Clone();
         if (prepared.Bands is { } bands) LeafRoadBlend.Apply(drawn, bands, TerrainMeshBuilder.VisualBlendClearance);
         // the building sites' graded ground, as the collision's (#1731)
-        SitePads.Apply(drawn, prepared.Stand.Pads);
+        SitePads.Apply(drawn, prepared.Stand.Pads, prepared.Bare);
         // the building sites' pits, cut into the drawn ground as into the collision (#1653)
         var pits = prepared.Stand.Pits.Count > 0 ? prepared.Stand.PitsInAnchor() : null;
         return new Near

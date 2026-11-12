@@ -69,7 +69,7 @@ public sealed class LeafStand
     /// sites' areas are graded into <paramref name="vertices"/> first (<see cref="Pads"/>), so the grid and all that is
     /// planned on it stand on the graded ground.
     /// </summary>
-    public static LeafStand Make(CubeLeafContent leaf, float[] vertices, int side)
+    public static LeafStand Make(CubeLeafContent leaf, float[] vertices, int side, float[]? bare = null)
     {
         var id = LeafStandIn.Id(leaf.Key);
         var nearest = new int[WaterTile.Size * WaterTile.Size];
@@ -77,7 +77,7 @@ public sealed class LeafStand
         var buildings = leaf.Buildings is { Buildings.Count: > 0 } b ? LeafStandIn.Buildings(b, id) : null;
         var planned = buildings != null && SitePlans.HasSite(buildings) ? SitePlans.For(buildings, roads) : new List<ConstructionSite>();
         var pads = PadsOf(planned, vertices);
-        SitePads.Apply(vertices, pads);
+        SitePads.Apply(vertices, pads, bare);
         var grid = LeafStandIn.Grid(id, vertices, side, nearest);
 
         var sites = new List<ConstructionSite>();
@@ -120,7 +120,8 @@ public sealed class LeafStand
         foreach (var site in sites)
         {
             var a = site.Area;
-            var rect = new SiteRect(a.Center - shift, a.AxisU, a.Width, a.Depth);
+            // the site's area and a working apron round it, level: the machines' room beside the yard (#1731)
+            var rect = new SiteRect(a.Center - shift, a.AxisU, a.Width + 2 * SitePads.Apron, a.Depth + 2 * SitePads.Apron);
             double sum = 0;
             int count = 0;
             for (int k = 0; k + 2 < vertices.Length; k += 3)
