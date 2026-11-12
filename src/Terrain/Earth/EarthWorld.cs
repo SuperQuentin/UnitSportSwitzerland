@@ -95,7 +95,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// a body cut from another is built again. Main thread; <see cref="_cutFrom"/> carries it from the patch's worker.
     /// </summary>
     private readonly Dictionary<CubeKey, LeafCollision> _bodyFrom = new();
-    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Vector3[], LeafCollision> _cutFrom = new();
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Vector3[], Cut> _cutFrom = new();
     private readonly List<Node3D> _anchors = new();
     private readonly HashSet<Node3D> _collisionAnchors = new();
     private readonly List<CollisionPatches.Body> _bodyList = new();
@@ -110,6 +110,30 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Bumped by each <see cref="Refresh"/>: a read begun before it is dropped as it lands.</summary>
     private volatile int _generation;
     private double _nextPlan;
+
+    /// <summary>
+    /// Main-thread time spent since <see cref="TakeSpent"/>, by part, ms (#1773): what a frame paid this world, for a probe
+    /// naming its worst frames. Timestamps only, nothing allocated.
+    /// </summary>
+    public struct Spent
+    {
+        public double LeafMesh, LeafEntered, LeafFurnish, LeafDrop, Bodies, Plan, PatchPlan;
+        /// <summary>Leaves added; collision bodies whole; collision pieces raised.</summary>
+        public int Leaves, BodyCount, Pieces;
+        public readonly double Total => LeafMesh + LeafEntered + LeafFurnish + LeafDrop + Bodies + Plan + PatchPlan;
+    }
+
+    private Spent _spent;
+
+    /// <summary>The time spent since the last call, and the counters started again.</summary>
+    public Spent TakeSpent()
+    {
+        var s = _spent;
+        _spent = default;
+        return s;
+    }
+
+    private static double Ms(long from) => Stopwatch.GetElapsedTime(from).TotalMilliseconds;
 
     /// <summary>
     /// The leaves changed under this world (#1655: the server's leaf index arrived, <see cref="LeafStore.UseRemote"/>, with
@@ -232,7 +256,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void AddAnchor(Node3D anchor, bool? collision = null)
     {
         if (!_anchors.Contains(anchor)) _anchors.Add(anchor);
-        if (collision ?? anchor is PhysicsBody3D) _collisionAnchors.Add(anchor);
+        if ((collision ?? anchor is PhysicsBody3D) && _collisionAnchors.Add(anchor)) _nextPatchPlan = 0;
     }
 
     public void RemoveAnchor(Node3D anchor)
@@ -250,11 +274,11 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public int BodyCount => _bodies.Count;
 
     /// <summary>Nothing loading, waiting to be added, or building collision.</summary>
-    public bool Idle => _loading.Count == 0 && _ready.IsEmpty && !_patches.Busy;
+    public bool Idle => _loading.Count == 0 && _ready.IsEmpty && !_patches.Busy && !_patches.HasReady && _raising.Count == 0;
 
     /// <summary>What the world is busy with, for a log line when something waited on <see cref="Idle"/> too long.</summary>
     public string Status => $"{_loading.Count} leaves loading ({_cancelled.Count} skipped), {_ready.Count} to add, {_near.Count} loaded, "
-        + $"{_anchors.Count} anchors, collision {(_patches.Busy ? "busy" : "idle")}";
+        + $"{_anchors.Count} anchors, collision {(_patches.Busy ? "busy" : "idle")}, {_raising.Count} patches standing up";
 
     public override void _Process(double delta)
     {
@@ -268,13 +292,51 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             if (_stale.Contains(gone) && !Leaves.Has(gone)) Remove(gone);
         }
 
+        long raise = Stopwatch.GetTimestamp();
+        RaiseBodies();
+        _spent.Bodies += Ms(raise);
+
         _nextPlan -= delta;
         if (_nextPlan > 0) return;
         _nextPlan = 0.2;
+        long t = Stopwatch.GetTimestamp();
         Plan();
+        _spent.Plan += Ms(t);
     }
 
+    /// <summary>
+    /// Seconds to the next collision plan (<see cref="CollisionPatches.Update"/>): it only notices which patches the bodies
+    /// want (300 m round, 400 m to release, 10 s ahead), so 10 Hz is enough (#1773: on every physics tick it cost 2 to
+    /// 4 ms a frame). A new anchor plans at once.
+    /// </summary>
+    private double _nextPatchPlan;
+    private const double PatchPlanSeconds = 0.1;
+
     public override void _PhysicsProcess(double delta)
+    {
+        _nextPatchPlan -= delta;
+        if (_nextPatchPlan <= 0)
+        {
+            _nextPatchPlan = PatchPlanSeconds;
+            long t0 = Stopwatch.GetTimestamp();
+            PlanPatches();
+            _spent.PatchPlan += Ms(t0);
+        }
+
+        // the finished patches start standing up (RaiseBodies, under a budget); the released ones go
+        long t1 = Stopwatch.GetTimestamp();
+        while (_patches.TryTakeReady(out var key, out var faces)) AddBody(key, faces);
+        while (_patches.TryTakeReleased(out var gone))
+        {
+            if (_raising.Remove(gone, out var raising)) raising.Body.QueueFree();
+            if (_bodies.Remove(gone, out var body)) body.QueueFree();
+            _bodyFrom.Remove(gone);
+        }
+        _spent.Bodies += Ms(t1);
+    }
+
+    /// <summary>The collision anchors and where they are headed, and the patches they want.</summary>
+    private void PlanPatches()
     {
         _bodyList.Clear();
         _anchors.RemoveAll(a => !IsInstanceValid(a));
@@ -295,15 +357,6 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             _bodyList.Add(new(Origin.ToEcef(at), Origin.ToEcef(at + ahead), airborne));
         }
         _patches.Update(_bodyList);
-
-        // a few patches a frame: each is one trimesh shape
-        for (int k = 0; k < 2 && _patches.TryTakeReady(out var key, out var faces); k++) AddBody(key, faces);
-        while (_patches.TryTakeReleased(out var gone))
-            if (_bodies.Remove(gone, out var body))
-            {
-                body.QueueFree();
-                _bodyFrom.Remove(gone);
-            }
     }
 
     /// <summary>Which leaves are wanted: every leaf within <see cref="NearM"/> of a focus, by a walk over cube neighbours.</summary>
@@ -474,6 +527,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             GD.Print($"[earth] {leaf.Key}: {other} patches cut from another preparation of it, built again (#1626)");
             _patches.Rebuild(p => _bodyFrom.TryGetValue(p, out var from) && from.Leaf == leaf.Key && from != leaf.Prepared);
         }
+        _spent.Leaves++;
+        long t = Stopwatch.GetTimestamp();
         if (leaf.Arrays is { } arrays)
         {
             var mesh = new ArrayMesh();
@@ -483,22 +538,29 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             AddChild(leaf.Mesh);
             leaf.Mesh.Transform = LeafToWorld(leaf.Anchor);
         }
+        _spent.LeafMesh += Ms(t);
+        t = Stopwatch.GetTimestamp();
         TileEntered?.Invoke(GroundTile.FromLeaf(leaf.Key));
+        _spent.LeafEntered += Ms(t);
+        t = Stopwatch.GetTimestamp();
         if (leaf.Furniture is { } f)
         {
             leaf.Node = Commit(leaf.Key, f);
             leaf.Furniture = null;
         }
+        _spent.LeafFurnish += Ms(t);
     }
 
     private void Remove(CubeKey key)
     {
         _stale.Remove(key);
         if (!_near.Remove(key, out var leaf)) return;
+        long t = Stopwatch.GetTimestamp();
         if (_collisionSource.PinnedOf(key) == leaf.Prepared) _collisionSource.Unpin(key);
         leaf.Mesh?.QueueFree();
         if (leaf.Node != null) Unfurnish(key, leaf.Node);
         TileUnloaded?.Invoke(GroundTile.FromLeaf(key));
+        _spent.LeafDrop += Ms(t);
     }
 
     /// <summary>
@@ -514,39 +576,133 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         return _bodies.Count;
     }
 
-    /// <summary>No patch waiting, building or built and not yet standing.</summary>
-    internal bool CollisionSettled => !_patches.Busy && !_patches.HasReady;
+    /// <summary>No patch waiting, building, built and not yet standing, or standing up piece by piece.</summary>
+    internal bool CollisionSettled => !_patches.Busy && !_patches.HasReady && _raising.Count == 0;
 
-    /// <summary>A patch's faces, on a patch worker, with the preparation they were cut from noted for <see cref="AddBody"/>.</summary>
+    /// <summary>
+    /// Triangles in one piece of a patch's collision (#1773): Jolt builds a trimesh as its body enters the tree, ~1.7 µs a
+    /// triangle on the main thread, and a whole patch (33k to 86k triangles) cost 50 to 170 ms in one frame. A piece is
+    /// 2 to 3 ms, raised under <see cref="CollisionBudgetMs"/>.
+    /// </summary>
+    internal const int PieceTriangles = 1536;
+
+    /// <summary>Main-thread time a frame spends raising collision pieces, ms (at least one piece a frame while any wait).</summary>
+    public double CollisionBudgetMs { get; set; } = 3;
+
+    /// <summary>
+    /// A patch's collision cut on its worker (#1773): the ground in strips of lattice rows (it comes first, row by row), the
+    /// roads and pits and the buildings each in squares of their triangles' middles, a piece about
+    /// <see cref="PieceTriangles"/>.
+    /// </summary>
+    private sealed record Cut(LeafCollision? From, Vector3[][] Ground, Vector3[][] Features, Vector3[][] Shells);
+
+    /// <summary>A patch body standing up piece by piece; it replaces the patch's old body only once it is whole.</summary>
+    private sealed class Raising(StaticBody3D body, Cut cut)
+    {
+        public readonly StaticBody3D Body = body;
+        public readonly Cut Cut = cut;
+        public StaticBody3D? Shells;
+        /// <summary>Pieces raised so far, ground then features then shells.</summary>
+        public int Next;
+        public int Count => Cut.Ground.Length + Cut.Features.Length + Cut.Shells.Length;
+    }
+
+    private readonly Dictionary<CubeKey, Raising> _raising = new();
+
+    /// <summary>A patch's faces, on a patch worker, cut into pieces for <see cref="AddBody"/> with the preparation they came from.</summary>
     private Vector3[]? CutPatch(CubeKey key)
     {
         var faces = _collisionSource.Build(key, out var from);
-        if (faces != null && from != null) _cutFrom.AddOrUpdate(faces, from);
+        if (faces is { Length: >= 3 }) _cutFrom.AddOrUpdate(faces, CutUp(key, faces, from));
         return faces;
     }
 
+    private static Cut CutUp(CubeKey key, Vector3[] faces, LeafCollision? from)
+    {
+        int features = from?.FeatureVertices(key) ?? 0;
+        int ground = faces.Length - features;
+        var shells = Squares(from?.Buildings(key));
+        // one role only: the ground's when the patch has no features, else theirs (its ground all holes)
+        if (features <= 0) return new(from, Strips(faces, 0, faces.Length), [], shells);
+        if (ground < 3) return new(from, [], Squares(faces), shells);
+        return new(from, Strips(faces, 0, ground), Squares(faces[ground..]), shells);
+    }
+
+    /// <summary>Consecutive runs of <see cref="PieceTriangles"/>: the ground's triangles come row by row, so a run is a strip.</summary>
+    private static Vector3[][] Strips(Vector3[] faces, int from, int to)
+    {
+        int per = PieceTriangles * 3, count = (to - from + per - 1) / per;
+        var strips = new Vector3[count][];
+        for (int s = 0; s < count; s++)
+        {
+            int a = from + s * per;
+            strips[s] = faces[a..Math.Min(to, a + per)];
+        }
+        return strips;
+    }
+
+    /// <summary>Triangles sorted into a k × k grid of their middles over their own extent (x and z of the anchor frame).</summary>
+    private static Vector3[][] Squares(Vector3[]? faces)
+    {
+        if (faces is not { Length: >= 3 }) return [];
+        int tris = faces.Length / 3;
+        if (tris <= PieceTriangles) return [faces];
+        float x0 = float.MaxValue, x1 = float.MinValue, z0 = float.MaxValue, z1 = float.MinValue;
+        for (int t = 0; t < tris; t++)
+        {
+            var m = faces[3 * t] + faces[3 * t + 1] + faces[3 * t + 2];
+            x0 = Math.Min(x0, m.X); x1 = Math.Max(x1, m.X); z0 = Math.Min(z0, m.Z); z1 = Math.Max(z1, m.Z);
+        }
+        int k = (int)Math.Ceiling(Math.Sqrt((double)tris / PieceTriangles));
+        float sx = k / Math.Max(1e-3f, x1 - x0), sz = k / Math.Max(1e-3f, z1 - z0);
+        var cell = new int[tris];
+        var counts = new int[k * k];
+        for (int t = 0; t < tris; t++)
+        {
+            var m = faces[3 * t] + faces[3 * t + 1] + faces[3 * t + 2];
+            int i = Math.Clamp((int)((m.X - x0) * sx), 0, k - 1), j = Math.Clamp((int)((m.Z - z0) * sz), 0, k - 1);
+            counts[cell[t] = i + j * k]++;
+        }
+        var pieces = new Vector3[k * k][];
+        var fill = new int[k * k];
+        for (int c = 0; c < pieces.Length; c++) pieces[c] = new Vector3[counts[c] * 3];
+        for (int t = 0; t < tris; t++)
+        {
+            int c = cell[t], at = fill[c]++ * 3;
+            pieces[c][at] = faces[3 * t];
+            pieces[c][at + 1] = faces[3 * t + 1];
+            pieces[c][at + 2] = faces[3 * t + 2];
+        }
+        // a crowded square (a town block's roofs) stays one piece: still far smaller than the patch
+        return Array.FindAll(pieces, p => p.Length > 0);
+    }
+
+    private static readonly StringName GroundShapes = "ground_shapes";
+
     /// <summary>
-    /// The shape index of a patch body's roads and buildings (<see cref="GroundShape"/> its ground): a ray's
-    /// <c>shape</c> tells which it hit (#1626: the ground off the height query is a fault, a roof over it is not).
+    /// Whether a ray's hit (its <c>collider</c> and <c>shape</c>) is a leaf's ground, not a road or building on it (#1626: the
+    /// ground off the height query is a fault, a roof over it is not): a patch body holds its ground's pieces first.
     /// </summary>
-    public const int GroundShape = 0, FeatureShape = 1;
-
-    private static readonly StringName FeaturesOnly = "features_only";
-
-    /// <summary>Whether a ray's hit (its <c>collider</c> and <c>shape</c>) is a leaf's ground, not a road or building on it.</summary>
     public static bool IsGroundHit(GodotObject? collider, int shape) =>
-        collider is StaticBody3D body && body.IsInGroup(GroundGroup) && shape == GroundShape && !body.HasMeta(FeaturesOnly);
+        collider is StaticBody3D body && body.IsInGroup(GroundGroup) && body.HasMeta(GroundShapes)
+        && shape < body.GetMeta(GroundShapes).AsInt32();
 
+    /// <summary>A patch's new faces: its body starts standing up, piece by piece (<see cref="RaiseBodies"/>).</summary>
     private void AddBody(CubeKey key, Vector3[]? faces)
     {
-        // a patch built again (CollisionPatches.Rebuild): the new faces replace the old body
-        if (_bodies.Remove(key, out var old)) old.QueueFree();
-        _bodyFrom.Remove(key);
-        if (faces is not { Length: >= 3 }) return;
+        // a body still standing up for this patch: these faces are newer
+        if (_raising.Remove(key, out var stale)) stale.Body.QueueFree();
         var (leaf, _, _) = LeafCollision.Split(key);
-        if (_cutFrom.TryGetValue(faces, out var from))
+        if (faces is not { Length: >= 3 } || !_cutFrom.TryGetValue(faces, out var cut))
         {
-            _cutFrom.Remove(faces);
+            // no ground (yet): the old body goes
+            if (_bodies.Remove(key, out var old)) old.QueueFree();
+            _bodyFrom.Remove(key);
+            return;
+        }
+        _cutFrom.Remove(faces);
+        if (cut.From is { } from)
+        {
             _bodyFrom[key] = from;
             // cut from another preparation than the loaded leaf answers from (begun before it was pinned): built again
             if (_near.TryGetValue(leaf, out var near) && near.Prepared != from)
@@ -555,32 +711,70 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
                 _patches.Rebuild(p => p == key);
             }
         }
+        else _bodyFrom.Remove(key);
         var body = new StaticBody3D { Name = key.FileStem };
         body.AddToGroup(GroundGroup);
-        // the ground first, then the roads and buildings as a second shape (the patch lists them last)
-        int features = from?.FeatureVertices(key) ?? 0;
-        int ground = faces.Length - features;
-        if (features <= 0 || ground < 3)
-        {
-            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
-            // one shape: the ground's when the patch has no features, else theirs (its ground all holes)
-            if (features > 0) body.SetMeta(FeaturesOnly, true);
-        }
-        else
-        {
-            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces[..ground] } });
-            body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces[ground..] } });
-        }
-        // its buildings in a body of their own, placed with it (#1704): an open doorway lets a walker through them alone
-        if (from?.Buildings(key) is { Length: >= 3 } shells)
-        {
-            var buildings = new StaticBody3D { Name = BuildingBodyName };
-            buildings.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = shells } });
-            body.AddChild(buildings);
-        }
+        body.SetMeta(GroundShapes, cut.Ground.Length);
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);
-        _bodies[key] = body;
+        _raising[key] = new Raising(body, cut);
+    }
+
+    /// <summary>
+    /// Collision pieces raised under <see cref="CollisionBudgetMs"/>, the patch nearest a body first; a whole body replaces
+    /// the patch's old one in the same frame, so a rebuilt patch never gaps under a walker (#1773). Main thread.
+    /// </summary>
+    private void RaiseBodies()
+    {
+        if (_raising.Count == 0) return;
+        long start = Stopwatch.GetTimestamp();
+        do
+        {
+            CubeKey key = default;
+            Raising? next = null;
+            double nearest = double.MaxValue;
+            foreach (var (k, r) in _raising)
+            {
+                double d = double.MaxValue;
+                var c = k.Anchor.Origin;
+                foreach (var b in _bodyList) d = Math.Min(d, Squared(c, b.At));
+                if (next == null || d < nearest) { key = k; next = r; nearest = d; }
+            }
+            RaisePiece(next!);
+            _spent.Pieces++;
+            if (next!.Next < next.Count) continue;
+            _raising.Remove(key);
+            if (_bodies.Remove(key, out var old)) old.QueueFree();
+            _bodies[key] = next.Body;
+            _spent.BodyCount++;
+        }
+        while (_raising.Count > 0 && Ms(start) < CollisionBudgetMs);
+
+        static double Squared(EcefPos a, EcefPos b)
+        {
+            double dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
+            return dx * dx + dy * dy + dz * dz;
+        }
+    }
+
+    /// <summary>One piece of a body: a trimesh shape added to it in the tree, built by Jolt there and then.</summary>
+    private static void RaisePiece(Raising r)
+    {
+        var cut = r.Cut;
+        int i = r.Next++;
+        if (i < cut.Ground.Length + cut.Features.Length)
+        {
+            var faces = i < cut.Ground.Length ? cut.Ground[i] : cut.Features[i - cut.Ground.Length];
+            r.Body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces } });
+            return;
+        }
+        // its buildings in a body of their own, placed with it (#1704): an open doorway lets a walker through them alone
+        if (r.Shells == null)
+        {
+            r.Shells = new StaticBody3D { Name = BuildingBodyName };
+            r.Body.AddChild(r.Shells);
+        }
+        r.Shells.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = cut.Shells[i - cut.Ground.Length - cut.Features.Length] } });
     }
 
     private const string BuildingBodyName = "Buildings";
@@ -615,6 +809,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         }
         foreach (var (key, body) in _bodies)
             body.Transform = LeafToWorld(LeafCollision.Split(key).Leaf.Anchor);
+        foreach (var (key, raising) in _raising)
+            raising.Body.Transform = LeafToWorld(LeafCollision.Split(key).Leaf.Anchor);
         // what the flat streamer keeps in world space: the door index, the building shader's door boxes
         Flat?.OnOriginShifted(shift);
     }
