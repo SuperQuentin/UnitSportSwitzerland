@@ -937,7 +937,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // tables only: no terrain wanted, and quitting mid-stream races the tile workers
             new(() => Loot.LootProbe.ParseArgs() != null, ToolAnchor.Dropped, _ => new Loot.LootProbe(cache, chunks, Loot.LootProbe.ParseArgs()!.Value)),
             new(() => Interiors.InteriorProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
-                _ => new Interiors.InteriorProbe(chunks, origin, cache, Interiors.InteriorProbe.ParseArgs().Shot)),
+                _ => new Interiors.InteriorProbe(Ground!, origin, cache, Interiors.InteriorProbe.ParseArgs().Shot)),
             new(() => Interiors.DoorWatchProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Interiors.DoorWatchProbe(chunks, origin, Interiors.DoorWatchProbe.ParseArgs().Shot)),
             new(() => Interiors.GarageLinkProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
