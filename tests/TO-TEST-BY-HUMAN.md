@@ -16,6 +16,15 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 - [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
 - [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
 
+## Sites, yards and walking in on leaves, online ([#1707](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1707), [#1704](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1704))
+
+A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --frame earth --generated-world --at 2588796,1118441`; a second client beside it.
+
+- [ ] Walk up to a building site's skip and press E (pad and VR too) → the panel opens; the other player sees what you take go.
+- [ ] Open a site office's door and walk in; in an apartment block ride the lift with the other player in the cabin → you walk through the doorway (no wall), both ride; nobody is sent back up from inside.
+- [ ] Look at the parked cars and the site machines round you → they stand on the ground, turned as the bays and the road; aiming at one wakes it.
+- [ ] Join a Battle Royale squad with a bot, go down and out → the bot takes your dogtag to a Postauto stop and you come back.
+
 ## Building-site pits on leaves ([#1687](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1687), [#1653](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1653))
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, at a real site at its foundations (`--constructioncheck` lists them), in a window.
