@@ -64,7 +64,7 @@ public sealed class LeafStand
     /// <summary>The sites' graded ground (<see cref="SitePads.Apply"/>, #1731): the collision's and the stand-in grid's, and the drawn mesh's.</summary>
     public List<SitePad> Pads { get; init; } = new();
 
-    /// <summary>The leaf's vertices as walked on (anchor frame): the bare lattice, its sites graded, the roads blended at clearance 0.</summary>
+    /// <summary>The leaf's vertices as walked on (anchor frame): the bare lattice, the roads blended at clearance 0, its sites graded.</summary>
     public float[] Walked { get; init; } = [];
 
     /// <summary>
@@ -79,12 +79,12 @@ public sealed class LeafStand
         var roads = leaf.Roads is { Segments.Count: > 0 } r ? LeafStandIn.Roads(r, id) : null;
         var buildings = leaf.Buildings is { Buildings.Count: > 0 } b ? LeafStandIn.Buildings(b, id) : null;
         var planned = buildings != null && SitePlans.HasSite(buildings) ? SitePlans.For(buildings, roads) : new List<ConstructionSite>();
-        // graded into the bare lattice, in place, before the roads are blended onto it: a road keeps its surface and meets
-        // the pad through its own blend
-        var pads = PadsOf(planned, bare);
-        SitePads.Apply(bare, pads);
+        // the roads blended first, then the sites graded over it: a site's area keeps off the carriageway, and a road's blend
+        // reaching into it (a raised road beside a yard) left a step a machine could not climb
         var vertices = (float[])bare.Clone();
         blend?.Invoke(vertices);
+        var pads = PadsOf(planned, vertices);
+        SitePads.Apply(vertices, pads);
         var grid = LeafStandIn.Grid(id, vertices, side, nearest);
 
         var sites = new List<ConstructionSite>();

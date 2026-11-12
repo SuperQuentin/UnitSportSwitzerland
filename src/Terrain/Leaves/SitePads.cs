@@ -19,8 +19,8 @@ public static class SitePads
 
 
     /// <summary>
-    /// Grades the pads into a leaf's bare vertices (anchor frame, x y z), before the roads are blended onto them: level
-    /// inside each, blended back over <see cref="Skirt"/>.
+    /// Grades the pads into a leaf's vertices (anchor frame, x y z), after the road blend: level inside each, blended back
+    /// over <see cref="Skirt"/>.
     /// </summary>
     public static void Apply(float[] vertices, IReadOnlyList<SitePad> pads)
     {

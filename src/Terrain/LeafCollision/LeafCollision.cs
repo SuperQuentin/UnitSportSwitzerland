@@ -51,7 +51,7 @@ public sealed class LeafCollision
     /// <summary>The leaf as its stand-in tile: grid, records, sites and doors (#1510).</summary>
     public LeafStand Stand { get; }
 
-    /// <summary>The lattice vertices before the road blend, the building sites graded into them (#1731): what the drawn mesh blends.</summary>
+    /// <summary>The lattice vertices before the blend.</summary>
     public float[] Bare { get; }
 
     /// <summary>The lattice vertices as the patches hold them (blended), x y z a vertex, row-major from the south-west.</summary>
@@ -70,8 +70,8 @@ public sealed class LeafCollision
         int n = (1 << heights.Bits) + 1;
         var bare = CubeGeometry.Vertices(leaf.Key, heights.Bits, heights.Heights);
         var bands = LeafRoadBlend.For(leaf.Key, leaf.Roads, neighbourRoads);
-        // the sites' pads graded into the bare lattice (#1731), then the roads blended onto it: the ground as walked on,
-        // what the stand-in's grid is made from (#1704); the drawn mesh blends the same graded lattice
+        // the roads blended, then the sites' pads graded over them (#1731): the ground as walked on, what the stand-in's grid
+        // is made from (#1704); the drawn mesh does the same at its own clearance
         var stand = LeafStand.Make(leaf, bare, n, v => { if (bands != null) LeafRoadBlend.Apply(v, bands, 0); });
         var vertices = stand.Walked;
 
