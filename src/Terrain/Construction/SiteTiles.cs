@@ -25,51 +25,48 @@ internal static class SiteTiles
         me.Origin!.ToWorld(GlobalPos.OfTileEn(tile, e, n, h));
 
     /// <summary>
-    /// The foot of the nearest crane, round the player's tile (<paramref name="rings"/> of the ground's tiles), with one of
-    /// its site's materials pallets under its jib (#1704): planned from the tiles' files, drawn or not. The generator plans
-    /// other sites on an earth world's leaves than on the flat world's tiles, so a check cannot name one.
+    /// The foot of the nearest crane with one of its site's materials pallets under its jib (#1704, #1731): the generated
+    /// world's sites (<see cref="ProceduralWorld.SitesNear"/>) nearest first, out to <paramref name="radius"/> m, each
+    /// planned from the ground's own tile for it (an earth leaf's stand-in, its leaf made on first ask). A site's dressing
+    /// rolls from its building's identity, which differs between the flat world and the leaves, so a check cannot name one.
     /// </summary>
-    public static async System.Threading.Tasks.Task<GlobalPos?> CraneWithPalletNear(FootPlayer me, int rings = 4, Action<string>? log = null)
+    public static async System.Threading.Tasks.Task<GlobalPos?> CraneWithPalletNear(FootPlayer me, double radius = 12000, Action<string>? log = null)
     {
         if (me.Terrain is not { } ground || ground.Content is not { } source) return null;
-        var here = ground.ContentName(ground.TileAt(me.GlobalPosition));
         var at = me.Global;
-        GlobalPos? best = null;
-        double nearest = double.MaxValue;
-        int tiles = 0, withSites = 0, sitesSeen = 0, cranes = 0, palletsSeen = 0;
-        float closest = float.MaxValue;
-        // ring by ring, nearest first: the first ring that has one ends the search (each leaf asked is made, ~2 s)
-        for (int ring = 0; ring <= rings && best == null; ring++)
-        for (int dx = -ring; dx <= ring; dx++)
-            for (int dz = ring; dz >= -ring; dz--)
+        var (e0, n0, _) = SwissGeodesy.FromEcef(at.Ecef);
+        var world = new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+        var places = new List<GlobalPos>();
+        foreach (var (se, sn, _, _) in world.SitesNear(e0, n0, radius)) places.Add(GlobalPos.FromLv95(se, sn, at.Alt));
+        places.Sort((a, b) => a.HorizontalDistanceSquaredTo(at).CompareTo(b.HorizontalDistanceSquaredTo(at)));
+        var seen = new HashSet<TileId>();
+        int sitesSeen = 0, cranes = 0, palletsSeen = 0;
+        foreach (var place in places)
+        {
+            var id = TileOf(me, place);
+            if (!seen.Add(id)) continue;
+            if (await source.LoadBuildingsAsync(id) is not { } tile || !SitePlans.HasSite(tile)) continue;
+            var roads = await source.LoadRoadsAsync(id);
+            var grid = await source.LoadChunkAsync(id);
+            foreach (var site in SitePlans.For(tile, roads))
             {
-                if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != ring) continue;
-                var id = here.Neighbour(dx, dz);
-                tiles++;
-                if (await source.LoadBuildingsAsync(id) is not { } tile || !SitePlans.HasSite(tile)) continue;
-                withSites++;
-                var roads = await source.LoadRoadsAsync(id);
-                var grid = await source.LoadChunkAsync(id);
-                foreach (var site in SitePlans.For(tile, roads))
+                var pallets = SitePlans.PalletsOf(tile, site, grid).Select(p => id.Local(p.E, p.N))
+                    .Select(l => new Vector2((float)l.X, (float)l.Z)).ToList();
+                sitesSeen++;
+                palletsSeen += pallets.Count;
+                foreach (var crane in site.Cranes)
                 {
-                    var pallets = SitePlans.PalletsOf(tile, site, grid).Select(p => id.Local(p.E, p.N))
-                        .Select(l => new Vector2((float)l.X, (float)l.Z)).ToList();
-                    sitesSeen++;
-                    palletsSeen += pallets.Count;
-                    foreach (var crane in site.Cranes)
-                    {
-                        cranes++;
-                        foreach (var p in pallets) closest = Math.Min(closest, p.DistanceTo(crane.Base));
-                        if (!pallets.Any(p => p.DistanceTo(crane.Base) is var d && d > CraneMotion.MinTrolley + 1f && d < crane.JibLength - 2f)) continue;
-                        var (e, n) = id.Global(crane.Base.X, crane.Base.Y);
-                        var foot = GlobalPos.OfTileEn(id, e, n, (grid?.SampleMeshHeight(e, n) ?? 0) + 2);
-                        double far = foot.HorizontalDistanceTo(at);
-                        if (far < nearest) (nearest, best) = (far, foot);
-                    }
+                    cranes++;
+                    if (!pallets.Any(p => p.DistanceTo(crane.Base) is var d && d > CraneMotion.MinTrolley + 1f && d < crane.JibLength - 2f)) continue;
+                    var (e, n) = id.Global(crane.Base.X, crane.Base.Y);
+                    var foot = GlobalPos.OfTileEn(id, e, n, (grid?.SampleMeshHeight(e, n) ?? 0) + 2);
+                    log?.Invoke($"{places.Count} generated sites within {radius / 1000:F0} km, {seen.Count} tiles read, {sitesSeen} sites, {cranes} cranes, {palletsSeen} pallets: {site.Key}'s crane {foot.HorizontalDistanceTo(at):F0} m away");
+                    return foot;
                 }
             }
-        log?.Invoke($"{tiles} tiles, {withSites} with sites, {sitesSeen} sites, {cranes} cranes, {palletsSeen} pallets, the closest pallet {closest:F1} m from a crane's foot");
-        return best;
+        }
+        log?.Invoke($"{places.Count} generated sites within {radius / 1000:F0} km, {seen.Count} tiles read, {sitesSeen} sites, {cranes} cranes, {palletsSeen} pallets: no crane with a pallet under its jib");
+        return null;
     }
 
     /// <summary>A point of a tile's plans (tile-local x, y, z) in the world.</summary>

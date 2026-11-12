@@ -23,6 +23,13 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
 - **The stand-in grid** (`LeafStand.Grid`) is rasterised from the lattice blended to the roads, the ground as walked
   on: what is planned on it (buildings, doors, the sites' offices and yards, parked vehicles) stands on the collision.
   From the bare lattice, a site office's sill was 1.3 m over its doorstep beside a road.
+- **Building sites are graded** (#1731, `SitePads`, `LeafStand.Pads`): a fill leaf follows the real relief (#1678), so
+  each site's area is levelled to the mean of the ground in it, with an 8 m skirt, after the road blend (a site keeps
+  off the carriageway; graded before it, a raised road blended back into the pad as a step). The collision, the grid
+  and the drawn mesh all carry it. No apron past the site's area: it reached the roads beside it.
+- **A site's dressing rolls from its building's Earth identity**, so a leaf's sites carry other materials than the
+  flat world's same village: a check finds a site that has what it needs (`SiteTiles.CraneWithPalletNear` walks
+  `ProceduralWorld.SitesNear`), never names one.
 - **Collision.** A leaf patch's buildings (shells, footings, office walls, garage links, stoops) are a child body
   `Buildings` of the patch's ground body (`LeafCollision.Buildings`, `EarthWorld.AddBody`); an open doorway lets a
   walker or a car through the bodies of the patches round it (`EarthWorld.BuildingBodiesNear`,
@@ -48,8 +55,7 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
   (`StandInChunkSource.LoadPistesAsync`, `LeafStandIn.Pistes`) and its leaf's still water as a 2 m layer
   (`LoadLeafWaterAsync`); a jetty belongs to the leaf its middle is on (`DormantSlots.LeafOf`). `world/ski-snow`,
   `world/landings`.
-- Open: generated building sites are rare on fill leaves and their yards unlevelled (#1731: `cranenetcheck`,
-  `sitepalletnetcheck` under earth). Not on stand-ins yet: concerts (no stadium bowls on leaves, #1723/#1725), the
+- Not on stand-ins yet: concerts (no stadium bowls on leaves, #1723/#1725), the
   piers and jetties' decks (`PierMeshBuilder`: the marina's boats lie at their berths beside no deck), the ski map
   and ski races (`SlopeMap`, `RaceRoute.BuildPisteAsync`: LV95 tiles); birds, herds, ropeways, UFO sightings and the
   egg still read LV95 tiles (the region's real tiles; nothing on the fill).

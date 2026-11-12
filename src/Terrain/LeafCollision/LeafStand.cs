@@ -61,14 +61,31 @@ public sealed class LeafStand
     /// </summary>
     public Vector3[] SiteFaces { get; init; } = [];
 
-    /// <summary>The leaf's stand-in from its content and its bare vertices (anchor frame, before any blend).</summary>
-    public static LeafStand Make(CubeLeafContent leaf, float[] bareVertices, int side)
+    /// <summary>The sites' graded ground (<see cref="SitePads.Apply"/>, #1731): the collision's and the stand-in grid's, and the drawn mesh's.</summary>
+    public List<SitePad> Pads { get; init; } = new();
+
+    /// <summary>The leaf's vertices as walked on (anchor frame): the bare lattice, the roads blended at clearance 0, its sites graded.</summary>
+    public float[] Walked { get; init; } = [];
+
+    /// <summary>
+    /// The leaf's stand-in from its content and its vertices (anchor frame; the collision's, blended to the roads). The
+    /// sites' areas are graded into <paramref name="vertices"/> first (<see cref="Pads"/>), so the grid and all that is
+    /// planned on it stand on the graded ground.
+    /// </summary>
+    public static LeafStand Make(CubeLeafContent leaf, float[] bare, int side, Action<float[]>? blend = null)
     {
         var id = LeafStandIn.Id(leaf.Key);
         var nearest = new int[WaterTile.Size * WaterTile.Size];
-        var grid = LeafStandIn.Grid(id, bareVertices, side, nearest);
         var roads = leaf.Roads is { Segments.Count: > 0 } r ? LeafStandIn.Roads(r, id) : null;
         var buildings = leaf.Buildings is { Buildings.Count: > 0 } b ? LeafStandIn.Buildings(b, id) : null;
+        var planned = buildings != null && SitePlans.HasSite(buildings) ? SitePlans.For(buildings, roads) : new List<ConstructionSite>();
+        // the roads blended first, then the sites graded over it: a site's area keeps off the carriageway, and a road's blend
+        // reaching into it (a raised road beside a yard) left a step a machine could not climb
+        var vertices = (float[])bare.Clone();
+        blend?.Invoke(vertices);
+        var pads = PadsOf(planned, vertices);
+        SitePads.Apply(vertices, pads);
+        var grid = LeafStandIn.Grid(id, vertices, side, nearest);
 
         var sites = new List<ConstructionSite>();
         DoorSpot[]? doors = null;
@@ -77,9 +94,9 @@ public sealed class LeafStand
         var pits = new List<PitCut>();
         if (buildings != null)
         {
-            if (SitePlans.HasSite(buildings))
+            if (planned.Count > 0)
             {
-                sites = SitePlans.For(buildings, roads);
+                sites = planned;
                 if (SiteShellBuilder.Build(buildings, sites, grid, mesh: false, collision: true) is { } shells)
                 {
                     // slabs, flights, lifts and footbridges go both ways round (#1653): the flat world's road cells
@@ -98,8 +115,31 @@ public sealed class LeafStand
         return new LeafStand
         {
             Leaf = leaf.Key, Id = id, Grid = grid, Nearest = nearest, Roads = roads, Buildings = buildings,
-            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(), SiteFaces = siteFaces.ToArray(),
+            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(), SiteFaces = siteFaces.ToArray(), Pads = pads, Walked = vertices,
         };
+    }
+
+    /// <summary>Each site's pad (<see cref="SitePad"/>): its area in the anchor frame, at the mean height of the ground in it; none where it holds no vertex.</summary>
+    public static List<SitePad> PadsOf(IReadOnlyList<ConstructionSite> sites, float[] vertices)
+    {
+        var pads = new List<SitePad>(sites.Count);
+        var shift = new Vector2((float)LeafStandIn.Offset, (float)LeafStandIn.Offset);
+        foreach (var site in sites)
+        {
+            var a = site.Area;
+            var rect = new SiteRect(a.Center - shift, a.AxisU, a.Width, a.Depth);
+            double sum = 0;
+            int count = 0;
+            for (int k = 0; k + 2 < vertices.Length; k += 3)
+            {
+                float y = vertices[k + 1];
+                if (float.IsNaN(y) || !rect.Contains(new Vector2(vertices[k], vertices[k + 2]))) continue;
+                sum += y;
+                count++;
+            }
+            if (count > 0) pads.Add(new SitePad(rect.Center, rect.AxisU, rect.Width, rect.Depth, (float)(sum / count)));
+        }
+        return pads;
     }
 
     /// <summary>Every triangle twice, once each way round: a one-sided body collides with it from both sides.</summary>
