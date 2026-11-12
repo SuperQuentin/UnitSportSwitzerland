@@ -4,7 +4,8 @@
 # G2 D's bar: the re-anchor, long-drive and long-flight probes (#1710, D0)
 
 The flip to `--frame earth` (D2, plan `docs/plans/global-tiling-g2-d.md` section 5) is proven by rows that did not
-exist before D0. All three run under `--frame earth` only, and judge re-anchors through one helper.
+exist before D0. The re-anchor and flight probes run under `--frame earth` only, the long drive on both (parity); all
+judge re-anchors through one helper.
 
 - **`Core/ReanchorWatch`**: what a re-anchor must not show. `Watch(name, node)` samples a node's Earth position (ECEF)
   every frame in game time (a time-warped flight, `--fixed-fps`); across a frame interval holding a re-anchor the
@@ -22,17 +23,26 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
   that far aside at the 3rd re-anchor: 0.1 m fails (the marker moved, the marker's track 5 cm against a 4 cm
   tolerance), the proof the check sees a pop; never in a map row. Samples are taken on the physics tick (a car sampled
   per frame had 40 cm of noise: a frame holds 0-2 ticks); a jump of d reads as d/2.
-- **`--longdrivecheck`** (`Player/LongDriveCheck`): a `RaceRoute` reads roads only 4 tiles round where it is built,
-  so the drive is chained legs: each toward a point `--legm` (3 km) on toward `--to` (LV95 notation; the leg target
-  is `GlobalPos` maths), the next built 1.2 km before the current one ends, from just ahead of the car, and a new
-  `AutoPilot` takes over on the move. Fails on a stall (60 s, less than 50 m won), a fall (1 m under the ground for
-  0.5 s, or out of the car), a jump. No `--to`: one leg, the longer way along the road (the quick row on `hairpin`).
-  `tools/longdrivecheck.sh`: Versoix → Nyon, the Geneva patch's north end (the D: region is patches, not a corridor).
-  On open roads (`--to`) the pilot is capped (`AutoPilot.MaxSpeed`: 60 km/h, 110 on a motorway), a next leg is taken
-  only if it ends 100 m nearer, and a first leg that is a stub (under 200 m) or opens round a corner tighter than 12 m
-  is looked for again 150 m on. **The D: drive does not get far yet, on flat as on earth**: flat out from Geneva's
-  centre the racing pilot went into the first wall; from Versoix it grazes buildings on narrow Major roads and the
-  chained legs stop toward Nyon (`RaceRoute.Towards` reads 4 tiles). The pilot's own log (`pilot:` lines) says why.
+- **`--longdrivecheck`** (`Player/LongDriveCheck`, #1744): with `--to` (LV95 notation) the route is planned once, end
+  to end, by `RaceRoute.ToAsync`: traffic's car lane graph (`Traffic.IsCarRoad`, ends joined; no tunnel, no restricted
+  road) over a corridor 2 km each side of the straight line, the leaves' roads on earth (`EarthLeaves.RoadsOf`, as
+  traffic reads them) or the LV95 tiles (flat, and both frames with `--routeroads lv95`); the quickest way (each class
+  at `RaceRoute.DriveSpeed`), each street's rightmost lane (`Traffic.KeepRight`), a curve across a trimmed junction, a
+  one-way street the wrong way only where the data's directions cut the way (8x its time, logged). Ends are found in a
+  grid on the same level (`EndIndex`: the old scan of every edge at every junction was quadratic, minutes in Geneva).
+  `LaneFollower` (`Player/LongDriveDriver.cs`) drives it: pure pursuit of the line 3 m + 0.5 s ahead, each road's
+  speed and its bends' (2.5 m/s² sideways, 3 braking, read from the line itself), backing off what it runs into. The
+  racing `AutoPilot` reads a 3 m street's buildings as a racing verge's hazards and holds; it stays for the fixture row
+  (no `--to`: one road, flat out, the quick row on `hairpin`). Stuck 15 s: the place is logged (`blocked:`, with the
+  route's heights and roads, a picture when windowed) and the drive planned again round it (up to 8; `--avoid E,N;..`
+  gives places up front). Fails on a stall (60 s), a fall, out of the car, no way, the route ending short, a jump.
+- **`tools/longdrivecheck.sh` is parity** (#1744, the user's call): the D: drive meets game and data bugs on flat and
+  earth alike (#1757 Place des Nations, #1758 Chambésy's signal pole, #1759 the A1 bridge at Bellevue, #1760 the Genthod
+  one-way cut), so it drives Bellevue → Nyon on flat, then on earth, on the same route (`--routeroads lv95`,
+  `--originshift 500`: re-anchors every 500 m), and earth passes when its first stop (first blocked place, else its end)
+  is flat's within 60 m and no re-anchor fault of its own came (`parity frame`). After a first stop the two runs part
+  (backing off is chaotic): logged, not judged. Measured: both stop ~6 km in near 2501000/1124500, 34 m apart, earth's 9
+  re-anchors 0.1 cm. `FRAME=flat|earth` runs one frame; `COMPARE_ONLY=1` judges the last two logs again.
 - **`--longflightcheck`** (`Player/LongFlightCheck`): an A320 launched 3 km over the start (`DebugLaunch`), the light
   sim's autopilot (`--airliner sim`, set by the probe if not given) on its knobs: heading toward Brest every second
   (the chord's level part at the aircraft is the great circle's start), 10 km cruise, 1,500 m from 220 km out.
@@ -44,4 +54,4 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
   a default destination (Brest airport) outside the leaves given is moved to their middle leaf (D:'s are the city).
 - **Runs**: quick rows on fixtures (`@realtime`: the leaves stream on threads); full rows on D: through
   `tools/lib/barprobe.sh` (skipped with RESULT ok when the data is missing, quiet user://, its log checked for
-  `[frame] earth`); the long ones carry `@timeout=3700` (`tools/test.sh`: a row longer than `TEST_TIMEOUT`).
+  `[frame] earth`); the long ones carry `@timeout=3700` (the drive's two runs `@timeout=7400`) (`tools/test.sh`: a row longer than `TEST_TIMEOUT`).
