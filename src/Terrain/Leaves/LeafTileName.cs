@@ -16,7 +16,8 @@ public static class LeafTileName
     public const int Level = 14;
 
     /// <summary>The stand-in tiles' first kilometre east: far past LV95's 2,480-2,840 (and a leaf's X fits under 20,000).</summary>
-    private const int BaseE = 100_000, FaceStrideE = 20_000, BaseN = 100_000;
+    public const int BaseE = 100_000;
+    private const int FaceStrideE = 20_000, BaseN = 100_000;
 
     /// <summary>A leaf's tile name: unique, the same every run.</summary>
     public static TileId Id(CubeKey leaf)
