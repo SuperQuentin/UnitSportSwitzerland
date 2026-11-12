@@ -8,8 +8,8 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.World.Snow;
 
 /// <summary>
-/// Which ski slope lies under a point (#887): the tiles' <c>.pst</c> files, loaded on demand from
-/// the chunk source and kept while asked for. Used by the server (whose headless terrain loads no
+/// Which ski slope lies under a point (#887): the tiles' <c>.pst</c> files (an earth leaf's slopes through its
+/// stand-in, #1735), loaded on demand from the chunk source and kept while asked for. Used by the server (whose headless terrain loads no
 /// cover) to count real skiers' wear, and by any peer for the ground under a body.
 /// </summary>
 public sealed class PisteIndex
@@ -27,8 +27,20 @@ public sealed class PisteIndex
     {
         mask = 0;
         if (_terrain.Origin is not { } origin) return null;
-        var (e, n) = origin.ToLv95(world);
-        var tile = Tile(TileId.FromLv95(e, n));
+        double e, n;
+        PisteTile? tile;
+        if (_terrain.TileAt(world) is { IsLeaf: true } leaf)
+        {
+            // an earth leaf (#1735): its stand-in's slopes, the point named in the stand-in's frame
+            var id = _terrain.ContentName(leaf);
+            (e, n, _) = origin.ToGlobal(world).InTileEn(id);
+            tile = Tile(id);
+        }
+        else
+        {
+            (e, n) = origin.ToLv95(world);
+            tile = Tile(TileId.FromLv95(e, n));
+        }
         if (tile == null) return null;
         int i = tile.IndexAt(e, n);
         if (i < 0 || tile.Slot[i] == 0) return null;

@@ -817,6 +817,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private MeshInstance3D? GroundAt(GroundTile tile) =>
         tile.IsLeaf && _near.TryGetValue(tile.Leaf, out var leaf) ? leaf.Mesh : null;
 
+    /// <summary>A loaded leaf's furnished roads mesh (in its stand-in's frame), for per-tile shader parameters (the ski slopes, #1735).</summary>
+    public MeshInstance3D? RoadsAt(CubeKey leaf) => _near.TryGetValue(leaf, out var near) ? near.Node?.RoadMesh : null;
+
     /// <summary>The earth world's <see cref="IWorldGround"/>: every query on the loaded leaves.</summary>
     private sealed class LeafGround(EarthWorld w) : IWorldGround
     {
