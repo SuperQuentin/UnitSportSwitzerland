@@ -170,6 +170,7 @@ public sealed class CinemaRelayTap : IDisposable
         _start = _live ? double.NaN : at;
         _soundStart = _live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
+        GD.Print(FormattableString.Invariant($"[cinema] relay {CinemaVideo.Title(Link)}: the hall at {position:F1} s, decoding from {at:F1} s (of {found.Duration:F1} s)"));
         string size = $"{CinemaVideo.StereoFit(_stereo, _size.Width, _size.Height)},fps={_size.Fps}";
         _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(found.Video, at, _live).Concat(new[]
             { "-an", "-sn", "-vf", size, "-c:v", "mjpeg", "-q:v", _size.JpegQ.ToString(), "-f", "image2pipe", "-" }), false, Said);

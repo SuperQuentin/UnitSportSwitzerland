@@ -83,8 +83,14 @@ public sealed class RaceRoute
             finally { slots.Release(); }
         }).ToList();
         var tiles = new List<RoadTile>();
+        int segments = 0;
         for (int i = 0; i < keys.Count; i++)
-            if (await loads[i] is { } roads) tiles.Add(TilePlace.OnAnchor(roads, keys[i]));
+            if (await loads[i] is { } roads)
+            {
+                tiles.Add(TilePlace.OnAnchor(roads, keys[i]));
+                segments += roads.Segments.Count;
+            }
+        GD.Print($"[race] the road from the leaves round {centre}: {tiles.Count} of {keys.Count} leaves with roads, {segments} segments");
         return tiles;
     }
 

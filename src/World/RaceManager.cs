@@ -226,8 +226,9 @@ public partial class RaceManager : Node, IOriginShiftAware
 
         string rest = string.Join(' ', words);
         bool isNumber = float.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float metres);
-        // the race's own frame, at the host: the server's origin may be anywhere (#185)
-        var frame = OriginFrame.AnchorNear(host.Global);
+        // the race's own frame, at the host: the server's origin may be anywhere (#185); on leaves the ENU there, which the
+        // leaves' roads are placed in (#1742)
+        var frame = LeafRoads != null ? OriginFrame.AnchorAt(host.Global.Ecef) : OriginFrame.AnchorNear(host.Global);
         var at = frame.ToWorld(host.Global);
         Vector3 target = default;
         if (air)
