@@ -124,7 +124,8 @@ public partial class LongDriveCheck : Node
         if (_to is { } to)
         {
             var target = _origin.ToWorld(to);
-            var leafRoads = _leafRoads;
+            // --routeroads lv95: the LV95 tiles in either frame (the parity runs: one route, flat and earth alike)
+            var leafRoads = CmdArgs.Value("--routeroads") == "lv95" ? null : _leafRoads;
             double half = _corridor;
             var along = _along;
             return Task.Run(() => RaceRoute.ToAsync(source, leafRoads, frame, at, target, half, Log, avoid, along));
@@ -398,9 +399,37 @@ public partial class LongDriveCheck : Node
         if (_blocked.Count > _known) Log(Inv($"{_blocked.Count - _known} place(s) found blocked and driven round (see the blocked: lines)"));
         Log(Inv($"drove {_driven / 1000:F2} km in {_t:F0} s ({(_t > 0 ? _driven / _t * 3.6 : 0):F0} km/h on average, top {_top * 3.6f:F0})"));
         Log(_watch.Summary().Replace("[longdrive] ", ""));
+        Parity();
         foreach (var f in _watch.Faults) Fault(f);
         Log(_faults.Count == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_faults.Count}: {_faults[0]})");
         GetTree().Quit(_faults.Count == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// The drive's result for the bar's parity (#1744; <c>tools/longdrivecheck.sh</c> runs it on flat, then on earth, and
+    /// compares): "parity blocked" at each place found blocked, "parity end" with how and where the drive ended (the
+    /// first fault's kind, or "arrived"), and "parity frame" for each re-anchor fault of the frame's own (a jump, the
+    /// ground moving), which no flat run can match. Real roads stop the drive at places the frame has nothing to do with
+    /// (the Geneva blockers, #1744): earth passes when it stops at the same places, the same way.
+    /// </summary>
+    private void Parity()
+    {
+        for (int i = _known; i < _blocked.Count; i++) Log("parity blocked " + Lv(_blocked[i]));
+        string end = _faults.Count == 0 ? "arrived" : Kind(_faults[0]);
+        Log($"parity end {end} " + (_player != null ? Lv(_origin.ToGlobal(_player.GlobalPosition)) : "-"));
+        foreach (var f in _watch.Faults)
+            if (f != "no re-anchor happened") Log("parity frame " + f);
+    }
+
+    // a fault's kind: its words before where it happened ("stalled", "out of the car", "no way round the place blocked")
+    private static string Kind(string fault)
+    {
+        int cut = fault.Length;
+        foreach (var mark in new[] { ":", " at ", " (", " after " })
+            if (fault.IndexOf(mark, StringComparison.Ordinal) is int i and >= 0) cut = Math.Min(cut, i);
+        for (int i = 0; i < cut; i++)
+            if (char.IsDigit(fault[i])) { cut = i; break; }   // "the route ended 0.50 km from ...": the words alone
+        return fault[..cut].Trim().Replace(' ', '_');
     }
 
     private static string Inv(FormattableString s) => s.ToString(CultureInfo.InvariantCulture);

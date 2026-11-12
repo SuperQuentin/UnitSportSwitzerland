@@ -48,3 +48,7 @@
   A car nose-to-tail with something stopped backs off and resets like one stuck off the road.
 - `--drivecheck --mount K [--riders N]` races another mount (RideKind number, 0 on foot) with the pilot
   `For` picks; `--verge 0` skips the verge survey.
+- `RaceRoute.ToAsync` (#1744): a route to a far destination over a corridor's lane graph (leaves or LV95 tiles), the
+  quickest way on traffic's car graph, each street's rightmost lane, a curve across a trimmed junction; ends found in a
+  grid on the same level (`EndIndex`, also every `BuildAsync`: the old scan was quadratic). Driven by `LaneFollower`, not
+  this pilot (`core/earth-bar-probes`).

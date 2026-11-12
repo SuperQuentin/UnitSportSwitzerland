@@ -410,9 +410,9 @@ src/Core/ReanchorWatch    quick  @realtime --frame earth --longdrivecheck --chun
 src/Core/ReanchorCheck    full   tools/reanchorcheck.sh
 src/Core/ReanchorWatch    full   tools/reanchorcheck.sh
 src/Core/OriginShifter    full   tools/reanchorcheck.sh
-src/Player/LongDriveCheck full   @timeout=3700 tools/longdrivecheck.sh
-src/Player/AutoPilot      full   @timeout=3700 tools/longdrivecheck.sh
-src/Player/RaceRoute      full   @timeout=3700 tools/longdrivecheck.sh
+src/Player/LongDriveCheck full   @timeout=7400 tools/longdrivecheck.sh
+src/Player/AutoPilot      full   @timeout=7400 tools/longdrivecheck.sh
+src/Player/RaceRoute      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/LongFlightCheck full  @timeout=3700 tools/longflightcheck.sh
 src/World/Globe/Globe.cs  full   @timeout=3700 tools/longflightcheck.sh
 tools/lib/barprobe        full   tools/reanchorcheck.sh
