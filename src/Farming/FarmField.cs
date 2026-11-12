@@ -59,6 +59,10 @@ public partial class FarmField : Node
     private readonly IChunkSource? _source;
     private readonly WorldOrigin _origin;
     private readonly ChunkManager? _chunks;
+    /// <summary>The earth world's ground (#1729): the fields drape on its leaves instead of <see cref="_chunks"/>' tiles.</summary>
+    private readonly IWorldGround? _earth;
+    /// <summary>Replaced when the leaves change, so every chunk is draped again (<c>DrawChunk.Grid</c>).</summary>
+    private object _earthGround = new();
     private readonly bool _dedicated;
 
     private sealed class Tile
@@ -96,20 +100,21 @@ public partial class FarmField : Node
     // reused by every Sweep: no allocation per call
     private readonly List<long> _sweepKeys = new(64);
 
-    public FarmField(IChunkSource? source, WorldOrigin origin, ChunkManager? chunks, bool dedicated)
+    public FarmField(IChunkSource? source, WorldOrigin origin, ChunkManager? chunks, bool dedicated, IWorldGround? earth = null)
     {
         _source = source;
         _origin = origin;
         _chunks = chunks;
+        _earth = earth;
         _dedicated = dedicated;
         Name = NodeName;
     }
 
     public FarmField() : this(null, WorldOrigin.SwissDefault(), null, false) { }
 
-    public static FarmField Create(Node world, IChunkSource? source, WorldOrigin origin, ChunkManager? chunks, bool dedicated)
+    public static FarmField Create(Node world, IChunkSource? source, WorldOrigin origin, ChunkManager? chunks, bool dedicated, IWorldGround? earth = null)
     {
-        var f = new FarmField(source, origin, chunks, dedicated);
+        var f = new FarmField(source, origin, chunks, dedicated, earth);
         world.AddChild(f);
         return f;
     }
@@ -119,6 +124,11 @@ public partial class FarmField : Node
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        if (_earth != null)
+        {
+            _earth.TileEntered -= OnLeavesChanged;
+            _earth.TerrainReplaced -= OnTerrainReplaced;
+        }
         foreach (var t in _tiles.Values) t.Cts.Cancel();
         SaveDirty();
     }
@@ -134,8 +144,16 @@ public partial class FarmField : Node
         _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), Core.Calendar.Now);
         Multiplayer.PeerDisconnected += OnPeerGone;
         if (!_dedicated) ReadyDraw();
+        if (_earth != null)
+        {
+            _earth.TileEntered += OnLeavesChanged;
+            _earth.TerrainReplaced += OnTerrainReplaced;
+        }
         GD.Print($"[farm] {(_dedicated ? "server" : "client")} ready, month {_month}");
     }
+
+    private void OnLeavesChanged(GroundTile _) => _earthGround = new();
+    private void OnTerrainReplaced(Func<GroundTile, bool>? _) => _earthGround = new();
 
     /// <summary>This peer owns the cells: the server, or the game offline.</summary>
     private bool Authority => _dedicated || !NetLink.Online(this);

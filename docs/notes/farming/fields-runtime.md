@@ -31,7 +31,9 @@
   prop material (`StyleKit.Material(Prop)`: PS1, Cartoon, Realistic through the style chain), an
   **indexed** mesh (a corner shared by neighbouring quads with the same colour is one vertex),
   vertex colours raw linear with **alpha 0** (the prop shader reads alpha as a lamp mask). Draped on
-  `ChunkManager.GridAt(tile).SampleMeshHeight`. Rebuilt only when a cell of the chunk changed
+  `ChunkManager.GridAt(tile).SampleMeshHeight`; on the earth world (#1729, `FarmField`'s `earth` ground) the
+  chunk's 26x26 cell corners are read from the leaves on the main thread before the worker runs, and the
+  chunk node takes the tile's whole transform (`WorldOrigin.TileTransform`). Rebuilt only when a cell of the chunk changed
   (`FieldCells.ChunkVersions`), its detail ring changed (lod 0 under 160 m, lod 1 beyond: cover and
   plain slabs), the ground grid was replaced, the month changed, or a growing cell passed its next
   tenth (`NextChange`). The worker gets the cells' looks plus a 2-cell ring (`FieldMeshBuilder.Ring`)
