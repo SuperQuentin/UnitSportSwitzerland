@@ -79,7 +79,10 @@ the steamer AI (#379) reads.
   are places every 9 m from 4 m in, both sides, the boat's side 0.4 m off the deck's edge, lying along
   it; `BoatBerths` keeps one in three by an FNV hash of its name (`m<jetty hash>_<k><l|r>`), at most 4
   a jetty, 2 in 5 speedboats, the rest jetskis, bow either way: the same on every peer and every
-  restart. `DormantSlots.ForMarina` (tier 0, `MarinaSlotTests`) makes each berth with
+  restart. On an earth leaf's stand-in (#1735) `DormantSlots.ForLeafMarina` takes the jetties whose middle is on
+  the leaf (`LeafOf`), names each berth by the stand-in's E/N (`GlobalPos.InTileEn`), heads it from true north (the
+  anchor's axes) and floats it on the leaf's water (`StandInChunkSource.LoadLeafWaterAsync`); the decks themselves
+  are not drawn on leaves yet. `DormantSlots.ForMarina` (tier 0, `MarinaSlotTests`) makes each berth with
   `MarinaMinDepth` (0.7 m) of water a dormant slot, keel at its draught under the still level, owner
   `<E>_<N>_m<jetty hash>` (the jetty's tile, by its ribbon's middle), ordinal = the berth's index on
   the jetty, so the vehicle is `veh_slot_<E>_<N>_m<hash>_<k>`. The water is read on the fill worker

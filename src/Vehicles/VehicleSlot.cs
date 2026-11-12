@@ -184,6 +184,41 @@ public static class DormantSlots
         }
     }
 
+    /// <summary>The earth leaf a jetty belongs to (#1735): the one its ribbon's middle is on, as an LV95 tile's is.</summary>
+    public static CubeKey LeafOf(Jetty jetty)
+    {
+        var (me, mn) = jetty.Ribbon.Middle;
+        return CubeKey.FromEcef(SwissGeodesy.ToEcef(me, mn, 0), Terrain.Leaves.LeafFrames.LeafLevel);
+    }
+
+    /// <summary>
+    /// <see cref="ForMarina"/> on an earth leaf's stand-in tile <paramref name="id"/> (#1735): the jetties whose middle is
+    /// on <paramref name="leaf"/>, each berth named by the stand-in's E/N (<c>GlobalPos.InTileEn</c>) and its height in
+    /// the stand-in's frame; <paramref name="water"/> is asked at those E/N. The heading is from true north, which the
+    /// leaf's anchor axes are (no grid convergence). Owners and ordinals as on a tile: the stand-in's name and the jetty's.
+    /// </summary>
+    public static void ForLeafMarina(TileId id, CubeKey leaf, IReadOnlyList<Jetty> jetties,
+        Func<double, double, (float Level, float Bed)?> water, int speedboatKind, int jetskiKind, List<VehicleSlot> into)
+    {
+        foreach (var jetty in jetties)
+        {
+            if (LeafOf(jetty) != leaf) continue;
+            var berths = jetty.BoatBerths();
+            for (int k = 0; k < berths.Count; k++)
+            {
+                var b = berths[k];
+                var (_, berthE, berthN, _, _, _) = b;
+                var (e, n, _) = GlobalPos.FromLv95(berthE, berthN, 0).InTileEn(id);
+                if (water(e, n) is not { } w || w.Level - w.Bed < MarinaMinDepth) continue;
+                // the stand-in's name, as a tile's owner is named by its E_N
+                string owner = $"{id}_{b.Id[..b.Id.IndexOf('_')]}";
+                float draught = b.Speedboat ? SpeedboatDraught : JetskiDraught;
+                into.Add(new VehicleSlot(owner, k, e, n, w.Level - draught, Wrap(-(float)(b.Heading * Math.PI / 180)),
+                    b.Speedboat ? speedboatKind : jetskiKind, 0, false, Respawns: true));
+            }
+        }
+    }
+
     /// <summary>
     /// What stands in an industrial site's yard (#496 phase 3), as rows across the strip. The fleet
     /// is the site's own: a haulier's tractors and artics and the trailers dropped beside them, a

@@ -9,6 +9,9 @@ uniform bool use_pistes = false;
 uniform sampler2DArray piste_map : filter_linear, repeat_disable;
 uniform sampler2D piste_state : filter_nearest, repeat_disable;
 instance uniform int piste_layer = -1;
+// where the mesh's local origin is in its layer's square: 0 for a tile's mesh; an earth leaf's, in its anchor frame,
+// sits at its stand-in's middle (World/Snow/PisteLayer, #1735)
+uniform vec2 piste_offset = vec2(0.0);
 // corduroy ribs and groomer lanes: both divide the 40 m phase, so its wrap never breaks the pattern
 const float PISTE_PHASE = 40.0;
 uniform float piste_rib = 1.25;
@@ -31,7 +34,7 @@ float piste_cover(vec2 local_xz) {
     if (!use_pistes || piste_layer < 0) {
         return 0.0;
     }
-    return texture(piste_map, vec3((local_xz * 0.5 + 0.5) / 512.0, float(piste_layer))).g;
+    return texture(piste_map, vec3(((local_xz + piste_offset) * 0.5 + 0.5) / 512.0, float(piste_layer))).g;
 }
 
 // The slope's snow over `col` at a tile-local point (x east, z south, metres) and its altitude.
@@ -50,7 +53,7 @@ vec3 piste_snow(vec3 col, vec2 local_xz, float altitude, vec3 n, vec3 sun, inout
         return col;
     }
 #endif
-    vec2 tx = local_xz * 0.5;
+    vec2 tx = (local_xz + piste_offset) * 0.5;
     vec4 m = texture(piste_map, vec3((tx + 0.5) / 512.0, float(piste_layer)));
     if (m.g < 0.004) {
         return col;
