@@ -16,15 +16,16 @@ namespace UnitSport.Terrain;
 /// </summary>
 public partial class WaterProbe : Node3D
 {
-    private readonly ChunkManager _chunks;
+    /// <summary>The world's ground: the flat tiles' or the earth leaves' and their water (#1739).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly double _e, _n, _settle, _minDepth;
     private ulong _startMs;
     private bool _done;
 
-    public WaterProbe(ChunkManager chunks, WorldOrigin origin, double e, double n, double settle, double minDepth)
+    public WaterProbe(IWorldGround ground, WorldOrigin origin, double e, double n, double settle, double minDepth)
     {
-        _chunks = chunks;
+        _ground = ground;
         _origin = origin;
         _e = e;
         _n = n;
@@ -36,10 +37,10 @@ public partial class WaterProbe : Node3D
     {
         _startMs = Time.GetTicksMsec();
         Position = _origin.ToWorld(_e, _n, 0);
-        _chunks.AddAnchor(this, collision: true);
+        _ground.AddAnchor(this, collision: true);
     }
 
-    public override void _ExitTree() => _chunks.RemoveAnchor(this);
+    public override void _ExitTree() => _ground.RemoveAnchor(this);
 
     public static double[]? ParseArgs()
     {
@@ -63,8 +64,8 @@ public partial class WaterProbe : Node3D
         _done = true;
 
         var at = _origin.ToWorld(_e, _n, 0);
-        bool wet = _chunks.Ground.TryGetWaterLevel(at, out float level);
-        bool ground = _chunks.Ground.TryGetHeight(at, out float bed);
+        bool wet = _ground.TryGetWaterLevel(at, out float level);
+        bool ground = _ground.TryGetHeight(at, out float bed);
         // the ground's collision only: a player spawned here (--at) stands in the ray
         var space = GetViewport().World3D.DirectSpaceState;
         var query = PhysicsRayQueryParameters3D.Create(_origin.ToWorld(_e, _n, 5000), _origin.ToWorld(_e, _n, -500));
