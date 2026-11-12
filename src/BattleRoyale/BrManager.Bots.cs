@@ -307,9 +307,14 @@ public partial class BrManager
         var source = _source;
         double e0 = _state.AreaE - h, n0 = _state.AreaN - h, e1 = _state.AreaE + h, n1 = _state.AreaN + h;
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        var leaves = TilesOf?.Invoke(new BrArea(_state.AreaE, _state.AreaN, _state.Side, _state.AreaName)).ToList();
+        var leafRoads = LeafRoads;
         _roads = Task.Run(async () =>
         {
-            var net = await Gpx.RoadNetwork.LoadAsync(source, e0, n0, e1, n1);
+            // an earth server's streets are its leaves' (#1704): its flat world holds no road tile
+            var net = leaves != null && leafRoads != null
+                ? await Gpx.RoadNetwork.LoadLeavesAsync(leaves, leafRoads)
+                : await Gpx.RoadNetwork.LoadAsync(source, e0, n0, e1, n1);
             net.BuildWalkGraph();
             GD.Print($"[br] bots: the streets are in, {net.Edges.Count} edges in {clock.ElapsedMilliseconds} ms");
             return net;

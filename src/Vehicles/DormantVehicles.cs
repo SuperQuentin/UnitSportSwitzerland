@@ -523,7 +523,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
         _anchorTilesNow.Clear();
         foreach (var anchor in _ground.Anchors)
-            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_origin.TileAt(anchor.GlobalPosition));
+            // the ground's names for the tiles (#1704): an earth leaf's stand-in, whose neighbours are the next leaves', so the
+            // fleets, yards and site pallets are the leaves' own, as drawn and as the server reads them
+            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_ground.ContentName(_ground.TileAt(anchor.GlobalPosition)));
         if (SameTiles(_anchorTilesNow, _anchorTiles))
         {
             if (_pending.Count > 0) _ = Fill();

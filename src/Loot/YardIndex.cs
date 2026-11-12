@@ -24,10 +24,13 @@ internal sealed class YardIndex
     private TileId _here;
     private bool _haveHere;
 
-    /// <summary>Plans the tiles round <paramref name="at"/> not yet planned, and takes in those that are done.</summary>
-    public void Around(IChunkSource source, GlobalPos at)
+    /// <summary>
+    /// Plans the tiles round <paramref name="at"/> on <paramref name="here"/> (the ground's name for the tile under it: an
+    /// LV95 tile, or an earth leaf's stand-in, whose neighbours are the next leaves', #1704) not yet planned, and takes in
+    /// those that are done.
+    /// </summary>
+    public void Around(IChunkSource source, TileId here, GlobalPos at)
     {
-        var here = at.Tile;
         if (!_haveHere || here != _here)
         {
             _here = here;
@@ -42,8 +45,8 @@ internal sealed class YardIndex
             {
                 var id = here.Neighbour(tx, tz);
                 if (_tiles.ContainsKey(id) || _loading.ContainsKey(id)) continue;
-                // how far the player is outside the tile, in its own frame (#1443)
-                var (x, z) = id.Local(at.Lv95.E, at.Lv95.N);
+                // how far the player is outside the tile, in its own frame (#1443, #1704)
+                var (x, _, z) = at.InTile(id);
                 double dx = Math.Max(0, Math.Max(-x, x - ChunkFormat.TileSizeM));
                 double dz = Math.Max(0, Math.Max(-z, z - ChunkFormat.TileSizeM));
                 if (dx * dx + dz * dz > TileReach * TileReach) continue;
@@ -72,11 +75,10 @@ internal sealed class YardIndex
     }
 
     /// <summary>
-    /// The container a player at <paramref name="e"/>, <paramref name="n"/> (feet at
-    /// <paramref name="alt"/>) looking along <paramref name="look"/> faces best
-    /// (<see cref="SiteLoot.Score"/>), skipping one <paramref name="skip"/> says is gone.
+    /// The container a player with feet at <paramref name="at"/> looking along <paramref name="look"/> faces best
+    /// (<see cref="SiteLoot.Score"/>, in each tile's own frame), skipping one <paramref name="skip"/> says is gone.
     /// </summary>
-    public bool Nearest(double e, double n, float alt, Vector2 look, Func<YardStock, bool> skip, out YardStock best)
+    public bool Nearest(GlobalPos at, Vector2 look, Func<YardStock, bool> skip, out YardStock best)
     {
         best = default;
         float bestScore = float.MaxValue;
@@ -84,7 +86,10 @@ internal sealed class YardIndex
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = 1; dz >= -1; dz--)
             {
-                if (!_tiles.TryGetValue(_here.Neighbour(dx, dz), out var list)) continue;
+                var id = _here.Neighbour(dx, dz);
+                if (!_tiles.TryGetValue(id, out var list) || list.Length == 0) continue;
+                var (e, n, h) = at.InTileEn(id);
+                float alt = (float)h;
                 for (int i = 0; i < list.Length; i++)
                 {
                     float s = SiteLoot.Score(list[i], e, n, alt, look);
