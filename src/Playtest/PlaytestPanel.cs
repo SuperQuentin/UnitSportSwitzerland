@@ -200,8 +200,17 @@ public partial class PlaytestPanel : CanvasLayer
         };
         _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 12, 16));
         AddChild(_panel);
+        // the whole panel scrolls: a long scenario text never pushes the chat box off the screen
+        var page = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            FollowFocus = true,
+        };
+        _panel.AddChild(page);
         var col = UiKit.VBox(10);
-        _panel.AddChild(col);
+        col.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        col.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        page.AddChild(col);
 
         var head = UiKit.HBox(8);
         head.AddChild(UiTheme.Title("Playtest", UiTheme.FontHeading));
@@ -289,7 +298,7 @@ public partial class PlaytestPanel : CanvasLayer
         col.AddChild(section);
         (_talkScroll, _talk) = UiKit.ScrollPage(4);
         _talkScroll.Visible = !batch;
-        _talkScroll.CustomMinimumSize = new Vector2(0, 90);
+        _talkScroll.CustomMinimumSize = new Vector2(0, 160);
         // to the newest line once the new rows have their height: the bar's range changes a frame or two later
         _talkScroll.GetVScrollBar().Changed += () =>
         {

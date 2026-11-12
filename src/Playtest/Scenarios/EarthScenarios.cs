@@ -117,12 +117,12 @@ public static class EarthScenarios
     [PlaytestScenario("earth-6-nyon-pier", "Nyon's pier and jetties", Category)]
     private static PlaytestScenario NyonPier() => new()
     {
-        Instructions = "At Nyon. Walk the Steg to the pier head; then take a speedboat (Quick menu > Vehicles), "
+        Instructions = "At Nyon. Walk out along the footbridge to the steamer landing (the pier head); then take a speedboat (Quick menu > Vehicles), "
             + "drive it along Port de Nyon's jetties and step out onto one.",
         Checklist =
         [
             "The pier and the jetty decks are drawn and solid, as on flat",
-            "Nothing falls through the Steg or a deck",
+            "Nothing falls through the footbridge or a deck",
             "The boat floats at the water's level beside the decks",
         ],
         Covers = [.. Earth],
