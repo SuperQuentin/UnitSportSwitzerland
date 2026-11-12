@@ -782,7 +782,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var snow = World.Snow.SnowService.Create(this, Ground!);
             if (_worldMaterials.Length > 0)
             {
-                _pistes = new World.Snow.PisteLayer(_chunks, origin, _worldMaterials[0], _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow);
+                // on the leaves under earth (#1735): their own ground material, the roads' shared one
+                _pistes = new World.Snow.PisteLayer(_chunks, origin, _earth?.GroundMaterial ?? _worldMaterials[0],
+                    _worldMaterials.Length > 1 ? _worldMaterials[1] : null, snow, _earth);
                 AddChild(_pistes);
             }
             AddChild(new World.Snow.SlopeMarkers(Ground!, snow));
@@ -792,7 +794,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             var lifts = World.Ropeways.RopewayService.Create(this, () => _chunks?.Source, Ground!);
             AddChild(new World.Ropeways.RopewayLayer(lifts, _chunks));
-            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, _chunks));
+            AddChild(new World.Snow.SlopeHud(() => LocalPlayer, Ground!));
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
@@ -989,6 +991,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
             // the pit of a building site driven, walked and dropped into (#619)
             new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin, Ground, _earth)),
+            // the fun course's ski slope and marina boats, on either frame (#1735)
+            new(World.Snow.PisteCheck.Requested, ToolAnchor.AtTarget, _ => new World.Snow.PisteCheck(Ground!, origin, World.Snow.PisteCheck.ParseArgs().Shot)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot, Ground)),
             new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
@@ -2291,6 +2295,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 World.Landings.Use(index);
                 static bool Holds(Terrain.Format.LandingIndex l, Terrain.Format.TileId id) => l.RibbonsOf(id).Any() || l.BollardsOf(id).Any();
                 _chunks?.RebuildPiers(id => Holds(before, id) || Holds(index, id));
+                // on the leaves (#1736): those holding a deck before or now are read again, their furnishing and collision
+                if (_earth != null)
+                    _earth.RefreshFurniture(Terrain.Leaves.LeafPiers.Leaves(before).Union(Terrain.Leaves.LeafPiers.Leaves(index)).ToList());
             }).CallDeferred();
 
         // Same for the horizon: a client that shipped without one gets it during sync.

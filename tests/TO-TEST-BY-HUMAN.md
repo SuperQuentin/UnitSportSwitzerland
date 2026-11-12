@@ -7,6 +7,16 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Ski slopes and marina boats on leaves ([#1735](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1735))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/row7/cube --chunks D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks --at 2583954,1109157 --date 2027-01-15` (La Tzoumaz); and `--chunks fixture:fun --frame earth`.
+
+- [ ] Ski down a run at La Tzoumaz on skis (keyboard, pad and VR) → the HUD names the run, the snow under you grips as corduroy or ice as on flat, the poles line both edges and none stands doubled where two leaves meet; the corduroy has no seam at a leaf's edge.
+- [ ] The same in a Quest (the standalone shader path) → the slope is drawn where the ground is, not shifted by 500 m.
+- [ ] On `fixture:fun`, walk to the jetty off the beach and aim at a moored boat → it wakes and you can drive it; it comes back at its berth a while after you leave it.
+- [ ] Offline at Nyon on earth (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks --at 2507900,1137600`): walk the Steg to the pier head, drive a speedboat along Port de Nyon's jetties and step out onto one ([#1736](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1736)) → the decks are drawn and solid as on flat; nothing falls through the Steg.
+- [ ] On skis at La Tzoumaz on earth (row-7 leaves as above), watch the ski map, then `/race` on skis with a friend online ([#1737](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1737)) → the map shows the runs round you, north up, with no seam where leaves meet; the race goes down the runs.
+
 ## Furnished leaves under `--frame earth` ([#1613](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1613), [#1510](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1510))
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva's centre).
@@ -23,6 +33,7 @@ A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --f
 - [ ] Walk up to a building site's skip and press E (pad and VR too) → the panel opens; the other player sees what you take go.
 - [ ] Open a site office's door and walk in; in an apartment block ride the lift with the other player in the cabin → you walk through the doorway (no wall), both ride; nobody is sent back up from inside.
 - [ ] Look at the parked cars and the site machines round you → they stand on the ground, turned as the bays and the road; aiming at one wakes it.
+- [ ] Walk round a building site on a hillside leaf ([#1731](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1731)) → its yard is level, its edges blend into the slope without a cliff, and the road beside it is not buried or floating.
 - [ ] Join a Battle Royale squad with a bot, go down and out → the bot takes your dogtag to a Postauto stop and you come back.
 
 ## Building-site pits on leaves ([#1687](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1687), [#1653](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1653))

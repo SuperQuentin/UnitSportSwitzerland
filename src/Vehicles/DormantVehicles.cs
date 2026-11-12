@@ -773,6 +773,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into, CancellationToken ct)
     {
         var jetties = Landings.Current.Jetties;
+        if (Terrain.Leaves.LeafStandIn.TryLeaf(id, out var leaf))
+        {
+            LeafMarina(source, id, leaf, jetties, into, ct);
+            return;
+        }
         bool here = false;
         foreach (var j in jetties)
         {
@@ -786,6 +791,29 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
+            var (lx, lz) = id.Local(e, n);
+            double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
+            if (!water.TrySample(x, z, out float level, out _)) return null;
+            var (ge, gn) = id.Global(x, z);
+            return (level, (float)grid.SampleHeight(ge, gn));
+        }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
+    }
+
+    /// <summary>
+    /// <see cref="Marina"/> on an earth leaf's stand-in (#1735): the jetties whose middle lies on the leaf, their berths
+    /// named in the stand-in's frame, afloat on the leaf's own water (<see cref="Terrain.Leaves.StandInChunkSource.LoadLeafWaterAsync"/>),
+    /// as the server and every client read it.
+    /// </summary>
+    private static void LeafMarina(IChunkSource source, TileId id, CubeKey leaf, IReadOnlyList<Jetty> jetties, List<VehicleSlot> into, CancellationToken ct)
+    {
+        bool here = false;
+        foreach (var j in jetties)
+            if (DormantSlots.LeafOf(j) == leaf) { here = true; break; }
+        if (!here || source is not Terrain.Leaves.StandInChunkSource stands) return;
+        if (stands.LoadLeafWaterAsync(id, ct).GetAwaiter().GetResult() is not { } water) return;
+        if (source.LoadChunkAsync(id, ct).GetAwaiter().GetResult() is not { } grid) return;
+        DormantSlots.ForLeafMarina(id, leaf, jetties, (e, n) =>
+        {
             var (lx, lz) = id.Local(e, n);
             double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
             if (!water.TrySample(x, z, out float level, out _)) return null;
@@ -826,7 +854,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             var body = new DormantBody
             {
                 Slot = s,
-                Position = _origin.ToWorld(s.E, s.N, s.Height),
+                Position = WorldOf(s),
                 Basis = new Basis(Vector3.Up, s.Yaw),
             };
             foreach (var (pose, shape) in look.Boxes)
@@ -906,7 +934,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>Where a slot stands, a vehicle in one piece: its place and its heading.</summary>
     private Transform3D SlotTransform(VehicleSlot s) =>
         // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
-        new(new Basis(Vector3.Up, s.Yaw), _origin.ToWorld(s.E, s.N, s.Height));
+        new(new Basis(Vector3.Up, s.Yaw), WorldOf(s));
+
+    /// <summary>A slot's place in the world (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    public Vector3 WorldOf(VehicleSlot s) => _origin.ToWorld(s.E, s.N, s.Height);
 
     /// <summary>
     /// A goods vehicle's sections where the live one stands them (#560): <see cref="HeavyGround.Stand"/>
@@ -1034,11 +1065,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     public VehicleSlot? SlotAt(double e, double n, double within = 1.5)
     {
+        // on the Earth: a slot on an earth leaf's stand-in is named by the stand-in's E/N, not the place's LV95 (#1736)
+        var at = GlobalPos.FromLv95(e, n, 0);
         foreach (var (_, slots) in _slots)
             foreach (var s in slots)
-                if ((s.E - e) * (s.E - e) + (s.N - n) * (s.N - n) < within * within) return s;
+                if (at.HorizontalDistanceTo(PlaceOf(s)) < within) return s;
         return null;
     }
+
+    /// <summary>A slot's place on the Earth (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    private static GlobalPos PlaceOf(VehicleSlot s) => GlobalPos.FromLv95(s.E, s.N, s.Height);
 
     /// <summary>Every slot worked out round the anchors, woken or not: what a check picks one from.</summary>
     public IEnumerable<VehicleSlot> Slots()

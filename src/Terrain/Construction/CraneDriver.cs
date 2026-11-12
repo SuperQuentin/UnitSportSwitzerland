@@ -24,8 +24,10 @@ public static class CraneDriver
     {
         var (yaw, reach) = CraneMotion.Aim(crane.Job, target - crane.Owner.GlobalPosition);
         await Drive(host, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown, () => CraneControl.Top(crane.Job) - 1f - crane.Last.HookY, 1.2f);
+        // the slew trimmed to an angle that is at most 0.2 m at the hook: a fixed angle was ~1 m off at a 30 m reach (#1731)
+        float slewCoast = 0.5f * CraneControl.SlewRate * CraneControl.Ramp + 0.003f;
         await Drive(host, PlayerInput.ArmSlewLeft, PlayerInput.ArmSlewRight, () => Mathf.AngleDifference(crane.Last.Yaw, yaw),
-            0.5f * CraneControl.SlewRate * CraneControl.Ramp + 0.003f);
+            slewCoast, Math.Min(slewCoast * 0.25f, 0.2f / Math.Max(reach, 1f)));
         await Drive(host, PlayerInput.ArmStickOut, PlayerInput.ArmStickIn, () => reach - crane.Last.Trolley,
             0.5f * CraneControl.TrolleyRate * CraneControl.Ramp + 0.02f);
         var hook = crane.HookWorld(crane.Last);
@@ -55,16 +57,17 @@ public static class CraneDriver
     /// <paramref name="coast"/>, which the drive covers as it ramps down; then short taps trim what
     /// is left over.
     /// </summary>
-    public static async Task Drive(Node host, string plus, string minus, Func<float> error, float coast)
+    public static async Task Drive(Node host, string plus, string minus, Func<float> error, float coast, float? accept = null)
     {
-        for (int pass = 0; pass < 4; pass++)
+        float done = accept ?? coast * 0.25f;
+        for (int pass = 0; pass < 16; pass++)
         {
             float e = error();
-            if (Mathf.Abs(e) <= coast * 0.25f) return;
+            if (Mathf.Abs(e) <= done) return;
             string lever = e > 0 ? plus : minus;
             XrPad.Press(lever, true);
             double t0 = GameClock.Now;
-            float limit = pass == 0 ? coast : coast * 0.2f;
+            float limit = pass == 0 ? coast : Math.Min(coast * 0.2f, done);
             while (Mathf.Sign(error()) == Mathf.Sign(e) && Mathf.Abs(error()) > limit && GameClock.Now - t0 < 60)
             {
                 await Frames(host, 1);

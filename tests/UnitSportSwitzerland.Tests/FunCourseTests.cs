@@ -217,7 +217,7 @@ public class FunCourseTests
                 var content = leaves.Build(key)!;
                 var pistes = content.Pistes;
                 Assert.NotNull(pistes);
-                Assert.Contains(pistes!.Records, r => r.Name == slope.Name && r.IsArea);
+                Assert.Contains(pistes!.Records, r => r.Name == slope.Name && r.IsArea == (slope.Line == null));
                 var on = new SourceOnLeaf(LeafFrames.Swiss, key, leaves.Source);
                 int n = on.Side;
                 Assert.Equal(n * n, pistes.Slot.Length);

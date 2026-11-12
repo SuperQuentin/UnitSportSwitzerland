@@ -1334,3 +1334,24 @@ src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --sy
 src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
 tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
 src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh
+# #1735: the fun course's ski slope (its snow layer, poles, the skier's lookup) and its jetty's moored boats, on both frames
+src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+shaders/body/piste_snow      quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/LeafCollision/StandInChunkSource quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Leaves/LeafStandIn quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Vehicles/VehicleSlot     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+# #1736: piers, landings and jetty decks on earth leaves (drawn, collided), the fixture's landing walked and its marina boats
+src/Terrain/Leaves/LeafPiers quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/LeafCollision/LeafCollision quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/Earth/EarthWorld quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/PierMesh     quick  --frame earth --steamercheck pier --chunks fixture:lake
+src/Vehicles/DormantVehicles quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Player/SteamerCheck  quick  --frame earth --steamercheck pier --chunks fixture:lake
+# #1737: the ski map and a ski race on the fun course's line run, on both frames
+src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Fixture/FunCourse quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15

@@ -54,6 +54,28 @@ public sealed class StandInChunkSource(IChunkSource inner, Func<CubeKey, LeafSta
     public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
         LeafStandIn.IsStandIn(id) ? Task.FromResult<List<FieldPolygon>?>(null) : Inner.LoadFieldsAsync(id, ct);
 
-    public Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default) =>
-        LeafStandIn.IsStandIn(id) ? Task.FromResult<PisteTile?>(null) : Inner.LoadPistesAsync(id, ct);
+    /// <summary>A leaf's ski slopes on its stand-in's 1 m grid (#1735, <see cref="LeafStandIn.Pistes"/>); a real tile's from beneath.</summary>
+    public async Task<PisteTile?> LoadPistesAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!LeafStandIn.TryLeaf(id, out var leaf)) return await Inner.LoadPistesAsync(id, ct);
+        var content = await Task.Run(() => leaves(leaf), ct);
+        if (content?.Pistes is not { Records.Count: > 0 } pistes) return null;
+        var stand = await Stand(leaf, ct);
+        return stand == null ? null : LeafStandIn.Pistes(pistes, id, (1 << content.Bits) + 1, stand.Nearest);
+    }
+
+    /// <summary>
+    /// A leaf's still water as its stand-in's 2 m layer (#1735, <see cref="LeafStandIn.Water"/>, levels and bed in the
+    /// stand-in's frame), as the leaf's furnishing draws it; null for a real tile, a dry leaf or one not prepared.
+    /// What a tile's water layer (<c>ChunkManager.LoadWaterLayerAsync</c>) is to an LV95 tile: the marina's berths read it.
+    /// </summary>
+    public async Task<WaterLayer?> LoadLeafWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!LeafStandIn.TryLeaf(id, out var leaf)) return null;
+        var content = await Task.Run(() => leaves(leaf), ct);
+        if (content?.Water is not { } water || content.Heights is not { } heights) return null;
+        var stand = await Stand(leaf, ct);
+        return stand == null ? null
+            : LeafStandIn.Water(water, LeafFrames.Swiss.TransformOf(leaf), (1 << heights.Bits) + 1, stand.Nearest, stand.Grid);
+    }
 }
