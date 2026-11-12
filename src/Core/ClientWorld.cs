@@ -964,14 +964,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(LongFlightCheck.Requested, ToolAnchor.AtTarget, _ => new LongFlightCheck(Ground, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
-            new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
+            new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(Ground!, _earth == null ? chunks : null, origin)),
             // the far horizon at its corners, across origin shifts (#1429)
             new(Terrain.HorizonCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.HorizonCheck(chunks, origin)),
             new(Terrain.SpaceBandCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.SpaceBandCheck(chunks, origin)),
             // the ground gameplay asks, against the streamer's own answers, and its cost (#1532)
             new(Terrain.WorldGroundCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.WorldGroundCheck(Ground!, chunks, _earth, origin)),
             // a GPX course drawn and run where it belongs, across origin shifts (#1429)
-            new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(chunks, origin)),
+            new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(Ground!, origin)),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(Ground!, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -1429,7 +1429,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Func<Vector3, float?> groundAt = p => Ground is { } gr && gr.TryGetHeight(p, out float h) ? h : null;
             AddChild(new Adventure.Rewards.RewardWorld(() => _onFoot ? LocalPlayer : null, () => _worldOrigin, groundAt));
             AddChild(new Adventure.Rewards.GuideNode(() => _worldOrigin, groundAt));
-            AddChild(new Adventure.Rewards.TrialRunner(() => LocalPlayer, () => _worldOrigin, () => _chunks));
+            AddChild(new Adventure.Rewards.TrialRunner(() => LocalPlayer, () => _worldOrigin, () => Ground));
             AddChild(new Adventure.Rewards.ChestRevealUi());
             AddChild(new Adventure.Rewards.RewardHud(() => LocalPlayer));
             Adventure.Rewards.CollectionPage.Register();
