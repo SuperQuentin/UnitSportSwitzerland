@@ -82,6 +82,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 - `simulate-network-s-rate-wall` — Simulate a network's rate in wall time, not frames
 - `initial-d-roster-real-specs` — Initial D roster, real specs, racing: (`CarCatalog`, `RaceLine`, `DriveProbe`; #5). 26 cars, append-only, `RideKind`...; `CarSpec.Transmission` stepped / e-CVT hybrid (Prius, `EngineAsleep`), left-hand drive (#760)
 - `autopilot-raceroute` — AutoPilot and RaceRoute: the scripted racer for cars, lean-steered mounts and runners (`AutoPilot.For`), no speed cap, traffic sensing,...
+- `earth-bar-probes` (core) — `--longdrivecheck` drives an `AutoPilot` car tens of km in chained `RaceRoute` legs (a route reads 4 tiles round its start); `--longflightcheck` flies the A320's autopilot Geneva → Brest (#1710)
 - `racing-line-verge` — Racing line: the safe verge (`RaceLine.Widen`, #39): up to two wheels off the tarmac where height grid, trees, walls, water allow...
 - `racecraft` — Racecraft (#52): velocity-aware traffic, oncoming anywhere on the road, hard blocked edges + `EdgeGuard`, passes, inside dives, no chop until a car length clear, road-wide sensing, jam resets; before/after numbers
 - `slipstream` — Slipstream: `RideGround.Draft`, up to 45% less drag 2-25 m behind a vehicle within ±15°, cars and motorbikes

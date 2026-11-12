@@ -292,7 +292,7 @@ State on 2026-11-10.
 | Interior check red on clean `main` | #1728 | open | not D |
 | Net checks failing on `main` | #1628, #1706 | open (flat too) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
-| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | dry run 297/375 before reruns; failures being sorted (many are #1705's doors); long-drive probe being fixed | D2 |
+| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | probes and `TEST_FRAME` built (`core/earth-bar-probes`); dry run 297/375, failures rerun and compared on flat; the flight flew 831 km to Brest clean (its end check fixed, rerun pending); the long drive (Versoix → Nyon) stops on real roads on flat too (the racing pilot, not the frame) | D2 |
 | **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
 | **D2**: the flip | #1726, PR #1727 | code done (earth default, protocol 96, stores at `user://earth/` with migrations), quick tier green; the bar waits for #1707, #1712, #1725 | user's merge |
 

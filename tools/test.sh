@@ -24,9 +24,11 @@
 #      test_output/tests/results.csv; tools/test-compare.py compares two), TEST_LIST (1: print the checks
 #      it would run, then stop), TEST_USERDATA (real: the Godot checks run on the real user://, not a
 #      fresh test_output/tests/userdata/<check> each, #1403), TEST_RESUME (1: skip what results.tsv
-#      already holds as PASS, to go on after a run that died, #1409), TEST_FRAME (earth|flat: the net checks'
-#      servers and clients play in that frame, and a log that does not state it fails its check, #1683;
-#      `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full` is the earth net bar).
+#      already holds as PASS, to go on after a run that died, #1409), TEST_FRAME (earth|flat: every Godot of
+#      every row plays in that frame, quick, net, full and coords alike: a row without its own --frame gets
+#      `--frame <it>`, the tools/*.sh scripts pass it to theirs, and a log that does not state it ("[frame] earth",
+#      or "[frame] none" from a process with no world) fails its row, so a silent flat fallback never passes;
+#      #1683, #1710; `TEST_FRAME=earth tools/test.sh coords` is G2 D's bar).
 # Every result is appended to test_output/tests/results.tsv as it lands (time, check, verdict, seconds, log, peak MB):
 # a run that dies keeps what it had.
 # Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
@@ -100,6 +102,11 @@ TIMEOUT=${TEST_TIMEOUT:-600}
 FAST=--fixed-fps\ 60
 [ "${TEST_REALTIME:-}" = 1 ] && FAST=
 BASE=${TEST_BASE:-origin/main}
+case ${TEST_FRAME:-} in
+  '' | earth | flat) ;;
+  *) echo "[test] TEST_FRAME=$TEST_FRAME: earth or flat" >&2; exit 2 ;;
+esac
+[ -n "${TEST_FRAME:-}" ] && export TEST_FRAME && echo "[test] every Godot row in frame $TEST_FRAME"
 mkdir -p "$OUT"
 export TEST_RUN="$$.$RANDOM$RANDOM"   # every process of this run inherits it: what `stop` sweeps for
 printf '%s\n%s\n' $$ "$TEST_RUN" > "$PIDFILE"
@@ -368,17 +375,52 @@ log_of() {
   echo "$OUT/$name.log"
 }
 
+# TEST_FRAME (#1710): a direct Godot row's frame arguments and the frame its log must state. A row with its own --frame
+# keeps it and is held to it (two would be read differently: GameSettings takes the last, ServerWorld the first): the
+# earth-only rows stay earth in a flat run. A row's own --frame flat in an earth run fails: every row plays earth there
+row_frame() { # check: sets FRAME_ARGS and ROW_FRAME
+  guard_frame_args
+  ROW_FRAME=${TEST_FRAME:-}
+  if [[ " $1 " =~ \ --frame\ ([a-z]+)\  ]]; then FRAME_ARGS=(); ROW_FRAME=${BASH_REMATCH[1]}; fi
+  return 0
+}
+row_frame_check() { # check log: the log states the row's frame; a flat row in an earth run fails
+  local name code=0
+  name=$(row_name "$1")
+  [ -z "${TEST_FRAME:-}" ] && return 0
+  if [ "$TEST_FRAME" = earth ] && [ "$ROW_FRAME" = flat ]; then
+    echo "[$name] RESULT: FAILED (the row plays --frame flat in a TEST_FRAME=earth run)"; return 1
+  fi
+  local keep=$TEST_FRAME
+  TEST_FRAME=$ROW_FRAME
+  guard_frame_check "$name" "$2" || code=1
+  TEST_FRAME=$keep
+  return $code
+}
+
 run_one() { # tier check log: runs one check, its exit code
-  local tier=$1 check=$2 log=$3 eng=
+  local tier=$1 check=$2 log=$3 eng= code to=$TIMEOUT
+  # "@timeout=<s> <check>": a row longer than TEST_TIMEOUT (600 s) says so (the long drive, the long flight, #1710)
+  if [[ $check == @timeout=* ]]; then to=${check%% *}; to=${to#@timeout=}; check=${check#* }; fi
   # shellcheck disable=SC2086  # the map's check is split into words on purpose
   case $check in
     @netsmoke) netsmoke "$log" ;;
+    # a script passes TEST_FRAME (exported) to its own Godots and checks their logs (twoclient.sh, guard_frame_check);
     # the script's own log can hold its Godots' peak lines: only its inner guard_runs count them (GUARD_PEAK_FILE)
-    tools/*) _guard_no_peak=1; guard_run "$TIMEOUT" "$log" bash $check; local c=$?; _guard_no_peak=0; return $c ;;
-    @realtime\ *) ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ;;
+    tools/*) _guard_no_peak=1; guard_run "$to" "$log" bash $check; local c=$?; _guard_no_peak=0; return $c ;;
+    @realtime\ *) ud "$log"; row_frame "$check"
+       guard_run "$to" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless --path . -- ${check#@realtime } ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
+       code=$?; row_frame_check "$check" "$log" >> "$log" || code=1; return $code ;;
     *) if [ "$tier" = quick ]; then eng=$FAST; elif [ -n "${TC_MAX_FPS:-}" ]; then eng="--max-fps $TC_MAX_FPS"; fi
-       ud "$log"; guard_run "$TIMEOUT" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ;;
+       ud "$log"; row_frame "$check"
+       guard_run "$to" "$log" ${UD[@]+"${UD[@]}"} "$GODOT" --headless $eng --path . -- $check ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
+       code=$?; row_frame_check "$check" "$log" >> "$log" || code=1; return $code ;;
   esac
+}
+row_name() { # the check's flag, for its RESULT line: the first word ending in "check", else the first word
+  local w
+  for w in ${1#@realtime }; do [[ $w == --*check ]] && { echo "${w#--}"; return; }; done
+  w=${1#@realtime }; w=${w%% *}; echo "${w#--}"
 }
 
 # --- side by side, admitted by measured RAM (#1008, #1702) ---------------------------------------

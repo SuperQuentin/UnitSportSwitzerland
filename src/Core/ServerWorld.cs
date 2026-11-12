@@ -129,7 +129,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
             + (manifest.Tiles.Count == 0 ? " (generated world)" : "") + (earth ? ", frame earth (ENU, on leaves)" : ""));
         // the frame this world plays in, every run: a net check under --frame earth fails on a silent flat fallback (#1683)
-        GD.Print($"[frame] {(earth ? "earth" : "flat")}");
+        FrameReport.Say(earth);
 
         // The same generated fill as every client's, anchored at the same point, so height
         // queries, interiors and loot work on generated ground and agree with what players see.

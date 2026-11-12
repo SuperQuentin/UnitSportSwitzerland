@@ -193,7 +193,7 @@ public partial class Swarm : Node
         GD.Print($"[swarm] hosting bots {_first}..{_first + _count - 1} of {_total}");
         // no world of its own, in either frame (positions go on the wire as Earth positions): a net check's frame check
         // reads this, not a missing line (#1683, tools/lib/guard.sh)
-        GD.Print("[frame] none (a swarm has no world)");
+        Core.FrameReport.SayNone("a swarm has no world");
         foreach (var g in _bots.GroupBy(b => b.Region))
             GD.Print($"[swarm] {g.Key.Name}: " + string.Join(", ", g.GroupBy(b => b.Role).Select(r => $"{r.Count()} {r.Key}")));
     }

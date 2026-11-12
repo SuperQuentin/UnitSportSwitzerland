@@ -10,8 +10,10 @@ cd "$(dirname "$0")/.."
 mkdir -p "$OUT"
 guard_wait_ram 3 600 || exit 1
 guard_test_userdata $OUT/userdata_waterparity   # its own user:// (#1378): not the player's, no focus, no sound
-guard_run 120 $OUT/waterparity.log ${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} "$GODOT" --path . --resolution 320x240 -- --waterparity
+guard_frame_args   # TEST_FRAME (#1710)
+guard_run 120 $OUT/waterparity.log ${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} "$GODOT" --path . --resolution 320x240 -- --waterparity ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
 code=$?
 grep -h "\[waterparity\]" $OUT/waterparity.log
+guard_frame_check waterparity $OUT/waterparity.log || exit 1
 grep -q "RESULT: ok" $OUT/waterparity.log && exit 0
 exit $([ $code = 0 ] && echo 1 || echo $code)
