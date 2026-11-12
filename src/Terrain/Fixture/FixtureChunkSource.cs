@@ -218,14 +218,14 @@ public sealed class FixtureChunkSource : IChunkSource
                 double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
                 var (minE, minN, maxE, maxN) = Extent(minX, minY, maxX, maxY);
                 if (!tile.Touches(minE, minN, maxE, maxN)) continue;
-                var path = slope.Outline.SelectMany(p =>
+                var path = slope.Path.SelectMany(p =>
                 {
                     var (x, y) = Place.Lv95(p.X, p.Y) is var (pe, pn) ? FromSouthWest(tile, pe, pn) : default;
                     return new[] { (float)x, (float)y };
                 }).ToArray();
                 var (low, high, sun, steep) = SlopeTerrain(_course, slope);
                 records.Add(new PisteRecord(0xF0F0_0000UL + (ulong)_course.Slopes.IndexOf(slope), PisteType.Downhill, slope.Difficulty,
-                    PisteGrooming.Classic, true, (float)(maxX - minX), slope.Name, "", path, low, high, sun, steep));
+                    PisteGrooming.Classic, slope.Line == null, (float)(maxX - minX), slope.Name, "", path, low, high, sun, steep));
                 byte index = (byte)records.Count;
                 for (int r = 0; r < size; r++)
                     for (int col = 0; col < size; col++)

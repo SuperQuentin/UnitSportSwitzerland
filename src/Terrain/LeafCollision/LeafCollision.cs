@@ -65,7 +65,7 @@ public sealed class LeafCollision
     /// neighbours' roads (for the blend at its edges; null: its own only).
     /// </summary>
     public static LeafCollision Prepare(CubeLeafContent leaf, Func<CubeKey, RoadTile?>? neighbourRoads, LeafFrames? frames = null,
-        Stadiums.StadiumLeaves? stadiums = null)
+        Stadiums.StadiumLeaves? stadiums = null, LeafPiers? piers = null)
     {
         var heights = leaf.Heights ?? throw new ArgumentException($"leaf {leaf.Key} has no heights");
         int n = (1 << heights.Bits) + 1;
@@ -81,7 +81,9 @@ public sealed class LeafCollision
         for (int p = 0; p < faces.Length; p++) (faces[p], buildingFaces[p]) = (new(), new());
         var all = new List<Vector3>();
         if (leaf.Roads is { } roads)
-            all.AddRange([.. RoadMeshBuilder.BuildBridgeCollisionFaces(roads), .. RoadWallBuilder.BuildCollisionFaces(roads),
+            // the decks both ways round (#1736): the flat world's road cells collide their backs (BackfaceCollision), a patch's
+            // shape is one-sided, and a walker on a Steg fell through Nyon's
+            all.AddRange([.. LeafStand.BothWindings(RoadMeshBuilder.BuildBridgeCollisionFaces(roads)), .. RoadWallBuilder.BuildCollisionFaces(roads),
                 .. RailingBuilder.BuildCollisionFaces(roads), .. IslandBuilder.BuildCollisionFaces(roads),
                 .. RoadSignBuilder.BuildCollisionFaces(roads), .. CatenaryBuilder.BuildCollisionFaces(roads),
                 .. ParkingBuilder.BuildCollisionFaces(roads), .. SignalBuilder.BuildCollisionFaces(roads),
@@ -97,6 +99,14 @@ public sealed class LeafCollision
         // ground, both ways round as the flat world's road cells hold them
         if (stadiums?.Build(leaf.Key, mesh: false, collision: true) is { Faces.Length: > 0 } bowl)
             all.AddRange(LeafStand.BothWindings(bowl.Faces));
+        // the piers and jetty decks on this leaf (#1736), from its stand-in's grid: walked on and stopping a boat, with the
+        // ground as a tile's road cells hold them, both ways round
+        if (piers?.Build(leaf.Key, stand.Grid, mesh: false, collision: true) is { Faces.Length: > 0 } decks)
+        {
+            var moved = new Vector3[decks.Faces.Length];
+            for (int k = 0; k < moved.Length; k++) moved[k] = LeafStand.ToAnchor(decks.Faces[k]);
+            all.AddRange(LeafStand.BothWindings(moved));
+        }
         // the building sites' pits (#619): the cells reaching into one leave the lattice, their ground outside the pit
         // and the pit's lining come back as faces (#1653), as the drawn mesh is cut
         var holes = leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
@@ -245,6 +255,9 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
     /// <summary>The stadiums on these leaves (#1723): their bowls' faces join each leaf's ground; null without any.</summary>
     public Stadiums.StadiumLeaves? Stadiums { get; init; }
 
+    /// <summary>The piers and jetty decks on the leaves (#1736), built into each leaf's collision; null: none.</summary>
+    public LeafPiers? Piers { get; init; }
+
     public const int KeptLeaves = 32;
 
     private readonly ConcurrentDictionary<CubeKey, Lazy<LeafCollision?>> _prepared = new();
@@ -271,7 +284,7 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
         // the unpinned ones past the kept: dropped together (a pinned leaf is held by its own entry)
         if (_prepared.Count - _pinned.Count > KeptLeaves) Trim();
         var lazy = _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
-            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames, Stadiums) : null));
+            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames, Stadiums, Piers) : null));
         var value = lazy.Value;
         if (value == null) _prepared.TryRemove(new KeyValuePair<CubeKey, Lazy<LeafCollision?>>(leaf, lazy));
         return value;
@@ -301,5 +314,15 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
     {
         _pinned.Clear();
         _prepared.Clear();
+    }
+
+    /// <summary>These leaves' preparations dropped, pinned or not: prepared again on the next ask.</summary>
+    public void Forget(IEnumerable<CubeKey> leaves)
+    {
+        foreach (var k in leaves)
+        {
+            _pinned.TryRemove(k, out _);
+            _prepared.TryRemove(k, out _);
+        }
     }
 }

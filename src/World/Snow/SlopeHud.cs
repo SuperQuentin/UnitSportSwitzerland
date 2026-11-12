@@ -25,7 +25,7 @@ public partial class SlopeHud : CanvasLayer
     /// </summary>
     public FootPlayer? Skier { get; private set; }
 
-    public SlopeHud(Func<FootPlayer?> player, Terrain.ChunkManager chunks)
+    public SlopeHud(Func<FootPlayer?> player, Terrain.IWorldGround chunks)
     {
         _player = player;
         Layer = 5;

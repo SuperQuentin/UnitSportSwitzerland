@@ -126,6 +126,14 @@ public sealed partial class EarthWorld
             else ChunkNode.WithPiers(f.Sites, inTile, stadiumProp);
         }
 
+        // the piers and jetty decks (#1736): the prop material, as a tile draws them in its roads mesh
+        if (m.Prop is { } pierProp && _collisionSource.Piers?.Build(content.Key, grid, mesh: true, collision: false) is { Mesh: { } decks })
+        {
+            if (_gone) return null;
+            if (f.Sites == null) f.Sites = ChunkNode.ToPropMesh(decks, pierProp);
+            else ChunkNode.WithPiers(f.Sites, decks, pierProp);
+        }
+
         if (content.Trees is { Count: > 0 } leafTrees && m.Tree is { } treeMaterial)
         {
             var trees = LeafStandIn.Trees(leafTrees);

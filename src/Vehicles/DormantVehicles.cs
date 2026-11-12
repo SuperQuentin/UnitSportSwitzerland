@@ -1065,11 +1065,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     public VehicleSlot? SlotAt(double e, double n, double within = 1.5)
     {
+        // on the Earth: a slot on an earth leaf's stand-in is named by the stand-in's E/N, not the place's LV95 (#1736)
+        var at = GlobalPos.FromLv95(e, n, 0);
         foreach (var (_, slots) in _slots)
             foreach (var s in slots)
-                if ((s.E - e) * (s.E - e) + (s.N - n) * (s.N - n) < within * within) return s;
+                if (at.HorizontalDistanceTo(PlaceOf(s)) < within) return s;
         return null;
     }
+
+    /// <summary>A slot's place on the Earth (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    private static GlobalPos PlaceOf(VehicleSlot s) => GlobalPos.FromLv95(s.E, s.N, s.Height);
 
     /// <summary>Every slot worked out round the anchors, woken or not: what a check picks one from.</summary>
     public IEnumerable<VehicleSlot> Slots()

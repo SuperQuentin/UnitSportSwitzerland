@@ -81,8 +81,7 @@ the steamer AI (#379) reads.
   a jetty, 2 in 5 speedboats, the rest jetskis, bow either way: the same on every peer and every
   restart. On an earth leaf's stand-in (#1735) `DormantSlots.ForLeafMarina` takes the jetties whose middle is on
   the leaf (`LeafOf`), names each berth by the stand-in's E/N (`GlobalPos.InTileEn`), heads it from true north (the
-  anchor's axes) and floats it on the leaf's water (`StandInChunkSource.LoadLeafWaterAsync`); the decks themselves
-  are not drawn on leaves yet. `DormantSlots.ForMarina` (tier 0, `MarinaSlotTests`) makes each berth with
+  anchor's axes) and floats it on the leaf's water (`StandInChunkSource.LoadLeafWaterAsync`). `DormantSlots.ForMarina` (tier 0, `MarinaSlotTests`) makes each berth with
   `MarinaMinDepth` (0.7 m) of water a dormant slot, keel at its draught under the still level, owner
   `<E>_<N>_m<jetty hash>` (the jetty's tile, by its ribbon's middle), ordinal = the berth's index on
   the jetty, so the vehicle is `veh_slot_<E>_<N>_m<hash>_<k>`. The water is read on the fill worker
@@ -129,6 +128,25 @@ the steamer AI (#379) reads.
 - `--steamercheck nyon[,shots] --chunks <real tiles> [--landings <file>] --at 2507900,1137600
   --occasion none --rings 5` (tier 3): the same at Nyon, from the Steg straight onto the head and up
   the plank (it rises 0.21 m, 9°), and Port de Nyon's jetties and boats.
+
+## On earth leaves (#1736)
+
+- `LeafPiers` (in `Terrain/LeafCollision`, held by `LeafCollisionSource.Piers`) cuts `Landings.Current` by leaf: a
+  ribbon to the leaf its middle is on, a bollard to the leaf it stands on, each point moved into the leaf's stand-in
+  frame (its `GeoPoints` when the file has them, else its LV95 by `GlobalPos.FromLv95`), once per landings index.
+  `PierMeshBuilder` builds them on the stand-in's grid as on a tile.
+- The mesh goes into the leaf's furnishing (`EarthWorld.Furnish`, the prop material, beside the stadium bowls). The
+  faces go into the leaf's collision with the ground (`LeafCollision.Prepare`, moved to the anchor, both ways round).
+- A client that gets the server's landings late re-furnishes only the leaves holding a deck, before or now
+  (`EarthWorld.RefreshFurniture`; the fill is kept, unlike `Refresh`).
+- **Bridge decks on leaves are collided both ways round** (`BuildBridgeCollisionFaces`): a patch's shape is one-sided,
+  where the flat world's road cells set `BackfaceCollision`. Nyon's Steg (a surveyed pier is a bridge road) let a walker
+  fall through on earth until then.
+- `DormantVehicles.SlotAt` compares Earth places: a slot on a stand-in is named by the stand-in's E/N.
+- Checks: `--frame earth --steamercheck pier --chunks fixture:lake` (quick). `--steamercheck nyon,shots` on
+  `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks
+  D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks` passes as flat does (the Steg, the head, the plank, Port de Nyon's
+  19 boats); the shots match flat's.
 
 ## Not done / decisions
 

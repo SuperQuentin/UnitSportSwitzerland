@@ -130,6 +130,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     }
 
     /// <summary>
+    /// What stands on some leaves changed, not their ground (#1736: the server's landings arrived, their piers): those
+    /// leaves are prepared, furnished and collided again, in place (the old ones stay until the new ones land). The fill
+    /// and its blend are kept, unlike <see cref="Refresh"/>. Main thread.
+    /// </summary>
+    public void RefreshFurniture(IReadOnlyCollection<CubeKey> leaves)
+    {
+        if (leaves.Count == 0) return;
+        var set = leaves.ToHashSet();
+        _collisionSource.Forget(set);
+        foreach (var key in _near.Keys)
+            if (set.Contains(key)) _stale.Add(key);
+        _patches.Rebuild(p => set.Contains(LeafCollision.Split(p).Leaf));
+        _nextPlan = 0;
+    }
+
+    /// <summary>
     /// The group of the leaves' collision patches (their ground with its roads and buildings): what a climb reads the cover
     /// of, as a flat chunk's own body (#1649).
     /// </summary>
@@ -167,7 +183,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         Origin = origin;
         Name = "Earth";
         // the stadiums (#1723) on the ground the leaves draw, built leaf by leaf in the collision and the furniture alike
-        _collisionSource = new LeafCollisionSource(leaves.Get) { Stadiums = Stadiums.StadiumLeaves.OnLeaves(leaves.Get) };
+        _collisionSource = new LeafCollisionSource(leaves.Get)
+        {
+            Stadiums = Stadiums.StadiumLeaves.OnLeaves(leaves.Get),
+            // the piers and jetty decks (#1736) from the region's landings, as the flat world's tiles build them
+            Piers = new LeafPiers(() => World.Landings.Current),
+        };
         _patches = new CollisionPatches(CutPatch)
         {
             Failed = (key, e) => GD.PushError($"[earth] collision patch {key}: {e.Message}"),
