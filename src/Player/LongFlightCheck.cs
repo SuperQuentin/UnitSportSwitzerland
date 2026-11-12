@@ -253,7 +253,8 @@ public partial class LongFlightCheck : Node
                 Finish();
                 return;
             }
-            if (toGo < 3000) { _leafSeen = 0; Finish(); return; }
+            // until it is over the destination: a destination's leaves may reach only 2-3 km round it (D:'s Brest: 8 x 8 leaves)
+            if (toGo < 300) { _leafSeen = 0; Finish(); return; }
         }
     }
 
