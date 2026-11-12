@@ -21,11 +21,10 @@ public static class SitePads
     public const float Apron = 12f;
 
     /// <summary>
-    /// Grades the pads into a leaf's vertices (anchor frame, x y z): level inside each, blended back over <see cref="Skirt"/>.
-    /// With <paramref name="bare"/> (the same lattice before the road blend), a vertex the roads moved is left as it is: a
-    /// road's surface stays where its blend put it.
+    /// Grades the pads into a leaf's bare vertices (anchor frame, x y z), before the roads are blended onto them: level
+    /// inside each, blended back over <see cref="Skirt"/>.
     /// </summary>
-    public static void Apply(float[] vertices, IReadOnlyList<SitePad> pads, float[]? bare = null)
+    public static void Apply(float[] vertices, IReadOnlyList<SitePad> pads)
     {
         foreach (var pad in pads)
         {
@@ -34,7 +33,7 @@ public static class SitePads
             for (int k = 0; k + 2 < vertices.Length; k += 3)
             {
                 float y = vertices[k + 1];
-                if (float.IsNaN(y) || bare != null && Math.Abs(bare[k + 1] - y) > 0.01f) continue;
+                if (float.IsNaN(y)) continue;
                 var d = new Vector2(vertices[k], vertices[k + 2]) - pad.Center;
                 if (Math.Abs(d.X) > reach || Math.Abs(d.Y) > reach) continue;
                 float du = Math.Max(0, Math.Abs(d.Dot(pad.AxisU)) - hu), dv = Math.Max(0, Math.Abs(d.Dot(v)) - hv);

@@ -64,20 +64,27 @@ public sealed class LeafStand
     /// <summary>The sites' graded ground (<see cref="SitePads.Apply"/>, #1731): the collision's and the stand-in grid's, and the drawn mesh's.</summary>
     public List<SitePad> Pads { get; init; } = new();
 
+    /// <summary>The leaf's vertices as walked on (anchor frame): the bare lattice, its sites graded, the roads blended at clearance 0.</summary>
+    public float[] Walked { get; init; } = [];
+
     /// <summary>
     /// The leaf's stand-in from its content and its vertices (anchor frame; the collision's, blended to the roads). The
     /// sites' areas are graded into <paramref name="vertices"/> first (<see cref="Pads"/>), so the grid and all that is
     /// planned on it stand on the graded ground.
     /// </summary>
-    public static LeafStand Make(CubeLeafContent leaf, float[] vertices, int side, float[]? bare = null)
+    public static LeafStand Make(CubeLeafContent leaf, float[] bare, int side, Action<float[]>? blend = null)
     {
         var id = LeafStandIn.Id(leaf.Key);
         var nearest = new int[WaterTile.Size * WaterTile.Size];
         var roads = leaf.Roads is { Segments.Count: > 0 } r ? LeafStandIn.Roads(r, id) : null;
         var buildings = leaf.Buildings is { Buildings.Count: > 0 } b ? LeafStandIn.Buildings(b, id) : null;
         var planned = buildings != null && SitePlans.HasSite(buildings) ? SitePlans.For(buildings, roads) : new List<ConstructionSite>();
-        var pads = PadsOf(planned, vertices);
-        SitePads.Apply(vertices, pads, bare);
+        // graded into the bare lattice, in place, before the roads are blended onto it: a road keeps its surface and meets
+        // the pad through its own blend
+        var pads = PadsOf(planned, bare);
+        SitePads.Apply(bare, pads);
+        var vertices = (float[])bare.Clone();
+        blend?.Invoke(vertices);
         var grid = LeafStandIn.Grid(id, vertices, side, nearest);
 
         var sites = new List<ConstructionSite>();
@@ -108,7 +115,7 @@ public sealed class LeafStand
         return new LeafStand
         {
             Leaf = leaf.Key, Id = id, Grid = grid, Nearest = nearest, Roads = roads, Buildings = buildings,
-            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(), SiteFaces = siteFaces.ToArray(), Pads = pads,
+            Sites = sites, Pits = pits, Doors = doors, ExtraFaces = extra.ToArray(), SiteFaces = siteFaces.ToArray(), Pads = pads, Walked = vertices,
         };
     }
 

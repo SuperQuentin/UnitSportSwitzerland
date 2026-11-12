@@ -51,7 +51,7 @@ public sealed class LeafCollision
     /// <summary>The leaf as its stand-in tile: grid, records, sites and doors (#1510).</summary>
     public LeafStand Stand { get; }
 
-    /// <summary>The lattice vertices before the blend.</summary>
+    /// <summary>The lattice vertices before the road blend, the building sites graded into them (#1731): what the drawn mesh blends.</summary>
     public float[] Bare { get; }
 
     /// <summary>The lattice vertices as the patches hold them (blended), x y z a vertex, row-major from the south-west.</summary>
@@ -69,12 +69,11 @@ public sealed class LeafCollision
         var heights = leaf.Heights ?? throw new ArgumentException($"leaf {leaf.Key} has no heights");
         int n = (1 << heights.Bits) + 1;
         var bare = CubeGeometry.Vertices(leaf.Key, heights.Bits, heights.Heights);
-        var vertices = (float[])bare.Clone();
         var bands = LeafRoadBlend.For(leaf.Key, leaf.Roads, neighbourRoads);
-        if (bands != null) LeafRoadBlend.Apply(vertices, bands, 0);
-        // the stand-in's grid from the ground as walked on (#1704): what stands on it (buildings, doors, the sites' offices
-        // and yards, parked vehicles) is planned on it, and beside a road the bare lattice is metres off the blended one
-        var stand = LeafStand.Make(leaf, vertices, n, bare);
+        // the sites' pads graded into the bare lattice (#1731), then the roads blended onto it: the ground as walked on,
+        // what the stand-in's grid is made from (#1704); the drawn mesh blends the same graded lattice
+        var stand = LeafStand.Make(leaf, bare, n, v => { if (bands != null) LeafRoadBlend.Apply(v, bands, 0); });
+        var vertices = stand.Walked;
 
         var faces = new List<Vector3>[PerSide * PerSide];
         var buildingFaces = new List<Vector3>[PerSide * PerSide];
