@@ -356,7 +356,7 @@ public partial class OccasionDecor : Node
             for (int dz = 1; dz >= -1; dz--)
             {
                 if (!_tiles.TryGetValue(id.Neighbour(dx, dz), out var tile) || !IsInstanceValid(tile.Node)) continue;
-                var o = tile.Node.GlobalTransform;   // turned on the earth world (#1729)
+                var o = tile.Node.GlobalTransform;   // the whole frame: a leaf's anchor on the earth world (#1729)
                 foreach (var s in tile.Spots)
                 {
                     var w = o * s.Local;

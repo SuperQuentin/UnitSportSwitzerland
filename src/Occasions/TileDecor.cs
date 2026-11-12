@@ -71,8 +71,9 @@ public sealed class TileContext
     public required IReadOnlyList<OccasionTowns.Town> Towns { get; init; }
 
     /// <summary>
-    /// The tile node's whole frame in the world (#1729): on the earth world a leaf's stand-in tile is turned and
-    /// tilted, so a tile-local point is not <see cref="Origin"/> plus itself. Unset: the flat tile's, a shift alone.
+    /// The tile node's whole frame in the world (#1729): on the earth world a leaf's stand-in tile stands in its
+    /// anchor's frame (east, up and north there, the Earth's curve between it and the world's), so a tile-local point
+    /// is not <see cref="Origin"/> plus itself. Unset: the flat tile's, a shift alone.
     /// </summary>
     public Transform3D? Frame { get; init; }
     /// <summary>The ground's tile (by its content name) under a world point, when the ground can say: the earth world's leaves.</summary>
@@ -99,7 +100,7 @@ public sealed class TileContext
 
     /// <summary>
     /// Whether a tile-local point is on this tile, at least <paramref name="margin"/> inside it: by the ground's own
-    /// tiles where it names them (a leaf's stand-in spans less than its square, its neighbours overlap it, #1729),
+    /// tiles where it names them (a leaf spans ~611 m of its stand-in's square, its neighbours overlap it, #1729),
     /// else by the tile's square.
     /// </summary>
     public bool InTile(Vector3 local, float margin = 0f)
