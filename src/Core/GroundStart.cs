@@ -23,6 +23,7 @@ public sealed class GroundStart
     private readonly IWorldGround _ground;
     private readonly FootPlayer _player;
     private double _waited;
+    private double _nextSearch;
 
     public bool Done { get; private set; }
 
@@ -41,8 +42,18 @@ public sealed class GroundStart
         bool ready = _ground.HasCollisionAt(at) && _ground.BuildingCollisionDoneAt(at);
         if (!ready && _waited < MaxWait) return false;
 
+        // nothing clear found: the collision may say it is there before its bodies are in the physics space (the earth
+        // world's patches, #1733), so the search runs again every half second until the wait runs out
+        if (_waited < _nextSearch) return false;
+        var found = FindClear(at);
+        if (found == null && _waited < MaxWait)
+        {
+            _nextSearch = _waited + 0.5;
+            return false;
+        }
+
         Done = true;
-        if (FindClear(at) is { } spot)
+        if (found is { } spot)
         {
             if (MathX.FlatDistance(spot, at) > 0.5f) _player.PlaceAt(spot, _player.Rotation.Y);
             GD.Print($"[spawn] on foot at {spot.Round()}, {MathX.FlatDistance(spot, at):F0} m from the spawn point");
