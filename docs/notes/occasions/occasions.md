@@ -33,7 +33,9 @@
   `Inventory.Worn`, wins). Towns come from `OccasionTowns`: `places.json`, else
   `ProceduralWorld.VillageCentres()` for the generated world, found round a tile's middle by its place in the
   world (#1729). `TileContext` works in the tile node's whole frame (`Frame`): on the earth world a leaf's stand-in
-  tile is turned (~28°) and spans less than its square, so heights, cover and LV95 go through the frame, a place
+  tile is placed by its anchor (east/north there, curved with the Earth) and the leaf spans less than its square
+  (~611 m; neighbouring stand-in ids step ~28° off east on the cube face), so heights, cover and LV95 go through
+  the frame, a place
   is on the tile when the ground names that tile there (`TileAtWorld`, `Holds`, `InTile`), and spots are read
   through the node's `GlobalTransform`. The earth world furnishes leaves within 900 m only: `--huntcheck` goes
   to the nearest town after 10 s without a spot. The hunt is taken with the
