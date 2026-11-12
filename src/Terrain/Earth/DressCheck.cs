@@ -77,7 +77,7 @@ public partial class DressCheck : Node
     {
         var space = GetViewport()?.World3D?.DirectSpaceState;
         if (space == null) return null;
-        var q = PhysicsRayQueryParameters3D.Create(at + Vector3.Up * 3f, at + Vector3.Down * 8f);
+        var q = PhysicsRayQueryParameters3D.Create(at + Vector3.Up * 1f, at + Vector3.Down * 8f);   // from 1 m up: a canopy over a parked car is not what it stands on
         // the leaves' ground and buildings only: not the parked car's own body or a passer-by
         for (int k = 0; k < 6; k++)
         {
