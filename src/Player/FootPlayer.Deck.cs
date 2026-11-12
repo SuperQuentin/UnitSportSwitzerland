@@ -83,6 +83,14 @@ public partial class FootPlayer
     /// <summary>Aboard, the body is a person's width: a bus's aisle is 57 cm between its seats.</summary>
     private const float AboardRadius = 0.2f;
 
+    /// <summary>
+    /// The fastest a walkable vehicle's drawn frame moves that is motion, not a jump (a copy appearing, a teleport),
+    /// and the most of its published velocity a new deck starts from. A ground vehicle's: 120 and 60 m/s. A flyer's
+    /// (#1741): an A320 flies at 120-230 m/s, and a deck measured at 60 m/s under a walker in one at 122 slammed them
+    /// into the cockpit wall every physics step until the frame's carry put them back; they never got out of it.
+    /// </summary>
+    private static (float Jump, float Start) MotionCaps(Rideable ride) => ride is Flyer ? (400f, 400f) : (120f, 60f);
+
     /// <summary>One vehicle's decks as collision here: a body per section, its door parts, and what was excepted.</summary>
     private sealed class DeckSet
     {
@@ -247,7 +255,7 @@ public partial class FootPlayer
             {
                 // how the deck under the walker moves (a rolling deck swings a walker high on it)
                 var spot = ((carried - GlobalPosition) / dt) with { Y = 0 };
-                if (spot.Length() < 120f) _deckSpotVel = _deckSpotValid ? _deckSpotVel.Lerp(spot, 1f - Mathf.Exp(-10f * dt)) : spot;
+                if (spot.Length() < MotionCaps(mine.Ride).Jump) _deckSpotVel = _deckSpotValid ? _deckSpotVel.Lerp(spot, 1f - Mathf.Exp(-10f * dt)) : spot;
                 _deckSpotValid = true;
             }
             GlobalPosition = carried;
@@ -274,7 +282,7 @@ public partial class FootPlayer
                 {
                     var raw = ((pos - set.LastPos) / dt) with { Y = 0 };
                     // a jump of the drawn frame (a copy appearing, a teleport) is not motion
-                    if (raw.Length() < 120f) set.Velocity = set.Velocity.Lerp(raw, MathX.Damp(10f, dt));
+                    if (raw.Length() < MotionCaps(set.Ride).Jump) set.Velocity = set.Velocity.Lerp(raw, MathX.Damp(10f, dt));
                 }
                 set.LastPos = pos;
                 set.Measured = true;
@@ -400,7 +408,7 @@ public partial class FootPlayer
     {
         // its velocity starts as the vehicle publishes it (level, sane), until its motion is measured
         var start = host switch { VehicleBody v => v.Velocity, FootPlayer p => p.WorldVelocity, _ => Vector3.Zero } with { Y = 0 };
-        var set = new DeckSet { Host = host, Key = key, Ride = ride, Velocity = start.LimitLength(60f) };
+        var set = new DeckSet { Host = host, Key = key, Ride = ride, Velocity = start.LimitLength(MotionCaps(ride).Start) };
         if (ride is Airstairs built) set.StairsHeight = built.DeckHeight;
         foreach (var deck in ride.Decks)
         {
