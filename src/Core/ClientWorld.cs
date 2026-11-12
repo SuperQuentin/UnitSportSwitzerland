@@ -1557,7 +1557,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Farm, same path as the server's, which owns the cells; offline this client does
         if (Systems.On(Systems.Farming))
         {
-            Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false, earth: _earth?.Ground);
             // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
             Farming.Herds.Create(this, Ground!, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
