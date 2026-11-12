@@ -224,11 +224,14 @@ public partial class OccasionDecor : Node
             .Where(a => a.Has(OccasionFacets.Decorations) || a.Has(OccasionFacets.Hunt)).ToList();
         if (running is not { Count: > 0 }) return;
 
-        var tileOrigin = _origin.TileTransform(id).Origin;
+        var frame = _origin.TileTransform(id);
+        var tileOrigin = frame.Origin;
         var ctx = new TileContext
         {
             Id = id,
             Origin = tileOrigin,
+            Frame = frame,
+            TileAtWorld = _origin.StandIns != null ? p => _ground.ContentName(_ground.TileAt(p)) : null,
             World = _origin,
             // doorsteps on the ground only: a lantern or a gift at a raised door (#827) stood on the walkway
             Doors = Array.FindAll(tile.Doors, d => d.Level == 0),
@@ -331,10 +334,14 @@ public partial class OccasionDecor : Node
         foreach (var list in cells.Values) yield return list;
     }
 
-    /// <summary>The towns within 3 km of a tile's middle, by its place on the Earth (#1704: a leaf's stand-in has no LV95 centre).</summary>
-    private static List<OccasionTowns.Town> TownsNear(TileId id)
+    /// <summary>
+    /// The towns within 3 km of a tile's middle, found by its place in this world (#1729): a leaf's stand-in tile
+    /// on the earth world names no LV95 square, so its <see cref="TileId.Centre"/> is nowhere near its towns.
+    /// </summary>
+    private List<OccasionTowns.Town> TownsNear(TileId id)
     {
-        var (e, n, _) = SwissGeodesy.FromEcef(GlobalPos.OfTile(id, 500, 0, 500).Ecef);
+        double half = Terrain.Format.ChunkFormat.TileSizeM / 2;
+        var (e, n) = _origin.ToLv95(_origin.TileToWorld(id, new Vector3((float)half, 0f, (float)half)));
         return OccasionTowns.Near(e, n, 3000).ToList();
     }
 
@@ -349,10 +356,10 @@ public partial class OccasionDecor : Node
             for (int dz = 1; dz >= -1; dz--)
             {
                 if (!_tiles.TryGetValue(id.Neighbour(dx, dz), out var tile) || !IsInstanceValid(tile.Node)) continue;
-                var o = tile.Node.GlobalPosition;
+                var o = tile.Node.GlobalTransform;   // the whole frame: a leaf's anchor on the earth world (#1729)
                 foreach (var s in tile.Spots)
                 {
-                    var w = o + s.Local;
+                    var w = o * s.Local;
                     float d = w.DistanceTo(world);
                     if (d <= reach) found.Add((s, w, d));
                 }
@@ -363,14 +370,14 @@ public partial class OccasionDecor : Node
     /// <summary>Every hunt spot currently drawn, for <c>--huntcheck</c>.</summary>
     public IEnumerable<(HuntSpot Spot, Vector3 World)> AllSpots() =>
         _tiles.Values.Where(t => IsInstanceValid(t.Node))
-            .SelectMany(t => t.Spots.Select(s => (s, t.Node.GlobalPosition + s.Local)));
+            .SelectMany(t => t.Spots.Select(s => (s, t.Node.GlobalTransform * s.Local)));
 
     /// <summary>True inside one of the pumpkin patches currently drawn.</summary>
     public bool InPatch(Vector3 world)
     {
         var id = _ground.ContentName(_ground.TileAt(world));   // the ground's names (#1704): a leaf's stand-in too
         if (!_tiles.TryGetValue(id, out var tile) || !IsInstanceValid(tile.Node)) return false;
-        var local = world - tile.Node.GlobalPosition;
+        var local = tile.Node.GlobalTransform.AffineInverse() * world;
         var p = new Vector2(local.X, local.Z);
         foreach (var r in tile.Patches)
             if (r.HasPoint(p)) return true;

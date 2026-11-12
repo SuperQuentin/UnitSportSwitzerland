@@ -63,8 +63,9 @@ public partial class YardLootNetProbe : ChatProbe
         foreach (var site in sites)
         {
             // the ground's name for the site's tile: LV95, or an earth leaf's stand-in (#1704)
-            var tile = SiteTiles.TileOf(me, site.E, site.N);
-            var (siteE, siteN, _) = GlobalPos.FromLv95(site.E, site.N, at.Alt).InTileEn(tile);
+            var place = GlobalPos.FromLv95(site.E, site.N, at.Alt);
+            var tile = SiteTiles.TileOf(me, place);
+            var (siteE, siteN, _) = place.InTileEn(tile);
             var yard = await Task.Run(() => SitePlans.YardOfTile(source, tile));
             var near = yard.OrderBy(c => Sq(c.E - siteE) + Sq(c.N - siteN)).ToList();
             foreach (var c in near.Where(c => c.Kind == SiteStockKind.Skip))

@@ -13,12 +13,11 @@ namespace UnitSport.Terrain.Construction;
 /// </summary>
 internal static class SiteTiles
 {
-    /// <summary>The ground's name for the tile under a generated site's LV95 place.</summary>
-    public static TileId TileOf(FootPlayer me, double e, double n)
+    /// <summary>The ground's name for the tile under a generated site's place.</summary>
+    public static TileId TileOf(FootPlayer me, GlobalPos site)
     {
-        if (me.Terrain is not { } ground || me.Origin is not { } origin) return TileId.FromLv95(e, n);
-        var world = origin.ToWorld(GlobalPos.FromLv95(e, n, me.Global.Alt));
-        return ground.ContentName(ground.TileAt(world));
+        if (me.Terrain is not { } ground || me.Origin is not { } origin) return site.Tile;
+        return ground.ContentName(ground.TileAt(origin.ToWorld(site)));
     }
 
     /// <summary>A point of a tile's plans (its E/N names and its height in the tile) in the world.</summary>
