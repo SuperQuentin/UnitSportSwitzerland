@@ -247,7 +247,10 @@ public partial class SitePalletNetProbe : ChatProbe
         var space = me.GetWorld3D().DirectSpaceState;
         var box = new PhysicsShapeQueryParameters3D { Shape = new BoxShape3D { Size = new Vector3(16f, 3f, 16f) } };
         box.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
-        foreach (float d in new[] { 30f, 45f, 60f, 75f, 90f })
+        // the flattest clear spot of all (on the leaves' real relief nothing may be quite level, #1731)
+        Vector3? best = null;
+        float flattest = 1.8f;
+        foreach (float d in new[] { 30f, 45f, 60f, 75f, 90f, 105f, 120f })
             for (int k = 0; k < 8; k++)
             {
                 var dir = new Vector3(Mathf.Cos(k * Mathf.Tau / 8f), 0, Mathf.Sin(k * Mathf.Tau / 8f));
@@ -262,12 +265,12 @@ public partial class SitePalletNetProbe : ChatProbe
                     if (!me.Terrain.TryGetHeight(at + new Vector3(cx, 0, cz), out float c)) { known = false; break; }
                     (lo, hi) = (Math.Min(lo, c), Math.Max(hi, c));
                 }
-                if (!known || hi - lo > 1.0f) continue;   // level enough for the loader after it, too
+                if (!known || hi - lo >= flattest) continue;   // level enough for the loader after it, too
                 at.Y = g + 0.3f;
                 box.Transform = new Transform3D(Basis.Identity, new Vector3(at.X, hi + 0.4f + 1.5f, at.Z));
-                if (space.IntersectShape(box, 1).Count == 0) return at;
+                if (space.IntersectShape(box, 1).Count == 0) (best, flattest) = (at, hi - lo);
             }
-        return null;
+        return best;
     }
 
     /// <summary>
