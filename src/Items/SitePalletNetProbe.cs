@@ -272,11 +272,12 @@ public partial class SitePalletNetProbe : ChatProbe
                 }
         }
         var space = me.GetWorld3D().DirectSpaceState;
-        var box = new PhysicsShapeQueryParameters3D { Shape = new BoxShape3D { Size = new Vector3(16f, 3f, 16f) } };
+        var box = new PhysicsShapeQueryParameters3D { Shape = new BoxShape3D { Size = new Vector3(10f, 3f, 10f) } };
         box.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
         // the flattest clear spot of all (on the leaves' real relief nothing may be quite level, #1731)
         Vector3? best = null;
-        float flattest = 1.8f;
+        float flattest = 1.8f, leastSpread = float.MaxValue;
+        int unknown = 0, steep = 0, blocked = 0;
         foreach (var point in points)
             {
                 var at = point;
@@ -285,16 +286,20 @@ public partial class SitePalletNetProbe : ChatProbe
                 // clear of its highest point, so it tests what stands there, not a slope (the leaves' real relief, #1731)
                 float lo = g, hi = g;
                 bool known = true;
-                foreach (var (cx, cz) in new[] { (-7f, -7f), (7f, -7f), (7f, 7f), (-7f, 7f) })
+                foreach (var (cx, cz) in new[] { (-5f, -5f), (5f, -5f), (5f, 5f), (-5f, 5f) })
                 {
                     if (!me.Terrain.TryGetHeight(at + new Vector3(cx, 0, cz), out float c)) { known = false; break; }
                     (lo, hi) = (Math.Min(lo, c), Math.Max(hi, c));
                 }
-                if (!known || hi - lo >= flattest) continue;   // level enough for the loader after it, too
+                if (!known) { unknown++; continue; }
+                leastSpread = Math.Min(leastSpread, hi - lo);
+                if (hi - lo >= flattest) { steep++; continue; }   // level enough for the loader after it, too
                 at.Y = g + 0.3f;
                 box.Transform = new Transform3D(Basis.Identity, new Vector3(at.X, hi + 0.4f + 1.5f, at.Z));
                 if (space.IntersectShape(box, 1).Count == 0) (best, flattest) = (at, hi - lo);
+                else blocked++;
             }
+        GD.Print(FormattableString.Invariant($"[sitepalletnet]   open ground: {points.Count} spots tried, {unknown} with no ground known, {steep} too steep (the least {leastSpread:F2} m across), {blocked} blocked; {(best is { } b ? $"{flattest:F2} m across, {new Vector2(b.X - near.X, b.Z - near.Z).Length():F0} m off" : "none")}"));
         return best;
     }
 
