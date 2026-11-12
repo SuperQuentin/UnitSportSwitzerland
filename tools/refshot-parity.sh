@@ -7,9 +7,9 @@
 #   tools/refshot-parity.sh <tag>        e.g. tools/refshot-parity.sh c6-82e03ec5
 #
 # Writes $REFSHOTS/<tag>-flat, $REFSHOTS/<tag>-earth and the diff in $REFSHOTS/<tag>-earth/diff-<tag>-flat/
-# (summary.md, report.html, sheet-<style>.png). Cartoon only by default: the one style compared and judged (the user,
-# Nov 12: PS1 is defunct and Realistic never finished); ~17 min on a free machine, ~50 for STYLES="cartoon ps1 real-".
-# One heavy-run slot.
+# (summary.md, report.html, sheet-<style>.png). Cartoon only by default (#1746: the user judges earth against flat in
+# Cartoon; PS1 is defunct and Realistic unfinished), ~18 min on a free machine; STYLES="cartoon ps1 real-" for all three
+# (~50 min). One heavy-run slot.
 # Env: as tools/refshots.sh (STYLES, VIEWS, LEAVES, GLOBE, CHUNKS, GODOT ...): both take the game's pyramid (GLOBE
 # overrides it), the reference as a player sees it today. Plus
 #   NOISE   the floor at 1/8 scale (D:/UnitSportSwitzerland/baselines/dd6b7207/noise-s8.json: two flat runs of one
@@ -19,12 +19,12 @@
 # Exit: refshot-diff.py's, 1 when a shot not judged is over its floor.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+export STYLES=${STYLES:-cartoon}
 . tools/lib/guard.sh
 tag=${1:?usage: tools/refshot-parity.sh <tag>}
 ROOT=${REFSHOTS:-D:/UnitSportSwitzerland/refshots}
 NOISE=${NOISE:-D:/UnitSportSwitzerland/baselines/dd6b7207/noise-s8.json}
 SKIP=${SKIP:-}
-export STYLES=${STYLES:-cartoon}
 flat=$ROOT/$tag-flat
 earth=$ROOT/$tag-earth
 

@@ -97,7 +97,7 @@ The coverage map found far rendering, GPX and the origin under load with no chec
 tools/refshot-parity.sh c6-<commit>
 ```
 
-- One heavy-run slot, ~50 min for three styles. It takes the flat library (`ANCHORS=1`), then the earth one
+- **Cartoon only** by default since #1746 (the user's call, Nov 12 2026: PS1 is defunct, Realistic unfinished; earth is judged against flat in Cartoon): one heavy-run slot, ~18 min; `STYLES="cartoon ps1 real-"` for all three, ~50 min. It takes the flat library (`ANCHORS=1`), then the earth one
   (`tools/refshots.sh --frame earth`, B4's leaves and pyramid from `D:/UnitSportSwitzerland/test_b3/b4/`), then
   the diff: `D:/UnitSportSwitzerland/refshots/<tag>-earth/diff-<tag>-flat/` with `summary.md` (within the floor,
   over it, judged), `report.html` and `sheet-<style>.png` (A flat | B earth | difference, by class). Exit 1 when a
