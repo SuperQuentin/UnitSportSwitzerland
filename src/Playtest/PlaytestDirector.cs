@@ -238,6 +238,13 @@ public partial class PlaytestDirector : Node
             var at = me.Global.Lv95;
             float heading = Mathf.PosMod(-Mathf.RadToDeg(me.GlobalRotation.Y), 360f);
             where = $" [at LV95 {at.E:F0},{at.N:F0} alt {me.Global.Alt:F0} m, heading {heading:F0}°, {PlaytestContext.Label(me.Ride)}";
+            // on the free camera the body stays parked: what the player looks at is where the camera is
+            if (GetViewport().GetCamera3D() is { } cam && me.Origin is { } origin
+                && cam.GlobalPosition.DistanceTo(me.GlobalPosition) > 30f)
+            {
+                var c = origin.ToLv95(cam.GlobalPosition);
+                where += $"; camera at LV95 {c.E:F0},{c.N:F0}";
+            }
         }
         int note = await NoteWithShot(text, "chat");
         if (note > 0) where += (where.Length > 0 ? "; " : " [") + $"note {note}: notes/{note:000}.png";
