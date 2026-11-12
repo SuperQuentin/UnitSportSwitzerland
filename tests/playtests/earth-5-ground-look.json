@@ -1,0 +1,25 @@
+{
+  "id": "earth-5-ground-look",
+  "title": "The ground and the lake\u0027s look",
+  "verdict": "validated",
+  "by": "Nicolas Maitre",
+  "date": "2026-11-12T21:55Z",
+  "commit": "8edf1d3be",
+  "coverHash": "dbbd3805c0532fe8",
+  "covers": [
+    "src/Terrain/Earth/**",
+    "src/Terrain/Leaves/**",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "shaders/cartoon_terrain.gdshader",
+    "shaders/cartoon_water.gdshader"
+  ],
+  "notes": [
+    {
+      "date": "2026-11-12T21:55Z",
+      "by": "Nicolas Maitre",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}
