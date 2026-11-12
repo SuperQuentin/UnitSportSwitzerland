@@ -8,10 +8,15 @@
 NAME=longdrivecheck
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
 CHUNKS=${CHUNKS:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks}
-AT=${AT:-2500956,1117569}   # Geneva
+AT=${AT:-2500900,1121300}   # Geneva, Chambésy on the Route de Lausanne (the old town and Sécheron open on corners and closed streets the drive cannot take)
 TO=${TO:-2507500,1138500}   # Nyon, the Geneva patch's north end along the lake
+# a Major road the car cannot drive on (ground collision across it at Place des Nations, on flat and earth alike): round it
+AVOID=${AVOID-2500145,1119932}
 NEED=("$LEAVES")
 FRAME=${FRAME:-${TEST_FRAME:-earth}}
 TIMEOUT_S=${TIMEOUT_S:-3600}
-ARGS=(--longdrivecheck --leaves "$LEAVES" --chunks "$CHUNKS" --at "$AT" --to "$TO" --car "${CAR:-4}" --traffic 0)
+ARGS=(--longdrivecheck --leaves "$LEAVES" --chunks "$CHUNKS" --at "$AT" --to "$TO" --car "${CAR:-4}" --traffic 0 --systems "${SYSTEMS:-terrain,physics,sky}")
+[ -n "$AVOID" ] && ARGS+=(--avoid "$AVOID")
+# shellcheck disable=SC2206
+[ -n "${EXTRA:-}" ] && ARGS+=($EXTRA)   # more probe arguments (a trial), as words
 . "$(dirname "$0")/lib/barprobe.sh"

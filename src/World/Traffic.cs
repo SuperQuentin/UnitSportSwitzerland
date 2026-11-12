@@ -242,7 +242,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     // ---- roads ---------------------------------------------------------------------------
 
-    private static bool IsCarRoad(RoadSegment s) =>
+    internal static bool IsCarRoad(RoadSegment s) =>
         s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp or RoadClass.Major
             or RoadClass.Road or RoadClass.Minor or RoadClass.Lane
         && (s.Flags & RoadFlags.Stairs) == 0;

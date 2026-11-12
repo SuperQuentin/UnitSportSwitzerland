@@ -35,10 +35,13 @@ public partial class LongDriveCheck : Node
     private readonly Func<CubeKey, RoadTile?>? _leafRoads;
     private readonly List<string> _faults = new();
     private readonly double _corridor = CmdArgs.Double("--corridor") is double c && c >= 300 ? c : 2000;
+    // --along Motorway: the drive starts and ends on that class of road (the bar's drive on the A1: no junction islands,
+    // signal poles or old-town corners, the frame's re-anchors at speed)
+    private readonly RoadClass? _along = Enum.TryParse<RoadClass>(CmdArgs.Value("--along"), true, out var cls) ? cls : null;
     private readonly int _car = CmdArgs.Int("--car") ?? 4;
     private GlobalPos? _to;
     private FootPlayer? _player;
-    private AutoPilot? _pilot;
+    private ILongDriveDriver? _pilot;
     private Camera3D _camera = null!;
     private ReanchorWatch _watch = null!;
     private Task<RaceRoute?>? _next;
@@ -70,6 +73,13 @@ public partial class LongDriveCheck : Node
             && double.TryParse(te, NumberStyles.Float, CultureInfo.InvariantCulture, out double e)
             && double.TryParse(tn, NumberStyles.Float, CultureInfo.InvariantCulture, out double n))
             _to = GlobalPos.FromLv95(e, n, 0);
+        // places known blocked (--avoid E,N;E,N, LV95 notation): planned round from the start, as one found on the way
+        foreach (var place in (CmdArgs.Value("--avoid") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+            if (place.Split(',') is [var ae, var an]
+                && double.TryParse(ae, NumberStyles.Float, CultureInfo.InvariantCulture, out double be)
+                && double.TryParse(an, NumberStyles.Float, CultureInfo.InvariantCulture, out double bn))
+                _blocked.Add(GlobalPos.FromLv95(be, bn, 0));
+        _known = _blocked.Count;
         AddChild(_camera = new Camera3D { Name = "Chase", Far = 30_000, Current = true });
         _camera.MakeCurrent();
         var (se, sn) = SpawnPoint.ParseTarget();
@@ -107,6 +117,7 @@ public partial class LongDriveCheck : Node
     /// <summary>The route from <paramref name="at"/>: to the destination along the corridor's lane graph, or (none) the longer way along the road.</summary>
     private Task<RaceRoute?> BuildRoute(Vector3 at)
     {
+        List<Vector3>? avoid = _blocked.Count == 0 ? null : _blocked.ConvertAll(b => _origin.ToWorld(b));
         var source = _ground.Content;
         if (source == null) return Task.FromResult<RaceRoute?>(null);
         var frame = _origin.Frame;
@@ -115,7 +126,8 @@ public partial class LongDriveCheck : Node
             var target = _origin.ToWorld(to);
             var leafRoads = _leafRoads;
             double half = _corridor;
-            return Task.Run(() => RaceRoute.ToAsync(source, leafRoads, frame, at, target, half, RoadClass.Minor));
+            var along = _along;
+            return Task.Run(() => RaceRoute.ToAsync(source, leafRoads, frame, at, target, half, Log, avoid, along));
         }
         return Task.Run(() => RaceRoute.BuildAsync(source, frame, at, smallest: RoadClass.Road));
     }
@@ -161,6 +173,17 @@ public partial class LongDriveCheck : Node
 
     private RaceRoute? _pending;
 
+    /// <summary>
+    /// Places the car was found stuck at (#1744): a road its route took that a car cannot drive (a passage the ground or a
+    /// building closes, on flat and earth alike in Geneva). The drive plans again round them, as a driver would, up to
+    /// <see cref="MaxReplans"/> times; each is logged ("blocked:") for its own issue, not counted as the frame's fault.
+    /// </summary>
+    private readonly List<GlobalPos> _blocked = new();
+    private int _known;   // how many of them --avoid gave
+    private Task<RaceRoute?>? _replan;
+    private const int MaxReplans = 8;
+    private const float ReplanAfterS = 15f, BlockAheadM = 6f;
+
     private void Mount()
     {
         if (_player is not { } p || !p.IsOnFloor()) return;
@@ -179,14 +202,21 @@ public partial class LongDriveCheck : Node
     private void TakeRoute(RaceRoute route)
     {
         route.Follow(_origin.Frame);
-        var pilot = AutoPilot.For(route, _player!);
-        if (pilot == null) { Fault("no pilot for the car"); Finish(); return; }
-        pilot.Temperament(0.9f, 0f, 1);
-        pilot.Go = true;
-        pilot.Log = m => GD.Print("[longdrivecheck] pilot: " + m);
-        _pilot = pilot;
+        ILongDriveDriver driver;
+        if (_to != null) driver = new LaneFollower(route, _player!, _origin);   // a drive to a destination: on its lane
+        else
+        {
+            // a fixture course: the racing pilot, flat out
+            var racer = AutoPilot.For(route, _player!);
+            if (racer == null) { Fault("no pilot for the car"); Finish(); return; }
+            racer.Temperament(0.9f, 0f, 1);
+            racer.Go = true;
+            racer.Log = m => GD.Print("[longdrivecheck] pilot: " + m);
+            driver = new RacingDriver(racer);
+        }
+        _pilot = driver;
         _bestArc = 0;
-        _player!.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Array.Empty<AutoPilot.Other>());
+        _player!.RideControls = () => driver.Drive((float)GetPhysicsProcessDeltaTime());
     }
 
     private void Drive(float dt)
@@ -202,27 +232,61 @@ public partial class LongDriveCheck : Node
         Chase(p);
 
         if (p.Ride == RideKind.OnFoot) { Fault($"out of the car at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
-        // a fall: under the ground's height (through a patch, off the data's edge)
-        if (_ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f)
+        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design
+        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f)
         {
             if ((_belowS += dt) > 0.5) { Fault($"fell under the ground ({g - p.GlobalPosition.Y:F1} m) at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
         }
         else _belowS = 0;
 
-        // a drive, not a race: each road's speed, the lower of here and 80 m on (a fixture course with no destination: flat out)
-        if (_to != null) pilot.MaxSpeed = Mathf.Min(SpeedOf(pilot.Route.ClassAt(pilot.Arc)), SpeedOf(pilot.Route.ClassAt(pilot.Arc + 80f)));
+        // a drive, not a race: each road's speed, the lower of here and 80 m on, and its bends taken gently (a fixture
+        // course with no destination: flat out, the racing pilot's own)
+        if (_to != null)
+            pilot.MaxSpeed = Mathf.Min(Mathf.Min(SpeedOf(pilot.Route.ClassAt(pilot.Arc)), SpeedOf(pilot.Route.ClassAt(pilot.Arc + 80f))),
+                BendSpeed(pilot.Route, pilot.Arc));
 
         // progress: toward the destination, or along the road
         double toGo = _to is { } to ? here.HorizontalDistanceTo(to) : pilot.Route.Length - pilot.Arc;
-        bool won = _to != null ? toGo < _bestToGo - StallM : pilot.Arc > _bestArc + StallM;
+        bool won = pilot.Arc > _bestArc + StallM;   // along the route: a planned way may head away from the destination first
         if (won || _stallT == 0) { _stallT = _t; _bestToGo = Math.Min(_bestToGo, toGo); _bestArc = Math.Max(_bestArc, pilot.Arc); }
+        // stuck: plan again round the place, from where the car is (it waits meanwhile)
+        if (_replan is { IsCompleted: true } replanned)
+        {
+            _replan = null;
+            var route = replanned.IsCompletedSuccessfully ? replanned.Result : null;
+            if (route == null || route.Length < MinLegM) { Fault(Inv($"no way round the place blocked at {LvAt(p)}")); Finish(); return; }
+            TakeRoute(route);
+            _stallT = _t;
+            Log(Inv($"route again: {route.Length / 1000:F2} km round {_blocked.Count} blocked place(s)"));
+            return;
+        }
+        if (_replan != null) { _stallT = _t; return; }
+        if (_to != null && _t - _stallT > ReplanAfterS && _blocked.Count - _known < MaxReplans)
+        {
+            var fwd = (-p.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            var block = p.GlobalPosition + fwd * BlockAheadM;
+            _blocked.Add(_origin.ToGlobal(block));
+            Log(Inv($"blocked: stuck {ReplanAfterS:F0} s at {LvAt(p)} on a {pilot.Route.ClassAt(pilot.Arc)}, {Ahead(p)}: planning round it"));
+            Log(RouteHere(pilot) + (pilot is LaneFollower lf ? "; the driver: " + lf.Said : ""));
+            if (DisplayServer.GetName() != "headless")
+            {
+                // windowed: the chase camera's picture of the place, for its issue
+                string shot = Inv($"test_output/longdrive_blocked_{_blocked.Count - _known}.png");
+                GetViewport().GetTexture().GetImage().SavePng(shot);
+                Log("picture: " + shot);
+            }
+            pilot.Go = false;
+            _replan = BuildRoute(p.GlobalPosition);
+            _stallT = _t;
+            return;
+        }
         if (_t - _stallT > StallS) { Fault($"stalled: {StallS:F0} s without {StallM:F0} m won, at {_driven / 1000:F2} km ({LvAt(p)}), {speed * 3.6f:F0} km/h, {Ahead(p)}"); Finish(); return; }
 
         _report += dt;
-        if (_report >= 10)
+        if (_report >= 5)
         {
             _report = 0;
-            Log(Inv($"t={_t,5:F0} s {_driven / 1000,6:F2} km {speed * 3.6f,4:F0} km/h at {pilot.Arc:F0}/{pilot.Route.Length:F0} m on {pilot.Route.ClassAt(pilot.Arc)}, {toGo / 1000:F2} km to go, {_watch.Shifts} re-anchors, {LvAt(p)}"));
+            Log(Inv($"t={_t,5:F0} s {_driven / 1000,6:F2} km {speed * 3.6f,4:F0} km/h at {pilot.Arc:F0}/{pilot.Route.Length:F0} m on {pilot.Route.ClassAt(pilot.Arc)}, {toGo / 1000:F2} km to go, {_watch.Shifts} re-anchors, {LvAt(p)}") + (pilot is LaneFollower f ? "; " + f.Said : ""));
         }
 
         if (_to != null && toGo < ArriveM) { Log(Inv($"arrived: {toGo:F0} m from the destination")); Finish(); return; }
@@ -233,6 +297,22 @@ public partial class LongDriveCheck : Node
             else Log(Inv($"the road's end after {_driven:F0} m"));
             Finish();
         }
+    }
+
+    // the route from 10 m behind the car to 40 m on: its height against the ground's and its road (a block's cause)
+    private string RouteHere(ILongDriveDriver pilot)
+    {
+        var r = pilot.Route;
+        var parts = new List<string>();
+        for (float d = -10f; d <= 40f; d += 5f)
+        {
+            float s = pilot.Arc + d;
+            var c = r.Centre[r.NearestCentreIndexAt(s)];
+            string ground = _ground.TryGetHeight(c, out float g) ? Inv($"{c.Y - g:+0.0;-0.0}") : "?";
+            var kind = r.Kinds is { Count: > 0 } k ? k[Mathf.Min(r.NearestCentreIndexAt(s), k.Count - 1)] : default;
+            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
+        }
+        return "the route here: " + string.Join("; ", parts);
     }
 
     // behind and above the car, looking at it: the origin follows this camera
@@ -246,42 +326,61 @@ public partial class LongDriveCheck : Node
         _camera.LookAt(p.GlobalPosition + Vector3.Up, Vector3.Up);
     }
 
+    /// <summary>Sideways and braking accelerations a drive keeps to in town streets (m/s²): a driver's, not a racer's.</summary>
+    private const float BendAccel = 2.5f, BrakeAccel = 3f, BendLookM = 150f;
+
     /// <summary>
-    /// The speed a drive keeps to on a class of road (m/s): Swiss limits, the lower where a class spans town and country
-    /// (a Major road through a village is 50, between them 80: 60 is safe on both at the racing pilot's cornering).
+    /// The speed (m/s) from which every bend of the route's own line in the next <see cref="BendLookM"/> m can be reached
+    /// braking at <see cref="BrakeAccel"/> and taken at <see cref="BendAccel"/> sideways. The line the car follows, not the
+    /// racing line (which smooths a junction's corner away: a turn from a Major road into a side street came at 35 km/h
+    /// and went 8 m wide, #1744). The bend at a point: the turn between the 4 m before it and the 4 m after, over 4 m.
     /// </summary>
-    public static float SpeedOf(RoadClass c) => c switch
+    private static float BendSpeed(RaceRoute route, float arc)
     {
-        RoadClass.Motorway => 110f,
-        RoadClass.Expressway => 90f,
-        RoadClass.Major => 60f,
-        RoadClass.Road => 50f,
-        _ => 40f,
-    } / 3.6f;
+        var c = route.Centre;
+        float best = float.MaxValue;
+        for (float d = 0; d <= BendLookM; d += 2f)
+        {
+            int i = route.NearestCentreIndexAt(arc + d);
+            if (i < 2 || i + 2 >= c.Count) continue;
+            var a = RaceRoute.Flat(c[i] - c[i - 2]);
+            var b = RaceRoute.Flat(c[i + 2] - c[i]);
+            if (a.LengthSquared() < 1e-4f || b.LengthSquared() < 1e-4f) continue;
+            float k = Mathf.Abs(RaceRoute.SignedAngle(a, b)) / (0.5f * (a.Length() + b.Length()));
+            if (k < 1e-4f) continue;
+            best = Mathf.Min(best, Mathf.Sqrt(BendAccel / k + 2f * BrakeAccel * d));
+        }
+        return Mathf.Max(best, 2.5f);
+    }
+
+    /// <summary>The speed a drive keeps to on a class of road (m/s): <see cref="RaceRoute.DriveSpeed"/>, which plans by it too.</summary>
+    public static float SpeedOf(RoadClass c) => RaceRoute.DriveSpeed(c);
 
     // the classes a route runs on and their lengths, for the log
     private static string ClassesSaid(RaceRoute r)
     {
-        if (r.Classes is not { Count: > 0 } c) return "";
+        if (r.Kinds is not { Count: > 0 } c) return "";
         var metres = new Dictionary<RoadClass, float>();
-        foreach (var k in c) metres[k] = metres.GetValueOrDefault(k) + 2f;
+        foreach (var (k, _) in c) metres[k] = metres.GetValueOrDefault(k) + 2f;
         var parts = new List<string>();
         foreach (var (k, m) in metres) parts.Add(Inv($"{k} {m / 1000:F1} km"));
         return "; " + string.Join(", ", parts);
     }
 
-    // what is in front of the car (a stall's or a crash's cause): the first body 12 m ahead at bumper height
-    private string Ahead(FootPlayer p)
+    // what is in front of the car (a stall's or a crash's cause): the first body 12 m ahead at bumper height, else at a kerb's
+    private string Ahead(FootPlayer p) { var high = Ahead(p, 0.7f); return high.StartsWith("nothing") ? Ahead(p, 0.3f) : high; }
+
+    private string Ahead(FootPlayer p, float height)
     {
         var fwd = (-p.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
-        var from = p.GlobalPosition + Vector3.Up * 0.7f;
+        var from = p.GlobalPosition + Vector3.Up * height;
         var q = PhysicsRayQueryParameters3D.Create(from, from + fwd * 12f);
         q.Exclude = new Godot.Collections.Array<Rid> { p.GetRid() };
         var hit = p.GetWorld3D().DirectSpaceState.IntersectRay(q);
-        if (hit.Count == 0) return "nothing 12 m ahead";
+        if (hit.Count == 0) return Inv($"nothing 12 m ahead at {height:F1} m");
         var c = hit["collider"].AsGodotObject() as Node;
         float d = from.DistanceTo(hit["position"].AsVector3());
-        return Inv($"ahead at {d:F1} m: {c?.GetType().Name} {c?.GetPath()}");
+        return Inv($"ahead at {d:F1} m ({height:F1} m up): {c?.GetType().Name} {c?.GetPath()}");
     }
 
     // LV95 as notation only, for the log
@@ -295,6 +394,8 @@ public partial class LongDriveCheck : Node
         _phase = -1;
         if (_player != null) _player.RideControls = null;
         _watch.Judge();
+        if (_pilot is LaneFollower backed && backed.BackOffs > 0) Log(Inv($"backed off {backed.BackOffs} time(s) from something it ran into"));
+        if (_blocked.Count > _known) Log(Inv($"{_blocked.Count - _known} place(s) found blocked and driven round (see the blocked: lines)"));
         Log(Inv($"drove {_driven / 1000:F2} km in {_t:F0} s ({(_t > 0 ? _driven / _t * 3.6 : 0):F0} km/h on average, top {_top * 3.6f:F0})"));
         Log(_watch.Summary().Replace("[longdrive] ", ""));
         foreach (var f in _watch.Faults) Fault(f);
