@@ -14,7 +14,10 @@ namespace UnitSport.Terrain.Earth;
 public partial class DressCheck : Node
 {
     private const double TimeoutS = 240, SettleS = 25, Reach = 600, HerdReach = 2500;
-    private const float MaxOffM = 2.5f;
+    /// <summary>A slot this far off what stands under it is off; more than <see cref="MaxOffShare"/> of them, or one past <see cref="WorstOffM"/>, fails.</summary>
+    private const float MaxOffM = 1.5f, WorstOffM = 6f;
+    private const double MaxOffShare = 0.02;
+    private int _checked, _off;
     /// <summary>How far a steamer's origin may sit from its still water level (its draught and more).</summary>
     private const float SteamerSlack = 4f;
 
@@ -43,15 +46,17 @@ public partial class DressCheck : Node
         _since += delta;
         if ((_poll += delta) < 1.0 || _since < SettleS) return;
         _poll = 0;
+        _checked = _off = 0;
         var found = Count(out float worst, out string worstWhat);
         bool all = Expected().All(k => found.TryGetValue(k, out int c) && c > 0);
         if (!all && _since < TimeoutS) return;
         _done = true;
         foreach (var (k, c) in found) GD.Print($"{Log} {k}: {c}");
-        GD.Print(FormattableString.Invariant($"{Log} worst height off the ground: {worst:F2} m ({worstWhat}), after {_since:F0} s; {_earth.Status}"));
+        GD.Print(FormattableString.Invariant($"{Log} worst height off the ground: {worst:F2} m ({worstWhat}), {_off} of {_checked} slots over {MaxOffM:F1} m, after {_since:F0} s; {_earth.Status}"));
         var missing = Expected().Where(k => !found.TryGetValue(k, out int c) || c == 0).ToList();
         if (missing.Count > 0) GD.Print($"{Log} RESULT: FAILED (nothing from {string.Join(", ", missing)} within reach)");
-        else if (worst > MaxOffM) GD.Print(FormattableString.Invariant($"{Log} RESULT: FAILED ({worstWhat} is {worst:F2} m off the ground)"));
+        else if (worst > WorstOffM || _off > MaxOffShare * Math.Max(1, _checked))
+            GD.Print(FormattableString.Invariant($"{Log} RESULT: FAILED ({_off} of {_checked} slots over {MaxOffM:F1} m off the ground, the worst {worstWhat} at {worst:F2} m)"));
         else GD.Print($"{Log} RESULT: ok");
     }
 
@@ -104,7 +109,10 @@ public partial class DressCheck : Node
                 if (at.HorizontalDistanceTo(_stop) > Reach) continue;
                 fleet++;
                 var world = origin.ToWorld(at);
-                if (OffWhatIsUnder(world) is { } off && off > w) (w, ww) = (off, $"slot {s.Owner}#{s.Ordinal}");
+                if (OffWhatIsUnder(world) is not { } off) continue;
+                _checked++;
+                if (off > MaxOffM) _off++;
+                if (off > w) (w, ww) = (off, $"slot {s.Owner}#{s.Ordinal}");
             }
         found["fleet"] = fleet;
 
