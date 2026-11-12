@@ -81,3 +81,17 @@ sweep), `StadiumCheck` (`--stadiumcheck`). Plan and later phases (stage, lights,
   than the real ones) up to the roof's underside, and the roof's solid part up to its translucent ring;
   both windings. `ConcertDirector` hangs it on the owning tile in the stadium frame. Occlusion culling is on
   with the building cells (`ChunkManager.ApplyOcclusion`).
+- **On leaves** (`--frame earth`, #1723, `StadiumLeaves`): a stadium is placed once on the Earth (`Place`: its centre
+  spot on the ground the leaves' drawn meshes give there, its axes the pitch's true azimuth in the east-up-south at the
+  spot). Every leaf it reaches (`Reaches`: `StadiumCatalog.Reach` + 600 m) sweeps the whole bowl in its anchor frame
+  (`StadiumBuilder.BuildIn`) and keeps the triangles whose middle lies on it (`CubeKey.FromEcef`): each belongs to one
+  leaf, so a bowl across a leaf edge is neither cut off nor drawn twice (19 of 34 venues cross one). The faces join
+  the leaf's ground in `LeafCollision.Prepare` (both ways round, like a site's slabs, not the building body #1707
+  lets walkers through at doors); the mesh joins the leaf's prop mesh in `EarthWorld.Furnish`. The data inside a
+  facade goes as a leaf is read (`StadiumLeaves.Clip`, through `LeafStore.Dress` set by `EarthLeaves`, and in
+  `EarthLeaves.Made` for generated and course leaves), on the level placement so reading a leaf never reads
+  another. `ConcertDirector` hangs the rig on the leaf under the centre spot (`OwnsOnLeaf`, `LeafFrame`, #1722).
+  `--stadiumcheck` builds every venue leaf by leaf and compares it with the whole bowl. Shot: Stade de la Tuilière
+  (4 leaves) on B4, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks --leaves
+  D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --origin 2537360,1155029 --at 2537360,1155029`; with an
+  empty `--chunks` folder the leaves draw no furniture (`EarthWorld.Flat` needs the flat streamer's materials).
