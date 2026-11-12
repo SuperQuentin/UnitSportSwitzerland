@@ -50,7 +50,10 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
   more there and `ChatProbe.Joined` waits 300 s at least: each client makes its own fill leaves first.
 - `tools/earthdresscheck.sh` (`--dresscheck`, `--dressexpect`): an earth server and a client on B4's real leaves at
   Geneva, Nyon, the airport and Riddes; parked fleets, the airport's stands (server), herds, birds, the Nyon steamer,
-  and parked slots on what stands under them (2 % may be off by 1.5 m, none by 6 m). Skipped without D:.
+  and parked slots on what stands under them (2 % may be off by 1.5 m, none by 6 m), and the yards' and sites' pallets
+  on a client (#1769: the `yard` stop at Les Acacias; `rhone` by Pont des Bergues on request). `--dressverbose` lists
+  each pallet in its tile's frame, `--dressyard E_N_I` one yard's box, door, facade and roads, `--dresssettle S` waits
+  longer for late yards. Skipped without D:.
 - **Ski slopes and marina boats** (#1735): a stand-in serves its leaf's slopes on its 1 m grid
   (`StandInChunkSource.LoadPistesAsync`, `LeafStandIn.Pistes`) and its leaf's still water as a 2 m layer
   (`LoadLeafWaterAsync`); a jetty belongs to the leaf its middle is on (`DormantSlots.LeafOf`). `world/ski-snow`,

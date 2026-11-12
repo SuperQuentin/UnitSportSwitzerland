@@ -87,7 +87,18 @@ public readonly record struct DoorSpan(float Along, float Half);
 /// yard's own u, which is centred on the main door and so not on the facade, and the doors along
 /// it. What the apron's pallets and forklift keep clear of. Worked out by <c>SiteYards.Fronts</c>.
 /// </summary>
-public readonly record struct SiteFront(SiteYard Yard, float From, float To, DoorSpan[] Doors);
+public readonly record struct SiteFront(SiteYard Yard, float From, float To, DoorSpan[] Doors)
+{
+    /// <summary>
+    /// The facade's span along a yard (#1769): the main door's own straight run of wall, the door in its middle
+    /// (<paramref name="door"/> along the yard, <paramref name="run"/> long), within the plan box's extent along it
+    /// (<paramref name="boxFrom"/>..<paramref name="boxTo"/>). A city block's door wall stands at any angle to its box,
+    /// whose extent along that wall ran 188 m on a 158 x 102 m block in Geneva: pallets out across the street and the
+    /// forklift 90 m off. A door with no run (on a curved wall's piece, <paramref name="run"/> 0) keeps the box's extent.
+    /// </summary>
+    public static (float From, float To) Span(float boxFrom, float boxTo, float door, float run) =>
+        run <= 0 ? (boxFrom, boxTo) : (MathF.Max(boxFrom, door - run / 2), MathF.Min(boxTo, door + run / 2));
+}
 
 /// <summary>
 /// Where dormant vehicles stand, as a <b>pure function of the tile's own bytes</b> — so the server
