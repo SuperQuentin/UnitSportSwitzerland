@@ -407,6 +407,8 @@ src/Core/ReanchorWatch    quick  @realtime --frame earth --reanchorcheck --chunk
 src/Core/OriginShifter    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
 src/Player/LongDriveCheck quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
 src/Core/ReanchorWatch    quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
+src/Player/ReanchorCamCheck quick @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
+src/Player/FootPlayer.cs  quick  @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
 src/Core/ReanchorCheck    full   tools/reanchorcheck.sh
 src/Core/ReanchorWatch    full   tools/reanchorcheck.sh
 src/Core/OriginShifter    full   tools/reanchorcheck.sh
