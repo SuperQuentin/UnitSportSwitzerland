@@ -36,6 +36,8 @@ villeneuve_a9     judge 20%  -- trees seeded per cube lattice vertex on earth, p
 # - invented fill: ground past the real tiles (2548/1148 has no LV95 tile) is generated on both sides, each its own way;
 #   the lake band at its back is #1669's, still looked at by eye on each run
 lavaux_bonfires   judge  -- invented fill past the real tiles on both sides (flat's generated forest, earth's fill); the lake band is #1669
+#   since #1746 earth's fill stands on the 500 m Swiss relief: the Signal de Chexbres (~655 m), 250-500 m south-east of
+#   the camera, hides Leman as it does from that spot; flat's invented ground there has no hill (31 -> 39 % cartoon)
 # - far villages: past the near leaves the far valley has no villages, rivers or roads until #1657 bakes them in
 riddes_aerial     judge  -- the far valley without villages, rivers or roads until #1657
 riddes_valley     judge  -- the far valley without villages, rivers or roads until #1657
