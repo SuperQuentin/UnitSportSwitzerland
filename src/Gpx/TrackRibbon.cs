@@ -15,7 +15,8 @@ public partial class TrackRibbon : MeshInstance3D
 {
     private GpxTrack _track = null!;
     public GpxTrack Track => _track;
-    private ChunkManager _chunks = null!;
+    /// <summary>The ground it is draped on (#1739: the earth leaves too).</summary>
+    private IWorldGround _ground = null!;
     private WorldOrigin _origin = null!;
     private double _sinceRebuild = double.MaxValue;
     private int _lastResolved = -1;
@@ -51,11 +52,24 @@ public partial class TrackRibbon : MeshInstance3D
     /// </summary>
     private const float RoadClearance = 0.25f;
 
-    public static TrackRibbon Create(GpxTrack track, ChunkManager chunks, WorldOrigin origin) => new()
+    /// <summary>
+    /// A course's plane point on the ground under it, and the ground's altitude there; null off the loaded ground. Draped by
+    /// altitude, not by setting the world's y: on the earth world y is the vertical at the frame's origin only, and a point
+    /// moved along it 2 km away lands off its place (#1739).
+    /// </summary>
+    internal static (Vector3 At, double Alt)? Drape(GpxTrack track, double x, double y, double ele, IWorldGround ground, WorldOrigin origin)
+    {
+        var p = origin.ToWorld(track.At(x, y, ele));
+        if (!ground.TryGetHeight(p, out float h)) return null;
+        double alt = origin.ToGlobal(p with { Y = h }).Alt;
+        return (origin.ToWorld(track.At(x, y, alt)), alt);
+    }
+
+    public static TrackRibbon Create(GpxTrack track, IWorldGround ground, WorldOrigin origin) => new()
     {
         Name = "TrackRibbon",
         _track = track,
-        _chunks = chunks,
+        _ground = ground,
         _origin = origin,
         MaterialOverride = RibbonMaterial(),
     };
@@ -113,7 +127,7 @@ public partial class TrackRibbon : MeshInstance3D
             // Only include stretches whose terrain has streamed in — the ribbon is still gated on
             // that even for a road-matched course, because a segment with nothing under it would
             // hang in space at the edge of the loaded world.
-            if (!_chunks.Ground.TryGetHeight(p, out float ground))
+            if (Drape(_track, x, y, ele, _ground, _origin) is not { } draped)
             {
                 prev = null;
                 continue;
@@ -122,7 +136,7 @@ public partial class TrackRibbon : MeshInstance3D
 
             // A road-matched course carries the road surface, decks and bores included. Re-draping
             // it would run the course line down into the gorge the bridge crosses.
-            if (!_track.ElevationIsSurface) p.Y = ground;
+            if (!_track.ElevationIsSurface) p = draped.At;
 
             var dir = prev.HasValue ? p - prev.Value : Vector3.Forward;
             dir.Y = 0;

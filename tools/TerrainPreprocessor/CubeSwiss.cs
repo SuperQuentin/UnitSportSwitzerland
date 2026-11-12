@@ -13,14 +13,16 @@ namespace UnitSport.Tools.Preprocessor;
 ///
 /// <code>
 /// --cube-swiss --cube-leaves DIR --etopo DIR --cube-out GLOBAL_DIR [--cube-levels 5-13] [--jobs N] [--cube-check] [--tlm GPKG]
+///   [--relief FILE|none]
 /// </code>
 ///
 /// <para>
 /// <b>Each height is a function of its lattice point</b>, as G1 asked (#1455): a level's vertex is the
 /// tent-weighted mean (¼ ½ ¼ each way) of the next finer level's nine lattice points round it, the
 /// same points from either neighbour, so edges stay the same bits. A vertex whose nine are not all
-/// there (past the leaves' edge) takes ETOPO's footprint mean instead, as levels 0-4 do; so does every
-/// vertex of a tile with no leaves under it. Built for every tile over the leaves and its three
+/// there (past the leaves' edge) takes the coarse ground's footprint mean instead: the game's 500 m Swiss relief
+/// where it holds (<c>--relief</c>, #1746: ETOPO's 1.8 km cells drew the far Alps as smooth grey sheets), ETOPO
+/// beyond it, as levels 0-4 do; so does every vertex of a tile with no leaves under it. Built for every tile over the leaves and its three
 /// siblings, so the renderer can always split a parent into all four.
 /// </para>
 /// </summary>
@@ -31,6 +33,8 @@ public static class CubeSwiss
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
         string? leavesDir = null, etopo = null, outDir = null, tlm = null;
+        // past the leaves the game's 500 m Swiss relief, not ETOPO's 1.8 km cells (#1746); "none" for ETOPO alone
+        string? relief = File.Exists(DefaultRelief) ? DefaultRelief : null;
         int minLevel = 5, maxLevel = 13, jobs = Environment.ProcessorCount;
         bool check = false;
         for (int i = 0; i < args.Count; i++)
@@ -49,6 +53,7 @@ public static class CubeSwiss
                 case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--cube-check": check = true; break;
                 case "--tlm": tlm = args[++i]; break;
+                case "--relief": relief = args[++i] is var r2 && r2 == "none" ? null : r2; break;
                 default: Console.Error.WriteLine($"--cube-swiss: unknown option {args[i]}"); return 2;
             }
         }
@@ -81,6 +86,12 @@ public static class CubeSwiss
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s, {wet} with water at its surface; lakes at {string.Join(", ", lakes.Select(l => l.ToString("F1", CultureInfo.InvariantCulture)))} m"));
         var grid = EtopoGrid.Load(etopo, jobs);
+        if (relief != null)
+        {
+            grid.Regional = SwissRelief.Load(relief);
+            Console.WriteLine($"cube-swiss: past the leaves the Swiss relief ({relief}, {grid.Regional.Spacing:F0} m), ETOPO beyond it");
+        }
+        else Console.WriteLine("cube-swiss: past the leaves ETOPO alone (no --relief)");
         // swissTLM3D's big lakes past the leaves (#1678): ETOPO smears a steep shore kilometres into them
         SwissLakeMask? lakeMask = null;
         if (tlm != null)
@@ -146,7 +157,7 @@ public static class CubeSwiss
             manifest.Levels.Add(rebuilt);
             if (check) foreach (var (k, t) in made) built[k] = t;
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"cube-swiss: level {level}: {made.Count} tiles, {100.0 * fromLeaves / Math.Max(1, fromLeaves + fromEtopo):F1} % of vertices from the finer level (the rest ETOPO), {sw.Elapsed.TotalSeconds:F0} s"));
+                $"cube-swiss: level {level}: {made.Count} tiles, {100.0 * fromLeaves / Math.Max(1, fromLeaves + fromEtopo):F1} % of vertices from the finer level (the rest the coarse ground: the Swiss relief or ETOPO), {sw.Elapsed.TotalSeconds:F0} s"));
             // the next level averages this one
             finer = made;
         }
@@ -157,7 +168,7 @@ public static class CubeSwiss
         manifest.BundleLevel = manifest.Levels[^1].BundleLevel;
         string leafSources = string.Join("; ", leafManifest.Sources);
         manifest.Sources.RemoveAll(s => s.StartsWith("levels ", StringComparison.Ordinal));
-        manifest.Sources.Add($"levels {minLevel}-{maxLevel}: averaged from {leafManifest.Tiles.Count} level-{leafLevel} leaves ({leafSources}), ETOPO past them");
+        manifest.Sources.Add($"levels {minLevel}-{maxLevel}: averaged from {leafManifest.Tiles.Count} level-{leafLevel} leaves ({leafSources}), {(relief != null ? "past them the game's 500 m Swiss relief (swisstopo swissALTIRegio), then ETOPO" : "ETOPO past them")}");
         File.WriteAllText(manifestPath, manifest.ToJson());
         int colourless = manifest.Levels.Count(l => l.Level >= minLevel && l.Level <= maxLevel && l.Albedo == 0);
         if (uncoloured > 0 || colourless > 0)
@@ -193,6 +204,9 @@ public static class CubeSwiss
         var lakes = CubeSurface.LakeLevels(levels, LakeSamples);
         return (tiles, wet, lakes);
     }
+
+    /// <summary>The game's 500 m Swiss relief, from the repository root (#1746).</summary>
+    private const string DefaultRelief = "src/Terrain/swiss_relief.gz";
 
     /// <summary>How far past the leaves' box TLM's lakes are read, metres.</summary>
     private const double LakeMarginM = 15_000;

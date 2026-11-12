@@ -440,6 +440,19 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
 
     private readonly HashSet<FootPlayer> _guests = new();
 
+    /// <summary>
+    /// Too high to wait for the ground (#1741): more than <see cref="CollisionReach.AirGapM"/> over it, where no world
+    /// builds collision for a body (the earth world's patches never come under an airborne one), or a flyer in the air
+    /// over ground not streamed yet. An aircraft left flying by its pilot stood still in the sky under <c>--frame
+    /// earth</c> waiting for a patch that never came, and the walker who stood up fell out of it.
+    /// </summary>
+    private bool Aloft()
+    {
+        if (IsOnFloor()) return false;
+        if (Terrain!.TryGetHeight(GlobalPosition, out float ground)) return GlobalPosition.Y - ground > CollisionReach.AirGapM;
+        return Ride is Flyer;
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         // a parked bus: people walking in it or up to its doors do not shove it (#162)
@@ -461,7 +474,7 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity, Core.IO
 
         // hold still until the ground is there; a vehicle dropped over unstreamed terrain would
         // otherwise fall through the world before it arrived
-        if (!inside && Terrain != null && !Terrain.HasCollisionAt(GlobalPosition)) return;
+        if (!inside && Terrain != null && !Terrain.HasCollisionAt(GlobalPosition) && !Aloft()) return;
 
         // the player's safety net, for vehicles: never under the terrain surface
         if (!inside && Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground) && GlobalPosition.Y < ground - 1f

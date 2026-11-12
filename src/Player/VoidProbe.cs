@@ -23,7 +23,8 @@ public partial class VoidProbe : Node
 
     private const float Deep = 30f;
 
-    private readonly ChunkManager _chunks;
+    /// <summary>The world's ground: the flat tiles' or the earth leaves' (#1740).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private FootPlayer? _player;
     private Vector3 _standing;
@@ -32,9 +33,9 @@ public partial class VoidProbe : Node
     private int _failures;
     private bool _done;
 
-    public VoidProbe(ChunkManager chunks, WorldOrigin origin)
+    public VoidProbe(IWorldGround ground, WorldOrigin origin)
     {
-        _chunks = chunks;
+        _ground = ground;
         _origin = origin;
         // after the player's own step, so a check sees what the rescue did
         ProcessPriority = 1;
@@ -50,10 +51,12 @@ public partial class VoidProbe : Node
         {
             var (e, n) = SpawnPoint.ParseTarget();
             var at = _origin.ToWorld(e, n, 0);
-            if (!_chunks.Ground.TryGetHeight(at, out float g)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks?.Ground };
+            if (!_ground.TryGetHeight(at, out float g)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
+            // its collision round it: the tool's spectator stays high, beyond the earth world's 300 m of it (#1740)
+            _ground.AddAnchor(_player, collision: true);
             GD.Print($"[voidcheck] player at LV95 {e:F0}/{n:F0}, ground {g:F1} m");
             return;
         }
@@ -143,7 +146,7 @@ public partial class VoidProbe : Node
         }
     }
 
-    private float Ground(FootPlayer p) => _chunks.Ground.TryGetHeight(p.GlobalPosition, out float g) ? g : float.NaN;
+    private float Ground(FootPlayer p) => _ground.TryGetHeight(p.GlobalPosition, out float g) ? g : float.NaN;
 
     private void Drop(FootPlayer p, float y, string what)
     {
@@ -165,7 +168,7 @@ public partial class VoidProbe : Node
         foreach (float d in new[] { 60_000f, 150_000f, 400_000f })
         {
             var at = _standing + new Vector3(d, 0, 0);
-            if (!_chunks.Ground.TryGetHeight(at, out _)) return at with { Y = -600f };
+            if (!_ground.TryGetHeight(at, out _)) return at with { Y = -600f };
         }
         return null;
     }
@@ -180,6 +183,11 @@ public partial class VoidProbe : Node
     {
         _stage += by;
         _t = 0;
+    }
+
+    public override void _ExitTree()
+    {
+        if (_player != null && _ground.HasAnchor(_player)) _ground.RemoveAnchor(_player);
     }
 
     private void Finish(int code)

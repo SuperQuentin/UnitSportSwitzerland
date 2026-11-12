@@ -47,6 +47,18 @@
 - **The vehicle's velocity is measured from where it is drawn**, level, smoothed (`DeckSet.Velocity`).
   A copy's published velocity is not its motion: one standing bus read 33 m/s, and the passenger
   boarding it shot through the roof.
+- **A flyer's speeds are a flyer's** (#1741, `MotionCaps`): drawn motion past 120 m/s was read as a jump and a new
+  deck started from at most 60 m/s, so under an A320 at 122 m/s the deck kept ~60 m/s and every physics step threw
+  the walker forward into the cockpit wall until the carry put them back. A flyer's caps are 400 m/s; a ground
+  vehicle's stay 120 and 60.
+- **An aircraft nobody flies keeps flying** (#1741, `VehicleBody.Aloft`): a parked body waits for the ground's
+  collision under it before it steps (one dropped over unstreamed ground would fall through), but not more than
+  `CollisionReach.AirGapM` over the ground, or a flyer in the air over ground not streamed yet. The earth world
+  builds no collision patch under an airborne body, so an A320 left in flight stood still in the sky under `--frame
+  earth`, and the walker who stood up was never on a deck and fell. The flat world's cabin row passed only because
+  the aircraft froze there too, over the fixture's edge, and the walk got through while it stood.
+- **A check aims a walk in `FootPlayer.DeckFrame`** (`CabinCheck.Pose`, `FreighterCheck.Pose`): in flight the drawn
+  frame leads the walker's by a frame's motion (2 m at 122 m/s), and a walk aimed from it pointed the wrong way.
 - **The vehicle ignores its guests** (`WatchGuests`, called by a driven walkable vehicle's host and
   by a parked one): every player within a metre of its decks is excepted from its hull. Without it,
   on the driver's peer the walking player's copy overlapped the hull at the door and the bus was

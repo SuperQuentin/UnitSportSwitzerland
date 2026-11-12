@@ -21,7 +21,7 @@ public partial class ClientWorld
         // a check's partner body is where it stands, not where the local player is (offline the service asks one body)
         var position = adventure.PositionOf;
         adventure.PositionOf = peer => together.PairPeer != 0 && peer == together.PairPeer ? together.Body(peer)?.Global : position?.Invoke(peer);
-        together.GlacierAt = g => _chunks != null && _worldOrigin is { } o && _chunks.Ground.TryGetCover(o.ToWorld(g), out var cover)
+        together.GlacierAt = g => Ground is { } ground && _worldOrigin is { } o && ground.TryGetCover(o.ToWorld(g), out var cover)
             ? cover is Terrain.Format.CoverClass.Glacier or Terrain.Format.CoverClass.Snowfield : null;
         AddChild(new TogetherChip());
         AddChild(new FonduePanel());

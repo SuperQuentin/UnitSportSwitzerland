@@ -17,7 +17,8 @@ public partial class TrialRunner : Node3D
 {
     private readonly Func<FootPlayer?> _me;
     private readonly Func<WorldOrigin?> _origin;
-    private readonly Func<ChunkManager?> _chunks;
+    /// <summary>The world's ground, the earth leaves under --frame earth (#1739).</summary>
+    private readonly Func<IWorldGround?> _ground;
     private readonly List<MeshInstance3D> _gates = new();
     private readonly List<GhostTrack.Sample> _samples = new();
     private Runner? _ghost;
@@ -32,11 +33,11 @@ public partial class TrialRunner : Node3D
     /// <summary>A ghost runs beside us (checks).</summary>
     public bool HasGhost => _ghost != null;
 
-    public TrialRunner(Func<FootPlayer?> me, Func<WorldOrigin?> origin, Func<ChunkManager?> chunks)
+    public TrialRunner(Func<FootPlayer?> me, Func<WorldOrigin?> origin, Func<IWorldGround?> ground)
     {
         _me = me;
         _origin = origin;
-        _chunks = chunks;
+        _ground = ground;
         Name = "TrialRunner";
     }
 
@@ -104,7 +105,7 @@ public partial class TrialRunner : Node3D
 
     private void OnGhost(string id, List<GhostTrack.Sample> samples)
     {
-        if (RewardService.Instance?.Trial?.Id != id || _chunks() is not { } chunks || _origin() is not { } origin || samples.Count < 2) return;
+        if (RewardService.Instance?.Trial?.Id != id || _ground() is not { } ground || _origin() is not { } origin || samples.Count < 2) return;
         // the ghost's LV95 samples on a plane centred on its start, as a GPX track lies (#1514)
         var places = samples.Select(s => GlobalPos.FromLv95(s.E, s.N, s.Alt)).ToList();
         var plane = UnitSport.Terrain.Format.MapProjection.At(places[0].Ecef);
@@ -119,7 +120,7 @@ public partial class TrialRunner : Node3D
         }
         var track = new GpxTrack { Name = "Ghost", Plane = plane, Points = points, HasTiming = true, ElevationIsSurface = true };
         _ghost?.QueueFree();
-        _ghost = Runner.Create(track, chunks, origin, 1);
+        _ghost = Runner.Create(track, ground, origin, 1);
         GetParent().AddChild(_ghost);
         _ghostStart = RewardService.Instance!.Trial!.Since;
         GD.Print($"[rewards] racing a ghost of {id} ({samples.Count} samples)");
