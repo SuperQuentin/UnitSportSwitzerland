@@ -493,7 +493,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _worldOrigin = origin;
         GD.Print($"[world] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}");
         // the frame this world plays in, every run: a net check under --frame earth fails on a silent flat fallback (#1683)
-        GD.Print($"[frame] {(earth ? "earth" : "flat")}");
+        FrameReport.Say(earth);
 
         // The floating origin (#185): world space follows the camera, so float32 stays precise
         // however far it goes. Online too: positions on the wire are LV95, never world space.
@@ -958,6 +958,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
             new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
+            // G2 D's bar (#1710): no pop at a re-anchor; a long drive and a long flight across many
+            new(ReanchorCheck.Requested, ToolAnchor.AtTarget, _ => ReanchorCheckFor(origin)),
+            new(LongDriveCheck.Requested, ToolAnchor.AtTarget, _ => new LongDriveCheck(Ground!, origin)),
+            new(LongFlightCheck.Requested, ToolAnchor.AtTarget, _ => new LongFlightCheck(Ground, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(chunks, origin)),
@@ -1896,6 +1900,19 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // course metres east and north; the world's x east, -z north
         var (reach, dir) = new[] { (maxX, Vector3.Right), (-minX, Vector3.Left), (maxY, Vector3.Forward), (-minY, Vector3.Back) }.MaxBy(r => r.Item1);
         return new Terrain.Earth.EarthCheck(Ground!, origin) { Earth = _earth, Source = WorldSource, ExpectTown = false, Direction = dir, TravelM = (float)reach + 300f, LegM = (float)reach + 300f, Speed = 60f };
+    }
+
+    /// <summary>
+    /// <c>--reanchorcheck</c> (#1710): on a fixture course along its longest reach from the start (legs that long, 200 m
+    /// short of its end); on a region north-east, in 3 km legs.
+    /// </summary>
+    private ReanchorCheck ReanchorCheckFor(WorldOrigin origin)
+    {
+        if (_earth?.Leaves.IsFixture != true || Systems.FixtureCourse is not { } name || Terrain.Fixture.FixtureCourse.Create(name) is not { } course)
+            return new ReanchorCheck(Ground!, origin);
+        var (minX, minY, maxX, maxY) = course.Bounds(0);
+        var (reach, dir) = new[] { (maxX, Vector3.Right), (-minX, Vector3.Left), (maxY, Vector3.Forward), (-minY, Vector3.Back) }.MaxBy(r => r.Item1);
+        return new ReanchorCheck(Ground!, origin) { Direction = dir, LegM = Mathf.Max(500f, (float)reach - 200f) };
     }
 
     /// <summary>

@@ -232,6 +232,7 @@ public partial class Main : Node
 	public override void _ExitTree()
 	{
 		SaveQueue.Flush();
+		FrameReport.AtExit();
 		GameSettings.PrintTestPeakMemory();
 	}
 }

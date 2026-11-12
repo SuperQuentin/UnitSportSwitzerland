@@ -10,8 +10,11 @@ OUT=test_output; mkdir -p $OUT
 [ -n "$GUARD_LOCK_HELD" ] || { guard_lock; trap guard_unlock EXIT; }
 guard_wait_ram 2
 guard_test_userdata $OUT/userdata_sparklecheck   # its own user:// (#1378): not the player's, no focus, no sound
-guard_run 300 $OUT/sparklecheck.log ${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} "$GODOT" --path . -- --sparklecheck --world fixture
+# TEST_FRAME (#1710, tools/lib/guard.sh): the frame it plays in, checked in its log at the end
+guard_frame_args
+guard_run 300 $OUT/sparklecheck.log ${GUARD_GODOT_ENV[@]+"${GUARD_GODOT_ENV[@]}"} "$GODOT" --path . -- --sparklecheck --world fixture ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"}
 grep -h "\[sparkles\]" $OUT/sparklecheck.log
 grep -q "\[sparkles\] RESULT: ok" $OUT/sparklecheck.log && code=0 || code=1
 echo "[sparklecheck] RESULT: $([ $code = 0 ] && echo ok || echo FAILED)"
+guard_frame_check sparklecheck $OUT/sparklecheck.log || code=1
 exit $code
