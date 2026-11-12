@@ -35,7 +35,8 @@ public partial class ReanchorCamCheck : Node
     /// <summary>The anchor is put this far short of the threshold behind the player: what is walked (driven) to cross it.</summary>
     private const float WalkBehindM = 30f, DriveBehindM = 80f;
     private float BehindM => _phase <= 3 ? WalkBehindM : DriveBehindM;
-    private const double TimeoutS = 240;
+    // wall clock: the leaves stream on threads, and a loaded machine read them in 53 s
+    private const double TimeoutS = 540;   // under the test runner's 600 s, so it reports first
 
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
@@ -48,7 +49,7 @@ public partial class ReanchorCamCheck : Node
     private AutoPilot? _pilot;
     private Vector3 _fwd;
     private int _phase, _shifts, _phaseShifts;
-    private double _t, _phaseT, _settle;
+    private double _t, _phaseT, _settle, _said;
     private ulong _startMs;
 
     // the camera's offset from the body, last frame's, and every step with no re-anchor in it
@@ -119,6 +120,7 @@ public partial class ReanchorCamCheck : Node
     private void FindRoad()
     {
         var at = _start.GlobalPosition with { Y = 0 };
+        if (_phaseT > _said + 15) { _said = _phaseT; Log(Inv($"waiting {_phaseT:F0} s for the road: collision {_ground.HasCollisionAt(at)}, route {(_routeTask == null ? "not asked" : _routeTask.Status.ToString())}")); }
         if (!_ground.HasCollisionAt(at) || !_ground.TryGetHeight(at, out float h)) return;
         _start.GlobalPosition = at with { Y = h + 20f };
         if (_ground.Content is not { } source) return;
