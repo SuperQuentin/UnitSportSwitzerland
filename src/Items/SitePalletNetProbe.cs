@@ -253,8 +253,18 @@ public partial class SitePalletNetProbe : ChatProbe
                 var dir = new Vector3(Mathf.Cos(k * Mathf.Tau / 8f), 0, Mathf.Sin(k * Mathf.Tau / 8f));
                 var at = near + dir * d;
                 if (me.Terrain == null || !me.Terrain.TryGetHeight(at, out float g)) continue;
+                // the ground round it, to the box's corners: level enough to set a pallet down, and the box lifted just
+                // clear of its highest point, so it tests what stands there, not a slope (the leaves' real relief, #1731)
+                float lo = g, hi = g;
+                bool known = true;
+                foreach (var (cx, cz) in new[] { (-7f, -7f), (7f, -7f), (7f, 7f), (-7f, 7f) })
+                {
+                    if (!me.Terrain.TryGetHeight(at + new Vector3(cx, 0, cz), out float c)) { known = false; break; }
+                    (lo, hi) = (Math.Min(lo, c), Math.Max(hi, c));
+                }
+                if (!known || hi - lo > 2.5f) continue;
                 at.Y = g + 0.3f;
-                box.Transform = new Transform3D(Basis.Identity, at + Vector3.Up * 1.8f);
+                box.Transform = new Transform3D(Basis.Identity, new Vector3(at.X, hi + 0.4f + 1.5f, at.Z));
                 if (space.IntersectShape(box, 1).Count == 0) return at;
             }
         return null;
