@@ -55,6 +55,22 @@ public partial class PlaytestDirector : Node
     private LoopbackHttp? _http;
     private bool _stageSet;
     private bool _settingUp;
+    private bool _resuming = CmdArgs.Has("--playtest-resume"), _relaunching;
+
+    /// <summary>
+    /// Between a launch and a scenario ready to play: a relaunch reopening its scenario, a setup running, or the game
+    /// about to quit for a relaunch. The panel covers the world meanwhile, so nobody plays what is still being built.
+    /// </summary>
+    public bool Busy => _resuming || _settingUp || _relaunching;
+
+    /// <summary>What <see cref="Busy"/> is waiting for, one line for the loading cover.</summary>
+    public string BusyWhat => _relaunching ? "Relaunching the game…"
+        : _local() == null ? "Loading the world…"
+        : _settingUp && Current != null ? $"Setting up: {Current.Title}"
+        : "Reopening the scenario…";
+
+    /// <summary>Whether a local player stands in the world yet (the loading cover's world line).</summary>
+    public bool WorldReady => _local() != null;
 
     /// <summary>The scenarios, ordered as the panel lists them.</summary>
     public List<PlaytestEntry> Entries { get; private set; } = [];
@@ -207,7 +223,25 @@ public partial class PlaytestDirector : Node
     {
         if (string.IsNullOrWhiteSpace(text)) return;
         Say("you", text);
-        Tell($"player: {text}");
+        _ = TellWithPlace(text);
+    }
+
+    /// <summary>
+    /// The player's message to Claude with where they stand and what they see: recorded, it is also a note
+    /// (a screenshot and a top view, as F12), so "here" and "this" in it can be looked at.
+    /// </summary>
+    private async Task TellWithPlace(string text)
+    {
+        string where = "";
+        if (_local() is { } me)
+        {
+            var at = me.Global.Lv95;
+            float heading = Mathf.PosMod(-Mathf.RadToDeg(me.GlobalRotation.Y), 360f);
+            where = $" [at LV95 {at.E:F0},{at.N:F0} alt {me.Global.Alt:F0} m, heading {heading:F0}°, {PlaytestContext.Label(me.Ride)}";
+        }
+        int note = await NoteWithShot(text, "chat");
+        if (note > 0) where += (where.Length > 0 ? "; " : " [") + $"note {note}: notes/{note:000}.png";
+        Tell($"player: {text}{(where.Length > 0 ? where + "]" : "")}");
     }
 
     private void Tell(string evt)
@@ -371,6 +405,8 @@ public partial class PlaytestDirector : Node
     /// </summary>
     public void Relaunch(PlaytestEntry? scenario, bool rebuild, string? course = null, string[]? flags = null)
     {
+        _relaunching = true;
+        Changed?.Invoke();
         var state = new ResumeState(scenario?.Id ?? Current?.Id, Current == scenario ? _ctx.Params : null,
             Conversation.TakeLast(60).ToList(), rebuild ? "rebuilt" : "relaunched");
         using (var f = Godot.FileAccess.Open(ResumeFile, Godot.FileAccess.ModeFlags.Write))
@@ -430,6 +466,12 @@ public partial class PlaytestDirector : Node
     }
 
     private async Task Resume()
+    {
+        try { await ResumeInner(); }
+        finally { _resuming = false; Changed?.Invoke(); }
+    }
+
+    private async Task ResumeInner()
     {
         if (!Godot.FileAccess.FileExists(ResumeFile)) return;
         string json = Godot.FileAccess.GetFileAsString(ResumeFile);
