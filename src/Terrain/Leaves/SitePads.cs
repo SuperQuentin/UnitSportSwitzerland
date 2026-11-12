@@ -17,8 +17,6 @@ public static class SitePads
     /// <summary>Metres round a site's area where its graded ground blends back to the leaf's.</summary>
     public const float Skirt = 8f;
 
-    /// <summary>Metres of level working ground round a site's area, inside the pad: room for a telehandler or a loader beside the yard.</summary>
-    public const float Apron = 12f;
 
     /// <summary>
     /// Grades the pads into a leaf's bare vertices (anchor frame, x y z), before the roads are blended onto them: level

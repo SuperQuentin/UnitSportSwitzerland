@@ -127,8 +127,7 @@ public sealed class LeafStand
         foreach (var site in sites)
         {
             var a = site.Area;
-            // the site's area and a working apron round it, level: the machines' room beside the yard (#1731)
-            var rect = new SiteRect(a.Center - shift, a.AxisU, a.Width + 2 * SitePads.Apron, a.Depth + 2 * SitePads.Apron);
+            var rect = new SiteRect(a.Center - shift, a.AxisU, a.Width, a.Depth);
             double sum = 0;
             int count = 0;
             for (int k = 0; k + 2 < vertices.Length; k += 3)
