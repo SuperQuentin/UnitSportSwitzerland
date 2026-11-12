@@ -60,7 +60,7 @@ public static class CraneDriver
     public static async Task Drive(Node host, string plus, string minus, Func<float> error, float coast, float? accept = null)
     {
         float done = accept ?? coast * 0.25f;
-        for (int pass = 0; pass < 8; pass++)
+        for (int pass = 0; pass < 16; pass++)
         {
             float e = error();
             if (Mathf.Abs(e) <= done) return;
