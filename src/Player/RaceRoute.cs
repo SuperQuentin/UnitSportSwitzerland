@@ -64,15 +64,17 @@ public sealed class RaceRoute
 
     /// <summary>The route from <paramref name="at"/>, a point in <paramref name="frame"/>, which the route is in too (and <paramref name="toward"/>).</summary>
     /// <summary>
-    /// An earth world's roads round a point (#1742): the 7 × 7 leaves round it (~4 km across), each leaf's own roads in its
-    /// anchor frame (<see cref="TilePlace.OnAnchor"/>, which the lane graph places through the leaf), read three at a time.
+    /// An earth world's roads round a point (#1742): the (2 <paramref name="reach"/> + 1)² leaves round it (a leaf is ~0.6 km),
+    /// each leaf's own roads in its anchor frame (<see cref="TilePlace.OnAnchor"/>, which the lane graph places through the
+    /// leaf), read three at a time.
     /// </summary>
-    private static async Task<List<RoadTile>> LeafTilesAround(System.Func<CubeKey, RoadTile?> leafRoads, OriginFrame frame, Vector3 at, CancellationToken ct)
+    private static async Task<List<RoadTile>> LeafTilesAround(System.Func<CubeKey, RoadTile?> leafRoads, OriginFrame frame, Vector3 at,
+        int reach, CancellationToken ct)
     {
         var centre = CubeKey.FromEcef(frame.ToGlobal(at).Ecef, Terrain.Leaves.LeafFrames.LeafLevel);
         var keys = new List<CubeKey>();
-        for (int dx = -3; dx <= 3; dx++)
-            for (int dy = -3; dy <= 3; dy++)
+        for (int dx = -reach; dx <= reach; dx++)
+            for (int dy = -reach; dy <= reach; dy++)
                 if (centre.Neighbour(dx, dy) is { } k) keys.Add(k);
         using var slots = new SemaphoreSlim(3);
         var loads = keys.Select(async k =>
@@ -99,8 +101,22 @@ public sealed class RaceRoute
         System.Func<CubeKey, RoadTile?>? leafRoads = null)
     {
         var tiles = new List<RoadTile>();
+        LaneGraph graph;
+        bool Usable(RoadSegment s) =>
+            s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
+            && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0;
         if (leafRoads != null && frame.Axes != null)
-            tiles = await LeafTilesAround(leafRoads, frame, at, ct);
+        {
+            // the 7 x 7 leaves round the point (~4 km), then 15 x 15 (~9 km, as far as the 9 x 9 LV95 tiles below reach)
+            // when none of them has a road to race on: a sparse generated fill has its roads kilometres apart
+            tiles = await LeafTilesAround(leafRoads, frame, at, 3, ct);
+            graph = LaneGraph.Build(tiles, frame, Usable);
+            if (graph.Edges.Count == 0)
+            {
+                tiles = await LeafTilesAround(leafRoads, frame, at, 7, ct);
+                graph = LaneGraph.Build(tiles, frame, Usable);
+            }
+        }
         else
         {
             var (e, n) = frame.ToLv95(at);
@@ -112,10 +128,8 @@ public sealed class RaceRoute
                     try { if (await source.LoadRoadsAsync(here.Neighbour(dx, dz), ct) is { } t) tiles.Add(t); }
                     catch (System.Exception) { /* no roads there */ }
                 }
+            graph = LaneGraph.Build(tiles, frame, Usable);
         }
-        var graph = LaneGraph.Build(tiles, frame, s =>
-            s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Major or RoadClass.Road or RoadClass.Minor
-            && s.Class <= smallest && (s.Flags & (RoadFlags.Stairs | RoadFlags.Tunnel)) == 0);
 
         LaneEdge? best = null;
         float bestD = float.MaxValue, bestS = 0;

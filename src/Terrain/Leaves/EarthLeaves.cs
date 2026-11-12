@@ -44,7 +44,9 @@ public sealed class EarthLeaves : ILeafSource
     {
         Real = real;
         // the data inside a stadium's facade goes as a region's leaf is read (#1723), as an LV95 tile's (StadiumClip)
+#if GODOT // the offline tools (BlendCheck) build without Godot and without stadiums
         real.Dress ??= Stadiums.StadiumLeaves.Clip;
+#endif
         _generated = generated;
         _roads = roads;
         _domain = domain;
@@ -256,7 +258,9 @@ public sealed class EarthLeaves : ILeafSource
                 {
                     // a generated, merged or course leaf loses what stands inside a stadium too (#1723)
                     if (make(k) is not { } made) return null;
+#if GODOT
                     Stadiums.StadiumLeaves.Clip(made);
+#endif
                     return made;
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
