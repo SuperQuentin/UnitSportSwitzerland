@@ -1318,3 +1318,12 @@ src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --sy
 src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
 tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
 src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh
+# #1735: the fun course's ski slope (its snow layer, poles, the skier's lookup) and its jetty's moored boats, on both frames
+src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+shaders/body/piste_snow      quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/LeafCollision/StandInChunkSource quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Leaves/LeafStandIn quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Vehicles/VehicleSlot     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15

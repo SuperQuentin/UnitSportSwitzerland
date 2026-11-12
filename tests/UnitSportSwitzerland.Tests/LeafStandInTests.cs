@@ -71,4 +71,44 @@ public class LeafStandInTests
         var trees = LeafStandIn.Trees([new TreeInstance(1, 400, -2, 12, 0)]);
         Assert.Equal((501f, 498f), (trees[0].X, trees[0].Z));
     }
+
+    [Fact]
+    public void A_leafs_slopes_lie_on_its_stand_in_where_the_leaf_has_them()
+    {
+        // a leaf whose lattice has a slope over its middle third (x and z within 100 m of the anchor)
+        int bits = CubeKey.LatticeBits(LeafFrames.LeafLevel), n = (1 << bits) + 1;
+        var v = CubeGeometry.Vertices(Geneva, bits, new float[n * n].Select(_ => 1200f).ToArray());
+        var slot = new byte[n * n];
+        var aux = new ushort[n * n];
+        for (int k = 0; k < n * n; k++)
+            if (Math.Abs(v[3 * k]) < 100 && Math.Abs(v[3 * k + 2]) < 100)
+            {
+                slot[k] = 1;
+                aux[k] = PisteFormat.PackAux(1f, v[3 * k]);
+            }
+        var record = new PisteRecord(9, PisteType.Downhill, PisteDifficulty.Easy, PisteGrooming.Classic, false, 30, "Middle", "",
+            [-100f, 50f, 100f, -50f], 1190, 1210);
+        var leaf = new PisteTile(default, [record], slot, aux);
+        var id = LeafStandIn.Id(Geneva);
+        var nearest = new int[WaterTile.Size * WaterTile.Size];
+        LeafStandIn.Grid(id, v, n, nearest);
+
+        var t = LeafStandIn.Pistes(leaf, id, n, nearest)!;
+        Assert.Equal(id, t.Id);
+        // the path: (x, z) of the anchor to (east, north) from the stand-in's south-west corner; altitudes kept
+        Assert.Equal([400f, 450f, 600f, 550f], t.Records[0].Path);
+        Assert.Equal((1190f, 1210f), (t.Records[0].AltLow, t.Records[0].AltHigh));
+        Assert.Equal(-100f, leaf.Records[0].Path[0]);   // the leaf's own copy untouched
+        // the raster: the slope 80 m round the stand-in's middle, none 120 m out or off the leaf
+        var (e, n0) = id.Global(500, 500);
+        foreach (var (dx, dz, on) in new[] { (0, 0, true), (80, -80, true), (-80, 60, true), (120, 0, false), (0, -130, false), (-400, -400, false) })
+        {
+            var (pe, pn) = id.Global(500 + dx, 500 + dz);
+            Assert.Equal(on, t.At(pe, pn) is { Name: "Middle" });
+        }
+        Assert.Equal(1f, PisteFormat.MaskOf(t.Aux[t.IndexAt(e, n0)]));
+        // the groom phase follows the leaf's: 37 m east of the anchor
+        Assert.Equal(37f, PisteFormat.PhaseOf(t.Aux[t.IndexAt(id.Global(537, 500).E, id.Global(537, 500).N)]), 1.5f);
+        Assert.Null(LeafStandIn.Pistes(null, id, n, nearest));
+    }
 }

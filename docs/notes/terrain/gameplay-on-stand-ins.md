@@ -44,7 +44,12 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
 - `tools/earthdresscheck.sh` (`--dresscheck`, `--dressexpect`): an earth server and a client on B4's real leaves at
   Geneva, Nyon, the airport and Riddes; parked fleets, the airport's stands (server), herds, birds, the Nyon steamer,
   and parked slots on what stands under them (2 % may be off by 1.5 m, none by 6 m). Skipped without D:.
+- **Ski slopes and marina boats** (#1735): a stand-in serves its leaf's slopes on its 1 m grid
+  (`StandInChunkSource.LoadPistesAsync`, `LeafStandIn.Pistes`) and its leaf's still water as a 2 m layer
+  (`LoadLeafWaterAsync`); a jetty belongs to the leaf its middle is on (`DormantSlots.LeafOf`). `world/ski-snow`,
+  `world/landings`.
 - Open: generated building sites are rare on fill leaves and their yards unlevelled (#1731: `cranenetcheck`,
-  `sitepalletnetcheck` under earth). Not on stand-ins yet: concerts (no stadium bowls on leaves, #1723/#1725),
-  slope markers and pistes, the marina's boats; birds, herds, ropeways, UFO sightings and the egg still read LV95
-  tiles (the region's real tiles; nothing on the fill).
+  `sitepalletnetcheck` under earth). Not on stand-ins yet: concerts (no stadium bowls on leaves, #1723/#1725), the
+  piers and jetties' decks (`PierMeshBuilder`: the marina's boats lie at their berths beside no deck), the ski map
+  and ski races (`SlopeMap`, `RaceRoute.BuildPisteAsync`: LV95 tiles); birds, herds, ropeways, UFO sightings and the
+  egg still read LV95 tiles (the region's real tiles; nothing on the fill).
