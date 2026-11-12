@@ -70,14 +70,56 @@ public sealed class TileContext
     public required Func<Vector3, CoverClass?> CoverAtWorld { get; init; }
     public required IReadOnlyList<OccasionTowns.Town> Towns { get; init; }
 
-    public float? HeightAt(Vector3 local) => HeightAtWorld(Origin + local);
-    public CoverClass? CoverAt(Vector3 local) => CoverAtWorld(Origin + local);
+    /// <summary>
+    /// The tile node's whole frame in the world (#1729): on the earth world a leaf's stand-in tile is turned and
+    /// tilted, so a tile-local point is not <see cref="Origin"/> plus itself. Unset: the flat tile's, a shift alone.
+    /// </summary>
+    public Transform3D? Frame { get; init; }
+    /// <summary>The ground's tile (by its content name) under a world point, when the ground can say: the earth world's leaves.</summary>
+    public Func<Vector3, TileId>? TileAtWorld { get; init; }
+
+    private Transform3D? _toLocal;
+    private Transform3D ToWorldFrame => Frame ?? new Transform3D(Basis.Identity, Origin);
+    private Transform3D ToLocalFrame => _toLocal ??= ToWorldFrame.AffineInverse();
+
+    /// <summary>The ground's height under a tile-local point, as a tile-local height.</summary>
+    public float? HeightAt(Vector3 local)
+    {
+        var w = ToWorldFrame * (local with { Y = 0 });
+        return HeightAtWorld(w) is { } h ? (ToLocalFrame * (w with { Y = h })).Y : null;
+    }
+
+    public CoverClass? CoverAt(Vector3 local) => CoverAtWorld(ToWorldFrame * (local with { Y = 0 }));
 
     /// <summary>LV95 of a tile-local point.</summary>
-    public (double E, double N) Lv95(Vector3 local) => World.ToLv95(Origin + local);
+    public (double E, double N) Lv95(Vector3 local) => World.ToLv95(ToWorldFrame * local);
 
     /// <summary>Tile-local position of an LV95 point (altitude 0).</summary>
-    public Vector3 Local(double e, double n) => World.ToWorld(e, n, 0) - Origin;
+    public Vector3 Local(double e, double n) => ToLocalFrame * World.ToWorld(e, n, 0);
+
+    /// <summary>
+    /// Whether a tile-local point is on this tile, at least <paramref name="margin"/> inside it: by the ground's own
+    /// tiles where it names them (a leaf's stand-in spans less than its square, its neighbours overlap it, #1729),
+    /// else by the tile's square.
+    /// </summary>
+    public bool InTile(Vector3 local, float margin = 0f)
+    {
+        if (TileAtWorld is { } at)
+        {
+            if (at(ToWorldFrame * local) != Id) return false;
+            if (margin <= 0f) return true;
+            foreach (var o in Margins)
+                if (at(ToWorldFrame * (local + o * margin)) != Id) return false;
+            return true;
+        }
+        float size = (float)ChunkFormat.TileSizeM;
+        return local.X >= margin && local.X < size - margin && local.Z > margin && local.Z <= size - margin;
+    }
+
+    private static readonly Vector3[] Margins = [new(1, 0, 0), new(-1, 0, 0), new(0, 0, 1), new(0, 0, -1)];
+
+    /// <summary>Whether an LV95 place lies on this tile (<see cref="InTile"/>), a leaf's stand-in included.</summary>
+    public bool Holds(double e, double n) => InTile(Local(e, n));
 
     /// <summary>
     /// A stable identity for a door, for hashing and hunt keys. A building's extra doors (#498)
