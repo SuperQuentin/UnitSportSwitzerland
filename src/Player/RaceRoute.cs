@@ -571,7 +571,7 @@ public sealed class RaceRoute
             .MinBy(e => e.Points.Min(p => Flat(p - to).LengthSquared()))!;
         var cost = new Dictionary<(LaneEdge, bool), float>();
         var from = new Dictionary<(LaneEdge, bool), (LaneEdge, bool)>();
-        var open = new PriorityQueue<(LaneEdge E, bool F), float>();
+        var open = new PriorityQueue<(LaneEdge Edge, bool F), float>();
         foreach (bool f in new[] { true, false })
         {
             if (keepRight && !against && Against(start, f)) continue;
@@ -581,16 +581,16 @@ public sealed class RaceRoute
             cost[(start, f)] = c;
             open.Enqueue((start, f), c);
         }
-        (LaneEdge E, bool F)? hit = null;
+        (LaneEdge Edge, bool F)? hit = null;
         while (open.TryDequeue(out var cur, out float c))
         {
             if (c > cost[cur]) continue;
-            if (cur.E == goal) { hit = cur; break; }
-            var (endP, _) = cur.E.Sample(cur.F ? cur.E.Length : 0);
-            long key = cur.F ? cur.E.KeyEnd : cur.E.KeyStart;
+            if (cur.Edge == goal) { hit = cur; break; }
+            var (endP, _) = cur.Edge.Sample(cur.F ? cur.Edge.Length : 0);
+            long key = cur.F ? cur.Edge.KeyEnd : cur.Edge.KeyStart;
             foreach (var next in graph.Leaving(key).Concat(ends.Near(endP, against)))
             {
-                if (next.Item1 == cur.E || banned?.Contains(next.Item1) == true) continue;
+                if (next.Item1 == cur.Edge || banned?.Contains(next.Item1) == true) continue;
                 float nc = c + Cost(next.Item1, next.Item1.Length, next.Item2);
                 if (cost.TryGetValue(next, out float old) && old <= nc) continue;
                 cost[next] = nc;
@@ -602,7 +602,7 @@ public sealed class RaceRoute
         if (hit == null && keepRight && cost.Count > 0)
             hit = cost.Keys.MinBy(k => Mathf.Min(Flat(k.Item1.Points[0] - to).LengthSquared(), Flat(k.Item1.Points[^1] - to).LengthSquared()));
         if (hit is not { } last) return null;
-        var chain = new List<(LaneEdge E, bool F)> { last };
+        var chain = new List<(LaneEdge Edge, bool F)> { last };
         while (from.TryGetValue(chain[^1], out var prev)) chain.Add(prev);
         chain.Reverse();
         var pts = new List<(Vector3, float)>();
@@ -622,12 +622,12 @@ public sealed class RaceRoute
             }
         }
         // on past the goal: a run-out (a race's), or the destination's street to its end (a drive's)
-        var tail = keepRight ? Along(last.E, last.F, chain.Count == 1 ? (last.F ? s : last.E.Length - s) : 0f)
-            : Walk(graph, ends, last.E, last.F, chain.Count == 1 ? (last.F ? s : last.E.Length - s) : 0f);
+        var tail = keepRight ? Along(last.Edge, last.F, chain.Count == 1 ? (last.F ? s : last.Edge.Length - s) : 0f)
+            : Walk(graph, ends, last.Edge, last.F, chain.Count == 1 ? (last.F ? s : last.Edge.Length - s) : 0f);
         if (keepRight && tail.Count >= 2)
-            Bridge(pts, kinds, tail[0].P, Flat(tail[1].P - tail[0].P).Normalized(), tail[0].W, (last.E.Class, last.E.Flags));
+            Bridge(pts, kinds, tail[0].P, Flat(tail[1].P - tail[0].P).Normalized(), tail[0].W, (last.Edge.Class, last.Edge.Flags));
         pts.AddRange(tail);
-        for (int k = 0; k < tail.Count; k++) kinds?.Add((last.E.Class, last.E.Flags));
+        for (int k = 0; k < tail.Count; k++) kinds?.Add((last.Edge.Class, last.Edge.Flags));
         return pts;
     }
 
