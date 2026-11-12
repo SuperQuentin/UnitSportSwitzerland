@@ -1263,7 +1263,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Build.GadgetNetProbe.Role != null) AddChild(new Build.GadgetNetProbe(items));
         // waking a dormant car over the network (#499), checked on the remote peer
         if (Vehicles.ParkingNetProbe.Mode() is { } parkingNet && _chunks.Origin is { } parkingOrigin)
-            AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, parkingOrigin));
+            AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, Ground!, parkingOrigin));
         if (World.ContainerNetProbe.Role is { } containerNet && _chunks.Origin is { } containerOrigin)
             AddChild(new World.ContainerNetProbe(containerNet, _chunks, containerOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());

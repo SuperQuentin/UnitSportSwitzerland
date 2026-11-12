@@ -27,16 +27,19 @@ namespace UnitSport.Vehicles;
 public partial class ParkingNetProbe : Node
 {
     private readonly ChunkManager _chunks;
+    /// <summary>The world's ground, flat or leaves: under <c>--frame earth</c> the streamer lists no tiles (#1684 follow-up).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly bool _wakes;
     private double _t;
     private int _phase;
     private VehicleSlot? _slot;
 
-    public ParkingNetProbe(string mode, ChunkManager chunks, WorldOrigin origin)
+    public ParkingNetProbe(string mode, ChunkManager chunks, IWorldGround ground, WorldOrigin origin)
     {
         Name = "ParkingNetProbe";
         _chunks = chunks;
+        _ground = ground;
         _origin = origin;
         _wakes = mode.StartsWith("A", StringComparison.OrdinalIgnoreCase);
     }
@@ -116,9 +119,18 @@ public partial class ParkingNetProbe : Node
                 .Where(s => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader or (int)RideKind.MiniExcavator or (int)RideKind.CompactRoller or (int)RideKind.Telehandler or (int)RideKind.WheelLoaderForks or (int)RideKind.MiniDumper && (!_wakes || !dormant.IsAwake(s)))
                 .OrderBy(s => s.NodeName, StringComparer.Ordinal)
                 .Cast<VehicleSlot?>().FirstOrDefault();
-        if (_chunks.Source is not { } source) return null;
+        if (_ground.Content is not { } source) return null;
         var loaded = new List<(TileId Id, int Stride)>();
         _chunks.ListTiles(loaded);
+        // the earth world streams leaves, not the streamer's tiles: the course's tiles round the anchor, read from the
+        // source, are laid where the leaves are (as ParkingProbe, fixtures-on-earth)
+        if (loaded.Count == 0 && _ground.Anchors.Count > 0)
+        {
+            var under = _origin.TileAt(_ground.Anchors[0].GlobalPosition);
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                    loaded.Add((under.Neighbour(dx, dz), 1));
+        }
 
         foreach (var (id, _) in loaded)
         {
