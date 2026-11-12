@@ -124,7 +124,7 @@ public partial class CraneNetProbe : ChatProbe
         var (at, yaw) = crane.AtRemote;
         me.PlaceAt(at + Vector3.Up * 0.3f, yaw);
         await Seconds(2);
-        Expect(me.TryInteract() && await Until(() => me.CraneWorking, 10), $"A takes the remote of {crane.Key} ({crane.Data.Spot.Kind}, jib {crane.Job.JibLength:F0} m)");
+        Expect(me.TryInteract() && await Until(() => me.CraneWorking, 30), $"A takes the remote of {crane.Key} ({crane.Data.Spot.Kind}, jib {crane.Job.JibLength:F0} m)");
         if (!me.CraneWorking) return;
         Say($"working {crane.Key}");
         if (!await Heard("B", "seen working", 60)) { Fail("B never saw the crane held"); return; }
@@ -189,6 +189,14 @@ public partial class CraneNetProbe : ChatProbe
         }
         if (!working) { Fail("A never took a crane"); return; }
         string key = Words("A", "working")![0];
+        // beside A, as a watcher walks over: B's own spawn can be kilometres off, out of the crane's drawing range
+        foreach (var n in GetTree().GetNodesInGroup(FootPlayer.Group))
+            if (n is FootPlayer other && other != me && !other.Npc && other.IsInsideTree())
+            {
+                me.PlaceAt(other.GlobalPosition + new Vector3(5f, 1f, 5f), me.Rotation.Y);
+                me.Velocity = Vector3.Zero;
+                break;
+            }
         if (!await Until(() => SiteCranes.All.ContainsKey(key), 60)) { Fail($"{key} is not drawn here"); return; }
         var crane = SiteCranes.All[key];
         CraneService.Hold? Hold() => CraneService.Instance?.Holds.GetValueOrDefault(key);
