@@ -145,7 +145,7 @@ public partial class SitePalletNetProbe : ChatProbe
         if (!await Heard("B", "seen", 30)) { Fail("B never saw it lifted"); return; }
 
         // out of the cramped yard to open ground with it on the forks, so the loader has room after
-        if (OpenGround(me, pallet.GlobalPosition) is not { } open) { Fail("no open ground near the site"); return; }
+        if (await OpenGround(me, pallet.GlobalPosition) is not { } open) { Fail("no open ground near the site"); return; }
         me.RideControls = () => new RideInput(0f, 0f, 0f, false);
         var toward = (open - me.GlobalPosition) with { Y = 0 };
         me.PlaceAt(open, Yaw(toward.Normalized()));
@@ -242,22 +242,65 @@ public partial class SitePalletNetProbe : ChatProbe
     /// A clear patch of ground near <paramref name="near"/>, 30 to 60 m off: a 16 m square with nothing
     /// standing in it (a box query, A's own body aside), on the drawn terrain. Null if none.
     /// </summary>
-    private static Vector3? OpenGround(FootPlayer me, Vector3 near)
+    private static async Task<Vector3?> OpenGround(FootPlayer me, Vector3 near)
     {
-        var space = me.GetWorld3D().DirectSpaceState;
-        var box = new PhysicsShapeQueryParameters3D { Shape = new BoxShape3D { Size = new Vector3(16f, 3f, 16f) } };
-        box.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
-        foreach (float d in new[] { 30f, 45f, 60f })
+        // the points to try: rings round the site, and along the roads near it (graded and clear: a site's open ground on
+        // the leaves' real relief, #1731)
+        var points = new List<Vector3>();
+        foreach (float d in new[] { 30f, 45f, 60f, 75f, 90f, 105f, 120f })
             for (int k = 0; k < 8; k++)
+                points.Add(near + new Vector3(Mathf.Cos(k * Mathf.Tau / 8f), 0, Mathf.Sin(k * Mathf.Tau / 8f)) * d);
+        if (me.Terrain is { Content: { } source } ground)
+        {
+            var here = ground.ContentName(ground.TileAt(near));
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    var id = here.Neighbour(dx, dz);
+                    if (await source.LoadRoadsAsync(id) is not { } roads) continue;
+                    foreach (var seg in roads.Segments)
+                    {
+                        if (seg.Class is not (Terrain.Format.RoadClass.Road or Terrain.Format.RoadClass.Minor or Terrain.Format.RoadClass.Major)) continue;
+                        if ((seg.Flags & (Terrain.Format.RoadFlags.Tunnel | Terrain.Format.RoadFlags.Bridge)) != 0) continue;
+                        for (int i = 0; i < seg.PointCount; i++)
+                        {
+                            var w = Terrain.Construction.SiteTiles.WorldLocal(me, id, new Vector3(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]));
+                            float far = new Vector2(w.X - near.X, w.Z - near.Z).Length();
+                            if (far > 25f && far < 150f) points.Add(w);
+                        }
+                    }
+                }
+        }
+        var space = me.GetWorld3D().DirectSpaceState;
+        var box = new PhysicsShapeQueryParameters3D { Shape = new BoxShape3D { Size = new Vector3(10f, 3f, 10f) } };
+        box.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
+        // the flattest clear spot of all (on the leaves' real relief nothing may be quite level, #1731)
+        Vector3? best = null;
+        float flattest = 1.8f, leastSpread = float.MaxValue;
+        int unknown = 0, steep = 0, blocked = 0;
+        foreach (var point in points)
             {
-                var dir = new Vector3(Mathf.Cos(k * Mathf.Tau / 8f), 0, Mathf.Sin(k * Mathf.Tau / 8f));
-                var at = near + dir * d;
+                var at = point;
                 if (me.Terrain == null || !me.Terrain.TryGetHeight(at, out float g)) continue;
+                // the ground round it, to the box's corners: level enough to set a pallet down, and the box lifted just
+                // clear of its highest point, so it tests what stands there, not a slope (the leaves' real relief, #1731)
+                float lo = g, hi = g;
+                bool known = true;
+                foreach (var (cx, cz) in new[] { (-5f, -5f), (5f, -5f), (5f, 5f), (-5f, 5f) })
+                {
+                    if (!me.Terrain.TryGetHeight(at + new Vector3(cx, 0, cz), out float c)) { known = false; break; }
+                    (lo, hi) = (Math.Min(lo, c), Math.Max(hi, c));
+                }
+                if (!known) { unknown++; continue; }
+                leastSpread = Math.Min(leastSpread, hi - lo);
+                if (hi - lo >= flattest) { steep++; continue; }   // level enough for the loader after it, too
                 at.Y = g + 0.3f;
-                box.Transform = new Transform3D(Basis.Identity, at + Vector3.Up * 1.8f);
-                if (space.IntersectShape(box, 1).Count == 0) return at;
+                box.Transform = new Transform3D(Basis.Identity, new Vector3(at.X, hi + 0.4f + 1.5f, at.Z));
+                if (space.IntersectShape(box, 1).Count == 0) (best, flattest) = (at, hi - lo);
+                else blocked++;
             }
-        return null;
+        GD.Print(FormattableString.Invariant($"[sitepalletnet]   open ground: {points.Count} spots tried, {unknown} with no ground known, {steep} too steep (the least {leastSpread:F2} m across), {blocked} blocked; {(best is { } b ? $"{flattest:F2} m across, {new Vector2(b.X - near.X, b.Z - near.Z).Length():F0} m off" : "none")}"));
+        return best;
     }
 
     /// <summary>
@@ -285,7 +328,7 @@ public partial class SitePalletNetProbe : ChatProbe
     {
         if (!await Heard("A", "hello", 90)) { Fail("A never said hello"); return; }
         // out of the yard: both spawn at the site, and B standing by a pallet blocks A's way in to it
-        if (OpenGround(me, me.GlobalPosition) is { } aside) me.PlaceAt(aside, 0f);
+        if (await OpenGround(me, me.GlobalPosition) is { } aside) me.PlaceAt(aside, 0f);
         await Seconds(1);
         Say("ready");
         if (!await Heard("A", "lifted", 120)) { Fail("A never lifted a site pallet"); return; }
