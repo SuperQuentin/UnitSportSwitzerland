@@ -31,7 +31,12 @@
   (→ `LootTables.Seasonal`, one extra roll drawn **last** so no-occasion loot is bit-identical),
   `HuntReward`, `Hat` (→ replicated `FootPlayer.HeadwearId` via `OccasionHats`; a worn hat item,
   `Inventory.Worn`, wins). Towns come from `OccasionTowns`: `places.json`, else
-  `ProceduralWorld.VillageCentres()` for the generated world. The hunt is taken with the
+  `ProceduralWorld.VillageCentres()` for the generated world, found round a tile's middle by its place in the
+  world (#1729). `TileContext` works in the tile node's whole frame (`Frame`): on the earth world a leaf's stand-in
+  tile is turned (~28°) and spans less than its square, so heights, cover and LV95 go through the frame, a place
+  is on the tile when the ground names that tile there (`TileAtWorld`, `Holds`, `InTile`), and spots are read
+  through the node's `GlobalTransform`. The earth world furnishes leaves within 900 m only: `--huntcheck` goes
+  to the nearest town after 10 s without a spot. The hunt is taken with the
   **gather hold** (G), not E — the spots stand beside doors, where E means "go in" — and claims
   are local (`user://occasions/claims.json`, per instance), like `Gathering` and the inventory.
   `ItemId` 37/38 are reserved by the bird-hunting PR (#7); occasions own 39-49. Festivals (#1269) are occasions with the gameplay
