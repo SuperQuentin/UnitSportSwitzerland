@@ -23,6 +23,7 @@ A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --f
 - [ ] Walk up to a building site's skip and press E (pad and VR too) → the panel opens; the other player sees what you take go.
 - [ ] Open a site office's door and walk in; in an apartment block ride the lift with the other player in the cabin → you walk through the doorway (no wall), both ride; nobody is sent back up from inside.
 - [ ] Look at the parked cars and the site machines round you → they stand on the ground, turned as the bays and the road; aiming at one wakes it.
+- [ ] Walk round a building site on a hillside leaf ([#1731](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1731)) → its yard is level, its edges blend into the slope without a cliff, and the road beside it is not buried or floating.
 - [ ] Join a Battle Royale squad with a bot, go down and out → the bot takes your dogtag to a Postauto stop and you come back.
 
 ## Building-site pits on leaves ([#1687](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1687), [#1653](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1653))
