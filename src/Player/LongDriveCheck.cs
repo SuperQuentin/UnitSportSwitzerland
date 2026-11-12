@@ -41,6 +41,10 @@ public partial class LongDriveCheck : Node
     private Camera3D _camera = null!;
     private ReanchorWatch _watch = null!;
     private Task<RaceRoute?>? _next;
+    private int _startTries;
+    private double _retryAt;
+    private const int StartTries = 6;
+    private const float StartStepM = 150f, MinLegM = 200f, LegGainM = 100f, StartBendM = 200f, TightK = 1f / 12f;
     private int _legs, _phase;
     private double _t, _report, _stallT, _belowS, _bestToGo = double.MaxValue, _bestArc;
     private double _driven;
@@ -124,7 +128,24 @@ public partial class LongDriveCheck : Node
         if (!_next.IsCompleted) return;
         var route = _next.IsCompletedSuccessfully ? _next.Result : null;
         _next = null;
-        if (route == null) { Fault("no road near the start"); Finish(); return; }
+        if (route == null || route.Length < MinLegM || (_to != null && TightStart(route) is > 0f))
+        {
+            // a stub (a slip road's piece, a dead end): look again a little further on toward the destination
+            if (_to is { } dest && ++_startTries < StartTries)
+            {
+                var g0 = _origin.ToGlobal(at);
+                var (de, dn, _) = g0.OffsetTo(dest);
+                double d = Math.Max(1.0, Math.Sqrt(de * de + dn * dn));
+                _camera.GlobalPosition = _origin.ToWorld(g0.Moved(de / d * StartStepM, dn / d * StartStepM)) with { Y = _camera.GlobalPosition.Y };
+                string why = route == null ? "missing" : route.Length < MinLegM ? Inv($"a {route.Length:F0} m stub")
+                    : Inv($"a {1f / TightStart(route)!.Value:F1} m bend in its first {StartBendM:F0} m (a junction's corner)");
+                Log(Inv($"the road at the start is {why}: looking again {StartStepM * _startTries:F0} m on"));
+                return;
+            }
+            Fault(route == null ? "no road near the start" : Inv($"only a {route.Length:F0} m road near the start"));
+            Finish();
+            return;
+        }
         route.Follow(_origin.Frame);
         var line = route.Line;
         var p = line.PointAt(10f);
@@ -164,6 +185,9 @@ public partial class LongDriveCheck : Node
         if (pilot == null) { Fault("no pilot for the car"); Finish(); return; }
         pilot.Temperament(0.9f, 0f, 1);
         pilot.Go = true;
+        pilot.Log = m => GD.Print("[longdrivecheck] pilot: " + m);
+        // a drive, not a race: the racing line at a road's speed (flat out it went into the first wall in Geneva, flat and earth alike)
+        if (_to != null) pilot.MaxSpeed = (route.Class == RoadClass.Motorway ? 110f : 60f) / 3.6f;   // a fixture course: flat out
         _pilot = pilot;
         _bestArc = 0;
         _player!.RideControls = () => pilot.Drive((float)GetPhysicsProcessDeltaTime(), true, Array.Empty<AutoPilot.Other>());
@@ -193,7 +217,7 @@ public partial class LongDriveCheck : Node
         double toGo = _to is { } to ? here.HorizontalDistanceTo(to) : pilot.Route.Length - pilot.Arc;
         bool won = _to != null ? toGo < _bestToGo - StallM : pilot.Arc > _bestArc + StallM;
         if (won || _stallT == 0) { _stallT = _t; _bestToGo = Math.Min(_bestToGo, toGo); _bestArc = Math.Max(_bestArc, pilot.Arc); }
-        if (_t - _stallT > StallS) { Fault($"stalled: {StallS:F0} s without {StallM:F0} m won, at {_driven / 1000:F2} km ({LvAt(p)}), {speed * 3.6f:F0} km/h"); Finish(); return; }
+        if (_t - _stallT > StallS) { Fault($"stalled: {StallS:F0} s without {StallM:F0} m won, at {_driven / 1000:F2} km ({LvAt(p)}), {speed * 3.6f:F0} km/h, {Ahead(p)}"); Finish(); return; }
 
         _report += dt;
         if (_report >= 10)
@@ -205,15 +229,18 @@ public partial class LongDriveCheck : Node
         if (_to != null && toGo < ArriveM) { Log(Inv($"arrived: {toGo:F0} m from the destination")); Finish(); return; }
         float left = pilot.Route.Length - pilot.Arc;
         // the next leg, built from a little ahead of the car, before this one runs out
-        if (_to != null && _next == null && left < BuildAheadM)
+        // (a leg shorter than the build-ahead distance gets its next one from its middle on, never every tick)
+        if (_to != null && _next == null && _t >= _retryAt && left < Math.Min(BuildAheadM, pilot.Route.Length * 0.5f))
             _next = BuildLeg(p.GlobalPosition + RaceRoute.Flat(p.WorldVelocity).Normalized() * Mathf.Max(20f, speed));
         if (_next is { IsCompleted: true } task)
         {
             _next = null;
             var route = task.IsCompletedSuccessfully ? task.Result : null;
-            if (route == null || route.Length < 200f)
+            // a new leg only if it ends nearer the destination than this one does (else the car would restart on a copy)
+            if (route == null || route.Length < MinLegM || EndToGo(route) > EndToGo(pilot.Route) - LegGainM)
             {
                 if (left < 60f) { Fault($"no road on toward the destination from {LvAt(p)} ({toGo / 1000:F1} km to go)"); Finish(); return; }
+                _retryAt = _t + 2.0;
             }
             else
             {
@@ -233,6 +260,33 @@ public partial class LongDriveCheck : Node
         var want = p.GlobalPosition - fwd.Normalized() * 10f + Vector3.Up * 4f;
         _camera.GlobalPosition = want;
         _camera.LookAt(p.GlobalPosition + Vector3.Up, Vector3.Up);
+    }
+
+    // the route moved into the current frame first (built on a thread, a re-anchor may have come since)
+    private double EndToGo(RaceRoute r) { r.Follow(_origin.Frame); return _origin.ToGlobal(r.Line.PointAt(r.Length)).HorizontalDistanceTo(_to!.Value); }
+
+    // what is in front of the car (a stall's or a crash's cause): the first body 12 m ahead at bumper height
+    private string Ahead(FootPlayer p)
+    {
+        var fwd = (-p.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+        var from = p.GlobalPosition + Vector3.Up * 0.7f;
+        var q = PhysicsRayQueryParameters3D.Create(from, from + fwd * 12f);
+        q.Exclude = new Godot.Collections.Array<Rid> { p.GetRid() };
+        var hit = p.GetWorld3D().DirectSpaceState.IntersectRay(q);
+        if (hit.Count == 0) return "nothing 12 m ahead";
+        var c = hit["collider"].AsGodotObject() as Node;
+        float d = from.DistanceTo(hit["position"].AsVector3());
+        return Inv($"ahead at {d:F1} m: {c?.GetType().Name} {c?.GetPath()}");
+    }
+
+    // the sharpest bend (1/m) in a route's first metres when tighter than 12 m, else null: a start round a
+    // junction's corner off a side street, where the racing pilot ground along a building (Versoix, #1710)
+    private static float? TightStart(RaceRoute r)
+    {
+        var line = r.Line;
+        float worst = 0f;
+        for (int i = 0; i < line.Arc.Count && line.Arc[i] < StartBendM; i++) worst = Mathf.Max(worst, Mathf.Abs(line.Curvature[i]));
+        return worst > TightK ? worst : null;
     }
 
     private string LvAt(Node3D n) { var (e, nn) = _origin.ToLv95(n.GlobalPosition); return Inv($"LV95 {e:F0}/{nn:F0}"); }

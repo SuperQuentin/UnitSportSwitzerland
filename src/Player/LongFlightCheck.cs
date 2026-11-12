@@ -75,6 +75,15 @@ public partial class LongFlightCheck : Node
             && double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out double lo))
             (lat, lon) = (la, lo);
         _to = GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(new Geodetic(lat, lon, 0)));
+        // the destination's own leaves (--leaves): the end needs one of them drawn under it, not a generated fill leaf
+        _real = Terrain.Leaves.LeafStore.Open(Core.TerrainPaths.FindLeafDir());
+        if (CmdArgs.Value("--tolatlon") is null && !_real.IsLocal(LeafUnder(_to)) && MiddleLeaf(_real.LocalKeys) is { } mid)
+        {
+            // the default (Brest airport) outside the leaves given: fly to their middle (D:'s brest_cube is the city, 9 km off)
+            (lat, lon) = (mid.Centre.LatDeg, mid.Centre.LonDeg);
+            _to = GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(new Geodetic(lat, lon, 0)));
+            Log(Inv($"the default destination is outside the leaves given: flying to their middle leaf {mid}"));
+        }
         if (Core.GameSettings.Current.Airliner != AirlinerHandling.Sim)
         {
             Core.GameSettings.Current.Airliner = AirlinerHandling.Sim;   // the autopilot is the light sim's (a test profile: never saved)
@@ -89,14 +98,28 @@ public partial class LongFlightCheck : Node
         _startKm = GlobalPos.FromLv95(e, n, 0).HorizontalDistanceTo(_to) / 1000;
         Log(Inv($"start LV95 {e:F0}/{n:F0} at {StartAltM:F0} m, to {lat:F4},{lon:F4}: {_startKm:F0} km, cruise {_cruise:F0} m, warp {_warp:F1}x, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}"));
         if (!_origin.Frame.IsAnchor) Fault("the world is not an anchor frame: run with --frame earth");
-        // the destination's own leaves (--leaves): the end needs one of them drawn under it, not a generated fill leaf
-        _real = Terrain.Leaves.LeafStore.Open(Core.TerrainPaths.FindLeafDir());
         Log($"{_real.LocalKeys.Count} real leaves in {Core.TerrainPaths.FindLeafDir()}; the destination's leaf {(_real.IsLocal(LeafUnder(_to)) ? "among them" : "NOT among them")}");
         if (World.Globe.DataDir is { } dir) _pyramid = new PyramidGround(dir);
         else Fault("no globe pyramid (cube_global, --globe)");
     }
 
     public override void _ExitTree() => Engine.TimeScale = 1.0;
+
+    // the leaf nearest the middle of a set (one face, one level: a destination's leaves)
+    private static CubeKey? MiddleLeaf(IReadOnlyCollection<CubeKey> keys)
+    {
+        if (keys.Count == 0) return null;
+        double x = 0, y = 0;
+        foreach (var k in keys) { x += k.X; y += k.Y; }
+        x /= keys.Count; y /= keys.Count;
+        CubeKey best = default; double bestD = double.MaxValue;
+        foreach (var k in keys)
+        {
+            double d = (k.X - x) * (k.X - x) + (k.Y - y) * (k.Y - y);
+            if (d < bestD) (best, bestD) = (k, d);
+        }
+        return best;
+    }
 
     // the whole flight at the warp, the descent at 1x, the start
     private double TimeoutS => 300 + (_stopKm ?? _startKm) * 1000 / 220 / _warp + 900;

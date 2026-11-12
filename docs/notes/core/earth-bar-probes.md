@@ -27,7 +27,12 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
   is `GlobalPos` maths), the next built 1.2 km before the current one ends, from just ahead of the car, and a new
   `AutoPilot` takes over on the move. Fails on a stall (60 s, less than 50 m won), a fall (1 m under the ground for
   0.5 s, or out of the car), a jump. No `--to`: one leg, the longer way along the road (the quick row on `hairpin`).
-  `tools/longdrivecheck.sh`: Geneva → Nyon, the Geneva patch's north end (the D: region is patches, not a corridor).
+  `tools/longdrivecheck.sh`: Versoix → Nyon, the Geneva patch's north end (the D: region is patches, not a corridor).
+  On open roads (`--to`) the pilot is capped (`AutoPilot.MaxSpeed`: 60 km/h, 110 on a motorway), a next leg is taken
+  only if it ends 100 m nearer, and a first leg that is a stub (under 200 m) or opens round a corner tighter than 12 m
+  is looked for again 150 m on. **The D: drive does not get far yet, on flat as on earth**: flat out from Geneva's
+  centre the racing pilot went into the first wall; from Versoix it grazes buildings on narrow Major roads and the
+  chained legs stop toward Nyon (`RaceRoute.Towards` reads 4 tiles). The pilot's own log (`pilot:` lines) says why.
 - **`--longflightcheck`** (`Player/LongFlightCheck`): an A320 launched 3 km over the start (`DebugLaunch`), the light
   sim's autopilot (`--airliner sim`, set by the probe if not given) on its knobs: heading toward Brest every second
   (the chord's level part at the aircraft is the great circle's start), 10 km cruise, 1,500 m from 220 km out.
@@ -35,7 +40,8 @@ exist before D0. All three run under `--frame earth` only, and judge re-anchors 
   under it drawn (`Globe.DrawnLevelAt`: the visible globe tile's level, `LeafLevelDrawn` for a leaf the earth world
   draws, -1 for a hole; 3 s fails), 8 far points at 70 % of the horizon (at most 150 km; 10 s fails), 300 m over the
   pyramid (`Net.PyramidGround`). At the end the destination's leaves must be drawn under it: the script passes
-  `--leaves .../brest_cube` (the game opens one leaf dir), so Geneva is pyramid and fill only.
+  `--leaves .../brest_cube` (the game opens one leaf dir), so Geneva is pyramid and fill only. Without `--tolatlon`,
+  a default destination (Brest airport) outside the leaves given is moved to their middle leaf (D:'s are the city).
 - **Runs**: quick rows on fixtures (`@realtime`: the leaves stream on threads); full rows on D: through
   `tools/lib/barprobe.sh` (skipped with RESULT ok when the data is missing, quiet user://, its log checked for
   `[frame] earth`); the long ones carry `@timeout=3700` (`tools/test.sh`: a row longer than `TEST_TIMEOUT`).
