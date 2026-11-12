@@ -81,7 +81,7 @@ public sealed class CinemaRelayTap : IDisposable
             return;
         }
         if (_found is not { } found) return;
-        if (_video == null) Begin(position, CinemaVideo.StartLead, found);
+        if (_video == null && !Ended) Begin(position, CinemaVideo.StartLead, found);
         if (_live && double.IsNaN(_start) && _frames.TryPeek(out _)) _start = position + LiveDelay;
         if (!double.IsNaN(_start))
         {
@@ -171,6 +171,14 @@ public sealed class CinemaRelayTap : IDisposable
         _soundStart = _live ? double.NaN : at;
         _restartAfter = position + lead + CinemaVideo.FallBehind;
         GD.Print(FormattableString.Invariant($"[cinema] relay {CinemaVideo.Title(Link)}: the hall at {position:F1} s, decoding from {at:F1} s (of {found.Duration:F1} s)"));
+        // past a known end: the film is over, as every client finds it (a decoder seeked past it read nothing, #1742)
+        if (!_live && found.Duration > 0 && at >= found.Duration - 0.5)
+        {
+            _videoDone = true;
+            Ended = true;
+            Status = "Ended";
+            return;
+        }
         string size = $"{CinemaVideo.StereoFit(_stereo, _size.Width, _size.Height)},fps={_size.Fps}";
         _video = CinemaLookup.Ffmpeg(CinemaLookup.Input(found.Video, at, _live).Concat(new[]
             { "-an", "-sn", "-vf", size, "-c:v", "mjpeg", "-q:v", _size.JpegQ.ToString(), "-f", "image2pipe", "-" }), false, Said);
