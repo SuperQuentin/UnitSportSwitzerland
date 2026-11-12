@@ -935,7 +935,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => Loot.GatherProbe.ParseArgs().Requested, ToolAnchor.Dropped,
                 k => new Loot.GatherProbe(chunks, origin, k.Gathering, k.Items, Loot.GatherProbe.ParseArgs().Shot)),
             new(() => Birds.BirdProbe.ParseArgs().Requested, ToolAnchor.Dropped,
-                k => new Birds.BirdProbe(chunks, origin, k.Birds, k.Items, Birds.BirdProbe.ParseArgs().Shot)),
+                k => new Birds.BirdProbe(Ground!, origin, k.Birds, k.Items, Birds.BirdProbe.ParseArgs().Shot)),
             // tables only: no terrain wanted, and quitting mid-stream races the tile workers
             new(() => Loot.LootProbe.ParseArgs() != null, ToolAnchor.Dropped, _ => new Loot.LootProbe(cache, chunks, Loot.LootProbe.ParseArgs()!.Value)),
             new(() => Interiors.InteriorProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
@@ -969,10 +969,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(Terrain.HorizonCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.HorizonCheck(chunks, origin)),
             new(Terrain.SpaceBandCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.SpaceBandCheck(chunks, origin)),
             // the ground gameplay asks, against the streamer's own answers, and its cost (#1532)
-            new(Terrain.WorldGroundCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.WorldGroundCheck(chunks, origin)),
+            new(Terrain.WorldGroundCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.WorldGroundCheck(Ground!, chunks, _earth, origin)),
             // a GPX course drawn and run where it belongs, across origin shifts (#1429)
             new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(chunks, origin)),
-            new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(chunks, origin)),
+            new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(Ground!, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var roadPerf = RoadPerfProbe.ParseArgs()!.Value;
