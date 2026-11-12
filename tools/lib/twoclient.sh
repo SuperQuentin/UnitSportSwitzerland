@@ -116,8 +116,11 @@ _tc_ports() {
   return 0
 }
 
+# TEST_FRAME=earth: every Godot of a check makes its own fill leaves before it stands (a server round each body), so
+# each gets this much longer before it is stopped (#1704; the probes' own waits for a joining player: ChatProbe.Joined)
+_tc_earth_slack=0; [ "${TEST_FRAME:-}" = earth ] && _tc_earth_slack=${TC_EARTH_SLACK:-300}
 tc_server() {
-  local timeout_s=$1 wait_s=$2 log=$3 i
+  local timeout_s=$(( $1 + _tc_earth_slack )) wait_s=$2 log=$3 i
   shift 3
   : > "$log"
   echo "$log" >> "$_tc_logs"
@@ -136,7 +139,7 @@ tc_server() {
 }
 
 tc_client() {
-  local timeout_s=$1 log=$2 headless=--headless
+  local timeout_s=$(( $1 + _tc_earth_slack )) log=$2 headless=--headless
   shift 2
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=

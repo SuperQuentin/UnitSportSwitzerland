@@ -280,17 +280,21 @@ State on 2026-11-10.
 | C6: visual parity | #1678, #1679, #1696, gate PRs #1690, #1697, #1698 | **done** (Nov 10): 0 over the floor, the rest judged; accepted differences in the G2 plan, near-ground shading follow-up #1695 | — |
 | C7: site pits on leaves | #1653 | **done** (#1687) | — |
 | C7: junctions the same wherever the tile edges are | #1660, #1691 | **done** (#1666, #1700): Geneva and the test region pass every tiling | — |
-| C7: the leaf build against LV95 | #1676 | judged by the user, not blocking: half the differences are an LV95 wall bug (filed only), the rest thresholds; a junction sanity check follows, not blocking | — |
+| C7: the leaf build against LV95 | #1676 | judged by the user, closed: LV95 wall bug #1708 (filed only), junction sanity check #1709 (#1715) | — |
 | C7: the shipping pipeline on cube data | #1650 | open, waits on G3's nationwide data | D3 |
 | **G1**: the earth server builds the fill and generated world | #1682 | **done** (#1693); fill leaves made fast (#1699, #1701) | — |
-| **G2**: fixture courses online on leaves | #1683, PR #1692 | code done, the full earth net tier running | D2 and the net bar |
-| **G3**: the server's flat-held services | #1684 | **done** (#1694): no `ChunkManager` on the earth server, escape hatches 0 | — |
-| Generated-world gameplay under earth | #1704, PR #1707 | session working | D2 |
-| Collision patch 27 m over the height at the region's border | #1626 | session working | D2 (a fall-through at the data edge would be a flip regression) |
-| Net checks failing on `main` | #1628 | open (orbit and movespeed, flat) | the net bar's baseline |
+| **G2**: fixture courses online on leaves | #1683 | **done** (#1692): every net check states and checks its frame | — |
+| **G3**: the server's flat-held services | #1684 | **done** (#1694); their net rows under earth #1722 **done** (#1724) | — |
+| Collision patch 27 m over the height at the region's border | #1626 | **done** (#1713) | — |
+| Generated-world gameplay under earth; open doors vs leaf building collision | #1704, #1705, PR #1707 | session working: interiors, doors, the leaf stand-in grid; dress check on B4's real leaves passes | D2 |
+| Stadium bowls on leaves | #1723, PR #1725 | waits for #1707 (same collision code) | D2 |
+| Farm, hunt and hairpin training under earth | #1729 | **done** (#1730) | — |
+| Interior check red on clean `main` | #1728 | open | not D |
+| Net checks failing on `main` | #1628, #1706 | open (flat too) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
-| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | probes and `TEST_FRAME` built (`core/earth-bar-probes`); the long drive is Geneva → Nyon inside the Geneva patch (two leaf sets at once is not built: Val Müstair waits for it); the flight reads Brest's leaves alone (`--leaves`), Geneva on the pyramid; dry run running | D2 |
-| **D1**: the build tools independent of LV95 | #1711, PR #1714 | **done**: the cube build from the sources and its leaves (`cube-only` in MapSetup); test region leaves byte-identical, Geneva differs only by the LV95 detour (`cube-region-files` note); castles, venues, givers still read `.bldg` (D4) | D4 |
+| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | probes and `TEST_FRAME` built (`core/earth-bar-probes`); dry run 297/375, failures rerun and compared on flat; the flight flew 831 km to Brest clean (its end check fixed, rerun pending); the long drive (Versoix → Nyon) stops on real roads on flat too (the racing pilot, not the frame) | D2 |
+| **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
+| **D2**: the flip | #1726, PR #1727 | code done (earth default, protocol 96, stores at `user://earth/` with migrations), quick tier green; the bar waits for #1707, #1712, #1725 | user's merge |
 
 ## Decided without the user
 

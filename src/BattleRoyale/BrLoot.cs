@@ -28,42 +28,99 @@ public static class BrLoot
     /// <summary>A road point: LV95 position, altitude, the road's heading (rad, 0 = north), its class.</summary>
     public readonly record struct RoadPoint(double E, double N, float Alt, float Heading, RoadClass Class);
 
-    /// <summary>Every usable road vertex in the square (no motorways, tunnels, bridges or footpaths).</summary>
-    public static async Task<List<RoadPoint>> RoadPoints(IChunkSource source, BrArea area)
+    /// <summary>
+    /// Every usable road vertex in the square (no motorways, tunnels, bridges or footpaths). <paramref name="tiles"/>: the
+    /// ground's names for the tiles over the square when they are not its LV95 tiles (the earth world's leaves,
+    /// <see cref="LeafTiles"/>, #1704); a leaf's points are given back in LV95 notation, as the match holds its places.
+    /// <paramref name="leafRoads"/>: a leaf's own roads (its anchor frame), read without preparing its collision; a stand-in
+    /// is read through <paramref name="source"/> without it.
+    /// </summary>
+    public static async Task<List<RoadPoint>> RoadPoints(IChunkSource source, BrArea area, IEnumerable<TileId>? tiles = null,
+        Func<CubeKey, RoadTile?>? leafRoads = null)
     {
         var points = new List<RoadPoint>();
-        double half = area.Side * 0.5;
-        for (int e = (int)Math.Floor((area.E - half) / 1000); e <= (int)Math.Floor((area.E + half - 1) / 1000); e++)
-            for (int n = (int)Math.Floor((area.N - half) / 1000); n <= (int)Math.Floor((area.N + half - 1) / 1000); n++)
+        // read side by side, three at a time (a fill leaf is made on first ask, ~2 s each), walked in order
+        var ids = (tiles ?? Lv95Tiles(area)).ToList();
+        using var slots = new SemaphoreSlim(3);
+        var loads = ids.Select(async id =>
+        {
+            await slots.WaitAsync();
+            try
             {
-                var id = new TileId(e, n);
-                RoadTile? tile = null;
-                try { tile = await source.LoadRoadsAsync(id); }
-                catch (Exception ex) { GD.PushWarning($"[br] roads {id}: {ex.Message}"); }
-                if (tile == null) continue;
-                foreach (var s in tile.Segments)
+                if (leafRoads != null && Terrain.Leaves.LeafStandIn.TryLeaf(id, out var key)) return await Task.Run(() => leafRoads(key));
+                return await source.LoadRoadsAsync(id);
+            }
+            catch (Exception ex) { GD.PushWarning($"[br] roads {id}: {ex.Message}"); return null; }
+            finally { slots.Release(); }
+        }).ToList();
+        // a leaf's own roads are in its anchor frame, a stand-in's shifted into the tile's
+        double shift = leafRoads != null ? Terrain.Leaves.LeafStandIn.Offset : 0;
+        for (int ti = 0; ti < ids.Count; ti++)
+        {
+            var id = ids[ti];
+            bool leaf = Terrain.Leaves.LeafStandIn.IsStandIn(id);
+            var tile = await loads[ti];
+            if (tile == null) continue;
+            foreach (var s in tile.Segments)
+            {
+                if (s.Class is not (RoadClass.Major or RoadClass.Road or RoadClass.Minor or RoadClass.Lane or RoadClass.Track)) continue;
+                if ((s.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0) continue;
+                for (int i = 0; i + 1 < s.PointCount; i++)
                 {
-                    if (s.Class is not (RoadClass.Major or RoadClass.Road or RoadClass.Minor or RoadClass.Lane or RoadClass.Track)) continue;
-                    if ((s.Flags & (RoadFlags.Tunnel | RoadFlags.Bridge)) != 0) continue;
-                    for (int i = 0; i + 1 < s.PointCount; i++)
+                    float x0 = s.Points[i * 3], y0 = s.Points[i * 3 + 1], z0 = s.Points[i * 3 + 2];
+                    float dx = s.Points[i * 3 + 3] - x0, dy = s.Points[i * 3 + 4] - y0, dz = s.Points[i * 3 + 5] - z0;
+                    float heading = Mathf.Atan2(dx, -dz);
+                    // a point every 25 m along the road, whatever its vertex spacing
+                    int steps = Math.Max(1, (int)(Mathf.Sqrt(dx * dx + dz * dz) / Spacing));
+                    for (int k = 0; k < steps; k++)
                     {
-                        float x0 = s.Points[i * 3], y0 = s.Points[i * 3 + 1], z0 = s.Points[i * 3 + 2];
-                        float dx = s.Points[i * 3 + 3] - x0, dy = s.Points[i * 3 + 4] - y0, dz = s.Points[i * 3 + 5] - z0;
-                        float heading = Mathf.Atan2(dx, -dz);
-                        // a point every 25 m along the road, whatever its vertex spacing
-                        int steps = Math.Max(1, (int)(Mathf.Sqrt(dx * dx + dz * dz) / Spacing));
-                        for (int k = 0; k < steps; k++)
+                        float t = k / (float)steps;
+                        if (leaf)
                         {
-                            float t = k / (float)steps;
-                            // in the tile's own frame (#1443); the east sum keeps its old order, bit for bit
-                            var (ge, pn) = id.Global(x0, z0 + dz * t);
-                            double pe = ge + dx * t;
-                            if (area.Contains(pe, pn)) points.Add(new RoadPoint(pe, pn, y0 + dy * t, heading, s.Class));
+                            // a leaf's stand-in frame (#1704): the place, in the match's LV95 notation
+                            var (le, ln, lh) = SwissGeodesy.FromEcef(GlobalPos.OfTile(id, x0 + dx * t + shift, y0 + dy * t, z0 + dz * t + shift).Ecef);
+                            if (area.Contains(le, ln)) points.Add(new RoadPoint(le, ln, (float)lh, heading, s.Class));
+                            continue;
                         }
+                        // in the tile's own frame (#1443); the east sum keeps its old order, bit for bit
+                        var (ge, pn) = id.Global(x0, z0 + dz * t);
+                        double pe = ge + dx * t;
+                        if (area.Contains(pe, pn)) points.Add(new RoadPoint(pe, pn, y0 + dy * t, heading, s.Class));
                     }
                 }
             }
+        }
         return points;
+    }
+
+    /// <summary>The LV95 tiles over the square.</summary>
+    private static IEnumerable<TileId> Lv95Tiles(BrArea area)
+    {
+        double half = area.Side * 0.5;
+        for (int e = (int)Math.Floor((area.E - half) / 1000); e <= (int)Math.Floor((area.E + half - 1) / 1000); e++)
+            for (int n = (int)Math.Floor((area.N - half) / 1000); n <= (int)Math.Floor((area.N + half - 1) / 1000); n++)
+                yield return new TileId(e, n);
+    }
+
+    /// <summary>
+    /// The earth world's leaves over the square (#1704), as their stand-in tiles: the leaf under every point of a 150 m
+    /// lattice over it and its rim (a leaf is ~600 m, so none that reaches in by more is missed).
+    /// </summary>
+    public static List<TileId> LeafTiles(BrArea area)
+    {
+        var seen = new HashSet<CubeKey>();
+        var list = new List<TileId>();
+        double half = area.Side * 0.5;
+        const double Step = 150;
+        int n = (int)Math.Ceiling(area.Side / Step);
+        for (int i = 0; i <= n; i++)
+            for (int j = 0; j <= n; j++)
+            {
+                double e = Math.Min(area.E - half + i * Step, area.E + half), no = Math.Min(area.N - half + j * Step, area.N + half);
+                var key = CubeKey.FromEcef(SwissGeodesy.ToEcef(e, no, 500), Terrain.Leaves.LeafFrames.LeafLevel);
+                if (seen.Add(key)) list.Add(Terrain.Leaves.LeafStandIn.Id(key));
+            }
+        return list;
     }
 
     /// <summary>Supply crates beside the roads and the odd military crate on a track, seeded by the match.</summary>

@@ -1100,7 +1100,9 @@ public sealed class AutoPilot
         // riders queue behind a moving one (nobody on two wheels is squeezed past on a Jura road);
         // one STOPPED in the way — a finisher, a faller — is ridden round, not queued behind for
         // good (a moto race ended "DNF" behind the winner stopped past the line)
-        foreach (var q in others)
+        // the traffic too, as a car pilot senses it (#1729): a car stopped at the edge of a narrow road to let the
+        // rider by was ridden into by a trainer's rider, who does not steer and was only ever told of players
+        foreach (var q in others.Concat(Sensed(dt, travel)))
         {
             var rel = RaceRoute.Flat(q.Position - pos);
             float a = rel.Dot(travel);

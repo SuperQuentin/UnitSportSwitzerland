@@ -74,6 +74,9 @@ public sealed record StadiumSpec
     /// <summary>The centre spot, LV95 (from the pitch polygon's centroid).</summary>
     public required double E { get; init; }
     public required double N { get; init; }
+
+    /// <summary>The centre spot as a place on the Earth, at height 0: what a distance, a frame or a leaf is asked of.</summary>
+    public GlobalPos Centre => GlobalPos.FromLv95(E, N, 0);
     /// <summary>The pitch's long axis as the catalogue writes it, measured off swissimage: degrees clockwise from grid north. Read <see cref="AzimuthDeg"/>.</summary>
     public float GridAzimuthDeg { get; init; }
 

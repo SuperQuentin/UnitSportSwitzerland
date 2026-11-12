@@ -547,9 +547,28 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces[..ground] } });
             body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces[ground..] } });
         }
+        // its buildings in a body of their own, placed with it (#1704): an open doorway lets a walker through them alone
+        if (from?.Buildings(key) is { Length: >= 3 } shells)
+        {
+            var buildings = new StaticBody3D { Name = BuildingBodyName };
+            buildings.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = shells } });
+            body.AddChild(buildings);
+        }
         AddChild(body);
         body.Transform = LeafToWorld(leaf.Anchor);
         _bodies[key] = body;
+    }
+
+    private const string BuildingBodyName = "Buildings";
+
+    /// <summary>
+    /// The buildings' collision bodies of the patches within <paramref name="radius"/> m of a world point (#1704): what an
+    /// open doorway lets a walker through (<c>InteriorManager.BuildingBodies</c>), as a flat tile's <c>BuildingBody</c>.
+    /// </summary>
+    public void BuildingBodiesNear(Vector3 world, List<StaticBody3D> into, double radius = 30)
+    {
+        foreach (var key in CollisionPatches.Near(Origin.ToEcef(world), radius).Keys)
+            if (_bodies.TryGetValue(key, out var body) && body.GetNodeOrNull<StaticBody3D>(BuildingBodyName) is { } shells) into.Add(shells);
     }
 
     /// <summary>A leaf's anchor frame in the world: one rigid transform, composed in doubles.</summary>

@@ -165,6 +165,49 @@ public sealed class RoadNetwork : IWalkGraph
         return network;
     }
 
+    /// <summary>
+    /// The roads of an earth world's leaves (#1704), given as their stand-in tiles: each leaf's own roads (its anchor frame,
+    /// <paramref name="leafRoads"/>) read three at a time, every vertex in LV95 notation, as an LV95 tile's network holds
+    /// them. A road cut at a leaf's edge joins its other half in the next leaf where their ends meet.
+    /// </summary>
+    public static async Task<RoadNetwork> LoadLeavesAsync(IReadOnlyList<TileId> standIns, Func<CubeKey, RoadTile?> leafRoads,
+        CancellationToken ct = default)
+    {
+        var network = new RoadNetwork();
+        using var slots = new SemaphoreSlim(3);
+        var loads = standIns.Select(async id =>
+        {
+            if (!Terrain.Leaves.LeafStandIn.TryLeaf(id, out var key)) return null;
+            await slots.WaitAsync(ct).ConfigureAwait(false);
+            try { return await Task.Run(() => leafRoads(key), ct).ConfigureAwait(false); }
+            catch (Exception) { return null; }   // a leaf that would not come is simply no roads there
+            finally { slots.Release(); }
+        }).ToList();
+        for (int k = 0; k < standIns.Count; k++)
+            if (await loads[k].ConfigureAwait(false) is { } roads) network.AddLeaf(standIns[k], roads);
+        return network;
+    }
+
+    private void AddLeaf(TileId standIn, RoadTile roads)
+    {
+        double off = Terrain.Leaves.LeafStandIn.Offset;
+        foreach (var segment in roads.Segments)
+        {
+            if (!IsTravellable(segment.Class)) continue;
+            int count = segment.PointCount;
+            if (count < 2) continue;
+            var e = new double[count];
+            var n = new double[count];
+            var y = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                var p = Core.GlobalPos.OfTile(standIn, segment.Points[i * 3] + off, segment.Points[i * 3 + 1], segment.Points[i * 3 + 2] + off);
+                (e[i], n[i], y[i]) = SwissGeodesy.FromEcef(p.Ecef);
+            }
+            AddEdge(e, n, y, segment.Class, segment.Flags);
+        }
+    }
+
     private void AddTile(RoadTile tile)
     {
         foreach (var segment in tile.Segments)

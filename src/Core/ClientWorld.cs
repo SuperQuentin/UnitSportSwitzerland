@@ -55,6 +55,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private IChunkSource? WorldSource => _earth is { } e && _cache != null ? _worldSource ??= e.Source(_cache) : _cache;
 
     private IChunkSource? _worldSource;
+
+    /// <summary>
+    /// What the world's tiles hold, loaded by the ground's names (#1684, #1704): the flat streamer's source, or the leaves'
+    /// stand-ins over it under <c>--frame earth</c>. What the sites' yards, cranes, pallets and the Battle Royale's stops plan from.
+    /// </summary>
+    private IChunkSource? TileFiles => Ground?.Content ?? _chunks?.Source;
     private ClientTerrainSync? _terrainSync;
     private Handshake? _handshake;
     private Net.Accounts.AccountGate? _accountGate;
@@ -726,7 +732,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 }
             }
             var chunksForDoors = _chunks;
-            interiors.BuildingBodies = tile => chunksForDoors.BuildingBodyAt(tile);
+            interiors.BuildingBodies = (tile, at, into) =>
+            {
+                // an earth leaf's buildings are bodies of their own per collision patch (#1704)
+                if (_earth != null && Terrain.Leaves.LeafStandIn.IsStandIn(tile)) _earth.BuildingBodiesNear(at, into);
+                else if (chunksForDoors.BuildingBodyAt(tile) is { } body) into.Add(body);
+            };
             interiors.OccupancySink = chunksForDoors.SetOccupancy;
             interiors.OpenDoorsSink = chunksForDoors.SetOpenDoors;
             interiors.OutsideShownChanged += shown =>
@@ -1139,6 +1150,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
         if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: false, fillE, fillN));
+        if (_earth != null && Terrain.Earth.DressCheck.Stop is var (dressE, dressN)) AddChild(new Terrain.Earth.DressCheck(_earth, server: false, dressE, dressN));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.BoatTrailerCheck.Role is { } trailerRole) AddChild(new Player.BoatTrailerCheck(trailerRole, () => LocalPlayer));
         if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));
@@ -1255,7 +1267,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Build.GadgetNetProbe.Role != null) AddChild(new Build.GadgetNetProbe(items));
         // waking a dormant car over the network (#499), checked on the remote peer
         if (Vehicles.ParkingNetProbe.Mode() is { } parkingNet && _chunks.Origin is { } parkingOrigin)
-            AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, parkingOrigin));
+            AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, Ground!, parkingOrigin));
         if (World.ContainerNetProbe.Role is { } containerNet && _chunks.Origin is { } containerOrigin)
             AddChild(new World.ContainerNetProbe(containerNet, _chunks, containerOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
@@ -1506,9 +1518,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _awaitingServerSpawn = SpawnPoint.ParseLv95("--at") == null;
         }
         // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
-        Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
+        Items.PalletService.Create(this, origin, server: false).Source = () => TileFiles;
         // cranes players work (#618): the server says who works which, offline this client does
-        Terrain.Construction.CraneService.Create(this, server: false).Source = () => _chunks?.Source;
+        Terrain.Construction.CraneService.Create(this, server: false).Source = () => TileFiles;
         // concerts (#885): the hosted sets and their cues from the server, the operator's show input
         Concert.ConcertService.Create(this, server: false).Local = () => LocalPlayer;
         // built structures (#274): the server owns them, offline this client does
@@ -1523,7 +1535,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var loot = Loot.LootService.Create(this);
             loot.Items = items;
             // a building site's skips and materials (#627) are worked out from the tiles
-            loot.Source = () => _chunks?.Source;
+            loot.Source = () => TileFiles;
         }
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
@@ -1534,7 +1546,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             Farming.FarmSales.Create(this, origin, server: false, items);
             var stands = Farming.FarmStands.Create(this, origin, server: false);
             stands.Items = items;
-            stands.Source = () => _chunks?.Source;
+            stands.Source = () => TileFiles;
             // the specialty buyers' offices and signs, beside their access roads
             Farming.FarmBuyerYards.Create(this, origin, () => _chunks?.Source, p => Ground is { } gr && gr.TryGetHeight(p, out float h) ? h : null);
             if (Farming.SellCheck.Requested) AddChild(new Farming.SellCheck(items, origin));
@@ -1561,7 +1573,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // World/Farm, same path as the server's, which owns the cells; offline this client does
         if (Systems.On(Systems.Farming))
         {
-            Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false, earth: _earth?.Ground);
             // the herds on the pastures (#863): worked out here from the fields, drawn, beamed up by the server
             Farming.Herds.Create(this, Ground!, origin, dedicated: false);
             AddChild(new Farming.HandFarming(items, origin));
@@ -2217,7 +2229,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         br.Teleport = (e, n, label) => _teleporter?.TeleportTo(e, n, label) == true;
         br.AddAnchor = node => Ground?.AddAnchor(node);
         br.RemoveAnchor = node => Ground?.RemoveAnchor(node);
-        br.Source = () => _chunks?.Source;
+        br.Source = () => TileFiles;
         // the match's crates (#194): drawn on this client's own ground
         var crates = BattleRoyale.BrCrates.Create(this, _worldOrigin!, server: false);
         crates.GroundAt = at => Ground is { } gr && gr.TryGetSurface(at, out float h) ? h : null;

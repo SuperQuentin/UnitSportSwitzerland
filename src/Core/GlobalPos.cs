@@ -53,7 +53,63 @@ public readonly record struct GlobalPos
     public static GlobalPos FromEcef(EcefPos p) => new(p.X, p.Y, p.Z);
 
     /// <summary>A place given in LV95 notation (a Swiss source, a literal, a typed coordinate), its height LHN95.</summary>
-    public static GlobalPos FromLv95(double e, double n, double alt) => FromEcef(SwissGeodesy.ToEcef(e, n, alt));
+    /// <remarks>
+    /// Until G2's step D, a place named in an earth leaf's stand-in tile (its records' E/N, past
+    /// <see cref="Terrain.Leaves.LeafStandIn.FirstPlaceE"/>, its height the tile's) is placed by that tile's frame
+    /// (<see cref="OfTileEn"/>, #1704): what the flat world's builders and services name by E/N lands where the leaf has it.
+    /// </remarks>
+    public static GlobalPos FromLv95(double e, double n, double alt) =>
+        e >= Terrain.Leaves.LeafStandIn.FirstPlaceE && Terrain.Leaves.LeafStandIn.IsStandIn(TileId.FromLv95(e, n))
+            ? OfTileEn(TileId.FromLv95(e, n), e, n, alt)
+            : FromEcef(SwissGeodesy.ToEcef(e, n, alt));
+
+    /// <summary>
+    /// A tile record's place (#1704): a point in a tile's own frame (x east, y up, z south, metres from its north-west
+    /// corner), the frame its roads, buildings and site plans are in. An LV95 tile's is LV95 with its height above sea
+    /// level; an earth leaf's stand-in (<see cref="Terrain.Leaves.LeafStandIn"/>) is the leaf's anchor frame shifted by
+    /// <see cref="Terrain.Leaves.LeafStandIn.Offset"/>, its y the anchor's up. What gameplay keyed by tile names (sites,
+    /// yards, cranes, pallets) places by, on both worlds.
+    /// </summary>
+    public static GlobalPos OfTile(TileId tile, double x, double y, double z)
+    {
+        if (Terrain.Leaves.LeafStandIn.TryLeaf(tile, out var leaf))
+            return FromEcef(AnchorOf(leaf).ToEcef(x - Terrain.Leaves.LeafStandIn.Offset, y, z - Terrain.Leaves.LeafStandIn.Offset));
+        var (e, n) = tile.Global(x, z);
+        return FromEcef(SwissGeodesy.ToEcef(e, n, y));
+    }
+
+    /// <summary>A tile record's place given as the tile's E/N names (<see cref="TileId.Local"/>) and its height in the tile.</summary>
+    public static GlobalPos OfTileEn(TileId tile, double e, double n, double h)
+    {
+        var (x, z) = tile.Local(e, n);
+        return OfTile(tile, x, h, z);
+    }
+
+    /// <summary>The inverse of <see cref="OfTile"/>: this place in a tile's own frame (x east, y up, z south).</summary>
+    public (double X, double Y, double Z) InTile(TileId tile)
+    {
+        if (Terrain.Leaves.LeafStandIn.TryLeaf(tile, out var leaf))
+        {
+            var (x, y, z) = AnchorOf(leaf).ToLocal(Ecef);
+            return (x + Terrain.Leaves.LeafStandIn.Offset, y, z + Terrain.Leaves.LeafStandIn.Offset);
+        }
+        var (e, n, h) = SwissGeodesy.FromEcef(Ecef);
+        var (lx, lz) = tile.Local(e, n);
+        return (lx, h, lz);
+    }
+
+    /// <summary>This place as a tile's E/N names and its height in the tile (<see cref="OfTileEn"/>'s inverse).</summary>
+    public (double E, double N, double H) InTileEn(TileId tile)
+    {
+        var (x, y, z) = InTile(tile);
+        var (e, n) = tile.Global(x, z);
+        return (e, n, y);
+    }
+
+    /// <summary>A leaf's anchor frame, kept (its trigonometry once per leaf; a few thousand leaves at most in a session).</summary>
+    private static EnuFrame AnchorOf(CubeKey leaf) => Anchors.GetOrAdd(leaf, static k => k.Anchor);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<CubeKey, EnuFrame> Anchors = new();
 
     /// <summary>This place in LV95 notation, for a person or a Swiss file: never for arithmetic between places (~1 µs).</summary>
     public Lv95Coord Lv95

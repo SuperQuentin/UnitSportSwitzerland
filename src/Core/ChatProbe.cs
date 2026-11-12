@@ -45,9 +45,14 @@ public abstract partial class ChatProbe : Node
     /// <summary>Our player: by default the one the camera rides.</summary>
     protected virtual FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
+    /// <summary>The least a joining player is waited for on an earth world: the spawn's own wait for leaves and more.</summary>
+    public const double EarthJoinSeconds = 300;
+
     /// <summary>Waits for chat, a connection and our player on the ground (plus <paramref name="also"/>), then listens to chat. False after a <see cref="Fail"/>.</summary>
     protected async Task<bool> Joined(double seconds, Func<bool>? also = null)
     {
+        // on an earth world a client stands on its own fill leaves first, and the spawn waits up to 180 s for them (#1704)
+        if (GameSettings.Current.Frame == WorldFrame.Earth) seconds = Math.Max(seconds, EarthJoinSeconds);
         if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor() && (also?.Invoke() ?? true), seconds))
         {
             Fail("no player on the ground");

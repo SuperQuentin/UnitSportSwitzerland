@@ -12,7 +12,8 @@
   pilot measures its mount instead of reading constants: a fresh `Rideable.Create(kind)` stepped on
   the flat for 2 s at full steer gives the max bank, 0.5 s of full brake against coasting gives the
   deceleration. Corners at `√(0.65·g·R·tan φmax)` (0.8 ran two R1s wide off a R 50 m bend: braking
-  into it takes grip off the lean), rides round a stopped rider, pulls over right past the line, and
+  into it takes grip off the lean), rides round a stopped rider or car and queues behind a moving one (players and,
+  since #1729, the traffic boxed along its line, `Sensed`, as the car pilot reads it), pulls over right past the line, and
   is put back on the line after 3 s stopped off the road; brakes at 85% of the measured decel, steers by the
   bank a pure-pursuit arc needs (`tan φ = v²κ/g`, `steer = −φ/φmax`). On foot the runner walks through
   `FootPlayer.WalkControls` (a world-space wish, set by the pilot itself; `pilot.Go` holds it).
