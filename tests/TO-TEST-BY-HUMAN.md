@@ -15,6 +15,13 @@ In a window, `--frame earth`, the spectator at full speed. Best once the globe d
 - [ ] Fly to Kazakhstan, Yamal, Greenland and the Amazon (LV95 6653598,2940530; 5034504,4850762; 902899,4677347; -6055442,-697411) → dry grass with scattered shrubs; olive tundra with dwarf shrubs; ice; a broadleaf canopy with clearings.
 - [ ] Fly from Geneva out of the generator's map (west of LV95 2,385,000 or south of 974,000) → the Swiss look fades into the biome over ~20 km, no straight seam; Geneva, Lavaux and the Salève look as before.
 
+## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
+
+On Windows, a real keyboard, in a window.
+
+- [ ] In the spectator (Shift+T), hold Shift a second or more and let go, twenty times, some while turning the mouse, some during a load hitch, some after an Alt tap with the cursor free → the camera stops sinking every time; a `[input] Shift repeated after its key-up: released` line in the log is that case caught.
+- [ ] On foot, sprint with Shift+W and let go of Shift first, then W, a dozen times → back to a walk every time.
+
 ## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.

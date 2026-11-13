@@ -35,6 +35,8 @@ src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
 src/Core/SpectatorSwitchCheck quick --spectatorcheck --world fixture
 src/Player/SpectatorCamera quick --spectatorcheck --world fixture
+src/Player/SpectatorCamera quick --spectatorturncheck --frame earth --chunks fixture:straight
+src/Player/SpectatorTurnCheck quick --spectatorturncheck --frame earth --chunks fixture:straight
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
 src/Player/OwnBodyCheck   quick  --ownbodycheck --world flat
 src/Avatar/OwnBody       quick  --ownbodycheck --world flat
@@ -430,6 +432,8 @@ src/Player/AutoPilot      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/RaceRoute      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/LongFlightCheck full  @timeout=1400 tools/longflightcheck.sh
 src/World/Globe/Globe.cs  full   @timeout=1400 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=500 tools/farfillcheck.sh
+src/Terrain/Earth/FarFillCheck full @timeout=500 tools/farfillcheck.sh
 tools/lib/barprobe        full   tools/reanchorcheck.sh
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake

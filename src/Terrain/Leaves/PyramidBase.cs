@@ -76,7 +76,7 @@ public sealed class PyramidBase
             var bytes = new byte[at.Length];
             RandomAccess.Read(handle, bytes, at.Offset);
             return CubeTileCodec.Decode(bytes);
-        }, manifest.Lakes, finest);
+        }, manifest.Lakes, finest) { SeaSurface = Egm2008.Available ? Egm2008.Undulation : null };
     }
 
     private CubeTile? Tile(CubeKey key)
@@ -125,6 +125,55 @@ public sealed class PyramidBase
             return south + (north - south) * v;
         }
         return double.NaN;
+    }
+
+    /// <summary>
+    /// The sea's surface over the ellipsoid at a latitude and longitude, degrees (#1808): <see cref="Egm2008.Undulation"/>
+    /// for the pyramid <see cref="Open"/> reads, the surface its sea stands at (<c>CubeGlobal</c>: <c>max(H, 0) + N</c>);
+    /// null, no sea (the fill laid the generator's land over the oceans).
+    /// </summary>
+    public Func<double, double, double>? SeaSurface { get; init; }
+
+    /// <summary>
+    /// How far over the sea's surface the pyramid's ground still is sea, metres: the coarse geoid grid's error (0.3 m at
+    /// the 99th percentile, 1.2 m at worst) and a coast's lattice samples, which average a little land in.
+    /// </summary>
+    public const double SeaTolM = 1.5;
+
+    /// <summary>
+    /// The sea over a square of a face's global lattice (#1808): the geoid at its four corners, bilinear between (it bends
+    /// by millimetres over a few kilometres), so a fill leaf asks the geodesy four times, not once a vertex. Null without a
+    /// sea or where the geoid is unknown.
+    /// </summary>
+    public SeaPatch? SeaOver(int face, long gi0, long gj0, long span, int latticeLevel)
+    {
+        if (SeaSurface is not { } sea) return null;
+        double N(long gi, long gj)
+        {
+            var g = CubeSphere.ToGeodetic(face, CubeSphere.Lattice(latticeLevel, gi), CubeSphere.Lattice(latticeLevel, gj));
+            return sea(g.LatDeg, g.LonDeg);
+        }
+        var patch = new SeaPatch(gi0, gj0, span, N(gi0, gj0), N(gi0 + span, gj0), N(gi0, gj0 + span), N(gi0 + span, gj0 + span));
+        return double.IsNaN(patch.N00 + patch.N10 + patch.N01 + patch.N11) ? null : patch;
+    }
+
+    /// <summary>The sea's surface over a square of a face's lattice, and whether the pyramid's ground at a point is sea.</summary>
+    public sealed record SeaPatch(long Gi0, long Gj0, long Span, double N00, double N10, double N01, double N11)
+    {
+        /// <summary>The sea's surface at a lattice point, ellipsoidal.</summary>
+        public double SurfaceAt(long gi, long gj)
+        {
+            double u = (double)(gi - Gi0) / Span, v = (double)(gj - Gj0) / Span;
+            double south = N00 + (N10 - N00) * u, north = N01 + (N11 - N01) * u;
+            return south + (north - south) * v;
+        }
+
+        /// <summary>The sea's level where ground of height <paramref name="h"/> at the point is sea (within <see cref="SeaTolM"/> of it), else NaN.</summary>
+        public float LevelAt(long gi, long gj, double h)
+        {
+            double n = SurfaceAt(gi, gj);
+            return h <= n + SeaTolM ? (float)n : float.NaN;
+        }
     }
 
     /// <summary>The lake level a height stands at (within <see cref="LakeTolM"/>), or NaN when it is no lake's.</summary>
