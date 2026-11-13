@@ -90,6 +90,25 @@ public partial class SkyShot : Node
         }
         ring /= 32;
 
+        // the sun (#1479): its brightest pixels round the ephemeris direction (the centre) and no wider than its disc.
+        // Before, the Cartoon sky's sun was a 20° glow along the light (lifted 3° at sunrise): no disc, off the sun low down.
+        float spot = 0, offPx = 0;
+        if (_body == "sun" && GetViewport().GetCamera3D() is { } shotCam)
+        {
+            float top = 0;
+            for (int y = -40; y <= 40; y++)
+                for (int x = -40; x <= 40; x++)
+                    top = Mathf.Max(top, Lum(image.GetPixel(cx + x, cy + y)));
+            float sx = 0, sy = 0, n = 0;
+            for (int y = -40; y <= 40; y++)
+                for (int x = -40; x <= 40; x++)
+                    if (Lum(image.GetPixel(cx + x, cy + y)) >= top - 0.02f) { sx += x; sy += y; n++; }
+            offPx = n > 0 ? new Vector2(sx / n, sy / n).Length() : 99;
+            float perRad = image.GetHeight() * 0.5f / Mathf.Tan(Mathf.DegToRad(Core.CameraLens.FovOf(shotCam)) * 0.5f);
+            float disc = Mathf.Max(SunDisc.TrueRadius, Mathf.DegToRad(Core.CameraLens.FovOf(shotCam)) * MoonDisc.MinScreenShare) * perRad;
+            spot = Mathf.Sqrt(n / Mathf.Pi) / Mathf.Max(disc, 1f);
+        }
+
         // in view: the ray toward it misses the Earth's ball under the camera (below the horizon from the ground)
         var axes = Globe.Axes ?? _origin.EcefAxes;
         var eye = axes.ToEcef(at.X, at.Y, at.Z);
@@ -120,7 +139,8 @@ public partial class SkyShot : Node
         {
             // a crescent fills a share of the box: its lit sliver and the earthshine disc
             expect = _body == "moon" ? "the moon drawn" : "the sun drawn";
-            ok = _body == "moon" ? peak - ring > 0.03f : peak > 0.7f && peak - ring > 0.3f;
+            ok = _body == "moon" ? peak - ring > 0.03f : peak > 0.7f && peak - ring > 0.3f && offPx < 3f && spot < 1.5f;
+            if (_body == "sun") expect += $", a disc on its place ({offPx:F1} px off, brightest {spot:F2}× its disc)";
         }
         GD.Print($"[skyshot] {_body} from {altitude / 1000:F1} km, {(hidden ? "behind the Earth" : "in view")}, the sun "
             + $"{DayNight.Instance?.SunElevationDeg:F1}° up below: centre {peak:F3}, round it {wide:F3}, sky {ring:F3}; wrote {_out}");
