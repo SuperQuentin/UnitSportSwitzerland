@@ -33,7 +33,7 @@ public partial class PhoneModel : Node3D
     /// <summary>The whole open phone, rim to rim: what the camera keeps in view.</summary>
     public static readonly Vector2 OpenSize = new(2f * HalfWidth, Height);
     /// <summary>How long the hinge takes to open or close all the way.</summary>
-    public const float UnfoldSeconds = 0.42f;
+    public const float UnfoldSeconds = 0.2f;
     private const float ScreenLift = 0.0003f;
 
     private const float IslandX = HalfWidth * 0.5f - 0.005f - 0.029f, IslandY = Height * 0.5f - 0.006f - 0.011f;

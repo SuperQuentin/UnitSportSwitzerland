@@ -163,8 +163,12 @@ public partial class FootPlayer
         StepPhone(dt);
         if (_camera == null) return;
         float look = Mathf.SmoothStep(0f, 1f, PhoneLook), cover = Mathf.SmoothStep(0f, 1f, PhoneCover);
-        if (look <= 0f || _phoneModel is not { Visible: true } || XR.XrSession.Active)
+        float camApp = Mathf.SmoothStep(0f, 1f, PhoneCameraApp);
+        bool special = cover > 0f || camApp > 0f;
+        if (look <= 0f || _phoneModel is not { Visible: true } || XR.XrSession.Active || !special)
         {
+            // folded or open in the hands (#1825) the lens is the game's own, third person (PhoneLook lends it): the
+            // phone is in the lower part of the view, the world round it, and the player looks and walks as ever
             if (!float.IsNaN(_phoneNear))
             {
                 _camera.Near = _phoneNear;
@@ -172,7 +176,7 @@ public partial class FootPlayer
                 _phoneNear = float.NaN;
             }
             _phoneSeen.Origin = new Vector3(float.NaN, 0, 0);
-            ShowBackdrop(0f, dt);
+            ShowBackdrop(look > 0f && !XR.XrSession.Active ? PhoneBackdrop : 0f, dt);
             return;
         }
         if (float.IsNaN(_phoneNear))
@@ -185,10 +189,9 @@ public partial class FootPlayer
         if (float.IsNaN(_phoneSeen.Origin.X) || _phoneSeen.Origin.DistanceTo(phone.Origin) > 1f) _phoneSeen = phone;
         else _phoneSeen = _phoneSeen.InterpolateWith(phone, MathX.Damp(PhoneCover > 0.5f ? 9f : 6f, dt)).Orthonormalized();
 
-        // over the shoulder onto the phone, folded or open; behind it, level, for the camera app; square
-        // onto it, close, for the map
-        float camApp = Mathf.SmoothStep(0f, 1f, PhoneCameraApp);
-        var target = PhoneShoulderView(_phoneSeen);
+        // from the game's own lens: behind the raised phone, level, for the camera app; square onto the screen, close,
+        // for the travel curtain (and the touch screen)
+        var target = _camera.GlobalTransform;
         if (camApp > 0f)
         {
             float selfie = Mathf.SmoothStep(0f, 1f, _phoneTurn);
@@ -199,10 +202,10 @@ public partial class FootPlayer
         if (cover > 0f) target = target.InterpolateWith(PhoneScreenView(_phoneSeen), cover);
         _camera.GlobalTransform = _camera.GlobalTransform.InterpolateWith(target, look);
         // the screen ends up a few centimetres from the lens
-        _camera.Near = Mathf.Lerp(_phoneNear, 0.01f, look);
+        _camera.Near = Mathf.Lerp(_phoneNear, 0.01f, Mathf.Max(cover, camApp));
         // set from the saved FOV each frame, not eased from the last: the game's own easing starts again from it
-        _camera.Fov = Mathf.Lerp(Mathf.Lerp(_phoneFov, PhoneFov, look), CameraAppFov, camApp * (1f - cover));
-        // on its way to the map or behind the raised phone the lens passes the face: the body is seen
+        _camera.Fov = Mathf.Lerp(Mathf.Lerp(_phoneFov, PhoneFov, cover), CameraAppFov, camApp * (1f - cover));
+        // on its way to the screen or behind the raised phone the lens passes the face: the body is seen
         // from the eye then (only its shadow drawn), the phone stays
         if (cover > 0.12f || camApp > 0.4f) SeeBodyFromEye(true);
         ShowBackdrop(PhoneBackdrop, dt);
@@ -210,25 +213,6 @@ public partial class FootPlayer
 
     /// <summary>The camera app's lens: wide enough that the world shows round the raised phone.</summary>
     private const float CameraAppFov = 52f;
-
-    /// <summary>
-    /// Behind and above the right shoulder (the left, over that one), looking down at the phone: the
-    /// folded phone's cover, or closer in, the open phone with the hand working it.
-    /// </summary>
-    private Transform3D PhoneShoulderView(Transform3D phone)
-    {
-        // the body's facing (the figure is built facing -Z), not the phone's, which leans toward the eyes
-        var ahead = MathX.Flat(-(_walker?.GlobalBasis.Z ?? GlobalBasis.Z));
-        ahead = ahead.LengthSquared() > 1e-4f ? ahead.Normalized() : Vector3.Forward;
-        var right = ahead.Cross(Vector3.Up);
-        float open = _phoneModel != null ? Mathf.SmoothStep(0f, 1f, _phoneModel.Fold) : 0f;
-        var at = phone * Phone.PhoneModel.CoverScreenCentre.Lerp(Phone.PhoneModel.InnerScreenCentre, open);
-        // open, a third closer: the phone and the finger on it fill the middle of the picture
-        float k = Mathf.Lerp(1f, 0.68f, open);
-        var lens = at + (Vector3.Up * 0.6f + right * (0.42f * _shoulderSide) - ahead * 0.2f) * k;
-        // the phone's long side up the picture: it reads upright, as a phone held up to read does
-        return new Transform3D(Basis.LookingAt(at - lens, phone.Basis.Y), lens);
-    }
 
     /// <summary>
     /// Square onto the open phone, as close as keeps all of it in view with a little room round its
