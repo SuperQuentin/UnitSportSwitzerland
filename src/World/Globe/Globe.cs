@@ -55,10 +55,13 @@ public partial class Globe : Node
 
     public const float SplitPixels = 6;
 
-    private static readonly StringName Cartoon = "cartoon", Ambient = "ambient", SunColor = "sun_color";
+    private static readonly StringName Cartoon = "cartoon", Ambient = "world_globe_ambient", SunColor = "world_globe_sun",
+        Band = "world_globe_band", PaletteBlend = "world_globe_palette";
 
-    // the environment's light as the globe's tiles are lit by it, kept on change
-    private static Vector3 _ambient = new(0.40f, 0.48f, 0.74f), _sunColor = Vector3.One;
+    // the environment's light as the globe's tiles are lit by it (common/globe_light), kept on change; NaN: not written yet
+    private static Vector3 _ambient = new(float.NaN, 0, 0), _sunColor = Vector3.One;
+    // the 20 km handover's band (#1802), as last written
+    private float _band, _paletteBlend;
 
     private const double EarthR = 6_371_000;
 
@@ -271,9 +274,28 @@ public partial class Globe : Node
     /// </summary>
     public const double TerrainBelowM = 20_000;
 
+    /// <summary>
+    /// The handover's band round <see cref="TerrainBelowM"/> (#1802), metres of camera altitude: from
+    /// <see cref="BandFromM"/> the terrain material's light eases into the globe's (the true sun's terminator; at night
+    /// the style's moonlight and tint are gone by 20 km), and up to <see cref="BandToM"/> the globe's material eases
+    /// from the terrain's palette and facets into the photo. At 20 km both draw the same picture. The lakes' surfaces
+    /// show below <see cref="BandFromM"/> only: lit by the scene's light, they would stand out of a ground lit by
+    /// the true sun; past it the ground under them is the lake's own blue (<c>style_lake</c>).
+    /// </summary>
+    public const double BandFromM = 15_000, BandToM = 25_000;
+
     // each tile's own globe material (its colour image, the sun's terminator); the terrain one is shared
     private readonly Dictionary<CubeKey, ShaderMaterial> _globeMaterials = new();
-    private bool _onTerrain;
+    private bool _onTerrain, _lakesShown;
+
+    /// <summary>The handover's two blends by the camera's altitude (common/globe_light), written on change only.</summary>
+    private void Blend(double altitude)
+    {
+        float band = (float)Mathf.SmoothStep(BandFromM, TerrainBelowM, altitude);
+        float palette = 1f - (float)Mathf.SmoothStep(TerrainBelowM, BandToM, altitude);
+        if (band != _band) RenderingServer.GlobalShaderParameterSet(Band, _band = band);
+        if (palette != _paletteBlend) RenderingServer.GlobalShaderParameterSet(PaletteBlend, _paletteBlend = palette);
+    }
 
     public override void _Ready()
     {
@@ -299,6 +321,8 @@ public partial class Globe : Node
         RenderingServer.GlobalShaderParameterSet(FillHide, 0f);
         RenderingServer.GlobalShaderParameterSet(FlatHide, 0f);
         RenderingServer.GlobalShaderParameterSet(FlatEdgeOn, 0f);
+        RenderingServer.GlobalShaderParameterSet(Band, 0f);
+        RenderingServer.GlobalShaderParameterSet(PaletteBlend, 0f);
         if (FlatWorld != null && IsInstanceValid(FlatWorld)) FlatWorld.Visible = true;
     }
 
@@ -415,8 +439,14 @@ public partial class Globe : Node
             {
                 _onTerrain = terrain;
                 foreach (var (key, node) in _patches) node.MaterialOverride = MaterialFor(key);
-                foreach (var lake in _lakes.Values) lake.Visible = terrain;
             }
+            bool lakes = altitude < BandFromM;
+            if (lakes != _lakesShown)
+            {
+                _lakesShown = lakes;
+                foreach (var lake in _lakes.Values) lake.Visible = lakes;
+            }
+            Blend(altitude);
             // the world is the anchor frame itself: placed again at each re-anchor
             if (Origin.Frame.Epoch != _epoch)
             {
@@ -469,7 +499,8 @@ public partial class Globe : Node
 
     /// <summary>
     /// The tiles lit as the style lights the world: its ambient (colour by energy) and its sun's colour by
-    /// energy, written to every tile when they change (the night's moonlight never: the sun stays the real one).
+    /// energy, written to the globals every globe tile and the handover's terrain read (common/globe_light) when
+    /// they change (the night's moonlight never: the sun stays the real one).
     /// </summary>
     private void Relight()
     {
@@ -480,11 +511,8 @@ public partial class Globe : Node
             ? new Vector3(light.LightColor.R, light.LightColor.G, light.LightColor.B) * light.LightEnergy : _sunColor;
         if (ambient.IsEqualApprox(_ambient) && sun.IsEqualApprox(_sunColor)) return;
         (_ambient, _sunColor) = (ambient, sun);
-        foreach (var m in _globeMaterials.Values)
-        {
-            m.SetShaderParameter(Ambient, ambient);
-            m.SetShaderParameter(SunColor, sun);
-        }
+        RenderingServer.GlobalShaderParameterSet(Ambient, ambient);
+        RenderingServer.GlobalShaderParameterSet(SunColor, sun);
     }
 
     /// <summary>Which tiles to draw: from the six faces down, by size on screen and the horizon.</summary>
@@ -790,8 +818,10 @@ public partial class Globe : Node
                         weights = new Vector4(1, 0, 0, 0);
                     }
                     // the pyramid knows its lakes (#1678): ground that is none of them is dry, whatever the colour image
-                    // says (Blue Marble's 500 m lake pixels painted a pale band of water 200 m up the Lavaux shore)
-                    else if (lakes != null) weights = GlobeGround.Dry(weights);
+                    // says (Blue Marble's 500 m lake pixels painted a pale band of water 200 m up the Lavaux shore); the
+                    // sea is no lake of its list: on the sea's bed the image's water stays (#1802: a bed is seldom level,
+                    // and most of the sea was painted as green land below 20 km)
+                    else if (lakes != null && hs[k] > GlobeGround.SeaReachM) weights = GlobeGround.Dry(weights);
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);
                     if (cover != null)
                     {
@@ -982,7 +1012,7 @@ public partial class Globe : Node
         if (water != null && WaterMaterial is { } waterMaterial)
         {
             var lake = new MeshInstance3D { Name = "Lakes", Mesh = Terrain.ChunkNode.ToArrayMesh(water, waterMaterial),
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = _onTerrain };
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = _lakesShown };
             node.AddChild(lake);
             _lakes[key] = lake;
         }
@@ -1028,8 +1058,6 @@ public partial class Globe : Node
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter(Cartoon, Styles.StyleKit.Style == Styles.VisualStyle.Cartoon);
-        material.SetShaderParameter(Ambient, _ambient);
-        material.SetShaderParameter(SunColor, _sunColor);
         if (colour != null) material.SetShaderParameter("albedo_tex", ImageTexture.CreateFromImage(colour));
         return new MeshInstance3D
         {

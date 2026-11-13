@@ -27,6 +27,20 @@ vec3 facet_normal(vec3 view_pos, mat4 inv_view) {
     return length(c) > 1e-20 ? normalize((inv_view * vec4(c, 0.0)).xyz) : vec3(0.0, 1.0, 0.0);
 }
 
+// A lake from afar (#1430), linear (every style can call it; Cartoon's ground and the globe do): the water's deepest band (body/water.gdshaderinc, toon_abyss, sRGB
+// 0.07, 0.25, 0.48), what most of a lake is seen from above, and what its far fade turns to. The ground draws lakes in the
+// land cover's slate (Terrain/CoverPalette's water, kept by the other styles): style_lake finds it by
+// its hue (bluer than red, darker than a pool or a glacier) past `from` metres and paints this blue
+// instead, so the loaded water and the lakes beyond it meet in one colour. Up close the ground under
+// the water is a lake bed, seen through the shallows, and stays as it was.
+const vec3 STYLE_LAKE = vec3(0.006, 0.051, 0.196);
+
+vec3 style_lake(vec3 col, float dist) {
+    vec3 srgb = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+    float w = smoothstep(0.06, 0.18, srgb.b - srgb.r) * (1.0 - smoothstep(0.40, 0.45, dot(srgb, vec3(0.333))));
+    return mix(col, STYLE_LAKE, w * smoothstep(500.0, 1000.0, dist));
+}
+
 #ifdef STYLE_CARTOON
 uniform float toon_edge = 0.08;   // width of the light/shade terminator, in N.L
 uniform float toon_rim = 0.22;    // rim strength on the lit side
@@ -57,20 +71,6 @@ vec3 style_grade(vec3 col) {
     float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
     col = mix(vec3(l), col, 0.92);
     return pow(max(col, vec3(0.0)), vec3(0.92)) * 0.95;
-}
-
-// A lake from afar (#1430), linear: the water's deepest band (body/water.gdshaderinc, toon_abyss, sRGB
-// 0.07, 0.25, 0.48), what most of a lake is seen from above, and what its far fade turns to. The ground draws lakes in the
-// land cover's slate (Terrain/CoverPalette's water, kept by the other styles): style_lake finds it by
-// its hue (bluer than red, darker than a pool or a glacier) past `from` metres and paints this blue
-// instead, so the loaded water and the lakes beyond it meet in one colour. Up close the ground under
-// the water is a lake bed, seen through the shallows, and stays as it was.
-const vec3 STYLE_LAKE = vec3(0.006, 0.051, 0.196);
-
-vec3 style_lake(vec3 col, float dist) {
-    vec3 srgb = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
-    float w = smoothstep(0.06, 0.18, srgb.b - srgb.r) * (1.0 - smoothstep(0.40, 0.45, dot(srgb, vec3(0.333))));
-    return mix(col, STYLE_LAKE, w * smoothstep(500.0, 1000.0, dist));
 }
 
 // Low-frequency value noise, 0..1: the painted variation BotW has on every large surface.

@@ -88,6 +88,13 @@ public static class GlobeGround
     /// <summary>The colour's water weight a level surface needs to be drawn as water (<see cref="Level"/>).</summary>
     public const float WaterHint = 0.2f;
 
+    /// <summary>
+    /// Ground this low, metres, may be the sea's (#1802): the pyramid holds the sea's bed (ETOPO's bathymetry, 20-50 m
+    /// down over a shelf sea), so the sea is seldom level and none of the pyramid's lakes. Under it the colour image's
+    /// water is kept where the lake list would dry it (no lake of the list lies this low; Lavaux's shore stands 372 m up).
+    /// </summary>
+    public const float SeaReachM = 10f;
+
     /// <summary>The water weight above which a coarser level's level vertex is drawn as a lake's surface too (#1669).</summary>
     public const float LakeWeight = 0.5f;
 
