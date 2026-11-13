@@ -994,6 +994,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _ => new World.ArrivalProbe(chunks, origin, World.ArrivalProbe.ParseArgs().Prefix)),
             new(() => World.TreeCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new World.TreeCheck(chunks, origin, World.TreeCheck.ParseArgs().Shot)),
+            // the trees on the ground, drawn and as their tiles hold them, before and after a flight across re-anchors (#1776)
+            new(() => World.TreeSeatCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new World.TreeSeatCheck(Ground!, origin, World.TreeSeatCheck.ParseArgs().Shot)),
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
             // the pit of a building site driven, walked and dropped into (#619)
             new(() => Terrain.Construction.PitCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Construction.PitCheck(chunks, origin, Ground, _earth)),
