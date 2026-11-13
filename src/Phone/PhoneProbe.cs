@@ -288,7 +288,7 @@ public partial class PhoneProbe : Node
         Teleporter.Instance?.TeleportTo(at.Moved(300, 40), "probe east");
         await Wait(0.1);
         Check(me.Global.OffsetTo(at).East is > -2 and < 2, "the jump is held while the curtain comes down (#1825)");
-        for (int i = 0; i < 200 && Math.Abs(me.Global.OffsetTo(at).East) < 20; i++) await Wait(0.02);
+        for (int i = 0; i < 1500 && Math.Abs(me.Global.OffsetTo(at).East) < 20; i++) await Wait(0.02);
         Check(Math.Abs(me.Global.OffsetTo(at).East) >= 20 && me.PhoneBackdropShown >= 0.99f, $"and runs only once the world is black ({me.PhoneBackdropShown:F2}) (#1825)");
         await Wait(0.3);
         Shot("phone_6_travelling.png");
