@@ -14,7 +14,7 @@
 #                            max exclusive). The départements default to the ones under the named area.
 #   plan                     publish, scan the rasters and count the tiles of the full run (builds nothing)
 #   log [N]                  last N lines of the run log (default 40)
-# Env (all optional):
+# Env (all optional; NAS, NAS_ROOT, HEAP_GB, JOBS also as NAS, NAS_ROOT, NAS_HEAP_GB, NAS_JOBS in tools/deploy.env):
 #   NAS=truenas_admin@TRUENAS        ssh target (key login, BatchMode)
 #   NAS_ROOT=/mnt/Data/Documents/UnitSportSwitzerland   = X:\UnitSportSwitzerland on Windows
 #   HEAP_GB=16        GC heap hard limit: the rest of the 31 GB stays for the ZFS ARC and the page cache
@@ -28,6 +28,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+. tools/lib/nas.sh
+nas_config   # NAS, NAS_ROOT, NAS_HEAP_GB, NAS_JOBS from tools/deploy.env; the environment wins
 NAS=${NAS:-truenas_admin@TRUENAS}
 NAS_ROOT=${NAS_ROOT:-/mnt/Data/Documents/UnitSportSwitzerland}
 HEAP_GB=${HEAP_GB:-16}
@@ -42,8 +44,6 @@ PIDFILE=$NAS_ROOT/terrain_chunks_france.pid
 DEM=$NAS_ROOT/data/france/rgealti
 # outside the repository: a build under the checkout's folders disturbs the game's own build
 PUBLISH=${PUBLISH:-${TMPDIR:-/tmp}/unitsport-nas/build-france-publish}
-
-. tools/lib/nas.sh
 
 # the command line shared by the full run and the tests: the NAS side, run through bash (its login shell is zsh)
 run_args() { # out temp [extra...]

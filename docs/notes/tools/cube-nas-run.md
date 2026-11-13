@@ -15,6 +15,8 @@ FROM=network tools/build-swiss-nas.sh cube start   # redo that stage and the lat
 tools/build-swiss-nas.sh cube status | stop | log [N]
 ```
 
+- **Where**: `NAS` (ssh target) and `NAS_ROOT` (the project folder on the NAS) from `tools/deploy.env` or the environment
+  (`tools/swiss-nas-run`, settings); `NAS_HEAP_GB` and `NAS_JOBS` too.
 - **The region**: `TILES=<file>` (LV95 km tiles, `E-N` a line, `#` comments), default `tools/regions/d2-server.tiles`:
   the server's region, B4's 825 tiles, Geneva to Riddes (#1508). Its `--cube-box` is the tiles' bounds, as MapSetup's
   `Selection.Bounds()`. Or `BOX=E0,N0,E1,N1` in LV95 metres: the leaves whose centre is inside, with the tiles within

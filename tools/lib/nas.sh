@@ -3,6 +3,23 @@
 
 nas() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$NAS" "$@"; }
 
+# nas_config: the NAS settings from tools/deploy.env (copy tools/deploy.env.example), called before the defaults.
+# Only NAS, NAS_ROOT, NAS_HEAP_GB (-> HEAP_GB) and NAS_JOBS (-> JOBS) are taken, read in a subshell: the rest of the
+# file is the game server's (its TILES=1 would be the cube runner's tile list). Variables set in the environment win.
+nas_config() {
+  local f=tools/deploy.env line
+  [ -f "$f" ] || return 0
+  while IFS= read -r line; do
+    case $line in
+      NAS=*)         [ -n "${NAS+x}" ]      || NAS=${line#*=} ;;
+      NAS_ROOT=*)    [ -n "${NAS_ROOT+x}" ] || NAS_ROOT=${line#*=} ;;
+      NAS_HEAP_GB=*) [ -n "${HEAP_GB+x}" ]  || HEAP_GB=${line#*=} ;;
+      NAS_JOBS=*)    [ -n "${JOBS+x}" ]     || JOBS=${line#*=} ;;
+    esac
+  done < <(set +eu; . "$f" > /dev/null 2>&1
+           for v in NAS NAS_ROOT NAS_HEAP_GB NAS_JOBS; do [ -n "${!v-}" ] && printf '%s=%s\n' "$v" "${!v}"; done)
+}
+
 # TerrainPreprocessor, self-contained linux-x64 (own .NET runtime: nothing installed on the NAS, no root)
 publish() {
   echo "== dotnet publish linux-x64 (self-contained)"

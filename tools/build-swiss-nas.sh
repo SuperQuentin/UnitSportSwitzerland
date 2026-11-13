@@ -27,7 +27,7 @@
 #     (default NAS_ROOT/terrain_chunks_cube); FRAMES= network frames side by side (default by the heap, ~5 GB
 #     each); ALTI2M=1 / RGEALTI=1 add the 2 m swissALTI3D / IGN RGE ALTI heights; NO_OSM=1 builds without OSM;
 #     HEAP_GB defaults to 20 for cube
-# Env (all optional):
+# Env (all optional; NAS, NAS_ROOT, HEAP_GB, JOBS also as NAS, NAS_ROOT, NAS_HEAP_GB, NAS_JOBS in tools/deploy.env):
 #   NAS=truenas_admin@TRUENAS   NAS_ROOT=/mnt/Data/Documents/UnitSportSwitzerland (= X:\UnitSportSwitzerland)
 #   HEAP_GB=16      GC heap hard limit (31 GB box: the rest stays for the ZFS ARC)
 #   JOBS=           threads (default nproc)      NICE=10      DEM_CACHE_MB=4096
@@ -40,6 +40,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+. tools/lib/nas.sh
+nas_config   # NAS, NAS_ROOT, NAS_HEAP_GB, NAS_JOBS from tools/deploy.env; the environment wins
 NAS=${NAS:-truenas_admin@TRUENAS}
 NAS_ROOT=${NAS_ROOT:-/mnt/Data/Documents/UnitSportSwitzerland}
 HEAP_GIVEN=${HEAP_GB:-}
@@ -56,8 +58,6 @@ PIDFILE=$NAS_ROOT/terrain_chunks_v3.pid
 CHAIN=$NAS_ROOT/bin/swiss-nas-chain.sh
 # outside the repository: a build under the checkout's folders disturbs the game's own build
 PUBLISH=${PUBLISH:-${TMPDIR:-/tmp}/unitsport-nas/build-swiss-nas-publish}
-
-. tools/lib/nas.sh
 
 send_chain() { nas "cat > '$CHAIN'" < tools/lib/swiss-nas-chain.sh; }
 

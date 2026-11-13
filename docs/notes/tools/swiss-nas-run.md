@@ -44,6 +44,9 @@ hash 1; wall 722 s. Peak RSS: terrain 0.6 GB, frdem 1.3 GB, osm 1.7 GB, features
 word 3, the manifest says `formatVersion` 3, `heightOffsetM` -50. Fixed costs dominate a small box, so these do not
 extrapolate to the 43,621 tiles; the stage log of the first full run is the real number.
 
+- **Settings**: `NAS`, `NAS_ROOT`, `NAS_HEAP_GB` and `NAS_JOBS` come from `tools/deploy.env` (`tools/deploy.env.example`'s
+  last block; `nas_config` in `tools/lib/nas.sh`), read in a subshell so the game server's lines there (its `TILES=1`) stay
+  out; the environment wins. Both runners, `build-france.sh` too. Before, the defaults had to be edited in the script.
 - **Missing DEMs**: a foreign DEM folder that is not under `data/` (`france/rgealti`, `germany_bw_dgm1`,
   `austria_bev_dtm`, `italy_bz_dtm`) is left out with a `stage dem: no ..., left out` line, and the stage is skipped when
   none is there. The preprocessor itself stops on a missing `--dem` folder (#1794).
