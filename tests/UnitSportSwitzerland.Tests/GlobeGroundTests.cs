@@ -146,4 +146,47 @@ public class GlobeGroundTests
         Assert.True(GlobeGround.OnLake(lakes, 422.23f, 0.039f));
         Assert.False(GlobeGround.OnLake(null, 422.2f, 0.01f));
     }
+    [Fact]
+    public void Bright_sand_is_not_snow()
+    {
+        // #1802: a desert read as a snowfield. Blue Marble's sand as the globe reads it back (lifted), against snow
+        var sand = GlobeGround.Unstore(new Vector3(0.62f, 0.50f, 0.34f));
+        var snow = GlobeGround.Unstore(new Vector3(0.80f, 0.82f, 0.86f));
+        Assert.True(GlobeGround.Classify(sand)[3] < 0.1f, string.Join(", ", GlobeGround.Classify(sand)));
+        Assert.True(GlobeGround.Classify(snow)[3] > 0.9f, string.Join(", ", GlobeGround.Classify(snow)));
+    }
+
+    [Fact]
+    public void The_palette_paints_its_own_region_and_the_photo_the_rest()
+    {
+        // #1802: inside Switzerland's box the palette as before, far from it the photo's colour on land, the palette's water
+        Assert.Equal(1f, GlobeGround.OwnPalette(46.5, 7.5));
+        Assert.Equal(1f, GlobeGround.OwnPalette(45.6, 5.8));
+        Assert.Equal(0f, GlobeGround.OwnPalette(25.0, 45.0));
+        Assert.Equal(0f, GlobeGround.OwnPalette(46.5, 13.0));
+        float edge = GlobeGround.OwnPalette(46.5, 10.6 + 0.25 / Math.Cos(46.5 * Math.PI / 180));
+        Assert.InRange(edge, 0.3f, 0.7f);
+
+        var sand = new Vector3(0.6f, 0.45f, 0.25f);
+        var land = GlobeGround.Colour(Vector4.Zero, 300, 0.5f, sand, 0f);
+        Assert.Equal(sand.X, land.R, 4);
+        Assert.Equal(sand.Z, land.B, 4);
+        var swiss = GlobeGround.Colour(Vector4.Zero, 300, 0.5f, sand, 1f);
+        Assert.Equal(GlobeGround.Colour(Vector4.Zero, 300, 0.5f).R, swiss.R, 4);
+        var sea = GlobeGround.Colour(new Vector4(1, 0, 0, 0), 0, 0.5f, sand, 0f);
+        Assert.Equal(Lin(CoverClass.Water).Z, sea.B, 3);
+    }
+
+    [Fact]
+    public void A_weight_grid_keeps_its_blocks_colour()
+    {
+        var grid = GlobeGround.Weigh(2, 2, (x, y) => new Color(0.5f, 0.4f, 0.3f));
+        var c = GlobeGround.SampleColour(grid, 0.5f, 0.5f);
+        // read as the bake stored it (sRGB texels, linear stored values), then back as the palette's
+        var l = new Color(0.5f, 0.4f, 0.3f).SrgbToLinear();
+        var want = GlobeGround.Unstore(new Vector3(l.R, l.G, l.B));
+        Assert.Equal(want.X, c.X, 2);
+        Assert.Equal(want.Y, c.Y, 2);
+        Assert.Equal(want.Z, c.Z, 2);
+    }
 }

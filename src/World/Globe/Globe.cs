@@ -743,6 +743,14 @@ public partial class Globe : Node
         // coarser level's surface where the leaf has none (level within 5 cm, or the leaf's bed well under it: Lavaux's
         // is 310 m down, and its shore vertices drew a wall that deep)
         bool[]? wet = null;
+        // a lake's own depth (surface less bed) where a leaf knows it (#1802): the far leaves' lakes drawn as deep as they
+        // are, as the near leaves draw them (a shallow harbour was the abyss's blue past the near leaves)
+        float[]? bedOf = null;
+        void Bed(int k, float depth)
+        {
+            if (bedOf == null) { bedOf = new float[n * n]; Array.Fill(bedOf, float.NaN); }
+            bedOf[k] = depth;
+        }
         if (water != null && water.Bits == bits)
         {
             wet = new bool[n * n];
@@ -753,6 +761,7 @@ public partial class Globe : Node
                     float ground = hs[j * n + i], surface = CubeSurface.SurfaceAt(water, i * stride, j * stride, ground);
                     if (surface == ground && float.IsNaN(CubeSurface.LevelAt(water.Level, water.Side, i * stride, j * stride))) continue;
                     wet[j * n + i] = true;
+                    if (surface > ground) Bed(j * n + i, surface - ground);
                     hs[j * n + i] = surface;
                 }
         }
@@ -767,8 +776,11 @@ public partial class Globe : Node
                     bool bed = under[k] - hs[k] > GlobeGround.BedM;
                     if (!bed && (!GlobeGround.Level(under, n, i, j) || hs[k] > under[k] + GlobeGround.LevelM)) continue;
                     (wet ??= new bool[n * n])[k] = true;
+                    if (under[k] > hs[k]) Bed(k, under[k] - hs[k]);
                     hs[k] = under[k];
                 }
+        // how much each vertex is the world's own region (GlobeGround.OwnPalette): the palette there, the photo away
+        var own = palette != null ? new float[n * n] : null;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -776,6 +788,8 @@ public partial class Globe : Node
                 var (x, y, z) = CubeGeometry.Exact(key, bits, i * stride, j * stride, h);
                 pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
                 var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, ((long)key.X << bits) + i * stride), CubeSphere.Lattice(key.Level + bits, ((long)key.Y << bits) + j * stride));
+                if (own != null)
+                    own[j * n + i] = GlobeGround.OwnPalette(Mathf.RadToDeg(Math.Asin(Math.Clamp(normal.Z, -1, 1))), Mathf.RadToDeg(Math.Atan2(normal.Y, normal.X)));
                 var (ux, uy, uz) = anchor.DirectionToLocal(normal);
                 up[j * n + i] = new Vector3((float)ux, (float)uy, (float)uz);
             }
@@ -817,10 +831,17 @@ public partial class Globe : Node
                         isWater = onLake || weights.X > GlobeGround.LakeWeight;
                         weights = new Vector4(1, 0, 0, 0);
                     }
+                    // the sea (#1802): drawn at the geoid, so seldom level, and none of the pyramid's lakes; where the image
+                    // says water plainly under the sea's reach it is the sea's surface, as a lake's: some tiles drew it as
+                    // water and others as painted ground, meeting at a tile edge, and the lake list painted it as land
+                    else if (guessed?[k] != true && hs[k] <= GlobeGround.SeaReachM && weights.X > GlobeGround.LakeWeight)
+                    {
+                        isWater = true;
+                        weights = new Vector4(1, 0, 0, 0);
+                    }
                     // the pyramid knows its lakes (#1678): ground that is none of them is dry, whatever the colour image
-                    // says (Blue Marble's 500 m lake pixels painted a pale band of water 200 m up the Lavaux shore); the
-                    // sea is no lake of its list: on the sea's bed the image's water stays (#1802: a bed is seldom level,
-                    // and most of the sea was painted as green land below 20 km)
+                    // says (Blue Marble's 500 m lake pixels painted a pale band of water 200 m up the Lavaux shore); under
+                    // the sea's reach a shore keeps the image's share of water
                     else if (lakes != null && hs[k] > GlobeGround.SeaReachM) weights = GlobeGround.Dry(weights);
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);
                     if (cover != null)
@@ -831,6 +852,9 @@ public partial class Globe : Node
                         var c = Terrain.CoverPalette.ColorFor(cls, hs[k], hash).SrgbToLinear();
                         colours[k] = new Color(c.R, c.G, c.B, 0);
                     }
+                    else if (own != null && own[k] < 1f)
+                        colours[k] = GlobeGround.Colour(weights, hs[k], hash,
+                            GlobeGround.SampleColour(palette!, rect.X + uvs[k].X * rect.Z, rect.Y + uvs[k].Y * rect.W), own[k]);
                     else colours[k] = GlobeGround.Colour(weights, hs[k], hash);
                     if (lakeAt != null) lakeAt[k] = isWater;
                 }
@@ -841,7 +865,7 @@ public partial class Globe : Node
         bool flip = (pos[1] - a0).Cross(pos[n] - a0).Dot(up[0]) > 0;
         // before the skirts: they hang from the ground the lakes sank (#1678), not from the surface, where every
         // tile edge stood a wall a few metres under the water and drew a pale line
-        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM);
+        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM, bedOf);
 
         // the edge ring, counter-clockwise in (i, j), then its lowered copy
         var ring = new int[edge];
@@ -912,7 +936,8 @@ public partial class Globe : Node
     /// triangle over three (a diagonal shore, as <see cref="Terrain.WaterMeshBuilder"/>), at the surface the ground was drawn
     /// at; that ground sinks <see cref="LakeSinkM"/> under it. No waves this far (wave scale 0, as flat's far tiles).
     /// </summary>
-    private static Terrain.WaterMeshBuilder.MeshData? Lakes(Vector3[] pos, Vector3[] up, Vector3[] verts, bool[] lakeAt, int n, bool flip, float cellM)
+    private static Terrain.WaterMeshBuilder.MeshData? Lakes(Vector3[] pos, Vector3[] up, Vector3[] verts, bool[] lakeAt, int n, bool flip, float cellM,
+        float[]? bedOf = null)
     {
         var map = new int[n * n];
         Array.Fill(map, -1);
@@ -968,7 +993,10 @@ public partial class Globe : Node
                 for (int b = -1; b <= 1 && inside; b++)
                     for (int a = -1; a <= 1; a++)
                         if (!lakeAt[Math.Clamp(j + b, 0, m) * n + Math.Clamp(i + a, 0, m)]) { inside = false; break; }
-                verts[k] = pos[k] - up[k] * (inside ? LakeDeepM : LakeSinkM);
+                // inside, a leaf's own depth where it knows it (#1802), at least the shore's sink and at most the deep one
+                float depth = !inside ? LakeSinkM
+                    : bedOf != null && !float.IsNaN(bedOf[k]) ? Math.Clamp(bedOf[k], LakeSinkM, LakeDeepM) : LakeDeepM;
+                verts[k] = pos[k] - up[k] * depth;
             }
         return new Terrain.WaterMeshBuilder.MeshData(vs.ToArray(), uvs.ToArray(), idx.ToArray());
     }

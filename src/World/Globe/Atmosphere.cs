@@ -118,6 +118,12 @@ public partial class Atmosphere : Node3D
         _space = space;
     }
 
+    /// <summary>
+    /// The sky's ground half's curve (<c>ProceduralSkyMaterial.GroundCurve</c>, #1802): at 8° under the horizontal (the
+    /// limb's dip at 60 km) still two thirds the horizon's colour. Only the Earth's limb lets it be seen.
+    /// </summary>
+    public const float LimbGroundCurve = 0.3f;
+
     /// <summary>The style's sky, dimmed by <paramref name="space"/>; written only when it changes or the style rewrote it.</summary>
     private void DimSky(float space)
     {
@@ -129,10 +135,15 @@ public partial class Atmosphere : Node3D
             if (env != _env || Mathf.Abs(sky.SkyEnergyMultiplier - _skyEnergy) > 1e-4f || Mathf.Abs(_skyEnergy - keep) > 1e-3f)
             {
                 sky.SkyEnergyMultiplier = keep;
-                // its ground half (below the horizontal) is where, up here, the limb glows: gone sooner
-                sky.GroundEnergyMultiplier = keep * keep * keep;
+                // its ground half (below the horizontal) shows between the horizontal and the Earth's limb, which dips
+                // 3° at 10 km and 8° at 60 km: dimmed as the sky is, never sooner (#1802: dimmed as keep³ it stood out
+                // as a dark band with a hard edge at eye level from 15 km), the shell's own glow drawn over both
+                sky.GroundEnergyMultiplier = keep;
                 _skyEnergy = keep;
             }
+            // and the horizon's haze down to the limb: the gradient's default curve (0.02) reached the ground's dark
+            // bottom colour within 2°, a grey band under the limb's haze
+            if (sky.GroundCurve != LimbGroundCurve) sky.GroundCurve = LimbGroundCurve;
         }
         else if (env.BackgroundMode == Godot.Environment.BGMode.Color)
         {
