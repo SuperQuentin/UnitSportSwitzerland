@@ -22,6 +22,9 @@ public partial class MoonDisc : MeshInstance3D
     /// <summary>The map: NASA SVS CGI Moon Kit (4720), LROC WAC colour, 4096 x 2048, centred on 0° E.</summary>
     public const string MapPath = "res://assets/space/moon_lroc_4k.jpg";
 
+    /// <summary>The least angular radius drawn, as a share of the view's vertical field: 24 px across at 1080p and 70°.</summary>
+    public const float MinScreenShare = 0.011f;
+
     private static readonly StringName SunDir = "sun_dir", Face = "face", Brightness = "brightness";
 
     private readonly ShaderMaterial _material;
@@ -41,7 +44,8 @@ public partial class MoonDisc : MeshInstance3D
     /// <summary>The moon's material; the model viewer and the telescope's checks use it too.</summary>
     public static ShaderMaterial NewMaterial()
     {
-        var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon.gdshader") };
+        // drawn before the stars, which its depth then hides behind it (moon.gdshader)
+        var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon.gdshader"), RenderPriority = -1 };
         material.SetShaderParameter("albedo", GD.Load<Texture2D>(MapPath));
         return material;
     }
@@ -57,13 +61,17 @@ public partial class MoonDisc : MeshInstance3D
             Visible = false;
             return;
         }
-        // just inside the far plane, at its true angular radius
+        // just inside the far plane, at its true angular radius, but never smaller than MinScreenShare of the view's
+        // height (#1798): true, it was 7 px across at a normal field of view, a star among stars, and a crescent a
+        // sliver of one pixel; the eye sees the moon bigger than that. The telescope's narrow views keep the true size.
         float distance = cam.Far * 0.9f;
-        float radius = distance * (float)(RadiusMetres / sky.MoonDistance);
+        float angular = Mathf.Max((float)(RadiusMetres / sky.MoonDistance), Mathf.DegToRad(cam.Fov) * MinScreenShare);
+        float radius = distance * angular;
         GlobalTransform = new Transform3D(Basis.Identity.Scaled(Vector3.One * radius), cam.GlobalPosition + sky.Moon * distance);
         Visible = true;
         _material.SetShaderParameter(SunDir, sky.Sun);
         _material.SetShaderParameter(Face, sky.MoonFace);
-        _material.SetShaderParameter(Brightness, Mathf.Lerp(0.5f, 1.8f, day.Night));
+        // above the air the sky behind it is black whatever the hour below: the night's brightness (#1798)
+        _material.SetShaderParameter(Brightness, Mathf.Lerp(0.5f, 1.8f, Mathf.Max(day.Night, Atmosphere.Space)));
     }
 }

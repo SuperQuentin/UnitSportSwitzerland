@@ -144,6 +144,8 @@ public partial class PinballPlay : CanvasLayer
         if (e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter }) GetViewport().SetInputAsHandled();
     }
 
+    private Core.FreshPress _start;
+
     public override void _Process(double delta)
     {
         _clock += delta;
@@ -153,7 +155,8 @@ public partial class PinballPlay : CanvasLayer
             return;
         }
         if (Input.IsActionJustPressed(ActView)) _top = !_top;
-        if (Input.IsActionJustPressed(ActStart)) PinballTables.Instance?.AskStart(_key, _index);
+        // E stepped up to the machine: that press does not also start a game (#1813)
+        if (_start.Take(ActStart)) PinballTables.Instance?.AskStart(_key, _index);
         if (_game is { } g) Step(g, delta);
         if (_cam != null) _cam.Transform = _cam.Transform.InterpolateWith(_top ? TopCamera() : EyeView(), (float)Math.Min(1, delta * 8));
         if (_told.Visible != _clock < _toldUntil) _told.Visible = _clock < _toldUntil;

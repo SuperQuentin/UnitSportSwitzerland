@@ -27,6 +27,8 @@ public class ZoomRuleTests
         Assert.InRange(ZoomRule.Of(Lens(35f)), 1.95f, 1.98f);   // 38 degrees
         Assert.InRange(ZoomRule.Of(Lens(200f)), 11.1f, 11.3f);  // 6.87 degrees
         Assert.InRange(ZoomRule.Of(9f), 8.5f, 8.7f);            // the binoculars
+        Assert.InRange(ZoomRule.Of(0.0688f), 1000f, ZoomRule.MaxZoom);   // the telescope at 20,000 mm still follows
+        Assert.Equal(ZoomRule.MaxZoom, ZoomRule.Of(0.00275f));  // at 500,000 mm (#1813) the detail stops there
     }
 
     [Fact]

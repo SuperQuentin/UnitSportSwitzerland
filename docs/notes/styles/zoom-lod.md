@@ -78,3 +78,4 @@ Lausanne from 120 m above Sauvabelin (`--origin 2538500,1154500`, shot line
 - `--shot-queue` with `fov 68` / `fov 6.87` lines, once with `--zoom-lod off` and once without;
   each zoomed shot logs `zoomlod=x<step> ranges=<tracked> pass=<ms>/<set>`.
 - `ZoomRuleTests` (tier 0) pins the factor, the steps and the ring rule.
+- **Zoom cap** (#1813): `ZoomRule.MaxZoom` = 1100 (the telescope at 20,000 mm, a 0.07° view): past it the detail stops following the zoom. The telescope reaches a 9.9″ view for the planets, and a mountain at x10,000 would otherwise ask for every tile's finest detail to the horizon.

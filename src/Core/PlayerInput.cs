@@ -519,13 +519,23 @@ public partial class PlayerInput : Node
         ProcessMode = ProcessModeEnum.Always;
         GameSettings.Changed += ApplyDeadzones;
         ApplyDeadzones();
+        // keys are tracked from the window's own input, before any node's _Input can handle them away
+        GetTree().Root.WindowInput += OnWindowInput;
     }
 
-    public override void _ExitTree() => GameSettings.Changed -= ApplyDeadzones;
+    public override void _ExitTree()
+    {
+        GameSettings.Changed -= ApplyDeadzones;
+        GetTree().Root.WindowInput -= OnWindowInput;
+    }
+
+    private static void OnWindowInput(InputEvent e)
+    {
+        if (e is InputEventKey key) TrackKey(key);
+    }
 
     public override void _Input(InputEvent e)
     {
-        if (e is InputEventKey key) TrackKey(key);
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
         // VR replays the controllers as a pad, and points at the UI panel with mouse events: it
@@ -920,5 +930,25 @@ public partial class PlayerInput : Node
             if (FindFocusable(child) is { } found) return found;
         }
         return null;
+    }
+}
+
+/// <summary>
+/// A key a view opened by E (or any key) takes only once it has been up since the view opened (#1813).
+/// A view that opens in the frame of the press (offline the client is the server; pinball and table
+/// games open on every client at once) would otherwise read that press as its own the same frame:
+/// E stepped straight back from the telescope, started a pinball game, sat at the table. A field per
+/// key in the view, not readonly: <c>if (_leave.Take(ActLeave)) ...</c> each frame.
+/// </summary>
+public struct FreshPress
+{
+    private bool _up;
+
+    /// <summary><see cref="Input.IsActionJustPressed(StringName, bool)"/>, once the key has been up since this view opened.</summary>
+    public bool Take(StringName action)
+    {
+        if (_up) return Input.IsActionJustPressed(action);
+        _up = !Input.IsActionPressed(action);
+        return false;
     }
 }

@@ -35,6 +35,8 @@ src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
 src/Core/SpectatorSwitchCheck quick --spectatorcheck --world fixture
 src/Player/SpectatorCamera quick --spectatorcheck --world fixture
+src/Player/SpectatorCamera quick --spectatorturncheck --frame earth --chunks fixture:straight
+src/Player/SpectatorTurnCheck quick --spectatorturncheck --frame earth --chunks fixture:straight
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
 src/Player/OwnBodyCheck   quick  --ownbodycheck --world flat
 src/Avatar/OwnBody       quick  --ownbodycheck --world flat
@@ -407,6 +409,9 @@ src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site -
 # the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
+# #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
+src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
 # G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
 # the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
 src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
@@ -430,6 +435,8 @@ src/Player/AutoPilot      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/RaceRoute      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/LongFlightCheck full  @timeout=1400 tools/longflightcheck.sh
 src/World/Globe/Globe.cs  full   @timeout=1400 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=500 tools/farfillcheck.sh
+src/Terrain/Earth/FarFillCheck full @timeout=500 tools/farfillcheck.sh
 tools/lib/barprobe        full   tools/reanchorcheck.sh
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
@@ -1373,3 +1380,6 @@ src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --
 src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
 src/Terrain/Fixture/FunCourse quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
 src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+# #1811: back into the body after a long spectator flight: upright, its camera sane, a poisoned view put right
+src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
+src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0

@@ -99,7 +99,7 @@ public static class Highlight
             else if (mi.MaterialOverlay == Material) mi.MaterialOverlay = null;
         }
         foreach (var child in root.GetChildren())
-            if (child is not CpuParticles3D) Set(child, on);
+            if (child is not CpuParticles3D && child.Name != FlagGhost.HaloName) Set(child, on);
     }
 
     // ---- what is pointed at ----------------------------------------------------------------------
