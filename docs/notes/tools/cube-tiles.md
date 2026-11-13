@@ -217,8 +217,13 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   the whole fade (`BlendReach`: 2 tiles round each leaf's tile), and every coarser level is its ancestors and siblings.
   At the leaves' data edge the blurred field stood up to 77 m off the vertex beside it (cliffs above Riddes, steps along
   every leaf cell): within 100 m (`RampM`) the correction starts from the nearest own vertex's exact miss (a distance
-  transform on the level's lattice) and hands over to the field. Check: `tools/fillseamscheck.sh` (BlendCheck
-  `--fill-seams`). NUMBERS_1778
+  transform on the level's lattice) and hands over to the field. Within 100 m the start is
+  blurred over ~d/2 at distance d (exact integer box sums), so the medial axis of a notch does not step. Check:
+  `tools/fillseamscheck.sh` (BlendCheck `--fill-seams`). Nov 13 2026, the command above, `--jobs 6`: 1,376 level-13 tiles
+  (were 848), 257 s, peak 16.2 GB, 0 of 4.2 M edge vertices differ; the new tiles need the colour bake
+  (`--globealbedo`, 660 s for 4,090 tiles x 12 months); the previous pyramid kept as `cube_global.pre1778`. The fill's
+  hand-over (`LeafBlend`) relies on the pyramid meeting the leaves now: on an older pyramid its seam steps (Lavaux p99
+  192 cm against 50).
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
