@@ -416,6 +416,12 @@ src/Player/LongDriveCheck quick  @realtime --frame earth --longdrivecheck --chun
 src/Core/ReanchorWatch    quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
 src/Player/ReanchorCamCheck quick @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
 src/Player/FootPlayer.cs  quick  @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
+# #1776: the trees on the ground, as their leaves hold them and as drawn, after a flight across the re-anchors
+src/Terrain/NearTrees     quick  @realtime --frame earth --treeseatcheck --systems terrain,generated --at 2580761,1116825 --treeseatto 2579661,1108305 --traffic 0
+src/World/TreeSeatCheck   quick  @realtime --frame earth --treeseatcheck --systems terrain,generated --at 2580761,1116825 --treeseatto 2579661,1108305 --traffic 0
+src/Terrain/NearTrees     full   tools/treeseatcheck.sh
+src/World/TreeSeatCheck   full   tools/treeseatcheck.sh
+tools/treeseatcheck       full   tools/treeseatcheck.sh
 src/Core/ReanchorCheck    full   tools/reanchorcheck.sh
 src/Core/ReanchorWatch    full   tools/reanchorcheck.sh
 src/Core/OriginShifter    full   tools/reanchorcheck.sh
