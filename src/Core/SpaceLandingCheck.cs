@@ -167,6 +167,17 @@ public partial class SpaceLandingCheck : Node
         firstBad = await Watch(me, 3);
         Expect(firstBad == null, $"a poisoned view is put right{(firstBad == null ? "" : ": " + firstBad)}");
         Expect(me.IsOnFloor() && me.Velocity.IsFinite(), $"the poisoned body stands on the ground again ({me.GlobalPosition}, velocity {me.Velocity})");
+
+        // a near plane left far too near under the far one (a 5 mm door lens kept as a camera's base): past ~1.7e7 the
+        // frustum's far plane degenerates in floats and the light culler fails every frame. Drawn frames only: headless
+        // draws nothing, and CameraGlobal works before each drawn frame
+        if (DisplayServer.GetName() != "headless")
+        {
+            me.Camera.Near = 0.001f;
+            for (int i = 0; i < 3; i++) await Frame();
+            float ratio = me.Camera.Far / me.Camera.Near;
+            Expect(ratio <= Styles.CameraGlobal.MaxFarOverNear * 1.01f, $"a 1 mm near plane is raised to what the renderer draws (far {me.Camera.Far:F0} / near {me.Camera.Near:F4} = {ratio:E2})");
+        }
         Finish(null);
     }
 

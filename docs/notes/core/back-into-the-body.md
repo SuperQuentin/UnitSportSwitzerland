@@ -27,10 +27,19 @@
     orthonormalised, a near plane over zero and a far plane past it, logged once (`[camera] ... could not be drawn`);
     the raised near plane (#1497) belongs to the camera it was raised on (`_raisedOn`): the switch used to put the
     spectator's base onto the body's camera and leave the spectator's raised.
+- **What `create_frustum_points` means**: Godot builds the frustum's planes from the projection in floats; past a far
+  plane ~1.7e7 times the near one, (far + near) / (far − near) rounds to 1, the far plane's normal is zero and the
+  three-plane intersection fails, every frame. A NaN does not trip it (NaN passes the zero test): a NaN camera draws
+  nothing silently. The user's rotated log (`godot2026-11-13T17.39.15.log`) shows the spectator failing too, after a
+  `/tp` to Nyon, and every camera fine in Space: a near plane left far too near, with the far plane at most 160 km low
+  down. One path found: `Climb` could take a 5 mm door lens's near (`DoorPortals.DoorwayNear`, lowered for a frame)
+  as its base and later write it onto whichever camera was drawn. Now the base belongs to its camera, and `Climb`
+  never lets far / near pass `CameraGlobal.MaxFarOverNear` (1e7), lowering it back with the rest of its raise.
 - **Checks**: `--spacelandcheck` (`Core/SpaceLandingCheck`): body on the ground, the spectator up to 1,500 km, 8,000 km
   east (211 turning re-anchors), four regime switches, 900 km low (3 km re-anchors), T at 70 km, down until the body
   takes over; asserts it upright, its camera finite and orthonormal with sane planes, standing on the ground, then
-  poisons the view (`DebugPoisonView`) and asserts it put right. Far away it needs ground there: the real leaves
+  poisons the view (`DebugPoisonView`) and asserts it put right; drawn (not headless), it also sets a 1 mm near plane
+  and asserts far / near brought within `MaxFarOverNear`. Far away it needs ground there: the real leaves
   (`--frame earth --leaves .../terrain_chunks_cube --chunks ... --at 2500956,1117569`), windowed to run `CameraGlobal`
   (headless draws nothing, so `FramePreDraw` never fires). `--spacelandcheck home` flies back over the start before
   landing: the fixture world (`--chunks fixture:straight`), quick tier.

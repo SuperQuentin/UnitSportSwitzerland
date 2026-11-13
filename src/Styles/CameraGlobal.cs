@@ -100,7 +100,10 @@ public partial class CameraGlobal : Node
             _groundY = groundY;
             RenderingServer.GlobalShaderParameterSet(GroundYParam, groundY);
         }
-        if (camera != null) Climb(camera, altitude);
+        if (camera != null)
+        {
+            Climb(camera, altitude);
+        }
         ZoomRanges.Tick();
         ScaleShadows();
     }
@@ -133,6 +136,16 @@ public partial class CameraGlobal : Node
             && Mathf.Abs(m.Column2.LengthSquared() - 1) < tol && Mathf.Abs(m.Column0.Dot(m.Column1)) < tol
             && Mathf.Abs(m.Column1.Dot(m.Column2)) < tol && Mathf.Abs(m.Column0.Dot(m.Column2)) < tol && m.Determinant() > 0;
     }
+
+    /// <summary>
+    /// The deepest far plane over the near plane the renderer takes (#1811). Godot builds the frustum's planes from the
+    /// projection in floats: past ~1.7e7, (far + near) / (far - near) rounds to 1, the far plane's normal is zero, and the
+    /// light culler fails every frame (<c>create_frustum_points</c>) with nothing drawn. 1e7 keeps a margin: a 5 mm door
+    /// lens (<c>DoorPortals.DoorwayNear</c>) under a 160 km horizon was 3.2e7. <see cref="Climb"/> raises the near plane to it,
+    /// and lowers it back with the rest of its raise.
+    /// </summary>
+    public const float MaxFarOverNear = 1e7f;
+    private bool _saidDepth;
 
     /// <summary>The last transform of the drawn camera that was finite, and the camera it was.</summary>
     private Transform3D _lastSane = Transform3D.Identity;
@@ -202,6 +215,17 @@ public partial class CameraGlobal : Node
         // drew, the shuttle 50 m ahead included. 1/200,000 of its distance from the origin: 2 m at 400 km.
         float floor = camera.GlobalPosition.Length() / NearOfDistance;
         float raised = Mathf.Max(altitude > RaisedNearFromM ? (float)(altitude / 10_000) : 0f, floor);
+        // and never so near under the far plane that the frustum's planes degenerate (#1811)
+        float deepest = camera.Far / MaxFarOverNear;
+        if (deepest > raised)
+        {
+            raised = deepest;
+            if (!_saidDepth && camera.Near < deepest)
+            {
+                _saidDepth = true;
+                GD.PushWarning($"[camera] {camera.GetPath()}: near {camera.Near} m under a {camera.Far} m far plane is past what the renderer draws: raised to {deepest} m (#1811)");
+            }
+        }
         // the base belongs to the camera it was raised on (#1811): the spectator's 1 m went onto the body's camera
         // at the switch, and the spectator kept its raised plane for its next turn
         if (_raisedOn != camera) LowerRaised();
