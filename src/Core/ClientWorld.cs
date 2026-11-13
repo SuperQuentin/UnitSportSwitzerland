@@ -959,10 +959,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
             new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
+            // the fill far away (another face, Asia) against the globe round it (#1800)
+            new(Terrain.Earth.FarFillCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.FarFillCheck(Ground!, origin,
+                () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus,
+                () => _earth?.Leaves.Pyramid)),
             // G2 D's bar (#1710): no pop at a re-anchor; a long drive and a long flight across many
             new(ReanchorCheck.Requested, ToolAnchor.AtTarget, _ => ReanchorCheckFor(origin)),
             new(LongDriveCheck.Requested, ToolAnchor.AtTarget, _ => new LongDriveCheck(Ground!, origin, _earth == null ? null : _earth.Leaves.RoadsOf)),
             new(LongFlightCheck.Requested, ToolAnchor.AtTarget, _ => new LongFlightCheck(Ground, origin)),
+            // the spectator's view across many turning re-anchors: level, no snap at the next look (#1800)
+            new(SpectatorTurnCheck.Requested, ToolAnchor.AtTarget, _ => new SpectatorTurnCheck(_spectator!, origin)),
             // the player's own camera across the earth ground's re-anchor, on foot and in a car (#1763)
             new(ReanchorCamCheck.Requested, ToolAnchor.AtTarget, _ => new ReanchorCamCheck(Ground!, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
@@ -1031,14 +1037,24 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _spectator!.Position = origin.ToWorld(w[0], w[1], 1200);
                 return new Terrain.WaterProbe(Ground!, origin, w[0], w[1], w[2], w.Length > 3 ? w[3] : 0);
             }),
+            new(() => World.SkyShot.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                // the sun, the moon or the light's direction from a height (#1798)
+                var s = World.SkyShot.ParseArgs()!;
+                FreeSpectator();
+                return new World.SkyShot(_spectator!, origin, s[0],
+                    float.Parse(s[1], System.Globalization.CultureInfo.InvariantCulture), s[2]);
+            }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;
-                FreeSpectator();
+                // --flyinput flies it by its own controls (#1796)
+                if (!CmdArgs.Has("--flyinput")) FreeSpectator();
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
                 return new FlightProbe(_spectator!, chunks,
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
-                    float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+                    float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv))
+                { Status = () => EarthStatus };
             }),
             new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -1158,6 +1174,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (EnterSpectatorCheck.Requested) AddChild(new EnterSpectatorCheck(() => LocalPlayer, () => _spectator));
+        if (NearBaseCheck.Requested) AddChild(new NearBaseCheck(() => _spectator));
+        if (SpaceLandingCheck.Requested && Ground is { } landGround) AddChild(new SpaceLandingCheck(() => LocalPlayer, () => _spectator, ToggleMode, landGround));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -1654,10 +1672,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // F9 or /debug: overlays, terrain layers and view modes, alone or as an admin (#339)
         var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast,
-            scale => _chat?.Send($"/speed {scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}"));
+            scale => _chat?.Send($"/speed {scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}"),
+            _earth, () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null);
         AddChild(debug);
         _chat.DebugRequested += debug.Open;
-        if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));
+        _chat.DebugToolsRequested += debug.ApplyTools;
+        if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks, _earth));
 
         // G opens a GPX track for playback; the session owns its own camera and HUD
         // on the world's ground in either frame (#1752): the leaves and their stand-ins under --frame earth
@@ -2695,6 +2715,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             yield return (PlayerInput.ToggleMode, "Walk");
             yield return (PlayerInput.FlyUp, "Up");
             yield return (PlayerInput.FlyDown, "Down");
+            // the speed (#1796): the readout under these rows says what it is (#1798)
+            yield return (PlayerInput.SpectatorFaster, "Faster");
+            yield return (PlayerInput.SpectatorSlower, "Slower");
             yield return (PlayerInput.Teleport, "Map");
         }
         else if (viewer is { } p && IsInstanceValid(p))
@@ -3115,15 +3138,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the first floor, stair, roof or ground under the camera with room to stand (#1244): in a building that
             // is its floor, not the street 3 km over it; the terrain's height when no collision is there yet
             // under a building's floor (flown through it into the void): onto its lowest floor there
-            if ((player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
-                    ? player.StandingSpotBelow(floor) : null)) is { } spot)
-                player.GlobalPosition = spot;
-            else
-            {
-                float ground = Ground!.TryGetSurface(pos, out float h) ? h : pos.Y;
-                player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
-            }
-            player.Velocity = Vector3.Zero;
+            var at = (player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
+                    ? player.StandingSpotBelow(floor) : null)) is { } spot
+                ? spot
+                : new Vector3(pos.X, (Ground!.TryGetSurface(pos, out float h) ? h : pos.Y) + 1f, pos.Z);
+            // upright, at rest and facing where the camera looked (#1811): the body parked far away kept the basis
+            // thousands of turning re-anchors gave it (tilted by the Earth's curve between there and here), and its
+            // eased view state from before the flight
+            var look = -_spectator.GlobalBasis.Z;
+            player.StepInFromSpectator(at, look.IsFinite() && MathX.FlatLength(look) > 1e-3f ? Mathf.Atan2(-look.X, -look.Z) : player.Rotation.Y);
             Interiors.InteriorManager.Instance?.SetBodySpace(player, player.GlobalPosition);
         }
         player.Camera.Current = true;

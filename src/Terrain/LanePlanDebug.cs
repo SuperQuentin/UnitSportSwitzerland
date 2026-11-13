@@ -79,6 +79,7 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
 
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
+    private readonly Earth.EarthWorld? _earth;
 
     private bool _on;
 
@@ -127,10 +128,11 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
         public void Clear() { Points.Clear(); Colours.Clear(); }
     }
 
-    public LanePlanDebug(ChunkManager chunks, WorldOrigin origin)
+    public LanePlanDebug(ChunkManager chunks, WorldOrigin origin, Earth.EarthWorld? earth = null)
     {
         _chunks = chunks;
         _origin = origin;
+        _earth = earth;
         Name = "LanePlanDebug";
     }
 
@@ -182,6 +184,15 @@ public partial class LanePlanDebug : Node3D, IOriginShiftAware
     /// <summary>The road tiles round (<paramref name="e"/>, <paramref name="n"/>), then the drawing.</summary>
     private async Task Load(double e, double n)
     {
+        // the earth world (#1743): the loaded leaves' road records on their stand-in tiles, already in hand
+        if (_earth != null)
+        {
+            _earth.StandRoadsNear(_origin.ToWorld(e, n, 0), Radius, _tiles);
+            _builtE = e;
+            _builtN = n;
+            Build();
+            return;
+        }
         if (_chunks?.Source is not { } source) return;
         _loading = true;
         int generation = ++_generation;

@@ -1,6 +1,5 @@
 using Godot;
 using UnitSport.Styles;
-using UnitSport.Terrain;
 
 namespace UnitSport.Core;
 
@@ -72,16 +71,16 @@ void fragment() {
     };
 
     /// <summary>
-    /// Leaves <paramref name="was"/> for <paramref name="mode"/>. Main thread; <paramref name="chunks"/>
-    /// may be null where there is no streamed world to rebuild.
+    /// Leaves <paramref name="was"/> for <paramref name="mode"/>. Main thread; <paramref name="rebuild"/> builds the
+    /// streamed world again (the flat tiles, or the earth world's leaves), null where there is none.
     /// </summary>
-    public static void Apply(Viewport viewport, ChunkManager? chunks, DebugViewMode mode, DebugViewMode was)
+    public static void Apply(Viewport viewport, Action? rebuild, DebugViewMode mode, DebugViewMode was)
     {
         bool wire = mode == DebugViewMode.Wireframe;
         if (wire != (was == DebugViewMode.Wireframe))
         {
             RenderingServer.SetDebugGenerateWireframes(wire);
-            if (wire) chunks?.RebuildVisuals();
+            if (wire) rebuild?.Invoke();
         }
         viewport.DebugDraw = mode switch
         {

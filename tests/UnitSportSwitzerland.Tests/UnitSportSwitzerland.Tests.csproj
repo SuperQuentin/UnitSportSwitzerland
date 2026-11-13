@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\tools\TerrainFormat\TerrainFormat.csproj" />
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\SpectatorSpeed.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ConflictPoints.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\MoverKind.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\NarrowPass.cs" Link="Game\%(Filename)%(Extension)" />
@@ -114,6 +115,7 @@
     <Compile Include="..\..\src\Net\Invites\PartyBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\CachingChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\GroundTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\BuildPolicy.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />

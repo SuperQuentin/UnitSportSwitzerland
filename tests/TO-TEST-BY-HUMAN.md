@@ -7,6 +7,43 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The debug menu on the earth world ([#1820](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1820), [#1743](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1743))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2027-07-15`, F9.
+
+- [ ] Click Leaf edges and Leaf labels, fly round Geneva and out over the fill → every leaf outlined on its ground (green furnished, yellow ground only, grey loading; fill dashed), labels on the near ones, new leaves outlined as they land.
+- [ ] Hover each switch → its tooltip names leaves, the globe and the anchor, not tiles; Earth curvature is greyed with its reason.
+- [ ] Freeze leaf streaming, fly 3 km away and look back → the loaded leaves stand alone; unfreeze → the leaves round you come back.
+- [ ] Wireframe → the leaves come back as lines within a few seconds (slow, as on flat); Normal → as before.
+- [ ] Type `/debug tiles,labels` then `/debug off` in the chat → the tools switch on, then all off.
+
+## A join from the menu reaches the ground ([#1816](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1816), PR [#1819](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1819))
+
+The exported Windows build, joined from the title screen (saved server or address), not `--connect`.
+
+- [ ] Delete `chunk_2583_1113.terr` (and its neighbours `2582-2584_1112-1114`) from `chunk_cache` (keep the `.terrc`), join `unitsport.infrack.ch` from the menu as a returning player → the loading screen ends, on foot at the spawn or where you fell asleep; no `[spawn] no terrain streamed under the spawn point` warning in the log.
+
+## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
+
+On Windows, a real keyboard, in a window.
+
+- [ ] In the spectator (Shift+T), hold Shift a second or more and let go, twenty times, some while turning the mouse, some during a load hitch, some after an Alt tap with the cursor free → the camera stops sinking every time; a `[input] Shift repeated after its key-up: released` line in the log is that case caught.
+- [ ] On foot, sprint with Shift+W and let go of Shift first, then W, a dozen times → back to a walk every time.
+
+## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.
+
+- [ ] With a pad: tap RB / LB, then hold each → a notch a tap, a smooth ramp held (2 m/s to 100 km/s in ~4 s); the readout top right; the hints list Faster RB / Slower LB.
+- [ ] In a headset: the right / left trigger while spectating → faster / slower, the readout readable on the VR panel; the triggers do nothing else there.
+- [ ] Climb from Geneva to ~300 km at full speed, fly east to Asia (~1 min, ~10 s boosted), come down → the speed grows with the altitude by itself, nothing freezes or hitches on the way, the generated ground is under you when you land.
+
+## Back into the body after a long spectator flight ([#1814](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1814))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T into the spectator.
+
+- [ ] Fly to Asia through Space at full speed, come down, press T above 50 km and keep descending → the body takes over once the ground is in, standing upright on it, the world drawn round it; no `create_frustum_points` in the log. If a `[camera] ... could not be drawn` or `[player] ... a non-finite ... was put back` line shows, the view is still drawn: send that line (it names the cause).
+
 ## The earth fill's walls and ledges north of Riddes ([#1788](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1788))
 
 In a window, the earth playtest's launch (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2578113,1115406 --date 2027-07-15`), the rebuilt pyramid on D: (`cube_global`, Nov 13).
@@ -987,3 +1024,15 @@ Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4
 Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-4-reanchor-flight`, traffic on.
 
 - [ ] Fly and drive across Geneva's re-anchors (every 3 km, the `[origin] shift` line) → no lag spike you notice; the line reads well under the 117-203 ms of Nov 12 (headless on a loaded machine: 23-48 ms), traffic keeps driving on its roads after each.
+
+## The globe's terminator and the spectator speed readout (PR [#1806](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1806), [#1798](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1798))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator camera (Shift+T).
+
+- [ ] Climb above 500 km and fly at 100 km/s, then with boost, along the day/night line → the lit half stays put on the ground: no drift with the camera, no snap twice a second.
+- [ ] Change the speed (wheel, `^` / `'` on a Swiss keyboard, RB / LB) → the speed shows bottom right under the key hints, clear of the F3 overlay at top right, and fades 1.5 s later.
+- [ ] On a Swiss keyboard the hints read "Wheel ↑ / ^" and "Wheel ↓ / '"; on a US keyboard "=" and "-".
+- [ ] On a phone (`--mobile`) the speed shows at top centre, not under the pedals.
+- [ ] At night in Geneva (`--date 2026-11-13`, after sunset) → no dim blue blob in the sky; the crescent moon low in the south-west, its dark part faintly lit, no star through it.
+- [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
+- [ ] With the telescope on the moon → the moon at its true size, as before.
