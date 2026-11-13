@@ -45,6 +45,7 @@ public partial class MenuCheck : Node
         (() => { }, () => _shell.Top == null && !_shell.MenuOpen, 1, "no menu once in the world"),
         (Esc, Top<PauseScreen>, 1, "Esc opens the pause menu"),
         (Esc, () => _shell.Top == null, 1, "Esc closes it"),
+        (() => { }, () => GetTree().Root.FindChild("Pause", true, false) == null && !_shell.MenuOpen, 1, "the closed pause page finishes its fade and is freed (#1831)"),
         (() => { }, () => _shell.Top == null, 1.5, "and it stays closed"),
         (() => Press(Key.P), Top<CharacterScreen>, 5, "P on foot opens the character menu"),
         (Esc, () => _shell.Top == null, 1, "Esc closes the character menu"),

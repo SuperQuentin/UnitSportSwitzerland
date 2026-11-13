@@ -307,6 +307,8 @@ src/Core/TestWorld       quick  --hitboxcheck --world flat
 src/Core/Systems         quick  --hitboxcheck --world flat
 src/Ui/                  quick  --leavecheck --world fixture
 src/Ui/                  quick  --menucheck --systems ui
+src/Ui/                  quick  --motioncheck --systems ui
+src/Core/GameSettings    quick  --motioncheck --systems ui
 src/Ui/Map               quick  --mapcheck --systems ui
 tools/MapCore/           quick  --mapcheck --systems ui
 src/Core/TerrainPaths    quick  --mapcheck --systems ui

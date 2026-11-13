@@ -87,11 +87,14 @@ public partial class PauseScreen : Screen
         AddChild(foot);
     }
 
+    public override bool Springy => true;
+
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
         var b = UiKit.MenuButton(text, dim ? 17 : 21);
         if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
+        b.ButtonDown += () => UiMotion.Press(b);
         into.AddChild(b);
         return b;
     }

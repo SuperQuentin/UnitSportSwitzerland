@@ -19,6 +19,12 @@ public abstract partial class Screen : Control
         Theme = Skins.MenuSkin.Theme();
     }
 
+    /// <summary>
+    /// True for a page that opens and closes with <see cref="UiMotion"/> (spring open, quick close) instead of the shell's
+    /// plain fade. Input never waits: the shell pops the page at once and only its picture lingers (#1831).
+    /// </summary>
+    public virtual bool Springy => false;
+
     /// <summary>Called each time the page comes to the front.</summary>
     public virtual void OnShown() => PlayerInput.FocusFirst(this);
 
