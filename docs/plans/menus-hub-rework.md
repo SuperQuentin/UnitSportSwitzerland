@@ -3,7 +3,7 @@
 
 # Menus rework: the phone as the hub, a lighter inventory, one motion language
 
-Status: design only, nothing implemented. Tracking issue: [#1824](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1824).
+Status: design only (mock-ups in `docs/plans/menus-hub-rework/`, `index.html` first), nothing implemented. Tracking issue: [#1824](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1824).
 
 Source: a read of the inventory, menu and phone code and notes (November 2026), then three rounds of
 questions to the owner about how the game feels to play. Builds on `docs/plans/phone-redesign.md`
@@ -125,7 +125,9 @@ a single phone key replacing M / J / P / R.
   Each opens its existing screen with a Back-to-phone path, as Journal does now. A native app is
   written only where the hand-off feels wrong in play.
 - M, J, P and R stay and open the same things, so no key anyone knows is lost.
-- The pause menu keeps Resume, Settings, the tutorial skip and Leave.
+- The pause menu keeps Resume, Settings, the tutorial skip, Leave and Quit. Activities, Character and
+  Controls leave it (the phone and their keys reach them). Its recording rows (Save clip, Record, Movie
+  studio) are still to decide.
 
 ## Phase 2: the inventory, still its own panel
 
@@ -205,5 +207,5 @@ after 1D and 2A so it does not conflict with their layout changes.
 - **`[E] Search  [R] Craft`** puts two verbs on one object, against the one-interact-key habit of
   `core/input-conventions`; it is the smallest change, not the only one.
 - **Panel width** with a figure, a grid and crafting must still fit 1152 px.
-- **No mockups yet.** `phone-redesign` had ten; the map, the hologram and the inventory figure would
-  each be cheaper to judge as a picture before code.
+- **The mock-ups are a first pass** (M01 to M06), not yet judged by the owner. The inventory figure's
+  slot positions in M04 are placeholders.
