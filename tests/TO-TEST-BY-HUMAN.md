@@ -1036,3 +1036,14 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] At night in Geneva (`--date 2026-11-13`, after sunset) → no dim blue blob in the sky; the crescent moon low in the south-west, its dark part faintly lit, no star through it.
 - [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
 - [ ] With the telescope on the moon → the moon at its true size, as before.
+
+## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
+
+Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
+
+- [ ] Noon (`--time 13`) → a small bright disc with a soft corona and faint spikes, no 20° blob; stars and planets near it hidden.
+- [ ] Sunset (`--time 20.6`, then 21) → an orange disc low over the Jura, a wider warm corona; it sets behind the ridge, cut by it.
+- [ ] Walk so trees or buildings stand in front of the low sun → beams between them; Settings → Graphics → "Sun rays" off → gone, on → back.
+- [ ] Night (`--time 23`) → no blob anywhere; the moon at its own place.
+- [ ] Fly up past 40 km (spectator) → the sun stays where it was, gains strong spikes over black; behind the Earth it is gone.
+- [ ] VR (Link): the sun and the beams in both eyes at the same place.

@@ -17,6 +17,12 @@ namespace UnitSport.World;
 /// before drawing for whichever camera is current: a ridge or a building hides it. Built once; only its
 /// transform and a few shader parameters move.
 /// </para>
+///
+/// <para>
+/// Its child <c>SunShafts</c> lays light shafts over the screen (<c>shaders/sun_shafts.gdshader</c>): ridges,
+/// trees and buildings cut beams out of the glow, strongest with the sun low. The "Sun rays" setting, off by
+/// default on phones and standalone headsets (<see cref="GameSettings.SunRays"/>).
+/// </para>
 /// </summary>
 public partial class SunDisc : MeshInstance3D
 {
@@ -26,10 +32,19 @@ public partial class SunDisc : MeshInstance3D
     /// <summary>The quad's angular half-size, rad: the corona fades to nothing inside it.</summary>
     public const float Reach = 0.14f;
 
-    private static readonly StringName CoreR = "core_r", ReachP = "reach", Warm = "warm", Brightness = "brightness";
+    private static readonly StringName CoreR = "core_r", ReachP = "reach", Warm = "warm", Brightness = "brightness",
+        SunDir = "sun_dir", ShaftColour = "shaft_colour", Spikes = "spikes";
 
-    private readonly ShaderMaterial _material;
-    private (float Core, float Warm, float Bright) _shown = (-1, -1, -1);
+    /// <summary>The starburst's strength on the ground (in space the atmosphere's sun has it full).</summary>
+    private const float GroundSpikes = 0.15f;
+
+    /// <summary>The shafts' strength high in the sky and on the horizon.</summary>
+    private const float ShaftsHigh = 0.035f, ShaftsLow = 0.3f;
+
+    private readonly ShaderMaterial _material, _shaftMaterial;
+    private readonly MeshInstance3D _shafts;
+    private (float Core, float Warm, float Bright, float Spikes) _shown = (-1, -1, -1, -1);
+    private (Vector3 Colour, float Warm) _shaftsShown = (-Vector3.One, -1);
 
     public SunDisc()
     {
@@ -41,6 +56,19 @@ public partial class SunDisc : MeshInstance3D
         Mesh = new QuadMesh { Size = new Vector2(2f, 2f) };
         _material = NewMaterial();
         MaterialOverride = _material;
+        _shaftMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sun_shafts.gdshader") };
+        _shafts = new MeshInstance3D
+        {
+            Name = "SunShafts",
+            // a quad the shader lays over the whole screen, never culled (as the atmosphere's)
+            Mesh = new QuadMesh { Size = new Vector2(2f, 2f) },
+            CustomAabb = new Aabb(-Vector3.One * 1e7f, Vector3.One * 2e7f),
+            MaterialOverride = _shaftMaterial,
+            CastShadow = ShadowCastingSetting.Off,
+            GIMode = GIModeEnum.Disabled,
+            Visible = false,
+        };
+        AddChild(_shafts);
     }
 
     /// <summary>The sun's material (the sky check reads it too).</summary>
@@ -85,11 +113,30 @@ public partial class SunDisc : MeshInstance3D
         GlobalTransform = new Transform3D(new Basis(right * half, up * half, -toSun), cam.GlobalPosition + toSun * distance);
         Visible = true;
 
-        var shown = (core, warm, bright);
+        PlaceShafts(toSun, warm, bright);
+
+        // a lens's starburst round a small bright point: gone once the disc is big on screen (a telescope's view)
+        float spikes = GroundSpikes * (1f - Mathf.SmoothStep(0.02f, 0.06f, core / fov));
+        var shown = (core, warm, bright, spikes);
         if (shown == _shown) return;
         _shown = shown;
         _material.SetShaderParameter(CoreR, core);
         _material.SetShaderParameter(Warm, warm);
         _material.SetShaderParameter(Brightness, bright);
+        _material.SetShaderParameter(Spikes, spikes);
+    }
+
+    private void PlaceShafts(Vector3 toSun, float warm, float bright)
+    {
+        float strength = GameSettings.Current.SunRays ? Mathf.Lerp(ShaftsHigh, ShaftsLow, warm) * bright : 0f;
+        _shafts.Visible = strength > 0.002f;
+        if (!_shafts.Visible) return;
+        _shaftMaterial.SetShaderParameter(SunDir, toSun);
+        var tint = new Color(1f, 0.86f, 0.66f).Lerp(new Color(1f, 0.6f, 0.3f), warm);
+        var colour = new Vector3(tint.R, tint.G, tint.B) * strength;
+        if ((colour, warm) == _shaftsShown) return;
+        _shaftsShown = (colour, warm);
+        _shaftMaterial.SetShaderParameter(ShaftColour, colour);
+        _shaftMaterial.SetShaderParameter(Warm, warm);
     }
 }

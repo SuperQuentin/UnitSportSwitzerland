@@ -820,6 +820,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(_dayNight);
             // the real moon in the sky (#1440), drawn under the real sun only
             AddChild(new World.MoonDisc());
+            // the real sun (#1479): a disc at its place, the sky no longer draws the light
+            AddChild(new World.SunDisc());
             // the stars (#1444), the real sky's too
             AddChild(new World.StarField());
             AddChild(new World.SkyBodies());

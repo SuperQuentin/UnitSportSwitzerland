@@ -33,7 +33,8 @@ const float SHADOW_SOFT = 2000.0;
 const int LIGHT_STEPS = 4;
 // the sun's own disc above the air (#1798): its true angular radius, rad, and its light against the scene's 1
 const float SUN_R = 0.00465;
-const vec3 SUN_COLOUR = vec3(1.0, 0.97, 0.90);
+
+#include "res://shaders/common/sun_look.gdshaderinc"
 
 void vertex() {
 	// the quad's corners (a 2 m QuadMesh, +-1) straight onto the screen's
@@ -66,29 +67,32 @@ vec2 sphere(vec3 o, vec3 d, float r) {
 
 // the sun where the sky is open toward it: nothing drawn there (depth) and the Earth's ball not in the way, so it
 // shows over the night side when it stands above the limb and hides behind the Earth; the procedural sky's disc,
-// dimmed with the sky as the camera climbs, is the one below. A disc a few pixels wide and its glare.
-vec3 sun_disc(vec3 o, vec3 dir, float depth, float a, float aa) {
+// faded out as the camera climbs (World/SunDisc), is the one below. The ground's look (#1479): its core, corona and
+// a full starburst; p is the offset from the sun on the screen's axes, radians.
+vec3 sun_disc(vec3 o, vec3 dir, float depth, vec2 p, float aa) {
 	if (depth > 1e-7) return vec3(0.0);
 	float c = dot(dir, sun_dir);
 	if (c <= 0.0) return vec3(0.0);
 	if (sphere(o, dir, planet_r).x > 0.0) return vec3(0.0);
-	float core = 1.0 - smoothstep(SUN_R - aa, SUN_R + aa, a);
-	float glare = 0.6 * exp(-a / 0.006) + 0.12 * exp(-a / 0.05);
-	return SUN_COLOUR * (4.0 * core + glare) * intensity;
+	return sun_look(p, SUN_R, 0.0, 1.0, aa) * intensity;
 }
 
 void fragment() {
 	float depth = texture(depth_tex, SCREEN_UV).x;
 	vec4 at = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, max(depth, 1e-7), 1.0);
 	at.xyz /= at.w;
-	vec3 dir = normalize((INV_VIEW_MATRIX * vec4(at.xyz, 0.0)).xyz);
+	// the ray from the near plane (reversed Z: 1): at the far plane's depth, 1 : 3 million from near to far high up,
+	// it came out ~0.5° off at 1,050 km and the sun's disc with it (#1479)
+	vec4 ray = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, 1.0, 1.0);
+	vec3 dir = normalize((INV_VIEW_MATRIX * vec4(ray.xyz / ray.w, 0.0)).xyz);
 	// reversed Z: 0 is the far plane, nothing drawn
 	float scene = depth > 1e-7 ? length(at.xyz) : 1e12;
 
 	vec3 o = CAMERA_POSITION_WORLD - planet_centre;
-	// the angle off the sun from its sine (acos loses it near 1 in floats), and a pixel of it for the disc's edge
-	float off_sun = length(cross(dir, sun_dir));
-	vec3 sun = sun_disc(o, dir, depth, off_sun, max(fwidth(off_sun), 1e-5));
+	// the offset from the sun on the screen's axes, radians (the view's tangent plane: the spikes stand on the screen)
+	vec3 vd = (VIEW_MATRIX * vec4(dir, 0.0)).xyz, vs = (VIEW_MATRIX * vec4(sun_dir, 0.0)).xyz;
+	vec2 p = vd.z < 0.0 && vs.z < 0.0 ? vd.xy / -vd.z - vs.xy / -vs.z : vec2(1.0);
+	vec3 sun = sun_disc(o, dir, depth, p, max(fwidth(length(p)), 1e-5));
 	vec2 air = sphere(o, dir, atmo_r);
 	float t0 = max(air.x, 0.0), t1 = air.y;
 	vec2 ground = sphere(o, dir, planet_r);
