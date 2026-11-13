@@ -27,7 +27,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
     [Export] public CameraMode Mode { get; set; } = CameraMode.Chase;
 
     private RacePlayback _race = null!;
-    private ChunkManager _chunks = null!;
+    private ReplayWorld _world = null!;
     private Cinema.Director? _director;
     private Cinema.ShotContext? _shotContext;
     private Vector3 _cinematicAnchor;
@@ -126,11 +126,11 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
         return d;
     }
 
-    public static PlaybackCamera Create(RacePlayback race, ChunkManager chunks) => new()
+    public static PlaybackCamera Create(RacePlayback race, ReplayWorld world) => new()
     {
         Name = "PlaybackCamera",
         _race = race,
-        _chunks = chunks,
+        _world = world,
         Near = 0.08f,
         Far = Core.GameSettings.Current.CameraFar,
         Fov = 70f,
@@ -170,7 +170,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
         if (focused?.Avatar == null)
         {
             // leave nothing dissolved behind when the race empties out
-            if (_cut > 0) { _cut = 0; _chunks.SetSightlineCut(Vector3.Zero, Vector3.Zero, 0); }
+            if (_cut > 0) { _cut = 0; _world.SetSightlineCut(Vector3.Zero, Vector3.Zero, 0); }
             _bubble?.HideNow();
             return;
         }
@@ -226,7 +226,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
                 _director ??= NewDirector(racing);
                 _shotContext ??= new Cinema.ShotContext
                 {
-                    Runner = focused, Camera = this, Chunks = _chunks,
+                    Runner = focused, Camera = this, WorldGround = _world.Ground,
                     Rng = new RandomNumberGenerator(),
                 };
 
@@ -234,7 +234,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
                 if (!ReferenceEquals(_shotContext.Runner, focused))
                     _shotContext = new Cinema.ShotContext
                     {
-                        Runner = focused, Camera = this, Chunks = _chunks,
+                        Runner = focused, Camera = this, WorldGround = _world.Ground,
                         Rng = _shotContext.Rng,
                     };
 
@@ -283,7 +283,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
         // Distance alone, deliberately not gated to one mode or one shot: a Locked-off tripod
         // and a spectator who has flown the Free camera off across the valley are the same
         // problem - the runner is somewhere on screen (or off it) too small to find.
-        _bubble ??= ZoomBubble.Create(_chunks);
+        _bubble ??= ZoomBubble.Create(_world.Ground);
         if (_bubble.GetParent() == null) GetParent()?.AddChild(_bubble);
         // the racing drones never let the car get small, and the inset only covers the picture there
         _bubble.Enabled = _bubbleEnabled && Mode != CameraMode.Racing;
@@ -362,7 +362,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
         // evaluating a corridor a millimetre wide for every fragment in the world
         if (_cut < 0.02f) _cut = 0f;
 
-        _chunks.SetSightlineCut(GlobalPosition, head, _cut);
+        _world.SetSightlineCut(GlobalPosition, head, _cut);
     }
 
     /// <summary>

@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## GPX replay and its video export on leaves ([#1752](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1752))
+
+In a window, `--frame earth` with a real recording on real leaves (e.g. `--leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --gpx <a ride in the region>`), each against the same without `--frame earth`.
+
+- [ ] Watch the replay in Chase, then press C into Absolute Cinema and Absolute Racing → the runner and the course line lie on the ground; Cinema cuts to the climbs and corners ahead (the log says `[cinema] ... N tiles, M events` with tiles > 0).
+- [ ] Turn the road snap on (R) on a ride along roads → the status says on, the runner keeps to the road.
+- [ ] Export the video at 30 fps → every frame has its ground and buildings (no blank or half-loaded frames at the start or along the route); the file plays. Known: no sightline cut through buildings and no tile prefetch on the leaves yet.
+
 ## Ski slopes and marina boats on leaves ([#1735](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1735))
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/row7/cube --chunks D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks --at 2583954,1109157 --date 2027-01-15` (La Tzoumaz); and `--chunks fixture:fun --frame earth`.

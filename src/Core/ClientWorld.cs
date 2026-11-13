@@ -974,6 +974,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(Terrain.WorldGroundCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.WorldGroundCheck(Ground!, chunks, _earth, origin)),
             // a GPX course drawn and run where it belongs, across origin shifts (#1429)
             new(Gpx.GpxCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.GpxCheck(Ground!, origin)),
+            // the replay mode itself, its route survey, road snap and export, on the world's ground (#1752)
+            new(Gpx.ReplayCheck.Requested, ToolAnchor.AtTarget, _ => new Gpx.ReplayCheck(Ground!, origin, () => _gpx,
+                path => { _gpx!.Load(path); EnterMode(GameMode.GpxReplay); })),
             new(VoidProbe.Requested, ToolAnchor.AtTarget, _ => new VoidProbe(Ground!, origin)),
             new(() => RoadPerfProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -1648,7 +1651,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));
 
         // G opens a GPX track for playback; the session owns its own camera and HUD
-        _gpx = GpxSession.Create(_chunks, origin, _spectator);
+        // on the world's ground in either frame (#1752): the leaves and their stand-ins under --frame earth
+        var replayWorld = _earth != null
+            ? new ReplayWorld { Ground = Ground!, Idle = () => EarthIdle, IdleStatus = () => EarthStatus }
+            : ReplayWorld.OnFlat(_chunks);
+        _gpx = GpxSession.Create(replayWorld, origin, _spectator);
         _gpx.ExitRequested += () => EnterMode(GameMode.Explore);
         AddChild(_gpx);
 
