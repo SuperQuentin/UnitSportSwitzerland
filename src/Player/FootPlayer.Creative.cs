@@ -30,7 +30,7 @@ public partial class FootPlayer
     public bool CreativeFlying
     {
         get => _creativeFlying;
-        private set
+        internal set
         {
             _creativeFlying = value;
             // back on the ground, the third-person lens keeps out of it again

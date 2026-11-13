@@ -121,6 +121,13 @@
     #1630's film never reached Space: its `g400000` glide waited for leaves under a fast climb and stayed at 2 km.
     A climb does enter the regime (`[origin] the earth frame re-anchors every 20 km from 60.x km`); `--orbitcheck` and
     `--shuttlecheck` take `--frame earth` on `--world flat` to fly it.
+    **Its drop under the snap distances** (#1763): each re-anchor lowers the world ~0.7 m at the camera (3 km out on
+    the old tangent plane, d²/2R), under the distances past which an eased camera snaps (the on-foot pivot 6 m, the
+    phone 1 m). A camera state kept in world space and eased (a height, a lens position) must be carried through the
+    shift (`FootPlayer.ShiftCameraState`), or the camera jumps up and eases back down at every re-anchor.
+    `--reanchorcamcheck --chunks fixture:straight` (no `--originshift`: the drop grows with the square of the threshold)
+    moves the anchor 2.9 km behind the local player and walks, then drives, across real re-anchors: the camera's
+    offset from the body may not step.
     The shift log line says how a shift turned (`turned: tilt 0.0269°, yaw 0.0000°`). `OriginShift.Turns` is exact
     (a 20 m stress shift turns 3·10⁻⁶ rad, under `IsEqualApprox`); `Apply(Aabb)` bounds the moved corners.
     `--originstress <m> --originyaw <deg>` there turns the tangent anchor by ±deg, one way then back.

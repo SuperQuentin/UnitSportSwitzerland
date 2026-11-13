@@ -46,7 +46,13 @@ judge re-anchors through one helper.
 - **`--longflightcheck`** (`Player/LongFlightCheck`): an A320 launched 3 km over the start (`DebugLaunch`), the light
   sim's autopilot (`--airliner sim`, set by the probe if not given) on its knobs: heading toward Brest every second
   (the chord's level part at the aircraft is the great circle's start), 10 km cruise, 1,500 m from 220 km out.
-  `Engine.TimeScale` = `--flightwarp` (4) for the cruise, 1 on the way down. Every half real second: the ground
+  `Engine.TimeScale` = `--flightwarp` (16, #1762) to 15 km out, then 1; over the destination 0.05 until its leaves are
+  drawn (180 s on the wall clock at most). Measured at 16x: 365 s on the wall clock, re-anchors 2.6 cm (aircraft) and
+  4.0 cm (camera), the leaves drawn 2 km out; 32x passed too (225 s) but at 10 cm, the tolerance. What a fast camera
+  must not do (#1762): ask for every leaf it passes on its own thread. `PisteIndex` loads two at a time and skips a
+  stale one, `PisteLayer` asks only where ground is drawn, the globe drops a tile no plan asked for since the one
+  before last; before that the pool starved (the globe stuck at level 1, an hour to exit). `ReanchorWatch` skips a
+  window across a time-scale change (the movers and its clock change step on different ticks: 37 m at 16x → 1x). Every half real second: the ground
   under it drawn (`Globe.DrawnLevelAt`: the visible globe tile's level, `LeafLevelDrawn` for a leaf the earth world
   draws, -1 for a hole; 3 s fails), 8 far points at 70 % of the horizon (at most 150 km; 10 s fails), 300 m over the
   pyramid (`Net.PyramidGround`). At the end the destination's leaves must be drawn under it: the script passes
@@ -54,4 +60,4 @@ judge re-anchors through one helper.
   a default destination (Brest airport) outside the leaves given is moved to their middle leaf (D:'s are the city).
 - **Runs**: quick rows on fixtures (`@realtime`: the leaves stream on threads); full rows on D: through
   `tools/lib/barprobe.sh` (skipped with RESULT ok when the data is missing, quiet user://, its log checked for
-  `[frame] earth`); the long ones carry `@timeout=3700` (the drive's two runs `@timeout=7400`) (`tools/test.sh`: a row longer than `TEST_TIMEOUT`).
+  `[frame] earth`); the long ones carry `@timeout=1400` (the flight) and `@timeout=7400` (the drive's two runs `@timeout=7400`) (`tools/test.sh`: a row longer than `TEST_TIMEOUT`).

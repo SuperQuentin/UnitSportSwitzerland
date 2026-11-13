@@ -962,6 +962,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(ReanchorCheck.Requested, ToolAnchor.AtTarget, _ => ReanchorCheckFor(origin)),
             new(LongDriveCheck.Requested, ToolAnchor.AtTarget, _ => new LongDriveCheck(Ground!, origin, _earth == null ? null : _earth.Leaves.RoadsOf)),
             new(LongFlightCheck.Requested, ToolAnchor.AtTarget, _ => new LongFlightCheck(Ground, origin)),
+            // the player's own camera across the earth ground's re-anchor, on foot and in a car (#1763)
+            new(ReanchorCamCheck.Requested, ToolAnchor.AtTarget, _ => new ReanchorCamCheck(Ground!, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),
             new(MantleProbe.Requested, ToolAnchor.AtTarget, _ => new MantleProbe(chunks, origin)),
             new(SlopeWalkProbe.Requested, ToolAnchor.AtTarget, _ => new SlopeWalkProbe(Ground!, _earth == null ? chunks : null, origin)),
@@ -999,6 +1001,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot, Ground)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
+            // creative flight with the boost held, frame times and what the earth world spent in the worst (#1773)
+            new(() => CreativeFlyProbe.Requested, ToolAnchor.AtTarget, _ => new CreativeFlyProbe(Ground, origin, _earth)),
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
             {
                 var r = RideProbe.ParseArgs()!.Value;

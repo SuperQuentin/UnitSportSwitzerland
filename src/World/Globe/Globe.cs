@@ -188,7 +188,7 @@ public partial class Globe : Node
     private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
     private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month, Terrain.ChunkNode.TreeMeshes? Trees, Terrain.WaterMeshBuilder.MeshData? Water)> _ready = new();
     private readonly HashSet<CubeKey> _loading = new(), _want = new();
-    /// <summary>Leaf requests that came back empty (a streamed leaf not come yet, #1655): freed on the main thread, asked again.</summary>
+    /// <summary>Requests that came back empty (a streamed leaf not come yet, #1655; a tile passed by before a worker came, #1762): freed on the main thread, asked again.</summary>
     private readonly ConcurrentQueue<CubeKey> _leafMissed = new();
     /// <summary>Leaf patches to read again (<see cref="RefreshLeaves"/>): each drawn until its new one lands.</summary>
     private readonly HashSet<CubeKey> _leafStale = new();
@@ -206,6 +206,27 @@ public partial class Globe : Node
         _nextPlan = 0;
     }
     private readonly SemaphoreSlim _workers = new(3);
+    /// <summary>
+    /// The plan each tile was last asked by (#1762): a tile that waited for a worker past the next plan without being
+    /// asked again is dropped unbuilt, so a camera that moves fast (an airliner at the time warp) does not leave a
+    /// queue of tiles it passed long ago ahead of the ones under it. Main thread writes, workers read, under its lock.
+    /// </summary>
+    private readonly Dictionary<CubeKey, int> _askedIn = new();
+    private volatile int _planNo;
+
+    private void MarkAsked(CubeKey key) { lock (_askedIn) _askedIn[key] = _planNo; }
+
+    /// <summary>On a worker, once it has one: whether no plan since the one before last asked for the tile.</summary>
+    private bool Unwanted(CubeKey key)
+    {
+        lock (_askedIn) return _askedIn.TryGetValue(key, out int at) && _planNo - at > 1;
+    }
+
+    private void Unload(CubeKey key)
+    {
+        _loading.Remove(key);
+        lock (_askedIn) _askedIn.Remove(key);
+    }
     // tiles and buildings on a worker; what the last plan asked for; whether a plan has run since the last commit and asked nothing (#1679)
     private int _inFlight, _asked;
     private bool _quiet;
@@ -368,7 +389,7 @@ public partial class Globe : Node
         var clock = Earth ? System.Diagnostics.Stopwatch.StartNew() : null;
         for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _ready.TryDequeue(out var r); k++)
             if (r.Month == _month && (!_patches.ContainsKey(r.Key) || _leafStale.Remove(r.Key))) Commit(r.Key, r.Arrays, r.Colour, r.Trees, r.Water);
-        while (_leafMissed.TryDequeue(out var missed)) _loading.Remove(missed);
+        while (_leafMissed.TryDequeue(out var missed)) Unload(missed);
         for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _buildingsReady.TryDequeue(out var b); k++)
             CommitBuildings(b.Key, b.Mesh);
 
@@ -440,6 +461,7 @@ public partial class Globe : Node
         _buildings.Clear();
         _lakes.Clear();
         _loading.Clear();
+        lock (_askedIn) _askedIn.Clear();
         _leafStale.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         GD.Print($"[globe] month {month}: built again");
@@ -480,6 +502,7 @@ public partial class Globe : Node
         _want.Clear();
         _distance.Clear();
         _asked = 0;
+        _planNo++;
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, eyeDir, horizon, focal);
         foreach (var (key, node) in _patches) node.Visible = _want.Contains(key);
         // leaf patches read again after the server's leaves came (#1655), those in view first: the old one stays drawn meanwhile
@@ -536,12 +559,14 @@ public partial class Globe : Node
 
     private void Request(CubeKey key)
     {
-        if ((_patches.ContainsKey(key) && !_leafStale.Contains(key)) || _loading.Contains(key)) return;
+        if (_loading.Contains(key)) { MarkAsked(key); return; }
+        if (_patches.ContainsKey(key) && !_leafStale.Contains(key)) return;
         // the earth world's last level: a leaf's own heights, no colour of its own yet
         if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel && Leaves is { } leaves)
         {
             if (!leaves.Has(key)) return;   // past the fill's domain: the parent's tile stays
             _loading.Add(key);
+            MarkAsked(key);
             int leafMonth = _month, generation = _leafGeneration;
             if (IsFarLeaf(key) && RealLeaves is { } real)
             {
@@ -550,7 +575,8 @@ public partial class Globe : Node
                     await _workers.WaitAsync().ConfigureAwait(false);
                     try
                     {
-                        if (BuildFarLeaf(key, real) is { } far) _ready.Enqueue((key, far.Arrays, null, leafMonth, far.Trees, far.Water));
+                        if (Unwanted(key)) _leafMissed.Enqueue(key);
+                        else if (BuildFarLeaf(key, real) is { } far) _ready.Enqueue((key, far.Arrays, null, leafMonth, far.Trees, far.Water));
                         else _leafMissed.Enqueue(key);
                     }
                     catch (Exception e)
@@ -569,8 +595,10 @@ public partial class Globe : Node
                 await _workers.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    // nothing yet (a streamed leaf not come, #1655), or read before a RefreshLeaves: asked again
-                    if (leaves.HeightsOf(key) is { } tile && generation == _leafGeneration)
+                    // nothing yet (a streamed leaf not come, #1655), or read before a RefreshLeaves: asked again;
+                    // passed by before a worker came (#1762): dropped, asked again if a plan wants it
+                    if (Unwanted(key)) _leafMissed.Enqueue(key);
+                    else if (leaves.HeightsOf(key) is { } tile && generation == _leafGeneration)
                     {
                         var (palette, rect) = Earth ? AncestorPalette(key) : (null, default);
                         // the heights hold the lake's bed (#298): the surface over it, as the leaf draws its water
@@ -599,6 +627,7 @@ public partial class Globe : Node
         }
         if (!_heights.TryGetValue(key, out var at)) return;
         _loading.Add(key);
+        MarkAsked(key);
         _albedo.TryGetValue(key, out var colourAt);
         int month = _month;
         _ = Spawn(async () =>
@@ -606,6 +635,7 @@ public partial class Globe : Node
             await _workers.WaitAsync().ConfigureAwait(false);
             try
             {
+                if (Unwanted(key)) { _leafMissed.Enqueue(key); return; }
                 var tile = CubeTileCodec.Decode(ReadBytes(at));
                 Image? colour = null;
                 if (colourAt.Path != null)
@@ -934,7 +964,7 @@ public partial class Globe : Node
         Terrain.WaterMeshBuilder.MeshData? water = null)
     {
         _quiet = false;
-        _loading.Remove(key);
+        Unload(key);
         var node = Patch(key, arrays, colour, _shader);
         var globe = (ShaderMaterial)node.MaterialOverride;
         if (colour == null) Inherit(key, globe);

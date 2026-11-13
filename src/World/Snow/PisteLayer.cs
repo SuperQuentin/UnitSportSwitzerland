@@ -193,6 +193,9 @@ public partial class PisteLayer : Node
                         continue;
                     }
                     if (_building.Contains(id) || _free.Count <= _building.Count) continue;
+                    // no ground drawn there (#1762: the earth world draws leaves only near the ground, none from an
+                    // airliner at 10 km): nothing to paint, so its slopes are not asked for (an earth leaf's generate it)
+                    if (GroundOf(id) == null) continue;
                     if (_snow.Index?.Tile(id) is not { } tile) continue; // none there, or still loading
                     _building.Add(id);
                     Task.Run(() => _ready.Enqueue((id, tile, Paint(tile), ShiftOf(id))));
