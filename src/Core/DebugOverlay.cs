@@ -167,12 +167,15 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
         Upload(_groundMesh, _groundPoints, _groundColours);
         Upload(_xrayMesh, _xrayPoints, _xrayColours);
         GroundLines = _groundPoints.Count / 2;
+        XrayLines = _xrayPoints.Count / 2;
         LabelsShown = labelsUsed;
     }
 
     /// <summary>For <c>--debugcheck</c>: the lines draped on the ground and the tile or leaf labels shown by the last build.</summary>
     public int GroundLines { get; private set; }
     public int LabelsShown { get; private set; }
+    /// <summary>For <c>--debugcheck</c>: the lines drawn through everything (the origin's mast and axes, the circle past the loaded leaves).</summary>
+    public int XrayLines { get; private set; }
 
     // ------------------------------------------------------------------------------------
     // the earth world's leaves (#1743)
@@ -389,8 +392,13 @@ public partial class DebugOverlay : Node3D, IOriginShiftAware
         for (int i = 1; i <= segments; i++)
         {
             float angle = Mathf.Tau * i / segments;
-            var next = Drape(new Vector3(MathF.Cos(angle) * (float)threshold, 0, MathF.Sin(angle) * (float)threshold), ref h);
-            Line(_groundPoints, _groundColours, prev, next, amber);
+            var onCircle = new Vector3(MathF.Cos(angle) * (float)threshold, 0, MathF.Sin(angle) * (float)threshold);
+            var next = Drape(onCircle, ref h);
+            // on the earth world the 3 km circle is mostly past the loaded leaves (~1.2 km): there it is drawn through
+            // the ground at the last height known, or it would sink under the globe's land and only show over a lake
+            bool loose = _earth != null && !Ground.TryGetHeight(onCircle, out _);
+            if (loose) Line(_xrayPoints, _xrayColours, prev, next, amber);
+            else Line(_groundPoints, _groundColours, prev, next, amber);
             prev = next;
         }
 

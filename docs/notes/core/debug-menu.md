@@ -91,7 +91,8 @@
     steps, inset two), draped on the leaves' ground; green furnished, yellow its ground only, grey loading; fill leaves
     dashed; a mast at a corner; labels (cube key, real or fill, state) on the leaves within 900 m.
   - "Earth anchor": the anchor frame's mast and axes and the re-anchor circle (`OriginShifter.GroundMode`, 3 km; `SpaceMode`
-    in Space), the shifts counted as re-anchors.
+    in Space), the shifts counted as re-anchors. Past the loaded leaves (~1.2 km) the circle has no ground to drape on: it
+    is drawn through everything there at the last height known.
   - Layers: the leaf's own mesh is the ground; roads, buildings, trees and water are its furnished `ChunkNode`'s
     (`HideLayers`); "Real leaves" / "Fill leaves" hide whole leaves (`EarthWorld.IsReal`: in `LeafStore`, a part-real
     border leaf counts as real); "Globe" sets `Globe.DebugHidden` (no patch drawn). New leaves take the flags in `Add`.

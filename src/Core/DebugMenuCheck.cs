@@ -195,7 +195,8 @@ public partial class DebugMenuCheck : ChatProbe
         await Toggle("labels", false);
 
         await Toggle("origin", true);
-        Expect(await Until(() => overlay.GroundLines > 0, 5), $"the {(_earth != null ? "earth anchor's" : "world origin's")} circle is drawn ({overlay.GroundLines} lines)");
+        Expect(await Until(() => overlay.GroundLines + overlay.XrayLines >= 163, 5),
+            $"the {(_earth != null ? "earth anchor's" : "world origin's")} mast, axes and circle are drawn ({overlay.GroundLines} on the ground, {overlay.XrayLines} through it)");
         await Toggle("origin", false);
 
         // a layer that stands on the ground: the roads of a loaded tile or leaf
