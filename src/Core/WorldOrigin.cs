@@ -752,6 +752,34 @@ public sealed class WorldOrigin
     /// </summary>
     public Func<TileId, Transform3D?>? StandIns { get; set; }
 
+    /// <summary>
+    /// A heading kept in a tile's own frame (a record's yaw about +Y, 0 = -Z: a parked slot's, a yard pallet's) as a
+    /// world heading (#1799). An earth leaf's stand-in tile is turned in the world by its leaf's frame, which far from
+    /// Switzerland (the world's axes carried along under a long flight) is a large turn; a real LV95 tile's heading is
+    /// returned as it is, as before (the flat world's axes are the grid's).
+    /// </summary>
+    public float WorldYawInTile(TileId id, float tileYaw)
+    {
+        if (StandIns?.Invoke(id) is not { } t) return tileYaw;
+        var f = t.Basis * new Vector3(-Mathf.Sin(tileYaw), 0, -Mathf.Cos(tileYaw));
+        return Mathf.Atan2(-f.X, -f.Z);
+    }
+
+    /// <summary><see cref="WorldYawInTile"/> for a record placed by E/N in its tile's frame (a stand-in's past <c>LeafStandIn.FirstPlaceE</c>).</summary>
+    public float WorldYawAt(double e, double n, float tileYaw) => WorldYawInTile(TileId.FromLv95(e, n), tileYaw);
+
+    /// <summary>
+    /// A tile record's heading as a <see cref="GlobalPos"/> record's (a <c>VehicleState</c>'s: the LV95 grid's axes at
+    /// its place, <see cref="OriginFrame.WorldYawOfGrid"/>): unchanged on an LV95 tile; on a stand-in, its world heading
+    /// taken back to the grid's (#1799), so a car woken from a leaf's parked slot faces the way its slot was drawn.
+    /// </summary>
+    public float RecordYawAt(double e, double n, float tileYaw)
+    {
+        var id = TileId.FromLv95(e, n);
+        if (StandIns?.Invoke(id) is null) return tileYaw;
+        return _frame.GridYawOf(ToWorld(e, n, 0), WorldYawInTile(id, tileYaw));
+    }
+
     public double AltitudeOf(Vector3 world) => _frame.AltitudeOf(world);
 
     public Vector3 UpAt(Vector3 world) => _frame.UpAt(world);
