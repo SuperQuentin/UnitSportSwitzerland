@@ -600,23 +600,21 @@ public partial class Traffic
     // ---- the origin --------------------------------------------------------------------------
 
     /// <summary>The origin moved (#185): the modes' graphs, their movers' routes and where they are.</summary>
-    private void ShiftModes(OriginShift shift, HashSet<LaneEdge> done)
+    private void ShiftModes(OriginShift shift, int pass)
     {
-        _walks?.Shift(shift, _origin.Frame, done);
-        _rides?.Shift(shift, _origin.Frame, done);
-        _tramLines?.Shift(shift, _origin.Frame, done);
+        _walks?.Shift(shift, _origin.Frame, pass);
+        _rides?.Shift(shift, _origin.Frame, pass);
+        _tramLines?.Shift(shift, _origin.Frame, pass);
         foreach (var list in (ReadOnlySpan<List<SlowMover>>)[_walkers, _riders])
             foreach (var m in list)
             {
-                foreach (var (edge, _) in m.Route.Legs)
-                    if (done.Add(edge)) edge.Shift(shift);
+                foreach (var (edge, _) in m.Route.Legs) edge.ShiftOnce(shift, pass);
                 m.Head = shift.Point(m.Head);
                 m.Vel = shift.Direction(m.Vel);
             }
         foreach (var t in _trams)
         {
-            foreach (var (edge, _) in t.Route.Legs)
-                if (done.Add(edge)) edge.Shift(shift);
+            foreach (var (edge, _) in t.Route.Legs) edge.ShiftOnce(shift, pass);
             t.Head = shift.Point(t.Head);
             t.Vel = shift.Direction(t.Vel);
             for (int i = 0; i < t.Path.Length; i++) t.Path[i] = shift.Point(t.Path[i]);

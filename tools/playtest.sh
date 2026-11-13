@@ -88,6 +88,17 @@ case "${1:-}" in
     shift 4
     # the game quits a moment after asking; give it 30 s
     for _ in $(seq 1 60); do alive "$pid" || break; sleep 0.5; done
+    # a game that hangs while exiting would hold the playtest port and keep the new one from listening (#1774):
+    # end that one process, by its PID, and wait until it is gone
+    if alive "$pid"; then
+      echo "$(date +%T) relaunch: game $pid still running after 30 s, ending it" >> test_output/playtest/relaunch.log
+      case "$(uname -s)" in
+        MINGW* | MSYS* | CYGWIN*) taskkill //PID "$pid" //F > /dev/null 2>&1 ;;
+        *) kill -9 "$pid" 2>/dev/null ;;
+      esac
+      for _ in $(seq 1 20); do alive "$pid" || break; sleep 0.5; done
+    fi
+    echo "$(date +%T) relaunch: starting $exe $*" >> test_output/playtest/relaunch.log
     if [ "$build" = build ]; then
       dotnet build UnitSportSwitzerland.csproj > test_output/playtest/build.log 2>&1 || echo "Build FAILED" >> test_output/playtest/build.log
     fi

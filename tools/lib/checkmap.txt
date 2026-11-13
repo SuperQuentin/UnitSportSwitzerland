@@ -407,14 +407,16 @@ src/Core/ReanchorWatch    quick  @realtime --frame earth --reanchorcheck --chunk
 src/Core/OriginShifter    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
 src/Player/LongDriveCheck quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
 src/Core/ReanchorWatch    quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
+src/Player/ReanchorCamCheck quick @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
+src/Player/FootPlayer.cs  quick  @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
 src/Core/ReanchorCheck    full   tools/reanchorcheck.sh
 src/Core/ReanchorWatch    full   tools/reanchorcheck.sh
 src/Core/OriginShifter    full   tools/reanchorcheck.sh
 src/Player/LongDriveCheck full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/AutoPilot      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/RaceRoute      full   @timeout=7400 tools/longdrivecheck.sh
-src/Player/LongFlightCheck full  @timeout=3700 tools/longflightcheck.sh
-src/World/Globe/Globe.cs  full   @timeout=3700 tools/longflightcheck.sh
+src/Player/LongFlightCheck full  @timeout=1400 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=1400 tools/longflightcheck.sh
 tools/lib/barprobe        full   tools/reanchorcheck.sh
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
@@ -1280,6 +1282,9 @@ src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --horiz
 src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
 src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
 src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+# #1752: the replay mode on the world's ground, flat and earth: runner, ribbon, route survey, road snap, export warm-up
+src/Gpx/                     quick  --replaycheck --chunks fixture:straight --snaproads
+src/Gpx/                     quick  --replaycheck --chunks fixture:straight --snaproads --frame earth
 # probes that existed without a row
 src/World/Traffic            quick  --trafficcheck --chunks fixture:junction
 src/World/LaneGraph          quick  --trafficcheck --chunks fixture:junction

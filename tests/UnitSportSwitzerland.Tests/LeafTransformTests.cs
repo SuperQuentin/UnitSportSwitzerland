@@ -234,4 +234,48 @@ public class LeafTransformTests
             + $"by the transform {lattice * 263169 / 1000:F1} ms ({sink:E1})");
         Assert.True(fast < chain, "the transform is slower than the chain");
     }
+
+    /// <summary>
+    /// The earth world's recent-leaf rule (#1751, <c>EarthWorld.Locate</c>): a point whose affine lattice guess
+    /// (<see cref="LeafTransform.LocalToLatticeGuess"/>) is at least 4 cells inside a leaf, at most 10 km over its anchor,
+    /// is in the leaf the cube key names (<see cref="CubeKey.FromEcef"/>), so skipping the key never changes the answer;
+    /// and the guess is within a cell of the Newton inverse on the ground.
+    /// </summary>
+    [Fact]
+    public void A_point_well_inside_by_the_lattice_guess_is_in_the_leaf_the_key_names()
+    {
+        const double margin = 4;
+        int accepted = 0;
+        double worstGuess = 0;
+        foreach (var (name, leaf, cell) in Cases)
+        {
+            var t = new LeafTransform(FrameOf(cell), leaf);
+            double hi = t.Cells - margin;
+            // rings 0 to 10 cells in from each edge, and the middle, at heights from below sea level to 10 km
+            foreach (double h in new[] { -400.0, 0, 2000, 4800, 9900 })
+                for (double d = -2; d <= 10; d += 0.25)
+                    for (int s = 0; s <= 64; s++)
+                    {
+                        double along = s * t.Cells / 64.0;
+                        foreach (var (i, j) in new[] { (d, along), (t.Cells - d, along), (along, d), (along, t.Cells - d), (t.Cells / 2.0, along) })
+                        {
+                            var p = t.LatticeToEcef(i, j, h);
+                            var (x, y, z) = t.Anchor.ToLocal(p);
+                            var (gi, gj) = t.LocalToLatticeGuess(x, z);
+                            if (h is >= 0 and <= 4800)
+                            {
+                                var (ni, nj, _) = t.LocalToLattice(x, y, z);
+                                worstGuess = Math.Max(worstGuess, Math.Max(Math.Abs(gi - ni), Math.Abs(gj - nj)));
+                            }
+                            if (!(gi >= margin && gi <= hi && gj >= margin && gj <= hi) || Math.Abs(y) > 10_000) continue;
+                            accepted++;
+                            Assert.True(CubeKey.FromEcef(p, leaf.Level) == leaf,
+                                $"{name}: guess ({gi:F3}, {gj:F3}) at {h} m is {CubeKey.FromEcef(p, leaf.Level)}, not {leaf}");
+                        }
+                    }
+        }
+        _out.WriteLine($"{accepted} points accepted, the guess within {worstGuess:F3} cells of the inverse on the ground");
+        Assert.True(accepted > 10_000);
+        Assert.True(worstGuess < 1, $"the guess is {worstGuess:F3} cells off");
+    }
 }

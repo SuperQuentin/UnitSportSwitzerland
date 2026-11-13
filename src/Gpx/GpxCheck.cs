@@ -138,7 +138,7 @@ public partial class GpxCheck : Node
     /// A straight course true east from LV95 (e, n) at a steady pace, one fix a second, elevation left to the drape:
     /// on a plane centred on its start (#1514), where a plane metre is a true one to 1e-8 over 1.5 km.
     /// </summary>
-    private static GpxTrack Course(double e, double n)
+    internal static GpxTrack Course(double e, double n)
     {
         int count = (int)(CourseM / PaceMs) + 1;
         var plane = MapProjection.At(GlobalPos.FromLv95(e, n, 0).Ecef);

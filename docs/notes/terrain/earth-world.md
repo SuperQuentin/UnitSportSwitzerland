@@ -31,11 +31,27 @@ decisions were made with the user on 2026-11-08.
   - A leaf's mesh is its collision's (`LeafCollision.Prepare`, road blend at clearance 0): what is drawn is what is stood on. Its look: "The ground's look (C6)" below.
   - Each leaf is placed by one rigid transform from its anchor (`LeafToWorld`) and placed again from the frame at each shift, never accumulated.
   - Queries compose in doubles: world → ECEF → the leaf it lies in → that leaf's anchor frame → its mesh (`CubeGeometry.MeshHeightAt`) → back.
+  - Fast path (#1751): each thread keeps its 4 recent leaves; a point at least 4 lattice cells inside one, under 10 km, is
+    answered by it without the cube key (`CubeKey.FromEcef`'s geodetic iteration was most of the old 6-7.6 µs). Each leaf
+    keeps a `LeafView` per origin frame: world → anchor frame, world → lattice guess (`LeafTransform.LocalToLatticeGuess`)
+    and anchor frame → world y as affine rows, made again after a re-anchor. The mesh walk starts at the guessed quad (no
+    shared hint). Cost 288 ns against flat's 249 ns (lake fixture, Debug JIT); the old path stays as `HeightAtByKey`,
+    which `--worldgroundcheck --frame earth` holds it to (bit for bit but a handful of points at ≤ 0.03 mm), before and
+    after a re-anchor with its turn, on a 0.4 m grid round a leaf corner and 3 km up.
   - Water comes from `CubeWater` (ellipsoidal level, every second vertex) with the flat world's wave scale, cover from the lattice byte, tunnels from the leaf's road bores.
   - `TileEntered`/`TileUnloaded` carry `GroundTile.FromLeaf(key)`. Furnishing and replacement events come with PR 2 and PR 3.
 - **Collision**: C2's `CollisionPatches` round the collision anchors (look-ahead 10 s, at most 600 m; none 200 m up).
-  - Each patch is a `StaticBody3D` holding a `ConcavePolygonShape3D`, placed by its leaf's transform.
-  - `HasCollisionAt` asks whether the patch under the point stands.
+  - Each patch is a `StaticBody3D` of `ConcavePolygonShape3D` pieces, placed by its leaf's transform.
+  - **Raised piece by piece (#1773)**: Jolt builds a trimesh when its body enters the tree, ~1.7 µs a triangle on the
+    main thread, and a whole patch (33k to 86k triangles) cost 50 to 170 ms in one frame; sprint-flying in creative
+    (60 m/s) stood up ~1.7 patches a second. The patch worker cuts the faces (`CutUp`): the ground in strips of
+    lattice rows, the roads/pits and the buildings in squares of their middles, ~1536 triangles a piece; the main
+    thread raises pieces under `CollisionBudgetMs` (3 ms, at least one a frame), the patch nearest a body first.
+    The new body replaces the old one only once whole, so a rebuilt patch never gaps; the ground's pieces come
+    first and the body's `ground_shapes` meta counts them (`IsGroundHit`).
+  - The patch plan (`CollisionPatches.Update`) runs at 10 Hz, at once for a new anchor: every physics tick it cost
+    2 to 4 ms a frame.
+  - `HasCollisionAt` asks whether the patch under the point stands (whole); `Idle` waits for the pieces too.
   - The patches carry roads and buildings already (C2), so a body bumps into a building before PR 2 draws it.
 - **`Globe`** (`Earth = true`, `Leaves`):
   - drawn at every altitude, placed in the anchor frame;
@@ -123,7 +139,7 @@ decisions were made with the user on 2026-11-08.
   - the ball 0.5 cm off;
   - 4.5 km with the ground never missing;
   - 1 re-anchor, marks 0.00 cm.
-- The flat world: `--worldgroundcheck --chunks fixture:lake` (quick).
+- `--worldgroundcheck --chunks fixture:lake`, flat and `--frame earth` (quick): parity with the cube-key path and the query's cost.
 
 ## The ground's look (G2 C6, #1634, #1632)
 

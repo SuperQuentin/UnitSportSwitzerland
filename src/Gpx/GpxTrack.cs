@@ -106,6 +106,39 @@ public sealed class GpxTrack
         return TrackPlane.Lv95Box(Plane, minX - pad, minY - pad, maxX + pad, maxY + pad);
     }
 
+    /// <summary>
+    /// The earth world's leaves along the track (#1752), as their stand-in tiles (<see cref="Terrain.Leaves.LeafStandIn"/>),
+    /// first met first: every leaf within <paramref name="pad"/> metres of a fix, sampled every <see cref="LeafSampleM"/>
+    /// along the track and across it on the plane. A swept corridor, not the box the LV95 tiles take: a leaf is a
+    /// third of a tile's side and is built when first asked, so a diagonal route's box would cost hundreds of leaves
+    /// it never comes near.
+    /// </summary>
+    public List<TileId> StandInsAlong(double pad)
+    {
+        var seen = new HashSet<CubeKey>();
+        var ids = new List<TileId>();
+        int across = (int)Math.Ceiling(pad / LeafSampleM);
+        double next = double.NegativeInfinity;
+        for (int k = 0; k < Points.Count; k++)
+        {
+            var p = Points[k];
+            if (p.Distance < next && k != Points.Count - 1) continue;
+            next = p.Distance + LeafSampleM;
+            for (int j = -across; j <= across; j++)
+                for (int i = -across; i <= across; i++)
+                {
+                    double dx = Math.Clamp(i * LeafSampleM, -pad, pad), dy = Math.Clamp(j * LeafSampleM, -pad, pad);
+                    var (lat, lon) = Plane.Inverse(p.X + dx, p.Y + dy);
+                    var key = Terrain.Leaves.LeafFrames.LeafAt(lat, lon);
+                    if (seen.Add(key)) ids.Add(Terrain.Leaves.LeafStandIn.Id(key));
+                }
+        }
+        return ids;
+    }
+
+    /// <summary>Metres between the samples <see cref="StandInsAlong"/> names leaves at: a quarter of a leaf's ~610 m.</summary>
+    private const double LeafSampleM = 150;
+
     public double Duration => Points.Count == 0 ? 0 : Points[^1].Seconds;
     public double Length => Points.Count == 0 ? 0 : Points[^1].Distance;
 
