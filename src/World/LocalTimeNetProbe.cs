@@ -54,12 +54,16 @@ public partial class LocalTimeNetProbe : ChatProbe
             met = await Heard("B", "ready", 3);
         }
         if (!met) { Fail("B never answered"); return; }
+        // the server's flood gate (a burst of 5, then 0.6 lines a second) counts commands too: let it refill
+        await Seconds(FloodGap * 3);
         if (!await LogIn("test")) return;
         // a stopped clock: what each peer reads is what was set, however late it reads it
+        await Seconds(FloodGap);
         Chat!.Send("/time speed 0");
         Expect(await Until(() => WorldClock.MinutesPerDay == 0, 10), "the clock stopped");
 
         double noon = LocalHours.SolarNoon(date, place.E, place.N);
+        await Seconds(FloodGap);
         Chat.Send("/time set noon");
         Expect(await Until(() => Near(WorldClock.Hour, noon) && Near(day.Hour, noon), 10),
             $"the world clock went to A's solar noon, {TimeCommand.Format(noon)} Swiss ({TimeCommand.Format(WorldClock.Hour)}, sky {day.Clock})");
@@ -69,14 +73,17 @@ public partial class LocalTimeNetProbe : ChatProbe
         float el = day.SunElevationDeg;
         Expect(el > before && el > after, string.Format(CultureInfo.InvariantCulture,
             "A's sun is at its highest ({0:F2}° against {1:F2}° and {2:F2}° a quarter-hour either side)", el, before, after));
+        await Seconds(FloodGap);
         Say(string.Format(CultureInfo.InvariantCulture, "noon {0:F5}", noon));
         Expect(await Heard("B", "saw noon", 15), "B's clock went to A's noon");
 
         var zone = LocalHours.ZoneAt(place.E, place.N, realSun: true);
         double twelve = zone.ToSwiss(12, date);
+        await Seconds(FloodGap);
         Chat.Send("/time set 12:00");
         Expect(await Until(() => Near(WorldClock.Hour, twelve), 10),
             $"/time set 12:00 is 12:00 {zone.Label}, {TimeCommand.Format(twelve)} Swiss ({TimeCommand.Format(WorldClock.Hour)})");
+        await Seconds(FloodGap);
         Say(string.Format(CultureInfo.InvariantCulture, "twelve {0:F5}", twelve));
         Expect(await Heard("B", "saw twelve", 15), "B's clock went to 12:00 in A's zone");
     }
@@ -94,6 +101,9 @@ public partial class LocalTimeNetProbe : ChatProbe
             else Fail($"B's clock is at {TimeCommand.Format(WorldClock.Hour)} (sky {day.Clock}), not A's {word} {TimeCommand.Format(want)}");
         }
     }
+
+    /// <summary>Seconds between A's lines: the flood gate's refill of one line (1 / 0.6 s), and a little.</summary>
+    private const double FloodGap = 1.8;
 
     /// <summary>Within half a game minute (the clock is stopped).</summary>
     private static bool Near(double hour, double want) => System.Math.Abs(TimeCommand.ShortWay(hour, want)) < 0.01;
