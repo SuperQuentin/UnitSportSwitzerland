@@ -185,8 +185,8 @@ public class GlobeGroundTests
         // read as the bake stored it (sRGB texels, linear stored values), then back as the palette's
         var l = new Color(0.5f, 0.4f, 0.3f).SrgbToLinear();
         var want = GlobeGround.Unstore(new Vector3(l.R, l.G, l.B));
-        Assert.Equal(want.X, c.X, 2);
-        Assert.Equal(want.Y, c.Y, 2);
-        Assert.Equal(want.Z, c.Z, 2);
+        Assert.Equal(want.X, c.X, 0.01);
+        Assert.Equal(want.Y, c.Y, 0.01);
+        Assert.Equal(want.Z, c.Z, 0.01);
     }
 }

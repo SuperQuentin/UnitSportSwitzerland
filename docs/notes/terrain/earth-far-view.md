@@ -30,10 +30,25 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   shots 500 m apart at 20 km went from a mean 25 (night) / 22 (day) of 255 to 1 / 3. A LITE (headset) variant and the
   PS1 unlit path keep the hard switch. Shots at a far spot need `--sun real` (the fixed sun of shots lights the globe
   by the scene's light, so it is never night there); at LV95 -5011173,8685903 `--time 12` is night, `--time 0` day.
-- **The sea's bed** (#1802): the pyramid holds ETOPO's bathymetry (a shelf sea 20-50 m down), so most of the sea is not
-  level, and the pyramid's lake list (`lakes != null`, any copy with the Swiss levels) dried every water vertex that was
-  not one of its lakes: the sea was painted as green land below 20 km. Under `GlobeGround.SeaReachM` (10 m) the colour
-  image's water stays. The deep ocean's bed is still drawn as ground with no sea surface over it. `world_fill_hide` is 0 in this world (it is the flat
+- **The sea** (#1802): the pyramid's heights are over the ellipsoid and the sea stands at the geoid (ETOPO "below sea
+  level at the geoid", -106 to +85 m: -20 to -50 m off China's coast), so it follows the geoid's swell and is seldom
+  level within 5 cm. Only its level patches drew a water surface, the rest painted ground, meeting at tile edges; and
+  the pyramid's lake list (any copy with the Swiss levels) dried every water vertex that was none of its lakes, so below
+  20 km the sea was green land. Now a vertex under `GlobeGround.SeaReachM` (90 m) whose colour says water plainly
+  (`LakeWeight`) is water: a surface at its height, the ground sunk under it, as a lake.
+- **Away from Switzerland, the photo's colour** (#1802, `GlobeGround.OwnPalette`): the palette's Swiss classes drew
+  deserts as meadows, and bright sand as snow. A weight grid sample now also holds its block's colour (`Stride` 7,
+  `SampleColour`, the photo lifted as `globe.gdshader` lifts it); land takes it outside Switzerland's lat/lon box (a
+  0.5° feather), water stays the palette's. Inside the box nothing changed. Snow also needs a pale, unyellow colour
+  (`Classify`: saturation under 0.16, blue not under red).
+- **Far lakes at their own depth** (#1802): a far leaf knows its lake's bed, and its ground under the surface sinks by that
+  depth (3 to 100 m), as the near leaves draw it; the coarser levels keep 100 m. A shallow harbour past the near leaves
+  was the abyss's blue, a hard line against the near water's shallows. The near water's mottling is its bed's depth
+  through the toon bands (the flat world draws it alike).
+- **The sky down to the limb** (#1802, `Atmosphere.DimSky`): between the horizontal and the Earth's limb (3° under it at
+  10 km, 8° at 60 km) the procedural sky's ground half shows. It was dimmed as `keep³` from 15 km and turned to its dark
+  bottom colour within 2° (`ground_curve` 0.02): a grey band with a hard edge at eye level. Now it dims with the sky
+  and keeps the horizon's haze (`LimbGroundCurve` 0.3). `world_fill_hide` is 0 in this world (it is the flat
   world's fill dissolve: at 1 `flat_hide` discards every terrain fragment) and `globe.gdshader`'s fill push is off by
   its own `fill_push` uniform.
 - **Colour per vertex, in the palette** (`GlobeGround`): each texel of a tile's colour image is read back through the
