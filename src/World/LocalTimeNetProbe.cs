@@ -44,8 +44,8 @@ public partial class LocalTimeNetProbe : ChatProbe
         var day = DayNight.Instance!;
         var place = day.Place;
         var date = SunPath.Today();
-        Expect(DayNight.RealSun && !LocalHours.IsHome(place.E, place.N),
-            $"A stands far from home under the real sun ({place.E:F0},{place.N:F0}, real {DayNight.RealSun})");
+        Expect(DayNight.RealSun && !LocalHours.IsHome(place),
+            $"A stands far from home under the real sun ({LocalTimeProbe.Where(place)}, real {DayNight.RealSun})");
         // whoever joins first says so until the other answers: a single line can go before the other listens
         bool met = false;
         for (int i = 0; i < 40 && !met; i++)
@@ -62,14 +62,13 @@ public partial class LocalTimeNetProbe : ChatProbe
         Chat!.Send("/time speed 0");
         Expect(await Until(() => WorldClock.MinutesPerDay == 0, 10), "the clock stopped");
 
-        double noon = LocalHours.SolarNoon(date, place.E, place.N);
+        double noon = LocalHours.SolarNoon(date, place);
         await Seconds(FloodGap);
         Chat.Send("/time set noon");
         Expect(await Until(() => Near(WorldClock.Hour, noon) && Near(day.Hour, noon), 10),
             $"the world clock went to A's solar noon, {TimeCommand.Format(noon)} Swiss ({TimeCommand.Format(WorldClock.Hour)}, sky {day.Clock})");
         await Seconds(0.3);
-        SunPath.Toward(SkyBody.Sun, date, noon - 0.25, place.E, place.N, out float before);
-        SunPath.Toward(SkyBody.Sun, date, noon + 0.25, place.E, place.N, out float after);
+        float before = SunPath.ElevationAt(date, noon - 0.25, place), after = SunPath.ElevationAt(date, noon + 0.25, place);
         float el = day.SunElevationDeg;
         Expect(el > before && el > after, string.Format(CultureInfo.InvariantCulture,
             "A's sun is at its highest ({0:F2}° against {1:F2}° and {2:F2}° a quarter-hour either side)", el, before, after));
@@ -77,7 +76,7 @@ public partial class LocalTimeNetProbe : ChatProbe
         Say(string.Format(CultureInfo.InvariantCulture, "noon {0:F5}", noon));
         Expect(await Heard("B", "saw noon", 15), "B's clock went to A's noon");
 
-        var zone = LocalHours.ZoneAt(place.E, place.N, realSun: true);
+        var zone = LocalHours.ZoneAt(place, realSun: true);
         double twelve = zone.ToSwiss(12, date);
         await Seconds(FloodGap);
         Chat.Send("/time set 12:00");

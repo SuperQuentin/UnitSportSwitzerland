@@ -14,15 +14,11 @@ public class LocalHoursTests
 {
     private static readonly DateOnly June = new(2026, 6, 21), December = new(2026, 12, 21), March = new(2026, 3, 20);
 
-    private static (double E, double N) At(double lat, double lon) => SwissGeodesy.ToLv95(lat, lon);
+    private static GlobalPos At(double lat, double lon) => GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(new Geodetic(lat, lon, 500)));
 
-    private static float SunElevation(DateOnly date, double swissHour, (double E, double N) at)
-    {
-        SunPath.Toward(SkyBody.Sun, date, swissHour, at.E, at.N, out float el);
-        return el;
-    }
+    private static float SunElevation(DateOnly date, double swissHour, GlobalPos at) => SunPath.ElevationAt(date, swissHour, at);
 
-    private static double Named(string name, (double E, double N) at, DateOnly date, bool realSun = true)
+    private static double Named(string name, GlobalPos at, DateOnly date, bool realSun = true)
     {
         Assert.True(TimeCommand.TryParse(["set", name], out TimeRequest request, out string perr), perr);
         Assert.True(TimeCommand.Resolve(request, at, date, realSun, out double hour, out _, out string err), err);
@@ -66,8 +62,8 @@ public class LocalHoursTests
         foreach (var (lat, lon) in new[] { (46.2044, 6.1432), (47.3769, 8.5417), (46.6, 10.43), (45.83, 9.03), (47.56, 7.59) })
         {
             var at = At(lat, lon);
-            Assert.True(LocalHours.IsHome(at.E, at.N));
-            Assert.True(LocalHours.ZoneAt(at.E, at.N, realSun: true).IsSwiss);
+            Assert.True(LocalHours.IsHome(at));
+            Assert.True(LocalHours.ZoneAt(at, realSun: true).IsSwiss);
             Assert.True(TimeCommand.TryParse(["set", "21:30"], out TimeRequest request, out _));
             Assert.True(TimeCommand.Resolve(request, at, June, true, out double hour, out var zone, out _));
             Assert.Equal(21.5, hour, 9);
@@ -83,7 +79,7 @@ public class LocalHoursTests
     public void A_place_120_degrees_east_has_its_noon_8_hours_earlier()
     {
         var far = At(LocalHours.BernLat, LocalHours.BernLon + 120);
-        Assert.False(LocalHours.IsHome(far.E, far.N));
+        Assert.False(LocalHours.IsHome(far));
         foreach (var date in new[] { June, December })
         {
             double bern = LocalHours.BernNoon(date), noon = Named("noon", far, date);
@@ -92,11 +88,11 @@ public class LocalHoursTests
             float el = SunElevation(date, noon, far);
             Assert.True(el > SunElevation(date, noon - 0.25, far) && el > SunElevation(date, noon + 0.25, far));
             // and as high as Bern's at its own noon (same latitude)
-            Assert.Equal(SunElevation(date, bern, (SunPath.BernE, SunPath.BernN)), el, 0);
+            Assert.Equal(SunElevation(date, bern, LocalHours.Bern), el, 0);
             Assert.Equal(-8.0, TimeCommand.ShortWay(Named("midnight", far, date), TimeCommand.Wrap(bern + 12)), 3);
         }
         // its zone is UTC+8: 12:00 there is 04:00 UTC, 05:00 in a Swiss winter, 06:00 in a Swiss summer
-        Assert.Equal(8, LocalHours.ZoneAt(far.E, far.N, realSun: true).UtcOffset);
+        Assert.Equal(8, LocalHours.ZoneAt(far, realSun: true).UtcOffset);
         Assert.True(TimeCommand.TryParse(["set", "12:00"], out TimeRequest twelve, out _));
         Assert.True(TimeCommand.Resolve(twelve, far, December, true, out double winter, out _, out _));
         Assert.True(TimeCommand.Resolve(twelve, far, June, true, out double summer, out var zone, out _));
@@ -104,7 +100,7 @@ public class LocalHoursTests
         Assert.Equal(6, summer, 9);
         Assert.Equal("12:00 UTC+8 (06:00 Swiss time)", TimeCommand.Describe(summer, zone, June));
         // under the fixed sun the sky is Switzerland's everywhere, so is the clock
-        Assert.True(LocalHours.ZoneAt(far.E, far.N, realSun: false).IsSwiss);
+        Assert.True(LocalHours.ZoneAt(far, realSun: false).IsSwiss);
     }
 
     [Theory]
@@ -112,7 +108,7 @@ public class LocalHoursTests
     [InlineData(0, 0)]
     public void Far_named_hours_light_the_sky_as_they_say(double e, double n)
     {
-        var at = (e, n);
+        var at = GlobalPos.FromLv95(e, n, 500);
         foreach (var date in new[] { June, December, March })
         {
             double rise = Named("sunrise", at, date), set = Named("sunset", at, date);
@@ -130,7 +126,7 @@ public class LocalHoursTests
     public void The_polar_night_and_the_midnight_sun_say_so()
     {
         var svalbard = At(78.22, 15.65);
-        Assert.False(LocalHours.IsHome(svalbard.E, svalbard.N));
+        Assert.False(LocalHours.IsHome(svalbard));
         foreach (var (date, word) in new[] { (December, "polar night"), (June, "midnight sun") })
             foreach (var name in new[] { "sunrise", "sunset" })
             {
@@ -195,7 +191,7 @@ public class LocalHoursTests
         Assert.False(TimeCommand.TryParse(["add", "2", "utc"], out _, out _));
         // a typed zone at home: 12:00 UTC is 14:00 in a Swiss summer
         Assert.True(TimeCommand.TryParse(["set", "12:00", "utc"], out TimeRequest utcNoon, out _));
-        Assert.True(TimeCommand.Resolve(utcNoon, (SunPath.BernE, SunPath.BernN), June, true, out double h, out _, out _));
+        Assert.True(TimeCommand.Resolve(utcNoon, LocalHours.Bern, June, true, out double h, out _, out _));
         Assert.Equal(14, h, 9);
     }
 
