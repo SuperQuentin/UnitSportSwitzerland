@@ -7,6 +7,12 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## A join from the menu reaches the ground ([#1816](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1816), PR [#1819](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1819))
+
+The exported Windows build, joined from the title screen (saved server or address), not `--connect`.
+
+- [ ] Delete `chunk_2583_1113.terr` (and its neighbours `2582-2584_1112-1114`) from `chunk_cache` (keep the `.terrc`), join `unitsport.infrack.ch` from the menu as a returning player → the loading screen ends, on foot at the spawn or where you fell asleep; no `[spawn] no terrain streamed under the spawn point` warning in the log.
+
 ## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
 
 On Windows, a real keyboard, in a window.
