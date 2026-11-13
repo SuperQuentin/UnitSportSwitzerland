@@ -995,3 +995,12 @@ Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4
 Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-4-reanchor-flight`, traffic on.
 
 - [ ] Fly and drive across Geneva's re-anchors (every 3 km, the `[origin] shift` line) → no lag spike you notice; the line reads well under the 117-203 ms of Nov 12 (headless on a loaded machine: 23-48 ms), traffic keeps driving on its roads after each.
+
+## The globe's terminator and the spectator speed readout (PR [#1806](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1806), [#1798](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1798))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator camera (Shift+T).
+
+- [ ] Climb above 500 km and fly at 100 km/s, then with boost, along the day/night line → the lit half stays put on the ground: no drift with the camera, no snap twice a second.
+- [ ] Change the speed (wheel, `^` / `'` on a Swiss keyboard, RB / LB) → the speed shows bottom right under the key hints, clear of the F3 overlay at top right, and fades 1.5 s later.
+- [ ] On a Swiss keyboard the hints read "Wheel ↑ / ^" and "Wheel ↓ / '"; on a US keyboard "=" and "-".
+- [ ] On a phone (`--mobile`) the speed shows at top centre, not under the pedals.

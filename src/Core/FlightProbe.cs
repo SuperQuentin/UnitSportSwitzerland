@@ -48,6 +48,8 @@ public partial class FlightProbe : Node
     // placed in, every frame: how far the terminator moved on the ground between frames, and how far it is from the
     // ephemeris' sun. A sun left in the scene's axes across a re-anchor moves with the globe, 20 km a turn in Space.
     private readonly bool _terminator = CmdArgs.Has("--flyterminator");
+    // --flyterminator FILE.csv: every frame's offset off the ephemeris, for a chart (a probe's own file, test_output/)
+    private readonly System.Text.StringBuilder? _sunCsv = CmdArgs.Value("--flyterminator") is { } f && f.EndsWith(".csv") ? new("t_s,off_km\n") : null;
     private EcefPos _sunLast, _truthLast;
     private bool _sunHave;
     private int _sunFrames, _sunJumps;
@@ -90,6 +92,7 @@ public partial class FlightProbe : Node
         double r = Ellipsoid.Wgs84.A / 1000;
         double off = Angle(sun, truth) * r;
         _sunOffWorstKm = Math.Max(_sunOffWorstKm, off);
+        _sunCsv?.Append(System.Globalization.CultureInfo.InvariantCulture, $"{_elapsed - _warmup:F3},{off:F3}\n");
         if (_sunHave)
         {
             // past the sun's own motion: the game's day runs faster than the wall clock, kilometres a frame
@@ -176,6 +179,7 @@ public partial class FlightProbe : Node
             + $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)}");
         if (_terminator)
         {
+            if (_sunCsv != null) System.IO.File.WriteAllText(CmdArgs.Value("--flyterminator")!, _sunCsv.ToString());
             bool held = _sunFrames > 0 && _sunJumps == 0 && _sunOffWorstKm <= TerminatorOffKm;
             GD.Print($"RESULT {(held ? "PASS" : "FAIL")} flyterminator: {_sunFrames} frames, the terminator moved up to "
                 + $"{_sunStepWorstKm:F2} km on the ground between frames past the sun's own motion (up to {_sunOwnWorstKm:F2} km at the "

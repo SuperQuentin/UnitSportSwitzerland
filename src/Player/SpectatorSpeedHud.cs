@@ -5,7 +5,7 @@ using UnitSport.Ui;
 namespace UnitSport.Player;
 
 /// <summary>
-/// The spectator camera's speed in the top-right corner (#1796), shown when it changes (a notch, a held
+/// The spectator camera's speed in the bottom-right corner under its key hints (#1796, #1798), shown when it changes (a notch, a held
 /// button's ramp, boost pressed or let go) and faded <see cref="HoldSeconds"/> after the last change: nothing on
 /// screen unless in use (<c>ui/style-guide</c>). Floating text, no box; the text is set on a change only and the
 /// fade runs only while it shows (<c>general/perf-no-per-frame-allocations</c>).
@@ -26,19 +26,33 @@ public partial class SpectatorSpeedHud : CanvasLayer
         var root = new Control { Theme = UiTheme.Get(), MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(root);
-        // the top-right corner: the spectator's key hints have the bottom-right (with Faster / Slower), the chat the
-        // bottom-left
+        // the bottom-right corner under the key hints (#1798), where a vehicle's readout stands (PlayerFeel's engine
+        // line; the prompt bar leaves it 64 px): next to its own Faster / Slower rows. The top right is the perf and
+        // position overlay's (F3), the top centre the compass's, the bottom left the chat's.
         var column = UiKit.VBox(0);
         column.MouseFilter = Control.MouseFilterEnum.Ignore;
-        column.AnchorLeft = column.AnchorRight = 1f;
-        column.OffsetLeft = column.OffsetRight = -16f;
-        column.OffsetTop = column.OffsetBottom = 16f;
+        column.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+        column.OffsetLeft = column.OffsetRight = -18f;
+        column.OffsetTop = column.OffsetBottom = -12f;
         column.GrowHorizontal = Control.GrowDirection.Begin;
+        column.GrowVertical = Control.GrowDirection.Begin;
+        var align = HorizontalAlignment.Right;
+        if (Platform.IsTouch)
+        {
+            // a phone's pedals and pad take the bottom right (#1043): top centre, as the vehicle's readout
+            column.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
+            column.OffsetLeft = column.OffsetRight = 0f;
+            column.OffsetTop = column.OffsetBottom = 16f;
+            column.GrowHorizontal = Control.GrowDirection.Both;
+            column.GrowVertical = Control.GrowDirection.End;
+            align = HorizontalAlignment.Center;
+        }
         root.AddChild(column);
         _column = column;
 
-        column.AddChild(_speed = Floating(UiKit.Text("", UiTheme.FontHeading, UiTheme.Text, bold: true, align: HorizontalAlignment.Right)));
-        column.AddChild(_note = Floating(UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber, align: HorizontalAlignment.Right)));
+        // the note over the speed: the speed keeps the corner's line, the note grows up toward the hints
+        column.AddChild(_note = Floating(UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber, align: align)));
+        column.AddChild(_speed = Floating(UiKit.Text("", UiTheme.FontHeading, UiTheme.Text, bold: true, align: align)));
         _column.Modulate = Colors.Transparent;
         SetProcess(false);
     }

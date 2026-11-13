@@ -2697,7 +2697,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             yield return (PlayerInput.ToggleMode, "Walk");
             yield return (PlayerInput.FlyUp, "Up");
             yield return (PlayerInput.FlyDown, "Down");
-            // the speed (#1796): the readout in the top-right corner says what it is
+            // the speed (#1796): the readout under these rows says what it is (#1798)
             yield return (PlayerInput.SpectatorFaster, "Faster");
             yield return (PlayerInput.SpectatorSlower, "Slower");
             yield return (PlayerInput.Teleport, "Map");
