@@ -7,6 +7,16 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The debug menu on the earth world ([#1820](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1820), [#1743](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1743))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2027-07-15`, F9.
+
+- [ ] Click Leaf edges and Leaf labels, fly round Geneva and out over the fill → every leaf outlined on its ground (green furnished, yellow ground only, grey loading; fill dashed), labels on the near ones, new leaves outlined as they land.
+- [ ] Hover each switch → its tooltip names leaves, the globe and the anchor, not tiles; Earth curvature is greyed with its reason.
+- [ ] Freeze leaf streaming, fly 3 km away and look back → the loaded leaves stand alone; unfreeze → the leaves round you come back.
+- [ ] Wireframe → the leaves come back as lines within a few seconds (slow, as on flat); Normal → as before.
+- [ ] Type `/debug tiles,labels` then `/debug off` in the chat → the tools switch on, then all off.
+
 ## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
 
 On Windows, a real keyboard, in a window.

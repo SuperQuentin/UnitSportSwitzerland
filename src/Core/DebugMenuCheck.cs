@@ -76,6 +76,13 @@ public partial class DebugMenuCheck : ChatProbe
                 Fail($"no {World} ground built");
                 return;
             }
+            // the leaves round the camera settled, the camera placed over them (a real region's leaves land one by one)
+            if (_earth != null && !await Until(() => _earth.Idle && GetViewport().GetCamera3D() is { } cam
+                    && _earth.Ground.TryGetHeight(cam.GlobalPosition, out float h) && cam.GlobalPosition.Y - h < 1000, 240))
+            {
+                Fail($"the leaves round the camera never settled ({_earth.Status})");
+                return;
+            }
             Chat!.LineReceived += (line, _) => _heard.Add(line);
             await Offline();
         }
@@ -255,7 +262,7 @@ public partial class DebugMenuCheck : ChatProbe
         var before = GroundMesh()?.Mesh;
         await PickView(DebugViewMode.Wireframe);
         Expect(GetViewport().DebugDraw == Viewport.DebugDrawEnum.Wireframe, "wireframe is the viewport's");
-        Expect(await Until(() => GroundMesh() is { Mesh: { } now } && now != before, 60), $"and the {World}s' meshes are built again for it");
+        Expect(await Until(() => GroundMesh() is { Mesh: { } now } && now != before, 60), $"and the {World} meshes are built again for it");
         await PickView(DebugViewMode.Normal);
         Expect(GetViewport().DebugDraw == Viewport.DebugDrawEnum.Disabled, "Normal clears the viewport's draw");
 
