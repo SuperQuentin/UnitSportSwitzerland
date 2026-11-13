@@ -109,8 +109,11 @@ public static class CubeSwiss
             Console.WriteLine($"cube-swiss: TLM lakes read in {sw.Elapsed.TotalSeconds:F0} s");
         }
 
-        // the tiles of each level: every ancestor of a leaf, and its siblings
+        // the tiles of each level: every ancestor of a leaf, and its siblings; at the level that blends past the leaves,
+        // every tile the blend reaches too (#1778): a coarser level stood the uncorrected relief where its tiles ended, a
+        // wall tens of metres high along a straight tile edge in the fill built on it, and a ledge under the globe
         var leafKeys = finer.Keys.ToList();
+        if (maxLevel + 1 == leafLevel) leafKeys = BlendReach(leafKeys, maxLevel);
         manifest.Tiles.RemoveAll(t => CubeKey.Parse(t.Key).Level is var l && l >= minLevel && l <= maxLevel);
         // each level's colour before the rebuild: it depends on the footprint alone, so it carries over (#1659)
         var colourBefore = manifest.Levels.Where(l => l.Level >= minLevel && l.Level <= maxLevel).ToDictionary(l => l.Level);
@@ -412,8 +415,67 @@ public static class CubeSwiss
                 int k = y0 * side + x0;
                 field[j * n + i] = (float)((1 - v) * ((1 - u) * c[k] + u * c[k + 1]) + v * ((1 - u) * c[k + side] + u * c[k + side + 1]));
             }
+
+        // (#1779) at the leaves' edge the blurred field is the miss averaged over ~110 m, not the miss of the vertex beside
+        // it: on a cliff the two stood 77 m apart, a step along every leaf cell's edge. Within RampM of the leaves' own
+        // vertices the correction starts from the nearest one's exact miss (an exact distance transform on the level's own
+        // lattice, so tiles sharing a vertex agree) and hands over to the field.
+        int m = (int)Math.Ceiling(RampM / stepM) + 1, ws = n + 2 * m;
+        var ownV = new bool[ws * ws];
+        var missV = new float[ws * ws];
+        bool anyV = false;
+        Parallel.For(0, ws, y =>
+        {
+            for (int x = 0; x < ws; x++)
+            {
+                long vi = gi0 - m + x, vj = gj0 - m + y;
+                if (TentMean(finer, key.Face, key.Level + 1, finerBits, finerSide, vi << scale, vj << scale) is not { } mean) continue;
+                var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(lv, vi), CubeSphere.Lattice(lv, vj));
+                double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
+                double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
+                float e = Shaped(grid, lakes, lakeMask, lat, lon, (float)grid.Footprint(lat, lon, half), out _);
+                ownV[y * ws + x] = true;
+                missV[y * ws + x] = mean - e;
+                anyV = true;
+            }
+        });
+        if (!anyV) return field;
+        var distV = new float[ws * ws];
+        var siteV = new int[ws * ws];
+        DistanceTransform.Run(ownV, ws, ws, distV, siteV);
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int k = (j + m) * ws + i + m;
+                if (siteV[k] < 0) continue;
+                double d = distV[k] * stepM;
+                if (d >= RampM) continue;
+                double t = d / RampM, s = t * t * (3 - 2 * t);
+                field[j * n + i] = (float)((1 - s) * missV[siteV[k]] + s * field[j * n + i]);
+            }
         return field;
     }
+
+    /// <summary>
+    /// How far from the leaves' own vertices the correction starts from the nearest one's exact miss before it is the
+    /// blurred field, metres (#1779).
+    /// </summary>
+    private const double RampM = 100;
+
+    /// <summary>The tent mean (¼ ½ ¼ each way) of the finer level's nine points round (fi, fj), null unless all nine exist.</summary>
+    private static float? TentMean(ConcurrentDictionary<CubeKey, CubeTile> finer, int face, int level, int bits, long side, long fi, long fj)
+    {
+        double sum = 0;
+        for (int b = -1; b <= 1; b++)
+            for (int a = -1; a <= 1; a++)
+            {
+                if (FinerAt(finer, face, level, bits, side, fi + a, fj + b) is not { } v) return null;
+                sum += TentW[a + 1] * TentW[b + 1] * v;
+            }
+        return (float)sum;
+    }
+
+    private static readonly float[] TentW = [0.25f, 0.5f, 0.25f];
 
     /// <summary>A box blur of radius <see cref="FieldBlur"/> along one axis, each value summed afresh in one order (edges clamped).</summary>
     private static float[] Blur(float[] f, int side, int dx, int dy)
@@ -433,6 +495,27 @@ public static class CubeSwiss
             }
         });
         return o;
+    }
+
+    /// <summary>
+    /// The tiles at <paramref name="level"/> (the one that blends past the leaves) whose correction is not zero: every
+    /// tile within <see cref="BlendM"/>, the blur's reach and <see cref="RampM"/> of a leaf's tile, in tiles a side (each
+    /// a tile's own key; its ancestors and siblings follow as for a leaf). Past them the correction is zero, so a coarser
+    /// level's tent mean of this one and its own relief agree.
+    /// </summary>
+    internal static List<CubeKey> BlendReach(IEnumerable<CubeKey> leaves, int level)
+    {
+        // a tile's side at a face's middle, metres (Switzerland is on face 0's middle)
+        double tileM = 6_371_000 * Math.PI / 2 / (1L << level);
+        double cellM = FieldStep * tileM / (1 << CubeKey.LatticeBits(level));
+        int grow = (int)Math.Ceiling((BlendM + 4 * FieldBlur * cellM + RampM) / tileM);
+        var keys = new HashSet<CubeKey>();
+        int side = 1 << level;
+        foreach (var t in leaves.Select(l => l.AncestorAt(level)).Distinct())
+            for (int y = Math.Max(0, t.Y - grow); y <= Math.Min(side - 1, t.Y + grow); y++)
+                for (int x = Math.Max(0, t.X - grow); x <= Math.Min(side - 1, t.X + grow); x++)
+                    keys.Add(new CubeKey(t.Face, level, x, y));
+        return keys.ToList();
     }
 
     /// <summary>How far past the leaves their heights blend into ETOPO's, metres.</summary>
