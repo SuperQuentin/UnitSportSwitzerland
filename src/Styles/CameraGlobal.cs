@@ -62,6 +62,7 @@ public partial class CameraGlobal : Node
     {
         if (GetViewport()?.GetCamera3D() is { } cam)
         {
+            KeepSane(cam);
             var at = cam.GlobalPosition;
             if (Interiors.InteriorManager.Instance is { } interiors) at = interiors.ThroughNearestDoor(at);
             RenderingServer.GlobalShaderParameterSet(WorldCamPos, at);
@@ -99,7 +100,10 @@ public partial class CameraGlobal : Node
             _groundY = groundY;
             RenderingServer.GlobalShaderParameterSet(GroundYParam, groundY);
         }
-        if (camera != null) Climb(camera, altitude);
+        if (camera != null)
+        {
+            Climb(camera, altitude);
+        }
         ZoomRanges.Tick();
         ScaleShadows();
     }
@@ -113,6 +117,86 @@ public partial class CameraGlobal : Node
     public const double RaisedNearFromM = 1_000_000;
 
     private float _baseNear = -1;
+    /// <summary>The camera whose near plane is raised over <see cref="_baseNear"/>.</summary>
+    private Camera3D? _raisedOn;
+
+    /// <summary>The raised camera's near plane back to its own base.</summary>
+    private void LowerRaised()
+    {
+        if (_baseNear >= 0 && _raisedOn != null && IsInstanceValid(_raisedOn)) _raisedOn.Near = _baseNear;
+        _baseNear = -1;
+        _raisedOn = null;
+    }
+
+    /// <summary>Unit axes at right angles (to 1e-3), turning the right way.</summary>
+    private static bool Orthonormal(Basis m)
+    {
+        const float tol = 1e-3f;
+        return Mathf.Abs(m.Column0.LengthSquared() - 1) < tol && Mathf.Abs(m.Column1.LengthSquared() - 1) < tol
+            && Mathf.Abs(m.Column2.LengthSquared() - 1) < tol && Mathf.Abs(m.Column0.Dot(m.Column1)) < tol
+            && Mathf.Abs(m.Column1.Dot(m.Column2)) < tol && Mathf.Abs(m.Column0.Dot(m.Column2)) < tol && m.Determinant() > 0;
+    }
+
+    /// <summary>
+    /// The deepest far plane over the near plane the renderer takes (#1811). Godot builds the frustum's planes from the
+    /// projection in floats: past ~1.7e7, (far + near) / (far - near) rounds to 1, the far plane's normal is zero, and the
+    /// light culler fails every frame (<c>create_frustum_points</c>) with nothing drawn. 1e7 keeps a margin: a 5 mm door
+    /// lens (<c>DoorPortals.DoorwayNear</c>) under a 160 km horizon was 3.2e7. <see cref="Climb"/> raises the near plane to it,
+    /// and lowers it back with the rest of its raise.
+    /// </summary>
+    public const float MaxFarOverNear = 1e7f;
+    private bool _saidDepth;
+
+    /// <summary>The last transform of the drawn camera that was finite, and the camera it was.</summary>
+    private Transform3D _lastSane = Transform3D.Identity;
+    private Camera3D? _lastSaneOf;
+    private bool _saidBroken;
+
+    /// <summary>
+    /// The drawn camera, sane for the renderer (#1811): a non-finite transform (back to its last finite one), a
+    /// non-orthonormal basis, a near plane not over zero or a far plane not past it make the light culler fail every
+    /// frame (<c>create_frustum_points</c>) and nothing draws. Logged the first time, put right every frame.
+    /// </summary>
+    private void KeepSane(Camera3D camera)
+    {
+        var t = camera.GlobalTransform;
+        string? wrong = null;
+        if (!t.IsFinite())
+        {
+            wrong = $"transform {t}";
+            if (_lastSaneOf == camera) camera.GlobalTransform = _lastSane;
+        }
+        else if (!Orthonormal(t.Basis))
+        {
+            wrong = $"basis {t.Basis}";
+            camera.GlobalTransform = t.Orthonormalized();
+        }
+        if (!(camera.Near > 0f && float.IsFinite(camera.Near)))
+        {
+            wrong ??= $"near plane {camera.Near}";
+            camera.Near = 0.05f;
+        }
+        if (!(camera.Far > camera.Near * 2f && float.IsFinite(camera.Far)))
+        {
+            wrong ??= $"far plane {camera.Far} (near {camera.Near})";
+            camera.Far = Mathf.Max(Core.GameSettings.Current.CameraFar, camera.Near * 1000f);
+        }
+        if (!float.IsFinite(camera.Fov) || camera.Fov <= 1f || camera.Fov >= 179f)
+        {
+            wrong ??= $"field of view {camera.Fov}";
+            camera.Fov = 70f;
+        }
+        if (camera.GlobalTransform.IsFinite())
+        {
+            _lastSane = camera.GlobalTransform;
+            _lastSaneOf = camera;
+        }
+        if (wrong != null && !_saidBroken)
+        {
+            _saidBroken = true;
+            GD.PushWarning($"[camera] {camera.GetPath()} could not be drawn ({wrong}): put right (#1811)");
+        }
+    }
 
     /// <summary>The near plane is at least the camera's distance from the world's origin over this (#1497).</summary>
     public const float NearOfDistance = 200_000;
@@ -131,16 +215,26 @@ public partial class CameraGlobal : Node
         // drew, the shuttle 50 m ahead included. 1/200,000 of its distance from the origin: 2 m at 400 km.
         float floor = camera.GlobalPosition.Length() / NearOfDistance;
         float raised = Mathf.Max(altitude > RaisedNearFromM ? (float)(altitude / 10_000) : 0f, floor);
+        // and never so near under the far plane that the frustum's planes degenerate (#1811)
+        float deepest = camera.Far / MaxFarOverNear;
+        if (deepest > raised)
+        {
+            raised = deepest;
+            if (!_saidDepth && camera.Near < deepest)
+            {
+                _saidDepth = true;
+                GD.PushWarning($"[camera] {camera.GetPath()}: near {camera.Near} m under a {camera.Far} m far plane is past what the renderer draws: raised to {deepest} m (#1811)");
+            }
+        }
+        // the base belongs to the camera it was raised on (#1811): the spectator's 1 m went onto the body's camera
+        // at the switch, and the spectator kept its raised plane for its next turn
+        if (_raisedOn != camera) LowerRaised();
         if (raised > (_baseNear >= 0 ? _baseNear : camera.Near))
         {
-            if (_baseNear < 0) _baseNear = camera.Near;
+            if (_baseNear < 0) { _baseNear = camera.Near; _raisedOn = camera; }
             if (Mathf.Abs(camera.Near - raised) > raised * 0.05f) camera.Near = raised;
         }
-        else if (_baseNear >= 0)
-        {
-            camera.Near = _baseNear;
-            _baseNear = -1;
-        }
+        else if (_baseNear >= 0) LowerRaised();
 
         float scale = HazeAt(altitude, World.Globe.Present);
         if (GetViewport()?.FindWorld3D()?.Environment is not { } env || (scale == _fogScale && env == _fogEnv)) return;

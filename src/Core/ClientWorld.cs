@@ -1166,6 +1166,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (EnterSpectatorCheck.Requested) AddChild(new EnterSpectatorCheck(() => LocalPlayer, () => _spectator));
+        if (SpaceLandingCheck.Requested && Ground is { } landGround) AddChild(new SpaceLandingCheck(() => LocalPlayer, () => _spectator, ToggleMode, landGround));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
@@ -3126,15 +3127,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the first floor, stair, roof or ground under the camera with room to stand (#1244): in a building that
             // is its floor, not the street 3 km over it; the terrain's height when no collision is there yet
             // under a building's floor (flown through it into the void): onto its lowest floor there
-            if ((player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
-                    ? player.StandingSpotBelow(floor) : null)) is { } spot)
-                player.GlobalPosition = spot;
-            else
-            {
-                float ground = Ground!.TryGetSurface(pos, out float h) ? h : pos.Y;
-                player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
-            }
-            player.Velocity = Vector3.Zero;
+            var at = (player.StandingSpotBelow(pos) ?? (Interiors.InteriorManager.Instance?.LowestFloorAbove(pos) is { } floor
+                    ? player.StandingSpotBelow(floor) : null)) is { } spot
+                ? spot
+                : new Vector3(pos.X, (Ground!.TryGetSurface(pos, out float h) ? h : pos.Y) + 1f, pos.Z);
+            // upright, at rest and facing where the camera looked (#1811): the body parked far away kept the basis
+            // thousands of turning re-anchors gave it (tilted by the Earth's curve between there and here), and its
+            // eased view state from before the flight
+            var look = -_spectator.GlobalBasis.Z;
+            player.StepInFromSpectator(at, look.IsFinite() && MathX.FlatLength(look) > 1e-3f ? Mathf.Atan2(-look.X, -look.Z) : player.Rotation.Y);
             Interiors.InteriorManager.Instance?.SetBodySpace(player, player.GlobalPosition);
         }
         player.Camera.Current = true;

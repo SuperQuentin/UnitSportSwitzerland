@@ -1865,6 +1865,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Process, Bot);
         using var water = World.WaterField.In(RegionTerrain);
         ProcessStep(delta);
+        // the local body's view: one non-finite value would latch and draw nothing ever after (#1811)
+        if (_camera != null) KeepFinite();
     }
 
     private void ProcessStep(double delta)
@@ -4107,6 +4109,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Bots.BodyProfiler.CountFrame();
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Physics, Bot);
         using var water = World.WaterField.In(RegionTerrain);
+        if (_camera != null) KeepFinite();
         PhysicsStep(delta);
     }
 

@@ -28,6 +28,12 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Sh
 - [ ] In a headset: the right / left trigger while spectating → faster / slower, the readout readable on the VR panel; the triggers do nothing else there.
 - [ ] Climb from Geneva to ~300 km at full speed, fly east to Asia (~1 min, ~10 s boosted), come down → the speed grows with the altitude by itself, nothing freezes or hitches on the way, the generated ground is under you when you land.
 
+## Back into the body after a long spectator flight ([#1814](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1814))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T into the spectator.
+
+- [ ] Fly to Asia through Space at full speed, come down, press T above 50 km and keep descending → the body takes over once the ground is in, standing upright on it, the world drawn round it; no `create_frustum_points` in the log. If a `[camera] ... could not be drawn` or `[player] ... a non-finite ... was put back` line shows, the view is still drawn: send that line (it names the cause).
+
 ## The earth fill's walls and ledges north of Riddes ([#1788](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1788))
 
 In a window, the earth playtest's launch (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2578113,1115406 --date 2027-07-15`), the rebuilt pyramid on D: (`cube_global`, Nov 13).
