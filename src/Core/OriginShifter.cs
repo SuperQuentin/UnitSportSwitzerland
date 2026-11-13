@@ -278,10 +278,20 @@ public partial class OriginShifter : Node
         foreach (var body in pass.Kinematic) Teleport(body);
         foreach (var node in pass.Doppler) ResetDoppler(node);
         double nodesMs = clock.Elapsed.TotalMilliseconds;
-        foreach (var node in pass.Aware) node.OnOriginShifted(shift);
+        // each handler timed (#1764): the slowest three are in the log line
+        _slowest.Clear();
+        double handlersFrom = nodesMs;
+        foreach (var node in pass.Aware)
+        {
+            node.OnOriginShifted(shift);
+            double now = clock.Elapsed.TotalMilliseconds;
+            Slowest(_slowest, node.GetType().Name, now - handlersFrom);
+            handlersFrom = now;
+        }
         Player.PlayerSnapshot.Forget();   // this tick's positions were taken in the old world space
         _origin.RaiseShifted(shift);
         PushPatternOffset();
+        Slowest(_slowest, "Shifted", clock.Elapsed.TotalMilliseconds - handlersFrom);
 
         ShiftCount++;
         LastShiftNodes = pass.Moved;
@@ -289,8 +299,31 @@ public partial class OriginShifter : Node
         if (!_stress || ShiftCount <= 50 || ShiftCount % 50 == 0)
             GD.Print($"[origin] shift {ShiftCount} by {shift}{(shift.Turns ? Turn(shift) : "")} to LV95 {newE:F0}/{newN:F0}: "
                 + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms, "
-                + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all");
+                + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all{SlowestSaid()}");
         return true;
+    }
+
+    /// <summary>The slowest handlers of the last shift (#1764), by type (several of one type are summed): name, ms.</summary>
+    public IReadOnlyList<(string Name, double Ms)> SlowestHandlers => _slowest;
+    private readonly List<(string Name, double Ms)> _slowest = new();
+    private const int SlowestKept = 3;
+
+    // a handler's time into the slowest few, summed by type (a hundred vehicles are one line)
+    private static void Slowest(List<(string Name, double Ms)> list, string name, double ms)
+    {
+        int at = list.FindIndex(e => e.Name == name);
+        if (at >= 0) { list[at] = (name, list[at].Ms + ms); list.Sort((a, b) => b.Ms.CompareTo(a.Ms)); return; }
+        list.Add((name, ms));
+        list.Sort((a, b) => b.Ms.CompareTo(a.Ms));
+    }
+
+    private string SlowestSaid()
+    {
+        if (_slowest.Count == 0) return "";
+        var parts = new List<string>(SlowestKept);
+        for (int i = 0; i < Math.Min(SlowestKept, _slowest.Count); i++)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{_slowest[i].Name} {_slowest[i].Ms:F1}"));
+        return " (slowest: " + string.Join(", ", parts) + " ms)";
     }
 
     /// <summary>How a turning shift turned: the tilt of up and the yaw about it, degrees (the log line).</summary>
