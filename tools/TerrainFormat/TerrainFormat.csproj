@@ -9,4 +9,9 @@
     <AssemblyName>TerrainFormat</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- EGM2008, sea level past Switzerland (#1808, Egm2008.cs): ETOPO 2022's geoid grid at 0.25°, int16 cm -->
+    <EmbeddedResource Include="egm2008_15min.gz" LogicalName="egm2008_15min.gz" WithCulture="false" />
+  </ItemGroup>
+
 </Project>

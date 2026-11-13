@@ -961,7 +961,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
             // the fill far away (another face, Asia) against the globe round it (#1800)
             new(Terrain.Earth.FarFillCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.FarFillCheck(Ground!, origin,
-                () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus)),
+                () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus,
+                () => _earth?.Leaves.Pyramid)),
             // G2 D's bar (#1710): no pop at a re-anchor; a long drive and a long flight across many
             new(ReanchorCheck.Requested, ToolAnchor.AtTarget, _ => ReanchorCheckFor(origin)),
             new(LongDriveCheck.Requested, ToolAnchor.AtTarget, _ => new LongDriveCheck(Ground!, origin, _earth == null ? null : _earth.Leaves.RoadsOf)),

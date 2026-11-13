@@ -5,7 +5,8 @@
 # 317 m over the leaves. Also the world's up against the ellipsoid's at the camera (a rolled view).
 #   GODOT=<exe> [AT=E,N] [WINDOWED=1 SHOTS=dir] tools/farfillcheck.sh
 # Other spots (LV95 notation, past Switzerland too): Everest 9554929,2509902; Colorado -5211876,6256180 (face F4);
-# Pacific -13287549,7940380; Brazil -6009819,-3052261 (F3); Japan 11888869,8015844.
+# Pacific -13287549,7940380; Brazil -6009819,-3052261 (F3); Japan 11888869,8015844. The sea (#1808: the leaves must be water
+# over the pyramid's sea): open sea 426597,-230351, the coast at Agadir 909680,-472439.
 # output: test_output/farfillcheck.log
 NAME=farfillcheck
 GLOBE=${GLOBE:-D:/UnitSportSwitzerland/cube_global}

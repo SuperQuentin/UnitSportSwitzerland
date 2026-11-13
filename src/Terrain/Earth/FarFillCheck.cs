@@ -16,7 +16,8 @@ namespace UnitSport.Terrain.Earth;
 /// (<see cref="World.Globe.SurfaceAt"/>). It fails where the globe's ground or lakes stand over the leaves' ground (the
 /// user's flight to Ladakh: the leaves' trees and a house through a pale globe surface),
 /// or where the world's up at the camera is
-/// not the ellipsoid's within 0.05° (a rolled view). It prints the pyramid's datum read-out (the ground's ellipsoidal
+/// not the ellipsoid's within 0.05° (a rolled view), or where the pyramid's ground is its sea and the leaves are dry
+/// land over it (#1808). It prints the pyramid's datum read-out (the ground's ellipsoidal
 /// height, LHN95 against the leaves' sea level). Windowed, <c>--farfillshot</c> writes two pictures. RESULT ok or FAILED.
 /// </summary>
 public partial class FarFillCheck : Node
@@ -32,14 +33,17 @@ public partial class FarFillCheck : Node
     private readonly Func<World.Globe?> _globe;
     private readonly Func<bool> _idle;
     private readonly Func<string?> _status;
+    private readonly Func<Leaves.PyramidBase?> _pyramid;
     private readonly List<string> _faults = new();
     private readonly string? _shots = CmdArgs.Value("--farfillshot");
     private double _t, _idleFor;
     private int _stage;
     private Vector3 _at;
 
-    public FarFillCheck(IWorldGround ground, WorldOrigin origin, Func<World.Globe?> globe, Func<bool> idle, Func<string?> status)
+    public FarFillCheck(IWorldGround ground, WorldOrigin origin, Func<World.Globe?> globe, Func<bool> idle, Func<string?> status,
+        Func<Leaves.PyramidBase?> pyramid)
     {
+        _pyramid = pyramid;
         _ground = ground;
         _origin = origin;
         _globe = globe;
@@ -84,7 +88,8 @@ public partial class FarFillCheck : Node
     {
         var globe = _globe();
         if (globe == null) { _faults.Add("no globe in this world"); return; }
-        int points = 0, over = 0, wetOver = 0, leafWater = 0, noGlobe = 0;
+        int points = 0, over = 0, wetOver = 0, leafWater = 0, noGlobe = 0, seaPoints = 0, dryOverSea = 0;
+        var pyramid = _pyramid();
         float worst = 0, worstWet = 0, worstLeafWater = 0;
         Vector3 worstAt = default;
         var levels = new Dictionary<int, int>();
@@ -103,6 +108,12 @@ public partial class FarFillCheck : Node
                     if (gy - ground > OverM) { over++; if (gy - ground > worst) { worst = gy - ground; worstAt = at; } }
                     if (wy - ground > OverM && !hasLeafWater) { wetOver++; worstWet = Math.Max(worstWet, wy - ground); }
                 }
+                // the pyramid's ground at the geoid is sea (#1808): the leaves must hold water there
+                if (pyramid != null && SeaThere(pyramid, _origin.ToEcef(p)))
+                {
+                    seaPoints++;
+                    if (!_ground.TryGetWaterLevel(p, out float sl) || sl < ground + 0.1f) dryOverSea++;
+                }
                 if (hasLeafWater && !(wy > ground))
                 {
                     leafWater++;
@@ -120,6 +131,8 @@ public partial class FarFillCheck : Node
         Print($"{points} points: the globe's ground over the leaves' at {over} (worst {worst:F1} m at {worstAt}), its lakes at {wetOver} "
             + $"(worst {worstWet:F1} m), the leaves' own water over their ground at {leafWater} (a lake or river, worst {worstLeafWater:F1} m), "
             + $"no globe tile at {noGlobe}; globe levels drawn {lv}");
+        Print($"the pyramid's sea under {seaPoints} points, the leaves dry over it at {dryOverSea}{(pyramid?.SeaSurface == null ? " (no sea known)" : "")}");
+        if (dryOverSea > 0) _faults.Add($"the leaves are dry land over the pyramid's sea at {dryOverSea} of {seaPoints} points");
         if (points < 100) _faults.Add($"only {points} points on the leaves' ground");
         if (over > 0) _faults.Add($"the globe's ground stands over the leaves' at {over} of {points} points (worst {worst:F1} m)");
         if (wetOver > 0) _faults.Add($"the globe's lakes stand over the leaves' ground at {wetOver} of {points} points (worst {worstWet:F1} m)");
@@ -148,6 +161,18 @@ public partial class FarFillCheck : Node
         double slope = Math.Atan(Math.Sqrt((he - hc) * (he - hc) + (hn - hc) * (hn - hc)) / Step) * 180 / Math.PI;
         Print($"the world's up at the camera is {off:F4}° off the ellipsoid's; the ground slopes {slope:F1}° there");
         if (off > UpTolDeg) _faults.Add($"the world's up is {off:F3}° off the ellipsoid's at the camera");
+    }
+
+    /// <summary>Whether the pyramid's ground at an Earth position is its sea: at the geoid within <see cref="Leaves.PyramidBase.SeaTolM"/>.</summary>
+    private static bool SeaThere(Leaves.PyramidBase pyramid, EcefPos p)
+    {
+        const int level = 23;
+        var (face, u, v, _) = CubeSphere.FromEcef(p);
+        long gi = (long)Math.Round((u + 1) / 2 * (1L << level)), gj = (long)Math.Round((v + 1) / 2 * (1L << level));
+        double h = pyramid.HeightAt(face, gi, gj, level);
+        if (double.IsNaN(h) || !float.IsNaN(pyramid.LakeAt(h))) return false;
+        var g = Ellipsoid.Wgs84.ToGeodetic(p);
+        return Egm2008.Available && h <= Egm2008.Undulation(g.LatDeg, g.LonDeg) + Leaves.PyramidBase.SeaTolM - 0.3;
     }
 
     private double _shotAt;
