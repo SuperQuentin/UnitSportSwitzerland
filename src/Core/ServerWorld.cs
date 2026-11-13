@@ -344,7 +344,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // /locate (#1277): every list the server holds, and an index of its buildings built now on workers
         // (from the tiles themselves, not the 32 MB cache the rest shares) or read back from user://cache
         AddChild(new World.Locate.LocateService(local, manifest, () => places, origin,
-            () => _players?.GetChildren().OfType<Player.FootPlayer>().Select(p => p.Global) ?? []));
+            () => _players?.GetChildren().OfType<Player.FootPlayer>().Select(p => p.Global) ?? [])
+        {
+            // under earth a parking entrance is the leaf's own building's (#1772)
+            Leaves = GameSettings.Current.Frame == WorldFrame.Earth ? leaf => _earth?.StandOf(leaf) : null,
+        });
 #if PLAYTEST
         // the playtest recorder (#844): the authoritative positions, for the top view's server-vs-client lines
         if (Playtest.Recording.PlaytestRecorder.Requested)

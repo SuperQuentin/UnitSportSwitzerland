@@ -145,6 +145,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
+        (() => Interiors.GarageLeafCheck.Requested, Interiors.GarageLeafCheck.Run),
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Interiors.OutlineSurvey.Requested, Interiors.OutlineSurvey.Run),
@@ -1340,7 +1341,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // /locate offline (#1277): this machine owns the world and searches its own tiles, indexed on first use
         if (_localSource != null && _localManifest != null && _worldOrigin != null)
             AddChild(new World.Locate.LocateService(_localSource, _localManifest, () => _places?.Index, _worldOrigin,
-                () => LocalPlayer is { } me ? [me.Global] : []) { OnDemand = true });
+                () => LocalPlayer is { } me ? [me.Global] : [])
+            {
+                OnDemand = true,
+                // under earth a parking entrance is the leaf's own building's (#1772)
+                Leaves = GameSettings.Current.Frame == WorldFrame.Earth ? leaf => _earth?.StandOf(leaf) : null,
+            });
         _chatUi = ChatUi.Create(_chat, new ChatCompleter
         {
             Places = (query, limit) => _places!.Search(query, limit).Select(p => p.Name),

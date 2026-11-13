@@ -68,6 +68,12 @@ Selectors stack (`+`, `with`, `and`, or before the noun):
   - The index only says the roll and the box take a ramp (`GarageRule.RampFor`, either side as the front).
   - `LocateService.GaragesAsync` then runs the real footprint (`BuildingFootprint.Compute`, a tile's candidates together, its road index built once) on the 40 nearest candidates. It keeps the first 3 with a ramp door and **moves each hit onto the door**.
   - About 2 s in Lausanne.
+  - **Under `--frame earth` (#1772)** a leaf seeds every building's rolls by its Earth identity (`BuildingId`, #1658), not
+    by its LV95 tile key, so the LV95 answer named doors the leaves never build (Geneva 2502137,1117793: a garage on
+    flat, a grocery on earth) and missed theirs. `LocateService.Leaves` (`EarthWorld.StandOf`, set by both worlds under
+    earth) makes the index roll by the `BuildingId` (`Entries(tile, earthSeeds)`, a cache key of its own) and
+    `GaragesOnLeaves` judge each candidate on the leaf under its centre: the stand-in building with the same id (nearest
+    within two units), its garage door as the world built it, given back in LV95 notation. The bank flag follows.
 
 ## Chat
 
@@ -108,6 +114,7 @@ Selectors stack (`+`, `with`, `and`, or before the noun):
 - `tools/test.sh unit`: `LocateTests`.
 - Quick: `--locatecheck --world fixture --chunks fixture:garage --pois fixture --systems ui`. It covers the index, the fixture castle and lake, the blocks' garage doors, the cache round trip and completion.
 - On a real region, `--chunks <dir> --at E,N --locatecheck "q1|q2"` prints the answers and their times; add `--locateearly` (and delete `user://cache/locate/`) to ask while the index is still filling.
+- Earth (#1772), on B4's Geneva data: `--garageleafcheck [--chunks D:/UnitSportSwitzerland/terrain_chunks] [--leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube] [--at 2502137,1117793]`, headless, about 30 s. For every building of the LV95 tile on the leaf there, `/locate`'s earth answer must match the leaf's own garage doors, and the earth-seeded index must offer all of them; it prints what the LV95 answer got wrong. `--locatecheck ... --frame earth` runs the fixture's garages through its leaves.
 - `--chatcheck` covers completion, a point's link opening its choices (and Esc closing them first), and the picker walked by its buttons.
 - Screenshots: `--chatopen 40 --chatsend "/locate castle" [--chatchoices] --uishot <png> 44`; `--chatpicker "<text>"` for the picker.
 - Net: `tools/locatenetcheck.sh` checks the server's answers, that the client built no index, and that `/go` lands on the garage door.
