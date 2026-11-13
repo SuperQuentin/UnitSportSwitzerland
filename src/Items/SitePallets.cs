@@ -13,6 +13,9 @@ public readonly record struct YardPallet(string Building, int Slot, double E, do
 {
     /// <summary>A yard stack's id, or with <see cref="Site"/> a building site's materials pallet's (#615).</summary>
     public string Id => Site ? Pallets.SiteId(Building, Slot) : Pallets.YardId(Building, Slot);
+
+    /// <summary>The tile its place and yaw are in (an earth leaf's stand-in past <c>LeafStandIn.FirstPlaceE</c>, #1799).</summary>
+    public TileId Tile => TileId.FromLv95(E, N);
 }
 
 /// <summary>

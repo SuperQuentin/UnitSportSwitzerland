@@ -43,6 +43,9 @@ public readonly record struct VehicleSlot(
     // one is taken, once nobody is near. A parked car does not: whoever drove it off has it.
     bool Respawns = false)
 {
+    /// <summary>The tile its place and yaw are in (an earth leaf's stand-in past <c>LeafStandIn.FirstPlaceE</c>, #1799).</summary>
+    public TileId Tile => TileId.FromLv95(E, N);
+
     /// <summary>
     /// The node name the server promotes this slot under. Deterministic, so a second wake of the
     /// same slot finds the vehicle already there instead of spawning another

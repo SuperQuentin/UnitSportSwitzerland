@@ -301,7 +301,9 @@ public partial class FootPlayer
         {
             GD.Print(FormattableString.Invariant($"[crane] {Name} sets a pallet down at {at.Y:F2}"));
             // its runners along the jib, as it hung
-            pallets.RequestDrop(load, origin.ToGlobal(at), _cranePose.Yaw + PalletNode.CarriedYaw(false), _ => { });
+            // the jib's yaw is the crane's tile's: a world yaw through its node (#1799)
+            float jib = _craneLive is { } crane && IsInstanceValid(crane.Owner) ? crane.WorldYaw(_cranePose.Yaw) : _cranePose.Yaw;
+            pallets.RequestDrop(load, origin.ToGlobal(at), jib + PalletNode.CarriedYaw(false), _ => { });
         }
     }
 

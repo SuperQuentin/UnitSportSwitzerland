@@ -195,7 +195,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             // where it stood and what it was, while its tile is known here: for putting it back (#689)
             int bar = key.Key.LastIndexOf('|');
             _awakeInfo[key.Key] = Find(key.Key[..bar], int.Parse(key.Key[(bar + 1)..])) is { } s
-                ? new World.AwakeSlot(VehicleState.Now, s.E, s.N, s.Yaw, s.KindId, s.Train, s.Load)
+                ? new World.AwakeSlot(VehicleState.Now, s.E, s.N, _origin.RecordYawIn(s.Tile, WorldOf(s), s.Yaw), s.KindId, s.Train, s.Load)
                 : new World.AwakeSlot(VehicleState.Now);
             containers.SaveAwake(_awakeInfo);
         }
@@ -855,7 +855,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             {
                 Slot = s,
                 Position = WorldOf(s),
-                Basis = new Basis(Vector3.Up, s.Yaw),
+                Basis = new Basis(Vector3.Up, _origin.WorldYawInTile(s.Tile, s.Yaw)),
             };
             foreach (var (pose, shape) in look.Boxes)
                 body.AddChild(new CollisionShape3D { Shape = shape, Transform = pose });
@@ -934,7 +934,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>Where a slot stands, a vehicle in one piece: its place and its heading.</summary>
     private Transform3D SlotTransform(VehicleSlot s) =>
         // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
-        new(new Basis(Vector3.Up, s.Yaw), WorldOf(s));
+        // its tile's heading turned with the tile: an earth leaf's stand-in is turned in the world (#1799)
+        new(new Basis(Vector3.Up, _origin.WorldYawInTile(s.Tile, s.Yaw)), WorldOf(s));
 
     /// <summary>A slot's place in the world (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
     public Vector3 WorldOf(VehicleSlot s) => _origin.ToWorld(s.E, s.N, s.Height);
@@ -1175,7 +1176,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
         // the state first, then its own ride: CreateRide is what knows a lone trailer from a truck
         // with one coupled to it from a plain car, so the wake path must not assume a mountable kind
-        var state = StateOf(slot);
+        // its heading as a record's (the grid's at its place), not its stand-in tile's (#1799)
+        var state = StateOf(slot) with { Yaw = _origin.RecordYawIn(slot.Tile, WorldOf(slot), slot.Yaw) };
         if (state.CreateRide() is not { } ride) return false;
         state = state with { Health = ride.MaxHealth };
         // exactly where the dormant copy stood, asleep: not dropped a hand's breadth onto the ground (#560)
