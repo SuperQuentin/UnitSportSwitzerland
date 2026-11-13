@@ -47,7 +47,7 @@ public sealed class CachingChunkSource : IChunkSource
 
     private sealed class Entry
     {
-        public object? Value;      // null is a real answer: "this tile has none"
+        public object? Value;      // null is a real answer: "this tile has none" (never for a grid: GetAsync)
         public long Bytes;
         public long LastUsed;
     }
@@ -194,6 +194,11 @@ public sealed class CachingChunkSource : IChunkSource
             // generated ones were): the caller may still use it, but it must not outlive the
             // Clear or Invalidate
             if (epoch != _epoch) return value;
+            // A missing grid is never "this tile has none": the rings only ask for tiles that exist, so
+            // it is a fetch that could not happen yet (no server link, a timeout, a cancelled build).
+            // Remembered, that tile's grid was never asked for again (#1816): a join from the menu
+            // builds its spawn tile before the link is up, and the player never reached the ground.
+            if (value == null && slot is AssetSlot.Chunk or AssetSlot.Coarse) return value;
             long bytes = value == null ? 32 : weigh(value);
             if (_entries.TryGetValue(key, out var existing)) _bytes -= existing.Bytes;
             _entries[key] = new Entry { Value = value, Bytes = bytes, LastUsed = ++_tick };

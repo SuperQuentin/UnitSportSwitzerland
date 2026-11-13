@@ -17,6 +17,12 @@ In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_
 - [ ] Wireframe → the leaves come back as lines within a few seconds (slow, as on flat); Normal → as before.
 - [ ] Type `/debug tiles,labels` then `/debug off` in the chat → the tools switch on, then all off.
 
+## A join from the menu reaches the ground ([#1816](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1816), PR [#1819](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1819))
+
+The exported Windows build, joined from the title screen (saved server or address), not `--connect`.
+
+- [ ] Delete `chunk_2583_1113.terr` (and its neighbours `2582-2584_1112-1114`) from `chunk_cache` (keep the `.terrc`), join `unitsport.infrack.ch` from the menu as a returning player → the loading screen ends, on foot at the spawn or where you fell asleep; no `[spawn] no terrain streamed under the spawn point` warning in the log.
+
 ## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
 
 On Windows, a real keyboard, in a window.
@@ -31,6 +37,12 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Sh
 - [ ] With a pad: tap RB / LB, then hold each → a notch a tap, a smooth ramp held (2 m/s to 100 km/s in ~4 s); the readout top right; the hints list Faster RB / Slower LB.
 - [ ] In a headset: the right / left trigger while spectating → faster / slower, the readout readable on the VR panel; the triggers do nothing else there.
 - [ ] Climb from Geneva to ~300 km at full speed, fly east to Asia (~1 min, ~10 s boosted), come down → the speed grows with the altitude by itself, nothing freezes or hitches on the way, the generated ground is under you when you land.
+
+## Back into the body after a long spectator flight ([#1814](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1814))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T into the spectator.
+
+- [ ] Fly to Asia through Space at full speed, come down, press T above 50 km and keep descending → the body takes over once the ground is in, standing upright on it, the world drawn round it; no `create_frustum_points` in the log. If a `[camera] ... could not be drawn` or `[player] ... a non-finite ... was put back` line shows, the view is still drawn: send that line (it names the cause).
 
 ## The earth fill's walls and ledges north of Riddes ([#1788](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1788))
 

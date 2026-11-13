@@ -17,6 +17,9 @@
   `GroundUnderCamera`, because a spawn point that gave up after 15 s leaves the camera at 4800 m.
   Without both, `EnterFootMode` put the body at camera height (`ground = pos.Y`), and the placement
   pass only ever lifts (`Max`): the body froze about 4.8 km up, then fell.
+  A join whose first spawn never settles (the wake then always lands first) was not the order but a lost
+  spawn tile: a menu join asked for its grid before the link was up and the cache kept the null (#1816,
+  `net/terrain-streaming`).
 - **Teleport rule**: `Permissions.ServerTeleport` / `CanTeleport` (`!Online || IsAdmin || ServerTeleport`).
   Off: `PlaceSearchUi.Go` and `XrMap` refuse, `ChatManager.CommandCity` refuses non-admins, and
   `ClientWorld.ToggleMode` returns from the fly camera with `EnterFootMode(inPlace)` +
