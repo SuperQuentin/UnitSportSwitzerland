@@ -29,3 +29,4 @@
   1.5× the disc. `--skyshot-slats`: posts 300 m out across the sun, a picture with rays on and off, the beams'
   stripes measured above the posts. At 1,050 km the shot reads 4.9 px off on main too: the check's own camera, not
   the sun (a `SunDisc` kept on in space lands at the same place as the atmosphere's).
+- **Never occlusion-culled** (#1839): `MoonDisc`, `SunDisc` and its shafts, `StarField`, `SkyBodies`, `Satellites` and the atmosphere's shell set `IgnoreOcclusionCulling`: depth hides the sky behind ridges; the buildings' coarse occlusion buffer is no test for it (the moon went when looked at head-on, not reproduced). `--skyshot moon,... --skyshot-walk --skyshot-sweep`: the walking first-person view swings across the moon and reads its pixel every drawn frame (scaled to the picture under a content scale).

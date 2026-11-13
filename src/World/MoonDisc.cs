@@ -35,6 +35,9 @@ public partial class MoonDisc : MeshInstance3D
         TopLevel = true;
         Visible = false;
         CastShadow = ShadowCastingSetting.Off;
+        // never occlusion-culled: depth hides it behind a ridge; the buildings' coarse occlusion buffer culled it when
+        // looked at head-on (it showed at the screen's edge and went near the middle)
+        IgnoreOcclusionCulling = true;
         GIMode = GIModeEnum.Disabled;
         Mesh = new SphereMesh { Radius = 1f, Height = 2f, RadialSegments = 96, Rings = 48 };
         _material = NewMaterial();

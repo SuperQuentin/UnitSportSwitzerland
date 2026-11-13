@@ -53,6 +53,7 @@ public partial class Atmosphere : Node3D
             CustomAabb = new Aabb(new Vector3(-r, -r, -r), new Vector3(2 * r, 2 * r, 2 * r)),
             MaterialOverride = _material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            IgnoreOcclusionCulling = true,
             Visible = false,
         };
         AddChild(_shell);
