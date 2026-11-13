@@ -32,9 +32,17 @@
   three-plane intersection fails, every frame. A NaN does not trip it (NaN passes the zero test): a NaN camera draws
   nothing silently. The user's rotated log (`godot2026-11-13T17.39.15.log`) shows the spectator failing too, after a
   `/tp` to Nyon, and every camera fine in Space: a near plane left far too near, with the far plane at most 160 km low
-  down. One path found: `Climb` could take a 5 mm door lens's near (`DoorPortals.DoorwayNear`, lowered for a frame)
-  as its base and later write it onto whichever camera was drawn. Now the base belongs to its camera, and `Climb`
-  never lets far / near pass `CameraGlobal.MaxFarOverNear` (1e7), lowering it back with the rest of its raise.
+  down.
+- **The root cause, reproduced** (`--nearbasecheck`, #1811's follow-up): a doorway's lens (`DoorPortals`) lowers the
+  drawn camera's near plane to 5 mm in `_Process` and puts it back after the draw. `CameraGlobal.Climb` (before the
+  draw) saw a near plane under its floor (distance from the origin / 200,000: 0.015 m 3 km out) and raised it, keeping
+  the lens's 5 mm as the camera's own base; it also reset the lens's far-plane cut. Once the floor fell under 5 mm
+  (low, near the origin) it wrote that base back, for good: 5 mm under the user's 160 km far plane (horizon 150 km),
+  far / near 3.2e7, every frame failing until the camera rose into Space. Measured with the old `CameraGlobal`: near
+  0.005, 61 `create_frustum_points` in 61 frames low. #1814's cap held far / near at 1e7 (no error, but the camera
+  kept 16 mm, not its own 1 m). Now `DoorPortals.LensHolds(camera)` says when a lens holds the camera this frame, and
+  `Climb` leaves its planes to the lens then (the lens keeps them within its own `MaxDepthRatio`, 2e6): the camera's own
+  1 m comes back, 0 errors. The cap (`MaxFarOverNear`, 1e7) stays as the guard behind it.
 - **Checks**: `--spacelandcheck` (`Core/SpaceLandingCheck`): body on the ground, the spectator up to 1,500 km, 8,000 km
   east (211 turning re-anchors), four regime switches, 900 km low (3 km re-anchors), T at 70 km, down until the body
   takes over; asserts it upright, its camera finite and orthonormal with sane planes, standing on the ground, then
@@ -43,3 +51,6 @@
   (`--frame earth --leaves .../terrain_chunks_cube --chunks ... --at 2500956,1117569`), windowed to run `CameraGlobal`
   (headless draws nothing, so `FramePreDraw` never fires). `--spacelandcheck home` flies back over the start before
   landing: the fixture world (`--chunks fixture:straight`), quick tier.
+  `--frame earth --nearbasecheck --chunks fixture:straight --traffic 0 --horizon 150` (windowed only, `Core/NearBaseCheck`):
+  the fly camera 3 km up held by a lens for 30 frames through `DoorPortals.TakeLens`/`DropLens` (near 5 mm, far cut), then
+  400 m up: far / near within 1.7e7 and the camera's own near plane back; the log has no `create_frustum_points`.
