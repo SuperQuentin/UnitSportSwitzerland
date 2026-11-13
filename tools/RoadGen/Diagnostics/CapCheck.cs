@@ -12,8 +12,11 @@ using UnitSport.Terrain.Format;
 /// </summary>
 public static class CapCheck
 {
-    /// <summary>How far inside a cap's outline a street's point may lie (m): a mouth's trim, a stub's end under the paving.</summary>
-    public const double Deep = 4;
+    /// <summary>
+    /// How far inside a cap's outline a street's point may lie (m): the planner's own residues (a stub's end under the paving,
+    /// one node's mouth cut away) reach 7.1 m in Geneva's 2499-2503 / 1116-1119 block; the swallowed streets lay 8.4 m and deeper.
+    /// </summary>
+    public const double Deep = 8;
 
     public static int Run(string chunks, string? at, bool list, Action<string> log)
     {
