@@ -32,7 +32,8 @@ wire are unchanged.
 - **The zone word** (`ClockZone.TryParse`): `/time set <hour> [zone]`, `/time [query] [zone]`, `/time
   <hour> [zone]`. `here`/`local` (the default: the zone you are in), `swiss`/`ch`/`cet`/`cest`,
   `utc`/`gmt`, `utc+8`, `utc-3:30`, `gmt+5.75` (UTC−12..+14). A bare `+8` is not a zone: it would be read as
-  an hour. Names ignore the zone (they are the sun's where you stand). `add` and `speed` take none.
+  an hour. Names ignore the zone (they are the sun's where you stand). `add` and `speed` take none;
+  `speed` takes `normal` (24 min a day) and `real` (a day a day, 1440 min).
   Swiss time's offset is the date's at noon (CET +1, CEST +2).
 - Replies away from home show both faces: "It is 12:30 UTC-7 (21:30 Swiss time)". At home they are
   unchanged ("It is 21:30").

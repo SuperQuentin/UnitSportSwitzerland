@@ -441,6 +441,7 @@ public sealed class ChatCompleter
                     0 => mayTime ? World.TimeCommand.Verbs : ["query"],
                     1 when mayTime && words[1].ToLowerInvariant() == "set" => World.TimeCommand.Named.Select(n => n.Name),
                     1 when words[1].ToLowerInvariant() == "query" => World.ClockZone.Words,
+                    1 when mayTime && words[1].ToLowerInvariant() == "speed" => World.TimeCommand.SpeedNames.Select(n => n.Name),
                     2 when mayTime && words[1].ToLowerInvariant() == "set" => World.ClockZone.Words,
                     _ => [],
                 };

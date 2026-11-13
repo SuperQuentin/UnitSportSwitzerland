@@ -11,7 +11,7 @@
   displayed as 0.40. Buildings light far more windows at night and those glow through the dark.
   Settings → Time of day (start hour, day length, default 24 min, 0 = stopped); `--time <h>` fixes
   the hour for one run. **`/time`** (#202, `World/TimeCommand` parses, `Net/ChatManager` applies):
-  `set <hh:mm|sunrise|day|noon|sunset|night|midnight> [zone]`, `add <hours>`, `speed <min a day, 0 stops>`;
+  `set <hh:mm|sunrise|day|noon|sunset|night|midnight> [zone]`, `add <hours>`, `speed <min a day, 0 stops | normal | real>` (`normal` = 24 min, `real` = 1440 min, a day a day; `TimeCommand.MaxMinutesPerDay` is a real day, the settings' slider stops at 240);
   bare `/time` answers from this screen's clock. Offline it moves this machine's clock
   (`DayNight.DayLengthOverride` for speed).
 - **The real sky** (#1430 phase H6, `World/SunPath`, `Core/Ephemeris`, `Core/SwissTime`): the

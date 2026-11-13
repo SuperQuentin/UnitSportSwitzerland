@@ -42,11 +42,24 @@ public static class TimeCommand
 
     public static readonly string[] Verbs = ["query", "set", "add", "speed"];
 
-    public const string Usage = "Usage: /time [query] [zone] | set <hh:mm | sunrise | day | noon | sunset | night | midnight> [zone] | add <hours> | speed <minutes per day, 0 stops>."
+    public const string Usage = "Usage: /time [query] [zone] | set <hh:mm | sunrise | day | noon | sunset | night | midnight> [zone] | add <hours> | speed <minutes per day, 0 stops | normal | real>."
         + " Hours read in the zone you are in unless you name one (here, swiss, utc, utc+8); the named hours are the sun's where you stand.";
 
-    /// <summary>Longest day <c>/time speed</c> takes, the same bound as the settings.</summary>
-    public const float MaxMinutesPerDay = 240f;
+    /// <summary>
+    /// Longest day <c>/time speed</c> takes: a real day, so <c>/time speed real</c> runs the sky at
+    /// one day a day. The settings' slider stops at 240.
+    /// </summary>
+    public const float MaxMinutesPerDay = RealMinutesPerDay;
+
+    /// <summary>The game's usual day, 24 real minutes (<c>/time speed normal</c>), and a real day (<c>/time speed real</c>).</summary>
+    public const float NormalMinutesPerDay = 24f, RealMinutesPerDay = 24f * 60f;
+
+    /// <summary>Words for <c>/time speed</c>.</summary>
+    public static readonly (string Name, float MinutesPerDay)[] SpeedNames =
+    [
+        ("normal", NormalMinutesPerDay),
+        ("real", RealMinutesPerDay),
+    ];
 
     /// <summary>
     /// Parses the words after <c>/time</c>. A bare hour (<c>/time 14:00</c>) is a set. Named hours
@@ -101,12 +114,19 @@ public static class TimeCommand
 
             case "speed" when args.Length == 2:
                 request = request with { Op = TimeOp.Speed };
+                string speedWord = arg.Trim().ToLowerInvariant();
+                int named = Array.FindIndex(SpeedNames, n => n.Name == speedWord);
+                if (named >= 0)
+                {
+                    request = request with { Value = SpeedNames[named].MinutesPerDay };
+                    return true;
+                }
                 if (TryParseNumber(arg, out double speed) && speed >= 0 && speed <= MaxMinutesPerDay)
                 {
                     request = request with { Value = speed };
                     return true;
                 }
-                error = $"Speed is real minutes per game day, 0 to {MaxMinutesPerDay:0} (0 stops the clock).";
+                error = $"Speed is real minutes per game day, 0 to {MaxMinutesPerDay:0} (0 stops the clock), or normal ({NormalMinutesPerDay:0} min) or real (a day a day).";
                 return false;
         }
 
@@ -259,7 +279,8 @@ public static class TimeCommand
 
     /// <summary>"24 min a day" / "stopped", for replies.</summary>
     public static string DescribeSpeed(float minutesPerDay) =>
-        minutesPerDay > 0 ? $"{minutesPerDay.ToString("0.#", CultureInfo.InvariantCulture)} min a day" : "stopped";
+        minutesPerDay == RealMinutesPerDay ? "real time, a day a day"
+        : minutesPerDay > 0 ? $"{minutesPerDay.ToString("0.#", CultureInfo.InvariantCulture)} min a day" : "stopped";
 
     /// <summary>Invariant culture: the French locale would read "1.5" as 15.</summary>
     private static bool TryParseNumber(string text, out double value) =>
