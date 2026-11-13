@@ -519,13 +519,23 @@ public partial class PlayerInput : Node
         ProcessMode = ProcessModeEnum.Always;
         GameSettings.Changed += ApplyDeadzones;
         ApplyDeadzones();
+        // keys are tracked from the window's own input, before any node's _Input can handle them away
+        GetTree().Root.WindowInput += OnWindowInput;
     }
 
-    public override void _ExitTree() => GameSettings.Changed -= ApplyDeadzones;
+    public override void _ExitTree()
+    {
+        GameSettings.Changed -= ApplyDeadzones;
+        GetTree().Root.WindowInput -= OnWindowInput;
+    }
+
+    private static void OnWindowInput(InputEvent e)
+    {
+        if (e is InputEventKey key) TrackKey(key);
+    }
 
     public override void _Input(InputEvent e)
     {
-        if (e is InputEventKey key) TrackKey(key);
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
         // VR replays the controllers as a pad, and points at the UI panel with mouse events: it

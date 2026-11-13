@@ -19,14 +19,28 @@ report; code that reads `Input.IsActionPressed` itself is not covered.
   parsed a bare physical key-up on device 0: it logged the release and let go of nothing (Shift kept
   sprinting). A check that fakes keys with `ParseInputEvent` sends them as the keyboard does
   (`SpectatorSwitchCheck.KeyEvent`), or it cannot see this.
+- **Late repeats** (#1805): Godot on Windows drops `WM_KEYUP` for Shift and makes Shift's key-up from
+  raw input, which `process_events()` drains *before* the message queue. An auto-repeat `WM_KEYDOWN`
+  queued just before the release (any frame boundary; surely across a hitch) is then parsed *after*
+  the key-up. `Input` keeps an echo out of its pressed keys (`IsPhysicalKeyPressed(Shift)` false) but
+  presses the actions on it (`allow_echo`), so sprint / the spectator's Down stayed held with no key-up
+  to come, and the stuck-key check, which follows only real presses, never saw it. `TrackKey` now
+  releases an echo of a key Godot holds up at once (`KeyUp` of the echo: only that key's part of each
+  action, Q still holds Down), logged once per release `[input] Shift repeated after its key-up:
+  released`. Only Shift's key-up comes from raw input; `Input.IsKeyPressed(Key.Shift)` (shift-clicks)
+  was never affected. An echo also comes for a key held while the window gains focus: it no longer
+  presses anything until pressed again.
+- **Keys are tracked from `Root.WindowInput`**, emitted before any node's `_Input`, so a UI that handles
+  a key away does not hide it from `PlayerInput`.
 - **Physical keys go through the scan code**: bindings are physical (US positions) but virtual keys
   follow the layout: on AZERTY the physical W is VK 'Z', on QWERTZ the physical Z is VK 'Y'.
   `VirtualKey` maps letters and digits by scan code with `MapVirtualKeyW`; modifiers, Space, arrows,
   Enter, Tab, Esc, Backspace, Home/End and F1-F12 by their fixed VK; punctuation is not checked.
-- Off headless, off unfocused, and off while `MouseCapture.Disabled` (a check driving the keys in a
-  window). A windowed check that fakes a key press with `ParseInputEvent` sees it released within
+- Off headless, off unfocused, and off while `MouseCapture.Disabled` (`--nocapture`, a check driving
+  the keys in a window; not the Alt free cursor, under which it runs). A windowed check that fakes a key press with `ParseInputEvent` sees it released within
   0.2 s: hold it with `Input.ActionPress` instead.
 - Checks: `--spectatorcheck --world fixture` (Shift+T as key events: no sink on the held Shift; `KeyUp`
   of a keyboard key-down lets go of the action, the keycode and the physical key, headless too; windowed
   it also fakes a W Windows never saw and expects it let go), `--creativecheck --world flat` (the hold-off
-  on `Held`/`Move`, the 26 letters mapping to 26 letter VKs on this layout).
+  on `Held`/`Move`, the 26 letters mapping to 26 letter VKs on this layout). `--spectatorcheck` also sends Shift let go with
+  a repeat behind its key-up (left, right, with W, Q, after Shift+T, an Alt tap, a 300 ms hitch).

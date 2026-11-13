@@ -9,6 +9,8 @@ namespace UnitSport.Core;
 /// then T: the spectator camera takes over and does not sink on the Shift that chose it; Shift
 /// pressed again sinks it; Shift+T again is back in the body; T alone switches creative mode.
 /// Windowed on Windows, also: a W Godot believes down while Windows says up is let go (stuck keys).
+/// Shift let go with an auto-repeat behind its key-up, as Windows delivers it (#1805): nothing stays
+/// held, left and right, with W, after Shift+T, across a 300 ms hitch, with Q still holding Down.
 /// Prints <c>[spectatorcheck] RESULT: ok</c>.
 /// </summary>
 public partial class SpectatorSwitchCheck : Node
@@ -93,6 +95,16 @@ public partial class SpectatorSwitchCheck : Node
         await Wait(0.5);
         Expect(cam.GlobalPosition.Y < y - 5f, $"Shift pressed again sinks it ({y:F1} -> {cam.GlobalPosition.Y:F1} m)");
 
+        // the user's case (#1805): let go while a repeat is still queued; Windows hands the key-up over first
+        Input.ParseInputEvent(ShiftKey(false, KeyLocation.Left));
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left, echo: true));
+        await Wait(0.1);
+        y = cam.GlobalPosition.Y;
+        await Wait(0.5);
+        Expect(Mathf.Abs(cam.GlobalPosition.Y - y) < 0.5f, $"Shift let go with a repeat behind its key-up stops sinking ({y:F1} -> {cam.GlobalPosition.Y:F1} m)");
+        Key(Godot.Key.Shift, true, true);   // held again for the Shift+T below
+        await Wait(0.05);
+
         Key(Godot.Key.T, true, true);
         await Wait(0.05);
         Key(Godot.Key.T, false, true);
@@ -122,6 +134,8 @@ public partial class SpectatorSwitchCheck : Node
         Expect(held && !Input.IsActionPressed(PlayerInput.MoveForward) && !Input.IsKeyPressed(Godot.Key.W) && !Input.IsPhysicalKeyPressed(Godot.Key.W),
             "the stuck-key release lets go of the action, the keycode and the physical key");
 
+        await LateRepeats();
+
         // windowed on Windows: a key Godot thinks is down while Windows says it is up (a key-up lost
         // in a hitch) is let go within a few checks
         if (OS.GetName() == "Windows" && DisplayServer.GetName() != "headless")
@@ -140,6 +154,91 @@ public partial class SpectatorSwitchCheck : Node
         }
 
         Finish(null);
+    }
+
+    /// <summary>Shift as Windows sends it: no Shift flag on Shift itself, its side, and an auto-repeat as an echo.</summary>
+    private static InputEventKey ShiftKey(bool down, KeyLocation side, bool echo = false) => new()
+    {
+        Device = (int)InputEvent.DeviceIdKeyboard, PhysicalKeycode = Godot.Key.Shift, Keycode = Godot.Key.Shift,
+        KeyLabel = Godot.Key.Shift, Location = side, Pressed = down, Echo = echo,
+    };
+
+    private static bool ShiftActionHeld => Input.IsActionPressed(PlayerInput.Sprint) || Input.IsActionPressed(PlayerInput.FlyDown);
+
+    /// <summary>
+    /// Godot on Windows reads Shift's key-up from raw input, drained before the message queue, so a
+    /// repeat queued before the release is parsed after it (#1805): Godot then holds Shift up while
+    /// its actions stay pressed. Each sequence ends with nothing held on Shift.
+    /// </summary>
+    private async Task LateRepeats()
+    {
+        async Task Released(string what)
+        {
+            await Wait(0.1);
+            Expect(!ShiftActionHeld && !Input.IsPhysicalKeyPressed(Godot.Key.Shift), $"{what}: sprint and Down let go");
+        }
+
+        // a plain press and release, either side
+        foreach (var side in new[] { KeyLocation.Left, KeyLocation.Right })
+        {
+            Input.ParseInputEvent(ShiftKey(true, side));
+            await Wait(0.05);
+            bool held = Input.IsActionPressed(PlayerInput.Sprint);
+            Input.ParseInputEvent(ShiftKey(false, side));
+            await Released($"{side} Shift down and up (held {held})");
+
+            Input.ParseInputEvent(ShiftKey(true, side));
+            await Wait(0.05);
+            Input.ParseInputEvent(ShiftKey(true, side, echo: true));
+            await Wait(0.05);
+            Expect(Input.IsActionPressed(PlayerInput.Sprint), $"{side} Shift held, repeating: still sprints");
+            Input.ParseInputEvent(ShiftKey(false, side));
+            Input.ParseInputEvent(ShiftKey(true, side, echo: true));
+            await Released($"{side} Shift up with a repeat behind it");
+        }
+
+        // W held through it
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left));
+        await Wait(0.05);
+        Key(Godot.Key.W, true, true);
+        await Wait(0.05);
+        Input.ParseInputEvent(ShiftKey(false, KeyLocation.Left));
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left, echo: true));
+        await Wait(0.1);
+        Expect(!ShiftActionHeld && Input.IsActionPressed(PlayerInput.MoveForward), "Shift up with a repeat behind it while W is held: W still walks, sprint let go");
+        Key(Godot.Key.W, false, false);
+        await Released("then W up");
+
+        // a hitch: the frame stalls 300 ms with Shift let go in it; the key-up comes first, the queued repeats after
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left));
+        await Wait(0.05);
+        OS.DelayMsec(300);
+        Input.ParseInputEvent(ShiftKey(false, KeyLocation.Left));
+        for (int i = 0; i < 3; i++) Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left, echo: true));
+        await Released("Shift let go in a 300 ms hitch");
+
+        // Q holds Down too: only Shift's part is let go
+        Key(Godot.Key.Q, true, false);
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left));
+        await Wait(0.05);
+        Input.ParseInputEvent(ShiftKey(false, KeyLocation.Left));
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left, echo: true));
+        await Wait(0.1);
+        Expect(Input.IsActionPressed(PlayerInput.FlyDown) && !Input.IsActionPressed(PlayerInput.Sprint), "Q held through a late Shift repeat: Down still held by Q, sprint let go");
+        Key(Godot.Key.Q, false, false);
+        await Released("then Q up");
+
+        // Alt tapped (the free cursor) while Shift is held, Shift let go with the cursor free
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left));
+        await Wait(0.05);
+        Key(Godot.Key.Alt, true, true);
+        await Wait(0.05);
+        Key(Godot.Key.Alt, false, true);
+        await Wait(0.05);
+        Input.ParseInputEvent(ShiftKey(false, KeyLocation.Left));
+        Input.ParseInputEvent(ShiftKey(true, KeyLocation.Left, echo: true));
+        await Released("Shift up with a repeat behind it after an Alt tap");
+        if (CursorToggle.Free) { Key(Godot.Key.Alt, true, false); await Wait(0.05); Key(Godot.Key.Alt, false, false); }
     }
 
     private void Finish(string? error)
