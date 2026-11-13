@@ -105,6 +105,11 @@ src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
+# #1801: /time's named hours and zone where the player stands, far away and at home (Geneva)
+src/World/LocalHours     quick  --localtimecheck --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at -4679383,7259183
+src/World/LocalHours     quick  --localtimecheck home --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at 2500300,1117900
+src/World/LocalTimeProbe quick  --localtimecheck --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at -4679383,7259183
+src/World/TimeCommand    quick  --localtimecheck home --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at 2500300,1117900
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
 # #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
@@ -148,6 +153,9 @@ src/Items/Placeables     quick  --campfirecheck --systems ui,physics
 src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SunDisc        quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+shaders/sun              quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+shaders/sky_point        quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
@@ -409,6 +417,9 @@ src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site -
 # the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
+# #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
+src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
 # G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
 # the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
 src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
@@ -624,6 +635,9 @@ src/World/TimeCommand    net    tools/clocknetcheck.sh
 src/World/ClockNetProbe  net    tools/clocknetcheck.sh
 src/Net/ClockSync        net    tools/clocknetcheck.sh
 src/Net/ChatManager      net    tools/clocknetcheck.sh
+src/World/LocalHours       net    tools/localtimenetcheck.sh
+src/World/LocalTimeNetProbe net   tools/localtimenetcheck.sh
+src/World/TimeCommand      net    tools/localtimenetcheck.sh
 tools/TerrainFormat/SignalPlan net tools/signalnetcheck.sh
 src/Player/Steamer       net    tools/steamernetcheck.sh
 src/Player/FootPlayer.St net    tools/steamernetcheck.sh
@@ -1377,3 +1391,6 @@ src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --
 src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
 src/Terrain/Fixture/FunCourse quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
 src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+# #1811: back into the body after a long spectator flight: upright, its camera sane, a poisoned view put right
+src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
+src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0

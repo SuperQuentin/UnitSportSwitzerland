@@ -21,11 +21,18 @@ public static class ZoomRule
     /// <summary>How far under a step the zoom must fall before the step drops: a zoom resting on a boundary does not flap.</summary>
     public const float Hysteresis = 1.05f;
 
-    /// <summary>The zoom of a vertical field of view of <paramref name="fovDeg"/>: tan(34°) / tan(fov / 2), never below 1.</summary>
+    /// <summary>
+    /// The most the detail follows a zoom: a ~0.07° view, the telescope at 20,000 mm (#1813). Past it
+    /// only the sky is looked at (the telescope reaches a 10″ view for the planets), and a mountain
+    /// at x10,000 would ask for every tile's finest detail to the horizon.
+    /// </summary>
+    public const float MaxZoom = 1100f;
+
+    /// <summary>The zoom of a vertical field of view of <paramref name="fovDeg"/>: tan(34°) / tan(fov / 2), from 1 to <see cref="MaxZoom"/>.</summary>
     public static float Of(float fovDeg)
     {
         if (!(fovDeg > 0f) || fovDeg >= 179f) return 1f;
-        return MathF.Max(1f, MathF.Tan(ReferenceFov * MathF.PI / 360f) / MathF.Tan(fovDeg * MathF.PI / 360f));
+        return Math.Clamp(MathF.Tan(ReferenceFov * MathF.PI / 360f) / MathF.Tan(fovDeg * MathF.PI / 360f), 1f, MaxZoom);
     }
 
     /// <summary>The step index for a zoom of <paramref name="value"/>, coming from step <paramref name="current"/>.</summary>

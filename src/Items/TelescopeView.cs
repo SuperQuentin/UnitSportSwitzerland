@@ -69,9 +69,13 @@ public partial class TelescopeView : CanvasLayer
         UiFocus.Set(this, true);
         _tube = _scope.GetNodeOrNull<Node3D>(TelescopeVisual.TubeName);
         // start where the tripod was set facing, a little up
-        var forward = -_scope.GlobalBasis.Z;
+        // where it was left (#1813): the tube keeps its turn (it turns with the world at a re-anchor),
+        // the zoom is remembered per telescope; never looked through: the way the tripod faces, a little up
+        bool used = Left.TryGetValue(Id, out float focal) && _tube != null;
+        var forward = used ? -_tube!.GlobalBasis.Z : -_scope.GlobalBasis.Z;
         Yaw = Mathf.Atan2(-forward.X, -forward.Z);
-        Pitch = Mathf.DegToRad(12f);
+        Pitch = used ? Mathf.Asin(Mathf.Clamp(forward.Y, -1f, 1f)) : Mathf.DegToRad(12f);
+        if (used) Focal = focal;
         _vr = XR.XrSession.Active;
         var own = GetViewport().GetCamera3D();
         _own = own;
@@ -108,9 +112,13 @@ public partial class TelescopeView : CanvasLayer
         _player.Rotation = new Vector3(0, Yaw, 0);
     }
 
+    /// <summary>The focal length each telescope was left at, on this client (its aim is the tube's own turn).</summary>
+    private static readonly Dictionary<long, float> Left = new();
+
     public override void _ExitTree()
     {
         if (Current == this) Current = null;
+        Left[Id] = Focal;
         UiFocus.Set(this, false);
         if (!_vr && _own != null && IsInstanceValid(_own)) _own.MakeCurrent();
         if (_cam != null && IsInstanceValid(_cam)) _cam.QueueFree();
@@ -140,7 +148,13 @@ public partial class TelescopeView : CanvasLayer
     /// <summary>What it follows while <see cref="Locked"/>: the moon, a planet or a big moon (#1444).</summary>
     public SkyBody Target { get; private set; } = SkyBody.Moon;
 
-    /// <summary>Locks on the body nearest the middle of the view, if it is in or near it; true when locked.</summary>
+    /// <summary>While <see cref="Locked"/>: following <see cref="Target"/> (picked in the menu), or else the sky's own turn.</summary>
+    public bool FollowsBody { get; private set; }
+
+    /// <summary>The tube's direction on the celestial sphere while the drive tracks the sky.</summary>
+    private Vector3 _skyDir;
+
+    /// <summary>Use: the drive on or off (#1813). On, it turns the tube against the Earth's rotation, so whatever is in the middle stays there.</summary>
     public bool ToggleLock()
     {
         if (Locked)
@@ -148,23 +162,19 @@ public partial class TelescopeView : CanvasLayer
             Locked = false;
             return false;
         }
+        return TrackSky();
+    }
+
+    /// <summary>Tracks the sky where the tube points now: a star, a nebula, any spot; the moon and planets drift slowly off it.</summary>
+    private bool TrackSky()
+    {
         if (World.DayNight.Instance?.Sky is not { } sky)
         {
-            ItemController.Instance?.Toast("Nothing to lock on here.");
+            ItemController.Instance?.Toast("No sky to track here.");
             return false;
         }
-        var (target, off) = (SkyBody.Moon, Mathf.RadToDeg(Direction.AngleTo(sky.Moon)));
-        if (World.SkyBodies.Instance?.Nearest(Direction) is { } planet && planet.OffDeg < off) (target, off) = (planet.Id, planet.OffDeg);
-        string? satellite = null;
-        if (World.Satellites.Instance?.Nearest(Direction) is { } sat && Mathf.RadToDeg(sat.Direction.AngleTo(Direction)) is var satOff && satOff < off)
-            (satellite, off) = (sat.Name, satOff);
-        if (!TelescopeOptics.CanLock(off, Focal))
-        {
-            ItemController.Instance?.Toast("Point it at the moon, a planet or a satellite first.");
-            return false;
-        }
-        Target = target;
-        Satellite = satellite;
+        _skyDir = sky.Stars.Inverse() * Direction;
+        FollowsBody = false;
         Locked = true;
         return true;
     }
@@ -173,7 +183,7 @@ public partial class TelescopeView : CanvasLayer
     public bool SelectTarget(SkyBody body)
     {
         Target = body;
-        Satellite = null;
+        FollowsBody = true;
         Locked = true;
         if (TargetDirection() is not { } d)
         {
@@ -187,18 +197,15 @@ public partial class TelescopeView : CanvasLayer
 
     /// <summary>The next (<paramref name="by"/> 1) or previous menu entry, from the one locked on (none: the first).</summary>
     public bool StepTarget(int by) =>
-        SelectTarget(TelescopeTargets.Step(Locked && Satellite == null ? Target : null, by));
+        SelectTarget(TelescopeTargets.Step(Locked && FollowsBody ? Target : null, by));
 
-    /// <summary>The satellite it follows while <see cref="Locked"/> (its name), or null for <see cref="Target"/>.</summary>
-    public string? Satellite { get; private set; }
-
-    /// <summary>Where <see cref="Target"/> is this frame, if the sky shows it.</summary>
-    private Vector3? TargetDirection() => Satellite != null ? World.Satellites.Instance?.DirectionOf(Satellite)
+    /// <summary>Where the tube is held this frame: the tracked spot of the sky, or <see cref="Target"/>, if the sky shows it.</summary>
+    private Vector3? TargetDirection() => !FollowsBody ? (World.DayNight.Instance?.Sky is { } sky ? (sky.Stars * _skyDir).Normalized() : null)
         : Target == SkyBody.Moon ? World.DayNight.Instance?.Sky?.Moon
         : World.SkyBodies.Instance?.DirectionOf(Target);
 
     /// <summary>The target's name for the readout.</summary>
-    private string TargetName => Satellite ?? (Target == SkyBody.Moon ? "the moon" : Target.ToString());
+    private string TargetName => !FollowsBody ? "the sky" : Target == SkyBody.Moon ? "the moon" : Target.ToString();
 
     /// <summary>The tube's direction in world axes.</summary>
     public Vector3 Direction => new Basis(Vector3.Up, Yaw) * new Basis(Vector3.Right, Pitch) * Vector3.Forward;
@@ -228,15 +235,22 @@ public partial class TelescopeView : CanvasLayer
         }
     }
 
+    /// <summary>
+    /// The press that opened the view is not its own (#1813): offline it opens in the frame of E's
+    /// press, and E is also the key that steps back, still "just pressed" that frame.
+    /// </summary>
+    private FreshPress _leave, _cancel, _use;
+
     public override void _Process(double delta)
     {
         if (_closing) return;
-        if (Input.IsActionJustPressed(ActLeave) || Input.IsActionJustPressed(ActCancel))
+        bool leave = _leave.Take(ActLeave), cancel = _cancel.Take(ActCancel), use = _use.Take(ActUse);
+        if (leave || cancel)
         {
             Close();
             return;
         }
-        if (Input.IsActionJustPressed(ActUse)) ToggleLock();
+        if (use) ToggleLock();
         if (Input.IsActionJustPressed(ActNext)) StepTarget(1);
         else if (Input.IsActionJustPressed(ActPrev)) StepTarget(-1);
         if (Input.IsActionJustPressed(ActInfo)) _infoOn = !_infoOn;
@@ -272,13 +286,13 @@ public partial class TelescopeView : CanvasLayer
         UpdateHud();
     }
 
-    /// <summary>A turn by the mouse or the stick, radians (x right, y down): it lets go of the moon.</summary>
+    /// <summary>A turn by the mouse or the stick, radians (x right, y down): it lets go of a body, and the drive (on) tracks the new spot.</summary>
     private void Turn(Vector2 by)
     {
         if (by.LengthSquared() < 1e-12f) return;
-        Locked = false;
         Yaw -= by.X;
         Pitch = Mathf.Clamp(Pitch - by.Y, Mathf.DegToRad(-30f), Mathf.DegToRad(89f));
+        if (Locked) TrackSky();
     }
 
     private void Apply()
@@ -372,7 +386,7 @@ public partial class TelescopeView : CanvasLayer
         if (_readoutShown != (Focal, Locked, TargetName))
         {
             _readoutShown = (Focal, Locked, TargetName);
-            _readout.Text = $"{Focal:0} mm   ×{TelescopeOptics.Magnification(Focal):0.#}{(Locked ? $"   locked on {TargetName}" : "")}";
+            _readout.Text = $"{Focal:0} mm   ×{TelescopeOptics.Magnification(Focal):0.#}{(!Locked ? "" : FollowsBody ? $"   following {TargetName}" : "   tracking the sky")}";
         }
         string hint = Hint();
         if (hint != _hintShown) _hint.Text = _hintShown = hint;
@@ -383,7 +397,7 @@ public partial class TelescopeView : CanvasLayer
     /// <summary>The target list, the locked one marked: text set only when it changes.</summary>
     private void UpdateMenu()
     {
-        string text = MenuText(Locked && Satellite == null ? Target : null);
+        string text = MenuText(Locked && FollowsBody ? Target : null);
         if (text != _menuShown) _menu.Text = _menuShown = text;
     }
 
@@ -406,14 +420,14 @@ public partial class TelescopeView : CanvasLayer
         if (!_infoOn || RealClock.Now - _infoAt < 0.25) return;
         _infoAt = RealClock.Now;
         if (World.DayNight.Instance?.Sky is not { } sky) return;
-        // the satellite (a spacecraft) has no ephemeris reading: it shows its name and place only
         var body = Target;
         string text, nl = "\n";
         (double Azimuth, double Altitude)? horizon = TargetDirection() is { } d ? TelescopeTargets.Horizon(d.X, d.Y, d.Z) : null;
         // the azimuth from true north at the scope, not the world's −Z (#1504)
         if (horizon is { } h && _player?.Origin is { } origin)
             horizon = ((h.Azimuth - Mathf.RadToDeg(_north.World(origin.Frame, _scope.GlobalPosition)) + 360) % 360, h.Altitude);
-        if (Satellite != null) text = Satellite + nl + TelescopeTargets.Where(horizon);
+        // tracking the sky: where the tube points, no body's readings
+        if (!(Locked && FollowsBody)) text = "Tracking the sky" + nl + TelescopeTargets.Where(horizon);
         else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, SwissTime.ToUtc(sky.Date, sky.Hour)), horizon);
         if (text != _infoShown) _info.Text = _infoShown = text;
     }
@@ -423,7 +437,7 @@ public partial class TelescopeView : CanvasLayer
     {
         var device = PlayerInput.HintDevice;
         string zoom = device == InputDevice.Gamepad ? "[D-pad ↑ ↓] zoom" : _vr ? "[right stick ↑ ↓] zoom" : "[wheel] zoom";
-        return $"{zoom}   {InputHints.Prompt(PlayerInput.UseItem, Locked ? $"let go of {TargetName}" : "lock on")}   " +
+        return $"{zoom}   {InputHints.Prompt(PlayerInput.UseItem, Locked ? "stop tracking" : "track the sky")}   " +
             $"{InputHints.Prompt(PlayerInput.InteractMount, "step back")}\n" +
             $"{InputHints.Prompt(PlayerInput.TelescopePrev, "previous")}  {InputHints.Prompt(PlayerInput.TelescopeNext, "next target")}   " +
             InputHints.Prompt(PlayerInput.TelescopeInfo, _infoOn ? "hide info" : "info");

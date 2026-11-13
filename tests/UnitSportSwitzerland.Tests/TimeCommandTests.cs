@@ -57,7 +57,7 @@ public class TimeCommandTests
     }
 
     [Theory]
-    [InlineData("speed", "241")]
+    [InlineData("speed", "1441")]
     [InlineData("speed", "-1")]
     [InlineData("add", "NaN")]
     [InlineData("set", "25:00")]
@@ -118,4 +118,26 @@ public class TimeCommandTests
     [InlineData(18.0, 6.0, -12.0)]
     public void ShortWay_goes_round_the_short_side(double from, double to, double hours)
         => Assert.Equal(hours, TimeCommand.ShortWay(from, to), 9);
+
+    [Theory]
+    [InlineData("normal", 24.0)]
+    [InlineData("NORMAL", 24.0)]
+    [InlineData("real", 1440.0)]
+    [InlineData("1440", 1440.0)]
+    [InlineData("0", 0.0)]
+    public void Speed_takes_normal_and_real(string word, double minutes)
+    {
+        Assert.True(TimeCommand.TryParse(["speed", word], out TimeOp op, out double value, out string error), error);
+        Assert.Equal(TimeOp.Speed, op);
+        Assert.Equal(minutes, value, 9);
+    }
+
+    [Fact]
+    public void Speed_past_a_real_day_is_refused()
+    {
+        Assert.False(TimeCommand.TryParse(["speed", "1441"], out _, out _, out string error));
+        Assert.Contains("real", error);
+        Assert.Equal("real time, a day a day", TimeCommand.DescribeSpeed(1440f));
+        Assert.Equal("24 min a day", TimeCommand.DescribeSpeed(24f));
+    }
 }

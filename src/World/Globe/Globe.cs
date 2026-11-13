@@ -455,6 +455,9 @@ public partial class Globe : Node
         RenderingServer.GlobalShaderParameterSet(RealAxes, new Vector4(east.X, east.Z, south.X, south.Z));
     }
 
+    /// <summary>The debug menu hid the globe (#1743, its Globe switch on the earth world): no patch is drawn while it is.</summary>
+    public bool DebugHidden { get; set; }
+
     public override void _Process(double delta)
     {
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
@@ -473,7 +476,7 @@ public partial class Globe : Node
             Hide(altitude, cam.GlobalPosition);
             Edge(altitude, cam.GlobalPosition);
         }
-        bool show = Earth || altitude > ShowAboveM;
+        bool show = !DebugHidden && (Earth || altitude > ShowAboveM);
         if (show != _shown)
         {
             _shown = show;

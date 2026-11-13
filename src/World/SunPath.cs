@@ -211,11 +211,20 @@ public static class SunPath
         Model == SunModel.Fixed ? (rise ? Sunrise : Sunset) : RiseOrSet(Today(), rise);
 
     /// <summary>The real sunrise or sunset at Bern on <paramref name="date"/>, hours of Swiss civil time.</summary>
-    public static double RiseOrSet(DateOnly date, bool rise)
+    public static double RiseOrSet(DateOnly date, bool rise) =>
+        RiseOrSet(date, rise, BernE, BernN) ?? (rise ? Sunrise : Sunset);
+
+    /// <summary>
+    /// The real sunrise or sunset at LV95 <paramref name="e"/> / <paramref name="n"/> on
+    /// <paramref name="date"/>, hours of Swiss civil time (#1801: far away it may fall at any hour of
+    /// the Swiss day). Null when the sun does not cross the horizon that way there: polar night or
+    /// midnight sun.
+    /// </summary>
+    public static double? RiseOrSet(DateOnly date, bool rise, double e, double n)
     {
         double El(double hour)
         {
-            Toward(SkyBody.Sun, date, hour, BernE, BernN, out float el);
+            Toward(SkyBody.Sun, date, hour, e, n, out float el);
             return el + 0.833;
         }
         // morning: the first climb through the horizon; evening: the last fall
@@ -231,7 +240,7 @@ public static class SunPath
             }
             return (a + b) / 2;
         }
-        return rise ? Sunrise : Sunset;
+        return null;
     }
 
     /// <summary>A place on the Earth, and true north as a unit vector in LV95 grid east / north.</summary>

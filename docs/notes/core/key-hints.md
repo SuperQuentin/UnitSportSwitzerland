@@ -3,7 +3,9 @@
 - **Key hints** (`Core/InputHints`, issue #32): never type a key into a UI string. `Label(action)`
   names the binding for the device in hand — keyboard keys through
   `DisplayServer.KeyboardGetLabelFromPhysical`, so the physical-Z engine key prints **Y** on a Swiss
-  QWERTZ keyboard and **W** on AZERTY; Xbox names on a pad. `Format("{use_item} to eat")` fills
+  QWERTZ keyboard and **W** on AZERTY; a symbol key prints its character, not its name (`'` not
+  "Apostrophe", #1798), and a dead key, which labels as the US key, prints the layout's keycode (`^` on a Swiss
+  keyboard's US-`=` key); Xbox names on a pad. `Format("{use_item} to eat")` fills
   `{action}` placeholders, which is how item, mount and car blurbs name their controls.
   `PromptBar` (bottom right) asks `ClientWorld.Prompts` a few times a second what applies *now*
   ("Get in the helicopter [E]", "Travel [R]", fly-camera keys), resolving the player from the camera

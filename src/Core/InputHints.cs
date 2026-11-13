@@ -205,9 +205,24 @@ public static class InputHints
         if (physical is >= Key.F1 and <= Key.F12) return OS.GetKeycodeString(physical);
 
         // only desktop display servers know the layout; Android errors on every call (#63)
-        var label = DisplayServer.GetName() is "headless" or "Android" ? Key.None : DisplayServer.KeyboardGetLabelFromPhysical(physical);
-        string name = OS.GetKeycodeString(label != Key.None ? label : physical);
-        return name.Length == 1 ? name.ToUpperInvariant() : name;
+        var key = physical;
+        if (DisplayServer.GetName() is not ("headless" or "Android"))
+        {
+            var label = DisplayServer.KeyboardGetLabelFromPhysical(physical);
+            if (label != Key.None) key = label;
+            // a dead key (a Swiss layout's ^ where US has =) labels as the US key: the layout's keycode knows it
+            if (key == physical && Printed(DisplayServer.KeyboardGetKeycodeFromPhysical(physical)) is { } typed) return typed;
+        }
+        // the character printed on the key, not its name: ' not "Apostrophe", $ not "Dollar" (#1798)
+        return Printed(key) ?? OS.GetKeycodeString(key);
+    }
+
+    /// <summary>The character a key types, upper case; null for a named key (Space, Home, F5, the keypad's).</summary>
+    private static string? Printed(Key key)
+    {
+        long code = (long)key;
+        if (code is <= 0x20 or 0x7F || code is > 0x7F and < 0xA0 || code >= (long)Key.Special || code > 0x10FFFF) return null;
+        return char.ConvertFromUtf32((int)code).ToUpperInvariant();
     }
 
     /// <summary>Xbox names: the layout most PC pads use, and what Godot's JoyButton enum follows.</summary>
