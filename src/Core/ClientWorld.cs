@@ -1294,6 +1294,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Items.TelescopeProbe.Requested) AddChild(new Items.TelescopeProbe(items));
         if (World.SkyProbe.Requested) AddChild(new World.SkyProbe());
+        if (World.LocalTimeProbe.Requested) AddChild(new World.LocalTimeProbe());   // #1801
         if (Items.TelescopeNetProbe.Role != null) AddChild(new Items.TelescopeNetProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
