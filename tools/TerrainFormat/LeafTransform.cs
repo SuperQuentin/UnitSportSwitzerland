@@ -232,6 +232,17 @@ public sealed class LeafTransform
         return LatticeToLocal(i, j, hSea + UndulationAt(i, j));
     }
 
+    /// <summary>
+    /// <see cref="LocalToLattice"/>'s affine first guess alone (#1751): the fractional lattice point under an anchor-frame
+    /// (x, z), height ignored. Within a fraction of a metre over a level-14 leaf on the ground (the normals' tilt moves a point
+    /// 0.05 m a kilometre up at a corner); a fast hint, never the answer.
+    /// </summary>
+    public (double I, double J) LocalToLatticeGuess(double x, double z)
+    {
+        double dx = x - _lx0, dz = z - _lz0;
+        return (_la * dx + _lb * dz, _lc * dx + _ld * dz);
+    }
+
     /// <summary>An anchor-frame point as a fractional lattice point and its ellipsoidal height (Newton on S + h·U).</summary>
     public (double I, double J, double HEll) LocalToLattice(double x, double y, double z)
     {
