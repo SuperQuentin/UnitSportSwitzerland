@@ -8,7 +8,7 @@ default and deletes the flat LV95 runtime. The end state, agreed with the user o
 format**. No LV95 tile, key, record or position in the game, the wire, saves or the build's intermediate files. LV95
 survives only as notation: how swisstopo sources are read, and how a person types or reads a Swiss coordinate.
 
-Status: **D2 ready for the user's merge** (2026-11-13): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7).
+Status: **D2 ready, waiting on the server side** (2026-11-13): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7). Only SuperQuentin has the server: he builds the leaves (MapSetup's `cube-only` layer), runs the runbook's steps 1-5 (`general/linux-deploy`), then the merge and `/update` (handover: PR #1727's comment of Nov 13).
 Planned 2026-11-10 from a survey of `main` at `862ddb3e`.
 
 ## In short
@@ -250,7 +250,11 @@ After D5: G2 marked built in `global-tiling.md` and the G2 plan, #1443 commented
 
 **Not on this machine, and not G2's bar** (the NAS, `tools/france-nas-run`): 0.5 m heights the whole way, the rest
 of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the cube-native tools. It's also
-#1650's nationwide release data: until it exists, the release ships the D: region's leaves and the pyramid.
+#1650's nationwide release data. Until it exists, **the release ships no terrain** (CI has no data; it ships only the
+globe's levels 0-2, `assets/globe`). Online, the server streams the D: region's leaves (B4's 2,412, 775 MB, deployed by
+`tools/deploy-linux.sh --leaves`, #1792), and the generated fill stands everywhere else. Offline, a fresh install has
+the fill alone. The full `cube_global` pyramid stays on D:: a server given it alone would build its fill ~20 m off the
+clients' (measured, `general/linux-deploy`) until #1656 streams it.
 
 ## 6. Risks and rollback
 
@@ -260,7 +264,9 @@ of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the
   - D3 deletes the old files only once their migration has run (a marker per store).
 - **A wrong drop**: dropping loot masks, shop counts, farm cells and contracts loses a few days' state. That's accepted; it's listed in the release notes.
   - Pinball high scores are the one dropped store a player might mind. If the user objects, D2 can convert them through the leaf buildings' `BuildingId` at the old key's tile centre plus the building index, while LV95 tiles still exist on the server.
-- **Shipping**: after D3 a fresh install has no terrain unless the release ships leaves (#1650) or a server streams them (#1662). D3 doesn't merge before #1650.
+- **Shipping**: from D2 on, a fresh install's real ground is what a server streams (#1662, the leaves deployed with
+  `tools/deploy-linux.sh --leaves`, #1792); the release ships none. The protocol 96 rollout (leaves and `--leaves`
+  first, then the merge, then `/update` on the server) is the runbook in `general/linux-deploy`. D3 doesn't merge before #1650.
 - **The net tier on fixtures**: until G2 lands, `--frame earth` online on a fixture is silently flat. A green earth net tier would then prove nothing. D0's dry run asserts the frame in each net check's log.
 - **Performance**: an earth client is measured against flat (`--perfcheck` on the D: region, phone build too), because flat's ring policy and `HorizonLayer` were tuned for years. To record in D2.
 - **Parallel LV95 work**: PRs still open against the LV95 build: #1422 (whole Swiss map v3), #1420 (grading), #1540 (builder performance), #1562/#1567 (water stage memory, SIMD), #1565, #1575.
@@ -296,7 +302,7 @@ State on 2026-11-13 (D2's bar recorded; first written 2026-11-10).
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
 | **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | **done** (#1712); the long drive's route #1744 (#1750), the long flight at 16x #1762 (#1783) | — |
 | **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
-| **D2**: the flip | #1726, PR #1727 | **ready, the bar recorded** (Nov 13, main merged in at b947a4886): full tier flat 357/378, earth 338/378; of the 20 rows red only under earth, 12 pass alone and 8 fail the same on plain `main` (#1743, #1745, #1787), so none is D2's; refshot parity 0 over the floor (31 judged expected); long drive, re-anchor, long flight (16x, 337 s) and `--replaycheck` ok in earth | the user's merge |
+| **D2**: the flip | #1726, PR #1727 | **ready, the bar recorded** (Nov 13, main merged in at b947a4886): full tier flat 357/378, earth 338/378; of the 20 rows red only under earth, 12 pass alone and 8 fail the same on plain `main` (#1743, #1745, #1787), so none is D2's; refshot parity 0 over the floor (31 judged expected); long drive, re-anchor, long flight (16x, 337 s) and `--replaycheck` ok in earth | SuperQuentin: the leaves built and deployed (runbook 1-5), then the merge and `/update` |
 | **D3**: the flat runtime deleted | — | waits for D2 merged, a full tier on `main`, the user's playtest of it, and #1650 | — |
 
 ## Decided without the user

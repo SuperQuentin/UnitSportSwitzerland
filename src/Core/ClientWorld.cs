@@ -1034,11 +1034,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;
-                FreeSpectator();
+                // --flyinput flies it by its own controls (#1796)
+                if (!CmdArgs.Has("--flyinput")) FreeSpectator();
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
                 return new FlightProbe(_spectator!, chunks,
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
-                    float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+                    float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv))
+                { Status = () => EarthStatus };
             }),
             new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -2695,6 +2697,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             yield return (PlayerInput.ToggleMode, "Walk");
             yield return (PlayerInput.FlyUp, "Up");
             yield return (PlayerInput.FlyDown, "Down");
+            // the speed (#1796): the readout in the top-right corner says what it is
+            yield return (PlayerInput.SpectatorFaster, "Faster");
+            yield return (PlayerInput.SpectatorSlower, "Slower");
             yield return (PlayerInput.Teleport, "Map");
         }
         else if (viewer is { } p && IsInstanceValid(p))
