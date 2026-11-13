@@ -156,6 +156,56 @@ public partial class Globe : Node
 
     /// <summary><see cref="DrawnLevelAt"/>'s answer where the earth world draws the leaf whole.</summary>
     public const int LeafLevelDrawn = 99;
+
+    /// <summary>
+    /// The highest surface the globe draws over a world point (#1800, a probe's read-out, not per frame): its visible
+    /// tiles' ground and their lakes, each along its own tile's up (vertical faces, the skirts, are passed over), as
+    /// world y with the level that drew it; false where no visible tile of the globe holds the point.
+    /// </summary>
+    public bool SurfaceAt(Vector3 world, EcefPos p, out float groundY, out float waterY, out int level)
+    {
+        groundY = waterY = float.NegativeInfinity;
+        level = -1;
+        for (int l = _maxLevel; l >= 0; l--)
+        {
+            var key = CubeKey.FromEcef(p, l);
+            if (!_patches.TryGetValue(key, out var node) || !node.Visible) continue;
+            if (TopOf(node, world) is { } y && y > groundY) { groundY = y; level = l; }
+            if (_lakes.TryGetValue(key, out var lake) && lake.Visible && TopOf(lake, world) is { } w && w > waterY) waterY = w;
+        }
+        return level >= 0;
+    }
+
+    // the highest triangle of a mesh over a world point, along the node's own up; null when none holds it
+    private static float? TopOf(MeshInstance3D node, Vector3 world)
+    {
+        if (node.Mesh is not ArrayMesh mesh || mesh.GetSurfaceCount() == 0) return null;
+        var xf = node.GlobalTransform;
+        var q = xf.AffineInverse() * world;
+        float? best = null;
+        for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            var arrays = mesh.SurfaceGetArrays(s);
+            var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            var idx = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+            int count = idx.Length > 0 ? idx.Length : v.Length;
+            for (int t = 0; t + 2 < count; t += 3)
+            {
+                var a = v[idx.Length > 0 ? idx[t] : t];
+                var b = v[idx.Length > 0 ? idx[t + 1] : t + 1];
+                var c = v[idx.Length > 0 ? idx[t + 2] : t + 2];
+                float d = (b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z);
+                if (Math.Abs(d) < 1e-6f) continue;
+                float u = ((q.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (q.Z - a.Z)) / d;
+                float w = ((b.X - a.X) * (q.Z - a.Z) - (q.X - a.X) * (b.Z - a.Z)) / d;
+                if (u < 0 || w < 0 || u + w > 1) continue;
+                var hit = a + u * (b - a) + w * (c - a);
+                float y = (xf * hit).Y;
+                if (best is not { } bb || y > bb) best = y;
+            }
+        }
+        return best;
+    }
     // every ancestor of a drawn leaf, with how many drawn leaves it holds: such a tile always splits
     private readonly Dictionary<CubeKey, int> _holdsDrawn = new();
 
@@ -592,7 +642,12 @@ public partial class Globe : Node
         // the earth world's last level: a leaf's own heights, no colour of its own yet
         if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel && Leaves is { } leaves)
         {
-            if (!leaves.Has(key)) return;   // past the fill's domain: the parent's tile stays
+            if (!leaves.Has(key))
+            {
+                // past the fill's domain: the parent's tile stays, unless it must split for a drawn leaf (#1800)
+                if (Earth && Bridges(key)) Synthesise(key);
+                return;
+            }
             _loading.Add(key);
             MarkAsked(key);
             int leafMonth = _month, generation = _leafGeneration;
@@ -653,7 +708,11 @@ public partial class Globe : Node
             });
             return;
         }
-        if (!_heights.TryGetValue(key, out var at)) return;
+        if (!_heights.TryGetValue(key, out var at))
+        {
+            if (Earth && Bridges(key)) Synthesise(key);
+            return;
+        }
         _loading.Add(key);
         MarkAsked(key);
         _albedo.TryGetValue(key, out var colourAt);
@@ -697,6 +756,54 @@ public partial class Globe : Node
     }
 
     private static byte[] ReadBytes((string Path, long Offset, int Length) at) => GlobeFiles.ReadBytes(at);
+
+    /// <summary>
+    /// Whether a tile the pyramid does not hold must still be built (#1800): its parent holds a drawn leaf, so it splits,
+    /// and only once all four children are built. Past the levels the pyramid holds there (outside Switzerland it stops
+    /// at level 4, a tile ~600 km wide) the split never came, and the coarse tile stayed drawn over the leaves, its
+    /// every-8th-vertex ground up to 317 m over them in the Himalaya.
+    /// </summary>
+    private bool Bridges(CubeKey key) => key.Level > 0 && _holdsDrawn.ContainsKey(key.Parent);
+
+    /// <summary>
+    /// A tile the pyramid does not hold, built from its coarser levels alone (#1800): every height from the nearest
+    /// ancestor that has it, bilinear in that ancestor's lattice (<see cref="GlobeGround.FillFromAncestors"/>), as the
+    /// fill's <c>PyramidBase</c> reads the ground there, so the fill and the globe beside it agree. The colour is its
+    /// ancestor's. Main thread.
+    /// </summary>
+    private void Synthesise(CubeKey key)
+    {
+        if (_loading.Contains(key)) { MarkAsked(key); return; }
+        if (_patches.ContainsKey(key)) return;
+        _loading.Add(key);
+        MarkAsked(key);
+        int month = _month;
+        _ = Spawn(async () =>
+        {
+            await _workers.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (Unwanted(key)) { _leafMissed.Enqueue(key); return; }
+                int bits = CubeKey.LatticeBits(key.Level), side = (1 << bits) + 1;
+                var heights = new float[side * side];
+                Array.Fill(heights, float.NaN);
+                var tile = new CubeTile { Key = key, Bits = bits, Heights = heights };
+                var (palette, rect) = AncestorPalette(key);
+                var lakes = new WaterOut();
+                if (Build(tile, palette, rect, ancestor: AncestorTile, lakesOut: lakes, beds: false, lakes: _lakeLevels) is { } arrays)
+                    _ready.Enqueue((key, arrays, null, month, null, lakes.Mesh));
+                else _leafMissed.Enqueue(key);
+            }
+            catch (Exception e)
+            {
+                GD.PushError($"[globe] {key} from its ancestors: {e.Message}");
+            }
+            finally
+            {
+                Done();
+            }
+        });
+    }
 
     /// <summary>A pyramid tile's heights, decoded on the asking worker (a coarser level filling a finer one's holes); null where none.</summary>
     private CubeTile? AncestorTile(CubeKey key) => _heights.TryGetValue(key, out var at) ? CubeTileCodec.Decode(ReadBytes(at)) : null;
