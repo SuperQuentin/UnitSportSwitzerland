@@ -58,6 +58,15 @@ judge re-anchors through one helper.
   pyramid (`Net.PyramidGround`). At the end the destination's leaves must be drawn under it: the script passes
   `--leaves .../brest_cube` (the game opens one leaf dir), so Geneva is pyramid and fill only. Without `--tolatlon`,
   a default destination (Brest airport) outside the leaves given is moved to their middle leaf (D:'s are the city).
+- **`--treeseatcheck`** (`World/TreeSeatCheck`, #1776): every tree within 150 m of a camera 60 m over `--at`, as its
+  leaf holds it (`NearTrees.Registered`, the tile's transform on the buffer) and as drawn (`NearTrees.DrawnBases`),
+  against `IWorldGround.TryGetHeight`; then a flight to `--treeseatto` in 2 km hops (each re-anchor of a flight without
+  streaming every leaf under it) and the same measure there. Fails past 0.3 m at the 95th percentile, or with over 0.5 % of trees past 1.5 m (the data has the odd sunk
+  tree: 1 of 1,652 at the Riddes start, 3 m under). What it caught: `NearTrees` (a child of the earth world, a container) was turned by every re-anchor while its
+  refill placed the trees relative to its position alone, so they were drawn turned about where the origin had been,
+  about d^2/R off (metres after a few re-anchors); it now goes back to the identity at each refill. Quick row on the
+  generated world (Riddes, 8.6 km, the playtest's note-30 route), `tools/treeseatcheck.sh` on D: at the playtest's two spots (`SPOT=geneva|riddes`,
+  both by default; `WINDOWED=1 SHOT=...png` for a picture of each measure).
 - **Runs**: quick rows on fixtures (`@realtime`: the leaves stream on threads); full rows on D: through
   `tools/lib/barprobe.sh` (skipped with RESULT ok when the data is missing, quiet user://, its log checked for
   `[frame] earth`); the long ones carry `@timeout=1400` (the flight) and `@timeout=7400` (the drive's two runs `@timeout=7400`) (`tools/test.sh`: a row longer than `TEST_TIMEOUT`).
