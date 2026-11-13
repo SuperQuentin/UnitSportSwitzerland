@@ -41,7 +41,7 @@ public partial class PlaytestPanel : CanvasLayer
     private VBoxContainer _list = null!, _current = null!, _talk = null!, _cardBody = null!;
     private ScrollContainer _talkScroll = null!;
     private LineEdit _input = null!;
-    private Label _claude = null!, _cardClaude = null!;
+    private Label _claude = null!, _cardClaude = null!, _cardState = null!;
     private TextureRect _dot = null!;
     private Button _validate = null!, _fail = null!;
     private bool _dirty = true, _failing, _listOpen = true, _stickToEnd = true;
@@ -71,6 +71,7 @@ public partial class PlaytestPanel : CanvasLayer
     public override void _Ready()
     {
         Layer = 16;   // over the chat, under the pause menu
+        BuildCover();   // first, so the panel and the card draw over it
         BuildPanel();
         BuildCard();
         _director.Changed += () => _dirty = true;
@@ -106,6 +107,50 @@ public partial class PlaytestPanel : CanvasLayer
         if (_dirty) Refresh();
         // the "listening" dot follows time, not events: checked twice a second, drawn only on change
         if (Engine.GetProcessFrames() % 30 == 0) UpdateClaude();
+        if (Engine.GetProcessFrames() % 10 == 0) UpdateCover();
+    }
+
+    // ---- the loading cover ---------------------------------------------------------------
+
+    private Control _cover = null!;
+    private Label _coverWhat = null!, _coverWorld = null!, _coverClaude = null!;
+    private string _coverShown = "";
+
+    /// <summary>
+    /// An opaque cover over the world while the director is <see cref="PlaytestDirector.Busy"/> (relaunching, the world
+    /// loading, the scenario setting up): nothing to play until the scenario is there. The panel stays on top of it.
+    /// </summary>
+    private void BuildCover()
+    {
+        _cover = new ColorRect { Color = new Color(0.04f, 0.05f, 0.07f), MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        _cover.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_cover);
+        var centre = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _cover.AddChild(centre);
+        var col = UiKit.VBox(10);
+        centre.AddChild(col);
+        col.AddChild(UiKit.Text("Playtest", UiTheme.FontHeading, UiTheme.Amber, bold: true));
+        col.AddChild(_coverWhat = UiKit.Text("", UiTheme.FontBody, UiTheme.Text));
+        col.AddChild(_coverWorld = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim));
+        col.AddChild(_coverClaude = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim));
+    }
+
+    private void UpdateCover()
+    {
+        bool busy = _director.Busy;
+        string what = busy ? _director.BusyWhat : "";
+        string world = _director.WorldReady ? "● World loaded" : "○ World loading…";
+        string claude = _director.Client == null ? "○ Claude connecting…" : _director.Listening ? "● Claude listening" : "● Claude thinking…";
+        string key = $"{busy}|{what}|{world}|{claude}";
+        if (key == _coverShown) return;
+        _coverShown = key;
+        _cover.Visible = busy;
+        _coverWhat.Text = what;
+        _coverWorld.Text = world;
+        _coverWorld.AddThemeColorOverride("font_color", _director.WorldReady ? UiTheme.Good : UiTheme.TextDim);
+        _coverClaude.Text = claude;
+        _coverClaude.AddThemeColorOverride("font_color", _director.Client == null ? UiTheme.TextDim : _director.Listening ? UiTheme.Good : UiTheme.Warn);
     }
 
     public override void _Input(InputEvent e)
@@ -155,8 +200,17 @@ public partial class PlaytestPanel : CanvasLayer
         };
         _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 12, 16));
         AddChild(_panel);
+        // the whole panel scrolls: a long scenario text never pushes the chat box off the screen
+        var page = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            FollowFocus = true,
+        };
+        _panel.AddChild(page);
         var col = UiKit.VBox(10);
-        _panel.AddChild(col);
+        col.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        col.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        page.AddChild(col);
 
         var head = UiKit.HBox(8);
         head.AddChild(UiTheme.Title("Playtest", UiTheme.FontHeading));
@@ -244,7 +298,7 @@ public partial class PlaytestPanel : CanvasLayer
         col.AddChild(section);
         (_talkScroll, _talk) = UiKit.ScrollPage(4);
         _talkScroll.Visible = !batch;
-        _talkScroll.CustomMinimumSize = new Vector2(0, 90);
+        _talkScroll.CustomMinimumSize = new Vector2(0, 160);
         // to the newest line once the new rows have their height: the bar's range changes a frame or two later
         _talkScroll.GetVScrollBar().Changed += () =>
         {
@@ -291,6 +345,8 @@ public partial class PlaytestPanel : CanvasLayer
         col.AddChild(_cardBody = UiKit.VBox(2));
         if (PlaytestRecorder.Instance != null) col.AddChild(_cardRec = UiKit.VBox(2));
         col.AddChild(_cardClaude = UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber, wrap: true));
+        // whether Claude is reading what was sent or waiting for the player, seen with the panel closed too
+        col.AddChild(_cardState = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim));
     }
 
     // ---- refreshing ----------------------------------------------------------------------
@@ -452,6 +508,9 @@ public partial class PlaytestPanel : CanvasLayer
         _shownClaude = text;
         _claude.Text = text;
         _dot.Texture = UiTheme.Dot(_director.Client == null ? UiTheme.TextFaint : _director.Listening ? UiTheme.Good : UiTheme.Warn, 10);
+        bool thinking = _director.Client != null && !_director.Listening;
+        _cardState.Text = _director.Client == null ? "" : thinking ? "● Claude is thinking…" : "● Claude is listening";
+        _cardState.AddThemeColorOverride("font_color", thinking ? UiTheme.Warn : UiTheme.Good);
     }
 
     // ---- actions -------------------------------------------------------------------------
