@@ -191,8 +191,12 @@ The rest of the determinism rules:
    - the four new ground classes;
    - `BlendCheck --fill-biomes`: top views of fill leaves at the test spots and the controls' digests;
    - `FillBiomeTests`.
-2. **The globe agrees**: `GlobeGround.Colour` paints its open, forest and snow weights by the vertex's biome (the
-   same `FillBiome.At`), so the handover from fill to globe keeps its colour. After #1803.
+2. **The globe agrees**: #1803 already paints the globe past Switzerland's box with the photo's own colour
+   (`GlobeGround.OwnPalette`), lifted and graded as `globe.gdshader` lifts it. At the desert spot that is sRGB
+   (215, 184, 146) against the fill's `Sand` after the same grade (197, 170, 127): one sand, the fill ~8 % darker;
+   steppe and tundra within a few units. So phase 2 shrinks to a check after #1803 merges: the handover seen from
+   20-25 km at the six spots, and only if it shows, the fill's ground classes tinted by `PhotoStats`' colour (same
+   bytes on every peer) rather than the globe painted by biome.
 3. **Land cover in the pyramid**: the preprocessor stage, the shipped levels 0-2, chain step 1 live, the Licenses
    rows. The guess stays for NoData and for builds without the section.
 4. **Biome looks, one PR each**:
