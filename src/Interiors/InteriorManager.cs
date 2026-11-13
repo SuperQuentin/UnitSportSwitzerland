@@ -1115,7 +1115,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             // the box's axis is its tile's: turned with an earth leaf's stand-in (#1799)
             var axis = xf.Basis * new Vector3(box.AxisU.X, 0, box.AxisU.Y);
             _boxes[plan] = new BuildingSounds.Occupied(xf * new Vector3(box.Center.X, b.MinY + 1.2f, box.Center.Y),
-                new Vector2(axis.X, axis.Z).Normalized(), box.Width / 2, box.Depth / 2, 0);
+                xf.Basis.IsEqualApprox(Basis.Identity) ? box.AxisU : new Vector2(axis.X, axis.Z).Normalized(), box.Width / 2, box.Depth / 2, 0);
         }
         catch (Exception e) { GD.PushWarning($"[interior] box of {plan}: {e.Message}"); }
     }
