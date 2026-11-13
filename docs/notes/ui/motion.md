@@ -18,7 +18,10 @@ The spring is `Tween.TransitionType.Back` ease out (`SpringTrans`, `SpringEase`)
 
 - **Never delays input.** The caller drops input at once (pops the page, stops the pointer, releases focus) and
   only the picture lingers. `Screen`s: the shell pops a `Springy` page from its stack on Esc, makes its controls
-  ignore the mouse, keeps the menu layer up for the 0.10 s, then frees it (`GameShell.Retire`). Keys work from the
+  ignore the mouse, keeps the menu layer up for the 0.10 s, then frees it (`GameShell.Retire`). The page itself only
+  fades; `Screen.MotionTarget` (the pause menu's column, default the page) is what scales, so a full-rect dim never
+  shows its edges. Retiring pages are tracked in a list and leave it once, on their fade or on `TreeExiting`
+  (`ClearStack`, the world or the shell freed), so the menu layer can never stay up. Keys work from the
   first frame; the open never waits.
 - **Reduce motion and VR.** `GameSettings.ReduceMotion` (Settings › Video › Menus, the same flag the menu skins
   read) or `XrSession.Active`: every call becomes a plain 0.1 s fade; Press, Pop and SlideTo are instant;

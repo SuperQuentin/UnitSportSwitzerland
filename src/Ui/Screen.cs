@@ -25,6 +25,12 @@ public abstract partial class Screen : Control
     /// </summary>
     public virtual bool Springy => false;
 
+    /// <summary>
+    /// What a <see cref="Springy"/> page scales while it opens and closes. The page itself only fades, so a full-rect dim
+    /// never shows its edges; a page whose whole look is its panel can leave this as the page.
+    /// </summary>
+    public virtual Control MotionTarget => this;
+
     /// <summary>Called each time the page comes to the front.</summary>
     public virtual void OnShown() => PlayerInput.FocusFirst(this);
 

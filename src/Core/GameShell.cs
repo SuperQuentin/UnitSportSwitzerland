@@ -41,7 +41,11 @@ public partial class GameShell : Node
     private ControlsHelp _help = null!;
     private TitleDiorama? _diorama;
     private readonly List<Screen> _stack = new();
-    private int _closing;   // springy pages still fading out, no longer on the stack
+    private readonly List<Screen> _retiring = new();   // springy pages still fading out, no longer on the stack
+    private static readonly StringName FadeKey = "shell_page_fade";
+
+    /// <summary>True while the menu layer is shown (a page up, or one still fading out).</summary>
+    internal bool MenuLayerUp => _menuLayer.Visible;
     private ClientWorld? _world;
     private WorldLaunch? _launch;
     private HostedServer? _hosted;
@@ -393,14 +397,35 @@ public partial class GameShell : Node
     /// </summary>
     private void Retire(Screen page)
     {
-        _closing++;
+        _retiring.Add(page);
         InertTree(page);
-        UiMotion.Close(page, () =>
+        bool done = false;
+        // however the page ends (its fade, ClearStack, the world or the shell freed), it leaves the list once
+        void Done()
         {
-            _closing = Math.Max(0, _closing - 1);
-            if (GodotObject.IsInstanceValid(page)) page.QueueFree();
-            UpdateMenuState();
+            if (done) return;
+            done = true;
+            _retiring.Remove(page);
+            if (IsInstanceValid(_menuLayer) && !_menuLayer.IsQueuedForDeletion()) _menuLayer.Visible = _stack.Count > 0 || _retiring.Count > 0;
+        }
+        page.TreeExiting += Done;
+        var target = page.MotionTarget;
+        if (target != page) FadePage(page, 0f, UiMotion.CloseSeconds);
+        UiMotion.Close(target, () =>
+        {
+            Done();
+            if (IsInstanceValid(page)) page.QueueFree();
         });
+    }
+
+    /// <summary>A plain alpha tween on a page whose panel scales on its own (<see cref="Screen.MotionTarget"/>): the dim and the shade fade, never scale.</summary>
+    private static void FadePage(Screen page, float to, float seconds)
+    {
+        if (page.HasMeta(FadeKey) && page.GetMeta(FadeKey).As<Tween>() is { } old && IsInstanceValid(old)) old.Kill();
+        if (!page.IsInsideTree()) { page.Modulate = new Color(1, 1, 1, to); return; }
+        var tw = page.CreateTween().SetIgnoreTimeScale(true);
+        page.SetMeta(FadeKey, tw);
+        tw.TweenProperty(page, "modulate:a", to, UiMotion.Reduced ? UiMotion.ReducedSeconds : seconds);
     }
 
     private static void InertTree(Node n)
@@ -417,14 +442,21 @@ public partial class GameShell : Node
         Modal.Current?.CloseModal();
         foreach (var s in _stack) { s.OnHidden(); s.QueueFree(); }
         _stack.Clear();
-        _closing = 0;
+        foreach (var r in _retiring.ToArray()) r.QueueFree();
+        _retiring.Clear();
         UpdateMenuState();
     }
 
     /// <summary>Fade in and settle up from a few pixels lower; a springy page (<see cref="Screen.Springy"/>) opens with <see cref="UiMotion"/>.</summary>
     private void Reveal(Screen c)
     {
-        if (c.Springy) { UiMotion.Open(c); return; }
+        if (c.Springy)
+        {
+            var target = c.MotionTarget;
+            if (target != c) { c.Modulate = new Color(1, 1, 1, 0); FadePage(c, 1f, UiMotion.OpenSeconds); }
+            UiMotion.Open(target);
+            return;
+        }
         c.Modulate = new Color(1, 1, 1, 0);
         c.Position = new Vector2(0, 12);
         var tw = c.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
@@ -436,7 +468,7 @@ public partial class GameShell : Node
     private void UpdateMenuState()
     {
         bool open = _stack.Count > 0;
-        _menuLayer.Visible = open || _closing > 0;
+        _menuLayer.Visible = open || _retiring.Count > 0;
         UiFocus.Set(this, open);
         if (open) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else if (_state == State.InWorld) _world?.ResumeControl();

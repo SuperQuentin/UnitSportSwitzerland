@@ -52,6 +52,7 @@ public partial class MenuCheck : Node
         (() => Pad(JoyButton.Start), Top<PauseScreen>, 1, "pad Start opens it"),
         (() => Pad(JoyButton.B), () => _shell.Top == null, 1, "pad B closes it"),
         (Esc, Top<PauseScreen>, 1, "Esc opens it again"),
+        (() => { _shell.Back(); GetTree().Root.FindChild("Pause", true, false)?.Free(); }, () => !_shell.MenuOpen && !_shell.MenuLayerUp, 1, "a pause page freed mid-fade leaves no menu layer up (#1831)"),
         (() => _shell.LeaveWorld(null), () => Top<TitleScreen>() && GetTree().Root.GetNodeOrNull("Main/World") == null, 30, "leave to the title, the world is gone"),
     };
 
