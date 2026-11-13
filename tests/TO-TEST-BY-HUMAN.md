@@ -957,3 +957,10 @@ Offline, in a window, each against the same without `--frame earth`.
 - [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
 - [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
 - [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.
+
+## No camera jump at the earth re-anchor (PR [#1780](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1780), [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763))
+
+Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-3-reanchor-drive`.
+
+- [ ] Walk (third person) across a re-anchor (the `[origin] shift` line, every 3 km) → the camera holds its place over the shoulder: no jump up, no ease back down.
+- [ ] Drive a car across one in chase view, then in cockpit view → no jump. The headless check measured 0.0 cm in the car before the fix too: if a jump remains while driving, note what was driven and from which view.
