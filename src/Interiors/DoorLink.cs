@@ -146,6 +146,12 @@ public sealed class DoorLink
     /// </summary>
     private static Transform3D Frame(Vector3 origin, Vector3 outward, Vector3 up)
     {
+        // up the world's (a flat-world tile, an unturned plan): exactly as before, to the bit (--doorcheck's baseline)
+        if (up.IsEqualApprox(Vector3.Up))
+        {
+            var flat = new Vector3(outward.X, 0, outward.Z).Normalized();
+            return new Transform3D(new Basis(Vector3.Up.Cross(flat), Vector3.Up, flat), origin);
+        }
         var y = up.Normalized();
         var z = (outward - y * outward.Dot(y)).Normalized();
         var x = y.Cross(z);
