@@ -37,8 +37,15 @@ public partial class TelescopeProbe : Node
             return;
         }
         await Seconds(1.0);
-        await ClearLeftovers(Me!, PlacedObjects.Instance!);
-        try { await Run(Me!, PlacedObjects.Instance!); }
+        // across a restart: "place" sets one up and quits leaving it saved, "reload" looks through it in the next run
+        string? restart = CmdArgs.Value("--telescopecheck") is "place" or "reload" ? CmdArgs.Value("--telescopecheck") : null;
+        if (restart == null) await ClearLeftovers(Me!, PlacedObjects.Instance!);
+        try
+        {
+            if (restart == "place") await PlaceForRestart(Me!, PlacedObjects.Instance!);
+            else if (restart == "reload") await LookAfterRestart(Me!, PlacedObjects.Instance!);
+            else await Run(Me!, PlacedObjects.Instance!);
+        }
         catch (Exception e) { Expect(false, $"threw: {e.Message}"); }
         // whatever a failure left: the view closed, so nothing refuses the packing up
         TelescopeView.Current?.Close();
@@ -136,6 +143,25 @@ public partial class TelescopeProbe : Node
         await Seconds(0.3);
         var lookAt = -cam!.GlobalBasis.Z;
         Expect(lookAt.AngleTo(view.Direction) < 0.001f, "the camera rides the tube");
+
+        // 3c. steady at the longest end (a pixel is 0.015″) (#1835 follow-up: "shaky when zoomed on the moon's surface"): the moon as drawn
+        // against the middle, every drawn frame for 2 s, following it and then on the sky drive (its drift is smooth:
+        // the jump from one frame to the next, less the run's mean, is the shake), in pixels
+        if (DisplayServer.GetName() != "headless")   // nothing is drawn headless
+        {
+            while (view.Focal < TelescopeOptics.FocalMax) view.Zoom(1);
+            view.SelectTarget(SkyBody.Moon);
+            var (followShake, _) = await MoonShake(view);
+            view.ToggleLock();
+            view.ToggleLock();
+            var (driveShake, drift) = await MoonShake(view);
+            // following: the camera and the moon from one vector (0.2 px). The drive holds a point of the stars' float frame and
+            // the moon is placed from its own float vector: each rounds by up to 6e-8 rad, ~half a pixel at a 10″ view (the stars
+            // stay on the drive). Before #1835 following stepped 1 px a frame (yaw and pitch as floats).
+            Expect(followShake < 0.5f && driveShake < 1.5f,
+                $"steady at {view.Focal:0} mm: following the moon {followShake:0.00} px, on the drive {driveShake:0.00} px a frame (drift {drift:0.00} px a frame)");
+        }
+        while (view.Focal > 2400f) view.Zoom(-1);
         if (DisplayServer.GetName() != "headless")
         {
             await Seconds(1.0);
@@ -257,5 +283,71 @@ public partial class TelescopeProbe : Node
     {
         GD.Print($"[telescopecheck] RESULT: FAILED - {why}");
         GetTree().Quit(1);
+    }
+
+    /// <summary><c>--telescopecheck place</c>: sets one up through the item's path and leaves it, saved, for <c>reload</c>.</summary>
+    private async Task PlaceForRestart(FootPlayer me, PlacedObjects placed)
+    {
+        await ClearLeftovers(me, placed);
+        var before = placed.All.Keys.ToHashSet();
+        _items.Inventory.Add(ItemId.Telescope, 1);
+        int slot = Hold(ItemId.Telescope);
+        me.LookYaw = 0f;
+        me.LookPitch = -0.6f;
+        await Seconds(0.3);
+        _items.UseSlot(me, slot);
+        Expect(await Until(() => New(placed, before) != null, 4), "the telescope is set up, left for the next run");
+        await Seconds(1.5);   // the save is written in the background
+    }
+
+    /// <summary>
+    /// <c>--telescopecheck reload</c>: the telescope a <c>place</c> run left, loaded from the save, looked through with a
+    /// real E press (#1813 follow-up: after a restart one could not), then packed up.
+    /// </summary>
+    private async Task LookAfterRestart(FootPlayer me, PlacedObjects placed)
+    {
+        var scope = placed.All.Values.Where(o => o.Kind == PlacedKind.Telescope)
+            .OrderBy(o => o.WorldTransform(placed.Origin).Origin.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        Expect(scope != null, "a telescope loaded from the save");
+        if (scope == null) return;
+        _placedHere.Add(scope.Id);
+        var at = scope.WorldTransform(placed.Origin).Origin;
+        GD.Print($"[telescopecheck] loaded #{scope.Id} {at.DistanceTo(me.GlobalPosition):0.0} m away, node {(Telescopes.Instance!.NodeOf(scope.Id) is { } n ? $"at {n.GlobalPosition.DistanceTo(at):0.00} m off its record" : "missing")}");
+        var away = (me.GlobalPosition - at) with { Y = 0 };
+        away = away.LengthSquared() > 0.01f ? away.Normalized() : Vector3.Back;
+        me.GlobalPosition = new Vector3(at.X, me.GlobalPosition.Y, at.Z) + away * 1.2f;
+        me.Velocity = Vector3.Zero;
+        await Seconds(0.8);
+        Expect(Telescopes.InteractionFor(me) is { Text: var prompt } && prompt.Contains("Look through"),
+            $"the prompt at the loaded tripod ({Telescopes.InteractionFor(me)?.Text ?? "none"}, at {me.GlobalPosition.DistanceTo(at):0.0} m)");
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = true });
+        await Seconds(0.15);
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = false });
+        await Seconds(1.0);
+        Expect(TelescopeView.Current != null, $"looked through it after a restart ({Telescopes.Instance!.LastRefused})");
+        TelescopeView.Current?.Close();
+        await Seconds(0.3);
+    }
+
+    /// <summary>The worst jump of the drawn moon on screen from one frame to the next less the mean (px), and the mean (px), over 2 s.</summary>
+    private async Task<(float Shake, float Drift)> MoonShake(TelescopeView view)
+    {
+        var moon = GetTree().Root.FindChild("MoonDisc", true, false) as Node3D;
+        var points = new List<Vector2>();
+        void Sample()
+        {
+            if (moon == null || GetViewport().GetCamera3D() is not { } c) return;
+            if (!c.IsPositionBehind(moon.GlobalPosition)) points.Add(c.UnprojectPosition(moon.GlobalPosition));
+        }
+        RenderingServer.FramePostDraw += Sample;
+        await Seconds(2.0);
+        RenderingServer.FramePostDraw -= Sample;
+        if (points.Count < 10) return (99f, 0f);
+        var steps = new List<Vector2>();
+        for (int i = 1; i < points.Count; i++) steps.Add(points[i] - points[i - 1]);
+        var mean = steps.Aggregate(Vector2.Zero, (a, b) => a + b) / steps.Count;
+        float worst = steps.Max(st => (st - mean).Length());
+        GD.Print($"[telescopecheck] moon on screen over {points.Count} frames: from {points[0]} to {points[^1]}, worst jump {worst:0.00} px");
+        return (worst, mean.Length());
     }
 }

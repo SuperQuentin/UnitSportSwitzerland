@@ -14,7 +14,20 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Ca
 - [ ] At the spot's night, climb slowly from 14 km to 26 km and back → the ground darkens from moonlit to night over 15-20 km with no jump at 20 km; the coast and sea stay where they are, no green land over the sea below 20 km.
 - [ ] The same by day → no jump in colour or relief at 20 km; the photo's sea and fields fade in over 20-25 km.
 - [ ] While spectating over the ground with the body falling below → no "open WINGSUIT" prompt.
+- [ ] Over Agadir (LV95 909680,-472439) and the Sahara, 2-25 km by day → sand coloured, never green or snow-white; the coast follows the ground, not kilometre steps; one sea colour across tile edges.
+- [ ] Facing the horizon from 10 to 60 km, day and night → no grey band with a hard edge between the sky and the Earth's limb.
+- [ ] Over Geneva's harbour at ~600 m looking up the lake → note whether the near water and the far lake still meet at a hard line (the far leaves now take their own depth).
 
+## Doors, interiors and parked cars far from Switzerland ([#1799](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1799))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at -4679383,7259173` (the generated village where the FARM CO-OP stood turned), or fly the spectator there.
+
+- [ ] Walk up to a house door, open it (E / pad A), look through, walk in and back out, in first and third person → the open leaf, the doorway and the rooms seen through it line up with the facade; you step through the doorway, not the wall beside it.
+- [ ] Open a garage or barn door and drive a car through it → its leaves swing on the facade, the car passes the doorway.
+- [ ] Look at the parked cars along the street and wake one (get in) → they stand along their bays and road, and the one you wake keeps its heading.
+- [ ] At a far building site: climb a tower crane's ladder, sit in the cab, set a pallet down with the hook, and work a self-erecting crane from its remote → you face the mast on the ladder, the jib in the cab, the mast at the remote; the pallet lands along the jib.
+- [ ] Walk up to a site's skip or rebar and look at it, then at another → the prompt and outline go to the one you face, the outline square on it.
+- [ ] Get into a car in a far underground car park (or a hall's forklift) → it wakes facing the way it stood.
 ## `/time` where you stand ([#1804](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1804))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator far from Switzerland (e.g. `/tp -4679383 7259183`).
@@ -1071,3 +1084,8 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 - [ ] Night (`--time 23`) → no blob anywhere; the moon at its own place.
 - [ ] Fly up past 40 km (spectator) → the sun stays where it was, gains strong spikes over black; behind the Earth it is gone.
 - [ ] VR (Link): the sun and the beams in both eyes at the same place.
+
+## Placed things after a restart (PR for [#1835](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1835))
+
+- [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
+- [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.
