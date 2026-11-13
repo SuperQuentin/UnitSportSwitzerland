@@ -67,7 +67,8 @@ public static class BiomePass
                 var g = CubeSphere.ToGeodetic(face, CubeSphere.Lattice(level, gi0 + a * ControlStep), CubeSphere.Lattice(level, gj0 + b * ControlStep));
                 lat[k] = g.LatDeg;
                 lon[k] = g.LonDeg;
-                und[k] = t.UndulationAt(a * ControlStep, b * ControlStep);
+                // the sea level abroad is EGM2008's (#1808); the leaf's own undulation is the Swiss grid's, held at its edge
+                und[k] = Egm2008.Available ? Egm2008.Undulation(g.LatDeg, g.LonDeg) : t.UndulationAt(a * ControlStep, b * ControlStep);
                 inside[k] = insideMapM(g.LatDeg, g.LonDeg);
                 if (inside[k] < FillBiome.GuardBandM) allGuarded = false;
             }

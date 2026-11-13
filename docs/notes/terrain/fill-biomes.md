@@ -28,7 +28,7 @@ sea. Since phase 1 the finished fill leaf is put in its biome. Code: `src/Terrai
   - **Not `GlobeGround.Classify`'s water**: its "dark is water" (luma under 0.12) took the Amazon, the Congo and Borneo
     for sea in most months.
 - **`BiomePass.Apply`**, run last by `GeneratedLeaves.OnPyramid`, so the altitude is the pyramid's (ellipsoidal minus
-  the leaf's undulation; past Switzerland that undulation is the Swiss grid's edge, tens of metres off EGM2008):
+  EGM2008's geoid, `Egm2008`, #1808; the leaf's own undulation is the Swiss grid's, held at its edge abroad):
   - it decides a biome every 2 vertices, with latitude, longitude, undulation and the guard at control points every
     16 vertices, bilinear between, longitudes unwrapped across the antimeridian;
   - a leaf whose every control point is 20 km inside the map returns at once, untouched (`Stats.Untouched`);
