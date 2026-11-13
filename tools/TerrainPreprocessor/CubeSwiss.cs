@@ -420,7 +420,9 @@ public static class CubeSwiss
         // it: on a cliff the two stood 77 m apart, a step along every leaf cell's edge. Within RampM of the leaves' own
         // vertices the correction starts from the nearest one's exact miss (an exact distance transform on the level's own
         // lattice, so tiles sharing a vertex agree) and hands over to the field.
-        int m = (int)Math.Ceiling(RampM / stepM) + 1, ws = n + 2 * m;
+        // the margin holds the ramp and twice the widest blur's reach (two passes each way): a blurred cell that far out
+        // finds its nearest own vertex up to the ramp and that reach further on, inside the window from every tile
+        int m = (int)Math.Ceiling(RampM / stepM) + 2 + 4 * RampBlurs[^1], ws = n + 2 * m;
         var ownV = new bool[ws * ws];
         var missV = new float[ws * ws];
         bool anyV = false;
@@ -443,6 +445,24 @@ public static class CubeSwiss
         var distV = new float[ws * ws];
         var siteV = new int[ws * ws];
         DistanceTransform.Run(ownV, ws, ws, distV, siteV);
+        // the nearest own vertex's miss everywhere (its own on an own vertex), and blurred at growing radii: the nearest one
+        // changes on the medial axis of a notch, where two edge vertices far apart along the edge meet (a 17 m step beside
+        // a 10 m cliff above Riddes); a vertex d away reads a blur of radius ~d/2, so the seam keeps the exact miss and
+        // the medial axis is smoothed over as far as it lies from the edge
+        var ext = new long[ws * ws];
+        for (int k = 0; k < ext.Length; k++)
+            ext[k] = siteV[k] < 0 ? 0 : (long)Math.Round(missV[ownV[k] ? k : siteV[k]] * FixedPerM);
+        var blurred = new long[RampBlurs.Length][];
+        for (int b = 0; b < RampBlurs.Length; b++)
+        {
+            var f = ext;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                f = BoxSum(f, ws, 1, 0, RampBlurs[b]);
+                f = BoxSum(f, ws, 0, 1, RampBlurs[b]);
+            }
+            blurred[b] = f;
+        }
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -450,10 +470,54 @@ public static class CubeSwiss
                 if (siteV[k] < 0) continue;
                 double d = distV[k] * stepM;
                 if (d >= RampM) continue;
+                double r = distV[k] / 2;
+                double start;
+                if (r <= RampBlurs[0]) start = Mix(ext[k], Blurred(blurred, 0, k), r / RampBlurs[0]);
+                else if (r >= RampBlurs[^1]) start = Blurred(blurred, RampBlurs.Length - 1, k);
+                else
+                {
+                    int b = 0;
+                    while (RampBlurs[b + 1] < r) b++;
+                    start = Mix(Blurred(blurred, b, k) * FixedPerM, Blurred(blurred, b + 1, k), (r - RampBlurs[b]) / (RampBlurs[b + 1] - RampBlurs[b]));
+                }
                 double t = d / RampM, s = t * t * (3 - 2 * t);
-                field[j * n + i] = (float)((1 - s) * missV[siteV[k]] + s * field[j * n + i]);
+                field[j * n + i] = (float)((1 - s) * start + s * field[j * n + i]);
             }
         return field;
+    }
+
+    /// <summary>Fixed-point units a metre for the ramp's blurs: sums of integers are exact in any order, so tiles agree.</summary>
+    private const double FixedPerM = 1024;
+
+    /// <summary>The ramp's blur radii, vertices of the level (2.4 m at level 13), each applied twice each way.</summary>
+    private static readonly int[] RampBlurs = [1, 2, 4, 8, 16];
+
+    /// <summary>Blur <paramref name="b"/> at <paramref name="k"/>, metres.</summary>
+    private static double Blurred(long[][] blurred, int b, int k)
+    {
+        double norm = Math.Pow(2 * RampBlurs[b] + 1, 4);
+        return blurred[b][k] / norm / FixedPerM;
+    }
+
+    /// <summary>a (fixed point, or metres times <see cref="FixedPerM"/>) to b (metres) by t.</summary>
+    private static double Mix(double aFixed, double b, double t) => (1 - t) * (aFixed / FixedPerM) + t * b;
+
+    /// <summary>A box sum of radius <paramref name="r"/> along one axis (edges clamped), exact: integers.</summary>
+    private static long[] BoxSum(long[] f, int side, int dx, int dy, int r)
+    {
+        var o = new long[f.Length];
+        Parallel.For(0, side, line =>
+        {
+            long sum = 0;
+            int At(int p) => dx == 1 ? line * side + Math.Clamp(p, 0, side - 1) : Math.Clamp(p, 0, side - 1) * side + line;
+            for (int p = -r; p <= r; p++) sum += f[At(p)];
+            for (int p = 0; p < side; p++)
+            {
+                o[At(p)] = sum;
+                sum += f[At(p + r + 1)] - f[At(p - r)];
+            }
+        });
+        return o;
     }
 
     /// <summary>

@@ -210,6 +210,15 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   the repository root). The earth fill and the far globe had drawn the Alps past the leaves on ETOPO's cells, with the
   generator's rivers running straight up their slopes (`tzoumaz_alps`). The command above unchanged: Nov 12 2026, 153 s,
   peak 12.5 GB, 0 of 2.7 M edge vertices differ, colours carried; the previous pyramid kept as `cube_global.pre1746`.
+- **Every level agrees past the leaves (#1778, #1779)**: only level 13 carried the correction that pulls the relief onto
+  the leaves, and its tiles stopped at the leaves' siblings, where the correction had not faded: past them levels 12 and
+  coarser held the raw relief, 30-47 m off at one point north of Riddes (L13 1464 m, L12 1497, L11 1513). The earth fill
+  drew it as walls along straight L13 tile edges (66 m), the globe as a ledge where the leaves begin. Level 13 now covers
+  the whole fade (`BlendReach`: 2 tiles round each leaf's tile), and every coarser level is its ancestors and siblings.
+  At the leaves' data edge the blurred field stood up to 77 m off the vertex beside it (cliffs above Riddes, steps along
+  every leaf cell): within 100 m (`RampM`) the correction starts from the nearest own vertex's exact miss (a distance
+  transform on the level's lattice) and hands over to the field. Check: `tools/fillseamscheck.sh` (BlendCheck
+  `--fill-seams`). NUMBERS_1778
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client

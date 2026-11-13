@@ -8,13 +8,16 @@ using static System.Console;
 /// "--fill-seams" (#1778, #1779): the earth world's generated fill at the spots the playtest of Nov 12 found walls,
 /// checked for continuity:
 /// <list type="bullet">
-/// <item>the pyramid the fill stands on (<see cref="PyramidBase"/>): neighbouring lattice points ~2.4 m apart differ by
-/// no more than the steepest real slope allows (<see cref="PyramidStepM"/>);</item>
+/// <item>the pyramid the fill stands on (<see cref="PyramidBase"/>), where the region has no height of its own:
+/// neighbouring lattice points ~2.4 m apart differ by no more than a steep rock face (<see cref="PyramidStepM"/>);</item>
 /// <item>the fill leaves the game builds there (<see cref="EarthLeaves"/>, roads off): every shared leaf edge agrees
 /// (<see cref="EdgeM"/>);</item>
 /// <item>the globe's far ground of a leaf (<see cref="EarthLeaves.HeightsOf"/> before the leaf is made) on the same
 /// edge as the made leaf beside it (<see cref="FarEdgeM"/>);</item>
+/// <item>the globe's coarser ground (the pyramid's levels 13 to 11) along the made leaves' edges: its miss averaged over
+/// ~150 m (<see cref="LedgeM"/>), the ledge of #1779.</item>
 /// </list>
+/// "--why" prints every level and the region's height at the worst step, and the worst edge vertex by vertex.
 ///
 ///   dotnet run --project tools/BlendCheck -c Release -- --fill-seams --pyramid D:/UnitSportSwitzerland/cube_global
 ///     [--leaves DIR] [--at E,N[;E,N...]] [--side 5]
@@ -27,6 +30,12 @@ internal static class FillSeamsCheck
     /// </summary>
     public const double PyramidStepM = 9;
 
+    /// <summary>
+    /// How near the region's own ground a step under the fill may continue the region's steepest step (plus 1 m), metres:
+    /// the pyramid's correction starts from the edge vertex's exact miss and hands over to the smooth field over 100 m.
+    /// </summary>
+    public const double NearRealM = 100;
+
     /// <summary>Two made leaves on their shared edge, metres: the frames' bar (1 cm) and the height quantum.</summary>
     public const double EdgeM = 0.05;
 
@@ -38,10 +47,15 @@ internal static class FillSeamsCheck
     public const double FarEdgeM = 6;
 
     /// <summary>
-    /// The mean miss of the globe's coarser ground (the pyramid's levels) along a leaf edge, metres: the fill's detail
-    /// (clamped to 12 m, zero-mean over its ~150 m low-pass) and a coarse level's tent mean are no bias; a ledge is.
+    /// The mean miss of the globe's coarser ground (the pyramid's levels) against a leaf along ~150 m of its edge, metres:
+    /// the fill is the pyramid plus the generator's short relief, which <see cref="PyramidFill"/> clamps to 12 m and the
+    /// coarser ground does not carry, so a ridge along an edge misses by up to that; a real leaf is the pyramid's own
+    /// source. More is a ledge (the levels' 31-47 m, the hand-over's 40 m trench).
     /// </summary>
-    public const double LedgeM = 3;
+    public const double LedgeM = PyramidFill.DetailClampM + 1;
+
+    /// <summary>The stretch of an edge the miss is averaged over, vertices (~150 m: the fill's low-pass, <see cref="PyramidFill.LowBlur"/>).</summary>
+    public const int LedgeWindow = 128;
 
     /// <summary>The playtest's spots: notes 31 and 30 (#1778) and 32 (#1779).</summary>
     private static readonly (double E, double N)[] Spots = [(2578980, 1116051), (2579661, 1108305), (2580090, 1116823)];
@@ -83,28 +97,56 @@ internal static class FillSeamsCheck
             long gi0 = ((long)centre.X - half) << bits, gj0 = ((long)centre.Y - half) << bits;
             int side = (2 * half + 1) * cells + 1;
             var p = new double[side * side];
+            // where the region has its own height the ground is the region's (a cliff there is a cliff): the fill stands
+            // on the pyramid only where it has none
+            var isReal = new bool[side * side];
+            var realH = new double[side * side];
             Parallel.For(0, side, j =>
             {
-                for (int i = 0; i < side; i++) p[j * side + i] = pyramid.HeightAt(centre.Face, gi0 + i, gj0 + j, level);
+                for (int i = 0; i < side; i++)
+                {
+                    p[j * side + i] = pyramid.HeightAt(centre.Face, gi0 + i, gj0 + j, level);
+                    realH[j * side + i] = RealAt(store, centre.Face, gi0 + i, gj0 + j, bits);
+                    isReal[j * side + i] = !double.IsNaN(realH[j * side + i]);
+                }
             });
-            double worst = 0;
-            long wi = 0, wj = 0;
+            // every step under the fill over the bar, and the region's own steepest step within NearRealM of it: next to a
+            // cliff of the region the pyramid continues it (its correction starts from the edge vertex's exact miss)
+            var over = new List<(double Step, int I, int J)>();
             for (int j = 0; j < side; j++)
                 for (int i = 0; i < side; i++)
                 {
                     double h = p[j * side + i];
-                    if (double.IsNaN(h)) continue;
+                    if (double.IsNaN(h) || isReal[j * side + i]) continue;
                     // per 2 lattice points: one level-13 sample
                     foreach (var (di, dj) in new[] { (2, 0), (0, 2) })
                     {
                         if (i + di >= side || j + dj >= side) continue;
                         double o = p[(j + dj) * side + i + di];
-                        if (double.IsNaN(o)) continue;
-                        if (Math.Abs(o - h) > worst) (worst, wi, wj) = (Math.Abs(o - h), gi0 + i, gj0 + j);
+                        if (double.IsNaN(o) || isReal[(j + dj) * side + i + di]) continue;
+                        if (Math.Abs(o - h) > PyramidStepM) over.Add((Math.Abs(o - h), i, j));
                     }
                 }
-            Check("pyramid steps", worst <= PyramidStepM, $"steepest {worst:F2} m over 2 lattice points at ({wi},{wj}) {Lv95Of(centre.Face, wi, wj, level)}");
-            if (worst > PyramidStepM && args.Contains("--why"))
+            double worst = 0, worstReal = 0;
+            long wi = 0, wj = 0;
+            int reach = (int)Math.Ceiling(NearRealM / 1.19);
+            foreach (var (step, i, j) in over.OrderByDescending(o => o.Step).Take(400))
+            {
+                double cliff = 0;
+                for (int b = Math.Max(0, j - reach); b <= Math.Min(side - 3, j + reach); b++)
+                    for (int a = Math.Max(0, i - reach); a <= Math.Min(side - 3, i + reach); a++)
+                    {
+                        double r = realH[b * side + a];
+                        if (double.IsNaN(r)) continue;
+                        if (!double.IsNaN(realH[b * side + a + 2])) cliff = Math.Max(cliff, Math.Abs(realH[b * side + a + 2] - r));
+                        if (!double.IsNaN(realH[(b + 2) * side + a])) cliff = Math.Max(cliff, Math.Abs(realH[(b + 2) * side + a] - r));
+                    }
+                if (step - Math.Max(PyramidStepM, cliff + 1) > worst - Math.Max(PyramidStepM, worstReal + 1) || worst == 0)
+                    (worst, worstReal, wi, wj) = (step, cliff, gi0 + i, gj0 + j);
+            }
+            Check("pyramid steps under the fill", worst <= Math.Max(PyramidStepM, worstReal + 1),
+                worst == 0 ? $"none over {PyramidStepM} m" : $"worst {worst:F2} m over 2 lattice points (the region's own steepest within {NearRealM} m: {worstReal:F1}) at ({wi},{wj}) {Lv95Of(centre.Face, wi, wj, level)}");
+            if (worst > Math.Max(PyramidStepM, worstReal + 1) && args.Contains("--why"))
                 foreach (var (di, dj) in new[] { (0, 0), (2, 0), (0, 2) })
                 {
                     var levels = string.Join("  ", Enumerable.Range(9, pyramid.FinestLevel - 8).Reverse().Select(l =>
@@ -112,7 +154,7 @@ internal static class FillSeamsCheck
                         double h = pyramid.HeightAt(centre.Face, wi + di, wj + dj, level, out int a, l);
                         return $"L{l}:{h:F1}(L{a})";
                     }));
-                    WriteLine($"    +({di},{dj}): {levels}");
+                    WriteLine($"    +({di},{dj}): {levels}  real {RealAt(store, centre.Face, wi + di, wj + dj, bits):F1}");
                 }
 
             // the leaves the game builds there, each on the first ask; the far ground of each before
@@ -151,23 +193,40 @@ internal static class FillSeamsCheck
                     long ki = (long)k.X << bits, kj = (long)k.Y << bits;
                     foreach (int edgeSide in new[] { 0, 1, 2, 3 })
                     {
-                        double sum = 0;
-                        int count = 0;
+                        var miss = new double[cells + 1];
                         for (int s = 0; s <= cells; s++)
                         {
                             int i = edgeSide switch { 0 => 0, 1 => cells, _ => s }, j = edgeSide switch { 2 => 0, 3 => cells, _ => s };
                             float lh = h[j * (cells + 1) + i];
                             double ph = pyramid.HeightAt(k.Face, ki + i, kj + j, level, out _, l);
-                            if (float.IsNaN(lh) || double.IsNaN(ph)) continue;
-                            sum += lh - ph;
-                            count++;
+                            miss[s] = float.IsNaN(lh) || double.IsNaN(ph) ? double.NaN : lh - ph;
                         }
-                        if (count < cells / 2) continue;
-                        double bias = sum / count;
-                        if (Math.Abs(bias) > Math.Abs(worstBias)) (worstBias, biasAt) = (bias, $" on {k}'s {"WESN"[edgeSide]} edge");
+                        // the mean over every LedgeWindow vertices along the edge
+                        for (int s0 = 0; s0 + LedgeWindow <= cells + 1; s0 += LedgeWindow / 4)
+                        {
+                            double sum = 0;
+                            int count = 0;
+                            for (int s = s0; s < s0 + LedgeWindow; s++)
+                                if (!double.IsNaN(miss[s])) { sum += miss[s]; count++; }
+                            if (count < LedgeWindow / 2) continue;
+                            double bias = sum / count;
+                            if (Math.Abs(bias) > Math.Abs(worstBias)) (worstBias, biasAt) = (bias, $" on {k}'s {"WESN"[edgeSide]} edge from vertex {s0}");
+                        }
                     }
                 }
                 Check($"pyramid level {l} along the leaves' edges", Math.Abs(worstBias) <= LedgeM, $"worst mean miss {worstBias:F2} m{biasAt}");
+                if (args.Contains("--why") && l == pyramid.FinestLevel && biasAt.Length > 0 && Math.Abs(worstBias) > LedgeM)
+                {
+                    var (k, h) = made.First(m => biasAt.Contains(m.Key.ToString() + "'s"));
+                    int edgeSide = "WESN".IndexOf(biasAt[biasAt.IndexOf("'s ") + 3]);
+                    // the whole edge
+                    long ki = (long)k.X << bits, kj = (long)k.Y << bits;
+                    for (int s = 0; s <= cells; s += 32)
+                    {
+                        int i = edgeSide switch { 0 => 0, 1 => cells, _ => s }, j = edgeSide switch { 2 => 0, 3 => cells, _ => s };
+                        WriteLine($"    {s,3}: leaf {h[j * (cells + 1) + i]:F1}  real {RealAt(store, k.Face, ki + i, kj + j, bits):F1}  L{l} {pyramid.HeightAt(k.Face, ki + i, kj + j, level):F1}");
+                    }
+                }
             }
         }
         WriteLine(fails == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({fails})");
@@ -200,6 +259,19 @@ internal static class FillSeamsCheck
             }
         return (worst, where);
     }
+
+    /// <summary>The region's own height at a point of the leaves' lattice, NaN where it has none.</summary>
+    private static double RealAt(LeafStore store, int face, long gi, long gj, int bits)
+    {
+        var k = new CubeKey(face, 23 - bits, (int)(gi >> bits), (int)(gj >> bits));
+        if (!store.Has(k)) return double.NaN;
+        var h = RealHeld.GetOrAdd(k, key => store.HeightsOf(key));
+        if (h is null) return double.NaN;
+        int n = (1 << bits) + 1;
+        return h.Heights[(int)(gj - ((long)k.Y << bits)) * n + (int)(gi - ((long)k.X << bits))];
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<CubeKey, CubeTile?> RealHeld = new();
 
     private static string Lv95Of(int face, long gi, long gj, int level)
     {
