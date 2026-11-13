@@ -135,4 +135,33 @@ public class SitePalletTests
         foreach (int type in new[] { Depot, Mechanic, Dealership })
             Assert.Null(DormantSlots.ForkliftOf(Tile, Front(type), ForkliftKind));
     }
+
+    /// <summary>
+    /// #1769: the facade is the main door's own run of wall, never the plan box's whole extent along it. A Geneva
+    /// block's door wall stood at 60° to its 158 x 102 m box: the box's 188 m along it ran 28 pallets across a street
+    /// and parked the forklift 90 m off, over the Rhône.
+    /// </summary>
+    [Fact]
+    public void FacadeIsTheDoorsOwnRun()
+    {
+        // the door 12 m along a 30 m run, on a box reaching -98..90 along that wall
+        var (from, to) = SiteFront.Span(-98.4f, 89.6f, 12f, 30f);
+        Assert.Equal(-3f, from, 3);
+        Assert.Equal(27f, to, 3);
+        // a run longer than the box's side is cut to the box
+        Assert.Equal((-20f, 25f), SiteFront.Span(-20f, 25f, 0f, 60f));
+        // no run (a door on a curved wall's piece): the box's extent, as before
+        Assert.Equal((-20f, 25f), SiteFront.Span(-20f, 25f, 3f, 0f));
+
+        // the pallets and the forklift of a yard on that run stay within it, plus the forklift's 1.5 m
+        var front = Front(Warehouse, from, to);
+        var yard = front.Yard;
+        foreach (var p in Of(front))
+        {
+            var (u, _) = Local(yard, p.E, p.N);
+            Assert.InRange(u, from, to);
+        }
+        if (DormantSlots.ForkliftOf(Tile, front, ForkliftKind) is { } lift)
+            Assert.InRange(Local(yard, lift.E, lift.N).U, from - 1.6f, to + 1.6f);
+    }
 }

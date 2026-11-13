@@ -1,0 +1,24 @@
+{
+  "id": "earth-3-reanchor-drive",
+  "title": "Driving across a re-anchor",
+  "verdict": "failed",
+  "by": "Nicolas Maitre",
+  "date": "2026-11-12T21:29Z",
+  "commit": "8edf1d3be",
+  "coverHash": "c0dc8008af75bb5e",
+  "covers": [
+    "src/Terrain/Earth/**",
+    "src/Terrain/Leaves/**",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Core/OriginShifter.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-11-12T21:29Z",
+      "by": "Nicolas Maitre",
+      "verdict": "failed",
+      "text": "camera jump"
+    }
+  ]
+}

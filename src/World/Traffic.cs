@@ -224,15 +224,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     public void OnOriginShifted(Core.OriginShift shift)
     {
-        var done = new HashSet<LaneEdge>();
-        _roads?.Shift(shift, _origin.Frame, done);
-        _rails?.Shift(shift, _origin.Frame, done);
-        ShiftModes(shift, done);
+        int pass = LaneEdge.NewShiftPass();
+        _roads?.Shift(shift, _origin.Frame, pass);
+        _rails?.Shift(shift, _origin.Frame, pass);
+        ShiftModes(shift, pass);
         foreach (var v in _cars.Concat(_trains))
         {
             // a vehicle may still be on an edge of an older graph
-            foreach (var (edge, _) in v.Route.Legs)
-                if (done.Add(edge)) edge.Shift(shift);
+            foreach (var (edge, _) in v.Route.Legs) edge.ShiftOnce(shift, pass);
             v.Head = shift.Point(v.Head);
             v.Vel = shift.Direction(v.Vel);
             for (int i = 0; i < v.Path.Length; i++) v.Path[i] = shift.Point(v.Path[i]);
@@ -370,13 +369,13 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 {
                     // the origin moved while it was being built: bring it into the current frame
                     var shift = _origin.Since(origin);
-                    roads.Shift(shift, _origin.Frame, new());
-                    rails.Shift(shift, _origin.Frame, new());
-                    // (a mode's graph may hold the roads' or rails' own edges: each moves once)
-                    var moved = new HashSet<LaneEdge>(roads.Edges.Concat(rails.Edges));
-                    walks?.Shift(shift, _origin.Frame, moved);
-                    rides?.Shift(shift, _origin.Frame, moved);
-                    trams?.Shift(shift, _origin.Frame, moved);
+                    // (a mode's graph may hold the roads' or rails' own edges: each moves once in a pass)
+                    int pass = LaneEdge.NewShiftPass();
+                    roads.Shift(shift, _origin.Frame, pass);
+                    rails.Shift(shift, _origin.Frame, pass);
+                    walks?.Shift(shift, _origin.Frame, pass);
+                    rides?.Shift(shift, _origin.Frame, pass);
+                    trams?.Shift(shift, _origin.Frame, pass);
                 }
                 _roads = roads;
                 _rails = rails;
