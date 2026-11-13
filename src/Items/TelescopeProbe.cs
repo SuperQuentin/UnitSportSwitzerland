@@ -143,6 +143,25 @@ public partial class TelescopeProbe : Node
         await Seconds(0.3);
         var lookAt = -cam!.GlobalBasis.Z;
         Expect(lookAt.AngleTo(view.Direction) < 0.001f, "the camera rides the tube");
+
+        // 3c. steady at the longest end (a pixel is 0.015″) (#1835 follow-up: "shaky when zoomed on the moon's surface"): the moon as drawn
+        // against the middle, every drawn frame for 2 s, following it and then on the sky drive (its drift is smooth:
+        // the jump from one frame to the next, less the run's mean, is the shake), in pixels
+        if (DisplayServer.GetName() != "headless")   // nothing is drawn headless
+        {
+            while (view.Focal < TelescopeOptics.FocalMax) view.Zoom(1);
+            view.SelectTarget(SkyBody.Moon);
+            var (followShake, _) = await MoonShake(view);
+            view.ToggleLock();
+            view.ToggleLock();
+            var (driveShake, drift) = await MoonShake(view);
+            // following: the camera and the moon from one vector (0.2 px). The drive holds a point of the stars' float frame and
+            // the moon is placed from its own float vector: each rounds by up to 6e-8 rad, ~half a pixel at a 10″ view (the stars
+            // stay on the drive). Before #1835 following stepped 1 px a frame (yaw and pitch as floats).
+            Expect(followShake < 0.5f && driveShake < 1.5f,
+                $"steady at {view.Focal:0} mm: following the moon {followShake:0.00} px, on the drive {driveShake:0.00} px a frame (drift {drift:0.00} px a frame)");
+        }
+        while (view.Focal > 2400f) view.Zoom(-1);
         if (DisplayServer.GetName() != "headless")
         {
             await Seconds(1.0);
@@ -308,5 +327,27 @@ public partial class TelescopeProbe : Node
         Expect(TelescopeView.Current != null, $"looked through it after a restart ({Telescopes.Instance!.LastRefused})");
         TelescopeView.Current?.Close();
         await Seconds(0.3);
+    }
+
+    /// <summary>The worst jump of the drawn moon on screen from one frame to the next less the mean (px), and the mean (px), over 2 s.</summary>
+    private async Task<(float Shake, float Drift)> MoonShake(TelescopeView view)
+    {
+        var moon = GetTree().Root.FindChild("MoonDisc", true, false) as Node3D;
+        var points = new List<Vector2>();
+        void Sample()
+        {
+            if (moon == null || GetViewport().GetCamera3D() is not { } c) return;
+            if (!c.IsPositionBehind(moon.GlobalPosition)) points.Add(c.UnprojectPosition(moon.GlobalPosition));
+        }
+        RenderingServer.FramePostDraw += Sample;
+        await Seconds(2.0);
+        RenderingServer.FramePostDraw -= Sample;
+        if (points.Count < 10) return (99f, 0f);
+        var steps = new List<Vector2>();
+        for (int i = 1; i < points.Count; i++) steps.Add(points[i] - points[i - 1]);
+        var mean = steps.Aggregate(Vector2.Zero, (a, b) => a + b) / steps.Count;
+        float worst = steps.Max(st => (st - mean).Length());
+        GD.Print($"[telescopecheck] moon on screen over {points.Count} frames: from {points[0]} to {points[^1]}, worst jump {worst:0.00} px");
+        return (worst, mean.Length());
     }
 }

@@ -143,7 +143,16 @@ public partial class TelescopeView : CanvasLayer
         var d = direction.Normalized();
         Yaw = Mathf.Atan2(-d.X, -d.Z);
         Pitch = Mathf.Asin(Mathf.Clamp(d.Y, -1f, 1f));
+        _aim = d;
     }
+
+    /// <summary>
+    /// The aim as a direction while something sets it (a body, the drive, a check), null while turned by hand (#1835):
+    /// the camera is turned straight from it. Through yaw and pitch as floats it stepped by their rounding, 2.4e-7 rad
+    /// near 3 rad, three pixels at the longest end: the moon shook while followed. From the same vector the body is
+    /// placed by, the two round alike.
+    /// </summary>
+    private Vector3? _aim;
 
     /// <summary>What it follows while <see cref="Locked"/>: the moon, a planet or a big moon (#1444).</summary>
     public SkyBody Target { get; private set; } = SkyBody.Moon;
@@ -290,6 +299,7 @@ public partial class TelescopeView : CanvasLayer
     private void Turn(Vector2 by)
     {
         if (by.LengthSquared() < 1e-12f) return;
+        _aim = null;
         Yaw -= by.X;
         Pitch = Mathf.Clamp(Pitch - by.Y, Mathf.DegToRad(-30f), Mathf.DegToRad(89f));
         if (Locked) TrackSky();
@@ -297,15 +307,15 @@ public partial class TelescopeView : CanvasLayer
 
     private void Apply()
     {
-        var basis = new Basis(Vector3.Up, Yaw) * new Basis(Vector3.Right, Pitch);
+        var basis = _aim is { } aim && Mathf.Abs(aim.Y) < 0.9999f
+            ? Basis.LookingAt(aim, Vector3.Up)
+            : new Basis(Vector3.Up, Yaw) * new Basis(Vector3.Right, Pitch);
         if (_tube != null) _tube.GlobalBasis = basis;
         if (_cam == null) return;
         CameraLens.SetFov(_cam, TelescopeOptics.Fov(Focal));
-        if (_vr)
-        {
-            var eye = (_tube ?? _scope).GlobalTransform * TelescopeVisual.EyeOffset;
-            _cam.GlobalTransform = new Transform3D(basis, eye);
-        }
+        // the camera's own turn set directly, not through the tube's and the tripod's (each product rounds again)
+        var eye = (_tube ?? _scope).GlobalTransform * TelescopeVisual.EyeOffset;
+        _cam.GlobalTransform = new Transform3D(basis, eye);
     }
 
     // ---- VR: the eyepiece's picture before the eyes ------------------------------------------------
