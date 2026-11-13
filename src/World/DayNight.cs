@@ -312,6 +312,14 @@ public partial class DayNight : Node
         _applied = applied;
         if (_environment != null)
             Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
+        // the sky draws the light's disc only while the light is the sun (#1798): at night it is the moon's shading,
+        // lifted to 25° and night-tinted, and the procedural sky drew it as a dim blue blob where no body is (the moon
+        // itself is MoonDisc, the sun above the air is the atmosphere's)
+        if (Sun != null)
+        {
+            var mode = SunElevationDeg > 3f ? DirectionalLight3D.SkyModeEnum.LightAndSky : DirectionalLight3D.SkyModeEnum.LightOnly;
+            if (Sun.SkyMode != mode) Sun.SkyMode = mode;
+        }
         if (_portalOutdoor != null)
             Styles.StyleKit.DriveEnvironment(_portalOutdoor, null, shade, tint, sky, Night, SunElevationDeg, moved);
         bool disco = Disco != _appliedDisco;

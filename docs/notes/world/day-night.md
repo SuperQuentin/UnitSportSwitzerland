@@ -31,6 +31,14 @@
   and pictures do not move with the date; `--sun real` (with `--date`) forces the real one there. Unit tests: `EphemerisTests`, `RealSunPathTests`.
   The moon is drawn in the sky too (`World/MoonDisc`, #1440, `items/telescope`): `DayNight.Sky` holds
   the real sun and moon in world axes and the moon's own axes for its face.
+- **The sky's disc is the sun's only** (#1798): the procedural sky draws a disc where the directional light comes
+  from, and at night that light is the moon's shading (lifted to 25°, night-tinted): a dim blue blob where no body
+  is, from the ground and from space (the "black sun"). The light is `LightOnly` while the sun is 3° up or lower,
+  `LightAndSky` above. The moon is `MoonDisc`; the sun above the air is `atmosphere.gdshader`'s (`terrain/earth-far-view`).
+  Windowed check: `--frame earth --skyshot sun|moon|light,altitudeM,out.png [--at E,N] [--date D] [--time H]
+  --weather clear --occasion none` (`World/SkyShot`): the camera turned to the body, a picture, and a RESULT by the
+  rule a body in view is drawn, one behind the Earth is not, and the light's own direction shows no disc unless it
+  is the sun (stars hidden for the measure). Before #1798 it failed the space sun and both blobs.
 - **Online, one clock for everyone** (#452, `World/WorldClock`): the server always owns it, from its
   own settings at start (`StartHour`, `DayLengthMinutes`, `--time`), or, on a dedicated server, from `user://world_clock.cfg`
   where it stopped last (saved every 60 s, on `/time` and on exit; not when hosted from the menu,

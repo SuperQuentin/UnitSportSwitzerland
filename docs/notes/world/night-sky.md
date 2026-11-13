@@ -6,7 +6,12 @@
 Everything here is drawn only under the real sun (`SunPath.Model == Real`: not in checks,
 screenshots or the fun world unless `--sun real`), placed just inside the camera's far plane at its
 true angular size, and read from `DayNight.Sky` (the date, hour and camera place, the celestial
-sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`.
+sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`; it is drawn at least
+`MoonDisc.MinScreenShare` of the view's height in angular radius (24 px across at 1080p and 70°; true, it was 7 px, a
+star among stars, and a 4-day crescent a one-pixel sliver), the telescope's narrow views at the true size, with
+earthshine 0.04 (0.012 vanished into the night sky), at night's brightness above the air (`Atmosphere.Space`), and
+it writes its depth a step nearer than the stars and is drawn before them (render priority -1): no star shows
+through it (#1798).
 
 - **Stars** (`World/StarField`, `shaders/sky_point.gdshader`): the Yale Bright Star Catalogue's 9,096
   stars (`assets/space/stars_bsc5.json`, J2000 RA/Dec, V, B-V), one mesh of quads built once, each

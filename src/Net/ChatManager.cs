@@ -308,11 +308,15 @@ public partial class ChatManager : Node
             return;
         }
         // the debug menu draws on this screen only; a server never hears of it (#339)
-        if (text.Trim().ToLowerInvariant() == "/debug")
+        // "/debug <tools>" (#1743): the --debugview words switched on (or "off" for all), the panel left as it is
+        if (text.Trim().ToLowerInvariant() is var debug && (debug == "/debug" || debug.StartsWith("/debug ")))
         {
+            string tools = debug.Length > 6 ? debug[7..].Trim() : "";
             if (!DebugMenu.Allowed) LineReceived?.Invoke(Permissions.InMatch ? NotInMatch : "The debug menu is for admins on a server.", ChatKind.Error);
             else if (DebugRequested is null) LineReceived?.Invoke("No debug menu here.", ChatKind.Error);
-            else DebugRequested();
+            else if (tools.Length == 0) DebugRequested();
+            else if (DebugToolsRequested is null) LineReceived?.Invoke("No debug tools here.", ChatKind.Error);
+            else DebugToolsRequested(tools);
             return;
         }
 #if PLAYTEST
@@ -476,6 +480,9 @@ public partial class ChatManager : Node
 
     /// <summary>Client: <c>/debug</c> was typed by someone allowed it (alone, or an admin); the debug menu opens.</summary>
     public event Action? DebugRequested;
+
+    /// <summary>Client: <c>/debug &lt;tools&gt;</c> (the <c>--debugview</c> words, or <c>off</c>) typed by someone allowed the menu.</summary>
+    public event Action<string>? DebugToolsRequested;
 #if PLAYTEST
     /// <summary>Client: <c>/note &lt;text&gt;</c>, a playtest note (#844), for the recorder to stamp.</summary>
     public event Action<string>? NoteRequested;

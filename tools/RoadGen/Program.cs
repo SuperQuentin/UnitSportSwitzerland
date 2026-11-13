@@ -54,6 +54,8 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --priority-check      junction priority self-check: main road, Wartelinie, signs (#121)
           --street-check        urban streets self-check: sidewalk widths against synthetic houses (#119)
           --dump-street E,N     corner patches and segment ends near a point, with heights (--chunks DIR)
+          --cap-check           no ground junction cap swallows a street: a car road's or track's point over 8 m inside one
+                                (--chunks DIR [--at E,N] [--list], #1821)
           --kerb-check          every zebra and bike crossing meets only sloped kerbs (--chunks DIR [--at E,N] [--list], #711)
           --signal-check        validate every traffic-light plan of a region (--chunks DIR; --at E,N dumps the nearest)
           --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
@@ -144,6 +146,10 @@ else if (ArgValue("--seam-check") is { } seamAt)
 else if (args.Contains("--kerb-check"))
 {
     return KerbCheck.Run(ArgValue("--chunks") ?? "terrain_chunks", ArgValue("--at"), args.Contains("--list"), Console.WriteLine);
+}
+else if (args.Contains("--cap-check"))
+{
+    return CapCheck.Run(ArgValue("--chunks") ?? "terrain_chunks", ArgValue("--at"), args.Contains("--list"), Console.WriteLine);
 }
 else if (args.Contains("--signal-check"))
 {
