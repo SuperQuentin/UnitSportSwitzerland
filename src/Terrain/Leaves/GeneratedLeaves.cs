@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using UnitSport.Terrain.Biomes;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain.Leaves;
@@ -21,7 +22,10 @@ namespace UnitSport.Terrain.Leaves;
 /// </summary>
 /// <param name="pyramid">The globe's pyramid the earth world's fill stands on (#1678, <see cref="PyramidFill"/>):
 /// <see cref="OnPyramid"/> moves a built leaf onto it; null, the generator's own ground.</param>
-public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = null, PyramidBase? pyramid = null)
+/// <param name="biomes">The fill's biomes outside the generator's own map (#1809, <see cref="BiomePass"/>), applied last by
+/// <see cref="OnPyramid"/>: by default the chain this build embeds; null, the generator everywhere.</param>
+public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = null, PyramidBase? pyramid = null, FillBiome? biomes = null,
+    bool noBiomes = false)
 {
     /// <summary>LV95 tiles whose products are held.</summary>
     public const int KeptTiles = 24;
@@ -32,6 +36,9 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
     public ProceduralWorld World => world;
 
     public PyramidBase? Pyramid => pyramid;
+
+    /// <summary>The biome chain the fill's leaves are finished in, or null (the generator everywhere).</summary>
+    public FillBiome? Biomes { get; } = noBiomes ? null : biomes ?? FillBiome.Default;
 
     private sealed record Products(byte[] Cover, WaterTile? Water, List<TreeInstance> Trees, BuildingTile? Buildings);
 
@@ -104,14 +111,32 @@ public sealed class GeneratedLeaves(ProceduralWorld world, LeafFrames? frames = 
 
     /// <summary>
     /// A built leaf (<see cref="Build"/>, its roads among it) moved onto the pyramid (#1678, <see cref="PyramidFill"/>);
-    /// unchanged without one, or where the pyramid holds no height over it.
+    /// unchanged without one, or where the pyramid holds no height over it. Then in its biomes (<see cref="InBiomes"/>).
     /// </summary>
     public CubeLeafContent OnPyramid(CubeLeafContent content)
     {
-        if (pyramid is null || content.Heights is not { } h) return content;
         var on = new SourceOnLeaf(_frames, content.Key, Lv95Source.Instance);
-        if (PyramidFill.Build(pyramid, on.Transform, h.Heights, GeneratorOn(content.Key)) is { } ground) PyramidFill.Apply(content, ground, on.Transform);
+        if (pyramid is not null && content.Heights is { } h
+            && PyramidFill.Build(pyramid, on.Transform, h.Heights, GeneratorOn(content.Key)) is { } ground)
+            PyramidFill.Apply(content, ground, on.Transform);
+        InBiomes(content, on.Transform);
         return content;
+    }
+
+    /// <summary>
+    /// A finished leaf in its biomes (#1809): outside the generator's own map its cover, trees, farms and still water
+    /// follow the biome there; within it (the Swiss guard) untouched. Null without a chain.
+    /// </summary>
+    public BiomePass.Stats? InBiomes(CubeLeafContent content, LeafTransform? transform = null) =>
+        Biomes is { } chain
+            ? BiomePass.Apply(content, transform ?? new SourceOnLeaf(_frames, content.Key, Lv95Source.Instance).Transform, chain, InsideMapM)
+            : null;
+
+    /// <summary>How far a latitude and longitude lie inside the generator's own map, metres (negative outside).</summary>
+    public static double InsideMapM(double latDeg, double lonDeg)
+    {
+        var (e, n) = Lv95Source.Instance.FromLatLon(latDeg, lonDeg);
+        return ProceduralWorld.MapInsideM(e, n);
     }
 
     /// <summary>

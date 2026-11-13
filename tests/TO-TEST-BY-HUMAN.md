@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
+
+In a window, `--frame earth`, the spectator at full speed. Best once the globe draws under the fill far away (the asia-globe-over-fill work) and paints sand as sand (#1802).
+
+- [ ] Land in the Sahara (`--at 1829400,-515818 --origin 1829400,-515818`) → sand, a few low shrubs, no farms, no green.
+- [ ] Fly to Kazakhstan, Yamal, Greenland and the Amazon (LV95 6653598,2940530; 5034504,4850762; 902899,4677347; -6055442,-697411) → dry grass with scattered shrubs; olive tundra with dwarf shrubs; ice; a broadleaf canopy with clearings.
+- [ ] Fly from Geneva out of the generator's map (west of LV95 2,385,000 or south of 974,000) → the Swiss look fades into the biome over ~20 km, no straight seam; Geneva, Lavaux and the Salève look as before.
+
 ## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.

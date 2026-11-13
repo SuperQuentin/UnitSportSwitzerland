@@ -7,6 +7,12 @@ namespace UnitSport.Terrain;
 public sealed partial class ProceduralWorld
 {
     /// <summary>
+    /// How far LV95 (e, n) lies inside the generator's own map (its relief's box), metres; negative outside. Past the
+    /// map the generator extrudes the map's edge, and the earth fill's biomes take over (#1809, <c>Biomes/FillBiome</c>).
+    /// </summary>
+    public static double MapInsideM(double e, double n) => Relief.Instance.InsideM(e, n);
+
+    /// <summary>
     /// The real country, coarsely: a 500 m heightmap of Switzerland and its border areas
     /// (swisstopo swissALTIRegio averaged down by <c>tools/swiss_relief.py</c>, embedded in the
     /// assembly), and what is derived from it once at load: the local relief the generator's
@@ -52,6 +58,9 @@ public sealed partial class ProceduralWorld
         public readonly int[] Area;
 
         public double NodeAreaKm2 => Spacing * Spacing / 1e6;
+
+        /// <summary>How far LV95 (e, n) lies inside the map's box, metres; negative outside (<see cref="MapInsideM"/>).</summary>
+        public double InsideM(double e, double n) => Math.Min(Math.Min(e - MinE, MaxE - e), Math.Min(n - MinN, MaxN - n));
 
         private static readonly Lazy<Relief> Shared = new(Load, LazyThreadSafetyMode.ExecutionAndPublication);
         public static Relief Instance => Shared.Value;

@@ -194,6 +194,13 @@ public partial class Main : Node
 			return;
 		}
 
+		// the earth fill's photo statistics for its biome guess (#1809): a tool, no game
+		if (UnitSport.World.BiomePhotoBake.Requested())
+		{
+			AddChild(new UnitSport.World.BiomePhotoBake { Name = "BiomePhotoBake" });
+			return;
+		}
+
 		if (UnitSport.Avatar.ModelViewer.Requested())
 		{
 			// shaded for the visual style, as the turntable above: the saved one, or --style (#760:

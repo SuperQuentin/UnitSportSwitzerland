@@ -165,6 +165,11 @@ public static class BrMapImage
         CoverClass.Rock or CoverClass.LooseRock or CoverClass.Boulders => new Color(0.60f, 0.57f, 0.54f),
         CoverClass.Scree or CoverClass.LooseScree => new Color(0.68f, 0.65f, 0.60f),
         CoverClass.Vineyard => new Color(0.60f, 0.62f, 0.34f),
+        // the earth fill's biomes (#1809)
+        CoverClass.Sand => new Color(0.86f, 0.78f, 0.60f),
+        CoverClass.DryGrass => new Color(0.76f, 0.72f, 0.52f),
+        CoverClass.Tundra => new Color(0.66f, 0.64f, 0.52f),
+        CoverClass.LushGround => new Color(0.48f, 0.66f, 0.38f),
         CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea => new Color(0.74f, 0.72f, 0.69f),
         // meadow: lush in the valleys, browner on the alps
         _ => new Color(0.62f, 0.76f, 0.45f).Lerp(new Color(0.70f, 0.66f, 0.50f), Mathf.Clamp((h - 1300f) / 1200f, 0f, 1f)),

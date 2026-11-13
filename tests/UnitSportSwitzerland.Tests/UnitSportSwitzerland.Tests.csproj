@@ -122,6 +122,9 @@
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's, and EarthLeaves over it, are checked by BlendCheck, which builds ProceduralWorld) -->
+    <!-- #1809: the earth fill's biome chain and pass, and its photo statistics -->
+    <Compile Include="..\..\src\Terrain\Biomes\*.cs" Link="Game\Biomes\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\src\Terrain\Biomes\photo_stats.bin.gz" LogicalName="photo_stats.bin.gz" WithCulture="false" />
     <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\Generated*.cs;..\..\src\Terrain\Leaves\EarthLeaves.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <!-- #1511 G2 C2: the collision patch provider (the patches themselves need the road builders: the harness checks them) -->
     <Compile Include="..\..\src\Terrain\LeafCollision\CollisionPatches.cs" Link="Game\Leaves\%(Filename)%(Extension)" />

@@ -1,6 +1,7 @@
 # Fill biomes: the earth fill outside Switzerland (#1809)
 
-Status: **planned**. Phase 1 (the seam and the photo guess) on `feat/1809-fill-biomes`.
+Status: **phase 1 built** on `feat/1809-fill-biomes` (the seam, the photo guess, the forest canopy; `terrain/fill-biomes`).
+Phases 2-4 to come.
 
 ## The problem
 
@@ -43,9 +44,9 @@ The two rules therefore agree with the generator at the guard's edge.
 
 ### The photo guess
 
-The input is a photo-statistics grid baked once from the **shipped** globe colour (`assets/globe`, levels 0-2, all
-12 months of Blue Marble NG; ~10 km a pixel at level 2). The grid is embedded in the assembly as
-`src/Terrain/Biomes/photo_stats.bin`. That makes it:
+The input is a photo-statistics grid baked once from Blue Marble NG's 12 months, the source of the shipped globe
+colour (built: from the JPEGs on D: directly, an equirectangular grid needs no cube resampling; 75 s). The grid is
+embedded in the assembly as `src/Terrain/Biomes/photo_stats.bin.gz` (1.28 MB). That makes it:
 
 - Godot-free: BlendCheck and the tests read it; WebP needs Godot's `Image`.
 - identical on every peer;
@@ -57,7 +58,8 @@ The grid has 0.2° cells (1800 x 900). Each cell holds 4 bytes:
 - the sRGB of the greenest month (the "summer" colour: the most `G - (R + B)/2`, mean over the cell);
 - the number of snowy months (bright, near-neutral, luma over 0.62 with `R - B` under 0.06: bright sand is warm,
   snow is not);
-- a sea flag (water in every month, `GlobeGround.Classify`'s water weight over 0.5).
+- a sea flag (water in 9 or more months: bluer than green, or black as Blue Marble draws lakes; built: not
+  `GlobeGround.Classify`'s water, whose "dark is water" took the Amazon and Borneo for sea).
 
 At run time the guess reads the grid bilinearly at the point's latitude and longitude, warped by ~0.1° of
 deterministic value noise (+, -, *, floor only: no transcendental function, so Windows and Linux peers agree to the
@@ -89,8 +91,8 @@ before `OnPyramid`). It reads the biome at each vertex for cover, at each tree's
 | Desert | `Sand` (new) | `Sand` | 1 in 50 kept as a low shrub | none | the generator's rivers dried (wadis) | open weight drawn as `Sand` | dunes in the relief detail, oases (palms, a village by the water), regional houses |
 | Steppe | `DryGrass` (new) | `DryGrass`, 1 in 6 trees kept | shrubs and solitary trees | 1 in 6 | kept | `DryGrass` | yurts, regional houses |
 | Savanna | `DryGrass` | `OpenForest` | 1 in 4 kept, broadleaf solitary | 1 in 4 | kept | `DryGrass`, forest as `OpenForest` | acacia model |
-| TropicalForest | `LushGround` (new) | unchanged | broadleaf only, trees added to forest density | 1 in 5 | kept | forest weight up | broadleaf and palm models |
-| Boreal | unchanged | unchanged | conifer only, trees added | 1 in 5 | kept | forest darker | birch, spruce models; lakes from land cover |
+| TropicalForest | `LushGround` (new); built: 80 % of it `Forest` canopy in ~480 m noise patches | unchanged | broadleaf only, ~150 a hectare scattered on the canopy | 1 in 5 | kept | forest weight up | broadleaf and palm models |
+| Boreal | unchanged; built: half of it `Forest` canopy | unchanged | conifer only, scattered on the canopy | 1 in 5 | kept | forest darker | birch, spruce models; lakes from land cover |
 | Tundra | `Tundra` (new: olive-brown moss and lichen) | `Tundra` | 1 in 30 kept as a dwarf shrub | none | kept | `Tundra` | |
 | Ice | `Glacier` | `Glacier` | none | none | none | snow weight 1 | crevasses |
 | Wetland (land cover only) | `Wetland` | `Wetland` | 1 in 3 kept | 1 in 3 | kept | `Wetland` | reeds, pools |
@@ -217,6 +219,27 @@ The rest of the determinism rules:
 | sea | mid-Atlantic, 30° N 40° W | Sea |
 | controls | Lavaux 2547200,1147800, the Salève fill | Swiss, **byte-identical** to `main` |
 
+## Built (phase 1)
+
+`BlendCheck --fill-biomes` on the D: pyramid, 3 x 3 leaves a spot, Nov 13 2026: desert, steppe, tundra, ice, jungle and
+sea each 100 % their biome by the photo guess. Trees, generator then biome:
+
+| Spot | Trees | Farms (buildings) |
+|---|---|---|
+| desert | 1,080 to 21 | 20 to 0 |
+| steppe | 806 to 132 | 13 to 0 |
+| tundra | 1,159 to 42 | 21 to 0 |
+| ice | 1,132 to 0 | 12 to 0 |
+| jungle | 1,004 to 46,200 (the Salève's Swiss forest: 53,404) | 20 to 2 |
+| sea | 800 to 0 | 4 to 0 |
+
+Lavaux and the Salève are unchanged to the bit. Shared leaf edges agree on their cover everywhere.
+
+Found on the way, left for later phases:
+
+- the occasion cows still graze the desert (animals by biome);
+- footsteps are snow over 3,025 m everywhere (the Alps' line).
+
 ## Decided without the user (review)
 
 - **The Swiss guard**: the generator's own map is `Swiss` whatever the data says. There the generator is shaped on
@@ -225,5 +248,9 @@ The rest of the determinism rules:
   deterministic (D:'s deeper colour levels differ from the shipped ones) and Godot-free (tools and tests).
 - **Phase 1 changes no relief**: dunes and the like come in phase 4. The height stays the pyramid's plus the
   generator's short relief, so collision is unaffected.
+- **The forest biomes get a canopy and scattered trees in phase 1**: without them the jungle was lush grass with field
+  trees, since the generator has no forest past its map.
+- **The guess's tropics end at 23.5°** for forest, **28°** for savanna; temperate land, England or the Midwest, stays
+  the Swiss look.
 - **ESA WorldCover over MODIS**: no account is needed, CC BY 4.0, and finer. MODIS would need the user's Earthdata
   account.
