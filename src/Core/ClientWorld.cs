@@ -1166,6 +1166,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Trainer.TrainingProbe.Requested && _chunks != null && _worldOrigin != null) AddChild(new Trainer.TrainingProbe(() => LocalPlayer, _chunks, _worldOrigin));
         if (SpectatorSwitchCheck.Requested) AddChild(new SpectatorSwitchCheck(() => LocalPlayer, () => _spectator));
         if (EnterSpectatorCheck.Requested) AddChild(new EnterSpectatorCheck(() => LocalPlayer, () => _spectator));
+        if (NearBaseCheck.Requested) AddChild(new NearBaseCheck(() => _spectator));
         if (SpaceLandingCheck.Requested && Ground is { } landGround) AddChild(new SpaceLandingCheck(() => LocalPlayer, () => _spectator, ToggleMode, landGround));
         if (Phone.PhoneVrProbe.Requested) AddChild(new Phone.PhoneVrProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));

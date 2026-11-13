@@ -203,6 +203,16 @@ public partial class CameraGlobal : Node
 
     private void Climb(Camera3D camera, double altitude)
     {
+        // a doorway's lens holds the camera this frame (#1811): its 5 mm near plane and its far plane cut to match are
+        // the lens's, put back once drawn. Taking that near plane as the camera's own and writing it back later, under
+        // a 160 km far plane, was the user's "nothing renders, any camera, low down"
+        if (Interiors.DoorPortals.LensHolds(camera) == null) Planes(camera, altitude);
+        Haze(altitude);
+    }
+
+    /// <summary>The camera's far and near planes by its altitude and distance from the origin.</summary>
+    private void Planes(Camera3D camera, double altitude)
+    {
         float far = Core.GameSettings.Current.CameraFar;
         if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
         if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
@@ -235,7 +245,11 @@ public partial class CameraGlobal : Node
             if (Mathf.Abs(camera.Near - raised) > raised * 0.05f) camera.Near = raised;
         }
         else if (_baseNear >= 0) LowerRaised();
+    }
 
+    /// <summary>The style's haze by the camera's altitude.</summary>
+    private void Haze(double altitude)
+    {
         float scale = HazeAt(altitude, World.Globe.Present);
         if (GetViewport()?.FindWorld3D()?.Environment is not { } env || (scale == _fogScale && env == _fogEnv)) return;
         _fogScale = scale;
