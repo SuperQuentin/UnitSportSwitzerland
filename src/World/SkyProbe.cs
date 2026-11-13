@@ -73,6 +73,7 @@ public partial class SkyProbe : Node
 
         await Track(view, day, 4.0, SkyBody.Jupiter, "jupiter");
         await Track(view, day, 20.0, SkyBody.Saturn, "saturn");
+        await Track(view, day, 5.0, SkyBody.Mars, "mars");   // #1813: a disc at the longest end
 
         // before dawn the low satellites are sunlit over a dark sky
         day.HourOverride = 6.3;
@@ -108,7 +109,9 @@ public partial class SkyProbe : Node
         day.HourOverride = null;   // the sky turns again
         await Seconds(3.0);
         float off = SkyBodies.Instance.DirectionOf(body) is { } now ? Mathf.RadToDeg(view.Direction.AngleTo(now)) : 99f;
-        Expect(off < 0.002f, $"{body} held in the middle as the sky turns ({off:0.00000}°)");
+        // a tenth of the view: at the longest end (#1813) the view is 9.9″ tall
+        float within = TelescopeOptics.Fov(view.Focal) * 0.1f;
+        Expect(off < within, $"{body} held in the middle as the sky turns ({off * 3600f:0.00}″, within {within * 3600f:0.00}″)");
         await Shot(name);
     }
 

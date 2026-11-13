@@ -21,7 +21,7 @@
   2.2 m asks the server (`ServeLook`, one player at a time, one telescope per player; freed on leave,
   disconnect, removal); others see "Someone is looking through the telescope" (`Busy` broadcast).
   The view is PinballPlay's pattern: `UiFocus` blocks walking, a `Camera3D` rides the tube at
-  `EyeOffset`, the body walks round the tripod behind the eyepiece. Focal 100-8,000 mm
+  `EyeOffset`, the body walks round the tripod behind the eyepiece. Focal 100-500,000 mm (a 9.9″ view at the end, Mars half of it or more; #1813)
   (`TelescopeOptics`, ×1.25 a notch; the moon fills the view at ~2,300 mm), look × fov/76 with no
   floor, Use locks on the moon when it is within the view (or a degree) and follows it each frame.
   A round eyepiece mask, the focal length and ×, the keys.
