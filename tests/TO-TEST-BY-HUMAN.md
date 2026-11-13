@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.
+
+- [ ] With a pad: tap RB / LB, then hold each → a notch a tap, a smooth ramp held (2 m/s to 100 km/s in ~4 s); the readout top right; the hints list Faster RB / Slower LB.
+- [ ] In a headset: the right / left trigger while spectating → faster / slower, the readout readable on the VR panel; the triggers do nothing else there.
+- [ ] Climb from Geneva to ~300 km at full speed, fly east to Asia (~1 min, ~10 s boosted), come down → the speed grows with the altitude by itself, nothing freezes or hitches on the way, the generated ground is under you when you land.
+
 ## The earth fill's walls and ledges north of Riddes ([#1788](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1788))
 
 In a window, the earth playtest's launch (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2578113,1115406 --date 2027-07-15`), the rebuilt pyramid on D: (`cube_global`, Nov 13).
