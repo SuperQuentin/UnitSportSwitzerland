@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using UnitSport.Terrain;
@@ -19,6 +20,13 @@ public sealed class PisteIndex
     private readonly HashSet<TileId> _loading = new();
     private readonly Dictionary<TileId, ulong> _lastAsked = new();
     private ulong _frame;
+    /// <summary>
+    /// Two loads at a time, and a load nobody asks for any more skipped once its turn comes (#1762): an earth leaf's
+    /// slopes generate the whole leaf, and a camera flying over (an airliner at the time warp) asked for every leaf it
+    /// passed, each on its own pool thread, which starved every other worker (the globe, the near leaves) for an hour.
+    /// </summary>
+    private readonly SemaphoreSlim _gate = new(2);
+    private readonly ConcurrentDictionary<TileId, byte> _cancelled = new();
 
     public PisteIndex(IWorldGround chunks) => _terrain = chunks;
 
@@ -54,13 +62,22 @@ public sealed class PisteIndex
         _lastAsked[id] = _frame;
         if (_tiles.TryGetValue(id, out var tile)) return tile;
         if (_terrain.Content is { } source && _loading.Add(id))
+        {
+            _cancelled.TryRemove(id, out _);
             Task.Run(async () =>
             {
-                PisteTile? t = null;
-                try { t = await source.LoadPistesAsync(id).ConfigureAwait(false); }
-                catch (System.Exception ex) { GD.PushWarning($"[snow] pistes {id}: {ex.Message}"); }
-                _tiles[id] = t;
+                await _gate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (_cancelled.TryRemove(id, out _)) return;
+                    PisteTile? t = null;
+                    try { t = await source.LoadPistesAsync(id).ConfigureAwait(false); }
+                    catch (System.Exception ex) { GD.PushWarning($"[snow] pistes {id}: {ex.Message}"); }
+                    _tiles[id] = t;
+                }
+                finally { _gate.Release(); }
             });
+        }
         return null;
     }
 
@@ -83,6 +100,8 @@ public sealed class PisteIndex
         {
             _lastAsked.Remove(id);
             if (_tiles.TryRemove(id, out _)) _loading.Remove(id);
+            // still waiting for its turn: skipped, and asked again if wanted
+            else if (_loading.Remove(id)) _cancelled[id] = 0;
         }
     }
 }

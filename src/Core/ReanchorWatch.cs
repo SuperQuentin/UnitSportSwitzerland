@@ -65,7 +65,7 @@ public partial class ReanchorWatch : Node
         public readonly string Name = name;
         public readonly Func<Node3D?> Node = node;
         // the last three samples: ECEF, time, and whether a re-anchor fell in the interval before the sample
-        public readonly (EcefPos P, double T, bool Shift)[] Last = new (EcefPos, double, bool)[3];
+        public readonly (EcefPos P, double T, bool Shift, double Scale)[] Last = new (EcefPos, double, bool, double)[3];
         public int Count;
         public double WorstAtShift, WorstElse;
         // every error with no re-anchor by it: its 95th percentile is the noise (a turn, a bump, a leg's end)
@@ -151,12 +151,15 @@ public partial class ReanchorWatch : Node
         var p = _origin.ToEcef(node.GlobalPosition);
         t.Last[0] = t.Last[1];
         t.Last[1] = t.Last[2];
-        t.Last[2] = (p, now, shifted);
+        t.Last[2] = (p, now, shifted, Engine.TimeScale);
         if (++t.Count < 3) return;
+        // the time scale changed inside the window (a time-warped flight slowing down, #1762): the movers' steps and
+        // the clock's do not change on the same tick, so the line through its neighbours says nothing there
+        if (t.Last[0].Scale != t.Last[2].Scale || t.Last[1].Scale != t.Last[2].Scale) return;
         // the middle sample against the line through its neighbours: a re-anchor in either interval round it
-        var (a, ta, _) = t.Last[0];
-        var (b, tb, s1) = t.Last[1];
-        var (c, tc, s2) = t.Last[2];
+        var (a, ta, _, _) = t.Last[0];
+        var (b, tb, s1, _) = t.Last[1];
+        var (c, tc, s2, _) = t.Last[2];
         if (tc - ta < 1e-6) return;
         double k = (tb - ta) / (tc - ta);
         double ex = a.X + (c.X - a.X) * k - b.X, ey = a.Y + (c.Y - a.Y) * k - b.Y, ez = a.Z + (c.Z - a.Z) * k - b.Z;
