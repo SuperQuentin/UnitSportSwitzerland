@@ -258,6 +258,16 @@ public partial class DebugMenuCheck : ChatProbe
         Expect(await Until(() => GroundMesh() is { Mesh: { } now } && now != before, 60), $"and the {World}s' meshes are built again for it");
         await PickView(DebugViewMode.Normal);
         Expect(GetViewport().DebugDraw == Viewport.DebugDrawEnum.Disabled, "Normal clears the viewport's draw");
+
+        // the chat's "/debug <tools>": the --debugview words, and "off" for all
+        Chat!.Send("/debug origin,noroads,clay");
+        await Frames(3);
+        Expect(overlay.WorldOrigin && _menu.SwitchBox("origin").ButtonPressed && (HiddenLayers & TileLayers.Roads) != 0 && _menu.View == DebugViewMode.Clay,
+            "/debug origin,noroads,clay switches those on");
+        Chat.Send("/debug off");
+        await Frames(3);
+        Expect(!overlay.WorldOrigin && HiddenLayers == TileLayers.None && _menu.View == DebugViewMode.Normal && _menu.IsOpen,
+            "/debug off turns every tool off and leaves the panel open");
     }
 
     private static BaseMaterial3D.ShadingModeEnum ShadingIn(VisualStyle style) =>

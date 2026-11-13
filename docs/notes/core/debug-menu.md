@@ -39,6 +39,9 @@
   `lanes`, `freeze`, `no<layer>` (`noground`, `noroads`, `nobuildings`, `notrees`, `nowater`, `nohorizon`,
   `noreal`, `nogenerated`, `nofill`), and one view: `wireframe`, `clay`, `colours`, `overdraw`.
   Example: `--origin 2583250,1113250 --shot-queue q.txt --debugview open,tiles,labels,origin`.
+- **`/debug <tools>`** in the chat (#1743, `DebugMenu.ApplyTools`): the same words (comma or space separated), plus `off` (every
+  tool back as it starts, the fill setting kept), `close` and `normal`; the panel is left as it is. A `--shot-queue` line
+  `/debug tiles,labels` switches tools between shots in one launch.
 - **Checks**: `--debugcheck --systems ui` (quick, `Core/DebugMenuCheck`): F9, mouse clicks pushed into
   the viewport, Space, Esc (not the pause menu), `/debug`, clay through a `/style` restyle and back, the lane plan drawn once with its legend and cleared.
   `tools/debugcheck.sh` (net): a server with `--admin-password`; refused, `/login`, offered,

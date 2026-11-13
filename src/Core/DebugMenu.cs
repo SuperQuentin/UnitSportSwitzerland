@@ -496,21 +496,38 @@ public partial class DebugMenu : CanvasLayer
     /// </summary>
     private void ApplyArgs()
     {
-        if (CmdArgs.Value("--debugview") is not { } list) return;
-        foreach (string raw in list.Split(','))
+        if (CmdArgs.Value("--debugview") is { } list) Apply(list, "--debugview");
+    }
+
+    /// <summary>
+    /// <c>/debug &lt;tools&gt;</c> in the chat (#1743): the <see cref="ApplyArgs"/> words, plus <c>off</c> (every tool back as
+    /// it starts), <c>close</c> and <c>normal</c> (the view). A shot queue switches tools between its shots with it.
+    /// </summary>
+    public void ApplyTools(string list)
+    {
+        if (!Allowed) return;
+        Apply(list, "/debug");
+    }
+
+    private void Apply(string list, string from)
+    {
+        foreach (string raw in list.Split(',', ' '))
         {
             string tool = raw.Trim().ToLowerInvariant();
+            if (tool.Length == 0) continue;
             if (tool == "open") CallDeferred(MethodName.Open);
+            else if (tool == "close") Close();
+            else if (tool == "off") ResetAll();
             // a flicker shot once the world round the camera has streamed in (#788)
             else if (tool == "flicker") GetTree().CreateTimer(FlickerDelaySeconds).Timeout += () => _ = TakeFlickerShot();
             else if (_toggles.TryGetValue(tool, out var on)) on.ButtonPressed = true;
             else if (tool.StartsWith("no") && _toggles.TryGetValue(tool[2..], out var off)) off.ButtonPressed = false;
-            else if (Array.IndexOf(ViewNames, tool) is var view and > 0)
+            else if (Array.IndexOf(ViewNames, tool) is var view and >= 0)
             {
                 _viewPicker.Selected = view;
                 SetView((DebugViewMode)view);
             }
-            else GD.PushWarning($"[debug] --debugview: unknown tool '{tool}'");
+            else GD.PushWarning($"[debug] {from}: unknown tool '{tool}'");
         }
     }
 

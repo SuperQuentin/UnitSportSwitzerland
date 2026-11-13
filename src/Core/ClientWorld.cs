@@ -1666,6 +1666,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _earth, () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null);
         AddChild(debug);
         _chat.DebugRequested += debug.Open;
+        _chat.DebugToolsRequested += debug.ApplyTools;
         if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks, _earth));
 
         // G opens a GPX track for playback; the session owns its own camera and HUD
