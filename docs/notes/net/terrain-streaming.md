@@ -29,6 +29,15 @@
   pending start by the gap): replies already queued behind a stall are handled first. Seen on Android
   joining a server: 18 s and 65 s without a frame while joining (first-use JIT, slow frames), the 30 s
   timeout expiring answers the server had sent (instrumented: received and answered at once).
+- **A grid that could not be fetched yet is not remembered (#1816).** `NetworkChunkSource` answers null
+  for "no server link yet", a timeout or a cancelled build, and keeps no record of it; `CachingChunkSource`
+  above it used to store that null as "this tile has none". A join from the menu yields frames while the world
+  is built (`ClientWorld.Breathe`), so the spawn tile's fine build ran before the ENet peer existed: with no
+  `.terr` on disk, its grid was never asked for again, the spawn gave up after 15 s at 4.8 km and the body
+  never stepped off. A `--connect` run makes the peer in the same frame, which is why it always worked.
+  Null grids (`Chunk`, `Coarse`) are not cached now; other kinds still are. `CachingChunkSourceTests`.
+  Repro (tier 3, real tiles): a returning player whose cache lacks the spawn's `.terr`, joining with
+  `FromCommandLine` false.
 - **The root cause on phones was a build cap of 0 (#1032).** `ChunkManager.PlayMaxConcurrentBuilds`
   (the streaming cap) read `MobileMaxConcurrentBuilds` while it was still 0: C# runs static field
   initializers in the order they are written, and the mobile cap was declared below. With the build
