@@ -140,7 +140,9 @@ echo "source tiles: \$(ls '$in' | wc -l)"
 $(chain_env "$out" "$temp" "$box" "$box" "$in")
 t0=\$(date +%s)
 bash '$CHAIN' 2>&1 | tee '$base/$name.out' | grep -E '^=== |FAIL|rror|Unhandled|WARN' | cut -c1-220
+rc=\${PIPESTATUS[0]}
 echo "wall: \$((\$(date +%s) - t0)) s"
+trap '[ \$rc = 0 ] || { echo "TEST FAILED: the chain exited \$rc"; exit \$rc; }' EXIT
 echo "tiles: \$(ls '$out' | grep -c '\.terr\$') .terr, \$(ls '$out' | grep -c '\.road\$') .road, \$(ls '$out' | grep -c '\.bldg\$') .bldg, \$(ls '$out' | grep -c '\.cover\$') .cover"
 echo "tile version words (offset 4) of up to 20 .terr: \$(for f in \$(ls '$out'/*.terr | head -20); do od -An -tu4 -j4 -N4 \$f; done | sort | uniq -c | tr -s ' ' | tr '\n' ';')"
 grep -oE '"(formatVersion|heightOffsetM|heightScale|manifestVersion)": *[-0-9.]+' '$out/manifest.json' | sort -u | tr '\n' ' '; echo
@@ -272,6 +274,8 @@ set -e
 $(cube_env "$out")
 t0=\$(date +%s)
 bash '$CUBE_CHAIN' 2>&1 | tee '$out.out' | grep -E '^=== |FAIL|rror|Unhandled|WARN' | cut -c1-220
+rc=\${PIPESTATUS[0]}
+trap '[ \$rc = 0 ] || { echo "TEST FAILED: the chain exited \$rc"; exit \$rc; }' EXIT
 echo "wall: \$((\$(date +%s) - t0)) s (full output: $out.out)"
 echo "kinds: \$(tr -d ' \n' < '$out/cube_manifest.json' | grep -o '\"kinds\":\[[^]]*\]' | head -1)"
 echo "region files: \$(ls '$out' | grep -v '[.]cubl\$' | tr '\n' ' ')"

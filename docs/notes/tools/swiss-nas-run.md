@@ -44,4 +44,30 @@ hash 1; wall 722 s. Peak RSS: terrain 0.6 GB, frdem 1.3 GB, osm 1.7 GB, features
 word 3, the manifest says `formatVersion` 3, `heightOffsetM` -50. Fixed costs dominate a small box, so these do not
 extrapolate to the 43,621 tiles; the stage log of the first full run is the real number.
 
-The earth leaves (cube-sphere L14, G2) of a region go through the same script: `tools/build-swiss-nas.sh cube ...`, `tools/cube-nas-run` (#1794). The publish lands in `${TMPDIR:-/tmp}/unitsport-nas`, outside the checkout (`PUBLISH=` moves it).
+- **Missing DEMs**: a foreign DEM folder that is not under `data/` (`france/rgealti`, `germany_bw_dgm1`,
+  `austria_bev_dtm`, `italy_bz_dtm`) is left out with a `stage dem: no ..., left out` line, and the stage is skipped when
+  none is there. The preprocessor itself stops on a missing `--dem` folder (#1794).
+- **`test` fails when a stage fails** (exit = the chain's): it used to print the summary and exit 0.
+
+## Checked off the NAS (Nov 13 2026, #1794)
+
+The same stub `ssh` as `tools/cube-nas-run` (WSL Ubuntu, `data/` linked to D:'s sources, RGE ALTI = D:'s Geneva sample,
+no DE/AT/IT DEMs). `test geneva`: 33 of the box's 36 source tiles (the rest are lake), every stage, all 36 `.terr` with
+version word 3, `formatVersion` 3; terrain 21 s, frdem 12 s, osm 53 s, features 2657 s (D:'s TLM through WSL's 9p mount;
+the NAS took 568 s), airports 107 s, hash 60 s; peak 4.2 GB (features). A bogus `FROM` fails the test with exit 2.
+`tools/build-france.sh` after the `nas.sh` refactor: `test 2499,1110,2505,1116 D074` (the
+Salève, from the 63-raster Geneva sample): 36 French tiles, heights 374..1309 m, 21 s, peak 0.5 GB; its publish moved out of
+the checkout like this script's. Not run: `start`/`plan` on all of France.
+
+## Its place after G2
+
+The flat v3 build stays while the game reads flat tiles: D2 makes the earth the default, but the flat runtime and its
+`terrain_chunks` live until D3 (`docs/plans/global-tiling-g2-d.md`), and the flat build is what a rollback to
+`--frame flat` and today's 95 server stream. It costs nothing to keep (a script and its chain, the preprocessor's flat
+modes stay until D4). **The future is the `cube` target**: D4 deletes the LV95 build and with it this script's flat
+commands and `swiss-nas-chain.sh`; `cube` stays. No full flat run has been made; start one only if a flat build is still
+wanted before D3.
+
+## The earth leaves
+
+The earth leaves (cube-sphere L14, G2) of a region go through the same script: `tools/build-swiss-nas.sh cube ...`, `tools/cube-nas-run` (#1794). The publish lands in `${TMPDIR:-/tmp}/unitsport-nas`, outside the checkout (`PUBLISH=` moves it), for `tools/build-france.sh` too.

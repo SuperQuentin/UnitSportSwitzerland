@@ -40,7 +40,8 @@ TEMP=${OUT}_temp
 LOG=$NAS_ROOT/terrain_chunks_france.log
 PIDFILE=$NAS_ROOT/terrain_chunks_france.pid
 DEM=$NAS_ROOT/data/france/rgealti
-PUBLISH=test_output/build-france/publish
+# outside the repository: a build under the checkout's folders disturbs the game's own build
+PUBLISH=${PUBLISH:-${TMPDIR:-/tmp}/unitsport-nas/build-france-publish}
 
 . tools/lib/nas.sh
 

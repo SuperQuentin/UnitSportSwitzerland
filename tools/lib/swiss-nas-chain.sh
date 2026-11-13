@@ -53,14 +53,26 @@ pbf=$(ls -t "$DATA"/osm/switzerland-*.osm.pbf 2>/dev/null | head -1)
 stage terrain --in "$IN_DIR"
 
 # 2. France: RGE ALTI over the box (Chablais and Geneva by default), Swiss border tiles parsed again over it
-fr=(--dem "lambert93,$DATA/france/rgealti,-0.28")
-[ -n "${FR_DEPTS:-}" ] && fr+=(--dem-only "$FR_DEPTS")
-stage frdem --in "$IN_DIR" "${fr[@]}" --dem-box "$FR_BOX" --dem-reparse --dem-cache-mb "$DEM_CACHE_MB"
+# A DEM folder that is not on the NAS is left out with a line in the log (the preprocessor stops on a missing one).
+if [ -d "$DATA/france/rgealti" ]; then
+  fr=(--dem "lambert93,$DATA/france/rgealti,-0.28")
+  [ -n "${FR_DEPTS:-}" ] && fr+=(--dem-only "$FR_DEPTS")
+  stage frdem --in "$IN_DIR" "${fr[@]}" --dem-box "$FR_BOX" --dem-reparse --dem-cache-mb "$DEM_CACHE_MB"
+else
+  say "stage frdem: no RGE ALTI in $DATA/france/rgealti, skipped (docs/notes/tools/france.md)"
+fi
 
 # 3. Germany (Baden-Wuerttemberg), Austria (Vorarlberg), Italy (South Tyrol): what was downloaded, dz as in #968
-stage dem --in "$IN_DIR" \
-  --dem "utm32,$DATA/germany_bw_dgm1,0.23" --dem "laea,$DATA/austria_bev_dtm,0.12" --dem "utm32,$DATA/italy_bz_dtm,0.08" \
-  --dem-box "$OTHER_BOX" --dem-reparse --dem-cache-mb "$DEM_CACHE_MB"
+dems=()
+for d in utm32,germany_bw_dgm1,0.23 laea,austria_bev_dtm,0.12 utm32,italy_bz_dtm,0.08; do
+  IFS=, read -r grid dir dz <<<"$d"
+  if [ -d "$DATA/$dir" ]; then dems+=(--dem "$grid,$DATA/$dir,$dz"); else say "stage dem: no $DATA/$dir, left out"; fi
+done
+if [ ${#dems[@]} -gt 0 ]; then
+  stage dem --in "$IN_DIR" "${dems[@]}" --dem-box "$OTHER_BOX" --dem-reparse --dem-cache-mb "$DEM_CACHE_MB"
+else
+  say "stage dem: none of the DE/AT/IT DEMs here, skipped"
+fi
 
 # 4. OSM overlay (whole map)
 if [ -n "$pbf" ]; then stage osm --tlm "$tlm" --osm-overlay "$pbf"; else say "stage osm: no OSM extract, skipped"; fi

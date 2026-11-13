@@ -87,5 +87,7 @@ sheets, the GWR, the 2026 TLM, OSM, Lake Geneva's bathymetry, no LWB).
   were `done earlier, skipped`, buildings started over, and the run ended with `ALL STAGES DONE`: 9 leaves, network 543
   junction records and 53 signals, as in the uninterrupted run. Through D:'s 9p mount the TLM-reading stages were slow
   (buildings' setup 822 s, fields 745 s, region files 1689 s), which the NAS's local disks should not be.
+- **After main's #1822** (a junction-cap fix in the network stage), `cube test` again: every stage, region files PASS,
+  cantons from the built-in copy, 550 junction records and 53 signals (543 before: #1822's change), 1825 s on D:.
 - Not run here: the whole server region on Linux (2 h and 18 GB of cache; B4's numbers stand in), the real NAS.
 - `--cube-dump` writes its JSON into the region folder: never point it at a reference set.
