@@ -15,6 +15,17 @@ public sealed class BdFeature
     /// <summary>The same rings as they came (WGS84 / ETRS89 degrees): the cube tiler (#1443, G1) converts these rigorously.</summary>
     public required List<List<(double Lat, double Lon)>> LatLonRings { get; init; }
 
+    /// <summary>
+    /// <see cref="Rings"/> again from <see cref="LatLonRings"/>, each point on the ground of the built tiles (#1507): they
+    /// come at the Plateau's height, which puts a point ~3 cm off a kilometre above or below it.
+    /// </summary>
+    public void OntoGround(GeoInput geo)
+    {
+        for (int r = 0; r < Rings.Count; r++)
+            for (int k = 0; k < Rings[r].Count; k++)
+                Rings[r][k] = geo.ToLv95(LatLonRings[r][k].Lat, LatLonRings[r][k].Lon);
+    }
+
     public string? Text(string key) =>
         Properties.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String
             ? v.GetString() : null;
@@ -173,7 +184,8 @@ public sealed class BdTopoClient : IDisposable
             // is a genuine trap: swap them and everything lands in the Indian Ocean.
             double lon = position[0].GetDouble();
             double lat = position[1].GetDouble();
-            points.Add(SwissProjection.ToLv95(lat, lon));
+            // at the Plateau's height: FranceStage puts them on its tiles' ground (BdFeature.OntoGround)
+            points.Add(SwissGeodesy.ToLv95(lat, lon));
             raw.Add((lat, lon));
         }
         into.Add(points);

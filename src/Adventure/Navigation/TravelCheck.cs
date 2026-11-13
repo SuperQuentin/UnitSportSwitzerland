@@ -103,7 +103,7 @@ public partial class TravelCheck : ChatProbe
         // the trip: charged, the curtain, the arrival
         long had = bank.Balance;
         var fare = TravelNetwork.MayTravel(new TravelAsk(TravelMode.Network, false, true, false, false, false, false, book(), stop, station,
-            Me!.Global.E, Me.Global.N, AdventureTravel.UnixNow, had), travel.Rules).Fare;
+            Me!.Global.Lv95.E, Me.Global.Lv95.N, AdventureTravel.UnixNow, had), travel.Rules).Fare;
         int played = TravelCurtain.Instance?.Played ?? 0;
         travel.AskTravel(stop.Id, station.Id);
         Expect(await Until(() => (TravelCurtain.Instance?.Played ?? 0) > played, 2), "the curtain plays");
@@ -152,7 +152,7 @@ public partial class TravelCheck : ChatProbe
         await Finish(0);
     }
 
-    private double Dist(Poi p) => TravelNetwork.Distance(p, Me!.Global.E, Me.Global.N);
+    private double Dist(Poi p) => TravelNetwork.Distance(p, Me!.Global);
     private bool Near(Poi p, double m) => Dist(p) <= m;
 
     /// <summary>Walks the body in 20 m steps twice a second (under the jump rule's 40 m/s), on the flat ground.</summary>
@@ -162,10 +162,12 @@ public partial class TravelCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }

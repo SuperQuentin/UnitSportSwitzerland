@@ -19,8 +19,10 @@ global uniform vec3 world_sky;
 uniform float box = 60.0;          // m; divides OriginShifter.PatternPeriodM, or flakes jump at a shift
 uniform float fall = 1.3;          // m/s
 uniform vec2 wind = vec2(0.35, 0.15);
-uniform float density = 1.0;       // 0..1: the share of flakes drawn at altitude
-uniform vec2 thin_below = vec2(700.0, 1800.0); // camera heights: 45 % of density under x, all of it over y
+uniform float density = 1.0;       // 0..1: the share of flakes drawn. OccasionPrecip thins it in the valleys
+                                   // and takes it to 0 above the cloud layer (SnowCeiling, #1637), by the
+                                   // camera's altitude through the world's frame: world Y is not the altitude
+                                   // in the earth frame or in space
 uniform float fog_start = 3500.0;
 uniform float fog_end = 8000.0;
 uniform float indoors_below = -2000.0; // camera heights under this are inside a building
@@ -28,6 +30,7 @@ uniform float indoors_below = -2000.0; // camera heights under this are inside a
 varying float keep;
 
 void vertex() {
+    PATTERN_NONE
     vec3 cam = INV_VIEW_MATRIX[3].xyz;
     vec3 home = VERTEX;
     float h = UV2.x;
@@ -41,8 +44,7 @@ void vertex() {
     vec3 corner = cam + pattern - vec3(box * 0.5);
     vec3 world = corner + mod(home + drift - corner, vec3(box)) - pattern;
 
-    // per camera, from its own height: a door portal shows the street's snow, not the lens's
-    keep = step(h, density * mix(0.45, 1.0, smoothstep(thin_below.x, thin_below.y, cam.y)));
+    keep = step(h, density);
     vec3 view = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
     // a flake is a couple of pixels wherever it is: grow it with distance
     float size = 0.035 + 0.0035 * length(view);

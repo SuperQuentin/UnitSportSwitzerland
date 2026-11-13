@@ -112,7 +112,7 @@ public partial class ZibeleGame : CanvasLayer
         if (_svc?.ZibeleNow() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            stall = ZibeleRules.NearestStall(m.Site, g.E, g.N);
+            stall = ZibeleRules.NearestStall(m.Site, g);
         }
         bool shown = stall >= 0 || GameClock.Now - _messageAt < 4;
         if (stall != _stall) _view.QueueRedraw();

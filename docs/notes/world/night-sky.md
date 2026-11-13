@@ -25,8 +25,14 @@ sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`
 - **Big moons**: Io, Europa, Ganymede, Callisto and Titan as circles in their planet's equator, the
   phase fitted to Horizons on 2026-01-01 (`Satellites` table in `Ephemeris.Planets.cs`): within 3.3 %
   of their orbit at the ten test dates.
+- **Their depth** (#1518, `shaders/common/sky_depth.gdshaderinc`): stars, planets, rings, the moon and satellites
+  keep a depth of at least 1.5e-7 (reversed: 0 is the far plane). High up the camera sees 1 : 3 million from near
+  to far (0.33 m to 1,117 km at 66 km), and a star straight ahead at 95 % of the far plane fell under a step of the
+  24-bit depth buffer: it read as the far plane and failed the test, so the stars went in a disc round whatever was
+  looked at (the shuttle's film, and a planet looked at from space). Ridges within ~2 steps of the far plane
+  (past ~62 km of a 70 km view) no longer hide them; the horizon's fade covers most of those.
 - **Drawing them** (`World/SkyBodies`, `shaders/planet.gdshader`, `planet_rings.gdshader`): by eye a
-  point sized by magnitude (Venus shows by day); once more than about a pixel wide (zoomed), the body:
+  point sized by magnitude (Venus alone shows by day: Jupiter and Mercury dotted a noon sky, #1497); once more than about a pixel wide (zoomed), the body:
   a unit sphere whose basis is the body's own axes, squashed along the pole (Jupiter, Saturn), its map
   read from the vertex, lit from **its own direction to the sun** (not the Earth's), limb-darkened for
   the giants. Saturn's rings are an annulus in its equator; the rings' far side and a moon behind its

@@ -41,7 +41,8 @@ public partial class SteinNetProbe : ChatProbe
         // A on the stone's near side, B five metres behind it
         double back = _role == "A" ? 0.8 : 5.0;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(ground.E - ground.DirE * back - g.E), 0.2f, (float)-(ground.N - ground.DirN * back - g.N));
+        var (backE, backN, _) = g.OffsetTo(GlobalPos.FromLv95(ground.E - ground.DirE * back, ground.N - ground.DirN * back, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)backE, 0.2f, (float)-backN));
         me.Velocity = Vector3.Zero;
         await Seconds(1.5);
 

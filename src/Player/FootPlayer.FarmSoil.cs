@@ -26,6 +26,8 @@ public partial class FootPlayer
         }
         var bar = ToGlobal(truck.WorkBarNode);
         var surface = Terrain is { } chunks ? Surfaces.At(chunks, bar, false, truck) : Surface.Grass;
+        // an occasion's snow (Christmas, from 1 November) is a look: the soil under it is worked
+        if (surface == Surface.Snow && World.DayNight.OccasionSnow > 0.5f && Terrain is { } under) surface = Surfaces.Beneath(under, bar, truck);
         // a field is soil whatever the cover says; asked only off the soil (rare)
         bool soil = IsSoil(surface) || FarmWork.CellAt(bar) != null;
         truck.OnSoil = soil;

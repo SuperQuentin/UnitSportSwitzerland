@@ -572,6 +572,7 @@ vec3 castle_wall(vec3 col, vec2 q, float h, float len, bool level, bool foot, in
 }
 
 void vertex() {
+    PATTERN_VERTEX
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     facade = UV;
     wall_frame = CUSTOM0.xyz;

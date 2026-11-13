@@ -102,7 +102,7 @@ public partial class PoiMarkers : Node3D
         if (places is { Catalogue.Count: > 0 } && me != null && IsInstanceValid(me) && _origin() is { } origin && Ui.AdventureLog.Adventuring)
         {
             var at = me.Global;
-            places.Catalogue.Near(at.E, at.N, RangeM, _near);
+            places.Catalogue.Near(at, RangeM, _near);
             foreach (var poi in _near)
                 if (PlacesService.HasMarker(places.Catalogue, poi)) _shown.Add(poi);
             var mine = AdventureService.Instance?.Mine.Get(PlacesProgress.Section);

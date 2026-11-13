@@ -1,3 +1,4 @@
+using System.Text;
 using Godot;
 using UnitSport.Items;
 using UnitSport.Net;
@@ -117,6 +118,8 @@ public static class ChatCheck
 
         History(host);
 
+        ChatTools(host);
+
         GD.Print($"[chatcheck] RESULT {(_failures == 0 ? "PASS" : $"FAIL ({_failures})")}");
         return _failures == 0 ? 0 : 1;
     }
@@ -168,8 +171,8 @@ public static class ChatCheck
         ui.CloseInput(recaptureMouse: false);
 
         // past the log's cap (#837): trimming with QueueFree alone spun forever once a line had to go
-        for (int i = 0; i < 100; i++) ui.Append($"line {i}", ChatKind.Say);
-        Expect(ui.LogLines <= 80, $"the log keeps 80 lines (has {ui.LogLines})");
+        for (int i = 0; i < 350; i++) ui.Append($"line {i}", ChatKind.Say);
+        Expect(ui.LogLines == ChatUi.MaxScrollback, $"the log keeps {ChatUi.MaxScrollback} lines (has {ui.LogLines})");
 
         ui.QueueFree();
         chat.QueueFree();
@@ -377,7 +380,73 @@ public static class ChatCheck
         ui.CloseInput(recaptureMouse: false);
         Expect(!ui.IsTyping, "Close shuts the chat");
 
+        // the command browser (/help): grouped, searchable, and a row fills the box
+        ui.OpenInput();
+        var input = ui.FindChildren("*", "LineEdit", true, false).OfType<LineEdit>()
+            .First(l => l.PlaceholderText.StartsWith("Message", StringComparison.Ordinal));
+        ui.ShowHelp("");
+        Expect(ui.IsHelpOpen && ui.HelpLabels.Any(l => l.StartsWith("/stadium", StringComparison.Ordinal)),
+            "the command browser lists the commands");
+        ui.ShowHelp("stad");
+        var rows = ui.HelpLabels.ToList();
+        Expect(rows.Count == 1 && rows[0].StartsWith("/stadium", StringComparison.Ordinal),
+            $"a search narrows the browser [{string.Join(" | ", rows)}]");
+        var row = ui.FindChildren("*", "Button", true, false).OfType<Button>()
+            .FirstOrDefault(b => b.Text.StartsWith("/stadium", StringComparison.Ordinal) && b.IsVisibleInTree());
+        row?.EmitSignal(BaseButton.SignalName.Pressed);
+        Expect(!ui.IsHelpOpen && input.Text == "/stadium ", $"a row puts the command in the box: \"{input.Text}\"");
+        ui.ShowHelp("");
+        host.GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
+        Expect(!ui.IsHelpOpen && ui.IsTyping, "Esc closes the browser, not the chat");
+        ui.CloseInput(recaptureMouse: false);
+
         ui.QueueFree();
+        chat.QueueFree();
+    }
+
+    /// <summary>
+    /// The chat's own tools: Unicode-safe scrubbing and cutting, the speaker a line names, the flood
+    /// gate, and the local ignore list.
+    /// </summary>
+    private static void ChatTools(Node host)
+    {
+        string scrubbed = ChatManager.Scrub("hi\u202Eevil\u200B!");
+        Expect(!scrubbed.Contains('\u202E') && !scrubbed.Contains('\u200B'), $"bidi and zero-width are scrubbed: {scrubbed}");
+        Expect(ChatManager.Scrub("🇨🇭 fondue") == "🇨🇭 fondue", "emoji survive the scrubber");
+        Expect(ChatManager.Scrub("👨\u200D👩\u200D👧") == "👨\u200D👩\u200D👧", "an emoji family keeps its joiners");
+        Expect(ChatManager.ClampText("hello", 2) == "he", "plain cut");
+        Expect(ChatManager.ClampText("😀😀😀", 2).EnumerateRunes().Count() == 2, "cut counts code points, not UTF-16 units");
+
+        Expect(ChatManager.SpeakerOf("Alice: hi", ChatKind.Say) == "Alice", "a say line names its speaker");
+        Expect(ChatManager.SpeakerOf("Bob whispers: hi", ChatKind.Whisper) == "Bob", "a whisper names its speaker");
+        Expect(ChatManager.SpeakerOf("* Carol waves", ChatKind.System) == "Carol", "an emote names its speaker");
+
+        // a burst of five, then the gate closes (and says why once)
+        var chat = ChatManager.CreateClient();
+        host.AddChild(chat);
+        int allowed = 0;
+        bool warned = false;
+        for (int i = 0; i < 8; i++)
+            if (chat.AcceptLine(42, out string? warning)) allowed++;
+            else warned |= !string.IsNullOrEmpty(warning);
+        Expect(allowed == 5, $"the flood gate lets a burst of five through ({allowed})");
+        Expect(warned, "the flood gate says why it refused");
+
+        // the ignore list is local and saved; it never reaches a server
+        var saved = GameSettings.Current.ChatIgnore.ToList();
+        GameSettings.Current.ChatIgnore.Clear();
+        string last = "";
+        chat.LineReceived += (line, _) => last = line;
+        chat.Send("/ignore Bob");
+        Expect(ChatManager.Ignores("bob") && GameSettings.Current.ChatIgnore.Count == 1,
+            $"/ignore adds a player: {last}");
+        chat.Send("/unignore bob");
+        Expect(!ChatManager.Ignores("Bob") && GameSettings.Current.ChatIgnore.Count == 0,
+            $"/unignore removes them: {last}");
+        GameSettings.Current.ChatIgnore.Clear();
+        GameSettings.Current.ChatIgnore.AddRange(saved);
+        GameSettings.Current.Commit();   // put the saved list back as it was
+
         chat.QueueFree();
     }
 

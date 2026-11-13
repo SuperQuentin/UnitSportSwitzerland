@@ -27,11 +27,16 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class InteriorProbe : Node, Core.IOriginShiftAware
 {
-    private readonly ChunkManager _chunks;
+    /// <summary>The world's ground: the flat tiles' or, under <c>--frame earth</c>, the leaves' (#1733).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly IChunkSource _source;
     private readonly string? _shot;
     private FootPlayer? _player;
+    /// <summary>Moves the offline player to clear ground near the target before it lands (<see cref="GroundStart"/>).</summary>
+    private GroundStart? _start;
+    /// <summary>How far from a church's middle its drawn doors are looked for under earth, m.</summary>
+    private const float ChurchReach = 45f;
     private bool _ok = true;
     private int _step = -1;
     private double _t, _total;
@@ -40,6 +45,10 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     private BuildingGroup? _church;
     private TileId _churchTile;
     private string _churchKey = "";
+    /// <summary>Where the church stands: under earth its doors are found there, drawn under the leaves' names (#1733).</summary>
+    private GlobalPos _churchAt;
+    /// <summary>Under earth the church is named by the interior its door leads into, not by its LV95 plan.</summary>
+    private bool _churchByDoors;
     private DoorIndex.Entry _churchIn, _churchOut;
     private bool _viewed;
     /// <summary>A raised door's pictures (#827): the gallery seen from the yard taken, and which upper room is being pictured.</summary>
@@ -51,9 +60,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     private bool Online => NetLink.Online(this);
     private long Me => Online ? Multiplayer.GetUniqueId() : 1;
 
-    public InteriorProbe(ChunkManager chunks, WorldOrigin origin, IChunkSource source, string? shot)
+    public InteriorProbe(IWorldGround ground, WorldOrigin origin, IChunkSource source, string? shot)
     {
-        _chunks = chunks;
+        _ground = ground;
         _origin = origin;
         _source = source;
         _shot = shot;
@@ -120,6 +129,8 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     {
         var (e, n) = SpawnPoint.ParseTarget();
         var centre = TileId.FromLv95(e, n);
+        var target = GlobalPos.FromLv95(e, n, 0);
+        bool earth = GameSettings.Current.Frame == WorldFrame.Earth;
         string svgDir = ProjectSettings.GlobalizePath("user://interior_plans");
         Directory.CreateDirectory(svgDir);
 
@@ -156,11 +167,16 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                             if (layout.Type != BuildingType.Church) problems.Add("church planned as a plain building");
                             if (layout.Entrances.Count < group.Members.Count)
                                 GD.Print($"[interior]   (only {layout.Entrances.Count} of {group.Members.Count} solids have a door)");
-                            if (_church == null || group.Members.Count > _church.Members.Count)
+                            var (ce, cn) = tile.Id.Global(layout.CenterX, layout.CenterZ);
+                            var at = GlobalPos.FromLv95(ce, cn, 0);
+                            // under earth the nearest of the largest: the leaves are furnished within 900 m only (#1733)
+                            if (_church == null || group.Members.Count > _church.Members.Count
+                                || earth && group.Members.Count == _church.Members.Count && at.HorizontalDistanceTo(target) < _churchAt.HorizontalDistanceTo(target))
                             {
                                 _church = group;
                                 _churchTile = tile.Id;
                                 _churchKey = layout.Key;
+                                _churchAt = at;
                             }
                         }
                         if (fp.Door.Width <= 0) Interlocked.Increment(ref _doorless);
@@ -211,6 +227,11 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         Check(problems == 0, $"every plan valid ({problems} of {total} with problems)");
     }
 
+    public override void _ExitTree()
+    {
+        if (_player != null && _ground.HasAnchor(_player)) _ground.RemoveAnchor(_player);
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         if (_step < 0) return;
@@ -227,7 +248,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var at = _origin.ToWorld(e, n, 0);
                 if (_player == null)
                 {
-                    if (!_chunks.TryGetHeight(at, out float g)) { StopIfStuck($"the ground under {e:F0}/{n:F0} to stream in"); return; }
+                    if (!_ground.TryGetHeight(at, out float g)) { StopIfStuck($"the ground under {e:F0}/{n:F0} to stream in"); return; }
                     if (Online)
                     {
                         // the player the server spawned for us: its position is what the server checks
@@ -240,14 +261,20 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     }
                     else
                     {
-                        _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+                        _player = new FootPlayer { Name = "Probe", Terrain = _ground };
                         AddChild(_player);
                         _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
+                        // the ground builds its collision round its anchors: the spectator stays 1200 m up, which the
+                        // earth world's 300 m of collision never reach (#1733)
+                        _ground.AddAnchor(_player, collision: true);
+                        // and somewhere clear to stand: under earth the target is inside a building site's solid (#1733)
+                        _start = new GroundStart(_ground, _player);
                     }
                     var probePlayer = _player;
                     interiors.LocalPlayer = () => probePlayer;
                     return;
                 }
+                if (_start is { Done: false } start && !start.Step(delta)) return;
                 if (!_player.IsOnFloor()) { StopIfStuck("the player to land on the ground"); return; }
                 var kind = DoorKindArg();
                 var door = ChooseDoor(_player.GlobalPosition);
@@ -277,7 +304,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     {
                         var across = new Vector3(-_door.Outward.Z, 0, _door.Outward.X);
                         var from = _door.World + _door.Outward * 7f + across * 6f * side;
-                        if (_chunks.TryGetHeight(from, out float gy)) from.Y = gy + 0.3f;
+                        if (_ground.TryGetHeight(from, out float gy)) from.Y = gy + 0.3f;
                         var look = (_door.World - from) with { Y = 0 };
                         _player!.LeaveInterior(from, Mathf.Atan2(-look.X, -look.Z));
                         _player.Velocity = Vector3.Zero;
@@ -503,7 +530,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 Check(interiors.SpaceOf(Me) == "", "the player's space is outside again");
                 // walk away: nobody near it, the door shuts by itself
                 var away = _door.World + _door.Outward * 25f;
-                if (_chunks.TryGetHeight(away, out float g)) away.Y = g + 1f;
+                if (_ground.TryGetHeight(away, out float g)) away.Y = g + 1f;
                 _player.LeaveInterior(away, 0);
                 Next();
                 break;
@@ -526,6 +553,14 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var doors = _church!.Members
                     .Select(m => DoorIndex.Find(new DoorKey(_churchTile.E, _churchTile.N, m)))
                     .Where(d => d != null).Select(d => d!.Value).ToList();
+                // under earth the doors are drawn under the leaves' stand-in names: the church doors at its place (#1733)
+                if (doors.Count == 0 && GameSettings.Current.Frame == WorldFrame.Earth)
+                {
+                    var where = _origin.ToWorld(_churchAt);
+                    doors = DoorIndex.All().Where(d => d.Kind == BuildingKind.Sacral && MathX.FlatDistance(d.World, where) < ChurchReach)
+                        .OrderBy(d => d.Key.ToString(), StringComparer.Ordinal).ToList();
+                    _churchByDoors = doors.Count > 0;
+                }
                 if (doors.Count == 0)
                 {
                     if (_t > 30) { Check(false, $"church {_churchKey} has a drawn door"); Finish(); }
@@ -566,6 +601,13 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 if (_t < 1.5) return;
                 var l = interiors.Current!;
+                // named by the door it was walked into (under earth, #1733): the checks after hold it to that one
+                if (_churchByDoors && l.Type == BuildingType.Church)
+                {
+                    GD.Print($"[interior] church {_churchKey} planned in LV95 is {l.Key} on the leaves");
+                    _churchKey = l.Key;
+                    _churchByDoors = false;
+                }
                 Check(l.Type == BuildingType.Church && l.Key == _churchKey, $"one church interior, {l.Key} ({l.Type})");
                 Check(interiors.SpaceOf(Me) == _churchKey, "the player's space is the church, not the door's building");
                 Check(_player!.IsOnFloor() && _player.GlobalPosition.Y < InteriorManager.InteriorBaseY + 2f, "standing on the church floor");
@@ -836,7 +878,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             foreach (float side in new[] { 0f, 2f, -2f, 4f, -4f })
             {
                 var at = mid + n * dist + along * side;
-                if (!_chunks.TryGetHeight(at, out float g)) continue;
+                if (!_ground.TryGetHeight(at, out float g)) continue;
                 var eye = new Vector3(at.X, g + 1.7f, at.Z);
                 if ((ta - eye).AngleTo(tb - eye) > Mathf.DegToRad(65)) continue;
                 if (!Blocked(space, eye, ta) && !Blocked(space, eye, tb)) return eye;
@@ -964,6 +1006,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 _shutT += GetPhysicsProcessDeltaTime();
                 bool shut = interiors.Links.TryGetValue(door, out var link) ? link.Swing <= 0f : !interiors.IsOpen(door);
                 if (!shut && _shutT < 8) return null;
+                Check(shut, $"{door} shut ({_shutT:F1} s)");
                 if (DoorLeaf.SwingsOut(_door.Hang) && DoorLeaf.LeafWidth(_door.Hang, _door.Width) > 2f)
                 {
                     var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Hang, _door.Width) + Vector3.Up;
@@ -1033,7 +1076,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             }
             case 4:
                 // opened again from the street, so the walk away below still sees it shut by itself
-                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0) return null;
+                // the leaf shut behind us first, not after a fixed second (docs/notes/general/check-waits.md)
+                if ((_shutT += GetPhysicsProcessDeltaTime()) < 1.0 || interiors.IsOpen(door) && _shutT < 8.0) return null;
+                Check(!interiors.IsOpen(door), $"{door} shut behind us ({_shutT:F1} s)");
                 Check(!interiors.IsOpen(door) && _player!.TryInteract(), $"E outside opens {door} again");
                 _shut = 5;
                 _shutT = 0;
@@ -1143,7 +1188,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 var dir = outward.Rotated(Vector3.Up, Mathf.DegToRad(deg));
                 var at = target with { Y = _churchIn.World.Y } + dir * dist;
-                if (!_chunks.TryGetHeight(at, out float g)) continue;
+                if (!_ground.TryGetHeight(at, out float g)) continue;
                 var eye = new Vector3(at.X, g + 3f, at.Z);
                 var query = PhysicsRayQueryParameters3D.Create(eye, target);
                 query.Exclude = new Godot.Collections.Array<Rid> { _player.GetRid() };

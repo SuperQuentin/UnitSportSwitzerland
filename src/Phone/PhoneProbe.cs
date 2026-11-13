@@ -259,26 +259,28 @@ public partial class PhoneProbe : Node
 
         // Esc on the curtain cancels a travel that has not jumped yet
         var stay = me.Global;
-        Teleporter.Instance?.TeleportTo(stay.E + 500, stay.N, "probe cancelled");
+        Teleporter.Instance?.TeleportTo(stay.Moved(500, 0), "probe cancelled");
         await Wait(0.1);
         Check(phone.Screens.Shown == PhoneScreens.Page.Travel, "the curtain is up while the jump waits (#1253)");
         await Key(Godot.Key.Escape, 2.5);
         var stayed = me.Global;
-        Check(Math.Abs(stayed.E - stay.E) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
+        Check(Math.Abs(stay.OffsetTo(stayed).East) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
 
         await FingerChecks(me, phone);
 
         // travel while open: behind the phone once the world is dark, and the phone folds away there
         var from = me.GlobalPosition;
         var at = me.Global;
-        Teleporter.Instance?.TeleportTo(at.E + 300, at.N + 40, "probe east");
+        Teleporter.Instance?.TeleportTo(at.Moved(300, 40), "probe east");
         await Wait(0.5);
         Shot("phone_6_travelling.png");
         Check(phone.IsOut, "still on the screen while the ground there streams in");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
         var moved = me.Global;
         Check(!phone.IsOut, "back in the pocket after the travel");
-        Check(Math.Abs(moved.E - (at.E + 300)) < 5 && Math.Abs(moved.N - (at.N + 40)) < 5, $"moved to the place ({moved.E - at.E:F0}, {moved.N - at.N:F0})");
+        var (offE, offN, _) = at.Moved(300, 40).OffsetTo(moved);
+        var (movedE, movedN, _) = at.OffsetTo(moved);
+        Check(Math.Abs(offE) < 5 && Math.Abs(offN) < 5, $"moved to the place ({movedE:F0}, {movedN:F0})");
         Check(me.PhoneState == FootPlayer.PhonePocketState, "pocket on the wire");
         Shot("phone_7_arrived.png");
         _ = from;
@@ -287,13 +289,16 @@ public partial class PhoneProbe : Node
         await Wait(0.5);
         await Press(PlayerInput.Phone, 1.0);
         var before = me.Global;
-        Teleporter.Instance?.TeleportTo(before.E - 250, before.N, "probe back");
+        Teleporter.Instance?.TeleportTo(before.Moved(-250, 0), "probe back");
         await Wait(0.15);
         var held = me.Global;
-        Check(Math.Abs(held.E - before.E) < 2, $"held until the screen covers the view ({held.E - before.E:F1} m)");
+        var (heldE, _, _) = before.OffsetTo(held);
+        Check(Math.Abs(heldE) < 2, $"held until the screen covers the view ({heldE:F1} m)");
         for (int i = 0; i < 300 && phone.IsOut; i++) await Wait(0.1);
         var back = me.Global;
-        Check(Math.Abs(back.E - (before.E - 250)) < 5, $"then moved behind it ({back.E - before.E:F0} m)");
+        var (backOff, _, _) = before.Moved(-250, 0).OffsetTo(back);
+        var (backE, _, _) = before.OffsetTo(back);
+        Check(Math.Abs(backOff) < 5, $"then moved behind it ({backE:F0} m)");
         Check(!phone.IsOut, "and put away");
 
         // Esc puts a folded phone away

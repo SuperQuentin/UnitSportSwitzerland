@@ -66,16 +66,19 @@ public static class OriginCheck
         var d = new Godot.Collections.Dictionary();
         sender.ToGlobal(at).Write(d);
         var read = GlobalPos.Read(d);
-        Expect(read.DistanceTo(new GlobalPos(2_601_234.567, 1_199_876.125, 812.5)) < 0.001, $"a dictionary carries the place ({read})");
+        Expect(read.DistanceTo(GlobalPos.FromLv95(2_601_234.567, 1_199_876.125, 812.5)) < 0.001, $"a dictionary carries the place ({read})");
         Expect(receiver.ToWorld(read).DistanceTo(receiver.ToWorld(2_601_234.567, 1_199_876.125, 812.5)) < 0.001,
             "the receiver puts it where its own origin says");
 
-        // a race road: built in a frame at the host, sent as offsets, mapped by a client, then shifted with it
+        // a race road: built in a frame at the host, sent as offsets in the ENU at an ECEF origin (#1503), mapped by a
+        // client, then shifted with it
         var race = OriginFrame.Anchor(2_731_000, 1_105_000);
         var pts = new[] { race.ToWorld(2_731_010.5, 1_105_020.25, 600), race.ToWorld(2_731_210.75, 1_105_420.5, 640) };
         var client = new WorldOrigin(2_729_000, 1_104_000);
-        var map = client.Since(OriginFrame.Anchor(race.E, race.N));
-        var route = RaceRoute.FromPoints(pts.Select(map.Point).ToList(), [6f, 6f], frame: client.Frame);
+        var o = race.ToEcef(Vector3.Zero);
+        var sent = pts.Select(race.ToAnchor(o).Point).ToArray();
+        var map = client.SinceAnchor(o);
+        var route = RaceRoute.FromPoints(sent.Select(map.Point).ToList(), [6f, 6f], frame: client.Frame);
         Expect(client.ToGlobal(route.Centre[1]).DistanceTo(race.ToGlobal(pts[1])) < 0.01, "a sent road lands where it was built");
         client.MoveTo(2_733_000, 1_106_000);
         route.Follow(client.Frame);
@@ -106,7 +109,7 @@ public static class OriginCheck
         Expect(here.Edges[0].KeyEnd == here.Edges[1].KeyStart, "the two roads meet at one junction");
 
         var shift = there.Frame.Since(here.Frame);
-        here.Shift(shift, there.Frame, new());
+        here.Shift(shift, there.Frame, World.LaneEdge.NewShiftPass());
         Expect(here.Edges[1].Points[1].IsEqualApprox(there.Edges[1].Points[1]), "a shifted graph lies where a fresh one does");
     }
 
@@ -156,7 +159,7 @@ public static class OriginCheck
         foreach (var (node, was) in before)
         {
             var now = Where(node);
-            Expect(now.HorizontalDistanceTo(was) < 0.01 && Math.Abs(now.Alt - was.Alt) < 0.01,
+            Expect(now.HorizontalDistanceTo(was) < 0.01 && Math.Abs(was.OffsetTo(now).Up) < 0.01,
                 $"{node.Name} is still at {was} (now {now})");
         }
         Expect(root.Transform == Transform3D.Identity && manager.Transform == Transform3D.Identity

@@ -18,7 +18,8 @@ public static class PlacesBodies
         int ride = me.RideKindId;
         if (me.RidingWith != 0) ride = player(me.RidingWith) is { } host && GodotObject.IsInstanceValid(host) ? host.RideKindId : PlacesRules.Aboard;
         else if (me.DeckOn.Length > 0 || me.LiftLine != 0) ride = PlacesRules.Aboard;
-        float agl = groundAt(at.E, at.N) is { } ground ? (float)(at.Alt - ground) : float.NaN;
-        return new PlacesBody(at.E, at.N, at.Alt, agl, ride, me.Down != 0);
+        var lv = at.Lv95;   // the discovery rules work on the LV95 grid: lake outlines, tiles
+        float agl = groundAt(lv.E, lv.N) is { } ground ? (float)(at.Alt - ground) : float.NaN;
+        return new PlacesBody(lv.E, lv.N, at.Alt, agl, ride, me.Down != 0);
     }
 }

@@ -133,6 +133,28 @@ public partial class SettingsScreen : Screen
                 "The item in hand is put away after 8 seconds of not using it (the key beside M holsters or draws it)");
             UiKit.ToggleRow(rows, "Speech bubbles", s.ChatBubbles, on => GameSettings.Current.ChatBubbles = on,
                 "What players near you say in the chat, in a comic bubble over their head");
+            // the chat itself: readable at any distance, and a place to get a nuisance out of the way
+            rows.AddChild(UiKit.Spacer(6));
+            rows.AddChild(UiKit.Section("Chat"));
+            UiKit.SliderRow(rows, "Chat text size", 0.8, 1.6, 0.05, s.ChatFontScale,
+                v => GameSettings.Current.ChatFontScale = (float)v,
+                v => $"{v * 100:F0}%", "New lines only; the panel grows with them");
+            UiKit.SliderRow(rows, "Chat background", 0.2, 1, 0.05, s.ChatOpacity,
+                v => GameSettings.Current.ChatOpacity = (float)v, Percent,
+                "How much of the world shows through the open chat panel");
+            UiKit.ToggleRow(rows, "Chat timestamps", s.ChatTimestamps, on => GameSettings.Current.ChatTimestamps = on,
+                "A dim time before each scrollback line");
+            UiKit.ToggleRow(rows, "Show joins and leaves", s.ChatShowJoins, on => GameSettings.Current.ChatShowJoins = on,
+                "Off keeps the conversation and the world's news, without the player ticker");
+            UiKit.ToggleRow(rows, "Highlight @mentions", s.ChatMentions, on => GameSettings.Current.ChatMentions = on,
+                "Paint your name amber wherever someone writes @you");
+            var ignored = UiKit.ActionRow(rows, "Ignored players", s.ChatIgnore.Count == 0 ? "None" : $"Clear {s.ChatIgnore.Count}",
+                () =>
+                {
+                    GameSettings.Current.ChatIgnore.Clear();
+                    GameSettings.Current.Commit();
+                }, "Ignored with /ignore <player>; this clears the list");
+            ignored.Disabled = s.ChatIgnore.Count == 0;
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
             UiKit.ToggleRow(rows, "Impact frames", s.ImpactFrames, on => GameSettings.Current.ImpactFrames = on,

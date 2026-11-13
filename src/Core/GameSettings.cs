@@ -5,6 +5,13 @@ using Godot;
 
 namespace UnitSport.Core;
 
+/// <summary>The world the game stands on (<see cref="GameSettings.Frame"/>): flat LV95 tiles or cube leaves.</summary>
+public enum WorldFrame
+{
+    Flat,
+    Earth,
+}
+
 /// <summary>How finely the inner LOD rings and their roads/buildings are drawn.</summary>
 /// <summary>How much the client streams (#63): Low data keeps fine tiles to the nearest rings.</summary>
 public enum DataPreset
@@ -152,6 +159,12 @@ public sealed class GameSettings
     /// copy with no terrain it generates anyway, the only ground there is (#1002).
     /// </summary>
     public bool GeneratedFill { get; set; } = true;
+
+    /// <summary>
+    /// The world the game stands on (#1510, G2 C1): today's flat LV95 tiles, or the cube leaves in true Earth
+    /// positions. <c>--frame flat|earth</c>; flat until G2's last step flips it.
+    /// </summary>
+    public WorldFrame Frame { get; set; } = WorldFrame.Flat;
 
     /// <summary>Tile builds allowed in flight at once; 0 picks by whether a server is involved.</summary>
     public int MaxConcurrentBuilds { get; set; }
@@ -394,6 +407,27 @@ public sealed class GameSettings
     /// <summary>A comic speech bubble over a player who talks in the chat near you (#862, <see cref="Ui.Bubbles.ChatBubbles"/>).</summary>
     public bool ChatBubbles { get; set; } = true;
 
+    /// <summary>Chat text scale, 0.8 to 1.6; lines already on screen keep the size they were drawn at.</summary>
+    public float ChatFontScale { get; set; } = 1f;
+
+    /// <summary>How opaque the open chat panel's glass is, 0.2 (see-through) to 1 (solid).</summary>
+    public float ChatOpacity { get; set; } = 0.72f;
+
+    /// <summary>A dim time before each scrollback line, so a conversation can be followed later.</summary>
+    public bool ChatTimestamps { get; set; } = true;
+
+    /// <summary>Show "X joined" / "X left" in the chat; the rest of the world's news stays either way.</summary>
+    public bool ChatShowJoins { get; set; } = true;
+
+    /// <summary>Paint <c>@YourName</c> in amber in the chat.</summary>
+    public bool ChatMentions { get; set; } = true;
+
+    /// <summary>
+    /// Players whose chat and speech bubbles are hidden on this screen (<c>/ignore</c>, saved with the
+    /// settings). A local preference: the server is never told, and nobody else's view changes.
+    /// </summary>
+    public List<string> ChatIgnore { get; set; } = new();
+
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
@@ -488,18 +522,23 @@ public sealed class GameSettings
     public int AppearanceBits { get; set; }
 
     /// <summary>
-    /// Where the player landed last (#515), LV95 metres, so the map screen opens on it instead of
-    /// sending everyone back to Riddes every session. Zero until a world has been entered.
+    /// The file's layout (#1503, G2 A2b): 2 keeps places as Earth positions (<see cref="GlobalPosJson"/>); a file
+    /// without it had LV95 <c>lastLandingE</c>/<c>N</c> and <c>hostSpawnE</c>/<c>N</c>, which <see cref="EarthSaves.Settings"/>
+    /// converts on the first load.
     /// </summary>
-    public double LastLandingE { get; set; }
-    public double LastLandingN { get; set; }
+    public int Version { get; set; } = EarthSaves.Current;
 
     /// <summary>
-    /// Hosting from the menu (#799): where players start on this machine's server, LV95 metres (zero:
+    /// Where the player landed last (#515), on the ground, so the map screen opens on it instead of
+    /// sending everyone back to Riddes every session. None until a world has been entered.
+    /// </summary>
+    public GlobalPos? LastLanding { get; set; }
+
+    /// <summary>
+    /// Hosting from the menu (#799): where players start on this machine's server, on the ground (none:
     /// Riddes), and whether they may teleport. Remembered for the next game hosted.
     /// </summary>
-    public double HostSpawnE { get; set; }
-    public double HostSpawnN { get; set; }
+    public GlobalPos? HostSpawn { get; set; }
     public bool HostTeleport { get; set; } = true;
 
     /// <summary>The world last picked on Play solo and in the Host dialog (#999, a <see cref="WorldChoice"/> id).</summary>
@@ -635,7 +674,15 @@ public sealed class GameSettings
             {
                 using var file = Godot.FileAccess.Open(File, Godot.FileAccess.ModeFlags.Read);
                 string text = file.GetAsText();
-                loaded = JsonSerializer.Deserialize<GameSettings>(text, JsonOptions) ?? loaded;
+                file.Close();
+                var root = System.Text.Json.Nodes.JsonNode.Parse(text) as System.Text.Json.Nodes.JsonObject ?? new();
+                // a file from before G2 A2b (LV95 places): converted in place, the file itself (not this run's flags) written back (#1503)
+                if (EarthSaves.Settings(root))
+                {
+                    try { JsonStore.Save(File, root, JsonOptions); }
+                    catch (Exception e) { GD.PushWarning($"[settings] could not write {File}: {e.Message}"); }
+                }
+                loaded = root.Deserialize<GameSettings>(JsonOptions) ?? loaded;
                 // before #261 the radios' volume lived in radio.cfg: carried over once
                 if (!text.Contains("\"musicVolume\"", StringComparison.OrdinalIgnoreCase) && OldRadioVolume() is float old)
                     loaded.MusicVolume = old;
@@ -686,6 +733,9 @@ public sealed class GameSettings
         WindowWidth = 640,
         WindowHeight = 360,
         FirstRunDone = false,   // as a fresh user:// before: the welcome stays a probe's own choice
+        // a probe holds an item and waits on the other peer for longer than the 8 s holster (#1369): the
+        // flag's ghost read None and A's torch went dark on B; PhoneProbe turns it on to check the holster itself
+        AutoHolster = false,
     };
 
     /// <summary>
@@ -701,6 +751,28 @@ public sealed class GameSettings
             GD.Print("[settings] test run: below normal priority");
         }
         catch (Exception e) { GD.Print($"[settings] could not lower the test run's priority: {e.Message}"); }
+    }
+
+    private static long _printedPeakMb;
+
+    /// <summary>
+    /// A test run's peak resident memory (#1702): the OS's own peak working set of this process (Windows, Linux
+    /// and macOS alike), printed as it quits and, with <paramref name="whenGrown"/>, whenever it grew 64 MB since
+    /// the last line (a two-client script kills its server: it never quits). <c>tools/lib/guard.sh</c> reads the
+    /// log's last line so <c>tools/test.sh</c> admits the check's next run by what it really took.
+    /// </summary>
+    public static void PrintTestPeakMemory(bool whenGrown = false)
+    {
+        if (!TestRun) return;
+        try
+        {
+            using var self = System.Diagnostics.Process.GetCurrentProcess();
+            long mb = self.PeakWorkingSet64 / (1024 * 1024);
+            if (whenGrown && mb < _printedPeakMb + 64) return;
+            _printedPeakMb = mb;
+            GD.Print($"[mem] peak {mb} MB");
+        }
+        catch (Exception) { }
     }
 
     /// <summary>
@@ -843,6 +915,9 @@ public sealed class GameSettings
         TouchOpacity = Math.Clamp(TouchOpacity, 0.2f, 1f);
         TouchPins ??= new();
         TouchOverrides ??= new();
+        ChatFontScale = Math.Clamp(ChatFontScale, 0.8f, 1.6f);
+        ChatOpacity = Math.Clamp(ChatOpacity, 0.2f, 1f);
+        ChatIgnore ??= new();
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
@@ -893,6 +968,7 @@ public sealed class GameSettings
                 case "--rings" when int.TryParse(v, out int r): RenderDistanceRings = r; break;
                 case "--horizon" when int.TryParse(v, out int h): HorizonKm = h; break;
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
+                case "--frame" when Enum.TryParse<WorldFrame>(v, true, out var wf): Frame = wf; break;
                 case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
                 // raw: generated roads without the road network stage (#559), to compare; not saved
                 case "--generated-roads": Terrain.FallbackChunkSource.RewriteRoads = v != "raw" && v != "off"; break;
@@ -946,7 +1022,12 @@ public sealed class GameSettings
                 // a fixed time of day, for screenshots: --time 21.5 is half past nine at night
                 case "--time" when float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out float hour):
                     StartHour = hour; DayLengthMinutes = 0; break;
-                case "--traffic" when int.TryParse(v, out int cars): TrafficCars = cars; break;
+                // --traffic 0 is no traffic: the riders (#1056, 30 by default) too, unless --bikes asks for some;
+                // a cyclist on the lake fixture's slipway kept --boattrailercheck's pickup out of the water
+                case "--traffic" when int.TryParse(v, out int cars):
+                    TrafficCars = cars;
+                    if (cars == 0 && Array.IndexOf(args, "--bikes") < 0) TrafficRiders = 0;
+                    break;
                 // the traffic modes (#1060): walkers, riders, trams for this run
                 case "--walkers" when int.TryParse(v, out int walkers): TrafficWalkers = walkers; break;
                 // (--bikes: --riders already counts a --drivecheck's racers)

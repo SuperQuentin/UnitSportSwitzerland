@@ -49,6 +49,14 @@ public partial class LocateService : Node
     /// <summary>The building index, once built or read (null before; empty with no tiles).</summary>
     public BuildingIndex? Buildings => _buildings;
 
+    /// <summary>
+    /// Under <c>--frame earth</c>, a leaf's stand-in as the world builds it (<c>EarthWorld.StandOf</c>; null on flat). A parking
+    /// entrance is then judged on the leaf's own building, not the LV95 tile's (#1772): on leaves every building's rolls
+    /// (shops under flats, the garage) are seeded from its Earth identity (#1658), so the LV95 tile's answer pointed at
+    /// garage doors the leaves never build.
+    /// </summary>
+    public Func<Terrain.Format.CubeKey, Terrain.Leaves.LeafStand?>? Leaves { get; init; }
+
     /// <param name="players">Where the players are, for the order the index is built in (round them first).</param>
     public LocateService(IChunkSource source, TerrainManifest manifest, Func<PlaceIndex?> places, WorldOrigin origin,
         Func<IEnumerable<GlobalPos>>? players = null)
@@ -97,7 +105,7 @@ public partial class LocateService : Node
         if (_manifest.Tiles.Count == 0) { _buildings = BuildingIndex.Empty; return; }
         _indexing = true;
         var started = System.Diagnostics.Stopwatch.StartNew();
-        string? key = BuildingIndexBuilder.CacheKey(_manifest);
+        string? key = BuildingIndexBuilder.CacheKey(_manifest, earthSeeds: Leaves != null);
         try
         {
             var index = key == null ? null : await Task.Run(() => BuildingIndexBuilder.ReadCache(key));
@@ -114,7 +122,7 @@ public partial class LocateService : Node
                 _buildings = growing;
                 if (_engine != null) _engine.Buildings = growing;
                 _indexClock.Restart();
-                await BuildingIndexBuilder.BuildInto(_source, growing, _queue, workers, _cancel.Token);
+                await BuildingIndexBuilder.BuildInto(_source, growing, _queue, workers, _cancel.Token, earthSeeds: Leaves != null);
                 index = growing;
                 if (key != null) await Task.Run(() => BuildingIndexBuilder.WriteCache(key, index));
             }
@@ -149,7 +157,7 @@ public partial class LocateService : Node
         FeedPlayers();
     }
 
-    private void FeedPlayers() => _queue?.SetPlayers(_players().Select(p => (p.E, p.N)).ToList());
+    private void FeedPlayers() => _queue?.SetPlayers(_players().Select(p => (p.Lv95.E, p.Lv95.N)).ToList());
 
     /// <summary>The engine over the lists as they are now; rebuilt when the POI catalogue arrives or changes.</summary>
     private async Task<LocateEngine> EngineAsync()
@@ -276,7 +284,7 @@ public partial class LocateService : Node
                 return ([$"No town matching '{q.Town}'."], true);
             (e, n, from) = (town.E, town.N, town.Name);
         }
-        else if (at is { } here) (e, n) = (here.E, here.N);
+        else if (at is { } here) (e, n) = (here.Lv95.E, here.Lv95.N);
         else return (["Where are you? Get into the world first, or ask '/locate <thing> in <town>'."], true);
         // still indexing: what is round the asker next
         if (q.OnBuildings || q.Target == LocateTarget.Church) _queue?.Prefer(e, n);
@@ -302,7 +310,7 @@ public partial class LocateService : Node
     {
         // a tile's candidates are worked out together, the first time one of them comes up, so its roads are
         // indexed once; the tiles of candidates past the first few that pass are never read
-        var doors = new Dictionary<(int E, int N, int Index), DoorSpot?>();
+        var doors = new Dictionary<(int E, int N, int Index), (double E, double N)?>();
         var read = new HashSet<TileId>();
         var kept = new List<LocateHit>();
         foreach (var hit in candidates)
@@ -313,21 +321,69 @@ public partial class LocateService : Node
             {
                 var tile = await _source.LoadBuildingsAsync(id, _cancel.Token);
                 if (tile == null) continue;
-                var roads = await _source.LoadRoadsAsync(id, _cancel.Token);
-                var grid = await _source.LoadChunkAsync(id, _cancel.Token);
                 var mine = candidates.Where(h => h.Building is { } o && o.TileE == b.TileE && o.TileN == b.TileN && o.Index < tile.Buildings.Count)
                     .Select(h => h.Building!.Value.Index).ToList();
+                if (Leaves is { } leaves)
+                {
+                    var onLeaves = await Task.Run(() => GaragesOnLeaves(tile, mine, leaves));
+                    for (int i = 0; i < mine.Count; i++) doors[(b.TileE, b.TileN, mine[i])] = onLeaves[i];
+                    continue;
+                }
+                var roads = await _source.LoadRoadsAsync(id, _cancel.Token);
+                var grid = await _source.LoadChunkAsync(id, _cancel.Token);
                 var fps = await Task.Run(() => BuildingFootprint.Compute(tile, mine, roads, grid));
                 for (int i = 0; i < mine.Count; i++)
-                    doors[(b.TileE, b.TileN, mine[i])] = fps[i]?.Extra.FirstOrDefault(d => d.Ramp != GarageRule.RampKind.None) is { Width: > 0 } g ? g : null;
+                {
+                    // the door is tile-local (X east, Z south from the tile's north-west corner)
+                    if (fps[i]?.Extra.FirstOrDefault(d => d.Ramp != GarageRule.RampKind.None) is { Width: > 0 } g)
+                    {
+                        var (ge, gn) = id.Global(g.Position.X, g.Position.Z);
+                        doors[(b.TileE, b.TileN, mine[i])] = (ge, gn);
+                    }
+                    else doors[(b.TileE, b.TileN, mine[i])] = null;
+                }
             }
-            if (!doors.TryGetValue((b.TileE, b.TileN, b.Index), out var found) || found is not { } door) continue;
-            // the door is tile-local (X east, Z south from the tile's north-west corner)
-            var (de, dn) = id.Global(door.Position.X, door.Position.Z);
+            if (!doors.TryGetValue((b.TileE, b.TileN, b.Index), out var found) || found is not var (de, dn)) continue;
             kept.Add(hit with { E = de, N = dn, Detail = hit.Detail.Length > 0 ? hit.Detail + ", garage door" : "garage door" });
             if (kept.Count >= max) break;
         }
         return kept;
+    }
+
+    /// <summary>
+    /// Under earth (#1772): each of an LV95 tile's buildings found on the leaf under its footprint centre by its Earth identity
+    /// (<see cref="BuildingId"/>, the same from both builds but a few on a unit's edge, so the nearest within two units), and
+    /// that leaf's garage door as the world built it, in LV95 notation; null where the leaf's building has none.
+    /// </summary>
+    internal static (double E, double N)?[] GaragesOnLeaves(BuildingTile tile, IReadOnlyList<int> indices,
+        Func<Terrain.Format.CubeKey, Terrain.Leaves.LeafStand?> leaves)
+    {
+        var result = new (double E, double N)?[indices.Count];
+        var ids = BuildingId.Assign(tile.Buildings, bb => BuildingId.OnLv95Tile(tile.Id, bb));
+        for (int i = 0; i < indices.Count; i++)
+        {
+            if (ids[indices[i]] is not { } want) continue;
+            var leaf = Terrain.Leaves.LeafFrames.LeafAt(want.LatDeg, want.LonDeg);
+            if (leaves(leaf) is not { Buildings: { } built, Doors: { } leafDoors } stand) continue;
+            int best = -1, bestD = 3;
+            for (int j = 0; j < built.Buildings.Count; j++)
+            {
+                // the stand-in key hashes as its building's Earth identity (LeafStandIn.Buildings registered it)
+                if (Fnv.StandIn($"{stand.Id.E}_{stand.Id.N}_{j}") is not { } name || !BuildingId.TryParse(name, out var have)) continue;
+                int d = Math.Abs(have.LatE5 - want.LatE5) + Math.Abs(have.LonE5 - want.LonE5) + (have.Dup == want.Dup ? 0 : 1);
+                if (d < bestD) (best, bestD) = (j, d);
+            }
+            if (best < 0) continue;
+            foreach (var d in leafDoors)
+                if (d.Index == best && d.Ramp != GarageRule.RampKind.None && d.Width > 0)
+                {
+                    // the door is in the stand-in tile's frame: its place, in LV95 notation as every answer is
+                    var (e, n, _) = SwissGeodesy.FromEcef(GlobalPos.OfTile(stand.Id, d.Position.X, d.Position.Y, d.Position.Z).Ecef);
+                    result[i] = (e, n);
+                    break;
+                }
+        }
+        return result;
     }
 
     /// <summary>For a server-run bot (#837): the nearest things a query names, from a point; empty while it cannot answer.</summary>

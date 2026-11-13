@@ -113,7 +113,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   by whichever pocket came first, from the exiting one without the lights' stop line (J5b's west
   approach: a 0.4 m bar at the mouth, no line across its TR lane).
 - **Not done**: right-turn lanes without lights,
-  pockets across a tile seam. Roads with 3 lanes (8 m, lane lines at ±1.33 m,
+  (pockets across a tile seam: done by #1660, the stage plans whole lines). Roads with 3 lanes (8 m, lane lines at ±1.33 m,
   no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a
   lane and a half (seen at LV95 2506561,1138202); #700 builds no pocket where 2+ lanes already run toward the junction.
 - **In town** (#325): a built-up stretch's lines are laid on an Urban-flagged copy of the segment

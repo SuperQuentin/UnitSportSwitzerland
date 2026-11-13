@@ -53,7 +53,7 @@ public static class HallCars
         var kinds = DormantVehicles.ParkedKinds;
         int pick = HallCarRule.Pick(l.Key, index, kinds.Length);
         if (pick < 0) return null;
-        return new VehicleSlot(HallCarRule.OwnerOf(l.Key), index, at.E, at.N, at.Alt,
+        return new VehicleSlot(HallCarRule.OwnerOf(l.Key), index, at.Lv95.E, at.Lv95.N, at.Alt,
             HallCarRule.NoseYaw(f.Turns, l.Yaw), kinds[pick], (byte)((uint)Fnv.Hash($"{l.Key}|paint|{index}") & 7), false);
     }
 }

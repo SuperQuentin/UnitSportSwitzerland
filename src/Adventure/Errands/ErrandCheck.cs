@@ -156,10 +156,12 @@ public partial class ErrandCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }
@@ -169,7 +171,8 @@ public partial class ErrandCheck : ChatProbe
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.2f, (float)-(n - g.N));
+        var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.2f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.5);
     }

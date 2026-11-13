@@ -56,14 +56,13 @@ uniform vec3 toon_foam : source_color = vec3(0.97, 0.98, 1.0);
 uniform vec3 toon_underside : source_color = vec3(0.78, 0.96, 0.96);
 uniform float foam_shore_m = 0.035;
 // far off (from, to: metres from the eye) the bands give way to the lake as the ground and the horizon
-// blocks draw it (shaders/body/terrain.gdshaderinc: Terrain/CoverPalette's water, made linear by
-// TerrainMeshBuilder as source_color does here; the style's grade and painted patches), opaque: a climb
+// blocks draw it (shaders/body/terrain.gdshaderinc: STYLE_LAKE, the style's grade and painted
+// patches), opaque: a climb
 // outruns the streaming, and the loaded tiles' bands and shallows stood out as a square on the lake
 // round them (#1430). So does the eye climbing (from, to: metres above the surface): the water under a
 // climb is near, but the tiles round it are not loaded yet
 uniform vec2 far_lake_m = vec2(1000.0, 2500.0);
 uniform vec2 far_lake_above_m = vec2(300.0, 900.0);
-uniform vec3 far_lake : source_color = vec3(0.20, 0.32, 0.42);
 #endif
 #ifdef STYLE_REAL
 uniform sampler2D water_screen_texture : hint_screen_texture, filter_linear_mipmap;
@@ -85,6 +84,7 @@ varying float wave_lift;
 varying float wave_scale;
 
 void vertex() {
+    PATTERN_VERTEX
     // UV.x: the water layer's wave scale (fetch x depth). The tile's transform is a translation,
     // so the world displacement is the local one. The short waves fade out with distance (a
     // 2 m-spaced vertex's worth at 500 m, 4 m at 1 km), never by the mesh's own spacing: two tiles
@@ -93,7 +93,25 @@ void vertex() {
     vec3 rest = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float spacing = max(2.0, distance(rest, CAMERA_POSITION_WORLD) * 0.008);
     vec3 n;
-    vec3 d = water_wave_displace(pattern_xz(rest), UV.x, spacing, n);
+    vec3 d;
+    if (pattern_frame.x < 0.5) {
+        d = water_wave_displace(pattern_xz(rest), UV.x, spacing, n);
+    } else {
+        // a leaf (#1512): the field on its face's pattern axes, turned into the mesh's frame; across a
+        // face edge the two faces' fields mix (WaterField does the same for the physics)
+        d = water_wave_displace(pattern_ab.xy, UV.x, spacing, n);
+        d.xz = pattern_turn_by(d.xz, pattern_frame.y);
+        n.xz = pattern_turn_by(n.xz, pattern_frame.y);
+        float wb = pattern_weight_b(pattern_frame);
+        if (wb > 0.0) {
+            vec3 nb;
+            vec3 db = water_wave_displace(pattern_ab.zw, UV.x, spacing, nb);
+            db.xz = pattern_turn_by(db.xz, pattern_frame.z);
+            nb.xz = pattern_turn_by(nb.xz, pattern_frame.z);
+            d = mix(d, db, wb);
+            n = normalize(mix(n, nb, wb));
+        }
+    }
     wave_normal = n;
     VERTEX += d;
     wave_lift = d.y;
@@ -251,7 +269,8 @@ void fragment() {
 #else
     float ripple = 0.25;
 #endif
-    vec3 n_world = normalize(wave_n - vec3(det.y, 0.0, det.z) * ripple * near * (0.45 + 0.8 * sea));
+    vec2 det_xz = pattern_turn(det.yz);
+    vec3 n_world = normalize(wave_n - vec3(det_xz.x, 0.0, det_xz.y) * ripple * near * (0.45 + 0.8 * sea));
     // from below, the surface faces down
     vec3 n_face = FRONT_FACING ? n_world : -n_world;
     NORMAL = style_view_normal(VIEW_MATRIX, n_face);
@@ -275,7 +294,7 @@ void fragment() {
     col = FRONT_FACING ? col : toon_underside;
     float far_off = FRONT_FACING ? max(smoothstep(far_lake_m.x, far_lake_m.y, dist),
         smoothstep(far_lake_above_m.x, far_lake_above_m.y, CAMERA_POSITION_WORLD.y - world_pos.y)) : 0.0;
-    vec3 lake = style_grade(occasion_mist(far_lake, mist_at, dist))
+    vec3 lake = style_grade(occasion_mist(STYLE_LAKE, mist_at, dist))
         * mix(0.9, 1.1, style_paint_noise(ground / 38.0) * 0.6 + style_paint_noise(ground / 9.0) * 0.4);
     ALBEDO = mix(style_grade(occasion_mist(mix(col, toon_foam, foam), mist_at, dist)), lake, far_off);
     ROUGHNESS = mix(0.6, 1.0, far_off);

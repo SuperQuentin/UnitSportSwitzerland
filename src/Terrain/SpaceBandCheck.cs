@@ -16,6 +16,10 @@ namespace UnitSport.Terrain;
 /// (<see cref="OriginFrame.TileTransform"/>), the ones shifts moved and the ones streamed after alike, to
 /// 0.5 m and 10⁻⁴ rad. The frame may turn only above 250 km (<see cref="Curvature.TurnEnterM"/>), and is a
 /// flat ground frame again below 50 km. RESULT ok or FAILED.
+/// Under <c>--frame earth</c> (#1739) the band is not there (flat tiles in a Space frame, the flat world's alone; the earth
+/// world's far view at these heights is the globe: <c>--orbitcheck</c>, <c>--longflightcheck</c>). The same climb then
+/// holds the earth side of it: no flat tile or horizon block is drawn at any height, and the frame is the Earth's
+/// anchor frame all the way up and down.
 /// </summary>
 public partial class SpaceBandCheck : Node
 {
@@ -30,6 +34,7 @@ public partial class SpaceBandCheck : Node
     private readonly HashSet<string> _seen = new();
     private double _t, _flight, _e0, _n0;
     private bool _wasTurned;
+    private readonly bool _earth = GameSettings.Current.Frame == WorldFrame.Earth;
     private int _stage, _turns, _shifts, _checked, _late, _tilesSeen, _blocksSeen, _turnedFrames;
 
     public SpaceBandCheck(ChunkManager chunks, WorldOrigin origin)
@@ -67,6 +72,12 @@ public partial class SpaceBandCheck : Node
                 double alt = StartAlt + up;
                 var at = SwissGeodesy.ToEcef(_e0 + East * _flight, _n0, alt);
                 camera.GlobalPosition = _origin.Frame.FromEcef(at);
+                if (_earth)
+                {
+                    VerifyEarth(alt);
+                    if (alt < StartAlt - 10_000) _stage = 2;
+                    return;
+                }
                 _wasTurned = OriginShifter.Instance?.Turned == true;
                 if (OriginShifter.Instance is { InSpace: true } shifter)
                 {
@@ -79,6 +90,15 @@ public partial class SpaceBandCheck : Node
             }
             default:
             {
+                if (_earth)
+                {
+                    foreach (var fault in _faults.Take(12)) GD.Print($"[spacebandcheck]   {fault}");
+                    GD.Print($"[spacebandcheck] under --frame earth: {_checked} frames from {StartAlt / 1000:F0} to {TopAlt / 1000:F0} km and back, "
+                        + $"{_shifts} shifts; the band of flat tiles is the flat world's (its earth twins: --orbitcheck, --longflightcheck)");
+                    if (_checked == 0) _faults.Add("no frame climbed");
+                    Finish(_faults.Count == 0 ? "ok" : $"FAILED {_faults.Count} faults");
+                    return;
+                }
                 var f = _origin.Frame;
                 if (f.IsAnchor || f.Alt0 != 0) _faults.Add($"down again: not a flat ground frame (anchor {f.IsAnchor}, alt0 {f.Alt0})");
                 foreach (var fault in _faults.Take(12)) GD.Print($"[spacebandcheck]   {fault}");
@@ -91,6 +111,21 @@ public partial class SpaceBandCheck : Node
                 return;
             }
         }
+    }
+
+    /// <summary>The earth world in the band (#1739): no flat tile or horizon block drawn, the frame the Earth's anchor.</summary>
+    private void VerifyEarth(double alt)
+    {
+        _checked++;
+        if (_faults.Count >= 200) return;
+        foreach (var child in _chunks.GetChildren())
+            if (child is ChunkNode node)
+            {
+                _faults.Add($"a flat tile {node.Name} drawn at {alt / 1000:F1} km under --frame earth");
+                break;
+            }
+        if (_chunks.Horizon is { } horizon && horizon.GetChildCount() > 0) _faults.Add($"flat horizon blocks drawn at {alt / 1000:F1} km under --frame earth");
+        if (_origin.Frame.Axes == null) _faults.Add($"a flat ground frame at {alt / 1000:F1} km under --frame earth");
     }
 
     /// <summary>Every tile and horizon block against the frame's transform for its tile.</summary>

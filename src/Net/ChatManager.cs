@@ -1,3 +1,4 @@
+using System.Text;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
@@ -22,6 +23,9 @@ public enum ChatKind
 
     /// <summary>A refused command.</summary>
     Error = 4,
+
+    /// <summary>A private message from one player to another.</summary>
+    Whisper = 5,
 }
 
 /// <summary>
@@ -41,8 +45,51 @@ public partial class ChatManager : Node
     /// <summary>Node name, which must match on server and client for RPC routing.</summary>
     public const string NodeName = "Chat";
 
-    /// <summary>Longest message accepted, to keep one client from flooding the others.</summary>
-    private const int MaxMessageLength = 240;
+    /// <summary>Longest message accepted, to keep one client from flooding the others. Shared with <see cref="ChatUi"/>.</summary>
+    public const int MaxMessageLength = 240;
+
+    /// <summary>
+    /// How many lines one player may send at once, and how fast that refills. The one thing a client
+    /// fully controls is how often it talks, so this is checked before anything else is parsed.
+    /// </summary>
+    private const double FloodBurst = 5, FloodPerSecond = 0.6, FloodWarnSeconds = 6;
+
+    /// <summary>How many recent lines a report carries, and how often one player may report.</summary>
+    private const int RecentLines = 80, ReportCooldownSeconds = 30;
+
+    private sealed class FloodGate
+    {
+        public double Tokens = FloodBurst;
+        public double Last;
+        public double WarnAt;
+        public double QuietUntil;
+        public int Strikes;
+    }
+
+    /// <summary>Server only: one bucket per peer, dropped when it leaves.</summary>
+    private readonly Dictionary<long, FloodGate> _flood = new();
+
+    /// <summary>Server only: the last lines, for <c>/report</c> to attach context to.</summary>
+    private readonly List<(string At, string Line)> _recent = new();
+
+    /// <summary>Server: keeps a line for a report's context, stamped with the wall clock.</summary>
+    private void Remember(string line)
+    {
+        _recent.Add((System.DateTime.Now.ToString("HH:mm:ss"), line));
+        if (_recent.Count > RecentLines) _recent.RemoveAt(0);
+    }
+
+    /// <summary>Server only: peers that may not speak, and until when (real time).</summary>
+    private readonly Dictionary<long, (string By, double Until)> _muted = new();
+
+    /// <summary>Server only: when a muted peer was last told why (so a spammer cannot amplify it).</summary>
+    private readonly Dictionary<long, double> _muteToldAt = new();
+
+    /// <summary>Server only: who whispered to whom, for <c>/r</c>.</summary>
+    private readonly Dictionary<long, long> _lastWhisper = new();
+
+    /// <summary>Server only: when each peer last sent a report.</summary>
+    private readonly Dictionary<long, double> _reportedAt = new();
 
     /// <summary>
     /// Pseudo peer id for the server's own console. Real ENet peer ids are never 0, so this
@@ -119,6 +166,12 @@ public partial class ChatManager : Node
     /// <summary>Raised on the client when the server closes the connection deliberately.</summary>
     public event Action<string>? Kicked;
 
+    /// <summary>
+    /// Client: <c>/help [command]</c> opens this screen's command browser rather than printing lines
+    /// into the chat. The argument is a filter (empty: everything). Nothing is sent to the server.
+    /// </summary>
+    public event Action<string>? HelpRequested;
+
     /// <summary>Builds the server half, which owns the registry and answers commands.</summary>
     public static ChatManager CreateServer(
         PlayerRegistry registry, Node3D players, WorldOrigin origin, PlaceIndex? places) => new()
@@ -183,6 +236,28 @@ public partial class ChatManager : Node
     public void Send(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
+        text = Scrub(text);
+        // the command browser and the ignore list live on this screen: neither is the server's business
+        string trimmed = text.Trim();
+        if (trimmed.StartsWith('/'))
+        {
+            string[] head = trimmed[1..].Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (head.Length > 0)
+            {
+                string verb = head[0].ToLowerInvariant();
+                string rest = head.Length > 1 ? head[1].Trim() : "";
+                if (verb == "help" && HelpRequested != null)
+                {
+                    HelpRequested(rest.TrimStart('/'));
+                    return;
+                }
+                if (verb is "ignore" or "unignore")
+                {
+                    IgnoreCommand(verb, rest);
+                    return;
+                }
+            }
+        }
         if (LocalClock(text.Trim()) is { } clock)
         {
             LineReceived?.Invoke(clock, ChatKind.Private);
@@ -251,12 +326,86 @@ public partial class ChatManager : Node
 #endif
         if (IsLocal)
         {
-            text = text.Trim();
-            HandleLocal(text.Length > MaxMessageLength ? text[..MaxMessageLength] : text);
+            HandleLocal(ClampText(text.Trim()));
             return;
         }
 
-        RpcId(1, MethodName.SubmitLine, text);
+        RpcId(1, MethodName.SubmitLine, ClampText(text));
+    }
+
+    /// <summary>
+    /// <c>/ignore &lt;name&gt;</c> and <c>/unignore &lt;name&gt;</c>: hide a player's lines and bubbles on
+    /// this screen, saved with the settings. No argument lists who is ignored. A local preference:
+    /// the server is never told, and nothing is hidden from anyone else.
+    /// </summary>
+    private void IgnoreCommand(string verb, string name)
+    {
+        var ignored = GameSettings.Current.ChatIgnore;
+        if (name.Length == 0)
+        {
+            LineReceived?.Invoke(ignored.Count == 0
+                ? "Nobody is ignored. /ignore <player> hides their chat and bubbles."
+                : $"Ignored: {string.Join(", ", ignored)}. /unignore <player> to see them again.", ChatKind.Private);
+            return;
+        }
+
+        string clean = PlayerRegistry.Sanitize(name);
+        if (clean.Length == 0)
+        {
+            LineReceived?.Invoke("Usage: /ignore <player>", ChatKind.Error);
+            return;
+        }
+        bool already = ignored.Any(n => n.Equals(clean, StringComparison.OrdinalIgnoreCase));
+        if (verb == "ignore")
+        {
+            if (already)
+            {
+                LineReceived?.Invoke($"{clean} is already ignored.", ChatKind.Private);
+                return;
+            }
+            ignored.Add(clean);
+            LineReceived?.Invoke($"{clean} is ignored: their chat and speech bubbles are hidden. /unignore {clean} brings them back.", ChatKind.Private);
+        }
+        else
+        {
+            if (!already)
+            {
+                LineReceived?.Invoke($"{clean} was not ignored.", ChatKind.Private);
+                return;
+            }
+            ignored.RemoveAll(n => n.Equals(clean, StringComparison.OrdinalIgnoreCase));
+            LineReceived?.Invoke($"{clean} is no longer ignored.", ChatKind.Private);
+        }
+        GameSettings.Current.Commit();
+    }
+
+    /// <summary>Whether <paramref name="name"/> is on this screen's ignore list.</summary>
+    public static bool Ignores(string name) =>
+        name.Length > 0 && GameSettings.Current.ChatIgnore.Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The speaker of a chat line, for the ignore list and the display: <c>Name: text</c>,
+    /// <c>Name whispers: text</c>, or <c>* Name action</c>. Null for a line that names nobody.
+    /// </summary>
+    public static string? SpeakerOf(string line, ChatKind kind)
+    {
+        if (kind == ChatKind.Whisper)
+        {
+            // "Alice whispers: text" to the receiver, "You whisper to Alice: text" to the sender
+            int whisper = line.IndexOf(" whispers: ", StringComparison.Ordinal);
+            if (whisper > 0) return line[..whisper];
+        }
+        if (kind is ChatKind.Say or ChatKind.Whisper)
+        {
+            int colon = line.IndexOf(": ", StringComparison.Ordinal);
+            return colon > 0 ? line[..colon] : null;
+        }
+        if (kind == ChatKind.System && line.StartsWith("* ", StringComparison.Ordinal))
+        {
+            int space = line.IndexOf(' ', 2);
+            return space > 2 ? line[2..space] : null;
+        }
+        return null;
     }
 
     /// <summary>
@@ -704,7 +853,8 @@ public partial class ChatManager : Node
                 return;
 
             case "name" or "login" or "stream" or "race" or "fight" or "aura" or "say" or "admin" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update"
-                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis":
+                or "invites" or "accept" or "decline" or "tpa" or "tphere" or "party" or "vs" or "versteckis"
+                or "w" or "whisper" or "tell" or "msg" or "r" or "reply" or "report" or "mute" or "unmute":
                 // Versteckis has no offline game (#1268): its bots need a server; Host a game from the menu
                 Show(verb is "vs" or "versteckis" ? "Versteckis needs a multiplayer game: Host a game from the menu, and bots fill it." : $"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
@@ -742,13 +892,57 @@ public partial class ChatManager : Node
         if (_registry is null) return;   // only the server acts on this
         long sender = Multiplayer.GetRemoteSenderId();
 
-        // Trim before anything else: length is the one thing a client fully controls.
-        text = text.Trim();
+        // How often a client talks is the one thing it fully controls: the bucket is checked before
+        // any parsing, so neither chat nor commands can be used to flood the server.
+        if (!AcceptLine(sender, out string? slow)) return;
+        if (slow != null) ReplyTo(sender, slow, ChatKind.Error);
+
+        // Trim and scrub before anything else: length and control characters are a client's to choose.
+        text = ClampText(Scrub(text).Trim());
         if (text.Length == 0) return;
-        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
 
         if (text.StartsWith('/')) HandleCommand(sender, text[1..]);
         else Say(sender, text);
+    }
+
+    /// <summary>
+    /// Server: whether <paramref name="peer"/> may send a line now. A token bucket (a short burst,
+    /// then a slow refill) with an escalating silence for someone who keeps hammering; <paramref name="warning"/>
+    /// is set only when it is worth telling them, so a flood cannot amplify itself through error lines.
+    /// </summary>
+    internal bool AcceptLine(long peer, out string? warning)
+    {
+        warning = null;
+        double now = Core.RealClock.Now;
+        if (!_flood.TryGetValue(peer, out var gate))
+            _flood[peer] = gate = new FloodGate { Last = now };
+
+        if (now < gate.QuietUntil)
+        {
+            if (now >= gate.WarnAt)
+            {
+                gate.WarnAt = now + FloodWarnSeconds;
+                warning = $"Chat is paused for you: wait {Math.Ceiling(gate.QuietUntil - now):0} s.";
+            }
+            return false;
+        }
+
+        gate.Tokens = Math.Min(FloodBurst, gate.Tokens + (now - gate.Last) * FloodPerSecond);
+        gate.Last = now;
+        if (gate.Tokens >= 1)
+        {
+            gate.Tokens -= 1;
+            gate.Strikes = 0;
+            return true;
+        }
+
+        // Over the line: a short silence that doubles if they keep going (up to a minute).
+        gate.Strikes = Math.Min(gate.Strikes + 1, 5);
+        double quiet = Math.Min(60, 3 * Math.Pow(2, gate.Strikes - 1));
+        gate.QuietUntil = now + quiet;
+        gate.WarnAt = now + FloodWarnSeconds;
+        warning = $"Slow down: chat is paused for {quiet:0} s.";
+        return false;
     }
 
     /// <summary>
@@ -758,22 +952,48 @@ public partial class ChatManager : Node
     /// </summary>
     public void Say(long peer, string text)
     {
-        text = text.Trim();
+        text = ClampText(Scrub(text).Trim());
         if (text.Length == 0) return;
-        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
+        if (Muted(peer, out double mutedSeconds))
+        {
+            // tell them at most every few seconds: a muted flood must not become a reply flood
+            double now = Core.RealClock.Now;
+            if (!_muteToldAt.TryGetValue(peer, out double told) || now - told >= FloodWarnSeconds)
+            {
+                _muteToldAt[peer] = now;
+                ReplyTo(peer, $"You are muted for another {Math.Ceiling(mutedSeconds / 60):0} min.", ChatKind.Error);
+            }
+            return;
+        }
         // a round's spectators talk among themselves while it runs (#1268, Core/Rounds): nobody calls out the spots
         if (Core.Rounds.ChatScope(peer) is { } scope && Versteckis != null)
         {
-            foreach (long member in Versteckis.ScopeMembers(scope)) ReplyTo(member, $"{NameOf(peer)} (spectating): {Scrub(text)}", ChatKind.Say);
+            foreach (long member in Versteckis.ScopeMembers(scope)) ReplyTo(member, $"{NameOf(peer)} (spectating): {text}", ChatKind.Say);
             return;
         }
-        Broadcast($"{NameOf(peer)}: {Scrub(text)}", ChatKind.Say);
-        Rpc(MethodName.Said, peer, Scrub(text));
+        Broadcast($"{NameOf(peer)}: {text}", ChatKind.Say);
+        Rpc(MethodName.Said, peer, text);
+    }
+
+    /// <summary>Server: whether <paramref name="peer"/> is muted now, and for how much longer.</summary>
+    private bool Muted(long peer, out double seconds)
+    {
+        seconds = 0;
+        if (!_muted.TryGetValue(peer, out var mute)) return false;
+        seconds = mute.Until - Core.RealClock.Now;
+        if (seconds > 0) return true;
+        _muted.Remove(peer);
+        return false;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Said(long peer, string text) => Spoken?.Invoke(peer, text);
+    private void Said(long peer, string text)
+    {
+        // an ignored player's lines are hidden here too, so no bubble appears over their head
+        if (_tagNames.TryGetValue(peer, out string? name) && Ignores(name)) return;
+        Spoken?.Invoke(peer, text);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -793,13 +1013,34 @@ public partial class ChatManager : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Deliver(string line, int kind) =>
-        LineReceived?.Invoke(line, (ChatKind)kind);
+    private void Deliver(string line, int kind)
+    {
+        var k = (ChatKind)kind;
+
+        // a player this screen ignores: neither their speech nor their whisper is shown
+        if (k is ChatKind.Say or ChatKind.Whisper or ChatKind.System
+            && SpeakerOf(line, k) is { } speaker && Ignores(speaker)) return;
+
+        // the join/leave ticker can be turned off without losing the rest of the world's news
+        if (k == ChatKind.System && !GameSettings.Current.ChatShowJoins
+            && (line.EndsWith(" joined", StringComparison.Ordinal) || line.EndsWith(" left", StringComparison.Ordinal))) return;
+
+        LineReceived?.Invoke(line, k);
+    }
+
+    /// <summary>Server: sends <paramref name="peer"/> to a ground point given in LV95 notation, on the wire as ECEF (#1503).</summary>
+    private void SendTeleport(long peer, double lv95E, double lv95N, string label)
+    {
+        var (x, y, z) = GlobalPos.FromLv95(lv95E, lv95N, 0).ToWire();
+        RpcId(peer, MethodName.ForceTeleport, x, y, z, label);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ForceTeleport(double lv95E, double lv95N, string label)
+    private void ForceTeleport(double x, double y, double z, string label)
     {
+        // a ground point, as ECEF at sea level (#1503): the teleport finds the ground there
+        var (lv95E, lv95N, _) = GlobalPos.FromWire(x, y, z).Lv95;
         // Client side: run the same teleport the Tab search uses, so the ground-settling and
         // the walking-versus-flying arrival height are handled identically.
         if (Teleporter is null)
@@ -844,6 +1085,7 @@ public partial class ChatManager : Node
     public void Broadcast(string line, ChatKind kind)
     {
         GD.Print($"[chat] {line}");
+        Remember(line);
         _capture?.Add(line);   // what everyone was told answers a website command too (#1211)
         Rpc(MethodName.Deliver, line, (int)kind);
         if (RemoteLine != null && _registry != null)
@@ -904,9 +1146,8 @@ public partial class ChatManager : Node
         }
         else if (!player.Bodiless) return;   // a game's peer: it talks through SubmitLine
 
-        text = text.Trim();
+        text = ClampText(Scrub(text).Trim());
         if (text.Length == 0) return;
-        if (text.Length > MaxMessageLength) text = text[..MaxMessageLength];
         GD.Print($"[console] {player.Name}: {text}");
         if (text.StartsWith('/')) HandleCommand(peer, text[1..]);
         else Say(peer, text);
@@ -918,6 +1159,11 @@ public partial class ChatManager : Node
     public void ReportDisconnect(long peerId)
     {
         _transfers.Remove(peerId);
+        _flood.Remove(peerId);
+        _muted.Remove(peerId);
+        _muteToldAt.Remove(peerId);
+        _lastWhisper.Remove(peerId);
+        _reportedAt.Remove(peerId);
         if (_registry?.Find(peerId) is not { } player) return;
         _registry.Remove(peerId);
         Broadcast($"{player.Name} left", ChatKind.System);
@@ -985,14 +1231,43 @@ public partial class ChatManager : Node
     }
 
     /// <summary>
-    /// Removes anything that would let one player's message forge another's, or break the
-    /// display. Newlines would let a message fake a system line.
+    /// Removes anything that would let one player's message forge another's, or break the display:
+    /// newlines, control characters, and the Unicode format characters (right-to-left overrides,
+    /// zero-width spaces, invisible separators) that can reverse or hide text. Emoji survive,
+    /// joiners and all: this walks code points, not UTF-16 units.
     /// </summary>
-    private static string Scrub(string text)
+    internal static string Scrub(string text)
     {
         var clean = new System.Text.StringBuilder(text.Length);
-        foreach (char c in text)
-            clean.Append(char.IsControl(c) ? ' ' : c);
+        foreach (var rune in text.EnumerateRunes())
+        {
+            var category = Rune.GetUnicodeCategory(rune);
+            // keep the joiner and the variation selectors: they build emoji families, flags and
+            // coloured glyphs, and cannot reverse a line; the rest of the format characters go
+            bool keepsEmoji = rune.Value is 0x200D or 0xFE0E or 0xFE0F;
+            bool bad = !keepsEmoji && (category is System.Globalization.UnicodeCategory.Control
+                or System.Globalization.UnicodeCategory.Format
+                or System.Globalization.UnicodeCategory.Surrogate
+                or System.Globalization.UnicodeCategory.PrivateUse
+                or System.Globalization.UnicodeCategory.OtherNotAssigned
+                or System.Globalization.UnicodeCategory.LineSeparator
+                or System.Globalization.UnicodeCategory.ParagraphSeparator);
+            clean.Append(bad ? ' ' : rune.ToString());
+        }
+        return clean.ToString();
+    }
+
+    /// <summary>Cuts a line to <paramref name="max"/> characters without splitting an emoji or a surrogate pair.</summary>
+    internal static string ClampText(string text, int max = MaxMessageLength)
+    {
+        if (text.Length <= max) return text;
+        var clean = new System.Text.StringBuilder(max);
+        int n = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (n++ >= max) break;
+            clean.Append(rune.ToString());
+        }
         return clean.ToString();
     }
 
@@ -1027,6 +1302,15 @@ public partial class ChatManager : Node
         switch (verb)
         {
             case "help": SendHelp(sender, rest); return;
+            // private messages: /w <player> <text>, and /r for the last one
+            case "w" or "whisper" or "tell" or "msg": CommandWhisper(sender, rest, reply: false); return;
+            case "r" or "reply": CommandWhisper(sender, rest, reply: true); return;
+            // a player reports another; the server writes the context down where an admin can read it
+            case "report": CommandReport(sender, rest); return;
+            // ignoring is a preference on the player's own screen (ChatUi); a hand-written client is told so
+            case "ignore" or "unignore":
+                ReplyTo(sender, "Ignoring players is a setting on your own screen: /ignore <player> there.", ChatKind.Private);
+                return;
             // invites (#840): answering them, teleport requests anyone may send, parties
             case "invites" or "accept" or "decline" or "tpa" or "tphere" or "party": InviteCommand(sender, verb, rest); return;
             case "stream": ReportStreaming(sender); return;
@@ -1041,7 +1325,13 @@ public partial class ChatManager : Node
             case "go": if (RequiresAvatar(sender, verb)) CommandGo(sender, rest); return;
             case "login": if (RequiresAvatar(sender, verb)) CommandLogin(sender, rest); return;
             case "me":
-                if (rest.Length > 0) Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
+                if (rest.Length == 0) return;
+                if (Muted(sender, out double actionMuted))
+                {
+                    ReplyTo(sender, $"You are muted for another {Math.Ceiling(actionMuted / 60):0} min.", ChatKind.Error);
+                    return;
+                }
+                Broadcast($"* {NameOf(sender)} {Scrub(rest)}", ChatKind.System);
                 return;
             // anyone may ask; set/add/speed are checked inside, against the same IsAdmin
             case "time": CommandTime(sender, parts[1..]); return;
@@ -1195,6 +1485,8 @@ public partial class ChatManager : Node
                 else RpcId(sender, MethodName.OrbitForced, orbitKm);
                 return;
             case "kick": CommandKick(sender, parts); return;
+            case "mute": CommandMute(sender, parts); return;
+            case "unmute": CommandUnmute(sender, parts); return;
             case "update": CommandUpdate(sender); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
             case "pvp": CommandPvp(sender, rest); return;
@@ -1448,7 +1740,7 @@ public partial class ChatManager : Node
 
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        RpcId(sender, MethodName.ForceTeleport, place.E, place.N, place.Name);
+        SendTeleport(sender, place.E, place.N, place.Name);
     }
 
     /// <summary>
@@ -1479,7 +1771,7 @@ public partial class ChatManager : Node
             return;
         }
         if (!MayTeleport(sender)) return;
-        RpcId(sender, MethodName.ForceTeleport, e, n, World.Locate.LocateCoords.Format(e, n));
+        SendTeleport(sender, e, n, World.Locate.LocateCoords.Format(e, n));
     }
 
     /// <summary>
@@ -1491,7 +1783,7 @@ public partial class ChatManager : Node
         var (lines, venue, failed) = StadiumReply(rest, _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global);
         foreach (string line in lines) ReplyTo(sender, line, failed ? ChatKind.Error : ChatKind.Private);
         if (venue is null || !RequiresAvatar(sender, "stadium") || !MayTeleport(sender)) return;
-        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+        SendTeleport(sender, venue.E, venue.N, venue.Name);
     }
 
     private static bool IsConcertJoin(string rest) => rest.Trim().Equals("join", StringComparison.OrdinalIgnoreCase);
@@ -1505,7 +1797,7 @@ public partial class ChatManager : Node
         var (line, venue) = ConcertJoinReply(Concerts?.HostedVenues(_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString())?.Global));
         ReplyTo(sender, line, venue is null ? ChatKind.Error : ChatKind.Private);
         if (venue is null || !RequiresAvatar(sender, "concert join") || !MayTeleport(sender)) return;
-        RpcId(sender, MethodName.ForceTeleport, venue.E, venue.N, venue.Name);
+        SendTeleport(sender, venue.E, venue.N, venue.Name);
     }
 
     /// <summary><c>/concert join</c>'s answer, the same on a server and offline: the line to show and the venue to go to (null: none).</summary>
@@ -1533,7 +1825,7 @@ public partial class ChatManager : Node
         if (words.Length == 0)
         {
             if (at is not { } here) return ([.. StadiumLookup.List(), "/stadium <name | town | #n> to go to one."], null, false);
-            var (near, metres) = StadiumLookup.Nearest(here.E, here.N);
+            var (near, metres) = StadiumLookup.Nearest(here.Lv95.E, here.Lv95.N);
             return ([$"Nearest venue: #{StadiumLookup.Number(near)} {StadiumLookup.Label(near)}, {StadiumLookup.Distance(metres)} away; "
                 + $"{Concert.ConcertService.ShowAt(near)}.", "/stadium list for all of them, /stadium <name | town | #n> to go to one."], null, false);
         }
@@ -1553,7 +1845,7 @@ public partial class ChatManager : Node
 
         // a Battle Royale is left alone (#425), and every other round (#1268): its entrants stay where the game has them
         foreach (int peer in Multiplayer.GetPeers())
-            if (!Core.Rounds.Playing(peer)) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
+            if (!Core.Rounds.Playing(peer)) SendTeleport(peer, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 
@@ -1587,7 +1879,7 @@ public partial class ChatManager : Node
         }
 
         // what the player published, exact: not the server's own world, far from its origin (#185)
-        (e, n) = (node.Global.E, node.Global.N);
+        (e, n) = (node.Global.Lv95.E, node.Global.Lv95.N);
         return true;
     }
 
@@ -1603,7 +1895,7 @@ public partial class ChatManager : Node
         if (AdminArgs.TryLv95(name, out double toE, out double toN))
         {
             if (RefusedInMatch(sender, sender)) return;
-            RpcId(sender, MethodName.ForceTeleport, toE, toN, $"{toE:F0} {toN:F0}");
+            SendTeleport(sender, toE, toN, $"{toE:F0} {toN:F0}");
             return;
         }
 
@@ -1615,7 +1907,7 @@ public partial class ChatManager : Node
             return;
         }
 
-        RpcId(sender, MethodName.ForceTeleport, e, n, target.Name);
+        SendTeleport(sender, e, n, target.Name);
         ReplyTo(target.PeerId, $"{NameOf(sender)} teleported to you", ChatKind.System);
     }
 
@@ -1637,7 +1929,7 @@ public partial class ChatManager : Node
 
         if (!TryLocate(sender, me.Name, out _, out double e, out double n)) return;
 
-        RpcId(target.PeerId, MethodName.ForceTeleport, e, n, me.Name);
+        SendTeleport(target.PeerId, e, n, me.Name);
         Broadcast($"{me.Name} brought {target.Name} to them", ChatKind.Admin);
     }
 
@@ -2145,6 +2437,188 @@ public partial class ChatManager : Node
         long balance = bank.AdminAdjust(account, set, add);
         if (online != null) bank.SendBalance(online.PeerId);
         ReplyTo(sender, $"{account}'s account: {balance} CHF{(online == null ? " (not online)" : "")}", ChatKind.Admin);
+    }
+
+    /// <summary>
+    /// <c>/w &lt;player&gt; &lt;text&gt;</c> (also <c>/whisper</c>, <c>/tell</c>, <c>/msg</c>) and
+    /// <c>/r &lt;text&gt;</c> for the last person whispered with. Only the two see it; a muted player
+    /// may not whisper, since that would be a way round the mute.
+    /// </summary>
+    private void CommandWhisper(long sender, string rest, bool reply)
+    {
+        if (_registry is null) return;
+        if (sender == ConsolePeerId)
+        {
+            ReplyTo(sender, "Whispering needs a player.", ChatKind.Error);
+            return;
+        }
+        if (Muted(sender, out double muted))
+        {
+            ReplyTo(sender, $"You are muted for another {Math.Ceiling(muted / 60):0} min.", ChatKind.Error);
+            return;
+        }
+
+        PlayerInfo? target;
+        string text;
+        if (reply)
+        {
+            text = rest;
+            target = _lastWhisper.TryGetValue(sender, out long other) ? _registry.Find(other) : null;
+            if (target == null)
+            {
+                ReplyTo(sender, "Nobody to reply to: /w <player> <text> starts a whisper.", ChatKind.Error);
+                return;
+            }
+        }
+        else
+        {
+            string[] split = rest.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (split.Length < 2)
+            {
+                ReplyTo(sender, "Usage: /w <player> <text>", ChatKind.Error);
+                return;
+            }
+            if (_registry.FindByName(split[0]) is not { } found)
+            {
+                ReplyTo(sender, $"No player matching '{split[0]}'.", ChatKind.Error);
+                return;
+            }
+            (target, text) = (found, split[1]);
+        }
+
+        if (target.PeerId == sender)
+        {
+            ReplyTo(sender, "You are already there.", ChatKind.Error);
+            return;
+        }
+        text = ClampText(Scrub(text).Trim());
+        if (text.Length == 0)
+        {
+            ReplyTo(sender, reply ? "Usage: /r <text>" : "Usage: /w <player> <text>", ChatKind.Error);
+            return;
+        }
+
+        ReplyTo(target.PeerId, $"{NameOf(sender)} whispers: {text}", ChatKind.Whisper);
+        ReplyTo(sender, $"You whisper to {target.Name}: {text}", ChatKind.Whisper);
+        _lastWhisper[sender] = target.PeerId;
+        _lastWhisper[target.PeerId] = sender;
+    }
+
+    /// <summary>
+    /// <c>/report &lt;player&gt; [reason]</c>: writes what happened, who says so and the last lines of
+    /// chat to <c>user://chat-reports.log</c>, so an operator has context later. Anyone may report;
+    /// one report every <see cref="ReportCooldownSeconds"/> seconds.
+    /// </summary>
+    private void CommandReport(long sender, string rest)
+    {
+        if (_registry is null) return;
+        if (sender == ConsolePeerId)
+        {
+            ReplyTo(sender, "Reports need a player.", ChatKind.Error);
+            return;
+        }
+        string[] split = rest.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (split.Length == 0)
+        {
+            ReplyTo(sender, "Usage: /report <player> [what happened]", ChatKind.Error);
+            return;
+        }
+        if (_registry.FindByName(split[0]) is not { } target)
+        {
+            ReplyTo(sender, $"No player matching '{split[0]}'.", ChatKind.Error);
+            return;
+        }
+
+        double now = Core.RealClock.Now;
+        if (_reportedAt.TryGetValue(sender, out double at) && now - at < ReportCooldownSeconds)
+        {
+            ReplyTo(sender, $"You reported someone {now - at:0} s ago; wait {ReportCooldownSeconds - (now - at):0} s.", ChatKind.Error);
+            return;
+        }
+        _reportedAt[sender] = now;
+
+        string reason = split.Length > 1 ? ClampText(Scrub(split[1]).Trim(), 200) : "";
+        string when = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        try
+        {
+            using var file = Godot.FileAccess.Open("user://chat-reports.log", Godot.FileAccess.ModeFlags.ReadWrite);
+            if (file != null)
+            {
+                file.SeekEnd();
+                file.StoreString($"==== {when} ====\n"
+                    + $"reporter: {NameOf(sender)} (peer {sender})\n"
+                    + $"target: {target.Name} (peer {target.PeerId})\n"
+                    + $"reason: {(reason.Length == 0 ? "(no reason given)" : reason)}\n"
+                    + "recent chat:\n");
+                foreach (var (stamp, line) in _recent)
+                    file.StoreString($"  {stamp}  {line}\n");
+                file.StoreString("\n");
+            }
+        }
+        catch (System.Exception e)
+        {
+            GD.PushError($"[report] cannot write chat-reports.log: {e.Message}");
+        }
+
+        GD.Print($"[report] {NameOf(sender)} reported {target.Name}: {(reason.Length == 0 ? "(no reason)" : reason)}");
+        ReplyTo(sender, $"Thank you: your report about {target.Name} was written down for the operators.", ChatKind.Private);
+    }
+
+    /// <summary>
+    /// <c>/mute &lt;player&gt; [minutes]</c>, an operator's: stops a player's chat, <c>/me</c> and
+    /// whispers for a while (10 minutes by default). The player is told, and everyone sees why.
+    /// </summary>
+    private void CommandMute(long sender, string[] parts)
+    {
+        if (_registry is null || parts.Length < 2)
+        {
+            ReplyTo(sender, "Usage: /mute <player> [minutes]", ChatKind.Error);
+            return;
+        }
+        if (_registry.FindByName(parts[1]) is not { } target)
+        {
+            ReplyTo(sender, $"No player matching '{parts[1]}'.", ChatKind.Error);
+            return;
+        }
+        if (target.IsAdmin)
+        {
+            ReplyTo(sender, $"{target.Name} is an operator; revoke that first.", ChatKind.Error);
+            return;
+        }
+        int minutes = 10;
+        if (parts.Length > 2 && (!int.TryParse(parts[2], out minutes) || minutes <= 0))
+        {
+            ReplyTo(sender, "Usage: /mute <player> [minutes]", ChatKind.Error);
+            return;
+        }
+        minutes = Math.Clamp(minutes, 1, 1440);
+
+        _muted[target.PeerId] = (NameOf(sender), Core.RealClock.Now + minutes * 60);
+        ReplyTo(target.PeerId, $"{NameOf(sender)} muted you for {minutes} min.", ChatKind.Admin);
+        Broadcast($"{target.Name} was muted by {NameOf(sender)} for {minutes} min.", ChatKind.Admin);
+        GD.Print($"[admin] {NameOf(sender)} muted {target.Name} for {minutes} min");
+    }
+
+    /// <summary><c>/unmute &lt;player&gt;</c>, an operator's: lets a muted player speak again.</summary>
+    private void CommandUnmute(long sender, string[] parts)
+    {
+        if (_registry is null || parts.Length < 2)
+        {
+            ReplyTo(sender, "Usage: /unmute <player>", ChatKind.Error);
+            return;
+        }
+        if (_registry.FindByName(parts[1]) is not { } target)
+        {
+            ReplyTo(sender, $"No player matching '{parts[1]}'.", ChatKind.Error);
+            return;
+        }
+        if (!_muted.Remove(target.PeerId))
+        {
+            ReplyTo(sender, $"{target.Name} is not muted.", ChatKind.Private);
+            return;
+        }
+        ReplyTo(target.PeerId, $"{NameOf(sender)} unmuted you.", ChatKind.Admin);
+        Broadcast($"{target.Name} was unmuted by {NameOf(sender)}.", ChatKind.Admin);
     }
 
     private void CommandKick(long sender, string[] parts)

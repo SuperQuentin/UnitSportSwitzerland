@@ -21,12 +21,12 @@ public partial class TargetDrone : AnimatableBody3D, Core.IOriginShiftAware
     public Vector3 Velocity { get; private set; }
     public float Health { get; private set; } = MaxHealth;
 
-    private ChunkManager? _terrain;
+    private IWorldGround? _terrain;
     private bool _circuit, _clockwise;
     private Vector3 _centre;
     private float _radius, _speed, _angle;
 
-    public static TargetDrone Circuit(ChunkManager? terrain, Vector3 centre, float radius, float speed,
+    public static TargetDrone Circuit(IWorldGround? terrain, Vector3 centre, float radius, float speed,
         float angle, bool clockwise) => new()
     {
         Name = "Drone", _terrain = terrain, _circuit = true, _centre = centre, _radius = radius,

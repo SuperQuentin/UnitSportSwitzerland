@@ -178,6 +178,14 @@ world_fill_hide={
 "type": "float",
 "value": 0.0
 }
+world_flat_edge={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+world_flat_edge_on={
+"type": "float",
+"value": 0.0
+}
 world_flat_hide={
 "type": "float",
 "value": 0.0

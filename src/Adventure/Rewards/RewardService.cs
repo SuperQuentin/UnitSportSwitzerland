@@ -129,7 +129,7 @@ public partial class RewardService : Node
     private static void OnServedPlaced(long peer, Items.PlacedObject o, bool planted)
     {
         if (o.Kind != Items.PlacedKind.TravelFlag || Navigation.AdventureTravel.Instance is not { } travel) return;
-        if (planted) travel.SetPortable(peer, o.E, o.N, (float)o.Altitude);
+        if (planted) travel.SetPortable(peer, o.At);
         else travel.ClearPortable(peer);
         GD.Print($"[rewards] peer {peer}'s travel flag {(planted ? "planted: its portable travel point" : "taken up")}");
     }
@@ -164,7 +164,7 @@ public partial class RewardService : Node
     {
         why = "";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) { why = "No body."; return false; }
-        double d = GlobalPos.HorizontalDistance(at.E, at.N, e, n);
+        double d = at.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, at.Alt));
         if (d > reach) { why = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Too far ({d:F0} m)."); return false; }
         if (Math.Abs(at.Alt - alt) > RewardRules.ClaimSlackUpM) { why = "Not there."; return false; }
         return true;
@@ -385,7 +385,7 @@ public partial class RewardService : Node
             foreach (long other in _adventure.Peers)
             {
                 if (!_adventure.Active(other) || _adventure.Progress(other) is not { } op || _adventure.PositionOf?.Invoke(other) is not { } at) continue;
-                if (Math.Sqrt((at.E - chest.E) * (at.E - chest.E) + (at.N - chest.N) * (at.N - chest.N)) > 30) continue;
+                if (at.HorizontalDistanceTo(GlobalPos.FromLv95(chest.E, chest.N, at.Alt)) > 30) continue;
                 _seals.MarkDone(op.Key, chest.Id, now);
                 SendSeal(other, chest.Id, _seals.MaskOf(op.Key, chest.Id));
             }
@@ -408,10 +408,10 @@ public partial class RewardService : Node
             foreach (long m in party)
                 if (m != peer && _adventure.Active(m) && _adventure.Progress(m) is { } mp && _adventure.PositionOf?.Invoke(m) is { } mpos)
                 {
-                    members.Add((mp.Key, mpos.E, mpos.N));
+                    members.Add((mp.Key, mpos.Lv95.E, mpos.Lv95.N));
                     peerOf[mp.Key] = m;
                 }
-        var keys = Seals.Coop(p.Key, members, at?.E ?? chest.E, at?.N ?? chest.N);
+        var keys = Seals.Coop(p.Key, members, at?.Lv95.E ?? chest.E, at?.Lv95.N ?? chest.N);
         var mine = SealStep.Ignored;
         foreach (string key in keys)
         {
@@ -474,9 +474,9 @@ public partial class RewardService : Node
         if (already && !p.Get(QuestsProgress.Section).Active.Keys.Any(k => k.StartsWith("pk:", StringComparison.Ordinal))) return "taken";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Refuse(peer, spotId, "No body.");
         if (!float.IsFinite(yawDeg) || !float.IsFinite(pitchDeg) || fovDeg is < 1 or > 120) return Refuse(peer, spotId, "No such photo.");
-        var ground = await Map.SightGround(at.E, at.N, spot.TargetE, spot.TargetN);
+        var ground = await Map.SightGround(at.Lv95.E, at.Lv95.N, spot.TargetE, spot.TargetN);
         if (!IsInstanceValid(this) || _adventure.Progress(peer) != p) return "gone";
-        var verdict = PhotoJudge.Judge(spot, at.E, at.N, (float)at.Alt + 1.6f, yawDeg, pitchDeg, fovDeg, ground);
+        var verdict = PhotoJudge.Judge(spot, at, (float)at.Alt + 1.6f, yawDeg, pitchDeg, fovDeg, ground);
         if (verdict != PhotoVerdict.Taken)
         {
             GD.Print($"[rewards] peer {peer}: photo of {spot.Id}: {verdict}");
@@ -527,7 +527,11 @@ public partial class RewardService : Node
         var par = Trials.Par(def, gates);
         GD.Print($"[rewards] {Short(p.Key)} starts {def.Id}: {gates.Length} gates, gold {par.Gold:F0} s");
         var flat = new double[gates.Length * 4];
-        for (int i = 0; i < gates.Length; i++) (flat[i * 4], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]) = (gates[i].E, gates[i].N, gates[i].Alt, gates[i].Radius);
+        for (int i = 0; i < gates.Length; i++)   // (#1503) ECEF x, y, z and the radius
+        {
+            var (x, y, z) = GlobalPos.FromLv95(gates[i].E, gates[i].N, gates[i].Alt).ToWire();
+            (flat[i * 4], flat[i * 4 + 1], flat[i * 4 + 2], flat[i * 4 + 3]) = (x, y, z, gates[i].Radius);
+        }
         if (Connected(peer)) RpcId(peer, MethodName.TellTrialStarted, def.Id, flat, now, par.Gold, par.Silver, par.Bronze);
         else if (!_networked) TellTrialStarted(def.Id, flat, now, par.Gold, par.Silver, par.Bronze);
         SendBoard(peer, def.Id);
@@ -701,6 +705,13 @@ public partial class RewardService : Node
             string path = System.IO.Path.Combine(GhostDir, GhostName(trialId, key));
             if (!File.Exists(path)) continue;
             byte[] all = File.ReadAllBytes(path);
+            // a ghost stored before G2 A2b (GSH1, LV95): rewritten in place as GSH2 (#1503)
+            if (GhostTrack.Upgrade(all) is { } upgraded)
+            {
+                all = upgraded;
+                try { File.WriteAllBytes(path, all); }
+                catch (Exception e) { GD.PushWarning($"[rewards] ghost {trialId}: {e.Message}"); }
+            }
             const int Chunk = 8000;
             int parts = (all.Length + Chunk - 1) / Chunk;
             for (int i = 0; i < parts; i++)
@@ -726,7 +737,7 @@ public partial class RewardService : Node
         foreach (long peer in _tickPeers)
         {
             if (_adventure.Progress(peer) is not { } p || !_guides.Following(p.Key, out _, out _, out _)) continue;
-            if (_adventure.PositionOf?.Invoke(peer) is not { } at || _guides.Follow(p.Key, at.E, at.N, now) is not { } move) continue;
+            if (_adventure.PositionOf?.Invoke(peer) is not { } at || _guides.Follow(p.Key, at.Lv95.E, at.Lv95.N, now) is not { } move) continue;
             SendGuide(peer, move);
             GuideStep(peer, p, move);
         }
@@ -800,7 +811,18 @@ public partial class RewardService : Node
     public void ReportPhoto(string spotId, float yawDeg, float pitchDeg, float fovDeg)
     {
         if (Authority) Log(ServePhoto(AdventureService.LocalPeer, spotId, yawDeg, pitchDeg, fovDeg));
-        else RpcId(1, MethodName.RequestPhoto, spotId, yawDeg, pitchDeg, fovDeg);
+        else if (_adventure.PositionOf?.Invoke(AdventureService.LocalPeer) is { } me)
+            RpcId(1, MethodName.RequestPhoto, spotId, BearingTrue(me, yawDeg, toWire: true), pitchDeg, fovDeg);
+    }
+
+    /// <summary>
+    /// (#1503) A photo's compass bearing (degrees, 0 north, 90 east) between the LV95 grid (grid north, what
+    /// <see cref="PhotoJudge"/> uses) and a bearing from true north at <paramref name="at"/> (what goes on the wire).
+    /// </summary>
+    private static float BearingTrue(GlobalPos at, float bearingDeg, bool toWire)
+    {
+        float yaw = -Mathf.DegToRad(bearingDeg);   // a compass bearing turns clockwise, a Godot yaw to the left
+        return -Mathf.RadToDeg(toWire ? Lv95Grid.TrueYaw(at, yaw) : Lv95Grid.GridYaw(at, yaw));
     }
 
     public void ReportFauna(string name)
@@ -872,7 +894,13 @@ public partial class RewardService : Node
     private void RequestGuide(string chestId) { if (_server) Log(ServeGuide(Sender, chestId)); }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPhoto(string spotId, float yaw, float pitch, float fov) { if (_server) Log(ServePhoto(Sender, spotId, yaw, pitch, fov)); }
+    private void RequestPhoto(string spotId, float yaw, float pitch, float fov)
+    {
+        if (!_server) return;
+        // (#1503) the bearing is from true north at the body; the judge works in the grid's
+        if (float.IsFinite(yaw) && _adventure.PositionOf?.Invoke(Sender) is { } at) yaw = BearingTrue(at, yaw, toWire: false);
+        Log(ServePhoto(Sender, spotId, yaw, pitch, fov));
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestFauna(string name) { if (_server) ServeFauna(Sender, name); }
@@ -941,7 +969,11 @@ public partial class RewardService : Node
     private void TellTrialStarted(string trialId, double[] gates, double since, double gold, double silver, double bronze)
     {
         var list = new TrialGate[gates.Length / 4];
-        for (int i = 0; i < list.Length; i++) list[i] = new TrialGate(gates[i * 4], gates[i * 4 + 1], (float)gates[i * 4 + 2], (float)gates[i * 4 + 3]);
+        for (int i = 0; i < list.Length; i++)
+        {
+            var at = GlobalPos.FromWire(gates[i * 4], gates[i * 4 + 1], gates[i * 4 + 2]);
+            list[i] = new TrialGate(at.Lv95.E, at.Lv95.N, (float)at.Alt, (float)gates[i * 4 + 3]);
+        }
         Trial = new ActiveTrial(trialId, list, since, new TrialPar(gold, silver, bronze)) { Next = 0 };
         TrialStarted?.Invoke(Trial);
     }

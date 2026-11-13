@@ -109,7 +109,7 @@ public partial class QuestTracker : CanvasLayer
         _sb.Clear();
         if (_service?.TrackedTarget is { } t && me is { } at)
         {
-            double d = Math.Sqrt((at.At.E - t.E) * (at.At.E - t.E) + (at.At.N - t.N) * (at.At.N - t.N));
+            double d = at.At.HorizontalDistanceTo(GlobalPos.FromLv95(t.E, t.N, 0));
             if (d <= t.RadiusM) _sb.Append("Here");
             else if (d < 1000) _sb.Append((int)(Math.Round(d / 10) * 10)).Append(" m");
             else _sb.Append((d / 1000).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)).Append(" km");

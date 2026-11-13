@@ -121,7 +121,7 @@ public partial class BrManager
         if (Origin == null) yield break;
         foreach (var m in _state.MatesOf(Me))
             if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(m.Peer)) is { } body)
-                yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+                yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.WorldYaw), Mathf.Cos(body.WorldYaw)));
     }
 
     // ------------------------------------------------------------------------------------
@@ -162,7 +162,8 @@ public partial class BrManager
         var hit = PingRay.Cast(me.GetWorld3D().DirectSpaceState, from, from + aim * 2000f, uint.MaxValue, me.SelfExclude);
         if (hit.Count == 0) return false;
         var at = Origin.ToGlobal(hit["position"].AsVector3());
-        RpcId(1, MethodName.RequestPing, at.E, at.N, at.Alt);
+        var (x, y, z) = at.ToWire();   // (#1503) the wire is ECEF
+        RpcId(1, MethodName.RequestPing, x, y, z, false);
         return true;
     }
 
@@ -172,7 +173,8 @@ public partial class BrManager
         if (!CanPing || Origin == null) return false;
         var world = WorldPoint(zone, 0f);
         double alt = LocalPlayer()?.Terrain is { } t && t.TryGetHeight(world, out float h) ? Origin.ToGlobal(world with { Y = h }).Alt : double.NaN;
-        RpcId(1, MethodName.RequestPing, _state.AreaE + zone.X, _state.AreaN + zone.Y, alt);
+        var (x, y, z) = GlobalPos.FromLv95(_state.AreaE + zone.X, _state.AreaN + zone.Y, double.IsFinite(alt) ? alt : 0).ToWire();   // (#1503) the wire is ECEF
+        RpcId(1, MethodName.RequestPing, x, y, z, !double.IsFinite(alt));
         return true;
     }
 
@@ -186,9 +188,11 @@ public partial class BrManager
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Pinged(long from, double e, double n, double alt)
+    private void Pinged(long from, double x, double y, double z, bool onMap)
     {
         if (_server) return;
+        var at = GlobalPos.FromWire(x, y, z);
+        double e = at.Lv95.E, n = at.Lv95.N, alt = onMap ? double.NaN : at.Alt;
         string name = _state.Find(from)?.Name ?? "?";
         // one ping a player: a new one replaces the last
         _pings.RemoveAll(p => p.Peer == from);
@@ -291,7 +295,7 @@ public partial class BrManager
         }
         string name = _state.Find(peer)?.Name ?? "?";
         _horns.RemoveAll(h => h.Name == name);
-        _horns.Add((new Vector2((float)(at.E - _state.AreaE), (float)(at.N - _state.AreaN)), name, until));
+        _horns.Add((_state.ZonePointOf(at), name, until));
         GD.Print($"[br] alphorn: {name}");
     }
 
@@ -313,7 +317,7 @@ public partial class BrManager
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void SetState(string json)
     {
-        if (_server || BrState.FromJson(json) is not { } s) return;
+        if (_server || BrState.FromJson(StateWire(json, toWire: false)) is not { } s) return;
         var before = _state.Phase;
         _state = s;
         var key = (s.Seed, s.Side, s.Pace, s.Field, s.ZoneCentres?.Sum() ?? 0f);   // the centres the server chose, #477
@@ -515,6 +519,7 @@ public partial class BrManager
     private async void BuildMap(BrArea area)
     {
         _mapFor = (area.E, area.N, area.Side);
+        BrMapDraw.SetArea(area.E, area.N);
         MapTexture = null;
         Waypoint = null;
         Towns = Places().Where(p => p.Kind == Terrain.Format.PlaceKind.Town && area.Contains(p.E, p.N))
@@ -558,18 +563,33 @@ public partial class BrManager
 
     /// <summary>
     /// Where the map is centred and which way it faces: the player you are watching, or yourself
-    /// with your camera's heading. Zone metres; heading is a direction (east, north).
+    /// with your camera's heading. Zone metres; heading is a direction (east, north) in the zone's axes;
+    /// <c>North</c> is true north's bearing in those axes there, degrees clockwise (#1504: what the compass reads).
     /// </summary>
-    public (Vector2 Position, Vector2 Heading)? ViewPoint()
+    public (Vector2 Position, Vector2 Heading, float North)? ViewPoint()
     {
         if (Origin == null) return null;
+        Vector3 at;
+        Vector2 heading;
         if (Watching != 0 && GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(Watching)) is { } other)
-            return (ZonePoint(other.GlobalPosition), new Vector2(-Mathf.Sin(other.NetYaw), Mathf.Cos(other.NetYaw)));
-        if (LocalPlayer() is not { } me) return null;
-        var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
-        var heading = new Vector2(fwd.X, -fwd.Z);
-        return (ZonePoint(me.GlobalPosition), heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector2.Up);
+        {
+            at = other.GlobalPosition;
+            heading = new Vector2(-Mathf.Sin(other.WorldYaw), Mathf.Cos(other.WorldYaw));
+        }
+        else
+        {
+            if (LocalPlayer() is not { } me) return null;
+            at = me.GlobalPosition;
+            var fwd = GetViewport().GetCamera3D() is { } cam ? -cam.GlobalTransform.Basis.Z : -me.GlobalTransform.Basis.Z;
+            heading = new Vector2(fwd.X, -fwd.Z);
+            heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector2.Up;
+        }
+        // the world's axes into the zone's (the LV95 grid's, #1502): the identity on the flat ground, a turn in an anchor frame
+        heading = _viewNorth.WorldToGrid(Origin.Frame, at, heading);
+        return (ZonePoint(at), heading, Mathf.RadToDeg(_viewNorth.Grid(Origin.Frame, at)));
     }
+
+    private TrueNorth.Near _viewNorth;
 
     // ------------------------------------------------------------------------------------
     // every frame

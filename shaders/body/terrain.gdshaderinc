@@ -51,10 +51,30 @@ global uniform sampler2D world_real_mask : filter_nearest, repeat_disable;
 global uniform vec2 world_real_origin;
 global uniform vec2 world_real_extent;
 global uniform vec4 world_real_axes;
+// the flat world's own edge, dissolved into the globe beneath while the globe is drawn (#1528: from above, the
+// tiles' square stood out as a patch): its centre (world x, z), the tiles' half side (Chebyshev from the
+// anchor's tile, as they load) and the horizon blocks' radius, metres; world_flat_edge_on 0..1 by height
+global uniform vec4 world_flat_edge;
+global uniform float world_flat_edge_on;
+// which edge this material dissolves at: 0 none, 1 the tiles' square, 2 the horizon blocks' circle
+uniform int flat_edge = 0;
+// off for the earth world's leaves (#1634): they are the globe's own last level and never give way to it (the
+// globe sets world_fill_hide to 1 there, and the real-tile mask is the flat world's)
+uniform bool gives_way = true;
+const float FLAT_EDGE_FADE = 4000.0;
 
 // how far a world XZ point has given way, 0..1
 float flat_hide(vec2 xz) {
+    if (!gives_way) {
+        return 0.0;
+    }
     float hide = world_flat_hide;
+    if (flat_edge != 0 && world_flat_edge_on > 0.0) {
+        vec2 d = abs(xz - world_flat_edge.xy);
+        float r = flat_edge == 1 ? max(d.x, d.y) : length(d);
+        float edge = flat_edge == 1 ? world_flat_edge.z : world_flat_edge.w;
+        hide = max(hide, smoothstep(edge - FLAT_EDGE_FADE, edge, r) * world_flat_edge_on);
+    }
     if (world_fill_hide > 0.0) {
         vec2 d = xz - world_real_origin;
         vec2 uv = vec2(dot(d, world_real_axes.xy), dot(d, world_real_axes.zw)) / world_real_extent;
@@ -108,6 +128,7 @@ varying vec3 v_col;
 #endif
 
 void vertex() {
+    PATTERN_VERTEX
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 #ifdef NO_DISCARD
     // a standalone headset (#1112): no discard anywhere in the terrain, which turned a Quest's early
@@ -137,7 +158,7 @@ void vertex() {
 #endif
 #ifdef VERTEX_FINISH
     {
-        vec3 c = COLOR.rgb;
+        vec3 c = style_lake(COLOR.rgb, length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz));
         float vertex_rock = smoothstep(0.62, 0.38, normalize(smooth_n).y);
         c = mix(c, vec3(0.30, 0.28, 0.26), vertex_rock * 0.75);
         c = style_grade(c);
@@ -178,6 +199,8 @@ void fragment() {
 
 #ifdef VERTEX_FINISH
     vec3 col = v_col;
+#elif defined(STYLE_CARTOON)
+    vec3 col = style_lake(COLOR.rgb, length(VERTEX));
 #else
     vec3 col = COLOR.rgb;
 #endif

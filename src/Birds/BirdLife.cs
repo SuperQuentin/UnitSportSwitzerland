@@ -48,7 +48,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private const float ShotFlushRadius = 150f;
     private const float SeenRange = 70f;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _terrain;
     private readonly WorldOrigin _origin;
     private readonly ItemController _items;
     private readonly List<Bird> _birds = new();
@@ -116,9 +116,9 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// <summary>This peer's origin: the birds fly in world space, <see cref="BirdNet"/> sends them in LV95 (#185).</summary>
     public WorldOrigin Origin => _origin;
 
-    public BirdLife(ChunkManager chunks, WorldOrigin origin, ItemController? items)
+    public BirdLife(IWorldGround chunks, WorldOrigin origin, ItemController? items)
     {
-        _chunks = chunks;
+        _terrain = chunks;
         _origin = origin;
         _items = items!;
     }
@@ -304,7 +304,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 
     /// <summary>The ground (or water surface) under a point, or the point's own height when the tile is not loaded.</summary>
-    public float Ground(Vector3 p) => _chunks.TryGetSurface(p, out float h) ? h : p.Y;
+    public float Ground(Vector3 p) => _terrain.TryGetSurface(p, out float h) ? h : p.Y;
 
     // ------------------------------------------------------------------------------------
     // habitat and species
@@ -365,7 +365,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         float a = (float)(_rng.NextDouble() * Mathf.Tau);
         float d = Mathf.Lerp(SpawnMin, SpawnMax, (float)_rng.NextDouble());
         var p = focus + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
-        if (!_chunks.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return (Habitat.None, 0);
+        if (!_terrain.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return (Habitat.None, 0);
         p.Y = ground;
         var habitat = HabitatAt(cover, ground);
         var tile = _origin.TileAt(p);
@@ -443,8 +443,8 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// </summary>
     private bool CoverAt(Vector3 p, out CoverClass cover)
     {
-        if (_chunks.TryGetCover(p, out cover)) return true;
-        if (!Headless || _chunks.Source is not { } source) return false;
+        if (_terrain.TryGetCover(p, out cover)) return true;
+        if (!Headless || _terrain.Content is not { } source) return false;
         var tile = _origin.TileAt(p);
         if (!_cover.TryGetValue(tile, out var raster))
         {
@@ -488,7 +488,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
     private void EnsureTrees(TileId tile)
     {
-        if (_trees.ContainsKey(tile) || !_loading.Add(tile) || _chunks.Source is not { } source) return;
+        if (_trees.ContainsKey(tile) || !_loading.Add(tile) || _terrain.Content is not { } source) return;
         LoadTrees(source, tile);
     }
 
@@ -590,7 +590,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
     private void EnsureTown(TileId tile)
     {
-        if (_town.ContainsKey(tile) || !_townLoading.Add(tile) || _chunks.Source is not { } source) return;
+        if (_town.ContainsKey(tile) || !_townLoading.Add(tile) || _terrain.Content is not { } source) return;
         LoadTown(source, tile);
     }
 
@@ -733,7 +733,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         EnsureTrees(_origin.TileAt(near));
         bool percher = b.Species.Body is BodyPlan.Passerine or BodyPlan.Corvid or BodyPlan.Pigeon or BodyPlan.Woodpecker;
         if (percher && NearestTreeTop(near, 16f) is { } top) return (top, Bird.Mode.Perched, null);
-        if (b.Species.Body is BodyPlan.Woodpecker || !_chunks.TryGetHeight(near, out float ground)
+        if (b.Species.Body is BodyPlan.Woodpecker || !_terrain.TryGetHeight(near, out float ground)
             || World.WaterField.TryGetStill(near, out float still, out _) && still > ground
             || CoverAt(near, out var cover) && cover is CoverClass.Water or CoverClass.Forest) return null;
         return (near with { Y = ground }, Bird.Mode.Ground, null);
@@ -1036,7 +1036,8 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
 
     /// <summary>
     /// Server: what <see cref="BirdNet"/> sends one peer: the birds within range of <paramref name="focus"/>.
-    /// Each packet starts with an LV95 anchor near the peer (#185), and every bird is a float offset from it.
+    /// Each packet starts with an ECEF anchor near the peer (#185, #1503), and every bird is a float offset in the
+    /// local east-up-south there, its velocity in those axes and its heading from north there.
     /// </summary>
     public List<byte[]> Snapshot(GlobalPos focus, int tick)
     {
@@ -1044,10 +1045,10 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         chunks.Clear();
         var ms = _snapshotBuffer;
         var w = _snapshotWriter;
-        double anchorE = System.Math.Round(focus.E / 1000) * 1000, anchorN = System.Math.Round(focus.N / 1000) * 1000;
-        var toAnchor = _origin.SinceAnchor(anchorE, anchorN).Inverse;
+        var anchor = focus.WithAlt(0).ToEcef();
+        var toAnchor = _origin.Frame.ToAnchor(anchor);
         var near = _origin.ToWorld(focus);
-        BeginSnapshot(anchorE, anchorN);
+        BeginSnapshot(anchor);
         int n = 0;
         foreach (var b in _birds)
         {
@@ -1060,20 +1061,21 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
             int every = b.State switch { Bird.Mode.Perched or Bird.Mode.Dead => 8, Bird.Mode.Ground or Bird.Mode.Swimming => 4, _ => 1 };
             if ((tick + b.Id) % every != 0) continue;
             w.Write(b.Id); w.Write((ushort)b.Species.Index); w.Write((byte)((byte)b.State | (b.Town ? TownBit : 0)));
-            w.Write(p.X); w.Write(p.Y); w.Write(p.Z); w.Write(b.Yaw);
+            w.Write(p.X); w.Write(p.Y); w.Write(p.Z); w.Write(b.Yaw + toAnchor.Yaw);
             w.Write(v.X); w.Write(v.Y); w.Write(v.Z);
-            if (++n == 32) { chunks.Add(ms.ToArray()); BeginSnapshot(anchorE, anchorN); n = 0; }
+            if (++n == 32) { chunks.Add(ms.ToArray()); BeginSnapshot(anchor); n = 0; }
         }
         if (n > 0) chunks.Add(ms.ToArray());
         return chunks;
     }
 
-    /// <summary>A new snapshot packet: it starts with its LV95 anchor.</summary>
-    private void BeginSnapshot(double anchorE, double anchorN)
+    /// <summary>A new snapshot packet: it starts with its ECEF anchor.</summary>
+    private void BeginSnapshot(EcefPos anchor)
     {
         _snapshotBuffer.SetLength(0);
-        _snapshotWriter.Write(anchorE);
-        _snapshotWriter.Write(anchorN);
+        _snapshotWriter.Write(anchor.X);
+        _snapshotWriter.Write(anchor.Y);
+        _snapshotWriter.Write(anchor.Z);
     }
 
     /// <summary>The state byte's top bit: a town bird (tame: it lets people come much closer).</summary>
@@ -1083,7 +1085,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     public void ApplySnapshot(byte[] data)
     {
         using var r = new BinaryReader(new MemoryStream(data));
-        var here = _origin.SinceAnchor(r.ReadDouble(), r.ReadDouble());
+        var here = _origin.SinceAnchor(new EcefPos(r.ReadDouble(), r.ReadDouble(), r.ReadDouble()));
         while (r.BaseStream.Position < r.BaseStream.Length)
         {
             int id = r.ReadInt32();
@@ -1091,7 +1093,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
             byte bits = r.ReadByte();
             var state = (Bird.Mode)(bits & ~TownBit);
             var p = here.Point(new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()));
-            float yaw = r.ReadSingle();
+            float yaw = r.ReadSingle() + here.Yaw;
             var v = here.Direction(new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()));
             if (!_byId.TryGetValue(id, out var b))
             {
@@ -1153,7 +1155,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         var dir = flat.Normalized();
         var p = at + dir * Mathf.Lerp(120f, 220f, (float)_rng.NextDouble())
             + dir.Cross(Vector3.Up) * ((float)_rng.NextDouble() * 2f - 1f) * 60f;
-        if (!_chunks.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return 0;
+        if (!_terrain.TryGetHeight(p, out float ground) || !CoverAt(p, out var cover)) return 0;
         p.Y = ground;
         var s = Pick(HabitatAt(cover, ground), ground);
         if (s == null) return 0;

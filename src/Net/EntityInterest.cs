@@ -1,13 +1,14 @@
 using Godot;
 using UnitSport.Core;
 using UnitSport.Player;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Net;
 
 /// <summary>A vehicle, dropped item or radio as <see cref="EntityInterest"/> sees it (#689).</summary>
 public interface IInterestEntity
 {
-    /// <summary>Where it is, LV95, as last published.</summary>
+    /// <summary>Where it is on the Earth, as last published.</summary>
     GlobalPos InterestAt { get; }
 
     /// <summary>How far a viewer with this lens is sent it, m (<see cref="EntityInterestRules"/>).</summary>
@@ -50,7 +51,6 @@ public partial class EntityInterest : Node
     /// <summary>Entities up to this size are found by cell; bigger ones (lorries, ships, aircraft) are checked against every viewer.</summary>
     public const float CellSize = 8f;
 
-    private const double CellM = 1000;
 
     /// <summary>The server's, or null on a client and offline.</summary>
     public static EntityInterest? Instance { get; private set; }
@@ -63,13 +63,13 @@ public partial class EntityInterest : Node
     private readonly Dictionary<long, HashSet<ulong>> _sets = new();
     /// <summary>Per viewer: entities whose stream stopped and whose node goes at the time given.</summary>
     private readonly Dictionary<(long Viewer, ulong Entity), double> _leaving = new();
-    private readonly Dictionary<long, (double E, double N, double At)> _lastSeen = new();
+    private readonly Dictionary<long, (GlobalPos Pos, double At)> _lastSeen = new();
     private readonly Dictionary<ulong, GlobalPos> _lastAt = new();
 
     // per round, reused (#221: no allocations per round)
     private readonly List<(ulong Id, IInterestEntity Entity, GlobalPos At)> _entities = new();
     private readonly Dictionary<ulong, int> _index = new();
-    private readonly Dictionary<(long, long), List<int>> _cells = new();
+    private readonly Dictionary<CubeKey, List<int>> _cells = new();
     private readonly Stack<List<int>> _spare = new();
     private readonly List<int> _big = new();
     private readonly HashSet<int> _seen = new();
@@ -137,7 +137,7 @@ public partial class EntityInterest : Node
         foreach (var (viewer, set) in _sets)
         {
             if (!_lastSeen.TryGetValue(viewer, out var v)) continue;
-            double d = Math.Sqrt((at.E - v.E) * (at.E - v.E) + (at.N - v.N) * (at.N - v.N));
+            double d = at.HorizontalDistanceTo(v.Pos);
             if (EntityInterestRules.Keep(d, entity.InterestRange(ViewOf(viewer)), was: false)) set.Add(id);
         }
     }
@@ -184,7 +184,7 @@ public partial class EntityInterest : Node
                 _entities.Add((id, entity, at));
                 _index[id] = i;
                 if (entity.InterestBig) { _big.Add(i); continue; }
-                var key = ((long)Math.Floor(at.E / CellM), (long)Math.Floor(at.N / CellM));
+                var key = CellOf(at);
                 if (!_cells.TryGetValue(key, out var cell)) _cells[key] = cell = _spare.Count > 0 ? _spare.Pop() : new List<int>();
                 cell.Add(i);
 
@@ -209,10 +209,15 @@ public partial class EntityInterest : Node
         {
             if (child is not FootPlayer p || FootPlayer.NetId(p.Name) is not long viewer || viewer <= 0) continue;
             var at = p.Global;
-            var (aheadE, aheadN) = _lastSeen.TryGetValue(viewer, out var prev)
-                ? EntityInterestRules.Ahead(at.E, at.N, prev.E, prev.N, now - prev.At)
-                : (at.E, at.N);
-            _lastSeen[viewer] = (at.E, at.N, now);
+            var ahead = at;
+            if (_lastSeen.TryGetValue(viewer, out var prev))
+            {
+                // the look-ahead in metres east and north of the viewer, true ones (#1502)
+                var (pe, pn, _) = at.OffsetTo(prev.Pos);
+                var (ae, an) = EntityInterestRules.Ahead(0, 0, pe, pn, now - prev.At);
+                if (ae != 0 || an != 0) ahead = at.Moved(ae, an);
+            }
+            _lastSeen[viewer] = (at, now);
             if (!_sets.TryGetValue(viewer, out var set)) _sets[viewer] = set = new HashSet<ulong>();
             var view = ViewOf(viewer);
 
@@ -220,11 +225,13 @@ public partial class EntityInterest : Node
             _seen.Clear();
             _candidates.Clear();
             float reach = EntityInterestRules.VehicleRange(CellSize, view.Far, view.FovDeg) * EntityInterestRules.LeaveFactor;
-            int cells = (int)Math.Ceiling(reach / CellM);
-            long ce = (long)Math.Floor(at.E / CellM), cn = (long)Math.Floor(at.N / CellM);
-            for (long de = -cells; de <= cells; de++)
-                for (long dn = -cells; dn <= cells; dn++)
-                    if (_cells.TryGetValue((ce + de, cn + dn), out var cell))
+            int cells = EntityInterestRules.CellRings(reach);
+            var centre = CellOf(at);
+            // the square of cells round the viewer's along its face's axes, across face edges (a cube corner has no
+            // diagonal cell: Neighbour gives null there, seven neighbours instead of eight)
+            for (int dx = -cells; dx <= cells; dx++)
+                for (int dy = -cells; dy <= cells; dy++)
+                    if (centre.Neighbour(dx, dy) is { } key && _cells.TryGetValue(key, out var cell))
                         foreach (int i in cell) Consider(i);
             foreach (int i in _big) Consider(i);
             foreach (var id in set)
@@ -234,7 +241,7 @@ public partial class EntityInterest : Node
             {
                 if (!_seen.Add(i)) return;
                 var (id, entity, where) = _entities[i];
-                double d = Math.Min(Flat(where, at.E, at.N), Flat(where, aheadE, aheadN));
+                double d = Math.Min(where.HorizontalDistanceTo(at), where.HorizontalDistanceTo(ahead));
                 _candidates.Add(new EntityInterestRules.Candidate(i, d, entity.InterestRange(view), set.Contains(id)));
             }
 
@@ -262,7 +269,11 @@ public partial class EntityInterest : Node
         }
     }
 
-    private static double Flat(GlobalPos a, double e, double n) => Math.Sqrt((a.E - e) * (a.E - e) + (a.N - n) * (a.N - n));
+    /// <summary>
+    /// The bucket a place is in (#1513): its level-13 cube cell, anywhere on the Earth. Only a spatial hash: the rings
+    /// round a viewer's cell are searched (<see cref="EntityInterestRules.CellRings"/>), distances are the Earth's.
+    /// </summary>
+    public static CubeKey CellOf(GlobalPos at) => CubeKey.FromEcef(at.Ecef, EntityInterestRules.CellLevel);
 }
 
 /// <summary>

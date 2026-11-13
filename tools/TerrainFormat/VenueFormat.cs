@@ -73,7 +73,11 @@ public enum VenueFix : byte
 
 /// <summary>One venue: LV95 metres to the decimetre.</summary>
 public sealed record VenueRecord(string Osm, VenueType Type, double E, double N, VenueFix Fix, VenueFlags Flags,
-    int Count, string Cuisine, string Name);
+    int Count, string Cuisine, string Name)
+{
+    /// <summary>The venue on the Earth, at the base of its solid (the ground in the open) (#1507: three more columns; null before).</summary>
+    public GeoPoint? Geo { get; init; }
+}
 
 /// <summary>
 /// <c>venues.tsv.gz</c> (#1232): every venue OSM knows in Switzerland, written by
@@ -87,17 +91,23 @@ public static class VenueFormat
     public const string Header = "# venues v1";
     public const string Columns = "osm\tkind\te\tn\tfix\tflags\tcount\tcuisine\tname";
 
+    /// <summary>The columns a run with Earth positions adds after the name (#1507): latitude, longitude, ellipsoidal height.</summary>
+    public const string GeoColumns = "\tlat\tlon\th";
+
     public static void Write(Stream stream, string source, IEnumerable<VenueRecord> rows)
     {
         // no file name or time in the gzip header (.NET writes none), so the same rows give the same bytes
         using var gz = new GZipStream(stream, CompressionLevel.SmallestSize, leaveOpen: true);
         using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+        var list = rows.ToList();
+        bool geo = list.Count > 0 && list.All(r => r.Geo != null);
         w.WriteLine($"{Header} {Clean(source)}");
-        w.WriteLine(Columns);
+        w.WriteLine(geo ? Columns + GeoColumns : Columns);
         var inv = CultureInfo.InvariantCulture;
-        foreach (var r in rows)
+        foreach (var r in list)
             w.WriteLine(string.Join('\t', r.Osm, ((int)r.Type).ToString(inv), r.E.ToString("0.0", inv), r.N.ToString("0.0", inv),
-                ((int)r.Fix).ToString(inv), ((int)r.Flags).ToString(inv), r.Count.ToString(inv), Clean(r.Cuisine), Clean(r.Name)));
+                ((int)r.Fix).ToString(inv), ((int)r.Flags).ToString(inv), r.Count.ToString(inv), Clean(r.Cuisine), Clean(r.Name))
+                + (geo ? string.Create(inv, $"\t{r.Geo!.Value.Lat:F9}\t{r.Geo.Value.Lon:F9}\t{r.Geo.Value.H:F2}") : ""));
     }
 
     public static List<VenueRecord> Read(Stream stream)
@@ -115,8 +125,10 @@ public static class VenueFormat
             if (line.Length == 0) continue;
             var c = line.Split('\t');
             if (c.Length < 9) throw new InvalidDataException($"venues: {c.Length} columns in \"{line}\"");
-            rows.Add(new VenueRecord(c[0], (VenueType)int.Parse(c[1], inv), double.Parse(c[2], inv), double.Parse(c[3], inv),
-                (VenueFix)int.Parse(c[4], inv), (VenueFlags)int.Parse(c[5], inv), int.Parse(c[6], inv), c[7], c[8]));
+            var row = new VenueRecord(c[0], (VenueType)int.Parse(c[1], inv), double.Parse(c[2], inv), double.Parse(c[3], inv),
+                (VenueFix)int.Parse(c[4], inv), (VenueFlags)int.Parse(c[5], inv), int.Parse(c[6], inv), c[7], c[8]);
+            if (c.Length >= 12) row = row with { Geo = new GeoPoint(double.Parse(c[9], inv), double.Parse(c[10], inv), double.Parse(c[11], inv)) };
+            rows.Add(row);
         }
         return rows;
     }

@@ -45,6 +45,16 @@ public partial class BrManager : Node
 
     // ---- server: the match's loot (#194) ----
     private Terrain.IChunkSource? _source;
+
+    /// <summary>
+    /// Server: the ground's names for the tiles over a match square when they are not its LV95 tiles (#1704): under
+    /// <c>--frame earth</c> the leaves' stand-ins (<see cref="BrLoot.LeafTiles"/>), read through the ground's own files.
+    /// Null in the flat world.
+    /// </summary>
+    public Func<BrArea, IEnumerable<TileId>>? TilesOf { get; set; }
+
+    /// <summary>Server, with <see cref="TilesOf"/>: a leaf's own roads (its anchor frame), made or read without its collision.</summary>
+    public Func<CubeKey, RoadTile?>? LeafRoads { get; set; }
     private BrCrates? _crates;
     private readonly HashSet<int> _dropped = new();
     private int _match;
@@ -220,7 +230,7 @@ public partial class BrManager : Node
         if (query.Equals("here", StringComparison.OrdinalIgnoreCase))
         {
             if (_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is not { } body) return "'/br open here' needs a player.";
-            var (e, n) = (body.Global.E, body.Global.N);
+            var (e, n) = (body.Global.Lv95.E, body.Global.Lv95.N);
             area = new BrArea(Math.Round(e / 50) * 50, Math.Round(n / 50) * 50, size, NearestTown(e, n) ?? "here");
         }
         else if (query.Length > 0)
@@ -590,7 +600,7 @@ public partial class BrManager : Node
         if (_source == null || Origin == null) return;
         try
         {
-            var roads = await BrLoot.RoadPoints(_source, area);
+            var roads = await BrLoot.RoadPoints(_source, area, TilesOf?.Invoke(area), LeafRoads);
             if (match != _match || _state.Phase != BrPhase.Playing) return;
             // the Postauto stops for recalls (#480), squads only
             if (_state.TeamSize > 1)
@@ -698,7 +708,7 @@ public partial class BrManager : Node
         if (_state.Find(peer) is not { Alive: true } e || _players?.GetNodeOrNull<Player.FootPlayer>(peer.ToString()) is not { } body) return;
         if (_lastFlare.TryGetValue(peer, out double last) && RealNow - last < 20) return;
         _lastFlare[peer] = RealNow;
-        var (pe, pn) = (body.Global.E, body.Global.N);
+        var (pe, pn) = (body.Global.Lv95.E, body.Global.Lv95.N);
         var rng = new Random(_state.Seed ^ (int)peer ^ (int)Now);
         float a = (float)(rng.NextDouble() * Math.Tau), r = 20f + (float)rng.NextDouble() * 30f;
         var drop = new Crate
@@ -725,7 +735,12 @@ public partial class BrManager : Node
     /// to the sender; at most one every <see cref="PingEvery"/> s.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestPing(double e, double n, double alt) => ServerPing(Multiplayer.GetRemoteSenderId(), e, n, alt);
+    private void RequestPing(double x, double y, double z, bool onMap)
+    {
+        // (#1503) ECEF on the wire; a map ping has no height (its z is the ground at sea level)
+        var at = GlobalPos.FromWire(x, y, z);
+        ServerPing(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, onMap ? double.NaN : at.Alt);
+    }
 
     /// <summary>
     /// Server: <paramref name="peer"/> marks a point for their team, a player's request or a bot's (#837). Sent to the
@@ -737,14 +752,14 @@ public partial class BrManager : Node
         if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return false;
         if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || BodyOf(peer) is not { } body) return false;
         if (_lastPing.TryGetValue(peer, out double last) && RealNow - last < PingEvery) return false;
-        var (be, bn) = (body.Global.E, body.Global.N);
-        if (GlobalPos.HorizontalDistance(e, n, be, bn) > PingReach) return false;
+        if (body.Global.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, 0)) > PingReach) return false;
         _lastPing[peer] = RealNow;
+        var (wx, wy, wz) = GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : 0).ToWire();   // (#1503) the wire is ECEF
         foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
-            if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+            if (!x.Bot && Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, wx, wy, wz, !double.IsFinite(alt));
         TeamPinged?.Invoke(me.Team, peer, e, n, alt);
         // a human's ping is for the team's bots to follow (#837 phase 4); a map ping has no height: the pinger's
-        if (!me.Bot) _humanPings[me.Team] = (new GlobalPos(e, n, double.IsFinite(alt) ? alt : body.GlobalPosition.Y), Now, peer);
+        if (!me.Bot) _humanPings[me.Team] = (GlobalPos.FromLv95(e, n, double.IsFinite(alt) ? alt : body.Global.Alt), Now, peer);
         return true;
     }
 
@@ -780,8 +795,8 @@ public partial class BrManager : Node
         // a squad player's dogtag (#480): a team-mate can bring them back with it
         if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
-        var (pe, pn) = (body.Global.E, body.Global.N);
-        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
+        var (pe, pn) = (body.Global.Lv95.E, body.Global.Lv95.N);
+        var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = (float)body.Global.Alt, Label = $"{e.Name}'s things" };
         box.SetStacks(stacks);
         _crates.Spawn(new[] { box });
     }
@@ -968,11 +983,40 @@ public partial class BrManager : Node
     }
 
     /// <summary>Server: a joining peer gets the state (it spectates a running match through it).</summary>
-    public void SendTo(long peer) => RpcId(peer, MethodName.SetState, _state.ToJson());
+    public void SendTo(long peer) => RpcId(peer, MethodName.SetState, StateWire(_state.ToJson(), toWire: true));
 
     private void Push()
     {
-        if (_server) Rpc(MethodName.SetState, _state.ToJson());
+        if (_server) Rpc(MethodName.SetState, StateWire(_state.ToJson(), toWire: true));
+    }
+
+    /// <summary>
+    /// (#1503) The state's area centre (<c>AreaE</c>, <c>AreaN</c>, LV95) crosses the wire as ECEF <c>AreaX</c>, <c>AreaY</c>,
+    /// <c>AreaZ</c>. Zone metres (<c>ZoneCentres</c>, <c>RecallPoints</c>) stay metres east and north of that centre on the grid:
+    /// the same on every peer, whatever its origin.
+    /// </summary>
+    internal static string StateWire(string json, bool toWire)
+    {
+        if (System.Text.Json.Nodes.JsonNode.Parse(json) is not System.Text.Json.Nodes.JsonObject o) return json;
+        if (toWire && o["AreaE"] != null && o["AreaN"] != null)
+        {
+            var (x, y, z) = GlobalPos.FromLv95(o["AreaE"]!.GetValue<double>(), o["AreaN"]!.GetValue<double>(), 0).ToWire();
+            o.Remove("AreaE");
+            o.Remove("AreaN");
+            o["AreaX"] = x;
+            o["AreaY"] = y;
+            o["AreaZ"] = z;
+        }
+        else if (!toWire && o["AreaX"] != null && o["AreaY"] != null && o["AreaZ"] != null)
+        {
+            var at = GlobalPos.FromWire(o["AreaX"]!.GetValue<double>(), o["AreaY"]!.GetValue<double>(), o["AreaZ"]!.GetValue<double>());
+            o.Remove("AreaX");
+            o.Remove("AreaY");
+            o.Remove("AreaZ");
+            o["AreaE"] = at.Lv95.E;
+            o["AreaN"] = at.Lv95.N;
+        }
+        return o.ToJsonString();
     }
 
     private void Broadcast(string line) => _chat?.Broadcast(line, ChatKind.System);
@@ -982,9 +1026,10 @@ public partial class BrManager : Node
         try
         {
             if (!Godot.FileAccess.FileExists(HistoryFile)) return new();
-            using var f = Godot.FileAccess.Open(HistoryFile, Godot.FileAccess.ModeFlags.Read);
-            var list = JsonSerializer.Deserialize<List<double[]>>(f.GetAsText()) ?? new();
-            return list.Where(p => p.Length == 2).Select(p => (p[0], p[1])).ToList();
+            var places = Core.SavedPlace.ReadPlaces(Godot.FileAccess.GetFileAsString(HistoryFile), out bool old);
+            // a file from before G2 A2b (LV95 pairs): converted in place (#1503)
+            if (old) WriteHistory(places);
+            return places.Select(p => { var (e, n, _) = p.Lv95; return (e, n); }).ToList();
         }
         catch (Exception ex)
         {
@@ -998,7 +1043,16 @@ public partial class BrManager : Node
         var list = LoadHistory();
         list.Add((_state.AreaE, _state.AreaN));
         if (list.Count > 5) list.RemoveRange(0, list.Count - 5);
-        try { Core.JsonStore.Save(HistoryFile, list.Select(p => new[] { p.E, p.N }).ToList()); }
+        WriteHistory(list.Select(p => GlobalPos.FromLv95(p.E, p.N, 0)));
+    }
+
+    /// <summary>
+    /// The last areas played, as Earth places on the ground (<see cref="Core.SavedPlace.PlacesNode"/>, #1503): an area's
+    /// centre is a place (a town's, jittered: <see cref="BrRegion.Pick"/>), not an id in a catalogue.
+    /// </summary>
+    private static void WriteHistory(IEnumerable<GlobalPos> places)
+    {
+        try { Core.JsonStore.Save(HistoryFile, Core.SavedPlace.PlacesNode(places)); }
         catch (Exception e) { GD.PushWarning($"[br] history: {e.Message}"); }
     }
 }

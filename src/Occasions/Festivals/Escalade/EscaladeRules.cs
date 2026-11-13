@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-escalade.md).
 
+using UnitSport.Core;
 namespace UnitSport.Occasions.Festivals.Escalade;
 
 /// <summary>
@@ -87,11 +88,13 @@ public static class EscaladeRules
 
     public static double Dist(double e, double n, (double E, double N) at) => Math.Sqrt((e - at.E) * (e - at.E) + (n - at.N) * (n - at.N));
 
-    public static bool NearMarmite(ResolvedSite site, double e, double n) => Dist(e, n, MarmiteAt(site)) <= MarmiteReach;
+    public static double Dist(GlobalPos pos, (double E, double N) at) => pos.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, pos.Alt));
 
-    public static bool NearPot(ResolvedSite site, double e, double n) => Dist(e, n, PotAt(site)) <= PotReach;
+    public static bool NearMarmite(ResolvedSite site, GlobalPos at) => Dist(at, MarmiteAt(site)) <= MarmiteReach;
 
-    public static bool NearStart(ResolvedSite site, double e, double n) => Dist(e, n, StartAt(site)) <= StartReach;
+    public static bool NearPot(ResolvedSite site, GlobalPos at) => Dist(at, PotAt(site)) <= PotReach;
+
+    public static bool NearStart(ResolvedSite site, GlobalPos at) => Dist(at, StartAt(site)) <= StartReach;
 
     // ---- the Course: pay ----------------------------------------------------------------------------------------
 

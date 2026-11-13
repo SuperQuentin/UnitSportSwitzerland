@@ -95,6 +95,31 @@ public partial class NearTrees : Node3D, IOriginShiftAware
 
     public override void _Ready() => _tilesChanged = true;
 
+    /// <summary>The live set, for the probes (<c>--treeseatcheck</c>); null when the style draws its trees per tile.</summary>
+    public static NearTrees? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>The registered tiles' trees, as their buffers hold them (each in its tile's frame). For the probes.</summary>
+    public static IEnumerable<KeyValuePair<ChunkNode, ChunkNode.TreeBuffers>> Registered => Tiles;
+
+    /// <summary>Where each drawn tree's base is in the world, as the renderer places it. For the probes.</summary>
+    public void DrawnBases(List<Vector3> into)
+    {
+        var g = GlobalTransform;
+        foreach (var (mm, buf) in new[] { (_conifers, _coniferBuf), (_broadleaves, _broadleafBuf) })
+            for (int i = 0, n = mm.VisibleInstanceCount; i < n; i++)
+            {
+                int s = i * FloatsPerInstance;
+                into.Add(g * new Vector3(buf[s + 3], buf[s + 7], buf[s + 11]));
+            }
+    }
+
     public override void _Process(double delta)
     {
         _sinceUpdate += delta;
@@ -114,7 +139,12 @@ public partial class NearTrees : Node3D, IOriginShiftAware
 
         var cone = new Cone(_range, zoom > 0 ? Styles.LodScale.Step * Styles.LodScale.StepRatio : 1f, at, dir, Styles.LodScale.ConeHalfDeg);
         int nc = 0, nb = 0;
-        var self = GlobalPosition;
+        // the instances are refilled in world space, so the node goes back to the identity: a shift moved it with the
+        // tiles, and the earth world's turning re-anchor turned it too (#1776). Placed relative to its position alone,
+        // every tree was drawn turned about it by the turns since it was made: metres up or down once the camera was
+        // a few km from where that was (four re-anchors from Geneva, trees floating over the leaves)
+        GlobalTransform = Transform3D.Identity;
+        var self = Vector3.Zero;
         foreach (var (tile, b) in Tiles)
         {
             if (!IsInstanceValid(tile) || !tile.IsInsideTree() || !tile.IsVisibleInTree()) continue;
@@ -124,8 +154,11 @@ public partial class NearTrees : Node3D, IOriginShiftAware
             float dz = Mathf.Max(0, Mathf.Max(o.Z - at.Z, at.Z - (o.Z + 1000f)));
             float d2 = dx * dx + dz * dz;
             if (d2 > cone.Near2 && (d2 > cone.Far2 || !Styles.LodScale.InCone(o + TileCentre, TileHalfDiagonal))) continue;
-            nc = Gather(b.Conifers, b.ConiferCount, o, self, cone, _coniferBuf, nc, _capacity);
-            nb = Gather(b.Broadleaves, b.BroadleafCount, o, self, cone, _broadleafBuf, nb, _capacity);
+            // an earth world's leaf (#1510) is turned a little in the world: its trees through its whole transform
+            var basis = tile.GlobalBasis;
+            Basis? turn = basis.IsEqualApprox(Basis.Identity) ? null : basis;
+            nc = Gather(b.Conifers, b.ConiferCount, o, turn, self, cone, _coniferBuf, nc, _capacity);
+            nb = Gather(b.Broadleaves, b.BroadleafCount, o, turn, self, cone, _broadleafBuf, nb, _capacity);
         }
         // a zoomed cone over a forest holds more than the buffers: grow them, and refill next frame
         if ((nc >= _capacity || nb >= _capacity) && _capacity < MaxCapacity)
@@ -186,13 +219,19 @@ public partial class NearTrees : Node3D, IOriginShiftAware
     }
 
     /// <summary>Copies a tile's trees within reach, placed relative to this node. Returns the new count.</summary>
-    private static int Gather(float[] src, int count, Vector3 tile, Vector3 self, in Cone cone, float[] dst, int n, int capacity)
+    private static int Gather(float[] src, int count, Vector3 tile, Basis? turn, Vector3 self, in Cone cone, float[] dst, int n, int capacity)
     {
         var at = cone.At;
         for (int i = 0; i < count && n < capacity; i++)
         {
             int s = i * FloatsPerInstance;
-            float x = src[s + 3] + tile.X, y = src[s + 7] + tile.Y, z = src[s + 11] + tile.Z;
+            float x, y, z;
+            if (turn is { } t)
+            {
+                var p = tile + t * new Vector3(src[s + 3], src[s + 7], src[s + 11]);
+                (x, y, z) = (p.X, p.Y, p.Z);
+            }
+            else (x, y, z) = (src[s + 3] + tile.X, src[s + 7] + tile.Y, src[s + 11] + tile.Z);
             if (!cone.Takes(x - at.X, z - at.Z)) continue;
             int d = n * FloatsPerInstance;
             System.Array.Copy(src, s, dst, d, FloatsPerInstance);

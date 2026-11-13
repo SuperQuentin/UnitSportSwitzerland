@@ -1,5 +1,6 @@
 using UnitSport.Terrain.Fixture;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 using Xunit;
 
 namespace UnitSport.Tests;
@@ -8,6 +9,7 @@ namespace UnitSport.Tests;
 /// The fun world's course (#1396, src/Terrain/Fixture/FunCourse.cs): what the game reads off it must stand where it
 /// is meant to, and the source must hand the venues, the arena, the fleet and the slope to the game as it reads them.
 /// </summary>
+[Collection(FixtureWorld.Collection)]
 public class FunCourseTests
 {
     private const double StartE = 2583250, StartN = 1113250;
@@ -139,5 +141,110 @@ public class FunCourseTests
         }
         Assert.DoesNotContain(UnitSport.Terrain.Stadiums.StadiumCatalog.All, s => s.Name == FunCourse.Arena.Name);
         Assert.Empty(FixtureChunkSource.Fleet);
+    }
+
+    /// <summary>
+    /// #1649: played on its leaves, the fleet stands where the leaves have its course points (their LV95 notation is the
+    /// latitude and longitude the leaves' plane gives), facing the course's way there, not where the flat world's grid
+    /// metres put it: the two part by metres across the course.
+    /// </summary>
+    [Fact]
+    public void On_earth_the_fleet_stands_where_the_leaves_have_its_course_points()
+    {
+        try
+        {
+            var source = FixtureChunkSource.Create("fun", StartE, StartN, earth: true)!;
+            Assert.Same(source.Place, CoursePlace.Active);
+            var leaves = FixtureLeaves.At(source);
+            Assert.Same(source.Place.Earth, leaves.Source);
+            var slots = FixtureChunkSource.Fleet.Values.SelectMany(l => l).OrderBy(s => s.Ordinal).ToList();
+            Assert.Equal(Course.Fleet.Count, slots.Count);
+            double parted = 0;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var (p, s) = (Course.Fleet[i], slots[i]);
+                var (lat, lon) = leaves.Source.ToLatLon(p.X, p.Y);
+                var (e, n) = Lv95Source.Instance.FromLatLon(lat, lon);
+                // the placement's map about the start against the plane itself: a few millimetres across the course
+                Assert.InRange(Math.Abs(s.E - e) + Math.Abs(s.N - n), 0, 0.01);
+                Assert.Equal(TileId.FromLv95(s.E, s.N), FixtureChunkSource.Fleet.Single(kv => kv.Value.Contains(s)).Key);
+                // the yaw on the grid, carried back onto the course: the course's heading
+                double grid = -s.Yaw;
+                var (x1, y1) = source.Place.Course(s.E + 10 * Math.Sin(grid), s.N + 10 * Math.Cos(grid));
+                double back = Math.Atan2(x1 - p.X, y1 - p.Y) * 180 / Math.PI;
+                Assert.InRange(Math.Abs(Math.IEEERemainder(back - p.HeadingDeg, 360)), 0, 0.01);
+                parted = Math.Max(parted, Math.Abs(s.E - (StartE + p.X)) + Math.Abs(s.N - (StartN + p.Y)));
+            }
+            Assert.True(parted > 0.5, $"the earth placement is the grid's ({parted:F2} m at most)");
+            // the tiles are laid the same way: the race track's road where the plane has it, and back
+            var corner = (FunCourse.TrackX0, FunCourse.TrackY0);
+            var (te, tn) = source.Place.Lv95(corner.Item1, corner.Item2);
+            var (xe, xn) = source.Place.Exact(corner.Item1, corner.Item2);
+            Assert.InRange(Math.Abs(te - xe) + Math.Abs(tn - xn), 0, 0.01);
+            var (bx, by) = source.Place.Course(te, tn);
+            Assert.InRange(Math.Abs(bx - corner.Item1) + Math.Abs(by - corner.Item2), 0, 1e-6);
+            Assert.InRange(source.Place.Turn * 180 / Math.PI, -1, 1);
+            Assert.NotEqual(0, source.Place.Turn);
+        }
+        finally
+        {
+            FixtureChunkSource.ForgetWorld();
+        }
+        Assert.Null(CoursePlace.Active);
+    }
+
+    /// <summary>
+    /// #1649: the snow slope on the fun course's leaves, as the cube piste stage writes a leaf's: its record on each leaf
+    /// the slope reaches, every slot vertex inside its outline, the slope's whole area covered once, through the codec.
+    /// </summary>
+    [Fact]
+    public void The_slope_is_on_its_leaves()
+    {
+        try
+        {
+            var source = FixtureChunkSource.Create("fun", StartE, StartN, earth: true)!;
+            var leaves = FixtureLeaves.At(source);
+            var slope = Assert.Single(Course.Slopes);
+            var touched = new HashSet<CubeKey>();
+            double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
+            double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
+            for (double x = minX; x <= maxX + 50; x += 50)
+                for (double y = minY; y <= maxY + 50; y += 50)
+                    touched.Add(SourceOnLeaf.LeafOf(leaves.Source, Math.Min(x, maxX), Math.Min(y, maxY)));
+            double covered = 0;
+            foreach (var key in touched)
+            {
+                var content = leaves.Build(key)!;
+                var pistes = content.Pistes;
+                Assert.NotNull(pistes);
+                Assert.Contains(pistes!.Records, r => r.Name == slope.Name && r.IsArea == (slope.Line == null));
+                var on = new SourceOnLeaf(LeafFrames.Swiss, key, leaves.Source);
+                int n = on.Side;
+                Assert.Equal(n * n, pistes.Slot.Length);
+                for (int j = 0; j + 1 < n; j++)
+                    for (int i = 0; i + 1 < n; i++)
+                    {
+                        if (pistes.Slot[i + j * n] == 0) continue;
+                        var (x, y) = on.SourceAt(i, j);
+                        Assert.True(FixtureChunkSource.Inside(slope.Outline, x, y));
+                        // the cell from this vertex east and north, in course metres
+                        var (xe, ye) = on.SourceAt(i + 1, j);
+                        var (xn, yn) = on.SourceAt(i, j + 1);
+                        covered += Math.Abs((xe - x) * (yn - y) - (ye - y) * (xn - x));
+                    }
+                var back = LeafPistes.Decode(LeafPistes.Encode(pistes, content.Heights.Bits));
+                Assert.Equal(pistes.Slot, back.Slot);
+                Assert.Equal(pistes.Records.Count, back.Records.Count);
+            }
+            double area = 0;
+            for (int i = 0, j = slope.Outline.Length - 1; i < slope.Outline.Length; j = i++)
+                area += (slope.Outline[j].X + slope.Outline[i].X) * (slope.Outline[j].Y - slope.Outline[i].Y);
+            area = Math.Abs(area) / 2;
+            Assert.InRange(covered / area, 0.9, 1.1);
+        }
+        finally
+        {
+            FixtureChunkSource.ForgetWorld();
+        }
     }
 }

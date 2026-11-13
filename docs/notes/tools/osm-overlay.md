@@ -15,7 +15,7 @@
   covers the manifest's tiles (or the tiles file) and writes `<chunks>_temp/osm_overlay.tsv` and
   `osm_overlay_report.txt` (and `osm_nodes.tsv`, below; and `osm_tram_stops.tsv`, #1057: `railway=tram_stop` and tram stop positions, `tram-approaches`). `--osm-check` is the self-check
   (synthetic lines and a synthetic crossroads for the nodes file, exit 1 on failure). `--out` is
-  only read for its manifest when there is no `--tiles-file`; `--temp` sends the output elsewhere.
+  read for its manifest when there is no `--tiles-file`, and for its heights (OSM nodes converted on the built ground, `GeoInput`, #1507); `--temp` sends the output elsewhere.
   MapSetup: `--layers roads,osm` (never implied by `all`); the download is `swiss_data.py osm`.
 - **Download gotcha**: Geofabrik's `switzerland-latest.osm.pbf` answered with a 301 to itself
   (2026-09). `swiss_data.py osm` reads the `europe/` index and takes the newest dated

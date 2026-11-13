@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-sechselaeuten.md).
 
+using UnitSport.Core;
 namespace UnitSport.Occasions.Festivals.Sechselaeuten;
 
 /// <summary>
@@ -131,9 +132,11 @@ public static class SechselaeutenRules
 
     public static double Dist(double e, double n, (double E, double N) at) => Math.Sqrt((e - at.E) * (e - at.E) + (n - at.N) * (n - at.N));
 
-    public static bool NearPyre(ResolvedSite site, double e, double n) => Dist(e, n, PyreAt(site)) <= PyreReach;
+    public static double Dist(GlobalPos pos, (double E, double N) at) => pos.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, pos.Alt));
 
-    public static bool NearWeibel(ResolvedSite site, double e, double n) => Dist(e, n, WeibelAt(site)) <= WeibelReach;
+    public static bool NearPyre(ResolvedSite site, GlobalPos at) => Dist(at, PyreAt(site)) <= PyreReach;
+
+    public static bool NearWeibel(ResolvedSite site, GlobalPos at) => Dist(at, WeibelAt(site)) <= WeibelReach;
 
     /// <summary>The six guild banners round the square: their distance from the middle and their count (a ring, hashed per tile by the decor).</summary>
     public const int Banners = 6;

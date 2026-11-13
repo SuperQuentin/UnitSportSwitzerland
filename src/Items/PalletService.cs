@@ -46,7 +46,7 @@ public partial class PalletService : Node
 
     public static PalletService? Instance { get; private set; }
 
-    /// <summary>A pallet somebody set down: LV95, altitude, its yaw (its runners' heading) and its load.</summary>
+    /// <summary>A pallet somebody set down: LV95, altitude, its yaw (its runners' heading, in GlobalPos's axes: grid north) and its load.</summary>
     public sealed record LoosePallet(long Id, double E, double N, double Altitude, float Yaw, byte Load);
 
     private bool _server;
@@ -288,13 +288,19 @@ public partial class PalletService : Node
         else ServeTake(1, id);
     }
 
-    /// <summary>Asks to set the forks' pallet down at <paramref name="at"/>, its runners on <paramref name="yaw"/>.</summary>
+    /// <summary>Asks to set the forks' pallet down at <paramref name="at"/>, its runners on <paramref name="yaw"/> (a world yaw here).</summary>
     public void RequestDrop(byte load, GlobalPos at, float yaw, Action<bool> done)
     {
         _dropDone = done;
         _askedAt = GameClock.Now;
-        if (Online) RpcId(1, MethodName.AskDrop, (int)load, at.E, at.N, at.Alt, yaw);
-        else ServeDrop(1, load, at.E, at.N, at.Alt, yaw);
+        // the record's yaw is in GlobalPos's axes; the wire's is from true north at the pallet (#1503)
+        float offsetYaw = _origin.Frame.GridYawOf(_origin.ToWorld(at), yaw);
+        if (Online)
+        {
+            var (x, y, z) = at.ToWire();
+            RpcId(1, MethodName.AskDrop, (int)load, x, y, z, Lv95Grid.TrueYaw(at, offsetYaw));
+        }
+        else ServeDrop(1, load, at, offsetYaw);
     }
 
     private long MyPeer => NetLink.Ready(this) ? Multiplayer.GetUniqueId() : 1;
@@ -328,10 +334,11 @@ public partial class PalletService : Node
 
     /// <summary>A pallet was set down; <paramref name="by"/>'s forks are empty now.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Dropped(long id, double e, double n, double alt, float yaw, int load, long by)
+    private void Dropped(long id, double x, double y, double z, float trueYaw, int load, long by)
     {
-        Add(new LoosePallet(id, e, n, alt, yaw, (byte)load));
-        GD.Print(FormattableString.Invariant($"[pallets] {Pallets.LooseId(id)} set down by peer {by} at LV95 {e:F1}/{n:F1} alt {alt:F1} (load {load})"));
+        var at = GlobalPos.FromWire(x, y, z);
+        Add(new LoosePallet(id, at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.GridYaw(at, trueYaw), (byte)load));
+        GD.Print(FormattableString.Invariant($"[pallets] {Pallets.LooseId(id)} set down by peer {by} at LV95 {at.Lv95.E:F1}/{at.Lv95.N:F1} alt {at.Alt:F1} (load {load})"));
         if (by == MyPeer && _dropDone is { } done)
         {
             Answered();
@@ -353,14 +360,18 @@ public partial class PalletService : Node
 
     /// <summary>The whole state, on joining: replaces whatever this client knew.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Snapshot(string[] taken, long[] ids, double[] pos, float[] yaws, int[] loads)
+    private void Snapshot(string[] taken, long[] ids, double[] pos, float[] trueYaws, int[] loads)
     {
         _taken.Clear();
         _takenHall.Clear();
         foreach (long id in _loose.Keys.ToList()) Remove(Pallets.LooseId(id));
         foreach (var id in taken) MarkTaken(id);
         for (int i = 0; i < ids.Length; i++)
-            Add(new LoosePallet(ids[i], pos[3 * i], pos[3 * i + 1], pos[3 * i + 2], yaws[i], (byte)loads[i]));
+        {
+            // three ECEF doubles each, headings from true north (#1503)
+            var at = GlobalPos.FromWire(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+            Add(new LoosePallet(ids[i], at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.GridYaw(at, trueYaws[i]), (byte)loads[i]));
+        }
         foreach (var node in PalletNode.All.Values) node.SetTaken(_taken.Contains(node.Id));
         GD.Print($"[pallets] snapshot: {taken.Length} taken, {ids.Length} loose");
         Changed?.Invoke();
@@ -399,7 +410,8 @@ public partial class PalletService : Node
         if (_server) return;
         if (_drawn.Remove(p.Id, out var old) && IsInstanceValid(old)) old.QueueFree();
         var node = PalletNode.Create(Pallets.LooseId(p.Id), p.Load, HumanMeshBuilder.FigureMaterial());
-        node.Transform = new Transform3D(new Basis(Vector3.Up, p.Yaw), _origin.ToWorld(p.E, p.N, p.Altitude));
+        var at = GlobalPos.FromLv95(p.E, p.N, p.Altitude);
+        node.Transform = new Transform3D(new Basis(Vector3.Up, _origin.Frame.WorldYawOfGrid(at, p.Yaw)), _origin.ToWorld(at));
         AddChild(node);
         _drawn[p.Id] = node;
     }
@@ -636,8 +648,8 @@ public partial class PalletService : Node
         var loose = _loose.Values.OrderBy(p => p.Id).ToList();
         RpcId(peer, MethodName.Snapshot, _taken.ToArray(),
             loose.Select(p => p.Id).ToArray(),
-            loose.SelectMany(p => new[] { p.E, p.N, p.Altitude }).ToArray(),
-            loose.Select(p => p.Yaw).ToArray(),
+            loose.SelectMany(p => { var (x, y, z) = GlobalPos.FromLv95(p.E, p.N, p.Altitude).ToWire(); return new[] { x, y, z }; }).ToArray(),
+            loose.Select(p => Lv95Grid.TrueYaw(GlobalPos.FromLv95(p.E, p.N, p.Altitude), p.Yaw)).ToArray(),
             loose.Select(p => (int)p.Load).ToArray());
     }
 
@@ -645,8 +657,17 @@ public partial class PalletService : Node
     private void AskTake(string id) => ServeTake(Multiplayer.GetRemoteSenderId(), id);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskDrop(int load, double e, double n, double alt, float yaw) =>
-        ServeDrop(Multiplayer.GetRemoteSenderId(), (byte)Math.Clamp(load, 0, 255), e, n, alt, yaw);
+    private void AskDrop(int load, double x, double y, double z, float trueYaw)
+    {
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(z) || !float.IsFinite(trueYaw))
+        {
+            RpcId(peer, MethodName.DropRefused, "Bad position.");
+            return;
+        }
+        var at = GlobalPos.FromWire(x, y, z);
+        ServeDrop(peer, (byte)Math.Clamp(load, 0, 255), at, Lv95Grid.GridYaw(at, trueYaw));
+    }
 
     private async void ServeTake(long peer, string id)
     {
@@ -657,7 +678,7 @@ public partial class PalletService : Node
         {
             if (!_loose.TryGetValue(r.Loose, out var loose)) { Refuse(peer, id, "It is not there any more."); return; }
             load = loose.Load;
-            at = new GlobalPos(loose.E, loose.N, loose.Altitude);
+            at = GlobalPos.FromLv95(loose.E, loose.N, loose.Altitude);
         }
         else if (r.Source == PalletSource.Hall)
         {
@@ -696,7 +717,8 @@ public partial class PalletService : Node
             if (stack is not { } yard) { Refuse(peer, id, "No such pallet."); return; }
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
             load = yard.Load;
-            at = new GlobalPos(yard.E, yard.N, yard.Height);
+            // in the site tile's own frame: an LV95 tile, or an earth leaf's stand-in (FromLv95 places either, #1704)
+            at = GlobalPos.FromLv95(yard.E, yard.N, yard.Height);
         }
 
         if (Forks(peer, null) is { } why) { Refuse(peer, id, why); return; }
@@ -708,13 +730,12 @@ public partial class PalletService : Node
         // the server's own copy, and offline the client's: the same call
         Took(id, load, peer);
         // a crane's hook (#618) carries it on the crane's own record, which everyone is told
-        Terrain.Construction.CraneService.Instance?.Hooked(peer, Pallets.Carried(load), (float)at.Alt);
+        Terrain.Construction.CraneService.Instance?.Hooked(peer, Pallets.Carried(load), at);
     }
 
-    private void ServeDrop(long peer, byte load, double e, double n, double alt, float yaw)
+    private void ServeDrop(long peer, byte load, GlobalPos at, float yaw)
     {
-        var at = new GlobalPos(e, n, alt);
-        string? why = !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !float.IsFinite(yaw) ? "Bad position."
+        string? why = !at.IsFinite || !float.IsFinite(yaw) ? "Bad position."
             : Holds(peer, load)
               ?? (!InReach(peer, at, BedReachOf(peer)) ? "Too far away." : null);
         if (why != null)
@@ -725,10 +746,13 @@ public partial class PalletService : Node
         }
         long id = _nextId++;
         yaw = Mathf.Wrap(yaw, -Mathf.Pi, Mathf.Pi);
+        // ECEF and a heading from true north on the wire; the server's own copy takes the same call (#1503)
+        var (x, y, z) = at.ToWire();
+        float trueYaw = Lv95Grid.TrueYaw(at, yaw);
         if (Online)
             foreach (int other in Multiplayer.GetPeers())
-                RpcId(other, MethodName.Dropped, id, e, n, alt, yaw, (int)load, peer);
-        Dropped(id, e, n, alt, yaw, load, peer);
+                RpcId(other, MethodName.Dropped, id, x, y, z, trueYaw, (int)load, peer);
+        Dropped(id, x, y, z, trueYaw, load, peer);
         Terrain.Construction.CraneService.Instance?.Hooked(peer, 0, float.NaN);
     }
 
@@ -775,7 +799,7 @@ public partial class PalletService : Node
         // a crane's operator reaches with its hook (#618): the pallet hangs a sling's length under it
         if (Terrain.Construction.CraneService.Instance?.HookOf(peer) is { } crane)
             return crane.Hook is { } hook
-                   && hook.DistanceTo(at with { Alt = at.Alt + Terrain.Construction.CraneControl.SlingHang - 0.5 }) <= Reach + more;
+                   && hook.DistanceTo(at.WithAlt(at.Alt + Terrain.Construction.CraneControl.SlingHang - 0.5)) <= Reach + more;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
         return body.Global.DistanceTo(at) <= Reach + more;
     }

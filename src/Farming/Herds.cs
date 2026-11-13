@@ -28,7 +28,7 @@ public partial class Herds : Node3D, IOriginContainer
 
     public static Herds? Instance { get; private set; }
 
-    private readonly ChunkManager? _chunks;
+    private readonly IWorldGround? _terrain;
     private readonly WorldOrigin _origin;
     private readonly bool _dedicated;
 
@@ -71,17 +71,17 @@ public partial class Herds : Node3D, IOriginContainer
         public double Epoch;
     }
 
-    public Herds(ChunkManager? chunks, WorldOrigin origin, bool dedicated)
+    public Herds(IWorldGround? chunks, WorldOrigin origin, bool dedicated)
     {
         Name = NodeName;
-        _chunks = chunks;
+        _terrain = chunks;
         _origin = origin;
         _dedicated = dedicated;
     }
 
     public Herds() : this(null, WorldOrigin.SwissDefault(), false) { }
 
-    public static Herds Create(Node world, ChunkManager? chunks, WorldOrigin origin, bool dedicated)
+    public static Herds Create(Node world, IWorldGround? chunks, WorldOrigin origin, bool dedicated)
     {
         var herds = new Herds(chunks, origin, dedicated);
         world.AddChild(herds);
@@ -141,7 +141,7 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>A tile with no farm layer: its herds from the land cover (<see cref="HerdPlan.FromLand"/>), worked out on a worker.</summary>
     private void OnTileNoFields(TileId id)
     {
-        if (_byTile.ContainsKey(id) || !_landPending.Add(id) || _chunks?.Source is not { } source) return;
+        if (_byTile.ContainsKey(id) || !_landPending.Add(id) || _terrain?.Content is not { } source) return;
         Task.Run(async () =>
         {
             try
@@ -299,10 +299,10 @@ public partial class Herds : Node3D, IOriginContainer
     /// <summary>The terrain's height at an LV95 point on this peer, NaN where it is not loaded.</summary>
     private float GroundAt(double e, double n)
     {
-        if (_chunks == null) return float.NaN;
+        if (_terrain == null) return float.NaN;
         var at = _origin.ToWorld(e, n, 0);
-        if (!_dedicated && _chunks.TryGetSurface(at, out float s)) return s;
-        return _chunks.TryGetHeight(at, out float h) ? h : float.NaN;
+        if (!_dedicated && _terrain.TryGetSurface(at, out float s)) return s;
+        return _terrain.TryGetHeight(at, out float h) ? h : float.NaN;
     }
 
     // ---- the authority: beams, and what it sends -------------------------------------------------
@@ -402,7 +402,18 @@ public partial class Herds : Node3D, IOriginContainer
         _over[cow.Key] = down;
         GD.Print($"[herds] cow {plan.Tile}/{plan.Index}/{cow.Index} set down at LV95 {o.E:F1}/{o.N:F1}, {down.Distance:F0} m from its herd");
         if (!plan.Staged && NetLink.Online(this) && Multiplayer.IsServer())
-            Rpc(MethodName.CowDown, cow.Key, o.E, o.N, o.Alt, o.Yaw, now, down.Distance);
+        {
+            var (x, y, z, trueYaw) = WireOf(o);
+            Rpc(MethodName.CowDown, cow.Key, x, y, z, trueYaw, now, down.Distance);
+        }
+    }
+
+    /// <summary>A cow's override on the wire (#1503): ECEF and a heading from true north at the place (the record's yaw is grid north).</summary>
+    private static (double X, double Y, double Z, float Yaw) WireOf(Override o)
+    {
+        var at = GlobalPos.FromLv95(o.E, o.N, o.Alt);
+        var (x, y, z) = at.ToWire();
+        return (x, y, z, Lv95Grid.TrueYaw(at, o.Yaw));
     }
 
     public override void _PhysicsProcess(double delta)
@@ -428,7 +439,8 @@ public partial class Herds : Node3D, IOriginContainer
             var o = _over[key];
             o.Dirty = false;
             _over[key] = o;
-            Rpc(MethodName.CowAir, key, o.E, o.N, o.Alt, o.Yaw);
+            var (x, y, z, trueYaw) = WireOf(o);
+            Rpc(MethodName.CowAir, key, x, y, z, trueYaw);
         }
     }
 
@@ -439,31 +451,36 @@ public partial class Herds : Node3D, IOriginContainer
     {
         if (!NetLink.Online(this) || !Multiplayer.IsServer()) return;
         foreach (var (key, o) in _over)
+        {
             if (key < 0) continue;
-            else if (o.Air) RpcId(peer, MethodName.CowAirSync, key, o.E, o.N, o.Alt, o.Yaw);
-            else RpcId(peer, MethodName.CowDown, key, o.E, o.N, o.Alt, o.Yaw, o.Since, o.Distance);
+            var (x, y, z, trueYaw) = WireOf(o);
+            if (o.Air) RpcId(peer, MethodName.CowAirSync, key, x, y, z, trueYaw);
+            else RpcId(peer, MethodName.CowDown, key, x, y, z, trueYaw, o.Since, o.Distance);
+        }
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
-    private void CowAir(long key, double e, double n, float alt, float yaw) => TakeAir(key, e, n, alt, yaw);
+    private void CowAir(long key, double x, double y, double z, float trueYaw) => TakeAir(key, x, y, z, trueYaw);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void CowAirSync(long key, double e, double n, float alt, float yaw) => TakeAir(key, e, n, alt, yaw);
+    private void CowAirSync(long key, double x, double y, double z, float trueYaw) => TakeAir(key, x, y, z, trueYaw);
 
-    private void TakeAir(long key, double e, double n, float alt, float yaw)
+    private void TakeAir(long key, double x, double y, double z, float trueYaw)
     {
         if (Authority) return;
+        var at = GlobalPos.FromWire(x, y, z);
         _over.TryGetValue(key, out var o);
         if (!o.Air) GD.Print($"[herds] server: cow {key:X} in a beam");
-        _over[key] = new Override { Air = true, E = e, N = n, Alt = alt, Yaw = yaw, Since = o.Air ? o.Since : Now };
+        _over[key] = new Override { Air = true, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = Lv95Grid.GridYaw(at, trueYaw), Since = o.Air ? o.Since : Now };
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void CowDown(long key, double e, double n, float alt, float yaw, double since, float distance)
+    private void CowDown(long key, double x, double y, double z, float trueYaw, double since, float distance)
     {
         if (Authority) return;
-        GD.Print($"[herds] server: cow {key:X} set down at LV95 {e:F1}/{n:F1}");
-        _over[key] = new Override { Air = false, E = e, N = n, Alt = alt, Yaw = yaw, Since = since, Distance = distance };
+        var at = GlobalPos.FromWire(x, y, z);
+        GD.Print($"[herds] server: cow {key:X} set down at LV95 {at.Lv95.E:F1}/{at.Lv95.N:F1}");
+        _over[key] = new Override { Air = false, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = Lv95Grid.GridYaw(at, trueYaw), Since = since, Distance = distance };
     }
 
     // ---- probes ------------------------------------------------------------------------------------
@@ -506,20 +523,24 @@ public partial class Herds : Node3D, IOriginContainer
     /// The cow of a non-staged herd nearest an LV95 point within <paramref name="within"/> m, at the
     /// moment <paramref name="at"/> (the sightings aim an abduction at it): its LV95 point then.
     /// </summary>
-    public (double E, double N, float Ground)? CowNear(double e, double n, float within, double at)
+    public (double E, double N, float Ground)? CowNear(double e, double n, float within, double at) =>
+        CowNear(GlobalPos.FromLv95(e, n, 0), within, at);
+
+    /// <summary><see cref="CowNear(double, double, float, double)"/> from a position.</summary>
+    public (double E, double N, float Ground)? CowNear(GlobalPos near, float within, double at)
     {
         (double E, double N, float Ground)? best = null;
         double bestD = within * within;
         foreach (var h in _all)
         {
             if (h.Plan.Staged) continue;
-            double he = h.Plan.E - e, hn = h.Plan.N - n;
+            var (he, hn, _) = near.OffsetTo(GlobalPos.FromLv95(h.Plan.E, h.Plan.N, near.Alt));
             if (he * he + hn * hn > (within + 60) * (within + 60)) continue;
             for (int i = 0; i < h.Cows.Length; i++)
             {
                 if (_over.ContainsKey(h.Cows[i].Key)) continue;
                 var (ce, cn, _, _, _, _) = Where(h, i, at);
-                double d = (ce - e) * (ce - e) + (cn - n) * (cn - n);
+                double d = near.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(ce, cn, near.Alt));
                 if (d >= bestD) continue;
                 float g = GroundAt(ce, cn);
                 if (float.IsNaN(g)) continue;

@@ -1,0 +1,24 @@
+{
+  "id": "earth-2-geneva-doors",
+  "title": "Doors, garages and stoops on leaves",
+  "verdict": "failed",
+  "by": "Nicolas Maitre",
+  "date": "2026-11-12T20:59Z",
+  "commit": "8edf1d3be",
+  "coverHash": "b0b7e24995cb689b",
+  "covers": [
+    "src/Terrain/Earth/**",
+    "src/Terrain/Leaves/**",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Interiors/InteriorLayout.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-11-12T20:59Z",
+      "by": "Nicolas Maitre",
+      "verdict": "failed",
+      "text": "the void in door frame \u002B other issues i mentionned"
+    }
+  ]
+}

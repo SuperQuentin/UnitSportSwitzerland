@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.August1;
@@ -142,7 +143,7 @@ public class August1Tests
         // one body cannot pass two stops at once, and the first stop is out of the post's reach
         for (int k = 1; k < path.Length; k++)
             Assert.True(August1Rules.Dist(path[k].E, path[k].N, path[k - 1]) > 2 * August1Rules.WaypointReach);
-        Assert.False(August1Rules.NearPost(site, path[0].E, path[0].N));
+        Assert.False(August1Rules.NearPost(site, GlobalPos.FromLv95(path[0].E, path[0].N, 0)));
         // the stops are further apart than the party may spread: the leader at one is out of reach of someone left at the last
         Assert.True(August1Rules.Dist(path[0].E, path[0].N, path[August1Rules.Waypoints]) > August1Rules.Together);
         // the stands are inside the ring and apart

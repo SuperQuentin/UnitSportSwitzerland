@@ -94,12 +94,37 @@ public partial class CraneNetProbe : ChatProbe
         if (!ready) { Fail("B never got ready"); return; }
 
         // the site's cranes are drawn with its buildings, its pallets with its machines
-        if (!await Until(() => CraneWithPallet(me.GlobalPosition) != null, 90)) { Fail("no crane with a site pallet in its reach near the spawn"); return; }
+        bool found = await Until(() => CraneWithPallet(me.GlobalPosition) != null, 40);
+        if (!found && await SiteTiles.CraneWithPalletNear(me, log: line => GD.Print($"{Log}   searched: {line}")) is { } elsewhere)
+        {
+            // none at the spawn (an earth world's leaves plan other sites): to the nearest that has one, B after A (#1704)
+            var (x, y, z) = elsewhere.ToWire();
+            Say(FormattableString.Invariant($"go {x:R} {y:R} {z:R}"));
+            GD.Print($"{Log} to the crane with a pallet at {elsewhere.HorizontalDistanceTo(me.Global):F0} m");
+            me.PlaceAt(me.Origin!.ToWorld(elsewhere), me.Rotation.Y);
+            me.Velocity = Vector3.Zero;
+            found = await Until(() => CraneWithPallet(me.GlobalPosition) != null, 90);
+        }
+        if (!found)
+        {
+            // what there was: the cranes near, the site pallets near each, and whether it has a drop on a slab
+            foreach (var c in SiteCranes.All.Values.OrderBy(c => c.Foot.DistanceSquaredTo(me.GlobalPosition)).Take(4))
+            {
+                int near = PalletNode.All.Values.Count(p => p.IsInsideTree() && Pallets.TryParse(p.Id, out var r) && r.Source == PalletSource.Site
+                    && new Vector2(p.GlobalPosition.X - c.Foot.X, p.GlobalPosition.Z - c.Foot.Z).Length() < c.Job.JibLength);
+                GD.Print($"[cranenet A]   crane {c.Key} {c.Foot.DistanceTo(me.GlobalPosition):F0} m away, jib {c.Job.JibLength:F0} m: {near} site pallets under it, drop on a slab {CraneDriver.DropOnSlab(c) != null}");
+            }
+            GD.Print($"[cranenet A]   {SiteCranes.All.Count} cranes, {PalletNode.All.Count} pallets drawn");
+            foreach (var p in PalletNode.All.Values.OrderBy(p => p.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(6))
+                GD.Print($"[cranenet A]   pallet {p.Id} {p.GlobalPosition.DistanceTo(me.GlobalPosition):F0} m away at {p.GlobalPosition}, in the tree {p.IsInsideTree()}, taken {p.Taken}");
+            Fail("no crane with a site pallet in its reach near the spawn");
+            return;
+        }
         var (crane, pallet) = CraneWithPallet(me.GlobalPosition)!.Value;
         var (at, yaw) = crane.AtRemote;
         me.PlaceAt(at + Vector3.Up * 0.3f, yaw);
         await Seconds(2);
-        Expect(me.TryInteract() && await Until(() => me.CraneWorking, 10), $"A takes the remote of {crane.Key} ({crane.Data.Spot.Kind}, jib {crane.Job.JibLength:F0} m)");
+        Expect(me.TryInteract() && await Until(() => me.CraneWorking, 30), $"A takes the remote of {crane.Key} ({crane.Data.Spot.Kind}, jib {crane.Job.JibLength:F0} m)");
         if (!me.CraneWorking) return;
         Say($"working {crane.Key}");
         if (!await Heard("B", "seen working", 60)) { Fail("B never saw the crane held"); return; }
@@ -148,8 +173,30 @@ public partial class CraneNetProbe : ChatProbe
         if (!await Heard("A", "hello", 120)) { Fail("A never said hello"); return; }
         Say("ready");
 
-        if (!await Heard("A", "working", 180)) { Fail("A never took a crane"); return; }
+        // A may send B to a crane elsewhere first (#1704)
+        bool working = false, went = false;
+        for (int t = 0; t < 720 && !working; t++)
+        {
+            if (!went && Words("A", "go") is { Length: >= 3 } g && me.Origin is { } o)
+            {
+                var goTo = GlobalPos.FromWire(double.Parse(g[0], CultureInfo.InvariantCulture), double.Parse(g[1], CultureInfo.InvariantCulture),
+                    double.Parse(g[2], CultureInfo.InvariantCulture)).Moved(4, 4);
+                me.PlaceAt(o.ToWorld(goTo), me.Rotation.Y);
+                me.Velocity = Vector3.Zero;
+                went = true;
+            }
+            working = await Heard("A", "working", 0.5);
+        }
+        if (!working) { Fail("A never took a crane"); return; }
         string key = Words("A", "working")![0];
+        // beside A, as a watcher walks over: B's own spawn can be kilometres off, out of the crane's drawing range
+        foreach (var n in GetTree().GetNodesInGroup(FootPlayer.Group))
+            if (n is FootPlayer other && other != me && !other.Npc && other.IsInsideTree())
+            {
+                me.PlaceAt(other.GlobalPosition + new Vector3(5f, 1f, 5f), me.Rotation.Y);
+                me.Velocity = Vector3.Zero;
+                break;
+            }
         if (!await Until(() => SiteCranes.All.ContainsKey(key), 60)) { Fail($"{key} is not drawn here"); return; }
         var crane = SiteCranes.All[key];
         CraneService.Hold? Hold() => CraneService.Instance?.Holds.GetValueOrDefault(key);

@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Crafting;
 using UnitSport.Items;
 using UnitSport.Items.Fishing;
@@ -73,7 +74,7 @@ public class FishingTests
         Assert.Equal(WaterKind.AlpineLake, FishWaters.Classify(true, 2100, 0, null));
         Assert.Equal(WaterKind.MountainStream, FishWaters.Classify(false, 1400, 0, null));
         Assert.Equal(WaterKind.River, FishWaters.Classify(false, 500, 0, null));
-        Assert.Equal(WaterKind.AlpineLake, FishWaters.Spot(true, 2_776_500, 1_143_500, 1797, 0).Kind);
+        Assert.Equal(WaterKind.AlpineLake, FishWaters.Spot(true, GlobalPos.FromLv95(2_776_500, 1_143_500, 1797), 0).Kind);
     }
 
     // ---- the catalogue ------------------------------------------------------------------------------
@@ -161,7 +162,7 @@ public class FishingTests
     [Fact]
     public void Each_water_has_its_own_fish()
     {
-        var geneva = FishWaters.Spot(true, 2_530_000, 1_140_000, 372, 0);
+        var geneva = FishWaters.Spot(true, GlobalPos.FromLv95(2_530_000, 1_140_000, 372), 0);
         Assert.Equal(Basin.Rhone, geneva.Basin);
         var leman = Sample(geneva, Bait.Dough, 12);
         Assert.Contains(ItemId.Whitefish, leman.Keys);
@@ -172,11 +173,11 @@ public class FishingTests
         Assert.True(leman_spinner.GetValueOrDefault(ItemId.Perch) > leman_spinner.GetValueOrDefault(ItemId.Roach),
             "a spinner takes perch, not roach");
 
-        var maggiore = Sample(FishWaters.Spot(true, 2_705_000, 1_110_000, 193, 0), Bait.Dough, 12);
+        var maggiore = Sample(FishWaters.Spot(true, GlobalPos.FromLv95(2_705_000, 1_110_000, 193), 0), Bait.Dough, 12);
         Assert.Contains(ItemId.Agone, maggiore.Keys);
         Assert.DoesNotContain(ItemId.Wels, maggiore.Keys);
 
-        var sils = Sample(FishWaters.Spot(true, 2_776_500, 1_143_500, 1797, 0), Bait.Spinner, 12);
+        var sils = Sample(FishWaters.Spot(true, GlobalPos.FromLv95(2_776_500, 1_143_500, 1797), 0), Bait.Spinner, 12);
         Assert.Contains(ItemId.Namaycush, sils.Keys);
         Assert.DoesNotContain(ItemId.Pike, sils.Keys);         // too high up
         Assert.DoesNotContain(ItemId.Carp, sils.Keys);
@@ -189,7 +190,7 @@ public class FishingTests
     [Fact]
     public void Night_brings_the_night_fish()
     {
-        var neuchatel = FishWaters.Spot(true, 2_554_000, 1_194_000, 429, 0);
+        var neuchatel = FishWaters.Spot(true, GlobalPos.FromLv95(2_554_000, 1_194_000, 429), 0);
         int day = Sample(neuchatel, Bait.Spinner, 13).GetValueOrDefault(ItemId.Wels);
         int night = Sample(neuchatel, Bait.Spinner, 1).GetValueOrDefault(ItemId.Wels);
         // the wels is already a big share of a spinner's catch there: by night it nearly doubles

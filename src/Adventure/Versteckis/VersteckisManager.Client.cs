@@ -111,7 +111,7 @@ public partial class VersteckisManager
     private void SetGames(string json)
     {
         if (_server) return;
-        Apply(VsState.FromListJson(json));
+        Apply(VsState.FromListJson(WireJson(json, toWire: false)));
     }
 
     /// <summary>Takes a new list of games (from the server, or a probe's own offline).</summary>
@@ -181,10 +181,11 @@ public partial class VersteckisManager
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void PutAt(double e, double n)
+    private void PutAt(double x, double y, double z)
     {
         if (_server) return;
-        Teleport(e, n, null);
+        var at = GlobalPos.FromWire(x, y, z);
+        Teleport(at.Lv95.E, at.Lv95.N, null);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -228,11 +229,18 @@ public partial class VersteckisManager
         GD.Print("[vs] missed");
     }
 
-    /// <summary>The puffs of a sniff, at LV95 points: drawn for 3 s, to this seeker only.</summary>
+    /// <summary>The puffs of a sniff, at points sent as ECEF (three doubles each, #1503): drawn for 3 s, to this seeker only.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Sniffed(double[] es, double[] ns)
+    private void Sniffed(double[] xyz)
     {
         if (_server) return;
+        var es = new double[xyz.Length / 3];
+        var ns = new double[es.Length];
+        for (int i = 0; i < es.Length; i++)
+        {
+            var at = GlobalPos.FromWire(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]);
+            (es[i], ns[i]) = (at.Lv95.E, at.Lv95.N);
+        }
         _layer?.Puffs(es, ns, VsRules.SniffSeconds);
         _hud?.Feed(es.Length == 0 ? "Nobody within 30 m" : $"{es.Length} {(es.Length == 1 ? "puff" : "puffs")} of pollen");
         GD.Print($"[vs] sniffed {es.Length} puffs");
@@ -240,11 +248,12 @@ public partial class VersteckisManager
 
     /// <summary>A sound in the game's area: a Moo, a sprint's thumps, a poof, the bell.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Sounded(long from, int voice, double e, double n)
+    private void Sounded(long from, int voice, double x, double y, double z)
     {
         if (_server) return;
         var v = (VsVoice)voice;
-        var at = _origin.ToWorld(e, n, 0);
+        var heard = GlobalPos.FromWire(x, y, z);
+        var at = _origin.ToWorld(heard.Lv95.E, heard.Lv95.N, 0);
         at.Y = GroundAt(at) ?? LocalPlayer()?.GlobalPosition.Y ?? 0;
         if (v == VsVoice.Bell) Effect(VsSounds.Toll, -4f);
         else if (VsSounds.Of(v) is { } bank) Spatial(bank, at + Vector3.Up, v == VsVoice.Thump ? VsRules.SprintHeard : VsRules.MooHeard);
@@ -397,7 +406,11 @@ public partial class VersteckisManager
         switch (tool)
         {
             case ItemId.VsTag:
-                if (TagPoint(player) is { } at) RpcId(1, MethodName.RequestTag, at.E, at.N, (float)at.Alt);
+                if (TagPoint(player) is { } at)
+                {
+                    var (x, y, z) = at.ToWire();   // (#1503) the wire is ECEF
+                    RpcId(1, MethodName.RequestTag, x, y, z);
+                }
                 break;
             case ItemId.VsSniff:
                 RpcId(1, MethodName.RequestSniff);
@@ -539,7 +552,11 @@ public partial class VersteckisManager
     }
 
     /// <summary>For probes: a tag at an LV95 point, as the Tag tool sends it (a forged far one too).</summary>
-    public void ProbeTag(double e, double n, float alt) => RpcId(1, MethodName.RequestTag, e, n, alt);
+    public void ProbeTag(double e, double n, float alt)
+    {
+        var (x, y, z) = GlobalPos.FromLv95(e, n, alt).ToWire();
+        RpcId(1, MethodName.RequestTag, x, y, z);
+    }
 
     /// <summary>For the offline check (<c>--versteckischeck</c>): lent the round as the server's <c>Enter</c> would.</summary>
     public void ProbeEnter() => Enter(0);

@@ -79,16 +79,17 @@ public partial class BirdNet : Node
     public void Report(int kind, int id, Vector3 from, Vector3 dir)
     {
         if (!Online || Life == null) return;
-        var at = Life.Origin.ToGlobal(from);
-        RpcId(1, MethodName.ReportRpc, kind, id, at.E, at.N, at.Alt, dir);
+        // ECEF and the local east-up-south at the gun (#1503)
+        var (x, y, z) = Life.Origin.ToGlobal(from).ToWire();
+        RpcId(1, MethodName.ReportRpc, kind, id, x, y, z, Life.Origin.EnuOf(from, dir));
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ReportRpc(int kind, int id, double e, double n, double alt, Vector3 dir)
+    private void ReportRpc(int kind, int id, double x, double y, double z, Vector3 dir)
     {
         if (!_server || kind is < ReportShot or > ReportFlush) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var from = new GlobalPos(e, n, alt);
+        var from = GlobalPos.FromWire(x, y, z);
         // a gun that is not where its owner is does not shoot
         float reach = kind == ReportShot ? MaxShotOffset : MaxFarOffset;
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > reach)
@@ -96,7 +97,8 @@ public partial class BirdNet : Node
             GD.Print($"[birds] peer {sender}: report {kind} on #{id} refused, not where its player is");
             return;
         }
-        Life!.ServerReport(sender, kind, id, Life.Origin.ToWorld(from), dir);
+        var world = Life!.Origin.ToWorld(from);
+        Life.ServerReport(sender, kind, id, world, Life.Origin.WorldOfEnu(world, dir));
     }
 
     /// <summary>Server: a bird fell. Everyone within earshot hears of it; the shooter is always told.</summary>
@@ -104,9 +106,11 @@ public partial class BirdNet : Node
     {
         if (!_server || !Online) return;
         var at = Life!.Origin.ToGlobal(b.Node.GlobalPosition);
+        var (x, y, z) = at.ToWire();
+        var enu = Life.Origin.EnuOf(b.Node.GlobalPosition, dir);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer == shooter || GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.DistanceTo(at) < KilledRange)
-                RpcId(peer, MethodName.Killed, b.Id, b.Species.Index, at.E, at.N, at.Alt, dir, shooter);
+                RpcId(peer, MethodName.Killed, b.Id, b.Species.Index, x, y, z, enu, shooter);
     }
 
     /// <summary>
@@ -117,26 +121,30 @@ public partial class BirdNet : Node
     {
         if (!_server || !Online) return;
         var at = Life!.Origin.ToGlobal(from);
+        var (x, y, z) = at.ToWire();
+        var enu = Life.Origin.EnuOf(from, vel);
         string name = by == 0 ? "" : GetNodeOrNull<ChatManager>("../" + ChatManager.NodeName)?.NameOfPeer(by) ?? "";
         foreach (int peer in Multiplayer.GetPeers())
             if (peer == victim || peer == by || GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.DistanceTo(at) < DroppingRange)
-                RpcId(peer, MethodName.Dropping, at.E, at.N, at.Alt, vel, victim, by, name);
+                RpcId(peer, MethodName.Dropping, x, y, z, enu, victim, by, name);
     }
 
     private const float DroppingRange = 150f;
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Dropping(double e, double n, double alt, Vector3 vel, long victim, long by, string byName)
+    private void Dropping(double x, double y, double z, Vector3 vel, long victim, long by, string byName)
     {
-        if (!_server && Life != null) Life.Dropping(Life.Origin.ToWorld(e, n, alt), vel, victim, by, byName);
+        if (_server || Life == null) return;
+        var at = Life.Origin.ToWorld(GlobalPos.FromWire(x, y, z));
+        Life.Dropping(at, Life.Origin.WorldOfEnu(at, vel), victim, by, byName);
     }
 
     /// <summary>Client: the local player, a pigeon, lets go (#217). The server checks it and picks the victim.</summary>
     public void SendDrop(Vector3 from, Vector3 vel)
     {
         if (!Online || Life == null) return;
-        var at = Life.Origin.ToGlobal(from);
-        RpcId(1, MethodName.DropRpc, at.E, at.N, at.Alt, vel);
+        var (x, y, z) = Life.Origin.ToGlobal(from).ToWire();
+        RpcId(1, MethodName.DropRpc, x, y, z, Life.Origin.EnuOf(from, vel));
     }
 
     /// <summary>A player pigeon's droppings: at most one per <see cref="DropInterval"/>, from where its body is.</summary>
@@ -144,11 +152,11 @@ public partial class BirdNet : Node
     private readonly Dictionary<long, double> _lastDrop = new();
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void DropRpc(double e, double n, double alt, Vector3 vel)
+    private void DropRpc(double x, double y, double z, Vector3 vel)
     {
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var from = new GlobalPos(e, n, alt);
+        var from = GlobalPos.FromWire(x, y, z);
         // wall clock (#579): a rate limit on what a client may send must not loosen when that
         // client slows its own simulation
         double now = Core.RealClock.Now;
@@ -157,15 +165,15 @@ public partial class BirdNet : Node
             || _lastDrop.TryGetValue(sender, out double last) && now - last < DropInterval) return;
         _lastDrop[sender] = now;
         var at = Life!.Origin.ToWorld(from);
-        BroadcastDropping(at, vel, Victim(at, sender), sender);
+        BroadcastDropping(at, Life.Origin.WorldOfEnu(at, vel), Victim(at, sender), sender);
     }
 
     /// <summary>Client: the local player crashed as a pigeon (#519); the server shows the splat to everyone near.</summary>
     public void SendSplat(Vector3 at, Vector3 vel)
     {
         if (!Online || Life == null) return;
-        var g = Life.Origin.ToGlobal(at);
-        RpcId(1, MethodName.SplatRpc, g.E, g.N, g.Alt, vel);
+        var (x, y, z) = Life.Origin.ToGlobal(at).ToWire();
+        RpcId(1, MethodName.SplatRpc, x, y, z, Life.Origin.EnuOf(at, vel));
     }
 
     private readonly Dictionary<long, double> _lastSplat = new();
@@ -175,24 +183,26 @@ public partial class BirdNet : Node
     /// (its ride may already read on foot), at most one a second.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void SplatRpc(double e, double n, double alt, Vector3 vel)
+    private void SplatRpc(double x, double y, double z, Vector3 vel)
     {
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        var from = new GlobalPos(e, n, alt);
+        var from = GlobalPos.FromWire(x, y, z);
         double now = Core.RealClock.Now;   // wall clock, as in DropRpc
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > 8f
             || !vel.IsFinite() || vel.Length() > 80f || _lastSplat.TryGetValue(sender, out double last) && now - last < 1.0) return;
         _lastSplat[sender] = now;
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } other && other.Global.DistanceTo(from) < DroppingRange)
-                RpcId(peer, MethodName.Splat, e, n, alt, vel);
+                RpcId(peer, MethodName.Splat, x, y, z, vel);   // relayed as sent: ECEF, the ENU there
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Splat(double e, double n, double alt, Vector3 vel)
+    private void Splat(double x, double y, double z, Vector3 vel)
     {
-        if (!_server && Life != null) Life.Splat(Life.Origin.ToWorld(e, n, alt), vel);
+        if (_server || Life == null) return;
+        var at = Life.Origin.ToWorld(GlobalPos.FromWire(x, y, z));
+        Life.Splat(at, Life.Origin.WorldOfEnu(at, vel));
     }
 
     /// <summary>Who a dropping from <paramref name="at"/> lands on: a person on foot nearly straight below, else nobody.</summary>
@@ -210,10 +220,11 @@ public partial class BirdNet : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Killed(int id, int species, double e, double n, double alt, Vector3 dir, long shooter)
+    private void Killed(int id, int species, double x, double y, double z, Vector3 dir, long shooter)
     {
-        if (_server) return;
+        if (_server || Life == null) return;
         GD.Print($"[birds] killed #{id} ({Species(species)?.Name}) by peer {shooter}");
-        Life?.RemoteKilled(id, species, Life.Origin.ToWorld(e, n, alt), dir, shooter);
+        var at = Life.Origin.ToWorld(GlobalPos.FromWire(x, y, z));
+        Life.RemoteKilled(id, species, at, Life.Origin.WorldOfEnu(at, dir), shooter);
     }
 }

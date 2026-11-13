@@ -82,8 +82,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>How often the anchors' tiles are looked at, in seconds.</summary>
     private const double CheckEvery = 0.5;
 
-    private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
+
+    /// <summary>
+    /// The ground the world stands on: the anchors followed, collision and the ground under a copy (#1649). The flat
+    /// streamer's own unless the world is the earth one's leaves; the slots still come from the streamer's source.
+    /// </summary>
+    private readonly IWorldGround _ground;
 
     /// <summary>Slots by tile, in <c>PARK</c> order; a tile with no car park has no entry.</summary>
     private readonly Dictionary<TileId, List<VehicleSlot>> _slots = new();
@@ -105,11 +110,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private readonly List<TileId> _drop = new();
     private double _sinceCheck = CheckEvery;
 
-    public DormantVehicles(ChunkManager chunks, WorldOrigin origin)
+    /// <param name="ground">The world's ground, flat or leaves (#1684): its anchors, collision and tile files (<see cref="IWorldGround.Content"/>).</param>
+    public DormantVehicles(IWorldGround ground, WorldOrigin origin)
     {
         Name = "DormantVehicles";
-        _chunks = chunks;
         _origin = origin;
+        _ground = ground;
     }
 
     public override void _Ready()
@@ -264,7 +270,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             && (s.DoorsOpen & 15) == 0 && s.Cd == "" && s.Radio == 0 && !s.EngineOn;
         foreach (var (key, slot) in _awakeInfo)
         {
-            if (!World.ContainerRules.BackInBay(slot, s.Position.E, s.Position.N, s.Yaw, (int)s.Kind, s.Train, s.Load, pristine)) continue;
+            if (!World.ContainerRules.BackInBay(slot, s.Position, s.Yaw, (int)s.Kind, s.Train, s.Load, pristine)) continue;
             int bar = key.LastIndexOf('|');
             string owner = key[..bar];
             int ordinal = int.Parse(key[(bar + 1)..]);
@@ -416,7 +422,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// there cannot drift apart.
     /// </summary>
     private static VehicleState StateOf(VehicleSlot s) =>
-        new(KindFor(s), new GlobalPos(s.E, s.N, s.Height), s.Yaw,
+        new(KindFor(s), GlobalPos.FromLv95(s.E, s.N, s.Height), s.Yaw,
             Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
             Train: s.Train, Load: s.Load);
 
@@ -504,7 +510,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 // would find the same terrain
                 bool built = true;
                 foreach (var (e, n, alt) in _unposed[id])
-                    if (!_chunks.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
+                    if (!_ground.HasCollisionAt(_origin.ToWorld(e, n, alt))) { built = false; break; }
                 if (!built) continue;
                 DrawLooks(id);
                 // and only once: a point that still misses with its collision built never will be hit (a
@@ -516,8 +522,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         }
 
         _anchorTilesNow.Clear();
-        foreach (var anchor in _chunks.Anchors)
-            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_origin.TileAt(anchor.GlobalPosition));
+        foreach (var anchor in _ground.Anchors)
+            // the ground's names for the tiles (#1704): an earth leaf's stand-in, whose neighbours are the next leaves', so the
+            // fleets, yards and site pallets are the leaves' own, as drawn and as the server reads them
+            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_ground.ContentName(_ground.TileAt(anchor.GlobalPosition)));
         if (SameTiles(_anchorTilesNow, _anchorTiles))
         {
             if (_pending.Count > 0) _ = Fill();
@@ -591,7 +599,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 var id = _pending[0];
                 _pending.RemoveAt(0);
                 if (_slots.ContainsKey(id) || !Within(id, KeepRings)) continue;
-                if (_chunks.Source is not { } source) return;
+                if (_ground.Content is not { } source) return;
 
                 // The provider seam. Nothing below this line knows what a bay is: a provider's only
                 // job is to append `VehicleSlot`s, and the draw, the collision, the wake path and
@@ -765,6 +773,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into, CancellationToken ct)
     {
         var jetties = Landings.Current.Jetties;
+        if (Terrain.Leaves.LeafStandIn.TryLeaf(id, out var leaf))
+        {
+            LeafMarina(source, id, leaf, jetties, into, ct);
+            return;
+        }
         bool here = false;
         foreach (var j in jetties)
         {
@@ -778,6 +791,29 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
+            var (lx, lz) = id.Local(e, n);
+            double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
+            if (!water.TrySample(x, z, out float level, out _)) return null;
+            var (ge, gn) = id.Global(x, z);
+            return (level, (float)grid.SampleHeight(ge, gn));
+        }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
+    }
+
+    /// <summary>
+    /// <see cref="Marina"/> on an earth leaf's stand-in (#1735): the jetties whose middle lies on the leaf, their berths
+    /// named in the stand-in's frame, afloat on the leaf's own water (<see cref="Terrain.Leaves.StandInChunkSource.LoadLeafWaterAsync"/>),
+    /// as the server and every client read it.
+    /// </summary>
+    private static void LeafMarina(IChunkSource source, TileId id, CubeKey leaf, IReadOnlyList<Jetty> jetties, List<VehicleSlot> into, CancellationToken ct)
+    {
+        bool here = false;
+        foreach (var j in jetties)
+            if (DormantSlots.LeafOf(j) == leaf) { here = true; break; }
+        if (!here || source is not Terrain.Leaves.StandInChunkSource stands) return;
+        if (stands.LoadLeafWaterAsync(id, ct).GetAwaiter().GetResult() is not { } water) return;
+        if (source.LoadChunkAsync(id, ct).GetAwaiter().GetResult() is not { } grid) return;
+        DormantSlots.ForLeafMarina(id, leaf, jetties, (e, n) =>
+        {
             var (lx, lz) = id.Local(e, n);
             double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
             if (!water.TrySample(x, z, out float level, out _)) return null;
@@ -818,7 +854,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             var body = new DormantBody
             {
                 Slot = s,
-                Position = _origin.ToWorld(s.E, s.N, s.Height),
+                Position = WorldOf(s),
                 Basis = new Basis(Vector3.Up, s.Yaw),
             };
             foreach (var (pose, shape) in look.Boxes)
@@ -898,7 +934,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>Where a slot stands, a vehicle in one piece: its place and its heading.</summary>
     private Transform3D SlotTransform(VehicleSlot s) =>
         // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
-        new(new Basis(Vector3.Up, s.Yaw), _origin.ToWorld(s.E, s.N, s.Height));
+        new(new Basis(Vector3.Up, s.Yaw), WorldOf(s));
+
+    /// <summary>A slot's place in the world (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    public Vector3 WorldOf(VehicleSlot s) => _origin.ToWorld(s.E, s.N, s.Height);
 
     /// <summary>
     /// A goods vehicle's sections where the live one stands them (#560): <see cref="HeavyGround.Stand"/>
@@ -912,11 +951,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         float Ground(Vector3 p)
         {
             // the very query a parked train stands on (VehicleBody.Ground): what a vehicle collides with
-            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _chunks, true, out bool solid);
+            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _ground, true, out bool solid);
             if (!solid)
             {
                 var g = _origin.ToGlobal(p);
-                _missed.Add((g.E, g.N, g.Alt));
+                _missed.Add((g.Lv95.E, g.Lv95.N, g.Alt));
             }
             return y;
         }
@@ -1026,11 +1065,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     public VehicleSlot? SlotAt(double e, double n, double within = 1.5)
     {
+        // on the Earth: a slot on an earth leaf's stand-in is named by the stand-in's E/N, not the place's LV95 (#1736)
+        var at = GlobalPos.FromLv95(e, n, 0);
         foreach (var (_, slots) in _slots)
             foreach (var s in slots)
-                if ((s.E - e) * (s.E - e) + (s.N - n) * (s.N - n) < within * within) return s;
+                if (at.HorizontalDistanceTo(PlaceOf(s)) < within) return s;
         return null;
     }
+
+    /// <summary>A slot's place on the Earth (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    private static GlobalPos PlaceOf(VehicleSlot s) => GlobalPos.FromLv95(s.E, s.N, s.Height);
 
     /// <summary>Every slot worked out round the anchors, woken or not: what a check picks one from.</summary>
     public IEnumerable<VehicleSlot> Slots()

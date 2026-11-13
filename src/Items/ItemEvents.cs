@@ -143,8 +143,9 @@ public partial class ItemEvents : Node
         long me = Online ? Multiplayer.GetUniqueId() : 1;
         Run(new ItemEvent(me, kind, position, direction, extra, Local: true));
         if (!Online) return;
-        var at = _origin.ToGlobal(position);
-        RpcId(1, MethodName.Relay, (int)kind, at.E, at.N, at.Alt, direction, extra);
+        // ECEF position, direction in the local east-up-south at it (#1503)
+        var (x, y, z) = _origin.ToGlobal(position).ToWire();
+        RpcId(1, MethodName.Relay, (int)kind, x, y, z, _origin.EnuOf(position, direction), extra);
     }
 
     // ---- a film's actors (the trailer director, #882) ---------------------------------------------
@@ -179,12 +180,13 @@ public partial class ItemEvents : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Relay(int kind, double e, double n, double alt, Vector3 direction, string extra)
+    private void Relay(int kind, double x, double y, double z, Vector3 direction, string extra)
     {
+        // direction stays the local east-up-south the sender gave (#1503): the server only checks its length and passes it on
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         if (extra.Length > MaxExtra) return;
-        var at = new Core.GlobalPos(e, n, alt);
+        var at = Core.GlobalPos.FromWire(x, y, z);
         if (kind == (int)ItemEventKind.Hit)
         {
             RelayHit(sender, at, direction, extra);
@@ -202,7 +204,7 @@ public partial class ItemEvents : Node
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && interest?.ServerSees(peer, sender) != false)
-                RpcId(peer, MethodName.Deliver, sender, kind, e, n, alt, direction, extra);
+                RpcId(peer, MethodName.Deliver, sender, kind, x, y, z, direction, extra);
     }
 
     // ---- server: a body the server runs fires (a bot, #837) ----------------------------------------
@@ -223,10 +225,12 @@ public partial class ItemEvents : Node
         // the bot's own frame when it is in a server region of its own (#1456)
         var at = (frame ?? _origin).ToGlobal(position);
         ServerHeard?.Invoke(shooter, kind, at);
+        var (x, y, z) = at.ToWire();
+        direction = (frame ?? _origin).EnuOf(position, direction);   // the wire's direction is the local east-up-south (#1503)
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (interest?.ServerSees(peer, shooter) != false)
-                RpcId(peer, MethodName.Deliver, shooter, (int)kind, at.E, at.N, at.Alt, direction, extra);
+                RpcId(peer, MethodName.Deliver, shooter, (int)kind, x, y, z, direction, extra);
     }
 
     /// <summary>
@@ -236,7 +240,7 @@ public partial class ItemEvents : Node
     /// </summary>
     public void ServerHit(long shooter, Vector3 at, Vector3 direction, PlayerHits.Hit hit, Core.WorldOrigin? frame = null)
     {
-        if (_server) RelayHit(shooter, (frame ?? _origin).ToGlobal(at), direction, hit.Pack());
+        if (_server) RelayHit(shooter, (frame ?? _origin).ToGlobal(at), (frame ?? _origin).EnuOf(at, direction), hit.Pack());
     }
 
     /// <summary>Server: the fire-rate budgets of every shooter (#468).</summary>
@@ -267,8 +271,8 @@ public partial class ItemEvents : Node
         if (!bot && !Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
         var eye = shooter.Global;
         if (!weapon.Melee && GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName)?.Ground is { } ground
-            && !Combat.HitGuard.TerrainClear((eye.E, eye.N, eye.Alt + 1.6), (position.E, position.N, position.Alt),
-                (e, n) => ground(new Core.GlobalPos(e, n, 0))))
+            && !Combat.HitGuard.TerrainClear(eye.Moved(0, 0, 1.6), position,
+                p => ground(p.WithAlt(0))))
         {
             GD.Print(FormattableString.Invariant($"[pvp] refused peer {sender} on peer {hit.Victim}: through the ground ({hit.Weapon})"));
             return;
@@ -282,7 +286,11 @@ public partial class ItemEvents : Node
         GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
         // a bot is run here: the server is its victim side (armour, kill credit, down or out, #837)
         if (bot) victim.ShotHit(hit.Damage, sender);
-        else RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
+        else
+        {
+            var (x, y, z) = position.ToWire();
+            RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, x, y, z, direction, extra);
+        }
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);
     }
 
@@ -303,16 +311,18 @@ public partial class ItemEvents : Node
         // in LV95, from what the players published (#185)
         if (!(victim.Global.DistanceTo(position) <= Slack) || !(thrower.Global.DistanceTo(position) <= 60f)) return;
         GD.Print(FormattableString.Invariant($"[bonk] peer {sender} hit peer {bonk.Victim} with {bonk.Item} for {bonk.Damage:F1}"));
+        var (bx, by, bz) = position.ToWire();
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && (peer == bonk.Victim || interest?.ServerSees(peer, sender) != false || interest?.ServerSees(peer, bonk.Victim) != false))
-                RpcId(peer, MethodName.Deliver, sender, (int)ItemEventKind.Bonk, position.E, position.N, position.Alt, direction, extra);
+                RpcId(peer, MethodName.Deliver, sender, (int)ItemEventKind.Bonk, bx, by, bz, direction, extra);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Deliver(long sender, int kind, double e, double n, double alt, Vector3 direction, string extra)
+    private void Deliver(long sender, int kind, double x, double y, double z, Vector3 direction, string extra)
     {
-        var position = _origin.ToWorld(e, n, alt);
+        var position = _origin.ToWorld(Core.GlobalPos.FromWire(x, y, z));
+        direction = _origin.WorldOfEnu(position, direction);   // from the local east-up-south (#1503)
         // on the owner's body as this peer shows it, when it is here
         if (kind is not ((int)ItemEventKind.Hit or (int)ItemEventKind.Bonk) && GetNodeOrNull<FootPlayer>("../Players/" + Net.PlayerReplication.NodeName(sender)) is { } body && direction.LengthSquared() > 1e-6f)
             position = MuzzleOf(body, direction.Normalized(), kind == (int)ItemEventKind.Shot ? 0.55f : 0.1f);

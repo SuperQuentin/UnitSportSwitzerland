@@ -78,13 +78,15 @@ public partial class CameraGlobal : Node
         // fades out from 5 to 20 km, the drop gives way to the exact sphere from 20 to 50 km. Pushed when it changes.
         var camera = GetViewport()?.GetCamera3D();
         double altitude = camera == null ? 0 : Origin?.AltitudeOf(camera.GlobalPosition) ?? camera.GlobalPosition.Y;
-        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.DropPerM2At(altitude) : 0f;
+        // the earth world's geometry is round (#1512): only refraction's lift, and no sphere wrap
+        bool round = Core.Curvature.RoundGeometry;
+        float curvature = Core.Curvature.Drawn ? (float)Core.Curvature.CurvaturePerM2At(altitude, round) : 0f;
         if (curvature != _curvature)
         {
             _curvature = curvature;
             RenderingServer.GlobalShaderParameterSet(CurvatureParam, curvature);
         }
-        float blend = Core.Curvature.Drawn ? (float)Core.Curvature.SphereBlendAt(altitude) : 0f;
+        float blend = Core.Curvature.Drawn ? (float)Core.Curvature.CurveBlendAt(altitude, round) : 0f;
         if (blend != _curveBlend)
         {
             _curveBlend = blend;
@@ -112,19 +114,27 @@ public partial class CameraGlobal : Node
 
     private float _baseNear = -1;
 
+    /// <summary>The near plane is at least the camera's distance from the world's origin over this (#1497).</summary>
+    public const float NearOfDistance = 200_000;
+
     private void Climb(Camera3D camera, double altitude)
     {
         float far = Core.GameSettings.Current.CameraFar;
         if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
         if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
-        // past 1,000 km (the spectator only: the UFO stops at 120 km) the near plane follows the
+        // past 1,000 km (the spectator only: the UFO and the shuttle fly lower) the near plane follows the
         // altitude: at 12,000 km a 17,400 km far over a 1 m near broke the light culler's frustum
-        // (create_frustum_points) and nothing drew; nothing is that near the camera up there (#1430 H4)
-        if (altitude > RaisedNearFromM)
+        // (create_frustum_points) and nothing drew; nothing is that near the camera up there (#1430 H4).
+        // Nearer in, it is kept off the floats' step where the camera stands (#1497): a turned Space anchor
+        // has no vertical origin, so the camera is ~altitude up in world Y; at 300 km a float steps 3 cm and a
+        // 0.08 m near plane's corners fell within a few steps of the eye: the frustum degenerated and nothing
+        // drew, the shuttle 50 m ahead included. 1/200,000 of its distance from the origin: 2 m at 400 km.
+        float floor = camera.GlobalPosition.Length() / NearOfDistance;
+        float raised = Mathf.Max(altitude > RaisedNearFromM ? (float)(altitude / 10_000) : 0f, floor);
+        if (raised > (_baseNear >= 0 ? _baseNear : camera.Near))
         {
-            float near = (float)(altitude / 10_000);
             if (_baseNear < 0) _baseNear = camera.Near;
-            if (Mathf.Abs(camera.Near - near) > near * 0.05f) camera.Near = near;
+            if (Mathf.Abs(camera.Near - raised) > raised * 0.05f) camera.Near = raised;
         }
         else if (_baseNear >= 0)
         {
@@ -148,9 +158,10 @@ public partial class CameraGlobal : Node
     /// </summary>
     public static float HazeAt(double altitude, bool globe = false) =>
         altitude <= 3_000 ? 1f : globe
-            // with the globe the air's own shell takes over the haze: thinned twice as fast (a climb
-            // through 6-20 km went all but blank)
-            ? Mathf.Exp(-(float)(altitude - 3_000) / 5_000f)
+            // with the globe the air's own shell takes over the haze: thinned by e every 2 km, near the
+            // aerosols' own 1.2 km (atmosphere.gdshader's H_M), as a clear day looks from a few km up. At 5 km
+            // a climb through 6-20 km went all but blank, and a landing from space saw no ground up to 10 km (#1528)
+            ? Mathf.Exp(-(float)(altitude - 3_000) / 2_000f)
             : Mathf.Max(1f / 6f, Mathf.Exp(-(float)(altitude - 3_000) / 10_000f));
 
     private void ScaleShadows()

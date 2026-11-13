@@ -18,7 +18,8 @@ namespace UnitSport.Player;
 public partial class FlightCheckProbe : Node
 {
     /// <summary>Null on <c>--world flat</c> (TestWorld): the ground is the plane.</summary>
-    private readonly ChunkManager? _chunks;
+    private readonly IWorldGround? _ground;
+    private bool _anchored;
     private readonly WorldOrigin _origin;
     private readonly string _kind;
     private readonly string? _shot;
@@ -31,9 +32,10 @@ public partial class FlightCheckProbe : Node
     private float _walk, _peak, _hit;
     private double _splatAt = -1;
 
-    public FlightCheckProbe(ChunkManager? chunks, WorldOrigin origin, string kind, string? shot)
+    /// <param name="ground">The world's ground (the earth world's leaves under <c>--frame earth</c>, #1512); the flat chunks' when null.</param>
+    public FlightCheckProbe(ChunkManager? chunks, WorldOrigin origin, string kind, string? shot, IWorldGround? ground = null)
     {
-        _chunks = chunks;
+        _ground = ground ?? chunks?.Ground;
         _origin = origin;
         _kind = kind;
         _shot = shot;
@@ -57,11 +59,13 @@ public partial class FlightCheckProbe : Node
 
         if (_player == null)
         {
-            if (!TestWorld.TryGround(_chunks, at, out float g)) return;
-            _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
+            if (!_anchored) { _anchored = true; TestWorld.AnchorEarthTarget(this, _ground, _origin, e, n); }
+            if (!TestWorld.TryGround(_ground, at, out float g)) return;
+            _player = new FootPlayer { Name = "Probe", Terrain = _ground };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
-            if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
+            if (_origin.Frame.IsAnchor) _ground?.AddAnchor(_player, collision: true);
+            if (_ground == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _player.Announced += (text, good) => { _last = text; GD.Print($"[flycheck] announce: {text}"); };
             // the crash sortie is meant to hit: it judges its own impact
             _player.Impacted += lost => { if (lost >= 8 && _kind != "pigeoncrash") _crashed = true; };
@@ -69,7 +73,7 @@ public partial class FlightCheckProbe : Node
         }
         if (!_started)
         {
-            if (_chunks != null && !_chunks.HasCollisionAt(at) || !_player.IsOnFloor()) return;
+            if (_ground != null && !_ground.HasCollisionAt(at) || !_player.IsOnFloor()) return;
             Begin();
             _started = true;
             return;
@@ -91,7 +95,7 @@ public partial class FlightCheckProbe : Node
         }
     }
 
-    private float Agl(Vector3 p) => TestWorld.TryGround(_chunks, p, out float g) ? p.Y - g : float.NaN;
+    private float Agl(Vector3 p) => TestWorld.TryGround(_ground, p, out float g) ? p.Y - g : float.NaN;
 
     /// <summary>Puts the pilot where the sortie starts.</summary>
     private void Begin()
@@ -265,14 +269,14 @@ public partial class FlightCheckProbe : Node
         float hour = CmdArgs.Value("--time") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out float hh) ? hh : 13f;
         World.AirLiftField.HourOverride = hour;
-        World.AirLiftField.Use(_chunks, _origin);
+        World.AirLiftField.Use(_ground, _origin);
         var ground = p.GlobalPosition;
         if (_kind == "campfire")
         {
             // a burning fire's updraft (AirLiftField's campfire numbers) 20 m ahead on the flat
             var fire = ground + new Vector3(0, -1f, -20f);
             var g = _origin.ToGlobal(fire);
-            World.AirLift.Volumes.Set(CheckFireKey, g.E, g.N, g.Alt, World.AirLiftField.CampfireRadius,
+            World.AirLift.Volumes.Set(CheckFireKey, g.Lv95.E, g.Lv95.N, g.Alt, World.AirLiftField.CampfireRadius,
                 World.AirLiftField.CampfireTop, World.AirLiftField.CampfireSpeed);
             _liftAt = fire;
             p.SetRide(RideKind.Paraglider);
@@ -285,8 +289,27 @@ public partial class FlightCheckProbe : Node
             int n = World.AirLiftField.ThermalsNear(ground, 1500, found);
             if (n > 0)
             {
-                _liftStrength = found[0].Strength;
-                _liftAt = World.AirLiftField.ToWorld(found[0]) ?? ground;
+                // the one that stays strongest through the 90 s sortie: a thermal breathes, and the strongest now may be
+                // about to die (the earth world boots slower, so its clock met one at its end, #1649)
+                Span<World.Thermal> mid = stackalloc World.Thermal[8], end = stackalloc World.Thermal[8];
+                int nMid = World.AirLiftField.ThermalsNear(ground, 1500, mid, 45), nEnd = World.AirLiftField.ThermalsNear(ground, 1500, end, 90);
+                int best = 0;
+                float bestScore = -1f;
+                for (int i = 0; i < n; i++)
+                {
+                    float score = Mathf.Min(found[i].Strength, Mathf.Min(Later(found[i], mid[..nMid]), Later(found[i], end[..nEnd])));
+                    if (score > bestScore) (best, bestScore) = (i, score);
+                }
+                _liftStrength = found[best].Strength;
+                _liftAt = World.AirLiftField.ToWorld(found[best]) ?? ground;
+
+                // the same thermal's strength later (its source stays put): 0 once it is gone
+                static float Later(in World.Thermal t, ReadOnlySpan<World.Thermal> then)
+                {
+                    foreach (var o in then)
+                        if (World.Thermal.SameSource(t, o)) return o.Strength;
+                    return 0f;
+                }
             }
             else _liftAt = ground;
             GD.Print($"[flycheck] {_kind} at {hour:F1} h: {n} thermals within 1.5 km, the strongest {_liftStrength:F2} "
@@ -438,7 +461,7 @@ public partial class FlightCheckProbe : Node
         var p = _player!.GlobalPosition;
         float dist = (float)_origin.ToGlobal(p).HorizontalDistanceTo(_from);
         float drop = (float)_from.Alt - p.Y;
-        bool under = TestWorld.TryGround(_chunks, p, out float g) && p.Y < g - 1.5f;
+        bool under = TestWorld.TryGround(_ground, p, out float g) && p.Y < g - 1.5f;
         GD.Print($"[flycheck] END {how}: {dist:F0} m flown, {drop:F0} m lost"
             + (drop > 1 ? $", overall glide {dist / drop:F1}" : "") + $", now {_player.Ride}");
         bool ok = !_crashed && !under;

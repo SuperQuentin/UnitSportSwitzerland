@@ -26,6 +26,7 @@ CHUNKS=${CHUNKS:-$ROOT/terrain_chunks}
 OUT=$ROOT/test_output/loadtest/$LABEL
 rm -rf "$OUT"; mkdir -p "$OUT"
 BOTS=$((PLAYERS - 1))
+guard_frame_args   # TEST_FRAME (#1710): every process in that frame, checked in its log at the end
 (( BOTS >= 1 && PLAYERS <= 32 )) || { echo "players must be 2..32 (NetworkManager.MaxClients)"; exit 1; }
 
 # the default user cache must not keep a server manifest from this run (see
@@ -42,7 +43,7 @@ MEM_START=$(avail_mb); MEM_MIN=$MEM_START
 (( MEM_START < 5000 )) && echo "[loadtest] WARNING: only $MEM_START MB available"
 echo "[loadtest] $LABEL: $BOTS bots + 1 observer, ${SECONDS_RUN}s, chunks $CHUNKS, $MEM_START MB available"
 "$GODOT" --headless --path . -- --title "loadtest $LABEL server" --server --port $PORT --serverstats,$LABEL --chunks "$CHUNKS" \
-    --seconds $((SECONDS_RUN + 90)) > "$OUT/server.log" 2>&1 &
+    --seconds $((SECONDS_RUN + 90)) ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"} > "$OUT/server.log" 2>&1 &
 SERVER=$!
 for _ in $(seq 60); do grep -q "server listening" "$OUT/server.log" 2>/dev/null && break; sleep 0.5; done
 
@@ -54,7 +55,7 @@ for ((k = 0; k < PROCS; k++)); do
     N=$(( BOTS / PROCS + (k < BOTS % PROCS ? 1 : 0) ))
     "$GODOT" --headless --path . -- --title "loadtest $LABEL swarm$k" --swarm $N --first $FIRST --total $BOTS --seed $SEED \
         --connect 127.0.0.1:$PORT --chunks "$CHUNKS" --cache "$OUT/swarm${k}_cache" \
-        --seconds $((SECONDS_RUN + 25)) > "$OUT/swarm$k.log" 2>&1 &
+        --seconds $((SECONDS_RUN + 25)) ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"} > "$OUT/swarm$k.log" 2>&1 &
     SWARMS+=($!); COUNTS+=($N)
     FIRST=$((FIRST + N))
 done
@@ -63,7 +64,7 @@ sleep $(( 4 + BOTS / 8 ))
 # the observer measures SECONDS_RUN-20 s once it has picked a target (after ~6 s)
 OBS_SECONDS=$(( SECONDS_RUN > 40 ? SECONDS_RUN - 20 : 20 ))
 "$GODOT" --headless --path . -- --title "loadtest $LABEL observer" --connect 127.0.0.1:$PORT --netsmooth,$OBS_SECONDS,$LABEL --at "$AT" \
-    --traffic 0 --chunks "$CHUNKS" --cache "$OUT/observer_cache" > "$OUT/observer.log" 2>&1 &
+    --traffic 0 --chunks "$CHUNKS" --cache "$OUT/observer_cache" ${FRAME_ARGS[@]+"${FRAME_ARGS[@]}"} > "$OUT/observer.log" 2>&1 &
 OBSERVER=$!
 
 # CPU time of the swarm processes over the steady part of the run. Git Bash's ps has no -o, and
@@ -133,3 +134,5 @@ if (( HAD_MANIFEST == 0 )) && [ -f "$USER_MANIFEST" ]; then rm -f "$USER_MANIFES
     echo "---- errors per log (ERROR lines)"
     for f in "$OUT"/*.log; do echo "$(basename "$f"): $(grep -c '^ERROR' "$f")"; done
 } | tee "$OUT/summary.txt"
+# TEST_FRAME (#1710): a server, swarm or observer not in the asked frame fails the run (last, after the summary)
+guard_frame_check loadtest "$OUT/server.log" "$OUT"/swarm*.log "$OUT/observer.log" || exit 1

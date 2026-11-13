@@ -119,7 +119,7 @@ public sealed class VersteckisBrain : IBotBrain
     {
         var others = new List<(double E, double N)>();
         foreach (var e in s.Entrants)
-            if (e.Role == VsRole.Hider && e.Peer != bot.Id && _vs.PositionOf(e.Peer) is { } p) others.Add((p.E, p.N));
+            if (e.Role == VsRole.Hider && e.Peer != bot.Id && _vs.PositionOf(e.Peer) is { } p) others.Add((p.Lv95.E, p.Lv95.N));
         var space = bot.World.Space;
         var door = _frame.ToWorld(s.DoorE, s.DoorN, 0) with { Y = bot.Body.GlobalPosition.Y + 1.6f };
         Func<double, double, bool> hidden = (e, n) =>
@@ -172,7 +172,7 @@ public sealed class VersteckisBrain : IBotBrain
                 var (se, sn) = Lv95(seen.At);
                 seeker = (se, sn);
                 dist = Math.Sqrt((se - be) * (se - be) + (sn - bn) * (sn - bn));
-                float yaw = seen.Body.NetYaw;
+                float yaw = seen.Body.GlobalYaw;   // LV95 maths: grid north (#1503)
                 facing = VsTactics.Facing(se, sn, -Math.Sin(yaw), Math.Cos(yaw), be, bn);
             }
         if (seeker == null && bot.Senses.Memory.TryGetValue(s.Seeker, out var mem) && now - mem.When < 20)

@@ -35,7 +35,7 @@ public static partial class TileRewriter
 
     private static List<JunctionPlan> PlanLayouts(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
-        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, IGround? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log,
         CrossingNodes? crossings = null, IReadOnlyDictionary<int, JunctionPlan>? alone = null)
     {
@@ -43,9 +43,14 @@ public static partial class TileRewriter
         // a merged junction's members are all lit where it is (#818 phase 5c)
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal)
             .SelectMany(p => p.Junction.Members ?? (IEnumerable<int>)[p.Junction.NodeId]).ToHashSet();
+        // the room beside an arm is measured against every line round it (#1660: the block's written lines and the band's, one
+        // list in the block's one frame; a real tile's own lines as before)
+        var wholeLines = output.Where(kv => BlockFrame.IsWhole(kv.Key)).OrderBy(kv => kv.Key.N).SelectMany(kv => kv.Value).ToList();
         var indexes = new Dictionary<TileId, EmbankmentPlanner.LineIndex>();
+        List<RoadSegment> ListOf(TileId t) => BlockFrame.IsWhole(t) ? wholeLines : output[t];
         EmbankmentPlanner.LineIndex Lines(TileId t) =>
-            indexes.TryGetValue(t, out var l) ? l : indexes[t] = new EmbankmentPlanner.LineIndex(output[t]);
+            indexes.TryGetValue(BlockFrame.IsWhole(t) ? BlockFrame.Lines : t, out var l) ? l
+                : indexes[BlockFrame.IsWhole(t) ? BlockFrame.Lines : t] = new EmbankmentPlanner.LineIndex(ListOf(t));
         var scratchLanes = new LaneStats();
         var plans = new List<JunctionPlan>();
         // today's caps by node: a road joining an arm's street keeps its own (JoinHold)
@@ -54,7 +59,7 @@ public static partial class TileRewriter
         // 1. what the data wants at every mouth of the block
         foreach (var (junction, plan) in priority.Plans)
         {
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             // the block's junctions, and those near it (#818: they may reach into it)
             bool beyond = !block.Contains(home) || !wanted.Contains(home);
             if (beyond && !near.Contains(junction.NodeId) || junction.Arms.Count < 3 || plan.Arms.Count != junction.Arms.Count) continue;
@@ -195,7 +200,7 @@ public static partial class TileRewriter
                 {
                     var so = segmentOf[a.LinkId];
                     double reach = Math.Max(TurnExit, a.Sizes.Count > 0 ? a.Sizes.Max(z => z.Max(o => o.Taper * Lanes(z, o) + o.Storage)) : 0);
-                    a.Room = MeasureRoom(so.Segment, so.Tile, output[so.Tile].IndexOf(so.Segment), a.AtEnd, a.MouthShift, Math.Min(reach, a.Length),
+                    a.Room = MeasureRoom(so.Segment, so.Tile, ListOf(so.Tile).IndexOf(so.Segment), a.AtEnd, a.MouthShift, Math.Min(reach, a.Length),
                         Lines(so.Tile), grids, buildings);
                 }
             // 5. line the through lanes up and fit each section to its room, trying the pockets' sizes longest first (step 6: a
@@ -323,7 +328,7 @@ public static partial class TileRewriter
     {
         Interlocked.Increment(ref _plannerFailures);
         Console.Error.WriteLine(FormattableString.Invariant(
-            $"  [WARN] junction planner: {e.GetType().Name}: {e.Message} at LV95 {jp.Centre.X:F1},{jp.Centre.Y:F1} (tile {TileId.FromLv95(jp.Centre.X, jp.Centre.Y)}, node {jp.Node}); fell back to {fellBackTo}"));
+            $"  [WARN] junction planner: {e.GetType().Name}: {e.Message} at LV95 {jp.Centre.X:F1},{jp.Centre.Y:F1} (tile {Plane.TileAt(jp.Centre.X, jp.Centre.Y)}, node {jp.Node}); fell back to {fellBackTo}"));
     }
 
     /// <summary>
@@ -427,6 +432,18 @@ public static partial class TileRewriter
         return junction ? length * 0.5 : double.MaxValue;
     }
 
+    /// <summary>
+    /// How far along its arms a junction's own records reach (#1660: its core, pockets, transitions, poles, and the street's paint
+    /// laid again past a transition; at 150 m the tiling check found dashes moved), m; with <see cref="WriteReach"/> beside them.
+    /// </summary>
+    private const double JunctionReach = 300;
+
+    /// <summary>
+    /// Junctions this close along their street may become one core (#818 phase 5c: overlapping cores, a tram between them, a
+    /// node short of a mouth): the band follows such streets on, so every block plans a group whole (#1660), m.
+    /// </summary>
+    private const double MergeReach = 80;
+
     /// <summary>A transition runs on along its street at most this far past its own link (m).</summary>
     private const double StreetOnMost = 150;
 
@@ -440,7 +457,7 @@ public static partial class TileRewriter
     private static (HashSet<int> Links, HashSet<int> Near) Band(PriorityResult priority, RoadGenResult result, HashSet<TileId> block, HashSet<TileId> wanted)
     {
         var net = result.Network;
-        bool InBlock(int link) => net.Links[link].Tag is Source s && block.Contains(s.Tile);
+        bool InBlock(int link) => net.Links[link].Tag is Source s && s.Line.Write;
         var planOf = new Dictionary<int, (Junction Junction, PriorityPlanner.Plan Plan)>();
         foreach (var p in priority.Plans) planOf[p.Junction.NodeId] = p;
         var near = new HashSet<int>();
@@ -449,11 +466,42 @@ public static partial class TileRewriter
         {
             var home = Home(p.Junction);
             if (block.Contains(home) && wanted.Contains(home)) planned.Add(p.Junction.NodeId);
-            else if (p.Plan.Arms.Any(arm => InBlock(arm.LinkId) || StreetOn(net, arm.LinkId, arm.End == LinkEnd.End).Links.Any(x => InBlock(x.Link))))
+            else if (p.Plan.Arms.Any(arm => Reaches(arm.LinkId, arm.End == LinkEnd.End)))
             {
                 near.Add(p.Junction.NodeId);
                 planned.Add(p.Junction.NodeId);
             }
+        }
+        // (#1660) a junction reaches the block where its arm runs into it (or past it within WriteReach) within JunctionReach of
+        // the junction: what it writes lies there (core, pockets, transitions, poles); an arm is a whole line, often far longer
+        bool Near(Vec2 q)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    if (block.Contains(Plane.TileAt(q.X + dx * WriteReach, q.Y + dy * WriteReach))) return true;
+            return false;
+        }
+        // (#1691) and all along the arm's own link: its paint is laid from the junction's mouth, so the dashes' phase anywhere on
+        // the street is the junction's (a 355 m street's dashes 3.6 m apart in a block 333 m from the junction)
+        bool Reaches(int linkId, bool atEnd)
+        {
+            double gone = 0;
+            foreach (var (link, end) in StreetOn(net, linkId, atEnd).Links.Prepend((linkId, atEnd)))
+            {
+                var c = net.Links[link].Centreline;
+                bool own = link == linkId;
+                for (int i = 1; i < c.Count && (own || gone <= JunctionReach); i++)
+                {
+                    var (a, b) = end ? (c[c.Count - i], c[c.Count - 1 - i]) : (c[i - 1], c[i]);
+                    double len = a.DistanceTo(b);
+                    int steps = Math.Max(1, (int)Math.Ceiling(len / 10));
+                    for (int k = 0; k <= steps; k++)
+                        if (Near(a + (b - a) * ((double)k / steps))) return true;
+                    gone += len;
+                }
+                if (gone > JunctionReach) break;
+            }
+            return false;
         }
         var links = new HashSet<int>();
         void Arms(PriorityPlanner.Plan plan, bool onward)
@@ -464,13 +512,15 @@ public static partial class TileRewriter
                 var on = StreetOn(net, arm.LinkId, arm.End == LinkEnd.End).Links;
                 foreach (var (l, _) in on) links.Add(l);
                 if (!onward) continue;
-                // the junction where the street on ends: a transition may be shared with it
+                // the junction where the street on ends: a transition may be shared with it; and (#1660) on past it while the
+                // street is short enough to make the two one core (a merged group is planned whole by every block it reaches)
                 var (last, atEnd) = on.Count > 0 ? on[^1] : (arm.LinkId, arm.End == LinkEnd.End);
                 int node = atEnd ? net.Links[last].StartNode : net.Links[last].EndNode;
                 if (planOf.TryGetValue(node, out var far) && planned.Add(node))
                 {
                     near.Add(node);
-                    Arms(far.Plan, false);
+                    double street = PolylineLength(net.Links[arm.LinkId].Centreline) + on.Sum(x => PolylineLength(net.Links[x.Link].Centreline));
+                    Arms(far.Plan, street < MergeReach);
                 }
             }
         }
@@ -479,7 +529,7 @@ public static partial class TileRewriter
         // the lines beside them in their own tiles: the room beside an arm is measured against those
         var byTile = new Dictionary<TileId, List<int>>();
         for (int l = 0; l < net.Links.Count; l++)
-            if (net.Links[l].Tag is Source s && !block.Contains(s.Tile) && net.Links[l].Centreline.Count > 0)
+            if (net.Links[l].Tag is Source s && !s.Line.Write && net.Links[l].Centreline.Count > 0)
                 (byTile.TryGetValue(s.Tile, out var list) ? list : byTile[s.Tile] = []).Add(l);
         static (double X0, double Y0, double X1, double Y1) Box(List<Vec2> line, double grow) =>
             (line.Min(p => p.X) - grow, line.Min(p => p.Y) - grow, line.Max(p => p.X) + grow, line.Max(p => p.Y) + grow);
@@ -488,7 +538,7 @@ public static partial class TileRewriter
             foreach (int o in list) boxes[o] = Box(net.Links[o].Centreline, 0);
         foreach (int l in links.ToList())
         {
-            if (net.Links[l].Tag is not Source s || block.Contains(s.Tile) || !byTile.TryGetValue(s.Tile, out var others)) continue;
+            if (net.Links[l].Tag is not Source s || s.Line.Write || !byTile.TryGetValue(s.Tile, out var others)) continue;
             var box = Box(net.Links[l].Centreline, RoomReach + 5);
             foreach (int o in others)
             {
@@ -496,7 +546,7 @@ public static partial class TileRewriter
                 if (b.X1 >= box.X0 && b.X0 <= box.X1 && b.Y1 >= box.Y0 && b.Y0 <= box.Y1) links.Add(o);
             }
         }
-        links.RemoveWhere(l => net.Links[l].Tag is not Source s || block.Contains(s.Tile));
+        links.RemoveWhere(l => net.Links[l].Tag is not Source s || s.Line.Write);
         return (links, near);
     }
 
@@ -868,10 +918,10 @@ public static partial class TileRewriter
     /// <summary>
     /// The room beside an arm (#818): at every <see cref="TurnStation"/> from its junction end out to <paramref name="reach"/>,
     /// the first offset from the axis on each side where a building stands, another line's ribbon lies, the ground is
-    /// more than <see cref="TurnGroundStep"/> off the road or the tile ends; per station (the transition checks its own width there).
+    /// more than <see cref="TurnGroundStep"/> off the road (never a tile edge: the arm is a whole line, #1660); per station (the transition checks its own width there).
     /// </summary>
     private static ArmRoom MeasureRoom(RoadSegment seg, TileId tile, int self, bool atEnd, double from, double reach, EmbankmentPlanner.LineIndex lines,
-        Dictionary<TileId, ChunkGrid>? grids, Footprints buildings)
+        IGround? grids, Footprints buildings)
     {
         double half = seg.Width * 0.5;
         double length = SegmentLength(seg);
@@ -888,9 +938,8 @@ public static partial class TileRewriter
                 for (double o = half + RoomStep; o <= limit; o += RoomStep)
                 {
                     double px = x + rx * o * side, pz = z + rz * o * side;
-                    var lv95 = new Vec2(tile.MinE + px, tile.MaxN - pz);
-                    bool blocked = px < 0 || pz < 0 || px > TileSizeM || pz > TileSizeM
-                        || buildings.Contains(lv95)
+                    var lv95 = new Vec2(Plane.West(tile) + px, Plane.North(tile) - pz);
+                    bool blocked = buildings.Contains(lv95)
                         || lines.Covering(px, pz, self, x, z, half + 1.0) is not null
                         || grids is not null && SampleGround(grids, lv95.X, lv95.Y) is var g && !double.IsNaN(g) && Math.Abs(g - y) > TurnGroundStep;
                     if (!blocked) continue;

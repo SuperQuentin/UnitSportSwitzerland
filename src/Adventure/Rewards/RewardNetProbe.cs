@@ -134,7 +134,7 @@ public partial class RewardNetProbe : ChatProbe
         placed.RequestPlace(PlacedKind.TravelFlag, at, "", r => planted = r);
         Expect(await Until(() => planted != null, 10) && planted!.Value.Object != null, $"A planted the travel flag ({planted?.Refused})");
         var fg = placed.Origin.ToGlobal(at.Origin);
-        Expect(await Until(() => Adv.Mine.Get(Navigation.TravelBook.Section).Flag is { } f && Math.Abs(f.E - fg.E) < 1 && Math.Abs(f.N - fg.N) < 1, 10),
+        Expect(await Until(() => Adv.Mine.Get(Navigation.TravelBook.Section).Flag is { } f && fg.OffsetTo(GlobalPos.FromLv95(f.E, f.N, fg.Alt)) is var (fe, fn, _) && Math.Abs(fe) < 1 && Math.Abs(fn) < 1, 10),
             $"the server made it A's portable travel point ({Adv.Mine.Get(Navigation.TravelBook.Section).Flag})");
         placed.RequestPlace(PlacedKind.TravelFlag, at with { Origin = at.Origin + new Vector3(3, 0, 0) }, "", r => second = r);
         Expect(await Until(() => second != null, 10) && second!.Value.Refused?.Contains("already stands") == true, $"a second flag is refused ({second?.Refused})");
@@ -241,10 +241,12 @@ public partial class RewardNetProbe : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.3) break;
             double s = Math.Min(d, step);
-            me.GlobalPosition += new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * s), 0.2f, (float)(-dn / d * s)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }

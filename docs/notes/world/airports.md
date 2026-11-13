@@ -29,8 +29,8 @@ no AI traffic.
   - **Fit**: the footprint is nose to tail by wingtip to wingtip plus 3 m. Out on the wings, only
     the stretch round the wing root counts. At least 95 % of it must be paved and free of
     buildings, and it must not overlap a footprint already chosen.
-  - **Choice**: the cargo apron gets the AN-124, then the freighter, roomiest stands first (farthest
-    from the next stand). The cargo apron is one named cargo/fret/fracht, else every stand. Then
+  - **Choice**: the cargo apron gets the AN-124, then the freighter, then the space shuttle
+    (`StandUse.Space`, #1492), roomiest stands first (farthest from the next stand). The cargo apron is one named cargo/fret/fracht, else every stand. Then
     comes a row of up to six A320s. It is built from the seed that gives the most A320s, then the
     tightest row. A row is one apron, its nearest stands facing within 30° of the seed, spaced at
     least 0.8 × span: business-jet stands are 15-20 m apart and are skipped.

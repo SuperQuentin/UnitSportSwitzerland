@@ -6,13 +6,19 @@
   tiles (bridging RoadGen's trimmed junctions within 18 m), `FromPoints` rebuilds one a server sent.
   `AutoPilot.Drive(dt, go, others)` plugs into `FootPlayer.RideControls`; `others` are the other cars
   (position, speed, wreck?) for racecraft.
+- **Under earth** (#1742): the server's race reads the leaves' own roads (`RaceManager.LeafRoads`, set by
+  `ServerWorld` to `EarthLeaves.Get` after a domain `Reach`), placed `TilePlace.OnAnchor` in an ENU frame
+  (`OriginFrame.AnchorAt`; the flat `AnchorNear` has no axes and silently took the LV95 path). 7 x 7 leaves
+  first, then 15 x 15 (~9 km, flat's 9 x 9 tiles) when none has a road to race on: the generated fill round
+  the Col du Mollendruz has its nearest road ~4 km off. Flat's route came from there too.
 - **Every ground mount** (#39): `AutoPilot.For(route, player)` picks the pilot for what the player is
   on — a car (the drift/grip driver), anything **lean-steered** (road bike, skis, the motorbike: any
   `Rideable` whose `Step` banks through `SteerByLean`), or its own legs; null for a flyer. The lean
   pilot measures its mount instead of reading constants: a fresh `Rideable.Create(kind)` stepped on
   the flat for 2 s at full steer gives the max bank, 0.5 s of full brake against coasting gives the
   deceleration. Corners at `√(0.65·g·R·tan φmax)` (0.8 ran two R1s wide off a R 50 m bend: braking
-  into it takes grip off the lean), rides round a stopped rider, pulls over right past the line, and
+  into it takes grip off the lean), rides round a stopped rider or car and queues behind a moving one (players and,
+  since #1729, the traffic boxed along its line, `Sensed`, as the car pilot reads it), pulls over right past the line, and
   is put back on the line after 3 s stopped off the road; brakes at 85% of the measured decel, steers by the
   bank a pure-pursuit arc needs (`tan φ = v²κ/g`, `steer = −φ/φmax`). On foot the runner walks through
   `FootPlayer.WalkControls` (a world-space wish, set by the pilot itself; `pilot.Go` holds it).
@@ -47,3 +53,7 @@
   A car nose-to-tail with something stopped backs off and resets like one stuck off the road.
 - `--drivecheck --mount K [--riders N]` races another mount (RideKind number, 0 on foot) with the pilot
   `For` picks; `--verge 0` skips the verge survey.
+- `RaceRoute.ToAsync` (#1744): a route to a far destination over a corridor's lane graph (leaves or LV95 tiles), the
+  quickest way on traffic's car graph, each street's rightmost lane, a curve across a trimmed junction; ends found in a
+  grid on the same level (`EndIndex`, also every `BuildAsync`: the old scan was quadratic). Driven by `LaneFollower`, not
+  this pilot (`core/earth-bar-probes`).

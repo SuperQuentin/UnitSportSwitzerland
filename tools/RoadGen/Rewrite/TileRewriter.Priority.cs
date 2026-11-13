@@ -60,7 +60,7 @@ public static partial class TileRewriter
     }
 
     private static void EmitPriority(PriorityResult priority, RoadGenResult result, HashSet<TileId> block,
-        HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
+        HashSet<TileId> wanted, IGround? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadPointProp>> props,
         PriorityPlanner.Stats stats)
     {
@@ -69,7 +69,7 @@ public static partial class TileRewriter
 
         foreach (var (junction, plan) in priority.Plans)
         {
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             bool counted = block.Contains(home) && wanted.Contains(home);
             if (counted)
             {
@@ -86,7 +86,7 @@ public static partial class TileRewriter
 
             foreach (var row in plan.Teeth)
             {
-                if (net.Links[row.LinkId].Tag is not Source source || !block.Contains(source.Tile)) continue;
+                if (net.Links[row.LinkId].Tag is not Source source || !source.Line.Write) continue;
                 float lift = (source.Segment.Flags & RoadFlags.Bridge) != 0 ? PaintBridgeLift : 0f;
                 var vertices = Local(source.Tile, [row.From, row.To], source.SampleHeight, lift);
                 Get(paint, source.Tile).Add(new RoadPaint
@@ -138,7 +138,7 @@ public static partial class TileRewriter
 
             foreach (var sign in plan.Signs)
             {
-                if (net.Links[sign.LinkId].Tag is not Source source || !block.Contains(source.Tile)) continue;
+                if (net.Links[sign.LinkId].Tag is not Source source || !source.Line.Write) continue;
                 clearance ??= new PriorityPlanner.Clearance(result.Ribbons, result.Junctions);
                 float road = source.SampleHeight(sign.RoadPoint);
                 string? why = null;
@@ -157,7 +157,8 @@ public static partial class TileRewriter
                 float kerb = sign.OnSidewalk ? Math.Max(side.Left.KerbCm, side.Right.KerbCm) / 100f : 0f;
                 float lower = sign.OnSidewalk ? RoadSigns.LowerEdgeSidewalk : RoadSigns.LowerEdge;
                 // heading about +Y, 0 = facing -Z (north): the plate's front looks along Facing
-                float heading = (float)Math.Atan2(-sign.Facing.X, sign.Facing.Y);
+                var facing = Plane.DirectionToTile(source.Tile, sign.At, sign.Facing);
+                float heading = (float)Math.Atan2(-facing.X, facing.Y);
                 list.Add(new RoadPointProp(sign.Type, sign.Variant, PropFlags.Solid, local[0], road + kerb, local[2],
                     heading, lower + RoadSigns.PlateHeight(sign.Type, sign.Variant)));
                 Get(priority.SignsOf, sign.LinkId).Add((source.Tile, list.Count - 1));
@@ -180,9 +181,9 @@ public static partial class TileRewriter
         var v = new float[plan.Count * 3];
         for (int i = 0; i < plan.Count; i++)
         {
-            v[i * 3] = (float)(plan[i].X - id.MinE);
+            v[i * 3] = (float)(plan[i].X - Plane.West(id));
             v[i * 3 + 1] = height(plan[i]) + lift;
-            v[i * 3 + 2] = (float)(id.MaxN - plan[i].Y);
+            v[i * 3 + 2] = (float)(Plane.North(id) - plan[i].Y);
         }
         return v;
     }
@@ -206,8 +207,9 @@ public static partial class TileRewriter
     /// plan (the roof always does). Loaded lazily per tile, each tile's roof triangles in <see cref="Cell"/> m cells (#854: a
     /// junction's corner asks thousands of points; scanning every building of nine tiles made planning the cores slow).
     /// </summary>
-    private sealed class Footprints(Func<TileId, BuildingTile?> source)
+    private sealed class Footprints(Func<TileId, BuildingTile?> source, IUnits units)
     {
+        // the buildings' own tiles, whatever frame the block's records are in (#1660)
         private const double Cell = 10;
         // per cell its roof triangles in plan, each as its box then its corners (10 numbers): a big building's box held a point
         // that was then tried against every triangle of its roof
@@ -225,12 +227,10 @@ public static partial class TileRewriter
 
         private bool Scan(Vec2 p)
         {
-            var at = TileId.FromLv95(p.X, p.Y);
-            for (int de = -1; de <= 1; de++)
-            for (int dn = -1; dn <= 1; dn++)
+            var at = units.TileAt(p.X, p.Y);
+            foreach (var id in units.Around(at, 1))
             {
-                var id = new TileId(at.E + de, at.N + dn);
-                double x = p.X - id.MinE, z = id.MaxN - p.Y;
+                double x = p.X - units.West(id), z = units.North(id) - p.Y;
                 if (!Load(id).TryGetValue(((int)Math.Floor(x / Cell), (int)Math.Floor(z / Cell)), out var here)) continue;
                 for (int t = 0; t + 9 < here.Count; t += 10)
                 {

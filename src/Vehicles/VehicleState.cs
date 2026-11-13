@@ -8,8 +8,11 @@ namespace UnitSport.Vehicles;
 /// Everything a vehicle is, at the moment it changes hands: from the player who was driving it to
 /// the world (getting out, crashing), or back (getting in). Travels over the network as a
 /// Godot Dictionary, which is what a MultiplayerSpawner's spawn data and an RPC can carry. Its
-/// position is LV95 (#185): it crosses the network, and the server keeps it for as long as the
-/// vehicle stands there.
+/// position is a <see cref="GlobalPos"/> (#185): it crosses the network, and the server keeps it for as
+/// long as the vehicle stands there. Its <see cref="Yaw"/>, <see cref="Velocity"/> and a boat's or an
+/// airliner's attitude (<see cref="Angles"/>) are in the LV95 grid's axes at that place (grid north
+/// until G2 A1, a flat world's axes): <see cref="ToDict"/> sends them in ECEF, local ENU and true north
+/// (#1503, protocol 93), the object containers save that form too (G2 A2b).
 /// </summary>
 public readonly record struct VehicleState(
     RideKind Kind,
@@ -91,13 +94,18 @@ public readonly record struct VehicleState(
     /// </summary>
     public int Units => Kind != RideKind.Trailer && Train != 0 ? 2 : 1;
 
+    /// <summary>A boat's or an airliner's <see cref="Angles"/> are its attitude (the axes' business); a truck's its joints'.</summary>
+    private bool AnglesAreAttitude => Boat.IsBoat(Kind) || Airliner.IsAirliner(Kind);
+
+    /// <summary>The state on the wire (a spawn, an RPC): ECEF, the local ENU and true north (#1503).</summary>
     public Godot.Collections.Dictionary ToDict()
     {
+        var enu = Lv95Grid.Axes(Position);
         var d = new Godot.Collections.Dictionary
         {
         ["kind"] = (int)Kind,
-        ["yaw"] = Yaw,
-        ["vel"] = Velocity,
+        ["yaw"] = enu.TrueYaw(Yaw),
+        ["vel"] = enu.ToEnu(Velocity),
         ["hp"] = Health,
         ["engine"] = EngineOn,
         ["wrecked"] = Wrecked,
@@ -111,7 +119,7 @@ public readonly record struct VehicleState(
         ["doors"] = DoorsOpen,
         ["setup"] = Setup,
         ["train"] = Train,
-        ["angles"] = Angles,
+        ["angles"] = !AnglesAreAttitude || Angles == default ? Angles : enu.ToEnu(Quaternion.FromEuler(Angles)).GetEuler(),
         ["flags"] = Flags,
         ["load"] = Load,
         ["radio"] = Radio,
@@ -129,7 +137,22 @@ public readonly record struct VehicleState(
         return d;
     }
 
-    public static VehicleState FromDict(Godot.Collections.Dictionary d) => new(
+    /// <summary>A state from <see cref="ToDict"/> (the wire, and the object containers since G2 A2b) or a container record saved before it (LV95 and grid north: its migration), told apart by their keys.</summary>
+    public static VehicleState FromDict(Godot.Collections.Dictionary d)
+    {
+        var s = Read(d);
+        if (!GlobalPos.IsWire(d)) return s;
+        // from the wire: the local ENU and true north at its place, in GlobalPos's axes there
+        var enu = Lv95Grid.Axes(s.Position);
+        return s with
+        {
+            Yaw = enu.Yaw(s.Yaw),
+            Velocity = enu.FromEnu(s.Velocity),
+            Angles = !s.AnglesAreAttitude || s.Angles == default ? s.Angles : enu.FromEnu(Quaternion.FromEuler(s.Angles)).GetEuler(),
+        };
+    }
+
+    private static VehicleState Read(Godot.Collections.Dictionary d) => new(
         (RideKind)d["kind"].AsInt32(),
         GlobalPos.Read(d),
         d["yaw"].AsSingle(),

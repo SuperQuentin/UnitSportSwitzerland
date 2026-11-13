@@ -79,15 +79,16 @@ public partial class ChunkNode : Node3D
     }
 
     /// <param name="paint">The v3 paint layer (<see cref="RoadPaintBuilder"/>), a second surface.</param>
+    /// <param name="pattern">A leaf's pattern points to bake (#1512, <see cref="Earth.LeafPattern"/>); null in the flat world.</param>
     public static ArrayMesh ToArrayMesh(RoadMeshBuilder.MeshData data, Material material,
-        RoadMeshBuilder.MeshData? paint = null)
+        RoadMeshBuilder.MeshData? paint = null, Earth.LeafPattern? pattern = null)
     {
         using var main = RoadArrays(data);
-        var mesh = Finish(main, material);
+        var mesh = Finish(main, material, pattern?.Into(main) ?? 0);
         if (paint != null)
         {
             using var arrays = RoadArrays(paint);
-            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: pattern?.Into(arrays) ?? 0);
             mesh.SurfaceSetMaterial(1, material);
         }
         return mesh;
@@ -114,11 +115,11 @@ public partial class ChunkNode : Node3D
     }
 
     /// <summary>Each cell's mesh (<see cref="SplitByCell(RoadMeshBuilder.MeshData)"/>), null where the cell is empty.</summary>
-    public static ArrayMesh?[] ToArrayMeshes(RoadMeshBuilder.MeshData?[] cells, Material material)
+    public static ArrayMesh?[] ToArrayMeshes(RoadMeshBuilder.MeshData?[] cells, Material material, Earth.LeafPattern? pattern = null)
     {
         var meshes = new ArrayMesh?[cells.Length];
         for (int c = 0; c < cells.Length; c++)
-            if (cells[c] is { } cell) meshes[c] = ToArrayMesh(cell, material);
+            if (cells[c] is { } cell) meshes[c] = ToArrayMesh(cell, material, pattern: pattern);
         return meshes;
     }
 
@@ -183,7 +184,7 @@ public partial class ChunkNode : Node3D
         return arrays;
     }
 
-    public static ArrayMesh ToArrayMesh(BuildingMeshBuilder.MeshData data, Material material)
+    public static ArrayMesh ToArrayMesh(BuildingMeshBuilder.MeshData data, Material material, Earth.LeafPattern? pattern = null)
     {
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
@@ -193,17 +194,18 @@ public partial class ChunkNode : Node3D
         arrays[(int)Mesh.ArrayType.TexUV2] = data.Uv2s;
         arrays[(int)Mesh.ArrayType.Custom0] = data.Frames;
         return Finish(arrays, material,
-            (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift));
+            (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift)
+            | (pattern?.Into(arrays) ?? 0));
     }
 
-    public static ArrayMesh ToArrayMesh(WaterMeshBuilder.MeshData data, Material material)
+    public static ArrayMesh ToArrayMesh(WaterMeshBuilder.MeshData data, Material material, Earth.LeafPattern? pattern = null)
     {
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-        var mesh = Finish(arrays, material);
+        var mesh = Finish(arrays, material, pattern?.Into(arrays) ?? 0);
         // the shader lifts crests above the still surface (#299): grow the bounds by the most a wave moves
         mesh.CustomAabb = mesh.GetAabb().Grow(WaterMeshBuilder.WaveMargin);
         return mesh;
@@ -1017,6 +1019,9 @@ public partial class ChunkNode : Node3D
     }
 
     private MeshInstance3D? _waterInstance;
+
+    /// <summary>Whether the tile's water is drawn (any build's, fine or flat).</summary>
+    public bool HasWater => _waterInstance != null;
 
     public void SetWater(ArrayMesh mesh)
     {

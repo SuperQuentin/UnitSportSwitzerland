@@ -16,13 +16,20 @@ public partial class SchwingRing : Node3D, IOriginContainer
     public const string NodeName = "SchwingRing";
 
     /// <summary>The ring's middle (LV95), 20 m north of the site's middle (the mortar rack is 14 m west, the flag ground 12 m east).</summary>
-    public static (double E, double N) Of(ResolvedSite site) => (site.E, site.N + 20);
+    public static (double E, double N) Of(ResolvedSite site)
+    {
+        var l = PosOf(site).Lv95;   // 20 m of true north, as PosOf (a grid-north 20 m is up to 0.7 m off at Scuol, #1502)
+        return (l.E, l.N);
+    }
+
+    /// <summary><see cref="Of"/> as a position (the same 20 m north of the site's middle).</summary>
+    public static GlobalPos PosOf(ResolvedSite site) => site.Pos.Moved(0, 20);
 
     public static SchwingRing? Instance { get; private set; }
 
     private readonly WorldOrigin _origin;
     private readonly Func<Vector3, float?> _ground;
-    private (double E, double N) _at = (double.NaN, double.NaN);
+    private GlobalPos? _at;
     private Node3D? _ring;
     private double _look;
 
@@ -35,7 +42,7 @@ public partial class SchwingRing : Node3D, IOriginContainer
 
     public static SchwingRing Create(Node world, ChunkManager? chunks, WorldOrigin origin)
     {
-        var r = new SchwingRing(origin, p => chunks != null && chunks.TryGetHeight(p, out float h) ? h : null);
+        var r = new SchwingRing(origin, p => chunks != null && chunks.Ground.TryGetHeight(p, out float h) ? h : null);
         world.AddChild(r);
         return r;
     }
@@ -59,7 +66,7 @@ public partial class SchwingRing : Node3D, IOriginContainer
     public static bool At(Node3D body)
     {
         if (SchwingManager.RingNow() is not { } ring || Instance is not { } node) return false;
-        var origin = node._origin.ToWorld(ring.E, ring.N, body.GlobalPosition.Y);
+        var origin = node._origin.ToWorld(ring.Pos.WithAlt(body.GlobalPosition.Y));
         var d = body.GlobalPosition - origin;
         d.Y = 0;
         return d.Length() <= SchwingRules.RingDiameter * 0.5f + SchwingManager.RingReach * 0.6f;
@@ -70,13 +77,13 @@ public partial class SchwingRing : Node3D, IOriginContainer
         var ring = SchwingManager.RingNow();
         if (ring is null)
         {
-            if (_ring != null) { _ring.QueueFree(); _ring = null; _at = (double.NaN, double.NaN); }
+            if (_ring != null) { _ring.QueueFree(); _ring = null; _at = null; }
             return;
         }
-        if (_ring != null && _at == (ring.Value.E, ring.Value.N)) return;
+        if (_ring != null && _at == ring.Value.Pos) return;
         _ring?.QueueFree();
-        _at = (ring.Value.E, ring.Value.N);
-        var probe = _origin.ToWorld(_at.E, _at.N, 0);
+        _at = ring.Value.Pos;
+        var probe = _origin.ToWorld(ring.Value.Pos.WithAlt(0));
         float y = _ground(probe) ?? GetViewport().GetCamera3D()?.GlobalPosition.Y - 1.7f ?? 400f;
         _ring = Build();
         _ring.Position = new Vector3(probe.X, y, probe.Z);

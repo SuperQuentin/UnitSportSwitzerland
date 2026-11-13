@@ -75,8 +75,11 @@ public partial class Sleepers : Node
         string path = ProjectSettings.GlobalizePath(StorePath);
         try
         {
-            if (File.Exists(path)) _book = SleeperBook.FromJson(File.ReadAllText(path));
-            GD.Print($"[sleepers] {_book.All.Count} asleep, from {path}");
+            bool migrated = false;
+            if (File.Exists(path)) _book = SleeperBook.FromJson(File.ReadAllText(path), out migrated);
+            GD.Print($"[sleepers] {_book.All.Count} asleep, from {path}{(migrated ? " (LV95: written back in Earth places)" : "")}");
+            // a file from before G2 A2b (#1503): converted in place
+            if (migrated) Save();
         }
         catch (Exception ex) { GD.PushWarning($"[sleepers] {path}: {ex.Message}"); }
     }
@@ -96,8 +99,9 @@ public partial class Sleepers : Node
         RpcId(peer, MethodName.Snapshot,
             list.Select(s => s.Id).ToArray(),
             list.Select(s => s.NameShown(PlayerIds.Server)).ToArray(),
-            list.SelectMany(s => new[] { s.E, s.N, s.Alt }).ToArray(),
-            list.Select(s => s.Yaw).ToArray(),
+            // ECEF and headings from true north (#1503); the book keeps LV95 and grid north until A2b
+            list.SelectMany(s => { var (x, y, z) = s.At.ToWire(); return new[] { x, y, z }; }).ToArray(),
+            list.Select(s => Lv95Grid.TrueYaw(s.At, s.Yaw)).ToArray(),
             list.Select(s => s.Rider).ToArray(),
             list.Select(s => s.Outfit).ToArray(),
             list.Select(s => s.Appearance).ToArray(),
@@ -136,8 +140,17 @@ public partial class Sleepers : Node
         if (_book.Wake(key) is not { } s) return;
         Unshow(s.Id);
         Save();
-        GD.Print($"[sleepers] {s.Name} wakes at {s.E:F1}/{s.N:F1}/{s.Alt:F1}");
-        RpcId(peer, MethodName.WakeAt, s.E, s.N, s.Alt, s.Yaw);
+        GD.Print($"[sleepers] {s.Name} wakes at {s.At}");
+        var (x, y, z) = s.At.ToWire();
+        RpcId(peer, MethodName.WakeAt, x, y, z, Lv95Grid.TrueYaw(s.At, s.Yaw));
+    }
+
+    /// <summary>A sleeper from the wire (#1503): ECEF and a heading from true north, kept as the book has them.</summary>
+    private static Sleeper FromWire(long id, string name, double x, double y, double z, float trueYaw, int rider, long outfit,
+        int appearance, int hat)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        return new Sleeper(id, "", name, at, Lv95Grid.GridYaw(at, trueYaw), rider, outfit, appearance, hat);
     }
 
     /// <summary>
@@ -149,31 +162,40 @@ public partial class Sleepers : Node
         _nonces.Remove(peer);
         if (!_keyOf.Remove(peer, out var key) || body is null || body.Npc) return;
 
+        // a body that never sent a state has no place: its default is no ground anywhere (#1547)
+        if (body.NetTime <= 0 || SleeperBook.Placeholder(body.NetGlobal))
+        {
+            GD.Print($"[sleepers] {name}: left before its first state, no sleeper");
+            return;
+        }
         var at = body.NetGlobal;
         double alt = at.Alt;
         // riding (a vehicle goes on without it) or inside (interiors are far below): on the ground there
         if (body.Ride != Player.RideKind.OnFoot || body.Indoors)
         {
-            if (GroundAt?.Invoke(at.E, at.N) is not { } ground)
+            if (GroundAt?.Invoke(at.Lv95.E, at.Lv95.N) is not { } ground)
             {
-                GD.Print($"[sleepers] {name}: no ground known under {at.E:F0}/{at.N:F0}, no sleeper");
+                GD.Print($"[sleepers] {name}: no ground known under {at.Lv95.E:F0}/{at.Lv95.N:F0}, no sleeper");
                 return;
             }
             alt = ground;
         }
 
-        var s = _book.Lay(new Sleeper(0, key, name, at.E, at.N, alt, body.NetYaw, (int)peer,
+        var s = _book.Lay(new Sleeper(0, key, name, at.WithAlt(alt), body.GlobalYaw, (int)peer,
             body.OutfitBits, body.AppearanceBits, body.HeadwearId), out var replaced);
         if (replaced != null) Unshow(replaced.Id);
         Show(s);
         Save();
-        GD.Print($"[sleepers] {name} falls asleep at {s.E:F1}/{s.N:F1}/{s.Alt:F1}");
+        GD.Print($"[sleepers] {name} falls asleep at {s.At}");
     }
 
     private void Show(Sleeper s)
     {
         foreach (int p in Multiplayer.GetPeers())
-            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), s.E, s.N, s.Alt, s.Yaw, s.Rider, s.Outfit, s.Appearance, s.Headwear);
+        {
+            var (x, y, z) = s.At.ToWire();
+            RpcId(p, MethodName.Add, s.Id, s.NameShown(PlayerIds.Server), x, y, z, Lv95Grid.TrueYaw(s.At, s.Yaw), s.Rider, s.Outfit, s.Appearance, s.Headwear);
+        }
     }
 
     private void Unshow(long id)
@@ -209,21 +231,23 @@ public partial class Sleepers : Node
     {
         foreach (long id in _shown.Keys.ToList()) Drop(id);
         for (int i = 0; i < ids.Length; i++)
-            Put(new Sleeper(ids[i], "", names[i], pos[3 * i], pos[3 * i + 1], pos[3 * i + 2], yaws[i], riders[i],
+            Put(FromWire(ids[i], names[i], pos[3 * i], pos[3 * i + 1], pos[3 * i + 2], yaws[i], riders[i],
                 outfits[i], appearances[i], hats[i]));
         GD.Print($"[sleepers] snapshot: {ids.Length} asleep");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Add(long id, string name, double e, double n, double alt, float yaw, int rider, long outfit,
-        int appearance, int hat) => Put(new Sleeper(id, "", name, e, n, alt, yaw, rider, outfit, appearance, hat));
+    private void Add(long id, string name, double x, double y, double z, float yaw, int rider, long outfit,
+        int appearance, int hat) => Put(FromWire(id, name, x, y, z, yaw, rider, outfit, appearance, hat));
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Remove(long id) => Drop(id);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void WakeAt(double e, double n, double alt, float yaw)
+    private void WakeAt(double x, double y, double z, float yaw)
     {
+        var at = GlobalPos.FromWire(x, y, z);
+        var (e, n, alt) = at.Lv95;
         GD.Print($"[sleepers] waking at {e:F1}/{n:F1}/{alt:F1}");
         LastWake = (e, n);
         Teleporter?.TeleportTo(e, n, "where you fell asleep");
@@ -249,8 +273,8 @@ public partial class Sleepers : Node
         Drop(s.Id);
         _shown[s.Id] = s;
         var node = Draw(s);
-        node.Position = _origin.ToWorld(s.E, s.N, s.Alt);
-        node.Rotation = new Vector3(0, s.Yaw, 0);
+        node.Position = _origin.ToWorld(s.At);
+        node.Rotation = new Vector3(0, _origin.Frame.WorldYawOfGrid(s.At, s.Yaw), 0);
         AddChild(node);
         _visuals[s.Id] = node;
     }

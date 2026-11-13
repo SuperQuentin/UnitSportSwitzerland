@@ -112,9 +112,12 @@ public sealed class SeatStart
     private void OntoRoad(RaceRoute? route)
     {
         float? bearing = CmdArgs.Float("--heading");
-        // compass bearing to a world direction: the node faces −Z (north), +X is east
-        Vector3? wish = bearing is float b ? new Vector3(Mathf.Sin(Mathf.DegToRad(b)), 0f, -Mathf.Cos(Mathf.DegToRad(b))) : null;
         var at = _player!.GlobalPosition;
+        // a compass bearing from true north at the body (#1504) to a world direction (the node faces −Z, +X is east)
+        float north = bearing != null && _origin != null ? TrueNorth.NorthBearing(_origin.Frame, at) : 0f;
+        Vector3? wish = bearing is float b
+            ? new Vector3(Mathf.Sin(Mathf.DegToRad(b) + north), 0f, -Mathf.Cos(Mathf.DegToRad(b) + north))
+            : null;
         Vector3 facing = wish ?? -_player.GlobalBasis.Z;
         if (route is { Centre.Count: >= 2 })
         {
@@ -126,7 +129,7 @@ public sealed class SeatStart
                 if (wish is { } w && along.Dot(w) < 0f) along = -along;
                 facing = along;
                 var road = route.Centre[0];
-                float ground = _chunks!.TryGetSurface(road, out float h) ? h : road.Y;
+                float ground = _chunks!.Ground.TryGetSurface(road, out float h) ? h : road.Y;
                 at = new Vector3(road.X, ground + 0.5f, road.Z);
                 GD.Print($"[seat] on the road {MathX.FlatDistance(road, _player.GlobalPosition):F0} m from where the body landed");
             }

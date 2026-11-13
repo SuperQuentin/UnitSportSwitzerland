@@ -548,7 +548,7 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>The Map's place rows, for the checks.</summary>
-    internal bool HasPlaces => _places() != null;
+    internal bool HasPlaces => _places() is { All.Count: > 0 };   // an index with no places.json lists nothing to pick
 
     internal int MapRowCount => _results.GetChildren().OfType<Button>().Count();
 
@@ -556,7 +556,7 @@ public partial class PhoneScreens : Node
     public void FocusSearch() => _query.GrabFocus();
 
     /// <summary>Where the player stands (LV95), for "Near you"; set by the controller.</summary>
-    public Func<(double E, double N)?>? Here;
+    public Func<GlobalPos?>? Here;
 
     /// <summary>The last places travelled to from the phone, newest first (this session).</summary>
     private static readonly List<Place> Recents = new();
@@ -640,7 +640,7 @@ public partial class PhoneScreens : Node
         if (here is { } me)
         {
             var near = places.All.Where(Fits).Where(p => !recent.Contains(p))
-                .Select(p => (Place: p, D: Math.Sqrt((p.E - me.E) * (p.E - me.E) + (p.N - me.N) * (p.N - me.N))))
+                .Select(p => (Place: p, D: me.HorizontalDistanceTo(GlobalPos.FromLv95(p.E, p.N, me.Alt))))
                 .Where(x => x.D > 500).OrderBy(x => x.D).Take(NearShown).ToList();
             if (near.Count > 0)
             {
@@ -670,9 +670,9 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>"850 m" or "12 km" from the player to a place.</summary>
-    internal static string Distance((double E, double N) from, Place to)
+    internal static string Distance(GlobalPos from, Place to)
     {
-        double d = Math.Sqrt((to.E - from.E) * (to.E - from.E) + (to.N - from.N) * (to.N - from.N));
+        double d = from.HorizontalDistanceTo(GlobalPos.FromLv95(to.E, to.N, from.Alt));
         return d < 1000 ? $"{Math.Round(d / 10) * 10:0} m" : d < 10000 ? $"{d / 1000:0.0} km" : $"{d / 1000:0} km";
     }
 

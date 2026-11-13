@@ -64,7 +64,9 @@ public static class CinemaLookup
     public static Found? Run(string link, out string why, int tallest = 480)
     {
         why = "";
-        if (!CinemaVideo.NeedsLookup(link)) return new Found(link, link, false, 0);
+        // a file or a direct link: its length from ffmpeg's header (#1742), so a decoder started past its end says it ended
+        // rather than that it could not read the video
+        if (!CinemaVideo.NeedsLookup(link)) return new Found(link, link, false, Probe(link, out _)?.Seconds ?? 0);
         try
         {
             var psi = new ProcessStartInfo(BundledTools.Resolve("yt-dlp"))

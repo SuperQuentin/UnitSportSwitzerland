@@ -7,6 +7,8 @@ shader_type spatial;
 // out towards the horizon.
 render_mode unshaded, fog_disabled, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
 
+#include "res://shaders/common/sky_depth.gdshaderinc"
+
 global uniform float world_night;
 // 0 in the air, 1 above it (#1430 H4, World/Globe/Atmosphere): no sky to hide the stars by day, and
 // the horizon far below the horizontal (the Earth hides what is behind it, by depth)
@@ -24,6 +26,8 @@ uniform bool single = false;
 uniform bool instanced = false;
 uniform vec4 point_color : source_color = vec4(1.0);
 uniform float point_size = 2.0;
+// every point this many times its size: a debugging aid (--shuttlefilm drive,bigstars: what crops the stars?)
+uniform float size_scale = 1.0;
 
 varying vec4 tint;
 
@@ -32,9 +36,9 @@ void vertex() {
 	vec3 cam = INV_VIEW_MATRIX[3].xyz;
 	vec4 clip = PROJECTION_MATRIX * (VIEW_MATRIX * vec4(cam + dir * distance, 1.0));
 	vec2 corner = UV * 2.0 - 1.0;
-	float px = instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x;
+	float px = (instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x) * size_scale;
 	clip.xy += corner * px * 2.0 / VIEWPORT_SIZE * clip.w;
-	POSITION = clip;
+	POSITION = sky_depth(clip);
 	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), 1.0, world_space);
 	float dark = max(max(smoothstep(0.35, 0.95, world_night), daylight), world_space);
 	vec4 c = single ? point_color : COLOR;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Versteckis;
 
@@ -134,10 +135,15 @@ public static class VsRules
     /// <c>NetYaw</c>: 0 faces north, positive turns to the west): the point within <see cref="TagSlack"/> of its
     /// footprint box, in the box's own frame. Height is not judged: a tag aims at the ground or the prop.
     /// </summary>
-    public static bool TagHits(VsProp prop, double he, double hn, float yaw, double e, double n)
+    public static bool TagHits(VsProp prop, double he, double hn, float yaw, double e, double n) =>
+        TagHits(prop, GlobalPos.FromLv95(he, hn, 0), yaw, e, n);
+
+    /// <summary><see cref="TagHits(VsProp, double, double, float, double, double)"/> for a body at a <see cref="GlobalPos"/>.</summary>
+    public static bool TagHits(VsProp prop, GlobalPos hider, float yaw, double e, double n)
     {
         var info = VsProps.Of(prop);
-        double dx = e - he, dn = n - hn;
+        var (dx, dn, _) = hider.OffsetTo(GlobalPos.FromLv95(e, n, hider.Alt));
+        yaw = Lv95Grid.TrueYaw(hider, yaw);   // callers keep the hider's grid yaw (a body's GlobalYaw, a decoy's); the offset is true east/north (#1502)
         // the box's axes: forward (−Z in Godot) is north turned by yaw; right is east turned by yaw
         double c = Math.Cos(yaw), s = Math.Sin(yaw);
         double right = dx * c + dn * s;     // along the body's right (east at yaw 0)
@@ -147,7 +153,15 @@ public static class VsRules
 
     /// <summary>A tag point within reach of the seeker's body (server positions), 2D, with the slack the client's aim needs.</summary>
     public static bool InReach(double se, double sn, double e, double n) =>
-        (e - se) * (e - se) + (n - sn) * (n - sn) <= (TagReach + 0.5) * (TagReach + 0.5);
+        InReach(GlobalPos.FromLv95(se, sn, 0), e, n);
+
+    /// <summary><see cref="InReach(double, double, double, double)"/> for a seeker at a <see cref="GlobalPos"/>.</summary>
+    public static bool InReach(GlobalPos seeker, double e, double n) =>
+        seeker.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, seeker.Alt)) <= (TagReach + 0.5) * (TagReach + 0.5);
+
+    /// <summary><see cref="InReach(GlobalPos, double, double)"/> for a tag point that is a <see cref="GlobalPos"/> too.</summary>
+    public static bool InReach(GlobalPos seeker, GlobalPos tag) =>
+        seeker.HorizontalDistanceSquaredTo(tag) <= (TagReach + 0.5) * (TagReach + 0.5);
 
     // ---- the server's checks (plan "Network") ----
     /// <summary>Slack on the walk cap for the network's jitter.</summary>
@@ -161,10 +175,14 @@ public static class VsRules
     /// A hider's two published positions <paramref name="dt"/> apart: within the walk cap (a sprint's burst when
     /// <paramref name="sprinting"/>), with slack. A teleport the server made itself (Gather) is not checked.
     /// </summary>
-    public static bool SpeedOk(double e0, double n0, double e1, double n1, double dt, float cap, bool sprinting)
+    public static bool SpeedOk(double e0, double n0, double e1, double n1, double dt, float cap, bool sprinting) =>
+        SpeedOk(GlobalPos.FromLv95(e0, n0, 0), GlobalPos.FromLv95(e1, n1, 0), dt, cap, sprinting);
+
+    /// <summary><see cref="SpeedOk(double, double, double, double, double, float, bool)"/> for two <see cref="GlobalPos"/> values.</summary>
+    public static bool SpeedOk(GlobalPos from, GlobalPos to, double dt, float cap, bool sprinting)
     {
         if (dt <= 0) return true;
-        double d = Math.Sqrt((e1 - e0) * (e1 - e0) + (n1 - n0) * (n1 - n0));
+        double d = from.HorizontalDistanceTo(to);
         double top = (sprinting ? SprintSpeed : cap) * SpeedSlack;
         // a small step (a nudge, the network's jitter) always passes: 0.6 m whatever the interval
         return d <= Math.Max(0.6, top * dt);
@@ -172,7 +190,11 @@ public static class VsRules
 
     /// <summary>Inside the area's circle.</summary>
     public static bool Inside(double ce, double cn, float radius, double e, double n) =>
-        (e - ce) * (e - ce) + (n - cn) * (n - cn) <= (double)radius * radius;
+        Inside(ce, cn, radius, GlobalPos.FromLv95(e, n, 0));
+
+    /// <summary><see cref="Inside(double, double, float, double, double)"/> for a <see cref="GlobalPos"/>.</summary>
+    public static bool Inside(double ce, double cn, float radius, GlobalPos at) =>
+        at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(ce, cn, at.Alt)) <= (double)radius * radius;
 
     /// <summary>Metres from the line, positive inside.</summary>
     public static double ToLine(double ce, double cn, float radius, double e, double n) =>

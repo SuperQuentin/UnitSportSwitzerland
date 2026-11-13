@@ -35,6 +35,8 @@ public static class Postkarte
     public const string Prefix = "pk:";
     public const int RepHome = 3, RepAway = 1;
 
+    public static (int E, int N) CellOf(GlobalPos at) => CellOf(at.Lv95.E, at.Lv95.N);
+
     public static (int E, int N) CellOf(double e, double n) => ((int)Math.Floor(e / CellM), (int)Math.Floor(n / CellM));
 
     public static string IdOf(int day, int cellE, int cellN, int slot) => $"{Prefix}{day}:{cellE}_{cellN}:{slot}";

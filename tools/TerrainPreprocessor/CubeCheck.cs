@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using UnitSport.Terrain.Format;
 
@@ -6,24 +7,80 @@ namespace UnitSport.Tools.Preprocessor;
 /// <summary>
 /// G1's measurements on a built cube region (#1443; <c>--cube-check</c>, or <c>--cube-check-only</c>
 /// on an existing one): every vertex against its rigorous ECEF point (target 1 cm), the control-point
-/// resampling against the exact one, shared edges between every pair of built neighbours (exact), a
-/// tangent-plane collision field against the mesh (target 2 cm), and the features against the
-/// terrain they stand on.
+/// resampling against the exact one, shared edges between every pair of built neighbours (exact; #1507
+/// counts those across frame and face edges), a tangent-plane collision field against the mesh (target
+/// 2 cm), and the features against the terrain they stand on. #1507 adds the frame ground
+/// (<see cref="FrameGround"/>) against the sources, and with <c>--cube-terr DIR</c> against the LV95
+/// build's <c>.terr</c> heights (<see cref="Lv95Ground"/>) at the same places. Once the water stage has
+/// run, the leaves hold lake and river beds where the sources hold the surface (#1568): the rows against
+/// the sources leave out the points under a leaf's water and say how many.
 /// </summary>
 public static class CubeCheck
 {
+    /// <summary>
+    /// Every leaf's heights in a region: the <see cref="LeafKind.Heights"/> sections of its <c>.cubl</c>
+    /// bundles (#1507), or G1's <c>.cubb</c> tiles when it has no <c>.cubl</c>.
+    /// </summary>
+    public static ConcurrentDictionary<CubeKey, CubeTile> ReadLeafHeights(string dir, int jobs)
+    {
+        var tiles = new ConcurrentDictionary<CubeKey, CubeTile>();
+        var leaves = Directory.GetFiles(dir, "*.cubl");
+        var opts = new ParallelOptions { MaxDegreeOfParallelism = jobs };
+        if (leaves.Length > 0)
+            Parallel.ForEach(leaves, opts, path =>
+            {
+                foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+                    if (CubeLeafCodec.ReadSection(bytes, LeafKind.Heights) is { } s) tiles[key] = LeafHeights.Decode(s);
+            });
+        else
+            Parallel.ForEach(Directory.GetFiles(dir, "*.cubb"), opts, path =>
+            {
+                foreach (var t in CubeBundle.ReadAll(path)) tiles[t.Key] = t;
+            });
+        return tiles;
+    }
+
+    /// <summary>The <see cref="LeafKind.Water"/> sections of a region's <c>.cubl</c> bundles: the leaves the water stage wrote beds into.</summary>
+    private static Dictionary<CubeKey, CubeWater> ReadLeafWater(string dir, int jobs)
+    {
+        var water = new ConcurrentDictionary<CubeKey, CubeWater>();
+        Parallel.ForEach(Directory.GetFiles(dir, "*.cubl"), new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        {
+            foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Water) is { } s) water[key] = LeafWater.Decode(s);
+        });
+        return new(water);
+    }
+
+    /// <summary>
+    /// Whether lattice point (i, j), fractional or not, is under the leaf's water: a still level on any of
+    /// the water samples (every second vertex) round it. The shore's dry vertices next to the water are
+    /// left out with it, which costs a few samples and keeps the test free of the bed's own shape.
+    /// </summary>
+    private static bool UnderWater(CubeWater? w, double i, double j)
+    {
+        if (w == null) return false;
+        int side = w.Side, ci = (int)Math.Floor(i / 2), cj = (int)Math.Floor(j / 2);
+        for (int dj = 0; dj <= 1; dj++)
+            for (int di = 0; di <= 1; di++)
+            {
+                int a = Math.Clamp(ci + di, 0, side - 1), b = Math.Clamp(cj + dj, 0, side - 1);
+                if (!float.IsNaN(w.Level[b * side + a])) return true;
+            }
+        return false;
+    }
+
     public static int Run(CubeStage.Options o, CubeHeightSource src)
     {
         var manifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(o.Out!, CubeManifest.FileName)));
         int bits = manifest.Bits, n = (1 << bits) + 1;
-        var tiles = new Dictionary<CubeKey, CubeTile>();
-        foreach (var path in Directory.EnumerateFiles(o.Out!, "*.cubb"))
-            foreach (var t in CubeBundle.ReadAll(path)) tiles[t.Key] = t;
-        Console.WriteLine($"check: {tiles.Count} tiles decoded");
+        var tiles = new Dictionary<CubeKey, CubeTile>(ReadLeafHeights(o.Out!, o.Jobs));
+        var water = ReadLeafWater(o.Out!, o.Jobs);
+        Console.WriteLine($"check: {tiles.Count} tiles decoded, {water.Count} with water");
         bool ok = true;
 
         // ---- shared edges: every pair of built neighbours, exact --------------------------------
-        long pairs = 0, compared = 0, differ = 0;
+        long pairs = 0, compared = 0, differ = 0, framePairs = 0, facePairs = 0, frameDiffer = 0;
         int lv = manifest.LeafLevel + bits;
         foreach (var (key, tile) in tiles)
             for (int side = 0; side < 2; side++)
@@ -31,6 +88,9 @@ public static class CubeCheck
                 var other = key.EdgeNeighbour(side);
                 if (!tiles.TryGetValue(other, out var ot)) continue;
                 pairs++;
+                bool acrossFrames = other.Face != key.Face || other.AncestorAt(manifest.BundleLevel) != key.AncestorAt(manifest.BundleLevel);
+                if (acrossFrames) framePairs++;
+                if (other.Face != key.Face) facePairs++;
                 for (int s = 0; s < n; s++)
                 {
                     int i = side == 0 ? n - 1 : s, j = side == 0 ? s : n - 1;
@@ -40,10 +100,15 @@ public static class CubeCheck
                     float a = tile.Heights[j * n + i], b = ot.Heights[oj * n + oi];
                     if (float.IsNaN(a) && float.IsNaN(b)) continue;
                     compared++;
-                    if (a != b) differ++;
+                    if (a != b)
+                    {
+                        differ++;
+                        if (acrossFrames) frameDiffer++;
+                    }
                 }
             }
-        Console.WriteLine($"check: shared edges: {pairs} neighbour pairs, {compared} edge vertices, {differ} differ (target 0)");
+        Console.WriteLine($"check: shared edges: {pairs} neighbour pairs ({framePairs} across frame edges, {facePairs} across face edges), {compared} edge vertices, "
+            + $"{differ} differ, {frameDiffer} of them across frames (target 0)");
         ok &= differ == 0;
 
         // ---- sample tiles: spread over the region, the foreign ones included -------------------
@@ -59,9 +124,11 @@ public static class CubeCheck
         var featTlm = new List<double>();
         var featBd = new List<double>();
         double spacing = 0;
+        int wet = 0;
         foreach (var key in sample)
         {
             var tile = tiles[key];
+            var w = water.GetValueOrDefault(key);
             var cur = new CubeHeightSource.Cursors(src.Dems.Count);
             var fresh = resampler.Heights(key, bits, cur)!;
             var verts = CubeGeometry.Vertices(key, bits, tile.Heights);
@@ -76,12 +143,13 @@ public static class CubeCheck
                 double exact = src.ExactHeight(normal, cur);
                 if (double.IsNaN(exact)) continue;
                 interp.Add(Math.Abs(fresh[j * n + i] - exact));
-                // the mesh vertex against the rigorous point of the ground
-                var (x, y, z) = anchor.ToLocal(CubeSphere.OnEllipsoid(normal, exact));
                 int v = (j * n + i) * 3;
-                total.Add(Math.Sqrt(Sq(verts[v] - x) + Sq(verts[v + 1] - y) + Sq(verts[v + 2] - z)));
                 var (gx, gy, gz) = CubeGeometry.Exact(key, bits, i, j, stored);
                 geom.Add(Math.Sqrt(Sq(verts[v] - gx) + Sq(verts[v + 1] - gy) + Sq(verts[v + 2] - gz)));
+                // the mesh vertex against the rigorous point of the ground: a bed against the sources' lake surface says nothing
+                if (UnderWater(w, i, j)) { wet++; continue; }
+                var (x, y, z) = anchor.ToLocal(CubeSphere.OnEllipsoid(normal, exact));
+                total.Add(Math.Sqrt(Sq(verts[v] - x) + Sq(verts[v + 1] - y) + Sq(verts[v + 2] - z)));
             }
 
             // collision: a tangent-plane field over the middle of the tile, at the mesh's spacing and twice it
@@ -117,14 +185,270 @@ public static class CubeCheck
         Console.WriteLine($"check: {sample.Count} sample tiles: {string.Join(", ", sample.Take(6).Select(k => k.Describe()))}{(sample.Count > 6 ? ", ..." : "")}");
         Report("resampling, control points against exact (height)", interp, 0.001);
         Report("vertex geometry, control grid against rigorous", geom, 0.01);
-        ok &= Report("mesh vertex against the rigorous ground point (target 1 cm)", total, 0.01);
-        ok &= Report($"collision field at the mesh's spacing ({spacing:F2} m) against the mesh (target 2 cm)", coll1, 0.02);
+        ok &= Report($"mesh vertex against the rigorous ground point (target 1 cm; {wet} under water left out)", total, 0.01);
+        // informational since G1 (#1452): the height field misses 2 cm against the mesh, so collision is trimesh patches (C2)
+        Report($"collision field at the mesh's spacing ({spacing:F2} m) against the mesh (G1: a height field misses, collision is trimesh patches)", coll1, double.NaN);
         Report($"collision field at half the spacing ({spacing / 2:F2} m) against the mesh", collHalf, 0.02);
         Report($"collision field at twice the spacing ({2 * spacing:F2} m) against the mesh", coll2, 0.02);
         Report("swissTLM3D feature points against the mesh below", featTlm, double.NaN);
         Report("BD TOPO feature points against the mesh below", featBd, double.NaN);
+        ok &= LeafFeatureCheck(o.Out!, manifest, tiles, water, o.Jobs);
+        ok &= GroundCheck(o, src, manifest, tiles, water, sample);
         Console.WriteLine(ok ? "check: PASS" : "check: FAIL");
         return ok ? 0 : 1;
+    }
+
+    /// <summary>Points a leaf gives each feature row at most (drawn at random, the same each run): the rows read every leaf.</summary>
+    private const int FeaturePointsPerLeaf = 400;
+
+    /// <summary>
+    /// Features on the ground for <c>.cubl</c> leaves (#1579): every leaf's <see cref="LeafKind.Roads"/>,
+    /// <see cref="LeafKind.Buildings"/>, <see cref="LeafKind.Trees"/> and <see cref="LeafKind.Water"/> against the leaf
+    /// mesh below them (<see cref="CubeBuild.AboveMesh"/>: ellipsoidal height over the mesh's triangles, along the true
+    /// vertical, on whichever leaf the point falls). Roads: draped vertices, those that keep their surveyed height
+    /// (bridges, tunnels, ropeways, walls; <see cref="CubeCompare.Surveyed"/>) counted apart. Buildings: per building,
+    /// its base corners' highest point above the ground (seated on the lowest ground under it: about zero; a floating
+    /// building is far above). Trees: the trunk's foot. Water: the still level at each wet sample against the bed below it
+    /// (a level under the ground hides the water).
+    /// </summary>
+    private static bool LeafFeatureCheck(string dir, CubeManifest manifest, Dictionary<CubeKey, CubeTile> tiles, Dictionary<CubeKey, CubeWater> water, int jobs)
+    {
+        var files = Directory.GetFiles(dir, "*.cubl");
+        if (files.Length == 0) return true;
+        int leafLevel = manifest.LeafLevel;
+        double Above(CubeKey key, float x, float y, float z) =>
+            CubeBuild.AboveMesh(key.Anchor.ToEcef(x, y, z), leafLevel, k => tiles.GetValueOrDefault(k));
+        var draped = new List<double>();
+        var buildings = new List<double>();
+        var trees = new List<double>();
+        var levels = new List<double>();
+        var sunk = new List<double>();
+        long noRoad = 0, noBuilding = 0, noTree = 0;
+        long surveyedSegs = 0, drapedSegs = 0, leavesRoads = 0, leavesBuildings = 0, leavesTrees = 0, leavesWater = 0;
+        var gate = new object();
+        Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        {
+            foreach (var (key, bytes) in CubeBundle.ReadAllEntries(path))
+            {
+                var rng = new Random(key.GetHashCode() ^ 1579);
+                List<double> Pick(List<double> all)
+                {
+                    if (all.Count <= FeaturePointsPerLeaf) return all;
+                    var pick = new List<double>(FeaturePointsPerLeaf);
+                    for (int k = 0; k < FeaturePointsPerLeaf; k++) pick.Add(all[rng.Next(all.Count)]);
+                    return pick;
+                }
+                List<double>? r = null, b = null, bSunk = null, t = null;
+                long sv = 0, dr = 0, missR = 0, missB = 0, missT = 0;
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Roads) is { } rs)
+                {
+                    r = new();
+                    foreach (var s in LeafRoads.Decode(rs).Segments)
+                    {
+                        var above = new double[s.Points.Length / 3];
+                        for (int p = 0; p < above.Length; p++) above[p] = Above(key, s.Points[p * 3], s.Points[p * 3 + 1], s.Points[p * 3 + 2]);
+                        if (CubeCompare.Surveyed(s, above)) { sv++; continue; }
+                        dr++;
+                        foreach (double a in above) if (double.IsNaN(a)) missR++; else r.Add(a);
+                    }
+                }
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Buildings) is { } bs)
+                {
+                    b = new(); bSunk = new();
+                    foreach (var bd in LeafBuildings.Decode(bs).Buildings)
+                    {
+                        double low = double.PositiveInfinity, high = double.NegativeInfinity;
+                        var tri = bd.Triangles;
+                        for (int v = 0; v + 2 < tri.Length; v += 3)
+                        {
+                            if (tri[v + 1] > bd.MinY + 0.01f) continue;   // a base corner
+                            double a = Above(key, tri[v], tri[v + 1], tri[v + 2]);
+                            if (double.IsNaN(a)) { missB++; continue; }
+                            low = Math.Min(low, a);
+                            high = Math.Max(high, a);
+                        }
+                        if (double.IsInfinity(low)) continue;
+                        // seated at the median ground of its footprint less the foundation: some corner is under the ground,
+                        // and none deeper than the foundation where the ground is lowest
+                        b.Add(Math.Max(0, low));
+                        bSunk.Add(Math.Max(0, -FoundationM - high));
+                    }
+                }
+                if (CubeLeafCodec.ReadSection(bytes, LeafKind.Trees) is { } ts)
+                {
+                    t = new();
+                    foreach (var tr in LeafTrees.Decode(ts))
+                    {
+                        double a = Above(key, tr.X, tr.Y, tr.Z);
+                        if (double.IsNaN(a)) missT++; else t.Add(a);
+                    }
+                }
+                List<double>? l = null;
+                if (water.TryGetValue(key, out var w) && tiles.TryGetValue(key, out var ht))
+                {
+                    l = new();
+                    for (int j = 0; j < w.Side; j++)
+                        for (int i = 0; i < w.Side; i++)
+                        {
+                            float level = w.Level[j * w.Side + i];
+                            if (float.IsNaN(level)) continue;
+                            float bed = ht.HeightAt(i * CubeWater.Stride, j * CubeWater.Stride);
+                            if (float.IsNaN(bed)) continue;
+                            l.Add(Math.Max(0, bed - level));   // how far the level lies under the ground
+                        }
+                }
+                lock (gate)
+                {
+                    if (r != null) { leavesRoads++; draped.AddRange(Pick(r)); }
+                    if (b != null) { leavesBuildings++; buildings.AddRange(b); sunk.AddRange(bSunk!); }
+                    if (t != null) { leavesTrees++; trees.AddRange(Pick(t)); }
+                    if (l != null) { leavesWater++; levels.AddRange(Pick(l)); }
+                    surveyedSegs += sv; drapedSegs += dr; noRoad += missR; noBuilding += missB; noTree += missT;
+                }
+            }
+        });
+        Console.WriteLine($"check: features on the leaves' ground: roads in {leavesRoads} leaves ({drapedSegs:N0} draped segments, {surveyedSegs:N0} keep their surveyed height), "
+            + $"buildings in {leavesBuildings} ({buildings.Count:N0}), trees in {leavesTrees}, water in {leavesWater}; at most {FeaturePointsPerLeaf} road, tree and water points a leaf; "
+            + $"over no leaf or no heights (past the data's edge): {noRoad:N0} road vertices, {noBuilding:N0} building corners, {noTree:N0} trees");
+        bool ok = true;
+        // the bars are gross (a feature a metre off its ground): the heights each stage gives a feature by design (a kerb, the
+        // network's smoothing, a seat on the median ground) are the comparer's to hold against the LV95 build (--cube-compare)
+        ok &= Gross("draped road vertices above the leaf mesh (the network's own heights: kerbs, smoothing)", draped, 1.0, RoadsOverPct);
+        ok &= Gross("buildings: the base's lowest corner above the leaf mesh (0: seated under the median ground)", buildings, 1.0, FloatingOverPct);
+        ok &= Gross($"buildings: the base's highest corner deeper than the foundation ({FoundationM} m) under the leaf mesh", sunk, 1.0, SunkOverPct);
+        ok &= Gross("trees: the foot above the leaf mesh", trees, 1.0, TreesOverPct);
+        ok &= Report("still water level under the leaf's bed (target 1 cm)", levels, 0.01);
+        return ok;
+    }
+
+    /// <summary>The foundation a building is sunk by (<see cref="BuildingExtractor"/>'s, BD TOPO's too).</summary>
+    private const double FoundationM = 0.8;
+
+    /// <summary>Gross bars (#1579): the share of a row's points more than a metre off, at most this many percent.</summary>
+    private const double RoadsOverPct = 1, FloatingOverPct = 0.1, SunkOverPct = 0.1, TreesOverPct = 0.01;
+
+    /// <summary>
+    /// Percentiles of signed values (a feature above or under the ground), how many lie over 0.1, 1 and 5 m off, and the
+    /// bar: at most <paramref name="maxPct"/> % over <paramref name="overM"/>.
+    /// </summary>
+    private static bool Gross(string what, List<double> v, double overM, double maxPct)
+    {
+        if (v.Count == 0) { Console.WriteLine($"  {what}: no samples"); return true; }
+        v.Sort();
+        double P(double q) => v[Math.Clamp((int)(v.Count * q), 0, v.Count - 1)] * 1000;
+        double Over(double m) => v.Count(x => Math.Abs(x) > m) * 100.0 / v.Count;
+        bool pass = Over(overM) <= maxPct;
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"  {what}: {v.Count} samples, min {v[0] * 1000:F0} p1 {P(0.01):F1} p50 {P(0.5):F1} p99 {P(0.99):F1} max {v[^1] * 1000:F0} mm; "
+            + $"over 0.1 m {Over(0.1):F2} %, 1 m {Over(1):F3} %, 5 m {Over(5):F4} % (bar: {maxPct} % over {overM} m){(pass ? "  ok" : "  OVER")}"));
+        return pass;
+    }
+
+    /// <summary>
+    /// The frame ground (#1507): on the sample leaves, the leaf mesh read through each leaf's work frame
+    /// (<see cref="FrameGround"/>) against the sources' height at the same place, and with
+    /// <c>--cube-terr</c> against the LV95 build's <c>.terr</c> (<see cref="Lv95Ground"/>) at that place's
+    /// LV95 position; then points on shared edges across frame edges, sampled from both frames (the same
+    /// height to a micrometre: the mesh edge is the same bits and the edges' sea level is rigorous).
+    /// </summary>
+    private static bool GroundCheck(CubeStage.Options o, CubeHeightSource src, CubeManifest manifest, Dictionary<CubeKey, CubeTile> tiles, Dictionary<CubeKey, CubeWater> water, List<CubeKey> sample)
+    {
+        int bits = manifest.Bits, cells = 1 << bits;
+        var grounds = new Dictionary<CubeKey, FrameGround>();
+        FrameGround GroundOf(CubeKey leaf)
+        {
+            var cell = leaf.AncestorAt(manifest.BundleLevel);
+            if (!grounds.TryGetValue(cell, out var g))
+                grounds[cell] = g = new FrameGround(new WorkFrame(cell, SwissSeaLevel.Instance), k => tiles.GetValueOrDefault(k), manifest.LeafLevel);
+            return g;
+        }
+        var grids = new Dictionary<TileId, ChunkGrid>();
+        var lv95 = new Lv95Ground(grids);
+        var toSources = new List<double>();
+        var toTerr = new List<double>();
+        int beds = 0, wet = 0;
+        int misses = 0, points = 0;
+        foreach (var key in sample)
+        {
+            var ground = GroundOf(key);
+            var t = ground.TransformOf(key)!;
+            if (o.Terr != null)
+            {
+                var (minE, minN, maxE, maxN) = CubeStage.Lv95Box(new[] { key }, bits);
+                for (int e = (int)Math.Floor(minE / 1000); e <= (int)Math.Floor(maxE / 1000); e++)
+                    for (int nn = (int)Math.Floor(minN / 1000); nn <= (int)Math.Floor(maxN / 1000); nn++)
+                    {
+                        var id = new TileId(e, nn);
+                        string path = Path.Combine(o.Terr, ChunkFormat.ChunkFileName(id));
+                        if (!grids.ContainsKey(id) && File.Exists(path))
+                            using (var fs = File.OpenRead(path)) grids[id] = ChunkCodec.Decode(fs);
+                    }
+            }
+            var cur = new CubeHeightSource.Cursors(src.Dems.Count);
+            var rng = new Random(key.GetHashCode() ^ 1507);
+            var w = water.GetValueOrDefault(key);
+            for (int k = 0; k < 2000; k++)
+            {
+                double i = rng.NextDouble() * cells, j = rng.NextDouble() * cells;
+                var (x, y) = t.LatticeToPlane(i, j);
+                points++;
+                if (ground.Sample(x, y) is not { } h)
+                {
+                    int qi = Math.Min((int)i, cells - 1), qj = Math.Min((int)j, cells - 1);
+                    var th = tiles[key];
+                    if (!float.IsNaN(th.HeightAt(qi, qj)) && !float.IsNaN(th.HeightAt(qi + 1, qj)) && !float.IsNaN(th.HeightAt(qi, qj + 1)) && !float.IsNaN(th.HeightAt(qi + 1, qj + 1))) misses++;
+                    continue;
+                }
+                double exact = src.ExactHeight(t.NormalAt(i, j), cur);
+                bool underWater = UnderWater(w, i, j);
+                if (underWater) wet++;
+                else if (!double.IsNaN(exact)) toSources.Add(Math.Abs(h - (exact - t.UndulationAt(i, j))));
+                if (o.Terr != null)
+                {
+                    var (e, nn, _) = SwissGeodesy.FromEcef(ground.Frame.ToEcef(x, y, h));
+                    if (lv95.Sample(e, nn) is { } ht)
+                    {
+                        // a lake on a leaf without the water stage: the LV95 build holds its bed (#298), the leaf the surveyed surface
+                        if (!underWater && h - ht > 1) beds++;
+                        else toTerr.Add(Math.Abs(h - ht));
+                    }
+                }
+            }
+        }
+        Console.WriteLine($"check: frame ground on {sample.Count} sample leaves: {points} points, {misses} found no ground over data (target 0)");
+        Report($"frame ground (leaf mesh, quads split as drawn) against the sources' height there ({wet} points under water left out)", toSources, double.NaN);
+        if (o.Terr != null)
+        {
+            Report($"frame ground against the LV95 build's .terr at the same place ({grids.Count} tiles; {beds} points over lake beds left out)", toTerr, double.NaN);
+            if (toTerr.Count > 0) Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"  of those within 5 cm {toTerr.Count(d => d <= 0.05) * 100.0 / toTerr.Count:F1} %, within 50 cm {toTerr.Count(d => d <= 0.5) * 100.0 / toTerr.Count:F1} % (.terr: 1 m lattice, 7 cm quanta)"));
+        }
+
+        // points on edges shared across frames, from both frames' grounds
+        var across = new List<double>();
+        foreach (var (key, _) in tiles.OrderBy(e => e.Key.Face).ThenBy(e => e.Key.Y).ThenBy(e => e.Key.X))
+        {
+            if (across.Count >= 4000) break;
+            for (int side = 0; side < 2; side++)
+            {
+                var other = key.EdgeNeighbour(side);
+                if (!tiles.ContainsKey(other) || other.AncestorAt(manifest.BundleLevel) == key.AncestorAt(manifest.BundleLevel)) continue;
+                var ga = GroundOf(key);
+                var gb = GroundOf(other);
+                var ta = ga.TransformOf(key)!;
+                for (int s = 0; s < 20; s++)
+                {
+                    double f = (s + 0.37) * cells / 20.0;
+                    var (i, j) = side == 0 ? ((double)cells, f) : (f, (double)cells);
+                    var (xa, ya) = ta.LatticeToPlane(i, j);
+                    // the same place on frame B's plane: through its latitude and longitude
+                    var (lat, lon) = ga.Frame.Plane.FromPlane(xa, ya);
+                    var (xb, yb) = gb.Frame.Plane.ToPlane(lat, lon);
+                    if (ga.Sample(xa, ya) is { } ha && gb.Sample(xb, yb) is { } hb) across.Add(Math.Abs(ha - hb));
+                }
+            }
+        }
+        return Report("frame ground on edges shared across frames, from both frames (target 1 µm)", across, 1e-6) && misses == 0;
     }
 
     /// <summary>
@@ -135,7 +459,10 @@ public static class CubeCheck
     public static int Dump(CubeStage.Options o, CubeKey key)
     {
         var manifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(o.Out!, CubeManifest.FileName)));
-        var tile = CubeBundle.Read(Path.Combine(o.Out!, CubeBundle.FileName(key.AncestorAt(manifest.BundleLevel))), key)
+        string leaves = Path.Combine(o.Out!, CubeBundle.LeafFileName(key.AncestorAt(manifest.BundleLevel)));
+        var tile = (File.Exists(leaves)
+                ? CubeBundle.ReadLeaf(leaves, key)?.Find(LeafKind.Heights) is { } s ? LeafHeights.Decode(s) : null
+                : CubeBundle.Read(Path.Combine(o.Out!, CubeBundle.FileName(key.AncestorAt(manifest.BundleLevel))), key))
             ?? throw new InvalidOperationException($"{key} is not built");
         var anchor = key.Anchor;
         var v = CubeGeometry.Vertices(key, tile.Bits, tile.Heights);

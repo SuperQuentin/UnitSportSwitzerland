@@ -32,11 +32,14 @@ public static class AirportPlanner
     public static readonly Size A320 = new(17.6, 19.97, 35.8, 12.64);
     public static readonly Size An124 = new(31.0, 38.1, 73.3, 22.0);
     public static readonly Size Freighter = new(12.6, 17.2, 40.4, 9.8);
+    /// <summary>The shuttle (#1492): ShuttleLayout.NoseZ 29.2, 37.24 m long, 23.79 m span, the nose gear 22.4 m ahead.</summary>
+    public static readonly Size Shuttle = new(29.2, 8.04, 23.79, 22.4);
 
     public static Size SizeOf(StandUse use) => use switch
     {
         StandUse.Heavy => An124,
         StandUse.Military => Freighter,
+        StandUse.Space => Shuttle,
         _ => A320,
     };
 
@@ -134,6 +137,8 @@ public static class AirportPlanner
         {
             foreach (var c in roomiest) if (TryPlace(c, StandUse.Heavy)) break;
             foreach (var c in roomiest) if (!chosen.Any(s => s.Ref == c.Ref && c.Ref.Length > 0) && TryPlace(c, StandUse.Military)) break;
+            // the space shuttle (#1492) on the next roomiest
+            foreach (var c in roomiest) if (!chosen.Any(s => s.Ref == c.Ref && c.Ref.Length > 0) && TryPlace(c, StandUse.Space)) break;
             // stands spaced for an airliner (business jets' stands are packed 15-20 m apart) that fit one on their own
             var fits = usable.Where(c => !c.Cargo && Room(c) >= A320.Span * 0.8 && Fits(c, A320, paved)).ToList();
             // a row: from each stand in turn, its nearest neighbours on the same apron facing the same

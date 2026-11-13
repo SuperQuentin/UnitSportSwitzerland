@@ -67,6 +67,20 @@ public partial class OriginShifter : Node
     /// </summary>
     public static ReanchorMode SpaceMode { get; set; } = new(20_000, Vertical: false, Rotates: true);
 
+    /// <summary>
+    /// The earth world's ground re-anchor (#1512, G2 C3): past <see cref="ReanchorMode.ThresholdM"/> from the anchor
+    /// (horizontally) the world moves to <see cref="FrameAxes.Tangent"/> under the camera at altitude 0, its axes the
+    /// old ones turned by the least rotation (0.009° a km), so up and gravity stay the ellipsoid's under the camera.
+    /// With <see cref="ReanchorMode.Rotates"/> off (C1's frame), the anchor moves along its own tangent plane, its
+    /// axes kept. The earth world has one frame at every altitude: above <see cref="Curvature.SpaceEnterM"/> it
+    /// re-anchors past <see cref="SpaceMode"/>'s threshold instead, with no handover (the flat world's Space band
+    /// and its two rigid moves exist because its tiles are flat).
+    /// </summary>
+    public static ReanchorMode GroundMode { get; set; } = new(3000, Vertical: false, Rotates: true);
+
+    /// <summary>The world is the earth world's anchor frame (<c>--frame earth</c>): re-anchored by <see cref="GroundMode"/>.</summary>
+    public bool Earth { get; init; }
+
     /// <summary>Whether the origin follows the camera in Space (above 60 km climbing, until below 50 km).</summary>
     public bool InSpace { get; private set; }
 
@@ -99,6 +113,8 @@ public partial class OriginShifter : Node
     /// </summary>
     private readonly float _stressYaw;
     private bool _stressTurned;
+    /// <summary><c>--originstress</c> or <c>--originshift</c> set <see cref="ThresholdM"/>: the earth world takes it too.</summary>
+    private readonly bool _thresholdGiven;
     private readonly HashSet<string> _warned = new();
 
     /// <param name="focus">Where precision matters most: the active camera.</param>
@@ -123,6 +139,7 @@ public partial class OriginShifter : Node
         }
         else if (ParseThreshold() is { } threshold)
             ThresholdM = threshold;
+        _thresholdGiven = _stress || ParseThreshold() != null;
     }
 
     /// <summary>"--originstress &lt;m&gt;": shift every few metres, so a missed cached position shows at once.</summary>
@@ -153,6 +170,11 @@ public partial class OriginShifter : Node
         // the Space regime (#1430 H3): entered climbing past 60 km, left below 50 km. Both handovers are
         // one rigid move of everything, the camera with it: the picture cannot change.
         double altitude = _origin.AltitudeOf(at);
+        if (Earth)
+        {
+            EarthReanchor(at, altitude);
+            return;
+        }
         bool space = Curvature.SpaceRegime(InSpace, altitude);
         if (space != InSpace)
         {
@@ -178,12 +200,12 @@ public partial class OriginShifter : Node
                 Turned = turn;
                 var (te, tn) = _origin.ToLv95(at);
                 GD.Print(string.Create(CultureInfo.InvariantCulture, $"[origin] the Space frame {(turn ? "turns" : "stops turning")} at {altitude / 1000:F1} km"));
-                ShiftTo(te, tn, exact: true, alt0: alt0, axes: turn ? SpaceAnchor(at, alt0) : null);
+                ShiftTo(te, tn, exact: true, alt0: alt0, axes: turn ? TurnedAnchor(at, alt0) : null);
                 return;
             }
             if (SpaceMode.Vertical ? at.Length() <= SpaceMode.ThresholdM : new Vector2(at.X, at.Z).Length() <= SpaceMode.ThresholdM) return;
             var (pe, pn) = _origin.ToLv95(at);
-            ShiftTo(pe, pn, exact: true, alt0: alt0, axes: Turned ? SpaceAnchor(at, alt0) : null);
+            ShiftTo(pe, pn, exact: true, alt0: alt0, axes: Turned ? TurnedAnchor(at, alt0) : null);
             return;
         }
         if (new Vector2(at.X, at.Z).Length() <= ThresholdM) return;
@@ -193,51 +215,133 @@ public partial class OriginShifter : Node
     }
 
     /// <summary>
+    /// The earth world's one frame (#1512, G2 C3): <see cref="GroundMode"/> near the ground, <see cref="SpaceMode"/>'s
+    /// threshold in Space, the same turning anchor in both. Crossing into Space or out of it moves nothing: the tiles
+    /// are round, so there is no flat band to hand over from.
+    /// </summary>
+    private void EarthReanchor(Vector3 at, double altitude)
+    {
+        bool space = Curvature.SpaceRegime(InSpace, altitude);
+        if (space != InSpace)
+        {
+            InSpace = space;
+            GD.Print(string.Create(CultureInfo.InvariantCulture,
+                $"[origin] the earth frame re-anchors every {(space ? SpaceMode : GroundMode).ThresholdM / 1000:F0} km from {altitude / 1000:F1} km"));
+        }
+        var mode = InSpace ? SpaceMode : GroundMode;
+        Turned = mode.Rotates;
+        double threshold = _thresholdGiven ? ThresholdM : mode.ThresholdM;
+        if (new Vector2(at.X, at.Z).Length() <= threshold) return;
+        if (_origin.Frame.Axes is not { } axes) return;
+
+        var (e, n) = _origin.ToLv95(at);
+        if (mode.Rotates)
+        {
+            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, 0));
+            return;
+        }
+        // C1's frame: the anchor moves to the camera's plane point, to the step, its axes kept
+        double step = Math.Max(1, StepM);
+        double x = Math.Round(at.X / step) * step, z = Math.Round(at.Z / step) * step;
+        ShiftTo(e, n, exact: true, axes: axes with { Origin = axes.ToEcef(x, 0, z) });
+    }
+
+    /// <summary>
     /// Moves the origin to (near) an LV95 point now, wherever the camera is: a teleport calls this
     /// first, so the destination is placed close to the new origin rather than far from the old one.
     /// Returns false when shifting is not allowed or would change nothing. <paramref name="exact"/>
     /// puts the origin on the point itself rather than snapping it to <see cref="StepM"/>.
     /// </summary>
-    /// <param name="axes">The anchor to move to (a turning Space shift, <see cref="SpaceAnchor"/>); null for one built from <paramref name="e"/> / <paramref name="n"/>.</param>
+    /// <param name="axes">The anchor to move to (a turning shift, <see cref="TurnedAnchor"/>); null for one built from <paramref name="e"/> / <paramref name="n"/>.</param>
     public bool ShiftTo(double e, double n, bool exact = false, double alt0 = 0, FrameAxes? axes = null)
     {
         if (!_allowed()) return false;
+        // the earth world stays an anchor frame (#1512): a teleport, a shot or a tool lands on the tangent anchor
+        // at altitude 0 under the point, turned from the current axes by the least rotation
+        if (Earth && axes == null && _origin.Frame.Axes is { } current)
+        {
+            axes = FrameAxes.Tangent(SwissGeodesy.ToEcef(e, n, 0), 0, current);
+            exact = true;
+        }
         double step = Math.Max(1, StepM);
         double newE = exact ? e : Math.Round(e / step) * step, newN = exact ? n : Math.Round(n / step) * step;
         if (!_origin.Frame.IsAnchor && newE == _origin.E && newN == _origin.N && alt0 == _origin.Alt0) return false;
 
         var clock = Stopwatch.StartNew();
-        var shift = _stressYaw != 0 ? _origin.MoveTo(StressAxes(newE, newN))
+        var shift = _stressYaw != 0 ? _origin.MoveTo(StressAxes(newE, newN, Earth ? axes : null))
             : axes != null ? _origin.MoveTo(axes)
             // a turning re-anchor (round tiles, #1443 G2): the ellipsoid's own axes at the camera
             : InSpace && Turned ? _origin.MoveTo(FrameAxes.GroundAt(newE, newN, alt0))
             : _origin.MoveTo(newE, newN, alt0);
         var pass = new Pass(shift) { Owner = this };
         Visit(GetTree().Root, pass, childrenAreGlobal: true);
+        double visitMs = clock.Elapsed.TotalMilliseconds;
         foreach (var body in pass.Kinematic) Teleport(body);
         foreach (var node in pass.Doppler) ResetDoppler(node);
         double nodesMs = clock.Elapsed.TotalMilliseconds;
-        foreach (var node in pass.Aware) node.OnOriginShifted(shift);
+        // each handler timed (#1764): the slowest three are in the log line
+        _slowest.Clear();
+        double handlersFrom = nodesMs;
+        foreach (var node in pass.Aware)
+        {
+            node.OnOriginShifted(shift);
+            double now = clock.Elapsed.TotalMilliseconds;
+            Slowest(_slowest, node.GetType().Name, now - handlersFrom);
+            handlersFrom = now;
+        }
         Player.PlayerSnapshot.Forget();   // this tick's positions were taken in the old world space
         _origin.RaiseShifted(shift);
         PushPatternOffset();
+        Slowest(_slowest, "Shifted", clock.Elapsed.TotalMilliseconds - handlersFrom);
 
         ShiftCount++;
         LastShiftNodes = pass.Moved;
         LastShiftMs = clock.Elapsed.TotalMilliseconds;
         if (!_stress || ShiftCount <= 50 || ShiftCount % 50 == 0)
-            GD.Print($"[origin] shift {ShiftCount} by {shift} to LV95 {newE:F0}/{newN:F0}: "
-                + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms, "
-                + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all");
+            GD.Print($"[origin] shift {ShiftCount} by {shift}{(shift.Turns ? Turn(shift) : "")} to LV95 {newE:F0}/{newN:F0}: "
+                + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms (teleports {nodesMs - visitMs:F1}), "
+                + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all{SlowestSaid()}");
         return true;
     }
 
+    /// <summary>The slowest handlers of the last shift (#1764), by type (several of one type are summed): name, ms.</summary>
+    public IReadOnlyList<(string Name, double Ms)> SlowestHandlers => _slowest;
+    private readonly List<(string Name, double Ms)> _slowest = new();
+    private const int SlowestKept = 3;
+
+    // a handler's time into the slowest few, summed by type (a hundred vehicles are one line)
+    private static void Slowest(List<(string Name, double Ms)> list, string name, double ms)
+    {
+        int at = list.FindIndex(e => e.Name == name);
+        if (at >= 0) { list[at] = (name, list[at].Ms + ms); list.Sort((a, b) => b.Ms.CompareTo(a.Ms)); return; }
+        list.Add((name, ms));
+        list.Sort((a, b) => b.Ms.CompareTo(a.Ms));
+    }
+
+    private string SlowestSaid()
+    {
+        if (_slowest.Count == 0) return "";
+        var parts = new List<string>(SlowestKept);
+        for (int i = 0; i < Math.Min(SlowestKept, _slowest.Count); i++)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"{_slowest[i].Name} {_slowest[i].Ms:F1}"));
+        return " (slowest: " + string.Join(", ", parts) + " ms)";
+    }
+
+    /// <summary>How a turning shift turned: the tilt of up and the yaw about it, degrees (the log line).</summary>
+    private static string Turn(OriginShift shift)
+    {
+        var up = shift.Direction(Vector3.Up);
+        double tilt = Math.Asin(Math.Min(1.0, Vector3.Up.Cross(up).Length()));
+        return string.Create(CultureInfo.InvariantCulture, $", turned: tilt {tilt * 180 / Math.PI:F4}°, yaw {shift.Yaw * 180 / Math.PI:F4}°");
+    }
+
     /// <summary>
-    /// The turning Space anchor under the camera (#1430 H5): built in ECEF (<see cref="FrameAxes.Tangent"/>),
-    /// its axes the current ones turned by the least rotation, its origin <paramref name="alt0"/> high
-    /// (LV95 heights, as the ground frame's) under the camera. No LV95 in it: an orbit goes everywhere.
+    /// The turning anchor under the camera (#1430 H5 in Space, #1512 on the earth world's ground): built in ECEF
+    /// (<see cref="FrameAxes.Tangent"/>), its axes the current ones turned by the least rotation, its origin
+    /// <paramref name="alt0"/> high (LV95 heights, as the ground frame's) under the camera. No LV95 in it: an orbit
+    /// goes everywhere, and so do the earth world's leaves.
     /// </summary>
-    private FrameAxes SpaceAnchor(Vector3 camera, double alt0)
+    private FrameAxes TurnedAnchor(Vector3 camera, double alt0)
     {
         var frame = _origin.Frame;
         var at = frame.ToEcef(camera);
@@ -249,7 +353,7 @@ public partial class OriginShifter : Node
         if (previous == null)
         {
             var g = frame.ToGlobal(camera);
-            previous = FrameAxes.GroundAt(g.E, g.N, alt0);
+            previous = FrameAxes.GroundAt(g.Lv95.E, g.Lv95.N, alt0);
         }
         return FrameAxes.Tangent(at, drop, previous);
     }
@@ -287,14 +391,16 @@ public partial class OriginShifter : Node
     /// <summary>
     /// The anchor frame a yawed stress shift goes to: the ground's own axes at the new place, at
     /// altitude 0 (so world Y stays near the altitude), turned about the up by the stress yaw every
-    /// other shift.
+    /// other shift. In the earth world (<paramref name="anchor"/>, the turning anchor the shift goes to, which
+    /// carries the last turn with it) it turns by the yaw one way, then back.
     /// </summary>
-    private FrameAxes StressAxes(double e, double n)
+    private FrameAxes StressAxes(double e, double n, FrameAxes? anchor = null)
     {
-        var g = FrameAxes.GroundAt(e, n, 0);
+        var g = anchor ?? FrameAxes.GroundAt(e, n, 0);
         _stressTurned = !_stressTurned;
-        if (!_stressTurned) return g;
-        double c = Math.Cos(_stressYaw), s = Math.Sin(_stressYaw);
+        double yaw = anchor != null ? (_stressTurned ? _stressYaw : -_stressYaw) : _stressYaw;
+        if (anchor == null && !_stressTurned) return g;
+        double c = Math.Cos(yaw), s = Math.Sin(yaw);
         // turned about up (Y): X' = X cos - Z sin... as Basis(Up, yaw) turns the world's X and Z
         var x = new EcefPos(g.X.X * c - g.Z.X * s, g.X.Y * c - g.Z.Y * s, g.X.Z * c - g.Z.Z * s);
         var z = new EcefPos(g.X.X * s + g.Z.X * c, g.X.Y * s + g.Z.Y * c, g.X.Z * s + g.Z.Z * c);

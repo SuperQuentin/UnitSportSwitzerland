@@ -84,7 +84,7 @@ public partial class MovieWorldProbe : Node
     {
         var (e, n) = SpawnPoint.ParseTarget();
         double a = t * 0.8;
-        return new GlobalPos(e + 30 * Math.Cos(a), n + 30 * Math.Sin(a), 500 + t);
+        return GlobalPos.FromLv95(e + 30 * Math.Cos(a), n + 30 * Math.Sin(a), 500 + t);
     }
 
     public override void _PhysicsProcess(double delta)

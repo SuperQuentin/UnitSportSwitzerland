@@ -17,8 +17,11 @@ uniform float earthshine = 0.012;
 
 varying vec3 world_normal;
 
+#include "res://shaders/common/sky_depth.gdshaderinc"
+
 void vertex() {
 	world_normal = (MODEL_MATRIX * vec4(VERTEX, 0.0)).xyz;
+	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
 }
 
 void fragment() {

@@ -17,6 +17,8 @@ namespace UnitSport.Terrain;
 /// <see cref="HeightMapShape3D"/> (1024² at the mesh's spacing) and a trimesh
 /// (<see cref="ConcavePolygonShape3D"/>) of the full mesh: build time, memory, and vertical rays
 /// against each compared with the mesh (target 2 cm).</item>
+/// <item><b>Collision patches</b> (<c>--cubepatches</c>, a region of <c>.cubl</c> leaves, #1511): G2's collision,
+/// <c>CubeHarness.Patches.cs</c>.</item>
 /// <item><b>Streaming</b>: a camera flies the region's long axis at <c>--cubespeed</c> m/s
 /// (100) and 300 m up; tiles within <c>--cuberadius</c> m (4,000) load on workers (decode, vertices,
 /// normals) with an LOD step by distance and are committed on the main thread. Frame times,
@@ -63,6 +65,11 @@ public partial class CubeHarness : Node3D
         if (CmdArgs.Float("--cuberadius") is { } r) _radius = r;
 
         _dir = CmdArgs.Value("--cubeharness")!;
+        if (CmdArgs.Has("--cubepatches"))
+        {
+            CallDeferred(nameof(StartPatches));
+            return;
+        }
         _manifest = CubeManifest.FromJson(File.ReadAllText(Path.Combine(_dir, CubeManifest.FileName)));
         foreach (var path in Directory.EnumerateFiles(_dir, "*.cubb"))
         {

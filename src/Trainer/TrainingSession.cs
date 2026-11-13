@@ -167,13 +167,14 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             _net = null;
             if (source != null)
             {
-                double minE = track.Points.Min(p => p.E), maxE = track.Points.Max(p => p.E);
-                double minN = track.Points.Min(p => p.N), maxN = track.Points.Max(p => p.N);
+                // the junctions' walking graph stays LV95 (until G2 D); the matcher gets the same roads on
+                // the track's plane (#1514)
+                var (minE, minN, maxE, maxN) = track.Lv95Bounds(0);
                 var net = await RoadNetwork.LoadAsync(source, minE, minN, maxE, maxN, pad: 1000);
                 if (net.Edges.Count > 0)
                 {
                     match = track.Points.Count < 4 ? new MatchResult(null, "track too short to match", 0)
-                        : await Task.Run(() => TrackMatcher.Match(track, net));
+                        : await Task.Run(() => TrackMatcher.Match(track, net.InPlane(track.Plane)));
                     await Task.Run(net.BuildWalkGraph);
                     _net = net;
                 }
@@ -198,6 +199,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         }
     }
 
+    /// <summary>The course in LV95, as the trainer's junctions and route keep it (until G2 D): each plane point's LV95.</summary>
     private static Course Build(GpxTrack track)
     {
         var points = new List<(double E, double N, double H)>();
@@ -206,14 +208,15 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         double s = 0;
         foreach (var p in track.Points)
         {
+            var (e, n, _) = track.At(p.X, p.Y, p.Elevation).Lv95;
             if (points.Count > 0)
             {
                 var (e0, n0, _) = points[^1];
-                double step = Math.Sqrt((p.E - e0) * (p.E - e0) + (p.N - n0) * (p.N - n0));
+                double step = Math.Sqrt((e - e0) * (e - e0) + (n - n0) * (n - n0));
                 if (step < 0.5) continue;   // a standstill's repeated fixes are no road
                 s += step;
             }
-            points.Add((p.E, p.N, p.Elevation));
+            points.Add((e, n, p.Elevation));
             arc.Add(s);
             profile.Add((s, p.Elevation));
         }
@@ -295,7 +298,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         {
             // the body to the start, on its feet, then onto the bike once it stands
             me.RideControls = null;
-            float ground = _chunks.TryGetHeight(start, out float h) ? h : start.Y;
+            float ground = _chunks.Ground.TryGetHeight(start, out float h) ? h : start.Y;
             me.DebugLaunch(new Vector3(start.X, ground + 1.2f, start.Z), Vector3.Zero);
             me.Rotation = new Vector3(0, yaw, 0);
             _way = CourseFrom(0);
@@ -651,10 +654,10 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         // the nearest road node, and its road that goes most nearly back
         int node = -1, next = -1;
         double best = double.MaxValue;
-        foreach (int n in g.NodesNear(at.E, at.N, 12))
+        foreach (int n in g.NodesNear(at.Lv95.E, at.Lv95.N, 12))
         {
             var (ne, nn, _) = g.Pos(n);
-            double d = (ne - at.E) * (ne - at.E) + (nn - at.N) * (nn - at.N);
+            double d = GlobalPos.FromLv95(ne, nn, 0).HorizontalDistanceSquaredTo(at);
             if (d < best) { best = d; node = n; }
         }
         double turn = double.MaxValue;
@@ -668,7 +671,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             }
         if (node < 0 || next < 0 || turn > 60) { Say("No road to turn round on here."); return; }
 
-        var way = new List<WayPoint> { new(at.E, at.N, at.Alt), JunctionChoice.Point(g, node) };
+        var way = new List<WayPoint> { new(at.Lv95.E, at.Lv95.N, at.Alt), JunctionChoice.Point(g, node) };
         AppendRoads(way, JunctionChoice.Follow(g, node, next, Window), SpliceAfter);
         var (ne2, nn2, _) = g.Pos(node);
         var (te2, tn2, _) = g.Pos(next);

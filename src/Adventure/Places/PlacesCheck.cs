@@ -123,7 +123,20 @@ public partial class PlacesCheck : ChatProbe
             map.Select(peak, centre: true);
             await Seconds(0.6);
             Expect(map.Selected == peak, "a place is selected on it");
-            if (DisplayServer.GetName() != "headless") GD.Print($"{Log} shot {Shot("map")}");
+            if (DisplayServer.GetName() != "headless")
+            {
+                GD.Print($"{Log} shot {Shot("map")}");
+                // the projection (#1514): the country at 2 px/km centred on Scuol, where LV95's grid north is 2° off true
+                // north, the fog lifted: the relief (an LV95 picture) turned by it, true north up
+                map.View.FocusOn(2_818_000, 1_186_000, 2);
+                map.ShowFog(false);
+                // the relief is baked on a worker once per process
+                for (int i = 0; i < 100 && Ui.MapRelief.TryGet() == null; i++) await Seconds(0.1);
+                map.Redraw();
+                await Seconds(0.4);
+                GD.Print($"{Log} shot {Shot("map_projection")}");
+                map.ShowFog(true);
+            }
             GameShell.Instance?.Back();
         }
 
@@ -149,21 +162,24 @@ public partial class PlacesCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }
-        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.E:F1}/{me.Global.N:F1}/{me.Global.Alt:F1}"));
+        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.Lv95}/{me.Global.Alt:F1}"));
     }
 
     private async Task Jump(double e, double n)
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.2f, (float)-(n - g.N));
+        var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.2f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.3);
     }

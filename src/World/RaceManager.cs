@@ -4,6 +4,7 @@ using UnitSport.Core;
 using UnitSport.Net;
 using UnitSport.Player;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.World;
 
@@ -119,6 +120,12 @@ public partial class RaceManager : Node, IOriginShiftAware
     private ChatManager? _chat;
     private Node3D? _players;
     private IChunkSource? _source;
+
+    /// <summary>
+    /// Server, under <c>--frame earth</c>: a leaf's own roads (its anchor frame), read or made. A race's road is then the
+    /// leaves' round the start (#1742): the earth server's flat world holds no road tile. Null in the flat world.
+    /// </summary>
+    public System.Func<Terrain.Format.CubeKey, Terrain.Format.RoadTile?>? LeafRoads { get; set; }
     /// <summary>Client: this peer's origin, which the courses the server sends are mapped into.</summary>
     private WorldOrigin? _origin;
     private double _clock;
@@ -219,8 +226,9 @@ public partial class RaceManager : Node, IOriginShiftAware
 
         string rest = string.Join(' ', words);
         bool isNumber = float.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float metres);
-        // the race's own frame, at the host: the server's origin may be anywhere (#185)
-        var frame = OriginFrame.AnchorNear(host.Global);
+        // the race's own frame, at the host: the server's origin may be anywhere (#185); on leaves the ENU there, which the
+        // leaves' roads are placed in (#1742)
+        var frame = LeafRoads != null ? OriginFrame.AnchorAt(host.Global.Ecef) : OriginFrame.AnchorNear(host.Global);
         var at = frame.ToWorld(host.Global);
         Vector3 target = default;
         if (air)
@@ -266,7 +274,7 @@ public partial class RaceManager : Node, IOriginShiftAware
                 RaceRoute? route = Player.SnowRide.Is(mount) ? await RaceRoute.BuildPisteAsync(source, frame, at, race.Metres + 200f) : null;
                 if (Player.SnowRide.Is(mount) && route == null)
                     Callable.From(() => _chat?.Tell(sender, $"[race] #{raceId} no slope here, racing the road", ChatKind.System)).CallDeferred();
-                route ??= await RaceRoute.BuildAsync(source, frame, at);
+                route ??= await RaceRoute.BuildAsync(source, frame, at, leafRoads: LeafRoads);
                 Callable.From(() => Opened(raceId, route, null, "")).CallDeferred();
             }
         });
@@ -432,7 +440,8 @@ public partial class RaceManager : Node, IOriginShiftAware
         {
             var e = plan[i];
             race.Arriving.Add(ids[i]);
-            RpcId(owner, MethodName.NpcArrive, race.Id, ids[i], race.Frame.E, race.Frame.N, lane.Centre, lane.Width, lane.Zero,
+            var (ox, oy, oz, wire) = OnWire(race);
+            RpcId(owner, MethodName.NpcArrive, race.Id, ids[i], ox, oy, oz, Wire(wire, lane.Centre), lane.Width, lane.Zero,
                 (int)e.Style, e.Variant, e.Slot, race.Entrants.Count);
             GD.Print($"[npc] {Who(ids[i])} arrives {e.Style} for slot {e.Slot + 1}");
         }
@@ -706,8 +715,9 @@ public partial class RaceManager : Node, IOriginShiftAware
     {
         var course = race.Course!;
         int slot = race.Entrants.IndexOf(e), count = race.Entrants.Count;
-        RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, race.Frame.E, race.Frame.N, race.Centre, race.Width,
-            race.Air ? course.Gates : System.Array.Empty<Vector3>(), course.Length, course.GridAltitude, slot, count,
+        var (ox, oy, oz, wire) = OnWire(race);
+        RpcId(SimOf(e), MethodName.Setup, race.Id, e, race.Air, ox, oy, oz, Wire(wire, race.Centre), race.Width,
+            race.Air ? Wire(wire, course.Gates) : System.Array.Empty<Vector3>(), course.Length, course.GridAltitude, slot, count,
             race.Mount, resume ? race.StartAt - _clock : Countdown, race.Next.GetValueOrDefault(e), resume, race.Class,
             race.Skill.GetValueOrDefault(e, 1f));
     }
@@ -1000,15 +1010,27 @@ public partial class RaceManager : Node, IOriginShiftAware
     public void ReportStaged(int raceId, long npc) => RpcId(1, MethodName.NpcStaged, raceId, npc);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void NpcArrive(int raceId, long npc, double frameE, double frameN, Vector3[] centre, float[] width, float zero,
+    private void NpcArrive(int raceId, long npc, double ox, double oy, double oz, Vector3[] centre, float[] width, float zero,
         int style, int variant, int slot, int count) =>
-        _arrivals[npc] = new Arrival(raceId, RaceRoute.FromPoints(Here(frameE, frameN, centre), width, frame: _origin!.Frame),
+        _arrivals[npc] = new Arrival(raceId, RaceRoute.FromPoints(Here(ox, oy, oz, centre), width, frame: _origin!.Frame),
             zero, (ArrivalStyle)style, variant, slot, count);
 
-    /// <summary>Points the server sent as offsets from a race's anchor, in this client's world space now (#185).</summary>
-    private Vector3[] Here(double frameE, double frameN, Vector3[] points)
+    /// <summary>
+    /// A race's frame on the wire (#1503, protocol 93): an ECEF origin at its anchor, and what puts its points in the
+    /// local east-up-south there (<see cref="OriginFrame.AnchorAt"/>), the same bits on every peer.
+    /// </summary>
+    private static (double X, double Y, double Z, OriginShift ToWire) OnWire(Race race)
     {
-        var shift = _origin!.SinceAnchor(frameE, frameN);
+        var o = race.Frame.ToEcef(Vector3.Zero);
+        return (o.X, o.Y, o.Z, race.Frame.ToAnchor(o));
+    }
+
+    private static Vector3[] Wire(OriginShift toWire, Vector3[] points) => points.Select(toWire.Point).ToArray();
+
+    /// <summary>Points the server sent in the ENU at a race's ECEF origin, in this client's world space now (#185, #1503).</summary>
+    private Vector3[] Here(double ox, double oy, double oz, Vector3[] points)
+    {
+        var shift = _origin!.SinceAnchor(new EcefPos(ox, oy, oz));
         return points.Select(shift.Point).ToArray();
     }
 
@@ -1046,13 +1068,13 @@ public partial class RaceManager : Node, IOriginShiftAware
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Setup(int raceId, long entrant, bool air, double frameE, double frameN, Vector3[] centre, float[] width, Vector3[] gates,
+    private void Setup(int raceId, long entrant, bool air, double ox, double oy, double oz, Vector3[] centre, float[] width, Vector3[] gates,
         float length, float gridAltitude, int slot, int count, int mount, double countdown, int next, bool resume, int carClass, float skill)
     {
         var r = new Runner
         {
             RaceId = raceId, Id = entrant, Slot = slot, Count = count, Mount = mount, GoIn = countdown, Next = next, Class = carClass,
-            Course = RaceCourse.FromWire(air, Here(frameE, frameN, centre), width, Here(frameE, frameN, gates), length, gridAltitude,
+            Course = RaceCourse.FromWire(air, Here(ox, oy, oz, centre), width, Here(ox, oy, oz, gates), length, gridAltitude,
                 _origin!.Frame),
             StartArc = air ? 0f : RaceCourse.StartArc(slot, count),
         };

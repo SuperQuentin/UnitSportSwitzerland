@@ -37,9 +37,17 @@
   takes the drop's old path (blend 0: one branch). Also by height: the far plane reaches
   √(2Rh + h²) + 200 km above 5 km; the style's haze (`Environment.FogDensity`) thins above 3 km,
   exp(−(h − 3 km)/10 km), kept at a sixth so the edge of the terrain data stays hazy until the globe
-  (H4); the horizon blocks' cull margin uses the unrefracted drop. The spectator stops at
+  (H4); with the globe drawn (from 5 km, #1528) exp(−(h − 3 km)/2 km), near the aerosols' 1.2 km scale height,
+  and the flat world's edges dissolve into it (`player/orbits`); the horizon blocks' cull margin uses the unrefracted drop. The spectator stops at
   `Curvature.SpectatorCeilingM` (50,000 km); the UFO flies an orbit above 60 km (`player/orbits`, #1480). Normals are not turned (only `POSITION`
   curves, as before): the lit styles shade far ground as flat. The server's rules keep the ground k.
+- **On round geometry** (`--frame earth`, #1512 G2 C3, `Curvature.RoundGeometry`): the leaves fall away by
+  themselves in a frame that turns under the camera, so `world_curvature` is `CurvaturePerM2At(h, round)` = −k/2R,
+  a lift (1 cm at 1 km, 1 m at 10 km, 37 m at 60 km), k fading out from 5 to 20 km as before, through the same
+  `CURVED_CLIP` sites (no shader change: the drop's sign flips). `world_curve_blend` is 0 at every height (the
+  geometry is the sphere). The sum, d²/2R of geometry less k·d²/2R, is the flat world's apparent drop
+  (`GroundFrameTurnsTests`). `Curvature.DrawnDrop` is what a marker subtracts in either world (`TargetMarker`).
+  The server's sight-line rules are unchanged.
 - **The global** `world_curvature` (1/2R per m², 0 flat) is pushed by `Styles/CameraGlobal` when it
   changes. Its default is 0: the model viewer and anything without `CameraGlobal` draws flat.
   `Curvature.Drawn` turns the picture off: `--curvature 0` or the debug menu's "Earth curvature".

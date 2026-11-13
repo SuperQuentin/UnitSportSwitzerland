@@ -22,7 +22,7 @@ public static class PoiStage
     public const string DefaultCards = "assets/adventure/atlas_cards.json";
 
     public sealed record Options(string? Boundaries = null, string? OsmPbf = null, string? GwrPath = null,
-        string? File = null, string? Cards = null, int Jobs = 4);
+        string? File = null, string? Cards = null, int Jobs = 4, IShoreSampler? Ground = null, GeoInput? Geo = null);
 
     public static int Run(string tlmPath, string outDir, IReadOnlySet<TileId> available, Options o)
     {
@@ -54,7 +54,7 @@ public static class PoiStage
             var cableStops = Stops(conn, all);
             CableCars(conn, all, cableStops);
         }
-        if (o.OsmPbf != null) Castles(o.OsmPbf, o.GwrPath, o.Jobs, all);
+        if (o.OsmPbf != null) Castles(o.OsmPbf, o.GwrPath, o.Jobs, o.Geo ?? GeoInput.Over(outDir), all);
         Console.WriteLine($"POIs: {all.Count} candidates nationwide ({sw.Elapsed.TotalSeconds:F0} s): " + string.Join(", ",
             all.GroupBy(c => c.Kind).OrderBy(g => g.Key).Select(g => $"{PoiId.Tag(g.Key)} {g.Count()}")));
 
@@ -80,7 +80,8 @@ public static class PoiStage
         string CantonAt(double e, double n) => rings != null ? rings.CodeAt(e, n) : NearestTownCanton(towns, e, n);
 
         var manifestTiles = available is HashSet<TileId> hs ? hs : available.ToHashSet();
-        var sampler = new LandingStage.TileSampler(outDir, manifestTiles);
+        // the built ground: an LV95 build's tiles, or a cube region's leaves (#1711, Options.Ground)
+        IShoreSampler sampler = o.Ground ?? new LandingStage.TileSampler(outDir, manifestTiles);
         var data = new PoiData();
         var records = new List<PoiRecord>(region.Count);
         int sampled = 0;
@@ -472,14 +473,14 @@ public static class PoiStage
     /// when <c>--gwr</c> is given; one per name within a kilometre, OSM first; unnamed ones dropped.
     /// Identity <c>osm:way/123</c>, <c>osm:node/123</c>, <c>egid:123</c>.
     /// </summary>
-    private static void Castles(string pbf, string? gwr, int jobs, List<Candidate> all)
+    private static void Castles(string pbf, string? gwr, int jobs, GeoInput geo, List<Candidate> all)
     {
         if (!File.Exists(pbf))
         {
             Console.Error.WriteLine($"  OSM extract not found: {pbf}; no castles");
             return;
         }
-        var raw = CastleStage.FromOsm(pbf, jobs).Select(c => (c, "osm:" + c.Source)).ToList();
+        var raw = CastleStage.FromOsm(pbf, jobs, geo).Select(c => (c, "osm:" + c.Source)).ToList();
         if (gwr != null && File.Exists(gwr))
             raw.AddRange(CastleStage.FromGwr(gwr).Select(c => (c, "egid:" + c.Source["egid/".Length..])));
         var kept = new List<Candidate>();

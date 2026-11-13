@@ -69,7 +69,7 @@ public static class OsmOverlay
 
     // ---- stage entry point -------------------------------------------------------------------
 
-    public static int Run(string pbfPath, string tlmGpkg, string tempDir, IReadOnlyCollection<TileId> tiles, int jobs)
+    public static int Run(string pbfPath, string tlmGpkg, string tempDir, IReadOnlyCollection<TileId> tiles, int jobs, string? chunkDir = null, GeoInput? geo = null)
     {
         if (!File.Exists(pbfPath)) { Console.Error.WriteLine($"--osm-overlay: {pbfPath} not found"); return 2; }
         if (tiles.Count == 0) { Console.Error.WriteLine("--osm-overlay: no tiles"); return 2; }
@@ -88,7 +88,7 @@ public static class OsmOverlay
         double tlmSec = clock.Elapsed.TotalSeconds;
         Console.WriteLine($"  {tlm.Count:N0} TLM line parts in {tlmSec:F0} s; reading {Path.GetFileName(pbfPath)} "
             + $"({new FileInfo(pbfPath).Length / 1e6:N0} MB)...");
-        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, near, jobs);
+        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, near, jobs, geo ?? GeoInput.Over(chunkDir));
         double osmSec = clock.Elapsed.TotalSeconds - tlmSec;
         Console.WriteLine($"  {osm.Count:N0} OSM way pieces in {osmSec:F0} s; matching them to the TLM lines, then signals and turn restrictions...");
         var result = Conflate(tlm, osm);
@@ -152,11 +152,11 @@ public static class OsmOverlay
     /// </summary>
     private static (List<OsmWay> Ways, List<OsmNodes.Point> Points, List<PbfReader.Relation> Relations,
         Func<long, (double E, double N)?> Position) LoadOsm(string pbf, double minE, double minN, double maxE, double maxN,
-            TileRegion near, int jobs)
+            TileRegion near, int jobs, GeoInput geo)
     {
         // a lat/lon box around the LV95 box; LV95 is not aligned with meridians, so take all four corners
         var corners = new[] { (minE, minN), (minE, maxN), (maxE, minN), (maxE, maxN) }
-            .Select(c => SwissProjection.ToWgs84(c.Item1, c.Item2)).ToList();
+            .Select(c => GeoInput.ToLatLon(c.Item1, c.Item2)).ToList();
         double la0 = corners.Min(c => c.Lat), la1 = corners.Max(c => c.Lat);
         double lo0 = corners.Min(c => c.Lon), lo1 = corners.Max(c => c.Lon);
 
@@ -164,7 +164,8 @@ public static class OsmOverlay
         // 2 GB for the whole country. Two passes (ways first, then only their nodes) if that matters.
         bool Near(double lat, double lon)
         {
-            var (e, n) = SwissProjection.ToLv95(lat, lon);
+            // a filter with a tile's margin: the Plateau's height will do (the positions below take the ground)
+            var (e, n) = SwissGeodesy.ToLv95(lat, lon);
             return near.Touches(e, n);
         }
         var data = PbfReader.Read(pbf, jobs, new PbfReader.Filter
@@ -197,17 +198,17 @@ public static class OsmOverlay
             foreach (long id in w.Refs)
             {
                 if (!nodes.TryGetValue(id, out var ll)) { Flush(); continue; }
-                var (pe, pn) = SwissProjection.ToLv95(ll.Lat, ll.Lon);
+                var (pe, pn) = geo.ToLv95(ll.Lat, ll.Lon);
                 e.Add(pe); n.Add(pn); ids.Add(id);
             }
             Flush();
         }
         var points = data.TaggedNodes.Select(t =>
         {
-            var (pe, pn) = SwissProjection.ToLv95(t.Lat, t.Lon);
+            var (pe, pn) = geo.ToLv95(t.Lat, t.Lon);
             return new OsmNodes.Point(t.Id, pe, pn, t.Tags);
         }).ToList();
-        (double E, double N)? Position(long id) => nodes.TryGetValue(id, out var ll) ? SwissProjection.ToLv95(ll.Lat, ll.Lon) : null;
+        (double E, double N)? Position(long id) => nodes.TryGetValue(id, out var ll) ? geo.ToLv95(ll.Lat, ll.Lon) : null;
         return (result, points, data.Relations, Position);
     }
 

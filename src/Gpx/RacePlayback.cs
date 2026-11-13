@@ -13,7 +13,7 @@ namespace UnitSport.Gpx;
 /// </summary>
 public partial class RacePlayback : Node3D, Core.IOriginContainer
 {
-    private ChunkManager _chunks = null!;
+    private ReplayWorld _world = null!;
     private WorldOrigin _origin = null!;
 
     public List<Runner> Runners { get; } = new();
@@ -94,7 +94,7 @@ public partial class RacePlayback : Node3D, Core.IOriginContainer
                 return;
             }
 
-            var source = _chunks.Source;
+            var source = _world.Source;
             if (source == null)
             {
                 Matching = false;
@@ -196,16 +196,16 @@ public partial class RacePlayback : Node3D, Core.IOriginContainer
     /// <summary>True once the clock has reached the finish and stopped there.</summary>
     public bool Complete => Runners.Count > 0 && Time >= Duration;
 
-    public static RacePlayback Create(ChunkManager chunks, WorldOrigin origin) => new()
+    public static RacePlayback Create(ReplayWorld world, WorldOrigin origin) => new()
     {
         Name = "RacePlayback",
-        _chunks = chunks,
+        _world = world,
         _origin = origin,
     };
 
     public Runner Add(GpxTrack track)
     {
-        var runner = Runner.Create(track, _chunks, _origin, Runners.Count);
+        var runner = Runner.Create(track, _world.Ground, _origin, Runners.Count);
         Runners.Add(runner);
         AddChild(runner);
 

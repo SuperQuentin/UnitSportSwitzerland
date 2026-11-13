@@ -96,6 +96,34 @@ public static class Curvature
     /// <summary>How far the drop has given way to the exact sphere, 0..1: the <c>world_curve_blend</c> global.</summary>
     public static double SphereBlendAt(double altitudeM) => SmoothStep(SphereFromM, SphereAtM, altitudeM);
 
+    // ---- round geometry (#1512, G2 C3: the earth world) -------------------------------------------
+
+    /// <summary>
+    /// The world's geometry is round already (<c>--frame earth</c>: cube leaves in true Earth positions, in a frame
+    /// that turns under the camera, #1512): it falls away by itself, so the shaders only lift it by what refraction
+    /// bends a sight line back up, and the exact sphere's wrap is off. Set by the client world when it boots.
+    /// </summary>
+    public static bool RoundGeometry { get; set; }
+
+    /// <summary>
+    /// The <c>world_curvature</c> global for a camera at <paramref name="altitudeM"/>: the drop per m² on flat
+    /// geometry (<see cref="DropPerM2At"/>); on round geometry −k/2R, a lift, k fading out with height as the drop's
+    /// does (0.13 low: 1 cm at 1 km, 1 m at 10 km, 37 m at 60 km; 0 from 20 km).
+    /// </summary>
+    public static double CurvaturePerM2At(double altitudeM, bool round) =>
+        round ? -RefractionAt(altitudeM) / (2 * EarthRadiusM) : DropPerM2At(altitudeM);
+
+    /// <summary>The <c>world_curve_blend</c> global: the sphere's wrap on flat geometry, none on round geometry (it is the sphere).</summary>
+    public static double CurveBlendAt(double altitudeM, bool round) => round ? 0 : SphereBlendAt(altitudeM);
+
+    /// <summary>
+    /// How far below its world position a point <paramref name="distanceM"/> from a camera near the ground is drawn:
+    /// <see cref="Drop"/> on flat geometry, the refraction's lift (negative) on round geometry (<see cref="RoundGeometry"/>).
+    /// What a screen projection of a far place (a marker) subtracts.
+    /// </summary>
+    public static double DrawnDrop(double distanceM) =>
+        RoundGeometry ? -distanceM * distanceM * Refraction / (2 * EarthRadiusM) : Drop(distanceM);
+
     /// <summary>The geometric horizon's distance from <paramref name="altitudeM"/> up, metres: √(2Rh + h²).</summary>
     public static double HorizonM(double altitudeM)
     {

@@ -127,7 +127,7 @@ public partial class VersteckisCheck : ChatProbe
         game.Phase = VsPhase.Seek;
         Vs.Apply(new List<VsState> { game });
         Expect(await Until(() => !Vs.Hud.Blind, 2), "the screen opens in Seek");
-        Expect(Vs.TagPoint(me) is { } tag && VsRules.InReach(me.Global.E, me.Global.N, tag.E, tag.N), "a tag lands within reach");
+        Expect(Vs.TagPoint(me) is { } tag && VsRules.InReach(me.Global, tag), "a tag lands within reach");
         if (Windowed) { await Seconds(1); GD.Print($"{Log} shot {Shot("seeker_view")}"); }
 
         // the results table

@@ -6,6 +6,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The pier planner and the landings file (#377).</summary>
+[Collection(FixtureWorld.Collection)]
 public class LandingTests
 {
     private const double Water = 372.14;
@@ -146,7 +147,12 @@ public class LandingTests
         // every 9 m from 4 m in, both sides
         Assert.Equal(2 * 6, slots.Count);   // 4, 13 .. 49 (58 is within 4 m of the end)
         Assert.All(slots, b => Assert.InRange(Math.Abs(b.E), 1.1 + 0.4 + 0.65 - 1e-6, 1.1 + 0.4 + 1.2 + 1e-6));
-        Assert.All(slots, b => Assert.True(b.Heading is 0 or 180, $"{b.Heading}"));
+        // along the jetty's grid line, from true north (#1504): the grid's 0 or 180 less the convergence there
+        Assert.All(slots, b =>
+        {
+            double grid = (b.Heading + SwissGeodesy.GridConvergenceDeg(b.E, b.N) + 360) % 360;
+            Assert.True(Math.Abs(grid) < 0.02 || Math.Abs(grid - 180) < 0.02 || Math.Abs(grid - 360) < 0.02, $"{b.Heading}");
+        });
         Assert.Equal(slots.Count, slots.Select(b => b.Id).Distinct().Count());
         var chosen = jetty.BoatBerths();
         Assert.InRange(chosen.Count, 1, Jetty.MaxBoats);

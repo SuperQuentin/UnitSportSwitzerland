@@ -23,7 +23,7 @@ public sealed class ShotContext
 {
     public required Runner Runner { get; init; }
     public required Camera3D Camera { get; init; }
-    public required ChunkManager Chunks { get; init; }
+    public required IWorldGround WorldGround { get; init; }
     public required RandomNumberGenerator Rng { get; init; }
 
     /// <summary>Track time, which runs at <see cref="ClockSpeed"/> times screen time.</summary>
@@ -165,7 +165,7 @@ public sealed class ShotContext
     }
 
     /// <summary>Terrain height, or null where the tile has not streamed in.</summary>
-    public float? Ground(Vector3 at) => Chunks.TryGetHeight(at, out float h) ? h : null;
+    public float? Ground(Vector3 at) => WorldGround.TryGetHeight(at, out float h) ? h : null;
 
     /// <summary>
     /// Ground height for a point close beside the runner - AnkleCam, LowHeroPass - which trusts

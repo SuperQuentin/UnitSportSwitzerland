@@ -12,9 +12,14 @@ using static System.Console;
 //
 //   dotnet run --project tools/BlendCheck -c Release
 
+if (args.Contains("--fill-seams")) return FillSeamsCheck.Run(args);
 if (args.Contains("--roads")) return RoadBlendCheck.Run(args);
 if (args.Contains("--generated-water")) return GeneratedWaterCheck.Run(args);
 if (args.Contains("--generated-roads")) return await GeneratedRoadsCheck.Run(args);
+if (args.Contains("--leaves")) return GeneratedLeavesCheck.Run(args);
+if (args.Contains("--leaf-roads-time")) return LeafRoadsTiming.Run(args);
+if (args.Contains("--leaf-roads")) return GeneratedLeafRoadsCheck.Run(args);
+if (args.Contains("--leaf-blend")) return LeafBlendCheck.Run(args);
 
 const double AnchorE = 2583250, AnchorN = 1113250;   // SpawnPoint.DefaultLv95E/N
 var world = new ProceduralWorld(AnchorE, AnchorN);

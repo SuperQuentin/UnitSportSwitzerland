@@ -24,6 +24,7 @@ public partial class OrbitCheck : Node
     private int _stage, _turns;
     private bool _done;
     private readonly double _km;
+    private readonly bool _earth;
 
     /// <summary>Simulation speed while it coasts: SimClock's fastest.</summary>
     private const double Speed = SimClock.MaxScale;
@@ -32,12 +33,14 @@ public partial class OrbitCheck : Node
     {
         _origin = origin;
         _km = CmdArgs.Double("--orbitcheck") is double km && km > 0 ? km : 400;
+        _earth = origin.Frame.IsAnchor;
     }
 
     public override void _Ready()
     {
         // the camera this world has none of: the shifter follows the craft, as it follows the camera in game
-        AddChild(new OriginShifter(_origin, () => _player?.GlobalPosition, () => true));
+        // --frame earth (#1630): the earth world's one turning frame, 20 km steps in Space and 3 km on the ground
+        AddChild(new OriginShifter(_origin, () => _player?.GlobalPosition, () => true) { Earth = _origin.Frame.IsAnchor });
         _origin.Shifted += shift => { if (shift.Turns) _turns++; };
     }
 
@@ -151,7 +154,19 @@ public partial class OrbitCheck : Node
         // back below the handover the world is a flat ground frame again, exactly: no turn, a whole-km
         // corner, altitude 0 at world Y 0 (#1480, the coordinator's condition)
         var f = _origin.Frame;
-        if (f.IsAnchor || f.Alt0 != 0 || f.E % 1000 != 0 || f.N % 1000 != 0)
+        // the earth world has one frame at every altitude (#1630): out of the Space regime, its anchor on the ground
+        // under the craft, up the ellipsoid's there
+        if (_earth)
+        {
+            var up = f.UpAt(p.GlobalPosition);
+            double off = Math.Acos(Math.Clamp(up.Dot(Vector3.Up), -1f, 1f)) * 180 / Math.PI;
+            if (!f.IsAnchor || OriginShifter.Instance?.InSpace != false || off > 0.5)
+            {
+                Fail(FormattableString.Invariant($"not back in the ground's turning frame: anchor {f.IsAnchor}, in Space {OriginShifter.Instance?.InSpace}, up {off:F2}° off"));
+                return;
+            }
+        }
+        else if (f.IsAnchor || f.Alt0 != 0 || f.E % 1000 != 0 || f.N % 1000 != 0)
         {
             Fail(FormattableString.Invariant($"not back in a ground frame: anchor {f.IsAnchor}, alt0 {f.Alt0}, corner {f.E}/{f.N}"));
             return;
@@ -175,7 +190,7 @@ public partial class OrbitCheck : Node
         if (alt < 20) p.FlyControls = () => new FlightInput(Vector2.Zero, 0f, 1f, 0f, 0f, false, false, 0f);
         if (!_ufo!.State.Landed) return;
         var g = _origin.Frame.ToGlobal(p.GlobalPosition);
-        GD.Print(FormattableString.Invariant($"[orbitcheck] landed after the orbit at LV95 {g.E:F0}/{g.N:F0}, {_t:F0} s from the hover; frame {_origin.Frame.E:F0}/{_origin.Frame.N:F0}, no turn"));
+        GD.Print(FormattableString.Invariant($"[orbitcheck] landed after the orbit at LV95 {g.Lv95.E:F0}/{g.Lv95.N:F0}, {_t:F0} s from the hover; frame {_origin.Frame.E:F0}/{_origin.Frame.N:F0}, no turn"));
         Finish(0, "ok");
     }
 

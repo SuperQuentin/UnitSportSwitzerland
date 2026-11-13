@@ -16,6 +16,9 @@ public static class NavTarget
     /// <summary>The ground height at a point (LV95), set by the client world.</summary>
     public static Func<double, double, float?>? GroundAt { get; set; }
 
+    /// <summary>The ground height under a <see cref="GlobalPos"/>, or null when unknown (see <see cref="GroundAt"/>).</summary>
+    public static float? GroundUnder(GlobalPos at) => GroundAt?.Invoke(at.Lv95.E, at.Lv95.N);
+
     private static (string Label, double E, double N, float RadiusM)? _cached;
     private static float? _alt;
     private static readonly List<Poi> Near = new();

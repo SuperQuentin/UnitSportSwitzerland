@@ -35,7 +35,7 @@ public class LiveNamesTests
     [Fact]
     public void A_sleepers_tag_shows_the_live_name_only_for_a_known_key()
     {
-        var s = new Sleeper(1, Key, "Alt", 0, 0, 0, 0, 1, 0, 0, 0);
+        var s = new Sleeper(1, Key, "Alt", default, 0, 1, 0, 0, 0);
         Assert.Equal("Alt", s.NameShown(null));
         var ids = new PlayerIds(new Dictionary<string, string> { [Key] = "Neu" });
         Assert.Equal("Neu", s.NameShown(ids));

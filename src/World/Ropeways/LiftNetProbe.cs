@@ -20,6 +20,28 @@ public partial class LiftNetProbe : Core.ChatProbe
 {
     public static string? Role => RoleArg("--liftnet");
 
+    /// <summary>For a failure's line: where A stands and the nearest bottom station loaded round it.</summary>
+    private string Nearest()
+    {
+        if (Me is not { Terrain.Origin: { } origin } me || RopewayService.Instance is not { } lifts) return "no player or no lifts";
+        var (e, n) = origin.ToLv95(me.GlobalPosition);
+        var near = lifts.Near(e, n);
+        double Dist(RopewayLine l) { var (le, ln) = l.Point(0); return System.Math.Sqrt((le - e) * (le - e) + (ln - n) * (ln - n)); }
+        var best = near.OrderBy(Dist).FirstOrDefault();
+        string where = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"at {e:F0}/{n:F0}, on the floor {me.IsOnFloor()}, {near.Count} lines near");
+        foreach (var l in near)
+            GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"[liftnet {_role}]   line {l.Id} {l.Kind} '{l.Name}': {Lv95(l.Point(0))} -> {Lv95(l.Point(^1))}"));
+        return best == null ? where : string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{where}, nearest bottom station {Lv95(best.Point(0))} ({Dist(best):F1} m, reach {RopewayService.BoardReach})");
+    }
+
+    private static string Lv95((double, double) p)
+    {
+        var (e, n) = p;
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{e:F0}/{n:F0}");
+    }
+
     public LiftNetProbe(ItemController items) : base(items, "liftnet", "LN") { }
     public LiftNetProbe() : this(null!) { }
 
@@ -34,7 +56,7 @@ public partial class LiftNetProbe : Core.ChatProbe
     private async Task RunA()
     {
         bool boarded = await Until(() => Me is { } me && me.TryLift(), 90);
-        Expect(boarded, "A boarded the lift at its station");
+        Expect(boarded, $"A boarded the lift at its station ({Nearest()})");
         if (!boarded) return;
         GD.Print($"{Log} on {Me?.Lift?.Kind} {Me?.LiftLine}, carrier {Me?.LiftCarrier}, leaving in {Me?.LiftWait:F1} s");
         Say("boarded");

@@ -106,8 +106,10 @@ public static class SiteYards
                 .Where(d => new Vector2(d.Outward.X, d.Outward.Z).Normalized().Dot(outward) > 0.9f)
                 .Select(d => new DoorSpan(along.Dot(new Vector2(d.Position.X, d.Position.Z) - centre), d.Width / 2))
                 .ToArray();
-            // the facade itself along the yard: the yard is centred on the main door, not on it
-            var (from, to) = box.Along(along, centre);
+            // the facade itself along the yard: the yard is centred on the main door, not on it; the door's
+            // own straight run of wall, never the whole box along it (#1769, SiteFront.Span)
+            var (boxFrom, boxTo) = box.Along(along, centre);
+            var (from, to) = SiteFront.Span(boxFrom, boxTo, along.Dot(new Vector2(fp.Door.Position.X, fp.Door.Position.Z) - centre), fp.Door.Run);
             yards.Add(new SiteFront(yard, from, to, doors));
         }
         return yards;

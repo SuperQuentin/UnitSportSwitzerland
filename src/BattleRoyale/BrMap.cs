@@ -113,7 +113,7 @@ public partial class BrMap : CanvasLayer
 
     private Vector2 Middle => _view.Size * 0.5f;
     private Vector2 ToScreen(Vector2 zone) => Middle + BrMapDraw.Screen(zone - _pan) * Ppm;
-    private Vector2 ToZone(Vector2 screen) => _pan + BrMapDraw.Screen((screen - Middle) / Ppm);
+    private Vector2 ToZone(Vector2 screen) => _pan + BrMapDraw.Zone((screen - Middle) / Ppm);
 
     private void OnInput(InputEvent e)
     {
@@ -143,7 +143,7 @@ public partial class BrMap : CanvasLayer
                 _br.PingMap(ToZone(middle.Position));
                 break;
             case InputEventMouseMotion motion when _dragging:
-                _pan -= BrMapDraw.Screen(motion.Relative / Ppm);
+                _pan -= BrMapDraw.Zone(motion.Relative / Ppm);
                 Clamp();
                 break;
         }
@@ -171,7 +171,7 @@ public partial class BrMap : CanvasLayer
 
             DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.04f, 0.05f, 0.07f, 0.92f));
             var nw = Map.ToScreen(new Vector2(-half, half));
-            DrawTextureRect(tex, new Rect2(nw, new Vector2(side, side) * ppm), false);
+            BrMapDraw.Image(this, tex, nw, side * ppm, Transform2D.Identity);
 
             // the grid: a kilometre a square, letters west to east, numbers north to south
             int cells = (int)Mathf.Ceil(side / 1000f);
@@ -205,7 +205,7 @@ public partial class BrMap : CanvasLayer
             }
 
             BrMapDraw.Overlays(this, br, Map.ToScreen, ppm, Size.Length() * 2f);
-            DrawRect(new Rect2(nw, new Vector2(side, side) * ppm), new Color(0, 0, 0, 0.9f), false, 2f);
+            BrMapDraw.Outline(this, nw, side * ppm, new Color(0, 0, 0, 0.9f), 2f);
 
             // the title and the help line
             string title = $"{br.State.AreaName} · {side / 1000:F0} × {side / 1000:F0} km";

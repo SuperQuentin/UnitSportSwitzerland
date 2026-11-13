@@ -32,6 +32,10 @@ Plan: `docs/plans/ellipsoid-handover.md` section 5. The geodesy under it: `core/
 
 ## The UFO in space (`Ufo.SpaceFly`, `UfoFlight.SpaceStep`)
 
+The seam below is `Player/SpaceOrbit` since the shuttle (#1492, `player/shuttle`) flies it too: an
+`ISpacecraft` has a `SpaceOrbit`, its body sets its `Place` before each step (`FootPlayer.SpaceStep`,
+`VehicleBody.StepFlyer`), and `SpaceOrbit.Step` returns the body's velocity and the orbit's track.
+
 - **Above the Space handover** (60 km climbing, out below 50 km: `Curvature.SpaceRegime`, on the
   craft's own altitude) the saucer's state is an `OrbitState`. Each physics step:
   - the body's place comes in as `Ufo.Place` (`SpacePlace`: frame, world point, altitude, sim time), set
@@ -79,7 +83,28 @@ Plan: `docs/plans/ellipsoid-handover.md` section 5. The geodesy under it: `core/
 - **Gap below 250 km far from Switzerland**: the flat Space frame is LV95, stretched by the projection's
   scale (it grows toward the oblique cylinder's poles, 43° N 172.6° W and 43° S 7.4° E), so a low orbit
   there is drawn at the wrong speed against the globe. Orbits live higher (400 km); round tiles (G2) end it.
+- **The generated fill far from Switzerland** follows a player anywhere (`terrain/generated-fill`'s 40-tile box)
+  and comes back under 80 km (`Globe.FillGoneM`): re-entering 1,600 km out it was a black disc under the shuttle
+  from 68 km. Farther than 100 km from the real tiles' box (`Globe.FillFarM`) it stays hidden wherever the
+  globe shows (above 5 km, gone over the 5 km above that), #1518.
+- **The globe from 5 km** (#1528, `Globe.ShowAboveM`, was 15): where the far plane starts reaching past the horizon
+  blocks' 60 km and the haze thins on the globe's word (`CameraGlobal.HazeAt` from 3 km). At 15 km a landing from
+  space looked through thinned haze at nothing past 60 km: a flat haze-coloured plane with the far lakes on it.
+- **The air is drawn as one full-screen quad** (#1528, `atmosphere.gdshader`, `Atmosphere`): each pixel's ray comes
+  from the screen and the depth, never the geometry. The sphere's back faces, pulled in to 90 % of the far plane, were
+  clipped round the view's axis on the way down from the drive: a sharp disc of no air (yellow ground) under the
+  shuttle at 57-62 km. The colour-coded branches (`--shuttlefilm shot,Fall,at=61`) showed no fragment there at all.
+- **The flat world's edges dissolve into the globe** while it is drawn (#1528, the user's choice; `terrain.gdshaderinc`
+  `flat_edge`, globals `world_flat_edge`/`_on` pushed by `Globe.Edge`): the tiles' square (Chebyshev from the
+  camera's tile, as they load) and the horizon blocks' circle over their last 4 km, in over 5-10 km of height. From
+  above, the tile square stood out against the globe as a green-yellow patch at 50-80 km. Drawing the globe from
+  5 km cost nothing measurable (6,430 draws against 6,693 at 6 km).
 - No vertical origin yet: world Y is still ~altitude in Space anchors (3 cm floats at 400 km).
+  **The camera's near plane follows it** (#1497, `Styles/CameraGlobal.NearOfDistance`): at least the camera's
+  distance from the world's origin / 200,000 (1.5 m at 300 km, 2 m at 400 km). With the player's 0.08 m near
+  plane, every view above 250 km drew black (no shuttle, globe or stars): its corners fell within a few float
+  steps of the eye, the frustum degenerated. The headless orbit checks never saw it; `--shuttlefilm orbit,400`
+  takes a picture there.
 
 ## Online
 
@@ -106,7 +131,7 @@ Plan: `docs/plans/ellipsoid-handover.md` section 5. The geodesy under it: `core/
 
 ## Checks
 
-- `--orbitcheck [km] --world flat` (`Player/OrbitCheck`, quick, 45 s): `/orbit 400` heading north (over the
+- `--orbitcheck [km] --world flat [--frame earth]` (`Player/OrbitCheck`, quick, 45 s; `--frame earth` flies the earth world's one turning frame, out of the Space regime at 50 km into its 3 km ground steps, #1630): `/orbit 400` heading north (over the
   pole and the LV95 sliver), one period at 8x: closes within 0.32 m, energy drift 5·10⁻¹⁴, ~2,080 turned
   shifts, no contact, the world within 20 km of the craft; then boosted down out of orbit into a hover,
   the frame flat again (no turn, a whole-km corner), and onto its legs.

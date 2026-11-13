@@ -110,7 +110,7 @@ public static class OccasionProbe
         Pref("pref: started over --occ", "christmas", ["halloween"], ["christmas"], OccasionPreference.Auto, OccasionPreference.Always);
         Pref("pref: --occasion names it", "halloween", ["halloween"], [], OccasionPreference.Off, OccasionPreference.Always);
 
-        GD.Print(failures == 0 ? "[occasioncheck] all passed" : $"[occasioncheck] {failures} FAILED");
+        GD.Print(failures == 0 ? "[occasioncheck] RESULT: ok" : $"[occasioncheck] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
     }
 }

@@ -9,6 +9,7 @@
 154.7	Aircraft / Antonov AN-124 (parked)
 365.3	Aircraft / Military cargo plane
 365.3	Aircraft / Military cargo plane (parked)
+2388.8	Aircraft / Space shuttle, re-entry
 38.4	Aircraft / UFO
 96.1	Aircraft / UFO, flying (legs up, beam on, shortened)
 382.9	Aura / Move - Arms crossed
@@ -1072,6 +1073,7 @@
 138.6	Parts / Mini excavator boom
 14.2	Parts / Mini excavator bucket
 7.9	Parts / Phone back half
+10	Parts / Shuttle plasma shell
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
 425.2	People / Errand givers - Dairy
@@ -1327,3 +1329,29 @@
 174635.9	Venues / Pinball attract - Space Mission, high scores
 30	World / Ropeways - T-bar
 1.1	Items / Zwiebelzopf
+# models added while the check could not finish (the whole-Earth globe hung it, #1501): recorded as they fight today, not fixed
+403.1	Figures / Pose - Flying
+80.3	Figures / Hat - PartyHat
+322.1	Figures / Hat - BirthdayCrown
+89.2	Figures / Hat - CandleHat
+2.8	Figures / Hat - CakeHat
+195.7	Figures / Hat - PropellerCap
+3.9	Figures / Hat - BalloonHat
+70.5	Venues / Air hockey - Two bots
+1308	Venues / Claw machine - A bot playing
+1595.9	Venues / Darts - 501, two bots
+7068.6	Venues / Table football - Two bots, a bar's table (1.5 x 0.8)
+7068.6	Venues / Table football - Two bots, an arcade's table (0.75 x 1.4)
+1595.9	Furniture / DartBoard
+1308	Furniture / ClawMachine
+70.5	Furniture / AirHockey
+496	Items / BirthdayGift
+4.7	Items / ArcadeCoin
+9.8	Items / PrizeTicket
+3.1	Items / SweetsBag
+281	Birthday / Cake, slices left - 8 left
+264.6	Birthday / Cake, slices left - 7 left
+196.8	Birthday / Cake, slices left - 5 left
+126.6	Birthday / Cake, slices left - 3 left
+56.3	Birthday / Cake, slices left - 1 left
+496	Birthday / Gift

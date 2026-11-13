@@ -78,4 +78,25 @@ public class FilmCoverageTests
         // without the country map every unbuilt tile is missing, as before
         Assert.Equal(missing.Count + abroad.Count, FilmCoverage.Missing(points, (_, _) => false).Count);
     }
+
+    /// <summary>Under --frame earth (#1514): the leaves round a need cover its disc, each once, and only those.</summary>
+    [Fact]
+    public void Leaves_near_a_need_cover_its_disc()
+    {
+        var need = new FilmCoverage.Need(2_500_500, 1_118_500, double.NaN, Eye: true);
+        var leaves = FilmCoverage.LeavesNear(need, 5000).ToList();
+        Assert.Equal(leaves.Count, leaves.Distinct().Count());
+        var at = Terrain.Format.SwissGeodesy.ToEcef(need.E, need.N, 500);
+        // every leaf whose centre is within 4.5 km is in, none whose centre is past 5.6 km
+        var near = Terrain.Format.CubeKey.FromEcef(at, 14);
+        foreach (var leaf in leaves)
+        {
+            var c = Terrain.Format.Ellipsoid.Wgs84.ToEcef(leaf.Centre with { H = 0 });
+            Assert.True(c.DistanceTo(at) < 5600, $"{leaf} at {c.DistanceTo(at):F0} m");
+        }
+        Assert.Contains(near, leaves);
+        Assert.InRange(leaves.Count, 200, 320); // pi 5 km² over ~0.37 km² leaves, and the rim's
+        Assert.Empty(FilmCoverage.MissingLeaves(new[] { need }, _ => true));
+        Assert.Equal(leaves.Count, FilmCoverage.MissingLeaves(new[] { need }, _ => false).Count);
+    }
 }

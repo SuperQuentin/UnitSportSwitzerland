@@ -328,11 +328,12 @@ public partial class PlaytestRecorder : Node
             _players.Add(id);
             if (p == local) LocalId = id;
             var g = p.Global;
+            var gl = g.Lv95;
             var v = sample.Vel;
             ref var s = ref frame.Add();
             s.Id = id;
-            s.E = g.E; s.N = g.N; s.Alt = (float)g.Alt;
-            s.Heading = Wrap(-p.NetYaw);
+            s.E = gl.E; s.N = gl.N; s.Alt = (float)g.Alt;
+            s.Heading = Wrap(-p.GlobalYaw);   // on the grid, as E/N are (#1503)
             s.VE = v.X; s.VN = -v.Z; s.VUp = v.Y;
             s.HasPlayer = true;
             s.Ride = (short)p.RideKindId; s.Seat = (sbyte)Math.Clamp(p.SeatIndex, sbyte.MinValue, sbyte.MaxValue);
@@ -341,13 +342,13 @@ public partial class PlaytestRecorder : Node
             if (_last.TryGetValue(id, out var was))
             {
                 s.Spin = (float)(Wrap(s.Heading - was.Heading) / Math.Max(1e-3, now - was.T));
-                double jump = Math.Sqrt((g.E - was.E) * (g.E - was.E) + (g.N - was.N) * (g.N - was.N));
+                double jump = g.HorizontalDistanceTo(GlobalPos.FromLv95(was.E, was.N, 0));
                 if (jump > 60 && jump > 4 * v.Length() * (now - was.T) + 20)
                     Event("teleport", ("player", Entities.GetValueOrDefault(id)?.Label ?? p.Name.ToString()), ("metres", Math.Round(jump, 1)),
-                        ("from", FormattableString.Invariant($"{was.E:F1},{was.N:F1}")), ("to", FormattableString.Invariant($"{g.E:F1},{g.N:F1}")));
+                        ("from", FormattableString.Invariant($"{was.E:F1},{was.N:F1}")), ("to", FormattableString.Invariant($"{gl.E:F1},{gl.N:F1}")));
             }
-            _last[id] = (g.E, g.N, s.Alt, s.Heading, now);
-            _playerSpots.Add((g.E, g.N));
+            _last[id] = (gl.E, gl.N, s.Alt, s.Heading, now);
+            _playerSpots.Add((gl.E, gl.N));
             Diff(p, id);
         }
         foreach (int id in _players) if (!_playersBefore.Contains(id)) Event("join", ("player", Entities.GetValueOrDefault(id)?.Label ?? $"#{id}"), ("id", id));
@@ -415,7 +416,7 @@ public partial class PlaytestRecorder : Node
         if (n is VehicleBody vb)
         {
             var g = vb.Global;
-            (e, nn, alt) = (g.E, g.N, (float)g.Alt);
+            (e, nn, alt) = (g.Lv95.E, g.Lv95.N, (float)g.Alt);
         }
         else if (origin != null)
         {
@@ -590,14 +591,14 @@ public partial class PlaytestRecorder : Node
         var line = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["t"] = Math.Round(t, 3), ["type"] = "note", ["id"] = id, ["text"] = text, ["source"] = source, ["scenario"] = scenario,
-            ["e"] = at?.E, ["n"] = at?.N, ["alt"] = at?.Alt,
+            ["e"] = at?.Lv95.E, ["n"] = at?.Lv95.N, ["alt"] = at?.Alt,
             ["ride"] = me == null ? "" : RideLabel(me.Ride),
             ["wall"] = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture), ["shot"] = shotFile, ["top"] = top,
         });
         var notes = _notes!;
         Queue(() => notes.WriteLine(line));
         Event("note", ("id", id), ("text", text), ("source", source), ("scenario", scenario));
-        var pin = at is { } a ? new EN(a.E, a.N) : (EN?)null;
+        var pin = at is { } a ? new EN(a.Lv95.E, a.Lv95.N) : (EN?)null;
         if (pin is { } pp) Notes.Add(new TopNote(t, pp.E, pp.N, text));
         _awaitingTop.Add((id, t, pin));
         GD.Print($"[playtest] note {id}: {text}");
@@ -612,7 +613,7 @@ public partial class PlaytestRecorder : Node
         TraceFrame? best = null;
         for (int i = 0; i < Ring.Count; i++)
             if (Ring[i].TryGet(me, out _) && (best == null || Math.Abs(Ring[i].T - t) < Math.Abs(best.T - t))) best = Ring[i];
-        return best != null && best.TryGet(me, out var s) ? new GlobalPos(s.E, s.N, s.Alt) : null;
+        return best != null && best.TryGet(me, out var s) ? GlobalPos.FromLv95(s.E, s.N, s.Alt) : null;
     }
 
     /// <summary>A note's top view: the ring's 10 s either side of it, centred on it, as a PNG beside its screenshot.</summary>

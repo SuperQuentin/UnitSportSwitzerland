@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using UnitSport.Core;
 
 namespace UnitSport.BattleRoyale;
 
@@ -162,6 +163,17 @@ public sealed class BrState
     }
     [JsonIgnore] public bool Running => Phase is BrPhase.Playing or BrPhase.Ended;
     [JsonIgnore] public BrArea Area => new(AreaE, AreaN, Side, AreaName);
+    /// <summary>The area's centre as a place (its easting and northing are the region catalogue's LV95 literals).</summary>
+    [JsonIgnore] public GlobalPos AreaCentre => GlobalPos.FromLv95(AreaE, AreaN, 0);
+    /// <summary>
+    /// A place as metres east/north of the area's centre (zone metres): LV95 grid metres, as <c>BrManager.ZonePoint</c> and
+    /// <c>WorldPoint</c> and the zone schedule keep them (#1502; the Earth's east and north differ by the convergence).
+    /// </summary>
+    public Godot.Vector2 ZonePointOf(GlobalPos p)
+    {
+        var l = p.Lv95;
+        return new Godot.Vector2((float)(l.E - AreaE), (float)(l.N - AreaN));
+    }
     /// <summary>This match's zone, the same on every peer; built once per (seed, side, pace, field).</summary>
     public ZoneSchedule Zone()
     {

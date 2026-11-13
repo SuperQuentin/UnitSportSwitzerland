@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Adventure.Places;
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.Adventure.Rewards;
@@ -17,11 +18,14 @@ public static class RewardPhotos
 
     private static readonly List<Vector3> Cows = new();
 
-    /// <summary>The camera's compass bearing and pitch (degrees): world X is east, −Z north.</summary>
-    public static (float Yaw, float Pitch) Aim(Camera3D cam)
+    /// <summary>
+    /// The camera's compass bearing from true north at the camera (#1504) and its pitch, degrees; with no world
+    /// (<paramref name="origin"/> null) the world's −Z is taken as north.
+    /// </summary>
+    public static (float Yaw, float Pitch) Aim(Camera3D cam, WorldOrigin? origin)
     {
         var f = -cam.GlobalTransform.Basis.Z;
-        float yaw = Mathf.RadToDeg(Mathf.Atan2(f.X, -f.Z));
+        float yaw = Mathf.RadToDeg(origin is { } o ? TrueNorth.Bearing(o.Frame, cam.GlobalPosition, f) : Mathf.Atan2(f.X, -f.Z));
         float pitch = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(f.Y, -1f, 1f)));
         return (yaw, pitch);
     }
@@ -31,9 +35,9 @@ public static class RewardPhotos
     {
         if (RewardService.Instance == null) return "";
         var g = player.Global;
-        var (yaw, pitch) = Aim(cam);
-        foreach (var s in PhotoSpots.At(g.E, g.N, PoiCatalogueHost.Current))
-            if (PhotoJudge.Judge(s, g.E, g.N, (float)g.Alt + 1.6f, yaw, pitch, fovDeg, (_, _) => null) == PhotoVerdict.Taken) return s.Id;
+        var (yaw, pitch) = Aim(cam, player.Origin);
+        foreach (var s in PhotoSpots.At(g, PoiCatalogueHost.Current))
+            if (PhotoJudge.Judge(s, g, (float)g.Alt + 1.6f, yaw, pitch, fovDeg, (_, _) => null) == PhotoVerdict.Taken) return s.Id;
         return "";
     }
 
@@ -42,9 +46,9 @@ public static class RewardPhotos
     {
         if (RewardService.Instance is not { } svc || AdventureService.Instance is not { } adv || !Ui.AdventureLog.Adventuring) return;
         var g = player.Global;
-        var (yaw, pitch) = Aim(cam);
+        var (yaw, pitch) = Aim(cam, player.Origin);
         var taken = adv.Mine.Get(PhotosProgress.Section).Taken;
-        foreach (var s in PhotoSpots.At(g.E, g.N, PoiCatalogueHost.Current))
+        foreach (var s in PhotoSpots.At(g, PoiCatalogueHost.Current))
             if (!taken.Contains(s.Id)) svc.ReportPhoto(s.Id, yaw, pitch, fovDeg);
         foreach (string name in AnimalsInFrame(cam, fovDeg)) svc.ReportFauna(name);
     }

@@ -70,7 +70,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Bowling: hold to swing, sideways for hook, let go to roll", PlayerInput.Jump),
             new("Telescope: E at a set-up telescope looks through it; E or Esc steps back", PlayerInput.InteractMount),
             new("Telescope: zoom", Keys: "wheel / + -", Pad: "D-pad ↑ ↓"),
-            new("Telescope: lock on the moon, or let go", PlayerInput.UseItem),
+            new("Telescope: lock on what is in the middle, or let go", PlayerInput.UseItem),
+            new("Telescope: slew to the previous / next sky object (moon, planets, big moons) and track it", Keys: "{telescope_prev} / {telescope_next}", Pad: "X / {telescope_next}"),
+            new("Telescope: show or hide the target's info (magnitude, distance, size, phase, height)", PlayerInput.TelescopeInfo),
             new("Festival alphorn row: sit down to the song; blow, pick the note, yodel", Keys: "{interact_mount}, hold {use_item}, wheel or {move_forward} / {move_back}, {jump}", Pad: "{interact_mount}, hold {use_item}, right stick ↑ ↓, {jump}"),
         }),
         ("Items", new Row[]
@@ -388,6 +390,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Cockpit view, without your body, chase camera", PlayerInput.CameraToggle),
             new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
+        ("Space shuttle", new Row[]
+        {
+            new("Rockets up / down (they never run out)", Keys: "{sprint} / {crouch_slide}", Pad: "{throttle} / {brake}"),
+            new("Pitch and roll (in space: the reaction jets; hands off, it holds its attitude)", Keys: "{move_forward}{move_left}{move_back}{move_right}", Pad: "{move_forward}"),
+            new("Above 60 km: the cruise drive on / off (on: the levers set its speed; off: a circular orbit)", PlayerInput.EngineToggle),
+            new("Gear up / down, wheel brakes, speedbrake, parking brake: as an airliner's", Keys: "{car_door} {jump} {speedbrake} {parking_brake}", Pad: "{car_door} {jump} {speedbrake}"),
+            new("Orbit 400 km up at once (offline, or an admin)", Keys: "/orbit 400", Pad: "—"),
+        }),
         ("UFO", new Row[]
         {
             new("Fly where you look (strafe sideways)", Keys: Wasd, Pad: "{move_forward}"),
@@ -510,7 +520,7 @@ public partial class ControlsHelp : CanvasLayer
     }
 
     /// <summary>The groups whose controls are used mounted: their VR names are the mounted ones.</summary>
-    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "UFO", "Flying" };
+    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "Space shuttle", "UFO", "Flying" };
 
     private static readonly Color KeyColor = new(1f, 0.84f, 0.42f);
     private static readonly Color PadColor = new(0.6f, 0.8f, 1f);

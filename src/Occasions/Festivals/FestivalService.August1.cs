@@ -78,18 +78,18 @@ public partial class FestivalService
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Go to the village.");
         return target switch
         {
-            August1LampionStand => ServeLampion(peer, p, run, site, at.E, at.N),
-            August1FireworkStand => ServeBox(peer, p, run, def, site, at.E, at.N),
-            August1Post => ServeWalkStart(peer, p, run, site, at.E, at.N),
-            _ => ServeLight(peer, run, at.E, at.N),
+            August1LampionStand => ServeLampion(peer, p, run, site, at),
+            August1FireworkStand => ServeBox(peer, p, run, def, site, at),
+            August1Post => ServeWalkStart(peer, p, run, site, at),
+            _ => ServeLight(peer, run, at),
         };
     }
 
     // ---- the stands ------------------------------------------------------------------------------------------
 
-    private string? ServeLampion(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, double e, double n)
+    private string? ServeLampion(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, GlobalPos at)
     {
-        if (!August1Rules.NearLampionStand(site, e, n)) return Tell(peer, "Go to the lampion stand first.");
+        if (!August1Rules.NearLampionStand(site, at)) return Tell(peer, "Go to the lampion stand first.");
         var key = (run.Instance, p.Key);
         if (_lamps.GetValueOrDefault(key) == run.Day) return Tell(peer, "You have your lampion for today.");
         _lamps[key] = run.Day;
@@ -99,9 +99,9 @@ public partial class FestivalService
         return null;
     }
 
-    private string? ServeBox(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeBox(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (!August1Rules.NearFireworkStand(site, e, n)) return Tell(peer, "Go to the fireworks stand first.");
+        if (!August1Rules.NearFireworkStand(site, at)) return Tell(peer, "Go to the fireworks stand first.");
         var key = (run.Instance, p.Key);
         var (day, count) = _boxes.GetValueOrDefault(key);
         if (day != run.Day) count = 0;
@@ -119,7 +119,7 @@ public partial class FestivalService
 
     // ---- the box ------------------------------------------------------------------------------------------------
 
-    private string? ServeLight(long peer, RunningFestival run, double e, double n)
+    private string? ServeLight(long peer, RunningFestival run, GlobalPos at)
     {
         if (!August1Rules.IsNight(Hour())) return Tell(peer, "Fireworks are for the night: after 20:30.");
         double now = GameClock.Now;
@@ -129,13 +129,14 @@ public partial class FestivalService
         double start = Net.ClockSync.SimNow + OwnLead;
         int seed = August1Rules.OwnSeed(run.Instance, ++_ownCount);
         August1Volleys++;
-        GD.Print($"[festival] a volley #{_ownCount} is lit at {e:F0},{n:F0}");
+        GD.Print($"[festival] a volley #{_ownCount} is lit at {at.Lv95.E:F0},{at.Lv95.N:F0}");
+        var (x, y, z) = at.ToWire();   // (#1503) the wire is ECEF
         foreach (long other in _adventure.Peers.ToArray())
         {
             if (other <= 0) continue;
-            if (_adventure.PositionOf?.Invoke(other) is { } at && August1Rules.Dist(at.E, at.N, (e, n)) > August1Rules.OwnRange) continue;
-            if (Connected(other)) RpcId(other, MethodName.ShowOwn, start, seed, e, n);
-            else if (!_networked) ShowOwn(start, seed, e, n);
+            if (_adventure.PositionOf?.Invoke(other) is { } viewer && viewer.HorizontalDistanceTo(at) > August1Rules.OwnRange) continue;
+            if (Connected(other)) RpcId(other, MethodName.ShowOwn, start, seed, x, y, z);
+            else if (!_networked) OwnShowTold?.Invoke(start, seed, at.Lv95.E, at.Lv95.N);
         }
         NoteAugust1(peer, August1Event.Lit, 0, 0, "The fireworks are lit: stand back.");
         return null;
@@ -143,9 +144,9 @@ public partial class FestivalService
 
     // ---- the lampion walk -------------------------------------------------------------------------------------------
 
-    private string? ServeWalkStart(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, double e, double n)
+    private string? ServeWalkStart(long peer, PlayerProgress p, RunningFestival run, ResolvedSite site, GlobalPos at)
     {
-        if (!August1Rules.NearPost(site, e, n)) return Tell(peer, "Go to the lampion post first.");
+        if (!August1Rules.NearPost(site, at)) return Tell(peer, "Go to the lampion post first.");
         if (!August1Rules.IsNight(Hour())) return Tell(peer, "The lampion walk starts after dark: from 20:30.");
         if (_lamps.GetValueOrDefault((run.Instance, p.Key)) != run.Day) return Tell(peer, "Take a lampion at the stand first.");
         var members = new List<long> { peer };
@@ -186,13 +187,13 @@ public partial class FestivalService
             }
             if (_adventure.PositionOf?.Invoke(leader) is not { } at) continue;
             var path = August1Rules.Path(site);
-            if (August1Rules.Dist(at.E, at.N, path[walk.Next]) > August1Rules.WaypointReach) continue;
+            if (August1Rules.Dist(at, path[walk.Next]) > August1Rules.WaypointReach) continue;
 
             // everyone who walks must be with the leader
             var behind = new List<long>();
             foreach (long member in walk.Members)
                 if (member != leader && (!_adventure.Active(member) || _adventure.PositionOf?.Invoke(member) is not { } mp
-                    || August1Rules.Dist(mp.E, mp.N, (at.E, at.N)) > August1Rules.Together)) behind.Add(member);
+                    || mp.HorizontalDistanceTo(at) > August1Rules.Together)) behind.Add(member);
             if (behind.Count > 0)
             {
                 if (now >= walk.NextWait)
@@ -275,5 +276,9 @@ public partial class FestivalService
     private void TellAugust1(int what, int a, int ms, string text) => August1Told?.Invoke((August1Event)what, a, ms, text);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ShowOwn(double start, int seed, double e, double n) => OwnShowTold?.Invoke(start, seed, e, n);
+    private void ShowOwn(double start, int seed, double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        OwnShowTold?.Invoke(start, seed, at.Lv95.E, at.Lv95.N);
+    }
 }

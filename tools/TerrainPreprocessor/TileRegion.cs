@@ -8,7 +8,7 @@ namespace UnitSport.Tools.Preprocessor;
 /// are one 94 x 55 km box for 826 tiles), so the box alone reads every feature in between: 214,670
 /// road lines there, of which 100,543 touch a built tile (#678).
 /// </summary>
-public sealed class TileRegion
+public sealed class TileRegion : ISourceRegion
 {
     /// <summary>
     /// One tile around the wanted ones. For lines, which look at their neighbours (a road ramps up
@@ -63,4 +63,23 @@ public sealed class TileRegion
     }
 
     public bool Touches(double x, double y) => Touches(x, x, y, y);
+}
+
+/// <summary>
+/// What a source read is for, in the source's own coordinates (#1507): the box the R-tree is asked, and a
+/// test of each feature's box against the wanted cells. <see cref="TileRegion"/> holds LV95 kilometre
+/// tiles, <see cref="LeafRegion"/> cube leaves; the readers take either.
+/// </summary>
+public interface ISourceRegion
+{
+    double MinE { get; }
+    double MinN { get; }
+    double MaxE { get; }
+    double MaxN { get; }
+    int Count { get; }
+
+    /// <summary>True when the box comes within the region's margin of a wanted cell, edges included. Thread-safe.</summary>
+    bool Touches(double minX, double maxX, double minY, double maxY);
+
+    bool Touches(double x, double y);
 }

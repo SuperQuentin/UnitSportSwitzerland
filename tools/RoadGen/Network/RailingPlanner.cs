@@ -1,5 +1,6 @@
 using System.Globalization;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
 
 namespace UnitSport.Tools.RoadGen.Network;
 
@@ -44,7 +45,7 @@ public static class RailingPlanner
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var props = new List<RoadLinearProp>();
-        double Ground(double x, double z) => ground(id.MinE + x, id.MaxN - z);
+        double Ground(double x, double z) => ground(Plane.West(id) + x, Plane.North(id) - z);
         var lines = new EmbankmentPlanner.LineIndex(segments);
 
         for (int w = 0; w < walls.Count; w++)

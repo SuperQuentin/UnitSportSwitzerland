@@ -92,7 +92,7 @@ public partial class BotDirector : Node
         for (int i = 0; i < count; i++)
         {
             double a = rng.NextDouble() * Math.Tau, r = 5 + rng.NextDouble() * 15;
-            var pos = new GlobalPos(at.E + Math.Cos(a) * r, at.N + Math.Sin(a) * r, 0);
+            var pos = GlobalPos.FromLv95(at.E + Math.Cos(a) * r, at.N + Math.Sin(a) * r, 0);
             if (Add(pos, (float)(rng.NextDouble() * Math.Tau), BotProfile.For(_seed, i, difficulty, taken)) != null) added++;
         }
         return added;

@@ -135,7 +135,7 @@ public partial class BirdNetProbe : ChatProbe
         // flushed everything around: B waits for newly spawned birds to settle near A first.
         await Seconds(1.0);
         // LV95: B's world space is not this one (every peer has its own origin, #185)
-        Say(string.Create(CultureInfo.InvariantCulture, $"at {me.Global.E:F0} {me.Global.N:F0}"));
+        Say(string.Create(CultureInfo.InvariantCulture, $"at {me.Global.Lv95.E:F0} {me.Global.Lv95.N:F0}"));
         if (!await Heard("B", "flushready", 70)) { Fail("B not ready for the flush"); return; }
         me.LookPitch = 1.2f;
         await Seconds(0.3);
@@ -221,7 +221,7 @@ public partial class BirdNetProbe : ChatProbe
         Expect(await Heard("A", "at", 30), "A says where it stands");
         var at = (_heard.LastOrDefault(l => l.Contains("PN A at")) ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var shooter = at.Length >= 2
-            ? new Core.GlobalPos(double.Parse(at[^2], CultureInfo.InvariantCulture), double.Parse(at[^1], CultureInfo.InvariantCulture), 0)
+            ? Core.GlobalPos.FromLv95(double.Parse(at[^2], CultureInfo.InvariantCulture), double.Parse(at[^1], CultureInfo.InvariantCulture), 0)
             : me.Global;
         // in this client's world space now, whatever it was when A said it
         Vector3 Shooter() => life.Origin.ToWorld(shooter);

@@ -60,7 +60,7 @@ public partial class FestivalService
         if (!Authority) return "Not here.";
         var run = Running.FirstOrDefault(r => r.Site != null && FestivalCatalog.Get(r.Id) is { } d && d.IsOpen(HornGround.GameId, r.Day));
         if (run?.Site is not { } site) return Tell(peer, "There is no alphorn to play now.");
-        if (_adventure.PositionOf?.Invoke(peer) is not { } at || !HornGround.Near(site, at.E, at.N, HornGround.ServerReachM))
+        if (_adventure.PositionOf?.Invoke(peer) is not { } at || !HornGround.Near(site, at, HornGround.ServerReachM))
             return Tell(peer, "Go to the alphorn row to play.");
         if (peer > 0 && !_adventure.Active(peer)) return Tell(peer, "No adventuring now.");
         if (peer > 0 && Connected(peer) && !Allowed(peer)) return "too fast";
@@ -97,7 +97,7 @@ public partial class FestivalService
         if (peer > 0 && GameClock.Now - voice.JoinedAt < session.Chart.Seconds * HornMinShare) return Tell(peer, "The song is not over yet.");
         if (peer > 0 && Connected(peer) && !Allowed(peer)) return "too fast";
         var run = RunningOf(session.Festival);
-        if (run?.Site is not { } site || _adventure.PositionOf?.Invoke(peer) is not { } at || !HornGround.Near(site, at.E, at.N, 40))
+        if (run?.Site is not { } site || _adventure.PositionOf?.Invoke(peer) is not { } at || !HornGround.Near(site, at, 40))
             return Tell(peer, "You left the row.");
         if (plays.Length > HornWire.MaxPlays || plays.Any(p => !AlphornRules.IsPartial(p.Partial) || p.On < 0 || p.Off < p.On)) return Tell(peer, "That song cannot be read.");
         voice.Plays = plays;

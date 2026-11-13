@@ -62,7 +62,7 @@ public partial class ErrandsPage : Control
             UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
         if (Where?.Invoke() is { } at)
         {
-            var (ce, cn) = Postkarte.CellOf(at.E, at.N);
+            var (ce, cn) = Postkarte.CellOf(at);
             var cards = svc.CardsIn(ce, cn);
             if (cards.Count == 0) _list.AddChild(UiKit.Text("No givers in this part of the country. Look for a post office, an alp dairy, a hut or a station.", UiTheme.FontSmall, UiTheme.TextFaint, wrap: true));
             foreach (var card in cards) _list.AddChild(CardRow(card, ErrandService.StateOf(mine, card.Id)));
@@ -73,11 +73,11 @@ public partial class ErrandsPage : Control
         {
             long self = Multiplayer.GetUniqueId();
             var seen = new HashSet<(int, int)>();
-            if (Where?.Invoke() is { } here) seen.Add(Postkarte.CellOf(here.E, here.N));
+            if (Where?.Invoke() is { } here) seen.Add(Postkarte.CellOf(here));
             foreach (var (peer, name) in party.Members)
             {
                 if (peer == self || Navigation.AdventureCompass.PeerAt(peer) is not { } far) continue;
-                var cell = Postkarte.CellOf(far.E, far.N);
+                var cell = Postkarte.CellOf(far);
                 if (!seen.Add(cell)) continue;
                 var theirs = svc.CardsIn(cell.E, cell.N);
                 if (theirs.Count == 0) continue;

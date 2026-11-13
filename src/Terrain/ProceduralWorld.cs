@@ -443,6 +443,23 @@ public sealed partial class ProceduralWorld
     /// <summary>Terrain height in metres at an LV95 position.</summary>
     public double Height(double e, double n) => Height(null, e, n);
 
+    /// <summary>
+    /// How far into one of the generator's lakes a point is (0..1, water above 0.5) and that lake's level above sea level
+    /// (#1678: the earth world's fill on the globe's pyramid keeps the generator's relief but not its lakes,
+    /// <c>Leaves/PyramidFill</c>).
+    /// </summary>
+    public static (double Lake, double Level) LakeAt(double e, double n)
+    {
+        double lake = LakeField(e, n, out double level, out _);
+        return (lake, level);
+    }
+
+    /// <summary>
+    /// <see cref="Height(double, double)"/> through <paramref name="tile"/>'s cached lattices, for many points in or round
+    /// it (a cube leaf's vertices, #1509): the same arithmetic on the same corners.
+    /// </summary>
+    public double HeightIn(TileId tile, double e, double n) => Height(LatticeFor(tile, fine: true), e, n);
+
     /// <summary>The height at a 5 m lattice point, its coarse field from a tile's lattice or on the spot.</summary>
     private static double FineHeight(Lattice? lattice, long i, long j) =>
         Combine(SampleCoarse(lattice, i * (double)FineM, j * (double)FineM), FineAt(i, j));
@@ -479,6 +496,12 @@ public sealed partial class ProceduralWorld
     private readonly Queue<TileId> _latticeOrder = new();
 
     /// <summary>
+    /// Tiles whose lattices are kept (~0.35 MB each with the fine one): a fill leaf's roads read the ground over a 5 x 5
+    /// leaves' halo, ~25 tiles, beside the leaves' own and the globe's far heights; 16 rebuilt them constantly (#1699).
+    /// </summary>
+    private const int KeptLattices = 64;
+
+    /// <summary>
     /// A tile's lattices, kept for a few tiles: its grid, cover, trees, roads and buildings all
     /// read them. The coarse one is cheap and always there; the fine one only when asked for.
     /// </summary>
@@ -509,7 +532,7 @@ public sealed partial class ProceduralWorld
                 {
                     _lattices[id] = lattice;
                     _latticeOrder.Enqueue(id);
-                    while (_latticeOrder.Count > 16) _lattices.Remove(_latticeOrder.Dequeue());
+                    while (_latticeOrder.Count > KeptLattices) _lattices.Remove(_latticeOrder.Dequeue());
                 }
             }
         }

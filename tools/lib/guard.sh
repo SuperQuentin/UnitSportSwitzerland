@@ -350,7 +350,27 @@ guard_run() {
   kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
   [ -s "$why" ] && code=$(cat "$why")
   rm -f "$why"
+  _guard_note_peak "$log"
   return "$code"
+}
+
+# GUARD_PEAK_FILE (#1702): every guard_run appends the peak its Godot printed as it quit ("[mem] peak N MB",
+# GameSettings.PrintTestPeakMemory), one line in MB. tools/test.sh sets it per check, so a two-client script's
+# server and clients add up there: their sum, an upper bound of the check's peak, admits its next run.
+_guard_note_peak() {
+  # a script's own log may hold its Godots' lines too: test.sh sets _guard_no_peak (not exported) around it
+  [ -n "${GUARD_PEAK_FILE:-}" ] && [ -f "$1" ] && [ "${_guard_no_peak:-0}" != 1 ] || return 0
+  local line mb=
+  while read -r line; do mb=${line#*peak }; mb=${mb%% *}; done < <(grep -a '^\[mem\] peak [0-9]* MB' "$1" 2>/dev/null)
+  [ -n "$mb" ] && echo "$mb" >> "$GUARD_PEAK_FILE"
+  return 0
+}
+
+# guard_peak_sum <file>: the MB the file's lines add up to, 0 when there are none
+guard_peak_sum() {
+  local s=0 l
+  [ -f "$1" ] && while read -r l; do [ -n "$l" ] && s=$(( s + l )); done < "$1"
+  echo "$s"
 }
 
 guard_watch() {
@@ -382,4 +402,24 @@ guard_watch() {
     done
   ) > /dev/null &   # never hold the caller's $(...) pipe open, or `w=$(guard_watch ...)` hangs
   echo $!
+}
+
+# TEST_FRAME=earth|flat (#1683): the frame a net check's Godots play in. guard_frame_args sets FRAME_ARGS
+# (--frame <frame>, empty when unset) for each server and client; guard_frame_check <name> <logs...> prints a
+# FAILED RESULT line and returns 1 for every log that does not state that frame ("[frame] <frame>", printed by
+# ServerWorld and ClientWorld on every run; "[frame] none" by a process with no world, the swarm), so a silent fallback to the other frame never reads as a pass
+guard_frame_args() { FRAME_ARGS=(); [ -n "${TEST_FRAME:-}" ] && FRAME_ARGS=(--frame "$TEST_FRAME"); return 0; }
+guard_frame_check() {
+  [ -z "${TEST_FRAME:-}" ] && return 0
+  local name=$1 log said bad=0
+  shift
+  for log; do
+    [ -f "$log" ] || continue
+    grep -aq "\[frame\] $TEST_FRAME" "$log" && continue
+    grep -aq "\[frame\] none" "$log" && continue   # a process with no world (the swarm) says so
+    said=$(grep -a '\[frame\]' "$log" | head -1 | tr -d '\r')
+    echo "[$name] RESULT: FAILED ($log is not in frame $TEST_FRAME: ${said:-no [frame] line})"
+    bad=1
+  done
+  return $bad
 }

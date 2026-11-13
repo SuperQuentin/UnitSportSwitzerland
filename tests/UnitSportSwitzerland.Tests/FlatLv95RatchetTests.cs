@@ -39,6 +39,25 @@ public class FlatLv95RatchetTests
         new("LV95 tile neighbour arithmetic",
             new(@"new\s+TileId\(\s*[\w.]+\s*[+-]", RegexOptions.Compiled),
             Baseline: 1, Instead: "a neighbour lookup on the tile key (G0c)"),
+        // an LV95 easting or northing read off anything (GlobalPos, TileId, a frame, a record): G2 removes them
+        // all (#1500, A1 #1502); a person's LV95 goes through GlobalPos.Lv95 / FromLv95, which still count
+        new("LV95 coordinate member",
+            new(@"\w\)?\.(E|N)\b(?!\s*\()", RegexOptions.Compiled),
+            // 4150 on main before G2 A2 (#1503), 4162 after the wire's step (the records' E/N read at the RPC edge); 4134
+            // after A2b: the saves keep Earth places, and records whose file moved hold a GlobalPos (sleepers) or give one
+            // (placed objects, structures, pins, the travel flag), which the RPC edges now read; 4091 after A1's last step
+            // (#1502): GlobalPos has no E/N, what is left reads its LV95 notation (`.Lv95.E`) or a record's LV95 fields;
+            // 4039 after C5 (#1514): GPX tracks lie on their own plane (X/Y), not LV95; 4037 after C4 (#1513): entity
+            // interest buckets by cube cell; 4018 after #1684's follow-up: a stadium's place is StadiumSpec.Centre;
+            // 4016 after #1735: a dormant slot placed by DormantVehicles.WorldOf
+            Baseline: 4016, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+        // the flat world's escape hatches out of IWorldGround (#1532, G2 C1): an LV95 tile key read off a
+        // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; 32 after #1532,
+        // 0 since #1684: gameplay asks IWorldGround.ContentName / Content, and the flat world's own Flat / FlatId stay
+        // in ChunkManager (Flat_tile_keys_stay_in_the_flat_world)
+        new("flat ground escape hatch",
+            new(@"\.Lv95Tile\b|\bGroundTile\.FromLv95\(|\bChunkManager\.Of\(", RegexOptions.Compiled),
+            Baseline: 0, Instead: "the GroundTile itself, or IWorldGround's own queries (TileAt, GroundAt, ContentName, Content)"),
     };
 
     private static readonly Regex Comment = new(@"//.*?$|/\*.*?\*/", RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.Singleline);
@@ -80,6 +99,27 @@ public class FlatLv95RatchetTests
                 _out.WriteLine($"  fewer than the baseline: lower it to {counts[i]} in this commit");
         }
         Assert.True(grown.Count == 0, "Flat LV95 arithmetic grew (#1443):\n" + string.Join("\n", grown));
+    }
+
+    /// <summary>
+    /// #1684: a <c>GroundTile</c> is made from an LV95 tile key, or read back to one, by the flat world alone
+    /// (<c>ChunkManager</c>, which step D deletes); everything else asks the ground.
+    /// </summary>
+    [Fact]
+    public void Flat_tile_keys_stay_in_the_flat_world()
+    {
+        string root = Root();
+        var flat = new Regex(@"\bGroundTile\.Flat\(|\.FlatId\b", RegexOptions.Compiled);
+        var outside = new List<string>();
+        foreach (string file in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            if (relative is "src/Terrain/GroundTile.cs" || relative.StartsWith("src/Terrain/ChunkManager", StringComparison.Ordinal)) continue;
+            string text = Strings.Replace(Comment.Replace(File.ReadAllText(file), ""), "\"\"");
+            if (flat.IsMatch(text)) outside.Add(relative);
+        }
+        Assert.True(outside.Count == 0, "GroundTile.Flat / FlatId outside the flat world (#1684): " + string.Join(", ", outside)
+            + "; ask the ground (IWorldGround.TileAt, ContentName, Content) instead");
     }
 
     private static string Root()

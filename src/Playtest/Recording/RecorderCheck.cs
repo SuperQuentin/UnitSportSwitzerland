@@ -90,8 +90,8 @@ public partial class RecorderCheck : Node
         {
             var traced = reader.Entities.Values.FirstOrDefault(e => !e.IsPlayer && e.Name == car.Name);
             bool there = traced != null && frames.Where(f => f.T > 3).Any(f => f.TryGet(traced.Id, out var s)
-                && Math.Abs(s.E - car.At.E) < 2 && Math.Abs(s.N - car.At.N) < 2);
-            Expect(there, FormattableString.Invariant($"{car.Name} ({traced?.Label}) is traced where the scenario put it ({car.At.E:F1}, {car.At.N:F1}), size {(traced == null ? "-" : string.Join(" x ", traced.Size.Select(v => v.ToString(System.Globalization.CultureInfo.InvariantCulture))))}"));
+                && Math.Abs(s.E - car.At.Lv95.E) < 2 && Math.Abs(s.N - car.At.Lv95.N) < 2);
+            Expect(there, FormattableString.Invariant($"{car.Name} ({traced?.Label}) is traced where the scenario put it ({car.At.Lv95.E:F1}, {car.At.Lv95.N:F1}), size {(traced == null ? "-" : string.Join(" x ", traced.Size.Select(v => v.ToString(System.Globalization.CultureInfo.InvariantCulture))))}"));
         }
         string report = Path.Combine(dir, SessionReport.ReportFile);
         string text = File.Exists(report) ? File.ReadAllText(report) : "";

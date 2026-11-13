@@ -17,7 +17,7 @@ public readonly record struct TerraceItem(TerraceKind Kind, Vector3 At, float Ya
 /// Terraces in front of restaurants, cafés and bars (#1243, epic #1232): bistro tables under parasols or
 /// an awning, beer benches in front of a beer garden, planters at the ends, a menu board by the door.
 /// Numbers in <c>docs/notes/terrain/venue-dining.md</c>, the rules in <c>docs/notes/terrain/terraces.md</c>.
-/// Client only, as <see cref="VenueSigns"/>: on <see cref="ChunkManager.TileFurnished"/>, once the tile's
+/// Client only, as <see cref="VenueSigns"/>: on <see cref="IWorldGround.TileFurnished"/>, once the tile's
 /// roads are loaded (as <see cref="OccasionDecor"/> waits for them), parented to the tile's node. Solid
 /// on the trees' layer (<see cref="World.TreeColliders.Layer"/>): walkers and cars stop, the chase camera
 /// does not. A pure function of the tile, so every client lays the same.
@@ -37,15 +37,15 @@ public partial class VenueTerraces : Node
     /// <summary><c>--terracelog</c>: why each terrace is or is not there.</summary>
     private static readonly bool Log = CmdArgs.Has("--terracelog");
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly IChunkSource _source;
     private ShaderMaterial _material = null!;
     private int _epoch;
 
-    public VenueTerraces(ChunkManager chunks, IChunkSource source)
+    public VenueTerraces(IWorldGround ground, IChunkSource source)
     {
         Name = NodeName;
-        _chunks = chunks;
+        _ground = ground;
         _source = source;
     }
 
@@ -193,26 +193,27 @@ public partial class VenueTerraces : Node
         _material.SetShaderParameter("flicker", 0f);
         FogUniforms.Apply(_material);
         GameSettings.Changed += ApplyFog;
-        if (_chunks == null) return;
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        if (_ground == null) return;
+        _ground.TileFurnished += OnFurnished;
+        _ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
         _epoch++;
         GameSettings.Changed -= ApplyFog;
-        if (_chunks == null) return;
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        if (_ground == null) return;
+        _ground.TileFurnished -= OnFurnished;
+        _ground.TileUnfurnished -= OnUnfurnished;
     }
 
     private void ApplyFog() => FogUniforms.Apply(_material);
 
-    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
+    private static void OnUnfurnished(GroundTile tile, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
-    private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
+    private void OnFurnished(GroundTile tile, ChunkNode node, DoorSpot[] doors)
     {
+        var id = _ground.ContentName(tile);
         node.GetNodeOrNull(NodeName)?.QueueFree();
         if (!doors.Any(d => d.Venue > 0 && Wants(Venues.At(d.Venue - 1)))) return;
         int epoch = _epoch;
@@ -261,7 +262,7 @@ public partial class VenueTerraces : Node
         float? Ground(Vector3 local)
         {
             var world = node.ToGlobal(local);
-            return _chunks.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : null;
+            return _ground.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : null;
         }
         Node3D? root = null;
         StaticBody3D? body = null;

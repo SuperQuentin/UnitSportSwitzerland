@@ -23,7 +23,7 @@ public static class AirLiftField
     /// <summary>The ground of the tiles in use, LV95 in and out.</summary>
     private sealed class ChunkTerrain : IAirLiftTerrain
     {
-        public ChunkManager? Chunks;
+        public IWorldGround? Chunks;
         public WorldOrigin? Origin;
 
         public bool TryHeight(double e, double n, out float height)
@@ -54,7 +54,7 @@ public static class AirLiftField
     public static IAirLiftTerrain Terrain => Ground;
 
     /// <summary>Points the field at the tiles in use (the flyer's own chunks and origin); cheap when unchanged.</summary>
-    public static void Use(ChunkManager? chunks, WorldOrigin? origin)
+    public static void Use(IWorldGround? chunks, WorldOrigin? origin)
     {
         if (ReferenceEquals(Ground.Chunks, chunks) && ReferenceEquals(Ground.Origin, origin)) return;
         Ground.Chunks = chunks;
@@ -72,15 +72,18 @@ public static class AirLiftField
         double now = Net.ClockSync.SimNow;
         SyncCampfires(now);
         var p = origin.ToGlobal(global);
-        return AirLift.At(p.E, p.N, (float)p.Alt, now, Ground);
+        return AirLift.At(p.Lv95.E, p.Lv95.N, (float)p.Alt, now, Ground);
     }
 
-    /// <summary>The thermals alive near a world point (the cues), strongest first; how many were written.</summary>
-    public static int ThermalsNear(Vector3 global, double radius, Span<Thermal> into)
+    /// <summary>
+    /// The thermals alive near a world point (the cues), strongest first; how many were written. <paramref name="ahead"/>
+    /// seconds on the clock: as they will be then (a thermal breathes, a check picks one that lasts its sortie).
+    /// </summary>
+    public static int ThermalsNear(Vector3 global, double radius, Span<Thermal> into, double ahead = 0)
     {
         if (!Permissions.LiftOn || Ground.Origin is not { } origin) return 0;
         var p = origin.ToGlobal(global);
-        return AirLift.ThermalsNear(p.E, p.N, radius, Net.ClockSync.SimNow, Ground, into);
+        return AirLift.ThermalsNear(p.Lv95.E, p.Lv95.N, radius, Net.ClockSync.SimNow + ahead, Ground, into);
     }
 
     /// <summary>A thermal's source as a world point (the cues place their specks there).</summary>

@@ -47,7 +47,7 @@ public partial class JazzCheck : ChatProbe
         Teleport(e, n);
     }
 
-    private static float StadiumAzimuth => Terrain.Stadiums.StadiumCatalog.MontreuxJazzOpenAir.AzimuthDeg;
+    private static float StadiumAzimuth => Terrain.Stadiums.StadiumCatalog.MontreuxJazzOpenAir.LocalAzimuthDeg;
 
     private int Count(ItemId id)
     {
@@ -111,11 +111,11 @@ public partial class JazzCheck : ChatProbe
             var venue = Terrain.Stadiums.StadiumCatalog.MontreuxJazzOpenAir;
             var origin = Me!.Origin!;
             var w = origin.ToWorld(site.E, site.N, 0);
-            float a = Mathf.DegToRad(venue.AzimuthDeg);
+            float a = Mathf.DegToRad(venue.AzimuthDeg) + TrueNorth.NorthBearing(origin.Frame, w);
             var basis = new Basis(new Vector3(MathF.Cos(a), 0, MathF.Sin(a)), Vector3.Up, new Vector3(-MathF.Sin(a), 0, MathF.Cos(a)));
             var rig = new ConcertRig(e) { Name = "JazzStage", Transform = new Transform3D(basis, w with { Y = Me.GlobalPosition.Y - 0.9f }), ForceLive = true };
             GetParent().AddChild(rig);
-            var (fe, fn) = MontreuxJazzRules.FromFrame(site.E, site.N, venue.AzimuthDeg, 0, MontreuxJazzRules.FrontV + 14f);
+            var (fe, fn) = MontreuxJazzRules.FromFrame(site.E, site.N, venue.LocalAzimuthDeg, 0, MontreuxJazzRules.FrontV + 14f);
             var from = origin.ToWorld(fe, fn, 0);
             var look = origin.ToWorld(MontreuxJazzRules.StageFront(site).E, MontreuxJazzRules.StageFront(site).N, 0);
             Me.PlaceAt(new Vector3(from.X, Me.GlobalPosition.Y, from.Z), Mathf.Atan2(-(look.X - from.X), -(look.Z - from.Z)));
@@ -164,7 +164,7 @@ public partial class JazzCheck : ChatProbe
         Expect(await UntilSongStart(e, 1), "the second song begins");
         Stand(site, 36.5f);
         await Seconds(0.5);
-        Expect(!MontreuxJazzRules.InZone(site, Me!.Global.E, Me.Global.N), "the lurker stands 36.5 m from the stage: outside the zone");
+        Expect(!MontreuxJazzRules.InZone(site, Me!.Global), "the lurker stands 36.5 m from the stage: outside the zone");
         paid = Svc.MontreuxSongsPaid; before = Mine.Batzen;
         Expect(await Until(() => Moment(e).Part != JazzPart.Song, 40), "the second song ends");
         await Seconds(0.6);

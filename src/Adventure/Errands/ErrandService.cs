@@ -122,7 +122,7 @@ public partial class ErrandService : Node
         if (Source.Find(cardId) is not { } offer || offer.Giver.Id != giver.Id || !ErrandClock.Alive(offer.Day, Today))
             return Refuse(peer, "That card is no longer on offer.");
         if (_adventure.PositionOf?.Invoke(peer) is not { } at
-            || Math.Sqrt((at.E - giver.E) * (at.E - giver.E) + (at.N - giver.N) * (at.N - giver.N)) > ReachM + SlackM)
+            || at.HorizontalDistanceTo(giver.Pos) > ReachM + SlackM)
             return Refuse(peer, $"Go and see {giver.Name} for it.");
         return Take(peer, p, offer, "Three cards a day: come back tomorrow.");
     }

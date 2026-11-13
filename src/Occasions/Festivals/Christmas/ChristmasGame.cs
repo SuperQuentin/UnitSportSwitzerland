@@ -115,8 +115,8 @@ public partial class ChristmasGame : CanvasLayer
         if (_svc?.MarketNow() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            stall = ChristmasRules.NearestStall(m.Site, g.E, g.N);
-            chlaus = stall < 0 && ChristmasRules.NearSamichlaus(m.Site, g.E, g.N);
+            stall = ChristmasRules.NearestStall(m.Site, g);
+            chlaus = stall < 0 && ChristmasRules.NearSamichlaus(m.Site, g);
         }
         bool shown = stall >= 0 || chlaus || GameClock.Now - _messageAt < 4;
         if (stall != _stall || chlaus != _chlaus) _view.QueueRedraw();

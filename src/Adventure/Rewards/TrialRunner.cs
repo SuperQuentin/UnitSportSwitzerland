@@ -17,7 +17,8 @@ public partial class TrialRunner : Node3D
 {
     private readonly Func<FootPlayer?> _me;
     private readonly Func<WorldOrigin?> _origin;
-    private readonly Func<ChunkManager?> _chunks;
+    /// <summary>The world's ground, the earth leaves under --frame earth (#1739).</summary>
+    private readonly Func<IWorldGround?> _ground;
     private readonly List<MeshInstance3D> _gates = new();
     private readonly List<GhostTrack.Sample> _samples = new();
     private Runner? _ghost;
@@ -32,11 +33,11 @@ public partial class TrialRunner : Node3D
     /// <summary>A ghost runs beside us (checks).</summary>
     public bool HasGhost => _ghost != null;
 
-    public TrialRunner(Func<FootPlayer?> me, Func<WorldOrigin?> origin, Func<ChunkManager?> chunks)
+    public TrialRunner(Func<FootPlayer?> me, Func<WorldOrigin?> origin, Func<IWorldGround?> ground)
     {
         _me = me;
         _origin = origin;
-        _chunks = chunks;
+        _ground = ground;
         Name = "TrialRunner";
     }
 
@@ -104,17 +105,22 @@ public partial class TrialRunner : Node3D
 
     private void OnGhost(string id, List<GhostTrack.Sample> samples)
     {
-        if (RewardService.Instance?.Trial?.Id != id || _chunks() is not { } chunks || _origin() is not { } origin || samples.Count < 2) return;
+        if (RewardService.Instance?.Trial?.Id != id || _ground() is not { } ground || _origin() is not { } origin || samples.Count < 2) return;
+        // the ghost's LV95 samples on a plane centred on its start, as a GPX track lies (#1514)
+        var places = samples.Select(s => GlobalPos.FromLv95(s.E, s.N, s.Alt)).ToList();
+        var plane = UnitSport.Terrain.Format.MapProjection.At(places[0].Ecef);
         var points = new List<TrackPoint>(samples.Count);
-        double dist = 0;
+        double dist = 0, px = 0, py = 0;
         for (int i = 0; i < samples.Count; i++)
         {
-            if (i > 0) dist += Math.Sqrt((samples[i].E - samples[i - 1].E) * (samples[i].E - samples[i - 1].E) + (samples[i].N - samples[i - 1].N) * (samples[i].N - samples[i - 1].N));
-            points.Add(new TrackPoint(samples[i].E, samples[i].N, samples[i].Alt, i / GhostTrack.Rate, dist));
+            var (x, y) = plane.Forward(places[i].Ecef);
+            if (i > 0) dist += TrackPlane.Length(plane, px, py, x, y);
+            (px, py) = (x, y);
+            points.Add(new TrackPoint(x, y, samples[i].Alt, i / GhostTrack.Rate, dist));
         }
-        var track = new GpxTrack { Name = "Ghost", Points = points, HasTiming = true, ElevationIsSurface = true };
+        var track = new GpxTrack { Name = "Ghost", Plane = plane, Points = points, HasTiming = true, ElevationIsSurface = true };
         _ghost?.QueueFree();
-        _ghost = Runner.Create(track, chunks, origin, 1);
+        _ghost = Runner.Create(track, ground, origin, 1);
         GetParent().AddChild(_ghost);
         _ghostStart = RewardService.Instance!.Trial!.Since;
         GD.Print($"[rewards] racing a ghost of {id} ({samples.Count} samples)");
@@ -136,14 +142,16 @@ public partial class TrialRunner : Node3D
         if (now >= _nextSample && _samples.Count * 16 < GhostTrack.MaxBytes - 64)
         {
             _nextSample = now + 1 / GhostTrack.Rate;
-            _samples.Add(new GhostTrack.Sample(at.E, at.N, (float)at.Alt, me.GlobalRotation.Y));
+            // the heading in GlobalPos's axes, as a ghost's samples keep it (#1503: the same as the world's on the ground)
+            _samples.Add(new GhostTrack.Sample(at.Lv95.E, at.Lv95.N, (float)at.Alt, me.GlobalYaw));
         }
         _ghost?.UpdateTo(now - _ghostStart, 1, delta);
         // a gate the server did not count (the body's published position lagged) is reported again a second later
         if (t.Next >= t.Gates.Length || t.Next == _sent && now - _sentAt < 1.0) return;
         var g = t.Gates[t.Next];
-        double dz = at.Alt - g.Alt;
-        double d2 = GlobalPos.HorizontalDistanceSquared(at.E, at.N, g.E, g.N) + (_glide ? dz * dz : 0);
+        var gate = GlobalPos.FromLv95(g.E, g.N, g.Alt);
+        double dz = -at.OffsetTo(gate).Up;
+        double d2 = at.HorizontalDistanceSquaredTo(gate) + (_glide ? dz * dz : 0);
         if (d2 > g.Radius * g.Radius || !_glide && Math.Abs(dz) > 15) return;
         _sent = t.Next;
         _sentAt = now;

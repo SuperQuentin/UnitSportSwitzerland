@@ -224,15 +224,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     public void OnOriginShifted(Core.OriginShift shift)
     {
-        var done = new HashSet<LaneEdge>();
-        _roads?.Shift(shift, _origin.Frame, done);
-        _rails?.Shift(shift, _origin.Frame, done);
-        ShiftModes(shift, done);
+        int pass = LaneEdge.NewShiftPass();
+        _roads?.Shift(shift, _origin.Frame, pass);
+        _rails?.Shift(shift, _origin.Frame, pass);
+        ShiftModes(shift, pass);
         foreach (var v in _cars.Concat(_trains))
         {
             // a vehicle may still be on an edge of an older graph
-            foreach (var (edge, _) in v.Route.Legs)
-                if (done.Add(edge)) edge.Shift(shift);
+            foreach (var (edge, _) in v.Route.Legs) edge.ShiftOnce(shift, pass);
             v.Head = shift.Point(v.Head);
             v.Vel = shift.Direction(v.Vel);
             for (int i = 0; i < v.Path.Length; i++) v.Path[i] = shift.Point(v.Path[i]);
@@ -242,7 +241,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     // ---- roads ---------------------------------------------------------------------------
 
-    private static bool IsCarRoad(RoadSegment s) =>
+    internal static bool IsCarRoad(RoadSegment s) =>
         s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp or RoadClass.Major
             or RoadClass.Road or RoadClass.Minor or RoadClass.Lane
         && (s.Flags & RoadFlags.Stairs) == 0;
@@ -269,6 +268,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _roads = _rails = _walks = _rides = _tramLines = null;
         _modesBuilt = 0;
         _builtAround = null;
+        _builtLeaf = null;
         _building = false;
     }
 
@@ -295,7 +295,14 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
 
     private void RebuildIfMoved(Vector3 focus)
     {
-        if (_building || _chunks.Source is not { } source) return;
+        if (_building) return;
+        // the earth world (#1636): the graphs from the leaves round the view, not LV95 tiles
+        if (LeafRoads is { } leafRoads)
+        {
+            RebuildOnLeaves(focus, leafRoads);
+            return;
+        }
+        if (_chunks.Source is not { } source) return;
         int epoch = _epoch;
         var (e, n) = _origin.ToLv95(focus);
         var here = TileId.FromLv95(e, n);
@@ -319,12 +326,32 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                     catch (Exception) { /* no roads there */ }
                 }
             var near = tiles.Where(t => Math.Abs(t.Id.E - here.E) <= 2 && Math.Abs(t.Id.N - here.N) <= 2).ToList();
+            BuildGraphs(tiles, near, origin, wanted, epoch, here.ToString(), null, () => _builtAround = here);
+        });
+    }
+
+    /// <summary>
+    /// On a worker: the graphs from the road tiles read (<paramref name="tiles"/> the wide set for rails, trams and the modes,
+    /// <paramref name="near"/> the roads'), handed to the main thread in its current frame; <paramref name="built"/> there records
+    /// what they were built around. A build that throws is logged and counts as built there: it is tried again once the view
+    /// moves on (before, the exception was lost and the traffic never rebuilt again).
+    /// </summary>
+    private void BuildGraphs(List<RoadTile> tiles, List<RoadTile> near, OriginFrame origin, uint wanted, int epoch, string here,
+        Vector3? around, Action built)
+    {
+        try
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            double Ms() => System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
             var roads = LaneGraph.Build(near, origin, IsCarRoad);
             int deadBefore = roads.DeadEnds;
             roads.JoinTrimmedEnds();
+            double roadsMs = Ms();
             var rails = LaneGraph.Build(tiles, origin, IsRail, MoverKind.Train);
+            double railsMs = Ms();
             // the modes' own graphs (#1060), each from its builder in its own file: none unless its density asks for movers
-            var (walks, rides, trams) = wanted == 0 ? default : BuildModeGraphs(new ModeTiles(tiles, near, origin, roads, rails), wanted);
+            var (walks, rides, trams) = wanted == 0 ? default
+                : BuildModeGraphs(new ModeTiles(tiles, near, origin, roads, rails) { Around = around }, wanted);
             if (walks is not null || rides is not null || trams is not null)
                 GD.Print($"[traffic] around {here}: {walks?.Edges.Count ?? 0} walk edges, {rides?.Edges.Count ?? 0} ride edges, {trams?.Edges.Count ?? 0} tram edges");
             int divided = roads.Edges.Count(x => (x.Flags & RoadFlags.Divided) != 0);
@@ -334,6 +361,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             long directions = roads.Edges.Where(x => x.OneWay != 0).Sum(x => (long)Mathf.RoundToInt(x.Length * 10) * 3 + x.OneWay);
             GD.Print($"[traffic] around {here}: {roads.Edges.Count} road edges ({oriented}/{divided} divided "
                 + $"carriageways oriented, {yielding} giving way at an end), {rails.Edges.Count} rail edges, dead ends {deadBefore} -> {roads.DeadEnds} joined across junctions, one-way fingerprint {directions}");
+            GD.Print($"[traffic] built around {here} in {Ms():F0} ms (roads {roadsMs:F0}, rails {railsMs - roadsMs:F0}, modes {Ms() - railsMs:F0})");
             Callable.From(() =>
             {
                 if (epoch != _epoch) return;   // built from the world that was replaced
@@ -341,21 +369,27 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 {
                     // the origin moved while it was being built: bring it into the current frame
                     var shift = _origin.Since(origin);
-                    roads.Shift(shift, _origin.Frame, new());
-                    rails.Shift(shift, _origin.Frame, new());
-                    // (a mode's graph may hold the roads' or rails' own edges: each moves once)
-                    var moved = new HashSet<LaneEdge>(roads.Edges.Concat(rails.Edges));
-                    walks?.Shift(shift, _origin.Frame, moved);
-                    rides?.Shift(shift, _origin.Frame, moved);
-                    trams?.Shift(shift, _origin.Frame, moved);
+                    // (a mode's graph may hold the roads' or rails' own edges: each moves once in a pass)
+                    int pass = LaneEdge.NewShiftPass();
+                    roads.Shift(shift, _origin.Frame, pass);
+                    rails.Shift(shift, _origin.Frame, pass);
+                    walks?.Shift(shift, _origin.Frame, pass);
+                    rides?.Shift(shift, _origin.Frame, pass);
+                    trams?.Shift(shift, _origin.Frame, pass);
                 }
                 _roads = roads;
                 _rails = rails;
                 (_walks, _rides, _tramLines, _modesBuilt) = (walks, rides, trams, wanted);
-                _builtAround = here;
+                built();
                 _building = false;
             }).CallDeferred();
-        });
+        }
+        catch (Exception x)
+        {
+            GD.PushError($"[traffic] building the graphs around {here} failed: {x}");
+            // (not tried again until the view moves on: a broken tile would fail every frame)
+            Callable.From(() => { if (epoch != _epoch) return; built(); _building = false; }).CallDeferred();
+        }
     }
 
     // ---- the loop ------------------------------------------------------------------------
@@ -1942,7 +1976,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// direction (#700: where the road has the lanes and a car's habit takes the next lane in: a third of
     /// them on 2+ lanes), clear of a painted bike lane.
     /// </summary>
-    private static float KeepRight(LaneEdge e, bool forward, uint habit)
+    internal static float KeepRight(LaneEdge e, bool forward, uint habit)
     {
         if (e.OneWay != 0) return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0 ? e.RightLane - e.LaneWidth : e.RightLane;
         if ((e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp) return 0f;
@@ -2271,6 +2305,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         _trains.Clear();
         ClearMovers();
         _builtAround = null;
+        _builtLeaf = null;
     }
 
     /// <summary>Removes the cars within <paramref name="radius"/> m of a point: a race grid is not lined up in the middle of the traffic.</summary>

@@ -38,7 +38,8 @@ public partial class HornNetProbe : ChatProbe
         // at the row
         var (rowE, rowN) = HornGround.SpotOf(site);
         var g0 = Me!.Global;
-        Me.PlaceAt(Me.GlobalPosition + new Vector3((float)(rowE - g0.E), 0.3f, (float)(g0.N - rowN)), Me.Rotation.Y);
+        var (rowDE, rowDN, _) = g0.OffsetTo(GlobalPos.FromLv95(rowE, rowN, g0.Alt));
+        Me.PlaceAt(Me.GlobalPosition + Me.Origin!.Frame.WorldOfEnu(g0, new Vector3((float)rowDE, 0.3f, (float)-rowDN)), Me.Rotation.Y);
         Me.Velocity = Vector3.Zero;
         Expect(await Until(() => HornGround.At(Me) != null && HornGround.InteractionFor(Me) != null, 10), "at the row, with the prompt");
         Expect(await Handshake("ready", _role == "A" ? "B" : "A", "ready", 120), "the other player is at the row too");
@@ -104,9 +105,27 @@ public partial class HornNetProbe : ChatProbe
         while (GameClock.Now < end)
         {
             Say(say);
-            if (await Heard(role, expected, 3)) return true;
+            if (await Heard(role, expected, 3))
+            {
+                Echo(say);
+                return true;
+            }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The other peer may not have heard us yet, though we heard it: B answered A's "ready" once and moved on,
+    /// A never got that one line and waited out its 120 s. Said three more times, 3 s apart, alongside.
+    /// </summary>
+    private async void Echo(string say)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            await Seconds(3.0);
+            if (!IsInsideTree()) return;
+            Say(say);
+        }
     }
 
     private async Task Frames(Func<bool> done, int max)

@@ -56,17 +56,19 @@ public partial class FunCrates : Node
     {
         if (_crates.MayLoot == _wrapped) return;
         var match = _crates.MayLoot;
-        _wrapped = peer => match(peer) || FunWorld.Players?.Invoke(peer) is { } p && FunWorld.InPvp(p.E, p.N);
+        _wrapped = peer => match(peer) || FunWorld.Players?.Invoke(peer) is { } p && FunWorld.InPvp(p);
         _crates.MayLoot = _wrapped;
     }
 
     private Crate Stock(int i)
     {
         var (x0, y0, x1, y1) = FunCourse.PvpBox;
+        // laid as the course is (#1648)
+        var (crateE, crateN) = FunWorld.Place.Lv95((x0 + x1) / 2 + Spots[i].X, (y0 + y1) / 2 + Spots[i].Y);
         var crate = new Crate
         {
             Style = CrateStyle.Military, Label = "a weapons crate",
-            E = FunWorld.Start.E + (x0 + x1) / 2 + Spots[i].X, N = FunWorld.Start.N + (y0 + y1) / 2 + Spots[i].Y,
+            E = crateE, N = crateN,
         };
         crate.SetStacks(Loot.MatchLoot.Roll(Loot.MatchTable.Military, _rng));
         _crates.Spawn([crate]);

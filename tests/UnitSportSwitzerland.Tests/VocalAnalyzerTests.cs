@@ -24,7 +24,28 @@ public class VocalAnalyzerTests
         return x;
     }
 
-    private static int PitchAt(VocalAnalyzer.Result r, float t) => r.Frames[4 * (int)(t * VocalAnalyzer.FrameRate) + 3];
+    private static int PitchAt(VocalAnalyzer.Result r, float t) => r.Frames[VocalAnalyzer.FrameBytes * (int)(t * VocalAnalyzer.FrameRate) + 3];
+    private static int ApertureAt(VocalAnalyzer.Result r, float t) => r.Frames[VocalAnalyzer.FrameBytes * (int)(t * VocalAnalyzer.FrameRate) + 4];
+
+    /// <summary>A sung vowel: a harmonic tone (A3) whose spectrum is shaped by one formant at <paramref name="f1"/>, Hz.</summary>
+    private static float[] Vowel(float f1, float seconds)
+    {
+        int n = (int)(seconds * Rate);
+        var x = new float[n + Rate];   // a second of silence after, as Glide
+        const double f0 = 220.0;
+        for (int i = 0; i < n; i++)
+        {
+            double v = 0;
+            for (int h = 1; h * f0 < 4000; h++)
+            {
+                double hz = h * f0;
+                double env = Math.Exp(-0.5 * Math.Pow((hz - f1) / 160.0, 2)) + 0.08;
+                v += env * Math.Sin(2 * Math.PI * hz * i / Rate) / h;
+            }
+            x[i] = (float)(0.25 * v);
+        }
+        return x;
+    }
 
     [Fact]
     public void A_steady_note_is_heard_at_its_pitch_and_held()
@@ -35,6 +56,26 @@ public class VocalAnalyzerTests
         Assert.True(r.Holds.Length >= 2 && r.Holds[0] < 0.5f && r.Holds[1] > 2.5f);
         Assert.Empty(r.Rises);
         Assert.Single(r.VocalIns);
+    }
+
+    [Fact]
+    public void An_open_vowel_reads_wider_than_a_closed_one_and_a_consonant_as_a_burst()
+    {
+        var ah = VocalAnalyzer.Analyse(Vowel(800f, 2f), Rate, 120f);   // "ah": energy up near 800 Hz
+        var ee = VocalAnalyzer.Analyse(Vowel(350f, 2f), Rate, 120f);   // "ee": down near 350 Hz
+        Assert.True(ApertureAt(ah, 1f) > ApertureAt(ee, 1f) + 40,
+            $"the aperture lane follows the vowel (ah {ApertureAt(ah, 1f)}, ee {ApertureAt(ee, 1f)})");
+
+        // a broadband burst between two notes: the consonant lane hears it
+        var x = Vowel(600f, 2f);
+        var rng = new Random(7);
+        int at = 2 * Rate, len = Rate / 20;
+        for (int i = 0; i < len; i++) x[at + i] = (float)(rng.NextDouble() * 2.0 - 1.0) * 0.5f;
+        var burst = VocalAnalyzer.Analyse(x, Rate, 120f);
+        int loudest = 0;
+        for (int o = 2 * VocalAnalyzer.FrameRate - 2; o <= 2 * VocalAnalyzer.FrameRate + 4; o++)
+            loudest = Math.Max(loudest, burst.Frames[VocalAnalyzer.FrameBytes * o + 5]);
+        Assert.True(loudest > 128, $"a consonant's burst is in the high band ({loudest})");
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Errands;
 
@@ -11,10 +12,17 @@ public enum GiverKind : byte { HutWarden = 0, StationMaster = 1, ShipMaster = 2,
 
 /// <summary>
 /// A giver: a server-known figure at a real place. <see cref="E"/>/<see cref="N"/> is where it stands (LV95 metres, the
-/// outside point of its door), <see cref="Heading"/> the way it faces (radians, 0 = north, clockwise).
+/// outside point of its door), <see cref="Heading"/> the way it faces as the givers file has it (radians, 0 = grid north, clockwise); the game
+/// reads <see cref="TrueHeading"/> (#1504).
 /// </summary>
 public sealed record Giver(string Id, GiverKind Kind, double E, double N, float Heading, string Canton, float Elevation, string Name, string Source)
 {
+    /// <summary>The way it faces from true north (#1504): <see cref="Heading"/> less the grid's meridian convergence there.</summary>
+    public float TrueHeading => (float)TrueNorth.GridToTrue(E, N, Heading);
+
+    /// <summary>Where it stands, computed once (its height the file's elevation).</summary>
+    public GlobalPos Pos { get; } = GlobalPos.FromLv95(E, N, Elevation);
+
     /// <summary>The 5 km cell holding it.</summary>
     public (int E, int N) Cell => Postkarte.CellOf(E, N);
 }

@@ -54,15 +54,23 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
     public bool Shown => GameSettings.Current.AdventureCompass && AdventureLog.Adventuring && !Permissions.InMatch
         && !XR.XrSession.Active && Me?.Invoke() != null && GameShell.Instance is not { Top: not null };
 
+    /// <summary>The camera's heading in true east and north, the markers' axes (<see cref="GlobalPos.OffsetTo"/>).</summary>
     public Vector2? Heading
     {
         get
         {
             if (GetViewport()?.GetCamera3D() is not { } cam) return null;
             var f = -cam.GlobalBasis.Z;
-            return new Vector2(f.X, -f.Z);
+            // the view's way as true east and north, as the markers' Toward (OffsetTo, #1502; a flat world's -Z is grid north)
+            var h = new Vector2(f.X, -f.Z);
+            return TargetMarker.Origin?.Invoke() is { } origin ? _north.WorldToEnu(origin.Frame, cam.GlobalPosition, h) : h;
         }
     }
+
+    /// <summary>True north's bearing in the axes of <see cref="Heading"/> and the markers: the local ENU's (#1502), so 0.</summary>
+    public float North => 0f;
+
+    private TrueNorth.Near _north;
 
     public bool Declutter => true;
     public bool Fades => true;
@@ -80,24 +88,28 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
     {
         if (Me?.Invoke() is not { } me) return 0;
         int n = 0;
-        void Add(int key, double e, double nn, Color color, MarkerShape shape, int row, byte icon, string label)
+        // a place given as LV95 numbers (a catalogue POI, a pin, a target), at the body's own height
+        GlobalPos P(double e, double nn) => GlobalPos.FromLv95(e, nn, me.Alt);
+        void Add(int key, GlobalPos at, Color color, MarkerShape shape, int row, byte icon, string label)
         {
             if (n >= into.Length) return;
+            var (east, north, _) = me.OffsetTo(at);
             into[n++] = new CompassMarker
             {
-                Key = key, Toward = new Vector2((float)(e - me.E), (float)(nn - me.N)), Color = color, Shape = shape, Row = (byte)row,
+                Key = key, Toward = new Vector2((float)east, (float)north), Color = color, Shape = shape, Row = (byte)row,
                 Icon = icon, Label = label,
             };
         }
-        static double Dist(GlobalPos me, double e, double n) => Math.Sqrt((e - me.E) * (e - me.E) + (n - me.N) * (n - me.N));
+        static double Dist(GlobalPos me, GlobalPos at) => me.HorizontalDistanceTo(at);
 
         // 1. the tracked target
         if (NavTarget.Current is { } t)
         {
-            double d = Dist(me, t.E, t.N);
+            var target = P(t.E, t.N);
+            double d = Dist(me, target);
             double climb = NavTarget.Alt is { } alt ? alt - me.Alt : double.NaN;
             string label = t.RadiusM > 0 && d <= t.RadiusM ? "in the area" : Label(1, d, climb);
-            Add(1, t.E, t.N, UiTheme.Amber, MarkerShape.Diamond, 0, 0, label);
+            Add(1, target, UiTheme.Amber, MarkerShape.Diamond, 0, 0, label);
         }
         // 2. the party
         if (Net.Parties.Client is { InParty: true } party)
@@ -106,34 +118,36 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
             foreach (var (peer, name) in party.Members)
             {
                 if (peer == self || PeerAt?.Invoke(peer) is not { } at) continue;
-                Add(1000 + (int)(peer % 1000), at.E, at.N, BattleRoyale.BrMapDraw.Mate, MarkerShape.Down, 1, 0,
-                    Label(1000 + (int)(peer % 1000), Dist(me, at.E, at.N), double.NaN, name));
+                Add(1000 + (int)(peer % 1000), at, BattleRoyale.BrMapDraw.Mate, MarkerShape.Down, 1, 0,
+                    Label(1000 + (int)(peer % 1000), Dist(me, at), double.NaN, name));
             }
         }
         // 3. pins: mine, then the party's
         if (AdventureTravel.Instance is { } travel)
         {
             foreach (var pin in travel.MyPins.Pins)
-                Add(2000 + pin.Id, pin.E, pin.N, NavIcons.ColorOf(pin.Icon), MarkerShape.Icon, 2, pin.Icon, Label(2000 + pin.Id, Dist(me, pin.E, pin.N), double.NaN));
+                Add(2000 + pin.Id, P(pin.E, pin.N), NavIcons.ColorOf(pin.Icon), MarkerShape.Icon, 2, pin.Icon, Label(2000 + pin.Id, Dist(me, P(pin.E, pin.N)), double.NaN));
             foreach (var (owner, (_, pins)) in travel.PartyPins)
                 foreach (var pin in pins)
                 {
                     int key = 3000 + (int)(owner % 100) * 64 + pin.Id % 64;
-                    Add(key, pin.E, pin.N, NavIcons.ColorOf(pin.Icon), MarkerShape.Icon, 2, pin.Icon, Label(key, Dist(me, pin.E, pin.N), double.NaN));
+                    Add(key, P(pin.E, pin.N), NavIcons.ColorOf(pin.Icon), MarkerShape.Icon, 2, pin.Icon, Label(key, Dist(me, P(pin.E, pin.N)), double.NaN));
                 }
         }
         // 3b. the world events running near: a cow loose, a lost hiker, an avalanche, smoke (#1339)
         if (Errands.WorldEvents.Instance is { } events)
             foreach (var (key, ee, nn2, kind, name) in events.Markers)
-                Add(key, ee, nn2, Errands.WorldEvents.ColorOf(kind), MarkerShape.Diamond, 1, 0, Label(key, Dist(me, ee, nn2), double.NaN, name));
+                Add(key, P(ee, nn2), Errands.WorldEvents.ColorOf(kind), MarkerShape.Diamond, 1, 0, Label(key, Dist(me, P(ee, nn2)), double.NaN, name));
         // 4. discovered places nearby, nearest first, their name near the caret only
         RefreshPlaces(me);
         float heading = Heading is { } h ? CompassMath.Bearing(h) : 0;
         for (int i = 0; i < _placeCount; i++)
         {
             var (poi, _) = _places[i];
-            float rel = CompassMath.Relative(CompassMath.Bearing(new Vector2((float)(poi.E - me.E), (float)(poi.N - me.N))), heading);
-            Add(5000 + i, poi.E, poi.N, new Color(1, 1, 1, 0.6f), MarkerShape.Place, 3, (byte)poi.Kind, Math.Abs(rel) <= PlaceLabelDeg ? poi.Name : "");
+            var at = P(poi.E, poi.N);
+            var (east, north, _) = me.OffsetTo(at);
+            float rel = CompassMath.Relative(CompassMath.Bearing(new Vector2((float)east, (float)north)), heading);
+            Add(5000 + i, at, new Color(1, 1, 1, 0.6f), MarkerShape.Place, 3, (byte)poi.Kind, Math.Abs(rel) <= PlaceLabelDeg ? poi.Name : "");
         }
         return n;
     }
@@ -146,11 +160,11 @@ public partial class AdventureCompass : CanvasLayer, ICompassSource
         _placeCount = 0;
         if (PlacesService.Instance is not { } places || AdventureService.Instance is not { } svc || !svc.Mine.Has(PlacesProgress.Section.Id)) return;
         var mine = svc.Mine.Get(PlacesProgress.Section);
-        places.Catalogue.Near(me.E, me.N, PlacesM, _near);
+        places.Catalogue.Near(me, PlacesM, _near);
         foreach (var poi in _near)
         {
             if (poi.Outline != null || !mine.Found.ContainsKey(poi.Id)) continue;
-            double d = Math.Sqrt((poi.E - me.E) * (poi.E - me.E) + (poi.N - me.N) * (poi.N - me.N));
+            double d = me.HorizontalDistanceTo(GlobalPos.FromLv95(poi.E, poi.N, me.Alt));
             if (d < 15) continue;
             // keep the nearest few: insertion into a short sorted array
             if (_placeCount == MaxPlaces && d >= _places[MaxPlaces - 1].D) continue;

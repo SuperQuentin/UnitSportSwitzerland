@@ -100,7 +100,7 @@ public partial class TrainingProbe : Node
             if (road.Arc[i] - last < 8) continue;
             last = road.Arc[i];
             var g = _origin.ToGlobal(road.Centre[i]);
-            var (lat, lon) = SwissGeodesy.ToLatLon(g.E, g.N, g.Alt);
+            var (lat, lon) = SwissGeodesy.ToLatLon(g.Lv95.E, g.Lv95.N, g.Alt);
             gpx.Append(CultureInfo.InvariantCulture, $"<trkpt lat=\"{lat:0.0000000}\" lon=\"{lon:0.0000000}\"><ele>{g.Alt:0.0}</ele></trkpt>\n");
         }
         gpx.Append("</trkseg></trk></gpx>\n");
@@ -175,7 +175,7 @@ public partial class TrainingProbe : Node
     {
         // the fixture's main road: the Major class, east-west; the T is 700 m along it
         var at = _origin.ToGlobal(me.GlobalPosition);
-        var net = await Gpx.RoadNetwork.LoadAsync(source, at.E - 2500, at.N - 2500, at.E + 2500, at.N + 2500, pad: 0);
+        var net = await Gpx.RoadNetwork.LoadAsync(source, at.Lv95.E - 2500, at.Lv95.N - 2500, at.Lv95.E + 2500, at.Lv95.N + 2500, pad: 0);
         var main = net.Edges.Where(e => e.Class == RoadClass.Major).ToList();
         if (main.Count == 0) { Finish("no main road on the junction fixture"); return; }
         double e0 = main.Min(e => e.E.Min()), n0 = main[0].N[0];
@@ -203,8 +203,9 @@ public partial class TrainingProbe : Node
         for (int i = 0; i < 300 && session.State != TrainingSession.Phase.Riding; i++) await Wait(0.1);
         Check(session.State == TrainingSession.Phase.Riding, $"riding ({session.State})");
 
-        double X() => _origin.ToGlobal(me.GlobalPosition).E - e0;
-        double Y() => _origin.ToGlobal(me.GlobalPosition).N - n0;
+        // course metres on the LV95 grid, as the course is laid (ToWorld(e0 + x, n0))
+        double X() => _origin.ToLv95(me.GlobalPosition).E - e0;
+        double Y() => _origin.ToLv95(me.GlobalPosition).N - n0;
 
         // the T in sight: its roads, straight on taken
         for (int i = 0; i < 300 && session.NextJunction == null; i++) await Wait(0.1);

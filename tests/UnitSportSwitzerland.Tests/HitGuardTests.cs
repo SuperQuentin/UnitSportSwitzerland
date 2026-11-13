@@ -1,4 +1,5 @@
 using UnitSport.Combat;
+using UnitSport.Core;
 using Xunit;
 
 namespace UnitSport.Tests;
@@ -64,34 +65,36 @@ public class HitGuardTests
 
     // ---- terrain ----
 
-    /// <summary>A 200 m-high ridge 10 m wide at E = 500; flat at 0 elsewhere.</summary>
-    private static float? Ridge(double e, double n) => Math.Abs(e - 500) < 30 ? 200f : 0f;
+    /// <summary>A 200 m-high ridge 60 m wide 500 m east of Bern; flat at 0 elsewhere.</summary>
+    private static float? Ridge(GlobalPos p) => Math.Abs(p.Lv95.E - 2_600_500) < 30 ? 200f : 0f;
+
+    private static GlobalPos At(double e, double n, double alt) => GlobalPos.FromLv95(2_600_000 + e, 1_200_000 + n, alt);   // metres from Bern
 
     [Fact]
     public void A_shot_over_flat_ground_is_clear()
-        => Assert.True(HitGuard.TerrainClear((0, 0, 1.6), (300, 0, 1.0), (_, _) => 0f));
+        => Assert.True(HitGuard.TerrainClear(At(0, 0, 1.6), At(300, 0, 1.0), _ => 0f));
 
     [Fact]
     public void A_shot_through_a_ridge_is_refused()
-        => Assert.False(HitGuard.TerrainClear((0, 0, 1.6), (1000, 0, 1.0), Ridge));
+        => Assert.False(HitGuard.TerrainClear(At(0, 0, 1.6), At(1000, 0, 1.0), Ridge));
 
     [Fact]
     public void A_shot_over_the_ridge_from_high_up_is_clear()
-        => Assert.True(HitGuard.TerrainClear((0, 0, 400), (1000, 0, 400), Ridge));
+        => Assert.True(HitGuard.TerrainClear(At(0, 0, 400), At(1000, 0, 400), Ridge));
 
     [Fact]
     public void Players_in_rooms_under_the_ground_still_hit_each_other()
         // an interior lies ~3 km under its building: both ends deep under the surface
-        => Assert.True(HitGuard.TerrainClear((0, 0, -2998), (20, 0, -2999), (_, _) => 450f));
+        => Assert.True(HitGuard.TerrainClear(At(0, 0, -2998), At(20, 0, -2999), _ => 450f));
 
     [Fact]
     public void A_valley_floor_the_lattice_fills_in_is_not_a_wall()
     {
         // the coarse surface reads 25 m above two players on a valley floor 300 m apart
-        Assert.True(HitGuard.TerrainClear((0, 0, 101.6), (300, 0, 101), (_, _) => 125f));
+        Assert.True(HitGuard.TerrainClear(At(0, 0, 101.6), At(300, 0, 101), _ => 125f));
     }
 
     [Fact]
     public void Unknown_ground_never_blocks()
-        => Assert.True(HitGuard.TerrainClear((0, 0, 1.6), (1000, 0, 1), (_, _) => null));
+        => Assert.True(HitGuard.TerrainClear(At(0, 0, 1.6), At(1000, 0, 1), _ => null));
 }

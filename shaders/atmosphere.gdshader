@@ -1,11 +1,13 @@
 // The air round the globe (#1430 H4, World/Globe/Atmosphere.cs): single scattering, Rayleigh and
 // Mie, marched along each pixel's ray through a shell 100 km thick, up to the first thing the
 // scene drew there (the depth buffer: the globe, the flat tiles) or the ground. From outside it is
-// the blue limb and the haze over the Earth; from inside, high up, the dark sky above. Drawn on a
-// sphere's back faces (once a pixel, inside or out), pulled in short of the far plane. Premultiplied:
+// the blue limb and the haze over the Earth; from inside, high up, the dark sky above. Drawn as one
+// quad over the whole screen (each pixel's ray comes from the screen and the depth, never from the
+// geometry): a sphere's back faces pulled in short of the far plane were clipped by it round the
+// view's axis on the way down from space, a disc of no air at all under the shuttle (#1528). Premultiplied:
 // what lies behind is dimmed by the air's transmittance along the ray, and the scattered light added.
 shader_type spatial;
-render_mode unshaded, blend_premul_alpha, depth_draw_never, depth_test_disabled, cull_front, fog_disabled, shadows_disabled;
+render_mode unshaded, blend_premul_alpha, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled, shadows_disabled;
 
 uniform vec3 planet_centre;
 uniform float planet_r = 6371000.0;
@@ -16,8 +18,6 @@ uniform float intensity = 1.0;
 // the sun as the scene lights the ground (energy 1, no 1/π in Godot's lighting): scattered light is π times
 // the phase-weighted sum, so ~3-4 here; 12 washed a bright palette out
 uniform float sun_power = 4.0;
-// the shell's vertices are pulled in to this distance, short of the far plane
-uniform float clamp_dist = 1000000.0;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 
 const vec3 BETA_R = vec3(5.8e-6, 13.5e-6, 33.1e-6);
@@ -33,10 +33,8 @@ const float SHADOW_SOFT = 2000.0;
 const int LIGHT_STEPS = 4;
 
 void vertex() {
-	vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
-	float d = length(view.xyz);
-	if (d > clamp_dist) view.xyz *= clamp_dist / d;
-	POSITION = PROJECTION_MATRIX * view;
+	// the quad's corners (a 2 m QuadMesh, +-1) straight onto the screen's
+	POSITION = vec4(VERTEX.xy, 0.5, 1.0);
 }
 
 // interleaved gradient noise: a per-pixel offset for the samples and the dither

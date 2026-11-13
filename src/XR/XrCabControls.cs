@@ -107,6 +107,7 @@ internal sealed partial class XrCabControls : Node3D
                                         // a farm machine (#494) has the bus's two pokes: kneel lowers its implement, destination its auger or delivery
                                         + (t.IsBus || t.Spec.Farm ? "-bus" : "") + (t.Spec.Body is TruckBody.Tipper or TruckBody.Mixer ? "-work" : ""),
             Car when p.InCockpit => "car",
+            Airliner { Spec.Spacecraft: true } => "shuttle",
             Airliner => "airliner",
             _ when p.Ride == RideKind.Steamer => "steamer",
             _ when p.Ride == RideKind.Forklift => "forklift",
@@ -154,7 +155,7 @@ internal sealed partial class XrCabControls : Node3D
             // the speed regulator's button under the radio's (#494)
             Add(Kind.Poke, new(0.22f, -0.39f, -0.5f), plus: PlayerInput.Cruise);
         }
-        else if (context == "airliner")
+        else if (context is "airliner" or "shuttle")
         {
             // the flap lever on the pedestal: back a notch for more flap, forward for less
             Add(Kind.Spring, new(0.26f, -0.42f, -0.3f), Vector3.Back, PlayerInput.FlapsDown, PlayerInput.FlapsUp, 0.05f);
@@ -166,6 +167,11 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Poke, new(0f, -0.03f, -0.6f), plus: PlayerInput.Autopilot);
             // the trim wheel beside the seat: rolled forward, nose down; back, nose up
             Add(Kind.Hold, new(0.22f, -0.52f, -0.12f), Vector3.Forward, PlayerInput.TrimNoseDown, PlayerInput.TrimNoseUp);
+            // the shuttle's cruise drive (#1492): the guarded switch on the centre console, where the model
+            // draws it (ShuttleLayout.DriveSwitch, 0.5 m right of the commander's eye, 0.63 down, 0.64 ahead),
+            // gripped and thrown forward: the engine switch's action, which above 60 km is the drive
+            if (context == "shuttle")
+                Add(Kind.Spring, new(0.5f, -0.63f, -0.64f), Vector3.Forward, PlayerInput.EngineToggle, null, 0.05f);
         }
         else if (context == "forklift")
             // the mast lever right of the wheel (#583): pulled back the forks rise, pushed forward

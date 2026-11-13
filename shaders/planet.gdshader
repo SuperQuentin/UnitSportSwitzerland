@@ -33,7 +33,10 @@ bool occluded(vec3 world, vec3 cam) {
 	return length(off) < occluder.w;
 }
 
+#include "res://shaders/common/sky_depth.gdshaderinc"
+
 void vertex() {
+	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
 	local_dir = VERTEX;
 	world_normal = (MODEL_MATRIX * vec4(VERTEX, 0.0)).xyz;
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;

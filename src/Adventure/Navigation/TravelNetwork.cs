@@ -95,7 +95,11 @@ public static class TravelNetwork
     /// One unlock tick for a body at (<paramref name="e"/>, <paramref name="n"/>): the nearest locked travel point in
     /// its radius among <paramref name="near"/>; returned only when it was the same at the tick before.
     /// </summary>
-    public static Poi? CheckUnlock(TravelBook book, double e, double n, IReadOnlyList<Poi> near, UnlockTracker tracker)
+    public static Poi? CheckUnlock(TravelBook book, double e, double n, IReadOnlyList<Poi> near, UnlockTracker tracker) =>
+        CheckUnlock(book, GlobalPos.FromLv95(e, n, 0), near, tracker);
+
+    /// <summary><see cref="CheckUnlock(TravelBook, double, double, IReadOnlyList{Poi}, UnlockTracker)"/> for a body at a <see cref="GlobalPos"/>.</summary>
+    public static Poi? CheckUnlock(TravelBook book, GlobalPos at, IReadOnlyList<Poi> near, UnlockTracker tracker)
     {
         Poi? best = null;
         double bd = double.MaxValue;
@@ -103,7 +107,7 @@ public static class TravelNetwork
         {
             var k = KindOf(p.Kind);
             if (k == TravelKind.None || book.Has(p.Id)) continue;
-            double d2 = GlobalPos.HorizontalDistanceSquared(p.E, p.N, e, n);
+            double d2 = p.Pos.HorizontalDistanceSquaredTo(at);
             float r = UnlockRadius(k);
             if (d2 <= (double)r * r && d2 < bd) { bd = d2; best = p; }
         }
@@ -120,7 +124,9 @@ public static class TravelNetwork
     public static bool MayTravelAs(int rideKind) =>
         PlacesRules.Class(rideKind) == TravelClass.Foot || rideKind > 0 && BicycleCatalog.IsBicycle((RideKind)rideKind);
 
-    public static double Distance(Poi a, double e, double n) => Math.Sqrt((a.E - e) * (a.E - e) + (a.N - n) * (a.N - n));
+    public static double Distance(Poi a, double e, double n) => Distance(a, GlobalPos.FromLv95(e, n, 0));
+
+    public static double Distance(Poi a, GlobalPos at) => a.Pos.HorizontalDistanceTo(at);
 
     /// <summary>
     /// Whether a trip may go, and its fare. Free mode and admins pay nothing and travel from anywhere; in Network

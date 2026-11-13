@@ -66,13 +66,14 @@ public static class WikidataStage
         http.DefaultRequestHeaders.UserAgent.ParseAdd("UnitSportSwitzerland-preprocessor/1.0 (https://github.com/SuperQuentin/UnitSportSwitzerland)");
         http.DefaultRequestHeaders.Accept.ParseAdd("application/sparql-results+json");
 
+        var geo = GeoInput.Over(outDir);
         var result = new SortedDictionary<string, Facts>(StringComparer.Ordinal);
         foreach (var (kind, classes) in Classes)
         {
             var ofKind = pois.Where(p => p.Kind == kind).ToList();
             if (ofKind.Count == 0) continue;
             var items = new List<WikidataMatch.Item>();
-            foreach (var q in classes) items.AddRange(await Query(http, q, cache, ct));
+            foreach (var q in classes) items.AddRange(await Query(http, q, cache, geo, ct));
             var matcher = new WikidataMatch(items);
             int matched = 0, ambiguous = 0;
             foreach (var p in ofKind)
@@ -96,7 +97,7 @@ public static class WikidataStage
         return 0;
     }
 
-    private static async Task<List<WikidataMatch.Item>> Query(HttpClient http, string qid, string cache, CancellationToken ct)
+    private static async Task<List<WikidataMatch.Item>> Query(HttpClient http, string qid, string cache, GeoInput geo, CancellationToken ct)
     {
         string path = Path.Combine(cache, qid + ".json");
         string json;
@@ -141,11 +142,11 @@ public static class WikidataStage
             await File.WriteAllTextAsync(path, json, ct);
             await Task.Delay(1000, ct);   // the query service asks for one request at a time, politely
         }
-        return Parse(json);
+        return Parse(json, geo);
     }
 
     /// <summary>A SPARQL JSON result into items: one per QID, every label, the first value of each fact.</summary>
-    public static List<WikidataMatch.Item> Parse(string json)
+    public static List<WikidataMatch.Item> Parse(string json, GeoInput? geo = null)
     {
         var byQid = new Dictionary<string, WikidataMatch.Item>(StringComparer.Ordinal);
         using var doc = JsonDocument.Parse(json);
@@ -158,7 +159,8 @@ public static class WikidataStage
             string qid = item[(item.LastIndexOf('/') + 1)..];
             if (!byQid.TryGetValue(qid, out var it))
             {
-                var (e, n) = SwissProjection.ToLv95(lat, lon);
+                // on the tiles' ground, else at the item's own elevation when its first row has one
+                var (e, n) = (geo ?? GeoInput.NoGround).ToLv95(lat, lon, Num("elev"));
                 byQid[qid] = it = new WikidataMatch.Item(qid, e, n);
             }
             if (Val("label") is { Length: > 0 } label && !it.Labels.Contains(label)) it.Labels.Add(label);

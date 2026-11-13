@@ -24,8 +24,8 @@ public static partial class TileRewriter
                     if (!a.Left.HasTrack && !a.Right.HasTrack) continue;
                     for (int i = 1; i < seg.PointCount; i++)
                     {
-                        var p = new Vec2(tile.MinE + seg.Points[(i - 1) * 3], tile.MaxN - seg.Points[(i - 1) * 3 + 2]);
-                        var q = new Vec2(tile.MinE + seg.Points[i * 3], tile.MaxN - seg.Points[i * 3 + 2]);
+                        var p = new Vec2(Plane.West(tile) + seg.Points[(i - 1) * 3], Plane.North(tile) - seg.Points[(i - 1) * 3 + 2]);
+                        var q = new Vec2(Plane.West(tile) + seg.Points[i * 3], Plane.North(tile) - seg.Points[i * 3 + 2]);
                         foreach (var (side, right) in new[] { (a.Left, false), (a.Right, true) })
                         {
                             if (!side.HasTrack) continue;

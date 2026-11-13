@@ -85,14 +85,14 @@ public static partial class TileRewriter
         foreach (var (junction, plan) in priority.Plans)
         {
             if (JunctionRules.Of(plan.Kind).Has(JunctionRule.StopLine)) continue;   // the lights draw theirs with the stop line (#682)
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             for (int i = 0; i < junction.Arms.Count; i++)
             {
                 var arm = junction.Arms[i];
                 var link = net.Links[arm.LinkId];
                 if (link.Tag is not Source source || InfoOf(link) is not { } info || !PriorityPlanner.IsCarRoad(info.Class)) continue;
-                if (crossings.OnArm(junction, i, net) is not { } at || !block.Contains(source.Tile)) continue;
+                if (crossings.OnArm(junction, i, net) is not { } at || !source.Line.Write) continue;
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right
                 var mid = (arm.Left + arm.Right) * 0.5;
@@ -166,7 +166,7 @@ public static partial class TileRewriter
         }
         bool OnStrip(Vec2 p)
         {
-            double x = p.X - tile.MinE, z = tile.MaxN - p.Y;
+            double x = p.X - Plane.West(tile), z = Plane.North(tile) - p.Y;
             foreach (var a in strips)
             {
                 var v = a.Vertices;

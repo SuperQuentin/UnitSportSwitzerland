@@ -5,14 +5,14 @@
   follows in one synchronous call at the start of a frame (`ProcessPriority = int.MinValue`).
   Altitude never shifts. Plan and later phases: `docs/plans/floating-origin.md`,
   `docs/plans/spherical-world.md` (#187).
-- **Online too, and every peer has its own origin**: positions cross the network in LV95, never
+- **Online too, and every peer has its own origin**: positions cross the network as ECEF, directions as local ENU, never
   world space (`net/positions-on-the-wire`). The server keeps the manifest's origin and never
   shifts (its players can be anywhere); far clusters of bodies get a frame and a physics space of
   their own (`net/server-regions`, #1456); it measures with what players publish (`FootPlayer.Global`),
   and runs each race in a frame of its own at the host (`RaceManager`). A client's origin is its
   own from boot: joining neither checks nor adopts the server's.
 - **A world-space `Vector3` means a place only in the frame it was computed in.** Anything that
-  keeps a position across frames either keeps a `GlobalPos` (LV95 doubles), keeps it relative to its
+  keeps a position across frames either keeps a `GlobalPos` (ECEF doubles, `core/globalpos-earth`), keeps it relative to its
   tile (trunks, bird perches, gathering trees are stored as the `.trees` file has them), or
   implements `IOriginShiftAware` and moves it in `OnOriginShifted`. Directions and velocities go
   through `shift.Direction`, points through `shift.Point`, placements through `shift.Apply`: the
@@ -27,6 +27,8 @@
   A mesh rebuilt from world points under a container (the traffic's debug lines, `ImmediateMesh`) is
   moved by a shift like any child: put its node back at the identity each time it is redrawn in the
   new frame, or every line lies a shift away (the trails "broke after moving on", `--origincheck`).
+  The same for instances refilled from world points (`NearTrees`, #1776): a turning re-anchor turns the node, and
+  placing them relative to its position alone draws them turned about it (trees floating metres up, `--treeseatcheck`).
 - **Worker threads take `origin.Frame` once** (an immutable `OriginFrame`) and work in it; the
   main thread maps the result with `origin.Since(frame)` (`Traffic`'s lane graphs, `RaceRoute`).
   Reading the live origin twice from a worker can straddle a shift.
@@ -51,8 +53,29 @@
   portal clipping are fine as they are (they want small local values). Uniforms holding world
   positions that are not pushed every frame must be re-pushed on a shift (`cover_origin`, the
   building shader's occupancy and open-door boxes).
+- **Patterns on the round world** (#1512, G2 C3, PR #1627): a turning re-anchor moves the world in a way no
+  offset follows, so a leaf's furniture (roads, paint, buildings, water) carries its pattern points instead:
+  `LeafPattern` bakes each vertex's cube-face (u, v) in metres (`PatternSpace`: X along u, Z along −v, arc at the
+  mean radius) into `CUSTOM1`, and the angle of the face's axes in the mesh's frame plus its distance past a face
+  edge into `CUSTOM2` (`ChunkNode`'s mesh helpers take the bake; the flat world passes none). Every body's
+  `vertex()` runs `PATTERN_VERTEX`; `pattern_xz` then reads the baked point, or `world_origin_offset` on a mesh
+  without one (`CUSTOM2.x` 0), so the flat world draws exactly as before. Within 60 m of a face edge a fragment
+  picks face A or B by an 8 m value noise on A's point (a ragged seam; the waves mix both). Exact on a 9 × 9 grid
+  per leaf with a height term, bilinear between: under 1 mm, 2 mm between neighbouring leaves
+  (`LeafPatternTests`). Points are kept near [0, 9.6 km) per leaf, so floats hold them; leaves differ by whole
+  periods, which no pattern sees. A new body that samples patterns: `PATTERN_VERTEX` first in its `vertex()`;
+  one that does not draw tile meshes: `PATTERN_NONE` (snow, wake foam). A direction in pattern space (waves,
+  ripples) goes through `pattern_turn`.
 - **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km; 22-47 ms in a
   window at Riddes (~530 nodes, 120 kinematic), so the frame that shifts takes 50-90 ms.
+  **The `[origin]` line says where it goes** (#1764): the node pass (and its kinematic teleports' share), and the
+  slowest three handlers by type, summed (`OriginShifter.SlowestHandlers`). On Geneva's leaves with traffic (the earth
+  playtest's 117-203 ms stall), traffic's lane graphs were most of it: 110,000 edges and 1.1 million points moved on
+  the main thread through a set of every edge, 100-380 ms. Each edge now moves once per pass by a stamp
+  (`LaneEdge.ShiftOnce`) and a graph past 4,096 edges moves in blocks on the pool: 10-16 ms. The whole shift took
+  27-48 ms there (a machine at 100% CPU): the node walk 13-24 ms (teleports under 1.1 ms), traffic 13-16 ms, the rest
+  under 3 ms. A handler that keeps a million of anything in world space moves it in parallel, or keeps it in a frame
+  of its own.
 - **The renderer across a shift** (phase 4, measured in a window at Riddes, RTX 4070, 1600x900,
   a `shift 1000,0` shot-queue line with the camera still):
   - **SDFGI** (Realistic+ with `--sdfgi`, Forward+): its cascades sit on the world grid round the
@@ -87,12 +110,39 @@
     `OriginShifter.Turned`), where no flat tile is drawn any more: every 20 km the anchor is
     `FrameAxes.Tangent` under the camera, built in ECEF (the previous axes turned by the least rotation, no
     LV95). From 60 to 250 km the Space frame stays flat: the flat tiles are still drawn there, and the
-    curvature shader wraps them as one plane. The ground keeps its flat frame until #1443 G2.
+    curvature shader wraps them as one plane. The flat world's ground keeps its flat frame until G2 D.
+  - **The earth world's ground turns** (#1512, G2 C3, `--frame earth`, `OriginShifter.GroundMode`): past 3 km
+    (horizontally) from the anchor, the world moves to `FrameAxes.Tangent` under the camera at altitude 0 (the
+    camera's LHN95 height as the drop, as the Space anchor's), its axes the old ones turned by the least rotation:
+    0.027° each 3 km, no yaw. Up and gravity (−Y) are then the ellipsoid's under the camera, never more than
+    0.027° off. No snap: everything placed from doubles (leaves, patches, the globe) is placed again from the
+    frame; what is moved in floats drifts by the float basis (0.1 mm 30 m out, ~2 cm on a body left 57 km away
+    over 19 shifts: such a body is dormant, kept by its Earth place). One frame at every altitude: above 60 km it
+    re-anchors past `SpaceMode`'s 20 km, with no handover (the flat world's band and its two rigid moves exist
+    because its tiles are flat). A teleport (`ShiftTo(e, n)`) lands on the tangent anchor under the point.
+    #1630's film never reached Space: its `g400000` glide waited for leaves under a fast climb and stayed at 2 km.
+    A climb does enter the regime (`[origin] the earth frame re-anchors every 20 km from 60.x km`); `--orbitcheck` and
+    `--shuttlecheck` take `--frame earth` on `--world flat` to fly it.
+    **Its drop under the snap distances** (#1763): each re-anchor lowers the world ~0.7 m at the camera (3 km out on
+    the old tangent plane, d²/2R), under the distances past which an eased camera snaps (the on-foot pivot 6 m, the
+    phone 1 m). A camera state kept in world space and eased (a height, a lens position) must be carried through the
+    shift (`FootPlayer.ShiftCameraState`), or the camera jumps up and eases back down at every re-anchor.
+    `--reanchorcamcheck --chunks fixture:straight` (no `--originshift`: the drop grows with the square of the threshold)
+    moves the anchor 2.9 km behind the local player and walks, then drives, across real re-anchors: the camera's
+    offset from the body may not step.
+    The shift log line says how a shift turned (`turned: tilt 0.0269°, yaw 0.0000°`). `OriginShift.Turns` is exact
+    (a 20 m stress shift turns 3·10⁻⁶ rad, under `IsEqualApprox`); `Apply(Aabb)` bounds the moved corners.
+    `--originstress <m> --originyaw <deg>` there turns the tangent anchor by ±deg, one way then back.
     `--orbitcheck` flies a polar orbit through ~2,080 turned shifts; `--spacebandcheck` the band.
   `--originstress <m> --originyaw <deg>` sends every shift to an anchor frame at altitude 0 turned
   ±deg about up, so every handler meets a rotation: the car ride, the A320 and the hairpin drive
-  pass at 2° (check map). Known gap: the speedboat's beach landing (`--boatcheck`) stops 3 m
-  further out and keeps creeping at 1.2 m/s in a turned frame, everything else on the boat passes.
+  pass at 2° (check map; but see `--world flat` below). Known gap: the speedboat's beach landing
+  (`--boatcheck speedboat --chunks fixture:lake --originstress 20 --originyaw 2`) stops short and keeps creeping at
+  1.2 m/s in a turned frame, everything else on the boat passes: 3 m short at H3, 17.1 m on Nov 9 2026 (17.2 m with
+  `Turns` as it was before #1512, so not C3's). On leaves (#1512): the car (`--ride car,25 --at 2496957,1122352
+  --heading 35`, open ground by Geneva airport) through 23 turning shifts.
+- **`--world flat` has no shifter**: its probes' `--originstress` changes nothing (no `[origin]` line). Stress a
+  handler on real terrain (`--chunks`) or under `--frame earth --leaves`.
 - **Checks**: `--origincheck` (headless: frames, lane keys, the wire between two origins, a race
   road followed across a shift, a remote interpolated 3,600 km out, the node walk, the kinematic
   case; RESULT line). Multiplayer: the `tools/*check.sh` loopback scripts with `--originstress` on

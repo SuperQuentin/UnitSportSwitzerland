@@ -1,5 +1,7 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-framework.md).
 
+using UnitSport.Core;
+
 namespace UnitSport.Occasions.Festivals;
 
 /// <summary>A town of the region, as the relocation reads it (<c>OccasionTowns.Town</c> without Godot).</summary>
@@ -9,6 +11,12 @@ public readonly record struct TownRef(string Name, double E, double N, int Build
 public sealed record ResolvedSite(string Name, double E, double N, double RadiusM, bool Relocated, string? PoiId, string Text)
 {
     public double DistanceTo(double e, double n) => Math.Sqrt((e - E) * (e - E) + (n - N) * (n - N));
+
+    /// <summary>The site's middle as a position (altitude 0: the rules measure along the ground).</summary>
+    public GlobalPos Pos { get; } = GlobalPos.FromLv95(E, N, 0);
+
+    /// <summary>The distance along the ground from <paramref name="at"/> to the site's middle.</summary>
+    public double DistanceTo(GlobalPos at) => at.HorizontalDistanceTo(Pos);
 }
 
 /// <summary>

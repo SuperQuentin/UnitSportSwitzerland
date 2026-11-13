@@ -191,6 +191,9 @@ public partial class Swarm : Node
         }
         _bots.AddRange(all.Skip(_first).Take(_count));
         GD.Print($"[swarm] hosting bots {_first}..{_first + _count - 1} of {_total}");
+        // no world of its own, in either frame (positions go on the wire as Earth positions): a net check's frame check
+        // reads this, not a missing line (#1683, tools/lib/guard.sh)
+        Core.FrameReport.SayNone("a swarm has no world");
         foreach (var g in _bots.GroupBy(b => b.Region))
             GD.Print($"[swarm] {g.Key.Name}: " + string.Join(", ", g.GroupBy(b => b.Role).Select(r => $"{r.Count()} {r.Key}")));
     }
@@ -373,13 +376,14 @@ public partial class Swarm : Node
 
     /// <summary>
     /// What a real owner's FootPlayer._Process writes for the synchronizer: the transform travels
-    /// as NetGlobal/NetVel/NetYaw stamped with NetTime (last), not as position/rotation.
+    /// as NetGlobal/NetVel/NetYaw stamped with NetTime (last), not as position/rotation; the velocity
+    /// and heading in the local ENU and from true north (#1503), from this frame's axes at the bot.
     /// </summary>
     private void PublishNet(FootPlayer me, Vector3 before, float dt)
     {
-        me.NetGlobal = _origin.ToGlobal(me.Position);
-        me.NetVel = dt > 0 ? (me.Position - before) / dt : Vector3.Zero;
-        me.NetYaw = me.Rotation.Y;
+        var frame = _origin.Frame;
+        var vel = dt > 0 ? (me.Position - before) / dt : Vector3.Zero;
+        me.SetNetState(frame.ToGlobal(me.Position), frame.GridOfWorld(me.Position, vel), frame.GridYawOf(me.Position, me.Rotation.Y));
         me.NetTime = Time.GetTicksUsec() / 1e6;
     }
 

@@ -133,8 +133,14 @@ public partial class PassengerService : Node
     /// <summary>The host was asked to hand the vehicle over (<see cref="FootPlayer.GiveUpVehicle"/>): its state, to pass on.</summary>
     public void HandOver(long to, VehicleState state) { if (Online) RpcId(1, MethodName.HandedOver, to, state.ToDict()); }
 
-    /// <summary>The host's vehicle was wrecked: everyone aboard is thrown out.</summary>
-    public void Wrecked(Vector3 velocity) { if (Online) RpcId(1, MethodName.HostWrecked, velocity); }
+    /// <summary>
+    /// The host's vehicle was wrecked: everyone aboard is thrown out. <paramref name="velocity"/> is the vehicle's
+    /// (<see cref="VehicleState.Velocity"/>, GlobalPos's axes); the wire carries it in the local east-up-south at the host (#1503).
+    /// </summary>
+    public void Wrecked(Vector3 velocity)
+    {
+        if (Online) RpcId(1, MethodName.HostWrecked, Local is { } me ? Lv95Grid.ToEnu(me.Global, velocity) : velocity);
+    }
 
     // ---- server side ----------------------------------------------------------------------
 
@@ -333,7 +339,8 @@ public partial class PassengerService : Node
         bool rolls = Rideable.Create(state.Kind).Driverless;
         if (riders.Count == 0 || !rolls)
         {
-            foreach (var (peer, _) in riders) { _byRider.Remove(peer); RpcId(peer, MethodName.Eject, state.Velocity); }
+            var enu = Lv95Grid.ToEnu(state.Position, state.Velocity);   // the state's velocity is in GlobalPos's axes (#1503)
+            foreach (var (peer, _) in riders) { _byRider.Remove(peer); RpcId(peer, MethodName.Eject, enu); }
             VehicleManager.Instance?.ParkFor(host, state);
             return;
         }
@@ -362,12 +369,13 @@ public partial class PassengerService : Node
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void HostWrecked(Vector3 velocity)
+    private void HostWrecked(Vector3 enuVelocity)
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
         if (!_byHost.Remove(sender, out var ride)) return;
-        foreach (var (peer, _) in ride.Riders) { _byRider.Remove(peer); RpcId(peer, MethodName.Eject, velocity); }
+        // passed on as it came: the local east-up-south at the host
+        foreach (var (peer, _) in ride.Riders) { _byRider.Remove(peer); RpcId(peer, MethodName.Eject, enuVelocity); }
     }
 
     /// <summary>
@@ -408,7 +416,12 @@ public partial class PassengerService : Node
     private void Moved(int host, int seat) => Local?.BoardAs(host, seat);
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Eject(Vector3 velocity) => Local?.ThrownOut(velocity);
+    private void Eject(Vector3 enuVelocity)
+    {
+        // the local east-up-south at the host (#1503) -> this peer's world axes at its own body
+        if (Local is not { } me) return;
+        me.ThrownOut(me.Origin is { } origin ? origin.WorldOfEnu(me.GlobalPosition, enuVelocity) : enuVelocity);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void InertiaIs(int mode) => Inertia = (DeckInertia)mode;

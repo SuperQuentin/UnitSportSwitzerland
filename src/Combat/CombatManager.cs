@@ -48,7 +48,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
 
     /// <summary>The player this client fires as. Resolved per frame, never captured.</summary>
     public Func<FootPlayer?>? LocalPlayer { get; set; }
-    public ChunkManager? Terrain { get; set; }
+    public IWorldGround? Terrain { get; set; }
 
     // --- for the HUD and the probe ---
     public int Ammo { get; private set; } = Magazine;
@@ -104,7 +104,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     /// <summary>This peer's origin: rounds go to the server and back in LV95 (#185).</summary>
     private Core.WorldOrigin _origin = null!;
 
-    public static CombatManager Create(Node world, ChunkManager? terrain, Core.WorldOrigin origin, bool server)
+    public static CombatManager Create(Node world, IWorldGround? terrain, Core.WorldOrigin origin, bool server)
     {
         var c = new CombatManager { Name = NodeName, Terrain = terrain, _origin = origin, _server = server };
         world.AddChild(c);
@@ -262,8 +262,9 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
     /// </summary>
     private void SendShot(Vector3 muzzle, Vector3 vel)
     {
-        var at = _origin.ToGlobal(muzzle);
-        RpcId(1, MethodName.Shot, at.E, at.N, at.Alt, vel);
+        var (x, y, z) = _origin.ToGlobal(muzzle).ToWire();
+        // ECEF position, velocity in the local east-up-south at the muzzle (#1503)
+        RpcId(1, MethodName.Shot, x, y, z, _origin.EnuOf(muzzle, vel));
     }
 
     /// <summary>
@@ -296,21 +297,24 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void Shot(double e, double n, double alt, Vector3 velocity)
+    private void Shot(double x, double y, double z, Vector3 velocity)
     {
         if (!_server) return;
         long shooter = Multiplayer.GetRemoteSenderId();
         var interest = GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName);
-        // relayed as it came, LV95: the server's own origin has nothing to do with it
+        // relayed as it came, ECEF and ENU: the server's own origin has nothing to do with it
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != shooter && interest?.ServerSees(peer, shooter) != false)
-                RpcId(peer, MethodName.ShotFrom, shooter, e, n, alt, velocity);
+                RpcId(peer, MethodName.ShotFrom, shooter, x, y, z, velocity);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void ShotFrom(long shooter, double e, double n, double alt, Vector3 velocity) =>
-        Spawn(_origin.ToWorld(e, n, alt), velocity, shooter);
+    private void ShotFrom(long shooter, double x, double y, double z, Vector3 velocity)
+    {
+        var at = _origin.ToWorld(GlobalPos.FromWire(x, y, z));
+        Spawn(at, _origin.WorldOfEnu(at, velocity), shooter);
+    }
 
     private void Spawn(Vector3 origin, Vector3 velocity, long shooter)
     {

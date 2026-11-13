@@ -338,7 +338,7 @@ public partial class BirthdayService : Node
         if (!_server) WishTaken(to);
         else if (Connected(from)) RpcId(from, MethodName.WishTaken, to);
         var head = b!.Global;
-        var at = _origin.ToWorld(head.E, head.N, head.Alt + 1.9);
+        var at = _origin.ToWorld(head.Moved(0, 0, 1.9));
         if (_server) GetParent()?.GetNodeOrNull<ItemEvents>(ItemEvents.NodeName)?.ServerSend(to, ItemEventKind.BirthdayWish, at, Vector3.Zero, wisher);
         return null;
     }
@@ -406,7 +406,7 @@ public partial class BirthdayService : Node
         string? why = o == null ? "The cake is gone."
             : CakeLeft(cake) <= 0 ? "Not a crumb left."
             : body == null ? "Not here."
-            : body.Global.DistanceTo(new GlobalPos(o.E, o.N, o.Altitude)) > BirthdayRules.SliceReach + 1.5f ? "Too far from the cake."
+            : body.Global.DistanceTo(GlobalPos.FromLv95(o.E, o.N, o.Altitude)) > BirthdayRules.SliceReach + 1.5f ? "Too far from the cake."
             : null;
         if (why != null)
         {
@@ -474,15 +474,21 @@ public partial class BirthdayService : Node
         if (why != null) return false;
         _lastShow = now;
         var at = me.Global;
-        if (Authority) ServeShow(Self, at.E, at.N);
-        else RpcId(1, MethodName.RequestShow, at.E, at.N);
+        if (Authority) ServeShow(Self, at.Lv95.E, at.Lv95.N);
+        else
+        {
+            var (x, y, z) = at.ToWire();   // (#1503) the wire is ECEF
+            RpcId(1, MethodName.RequestShow, x, y, z);
+        }
         return true;
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestShow(double e, double n)
+    private void RequestShow(double x, double y, double z)
     {
-        if (_server) ServeShow(Multiplayer.GetRemoteSenderId(), e, n);
+        if (!_server) return;
+        var at = GlobalPos.FromWire(x, y, z);
+        ServeShow(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N);
     }
 
     /// <summary>The authority: <paramref name="peer"/> lights birthday fireworks at <paramref name="e"/>, <paramref name="n"/>. Null when lit, else why not.</summary>
@@ -495,7 +501,7 @@ public partial class BirthdayService : Node
             : shows.Count >= BirthdayRules.ShowsPerDay ? "That was today's last show."
             : now - shows.Last < BirthdayRules.ShowCooldown ? "Wait for your fireworks to end."
             : !double.IsFinite(e) || !double.IsFinite(n) || BodyOf?.Invoke(peer) is not { } body ? "Not here."
-            : body.Global.DistanceTo(new GlobalPos(e, n, body.Global.Alt)) > 30 ? "Light it where you stand."
+            : body.Global.DistanceTo(GlobalPos.FromLv95(e, n, body.Global.Alt)) > 30 ? "Light it where you stand."
             : null;
         if (why != null)
         {
@@ -508,14 +514,19 @@ public partial class BirthdayService : Node
         GD.Print($"[birthday] {Who(peer)} lit birthday fireworks, seed {seed}");
         if (_server)
         {
-            foreach (int p in Multiplayer.GetPeers()) RpcId(p, MethodName.Show, start, seed, e, n);
+            var (x, y, z) = GlobalPos.FromLv95(e, n, BodyOf?.Invoke(peer)?.Global.Alt ?? 0).ToWire();   // (#1503) the wire is ECEF
+            foreach (int p in Multiplayer.GetPeers()) RpcId(p, MethodName.Show, start, seed, x, y, z);
         }
-        else Show(start, seed, e, n);
+        else Festivals.Fireworks.Instance?.QueueBirthday(start, seed, e, n);
         return null;
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Show(double start, int seed, double e, double n) => Festivals.Fireworks.Instance?.QueueBirthday(start, seed, e, n);
+    private void Show(double start, int seed, double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        Festivals.Fireworks.Instance?.QueueBirthday(start, seed, at.Lv95.E, at.Lv95.N);
+    }
 
     // ---- /birthday -----------------------------------------------------------------------------------
 

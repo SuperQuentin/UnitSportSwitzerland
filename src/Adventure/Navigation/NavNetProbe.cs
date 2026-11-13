@@ -63,7 +63,7 @@ public partial class NavNetProbe : ChatProbe
         Chat.Send("/party invite Tom");
         Expect(await Until(() => Parties.Client is { Members.Count: 2 }, 30), "A's party holds A and B");
         var at = Me!.Global;
-        Travel.AskPinAdd(at.E + 25, at.N + 5, (byte)PinIcon.Flag, "Meet here", shared: true);
+        Travel.AskPinAdd(at.Moved(25, 5), (byte)PinIcon.Flag, "Meet here", shared: true);
         Expect(await Until(() => Travel.MyPins.Pins.Count == 1, 10), "the pin is in A's section");
         Say("pinned");
 
@@ -138,8 +138,8 @@ public partial class NavNetProbe : ChatProbe
         Chat!.Send("/bank Lea set 500");
         Expect(await Heard("WALK", "arrived", 120), "A travelled");
         var a = Parties.Client!.Members.First(m => m.Name == "Lea").Peer;
-        Expect(await Until(() => AdventureCompass.PeerAt?.Invoke(a) is { } p && TravelNetwork.Distance(stop, p.E, p.N) < 40, 15),
-            $"B sees A's remote body at the bus stop ({(AdventureCompass.PeerAt?.Invoke(a) is { } q ? TravelNetwork.Distance(stop, q.E, q.N) : -1):F0} m)");
+        Expect(await Until(() => AdventureCompass.PeerAt?.Invoke(a) is { } p && TravelNetwork.Distance(stop, p) < 40, 15),
+            $"B sees A's remote body at the bus stop ({(AdventureCompass.PeerAt?.Invoke(a) is { } q ? TravelNetwork.Distance(stop, q) : -1):F0} m)");
         Say("seen");
         Expect(await Heard("WALK", "fundga", 60), "A wants the GA");
         Chat.Send("/bank Lea set 5000");
@@ -148,7 +148,7 @@ public partial class NavNetProbe : ChatProbe
         Expect(!Travel.MyBook.Has(stop.Id), "none of A's network is B's");
     }
 
-    private double Dist(Poi p) => TravelNetwork.Distance(p, Me!.Global.E, Me.Global.N);
+    private double Dist(Poi p) => TravelNetwork.Distance(p, Me!.Global);
 
     /// <summary>Walks the body in 20 m steps twice a second (under the jump rule's 40 m/s).</summary>
     private async Task WalkTo(double e, double n)
@@ -157,13 +157,15 @@ public partial class NavNetProbe : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }
-        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.E:F1}/{me.Global.N:F1}"));
+        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.Lv95}"));
     }
 }

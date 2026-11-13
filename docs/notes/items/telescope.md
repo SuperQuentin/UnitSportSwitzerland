@@ -25,20 +25,29 @@
   (`TelescopeOptics`, ×1.25 a notch; the moon fills the view at ~2,300 mm), look × fov/76 with no
   floor, Use locks on the moon when it is within the view (or a degree) and follows it each frame.
   A round eyepiece mask, the focal length and ×, the keys.
+- **Targets and info** (#1530, `Items/TelescopeTargets`, plain C#): the target menu lists the moon, the
+  planets and Io, Europa, Ganymede, Callisto and Titan (never the sun) down the left of the view; Left / Right
+  (pad X / LB; VR left X / left trigger) slew to the previous / next one and lock on (`TelescopeView.SelectTarget`;
+  the lock already followed any body, planet or satellite each frame, through `SkyBodies.DirectionOf`), so it
+  stays centred while the player moves or the clock runs. Up (pad / VR Y) toggles the info HUD down the right:
+  magnitude, distance (km, or AU past the moon), apparent size, lit share (moon: waxing / waning), altitude and
+  azimuth of the target's world direction, "below the horizon" under it. Read from the ephemeris
+  (`Ephemeris.Ecef`, `Magnitude`, `Radii`, `MoonPhase`; the moon's magnitude from Allen's phase law), geocentric,
+  at most four times a second and only while shown; texts set only on change (`TelescopeTargetsTests`).
 - **Below 1°**: Godot's `Camera3D.Fov` refuses under 1°, so `Core/CameraLens.SetFov` switches to a
   frustum projection of the same angle (`Near` 1 m keeps its size workable); `CameraLens.FovOf`
   reads either, and C0's `LodScale` and the terrain's view cone (`ChunkManager.SetView`) read through
   it. The shot queue's `fov` line takes any angle the same way. Detail picked for a ×400 zoom has no
   cap yet: point it at far mountains and watch the frame time (`items/telescope` follow-up).
 - **Devices**: wheel / + - / D-pad ↑ ↓ (→) zoom; mouse and right stick turn; Use (LMB, RT, VR
-  trigger) locks; E or Esc / B steps back. VR: the head stays the camera, the eyepiece's picture
+  trigger) locks; Left / Right (X / LB) the previous / next target, Up (Y) the info; E or Esc / B steps back. VR: the head stays the camera, the eyepiece's picture
   (a `SubViewport`) floats 0.5 m before the eyes, the tube follows the head. Rows in `ControlsHelp`,
   `xr/vr-action-map`, `bots/bot-capability-map` (n/a).
 - **Checks**: `--telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23`
-  (the item path, the view, a 0.58° frustum, the lock holding the moon to 0.0000° over 8 s, refused
+  (the item path, the view, a 0.58° frustum, the lock holding the moon to 0.0000° over 8 s, the menu slewing to Jupiter and holding it, refused
   packing up, E steps back, packed up into the pack; windowed it saves
   `test_output/telescope_moon.png`). `tools/telescopecheck.sh`: two clients, busy, refused, freed.
-  Unit: `TelescopeOpticsTests`, `EphemerisTests.The_moons_face_matches_Horizons`.
+  Unit: `TelescopeOpticsTests`, `TelescopeTargetsTests`, `EphemerisTests.The_moons_face_matches_Horizons`.
 - Not yet: the tube's aim replicated (others see it level), planets and far markers (H7, C3),
   lunar elevation and finer moon levels, the POI viewpoint telescopes (`Adventure/Places`) opening
   this view.

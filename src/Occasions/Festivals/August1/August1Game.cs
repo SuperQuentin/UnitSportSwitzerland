@@ -142,9 +142,9 @@ public partial class August1Game : CanvasLayer
         if (_svc?.August1Now() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            target = August1Rules.NearLampionStand(m.Site, g.E, g.N) ? FestivalService.August1LampionStand
-                : August1Rules.NearFireworkStand(m.Site, g.E, g.N) ? FestivalService.August1FireworkStand
-                : August1Rules.NearPost(m.Site, g.E, g.N) ? FestivalService.August1Post : -1;
+            target = August1Rules.NearLampionStand(m.Site, g) ? FestivalService.August1LampionStand
+                : August1Rules.NearFireworkStand(m.Site, g) ? FestivalService.August1FireworkStand
+                : August1Rules.NearPost(m.Site, g) ? FestivalService.August1Post : -1;
         }
         else if (_walking) _walking = false;   // the festival ended, or this body is gone
         bool shown = target >= 0 || _walking || GameClock.Now - _messageAt < 4;
@@ -206,9 +206,10 @@ public partial class August1Game : CanvasLayer
         var path = August1Rules.Path(site);
         var g = p.Global;
         var to = path[Math.Clamp(_next, 0, August1Rules.Waypoints)];
-        double dx = to.E - g.E, dn = to.N - g.N;
+        var target = GlobalPos.FromLv95(to.E, to.N, g.Alt);
+        var (dx, dn, _) = g.OffsetTo(target);
         int dist = (int)(Math.Sqrt(dx * dx + dn * dn) / 5) * 5;
-        int bearing = (int)Math.Round(Math.Atan2(dx, dn) / (Math.PI / 4));   // 0 = north, clockwise
+        int bearing = (int)Math.Round(g.BearingTo(target) / (Math.PI / 4));   // 0 = true north, clockwise (#1504)
         int secs = (int)(GameClock.Now - _runStart);
         var key = (secs, _next, dist, ((bearing % 8) + 8) % 8);
         if (key == _runKey) return;

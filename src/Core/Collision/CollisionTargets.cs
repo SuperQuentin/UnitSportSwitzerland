@@ -131,6 +131,10 @@ public static class CollisionTargets
         ("Machines/UFO", "*", new[] { "side", "side-" }, "the ramp is drawn only"),
         // Rideable.ParkedBox, measured without the rotor: one box from the ground up, under the tail boom too
         ("Aircraft/Helicopter", "car", new[] { "side+" }, "the parked box is solid under the tail boom"),
+        // Airliner.ShuttleShape: one parked box from the ground up; under the middle of the 2 m belly
+        // (the mains stand outside it) nothing is drawn, and a box from the belly up left the nose and
+        // the body flap, which hang lower, drawn only
+        ("Aircraft/Space shuttle", "*", new[] { "side" }, "the parked box stands from the ground under the belly"),
         // Steamer.BuildParkedHull: the hull's own sections, the paddle boxes either side left out
         ("Boats/Paddle steamer", "*", new[] { "end-", "end+" }, "the parked hull leaves out the paddle boxes"),
     };

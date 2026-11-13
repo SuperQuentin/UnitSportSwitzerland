@@ -7,7 +7,7 @@ namespace UnitSport.World;
 /// <summary>
 /// The water, for everything that needs it (#299): swimmers, boats, birds, audio, loot, vehicles.
 /// Static, one per process, no node: it reads the loaded tiles' still water
-/// (<see cref="ChunkManager.TryGetWater"/>) and adds the deterministic waves of
+/// (<see cref="IWorldGround.TryGetWater"/>) and adds the deterministic waves of
 /// <see cref="WaveSpectrum"/> on the synchronized server clock, so every peer, headless ones
 /// included, gets the same surface with nothing replicated but <see cref="SeaState"/>. The shader
 /// draws the same function from the globals <see cref="PushGlobals"/> writes.
@@ -26,7 +26,8 @@ namespace UnitSport.World;
 /// </summary>
 public static class WaterField
 {
-    private static ChunkManager? _chunks;
+    /// <summary>The ground whose water is read: the flat tiles' or the earth world's leaves (#1513).</summary>
+    private static IWorldGround? _ground;
     private static float _seaState;
     private static readonly float[] Amp = new float[WaveSpectrum.Count];
 
@@ -53,31 +54,34 @@ public static class WaterField
         SeaStateChanged?.Invoke(state);
     }
 
-    /// <summary>The tiles whose water is queried; null when there are none (a flat test world, teardown).</summary>
-    public static void Bind(ChunkManager? chunks) => _chunks = chunks;
+    /// <summary>
+    /// The ground whose water is queried: the flat tiles' or the earth world's leaves (<c>--frame earth</c>, #1513); null
+    /// when there is none (a flat test world, teardown).
+    /// </summary>
+    public static void Bind(IWorldGround? ground) => _ground = ground;
 
     /// <summary>
     /// The water of another terrain, while a scope lasts: a body in a server region of its own steps in
     /// that region's frame (#1456), so its water comes from the region's terrain, not the one bound.
-    /// Null changes nothing.
+    /// Null changes nothing. A region on leaves (<c>--frame earth</c>, #1513) passes its earth world's ground.
     /// </summary>
-    public static Scope In(ChunkManager? chunks) => new(chunks);
+    public static Scope In(IWorldGround? ground) => new(ground);
 
     public readonly struct Scope : IDisposable
     {
-        private readonly ChunkManager? _was;
+        private readonly IWorldGround? _was;
         private readonly bool _set;
 
-        public Scope(ChunkManager? chunks)
+        public Scope(IWorldGround? ground)
         {
-            _set = chunks != null;
-            _was = _chunks;
-            if (_set) _chunks = chunks;
+            _set = ground != null;
+            _was = _ground;
+            if (_set) _ground = ground;
         }
 
         public void Dispose()
         {
-            if (_set) _chunks = _was;
+            if (_set) _ground = _was;
         }
     }
 
@@ -100,7 +104,7 @@ public static class WaterField
     {
         still = 0f;
         scale = 0f;
-        return _chunks != null && _chunks.TryGetWater(world, out still, out scale);
+        return _ground != null && _ground.TryGetWater(world, out still, out scale);
     }
 
     // ---- the surface -----------------------------------------------------------------------
@@ -153,20 +157,32 @@ public static class WaterField
     public static Vector3 Normal(float x, float z, double t)
     {
         var p = new Vector3(x, 0, z);
-        if (!TryGetStill(p, out _, out float scale) || !Pattern(p, out double px, out double pz)) return Vector3.Up;
+        if (!TryGetStill(p, out _, out float scale) || !Pattern(p, out var at)) return Vector3.Up;
+        var n = NormalOn(at.AX, at.AZ, at.AngA, t, scale);
+        return at.WeightB > 0f ? n.Lerp(NormalOn(at.BX, at.BZ, at.AngB, t, scale), at.WeightB).Normalized() : n;
+    }
+
+    private static Vector3 NormalOn(double px, double pz, double angle, double t, float scale)
+    {
         RestPoint(ref px, ref pz, t, scale);
         WaveSpectrum.Normal(px, pz, t, scale, Amp, out double nx, out double ny, out double nz);
-        return new Vector3((float)nx, (float)ny, (float)nz);
+        return Turned(nx, ny, nz, angle);
     }
 
     /// <summary>The velocity of the water at the surface over world (x, z) at wave time t (zero with no water).</summary>
     public static Vector3 Velocity(float x, float z, double t)
     {
         var p = new Vector3(x, 0, z);
-        if (!TryGetStill(p, out _, out float scale) || !Pattern(p, out double px, out double pz)) return Vector3.Zero;
+        if (!TryGetStill(p, out _, out float scale) || !Pattern(p, out var at)) return Vector3.Zero;
+        var v = VelocityOn(at.AX, at.AZ, at.AngA, t, scale);
+        return at.WeightB > 0f ? v.Lerp(VelocityOn(at.BX, at.BZ, at.AngB, t, scale), at.WeightB) : v;
+    }
+
+    private static Vector3 VelocityOn(double px, double pz, double angle, double t, float scale)
+    {
         RestPoint(ref px, ref pz, t, scale);
         WaveSpectrum.Velocity(px, pz, t, scale, Amp, out double vx, out double vy, out double vz);
-        return new Vector3((float)vx, (float)vy, (float)vz);
+        return Turned(vx, vy, vz, angle);
     }
 
     /// <summary>
@@ -175,15 +191,19 @@ public static class WaterField
     /// </summary>
     public static Vector3 Displacement(Vector3 restWorld, double t, float scale)
     {
-        if (!Pattern(restWorld, out double px, out double pz)) return Vector3.Zero;
-        WaveSpectrum.Displace(px, pz, t, scale, Amp, out double dx, out double dy, out double dz);
-        return new Vector3((float)dx, (float)dy, (float)dz);
+        if (!Pattern(restWorld, out var at)) return Vector3.Zero;
+        WaveSpectrum.Displace(at.AX, at.AZ, t, scale, Amp, out double dx, out double dy, out double dz);
+        var d = Turned(dx, dy, dz, at.AngA);
+        if (at.WeightB <= 0f) return d;
+        WaveSpectrum.Displace(at.BX, at.BZ, t, scale, Amp, out dx, out dy, out dz);
+        return d.Lerp(Turned(dx, dy, dz, at.AngB), at.WeightB);
     }
 
     private static double HeightOver(float x, float z, double t, float scale)
     {
-        if (scale <= 0f || !Pattern(new Vector3(x, 0, z), out double px, out double pz)) return 0;
-        return WaveSpectrum.HeightAt(px, pz, t, scale, Amp);
+        if (scale <= 0f || !Pattern(new Vector3(x, 0, z), out var at)) return 0;
+        double h = WaveSpectrum.HeightAt(at.AX, at.AZ, t, scale, Amp);
+        return at.WeightB > 0f ? h + (WaveSpectrum.HeightAt(at.BX, at.BZ, t, scale, Amp) - h) * at.WeightB : h;
     }
 
     /// <summary>Moves a displaced point back to the rest point the waves carried there.</summary>
@@ -202,7 +222,7 @@ public static class WaterField
     public static bool TryWorld(double lv95E, double lv95N, out Vector3 world)
     {
         world = Vector3.Zero;
-        if (_chunks?.Origin is not { } origin) return false;
+        if (_ground?.Origin is not { } origin) return false;
         world = origin.ToWorld(lv95E, lv95N, 0);
         return true;
     }
@@ -211,7 +231,7 @@ public static class WaterField
     public static bool TryLv95(Vector3 world, out double lv95E, out double lv95N)
     {
         lv95E = lv95N = 0;
-        if (_chunks?.Origin is not { } origin) return false;
+        if (_ground?.Origin is not { } origin) return false;
         (lv95E, lv95N) = origin.ToLv95(world);
         return true;
     }
@@ -237,14 +257,53 @@ public static class WaterField
     }
 
     /// <summary>Pattern coordinates (LV95 modulo 9.6 km, see <see cref="WaveSpectrum"/>) of a world point.</summary>
-    private static bool Pattern(Vector3 world, out double px, out double pz)
+    private static bool Pattern(Vector3 world, out Place at)
     {
-        px = pz = 0;
-        if (_chunks?.Origin is not { } origin) return false;
+        at = default;
+        if (_ground?.Origin is not { } origin) return false;
+        if (_ground.PatternsOnFaces)
+        {
+            at = OnFaces(origin.Frame, world);
+            return true;
+        }
         var (e, n) = origin.ToLv95(world);
-        px = WaveSpectrum.PatternX(e);
-        pz = WaveSpectrum.PatternZ(n);
+        double px = WaveSpectrum.PatternX(e), pz = WaveSpectrum.PatternZ(n);
+        at = new Place(px, pz, px, pz, 0f, 0, 0);
         return true;
+    }
+
+    /// <summary>
+    /// A point's pattern place: face A's pattern point, face B's and B's weight (B = A off a face edge), and the
+    /// angle each face's pattern X axis makes in the world's horizontal (0 in the flat world: pattern axes are world
+    /// axes there).
+    /// </summary>
+    private readonly record struct Place(double AX, double AZ, double BX, double BZ, float WeightB, double AngA, double AngB);
+
+    /// <summary>
+    /// The round world's pattern place (#1512): as the shader reads it from a leaf's baked points
+    /// (<see cref="Terrain.Earth.LeafPattern"/>), here from the point's place on the Earth, so a hull floats on the
+    /// waves drawn under it in any frame.
+    /// </summary>
+    private static Place OnFaces(Core.OriginFrame frame, Vector3 world)
+    {
+        var n = Terrain.Earth.PatternSpace.NormalOf(frame.ToGlobal(world).Ecef);
+        var pair = Terrain.Earth.PatternSpace.PairAt(n);
+        var axes = frame.EcefAxes;
+        var (ax, az) = Terrain.Earth.PatternSpace.OnFace(pair.A, n);
+        double angA = Terrain.Earth.PatternSpace.AngleIn(Terrain.Earth.PatternSpace.AxisX(pair.A, n), axes.X, axes.Z);
+        if (pair.Single) return new Place(Terrain.Earth.PatternSpace.Wrap(ax), Terrain.Earth.PatternSpace.Wrap(az), 0, 0, 0f, angA, angA);
+        var (bx, bz) = Terrain.Earth.PatternSpace.OnFace(pair.B, n);
+        double angB = Terrain.Earth.PatternSpace.AngleIn(Terrain.Earth.PatternSpace.AxisX(pair.B, n), axes.X, axes.Z);
+        return new Place(Terrain.Earth.PatternSpace.Wrap(ax), Terrain.Earth.PatternSpace.Wrap(az),
+            Terrain.Earth.PatternSpace.Wrap(bx), Terrain.Earth.PatternSpace.Wrap(bz), Terrain.Earth.PatternSpace.WeightB(pair, n), angA, angB);
+    }
+
+    /// <summary>A pattern-space vector (x along pattern X, z along pattern Z) in the world's axes.</summary>
+    private static Vector3 Turned(double x, double y, double z, double angle)
+    {
+        if (angle == 0) return new Vector3((float)x, (float)y, (float)z);
+        var (tx, tz) = Terrain.Earth.PatternSpace.Turn(x, z, angle);
+        return new Vector3((float)tx, (float)y, (float)tz);
     }
 
     // ---- the shader ------------------------------------------------------------------------

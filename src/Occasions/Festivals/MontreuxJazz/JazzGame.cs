@@ -120,8 +120,8 @@ public partial class JazzGame : CanvasLayer
         if (_svc?.MontreuxNow() is { } m && p != null)
         {
             var g = p.Global;
-            rail = MontreuxJazzRules.AtRail(m.Site, g.E, g.N);
-            zone = MontreuxJazzRules.InZone(m.Site, g.E, g.N);
+            rail = MontreuxJazzRules.AtRail(m.Site, g);
+            zone = MontreuxJazzRules.InZone(m.Site, g);
             var e = EventOf(m.Run);
             double h = _svc.Hour();
             if (zone && h >= e.StartHour && h < e.EndHour)

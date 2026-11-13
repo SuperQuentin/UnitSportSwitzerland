@@ -117,9 +117,10 @@ public partial class AdventureNetProbe : ChatProbe
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.3f, (float)-(n - g.N));
+        var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.3f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Until(() => me.IsOnFloor(), 5);
-        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.E:F1}/{me.Global.N:F1}"));
+        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.Lv95}"));
     }
 }

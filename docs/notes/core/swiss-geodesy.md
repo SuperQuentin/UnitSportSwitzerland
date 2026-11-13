@@ -13,7 +13,7 @@
 - **The way in from latitude and longitude** (GPS, OSM, IGN): `SwissGeodesy.ToLv95(lat, lon[, hEll])`
   and back `ToLatLon(e, n[, hLhn95])`, rigorous however far out. The game uses only these (#1443,
   G0a: GPX import and export, photo spots, landmarks, berths, the 1 August quays); the preprocessor's
-  stages still use `SwissProjection` until G1. A point without a height is taken at 500 m
+  stages too since #1507, through `GeoInput` on the built tiles' ground (`tools/cube-compare`). A point without a height is taken at 500 m
   ellipsoidal; the height moves it by 2.6-2.8 cm per km (the datums' normals are not parallel), so
   pass it when it is known.
 - **Types**: `EcefPos` (earth-centred doubles), `Geodetic` (degrees, ellipsoidal height),
@@ -33,6 +33,8 @@
   - `lhn95tobessel` gives the geoid (altitude 0 in, the geoid out). It answers over the whole grid
     but not at 2,900,000 / 1,300,000. To resample the grid, loop over the nodes with `xargs -P 8`
     (273 calls in a few seconds) and paste the centimetres into `GeoidCm`.
+- **Grid north against true north**: `SwissGeodesy.GridConvergence(e, n)`, the meridian convergence (0 on Bern's
+  meridian, ~+0.93° at Geneva); what the game turns every grid heading by (`core/true-north`, #1504).
 - **The projection sphere's radius is 6,378,815.904 m** (`SwissGeodesy.R`): the same R the
   render-space curvature of #187 uses near Bern.
 - **The valid domain** (#1480): LV95 round-trips to a tenth of a millimetre over the whole Earth **but a

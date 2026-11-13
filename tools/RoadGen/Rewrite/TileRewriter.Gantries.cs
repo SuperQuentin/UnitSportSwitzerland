@@ -31,6 +31,19 @@ public sealed class GantryContext
             : [],
     };
 
+    /// <summary>The same data on another plane (#1507: a work frame's, from LV95; see <see cref="SitgGantries.Moved"/>).</summary>
+    public GantryContext Moved(Func<double, double, (double X, double Y)> toPlane, Func<double, double, double, double> bearing) => new()
+    {
+        Sitg = Sitg?.Moved(toPlane, bearing),
+        Rule = Rule,
+        Places = Places.Select(p =>
+        {
+            var (x, y) = toPlane(p.E, p.N);
+            return new Place { Name = p.Name, Canton = p.Canton, E = x, N = y, Kind = p.Kind, Buildings = p.Buildings, Elevation = p.Elevation };
+        }).ToList(),
+        Overlay = Overlay,
+    };
+
     /// <summary>Writes the facts (<c>gantry_facts.tsv</c>), sorted so two runs give the same file.</summary>
     public void WriteFacts(string path)
     {
@@ -178,7 +191,7 @@ public static partial class TileRewriter
         return new SignGantry
         {
             Arm = arm, Lit = true, X = fa[0], Y = fa[1], Z = fa[2], EndX = fb[0], EndY = fb[1], EndZ = fb[2],
-            Bottom = road + GantryLowerEdge, Heading = Heading(u), Signs = signs,
+            Bottom = road + GantryLowerEdge, Heading = Heading(home, pa, u), Signs = signs,
         };
     }
 

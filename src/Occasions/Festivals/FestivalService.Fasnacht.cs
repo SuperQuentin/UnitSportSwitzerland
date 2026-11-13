@@ -96,15 +96,15 @@ public partial class FestivalService
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return target == FasnachtRaeppli ? "No position." : Tell(peer, "Go to the square.");
         return target switch
         {
-            FasnachtStall => ServeStall(peer, p, run, def, site, at.E, at.N),
-            FasnachtLantern => ServeLantern(peer, p, run, def, site, at.E, at.N),
-            _ => ServeThrow(peer, p, run, def, site, at.E, at.N),
+            FasnachtStall => ServeStall(peer, p, run, def, site, at),
+            FasnachtLantern => ServeLantern(peer, p, run, def, site, at),
+            _ => ServeThrow(peer, p, run, def, site, at),
         };
     }
 
-    private string? ServeStall(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeStall(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (!FasnachtRules.NearStall(site, e, n, FasnachtRules.ServerSlack)) return Tell(peer, "Go to the Larven stall first.");
+        if (!FasnachtRules.NearStall(site, at, FasnachtRules.ServerSlack)) return Tell(peer, "Go to the Larven stall first.");
         if (PlayedToday(p, run, def, FasnachtRules.LarvenGame) > 0) return Tell(peer, "You have had your Larve today.");
         int mask = FasnachtRules.MaskFor(p.Key, run.Day);
         int granted = Award(peer, run.Id, FasnachtRules.StallBatzen, "a Larve from the stall", FasnachtRules.LarvenGame, FasnachtRules.StallPoints);
@@ -115,10 +115,10 @@ public partial class FestivalService
         return null;
     }
 
-    private string? ServeLantern(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeLantern(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
         if (!def.IsOpen(FasnachtRules.MorgestraichGame, run.Day)) return Tell(peer, "The Morgestraich is Basel's.");
-        if (!FasnachtRules.NearLantern(site, e, n, FasnachtRules.ServerSlack)) return Tell(peer, "Go to the Vorlaarve lantern first.");
+        if (!FasnachtRules.NearLantern(site, at, FasnachtRules.ServerSlack)) return Tell(peer, "Go to the Vorlaarve lantern first.");
         if (!FasnachtRules.Morgestraich(run.Id, run.Day, FasnachtHour())) return Tell(peer, "The Morgestraich is on the first day at four in the morning.");
         if (PlayedToday(p, run, def, FasnachtRules.MorgestraichGame) > 0) return Tell(peer, "You marched at the Morgestraich today.");
         int granted = Award(peer, run.Id, FasnachtRules.MorgestraichBatzen, "the Morgestraich", FasnachtRules.MorgestraichGame, FasnachtRules.MorgestraichPoints);
@@ -127,9 +127,9 @@ public partial class FestivalService
         return null;
     }
 
-    private string? ServeThrow(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeThrow(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (FasnachtRules.Dist(e, n, (site.E, site.N)) > FasnachtRules.RaeppliReach + FasnachtRules.ServerSlack) return "Too far from the Fasnacht.";
+        if (FasnachtRules.Dist(at, (site.E, site.N)) > FasnachtRules.RaeppliReach + FasnachtRules.ServerSlack) return "Too far from the Fasnacht.";
         double now = GameClock.Now;
         if (_throwAt.TryGetValue(peer, out double last) && now - last < FasnachtRules.ThrowGap) return "Too fast.";
         _throwAt[peer] = now;
@@ -162,7 +162,7 @@ public partial class FestivalService
         if (FasnachtNow() is not { } m || FestivalCatalog.Get(m.Run.Id) is not { } def || !def.IsOpen(FasnachtRules.GuggenGame, m.Run.Day))
             return Tell(peer, "There is no Guggenmusik to play with now.");
         var (run, site) = m;
-        if (_adventure.PositionOf?.Invoke(peer) is not { } at || !FasnachtRules.NearStage(site, at.E, at.N, FasnachtRules.ServerSlack))
+        if (_adventure.PositionOf?.Invoke(peer) is not { } at || !FasnachtRules.NearStage(site, at, FasnachtRules.ServerSlack))
             return Tell(peer, "Go to the Guggenmusik's stage to play.");
         if (peer > 0 && !_adventure.Active(peer)) return Tell(peer, "No adventuring now.");
         if (peer > 0 && Connected(peer) && !Allowed(peer)) return "too fast";
@@ -197,7 +197,7 @@ public partial class FestivalService
         if (voice.Taps != null) return Tell(peer, "You already played this one.");
         if (peer > 0 && GameClock.Now - voice.JoinedAt < session.Chart.Seconds * GuggenMinShare) return Tell(peer, "The song is not over yet.");
         if (peer > 0 && Connected(peer) && !Allowed(peer)) return "too fast";
-        if (RunningOf(session.Festival)?.Site is not { } site || _adventure.PositionOf?.Invoke(peer) is not { } at || !FasnachtRules.NearStage(site, at.E, at.N, 33))
+        if (RunningOf(session.Festival)?.Site is not { } site || _adventure.PositionOf?.Invoke(peer) is not { } at || !FasnachtRules.NearStage(site, at, 33))
             return Tell(peer, "You left the stage.");
         if (taps.Length > GuggenWire.MaxTaps || taps.Any(t => t < 0 || t > session.Chart.Seconds + 3)) return Tell(peer, "That song cannot be read.");
         voice.Taps = taps;

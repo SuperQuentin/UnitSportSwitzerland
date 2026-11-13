@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
@@ -325,6 +327,63 @@ public sealed class ContainerBook
 /// </summary>
 public sealed record AwakeSlot(double Since, double? E = null, double? N = null, float Yaw = 0f, int KindId = -1, int Train = 0, float Load = 0f);
 
+/// <summary>
+/// <c>awake.json</c>, the woken slots (#499) on disk (#1503, G2 A2b): <c>{"version": 2, "slots": {key: {since, at,
+/// yawTrue, kindId, train, load}}}</c>, the bay an Earth place on the ground and its heading from true north. Before,
+/// the file was the bare dictionary of <see cref="AwakeSlot"/> (LV95 <c>E</c>, <c>N</c>, grid <c>Yaw</c>): still read,
+/// and the caller writes it back.
+/// </summary>
+public static class AwakeSlots
+{
+    private sealed class Saved
+    {
+        [JsonPropertyName("since")] public double Since { get; set; }
+        [JsonPropertyName("at")] public GlobalPos? At { get; set; }
+        [JsonPropertyName("yawTrue")] public float YawTrue { get; set; }
+        [JsonPropertyName("kindId")] public int KindId { get; set; } = -1;
+        [JsonPropertyName("train")] public int Train { get; set; }
+        [JsonPropertyName("load")] public float Load { get; set; }
+    }
+
+    private sealed class SavedFile
+    {
+        [JsonPropertyName("version")] public int Version { get; set; } = 2;
+        [JsonPropertyName("slots")] public Dictionary<string, Saved> Slots { get; set; } = new();
+    }
+
+    public static string ToJson(IReadOnlyDictionary<string, AwakeSlot> awake)
+    {
+        var file = new SavedFile();
+        foreach (var (key, s) in awake)
+        {
+            GlobalPos? at = s.E is { } e && s.N is { } n ? GlobalPos.FromLv95(e, n, 0) : null;
+            file.Slots[key] = new Saved { Since = s.Since, At = at, YawTrue = at is { } g ? Lv95Grid.TrueYaw(g, s.Yaw) : s.Yaw, KindId = s.KindId, Train = s.Train, Load = s.Load };
+        }
+        return JsonSerializer.Serialize(file);
+    }
+
+    /// <summary>The slots a file holds; <paramref name="old"/> when it is the form before A2b (write it back).</summary>
+    public static Dictionary<string, AwakeSlot> FromJson(string json, out bool old)
+    {
+        var root = JsonNode.Parse(json) as JsonObject;
+        old = root != null && root["slots"] == null && root["version"] == null;
+        if (root == null) return new();
+        if (old) return root.Deserialize<Dictionary<string, AwakeSlot>>() ?? new();
+        var file = root.Deserialize<SavedFile>() ?? new SavedFile();
+        var slots = new Dictionary<string, AwakeSlot>();
+        foreach (var (key, s) in file.Slots)
+        {
+            if (s.At is { } at)
+            {
+                var (e, n, _) = at.Lv95;
+                slots[key] = new AwakeSlot(s.Since, e, n, Lv95Grid.GridYaw(at, s.YawTrue), s.KindId, s.Train, s.Load);
+            }
+            else slots[key] = new AwakeSlot(s.Since, null, null, s.YawTrue, s.KindId, s.Train, s.Load);
+        }
+        return slots;
+    }
+}
+
 /// <summary>The decisions of the containers (#689), pure: which tiles wake, what may sleep.</summary>
 public static class ContainerRules
 {
@@ -367,11 +426,15 @@ public static class ContainerRules
     /// the same way, and <paramref name="pristine"/> (undamaged, untuned, doors shut, nothing playing):
     /// anything else would be silently repaired or undone by turning back into the slot's own look.
     /// </summary>
-    public static bool BackInBay(AwakeSlot slot, double e, double n, float yaw, int kindId, int train, float load, bool pristine)
+    public static bool BackInBay(AwakeSlot slot, double e, double n, float yaw, int kindId, int train, float load, bool pristine) =>
+        BackInBay(slot, GlobalPos.FromLv95(e, n, 0), yaw, kindId, train, load, pristine);
+
+    /// <inheritdoc cref="BackInBay(AwakeSlot, double, double, float, int, int, float, bool)"/>
+    public static bool BackInBay(AwakeSlot slot, GlobalPos at, float yaw, int kindId, int train, float load, bool pristine)
     {
         if (!pristine || slot.E is not { } se || slot.N is not { } sn) return false;
         if (kindId != slot.KindId || train != slot.Train || Math.Abs(load - slot.Load) > 0.05f) return false;
-        if (Math.Sqrt((e - se) * (e - se) + (n - sn) * (n - sn)) > BayReach) return false;
+        if (at.HorizontalDistanceTo(GlobalPos.FromLv95(se, sn, 0)) > BayReach) return false;
         double turn = Math.IEEERemainder(yaw - slot.Yaw, 2 * Math.PI);
         return Math.Abs(turn) <= BayYawDeg * Math.PI / 180;
     }

@@ -236,9 +236,9 @@ public partial class MovieProbe : Node
                 // two keys round the actor at 2 s: the first aims at it, the second is a cut to a fixed view
                 _stage!.Playing = false;
                 _stage.Seek(2);
-                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition);
-                _project!.Camera.Set(new CameraKey { T = 1, E = actor.E + 30, N = actor.N, Alt = actor.Alt + 8, Lens = 24, Ease = KeyEase.Cut, LookAt = 0 }, 0);
-                _cutTo = _project.Camera.Set(new CameraKey { T = 3, E = actor.E - 30, N = actor.N + 5, Alt = actor.Alt + 2, Lens = 85 }, 0);
+                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition).Lv95;
+                _project!.Camera.Set(new CameraKey { T = 1, E = actor.E + 30, N = actor.N, Alt = actor.H + 8, Lens = 24, Ease = KeyEase.Cut, LookAt = 0 }, 0);
+                _cutTo = _project.Camera.Set(new CameraKey { T = 3, E = actor.E - 30, N = actor.N + 5, Alt = actor.H + 2, Lens = 85 }, 0);
                 _cam = new StudioCamera(_origin);
                 AddChild(_cam);
                 _soundFrames = 0;
@@ -265,7 +265,7 @@ public partial class MovieProbe : Node
                 if (++_soundFrames < 3) return;
                 _project!.Camera.Sample(_stage!.Time, out var pose);
                 _cam!.ShowPose(pose, lane => _stage.Puppet(lane)?.GlobalPosition);
-                var want = _origin.ToWorld(new GlobalPos(_cutTo!.E, _cutTo.N, _cutTo.Alt));
+                var want = _origin.ToWorld(GlobalPos.FromLv95(_cutTo!.E, _cutTo.N, _cutTo.Alt));
                 float off = _cam.GlobalPosition.DistanceTo(want);
                 bool lens = Mathf.IsEqualApprox(_cam.Fov, CameraTrack.Fov(85), 0.01f);
                 GD.Print($"[moviecheck] after the cut: {off:F3} m from the next key, lens {_cam.Lens:F0} mm {(off < 0.01f && lens ? "ok" : "WRONG")}");
@@ -277,9 +277,9 @@ public partial class MovieProbe : Node
                 if (made.Count != covering || _project.Clips.Count != before + covering) Fail("cut all missed a lane");
 
                 // a second camera, high and wide, and the program cutting to it at 3.5 s
-                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition);
+                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition).Lv95;
                 var wide = _project.AddCamera();
-                _wide = wide.Set(new CameraKey { T = 0, E = actor.E, N = actor.N - 40, Alt = actor.Alt + 20, Lens = 135 }, 0);
+                _wide = wide.Set(new CameraKey { T = 0, E = actor.E, N = actor.N - 40, Alt = actor.H + 20, Lens = 135 }, 0);
                 _project.CutTo(3.5, 1, 0);
                 _gizmos = new CameraGizmos(_stage, _origin, lane => _stage.Puppet(lane)?.GlobalPosition);
                 AddChild(_gizmos);
@@ -295,7 +295,7 @@ public partial class MovieProbe : Node
                 int before = p.ProgramCamera(3.4), after = p.ProgramCamera(_stage!.Time);
                 p.Cameras[after].Sample(_stage.Time, out var pose);
                 _cam!.ShowPose(pose, lane => _stage.Puppet(lane)?.GlobalPosition);
-                var wideAt = _origin.ToWorld(new GlobalPos(_wide!.E, _wide.N, _wide.Alt));
+                var wideAt = _origin.ToWorld(GlobalPos.FromLv95(_wide!.E, _wide.N, _wide.Alt));
                 float off = _cam.GlobalPosition.DistanceTo(wideAt);
                 bool program = before == 0 && after == 1 && off < 0.01f && Mathf.IsEqualApprox(_cam.Lens, 135f);
                 GD.Print($"[moviecheck] program: Cam {before + 1} before the cut, Cam {after + 1} after it, the view {off:F3} m "
@@ -335,7 +335,7 @@ public partial class MovieProbe : Node
         var puppet = _stage!.Puppet(0);
         var track = _project!.Tracks[0];
         track.Sample(t, _state);
-        var want = _origin.ToWorld(new GlobalPos(_state.E, _state.N, _state.Alt));
+        var want = _origin.ToWorld(GlobalPos.FromLv95(_state.E, _state.N, _state.Alt));
         var kind = (RideKind)_state.Num[ActorIo.RideKind];
         if (puppet == null) { Fail($"t {t:F2} ({why}): no puppet"); return; }
         float off = puppet.GlobalPosition.DistanceTo(want);

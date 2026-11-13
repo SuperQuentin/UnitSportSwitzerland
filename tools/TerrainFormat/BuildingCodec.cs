@@ -15,15 +15,30 @@ public static class BuildingCodec
 {
     public static void Encode(BuildingTile tile, Stream output)
     {
-        Span<byte> header = stackalloc byte[BuildingFormat.HeaderSize];
+        Span<byte> header = stackalloc byte[16];
         BinaryPrimitives.WriteUInt32LittleEndian(header[0..], BuildingFormat.Magic);
         BinaryPrimitives.WriteUInt16LittleEndian(header[4..], BuildingFormat.Version);
         BinaryPrimitives.WriteUInt16LittleEndian(header[6..], 0);
         BinaryPrimitives.WriteInt32LittleEndian(header[8..], tile.Id.E);
         BinaryPrimitives.WriteInt32LittleEndian(header[12..], tile.Id.N);
-        BinaryPrimitives.WriteUInt32LittleEndian(header[16..], (uint)tile.Buildings.Count);
-        BinaryPrimitives.WriteUInt32LittleEndian(header[20..], 0);
         output.Write(header);
+        EncodeBody(tile, output);
+    }
+
+    /// <summary>
+    /// The key-free body (#1505, G2 B1): the building count, the reserved word and the records, what
+    /// follows the header's tile id. The .bldg file is its 16-byte head and then this, byte for byte as
+    /// before the split; a cube leaf's building section (<see cref="LeafBuildings"/>) is this alone,
+    /// compressed. Inside a leaf the triangles, <see cref="Building.MinY"/> and <see cref="Building.MaxY"/>
+    /// are in the leaf's anchor frame (<see cref="CubeKey.Anchor"/>: x east, y ENU up, z south, metres
+    /// from the cell centre on the ellipsoid), not tile-local from the NW corner with y the altitude.
+    /// </summary>
+    public static void EncodeBody(BuildingTile tile, Stream output)
+    {
+        Span<byte> count = stackalloc byte[8];
+        BinaryPrimitives.WriteUInt32LittleEndian(count, (uint)tile.Buildings.Count);
+        BinaryPrimitives.WriteUInt32LittleEndian(count[4..], 0);
+        output.Write(count);
 
         Span<byte> rec = stackalloc byte[20];
         Span<byte> f = stackalloc byte[4];
@@ -48,7 +63,7 @@ public static class BuildingCodec
 
     public static BuildingTile Decode(Stream input)
     {
-        Span<byte> header = stackalloc byte[BuildingFormat.HeaderSize];
+        Span<byte> header = stackalloc byte[16];
         input.ReadExactly(header);
 
         uint magic = BinaryPrimitives.ReadUInt32LittleEndian(header[0..]);
@@ -61,7 +76,15 @@ public static class BuildingCodec
         var id = new TileId(
             BinaryPrimitives.ReadInt32LittleEndian(header[8..]),
             BinaryPrimitives.ReadInt32LittleEndian(header[12..]));
-        uint count = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
+        return DecodeBody(input, id);
+    }
+
+    /// <summary>Reads what <see cref="EncodeBody"/> wrote; <paramref name="id"/> is the LV95 tile's (default inside a leaf).</summary>
+    public static BuildingTile DecodeBody(Stream input, TileId id = default)
+    {
+        Span<byte> head = stackalloc byte[8];
+        input.ReadExactly(head);
+        uint count = BinaryPrimitives.ReadUInt32LittleEndian(head);
 
         var buildings = new List<Building>((int)count);
         Span<byte> rec = stackalloc byte[20];

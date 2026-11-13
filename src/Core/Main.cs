@@ -56,6 +56,13 @@ public partial class Main : Node
 		SetWindowTitle(GetWindow());
 		MouseCapture.PassTestWindowThrough();
 		GameSettings.LowerTestPriority();
+		// a test run's peak memory as it grows (#1702): a killed server never reaches _ExitTree
+		if (GameSettings.TestRun)
+		{
+			var peak = new Godot.Timer { WaitTime = 5, Autostart = true, Name = "TestPeakMemory" };
+			peak.Timeout += () => GameSettings.PrintTestPeakMemory(whenGrown: true);
+			AddChild(peak);
+		}
 		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
 		ClipRecorder.StartFromArgs(GetTree());
 
@@ -173,6 +180,13 @@ public partial class Main : Node
 			return;
 		}
 
+		// the leaves' aerial photos into a cube region (#1507, G2 B3 row 7): a tool, no game
+		if (UnitSport.World.CubePhotoBake.Requested())
+		{
+			AddChild(new UnitSport.World.CubePhotoBake { Name = "CubePhotoBake" });
+			return;
+		}
+
 		// the globe's colour bake into a --cube-global region (#1430 H4): a tool, no game
 		if (UnitSport.World.GlobeAlbedoBake.Requested())
 		{
@@ -215,5 +229,10 @@ public partial class Main : Node
 	}
 
 	// after every child's _ExitTree (Godot exits children first): saves still queued reach the disk
-	public override void _ExitTree() => SaveQueue.Flush();
+	public override void _ExitTree()
+	{
+		SaveQueue.Flush();
+		FrameReport.AtExit();
+		GameSettings.PrintTestPeakMemory();
+	}
 }

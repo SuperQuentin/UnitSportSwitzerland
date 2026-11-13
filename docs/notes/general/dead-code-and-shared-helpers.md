@@ -2,8 +2,9 @@
 
 ## Rule
 
-- WGS84 <-> LV95: call `UnitSport.Terrain.Format.SwissProjection.ToLv95/ToWgs84` (in
-  `tools/TerrainFormat`). `UnitSport.Gpx.SwissProjection` no longer exists; never re-add a forwarder.
+- WGS84 <-> LV95: `UnitSport.Terrain.Format.SwissGeodesy.ToLv95/ToLatLon` (rigorous; `core/swiss-geodesy`), in the
+  preprocessor `GeoInput` (on the built tiles' ground, #1507). `SwissProjection` (swisstopo's polynomials) is left
+  to GPX and MapCore. `UnitSport.Gpx.SwissProjection` no longer exists; never re-add a forwarder.
 - Tiles files (`--tiles-file`, "E-N" per line, `#` comments): `TileId.ReadList(path)` (returns a
   `List<TileId>`; `.ToHashSet()` when you need a set). Never write another `ReadTilesFile`.
 - Before adding a helper, grep for one; before deleting a member, prove it is unused (below).

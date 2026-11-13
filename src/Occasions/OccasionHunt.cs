@@ -64,6 +64,7 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     /// frames this budget burned in ~2 s of real time and the probe failed with the terrain still
     /// streaming (<c>docs/notes/general/fast-checks.md</c>: wait for threaded work on the wall clock).</summary>
     private ulong _probeStartMs;
+    private bool _wentToTown;
 
     /// <summary>
     /// <c>--huntcheck</c> (with an occasion running): waits for a drawn hunt spot, claims it in
@@ -79,7 +80,17 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
         var first = decor?.AllSpots().FirstOrDefault();
         if (first is not { Spot.Key: not null } found)
         {
-            if ((Time.GetTicksMsec() - _probeStartMs) / 1000.0 > 90)
+            double waited = (Time.GetTicksMsec() - _probeStartMs) / 1000.0;
+            // none round the spawn after a while: go to the nearest town's tree (its five gifts). The earth world
+            // furnishes only the leaves within 900 m, short of the generated world's villages (#1729)
+            if (!_wentToTown && waited > 10 && Teleporter.Instance is { } tp
+                && OccasionTowns.Nearest(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N, 20_000) is { } town)
+            {
+                _wentToTown = true;
+                GD.Print($"[huntcheck] no spot round the spawn after {waited:F0} s: to {town.Name}");
+                tp.TeleportTo(town.E, town.N, "huntcheck");
+            }
+            if (waited > 90)
                 Finish(false, "no hunt spot was drawn within 90 s of real time");
             return;
         }
@@ -119,7 +130,7 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     private void Finish(bool ok, string? why)
     {
         _probe = false;
-        GD.Print(ok ? "[huntcheck] all passed" : $"[huntcheck] FAILED{(why == null ? "" : ": " + why)}");
+        GD.Print(ok ? "[huntcheck] RESULT: ok" : $"[huntcheck] RESULT: FAILED{(why == null ? "" : ": " + why)}");   // the runner reads the RESULT line: without it a crash at exit (139) failed a passing run
         GetTree().Quit(ok ? 0 : 1);
     }
 

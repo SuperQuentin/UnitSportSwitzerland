@@ -9,6 +9,9 @@
 #   NOTERRAIN (--chunks $OUT/no_terrain), an empty folder: for a check of the GENERATED world, on its
 #           server and every client, so a terrain_location.json or UNITSPORT_CHUNKS pointing at real
 #           tiles (the main checkout's) never puts real ground under its generated sites (#943)
+#   TEST_FRAME=earth (env): every Godot run here takes --frame earth after its own args (G2 D0), and at exit the
+#           check fails ("RESULT: FAILED", exit 1) if a server's or client's log does not state that frame
+#           ("[frame] earth", #1683): a world that silently fell back to flat never passes
 #   user:// a fresh $OUT/userdata_<name> for every Godot started here (APPDATA on Windows,
 #           XDG_DATA_HOME on Linux, HOME of the Godot runs only on macOS), so loot, bank, placed,
 #           birds, identity... are never the real ones; USERDATA=<dir> picks another, USERDATA=real
@@ -73,11 +76,24 @@ if [ "${USERDATA:-}" != real ]; then
 fi
 
 _tc_servers=()
+# every server's and client's log, for the frame check at exit: a file, as background clients run in subshells
+# ($$ is this script's PID in them too)
+_tc_logs=$OUT/.tc_logs.$$
+: > "$_tc_logs"
 _tc_cleanup() {
   local p
   # only the ones still up: a tree walk costs ~0.5 s on Git Bash, for a server tc_stop already took down
   for p in ${_tc_servers[@]+"${_tc_servers[@]}"}; do kill -0 "$p" 2>/dev/null && _guard_kill_tree "$p"; done
   [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock
+  # last, after the check's own RESULT line: tools/test.sh reads the last one
+  # each log held to the frame it was started in: a script's own --frame earth stays earth in a flat run (the
+  # earth-only checks), anything else is TEST_FRAME's (an own --frame flat in an earth run still fails)
+  local f bad=0
+  while IFS=$'\t' read -r f p; do
+    [ -n "$p" ] && { TEST_FRAME=$f guard_frame_check "$_tc_name" "$p" || bad=1; }
+  done < "$_tc_logs"
+  rm -f "$_tc_logs"
+  [ "$bad" = 0 ] || exit 1
 }
 trap _tc_cleanup EXIT
 # under tools/test.sh the runner already holds the lock: taking it again would wait forever
@@ -88,6 +104,13 @@ guard_wait_ram 4 600 || exit 1
 # fixed PORT; the Godot runs here get --port N and 127.0.0.1:N / localhost:N moved by GUARD_SLOT * 1000, so slot
 # 0 keeps today's ports and no script's PORT line changes. TC_PORT_OFFSET for a port a script uses otherwise.
 TC_PORT_OFFSET=$(( ${GUARD_SLOT:-0} * 1000 ))
+# a log for the frame check at exit, with the frame it must state ("" = none asked: TEST_FRAME unset)
+_tc_register() {
+  local log=$1 f=${TEST_FRAME:-}; shift
+  [[ " $* " == *" --frame earth "* ]] && f=earth
+  [ -n "$f" ] && printf '%s\t%s\n' "$f" "$log" >> "$_tc_logs"
+  return 0
+}
 _tc_ports() {
   _tc_args=()
   local a prev=
@@ -97,12 +120,21 @@ _tc_ports() {
     fi
     _tc_args+=("$a"); prev=$a
   done
+  # TEST_FRAME=earth (G2 D0, #1682): every Godot of the check under that frame. A script's own --frame is kept and
+  # none added (GameSettings reads the last, ServerWorld the first: two would split the frame); the log check still
+  # holds it to TEST_FRAME (#1710)
+  [ -n "${TEST_FRAME:-}" ] && [[ " $* " != *" --frame "* ]] && _tc_args+=(--frame "$TEST_FRAME")
+  return 0
 }
 
+# TEST_FRAME=earth: every Godot of a check makes its own fill leaves before it stands (a server round each body), so
+# each gets this much longer before it is stopped (#1704; the probes' own waits for a joining player: ChatProbe.Joined)
+_tc_earth_slack=0; [ "${TEST_FRAME:-}" = earth ] && _tc_earth_slack=${TC_EARTH_SLACK:-300}
 tc_server() {
-  local timeout_s=$1 wait_s=$2 log=$3 i
+  local timeout_s=$(( $1 + _tc_earth_slack )) wait_s=$2 log=$3 i
   shift 3
   : > "$log"
+  _tc_register "$log" "$@"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} --headless --path . -- "$@" &
   SERVER=$!
@@ -118,16 +150,18 @@ tc_server() {
 }
 
 tc_client() {
-  local timeout_s=$1 log=$2 headless=--headless
+  local timeout_s=$(( $1 + _tc_earth_slack )) log=$2 headless=--headless
   shift 2
   [ "${1:-}" = --windowed ] && { headless=; shift; }
   [ -n "${WINDOWED:-}" ] && headless=
+  _tc_register "$log" "$@"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" ${TC_MAX_FPS:+--max-fps $TC_MAX_FPS} $headless --path . -- "$@"
 }
 
 tc_godot() {
   local timeout_s=$1 log=$2; shift 2
+  _tc_register "$log" "$@"
   _tc_ports "$@"; set -- ${_tc_args[@]+"${_tc_args[@]}"}
   guard_run "$timeout_s" "$log" ${_tc_env[@]+"${_tc_env[@]}"} "$GODOT" "$@"
 }

@@ -30,7 +30,8 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
     public Color Tint { get; private set; }
 
     private WorldOrigin _origin = null!;
-    private ChunkManager _chunks = null!;
+    /// <summary>The ground it runs on and anchors (#1739: the earth leaves too).</summary>
+    private IWorldGround _ground = null!;
     private UnitSport.Avatar.SkinnedFigure? _body;
     private UnitSport.Avatar.Cyclist? _cyclist;
     private UnitSport.Avatar.CarRig? _car;
@@ -164,13 +165,13 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         new(0.20f, 0.80f, 0.80f),   // teal
     };
 
-    public static Runner Create(GpxTrack track, ChunkManager chunks, WorldOrigin origin, int index) =>
+    public static Runner Create(GpxTrack track, IWorldGround ground, WorldOrigin origin, int index) =>
         new()
         {
             Name = $"Runner{index}",
             Track = track,
             Tint = Palette[index % Palette.Length],
-            _chunks = chunks,
+            _ground = ground,
             _origin = origin,
         };
 
@@ -211,10 +212,10 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             Avatar.AddChild(_body);
         }
 
-        _chunks.AddAnchor(Avatar);
+        _ground.AddAnchor(Avatar);
     }
 
-    public override void _ExitTree() => _chunks.RemoveAnchor(Avatar);
+    public override void _ExitTree() => _ground.RemoveAnchor(Avatar);
 
     /// <summary>
     /// Where the course is at a race time, in world space, for cameras that plan ahead of the
@@ -223,10 +224,9 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
     public Vector3 CourseAt(double raceTime)
     {
         var course = Active;
-        var (e, n, ele, _, _) = course.Sample(raceTime);
-        var p = _origin.ToWorld(e, n, ele);
-        if (!course.ElevationIsSurface && _chunks.TryGetHeight(p, out float g)) p.Y = g;
-        return p;
+        var (x, y, ele, _, _) = course.Sample(raceTime);
+        if (!course.ElevationIsSurface && TrackRibbon.Drape(course, x, y, ele, _ground, _origin) is { } draped) return draped.At;
+        return _origin.ToWorld(course.At(x, y, ele));
     }
 
     /// <summary>Places the avatar for the shared race time.</summary>
@@ -235,19 +235,19 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
         var course = Active;
         Finished = raceTime >= course.Duration;
 
-        var (e, n, recordedEle, speed, distance) = course.Sample(raceTime);
+        var (x, y, recordedEle, speed, distance) = course.Sample(raceTime);
         Speed = Finished ? 0 : speed;
         Distance = distance;
 
-        var pos = _origin.ToWorld(e, n, recordedEle);
+        var pos = _origin.ToWorld(course.At(x, y, recordedEle));
 
         // A road-matched course already sits on the road surface, bridge decks and tunnel bores
         // included, so re-draping it onto the terrain would undo exactly that. Only a raw
         // recording gets draped, because its own elevation is GPS noise.
-        if (_chunks.TryGetHeight(pos, out float ground))
+        if (TrackRibbon.Drape(course, x, y, recordedEle, _ground, _origin) is { } draped)
         {
-            ElevationDrift = recordedEle - ground;
-            if (!course.ElevationIsSurface) pos.Y = ground;
+            ElevationDrift = recordedEle - draped.Alt;
+            if (!course.ElevationIsSurface) pos = draped.At;
         }
 
         // Ease the rendered position toward the sampled one. This damps both the surge
@@ -279,9 +279,9 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
 
         double ahead = Math.Min(raceTime + window, course.Duration);
         double behind = Math.Max(raceTime - window, 0);
-        var (fe, fn, _, _, _) = course.Sample(ahead);
-        var (be, bn, _, _, _) = course.Sample(behind);
-        var dir = _origin.ToWorld(fe, fn, recordedEle) - _origin.ToWorld(be, bn, recordedEle);
+        var (fx, fy, _, _, _) = course.Sample(ahead);
+        var (bx, by, _, _, _) = course.Sample(behind);
+        var dir = _origin.ToWorld(course.At(fx, fy, recordedEle)) - _origin.ToWorld(course.At(bx, by, recordedEle));
         dir.Y = 0;
 
         if (dir.LengthSquared() > 1e-4f)

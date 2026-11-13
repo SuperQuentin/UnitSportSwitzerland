@@ -30,7 +30,9 @@
   grass buffer to the sidewalk too. Path 2.0 m (ASTRA). Grass takes the path's height. A kerb
   touching the path is a straight slope over 0.30 m (ASTRA slanted kerb "A", 6 cm / 30 cm);
   other kerbs vertical. The layout is hashed per **stroke** (links chained through each node with
-  the straightest partner under 30°, keyed by the smallest TLM uuid), so a long street keeps it;
+  the straightest partner under 30°, keyed by the smallest TLM uuid among the chain's links within 500 m of the link's middle,
+  #1660: the whole chain could run past what a block reads, so two blocks chose differently), so a street keeps it up to a
+  kilometre, a longer one may change at a junction;
   where the corridor to the facade cannot hold layout + 1.5 m sidewalk, the next smaller one of
   the same level (5→4→3, 2→1), then none. A street with paths on ≥ 50 % of its urban stations
   drops its painted lanes; else it keeps the lanes and gets no path.

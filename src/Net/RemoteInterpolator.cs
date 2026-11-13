@@ -21,7 +21,10 @@ namespace UnitSport.Net;
 /// States are <see cref="GlobalPos"/>, never world space (#185): every peer has its own origin
 /// and this one's moves while the states sit in the ring, so they are mapped to world space only
 /// on the way out. The arithmetic is on offsets between neighbouring states, which stay small and
-/// precise however far from anything the player is.
+/// precise however far from anything the player is. Velocities are in the local east-up-south at each state and
+/// headings from true north there, as the wire has them (#1503), which is what <see cref="GlobalPos"/>'s own maths
+/// are in (#1502), so a <see cref="Sample"/>'s heading is turned into the caller's world by its frame at the drawn
+/// place (<see cref="OriginFrame.WorldYaw(GlobalPos, float)"/>).
 /// </para>
 /// </summary>
 public sealed class RemoteInterpolator
@@ -80,7 +83,7 @@ public sealed class RemoteInterpolator
 
     public bool HasData => _count > 0;
 
-    /// <summary>Records a state the owner sent, stamped with the owner's clock.</summary>
+    /// <summary>Records a state the owner sent, stamped with the owner's clock: its velocity in the local east-up-south there and its yaw from true north (the wire's).</summary>
     public void Push(double senderTime, double localTime, GlobalPos position, Vector3 velocity, float yaw)
     {
         if (_count > 0)
@@ -125,7 +128,7 @@ public sealed class RemoteInterpolator
 
     private bool _rebase;
 
-    /// <summary>The position and yaw to draw at <paramref name="localTime"/>.</summary>
+    /// <summary>The position and yaw (from true north there) to draw at <paramref name="localTime"/>.</summary>
     public (GlobalPos Position, float Yaw) Sample(double localTime, float dt)
     {
         if (_count == 0) return (_lastOut, _lastYaw);
@@ -252,6 +255,7 @@ public sealed class RemoteInterpolator
         double send = 0, sendDt = 1.0 / 30.0, frameDt = 1.0 / 60.0;
         var inFlight = new System.Collections.Generic.List<(double Arrive, double T)>();
         double worstRatio = 0; int freezes = 0; GlobalPos? prev = null;
+        var start = GlobalPos.FromLv95(3_600_000, 1_200_000, 600);
         for (double now = 0; now < 10; now += frameDt)
         {
             while (send <= now)
@@ -267,7 +271,7 @@ public sealed class RemoteInterpolator
                 double t = inFlight[0].T;
                 inFlight.RemoveAt(0);
                 ip.BeginCorrection(now);
-                ip.Push(t, now, new GlobalPos(3_600_000 + v * t, 1_200_000, 600), new Vector3(v, 0, 0), 0f);
+                ip.Push(t, now, start.Moved(v * t, 0), new Vector3(v, 0, 0), 0f);
                 ip.EndCorrection();
             }
             if (!ip.HasData) continue;

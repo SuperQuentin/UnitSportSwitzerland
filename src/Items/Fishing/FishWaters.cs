@@ -116,9 +116,13 @@ public static class FishWaters
         return altitude > 1500 ? WaterKind.AlpineLake : WaterKind.SmallLake;
     }
 
-    public static FishSpot Spot(bool onLayer, double e, double n, double altitude, double slope, string place = "")
+    public static FishSpot Spot(bool onLayer, Core.GlobalPos at, double slope, string place = "")
     {
-        var lake = onLayer && slope <= 0.002 ? LakeAt(e, n, altitude) : null;
-        return new FishSpot(Classify(onLayer, altitude, slope, lake), BasinAt(e, n), altitude, lake, place);
+        var lake = onLayer && slope <= 0.002 ? LakeAt(at.Lv95.E, at.Lv95.N, at.Alt) : null;
+        return new FishSpot(Classify(onLayer, at.Alt, slope, lake), BasinAt(at.Lv95.E, at.Lv95.N), at.Alt, lake, place);
     }
+
+    /// <summary><see cref="Spot(bool, Core.GlobalPos, double, string)"/> for a place given in LV95 notation.</summary>
+    public static FishSpot Spot(bool onLayer, double e, double n, double altitude, double slope, string place = "") =>
+        Spot(onLayer, Core.GlobalPos.FromLv95(e, n, altitude), slope, place);
 }

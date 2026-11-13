@@ -278,7 +278,7 @@ public static partial class TileRewriter
             // (each end on its line's centre: the track lies its offset to the right of the way, Vec2.Perp is to the left)
             var start = pts[0] + (pts[1] - pts[0]).Normalized().Perp * w.FromOffset;
             var end = pts[^1] - (pts[^1] - pts[^2]).Normalized().Perp * w.ToOffset;
-            JunctionPathEnd End(Vec2 p, double offset) => new((float)(p.X - home.MinE), CapHeightAt(cap, home, p), (float)(home.MaxN - p.Y), (float)offset);
+            JunctionPathEnd End(Vec2 p, double offset) => new((float)(p.X - Plane.West(home)), CapHeightAt(cap, home, p), (float)(Plane.North(home) - p.Y), (float)offset);
             Get(pathsOf, home).Add(new RoadJunctionPath
             {
                 Junction = cap, From = End(start, w.FromOffset), To = End(end, w.ToOffset), Move = w.Move, Kind = JunctionPathKind.Tram,
@@ -331,6 +331,9 @@ public static partial class TileRewriter
         return runs;
     }
 
+    /// <summary>The walkers' crossings of every junction the block planned (#1660), gathered by the layout writer for <see cref="PaveTrackCrossings"/>.</summary>
+    [ThreadStatic] private static List<(Vec2 A, Vec2 B)>? _walkerCrossings;
+
     /// <summary>
     /// Paves the tram beds under the walkers' crossings at lights (#1179): every tram track on its own bed (not embedded, not a
     /// paved bed already) that a crossing's walkers' line crosses is cut there, the piece under it a paved bed (flush, its rails as
@@ -343,11 +346,9 @@ public static partial class TileRewriter
         finally { KeepStopLinesOnPavedTrack(output, paint, stats); }
         void Pave()
         {
-        var crossings = new List<(Vec2 A, Vec2 B)>();
-        foreach (var (tile, list) in signals)
-            foreach (var s in list)
-                foreach (var l in s.ConflictLines.Where(l => l.Mover == ConflictMover.Walker && l.Points.Length >= 6))
-                    crossings.Add((new Vec2(tile.MinE + l.Points[0], tile.MaxN - l.Points[2]), new Vec2(tile.MinE + l.Points[^3], tile.MaxN - l.Points[^1])));
+        // every planned junction's walkers' lines (#1660: a signal record is its owner block's only, a track its every block's)
+        var crossings = _walkerCrossings ?? [];
+        _walkerCrossings = null;
         if (crossings.Count == 0) return;
         foreach (var (tile, segments) in output)
             for (int i = segments.Count - 1; i >= 0; i--)
@@ -355,7 +356,7 @@ public static partial class TileRewriter
                 var seg = segments[i];
                 if (seg.Class != RoadClass.Railway || (seg.Flags & RoadFlags.Tramway) == 0
                     || (seg.Attributes.Flags & (RoadAttrFlags.Embedded | RoadAttrFlags.PavedBed)) != 0 || seg.PointCount < 2) continue;
-                var plan = Enumerable.Range(0, seg.PointCount).Select(k => new Vec2(tile.MinE + seg.Points[k * 3], tile.MaxN - seg.Points[k * 3 + 2])).ToList();
+                var plan = Enumerable.Range(0, seg.PointCount).Select(k => new Vec2(Plane.West(tile) + seg.Points[k * 3], Plane.North(tile) - seg.Points[k * 3 + 2])).ToList();
                 var near = crossings.Where(c => plan.Any(p => p.DistanceTo((c.A + c.B) * 0.5) < c.A.DistanceTo(c.B) + 10)).ToList();
                 if (near.Count == 0) continue;
                 var runs = PavedUnder(plan, near);
@@ -383,7 +384,7 @@ public static partial class TileRewriter
                     };
                     segments.Insert(insertAt++, piece);
                     if (!paved) continue;
-                    var piecePlan = Enumerable.Range(0, points.Length / 3).Select(k => new Vec2(tile.MinE + points[k * 3], tile.MaxN - points[k * 3 + 2])).ToList();
+                    var piecePlan = Enumerable.Range(0, points.Length / 3).Select(k => new Vec2(Plane.West(tile) + points[k * 3], Plane.North(tile) - points[k * 3 + 2])).ToList();
                     var heights = Enumerable.Range(0, points.Length / 3).Select(k => points[k * 3 + 1]).ToArray();
                     rails.EmitGrooves(new Network.RailRoadOverlap.Piece(piecePlan, heights, false), piece, tile, Get(paint, tile), ownHeight: true);
                     stats.TrackCrossingsPaved++;
@@ -403,17 +404,17 @@ public static partial class TileRewriter
             {
                 var p = list[i];
                 if (p.Type != PaintType.StopLine || p.Variant != RoadPaint.OverTrack || p.Vertices.Length < 6) continue;
-                var mid = new Vec2(tile.MinE + (p.Vertices[0] + p.Vertices[^3]) / 2, tile.MaxN - (p.Vertices[2] + p.Vertices[^1]) / 2);
+                var mid = new Vec2(Plane.West(tile) + (p.Vertices[0] + p.Vertices[^3]) / 2, Plane.North(tile) - (p.Vertices[2] + p.Vertices[^1]) / 2);
                 bool paved = false;
                 foreach (var (segTile, segments) in output)
                 {
-                    if (Math.Abs(segTile.MinE + 500 - mid.X) > 600 || Math.Abs(segTile.MaxN - 500 - mid.Y) > 600) continue;
+                    // (every frame of a block is one since #1660: no tile is nearer than another)
                     foreach (var seg in segments)
                     {
                         if (seg.Class != RoadClass.Railway || !TramStopLinePainted(seg.Attributes.Flags)) continue;
                         for (int k = 0; k + 1 < seg.PointCount && !paved; k++)
-                            paved = Polyline.PointSegmentDistance(mid, new Vec2(segTile.MinE + seg.Points[k * 3], segTile.MaxN - seg.Points[k * 3 + 2]),
-                                new Vec2(segTile.MinE + seg.Points[k * 3 + 3], segTile.MaxN - seg.Points[k * 3 + 5])) < TrackOffsetMost;
+                            paved = Polyline.PointSegmentDistance(mid, new Vec2(Plane.West(segTile) + seg.Points[k * 3], Plane.North(segTile) - seg.Points[k * 3 + 2]),
+                                new Vec2(Plane.West(segTile) + seg.Points[k * 3 + 3], Plane.North(segTile) - seg.Points[k * 3 + 5])) < TrackOffsetMost;
                         if (paved) break;
                     }
                     if (paved) break;
@@ -439,7 +440,7 @@ public static partial class TileRewriter
     {
         Shape = PaintShape.Polyline, Type = PaintType.StopLine, Variant = RoadPaint.OverTrack, Rgba = PaintEmitter.White,
         Width = JunctionRules.StopLineWidth,
-        Vertices = [(float)(p0.X - tile.MinE), y, (float)(tile.MaxN - p0.Y), (float)(p1.X - tile.MinE), y, (float)(tile.MaxN - p1.Y)],
+        Vertices = [(float)(p0.X - Plane.West(tile)), y, (float)(Plane.North(tile) - p0.Y), (float)(p1.X - Plane.West(tile)), y, (float)(Plane.North(tile) - p1.Y)],
     };
 
     /// <summary>
@@ -493,7 +494,7 @@ public static partial class TileRewriter
                 double half = TramWidth * 0.5 + TramStopLineOver;
                 var p0 = stopAt - right * half;
                 var p1 = stopAt + right * half;
-                var tile = TileId.FromLv95(stopAt.X, stopAt.Y);
+                var tile = Plane.TileAt(stopAt.X, stopAt.Y);
                 Get(paint, tile).Add(TramStopLine(tile, p0, p1, record.Y));
                 stats.TramStopLines++;
             }
@@ -655,13 +656,13 @@ public static partial class TileRewriter
             if (placed.Any(x => x.At.DistanceTo(q) < 40 && x.Dir.Dot(dir) > 0.7)) continue;
             placed.Add((q, dir));
             var foot = q - dir.Perp * TramStopAside;
-            var home = TileId.FromLv95(foot.X, foot.Y);
+            var home = Plane.TileAt(foot.X, foot.Y);
             if (!block.Contains(home)) continue;
             // facing the arriving trams: its front the way they come from (a prop's heading: 0 faces -Z, north)
-            var facing = -dir;
+            var facing = Plane.DirectionToTile(home, foot, -dir);
             float heading = (float)Math.Atan2(-facing.X, facing.Y);
             Get(signs, home).Add(new RoadPointProp(PointPropType.TramStop, 0, PropFlags.Solid,
-                (float)(foot.X - home.MinE), y, (float)(home.MaxN - foot.Y), heading, TramStopHeight));
+                (float)(foot.X - Plane.West(home)), y, (float)(Plane.North(home) - foot.Y), heading, TramStopHeight));
             stats.TramStops++;
         }
     }

@@ -20,6 +20,14 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   for a server or several clients, and `guard_unlock` in its `EXIT` trap. No bare
   `godot ... &` without a timeout. A server + clients check sources `tools/lib/twoclient.sh`
   instead, which does all of that (`twoclient-checks`).
+- **Every tier in a frame** (#1683 net, #1710 the rest): `TEST_FRAME=earth|flat tools/test.sh <tier>`. Every Godot of
+  every row plays in it: a direct row gets `--frame <it>` unless it has its own (then it is held to its own, and a
+  `--frame flat` row fails an earth run), a `tools/*.sh` script passes it to its Godots (`twoclient.sh` does,
+  `guard_frame_args` for the others), and a log not stating the frame fails its row. Every run says it once
+  (`Core/FrameReport`): `[frame] earth|flat` from the world that decided it (client, server, `TestWorld`), `[frame]
+  none (...)` at exit from a process that built no world. `TEST_FRAME=earth tools/test.sh full` is G2 D's dry run;
+  the earth net bar alone is `TEST_FRAME=earth TEST_ONLY=net tools/test.sh full`. The unit tier has no frame.
+- **A row longer than `TEST_TIMEOUT`** (600 s) starts with `@timeout=<s>` (the long drive and flight, `core/earth-bar-probes`).
 - **A test window never takes focus or the mouse and never makes a sound (#1378)**: a person works at
   the machine while a tier runs. Every windowed Godot a check starts runs in a fresh `user://` of its own
   (`guard_test_userdata <dir>`, or `twoclient.sh`'s `tc_userdata`) holding `test_window.cfg`, which
@@ -41,6 +49,10 @@ Run the cheapest tier that can catch the bug. Heavy tiers only when the change n
   render scale 0.5, no AA, 256 px concert screens, no mirrors, 640x360), the same on every machine, and
   the process runs below normal priority. A check that needs more says so on its command line (`--rings`,
   `--horizon`, `--detail`, `--render-scale`, `--aa`, `--mirrors`), never by changing the profile.
+  The calendar is pinned too: a test run is on `Calendar.TestDate` (Wed 2026-06-17, outside every
+  occasion, #1501), so a season never breaks a check (Christmas snow under the tyres, Nov 2026). A check
+  of an occasion or a season passes its own `--date YYYY-MM-DD` (`--huntcheck --date 2026-11-15`);
+  `--date today` keeps the real date.
   `lootsynccheck` on real terrain: 978 MB per client, 2.4 GB in all (3.4 GB per client on the defaults).
 - **A windowed check by hand** (a session running one probe straight from Godot) gets none of that on
   its own: `. tools/lib/guard.sh; guard_test_userdata test_output/userdata_<x>` first (then
@@ -63,7 +75,7 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 
 | Tier | What | Command | Measured (Windows, 4.7.1) |
 |---|---|---|---|
-| 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | 72 tests in ~1 s, ~3 s with the build |
+| 0 unit | `tests/UnitSportSwitzerland.Tests`: xUnit, plain .NET, **no Godot** | `tools/test.sh unit` | ~4,650 tests in ~70 s, ~90 s with the build (#1716) |
 | 0.5 quick | unit + the headless checks on `--world flat` (TestWorld) or `--systems ui`: no map, no generated world | `tools/test.sh quick [area]` | most 1-25 s at 170-430 MB; `--synccheck --world flat` 56 s / 210 MB |
 | 1 quick | the same runner: checks on a fixture world or course (`--world fixture`, `--chunks fixture:<course>`) | `tools/test.sh quick [area]` | `--leavecheck --world fixture` 23 s / 540 MB; `--drivecheck --chunks fixture:hairpin` 94 s / 690 MB; `--huntcheck` 10 s / 770 MB, `--lootchancecheck` 20 s (no world flags yet) |
 | 2 net | quick + a headless dedicated server and a headless `--leavecheck connect` client that joins it twice, both `--world fixture` | `tools/test.sh net [area]` | `@netsmoke` 41 s, client 750 MB + server 210 MB |
@@ -127,6 +139,11 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   `/time` parsing (also under a French locale), the fixture courses (`FixtureCourseTests`: tile
   splits, valid tiles, ground under the road, hairpin grade).
 - The game csproj excludes `tests/**`; `tests/.gdignore` keeps it out of the Godot import.
+- Fast because optimized (#1716): the test project and `tools/RoadGen` build with `<Optimize>true</Optimize>` in Debug
+  too (DEBUG asserts kept). Unoptimized, the signal test region took 175 s to build against 29 s, and the stage
+  319 s against ~90 s (4,655 tests, 16 threads). A fixture several classes read is built once per run through a
+  static `Lazy` (`TestRegionBuilds`), never an `IClassFixture` per class: seven classes built that region seven times.
+  Profile with `dotnet test ... --logger "trx;LogFileName=x.trx"`: each test's start and end show what waits on what.
 
 ## Path-to-check map: `tools/lib/checkmap.txt`
 
@@ -160,8 +177,15 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
 - Sourced by the runner, usable by any script: `guard_wait_ram <GB>`, `guard_lock`/`guard_unlock`,
   `guard_run <timeout_s> <log> cmd...`. Windows (Git Bash) and Linux.
 - Free RAM: `/proc/meminfo` (`MemAvailable` on Linux; in Git Bash `MemFree` is Windows' free
-  physical memory, read in ~30 ms), PowerShell only as a fallback. Light Godot runs wait for
-  `TEST_RAM_GB` (3), tiers 2/3 for `TEST_HEAVY_RAM_GB` (6).
+  physical memory, read in ~30 ms), PowerShell only as a fallback. A check never measured waits for
+  `TEST_RAM_GB` (3) in the quick tier, `TEST_HEAVY_RAM_GB` (6) in tiers 2/3; a measured one for its last
+  peak and a quarter (below).
+- **Every check's peak RAM is measured (#1702)**: every Godot of a test run prints its OS peak working set
+  (`[mem] peak N MB`, `GameSettings.PrintTestPeakMemory`: as it grows by 64 MB, checked every 5 s, and as it
+  quits; a killed server never quits). `guard_run` appends its log's last line to `GUARD_PEAK_FILE`, which
+  `test.sh` sets per check, so a two-client script's server and clients add up. The sum and the seconds go to
+  `results.tsv`, `results.csv` (`peak_mb`), the table, and the machine-wide `$TEMP/unitsport-check-peaks.tsv`
+  (`TEST_PEAKS`), which every worktree's next run reads. Works on Windows, where `_guard_mem_mb` reads 0.
 - **RAM watchdog, so a run can never take Windows or WSL down.** Waiting for RAM before a run is not
   enough: a run can grow during execution (WSL died several times that way). `guard_run` reads free
   RAM every `GUARD_MEM_EVERY` (2) s while its command runs. When free RAM falls under
@@ -200,15 +224,46 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
   - **Ports:** `tc_server`, `tc_client` and `tc_godot` move `--port N` and `127.0.0.1:N` by
     `GUARD_SLOT * 1000`. Slot 0 keeps the scripts' own ports, and no `PORT=` line changes. A script that
     starts Godot itself adds the offset (`buildnetcheck`, netsmoke).
-  - **`tools/test.sh net|full`** runs the heavy checks up to `TEST_JOBS` at once (default `GUARD_SLOTS`),
-    each job in its own slot. A job starts with `TEST_HEAVY_RAM_GB` (6) free and `TEST_JOB_STAGGER` (40) s
-    after the previous one, so that one has grown to its size first. A job the RAM watchdog stopped runs
-    again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
+  - **`tools/test.sh net|full`** runs the heavy checks up to `TEST_JOBS` at once (default `GUARD_SLOTS`; in
+    `test.sh` one slot per 8 GB, 1 to 4, since #1702 admits each job by its peak), each job in its own slot.
+    A job starts when its need (last peak and a quarter, else `TEST_HEAVY_RAM_GB`, 6) is free over the floor,
+    counting every job started less than `TEST_JOB_STAGGER` (40) s ago at its full need: it has not grown to
+    its size yet. **Machine-wide**: every job started leaves `start grow_s need_mb` in
+    `$TEMP/unitsport-check-peaks-reserved/<runner pid>.<n>` (`TEST_RESERVED_DIR`), and `admit` also subtracts the
+    jobs of other runners (worktrees, sessions) still inside their grow time; a runner with nothing running waits
+    only while such a job grows. Without it, a Player net run beside another session's checks had 11 of 36 checks
+    fail or stop at the floor (some run alone), 3,666 s instead of ~2,900 s serial (Nov 10). A job the RAM
+    watchdog stopped runs again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
     another session's run, a qemu VM (8 GB) and an idle dotnet build server (3 GB). The table keeps the map's
     order. Two scripts logging under one twoclient name never run together (`rampalongnetcheck` execs
     `rampnetcheck`), and `loadtest.sh` / `trailer.sh` run alone.
   - `TEST_JOBS=1` is the old serial run, holding one slot throughout. `TEST_ONLY=net tools/test.sh full`
     runs every net row and nothing else.
+- **The quick tier runs side by side too, longest first (#1702).**
+  - Up to `TEST_QUICK_JOBS` headless Godots at once: 3/8 of the cores and one per 5 GB, 1 to 8 (6 on
+    16 threads and 32 GB). Admitted like the net tier, by need, counting jobs younger than `TEST_QUICK_GROW`
+    (15 s). Quick checks are small (Nov 2026: 250-480 MB the self-checks and `--world flat`, ~630 MB
+    `--world fixture`, ~1.1 GB the lake), so the CPU, not the RAM, sets the count: on the Avatar area 6 jobs
+    took 678 s, 4 jobs 809 s, for 10 % more CPU seconds per check.
+  - Any row runs beside any other: with one flag at a time the rule, two `--collidecheck` rows (which write
+    nothing) held 361 s in a row, and dropping the rule took the Avatar area from 1,363 s to 835 s (4 jobs).
+    Flags whose rows must not overlap go in `TEST_QUICK_SERIAL`. `@netsmoke`
+    (ports) and the quick `tools/` scripts run one at a time after. A check that fails beside others runs
+    again alone; a pass alone says "passed alone, failed beside others": that is how a clash shows.
+  - **Longest first**: each check starts in the order of its last seconds in the peak store (never run:
+    `TEST_UNKNOWN_SECONDS`, 120), the first one the RAM admits; the net tier likewise, so a long check never
+    starts last and runs on alone (`orbitnetcheck`, 250 s, came last in map order). The store's path goes to
+    awk through `ENVIRON`: `awk -v` reads backslash escapes, mangled `C:\Users\...`, and until Nov 10 every
+    check counted as unknown, so the order was the map's on Windows.
+  - **A long check is split, not waited for**: `--zfightcheck` (502-629 s) runs as four `--zfightshard` parts.
+    A new check over ~5 min in the quick tier gets a shard flag the same way.
+  - **The unit stage runs beside the Godot checks**, started once the game is built (the two builds never
+    meet): its 4-5 min no longer come first. `TEST_UNIT_BESIDE=0` puts it first again. Its own critical path
+    is shared fixture builds (the lane and junction region tests finish at 250 s with ~0 s of their own; 553 s
+    of test time in 267 s on 16 threads, Nov 2026).
+  - `TEST_QUICK_JOBS=1 TEST_UNIT_BESIDE=0` is the old serial run.
+  - **Never edit `tools/test.sh` while it runs**: bash reads the script as it goes, and the run dies on a
+    syntax error mid-file.
 - **Stale locks are taken over at once, never waited out.** An ad-hoc lock once kept two agents
   waiting 20 min behind an owner that had died. Now a waiter takes the lock over when:
   - the owner PID is gone (`kill -0`);

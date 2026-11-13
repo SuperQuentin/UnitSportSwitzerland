@@ -122,7 +122,7 @@ public partial class MoveSpeedNetProbe : ChatProbe
             double t0 = GameClock.Now;
             await Seconds(1.0);
             var to = a.Global;
-            float seen = (float)(Math.Sqrt((to.E - from.E) * (to.E - from.E) + (to.N - from.N) * (to.N - from.N)) / (GameClock.Now - t0));
+            float seen = (float)(from.HorizontalDistanceTo(to) / (GameClock.Now - t0));
             Expect(Mathf.Abs(seen - want) < want * 0.25f, $"A's copy covers {F(seen)} m/s here (A walks {F(want)})");
             Say($"seen {F(want)}");
         }

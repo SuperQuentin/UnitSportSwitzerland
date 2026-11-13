@@ -52,12 +52,37 @@ G2a of global tiling (#1443); design and audit in `docs/plans/server-regions.md`
     from its frame (`ItemEvents.ServerSend/ServerHit(..., frame)`).
 - **Checks**: `tools/regioncheck.sh` (net tier for the region code): at the spawn and 300 km east, a
   walker into a blocker and a second into a parked car; the tracks with both sites match each site
-  alone to 0.000 cm. `BEFORE=1` adds `--noregions` (the far site 3.7 cm off) and `--nomirrors` (the far
+  alone to 0.000 cm. The hop prints the walker's true heading either side (flat to flat it turns by the meridians'
+  2.8° over 300 km, as before G2; a turning handover keeps it). `BEFORE=1` adds `--noregions` (the far site 3.7 cm off) and `--nomirrors` (the far
   walker goes 22.7 m through the car). `--regionat E,N --regionfar E,N --regionwander S` for real terrain
   (`--chunks D:/...`): Geneva and Riddes (the D: set spans 93 km), every bot strolled 60-90 m among trunks
   and houses, on the ground 100 % of the time.
 - **Run Godot by hand with a scratch `user://`** (`APPDATA=...`): the server files parked cars in its
   object containers, and the check's cars stayed in the real save once.
-- **Not yet**: a region's frame is an LV95 offset; G2 gives it #1430's anchor frame (`OriginFrame.Axes`,
-  #1460), and a handover's `Frame.Since` then carries the rotation. Interiors are still not built on
-  the server (`bots/server-collision`).
+- **ENU regions** (#1513, G2 C4): when the server's main world is an anchor frame (`--frame earth`), a new region is an ENU frame (`WorldOrigin(FrameAxes.Enu(..))`: true north, true metres,
+  Y its anchor's up, so the space's default −Y gravity is its own) at its members' **Earth mean** (the ECEF mean put
+  on the ellipsoid, `RegionPlanner.Anchoring.Earth`). Under the flat frame a region stays the whole-km LV95 frame.
+  Never over the flat tiles: the flat `ChunkManager` answers heights as LV95 altitudes in world Y, which an ENU
+  frame's Y is not (a tried `--regionenu` left its bots hovering beside their ground); ENU regions stand on leaves.
+- **A turning handover** (`OriginFrame.Carry(earlier, from, to)`): the body lands on its place, and what it keeps
+  (velocity, headings, mantle points) keeps its bearing against the local east-up-south; the node is then stood up
+  on the new frame's +Y. Where the two places are one (a handover) that is the frames' rigid map there; on a
+  teleport 300 km away (`Put`) a rigid map would turn the heading by the meridians' 2.8°. Flat to flat it is the
+  plain translation of `Since`. Mirrors turn their copies the same way.
+- **The server on leaves** (`--frame earth`, #1513, PR #1610): read from the server's command line (it never loads the
+  settings file). The main frame is the ENU frame on the manifest origin at height 0 and its ground an `EarthWorld`
+  (`BuildMeshes = false`: heights and collision patches, nothing meshed); `ServerRegions.MakeGround` gives every ENU
+  region its own `EarthWorld` over the one shared `LeafStore`. A `ServerRegion` holds a terrain node and an
+  `IWorldGround` (`Chunks` is the flat case only); handovers, ghosts and shadows go through `Ground`, and
+  `WaterField.Bind/In` take an `IWorldGround`. The flat `ChunkManager` is still built but out of the tree: the services
+  placed from LV95 tiles (dormant fleets, steamer, airports, herds, slopes, lifts, UFOs, birds, the Africa Twin) stay
+  idle until C1 PR 2 furnishes leaves, as on an earth client; no trunks either. Clients play online under
+  `--frame earth` each in its own ENU frame (the wire is Earth positions), reading the leaves from their own disk.
+  - `EARTH=1 tools/regioncheck.sh` (D: leaves, Geneva and Riddes, 83 km): tracks with both sites as each alone to
+    0.000 cm; the hop keeps the true heading to 0.000°. `EARTH=1 tools/botcheck.sh`: bots on leaf collision, two
+    clients.
+  - A replicated player finds its ground at `World/Terrain`, else `World/Earth` (`FootPlayer._Ready`).
+- **Not yet**: a bot's drive (`BotDriving`) plans its road route from the flat tiles' source, so under `--frame earth`
+  it gets out at once ("no terrain") until roads stand on leaves (C1 PR 2): `EARTH=1 tools/botcheck.sh` fails only
+  its "drove off" step. Interiors on the server (`bots/server-collision`).
+- An earth server's line of sight: `net/vision-interest` ("Under `--frame earth`").

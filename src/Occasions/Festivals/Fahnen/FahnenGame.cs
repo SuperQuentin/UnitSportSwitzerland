@@ -105,7 +105,7 @@ public partial class FahnenGame : CanvasLayer
     {
         if (Instance == null || FestivalService.Instance?.FahneGroundNow() is not { } g) return false;
         var at = p.Global;
-        return GlobalPos.HorizontalDistance(at.E, at.N, g.E, g.N) <= FestivalCatalog.FahneGroundRadius;
+        return at.HorizontalDistanceTo(GlobalPos.FromLv95(g.E, g.N, at.Alt)) <= FestivalCatalog.FahneGroundRadius;
     }
 
     /// <summary>"[E] Swing the flag" on the ground; null elsewhere or while swinging.</summary>

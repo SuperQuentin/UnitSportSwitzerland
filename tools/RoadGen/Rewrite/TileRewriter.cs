@@ -82,7 +82,12 @@ public static partial class TileRewriter
         /// everywhere), the region's <c>places.json</c> (the signs' destinations) and where to write every lit approach's facts
         /// (<c>gantry_facts.tsv</c>, for <c>--gantry-benchmark</c>); <see cref="Gantries"/> false: none at all.
         /// </summary>
-        string? SitgSigns = null, string? Places = null, string? GantryFacts = null, bool Gantries = true);
+        string? SitgSigns = null, string? Places = null, string? GantryFacts = null, bool Gantries = true,
+        /// <summary>
+        /// The most tiles a block reads past its halo to follow its lines to their ends (#1660, <see cref="Close"/>); 0 = none (a
+        /// source that makes tiles on demand, the game's generated leaves: a line leaving the halo is then cut where it leaves it).
+        /// </summary>
+        int CloseTiles = 64);
 
     public sealed record Stats(
         int TilesRead, int TilesWritten, int Junctions, int SegmentsWritten, int SegmentsDropped,
@@ -121,6 +126,9 @@ public static partial class TileRewriter
         public readonly CatenaryPlanner.Stats Catenary = new();
         public readonly PriorityPlanner.Stats Priority = new();
         public readonly BikePlanner.Stats Bikes = new();
+        /// <summary>Whole lines (#1660): raw pieces joined across cuts, tiles read past the halo to close a line, lines cut when written.</summary>
+        public readonly TileCut.Stats Cut = new();
+        public int PiecesJoined, LinesClosed, TilesClosed, LinesLeftOpen;
 
         private string FormatParts(int tiles) => "    parts     " + string.Join(", ", Parts.Select(kv =>
             string.Create(CultureInfo.InvariantCulture,
@@ -138,7 +146,8 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Catenary.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format()
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Catenary.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + Lanes.Format() + "\n" + Bikes.Format() + "\n" + string.Create(CultureInfo.InvariantCulture,
+                    $"    whole lines (#1660): {PiecesJoined:N0} raw pieces joined across cuts, {LinesClosed:N0} lines followed past the halo ({TilesClosed:N0} tiles read), {LinesLeftOpen:N0} left open; written: {Cut.Segments:N0} segments, {Cut.Cut:N0} cut into {Cut.Pieces:N0} pieces, {Cut.PaintCut:N0} paint lines and {Cut.TransitionsCut:N0} transitions cut, {Cut.PropsCut:N0} walls cut, {Cut.Orphans} orphans")
                 + (Layouts.Count > 0 ? "\n" + Layout.JunctionPlan.Summary(Layouts) + "\n" + Layout.JunctionPlan.CoreSummary(Layouts) + "\n" + Merge.Summary() + "\n" + Layout.JunctionPlan.TransitionSummary(Layouts) + (LayoutWrite.Junctions + LayoutWrite.Skipped > 0 ? "\n" + LayoutWrite.Format() : "") : "");
         }
     }
@@ -250,70 +259,28 @@ public static partial class TileRewriter
     /// </summary>
     public sealed class AlreadyRewrittenException(string message) : Exception(message);
 
+    /// <summary>The stage over a chunk directory's tiles, in LV95 (<see cref="Lv95TileLoop"/>).</summary>
     public static Stats Run(string chunkDir, IReadOnlyList<TileId> tiles, Options options, Action<string> log)
     {
         _plannerFailures = 0;
-        string rawDir = options.RawDir ?? RawRoads.DirFor(RawRoads.DefaultTempDir(chunkDir));
-        // the car park rings are written to their own directory beside the raw roads, not into it
-        // (#499, ParkingAreaExtractor -> RawParking.DirFor), so they are found from the temp dir
-        string parkDir = RawParking.DirFor(Directory.GetParent(rawDir)?.FullName ?? RawRoads.DefaultTempDir(chunkDir));
+        return Run(new Lv95TileLoop(chunkDir, tiles, options, log), options, log);
+    }
 
-        // Input per tile: the raw extractor output if kept, else a fresh (never rewritten) tile
-        // in the chunk dir. A rewritten tile with no raw input would be trimmed a second time.
-        var targets = new List<TileId>();
-        var rewritten = new List<TileId>();
-        foreach (var id in tiles)
-        {
-            if (File.Exists(RawRoads.RoadPath(rawDir, id))) targets.Add(id);
-            else if (!File.Exists(Path.Combine(chunkDir, RoadFormat.FileName(id)))) continue;
-            else if (!options.Force && RawRoads.IsRewritten(Path.Combine(chunkDir, RoadFormat.FileName(id)))) rewritten.Add(id);
-            else targets.Add(id);
-        }
-        if (rewritten.Count > 0 && !options.SkipRewritten)
-            throw new AlreadyRewrittenException(
-                $"{rewritten.Count} of {tiles.Count} tiles were already rewritten (v2, or v3 from the network\n"
-                + $"stage) and have no raw input in {rawDir}.\n"
-                + "Rewriting is not idempotent on its own output — a second pass trims roads that are\n"
-                + "already trimmed and leaves a hole at every junction. Re-run the roads preprocessing\n"
-                + "(it keeps the raw input), --skip-rewritten to leave them, or --force if you know better.");
-        if (rewritten.Count > 0) log($"  skipping {rewritten.Count} rewritten tiles with no raw input");
-
-        var overlay = options.OsmOverlay is { } overlayPath ? OsmOverlayReader.TryLoad(overlayPath) : null;
-        var cantons = options.Cantons ?? Cantons.Find();   // pedestrian heads per canton (#348); a test world's zones (#1038)
-        // OSM traffic signals (#347), beside the overlay
-        var osmNodes = options.OsmOverlay is { } nodesBeside
-            ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null;
-        var signalSites = SignalSites.From(osmNodes);
-        var restrictions = Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
-        var crossingNodes = CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
-        // walkers' crossings over a tram track left without lights (#1176: OSM railway=tram_crossing, crossing=uncontrolled)
-        UncontrolledTramCrossings = osmNodes is null ? [] : osmNodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing
-            && e.Value == "uncontrolled" && e.Tags.GetValueOrDefault("railway") == "tram_crossing").Select(e => new Vec2(e.E, e.N)).ToList();
-        if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
-        if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
-
-        var wanted = new HashSet<TileId>(targets);
-        var blocks = GroupIntoBlocks(targets, options.BlockSize);
-        // gantries of lane signs (#1110): SITG's in canton Geneva, the rule elsewhere
-        var gantries = options.Gantries ? GantryContext.Load(options.SitgSigns, options.Places) : null;
-        if (gantries is not null) gantries.Overlay = overlay;
-        if (gantries?.Sitg is { } sitg) log($"  SITG lane signs (#1110): {sitg.Gantries.Count:N0} gantries from {options.SitgSigns}");
-
-        var session = new Session(options, new Inputs
-        {
-            Roads = id => LoadInput(chunkDir, rawDir, id, stash: wanted.Contains(id) && !options.DryRun),
-            Grid = id => LoadGrid(chunkDir, id),
-            Buildings = id => Facades.Read(chunkDir, id),
-            Parking = id => RawParking.Read(parkDir, id),
-            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions, Crossings = crossingNodes,
-            Gantries = gantries,
-        });
+    /// <summary>
+    /// The stage over a tile loop (#1507): its blocks one after another, each finished tile handed to
+    /// <see cref="ITileLoop.Write"/>, on the loop's units.
+    /// </summary>
+    public static Stats Run(ITileLoop loop, Options options, Action<string> log)
+    {
+        using var units = Plane.Use(loop.Inputs.Units);
+        var session = new Session(options, loop.Inputs);
+        var blocks = loop.Blocks;
 
         int blockIndex = 0;
         foreach (var block in blocks)
         {
             blockIndex++;
-            foreach (var tile in session.Block(block, wanted))
+            foreach (var tile in session.Block(block, loop.Wanted))
             {
                 options.Decorate?.Invoke(tile);
                 var bytes = Encode(tile);
@@ -321,13 +288,7 @@ public static partial class TileRewriter
 
                 if (options.DryRun) { session.TilesWritten++; continue; }
 
-                string path = Path.Combine(chunkDir, RoadFormat.FileName(tile.Id));
-                string temp = path + ".part";
-
-                // write via a temp file: a half-written .road looks exactly like a valid short
-                // one, and the region being rewritten is the region being played
-                File.WriteAllBytes(temp, bytes);
-                File.Move(temp, path, overwrite: true);
+                loop.Write(tile, bytes);
                 session.TilesWritten++;
             }
 
@@ -335,7 +296,7 @@ public static partial class TileRewriter
                 log($"  block {blockIndex}/{blocks.Count}  {session.TilesWritten} tiles, {session.JunctionCount} junctions");
         }
 
-        if (gantries is not null && options.GantryFacts is { } factsPath && !options.DryRun) gantries.WriteFacts(factsPath);
+        loop.Finish();
         return session.Finish(log);
     }
 
@@ -352,8 +313,16 @@ public static partial class TileRewriter
         /// on every call: the stage writes into the segments (road heights in town, #119).
         /// </summary>
         public required Func<TileId, (RoadTile? Tile, RawRoads.Key?[]? Keys)> Roads { get; init; }
-        /// <summary>A tile's full-resolution ground, or null.</summary>
-        public required Func<TileId, ChunkGrid?> Grid { get; init; }
+        /// <summary>A tile's full-resolution ground, or null: the LV95 instance's ground (<see cref="Lv95TileGround"/>).</summary>
+        public Func<TileId, ChunkGrid?>? Grid { get; init; }
+        /// <summary>
+        /// The ground over a block and its halo (#1507), null for none at all (no lots, walls or height audit then);
+        /// unset = <see cref="Lv95TileGround"/> over <see cref="Grid"/>'s tiles. A frame instance hands in its frame's.
+        /// </summary>
+        public Func<IReadOnlyCollection<TileId>, IGround?>? Ground { get; init; }
+
+        internal IGround? GroundOver(IReadOnlyCollection<TileId> tiles) =>
+            Ground is { } ground ? ground(tiles) : Grid is { } grid ? Lv95TileGround.Over(grid, tiles) : null;
         /// <summary>A tile's buildings, or null: the walls streets stop at, the footprints poles keep off.</summary>
         public required Func<TileId, BuildingTile?> Buildings { get; init; }
         /// <summary>A tile's car parks (#499); null = none anywhere.</summary>
@@ -368,6 +337,10 @@ public static partial class TileRewriter
         internal CrossingNodes? Crossings { get; init; }
         /// <summary>The gantries' data and rule (#1110); null = no gantries.</summary>
         public GantryContext? Gantries { get; init; }
+        /// <summary>The region's tram stops on the inputs' plane (#1057, #1507); null = read <see cref="Options.TramStops"/>.</summary>
+        public List<(string Name, Vec2 At)>? TramStops { get; init; }
+        /// <summary>The plane the inputs are on and its tiles (#1507); LV95 unless a frame says otherwise.</summary>
+        public IUnits Units { get; init; } = Lv95Units.Instance;
     }
 
     /// <summary>
@@ -398,7 +371,7 @@ public static partial class TileRewriter
         // one block's, made in Block: a session-long cache held every building tile it ever saw (#1425)
         private Footprints buildings = null!;
         /// <summary>The region's tram stops (#1057, <see cref="Options.TramStops"/>), none without the file.</summary>
-        private readonly List<(string Name, Vec2 At)> tramStops = options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : [];
+        private readonly List<(string Name, Vec2 At)> tramStops = inputs.TramStops ?? (options.TramStops is { } stopsPath ? ReadAllTramStops(stopsPath) : []);
 
         /// <summary>
         /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;
@@ -413,47 +386,57 @@ public static partial class TileRewriter
             var restrictions = inputs.Restrictions;
             var crossingNodes = inputs.Crossings;
             var built = new List<RoadTile>();
+            using var units = Plane.Use(inputs.Units);
 
-            buildings = new Footprints(inputs.Buildings);
+            var real = inputs.Units;
+            buildings = new Footprints(inputs.Buildings, real);
             var context = WithHalo(block, options.Halo);
+            // building walls, for the streets, and the density from them: on the real tiles, as the buildings come
+            var facades = inputs.Facades ?? new Facades(inputs.Buildings, real);
+            var field = inputs.Field ?? new UrbanField(facades);
 
             var net = new RoadNetwork();
             var lines = new List<CrossSectionPlanner.Line>();
             var loaded = new Dictionary<TileId, RoadTile>();
-            var passthrough = new Dictionary<TileId, List<RoadSegment>>();
+            // cableways, watercourses and walls: carried through as they came, written where they lie in the block
+            var passthrough = new List<(RoadSegment Segment, bool Write)>();
 
+            // (#1660, the user: "junctions should be generated the same, no matter where the tile edges are") the raw pieces of
+            // the block and its halo joined back into whole lines across every tile cut, a line leaving the halo followed to its
+            // end (Close); nothing from here on sees a tile edge: every line lies under BlockFrame.Lines in one frame centred on
+            // the block, and the finished records are cut at the tile edges only when they are written (TileCut)
+            var rawPieces = new List<LineJoin.Piece>();
             foreach (var id in context)
             {
-                var (tile, keys) = inputs.Roads(id);
+                var (tile, rawKeys) = inputs.Roads(id);
                 if (tile is null) continue;
                 loaded[id] = tile;
                 if (block.Contains(id)) tilesRead++;
-
-                for (int si = 0; si < tile.Segments.Count; si++)
+                for (int si = 0; si < tile.Segments.Count; si++) rawPieces.Add(new LineJoin.Piece(id, si, tile.Segments[si], rawKeys?[si]));
+            }
+            var whole = Close(rawPieces, context, real, inputs.Roads, options.CloseTiles, netStats);
+            // (#1691) in one order whatever the block: by their points on the plane, not by the order the block read its tiles in
+            whole.Sort(LineOrder);
+            var frame = BlockFrame.Over(real, block);
+            using var blockFrame = Plane.Use(frame);
+            foreach (var line in whole)
+            {
+                bool write = line.Parts.Any(p => block.Contains(p.Tile)) || Beside(line, block, real);
+                var segment = LineJoin.ToSegment(line, frame, BlockFrame.Lines);
+                // Aerial ropeways and watercourses are carried in the same file but are not
+                // carriageways, and must not enter the graph. A cableway would be snapped to
+                // the road it flies over; a stream confluence would be handed a junction
+                // polygon and rendered as a patch of tarmac in the middle of a river.
+                if (RoadFormat.IsAerial(segment.Class) || RoadFormat.IsWatercourse(segment.Class) || RoadFormat.IsWall(segment.Class))
                 {
-                    var segment = tile.Segments[si];
-                    // Aerial ropeways and watercourses are carried in the same file but are not
-                    // carriageways, and must not enter the graph. A cableway would be snapped to
-                    // the road it flies over; a stream confluence would be handed a junction
-                    // polygon and rendered as a patch of tarmac in the middle of a river.
-                    if (RoadFormat.IsAerial(segment.Class) || RoadFormat.IsWatercourse(segment.Class)
-                        || RoadFormat.IsWall(segment.Class))
-                    {
-                        if (!passthrough.TryGetValue(id, out var keep))
-                            passthrough[id] = keep = new List<RoadSegment>();
-                        keep.Add(segment);
-                        continue;
-                    }
-
-                    lines.Add(new CrossSectionPlanner.Line
-                        { Tile = id, Segment = segment, Key = keys?[si], Write = block.Contains(id) });
+                    passthrough.Add((segment, write));
+                    continue;
                 }
+                lines.Add(new CrossSectionPlanner.Line { Tile = BlockFrame.Lines, Segment = segment, Key = line.Key, Write = write });
             }
 
             CrossSectionPlanner.Plan(lines, overlay, netStats.Carriageways);
             // road heights against the ground (#119), before anything reads them
-            var facades = inputs.Facades ?? new Facades(inputs.Buildings);   // building walls, for the streets
-            var field = inputs.Field ?? new UrbanField(facades);
             RoadHeights.Apply(lines, field, heightStats, count: true);
             BikePlanner.PlanLines(lines, field, netStats.Bikes);   // bike lanes (#120), before the junctions read the lines
             // roundabout rings rebuilt as arcs before anything is built from them (#122)
@@ -462,7 +445,7 @@ public static partial class TileRewriter
             foreach (var ring in RoundaboutShaper.Shape(lines, netStats.Roundabouts))
             {
                 rings.Add(ring);
-                var at = TileId.FromLv95(ring.Centre.X, ring.Centre.Y);
+                var at = Plane.TileAt(ring.Centre.X, ring.Centre.Y);
                 if (!block.Contains(at) || RoundaboutShaper.Island(ring, at) is not { } island) continue;
                 if (!islands.TryGetValue(at, out var list)) islands[at] = list = new List<RoadAreaProp>();
                 list.Add(island);
@@ -488,7 +471,7 @@ public static partial class TileRewriter
             var catenaryWires = new Dictionary<TileId, List<CatenaryWire>>();
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
-            var grids = LoadGrids(inputs.Grid, context);
+            var grids = inputs.GroundOver(context);
 
             if (net.Links.Count > 0)
             {
@@ -517,7 +500,7 @@ public static partial class TileRewriter
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)
                 var priority = PlanPriority(result, j => Lights(j, result.Network, field, signalSites,
-                    block.Contains(TileId.FromLv95(j.Centre.X, j.Centre.Y)) ? netStats.Signals : null), netStats.Signals);
+                    block.Contains(Plane.TileAt(j.Centre.X, j.Centre.Y)) ? netStats.Signals : null), netStats.Signals);
                 var bikeLayouts = BikePlanner.StrokeLayouts(result.Network, BikeStrokeKey);   // one path layout per street (#120)
                 var trackPaint = new List<(RoadSegment Segment, TileId Tile, bool Start, bool End)>();
                 var lanePaint = new List<(RoadSegment Segment, TileId Tile, double Station, bool Start, bool End)>();
@@ -538,7 +521,7 @@ public static partial class TileRewriter
                 {
                     var link = result.Network.Links[ribbon.LinkId];
                     if (link.Tag is not Source source) continue;
-                    bool write = block.Contains(source.Tile);
+                    bool write = source.Line.Write;   // a whole line with a part in the block (#1660)
                     if (ribbon.Stations.Count < 2) { if (write) dropped++; continue; }
 
                     var plan = ribbon.Stations.Select(s => s.Position).ToList();
@@ -586,13 +569,12 @@ public static partial class TileRewriter
                         footway: footway,
                         carriageway: seg.Class <= RoadClass.Lane || seg.Class == RoadClass.Railway);
                 }
-                foreach (var (tileId, kept) in passthrough)
-                    foreach (var seg in kept)
-                    {
-                        if (RoadFormat.IsWall(seg.Class)) obstacles.Add(seg, tileId, 0.3, -1);
-                        else if (RoadFormat.IsWatercourse(seg.Class) && (seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0)
-                            obstacles.Add(seg, tileId, seg.Width * 0.5, -1);
-                    }
+                foreach (var (seg, _) in passthrough)
+                {
+                    if (RoadFormat.IsWall(seg.Class)) obstacles.Add(seg, BlockFrame.Lines, 0.3, -1);
+                    else if (RoadFormat.IsWatercourse(seg.Class) && (seg.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) == 0)
+                        obstacles.Add(seg, BlockFrame.Lines, seg.Width * 0.5, -1);
+                }
                 // tunnel mouths of the block (#119): their approach roads run between walls as wide as the bore
                 var mouths = new List<(Vec2 At, Vec2 Out, double Half)>();
                 foreach (var (src, pl, _, _) in plans)
@@ -647,8 +629,10 @@ public static partial class TileRewriter
                     bool band = !write && bandLinks.Contains(linkId);
                     if (!write && !band) continue;
                     var into = band ? bandOutput : output;
-                    if (!into.TryGetValue(source.Tile, out var list))
-                        into[source.Tile] = list = new List<RoadSegment>();
+                    // the band's streets under their own name (#1660): planned like the block's, never written
+                    var outKey = band ? BlockFrame.Band : source.Tile;
+                    if (!into.TryGetValue(outKey, out var list))
+                        into[outKey] = list = new List<RoadSegment>();
                     var painted = bandPaint;
                     if (!band && !paint.TryGetValue(source.Tile, out painted)) paint[source.Tile] = painted = new List<RoadPaint>();
                     if (pieces is not null)
@@ -708,12 +692,12 @@ public static partial class TileRewriter
                     double station = source.Key is { } at ? at.FromM + source.AlongOf(plan[0]) : 0;
                     if (band)
                     {
-                        bandSegmentOf[linkId] = (segment, source.Tile, paintOn);
+                        bandSegmentOf[linkId] = (segment, BlockFrame.Band, paintOn);
                         bandStation[linkId] = (station, startsAtJunction, endsAtJunction);
                         continue;
                     }
                     segmentOf[linkId] = (segment, source.Tile, paintOn);   // turn lanes find the lines on paintOn (#325)
-                    PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false);
+                    PaintEmitter.Emit(paintOn, station, painted, startsAtJunction, endsAtJunction, bikeLanes: false, tile: source.Tile);
                     paintStation[linkId] = (station, startsAtJunction, endsAtJunction);
                     if (paintAttributes.Left.HasLane || paintAttributes.Right.HasLane)   // on the final pieces (#120)
                         lanePaint.Add((segment, source.Tile, station, startsAtJunction, endsAtJunction));
@@ -734,7 +718,7 @@ public static partial class TileRewriter
 
                 foreach (var junction in result.Junctions)
                 {
-                    var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+                    var home = Plane.TileAt(junction.Centre.X, junction.Centre.Y);
                     if (!block.Contains(home) || !wanted.Contains(home)) continue;
 
                     netStats.TurnLanes.TightCorners += junction.TightCorners.Count;   // #700
@@ -862,7 +846,7 @@ public static partial class TileRewriter
                         var strips = stripsOf.TryGetValue(list[i], out var own) ? own : null;
                         var final = strips is null ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
                         // a gap in the grass where a left-turn pocket opens, for cyclists to reach it (#352)
-                        if (cut) final = CutVerges(list[i], tileId, final, opened!, block.Contains(tileId) && wanted.Contains(tileId) ? netStats.Bikes : null);
+                        if (cut) final = CutVerges(list[i], tileId, final, opened!, netStats.Bikes);
                         // a path stopped a few metres short of a junction's mouth goes on to it (#700, the user's rule): it reaches
                         // the road it crosses before its crossing starts
                         if (linkOfSegment.TryGetValue(list[i], out var pathLink))
@@ -888,7 +872,7 @@ public static partial class TileRewriter
                 // the junction planner's junctions written (#818 phase 3): cores, trims, transitions and their paint
                 if (layouts is not null && writtenNodes.Count > 0)
                     WriteLayouts(layouts, writtenNodes, result, layoutSegmentOf, finalPieces, layoutOutput, capOf, caps, writtenCaps, paint, layoutStation,
-                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, buildings,
+                        transitionsOf, islands, signs, signalRecords, approachRecords, cantons, netStats.Signals, netStats.LayoutWrite, coreCorners, pathEnds, bikeBridges, pathsOf, t => block.Contains(t) && wanted.Contains(t), buildings,
                         inputs.Gantries);
                 // the tram stops' signs beside their tracks (#1057), where the preprocessor found stops (--tram-stops)
                 if (tramStops.Count > 0) EmitTramStops(tramStops, new TramNet(result), block, signs, netStats.LayoutWrite);
@@ -922,7 +906,7 @@ public static partial class TileRewriter
                         // a transition's piece (#818): its own paint has the bike lanes
                         if (pieces[i].Attributes.Has(RoadAttrFlags.InTransition)) { s += length; continue; }
                         PaintEmitter.BikeLanes(pieces[i], s, into, i == 0 && start, i == pieces.Count - 1 && end,
-                            skipLeft: Inside(false), skipRight: Inside(true));
+                            skipLeft: Inside(false), skipRight: Inside(true), tile: tileId);
                         foreach (var (right, stop, solid) in stops)
                             BikeLaneToStop(into, before, pieces[i], right, stop - (s - station), solid - (s - station));
                         // an exit's bike lane starts where the left-turn guides leave it (#711): the left side at a link's end,
@@ -955,7 +939,7 @@ public static partial class TileRewriter
                         for (int k = 1; k < line.Vertices.Length; k += 3) line.Vertices[k] = y + lift;
                 _pathLines?.Clear();
                 foreach (var (segment, tileId, start, end) in trackPaint)
-                    EmitTrackPaint((finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment]).Where(x => !x.Attributes.Has(RoadAttrFlags.InTransition)).ToList(), start, end, Get(paint, tileId));
+                    EmitTrackPaint((finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment]).Where(x => !x.Attributes.Has(RoadAttrFlags.InTransition)).ToList(), start, end, Get(paint, tileId), tileId);
                 KerbArcs(oldPriority, townArcs, kerbArcs);
             }
 
@@ -967,49 +951,66 @@ public static partial class TileRewriter
             PlanParking(inputs.Parking, block, wanted, output, facades, grids,
                 parkAreas, paint, parkPoints, parkBays, parkingStats);
 
+            // (#1660) the block's records in its one frame: whole lines and what lies along them under BlockFrame.Lines, each
+            // junction's under its home tile; walls, railings, signs and corners from every line of the block at once, so none
+            // of them sees where a tile ends; then cut into the real tiles (TileCut), each in its own frame
+            var allSegments = new List<RoadSegment>();
+            foreach (var list in output.Values) allSegments.AddRange(list);
+            // cableways and watercourses go back exactly as they came in (whole, then cut where they were)
+            allSegments.AddRange(passthrough.Where(x => x.Write).Select(x => x.Segment));
+            var allTransitions = Placed(BlockFrame.Lines, transitionsOf.Where(kv => kv.Key != BlockFrame.Band).SelectMany(kv => kv.Value).ToList(), allSegments, netStats.LayoutWrite);   // (the band's: planned, never written)
+            var allIslands = islands.Values.SelectMany(x => x).ToList();
+            var allBridges = bikeBridges.Values.SelectMany(x => x).ToList();
+            var allLights = signalRecords.Values.SelectMany(x => x).Select(x => (x.X, x.Z)).ToList();
+            foreach (var list in signs.Values) MoveSignsOffPaths(allSegments, list, netStats.Bikes);   // #120
+            var walls = new List<RoadLinearProp>();
+            if (grids is not null)
+            {
+                var owners = new List<int>();
+                walls = EmbankmentPlanner.Plan(BlockFrame.Lines, allSegments, (e, n) => SampleGround(grids, e, n), embankments, owners);
+                walls.AddRange(RailingPlanner.Plan(BlockFrame.Lines, allSegments, walls, owners, (e, n) => SampleGround(grids, e, n), railings));
+            }
+            var keyed = new HashSet<TileId> { BlockFrame.Lines };
+            foreach (var k in caps.Keys.Concat(paint.Keys).Concat(signs.Keys).Concat(islands.Keys).Concat(signalRecords.Keys).Concat(approachRecords.Keys)
+                         .Concat(parkAreas.Keys).Concat(parkPoints.Keys).Concat(parkBays.Keys).Concat(pathsOf.Keys).Concat(catenarySupports.Keys)
+                         .Concat(catenaryWires.Keys).Concat(bikeBridges.Keys).Concat(coreCorners.Keys).Concat(kerbArcs.Keys).Concat(pathEnds.Keys))
+                if (k != BlockFrame.Band) keyed.Add(k);   // the band's streets and their paint: planned, never written
+            var sources = new Dictionary<TileId, RoadTile>();
+            foreach (var key in keyed)
+            {
+                bool lineKey = key == BlockFrame.Lines;
+                var junctions = caps.TryGetValue(key, out var j) ? j : new List<RoadJunction>();
+                var pointProps = signs.TryGetValue(key, out var sp) ? sp : new List<RoadPointProp>();
+                if (parkPoints.TryGetValue(key, out var pp)) pointProps.AddRange(pp);   // boom, kiosk, shelter, P sign (#499)
+                var bridges = bikeBridges.TryGetValue(key, out var br) ? br : [];
+                var keyPaint = paint.TryGetValue(key, out var kp) ? kp : new List<RoadPaint>();
+                rails.ClearTrackZones(keyPaint, BlockFrame.Lines, allLights);
+                sources[key] = new RoadTile
+                {
+                    Id = key, Segments = lineKey ? allSegments : [], Junctions = junctions,
+                    Paint = keyPaint,
+                    LinearProps = lineKey ? walls : [],
+                    AreaProps = [.. islands.TryGetValue(key, out var isl) ? isl : [],
+                        .. Unbridged(key, CornerPlanner.Plan(key, allSegments, junctions, facades, cornerStats, allIslands, kerbArcs.GetValueOrDefault(key), pathEnds.GetValueOrDefault(key), allBridges.Select(x => x.Band), coreCorners.GetValueOrDefault(key), allTransitions, bends: lineKey), allBridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. bridges.Select(x => x.Band),
+                        .. parkAreas.TryGetValue(key, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
+                    PointProps = pointProps,
+                    Signals = signalRecords.TryGetValue(key, out var sg) ? sg : new List<RoadSignal>(),
+                    Approaches = approachRecords.TryGetValue(key, out var ap) ? ap : new List<RoadApproach>(),
+                    Parking = parkBays.TryGetValue(key, out var pb) ? pb : new List<ParkingBay>(),   // #499
+                    Transitions = lineKey ? allTransitions : [],   // #818
+                    JunctionPaths = pathsOf.GetValueOrDefault(key) ?? [],   // #818 phase 5: the writer keeps those whose cap the tile holds
+                    CatenarySupports = catenarySupports.GetValueOrDefault(key) ?? [],   // #1052
+                    CatenaryWires = catenaryWires.GetValueOrDefault(key) ?? [],
+                };
+            }
+            var finished = TileCut.Cut(sources, frame, t => block.Contains(t) && wanted.Contains(t) && loaded.ContainsKey(t), netStats.Cut);
             foreach (var id in block)
             {
                 if (!loaded.ContainsKey(id) || !wanted.Contains(id)) continue;
-
-                var segments = output.TryGetValue(id, out var s) ? s : new List<RoadSegment>();
-                var junctions = caps.TryGetValue(id, out var j) ? j : new List<RoadJunction>();
-
-                // cableways and watercourses go back exactly as they came in
-                if (passthrough.TryGetValue(id, out var kept)) segments.AddRange(kept);
-
-                var flags = RoadTileFlags.Network | RoadTileFlags.Bikes;
-                if (segments.Any(x => x.Attributes.Has(RoadAttrFlags.Osm))) flags |= RoadTileFlags.Osm;
+                // a tile read with no roads left in it is still written: the stage's output, empty (as before #1660)
+                if (!finished.TryGetValue(id, out var tile)) tile = new RoadTile { Id = id, Segments = [], Flags = RoadTileFlags.Network | RoadTileFlags.Bikes };
                 streetStats.Tiles++;
-                var pointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>();
-                var bridges = bikeBridges.TryGetValue(id, out var br) ? br : [];
-                MoveSignsOffPaths(segments, pointProps, netStats.Bikes);   // #120
-                if (parkPoints.TryGetValue(id, out var pp)) pointProps.AddRange(pp);   // boom, kiosk, shelter, P sign (#499)
-                var walls = new List<RoadLinearProp>();
-                if (grids is not null)
-                {
-                    var owners = new List<int>();
-                    walls = EmbankmentPlanner.Plan(id, segments, (e, n) => SampleGround(grids, e, n), embankments, owners);
-                    walls.AddRange(RailingPlanner.Plan(id, segments, walls, owners, (e, n) => SampleGround(grids, e, n), railings));
-                }
-                var tile = new RoadTile
-                {
-                    Id = id, Segments = segments, Junctions = junctions, Flags = flags,
-                    Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
-                    LinearProps = walls,
-                    AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id), bridges.Select(x => x.Band), coreCorners.GetValueOrDefault(id), transitionsOf.GetValueOrDefault(id)), bridges, netStats.Bikes),   // sidewalk corners (#119)
-                        .. bridges.Select(x => x.Band),
-                        .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
-                    PointProps = pointProps,
-                    Signals = signalRecords.TryGetValue(id, out var sg) ? sg : new List<RoadSignal>(),
-                    Approaches = approachRecords.TryGetValue(id, out var ap) ? ap : new List<RoadApproach>(),
-                    Parking = parkBays.TryGetValue(id, out var pb) ? pb : new List<ParkingBay>(),   // #499
-                    Transitions = Placed(id, transitionsOf.GetValueOrDefault(id), segments, netStats.LayoutWrite),   // #818
-                    JunctionPaths = pathsOf.GetValueOrDefault(id) ?? [],   // #818 phase 5: the writer keeps those whose cap the tile holds
-                    CatenarySupports = catenarySupports.GetValueOrDefault(id) ?? [],   // #1052
-                    CatenaryWires = catenaryWires.GetValueOrDefault(id) ?? [],
-                };
-                rails.ClearTrackZones(tile.Paint, id, tile.Signals.Select(s => (s.X, s.Z)).ToList());
                 built.Add(tile);
             }
             return built;
@@ -1035,7 +1036,7 @@ public static partial class TileRewriter
     /// chunk-dir tile (a region extracted before the raw dir existed) is stashed as raw first, so
     /// the next run has the same input.
     /// </summary>
-    private static (RoadTile? Tile, RawRoads.Key?[]? Keys) LoadInput(string chunkDir, string rawDir, TileId id, bool stash)
+    internal static (RoadTile? Tile, RawRoads.Key?[]? Keys) LoadInput(string chunkDir, string rawDir, TileId id, bool stash)
     {
         string raw = RawRoads.RoadPath(rawDir, id);
         if (File.Exists(raw))
@@ -1200,7 +1201,7 @@ public static partial class TileRewriter
     /// <summary>The height of a street's final pieces' centreline nearest an LV95 point, null when they have none.</summary>
     private static float? PieceHeight(IReadOnlyList<RoadSegment> pieces, TileId tile, Vec2 p)
     {
-        var q = new Vec2(p.X - tile.MinE, p.Y - tile.MaxN);
+        var q = new Vec2(p.X - Plane.West(tile), p.Y - Plane.North(tile));
         double best = double.MaxValue;
         float? y = null;
         foreach (var piece in pieces)
@@ -1233,7 +1234,7 @@ public static partial class TileRewriter
         // where the two points lie along the pieces (tile-local plan, x east, y north)
         double Along(Vec2 p)
         {
-            var q = new Vec2(p.X - tile.MinE, p.Y - tile.MaxN);
+            var q = new Vec2(p.X - Plane.West(tile), p.Y - Plane.North(tile));
             double best = double.MaxValue, at = 0, travelled = 0;
             foreach (var piece in pieces)
             {
@@ -1437,7 +1438,7 @@ public static partial class TileRewriter
                     var mid = StreetPlanner.Slice(piece, (l0 + l1) * 0.5, (l0 + l1) * 0.5 + 0.01);
                     if (mid.Length >= 3)
                         bikes.VergeCutsAt.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                            $"{tile.MinE + mid[0]:F0},{tile.MaxN - mid[2]:F0}"));
+                            $"{Plane.West(tile) + mid[0]:F0},{Plane.North(tile) - mid[2]:F0}"));
                 }
                 cut = true;
                 start = end;
@@ -1480,8 +1481,8 @@ public static partial class TileRewriter
     {
         if (!RoadEmbankment.IsAtGrade(seg) || seg.Class > RoadClass.Lane || seg.PointCount < 2) return seg;
         var p = seg.Points;
-        var a = new Vec2(id.MinE + p[0], id.MaxN - p[2]);
-        var b = new Vec2(id.MinE + p[^3], id.MaxN - p[^1]);
+        var a = new Vec2(Plane.West(id) + p[0], Plane.North(id) - p[2]);
+        var b = new Vec2(Plane.West(id) + p[^3], Plane.North(id) - p[^1]);
         var heading = b - a;
         if (heading.Length < 1e-6) return seg;
         heading = heading / heading.Length;
@@ -1645,7 +1646,7 @@ public static partial class TileRewriter
     /// </para>
     /// </summary>
     private static int ApplyCliffGuard(List<Vec2> plan, Source source,
-        Dictionary<TileId, ChunkGrid> terrain, double maxShift)
+        IGround terrain, double maxShift)
     {
         if (maxShift <= 0) return 0;
         int reverted = 0;
@@ -1667,18 +1668,10 @@ public static partial class TileRewriter
         return reverted;
     }
 
-    private static double SampleGround(Dictionary<TileId, ChunkGrid> grids, double e, double n) =>
-        grids.TryGetValue(TileId.FromLv95(e, n), out var grid) ? grid.SampleHeight(e, n) : double.NaN;
+    /// <summary>The ground's height above sea level at a plane point, NaN where it has none.</summary>
+    private static double SampleGround(IGround ground, double e, double n) => ground.Sample(e, n) ?? double.NaN;
 
-    private static Dictionary<TileId, ChunkGrid>? LoadGrids(Func<TileId, ChunkGrid?> grid, IEnumerable<TileId> tiles)
-    {
-        var grids = new Dictionary<TileId, ChunkGrid>();
-        foreach (var id in tiles)
-            if (grid(id) is { } g) grids[id] = g;
-        return grids.Count == 0 ? null : grids;
-    }
-
-    private static ChunkGrid? LoadGrid(string chunkDir, TileId id)
+    public static ChunkGrid? LoadGrid(string chunkDir, TileId id)
     {
         string path = Path.Combine(chunkDir, ChunkFormat.ChunkFileName(id));
         if (!File.Exists(path)) return null;
@@ -1711,7 +1704,7 @@ public static partial class TileRewriter
         /// absolute road-to-ground distances instead is meaningless on a cliff, where the two
         /// points sit on terrain tens of metres apart.
         /// </summary>
-        public void Add(List<Vec2> plan, Source source, Dictionary<TileId, ChunkGrid> terrain)
+        public void Add(List<Vec2> plan, Source source, IGround terrain)
         {
             foreach (var p in plan)
             {
@@ -1734,11 +1727,7 @@ public static partial class TileRewriter
             }
         }
 
-        internal static double Sample(Dictionary<TileId, ChunkGrid> terrain, Vec2 p)
-        {
-            var id = TileId.FromLv95(p.X, p.Y);
-            return terrain.TryGetValue(id, out var grid) ? grid.SampleHeight(p.X, p.Y) : double.NaN;
-        }
+        internal static double Sample(IGround terrain, Vec2 p) => SampleGround(terrain, p.X, p.Y);
 
         internal static Vec2 NearestOnOriginal(Source source, Vec2 p, out double distance)
         {
@@ -1805,9 +1794,9 @@ public static partial class TileRewriter
         var points = new float[plan.Count * 3];
         for (int i = 0; i < plan.Count; i++)
         {
-            points[i * 3] = (float)(plan[i].X - id.MinE);
+            points[i * 3] = (float)(plan[i].X - Plane.West(id));
             points[i * 3 + 1] = heights?[i] ?? source.SampleHeight(plan[i]);
-            points[i * 3 + 2] = (float)(id.MaxN - plan[i].Y);
+            points[i * 3 + 2] = (float)(Plane.North(id) - plan[i].Y);
         }
 
         return new RoadSegment
@@ -1838,30 +1827,15 @@ public static partial class TileRewriter
         if (junction.Vertices.Count > ushort.MaxValue) return null;
 
         var anchors = CapAnchors(junction, net);
-        RoadClass dominant = RoadClass.Unknown;
-        int bestPriority = int.MinValue;
-
-        foreach (var arm in junction.Arms)
-        {
-            var link = net.Links[arm.LinkId];
-            if (link.Tag is not Source source) continue;
-
-            if (link.Profile.Priority > bestPriority)
-            {
-                bestPriority = link.Profile.Priority;
-                dominant = source.Segment.Class;
-            }
-        }
-
         if (anchors.Count == 0) return null;
 
         var vertices = new float[junction.Vertices.Count * 3];
         for (int i = 0; i < junction.Vertices.Count; i++)
         {
             var v = junction.Vertices[i];
-            vertices[i * 3] = (float)(v.X - id.MinE);
+            vertices[i * 3] = (float)(v.X - Plane.West(id));
             vertices[i * 3 + 1] = HeightAt(anchors, v);
-            vertices[i * 3 + 2] = (float)(id.MaxN - v.Y);
+            vertices[i * 3 + 2] = (float)(Plane.North(id) - v.Y);
         }
 
         var indices = new ushort[junction.Triangles.Count];
@@ -1870,12 +1844,33 @@ public static partial class TileRewriter
 
         return new RoadJunction
         {
-            Class = dominant,
-            Layer = (sbyte)(junction.Layer > RailLayer / 2 ? junction.Layer - RailLayer : junction.Layer),
+            Class = CapClass(junction, net),
+            Layer = CapLayer(junction),
             Vertices = vertices,
             Indices = indices,
         };
     }
+
+    /// <summary>A cap's class: its arm of the highest priority's (the first of them round the node).</summary>
+    private static RoadClass CapClass(Junction junction, RoadNetwork net)
+    {
+        RoadClass dominant = RoadClass.Unknown;
+        int bestPriority = int.MinValue;
+        foreach (var arm in junction.Arms)
+        {
+            var link = net.Links[arm.LinkId];
+            if (link.Tag is not Source source) continue;
+            if (link.Profile.Priority > bestPriority)
+            {
+                bestPriority = link.Profile.Priority;
+                dominant = source.Segment.Class;
+            }
+        }
+        return dominant;
+    }
+
+    /// <summary>A cap's layer as the file keeps it (a rail layer back below zero).</summary>
+    private static sbyte CapLayer(Junction junction) => (sbyte)(junction.Layer > RailLayer / 2 ? junction.Layer - RailLayer : junction.Layer);
 
     /// <summary>Each arm end's middle with its road's height there: what a cap's heights blend (<see cref="HeightAt"/>).</summary>
     private static List<(Vec2 At, float Height)> CapAnchors(Junction junction, RoadNetwork net)
@@ -1927,6 +1922,101 @@ public static partial class TileRewriter
         return profile with { Width = width };
     }
 
+    /// <summary>
+    /// How far beside its line a line's own records reach (#1660: paint offset from it, sidewalks, walls, signs), m: a block
+    /// writes every line passing this close to it, and keeps of it what lies in its tiles.
+    /// </summary>
+    private const double WriteReach = 50;
+
+    /// <summary>Whether a line passes within <see cref="WriteReach"/> of a tile of the block (sampled every 10 m along it).</summary>
+    private static bool Beside(LineJoin.Line line, HashSet<TileId> block, IUnits real)
+    {
+        var pts = line.Points;
+        bool Near(double x, double y)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    if (block.Contains(real.TileAt(x + dx * WriteReach, y + dy * WriteReach))) return true;
+            return false;
+        }
+        if (pts.Count > 0 && Near(pts[0].X, pts[0].Y)) return true;
+        for (int i = 1; i < pts.Count; i++)
+        {
+            double ax = pts[i - 1].X, ay = pts[i - 1].Y, bx = pts[i].X, by = pts[i].Y;
+            int steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / 10));
+            for (int k = 1; k <= steps; k++)
+                if (Near(ax + (bx - ax) * k / steps, ay + (by - ay) * k / steps)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whole lines by their first points, last point and count (#1691: a block's lines in an order no tile decides).</summary>
+    private static int LineOrder(LineJoin.Line a, LineJoin.Line b)
+    {
+        var (p, q) = (a.Points, b.Points);
+        int c;
+        for (int i = 0; i < Math.Min(2, Math.Min(p.Count, q.Count)); i++)
+        {
+            if ((c = p[i].X.CompareTo(q[i].X)) != 0 || (c = p[i].Y.CompareTo(q[i].Y)) != 0) return c;
+        }
+        if ((c = p.Count.CompareTo(q.Count)) != 0) return c;
+        if (p.Count > 0 && ((c = p[^1].X.CompareTo(q[^1].X)) != 0 || (c = p[^1].Y.CompareTo(q[^1].Y)) != 0)) return c;
+        return ((int)a.Template.Class).CompareTo((int)b.Template.Class);
+    }
+
+    /// <summary>The most rounds a block takes to close its lines (#1660): each reads the tiles across their open ends.</summary>
+    private const int CloseRounds = 12;
+
+    /// <summary>
+    /// The context's raw pieces joined into whole lines (#1660); a line ending on the context's edge (a cut whose other side was
+    /// not read) is followed: the tile across that end is read and its pieces of the line joined on, round after round, until
+    /// the line ends or <paramref name="most"/> tiles were read. Lines only in those tiles are left out (never the block's).
+    /// Only the end of the data leaves a line open.
+    /// </summary>
+    private static List<LineJoin.Line> Close(List<LineJoin.Piece> pieces, HashSet<TileId> context, IUnits real,
+        Func<TileId, (RoadTile? Tile, RawRoads.Key?[]? Keys)> roads, int most, NetworkStats stats)
+    {
+        var read = new HashSet<TileId>(context);
+        var extra = new HashSet<TileId>();
+        var lines = LineJoin.Join(pieces, real);
+        for (int round = 0; round < CloseRounds; round++)
+        {
+            var want = new HashSet<TileId>();
+            foreach (var line in lines)
+            {
+                if (line.Parts.All(p => extra.Contains(p.Tile))) continue;
+                var pts = line.Points;
+                if (pts.Count < 2) continue;
+                foreach (bool atEnd in (ReadOnlySpan<bool>)[false, true])
+                {
+                    if (atEnd ? !line.OpenEnd : !line.OpenStart) continue;
+                    var (a, b) = atEnd ? (pts[^2], pts[^1]) : (pts[1], pts[0]);
+                    double dx = b.X - a.X, dy = b.Y - a.Y, l = Math.Sqrt(dx * dx + dy * dy);
+                    if (l < 1e-9) continue;
+                    var across = real.TileAt(b.X + dx / l * 0.05, b.Y + dy / l * 0.05);
+                    if (!read.Contains(across)) want.Add(across);
+                }
+            }
+            if (want.Count == 0 || extra.Count >= most) break;
+            foreach (var id in want.OrderBy(t => t.E).ThenBy(t => t.N))
+            {
+                if (extra.Count >= most) break;
+                read.Add(id);
+                extra.Add(id);
+                var (tile, keys) = roads(id);
+                if (tile is null) continue;
+                for (int si = 0; si < tile.Segments.Count; si++) pieces.Add(new LineJoin.Piece(id, si, tile.Segments[si], keys?[si]));
+            }
+            lines = LineJoin.Join(pieces, real);
+        }
+        var kept = lines.Where(l => !l.Parts.All(p => extra.Contains(p.Tile))).ToList();
+        stats.PiecesJoined += kept.Sum(l => l.Parts.Count - 1);
+        stats.LinesClosed += kept.Count(l => l.Parts.Any(p => extra.Contains(p.Tile)));
+        stats.TilesClosed += extra.Count;
+        stats.LinesLeftOpen += kept.Count(l => l.OpenStart || l.OpenEnd);
+        return kept;
+    }
+
     /// <summary>A shallow copy for the before-measurement, since the pipeline mutates its input.</summary>
     private static RoadNetwork CloneNetwork(RoadNetwork net)
     {
@@ -1937,25 +2027,12 @@ public static partial class TileRewriter
         return copy;
     }
 
-    private static List<HashSet<TileId>> GroupIntoBlocks(IReadOnlyList<TileId> tiles, int size)
-    {
-        var blocks = new Dictionary<(int, int), HashSet<TileId>>();
-        foreach (var id in tiles)
-        {
-            var key = ((int)Math.Floor(id.E / (double)size), (int)Math.Floor(id.N / (double)size));
-            if (!blocks.TryGetValue(key, out var set)) blocks[key] = set = new HashSet<TileId>();
-            set.Add(id);
-        }
-        return blocks.Values.ToList();
-    }
-
     private static HashSet<TileId> WithHalo(HashSet<TileId> block, int halo)
     {
         var result = new HashSet<TileId>(block);
         foreach (var id in block)
-            for (int de = -halo; de <= halo; de++)
-            for (int dn = -halo; dn <= halo; dn++)
-                result.Add(new TileId(id.E + de, id.N + dn));
+            foreach (var near in Plane.Around(id, halo))
+                result.Add(near);
         return result;
     }
 }

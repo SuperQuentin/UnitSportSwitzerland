@@ -30,7 +30,7 @@ public partial class SnowService : Node
 
     public static SnowService? Instance { get; private set; }
 
-    private ChunkManager? _chunks;
+    private IWorldGround? _terrain;
     private PisteIndex? _index;
     private WeatherOverride? _override;
     private readonly Dictionary<ulong, float> _wear = new();
@@ -50,9 +50,9 @@ public partial class SnowService : Node
     public WeatherOverride? Override => _override;
     public PisteIndex? Index => _index;
 
-    public static SnowService Create(Node world, ChunkManager chunks)
+    public static SnowService Create(Node world, IWorldGround chunks)
     {
-        var s = new SnowService { Name = NodeName, _chunks = chunks, _index = new PisteIndex(chunks) };
+        var s = new SnowService { Name = NodeName, _terrain = chunks, _index = new PisteIndex(chunks) };
         world.AddChild(s);
         return s;
     }
@@ -92,7 +92,8 @@ public partial class SnowService : Node
         slope = null!;
         if (_index?.At(world, out mask) is not { } found) { mask = 0; return false; }
         slope = found;
-        state = StateAt(found, world.Y);
+        // the altitude, not the world's y: an earth frame's y is a height over its own tangent plane (#1735)
+        state = StateAt(found, _terrain?.Origin is { } origin ? (float)origin.AltitudeOf(world) : world.Y);
         return true;
     }
 
@@ -153,7 +154,7 @@ public partial class SnowService : Node
             if (node is not FootPlayer p || !SnowRide.Is(p.RideKindId)) continue;
             ulong key = p.GetInstanceId();
             // in the terrain's frame, from the Earth position: on the server the body may be in another region's (#1456)
-            var at = _chunks?.Origin is { } frame ? frame.ToWorld(p.Global) : p.GlobalPosition;
+            var at = _terrain?.Origin is { } frame ? frame.ToWorld(p.Global) : p.GlobalPosition;
             var slope = _index.At(at, out _);
             if (slope != null && _lastSeen.TryGetValue(key, out var last) && last.Slope == slope.Id)
             {

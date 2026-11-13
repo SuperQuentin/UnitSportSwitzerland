@@ -68,7 +68,7 @@ public partial class PhotoLayer : Node
     {
         _terrain.SetShaderParameter("use_photos", false);
         foreach (var (id, _) in _shown)
-            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter(PhotoSlot, -1);
+            if (_chunks.GroundMeshAt(id) is { } ground) ground.SetInstanceShaderParameter(PhotoSlot, -1);
     }
 
     public override void _Process(double delta)
@@ -93,7 +93,7 @@ public partial class PhotoLayer : Node
             if (LodPolicy.Distance(id, centre) > Radius) _gone.Add(id);
         foreach (var id in _gone)
         {
-            if (_chunks.GroundAt(id) is { } ground) ground.SetInstanceShaderParameter(PhotoSlot, -1);
+            if (_chunks.GroundMeshAt(id) is { } ground) ground.SetInstanceShaderParameter(PhotoSlot, -1);
             _free.Push(_shown[id].Slot);
             _shown.Remove(id);
         }
@@ -105,7 +105,7 @@ public partial class PhotoLayer : Node
                 if (_shown.TryGetValue(id, out var shown))
                 {
                     // a tile rebuilt or reloaded has a new ground node: tell it its slot again
-                    if (_chunks.GroundAt(id) is { } ground && ground.GetInstanceId() != shown.Ground)
+                    if (_chunks.GroundMeshAt(id) is { } ground && ground.GetInstanceId() != shown.Ground)
                     {
                         ground.SetInstanceShaderParameter(PhotoSlot, shown.Slot);
                         _shown[id] = (shown.Slot, ground.GetInstanceId());

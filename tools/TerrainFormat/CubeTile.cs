@@ -226,16 +226,26 @@ public static class CubeTileCodec
         return outMs.ToArray();
     }
 
+    /// <summary>
+    /// A thread's scratch for <see cref="DecodeHeights"/> (#1773): the varints and the quantised heights of a 513² leaf are
+    /// ~0.5 and 2 MB, and the earth world decodes leaves on every worker as the view moves (at a 60 m/s flight these
+    /// temporaries were a third of everything allocated, and the collector's pauses tanked the frame rate). Only the
+    /// heights are new.
+    /// </summary>
+    [ThreadStatic] private static byte[]? _rawScratch;
+    [ThreadStatic] private static long[]? _quantScratch;
+
     public static float[] DecodeHeights(byte[] blob, int n, long baseQ, float quantum)
     {
-        byte[] raw;
-        using (var br = new BrotliStream(new MemoryStream(blob, writable: false), CompressionMode.Decompress))
-        using (var ms = new MemoryStream())
+        var raw = _rawScratch ??= new byte[Math.Max(1 << 16, blob.Length * 8)];
+        int written;
+        while (!BrotliDecoder.TryDecompress(blob, raw, out written))
         {
-            br.CopyTo(ms);
-            raw = ms.ToArray();
+            // too small (or corrupt: past any varint stream's bound, 10 bytes a vertex, it is not the room)
+            if (raw.Length >= n * n * 10) throw new InvalidDataException("cube tile heights do not decompress");
+            raw = _rawScratch = new byte[Math.Min(raw.Length * 2, n * n * 10)];
         }
-        var q = new long[n * n];
+        var q = _quantScratch is { } kept && kept.Length >= n * n ? kept : _quantScratch = new long[n * n];
         var h = new float[n * n];
         int p = 0;
         for (int j = 0; j < n; j++)
@@ -251,6 +261,8 @@ public static class CubeTileCodec
                 q[k] = r + Predict(q, n, i, j);
                 h[k] = (float)((q[k] + baseQ) * (double)quantum);
             }
+        // the scratch outlasts the stream: a short one read stale bytes past its end
+        if (p > written) throw new InvalidDataException("cube tile heights end early");
         return h;
     }
 

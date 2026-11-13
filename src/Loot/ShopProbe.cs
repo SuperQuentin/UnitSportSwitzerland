@@ -264,7 +264,8 @@ public partial class ShopProbe : ChatProbe
         var node = interiors.CurrentNode!;
         int i = m.Layout.Furniture.FindIndex(f => f.Type == FurnitureType.VendingMachine);
         if (!await StandAt(me, m.Layout, node, i, f => ShopService.NearestMachine(me, m.Layout, node) == f)) return;
-        Expect(me.TryInteract() && Shops.IsOpen && Shops.Open?.Type == ShopType.Vending, "E opens the PAUSA machine");
+        string would = $"E would: {InteriorManager.Instance?.Interacting(me, out _)?.Text ?? "nothing"}, at the way out {InteriorManager.Instance?.AtExit(me)}, sitting {me.Sitting}";
+        Expect(me.TryInteract() && Shops.IsOpen && Shops.Open?.Type == ShopType.Vending, $"E opens the PAUSA machine ({would})");
         if (!await Until(() => !Shops.Waiting && Shops.OpenStock.Count == ShopTables.VendingSlots, 15)) { Expect(false, "the machine's stock came"); return; }
         if (Shops.OutOfOrder) { GD.Print($"{Log} the machine is hors service this period: skipped"); Shops.Close(); return; }
         var line = Shops.OpenStock.First(l => Shops.Left(l.Slot) > 0);

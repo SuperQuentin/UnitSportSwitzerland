@@ -24,6 +24,8 @@ public sealed class Crate
     public double E { get; set; }
     public double N { get; set; }
     public float Alt { get; set; } = BrCrates.Ground;
+    /// <summary>Where it stands (<see cref="E"/>/<see cref="N"/> are the catalogue's LV95 literals).</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public GlobalPos At => GlobalPos.FromLv95(E, N, Alt);
     /// <summary>Server clock at which it is on the ground and can be opened (an airdrop falls first).</summary>
     public double LandsAt { get; set; }
     public string Label { get; set; } = "";
@@ -114,7 +116,46 @@ public partial class BrCrates : Node3D, IOriginContainer
             _crates[c.Id] = c;
             batch.Add(c);
         }
-        if (batch.Count > 0) Rpc(MethodName.AddMany, JsonSerializer.Serialize(batch, Json));
+        if (batch.Count > 0) Rpc(MethodName.AddMany, CratesWire(JsonSerializer.Serialize(batch, Json), toWire: true));
+    }
+
+    /// <summary>
+    /// (#1503) Crates cross the wire with their place as ECEF <c>X</c>, <c>Y</c>, <c>Z</c> in place of <c>E</c>, <c>N</c> (at the
+    /// crate's height, the ground at sea level; <c>Alt</c> stays, <see cref="Ground"/> included) and their yaw as a heading from
+    /// true north there. The crate itself keeps LV95 and its grid yaw; a NaN yaw ("any way round") is left as the string it is.
+    /// </summary>
+    internal static string CratesWire(string json, bool toWire)
+    {
+        if (System.Text.Json.Nodes.JsonNode.Parse(json) is not System.Text.Json.Nodes.JsonArray list) return json;
+        foreach (var item in list)
+        {
+            if (item is not System.Text.Json.Nodes.JsonObject o) continue;
+            GlobalPos at;
+            if (toWire && o["E"] != null && o["N"] != null)
+            {
+                double alt = o["Alt"]?.GetValue<float>() ?? Ground;
+                at = GlobalPos.FromLv95(o["E"]!.GetValue<double>(), o["N"]!.GetValue<double>(), alt == Ground ? 0 : alt);
+                var (x, y, z) = at.ToWire();
+                o.Remove("E");
+                o.Remove("N");
+                o["X"] = x;
+                o["Y"] = y;
+                o["Z"] = z;
+            }
+            else if (!toWire && o["X"] != null && o["Y"] != null && o["Z"] != null)
+            {
+                at = GlobalPos.FromWire(o["X"]!.GetValue<double>(), o["Y"]!.GetValue<double>(), o["Z"]!.GetValue<double>());
+                o.Remove("X");
+                o.Remove("Y");
+                o.Remove("Z");
+                o["E"] = at.Lv95.E;
+                o["N"] = at.Lv95.N;
+            }
+            else continue;
+            if (o["Yaw"] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue(out float yaw) && float.IsFinite(yaw))
+                o["Yaw"] = toWire ? Lv95Grid.TrueYaw(at, yaw) : Lv95Grid.GridYaw(at, yaw);
+        }
+        return list.ToJsonString();
     }
 
     /// <summary>Server: every crate gone (the match is over).</summary>
@@ -127,7 +168,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     /// <summary>Server: a joining peer gets the crates there are.</summary>
     public void SendTo(long peer)
     {
-        if (_crates.Count > 0) RpcId(peer, MethodName.AddMany, JsonSerializer.Serialize(_crates.Values.ToList(), Json));
+        if (_crates.Count > 0) RpcId(peer, MethodName.AddMany, CratesWire(JsonSerializer.Serialize(_crates.Values.ToList(), Json), toWire: true));
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -185,8 +226,13 @@ public partial class BrCrates : Node3D, IOriginContainer
     public Vector3? WorldOf(Crate c, float groundY) => WorldOf(c, groundY, Origin);
 
     /// <summary>The crate in <paramref name="frame"/>: a bot's own, on a server with regions (#1456).</summary>
-    public static Vector3? WorldOf(Crate c, float groundY, WorldOrigin? frame) =>
-        frame?.ToWorld(c.E, c.N, c.Alt == Ground ? groundY : c.Alt);
+    public static Vector3? WorldOf(Crate c, float groundY, WorldOrigin? frame)
+    {
+        if (frame == null) return null;
+        if (c.Alt != Ground) return frame.ToWorld(c.E, c.N, c.Alt);
+        // on the ground wherever this peer has it: at that world height, which is no altitude in an earth frame (#1704)
+        return frame.ToWorld(c.E, c.N, 0) with { Y = groundY };
+    }
 
     /// <summary>The dial's numbers for a locked crate: the same on the server and every client, never sent.</summary>
     public static int[] Combination(long id, int seed) =>
@@ -232,8 +278,8 @@ public partial class BrCrates : Node3D, IOriginContainer
     private static bool Near(Crate c, GlobalPos at, float reach)
     {
         // in Earth positions (#1456): the body may be in another server region's frame than this world
-        if (GlobalPos.HorizontalDistanceSquared(at.E, at.N, c.E, c.N) > reach * reach) return false;
-        return c.Alt == Ground || System.Math.Abs(at.Alt - c.Alt) < 4f;
+        if (at.HorizontalDistanceSquaredTo(c.At) > reach * reach) return false;
+        return c.Alt == Ground || System.Math.Abs(c.At.OffsetTo(at).Up) < 4f;
     }
 
     // ------------------------------------------------------------------------------------
@@ -245,7 +291,7 @@ public partial class BrCrates : Node3D, IOriginContainer
     {
         if (_server) return;
         List<Crate>? list;
-        try { list = JsonSerializer.Deserialize<List<Crate>>(json, Json); }
+        try { list = JsonSerializer.Deserialize<List<Crate>>(CratesWire(json, toWire: false), Json); }
         catch (JsonException) { return; }
         foreach (var c in list ?? new())
         {

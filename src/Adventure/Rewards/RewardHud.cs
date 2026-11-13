@@ -258,11 +258,14 @@ public partial class RewardHud : CanvasLayer
         {
             if (s.Kind == SpotKind.Cairn) continue;
             if (s.Kind == SpotKind.Chest ? opened?.Contains(RewardRules.OpenId(s, edition)) == true : taken?.Contains(s.Id) == true) continue;
-            double d = (s.E - at.E) * (s.E - at.E) + (s.N - at.N) * (s.N - at.N);
-            if (d < best) (best, be, bn) = (d, s.E - at.E, s.N - at.N);
+            var (se, sn, _) = at.OffsetTo(GlobalPos.FromLv95(s.E, s.N, at.Alt));
+            double d = se * se + sn * sn;
+            if (d < best) (best, be, bn) = (d, se, sn);
         }
         if (best == double.MaxValue || Math.Sqrt(best) > Detector.RangeM) return null;
-        return (new Vector3((float)be, 0, (float)-bn).Normalized(), (float)Math.Sqrt(best));
+        // the way is true east/north; the arrow is turned against the camera's world axes (#1502)
+        var enu = new Vector3((float)be, 0, (float)-bn);
+        return ((me.Origin is { } o ? o.WorldOfEnu(me.GlobalPosition, enu) : enu).Normalized(), (float)Math.Sqrt(best));
     }
 
     public override void _Process(double delta)

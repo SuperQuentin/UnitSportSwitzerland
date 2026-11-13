@@ -153,7 +153,7 @@ public partial class PhoneController : Node
     public override void _Ready()
     {
         AddChild(_screens);
-        _screens.Here = () => _player() is { } pl ? (pl.Global.E, pl.Global.N) : null;
+        _screens.Here = () => _player() is { } pl ? pl.Global : null;
         _screens.BackPressed += () => { if (_stage is Stage.Open or Stage.Opening) Back(); };
         _screens.TravelPicked += place => Travel(place.E, place.N, place.Name);
         _screens.CommandPicked += cmd =>
@@ -559,7 +559,7 @@ public partial class PhoneController : Node
             var at = p.Global;
             float focal = 12f / Mathf.Tan(Mathf.DegToRad(fov) * 0.5f);
             // by a birthday cake (#1423): the birthday frame, a selfie with the cake too
-            string id = Items.PhotoStore.Save(image, at.E, at.N, at.Alt, focal, path,
+            string id = Items.PhotoStore.Save(image, at.Lv95.E, at.Lv95.N, at.Alt, focal, path,
                 birthday: Occasions.Birthdays.BirthdayService.Instance?.CakeNear(p.GlobalPosition) == true);
             GD.Print($"[phone] {(_selfie ? "selfie" : "photo")} {id} ({_screens.Zoom:0.#}×, {path})");
             LastPhoto = id;

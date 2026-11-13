@@ -6,6 +6,7 @@ using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.World.Snow;
 
@@ -17,6 +18,13 @@ namespace UnitSport.World.Snow;
 /// is snowed over too; and the slopes' snow sits in a small state texture
 /// that is rewritten only when the snow has moved on (<see cref="StateSeconds"/>), never per
 /// frame. The terrain material stays the one every tile shares. shaders/body/piste_snow.gdshaderinc.
+/// <para>
+/// Under <c>--frame earth</c> (#1735) the tiles are the leaves round the camera, named by their stand-ins: a layer is
+/// painted from the stand-in's slopes (<c>LeafStandIn.Pistes</c>) and told to the leaf's ground mesh and its furnished
+/// roads. The leaves' ground material reads it at <c>piste_offset</c> from the mesh's anchor frame (the stand-in's square
+/// less <see cref="LeafStandIn.Offset"/>), and a slope's altitudes go into the state as the leaf's own heights (over the
+/// ellipsoid along the anchor's up), which is what the mesh carries as its local y.
+/// </para>
 /// </summary>
 public partial class PisteLayer : Node
 {
@@ -28,6 +36,7 @@ public partial class PisteLayer : Node
     private const double StateSeconds = 2;
 
     private readonly ChunkManager _chunks;
+    private readonly Terrain.Earth.EarthWorld? _earth;
     private readonly WorldOrigin _origin;
     private readonly ShaderMaterial _terrain;
     private readonly ShaderMaterial? _roads;
@@ -36,26 +45,31 @@ public partial class PisteLayer : Node
     private readonly Image _stateImage;
     private readonly ImageTexture _stateTexture;
     private readonly byte[] _state = new byte[SlotsPerLayer * Capacity * 3 * 4];
-    private readonly Dictionary<TileId, (int Layer, ulong Ground, ulong Roads, PisteTile Tile)> _shown = new();
+    private readonly Dictionary<TileId, (int Layer, ulong Ground, ulong Roads, PisteTile Tile, float Shift)> _shown = new();
     private readonly HashSet<TileId> _building = new();
     private readonly Stack<int> _free = new();
-    private readonly ConcurrentQueue<(TileId Id, PisteTile Tile, Image Image)> _ready = new();
+    private readonly ConcurrentQueue<(TileId Id, PisteTile Tile, Image Image, float Shift)> _ready = new();
     private readonly List<TileId> _gone = new();
 
     public static readonly StringName PisteLayerParam = "piste_layer";
     private static readonly StringName UsePistes = "use_pistes";
     private static readonly StringName PisteMap = "piste_map";
     private static readonly StringName PisteState = "piste_state";
+    private static readonly StringName PisteOffset = "piste_offset";
 
     private double _sincePoll = double.MaxValue, _sinceState = double.MaxValue;
     private int _stateVersion = -1;
     private double _stateHour = -1;
     private bool _stateDirty;
 
-    public PisteLayer(ChunkManager chunks, WorldOrigin origin, ShaderMaterial terrain, ShaderMaterial? roads, SnowService snow)
+    /// <param name="earth">The earth world (#1735): its leaves are drawn instead of <paramref name="chunks"/>' tiles, and
+    /// <paramref name="terrain"/> is its ground material.</param>
+    public PisteLayer(ChunkManager chunks, WorldOrigin origin, ShaderMaterial terrain, ShaderMaterial? roads, SnowService snow,
+        Terrain.Earth.EarthWorld? earth = null)
     {
         Name = "PisteLayer";
         _chunks = chunks;
+        _earth = earth;
         _origin = origin;
         _terrain = terrain;
         _roads = roads;
@@ -79,6 +93,8 @@ public partial class PisteLayer : Node
             m?.SetShaderParameter(PisteState, _stateTexture);
             m?.SetShaderParameter(UsePistes, true);
         }
+        // a leaf's ground mesh is in its anchor frame, the stand-in's square shifted (its furnished roads are in the stand-in's)
+        if (_earth != null) _terrain.SetShaderParameter(PisteOffset, new Vector2((float)LeafStandIn.Offset, (float)LeafStandIn.Offset));
     }
 
     public override void _ExitTree()
@@ -96,7 +112,7 @@ public partial class PisteLayer : Node
             if (_free.Count == 0) continue;
             int layer = _free.Pop();
             _map.UpdateLayer(r.Image, layer);
-            _shown[r.Id] = (layer, 0, 0, r.Tile);
+            _shown[r.Id] = (layer, 0, 0, r.Tile, r.Shift);
             _stateDirty = true;
         }
 
@@ -104,7 +120,7 @@ public partial class PisteLayer : Node
         if (_sincePoll >= 0.5 && GetViewport()?.GetCamera3D() is { } cam)
         {
             _sincePoll = 0;
-            Poll(_origin.TileAt(cam.GlobalPosition));
+            Poll(_earth is { } earth ? earth.Ground.ContentName(earth.Ground.TileAt(cam.GlobalPosition)) : _origin.TileAt(cam.GlobalPosition));
         }
 
         _sinceState += delta;
@@ -121,9 +137,19 @@ public partial class PisteLayer : Node
 
     private void Tag(TileId id, int layer)
     {
-        _chunks.GroundAt(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
-        if (_chunks.RoadsAt(id) is { } roads) TagRoads(roads, layer);
+        GroundOf(id)?.SetInstanceShaderParameter(PisteLayerParam, layer);
+        if (RoadsOf(id) is { } roads) TagRoads(roads, layer);
     }
+
+    /// <summary>A tile's ground mesh: the flat streamer's, or an earth leaf's by its stand-in's name.</summary>
+    private MeshInstance3D? GroundOf(TileId id) => _earth is { } earth
+        ? LeafStandIn.TryLeaf(id, out var leaf) ? earth.Ground.GroundAt(GroundTile.FromLeaf(leaf)) : null
+        : _chunks.GroundMeshAt(id);
+
+    /// <summary>A tile's roads mesh: the flat streamer's, or the one an earth leaf is furnished with.</summary>
+    private MeshInstance3D? RoadsOf(TileId id) => _earth is { } earth
+        ? LeafStandIn.TryLeaf(id, out var leaf) ? earth.RoadsAt(leaf) : null
+        : _chunks.RoadsAt(id);
 
     /// <summary>The roads mesh and its cells (<see cref="ChunkNode.SetRoadCells"/>).</summary>
     private static void TagRoads(MeshInstance3D roads, int layer)
@@ -154,12 +180,12 @@ public partial class PisteLayer : Node
                     if (_shown.TryGetValue(id, out var shown))
                     {
                         // a tile rebuilt or reloaded has new ground or road nodes: tell them its layer again
-                        if (_chunks.GroundAt(id) is { } ground && ground.GetInstanceId() != shown.Ground)
+                        if (GroundOf(id) is { } ground && ground.GetInstanceId() != shown.Ground)
                         {
                             ground.SetInstanceShaderParameter(PisteLayerParam, shown.Layer);
                             _shown[id] = shown = shown with { Ground = ground.GetInstanceId() };
                         }
-                        if (_chunks.RoadsAt(id) is { } roads && roads.GetInstanceId() != shown.Roads)
+                        if (RoadsOf(id) is { } roads && roads.GetInstanceId() != shown.Roads)
                         {
                             TagRoads(roads, shown.Layer);
                             _shown[id] = shown with { Roads = roads.GetInstanceId() };
@@ -167,10 +193,23 @@ public partial class PisteLayer : Node
                         continue;
                     }
                     if (_building.Contains(id) || _free.Count <= _building.Count) continue;
+                    // no ground drawn there (#1762: the earth world draws leaves only near the ground, none from an
+                    // airliner at 10 km): nothing to paint, so its slopes are not asked for (an earth leaf's generate it)
+                    if (GroundOf(id) == null) continue;
                     if (_snow.Index?.Tile(id) is not { } tile) continue; // none there, or still loading
                     _building.Add(id);
-                    Task.Run(() => _ready.Enqueue((id, tile, Paint(tile))));
+                    Task.Run(() => _ready.Enqueue((id, tile, Paint(tile), ShiftOf(id))));
                 }
+    }
+
+    /// <summary>
+    /// What a leaf's drawn heights add to an altitude (#1735): its mesh's local y is the height over the ellipsoid along
+    /// its anchor's up, so the geoid's undulation there (~50 m); 0 on an LV95 tile, whose local y is the altitude. Any thread.
+    /// </summary>
+    private static float ShiftOf(TileId id)
+    {
+        if (!LeafStandIn.TryLeaf(id, out var leaf)) return 0;
+        return (float)GlobalPos.FromEcef(leaf.Anchor.ToEcef(0, 0, 0)).WithAlt(0).InTile(id).Y;
     }
 
     /// <summary>The tile's layer: every other grid vertex, so texel (x, y) is the vertex (2x, 2y). Any thread.</summary>
@@ -211,7 +250,7 @@ public partial class PisteLayer : Node
                 int slot = k + 1;
                 Put(shown.Layer * 3, slot, low.Fresh, low.Loose, low.Ice, low.Wet);
                 Put(shown.Layer * 3 + 1, slot, high.Fresh, high.Loose, high.Ice, high.Wet);
-                Put(shown.Layer * 3 + 2, slot, (low.Bumps + high.Bumps) * 0.5f, r.AltLow / 4700f, r.AltHigh / 4700f, 0);
+                Put(shown.Layer * 3 + 2, slot, (low.Bumps + high.Bumps) * 0.5f, (r.AltLow + shown.Shift) / 4700f, (r.AltHigh + shown.Shift) / 4700f, 0);
             }
         }
         _stateImage.SetData(SlotsPerLayer, Capacity * 3, false, Image.Format.Rgba8, _state);

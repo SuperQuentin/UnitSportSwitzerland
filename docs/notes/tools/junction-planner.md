@@ -20,7 +20,7 @@ off, `--junctions new` plans and reports without writing.
   (3) pocket sizes per arm (`PocketSizes`, right pocket at most `RightEarlier` past the left's storage), the street shared
   with the junction at its other end (its exit hatch keeps `TurnExit + TurnRejoin`; too short for both: **merged**, #325);
   an exit shorter than `TurnExit + TurnClear` feeds no pocket; (4) room per arm (`MeasureRoom`: every 2.5 m out to the
-  longest transition, each side to the first building, other line, ground step > 1.2 m or tile edge, 20 m max);
+  longest transition, each side to the first building, other line, ground step > 1.2 m, 20 m max; no tile edge since #1660: the block's whole lines, `roadgen-units`);
   (5) rounds: align from the base sections, fit with the size search, align again from the fitted lanes, fit again; an exit
   that cannot hold its hatch (fit step "7 the pocket feeding this exit") drops its feeder's pocket, all again.
 - **Room order** (`MouthPlanner.Fit`): 1 bike right-turn lane, verge and buffer, 2 island, left-turn bike lane, 3 lane widths to 2.75 / bike 1.25, 4 right pocket,
@@ -329,7 +329,9 @@ off, `--junctions new` plans and reports without writing.
   `Junction.Holds` (`EndAt`, `Internal`); arms sort round the core by `ArmPlan.Ring` (where they leave it, seen from its
   centre); the line-up distance adds the way between two arms' nodes. Written: every member counts as written (the old
   layout skips them), the other members' caps go, the streets between them are emptied. Not merged: a roundabout member, a
-  street of 30 m or more between two members, a centre outside every member's tile. A merged core follows the planner's
+  street of 30 m or more between two members. The member nearest the centre stands for the core (its class and layer), and
+  the core goes in its centre's tile, whatever tiles the members are in (#1660: a tile edge between members chose another
+  one, or refused the merge, "a centre outside every member's tile"). A merged core follows the planner's
   rules as any crossroads (the user, Oct 15: pockets even where they push the side roads out). 168 real tiles: 501 groups
   merged of 1,126 junctions, 2,734 cores written (226 merged, of 481 nodes), `JPTH` 18,343 paths, 67 ends off their lane;
   kerb check 33. Test region: the 8 m pair one core, traffic 371 paths taken, no step, no red run.

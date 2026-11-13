@@ -1,4 +1,5 @@
 using System;
+using UnitSport.Core;
 
 namespace UnitSport.Adventure.Errands;
 
@@ -41,6 +42,8 @@ public static class WorldEventRules
     };
 
     public static long Slot(double t) => (long)Math.Floor(t / SlotS);
+
+    public static (int E, int N) Cell(GlobalPos at) => Cell(at.Lv95.E, at.Lv95.N);
 
     public static (int E, int N) Cell(double e, double n) => ((int)Math.Floor(e / CellM), (int)Math.Floor(n / CellM));
 

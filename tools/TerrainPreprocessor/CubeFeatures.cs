@@ -30,7 +30,7 @@ public sealed class CubeFeatures
     /// <summary>An LV95 point on the sources' ground: swissALTI3D's height there, or the other sources' through the normal.</summary>
     public Placed? FromLv95(double e, double n, CubeHeightSource.Cursors cur)
     {
-        double h = _src.Swiss?.Sample(e, n, ref cur.Swiss) ?? double.NaN;
+        double h = _src.SwissHeight(e, n, cur);
         EcefPos p;
         if (!double.IsNaN(h)) p = SwissGeodesy.ToEcef(e, n, h);
         else

@@ -8,6 +8,7 @@ using UnitSport.Items;
 using UnitSport.Player;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Construction;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Loot;
 
@@ -200,6 +201,22 @@ public partial class LootService : Node
         return new(empty ? $"{key} Search the {what} (empty)" : $"{key} Search the {what}", piece);
     }
 
+    /// <summary>
+    /// A bank counter, a shop's counter or a PAUSA machine in reach (nothing open): what a chair beside it must
+    /// not take E from (a lobby's machine stood by a chair, and E sat down). Cupboards still come after seats.
+    /// </summary>
+    public Interaction? ServiceInteractionFor(FootPlayer p)
+    {
+        if (_ui?.IsOpen == true || _simonUi?.IsOpen == true || _counterUi?.IsOpen == true || _lockUi?.IsOpen == true || ShopService.Instance?.IsOpen == true) return null;
+        if (InteriorManager.Instance is not { Current: { } layout, CurrentNode: { } node }) return null;
+        if (NearestCounter(p, layout, node) is var counter and >= 0)
+            return new($"{InputHints.Tag(PlayerInput.InteractMount)} Bank counter: deposit or withdraw", Outline.Piece(node, counter));
+        return ShopService.Instance?.InteractionFor(p);
+    }
+
+    /// <summary>E at a bank counter, a shop's counter or a PAUSA machine (<see cref="ServiceInteractionFor"/>): opens it, else false.</summary>
+    public bool TryService(FootPlayer p) => ServiceInteractionFor(p) != null && TrySearch(p);
+
     /// <summary>E indoors. Toggles the panel on the facing container; false when there is nothing to search.</summary>
     public bool TrySearch(FootPlayer p)
     {
@@ -254,10 +271,12 @@ public partial class LootService : Node
         found = default;
         if (p.Indoors || p.Ride != RideKind.OnFoot || Source?.Invoke() is not { } source) return false;
         var at = p.Global;
-        _yards.Around(source, at.E, at.N);
+        // the tile the feet are on, by the ground's own names (#1704): an LV95 tile, or an earth leaf's stand-in
+        var here = p.Terrain is { } ground ? ground.ContentName(ground.TileAt(p.GlobalPosition)) : at.Tile;
+        _yards.Around(source, here, at);
         var look = -p.Camera.GlobalTransform.Basis.Z;
         // the world's x is east and its z south, as a tile's frame
-        return _yards.Nearest(at.E, at.N, (float)at.Alt, new Vector2(look.X, look.Z), MovedYard, out found);
+        return _yards.Nearest(at, new Vector2(look.X, look.Z), MovedYard, out found);
     }
 
     /// <summary>The prompt line for the yard container the player faces outdoors (#627), or null.</summary>
@@ -460,7 +479,7 @@ public partial class LootService : Node
         if (SiteLoot.IsYard(_open.Value.Furniture))
         {
             if (p == null || !IsInstanceValid(p) || !p.IsViewing || p.Indoors
-                || SiteLoot.EdgeDistance(_openYard, p.Global.E, p.Global.N) > SiteLoot.CloseReach) Close();
+                || EdgeDistance(_openYard, p.Global) > SiteLoot.CloseReach) Close();
             return;
         }
         var interior = InteriorManager.Instance;
@@ -752,9 +771,22 @@ public partial class LootService : Node
         if (!Online) return true;
         if (InteriorManager.Instance is { } interiors && interiors.SpaceOf(peer).Length > 0) return false;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
-        var at = body.Global;
-        return SiteLoot.InServerReach(c, at.E, at.N, at.Alt);
+        var (e, n, h) = body.Global.InTileEn(TileOf(c));
+        return SiteLoot.InServerReach(c, e, n, h);
     }
+
+    /// <summary>The tile a yard container's site is on: its places are in that tile's frame (#1704, a leaf's stand-in on earth).</summary>
+    internal static TileId TileOf(in YardStock c) => BuildingKey.TryParse(c.Building, out var key) ? key.Tile : default;
+
+    /// <summary>The horizontal distance from a place to a yard container's box (<see cref="SiteLoot.EdgeDistance"/>), in its tile's frame.</summary>
+    internal static float EdgeDistance(in YardStock c, GlobalPos at)
+    {
+        var (e, n, _) = at.InTileEn(TileOf(c));
+        return SiteLoot.EdgeDistance(c, e, n);
+    }
+
+    /// <summary>A yard container's middle at its foot, as a place.</summary>
+    internal static GlobalPos PlaceOf(in YardStock c) => GlobalPos.OfTileEn(TileOf(c), c.E, c.N, c.Bottom);
 
     /// <summary>
     /// The take mask of a <c>Contents</c> reply that refuses a yard container (#627): the asker is
@@ -810,7 +842,7 @@ public partial class LootService : Node
         // anyone else outdoors near the site may have the same container open: tell them it is gone
         if (!Online) return;
         var interiors = InteriorManager.Instance;
-        var here = new GlobalPos(c.E, c.N, c.Bottom);
+        var here = PlaceOf(c);
         foreach (int other in Multiplayer.GetPeers())
         {
             if (other == peer || interiors?.SpaceOf(other) is { Length: > 0 }) continue;

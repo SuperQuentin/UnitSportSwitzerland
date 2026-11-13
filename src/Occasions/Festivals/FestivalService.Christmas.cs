@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Adventure;
 using UnitSport.Adventure.Alcohol;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Occasions.Festivals.Christmas;
 
@@ -54,16 +55,16 @@ public partial class FestivalService
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is not { } p) return Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Go to the market.");
-        return target == MarketSamichlaus ? ServeSamichlaus(peer, p, run, def, site, at.E, at.N) : ServeStall(peer, p, run, def, site, target, at.E, at.N);
+        return target == MarketSamichlaus ? ServeSamichlaus(peer, p, run, def, site, at) : ServeStall(peer, p, run, def, site, target, at);
     }
 
     /// <summary>The target number of the Samichlaus.</summary>
     public const int MarketSamichlaus = 100;
 
-    private string? ServeStall(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, int stall, double e, double n)
+    private string? ServeStall(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, int stall, GlobalPos at)
     {
         var st = ChristmasRules.Layout(site)[stall];
-        if ((st.E - e) * (st.E - e) + (st.N - n) * (st.N - n) > ChristmasRules.StallReach * ChristmasRules.StallReach)
+        if (at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(st.E, st.N, at.Alt)) > ChristmasRules.StallReach * ChristmasRules.StallReach)
             return Tell(peer, "Go to the stall first.");
         string name = ChristmasRules.StallName(st.Kind);
         var key = (run.Instance, peer);
@@ -98,9 +99,9 @@ public partial class FestivalService
         return null;
     }
 
-    private string? ServeSamichlaus(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, double e, double n)
+    private string? ServeSamichlaus(long peer, PlayerProgress p, RunningFestival run, FestivalDef def, ResolvedSite site, GlobalPos at)
     {
-        if (!ChristmasRules.NearSamichlaus(site, e, n)) return Tell(peer, "Go to the Samichlaus first.");
+        if (!ChristmasRules.NearSamichlaus(site, at)) return Tell(peer, "Go to the Samichlaus first.");
         if (run.Day < ChristmasRules.SamichlausDay) return Tell(peer, "The Samichlaus comes on 6 December.");
         if (run.Day > ChristmasRules.SamichlausDay) return Tell(peer, "The Samichlaus has gone until next year.");
         var inst = p.Get(FestivalBook.Section).Of(run.Instance, def.Id);

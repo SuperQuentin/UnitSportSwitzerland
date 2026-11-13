@@ -50,6 +50,64 @@ path: nothing in the game reads it yet (G2 switches). Code in `tools/TerrainForm
   (i, j)–(i+1, j+1). `MeshHeightAt` finds the mesh height below a tangent-plane point;
   `CollisionField` samples a regular height field from it.
 
+## Leaves with content (G2 B1, #1505)
+
+Every tile kind of a level-14 leaf as a **section of one entry** (layout A, chosen by the user on
+measurements over the D: region: 1 read and 24 ms median cold a leaf, against 5.3 reads and 92 ms for
+a bundle per kind; equal from the OS cache). Code: `CubeLeaf.cs` (container), `CubeLeafSections.cs`
+(the section codecs, `CubeLeafContent`); tests `CubeLeafTests`. `--cube` writes their heights since B3 PR 1 (`cube-frames`), the other kinds come with the later B3 stages,
+and the game reads none (C1).
+
+- **Frame**: every position is in the leaf's anchor frame (`CubeKey.Anchor`): x east, y ENU up, z
+  south, metres from the cell centre on the ellipsoid, floats. **y is not an altitude**: it is
+  measured from the ellipsoid (~50 m below sea level in Switzerland, the geoid) along the centre's
+  up, so the ellipsoid itself drops ~1.5 cm below y = 0 at a leaf's corner. Heights are ellipsoidal,
+  as G1's. Lattice kinds are on the
+  leaf's lattice (`CubeKey.LatticeBits`: 513² at level 14, row-major from the south-west, i along u,
+  j along v), as the heights.
+- **Entry** (`CubeLeafCodec`, `CULF`): head 20 B (magic, version, section count, face, level, x, y),
+  a table of 12 B a section (kind u16, the section codec's own version u16 and flags u16, length
+  u32), the payloads back to back. A reader skips a kind it does not know and a codec version newer
+  than it reads (`CubeLeafContent.Skipped`), so neither bumps the entry version. `Decode` keeps
+  every section, unknown ones too; `CubeLeafCodec.Replace` and `CubeBundle.UpdateLeaves` (a stage
+  rewrites its own kinds in a bundle) keep every other section bit for bit.
+- **Bundles**: `CUBL`, `F0_L9_x_y.cubl`, one per level-9 ancestor, `CubeBundle`'s index layout; the
+  coarse pyramid keeps `.cubb` (CUBT entries) and colour `.cuba`.
+
+| Kind | Payload | Geneva km² (2499/1117) as one section |
+|---|---|---|
+| `Heights` | `CubeTileCodec` bytes as they are (version and features included) | G1 leaves 170 KB mean, 338 KB max |
+| `Cover` | bits u8, Brotli of a `CoverClass` byte a vertex (`CoverPalette`'s codes) | 9.8 KB (LV95 26.8 KB) |
+| `Holes` | bits u8, Brotli of the count and the sorted quads (i + j·2^bits, quad (i, j) south-west of vertex (i, j)) as delta varints | 89 B (560 B) |
+| `Water` | every second vertex (257², ~2.4 m): bits u8, base i64 (1 cm quanta, rounded from the lowest level), a `CubeTileCodec.EncodeHeights` blob of the ellipsoidal surface (dry = its missing code), then Brotli of the fetch bytes (`WaterFormat.FetchUnitM`, 0 dry) | 3.6 KB (20 KB) |
+| `Roads` | Brotli of `RoadCodec.EncodeBody`; version `RoadFormat.Version`, flags the `RoadTileFlags` | 3.3 MB (5.9 MB) |
+| `Buildings` | Brotli of `BuildingCodec.EncodeBody` | 427 KB (2.1 MB) |
+| `Trees` | Brotli of `TreeFormat.EncodeBody` | 10 KB (15 KB) |
+| `Pistes` | bits u8, Brotli of `PisteFormat.EncodeBody` with `Slot`/`Aux` on the leaf lattice; flags `FlagOsm` | (no piste on D:) |
+| `Fields` | Brotli of `FieldFormat.EncodeBody`: outlines, ring points (x, z) | (no field on D:) |
+| `RoadKeys` | raw (B3 PR 2, the temporary `.cubl` only): Brotli of the count, per raw segment a byte (0 none, 1 a key), the TLM uuid (7-bit length, UTF-8), the part (7-bit), the distance along the part on the work plane (f64), aligned with the raw `Roads` section (`LeafRoadKeys`) | (`cube-roads`) |
+| `Parking` | raw (the temporary `.cubl` only): Brotli of the count, per lot the `CoverClass` byte, the source (`tlm`, `override`), the point count and the ring's (x, y, z) f32 on the leaf mesh, unclosed (`LeafParking`) | |
+| `Photo` | format u8 (`CubeAlbedoFormat`, `Jpeg` added), width and height u16, the image bytes as they are; row 0 the south edge, as `CubeAlbedo` | 122 KB (SWISSIMAGE 512² JPEG) |
+
+- **Compression**: Brotli quality 6, window 22 (`LeafPack`): roads kept 72 % at quality 4 (.NET's
+  `Optimal`), 56 % at 6 (0.9 s for that km²), 45 % at 11 (24 s); decoding costs the same.
+- **The body split**: the road, building, tree, piste and field codecs are a 16-byte head (magic,
+  version, flags, `TileId`: `TileHeader.WriteHead`/`ReadHead`) and a key-free body
+  (`EncodeBody`/`DecodeBody`), which the leaf sections reuse. The LV95 files are byte-identical
+  (pinned SHA-256 from main in `CubeLeafTests`; all 2,103 road, building and tree files of the D:
+  region re-encode to their own bytes with the split codecs, as with main's). The record types keep
+  their `TileId Id` until C1; inside a leaf it is default.
+- **Pistes**: `PisteTile.Slot`/`Aux` index the LV95 1 m grid (row 0 north), so a leaf carries them
+  on its lattice and `PisteTile.IndexAt` does not apply there; `AltLow`/`AltHigh` stay altitudes
+  above sea level (the snow model's input), not ENU heights.
+- **Fields**: outlines, not cells: the game rasterises its 4 m cells from them at load
+  (`FieldTile.Build` → `FieldFormat.Rasterise`) and clips the drawing to them (`FieldMeshBuilder`,
+  Versteckis' `VsGround` through `FieldTile`), so the leaf form needs no lattice; cells keyed by leaf
+  come with the farm store's re-keying (D).
+- **Re-encoding**: every section codec re-encodes a decoded section to the same bytes except the
+  heights: G1's header keeps the height range before quantising (a decoded tile writes a range a few
+  mm off, the same heights).
+
 ## Coarse levels: the pyramid (#1430 H4, agreed on #1455)
 
 The globe (H4) and G2's far view are one pyramid in this format, from the leaves up to the faces.
@@ -105,7 +163,67 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   vertex, ETOPO's footprint where the nine are not all there; every tile over the leaves and its three
   siblings (so a parent can always split). Nov 3 2026, below-normal priority, 12 threads: 39 s,
   1,340 tiles, 136 MB, peak 9.6 GB (the 2,547 leaves held at once); 0 of 2.7 M edge vertices differ.
-  Run the colour bake again after it.
+  A level it rebuilds keeps its colour (`CubeColourCarry`, #1659): colour is Blue Marble over a tile's footprint, never
+  its heights, so the `.cuba` bundles still hold; it prints the new tiles with none and the levels left colourless,
+  which need the colour bake again. Before #1659 it dropped every rebuilt level's `albedo` from the manifest, and the
+  globe drew those levels white (B4's pyramid from level 5 down: a rectangle west of Switzerland from space; its
+  manifest repaired on D:, the old one kept as `cube_manifest.json.pre1659`).
+- **From B4's leaves, at their surface (#1654)**: `--cube-leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube,D:/UnitSportSwitzerland/cube_g1/region14`
+  (B4's 2,412 leaves, the game's, then 135 of G1's where B4 has none: the Salève, which ETOPO blurs from 889 m to 570). A leaf is read at its surface (`TerrainFormat/CubeSurface`): its heights hold a lake's
+  bed since the water stage (#298), 300 m under Lavaux, so the still water stands over them, and a bed the water stage
+  left dry along a lake leaf's edge (76 leaves, 14,000 vertices) takes the water beside it. Past the leaves two fixes
+  meet ETOPO: a vertex where ETOPO holds a lake (within 6 m of a leaves' lake of 200,000+ samples, and so ~400 m each
+  way: no flatness test, ETOPO's cells rise towards a shore) stands at the leaves' level (ETOPO's Lake Geneva is 418.3 m
+  against 422.2), and heights blend from
+  ETOPO corrected by how far it misses the nearest leaves, the correction fading over 1.5 km (at level 13 only) (16 rings, 12 directions, a function of the point): ETOPO's 1.8 km
+  cells blur a steep shore, and the hard switch stood a wall up to 120 m along the region's edge east of Lavaux.
+  Nov 10 2026: 1,280 tiles, 60-80 s, peak 9.3 GB, 0 of 2.6 M edge vertices differ; G1's pyramid kept as
+  `cube_global.pre1654`.
+- **One level per lake (#1669 follow-up)**: the leaves' decimetre bins within a metre of a busier one are that lake's
+  (`CubeSurface.LakeLevels`: Léman 422.2, not 422.2 and 422.3); a finer tent mean whose nine points are all within
+  0.3 m of it snaps to it exactly, and a snapped vertex gets no edge blend (ETOPO's +4 m miss stood humps on the lake).
+  The levels go in the manifest (`lakes`), which the globe reads to draw water where Blue Marble's shore colour does not
+  say so. Before: green bands and puddles over the south half of Léman from 5 km (`lake_air5k`); kept as
+  `cube_global.pre1669b`.
+- **Past the leaves, smooth and with TLM's lakes (#1678)**: the 16 rings of the edge blend each stood a step (13-40 m
+  east of Lavaux, terraces under the earth fill built on it). Level 13 now takes a continuous field: on a window round
+  the tile (every 4 vertices, 1.5 km and the blur's reach of margin) the leaves' points and ETOPO's miss at each, each
+  point past them the miss of the nearest one (`DistanceTransform`, exact) fading over 1.5 km, the field smoothed by two
+  box blurs (each value summed afresh, so shared vertices agree to the bit), bilinear at the vertex. `--tlm GPKG`
+  (`SwissLakeMask`) rasterises swissTLM3D's standing waters over 2 km² (10 m cells, the shore at the half of a ~50 m
+  smoothing) over the leaves' box and 15 km, matches each to a leaves' lake by ETOPO's median over it (Léman: 418.6 to
+  422.2; others left), stands ETOPO at the level inside and brings it down to it over 300 m outside: ETOPO's cells had
+  1.5-2 km of ground 3-35 m over Léman below Lavaux. The command above plus
+  `--tlm D:/UnitSportSwitzerland/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg`: Nov 10 2026, 83-114 s, peak 12-13 GB,
+  0 of 2.7 M edge vertices differ; the previous pyramid kept as `cube_global.pre1678`.
+- **On TLM's mask, TLM alone says where the lakes are (#1696)**: ETOPO's basin test (within 6 m of the level for
+  ~400 m) took the Rhône plain at Villeneuve, 0-6 m over Léman, for lake 2.5-3 km past the shore, and the earth fill,
+  built on the pyramid's lakes since #1678, drew Léman over the meadow (`villeneuve_a9` 12 to 55 %). On the mask
+  that test is skipped, and land within 5 km of a TLM lake stands at least 2 m over its level (the plain is ~3 m up)
+  before the 300 m shore ramp. Nov 10 2026: 145 s, peak 12.5 GB, 0 differ; Lavaux's heights unchanged to the
+  centimetre; the previous pyramid kept as `cube_global.pre1696`.
+- **Past the leaves, the game's 500 m Swiss relief, not ETOPO (#1746)**: every height the levels took from ETOPO's 60"
+  (1.8 km) cells past the leaves now comes from `src/Terrain/swiss_relief.gz` (swissALTIRegio at 500 m, what the flat
+  world's fill stands on; `TerrainFormat/SwissRelief`, Catmull-Rom as `ProceduralWorld.Relief.Macro`, LHN95 + the
+  undulation), ETOPO only beyond its map (550 x 430 km round Switzerland, handed over in its last 5 km): `EtopoGrid.Regional`,
+  so the lake snap, the TLM mask and the edge blend all read it. `--relief FILE|none` (default the repository's file, from
+  the repository root). The earth fill and the far globe had drawn the Alps past the leaves on ETOPO's cells, with the
+  generator's rivers running straight up their slopes (`tzoumaz_alps`). The command above unchanged: Nov 12 2026, 153 s,
+  peak 12.5 GB, 0 of 2.7 M edge vertices differ, colours carried; the previous pyramid kept as `cube_global.pre1746`.
+- **Every level agrees past the leaves (#1778, #1779)**: only level 13 carried the correction that pulls the relief onto
+  the leaves, and its tiles stopped at the leaves' siblings, where the correction had not faded: past them levels 12 and
+  coarser held the raw relief, 30-47 m off at one point north of Riddes (L13 1464 m, L12 1497, L11 1513). The earth fill
+  drew it as walls along straight L13 tile edges (66 m), the globe as a ledge where the leaves begin. Level 13 now covers
+  the whole fade (`BlendReach`: 2 tiles round each leaf's tile), and every coarser level is its ancestors and siblings.
+  At the leaves' data edge the blurred field stood up to 77 m off the vertex beside it (cliffs above Riddes, steps along
+  every leaf cell): within 100 m (`RampM`) the correction starts from the nearest own vertex's exact miss (a distance
+  transform on the level's lattice) and hands over to the field. Within 100 m the start is
+  blurred over ~d/2 at distance d (exact integer box sums), so the medial axis of a notch does not step. Check:
+  `tools/fillseamscheck.sh` (BlendCheck `--fill-seams`). Nov 13 2026, the command above, `--jobs 6`: 1,376 level-13 tiles
+  (were 848), 257 s, peak 16.2 GB, 0 of 4.2 M edge vertices differ; the new tiles need the colour bake
+  (`--globealbedo`, 660 s for 4,090 tiles x 12 months); the previous pyramid kept as `cube_global.pre1778`. The fill's
+  hand-over (`LeafBlend`) relies on the pyramid meeting the leaves now: on an older pyramid its seam steps (Lavaux p99
+  192 cm against 50).
 - **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
@@ -120,11 +238,15 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
 dotnet run --project tools/TerrainPreprocessor -c Release -- --cube --cube-out D:/.../cube13 \
   --in <swissALTI3D zips> [--rgealti <RGE ALTI dir> | --dem lambert93,<dir>,-0.28] [--cube-level 14] \
   [--cube-box minE,minN,maxE,maxN] [--tlm <swissTLM3D.gpkg>] [--buildings <swissBUILDINGS3D gpkg>] \
-  [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only]
+  [--cube-bdtopo] [--cube-cache DIR] [--cube-check | --cube-check-only] [--cube-terr <LV95 chunks>]
 ```
 
+- **Since #1507 (G2 B3) it writes leaves**: one level-9 work frame at a time through the leaf writer,
+  each leaf's `Heights` section into the frame's `.cubl` (G1's `.cubb` leaves are still read by the
+  check and `--cube-swiss`); the driver, transforms, ground and writer are in `cube-frames`.
 - Sources: swissALTI3D parsed once to float32 (`<cache>/alti/E_N.f32`, 16 MB a km², not the
-  build's 7 cm ushorts), an LRU of 300 in memory; then `ForeignDem` (RGE ALTI etc.) with its dz.
+  build's 7 cm ushorts; the 2 m corridor `E_N_2m.f32`, 1 MB, read where 0.5 m has nothing), an LRU
+  of 300 in memory; then `ForeignDem` (RGE ALTI etc.) with its dz.
 - Heights: the point on each vertex's normal whose LHN95 height (`SwissGeodesy.FromEcef`) equals the
   source height at its own LV95 position (`CubeHeightSource.ExactHeight`, a fixed point). The
   LV95 position, LHN95 height and each DEM's grid position are rigorous at 17 × 17 control points

@@ -14,10 +14,14 @@ namespace UnitSport.Tools.Preprocessor;
 /// too small or too steep for a layout keeps the pattern.
 /// </para>
 /// </summary>
-public sealed class ParkingAreaExtractor(string gpkgPath)
+/// <param name="readMarginM">
+/// How far round the written tiles rings are read: a lot is kept by its centroid's tile, which a concave ring need not
+/// touch (the LV95 build reads none round its 1 km tiles; a frame's ~600 m leaves want some).
+/// </param>
+public sealed class ParkingAreaExtractor<TTile>(string gpkgPath, IRoadSpace<TTile> space, double readMarginM = 0) where TTile : struct, IEquatable<TTile>
 {
-    /// <summary>Lots by the tile holding their centroid, which is the tile that lays them out.</summary>
-    public Dictionary<TileId, List<RawParking.Lot>> Lots { get; } = new();
+    /// <summary>Lots by the tile holding their centroid, which is the tile that lays them out; rings on the space's plane.</summary>
+    public Dictionary<TTile, List<RawParking.Lot>> Lots { get; } = new();
 
     public int RingCount { get; private set; }
     public int Skipped { get; private set; }
@@ -28,11 +32,11 @@ public sealed class ParkingAreaExtractor(string gpkgPath)
     /// </summary>
     private const double MinAreaM2 = 120;
 
-    public void Extract(IReadOnlyCollection<TileId> tiles, string? overridesPath)
+    public void Extract(string? overridesPath)
     {
-        if (tiles.Count == 0) return;
+        if (space.Tiles.Count == 0) return;
         using var conn = GeoPackageReader.Open(gpkgPath);
-        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_areale_verkehrsareal", new[] { "objektart" }, new TileRegion(tiles)))
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_areale_verkehrsareal", new[] { "objektart" }, space.Lv95Region(readMarginM)))
         {
             string? kind = reader.IsDBNull(0) ? null : reader.GetString(0);
             var cover = CoverFormat.ParseTrafficArea(kind);
@@ -70,7 +74,7 @@ public sealed class ParkingAreaExtractor(string gpkgPath)
     }
 
     /// <summary>
-    /// Keeps one ring, flattened to E,N, on the tile holding its centroid — once, even where it
+    /// Keeps one ring, flattened to the plane (LV95: E, N as they are; a frame: each point at its own height), on the tile holding its centroid — once, even where it
     /// spills into neighbours, so the stage lays out the whole polygon across a seam.
     /// </summary>
     private void Add(double[] xyz, int count, CoverClass cover, string source)
@@ -82,7 +86,14 @@ public sealed class ParkingAreaExtractor(string gpkgPath)
         if (count < 3) { Skipped++; return; }
 
         var ring = new double[count * 2];
-        for (int i = 0; i < count; i++) { ring[i * 2] = xyz[i * 3]; ring[i * 2 + 1] = xyz[i * 3 + 1]; }
+        for (int i = 0; i < count; i++)
+        {
+            double e = xyz[i * 3], n = xyz[i * 3 + 1], h = xyz[i * 3 + 2];
+            var (x, y) = space.FromLv95(e, n, h);
+            // a hand-traced ring has no heights: its points at the ground (an LV95 point moves 3 cm a km of height)
+            if (h == 0 && space.Ground.Sample(x, y) is { } g) (x, y) = space.FromLv95(e, n, g);
+            (ring[i * 2], ring[i * 2 + 1]) = (x, y);
+        }
 
         double area = 0, ce = 0, cn = 0;
         for (int i = 0; i < count; i++)
@@ -97,16 +108,13 @@ public sealed class ParkingAreaExtractor(string gpkgPath)
         if (Math.Abs(area) < MinAreaM2) { Skipped++; return; }
 
         var centroid = (E: ce / (6 * area), N: cn / (6 * area));
-        var home = TileId.FromLv95(centroid.E, centroid.N);
+        var home = space.TileAt(centroid.E, centroid.N);
         if (!Lots.TryGetValue(home, out var list)) Lots[home] = list = new List<RawParking.Lot>();
         list.Add(new RawParking.Lot(cover, source, ring));
         RingCount++;
     }
 
-    /// <summary>Writes every tile's lots, and clears the file of a tile that no longer has any.</summary>
-    public void WriteAll(string rawDir, IReadOnlyCollection<TileId> tiles)
-    {
-        foreach (var id in tiles)
-            RawParking.Write(rawDir, id, Lots.GetValueOrDefault(id) ?? []);
-    }
+    /// <summary>The written tiles' lots, a list for every one (empty where it has none).</summary>
+    public IEnumerable<(TTile Tile, IReadOnlyList<RawParking.Lot> Lots)> Written() =>
+        space.Tiles.Select(t => (t, (IReadOnlyList<RawParking.Lot>)(Lots.GetValueOrDefault(t) ?? [])));
 }

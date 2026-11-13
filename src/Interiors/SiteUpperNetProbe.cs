@@ -192,8 +192,8 @@ public partial class SiteUpperNetProbe : ChatProbe
     /// <summary>The gallery's foot, top and this door's doorstep, from the site's plan as every peer makes it.</summary>
     private async Task<bool> Gallery(DoorIndex.Entry door)
     {
-        var chunks = FindChunks(GetTree().Root);
-        if (chunks?.Source is not { } source) { Fail("no chunk source to plan the site from"); return false; }
+        // the ground's own tile files (#1704): the flat streamer's, or the leaves' stand-ins under --frame earth
+        if (Me?.Terrain?.Content is not { } source) { Fail("no chunk source to plan the site from"); return false; }
         var bt = await source.LoadBuildingsAsync(_tile);
         var roads = await source.LoadRoadsAsync(_tile);
         if (bt == null || SitePlans.Of(bt, roads, door.Key.Index) is not { } site
@@ -209,14 +209,6 @@ public partial class SiteUpperNetProbe : ChatProbe
         _step = SiteShellBuilder.ToTile(site, gallery.Doorsteps[k]);
         GD.Print($"{Log} the gallery: {gallery.Steps} steps, side {gallery.Side}, the door's doorstep {k}");
         return true;
-    }
-
-    private static Terrain.ChunkManager? FindChunks(Node n)
-    {
-        if (n is Terrain.ChunkManager c) return c;
-        foreach (var child in n.GetChildren())
-            if (FindChunks(child) is { } found) return found;
-        return null;
     }
 
     /// <summary>Puts the player at a world point (from above, landing on what is there), and waits for the ground.</summary>
@@ -286,10 +278,10 @@ public partial class SiteUpperNetProbe : ChatProbe
                     var d = new Vector2(t.X, t.Z) - _site.Box.Center;
                     var p = new Vector3(d.Dot(_site.Box.AxisU), t.Y, d.Dot(_site.Box.AxisV));
                     GD.Print($"{Log} at site ({p.X:F2}, {p.Y:F2}, {p.Z:F2}); goal {toSite * Goal()}; velocity {me.Velocity}, on a wall {me.IsOnWall()}");
-                    var chunks = FindChunks(GetTree().Root);
+                    var ground = me.Terrain;
                     var toGoal = ((Goal() - me.GlobalPosition) with { Y = 0 }).Normalized();
                     for (float k = -0.4f; k <= 1.21f; k += 0.4f)
-                        if (chunks != null && chunks.TryGetHeight(me.GlobalPosition + toGoal * k, out float gh))
+                        if (ground != null && ground.TryGetHeight(me.GlobalPosition + toGoal * k, out float gh))
                             GD.Print($"{Log}   the terrain {k:F1} m on: {gh:F2} (feet {me.GlobalPosition.Y:F2})");
                     var space = me.GetWorld3D().DirectSpaceState;
                     var q = PhysicsRayQueryParameters3D.Create(me.GlobalPosition + Vector3.Up * 0.3f, me.GlobalPosition + Vector3.Up * 0.3f + toGoal * 1.2f);

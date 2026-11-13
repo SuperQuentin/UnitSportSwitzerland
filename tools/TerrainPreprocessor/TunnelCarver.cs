@@ -42,14 +42,13 @@ public static class TunnelCarver
     private const double Aim = 3.0;
 
     /// <summary>
-    /// Adds hole quads for one tunnel centreline (map coordinates) at each of its
-    /// <paramref name="portals"/> (its ends that meet a road or a rail, or nothing).
+    /// Adds hole quads for one tunnel centreline (plane coordinates of <paramref name="space"/>) at each of its
+    /// <paramref name="portals"/> (its ends that meet a road or a rail, or nothing), on the space's written tiles.
     /// </summary>
-    public static void Carve(List<(double E, double N, double Z)> centre,
-        double width, double bodyHeight,
-        Func<double, double, double?> heightOf,
-        Dictionary<TileId, HashSet<int>> holes,
-        IReadOnlyList<(double E, double N)> portals)
+    public static void Carve<TTile>(List<(double E, double N, double Z)> centre,
+        double width, IRoadSpace<TTile> space,
+        Dictionary<TTile, HashSet<int>> holes,
+        IReadOnlyList<(double E, double N)> portals) where TTile : struct, IEquatable<TTile>
     {
         if (centre.Count < 2) return;
         double half = width * 0.5 + SideMargin;
@@ -66,30 +65,26 @@ public static class TunnelCarver
             }
             var (fx, fy) = Normalize(aim.E - end.E, aim.N - end.N);
             if (fx == 0 && fy == 0) continue;
-            Punch(end.E, end.N, fx, fy, half, holes);
+            Punch(end.E, end.N, fx, fy, half, space, holes);
         }
     }
 
-    /// <summary>Every lattice quad whose centre lies in the strip at the portal.</summary>
-    private static void Punch(double e, double n, double fx, double fy, double half,
-        Dictionary<TileId, HashSet<int>> holes)
+    /// <summary>
+    /// Every quad whose centre lies in the strip at the portal: the LV95 build's 1 m quads, a leaf's lattice
+    /// quads (<see cref="IRoadSpace{TTile}.QuadsNear"/>). The strip is in metres, so either lattice takes it.
+    /// </summary>
+    private static void Punch<TTile>(double e, double n, double fx, double fy, double half,
+        IRoadSpace<TTile> space, Dictionary<TTile, HashSet<int>> holes) where TTile : struct, IEquatable<TTile>
     {
-        double spacing = ChunkFormat.SpacingM;
-        double reach = Math.Max(half, Inside) + spacing;
-        for (double qe = Math.Floor((e - reach) / spacing) * spacing; qe <= e + reach; qe += spacing)
-            for (double qn = Math.Floor((n - reach) / spacing) * spacing; qn <= n + reach; qn += spacing)
-            {
-                // the quad's centre
-                double ce = qe + spacing * 0.5, cn = qn + spacing * 0.5;
-                double along = (ce - e) * fx + (cn - n) * fy, across = -(ce - e) * fy + (cn - n) * fx;
-                if (along < -Outside - spacing * 0.5 || along > Inside || Math.Abs(across) > half) continue;
-                var tile = TileId.FromLv95(ce, cn);
-                int col = (int)Math.Floor((ce - tile.MinE) / spacing);
-                int row = (int)Math.Floor((tile.MaxN - cn) / spacing);
-                if ((uint)col >= HoleFormat.QuadsPerSide || (uint)row >= HoleFormat.QuadsPerSide) continue;
-                if (!holes.TryGetValue(tile, out var set)) holes[tile] = set = new HashSet<int>();
-                set.Add(HoleFormat.CellIndex(col, row));
-            }
+        double reach = Math.Max(half, Inside) + ChunkFormat.SpacingM;
+        foreach (var (tile, quad, ce, cn) in space.QuadsNear(e, n, reach))
+        {
+            double along = (ce - e) * fx + (cn - n) * fy, across = -(ce - e) * fy + (cn - n) * fx;
+            // half a quad in front of the portal: the LV95 build's 1 m, as the cube's ~1.2 m quads take it too
+            if (along < -Outside - ChunkFormat.SpacingM * 0.5 || along > Inside || Math.Abs(across) > half) continue;
+            if (!holes.TryGetValue(tile, out var set)) holes[tile] = set = new HashSet<int>();
+            set.Add(quad);
+        }
     }
 
     private static (double X, double Y) Normalize(double x, double y)

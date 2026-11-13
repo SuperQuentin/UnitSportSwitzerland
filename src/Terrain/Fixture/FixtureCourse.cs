@@ -81,8 +81,8 @@ public sealed class FixtureCourse
     /// this is how the fixture reaches that half of the planner.
     /// </summary>
     public (double DoorX, double DoorY, double FloorAreaM2, bool Retail)? Store { get; init; }
-    /// <summary>The course's airports (#422) planned at a start in LV95; null: none.</summary>
-    public Func<double, double, AirportIndex>? Airports { get; init; }
+    /// <summary>The course's airports (#422) planned where the course is laid (<see cref="CoursePlace"/>); null: none.</summary>
+    public Func<CoursePlace, AirportIndex>? Airports { get; init; }
 
     /// <summary>A road's own width (m), by its index in <see cref="Roads"/>; the others are their class's default.</summary>
     public Dictionary<int, float> RoadWidths { get; } = new();
@@ -106,7 +106,13 @@ public sealed class FixtureCourse
     public List<Parked> Fleet { get; } = new();
 
     /// <summary>A prepared ski slope (#1396): an outline, metres from the start, and how hard it is.</summary>
-    public sealed record Slope(string Name, PisteDifficulty Difficulty, (double X, double Y)[] Outline);
+    /// <param name="Line">A line slope's centreline, top to foot (#1737: what a ski race chains): its record is a line of the
+    /// outline's width along it, the raster still the outline's; null: an area slope.</param>
+    public sealed record Slope(string Name, PisteDifficulty Difficulty, (double X, double Y)[] Outline, (double X, double Y)[]? Line = null)
+    {
+        /// <summary>The points the record keeps: the centreline of a line slope, else the outline.</summary>
+        public (double X, double Y)[] Path => Line ?? Outline;
+    }
 
     /// <summary>The course's ski slopes; none by default.</summary>
     public List<Slope> Slopes { get; } = new();
@@ -114,8 +120,8 @@ public sealed class FixtureCourse
     /// <summary>Painted lines on the ground (a marked bay), metres from the start: white, 15 cm.</summary>
     public List<(double X0, double Y0, double X1, double Y1)> Lines { get; } = new();
 
-    /// <summary>A stadium of the course's own, planned at a start in LV95 (#1396); null: none.</summary>
-    public Func<double, double, Stadiums.StadiumSpec>? StadiumAt { get; init; }
+    /// <summary>A stadium of the course's own (#1396), planned where the course is laid (<see cref="CoursePlace"/>); null: none.</summary>
+    public Func<CoursePlace, Stadiums.StadiumSpec>? StadiumAt { get; init; }
 
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }

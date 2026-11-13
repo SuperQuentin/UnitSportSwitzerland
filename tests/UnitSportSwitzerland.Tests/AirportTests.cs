@@ -5,6 +5,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The airport stand planner, runway profiles and the airports file (#422).</summary>
+[Collection(FixtureWorld.Collection)]
 public class AirportTests
 {
     private static readonly List<IReadOnlyList<(double E, double N)>> Taxiway = new() { new List<(double, double)> { (-1000, 100), (1000, 100) } };
@@ -40,7 +41,7 @@ public class AirportTests
     [Fact]
     public void FixtureAirportParksSixA320sAndTheCargoPair()
     {
-        var index = FixtureAirport.Plan(2600000, 1200000);
+        var index = FixtureAirport.Plan(CoursePlace.Flat(2600000, 1200000));
         var airport = Assert.Single(index.Airports);
         var stands = airport.Stands;
         Assert.Equal(6, stands.Count(s => s.Use == StandUse.Airliner));
@@ -48,6 +49,8 @@ public class AirportTests
         var military = Assert.Single(stands, s => s.Use == StandUse.Military);
         Assert.Equal("C1", heavy.Ref);
         Assert.Equal("C2", military.Ref);
+        // the space shuttle on the third cargo stand (#1492)
+        Assert.Equal("C3", Assert.Single(stands, s => s.Use == StandUse.Space).Ref);
         // nose gear on the stop: the origin 12.64 m behind it (north: the A320s face south)
         var one = stands.Single(s => s.Ref == "1");
         Assert.Equal(2600030, one.E, 3);
@@ -118,7 +121,7 @@ public class AirportTests
     [Fact]
     public void FileRoundTrips()
     {
-        var index = FixtureAirport.Plan(2600000, 1200000);
+        var index = FixtureAirport.Plan(CoursePlace.Flat(2600000, 1200000));
         index.Airports[0].Stands[0].Ground = double.NaN;
         var back = AirportIndex.FromJson(index.ToJson());
         Assert.Equal(index.Stands().Count(), back.Stands().Count());

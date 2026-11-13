@@ -51,7 +51,7 @@ public partial class AdventureCheck : ChatProbe
         var at = Me!.Global;
         var a = ProbeQuests.PointA(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
         var b = ProbeQuests.PointB(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
-        GD.Print(FormattableString.Invariant($"{Log} at {at.E:F1}/{at.N:F1}; A at {a.E:F0}/{a.N:F0}"));
+        GD.Print(FormattableString.Invariant($"{Log} at {at.Lv95}; A at {a.E:F0}/{a.N:F0}"));
         Expect(svc.Authority, "offline, this client keeps the progress");
         Expect(svc.Active(AdventureService.LocalPeer), "the local player adventures");
         Expect(svc.Mine.Ids.Contains(QuestsProgress.Section.Id), "the quests section is there from the start");
@@ -129,9 +129,10 @@ public partial class AdventureCheck : ChatProbe
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.3f, (float)-(n - g.N));
+        var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.3f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Until(() => false, 0.3);
-        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.E:F1}/{me.Global.N:F1}"));
+        GD.Print(FormattableString.Invariant($"{Log} at {me.Global.Lv95}"));
     }
 }

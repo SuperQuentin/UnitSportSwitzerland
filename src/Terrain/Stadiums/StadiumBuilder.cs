@@ -79,11 +79,25 @@ public static class StadiumBuilder
         return new StadiumBuild(g.Data(), g.Faces.ToArray(), capacity);
     }
 
+    /// <summary>
+    /// One stadium in a frame of the caller's (#1723: a leaf's anchor frame): <paramref name="frame"/> maps the stadium frame's
+    /// (u, v) and a height over the pitch into it, <paramref name="outside"/> gives the ground round the bowl over the pitch.
+    /// </summary>
+    public static StadiumBuild BuildIn(StadiumSpec s, Func<Vector2, float, Vector3> frame, Func<Vector2, float>? outside, bool mesh, bool collision)
+    {
+        var g = new Geo(mesh, collision);
+        int capacity = Sweep(s, g, frame, outside);
+        return new StadiumBuild(g.Data(), g.Faces.ToArray(), capacity);
+    }
+
+    /// <summary>The facade's outline in the stadium frame (u, v), round the bowl.</summary>
+    public static Vector2[] OutlineUv(StadiumSpec s) => Stations(s).Select(st => st.P + st.N * st.Depth).ToArray();
+
     /// <summary>The facade's outline in <paramref name="id"/>'s frame (x, z), round the bowl: what the stadium owns (<see cref="StadiumClip"/>).</summary>
     public static Vector2[] Outline(StadiumSpec s, TileId id)
     {
         var frame = Frame(s, id, 0f);
-        return Stations(s).Select(st => { var p = frame(st.P + st.N * st.Depth, 0); return new Vector2(p.X, p.Z); }).ToArray();
+        return OutlineUv(s).Select(uv => { var p = frame(uv, 0); return new Vector2(p.X, p.Z); }).ToArray();
     }
 
     /// <summary>A seat found in the stadium frame: the hip's place, the way it faces, and heights (<see cref="StadiumSeats"/>).</summary>
@@ -189,7 +203,7 @@ public static class StadiumBuilder
     /// <summary>The stadium frame (u across, v along the pitch, y up from it) into tile-local metres.</summary>
     private static Func<Vector2, float, Vector3> Frame(StadiumSpec s, TileId id, float ground)
     {
-        float a = Mathf.DegToRad(s.AzimuthDeg);
+        float a = Mathf.DegToRad(s.LocalAzimuthDeg);
         var u = new Vector3(MathF.Cos(a), 0, MathF.Sin(a));
         var v = new Vector3(-MathF.Sin(a), 0, MathF.Cos(a));
         var (sx, sz) = id.Local(s.E, s.N);

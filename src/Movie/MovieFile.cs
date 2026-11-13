@@ -14,12 +14,15 @@ namespace UnitSport.Movie;
 /// stored by the name of its asset file (<see cref="WorldLook.Asset"/>), which the engine side
 /// writes and reads (<c>WorldLookStore</c>). Version 6 (#776) adds each camera's shot settings (rig,
 /// target, smoothing, shake, beat links) and named sequences in place of the one cut list; an older
-/// file's cuts become the sequence "Main".
+/// file's cuts become the sequence "Main". Version 7 (#1503, G2 A2b) keeps places on the Earth: a player's
+/// frames, a recorded group's poses and a camera's keys as ECEF, a player's velocity in the local east-up-south and
+/// its heading from true north, a group's and a camera's turn in the local east-up-south (<see cref="Earth(ActorTrack, bool)"/>);
+/// in memory they stay LV95 and grid axes, and an older file is read as it was and written back by its caller.
 /// </summary>
 public static class MovieFile
 {
     private const uint Magic = 0x564D5355;   // "USMV"
-    private const int Version = 6;
+    private const int Version = 7;
 
     public static void Write(MovieProject p, Stream to) => Write(p, to, Version);
 
@@ -38,7 +41,7 @@ public static class MovieFile
         foreach (var l in p.Lanes) { w.Write(l.Key); w.Write(l.Label); w.Write(l.PeerId); }
 
         w.Write(p.Tracks.Count);
-        foreach (var t in p.Tracks) WriteTrack(w, t);
+        foreach (var t in p.Tracks) WriteTrack(w, version >= 7 ? Earth(t, toEarth: true) : t);
 
         if (version >= 2)
         {
@@ -59,7 +62,7 @@ public static class MovieFile
         if (version >= 5)
         {
             w.Write(p.Worlds.Count);
-            foreach (var t in p.Worlds) WriteWorld(w, t);
+            foreach (var t in p.Worlds) WriteWorld(w, t, version);
         }
 
         var clips = p.Clips.Where(c => (version >= 2 || !c.Audio) && (version >= 5 || !c.World)).ToList();
@@ -78,14 +81,14 @@ public static class MovieFile
             foreach (double m in p.Markers) w.Write(m);
         }
 
-        if (version == 3) WriteKeys(w, p.Camera);
+        if (version == 3) WriteKeys(w, p.Camera, version);
         if (version >= 4)
         {
             w.Write(p.Cameras.Count);
             foreach (var cam in p.Cameras)
             {
                 w.Write(cam.Name);
-                WriteKeys(w, cam);
+                WriteKeys(w, cam, version);
                 if (version >= 6) WriteShot(w, cam);
             }
             if (version >= 6)
@@ -197,12 +200,12 @@ public static class MovieFile
         }
     }
 
-    private static void WriteWorld(BinaryWriter w, WorldTrack t)
+    private static void WriteWorld(BinaryWriter w, WorldTrack t, int version)
     {
         w.Write(t.Duration);
         w.Write(t.Looks.Length);
         foreach (var l in t.Looks) w.Write(l.Asset ?? "");
-        WriteEntities(w, t.Entities);
+        WriteEntities(w, version >= 7 ? Earth(t.Entities, toEarth: true) : t.Entities);
     }
 
     /// <summary>A world track's objects (also a Record / Stop session's pieces on disk, #782).</summary>
@@ -227,12 +230,13 @@ public static class MovieFile
         }
     }
 
-    private static WorldTrack ReadWorld(BinaryReader r)
+    private static WorldTrack ReadWorld(BinaryReader r, int version)
     {
         double duration = r.ReadDouble();
         var looks = new WorldLook[r.ReadInt32()];
         for (int i = 0; i < looks.Length; i++) looks[i] = new WorldLook { Asset = r.ReadString() };
-        return new WorldTrack(ReadEntities(r, looks.Length), looks, duration);
+        var entities = ReadEntities(r, looks.Length);
+        return new WorldTrack(version >= 7 ? Earth(entities, toEarth: false) : entities, looks, duration);
     }
 
     /// <summary>Objects written by <see cref="WriteEntities"/>, a look outside <paramref name="looks"/> dropped.</summary>
@@ -274,13 +278,17 @@ public static class MovieFile
         return entities;
     }
 
-    private static void WriteKeys(BinaryWriter w, CameraTrack cam)
+    private static void WriteKeys(BinaryWriter w, CameraTrack cam, int version)
     {
         w.Write(cam.Keys.Count);
         foreach (var k in cam.Keys)
         {
-            w.Write(k.T); w.Write(k.E); w.Write(k.N); w.Write(k.Alt);
-            w.Write(k.Qx); w.Write(k.Qy); w.Write(k.Qz); w.Write(k.Qw);
+            double a = k.E, b = k.N, c = k.Alt;
+            var q = new Godot.Quaternion(k.Qx, k.Qy, k.Qz, k.Qw);
+            // version 7: a camera fixed in the world keys places (ECEF, its turn in the local ENU); one on an actor, offsets in the actor's frame
+            if (version >= 7 && !cam.Relative) q = Turn(Place(ref a, ref b, ref c, toEarth: true), q, toEarth: true);
+            w.Write(k.T); w.Write(a); w.Write(b); w.Write(c);
+            w.Write(q.X); w.Write(q.Y); w.Write(q.Z); w.Write(q.W);
             w.Write(k.Lens); w.Write((byte)k.Ease); w.Write(k.LookAt);
         }
     }
@@ -302,12 +310,17 @@ public static class MovieFile
     }
 
     /// <summary>Reads a project saved by <see cref="Write"/>, its properties mapped onto <paramref name="discrete"/>.</summary>
-    public static MovieProject Read(Stream from, string[] discrete)
+    public static MovieProject Read(Stream from, string[] discrete) => Read(from, discrete, out _);
+
+    /// <inheritdoc cref="Read(Stream, string[])"/>
+    /// <param name="old">A file older than this build's version (before G2 A2b: LV95 places): the caller writes it back.</param>
+    public static MovieProject Read(Stream from, string[] discrete, out bool old)
     {
         using var r = new BinaryReader(from, Encoding.UTF8, leaveOpen: true);
         if (r.ReadUInt32() != Magic) throw new InvalidDataException("not a movie file");
         int version = r.ReadInt32();
         if (version > Version) throw new InvalidDataException($"movie file version {version} is newer than this game ({Version})");
+        old = version < Version;
         string name = r.ReadString();
         int stride = r.ReadInt32();
         if (stride != Channels.Stride) throw new InvalidDataException($"frame layout {stride} floats, expected {Channels.Stride}");
@@ -322,7 +335,11 @@ public static class MovieFile
             p.Lanes.Add(new Lane { Key = r.ReadString(), Label = r.ReadString(), PeerId = r.ReadInt64() });
 
         int tracks = r.ReadInt32();
-        for (int i = 0; i < tracks; i++) p.Tracks.Add(ReadTrack(r, map, discrete.Length));
+        for (int i = 0; i < tracks; i++)
+        {
+            var track = ReadTrack(r, map, discrete.Length);
+            p.Tracks.Add(version >= 7 ? Earth(track, toEarth: false) : track);
+        }
 
         if (version >= 2)
         {
@@ -345,7 +362,7 @@ public static class MovieFile
         if (version >= 5)
         {
             int worlds = r.ReadInt32();
-            for (int i = 0; i < worlds; i++) p.Worlds.Add(ReadWorld(r));
+            for (int i = 0; i < worlds; i++) p.Worlds.Add(ReadWorld(r, version));
         }
 
         int clips = r.ReadInt32();
@@ -382,6 +399,8 @@ public static class MovieFile
                 var cam = new CameraTrack { Name = r.ReadString() };
                 ReadKeys(r, cam, p.Lanes.Count);
                 if (version >= 6) ReadShot(r, cam, p.Lanes.Count);
+                // version 7: a camera fixed in the world keyed places on the Earth (its rig is known only now)
+                if (version >= 7 && !cam.Relative) FromEarth(cam);
                 p.Cameras.Add(cam);
             }
             if (p.Cameras.Count == 0) p.Cameras.Add(new CameraTrack { Name = "Cam 1" });
@@ -416,5 +435,83 @@ public static class MovieFile
             }
         }
         return p;
+    }
+    // ---- version 7: places on the Earth (#1503, G2 A2b) ----------------------------------------------------------
+
+    /// <summary>A place as the file keeps it (ECEF), or back (LV95 and the altitude, as in memory); GlobalPos's axes there.</summary>
+    private static Core.EnuAxes Place(ref double a, ref double b, ref double c, bool toEarth)
+    {
+        Core.GlobalPos at;
+        if (toEarth)
+        {
+            at = Core.GlobalPos.FromLv95(a, b, c);
+            (a, b, c) = at.ToWire();
+        }
+        else
+        {
+            at = Core.GlobalPos.FromWire(a, b, c);
+            (a, b, c) = at.Lv95;
+        }
+        return Core.Lv95Grid.Axes(at);
+    }
+
+    private static Godot.Quaternion Turn(Core.EnuAxes enu, Godot.Quaternion q, bool toEarth) =>
+        q.LengthSquared() < 1e-12f ? q : toEarth ? enu.ToEnu(q) : enu.FromEnu(q);
+
+    /// <summary>A player's track with its frames on the Earth (<paramref name="toEarth"/>) or back: place, velocity, heading.</summary>
+    internal static ActorTrack Earth(ActorTrack t, bool toEarth)
+    {
+        var pos = (double[])t.Pos.Clone();
+        var f = (float[])t.F.Clone();
+        for (int k = 0; k < t.Frames; k++)
+        {
+            int p = 3 * k, o = k * Channels.Stride;
+            var enu = Place(ref pos[p], ref pos[p + 1], ref pos[p + 2], toEarth);
+            var v = new Godot.Vector3(f[o + Channels.Vel], f[o + Channels.Vel + 1], f[o + Channels.Vel + 2]);
+            v = toEarth ? enu.ToEnu(v) : enu.FromEnu(v);
+            f[o + Channels.Vel] = v.X; f[o + Channels.Vel + 1] = v.Y; f[o + Channels.Vel + 2] = v.Z;
+            f[o + Channels.Yaw] = toEarth ? enu.TrueYaw(f[o + Channels.Yaw]) : enu.Yaw(f[o + Channels.Yaw]);
+        }
+        return new ActorTrack(t.Times, pos, f, t.BaseNum, t.BaseStr, t.Events);
+    }
+
+    /// <summary>
+    /// A world track's objects with the groups' poses on the Earth or back: a group (<see cref="WorldEntity.IsGroup"/>)
+    /// stands at a place in GlobalPos's axes; its parts are in the group's own frame, and the environment's pose is the
+    /// weather: neither changes.
+    /// </summary>
+    internal static WorldEntity[] Earth(WorldEntity[] entities, bool toEarth)
+    {
+        var copy = new WorldEntity[entities.Length];
+        for (int i = 0; i < entities.Length; i++)
+        {
+            var e = entities[i];
+            if (!e.IsGroup) { copy[i] = e; continue; }
+            var poses = (WorldPose[])e.Poses.Clone();
+            for (int k = 0; k < poses.Length; k++)
+            {
+                var enu = Place(ref poses[k].X, ref poses[k].Y, ref poses[k].Z, toEarth);
+                poses[k].Rot = Turn(enu, poses[k].Rot, toEarth);
+            }
+            copy[i] = new WorldEntity
+            {
+                Parent = e.Parent, Born = e.Born, Died = e.Died, Times = e.Times, Poses = poses,
+                ShowTimes = e.ShowTimes, Shown = e.Shown, LookTimes = e.LookTimes, Looks = e.Looks,
+            };
+        }
+        return copy;
+    }
+    /// <summary>A world camera's keys read from a version 7 file (ECEF, turns in the local ENU) back in LV95 and grid axes.</summary>
+    private static void FromEarth(CameraTrack cam)
+    {
+        for (int i = 0; i < cam.Keys.Count; i++)
+        {
+            var k = cam.Keys[i];
+            double a = k.E, b = k.N, c = k.Alt;
+            var q = Turn(Place(ref a, ref b, ref c, toEarth: false), new Godot.Quaternion(k.Qx, k.Qy, k.Qz, k.Qw), toEarth: false);
+            var back = k.Copy();
+            (back.E, back.N, back.Alt, back.Qx, back.Qy, back.Qz, back.Qw) = (a, b, c, q.X, q.Y, q.Z, q.W);
+            cam.Keys[i] = back;
+        }
     }
 }

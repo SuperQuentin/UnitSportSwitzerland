@@ -402,7 +402,7 @@ public partial class SiteProbe : Node3D
             foreach (var s in slots)
             {
                 var state = new Vehicles.VehicleState((Player.RideKind)s.KindId,
-                    new Core.GlobalPos(s.E, s.N, s.Height), s.Yaw, Vector3.Zero, 0f,
+                    Core.GlobalPos.FromLv95(s.E, s.N, s.Height), s.Yaw, Vector3.Zero, 0f,
                     EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
                     Train: s.Train, Load: s.Load);
                 if (state.CreateRide() is not { } ride) { Check(false, $"{site}: slot {s.Ordinal} builds no ride"); continue; }

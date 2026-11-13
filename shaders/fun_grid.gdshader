@@ -1,6 +1,6 @@
 // The fun world's neon grid floor (#1396, World/Fun/FunBackdrop): a dark violet plane under the course reaching to the
-// horizon, glowing lines every `spacing` metres. World-anchored (the floating origin moves by whole kilometres, a
-// multiple of the spacing), the lines fading out with distance before they shimmer and the plane into the horizon's
+// horizon, glowing lines every `spacing` metres. Laid from the course's start (`grid_origin`, set as the origin moves), the
+// lines fading out with distance before they shimmer and the plane into the horizon's
 // pink. The plane follows the camera; nothing is set per frame.
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled;
@@ -15,6 +15,9 @@ uniform float fade_lines = 2600.0;
 uniform float fade_floor = 16000.0;
 // the course's tiles, world x/z (min x, min z, max x, max z): their own ground is there, the lake under the floor's height
 uniform vec4 hole = vec4(0.0);
+// where the lines are laid from (the course's start, world x/z): a re-anchor of the earth world is no whole number of
+// spacings (#1648)
+uniform vec2 grid_origin = vec2(0.0);
 
 varying vec3 world;
 
@@ -24,7 +27,7 @@ void vertex() {
 
 void fragment() {
 	if (world.x > hole.x && world.x < hole.z && world.z > hole.y && world.z < hole.w) discard;
-	vec2 g = world.xz / spacing;
+	vec2 g = (world.xz - grid_origin) / spacing;
 	vec2 w = fwidth(g);
 	vec2 a = abs(fract(g - 0.5) - 0.5) / max(w, vec2(1e-4));
 	float line = 1.0 - min(min(a.x, a.y) / 1.5, 1.0);

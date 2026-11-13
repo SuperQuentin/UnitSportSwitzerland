@@ -130,6 +130,16 @@ public partial class FestivalService
         }
     }
 
+    /// <summary>
+    /// Metres east and north of the site on the LV95 grid (#1502): the flock keeps its cows in these (the world draws them
+    /// at <c>site.E + x</c>), so a body's place is measured in the same axes, not in the true east and north.
+    /// </summary>
+    private static (double E, double N) GridOffset(ResolvedSite site, GlobalPos at)
+    {
+        var l = at.Lv95;
+        return (l.E - site.E, l.N - site.N);
+    }
+
     private void DesalpeStep(DesalpeSrv s, float dt)
     {
         var run = s.Run;
@@ -141,7 +151,7 @@ public partial class FestivalService
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !_adventure.Active(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            double x = at.E - s.Site.E, y = at.N - s.Site.N;
+            var (x, y) = GridOffset(s.Site, at);
             float zone = DesalpeRules.ZoneFoot;
             if (s.Last.TryGetValue(peer, out var was) && Math.Sqrt((x - was.X) * (x - was.X) + (y - was.Y) * (y - was.Y)) / dt > 3.5) zone = DesalpeRules.ZoneMounted;
             s.Last[peer] = (x, y);
@@ -244,7 +254,35 @@ public partial class FestivalService
     {
         if (_ds == null || !Connected(peer)) return;
         RpcId(peer, MethodName.TellDesalpe, JsonSerializer.Serialize(ViewOf(_ds), _json));
-        RpcId(peer, MethodName.TellDesalpeSnap, DesalpeWire.Pack(_ds.Run.Phase, _ds.Run.Flock));
+        var fair = _ds.Site.Pos;
+        var (fx, fy, fz) = fair.ToWire();
+        RpcId(peer, MethodName.TellDesalpeSnap, DesalpeTurn(DesalpeWire.Pack(_ds.Run.Phase, _ds.Run.Flock), fair, toWire: true), fx, fy, fz);
+    }
+
+    /// <summary>
+    /// (#1503) A snapshot's cows are metres east and north of the fair on the grid and a Godot yaw on it; on the wire they are the
+    /// same in the local east-north-up at the fair and from true north (the fair's ECEF travels with the snapshot). A copy.
+    /// </summary>
+    private static byte[] DesalpeTurn(byte[] bytes, GlobalPos fair, bool toWire)
+    {
+        if (bytes.Length < DesalpeWire.Header || bytes.Length != DesalpeWire.Header + bytes[1] * DesalpeWire.PerCow) return bytes;
+        var axes = Lv95Grid.Axes(fair);
+        var turned = (byte[])bytes.Clone();
+        for (int i = 0; i < bytes[1]; i++)
+        {
+            int at = DesalpeWire.Header + i * DesalpeWire.PerCow;
+            float x = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(at));
+            float y = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(at + 4));
+            var v = new Vector3(x, 0, -y);
+            v = toWire ? axes.ToEnu(v) : axes.FromEnu(v);
+            System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(turned.AsSpan(at), v.X);
+            System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(turned.AsSpan(at + 4), -v.Z);
+            float yaw = bytes[at + 8] / 255f * Mathf.Tau;
+            if (yaw > Mathf.Pi) yaw -= Mathf.Tau;
+            yaw = toWire ? axes.TrueYaw(yaw) : axes.Yaw(yaw);
+            turned[at + 8] = (byte)(((yaw / Mathf.Tau) % 1f + 1f) % 1f * 255f);
+        }
+        return turned;
     }
 
     private void DesalpeSnap(DesalpeSrv s)
@@ -252,15 +290,19 @@ public partial class FestivalService
         var bytes = DesalpeWire.Pack(s.Run.Phase, s.Run.Flock);
         if (!_networked)
         {
-            TellDesalpeSnap(bytes);
+            ApplyDesalpeSnap(bytes);
             return;
         }
+        var fair = s.Site.Pos;
+        var wire = DesalpeTurn(bytes, fair, toWire: true);
+        var (fx, fy, fz) = fair.ToWire();
         var (cx, cy) = s.Run.Flock.Centroid();
         foreach (long peer in _adventure.Peers.ToArray())
         {
             if (peer <= 0 || !Connected(peer) || _adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            double x = at.E - s.Site.E - cx, y = at.N - s.Site.N - cy;
-            if (x * x + y * y <= 500 * 500) RpcId(peer, MethodName.TellDesalpeSnap, bytes);
+            var (offE, offN) = GridOffset(s.Site, at);
+            double x = offE - cx, y = offN - cy;
+            if (x * x + y * y <= 500 * 500) RpcId(peer, MethodName.TellDesalpeSnap, wire, fx, fy, fz);
         }
     }
 
@@ -282,7 +324,8 @@ public partial class FestivalService
         if (peer > 0)
         {
             if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Where are you?");
-            double x = at.E - s.Site.E - s.Run.Flock.X[cow], y = at.N - s.Site.N - s.Run.Flock.Y[cow];
+            var (offE, offN) = GridOffset(s.Site, at);
+            double x = offE - s.Run.Flock.X[cow], y = offN - s.Run.Flock.Y[cow];
             if (x * x + y * y > (DesalpeRules.DressReach + 3) * (DesalpeRules.DressReach + 3)) return Tell(peer, $"Go to the cow to dress it ({Math.Sqrt(x * x + y * y):F0} m).");
         }
         byte was = s.Run.Dress[cow];
@@ -311,7 +354,8 @@ public partial class FestivalService
         foreach (long p in _adventure.Peers.ToArray())
         {
             if (p <= 0 || !_adventure.Active(p) || _adventure.PositionOf?.Invoke(p) is not { } at) continue;
-            double x = at.E - s.Site.E - sign.X, y = at.N - s.Site.N - sign.Y;
+            var (offE, offN) = GridOffset(s.Site, at);
+            double x = offE - sign.X, y = offN - sign.Y;
             double d2 = x * x + y * y;
             if (d2 <= (DesalpeRules.StartReach + 40) * (DesalpeRules.StartReach + 40)) near++;
             if (p == peer && d2 <= (DesalpeRules.StartReach + 5) * (DesalpeRules.StartReach + 5)) starter = true;
@@ -359,7 +403,7 @@ public partial class FestivalService
         if (!def.IsOpen(DesalpeRules.VoteGame, run.Day)) return Tell(peer, $"The vote opens on day {def.OpensOn(DesalpeRules.VoteGame)}.");
         if (!_adventure.Active(peer) || _adventure.KeyOf(peer) is not { } key) return Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
-        if (_adventure.PositionOf?.Invoke(peer) is not { } at || s.Site.DistanceTo(at.E, at.N) > DesalpeRules.VoteReach + 10) return Tell(peer, "Go to the fair's ring to vote.");
+        if (_adventure.PositionOf?.Invoke(peer) is not { } at || s.Site.DistanceTo(at) > DesalpeRules.VoteReach + 10) return Tell(peer, "Go to the fair's ring to vote.");
         if (s.Vote.TryVote(key, entry) is { } why) return Tell(peer, why);
         Award(peer, s.Festival, DesalpeRules.VoteBatzen, $"voted for herd {entry}", DesalpeRules.VoteGame, DesalpeRules.VotePoints);
         if (Connected(peer)) RpcId(peer, MethodName.TellDesalpeVoted, entry);
@@ -425,7 +469,10 @@ public partial class FestivalService
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
-    private void TellDesalpeSnap(byte[] bytes)
+    private void TellDesalpeSnap(byte[] bytes, double fx, double fy, double fz) =>
+        ApplyDesalpeSnap(DesalpeTurn(bytes, GlobalPos.FromWire(fx, fy, fz), toWire: false));
+
+    private void ApplyDesalpeSnap(byte[] bytes)
     {
         DesalpeSnapshot = bytes;
         DesalpeSnapped?.Invoke(bytes);

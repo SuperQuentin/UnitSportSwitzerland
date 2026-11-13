@@ -75,7 +75,7 @@ public static class CastleStage
     {
         var sw = Stopwatch.StartNew();
         var candidates = new List<Candidate>();
-        candidates.AddRange(FromOsm(pbf, jobs));
+        candidates.AddRange(FromOsm(pbf, jobs, GeoInput.Over(chunkDir)));
         int osm = candidates.Count;
         candidates.AddRange(FromGwr(gwrPath));
         Console.WriteLine($"castles: {osm} OSM + {candidates.Count - osm} GWR candidates ({sw.Elapsed.TotalSeconds:F0} s)");
@@ -99,12 +99,13 @@ public static class CastleStage
         {
             var solids = c.Outline != null ? InOutline(c, Tile) : AtPoint(c, Tile);
             var points = new List<(double E, double N)>();
+            var bases = new List<double>();   // each point's solid base: its height for the Earth positions (#1507)
             var years = new List<int>();
             foreach (var (id, i) in solids)
             {
                 if (!claimed.Add((id, i))) continue;
                 var b = Tile(id)!.Buildings[i];
-                if (InsidePoint(id, b) is { } p) points.Add(p);
+                if (InsidePoint(id, b) is { } p) { points.Add(p); bases.Add(b.MinY); }
                 if (b.YearBuilt > 0) years.Add(b.YearBuilt);
             }
             if (points.Count == 0)
@@ -115,7 +116,8 @@ public static class CastleStage
             // no word from OSM or the name: the solids' own years decide, a fortress when unknown
             int kind = c.Kind != Unknown ? c.Kind
                 : years.Count > 0 && years.Order().ElementAt(years.Count / 2) >= ManorFrom ? Manor : Fortress;
-            castles.Add(new Castle(c.Name, canton(points[0].E, points[0].N), kind, points));
+            castles.Add(new Castle(c.Name, canton(points[0].E, points[0].N), kind, points,
+                points.Select((p, k) => GeoPoint.FromLv95(p.E, p.N, bases[k])).ToList()));
         }
         castles.Sort((a, b) => a.Points[0].E != b.Points[0].E ? a.Points[0].E.CompareTo(b.Points[0].E) : a.Points[0].N.CompareTo(b.Points[0].N));
         Write(outFile, castles);
@@ -128,7 +130,7 @@ public static class CastleStage
         return 0;
     }
 
-    internal static IEnumerable<Candidate> FromOsm(string pbf, int jobs)
+    internal static IEnumerable<Candidate> FromOsm(string pbf, int jobs, GeoInput geo)
     {
         var keys = new HashSet<string> { "historic", "name", "castle_type", "ruins" };
         static bool IsCastle(Dictionary<string, string> t) => t.GetValueOrDefault("historic") == "castle";
@@ -149,13 +151,13 @@ public static class CastleStage
             if (w.Refs.Length < 4 || w.Refs[0] != w.Refs[^1]) continue; // only closed outlines
             var ring = new List<(double E, double N)>();
             foreach (var r in w.Refs)
-                if (nodes.TryGetValue(r, out var ll)) ring.Add(SwissProjection.ToLv95(ll.Lat, ll.Lon));
+                if (nodes.TryGetValue(r, out var ll)) ring.Add(geo.ToLv95(ll.Lat, ll.Lon));
             if (ring.Count < 4) continue;
             yield return new Candidate(NameOf(w.Tags), $"way/{w.Id}", ring.Average(p => p.E), ring.Average(p => p.N), ring, KindOf(w.Tags, NameOf(w.Tags)));
         }
         foreach (var n in first.TaggedNodes)
         {
-            var (e, nn) = SwissProjection.ToLv95(n.Lat, n.Lon);
+            var (e, nn) = geo.ToLv95(n.Lat, n.Lon);
             yield return new Candidate(NameOf(n.Tags), $"node/{n.Id}", e, nn, null, KindOf(n.Tags, NameOf(n.Tags)));
         }
     }
@@ -189,7 +191,7 @@ public static class CastleStage
         }
     }
 
-    private sealed record Castle(string Name, string Canton, int Kind, List<(double E, double N)> Points);
+    private sealed record Castle(string Name, string Canton, int Kind, List<(double E, double N)> Points, List<GeoPoint> Geo);
 
     /// <summary>
     /// The canton at a point: the one most GWR buildings of its kilometre cell are in, else of the
@@ -382,7 +384,7 @@ public static class CastleStage
                 {
 
             """);
-        foreach (var (name, canton, kind, points) in castles)
+        foreach (var (name, canton, kind, points, _) in castles)
         {
             sb.Append("        (\"").Append(name.Replace("\\", "\\\\").Replace("\"", "\\\"")).Append("\", \"").Append(canton)
               .Append("\", CastleKind.").Append(kind == Manor ? "Manor" : kind == Ruin ? "Ruin" : "Fortress").Append(", new[] { ");
@@ -390,6 +392,22 @@ public static class CastleStage
                 p.E.ToString("0.0", CultureInfo.InvariantCulture) + ", " + p.N.ToString("0.0", CultureInfo.InvariantCulture))));
             sb.Append(" }),\n");
         }
+        sb.Append("    };\n");
+        // the same points on the Earth (#1507): latitude, longitude and ellipsoidal height at the base of each solid,
+        // one array per castle in the order of List
+        sb.Append("""
+
+                /// <summary>
+                /// <see cref="List"/>'s points on the Earth (#1507): per castle, latitude, longitude and ellipsoidal height
+                /// triples at the base of each solid, in the order of its LV95 points.
+                /// </summary>
+                public static readonly double[][] Geo =
+                {
+
+            """);
+        foreach (var c in castles)
+            sb.Append("        new[] { ").Append(string.Join(", ", c.Geo.Select(g => string.Create(CultureInfo.InvariantCulture,
+                $"{g.Lat:F9}, {g.Lon:F9}, {g.H:F2}")))).Append(" },\n");
         sb.Append("    };\n}\n");
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
     }

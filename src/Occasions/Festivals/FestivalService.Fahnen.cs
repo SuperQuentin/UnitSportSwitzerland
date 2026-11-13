@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Adventure;
+using UnitSport.Core;
 using UnitSport.Occasions.Festivals.Fahnen;
 
 namespace UnitSport.Occasions.Festivals;
@@ -43,7 +44,7 @@ public partial class FestivalService
     /// <summary>Whether the body of <paramref name="peer"/> stands on the flag ground.</summary>
     public bool OnFahneGround(long peer) =>
         FahneGroundNow() is { } g && _adventure.PositionOf?.Invoke(peer) is { } at
-        && Math.Sqrt((at.E - g.E) * (at.E - g.E) + (at.N - g.N) * (at.N - g.N)) <= FestivalCatalog.FahneGroundRadius;
+        && at.HorizontalDistanceTo(GlobalPos.FromLv95(g.E, g.N, at.Alt)) <= FestivalCatalog.FahneGroundRadius;
 
     /// <summary>
     /// Server (and a bot's way in): <paramref name="peer"/> asks to swing the flag. The routine starts at the next slot boundary

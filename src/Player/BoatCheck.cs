@@ -119,7 +119,7 @@ public partial class BoatCheck : Node
     {
         if (me.Origin is not { } origin) return 0f;
         var here = origin.ToGlobal(me.GlobalPosition);
-        var north = origin.ToWorld(here.E, here.N + 100, here.Alt) - origin.ToWorld(here);
+        var north = origin.ToWorld(here.Moved(0, 100)) - origin.ToWorld(here);
         return Mathf.Atan2(-north.X, -north.Z);
     }
 

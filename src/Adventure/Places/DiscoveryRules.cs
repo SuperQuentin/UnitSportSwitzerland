@@ -49,7 +49,7 @@ public static class PlacesRules
     /// </summary>
     public static bool ClearsFog(int rideKind) => rideKind switch
     {
-        (int)RideKind.A320 or (int)RideKind.Freighter or (int)RideKind.An124 or (int)RideKind.Ufo
+        (int)RideKind.A320 or (int)RideKind.Freighter or (int)RideKind.An124 or (int)RideKind.Ufo or (int)RideKind.Shuttle
             or (int)RideKind.Trailer or Aboard => false,
         _ => true,
     };
@@ -70,6 +70,8 @@ public static class PlacesRules
     /// </summary>
     public static float MaxSpeed(int rideKind) => rideKind switch
     {
+        // the shuttle orbits at 7.7 km/s and its cruise drive has no top speed (#1492)
+        (int)RideKind.Shuttle => float.PositiveInfinity,
         (int)RideKind.OnFoot or (int)RideKind.Skis or (int)RideKind.Snowboard or (int)RideKind.Pigeon => 40,
         (int)RideKind.Wingsuit or (int)RideKind.Parachute or (int)RideKind.Paraglider => 70,
         (int)RideKind.Helicopter or (int)RideKind.Plane or (int)RideKind.A320 or (int)RideKind.Freighter

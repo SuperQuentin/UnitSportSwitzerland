@@ -24,10 +24,11 @@ public static class BuildingIndexBuilder
     /// The cache file's name for this set of tiles, from the manifest's content hashes; null when a tile has
     /// none (an old manifest, a fixture): then the index is built every boot and not written.
     /// </summary>
-    public static string? CacheKey(TerrainManifest manifest)
+    /// <param name="earthSeeds">The rolls seeded by the Earth identity (<see cref="Entries"/>): an index of its own.</param>
+    public static string? CacheKey(TerrainManifest manifest, bool earthSeeds = false)
     {
         if (manifest.Tiles.Count == 0 || manifest.Tiles.Any(t => t.Hash == null)) return null;
-        var sb = new StringBuilder($"v{BuildingIndex.Version}|r{BuildingRules}|");
+        var sb = new StringBuilder($"v{BuildingIndex.Version}|r{BuildingRules}|{(earthSeeds ? "earth|" : "")}");
         foreach (var t in manifest.Tiles.OrderBy(t => t.E).ThenBy(t => t.N)) sb.Append(t.E).Append('_').Append(t.N).Append(':').Append(t.Hash).Append(';');
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())))[..24].ToLowerInvariant();
     }
@@ -77,14 +78,15 @@ public static class BuildingIndexBuilder
     /// tiles at a time, in the order <paramref name="queue"/> gives (round the players first): <c>/locate</c> reads the
     /// index while it fills and knows how far round the asker it is whole.
     /// </summary>
-    public static async Task BuildInto(IChunkSource source, BuildingIndex index, TileQueue queue, int workers, CancellationToken ct = default)
+    public static async Task BuildInto(IChunkSource source, BuildingIndex index, TileQueue queue, int workers, CancellationToken ct = default,
+        bool earthSeeds = false)
     {
         async Task Work()
         {
             while (!ct.IsCancellationRequested && queue.TryNext(out var id))
             {
                 var tile = await source.LoadBuildingsAsync(id, ct);
-                index.AddTile(id, tile == null ? [] : Entries(tile));
+                index.AddTile(id, tile == null ? [] : Entries(tile, earthSeeds));
             }
         }
         await Task.WhenAll(Enumerable.Range(0, Math.Max(1, workers)).Select(_ => Task.Run(Work, ct)));
@@ -103,8 +105,14 @@ public static class BuildingIndexBuilder
     /// one (a church's hall or tower, a block that may roll a garage, a bank): the houses, farms and works that
     /// are most of a region never do, and the box is most of the cost.
     /// </summary>
-    public static List<IndexedBuilding> Entries(BuildingTile tile)
+    /// <param name="earthSeeds">
+    /// Under <c>--frame earth</c> (#1772): the rolls (a bank, a garage) seeded by each building's Earth identity
+    /// (<see cref="BuildingId"/>), as the leaves seed them (#1658), not by its LV95 tile key: an index that rolled the LV95
+    /// way named garages and banks the leaves never build, and missed theirs.
+    /// </param>
+    public static List<IndexedBuilding> Entries(BuildingTile tile, bool earthSeeds = false)
     {
+        var earthIds = earthSeeds ? BuildingId.Assign(tile.Buildings, b => BuildingId.OnLv95Tile(tile.Id, b)) : null;
         int count = tile.Buildings.Count;
         var boxes = new PlanBox?[count];
         bool sacral = false;
@@ -132,7 +140,7 @@ public static class BuildingIndexBuilder
             }
             if (box is { } pb && b.Kind is BuildingKind.Apartment or BuildingKind.Commercial or BuildingKind.Other)
             {
-                string key = new BuildingKey(tile.Id.E, tile.Id.N, i).ToString();
+                string key = earthIds?[i]?.ToString() ?? new BuildingKey(tile.Id.E, tile.Id.N, i).ToString();
                 if (BuildingFootprint.IsBank(key, b.Kind, pb.Width, pb.Depth)) flags |= IndexedFlags.Bank;
                 else
                 {

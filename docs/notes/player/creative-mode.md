@@ -44,3 +44,9 @@
   off, forward follows the look.
 - Bots: not for bots (a client toggle); a bot's body never reads it.
 - Check: `--creativecheck --world flat` (`Player/CreativeCheck`).
+- Perf probe (#1773): `--creativefly heading,seconds[,boost[,agl]] --at E,N [--frame earth|flat] [--allocs]`
+  (`Player/CreativeFlyProbe`): a creative player flies level along a compass heading, the fly boost held (60 m/s)
+  or not, `agl` m over the start's ground (default 40: east of Geneva's centre the hill stops it; 80 along 300°
+  flies 2.4 km). After the arrival settles it prints frame percentiles, GC counts and pause time, MB/s allocated,
+  peak working set, and the worst frames with what the earth world spent in them (`EarthWorld.Spent`);
+  `--allocs` adds MB/s by type. Allocation stacks: `core/alloc-profiling`.

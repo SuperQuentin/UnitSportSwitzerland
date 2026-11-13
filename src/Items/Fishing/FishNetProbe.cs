@@ -90,7 +90,7 @@ public partial class FishNetProbe : ChatProbe
         if (Visuals?.LocalFloat is { } f)
         {
             var g = me.Origin!.ToGlobal(f);
-            Say(FormattableString.Invariant($"float {g.E:F2} {g.N:F2}"));
+            Say(FormattableString.Invariant($"float {g.Lv95.E:F2} {g.Lv95.N:F2}"));
         }
         if (!await Until(() => Said("B", "float ok") || Said("B", "float off"), 30)) { Fail("B never answered about the float"); return; }
 
@@ -134,7 +134,7 @@ public partial class FishNetProbe : ChatProbe
         if (drawn && Visuals!.FloatOf(_aPeer) is { } f)
         {
             var g = me.Origin!.ToGlobal(f);
-            double off = Math.Sqrt((g.E - e) * (g.E - e) + (g.N - n) * (g.N - n));
+            double off = g.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, g.Alt));
             Expect(off < 1.0, FormattableString.Invariant($"B's float for A lies where A's does ({off:F2} m off)"));
             Expect(WaterField.TryLevelAt(f, out float level) && Mathf.Abs(f.Y - level) < 0.3f, "on B's water surface");
             Say(off < 1.0 ? "float ok" : "float off");

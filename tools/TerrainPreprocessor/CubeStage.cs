@@ -9,12 +9,16 @@ namespace UnitSport.Tools.Preprocessor;
 /// <summary>
 /// The cube-sphere tiler (#1443, G1; docs/plans/global-tiling.md §7, tools/cube-tiles note): every
 /// source resampled onto cube tiles in true Earth positions, beside the LV95 build (nothing here
-/// reads or writes it).
+/// reads or writes it). Since #1507 (G2 B3) it runs on the work-frame driver (<see cref="FrameDriver"/>:
+/// one level-9 frame at a time, (face, y, x) order) and writes each leaf's <see cref="LeafKind.Heights"/>
+/// section through the <see cref="LeafWriter"/> into the frame's <c>.cubl</c> bundle (the coarse pyramid
+/// keeps <c>.cubb</c>). swissALTI3D at 0.5 m and at 2 m (the corridor) are both read, 0.5 m first.
 ///
 /// <code>
 /// --cube --cube-out DIR [--in SWISSALTI3D_DIR ...] [--dem lambert93,DIR[,dz] ...] [--cube-level 14]
 ///   [--cube-bits 9] [--cube-bundle 9] [--cube-box minE,minN,maxE,maxN] [--tlm GPKG] [--buildings GPKG]
 ///   [--cube-bdtopo] [--cube-cache DIR] [--cube-cache-tiles 300] [--jobs N] [--cube-check]
+///   [--cube-terr LV95_TERRAIN_DIR]
 /// </code>
 /// </summary>
 public static class CubeStage
@@ -25,7 +29,7 @@ public static class CubeStage
     {
         public List<string> In { get; } = new();
         public List<string> Dems { get; } = new();
-        public string? Out, Cache, Tlm, Buildings;
+        public string? Out, Cache, Tlm, Buildings, Terr;
         public int Level = 14, Bits = -1, Bundle = -1, CacheTiles = 300, Jobs = Environment.ProcessorCount;
         public (double MinE, double MinN, double MaxE, double MaxN)? Box;
         public bool BdTopo, Check, CheckOnly;
@@ -60,6 +64,7 @@ public static class CubeStage
                 case "--cube-check": o.Check = true; break;
                 case "--cube-check-only": o.Check = o.CheckOnly = true; break;
                 case "--cube-dump": o.Dump = args[++i]; break;
+                case "--cube-terr": o.Terr = args[++i]; break;
                 case "--jobs": o.Jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 default: Console.Error.WriteLine($"--cube: unknown option {args[i]}"); return 2;
             }
@@ -70,7 +75,14 @@ public static class CubeStage
         o.Cache ??= o.Out.TrimEnd('/', '\\') + "_temp";
         Directory.CreateDirectory(o.Out);
 
-        var swiss = o.In.Count > 0 ? new SwissAltiSource(o.In, Path.Combine(o.Cache, "alti")) { Capacity = o.CacheTiles } : null;
+        // swissALTI3D, finest first: 0.5 m, then the 2 m corridor where 0.5 m has nothing
+        var swiss = new List<SwissAltiSource>();
+        if (o.In.Count > 0)
+            foreach (double spacing in new[] { 0.5, 2.0 })
+            {
+                var s = new SwissAltiSource(o.In, Path.Combine(o.Cache, "alti"), spacing) { Capacity = spacing == 0.5 ? o.CacheTiles : o.CacheTiles * 16 };
+                if (s.Tiles.Count > 0) swiss.Add(s);
+            }
         var dems = new List<ForeignDem>();
         foreach (var d in o.Dems)
         {
@@ -79,42 +91,45 @@ public static class CubeStage
         }
         var src = new CubeHeightSource(swiss, dems);
         Console.WriteLine($"cube: level {o.Level}, {1 << o.Bits} cells a tile, bundles at level {o.Bundle}; "
-            + $"swissALTI3D {swiss?.Tiles.Count ?? 0} tiles, {dems.Count} foreign DEM(s)");
+            + $"swissALTI3D {string.Join(" + ", swiss.Select(s => $"{s.Tiles.Count} tiles at {s.Spacing.ToString(CultureInfo.InvariantCulture)} m"))}, {dems.Count} foreign DEM(s)");
 
         if (o.Dump != null) return CubeCheck.Dump(o, CubeKey.Parse(o.Dump));
         if (o.CheckOnly) return CubeCheck.Run(o, src);
 
         var sw = Stopwatch.StartNew();
         var (keys, french) = SelectTiles(o, swiss, dems);
-        Console.WriteLine($"cube: {keys.Count} tiles to build ({french.Count} with foreign data), chosen in {sw.Elapsed.TotalSeconds:F1} s");
+        var driver = new FrameDriver(keys, 0, SwissSeaLevel.Instance, o.Bundle);
+        Console.WriteLine($"cube: {keys.Count} tiles to build ({french.Count} with foreign data) in {driver.Frames.Count} frames, chosen in {sw.Elapsed.TotalSeconds:F1} s");
 
-        var bundles = keys.GroupBy(k => k.AncestorAt(o.Bundle)).OrderBy(g => g.Key.Face).ThenBy(g => g.Key.Y).ThenBy(g => g.Key.X).ToList();
-        var manifest = new CubeManifest { LeafLevel = o.Level, Bits = o.Bits, BundleLevel = o.Bundle };
-        if (swiss != null) manifest.Sources.Add("swissALTI3D 0.5 m (LHN95 -> WGS84 by SwissGeodesy)");
-        foreach (var d in dems) manifest.Sources.Add($"{d.Name} (dz {d.OffsetZ.ToString(CultureInfo.InvariantCulture)} m)");
+        var sources = new List<string>();
+        foreach (var s in swiss) sources.Add($"swissALTI3D {s.Spacing.ToString(CultureInfo.InvariantCulture)} m (LHN95 -> WGS84 by SwissGeodesy)");
+        foreach (var d in dems) sources.Add($"{d.Name} (dz {d.OffsetZ.ToString(CultureInfo.InvariantCulture)} m)");
 
         SqliteConnection? tlm = o.Tlm != null ? GeoPackageReader.Open(o.Tlm) : null;
         SqliteConnection? b3d = o.Buildings != null ? GeoPackageReader.Open(o.Buildings) : null;
         using var bdtopo = o.BdTopo ? new BdTopoClient() : null;
         var resampler = new CubeResampler(src);
         var features = new CubeFeatures(src, o.Level);
-        long bytes = 0, roads = 0, buildings = 0;
-        double heightSeconds = 0, featureSeconds = 0;
+        var writer = new LeafWriter(o.Out, o.Bundle, new[] { LeafKind.Heights }, new[] { LatticeKind.Heights });
+        long bytes = 0, roads = 0, buildings = 0, seamSamples = 0, seamCopied = 0, seamAcross = 0;
+        double heightSeconds = 0, featureSeconds = 0, writeSeconds = 0, worstFrame = 0;
+        long frameMemory = 0;
         var oldOffsets = new List<double>();
-        int done = 0;
+        int done = 0, built = 0;
 
-        foreach (var bundle in bundles)
+        foreach (var plan in driver.Frames)
         {
             ct.ThrowIfCancellationRequested();
+            var frameClock = Stopwatch.StartNew();
             // features first, into empty holders: the heights are then encoded the moment they exist, so
-            // a bundle never holds its tiles' heights all at once (1,024 x 4 MB at level 13)
-            var holders = bundle.ToDictionary(k => k, k => new CubeTile { Key = k, Bits = o.Bits, Heights = Array.Empty<float>() });
+            // a frame never holds its leaves' heights all at once (1,024 x 1 MB at level 14)
+            var holders = plan.Core.ToDictionary(k => k, k => new CubeTile { Key = k, Bits = o.Bits, Heights = Array.Empty<float>() });
             var fs = Stopwatch.StartNew();
             if (tlm != null || bdtopo != null)
             {
                 var cur = new CubeHeightSource.Cursors(dems.Count);
                 var raw = new List<CubeFeatures.Raw>();
-                if (tlm != null && swiss != null)
+                if (tlm != null && swiss.Count > 0)
                 {
                     var box = Lv95Box(holders.Keys, o.Bits);
                     raw.AddRange(features.SwissRoads(tlm, box, cur));
@@ -133,41 +148,49 @@ public static class CubeStage
             }
             featureSeconds += fs.Elapsed.TotalSeconds;
 
-            var encoded = new ConcurrentBag<(CubeKey Key, byte[] Bytes)>();
+            var sections = new ConcurrentDictionary<CubeKey, List<LeafSection>>();
             var hs = Stopwatch.StartNew();
-            Parallel.ForEach(bundle.OrderBy(k => k.Y).ThenBy(k => k.X), new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, key =>
+            Parallel.ForEach(plan.Core, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, key =>
             {
                 var cur = new CubeHeightSource.Cursors(dems.Count);
                 if (resampler.Heights(key, o.Bits, cur) is not { } h) return;
                 var holder = holders[key];
-                encoded.Add((key, CubeTileCodec.Encode(new CubeTile { Key = key, Bits = o.Bits, Heights = h, Roads = holder.Roads, Buildings = holder.Buildings })));
+                sections[key] = new List<LeafSection> { LeafHeights.Encode(new CubeTile { Key = key, Bits = o.Bits, Heights = h, Roads = holder.Roads, Buildings = holder.Buildings }) };
             });
             heightSeconds += hs.Elapsed.TotalSeconds;
+            frameMemory = Math.Max(frameMemory, Process.GetCurrentProcess().WorkingSet64);
 
-            var list = encoded.OrderBy(e => e.Key.Y).ThenBy(e => e.Key.X).ToList();
-            if (list.Count > 0) CubeBundle.Write(Path.Combine(o.Out, CubeBundle.FileName(bundle.Key)), bundle.Key, list);
-            foreach (var (key, bb) in list)
+            var ws = Stopwatch.StartNew();
+            var seams = writer.WriteFrame(plan.Cell, new Dictionary<CubeKey, List<LeafSection>>(sections));
+            writeSeconds += ws.Elapsed.TotalSeconds;
+            foreach (var st in seams)
             {
-                var t = holders[key];
-                var (_, _, min, max) = CubeTileCodec.ReadHeader(bb);
-                manifest.Tiles.Add(new CubeManifestTile { Key = key.ToString(), Min = min, Max = max, Roads = t.Roads.Count, Buildings = t.Buildings.Count, Bytes = bb.Length });
-                bytes += bb.Length;
-                roads += t.Roads.Count;
-                buildings += t.Buildings.Count;
+                seamSamples += st.Samples;
+                seamCopied += st.Copied;
+                seamAcross += st.CopiedAcrossFrames;
             }
-            done += bundle.Count();
-            Console.WriteLine($"  [{done}/{keys.Count}] bundle {bundle.Key.Describe()}: {list.Count} tiles, {list.Sum(e => (long)e.Bytes.Length) / 1e6:F1} MB, "
-                + $"{sw.Elapsed.TotalSeconds:F0} s");
+            long frameBytes = sections.Values.Sum(l => (long)l.Sum(s => s.Payload.Length));
+            bytes += frameBytes;
+            roads += sections.Keys.Sum(k => holders[k].Roads.Count);
+            buildings += sections.Keys.Sum(k => holders[k].Buildings.Count);
+            built += sections.Count;
+            done += plan.Core.Count;
+            worstFrame = Math.Max(worstFrame, frameClock.Elapsed.TotalSeconds);
+            string seamText = string.Join(", ", seams.Select(st => $"seam {st.Kind}: {st.Copied} of {st.Samples} shared samples copied ({st.CopiedAcrossFrames} across frames)"));
+            Console.WriteLine($"  [{done}/{keys.Count}] frame {plan.Cell.Describe()}: {sections.Count} leaves, {frameBytes / 1e6:F1} MB, "
+                + $"{frameClock.Elapsed.TotalSeconds:F1} s, working set {Process.GetCurrentProcess().WorkingSet64 / 1e9:F1} GB; {seamText}; {sw.Elapsed.TotalSeconds:F0} s");
         }
         tlm?.Dispose();
         b3d?.Dispose();
 
-        File.WriteAllText(Path.Combine(o.Out, CubeManifest.FileName), manifest.ToJson());
+        var manifest = LeafWriter.WriteManifest(o.Out, o.Level, o.Bundle, sources);
         int n = manifest.Tiles.Count;
-        Console.WriteLine($"cube: {n} tiles in {bundles.Count} bundles, {bytes / 1e6:F1} MB ({(n > 0 ? bytes / n / 1024.0 : 0):F0} KB a tile), "
+        Console.WriteLine($"cube: {n} leaves in {driver.Frames.Count} frames, {bytes / 1e6:F1} MB of heights ({(built > 0 ? bytes / built / 1024.0 : 0):F0} KB a leaf), "
             + $"{roads} road runs, {buildings} buildings; {sw.Elapsed.TotalSeconds:F0} s "
-            + $"(heights and encoding {heightSeconds:F0} s = {(n > 0 ? heightSeconds * o.Jobs / n : 0):F2} CPU-s a tile on {o.Jobs} threads, features {featureSeconds:F0} s), "
+            + $"(heights and encoding {heightSeconds:F0} s = {(built > 0 ? heightSeconds * o.Jobs / built : 0):F2} CPU-s a leaf on {o.Jobs} threads, features {featureSeconds:F0} s, "
+            + $"seam and write {writeSeconds:F1} s), slowest frame {worstFrame:F1} s, working set after a frame's heights up to {frameMemory / 1e9:F1} GB, "
             + $"peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
+        Console.WriteLine($"cube: seam pass over the heights: {seamCopied} of {seamSamples} shared edge samples copied from their owner, {seamAcross} across frames (0 expected: G1's edges are rigorous)");
         if (oldOffsets.Count > 0)
         {
             oldOffsets.Sort();
@@ -179,33 +202,19 @@ public static class CubeStage
 
     /// <summary>
     /// The leaf cells to build: under every swissALTI3D tile and every LV95 kilometre with foreign
-    /// data, a 100 m lattice of probe points, each giving the cell it falls in. The second set is the
-    /// cells with foreign data (for BD TOPO).
+    /// data, a 100 m lattice of probe points, each giving the cell it falls in (<see cref="FrameDriver.LeavesUnderLv95"/>).
+    /// The second set is the cells with foreign data (for BD TOPO).
     /// </summary>
-    private static (HashSet<CubeKey> Keys, HashSet<CubeKey> Foreign) SelectTiles(Options o, SwissAltiSource? swiss, List<ForeignDem> dems)
+    private static (HashSet<CubeKey> Keys, HashSet<CubeKey> Foreign) SelectTiles(Options o, List<SwissAltiSource> swiss, List<ForeignDem> dems)
     {
-        var keys = new HashSet<CubeKey>();
+        var keys = FrameDriver.LeavesUnderLv95(swiss.SelectMany(s => s.Tiles).Distinct(), o.Level, o.Box);
         var foreign = new HashSet<CubeKey>();
-        bool InBox(TileId t) => o.Box is not { } b || (t.MinE + 1000 > b.MinE && t.MinE < b.MaxE && t.MinN + 1000 > b.MinN && t.MinN < b.MaxN);
-        void Probe(TileId t, HashSet<CubeKey> into)
-        {
-            for (int j = 0; j < 10; j++)
-                for (int i = 0; i < 10; i++)
-                {
-                    double e = t.MinE + 50 + 100 * i, n = t.MinN + 50 + 100 * j;
-                    if (o.Box is { } b && (e < b.MinE || e > b.MaxE || n < b.MinN || n > b.MaxN)) continue;
-                    var g = SwissGeodesy.ToWgs84(e, n, 500);
-                    into.Add(CubeKey.FromLatLon(g.LatDeg, g.LonDeg, o.Level));
-                }
-        }
-        if (swiss != null)
-            foreach (var t in swiss.Tiles.Where(InBox)) Probe(t, keys);
         foreach (var dem in dems)
         {
             var (minE, minN, maxE, maxN) = dem.BoundsLv95Km();
             if (o.Box is { } b) (minE, minN, maxE, maxN) = (Math.Max(minE, (int)(b.MinE / 1000)), Math.Max(minN, (int)(b.MinN / 1000)), Math.Min(maxE, (int)(b.MaxE / 1000) + 1), Math.Min(maxN, (int)(b.MaxN / 1000) + 1));
             var tiles = dem.TilesIn(minE, minN, maxE, maxN, new HashSet<TileId>(), 1);
-            foreach (var t in tiles) Probe(t, foreign);
+            foreign.UnionWith(FrameDriver.LeavesUnderLv95(tiles, o.Level, o.Box));
         }
         keys.UnionWith(foreign);
         return (keys, foreign);

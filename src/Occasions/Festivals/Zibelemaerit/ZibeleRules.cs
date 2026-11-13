@@ -1,5 +1,6 @@
 // Plain C#, no Godot: linked into the unit tests (docs/notes/occasions/festival-zibelemaerit.md).
 
+using UnitSport.Core;
 using UnitSport.Items;
 
 namespace UnitSport.Occasions.Festivals.Zibelemaerit;
@@ -54,22 +55,24 @@ public static class ZibeleRules
 
     public static ZibeleStall[] Layout(ResolvedSite site) => Layout(site.E, site.N);
 
+    public static double Dist(GlobalPos pos, double e2, double n2) => pos.HorizontalDistanceTo(GlobalPos.FromLv95(e2, n2, pos.Alt));
+
     public static double Dist(double e, double n, double e2, double n2) => Math.Sqrt((e - e2) * (e - e2) + (n - n2) * (n - n2));
 
     /// <summary>The nearest stall within <paramref name="reach"/> of a body, or -1.</summary>
-    public static int NearestStall(ResolvedSite site, double e, double n, double reach = StallReach)
+    public static int NearestStall(ResolvedSite site, GlobalPos at, double reach = StallReach)
     {
         int best = -1;
         double bestD = reach * reach;
         foreach (var s in Layout(site))
         {
-            double d = (s.E - e) * (s.E - e) + (s.N - n) * (s.N - n);
+            double d = at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.E, s.N, at.Alt));
             if (d <= bestD) { bestD = d; best = s.Index; }
         }
         return best;
     }
 
-    public static bool NearSite(ResolvedSite site, double e, double n, double slack = 0) => Dist(e, n, site.E, site.N) <= ThrowReach + slack;
+    public static bool NearSite(ResolvedSite site, GlobalPos at, double slack = 0) => at.HorizontalDistanceTo(site.Pos) <= ThrowReach + slack;
 
     // ---- the wares -------------------------------------------------------------------------------------------
 

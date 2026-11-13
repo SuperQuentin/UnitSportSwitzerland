@@ -79,7 +79,7 @@ public static class XyzParser
         }
     }
 
-    private static long ParseText<TSink>(Stream stream, string sourceName, TileId tile, TSink grid, byte[] buffer) where TSink : struct, ISink
+    private static long ParseText<TSink>(Stream stream, string sourceName, TileId tile, TSink grid, byte[] buffer, double perMetre = 2.0, int cells = CellsPerSide) where TSink : struct, ISink
     {
         double baseE = tile.MinE;
         double topN = tile.MaxN;
@@ -101,7 +101,7 @@ public static class XyzParser
                 continue;
             }
 
-            filled += ParseLines(buffer.AsSpan(0, end), grid, baseE, topN, sourceName);
+            filled += ParseLines(buffer.AsSpan(0, end), grid, baseE, topN, sourceName, perMetre, cells);
             if (eof) break;
 
             len -= end;
@@ -110,7 +110,7 @@ public static class XyzParser
         return filled;
     }
 
-    private static long ParseLines<TSink>(ReadOnlySpan<byte> s, TSink grid, double baseE, double topN, string sourceName) where TSink : struct, ISink
+    private static long ParseLines<TSink>(ReadOnlySpan<byte> s, TSink grid, double baseE, double topN, string sourceName, double perMetre, int cells) where TSink : struct, ISink
     {
         long filled = 0;
         int i = 0;
@@ -131,15 +131,15 @@ public static class XyzParser
                 throw new InvalidDataException($"Unparsable line in {sourceName}");
 
             // Cell centers sit at base + 0.25 + 0.5*i; recover the index by rounding.
-            int col = (int)Math.Round((x - baseE) * 2.0 - 0.5);
-            int row = (int)Math.Round((topN - y) * 2.0 - 0.5);
-            if ((uint)col >= CellsPerSide || (uint)row >= CellsPerSide)
+            int col = (int)Math.Round((x - baseE) * perMetre - 0.5);
+            int row = (int)Math.Round((topN - y) * perMetre - 0.5);
+            if ((uint)col >= cells || (uint)row >= cells)
                 throw new InvalidDataException($"Point ({x}, {y}) outside tile in {sourceName}");
 
             // swisstopo's no-data (-9999, past the border) is a missing cell, not a 0 m pit
             if (z < -1000) continue;
 
-            if (grid.Set(row * CellsPerSide + col, z)) filled++;
+            if (grid.Set(row * cells + col, z)) filled++;
         }
         return filled;
     }
@@ -173,9 +173,10 @@ public static class XyzParser
 
     /// <summary>
     /// Parses a swissALTI3D tile into metres as they are (floats, NaN where missing), not the build's
-    /// 7 cm quantisation: the cube tiler (#1443, G1) resamples them with a 1 cm budget. No gap fill.
+    /// 7 cm quantisation: the cube tiler (#1443, G1) resamples them with a 1 cm budget. No gap fill. The 2 m tiles
+    /// (#1507, the corridor) are 500² cells centred at base + 1 + 2i: <paramref name="spacing"/> 2.
     /// </summary>
-    public static void ParseFloat(byte[] data, string sourcePath, TileId tile, float[] grid, byte[] textBuffer)
+    public static void ParseFloat(byte[] data, string sourcePath, TileId tile, float[] grid, byte[] textBuffer, double spacing = 0.5)
     {
         Array.Fill(grid, float.NaN);
         using var ms = new MemoryStream(data, writable: false);
@@ -185,11 +186,11 @@ public static class XyzParser
             var entry = zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".xyz", StringComparison.OrdinalIgnoreCase))
                 ?? throw new InvalidDataException($"No .xyz entry in {sourcePath}");
             using var stream = entry.Open();
-            ParseText(stream, sourcePath, tile, new FloatSink(grid), textBuffer);
+            ParseText(stream, sourcePath, tile, new FloatSink(grid), textBuffer, 1 / spacing, (int)Math.Round(1000 / spacing));
         }
         else
         {
-            ParseText(ms, sourcePath, tile, new FloatSink(grid), textBuffer);
+            ParseText(ms, sourcePath, tile, new FloatSink(grid), textBuffer, 1 / spacing, (int)Math.Round(1000 / spacing));
         }
     }
 

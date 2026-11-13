@@ -30,7 +30,11 @@ public partial class VersteckisManager
     private void RequestDisguise(int kind) => Reply(ServeDisguise(Multiplayer.GetRemoteSenderId(), kind));
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestTag(double e, double n, float alt) => Reply(ServeTag(Multiplayer.GetRemoteSenderId(), e, n, alt));
+    private void RequestTag(double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);   // (#1503) the wire is ECEF
+        Reply(ServeTag(Multiplayer.GetRemoteSenderId(), at.Lv95.E, at.Lv95.N, (float)at.Alt));
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestSniff() => Reply(ServeSniff(Multiplayer.GetRemoteSenderId()));
@@ -99,7 +103,7 @@ public partial class VersteckisManager
         if (e!.DecoyUsed) return "One decoy a round.";
         if (PositionOf(peer) is not { } at || BodyOf(peer) is not { } body) return "Nowhere to put it.";
         e.DecoyUsed = true;
-        var d = new VsDecoy { Id = g!.NextDecoy++, Owner = peer, Prop = e.Prop, E = at.E, N = at.N, Alt = (float)at.Alt, Yaw = body.NetYaw, Until = Now + VsRules.DecoySeconds };
+        var d = new VsDecoy { Id = g!.NextDecoy++, Owner = peer, Prop = e.Prop, E = at.Lv95.E, N = at.Lv95.N, Alt = (float)at.Alt, Yaw = body.GlobalYaw, Until = Now + VsRules.DecoySeconds };
         g.S.Decoys.Add(d);
         GD.Print(FormattableString.Invariant($"[vs] {e.Name} left a decoy ({VsProps.A(d.Prop)}) at {d.E:F1}/{d.N:F1}"));
         Push();
@@ -159,13 +163,13 @@ public partial class VersteckisManager
         double now = Now;
         if (PositionOf(peer) is not { } me) return null;
         // a tag out of reach is refused whatever the cooldown (a forged one, or a client that drew a prop elsewhere)
-        if (!VsRules.InReach(me.E, me.N, e, n))
+        if (!VsRules.InReach(me, e, n))
         {
-            GD.Print(FormattableString.Invariant($"[vs] {seeker!.Name}'s tag refused: {Math.Sqrt((e - me.E) * (e - me.E) + (n - me.N) * (n - me.N)):F1} m away"));
+            GD.Print(FormattableString.Invariant($"[vs] {seeker!.Name}'s tag refused: {me.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, me.Alt)):F1} m away"));
             return "Too far to tag.";
         }
         if (now < run.TagReadyAt) return null;
-        if (!VsRules.Inside(s.E, s.N, s.Radius, me.E, me.N)) return "Outside the line you cannot tag.";
+        if (!VsRules.Inside(s.E, s.N, s.Radius, me)) return "Outside the line you cannot tag.";
         // a hider's body first (nearest the point), then the decoys
         VsEntrant? hit = null;
         double best = double.MaxValue;
@@ -173,8 +177,8 @@ public partial class VersteckisManager
         {
             if (!h.Hiding || PositionOf(h.Peer) is not { } at || BodyOf(h.Peer) is not { } body) continue;
             var prop = h.Disguised ? h.Prop : VsProp.MilkCan;   // undisguised (on an objective): a body's own footprint
-            if (!VsRules.TagHits(prop, at.E, at.N, body.NetYaw, e, n)) continue;
-            double d = (at.E - e) * (at.E - e) + (at.N - n) * (at.N - n);
+            if (!VsRules.TagHits(prop, at, body.GlobalYaw, e, n)) continue;
+            double d = at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt));
             if (d < best) { best = d; hit = h; }
         }
         if (hit != null)
@@ -234,16 +238,23 @@ public partial class VersteckisManager
         if (seeker.SniffBackAt <= 0) seeker.SniffBackAt = Now + VsRules.SniffRecharge;
         var es = new List<double>();
         var ns = new List<double>();
+        var xyz = new List<double>();   // (#1503) the same puffs as ECEF for the wire, three per puff
         foreach (var h in s.Entrants)
         {
             if (!h.Hiding || PositionOf(h.Peer) is not { } at) continue;
-            if ((at.E - me.E) * (at.E - me.E) + (at.N - me.N) * (at.N - me.N) > VsRules.SniffRadius * VsRules.SniffRadius) continue;
+            if (at.HorizontalDistanceSquaredTo(me) > VsRules.SniffRadius * VsRules.SniffRadius) continue;
             double a = _rng.NextDouble() * Math.Tau, r = _rng.NextDouble() * VsRules.SniffOffset;
-            es.Add(at.E + Math.Cos(a) * r);
-            ns.Add(at.N + Math.Sin(a) * r);
+            var puff = at.Moved(Math.Cos(a) * r, Math.Sin(a) * r);
+            es.Add(puff.Lv95.E);
+            ns.Add(puff.Lv95.N);
+            if (seeker.Bot) continue;
+            var (x, y, z) = puff.ToWire();
+            xyz.Add(x);
+            xyz.Add(y);
+            xyz.Add(z);
         }
         if (seeker.Bot) BotSniffed(peer, es, ns);
-        else if (Connected(peer)) RpcId(peer, MethodName.Sniffed, es.ToArray(), ns.ToArray());
+        else if (Connected(peer)) RpcId(peer, MethodName.Sniffed, xyz.ToArray());
         GD.Print($"[vs] {seeker.Name} sniffed: {es.Count} puffs");
         Push();
         return null;
@@ -270,7 +281,7 @@ public partial class VersteckisManager
         double now = Now;
         bool can = o.Site == VsSite.Can;
         double siteE = can && step == 0 ? o.FromE : o.E, siteN = can && step == 0 ? o.FromN : o.N;
-        bool near = (at.E - siteE) * (at.E - siteE) + (at.N - siteN) * (at.N - siteN) <= (VsRules.SiteReach + 0.5) * (VsRules.SiteReach + 0.5);
+        bool near = at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(siteE, siteN, at.Alt)) <= (VsRules.SiteReach + 0.5) * (VsRules.SiteReach + 0.5);
         switch (step)
         {
             case 0:
@@ -358,17 +369,18 @@ public partial class VersteckisManager
     /// <summary>A sound at a hider's server position, to the peers that can hear it (within 80 m; the bell to everyone in the game).</summary>
     private void Sound(Game g, long peer, VsVoice voice)
     {
-        if (PositionOf(peer) is { } at) SoundAt(g, at.E, at.N, peer, voice);
+        if (PositionOf(peer) is { } at) SoundAt(g, at.Lv95.E, at.Lv95.N, peer, voice);
     }
 
     private void SoundAt(Game g, double e, double n, long from, VsVoice voice, bool everyone = false)
     {
         const double reach = 80;
+        var (x, y, z) = GlobalPos.FromLv95(e, n, g.S.Ground).ToWire();   // (#1503) the wire is ECEF
         foreach (long p in Multiplayer.GetPeers())
         {
             bool inGame = g.S.Find(p) is { Left: false };
-            bool near = PositionOf(p) is { } at && (at.E - e) * (at.E - e) + (at.N - n) * (at.N - n) <= reach * reach;
-            if (near || everyone && inGame) RpcId(p, MethodName.Sounded, from, (int)voice, e, n);
+            bool near = PositionOf(p) is { } at && at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt)) <= reach * reach;
+            if (near || everyone && inGame) RpcId(p, MethodName.Sounded, from, (int)voice, x, y, z);
         }
         BotHeard(g, e, n, voice);
     }
@@ -395,7 +407,7 @@ public partial class VersteckisManager
             if (e.Role == VsRole.Seeker)
             {
                 // blind at the door: beyond 3 m the server puts it back
-                if (s.Phase == VsPhase.Hide && (at.E - s.DoorE) * (at.E - s.DoorE) + (at.N - s.DoorN) * (at.N - s.DoorN) > VsRules.DoorHold * VsRules.DoorHold * 4
+                if (s.Phase == VsPhase.Hide && at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(s.DoorE, s.DoorN, at.Alt)) > VsRules.DoorHold * VsRules.DoorHold * 4
                     && now - s.PhaseStarted > 1.5 && now - run.LastAt > 0.75)
                 {
                     GD.Print(FormattableString.Invariant($"[vs] {e.Name} left the church door in Hide: put back"));
@@ -413,18 +425,18 @@ public partial class VersteckisManager
             {
                 float cap = e.Disguised ? VsProps.Of(e.Prop).WalkCap : 6.5f;
                 bool sprinting = now < run.SprintUntil + 1.0;
-                if (!VsRules.SpeedOk(last.E, last.N, at.E, at.N, now - run.LastAt, cap, sprinting)) run.SpeedBadUntil = now + 1.0;
+                if (!VsRules.SpeedOk(last, at, now - run.LastAt, cap, sprinting)) run.SpeedBadUntil = now + 1.0;
                 if (run.HoldSite >= 0 && s.Objectives[run.HoldSite].Carrier == e.Peer)
-                    run.CarryMetres += Math.Sqrt((at.E - last.E) * (at.E - last.E) + (at.N - last.N) * (at.N - last.N));
+                    run.CarryMetres += at.HorizontalDistanceTo(last);
                 run.Last = at;
                 run.LastAt = now;
             }
             if (now < run.SpeedBadUntil) { ok = false; fault = "speed"; }
-            if (!VsRules.Inside(s.E, s.N, s.Radius, at.E, at.N)) { ok = false; fault ??= "bounds"; }
+            if (!VsRules.Inside(s.E, s.N, s.Radius, at)) { ok = false; fault ??= "bounds"; }
             // inside a building: through a door (an interior is far under the world) or through a wall
-            bool indoors = Interiors.InteriorManager.SurfacePoint(at) != at;
-            if (indoors || g.Site?.InBuilding(at.E, at.N) == true) { ok = false; fault ??= "building"; }
-            else if (!VsRules.GroundOk((float)at.Alt, g.Site?.GroundAt(at.E, at.N))) { ok = false; fault ??= "ground"; }
+            bool indoors = Interiors.InteriorManager.SurfacePoint(at).DistanceTo(at) > 0.01;   // (not ==: the doubles of a moved place differ, #1502)
+            if (indoors || g.Site?.InBuilding(at.Lv95.E, at.Lv95.N) == true) { ok = false; fault ??= "building"; }
+            else if (!VsRules.GroundOk((float)at.Alt, g.Site?.GroundAt(at.Lv95.E, at.Lv95.N))) { ok = false; fault ??= "ground"; }
             if (ok)
             {
                 run.OutSince = -1;

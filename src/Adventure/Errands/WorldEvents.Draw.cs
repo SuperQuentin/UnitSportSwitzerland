@@ -133,11 +133,11 @@ public partial class WorldEvents
         AddChild(v.Root);
         _views[id] = v;
         Place(v);
-        if (Me?.Invoke() is { } me && Dist2(me.Global.E, me.Global.N, e, n) < 1500.0 * 1500) Toast?.Invoke($"{WorldEventRules.Name(v.Kind)} nearby.");
+        if (Me?.Invoke() is { } me && Dist2(me.Global, e, n) < 1500.0 * 1500) Toast?.Invoke($"{WorldEventRules.Name(v.Kind)} nearby.");
         GD.Print($"[worldevents] drawing {v.Kind} {id} at LV95 {e:F0}/{n:F0}");
     }
 
-    private static double Dist2(double e, double n, double e2, double n2) => (e - e2) * (e - e2) + (n - n2) * (n - n2);
+    private static double Dist2(GlobalPos at, double e2, double n2) => at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e2, n2, at.Alt));
 
     private static FigureLook HikerLook(int id)
     {
@@ -201,7 +201,7 @@ public partial class WorldEvents
         if (!_views.Remove(id, out var v)) return;
         if (_holding is { } h && h.Id == id) { _holding = null; _bar.Visible = false; }
         v.Root.QueueFree();
-        if (Me?.Invoke() is { } me && Dist2(me.Global.E, me.Global.N, v.CurE, v.CurN) < WorldEventRules.InformM * WorldEventRules.InformM) Toast?.Invoke(line);
+        if (Me?.Invoke() is { } me && Dist2(me.Global, v.CurE, v.CurN) < WorldEventRules.InformM * WorldEventRules.InformM) Toast?.Invoke(line);
         GD.Print($"[worldevents] {v.Kind} {id} over: {(success ? "helped" : "timed out")}");
     }
 
@@ -246,7 +246,7 @@ public partial class WorldEvents
                 if (v.Figure != null) PoseHiker(v, (float)delta);
             }
             else if (v.Root.Position == Vector3.Zero) Place(v);
-            double d2 = Dist2(at.E, at.N, v.CurE, v.CurN);
+            double d2 = Dist2(at, v.CurE, v.CurN);
             veil = Math.Max(veil, v.Kind == WorldEventKind.ForestFire ? SmokeAt(v, at) : 0f);
             if (now >= v.NextSound && d2 < HearM * HearM) Sound(v, at, d2, now);
         }
@@ -281,7 +281,7 @@ public partial class WorldEvents
         foreach (int key in v.Data)
         {
             var (a, b) = FireSim.Unpack(key);
-            float d = (float)Math.Sqrt(Dist2(at.E, at.N, v.E + a * FireSim.CellM, v.N + b * FireSim.CellM));
+            float d = (float)Math.Sqrt(Dist2(at, v.E + a * FireSim.CellM, v.N + b * FireSim.CellM));
             if (d < best) best = d;
         }
         return (SmokeM - best) / SmokeM * 0.55f;
@@ -313,7 +313,7 @@ public partial class WorldEvents
                 WorldEventSounds.Play(this, WorldEventSounds.Crackle, -12f);
                 break;
             case WorldEventKind.Avalanche when v.Avalanche is { } av:
-                int victim = av.Nearest(at.E, at.N, AvalancheSim.DetectM, out double dist);
+                int victim = av.Nearest(at, AvalancheSim.DetectM, out double dist);
                 var dug = v.Data.Length > 0 ? v.Data[0] : 0;
                 if (victim < 0 || (dug & (1 << victim)) != 0) { v.NextSound = now + 0.5; break; }
                 v.NextSound = now + 1.0 / Math.Max(1f, AvalancheSim.BeepHz(dist));
@@ -337,7 +337,7 @@ public partial class WorldEvents
                 for (int i = 0; i < av.Buried; i++)
                 {
                     if ((dug & (1 << i)) != 0) continue;
-                    double d = Dist2(at.E, at.N, av.Spots[i].E, av.Spots[i].N);
+                    double d = Dist2(at, av.Spots[i].E, av.Spots[i].N);
                     if (d <= best) { best = d; target = (v.Id, EventAct.DigStart, i, "dig out the person"); }
                 }
             }
@@ -346,7 +346,7 @@ public partial class WorldEvents
                 foreach (int key in v.Data)
                 {
                     var (a, b) = FireSim.Unpack(key);
-                    double d = Dist2(at.E, at.N, v.E + a * FireSim.CellM, v.N + b * FireSim.CellM);
+                    double d = Dist2(at, v.E + a * FireSim.CellM, v.N + b * FireSim.CellM);
                     if (d <= best) { best = d; target = (v.Id, EventAct.BeatStart, key, "beat out the flames"); }
                 }
             }
@@ -401,7 +401,7 @@ public partial class WorldEvents
         {
             if (v.Avalanche is not { } av) continue;
             int dug = v.Data.Length > 0 ? v.Data[0] : 0;
-            int i = av.Nearest(at.E, at.N, AvalancheSim.DetectM, out double d);
+            int i = av.Nearest(at, AvalancheSim.DetectM, out double d);
             if (i < 0 || (dug & (1 << i)) != 0) continue;
             string line = $"Signal {(int)(d / 5) * 5 + 5} m";
             if (_promptFor != line) { _promptFor = line; _prompt.Text = line; }
@@ -423,7 +423,7 @@ public partial class WorldEvents
         foreach (var v in _views.Values)
         {
             if (v.Kind != WorldEventKind.LostHiker || v.Found) continue;
-            double d = Dist2(at.E, at.N, v.CurE, v.CurN);
+            double d = Dist2(at, v.CurE, v.CurN);
             if (d <= bd) { bd = d; best = v; }
         }
         return best;
@@ -480,7 +480,7 @@ public partial class WorldEvents
     {
         public static EventMapOverlay Instance { get; } = new();
 
-        public void Draw(MapView view, CanvasItem on)
+        public void Draw(EarthMapView view, CanvasItem on)
         {
             if (WorldEvents.Instance is not { } events) return;
             foreach (var (_, e, n, kind, _) in events.Markers)

@@ -5,6 +5,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The playtest recorder's trace (#844): written, read back, a window found through the index; and the top view drawn from it.</summary>
+[Collection(FixtureWorld.Collection)]
 public class PlaytestTraceTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "usp-trace-" + Guid.NewGuid().ToString("N"));

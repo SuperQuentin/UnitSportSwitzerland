@@ -32,7 +32,8 @@
   bottom (the tail's end) sits on the head, 1.4 m wide at hand and scaled up with distance
   (x1 to x3.2 from 9 m) so it still reads at 36 m. Not checked in a headset yet (no `--xrsim` run).
 - **Setting**: `GameSettings.ChatBubbles`, Settings › Gameplay › *Speech bubbles*, on by default;
-  turning it off drops the bubbles on screen at the next frame.
+  turning it off drops the bubbles on screen at the next frame. A player on `/ignore` produces none:
+  `ChatManager.Said` drops the line before `Spoken`.
 - **Cost**: nothing per frame while nobody talks (`_Process` returns on an empty list). With
   bubbles up: one projection and a placement of at most 8 rectangles, no allocation; a bubble
   redraws only when its tail's end moves by half a pixel, its text and outline built once per line.

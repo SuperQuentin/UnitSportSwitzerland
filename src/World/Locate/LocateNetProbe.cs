@@ -42,7 +42,7 @@ public partial class LocateNetProbe : ChatProbe
         if (garage != null && LocateCoords.FindAll(garage) is [var at, ..])
         {
             Chat!.Send($"/go {LocateCoords.Format(at.E, at.N)}");
-            Expect(await Until(() => Me is { } me && me.Global.HorizontalDistanceTo(new GlobalPos(at.E, at.N, 0)) < 30, 20),
+            Expect(await Until(() => Me is { } me && me.Global.HorizontalDistanceTo(GlobalPos.FromLv95(at.E, at.N, 0)) < 30, 20),
                 $"/go moved this player to the garage door ({Me?.Global})");
         }
         await Finish(1.0);

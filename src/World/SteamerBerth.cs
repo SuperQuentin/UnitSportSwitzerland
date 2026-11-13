@@ -39,11 +39,11 @@ public partial class SteamerBerth : Node
     /// <summary>How far from the landing the berth is looked for, m.</summary>
     public const float SearchRadius = 400f;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _chunks;
     private readonly double _e, _n;
     private bool _busy;
 
-    public SteamerBerth(ChunkManager chunks)
+    public SteamerBerth(IWorldGround chunks)
     {
         Name = "SteamerBerth";
         _chunks = chunks;
@@ -53,8 +53,10 @@ public partial class SteamerBerth : Node
     /// <summary>Nyon's berth alongside its pier, when the landings have one that floats the steamer.</summary>
     public static LandingBerth? PierBerth => Landings.Find(LandingName)?.Berth is { Fits: true } b ? b : null;
 
-    /// <summary>The tile that places it: the berth's, else the old landing point's.</summary>
-    private TileId Tile => PierBerth is { } b ? TileId.FromLv95(b.E, b.N) : TileId.FromLv95(_e, _n);
+    /// <summary>The ground's tile that places it, flat or a leaf (#1684): the berth's, else the old landing point's.</summary>
+    private GroundTile? Tile => _chunks.Origin is { } origin
+        ? _chunks.TileAt(PierBerth is { } b ? origin.ToWorld(b.E, b.N, 0) : origin.ToWorld(_e, _n, 0))
+        : null;
 
     public override void _Ready()
     {
@@ -73,9 +75,9 @@ public partial class SteamerBerth : Node
 
     private bool Decides => Net.NetworkManager.DedicatedServer || Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer;
 
-    private async void OnTileEntered(TileId id)
+    private async void OnTileEntered(GroundTile tile)
     {
-        if (id != Tile || _busy || !Decides) return;
+        if (_busy || !Decides || tile != Tile) return;
         if (VehicleManager.Instance is not { } vehicles || _chunks.Origin is not { } origin) return;
         if (vehicles.GetNodeOrNull<VehicleBody>(BerthName) is { Wrecked: false }) return;
         _busy = true;
@@ -127,16 +129,16 @@ public partial class SteamerBerth : Node
     /// A pier's berth (#377) once the water there has loaded: the keel at the floating draught
     /// under the still level, heading along the pier's face. Null while the water is not here yet.
     /// </summary>
-    public static Berth? AtPier(ChunkManager chunks, WorldOrigin origin, LandingBerth pier)
+    public static Berth? AtPier(IWorldGround chunks, WorldOrigin origin, LandingBerth pier)
     {
         var keel = Landings.KeelWorld(pier, origin, FloatDraught);
         if (!chunks.TryGetWater(keel, out float still, out _)) return null;
         keel.Y = still - FloatDraught;
-        return new Berth(keel, Landings.Yaw(pier), (float)pier.Depth, 0f);
+        return new Berth(keel, Landings.Yaw(pier, origin), (float)pier.Depth, 0f);
     }
 
     /// <summary>For the log when no berth is found: how much of the search area has water loaded, and the deepest.</summary>
-    private static string Survey(ChunkManager chunks, Vector3 landing)
+    private static string Survey(IWorldGround chunks, Vector3 landing)
     {
         int wet = 0, all = 0;
         float deepest = 0f;
@@ -160,7 +162,7 @@ public partial class SteamerBerth : Node
     /// away): rings out from the landing every 4 m, 12 headings tried at each spot. Null when there
     /// is none within <see cref="SearchRadius"/>.
     /// </summary>
-    public static Berth? FindBerth(ChunkManager chunks, Vector3 landing)
+    public static Berth? FindBerth(IWorldGround chunks, Vector3 landing)
     {
         float need = SteamerLines.Draught + Clearance;
         float Depth(Vector3 p) => chunks.TryGetWater(p, out float still, out _) && chunks.TryGetHeight(p, out float bed) ? still - bed : -1f;

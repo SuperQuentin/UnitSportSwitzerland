@@ -118,8 +118,16 @@ public static class GiverPick
             double z = elevationAt(c.E, c.N);
             int kind = Resolve(c.Kind, double.IsFinite(z) ? z : 0);
             double heading = double.IsNaN(c.Heading) ? Hash(c.Source + "#h") % 628 / 100.0 : c.Heading;
-            rows.Add(new GiverRecord(IdOf(kind, c.Source), kind, Math.Round(c.E, 1), Math.Round(c.N, 1), (float)heading, cantonAt(c.E, c.N),
-                (float)Math.Round(double.IsFinite(z) ? z : 0), c.Name.Length > 0 ? c.Name : DefaultName(kind), c.Source));
+            // off the built tiles the Plateau's height, as GeoInput placed the OSM point
+            double e = Math.Round(c.E, 1), n = Math.Round(c.N, 1), h = double.IsFinite(z) ? z : SwissGeodesy.GroundH - 50;
+            // also in Earth positions (#1507): on the ground, the heading from true north
+            double trueHeading = heading - SwissGeodesy.GridConvergence(e, n, h);
+            rows.Add(new GiverRecord(IdOf(kind, c.Source), kind, e, n, (float)heading, cantonAt(c.E, c.N),
+                (float)Math.Round(double.IsFinite(z) ? z : 0), c.Name.Length > 0 ? c.Name : DefaultName(kind), c.Source)
+            {
+                Geo = GeoPoint.FromLv95(e, n, h),
+                GeoHeading = (float)(((trueHeading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)),
+            });
         }
         rows.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
         return rows;

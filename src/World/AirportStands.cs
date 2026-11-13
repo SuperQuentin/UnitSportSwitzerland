@@ -33,7 +33,9 @@ public partial class AirportStands : Node
     /// <summary>A stand is filled only with a player within this, m (vehicles further off are cleared as lonely anyway).</summary>
     public static readonly float PlaceRadius = VehicleManager.LonelyDistance - 200f;
 
-    private readonly ChunkManager _chunks;
+
+    /// <summary>The world's ground: the streamer's, or the earth world's leaves (#1649), whose tile events say where the ground is.</summary>
+    private readonly IWorldGround _ground;
     /// <summary>The stands whose tiles have been seen, and since when each stood empty (NaN: filled; -inf: never filled).</summary>
     private readonly Dictionary<string, (AirportStand Stand, double EmptySince)> _stands = new();
     private AirportIndex _index = new();
@@ -47,10 +49,11 @@ public partial class AirportStands : Node
     /// <summary>The airports read at boot (empty, never null, before or without any).</summary>
     public AirportIndex Index => _index;
 
-    public AirportStands(ChunkManager chunks)
+    /// <param name="ground">The world's ground: its tiles' events, its origin, and the airports' file (<see cref="IWorldGround.Content"/>).</param>
+    public AirportStands(IWorldGround ground)
     {
         Name = "AirportStands";
-        _chunks = chunks;
+        _ground = ground;
     }
 
     public AirportStands() : this(null!) { }
@@ -59,24 +62,25 @@ public partial class AirportStands : Node
 
     public override async void _Ready()
     {
-        _chunks.TileEntered += OnTileEntered;
+        _ground.TileEntered += OnTileEntered;
         // a check's server refills sooner (tools/airportnetcheck.sh)
         if (double.TryParse(CmdArgs.Value("--standrespawn"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double respawn))
             RespawnSeconds = respawn;
-        var index = await LoadAsync(_chunks.Source);
+        var index = await LoadAsync(_ground.Content);
         if (!IsInsideTree()) return;
         _index = index ?? new AirportIndex();
         if (_index.Airports.Count > 0)
             GD.Print($"[airports] {_index.Airports.Count} airports, {_index.Stands().Count()} stands ({string.Join(", ", _index.Airports.Select(a => $"{a.Code} {a.Stands.Count}"))})");
-        // tiles that entered before the file was read
-        var seen = new List<(TileId Id, int Stride)>();
-        _chunks.ListTiles(seen);
-        foreach (var (id, _) in seen) OnTileEntered(id);
+        // the stands whose ground entered before the file was read: the ground already has a height under them
+        if (Decides && _ground.Origin is { } origin)
+            foreach (var (_, stand) in _index.Stands())
+                if (!_stands.ContainsKey(stand.Id) && _ground.TryGetHeight(origin.ToWorld(stand.E, stand.N, 0), out _))
+                    _stands[stand.Id] = (stand, double.NegativeInfinity);
     }
 
     public override void _ExitTree()
     {
-        _chunks.TileEntered -= OnTileEntered;
+        _ground.TileEntered -= OnTileEntered;
         if (Instance == this) Instance = null;
     }
 
@@ -93,14 +97,18 @@ public partial class AirportStands : Node
 
     private bool Decides => Net.NetworkManager.DedicatedServer || Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer;
 
-    private void OnTileEntered(TileId id)
+    private void OnTileEntered(GroundTile tile)
     {
         if (!Decides) return;
         foreach (var (_, stand) in _index.Stands())
-            if (TileId.FromLv95(stand.E, stand.N) == id && !_stands.ContainsKey(stand.Id))
+            if (!_stands.ContainsKey(stand.Id) && On(stand, tile))
                 _stands[stand.Id] = (stand, double.NegativeInfinity);   // never filled: as soon as the ground is here
         _sinceCheck = double.MaxValue;
     }
+
+    /// <summary>Whether a stand stands on a tile of the ground: the tile the ground has under it, flat or a leaf (#1649, #1684).</summary>
+    private bool On(AirportStand stand, GroundTile tile) =>
+        _ground.Origin is { } origin && _ground.TileAt(origin.ToWorld(stand.E, stand.N, 0)) == tile;
 
     public override void _Process(double delta)
     {
@@ -108,7 +116,7 @@ public partial class AirportStands : Node
         _sinceCheck += delta;
         if (_sinceCheck < 3.0) return;
         _sinceCheck = 0;
-        if (!Decides || VehicleManager.Instance is not { } vehicles || _chunks.Origin is not { } origin) return;
+        if (!Decides || VehicleManager.Instance is not { } vehicles || _ground.Origin is not { } origin) return;
         Review(vehicles, origin);
     }
 
@@ -127,6 +135,7 @@ public partial class AirportStands : Node
     {
         StandUse.Heavy => RideKind.An124,
         StandUse.Military => RideKind.Freighter,
+        StandUse.Space => RideKind.Shuttle,
         _ => RideKind.A320,
     };
 
@@ -161,7 +170,7 @@ public partial class AirportStands : Node
             if (!double.IsNegativeInfinity(empty) && now - empty < RespawnSeconds) continue;
             var at = origin.ToWorld(stand.E, stand.N, 0);
             if (_players.Count > 0 && !_players.Any(p => MathX.FlatDistance(p, at) < PlaceRadius)) continue;
-            if (!_chunks.TryGetHeight(at, out float ground)) continue;
+            if (!_ground.TryGetHeight(at, out float ground)) continue;
             var size = AirportPlanner.SizeOf(stand.Use);
             if (!double.IsNegativeInfinity(empty) && !Clear(vehicles, at, name, (float)(size.Span / 2 + 3))) continue;
             if (Fill(vehicles, origin, stand, at with { Y = ground }) == 0) continue;
@@ -190,7 +199,10 @@ public partial class AirportStands : Node
         var kind = KindOf(stand.Use);
         if (Airliner.For(kind) is not { } ride) return 0;
         bool stairs = kind == RideKind.A320;   // placed at the next review, once it stands (Review)
-        var state = new VehicleState(kind, origin.ToGlobal(at), -Mathf.DegToRad((float)stand.Heading), Vector3.Zero, ride.MaxHealth,
+        // the stand's heading from true north (#1504), in the state's offset axes
+        var place = origin.ToGlobal(at);
+        float yaw = TrueNorth.OffsetYaw(place, -Mathf.DegToRad((float)stand.TrueHeading));
+        var state = new VehicleState(kind, place, yaw, Vector3.Zero, ride.MaxHealth,
             EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: VehicleState.Now,
             // boarding: L1 and L2 open at the stairs; the rest as a pilot leaves one (gear down)
             // (an airliner keeps its doors in Flags bits 13-16, VehicleBody)

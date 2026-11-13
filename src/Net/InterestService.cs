@@ -50,6 +50,12 @@ public partial class InterestService : Node
     /// <summary>Server: coarse ground height for line of sight and height above ground.</summary>
     public Func<GlobalPos, float?>? Ground { get; set; }
 
+    /// <summary>
+    /// Server, <c>--frame earth</c> (#1513): line of sight between two Earth positions (<see cref="EarthSight.Clear"/> over
+    /// the leaves and the pyramid). When set it replaces the flat test over <see cref="Ground"/> (the horizon lattice).
+    /// </summary>
+    public Func<GlobalPos, GlobalPos, bool>? Sight { get; set; }
+
     /// <summary>Server: true when two peers race each other; always relevant then.</summary>
     public Func<long, long, bool>? Together { get; set; }
 
@@ -75,6 +81,8 @@ public partial class InterestService : Node
     /// (#221): a pair used to cost three native position reads and two ground lookups.
     /// </summary>
     private readonly List<GlobalPos> _at = new();
+    /// <summary><see cref="_at"/> in LV95 notation, once a round: the rules' floats are a flat LV95 frame at each viewer (#1502).</summary>
+    private readonly List<Lv95Coord> _lv95 = new();
     private readonly List<float> _agl = new();
     private readonly List<RideKind> _ride = new();
     private readonly List<int> _viewerIndex = new();
@@ -87,7 +95,7 @@ public partial class InterestService : Node
     /// </summary>
     private double _frameE, _frameN;
     private Func<Vector3, Vector3, bool>? _sight;
-    private Vector3 Local(GlobalPos g) => new((float)(g.E - _frameE), (float)g.Alt, (float)-(g.N - _frameN));
+    private Vector3 Local(Lv95Coord g) => new((float)(g.E - _frameE), (float)g.H, (float)-(g.N - _frameN));
     private double _nextEvalAt;
 
     public static InterestService CreateServer(Node parent, Node players, Func<GlobalPos, float?>? ground)
@@ -169,7 +177,7 @@ public partial class InterestService : Node
         _scratch.Clear();
         _targets.Clear();
         _byId.Clear();
-        _at.Clear(); _agl.Clear(); _ride.Clear(); _viewerIndex.Clear(); _together.Clear();
+        _at.Clear(); _lv95.Clear(); _agl.Clear(); _ride.Clear(); _viewerIndex.Clear(); _together.Clear();
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
             {
@@ -178,6 +186,7 @@ public partial class InterestService : Node
                 _byId[id] = p;
                 var to = Where(p);
                 _at.Add(to);
+                _lv95.Add(to.Lv95);
                 // height above ground does not depend on the viewer's frame
                 _agl.Add(Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f);
                 _ride.Add(p.Ride);
@@ -192,14 +201,17 @@ public partial class InterestService : Node
             if (first) _sets[viewer] = set = new HashSet<long>();
             var view = _views.TryGetValue(viewer, out var v) ? v : Interest.View.Default;
             // someone inside a building is 3 km under it: seen, and seeing, from where the building is
-            var from = _at[_viewerIndex[vi]];
+            var from = _lv95[_viewerIndex[vi]];
             // the rules work in floats: in a frame at this viewer, whatever the server's origin is
             _frameE = Math.Round(from.E / 1000) * 1000;
             _frameN = Math.Round(from.N / 1000) * 1000;
             var eye = Local(from) + Vector3.Up * 1.7f;
-            if (Ground != null && _sight == null)
+            if (Sight is { } sight && _sight == null)
+                // --frame earth (#1513): the ray between the two Earth positions, the curve in its geometry
+                _sight = (a, b) => sight(GlobalPos.FromLv95(_frameE + a.X, _frameN - a.Z, a.Y), GlobalPos.FromLv95(_frameE + b.X, _frameN - b.Z, b.Y));
+            else if (Ground != null && _sight == null)
             {
-                var groundHere = (Func<Vector3, float?>)(p => Ground(new GlobalPos(_frameE + p.X, _frameN - p.Z, p.Y)));
+                var groundHere = (Func<Vector3, float?>)(p => Ground(GlobalPos.FromLv95(_frameE + p.X, _frameN - p.Z, p.Y)));
                 _sight = (a, b) => Interest.Clear(a, b, groundHere);
             }
             _changed.Clear();
@@ -213,8 +225,8 @@ public partial class InterestService : Node
                 bool withheld = Withheld?.Invoke(viewer, target) == true;
                 bool together = !withheld && Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
-                bool now_ = !withheld && Interest.Relevant(eye, Local(_at[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
-                    together, Ground == null ? null : _sight);
+                bool now_ = !withheld && Interest.Relevant(eye, Local(_lv95[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                    together, Ground == null && Sight == null ? null : _sight);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second (a withholding is never held back)
@@ -297,7 +309,7 @@ public partial class InterestService : Node
     /// <summary>A coarse ground function over <c>horizon.bin</c>'s 100 m lattice, for the server.</summary>
     public static Func<GlobalPos, float?> HorizonGround(HorizonIndex index) => at =>
     {
-        var (e, n) = (at.E, at.N);
+        var (e, n, _) = at.Lv95;
         var id = TileId.FromLv95(e, n);
         if (!index.TryGet(id, out _)) return null;
         var (lx, lz) = id.Local(e, n);

@@ -46,8 +46,8 @@ public partial class FootPlayer
     public Vector3 WhereIs(Vehicles.VehicleBody v) =>
         Origin is { } mine && v.Origin is { } theirs && mine != theirs ? mine.ToWorld(v.Global) : v.GlobalPosition;
 
-    /// <summary>The terrain of the region this body is in when that is not the main one (the statics bound to the main terrain step aside for it), else null.</summary>
-    public ChunkManager? RegionTerrain => Region is { IsMain: false } r ? r.Chunks : null;
+    /// <summary>The ground of the region this body is in when that is not the main one (the statics bound to the main terrain step aside for it), else null.</summary>
+    public IWorldGround? RegionTerrain => Region is { IsMain: false } r ? r.Ground : null;
 
     /// <summary>Whether this body is in the server's main frame (always on a client): where parked vehicles, crates and stops are placed.</summary>
     public bool InMainFrame => Region is null or { IsMain: true };
@@ -63,9 +63,17 @@ public partial class FootPlayer
         Terrain?.RemoveAnchor(this);
         Region = target;
         Origin = target.Origin;
-        Terrain = target.Chunks;
+        Terrain = target.Ground;
         ApplyRegionSpace();
-        if (from != null) OriginShifter.Move(this, target.Origin.Frame.Since(from.Frame));
+        if (from != null)
+        {
+            // what the body keeps in world space moves as at an origin shift; between frames that turn against each other
+            // (ENU regions, #1513) it turns too, keeping its bearings against true north (velocity, headings, as at a
+            // Space re-anchor), and the node is stood up on the new frame's up
+            var shift = target.Origin.Frame.Carry(from.Frame, Position, at);
+            OriginShifter.Move(this, shift);
+            if (shift.Turns) Rotation = new Vector3(0, Rotation.Y, 0);
+        }
         // exact from the Earth position, not the float sum of a far position and a far offset
         Position = target.Origin.ToWorld(at);
         if (PhysicsServer3D.BodyGetMode(GetRid()) == PhysicsServer3D.BodyMode.Kinematic) OriginShifter.Teleport(this);

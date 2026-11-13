@@ -56,7 +56,7 @@ public static class FranceStage
             {
                 double lat = minLat + (maxLat - minLat) * i / 24.0;
                 double lon = minLon + (maxLon - minLon) * j / 24.0;
-                var (e, n) = SwissProjection.ToLv95(lat, lon);
+                var (e, n) = SwissGeodesy.ToLv95(lat, lon);
                 var tile = TileId.FromLv95(e, n);
                 if (available.Contains(tile)) wanted.Add(tile);
             }
@@ -79,6 +79,7 @@ public static class FranceStage
             grids[tile] = ChunkCodec.Decode(fs);
         }
         var heightAt = TerrainSampler.For(grids);
+        var space = new Lv95RoadSpace(wanted.ToList(), new Lv95Ground(grids), GeoInput.Over(outDir));
 
         var sw = Stopwatch.StartNew();
         using var client = new BdTopoClient();
@@ -89,7 +90,9 @@ public static class FranceStage
         Console.WriteLine($"France: fetched {footprints.Count} building footprints");
 
         var buildingStats = new FranceBuildings.Stats();
-        var buildingsByTile = FranceBuildings.Build(footprints, wanted, heightAt, buildingStats);
+        var geo = GeoInput.Over(outDir);
+        // the space takes each latitude and longitude onto the tiles' ground (GeoInput), as BdFeature.OntoGround does
+        var buildingsByTile = FranceBuildings.Build(footprints, new Lv95FeatureSpace(wanted, new Lv95Ground(grids), geo), buildingStats);
 
         foreach (var (tile, built) in buildingsByTile) MergeBuildings(outDir, tile, built);
 
@@ -103,7 +106,8 @@ public static class FranceStage
         Console.WriteLine($"France: fetched {lines.Count} road sections");
 
         var roadStats = new FranceRoads.Stats();
-        var roadsByTile = FranceRoads.Build(lines, wanted, heightAt, roadStats);
+        // on the built ground from their latitudes and longitudes (the space's GeoInput), as the buildings above
+        var roadsByTile = FranceRoads.Build(lines, space, roadStats);
 
         foreach (var (tile, segments) in roadsByTile) MergeRoads(outDir, tile, segments);
 

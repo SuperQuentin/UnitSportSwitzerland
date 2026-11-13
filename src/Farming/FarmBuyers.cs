@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Items;
 
 // Plain C#, no Godot: linked into the unit tests.
@@ -59,13 +60,16 @@ public static class FarmBuyers
     public static IEnumerable<FarmBuyer> Everyone => StandIn is { } extra ? All.Append(extra) : All;
 
     /// <summary>The buyer whose yard holds an LV95 point (the nearest if two did), or null.</summary>
-    public static FarmBuyer? At(double e, double n, float slack = 0f)
+    public static FarmBuyer? At(double e, double n, float slack = 0f) => At(GlobalPos.FromLv95(e, n, 0), slack);
+
+    /// <inheritdoc cref="At(double, double, float)"/>
+    public static FarmBuyer? At(GlobalPos at, float slack = 0f)
     {
         FarmBuyer? best = null;
         double bestD = double.MaxValue;
         foreach (var b in Everyone)
         {
-            double d = Math.Sqrt((b.E - e) * (b.E - e) + (b.N - n) * (b.N - n));
+            double d = at.HorizontalDistanceTo(GlobalPos.FromLv95(b.E, b.N, at.Alt));
             if (d <= b.Reach + slack && d < bestD) { best = b; bestD = d; }
         }
         return best;

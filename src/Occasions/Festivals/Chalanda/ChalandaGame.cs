@@ -168,7 +168,7 @@ public partial class ChalandaGame : CanvasLayer
         if (_svc?.ChalandaNow() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            near = !_marching && ChalandaRules.NearStand(m.Site, g.E, g.N);
+            near = !_marching && ChalandaRules.NearStand(m.Site, g);
         }
         else if (_marching) _marching = false;   // the festival ended, or this body is gone
         if (_marching)
@@ -242,9 +242,10 @@ public partial class ChalandaGame : CanvasLayer
         var path = ChalandaRules.Path(site);
         var g = p.Global;
         var to = path[Math.Clamp(_next, 0, ChalandaRules.Stations)];
-        double dx = to.E - g.E, dn = to.N - g.N;
+        var target = GlobalPos.FromLv95(to.E, to.N, g.Alt);
+        var (dx, dn, _) = g.OffsetTo(target);
         int dist = (int)(Math.Sqrt(dx * dx + dn * dn) / 5) * 5;
-        int bearing = (int)Math.Round(Math.Atan2(dx, dn) / (Math.PI / 4));   // 0 = north, clockwise
+        int bearing = (int)Math.Round(g.BearingTo(target) / (Math.PI / 4));   // 0 = true north, clockwise (#1504)
         var key = (_points, _synced, _next, dist, ((bearing % 8) + 8) % 8);
         if (key == _runKey) return;
         _runKey = key;

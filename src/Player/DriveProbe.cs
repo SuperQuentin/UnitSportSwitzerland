@@ -34,6 +34,9 @@ namespace UnitSport.Player;
 public partial class DriveProbe : Node
 {
     private readonly ChunkManager _chunks;
+
+    /// <summary>The world's ground: the streamer's, or the earth world's leaves (#1649).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly string? _shotPrefix;
     private readonly int[] _cars;
@@ -88,9 +91,10 @@ public partial class DriveProbe : Node
         public double SinceFix;
     }
 
-    public DriveProbe(ChunkManager chunks, WorldOrigin origin, string? shotPrefix, int car, double seconds)
+    public DriveProbe(ChunkManager chunks, WorldOrigin origin, string? shotPrefix, int car, double seconds, IWorldGround? ground = null)
     {
         _chunks = chunks;
+        _ground = ground ?? chunks.Ground;
         _origin = origin;
         // the probe keeps its route, cars and logs in world space for the whole run: no floating-origin
         // shift under it (#185 moved the origin 34 km mid-build and the route came out in a village)
@@ -181,7 +185,7 @@ public partial class DriveProbe : Node
         // 6 m Jura road put six cars into the first corner together and the forest took them
         if (_entries.Count == 0)
         {
-            if (!_chunks.TryGetHeight(line.Points[0], out _)) return;
+            if (!_ground.TryGetHeight(line.Points[0], out _)) return;
             int count = _mount != null ? (CmdArgs.Int("--riders") ?? 1) : _cars.Length;
             for (int k = 0; k < count; k++)
             {
@@ -194,8 +198,8 @@ public partial class DriveProbe : Node
                 float s = 12f + 15f * (count - 1 - k);
                 var at = line.PointAt(s);
                 var fwd = RaceRoute.Flat(line.PointAt(s + 2f) - line.PointAt(s - 2f)).Normalized();
-                float g = _chunks.TryGetHeight(at, out float gh) ? gh : at.Y;
-                var player = new FootPlayer { Name = $"Driver{k}", Terrain = _chunks };
+                float g = _ground.TryGetHeight(at, out float gh) ? gh : at.Y;
+                var player = new FootPlayer { Name = $"Driver{k}", Terrain = _ground };
                 AddChild(player);
                 player.GlobalPosition = at with { Y = g + 1.2f };
                 player.Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
@@ -396,7 +400,7 @@ public partial class DriveProbe : Node
         }
         _cinePlaced = true;
         var cp = _cine.GlobalPosition;
-        if (_chunks.TryGetHeight(cp, out float ground) && cp.Y < ground + 1.5f) _cine.GlobalPosition = cp with { Y = ground + 1.5f };
+        if (_ground.TryGetHeight(cp, out float ground) && cp.Y < ground + 1.5f) _cine.GlobalPosition = cp with { Y = ground + 1.5f };
         var look = car - _cine.GlobalPosition;
         if (look.LengthSquared() > 0.25f && Mathf.Abs(look.Normalized().Y) < 0.98f)
             _cine.GlobalBasis = Basis.LookingAt(look.Normalized(), Vector3.Up);
@@ -499,7 +503,8 @@ public partial class DriveProbe : Node
             var l = es.Where(e => e.FinishTime >= 0 && e.Pilot != null).Select(e => e.Pilot!.ReferenceSeconds(_finish) / e.FinishTime * 100.0).ToList();
             return l.Count == 0 ? "n/a" : $"{l.Average():F1}%";
         }
-        float best = _entries.Max(e => e.Pilot?.Skill ?? 0f);
+        // none on the grid (a timeout before the ground came): no pace, and the result below fails
+        float best = _entries.Count == 0 ? 0f : _entries.Max(e => e.Pilot?.Skill ?? 0f);
         GD.Print($"[drive] PACE ace (skill {best:F2}) {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) >= best))}, others {Index(_entries.Where(e => (e.Pilot?.Skill ?? 0f) < best))}");
         bool anyFinish = _entries.Any(e => e.FinishTime >= 0);
         bool driftOk = _entries.All(e => e.Spec == null || e.Grip) || _entries.Any(e => e.Pilot?.Drifts > 0);

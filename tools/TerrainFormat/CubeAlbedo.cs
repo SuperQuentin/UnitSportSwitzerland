@@ -32,6 +32,8 @@ public enum CubeAlbedoFormat : byte
 {
     Webp = 1,
     Png = 2,
+    /// <summary>A leaf's aerial photo as SWISSIMAGE's WMS gives it (<see cref="CubePhoto"/>, #1505).</summary>
+    Jpeg = 3,
 }
 
 /// <summary>

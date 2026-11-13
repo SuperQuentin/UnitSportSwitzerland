@@ -76,14 +76,14 @@ public partial class NavCheck : ChatProbe
 
         // a target straight ahead of the view, then straight behind
         var cam = GetViewport().GetCamera3D()!;
-        var f = -cam.GlobalBasis.Z;
+        var f = me.Origin!.EnuOf(cam.GlobalPosition, -cam.GlobalBasis.Z);   // true east and north (#1502)
         var fwd = new Vector2(f.X, -f.Z).Normalized();
         var at = me.Global;
-        svc.TrackPlace("Ahead", at.E + fwd.X * 200, at.N + fwd.Y * 200, 0);
+        svc.TrackPlace("Ahead", at.Moved(fwd.X * 200, fwd.Y * 200), 0);
         var marker = TargetMarker.Instance!;
         Expect(await Until(() => marker.Showing && marker.OnScreen, 3), $"a target ahead: the marker on screen at {marker.At}");
         if (Windowed) GD.Print($"{Log} shot {Shot("marker_on")}");
-        svc.TrackPlace("Behind", at.E - fwd.X * 200, at.N - fwd.Y * 200, 0);
+        svc.TrackPlace("Behind", at.Moved(-(fwd.X * 200), -(fwd.Y * 200)), 0);
         var screen = GetViewport().GetVisibleRect().Size;
         Expect(await Until(() => marker.Showing && !marker.OnScreen, 3), "a target behind: the marker leaves the screen");
         var e = (marker.At - screen / 2) / new Vector2(screen.X / 2 - 48, screen.Y / 2 - 48);
@@ -91,7 +91,7 @@ public partial class NavCheck : ChatProbe
         if (Windowed) GD.Print($"{Log} shot {Shot("marker_off")}");
 
         // the guiding gust toward a target ahead
-        svc.TrackPlace("Ahead", at.E + fwd.X * 300, at.N + fwd.Y * 300, 0);
+        svc.TrackPlace("Ahead", at.Moved(fwd.X * 300, fwd.Y * 300), 0);
         var wind = GuidingWind.Instance!;
         Expect(GuidingWind.Can && wind.Summon() && wind.Blowing, "N: the gust blows");
         await Seconds(0.6);
@@ -106,7 +106,7 @@ public partial class NavCheck : ChatProbe
         GameSettings.Current.GuideHighContrast = false;
 
         // a pin, on the compass and on the map
-        travel.AskPinAdd(at.E + 40, at.N + 20, (byte)PinIcon.Star, "  Picnic\u0007 spot  ", shared: false);
+        travel.AskPinAdd(at.Moved(40, 20), (byte)PinIcon.Star, "  Picnic\u0007 spot  ", shared: false);
         Expect(await Until(() => travel.MyPins.Pins.Count == 1, 3), "the pin is in the pins section");
         Expect(travel.MyPins.Pins.Count == 1 && travel.MyPins.Pins[0].Note == "Picnic spot", $"its note sanitised ('{(travel.MyPins.Pins.Count > 0 ? travel.MyPins.Pins[0].Note : "")}')");
         await Seconds(0.3);
@@ -139,7 +139,7 @@ public partial class NavCheck : ChatProbe
 
         // a place tracked from the map is let go on arrival
         at = me.Global;
-        svc.TrackPlace("Here", at.E + 3, at.N, 0);
+        svc.TrackPlace("Here", at.Moved(3, 0), 0);
         Expect(await Until(() => svc.TrackedPlace == null, 3), "arrived at a tracked place: it is let go");
 
         svc.SaveAll();

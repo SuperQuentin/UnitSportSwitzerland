@@ -14,13 +14,14 @@ namespace UnitSport.Adventure.Places;
 /// </summary>
 public interface IMapOverlay
 {
-    void Draw(MapView view, CanvasItem on);
+    void Draw(EarthMapView view, CanvasItem on);
     /// <summary>A click on the map, before it selects a place; true when the overlay took it.</summary>
     bool Click(Vector2 lv95, MouseButton button);
 }
 
 /// <summary>
-/// The adventure map (#1224, places plan 6): M while the adventure is on for the player (the place search
+/// The adventure map (#1224, places plan 6), on an oblique stereographic projection centred on the view
+/// (<see cref="EarthMapView"/>, #1514): M while the adventure is on for the player (the place search
 /// otherwise, the Battle Royale map in a round). The relief of <see cref="MapRelief"/>, this player's fog
 /// (<see cref="FogTexture"/>, a shader), the canton borders, the places it has found and the landmarks it
 /// has sighted under revealed fog (grey), the player's arrow, and every <see cref="IMapOverlay"/>. A side
@@ -41,7 +42,7 @@ public partial class AdventureMap : Screen
 
     public static void RemoveOverlay(IMapOverlay overlay) => Overlays.Remove(overlay);
 
-    /// <summary>The local player's position and heading (yaw, radians), set by the client world.</summary>
+    /// <summary>The local player's position and heading (radians from true north, as <c>Rotation.Y</c>), set by the client world.</summary>
     public static Func<(GlobalPos At, float Yaw)?>? Me { get; set; }
     /// <summary>The old place search (teleporting, where the server allows it), set by the client world.</summary>
     public static Action? PlaceSearch { get; set; }
@@ -144,7 +145,7 @@ public partial class AdventureMap : Screen
         }
 
         // centred on the player, or the place asked for
-        if (Me?.Invoke() is { } me) _canvas.View.FocusOn(me.At.E, me.At.N, 32);
+        if (Me?.Invoke() is { } me) _canvas.View.FocusOn(me.At, 32);
         if (_focus != null) Select(_focus, centre: true);
         if (_point is { } point) _canvas.View.FocusOn(point.E, point.N, 32);
         if (AdventureService.Instance is { } svc) svc.SectionChanged += OnSection;
@@ -203,7 +204,7 @@ public partial class AdventureMap : Screen
     }
 
     /// <summary>The map's view (an overlay's hit tests).</summary>
-    public MapView View => _canvas.View;
+    public EarthMapView View => _canvas.View;
 
     /// <summary>The point under the centre cross, LV95 (the pad's and VR's "Pin here").</summary>
     public (double E, double N) Centre => _canvas.View.ToLv95(_canvas.Size / 2);
@@ -216,6 +217,9 @@ public partial class AdventureMap : Screen
         _cardBox.AddChild(card);
         _canvas.Redraw();
     }
+
+    /// <summary>Shows or hides this player's fog (a check's picture of the relief under it).</summary>
+    public void ShowFog(bool on) => _canvas.ShowFog(on);
 
     /// <summary>Redraws the map's layers (an overlay's data changed).</summary>
     public void Redraw() => _canvas.Redraw();
@@ -245,7 +249,7 @@ public partial class AdventureMap : Screen
     {
         private static readonly int[] Steps = [2, 4, 8, 16, 32, 64, 128];
 
-        public readonly MapView View = new(Steps);
+        public readonly EarthMapView View = new(Steps);
         private readonly AdventureMap _map;
         private readonly Control _fog, _top;
         private static CountryData? _country;
@@ -280,6 +284,12 @@ public partial class AdventureMap : Screen
             if (_country == null)
                 try { _country = CountryData.LoadEmbedded(); }
                 catch (Exception e) { GD.PushWarning($"[map] no canton borders: {e.Message}"); }
+        }
+
+        public void ShowFog(bool on)
+        {
+            _fog.Visible = on;
+            Redraw();
         }
 
         public void Redraw()
@@ -401,9 +411,13 @@ public partial class AdventureMap : Screen
         private void DrawMe(CanvasItem on)
         {
             if (Me?.Invoke() is not { } me) return;
-            var at = View.ToScreen(me.At.E, me.At.N);
-            // the yaw turns from north (screen up), clockwise
-            var fwd = new Vector2(Mathf.Sin(-me.Yaw), -Mathf.Cos(me.Yaw));
+            var at = View.ToScreen(me.At);
+            // off the view (or far round the Earth): no arrow; a polygon thousands of km off screen is drawn as a sliver across it
+            if (!float.IsFinite(at.X) || !float.IsFinite(at.Y) || at.X < -40 || at.Y < -40 || at.X > Size.X + 40 || at.Y > Size.Y + 40) return;
+            // the heading from true north as one on the map (its convergence there), 0 up
+            float yaw = View.ScreenYaw(at, me.Yaw);
+            if (!float.IsFinite(yaw)) yaw = me.Yaw;
+            var fwd = new Vector2(Mathf.Sin(-yaw), -Mathf.Cos(yaw));
             var side = new Vector2(-fwd.Y, fwd.X);
             Vector2[] arrow = [at + fwd * 11, at - fwd * 7 + side * 7, at - fwd * 3, at - fwd * 7 - side * 7];
             on.DrawColoredPolygon(arrow, new Color(0, 0, 0, 0.6f));

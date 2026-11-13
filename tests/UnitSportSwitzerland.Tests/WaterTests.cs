@@ -294,6 +294,7 @@ public class SeaStateArgsTests
 }
 
 /// <summary>The <c>lake</c> fixture course (src/Terrain/Fixture/FixtureLake.cs): beach, shelf, drop-off, river.</summary>
+[Collection(FixtureWorld.Collection)]
 public class FixtureLakeTests
 {
     private const double StartE = 2_560_000, StartN = 1_130_000;

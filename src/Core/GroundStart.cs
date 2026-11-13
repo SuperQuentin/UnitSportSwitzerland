@@ -20,15 +20,16 @@ public sealed class GroundStart
     /// <summary>Waiting longer than this for building collision, the search runs with what there is.</summary>
     private const double MaxWait = 10;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly FootPlayer _player;
     private double _waited;
+    private double _nextSearch;
 
     public bool Done { get; private set; }
 
-    public GroundStart(ChunkManager chunks, FootPlayer player)
+    public GroundStart(IWorldGround ground, FootPlayer player)
     {
-        _chunks = chunks;
+        _ground = ground;
         _player = player;
     }
 
@@ -38,11 +39,21 @@ public sealed class GroundStart
         if (Done) return true;
         _waited += delta;
         var at = _player.GlobalPosition;
-        bool ready = _chunks.HasCollisionAt(at) && _chunks.BuildingCollisionDoneAt(at);
+        bool ready = _ground.HasCollisionAt(at) && _ground.BuildingCollisionDoneAt(at);
         if (!ready && _waited < MaxWait) return false;
 
+        // nothing clear found: the collision may say it is there before its bodies are in the physics space (the earth
+        // world's patches, #1733), so the search runs again every half second until the wait runs out
+        if (_waited < _nextSearch) return false;
+        var found = FindClear(at);
+        if (found == null && _waited < MaxWait)
+        {
+            _nextSearch = _waited + 0.5;
+            return false;
+        }
+
         Done = true;
-        if (FindClear(at) is { } spot)
+        if (found is { } spot)
         {
             if (MathX.FlatDistance(spot, at) > 0.5f) _player.PlaceAt(spot, _player.Rotation.Y);
             GD.Print($"[spawn] on foot at {spot.Round()}, {MathX.FlatDistance(spot, at):F0} m from the spawn point");
@@ -78,9 +89,9 @@ public sealed class GroundStart
     private Vector3? Clear(PhysicsDirectSpaceState3D space, Godot.Collections.Array<Rid> self,
         PhysicsShapeQueryParameters3D body, Vector3 p)
     {
-        if (!_chunks.HasCollisionAt(p) || !_chunks.TryGetHeight(p, out float ground)) return null;
+        if (!_ground.HasCollisionAt(p) || !_ground.TryGetHeight(p, out float ground)) return null;
         // not in a lake or a river
-        if (_chunks.TryGetSurface(p, out float surface) && surface > ground + 0.2f) return null;
+        if (_ground.TryGetSurface(p, out float surface) && surface > ground + 0.2f) return null;
 
         // open sky: a ray from high above meets the ground first, not a roof, a bridge or a tree
         var ray = PhysicsRayQueryParameters3D.Create(new Vector3(p.X, ground + 80, p.Z), new Vector3(p.X, ground - 4, p.Z));

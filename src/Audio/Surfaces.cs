@@ -34,6 +34,7 @@ public static class Surfaces
     /// </summary>
     public static WorldOrigin? Origin { get; set; }
 
+
     private const float RoadYTolerance = 2.5f;   // a road under a bridge is not the one being walked
     private const float CacheSeconds = 0.25f;
     private const float CacheMetres = 0.5f;
@@ -60,7 +61,7 @@ public static class Surfaces
     /// <paramref name="caller"/> (a driven vehicle) gets a cache of its own; without one the
     /// answer is cached for everyone (the local player's feet).
     /// </summary>
-    public static Surface At(ChunkManager chunks, Vector3 feet, bool indoors, object? caller = null)
+    public static Surface At(IWorldGround chunks, Vector3 feet, bool indoors, object? caller = null)
     {
         var c = caller == null ? Shared : Callers.GetValue(caller, _ => new Cache());
         double now = Time.GetTicksMsec() / 1000.0;
@@ -73,14 +74,31 @@ public static class Surfaces
         return s;
     }
 
-    private static Surface Compute(ChunkManager chunks, Vector3 feet)
+    /// <summary>
+    /// What the ground is under an occasion's snow, cached per caller: the surface as it would be with no
+    /// occasion running. Farming works the soil under Christmas's snow (#494): the snow is a look, the
+    /// field is still there.
+    /// </summary>
+    public static Surface Beneath(IWorldGround chunks, Vector3 feet, object caller)
+    {
+        var c = Under.GetValue(caller, _ => new Cache());
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (now - c.Time < CacheSeconds && !float.IsNaN(c.At.X) && c.At.DistanceTo(feet) < CacheMetres) return c.Value;
+        c.Value = Compute(chunks, feet, occasionSnow: false); c.At = feet; c.Time = now;
+        return c.Value;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, Cache> Under = new();
+
+    private static Surface Compute(IWorldGround chunks, Vector3 feet, bool occasionSnow = true)
     {
         // standing in water (World/WaterField, #299): a lake's shallows over a gravel bed are water
         if (chunks.TryGetWaterLevel(feet, out float still) && still - feet.Y > 0.05f) return Surface.Water;
 
         // a ski slope (#887): snow all year, ice where its state says so
         if (World.Snow.SnowService.Instance is { } snow && snow.Index?.At(feet, out float mask) is { } slope && mask > 0.3f)
-            return snow.StateAt(slope, feet.Y).Ice > 0.5f ? Surface.Ice : Surface.Snow;
+            // at the altitude: an earth frame's y is no altitude (#1735)
+            return snow.StateAt(slope, chunks.Origin is { } origin ? (float)origin.AltitudeOf(feet) : feet.Y).Ice > 0.5f ? Surface.Ice : Surface.Snow;
 
         bool known = chunks.TryGetCover(feet, out var cover);
 
@@ -89,7 +107,7 @@ public static class Surfaces
 
         if (RoadUnder(chunks, feet) is { } road) return road;
         // the white above the permanent snow line, and an occasion's snow, are snow underfoot (#899)
-        if (feet.Y > CoverPalette.SnowLine + 125f || World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
+        if (feet.Y > CoverPalette.SnowLine + 125f || occasionSnow && World.DayNight.OccasionSnow > 0.5f) return Surface.Snow;
         return known ? FromCover(cover) : Surface.Grass;
     }
 
@@ -111,11 +129,12 @@ public static class Surfaces
     // roads
     // ------------------------------------------------------------------------------------
 
-    private static Surface? RoadUnder(ChunkManager chunks, Vector3 feet)
+    private static Surface? RoadUnder(IWorldGround chunks, Vector3 feet)
     {
-        if (Origin is not { } origin || chunks.Source is not { } source) return null;
+        // the ground's own tiles (#1684): an earth leaf's stand-in, placed by the origin's stand-in frames
+        if (Origin is not { } origin || chunks.Content is not { } source) return null;
         Watch(chunks);
-        var tile = origin.TileAt(feet);
+        var tile = chunks.ContentName(chunks.TileAt(feet));
         if (!Roads.TryGetValue(tile, out var index))
         {
             // fetched once through the (cached) chunk source; until it lands there is simply no road
@@ -244,11 +263,11 @@ public static class Surfaces
         && !s.Attributes.Has(RoadAttrFlags.Embedded);   // the road around an embedded rail is what you stand on
 
     private static int _epoch;
-    private static ChunkManager? _watched;
+    private static IWorldGround? _watched;
     private static readonly bool CheckIndex = CmdArgs.Has("--surfacecheck");
 
     /// <summary>A road tile goes when its terrain tile unloads: they used to pile up for the whole session (#221).</summary>
-    private static void Watch(ChunkManager chunks)
+    private static void Watch(IWorldGround chunks)
     {
         if (_watched == chunks) return;
         if (_watched != null) _watched.TileUnloaded -= Evict;
@@ -256,10 +275,12 @@ public static class Surfaces
         _watched = chunks;
     }
 
-    private static void Evict(TileId tile)
+    private static void Evict(GroundTile tile)
     {
-        Roads.Remove(tile);
-        Loading.Remove(tile);
+        if (_watched is not { } ground) return;
+        var id = ground.ContentName(tile);
+        Roads.Remove(id);
+        Loading.Remove(id);
     }
 
     /// <summary>Drops the cached road tiles, for when the world under them is replaced.</summary>

@@ -30,6 +30,18 @@ public static class TerrainPaths
     /// </para>
     /// Resolved once per process (the arguments, the variable and the file do not change) and logged.
     /// </summary>
+    /// <summary>
+    /// The earth world's leaves (#1510, <c>--frame earth</c>): <c>--leaves &lt;dir&gt;</c>, else the chunk folder's
+    /// <c>_cube</c> sibling as the build writes it (<c>terrain_chunks_cube</c>), else the chunk folder itself.
+    /// </summary>
+    public static string FindLeafDir()
+    {
+        if (CmdArgs.Value("--leaves") is { } explicitDir) return explicitDir;
+        var chunks = FindChunkDir().TrimEnd('/', '\\');
+        var cube = chunks + "_cube";
+        return Directory.Exists(cube) ? cube : chunks;
+    }
+
     public static string FindChunkDir()
     {
         // a test world's own folder (#999); a fixture course has none and falls back as --chunks fixture:x does

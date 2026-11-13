@@ -52,7 +52,7 @@ public partial class WorldEventCheck : ChatProbe
         foreach (string card in adventure.Mine.Get(QuestsProgress.Section).Active.Keys.Where(Postkarte.IsCard).ToList()) adventure.Abandon(AdventureService.LocalPeer, card);
         Expect(await Until(() => events.RunningCount == 0, 60), "no event is left over from an earlier run");
         var start = Me!.Global;
-        double e0 = start.E, n0 = start.N;
+        double e0 = start.Lv95.E, n0 = start.Lv95.N;
         Expect(WorldEvents.Mode == WorldEventMode.Normal, "the default mode is normal");
         WorldEvents.Mode = WorldEventMode.Off;   // no chance event comes in between: the forced ones below still plan
 
@@ -76,7 +76,7 @@ public partial class WorldEventCheck : ChatProbe
         {
             var cells = events.Targets(fire);
             var me = Me!.Global;
-            var next = cells.OrderBy(c => (c.E - me.E) * (c.E - me.E) + (c.N - me.N) * (c.N - me.N)).First();
+            var next = cells.OrderBy(c => me.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(c.E, c.N, me.Alt))).First();
             await WalkTo(next.E + 1, next.N);
             events.AskHelp(fire, EventAct.BeatStart, next.Key);
             await Until(() => events.Targets(fire).All(c => c.Key != next.Key), 6);
@@ -214,10 +214,12 @@ public partial class WorldEventCheck : ChatProbe
         for (int guard = 0; guard < 400; guard++)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 3) return;
             double step = Math.Min(d, 1.5);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.1f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.1f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(1);
         }
@@ -229,10 +231,12 @@ public partial class WorldEventCheck : ChatProbe
         while (true)
         {
             var g = me.Global;
-            double de = e - g.E, dn = n - g.N, d = GlobalPos.HorizontalDistance(e, n, g.E, g.N);
+            var to = GlobalPos.FromLv95(e, n, g.Alt);
+            var (de, dn, _) = g.OffsetTo(to);
+            double d = g.HorizontalDistanceTo(to);
             if (d < 0.5) break;
             double step = Math.Min(d, 20);
-            me.GlobalPosition += new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step));
+            me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)(de / d * step), 0.2f, (float)(-dn / d * step)));
             me.Velocity = Vector3.Zero;
             await Seconds(0.5);
         }
@@ -242,7 +246,8 @@ public partial class WorldEventCheck : ChatProbe
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.2f, (float)-(n - g.N));
+        var (toE, toN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)toE, 0.2f, -(float)toN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.5);
     }

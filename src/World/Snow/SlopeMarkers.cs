@@ -5,12 +5,13 @@ using UnitSport.Core;
 using UnitSport.Styles;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.World.Snow;
 
 /// <summary>
 /// The poles along a ski slope's edges (#887), on the tiles near the camera (those
-/// <see cref="ChunkManager.TileFurnished"/> dresses). One every <see cref="Spacing"/> m on both edges, just inside them,
+/// <see cref="IWorldGround.TileFurnished"/> dresses). One every <see cref="Spacing"/> m on both edges, just inside them,
 /// of a line slope, and round an area's outline. The pole is painted in the slope's colour: blue,
 /// red, black, or yellow for an itinerary. The pole on the right-hand edge going down also has an
 /// orange top, as on Swiss slopes. Drawn only: no collision, a skier goes through them as through a twig.
@@ -19,12 +20,18 @@ namespace UnitSport.World.Snow;
 public partial class SlopeMarkers : Node
 {
     private const string NodeName = "SlopeMarkers";
+
+    /// <summary>
+    /// Meta on a tile's poles node: where each pole stands in the node's frame (a <c>Vector3[]</c>), written once with
+    /// them. What a check reads (#1735): a headless run's MultiMesh keeps no transforms.
+    /// </summary>
+    public static readonly StringName PolesMeta = "poles";
     public const float Spacing = 30f;
     public const float Height = 1.8f;
     /// <summary>How far outside the slope's edge a pole stands: a little inside it, in front of the trees that line the run.</summary>
     private const float Outside = -0.4f;
 
-    private readonly ChunkManager _chunks;
+    private readonly IWorldGround _ground;
     private readonly SnowService _snow;
     private readonly Dictionary<TileId, ChunkNode> _waiting = new();
     private readonly List<TileId> _done = new();
@@ -34,10 +41,10 @@ public partial class SlopeMarkers : Node
     private static readonly Color Orange = new(1f, 0.42f, 0.05f);
     private static readonly Dictionary<(int Level, bool Right), ArrayMesh> Meshes = new();
 
-    public SlopeMarkers(ChunkManager chunks, SnowService snow)
+    public SlopeMarkers(IWorldGround ground, SnowService snow)
     {
         Name = NodeName;
-        _chunks = chunks;
+        _ground = ground;
         _snow = snow;
     }
 
@@ -45,20 +52,21 @@ public partial class SlopeMarkers : Node
     {
         _material = StyleKit.Material(MaterialRole.Prop);
         _material.SetShaderParameter("flicker", 0f);
-        _chunks.TileFurnished += OnFurnished;
-        _chunks.TileUnfurnished += OnUnfurnished;
+        _ground.TileFurnished += OnFurnished;
+        _ground.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
-        _chunks.TileFurnished -= OnFurnished;
-        _chunks.TileUnfurnished -= OnUnfurnished;
+        _ground.TileFurnished -= OnFurnished;
+        _ground.TileUnfurnished -= OnUnfurnished;
     }
 
-    private void OnFurnished(TileId id, ChunkNode node, Interiors.DoorSpot[] _) => _waiting[id] = node;
+    private void OnFurnished(GroundTile tile, ChunkNode node, Interiors.DoorSpot[] _) => _waiting[_ground.ContentName(tile)] = node;
 
-    private void OnUnfurnished(TileId id, ChunkNode node)
+    private void OnUnfurnished(GroundTile tile, ChunkNode node)
     {
+        var id = _ground.ContentName(tile);
         _waiting.Remove(id);
         node.GetNodeOrNull(NodeName)?.QueueFree();
     }
@@ -89,12 +97,15 @@ public partial class SlopeMarkers : Node
                 Place(node, tile, r, spots);
         if (spots.Count == 0) return;
         var root = new Node3D { Name = NodeName };
+        var all = new List<Vector3>();
         foreach (var (key, list) in spots)
         {
+            foreach (var t in list) all.Add(t.Origin);
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = MeshOf(key.Item1, key.Item2), InstanceCount = list.Count };
             for (int i = 0; i < list.Count; i++) mm.SetInstanceTransform(i, list[i]);
             root.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = _material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         }
+        root.SetMeta(PolesMeta, all.ToArray());
         node.AddChild(root);
     }
 
@@ -151,6 +162,8 @@ public partial class SlopeMarkers : Node
         var (e, n) = tile.Id.Global(east, ChunkFormat.TileSizeM - north);
         int i = tile.IndexAt(e, n);
         if (i >= 0 && tile.Slot[i] != 0 && tile.Records[tile.Slot[i] - 1].Id != r.Id && PisteFormat.MaskOf(tile.Aux[i]) > 0.5f) return;
+        // an earth leaf's stand-in reaches past its leaf into its neighbours' (#1735): only the poles on its own leaf
+        if (LeafStandIn.IsStandIn(tile.Id) && _ground.ContentName(_ground.TileAt(node.ToGlobal(new Vector3(east, 0, 1000 - north)))) != tile.Id) return;
         float y = Ground(node, east, north);
         if (float.IsNaN(y)) return;
         var key = (level, right);
@@ -162,7 +175,7 @@ public partial class SlopeMarkers : Node
     private float Ground(ChunkNode node, float east, float north)
     {
         var world = node.ToGlobal(new Vector3(east, 0, 1000 - north));
-        return _chunks.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : float.NaN;
+        return _ground.TryGetHeight(world, out float h) ? node.ToLocal(world with { Y = h }).Y : float.NaN;
     }
 
     /// <summary>0 blue, 1 red, 2 black, 3 yellow (itinerary).</summary>

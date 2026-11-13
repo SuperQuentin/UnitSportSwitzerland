@@ -21,10 +21,24 @@ Flickering faces have two causes, and each test catches what the other cannot.
   ~6400 cm²). The baseline is headless, so those lines are in it; windowed, the same lights score
   ~53 000 cm², mostly the lenses' bloom quads over the housings. The `NEW` / `WORSE` verdict is
   printed after a model's last place line, so it reads as if it belonged to that pair.
-- **`--zfightcheck`** (quick tier, ~75 s): every model viewer entry against
+- **`--zfightcheck`** (quick tier, ~6 min for 2,222 models in Nov 2026; ~75 s for 1,318 at first): every model viewer entry against
   `tests/zfight-baseline.txt` (cm² per model). A model over its line, or a new model that fights,
   fails. `--zfightcheck update` rewrites the baseline: do it after fixing faces, and commit it.
   `--zfightcheck <text>` narrows the run; `--zfighthidden` keeps the hidden faces.
+  `--zfightshard K/N` scans the Kth of N parts (#1702): `checkmap.txt` runs four parts that
+  `tools/test.sh` starts side by side. One whole run took 629 s and ended a quick tier on its own.
+  The parts are dealt by `tests/zfight-seconds.txt` (#1717: models of 1 s or more, slowest first, each
+  to the least loaded part; the rest count 0.1 s and go round in catalog order), so no part draws two
+  slow models by chance. `update` rewrites the whole baseline and the seconds file, so it refuses a shard.
+  **Stacked copies are cheap** (#1717): the pins of each bowling lane rig (20 copies, headless at its
+  origin) made the two-level bowling centre 90 s and the arcade 118 s. `ZFight` now skips same-look
+  pairs per cell before testing, casts the visibility rays against each opaque triangle once, and
+  reuses a pair's answer for every pair of the same two faces: 12 s and 14 s, the same findings.
+  The building sites' foundations vary by a few places from run to run on one build (not a regression).
+  A model over 200,000 triangles or 5 km across is skipped and named (`skipped:`): the scan's grid
+  is sized by the mean triangle, and the whole-Earth globe (#1430 H4) hung the check from 3 November
+  until #1501's fix. A model over 2 s is named (`slow:`), a category over 5 s too; `--zfighttrace`
+  names each model before it is built, to find the one a run hangs on.
   Not `--modelsonly`: any `--models*` flag starts the viewer instead.
 - **Model viewer `--zfight`**: the fighting regions in magenta over the model, the count in the
   header, the worst places in the log (works in `--models,<dir>` PNG runs: before/after shots).

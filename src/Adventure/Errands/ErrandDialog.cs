@@ -129,7 +129,7 @@ public sealed partial class ErrandDialog : CanvasLayer
         if (_giver is { } g && _me() is { } me && IsInstanceValid(me))
         {
             var at = me.Global;
-            if (Math.Sqrt((at.E - g.E) * (at.E - g.E) + (at.N - g.N) * (at.N - g.N)) > LeaveM) Close();
+            if (at.HorizontalDistanceTo(g.Pos) > LeaveM) Close();
         }
     }
 

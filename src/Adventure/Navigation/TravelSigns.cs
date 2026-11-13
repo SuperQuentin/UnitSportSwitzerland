@@ -91,9 +91,9 @@ public partial class TravelSigns : Node3D
         if (PlacesService.Instance is { Catalogue.Count: > 0 } places && me != null && IsInstanceValid(me) && _origin() is { } origin && AdventureLog.Adventuring)
         {
             var at = me.Global;
-            places.Catalogue.Near(at.E, at.N, RangeM, _near);
+            places.Catalogue.Near(at, RangeM, _near);
             foreach (var poi in _near)
-                if (TravelNetwork.IsPoint(poi)) _nearest.Add((poi, TravelNetwork.Distance(poi, at.E, at.N)));
+                if (TravelNetwork.IsPoint(poi)) _nearest.Add((poi, TravelNetwork.Distance(poi, at)));
             _nearest.Sort((a, b) => a.D.CompareTo(b.D));
             if (_nearest.Count > Count) _nearest.RemoveRange(Count, _nearest.Count - Count);
             var book = AdventureTravel.Instance?.MyBook;

@@ -38,11 +38,13 @@ public static class ActorIo
     public static void Read(FootPlayer p, ActorState s)
     {
         var at = p.Global;
-        s.E = at.E; s.N = at.N; s.Alt = at.Alt;
+        s.E = at.Lv95.E; s.N = at.Lv95.N; s.Alt = at.Alt;
         var f = s.F;
-        var v = p.WorldVelocity;
+        // a recording keeps its velocity and heading in GlobalPos's axes at its LV95 place (grid north, as saved
+        // clips always have); the wire's ENU and true north are worked out again when it plays (#1503)
+        var v = p.GlobalVelocity;
         f[Channels.Vel] = v.X; f[Channels.Vel + 1] = v.Y; f[Channels.Vel + 2] = v.Z;
-        f[Channels.Yaw] = p.NetYaw;
+        f[Channels.Yaw] = p.GlobalYaw;
         var a = p.Anim;
         f[Channels.Anim] = a.X; f[Channels.Anim + 1] = a.Y; f[Channels.Anim + 2] = a.Z; f[Channels.Anim + 3] = a.W;
         var d = p.DeckPos;
@@ -93,8 +95,6 @@ public static class ActorIo
         if (p.CarCd != s.Str[20]) p.CarCd = s.Str[20];
 
         var f = s.F;
-        p.NetVel = new Vector3(f[Channels.Vel], f[Channels.Vel + 1], f[Channels.Vel + 2]);
-        p.NetYaw = f[Channels.Yaw];
         p.Anim = new Vector4(f[Channels.Anim], f[Channels.Anim + 1], f[Channels.Anim + 2], f[Channels.Anim + 3]);
         p.DeckPos = new Vector3(f[Channels.DeckPos], f[Channels.DeckPos + 1], f[Channels.DeckPos + 2]);
         p.DeckYaw = f[Channels.DeckYaw];
@@ -106,7 +106,7 @@ public static class ActorIo
             Array.Copy(f, Channels.Pose, buffer, 0, len);
             p.NetPose = buffer;
         }
-        p.NetGlobal = new GlobalPos(s.E, s.N, s.Alt);
+        p.SetNetState(GlobalPos.FromLv95(s.E, s.N, s.Alt), new Vector3(f[Channels.Vel], f[Channels.Vel + 1], f[Channels.Vel + 2]), f[Channels.Yaw]);
         p.NetTime = stamp;
     }
 }

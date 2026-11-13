@@ -1,6 +1,7 @@
 namespace UnitSport.Tools.RoadGen.Rewrite;
 
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Import;
 using UnitSport.Tools.RoadGen.Geometry;
 using UnitSport.Tools.RoadGen.Junctions;
 using UnitSport.Tools.RoadGen.Layout;
@@ -112,7 +113,13 @@ public static partial class TileRewriter
     }
 
     /// <summary>OSM's uncontrolled walkers' crossings of a tram track (#1176), LV95: a middle stage within <see cref="UncontrolledReach"/> stays unlit.</summary>
-    internal static List<Vec2> UncontrolledTramCrossings = [];
+    /// <summary>A run's walkers' crossings over a tram track left without lights, per thread (#1508: frames run side by side).</summary>
+    internal static List<Vec2> UncontrolledTramCrossings { get => _uncontrolled ?? []; set => _uncontrolled = value; }
+    [ThreadStatic] private static List<Vec2>? _uncontrolled;
+
+    /// <summary>OSM's walkers' crossings over a tram track left without lights (#1176: railway=tram_crossing, crossing=uncontrolled).</summary>
+    internal static List<Vec2> UncontrolledCrossings(OsmNodesReader? nodes) => nodes is null ? [] : nodes.All.Where(e => e.Kind == OsmNodesReader.NodeKind.Crossing
+        && e.Value == "uncontrolled" && e.Tags.GetValueOrDefault("railway") == "tram_crossing").Select(e => new Vec2(e.E, e.N)).ToList();
 
     private const double UncontrolledReach = 12;
 
@@ -132,10 +139,10 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadApproach>> approaches, Cantons? cantons, SignalStats signalStats, LayoutWriteStats stats,
         Dictionary<TileId, List<RoadPointProp>> signs, Func<Vec2, bool> clear, Func<Vec2, bool>? building = null,
         IReadOnlyDictionary<int, (SignalMoves Moves, double Lateral)>? trams = null, GantryContext? gantries = null,
-        Dictionary<TileId, List<RoadAreaProp>>? areas = null)
+        Dictionary<TileId, List<RoadAreaProp>>? areas = null, Func<Vec2, string?>? why = null)
     {
         var net = result.Network;
-        var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
+        var home = Plane.TileAt(jp.Centre.X, jp.Centre.Y);
         var arms = new List<SignalArm>();
         var exterior = new List<ArmExterior>();
         foreach (var a in jp.Arms)
@@ -319,14 +326,26 @@ public static partial class TileRewriter
                     lift = 0.12f;
                 }
                 else if (ClearFoot(p, ex, a, P, clear) is var (spot, kerbLift)) (foot, lift) = (spot, kerbLift);
-                else { stats.PolesRejected++; continue; }
+                else
+                {
+                    stats.PolesRejected++;
+                    // (#1709) what kept a main pole off every spot it tried
+                    if (why is not null && arms[k].In && (p.Flags & SignalPoleFlags.Main) != 0)
+                    {
+                        var blocks = new SortedSet<string>(StringComparer.Ordinal);
+                        ClearFoot(p, ex, a, P, q => { if (why(q) is { } b) blocks.Add(b); return false; });
+                        string key = blocks.Count == 0 ? "no spot tried" : string.Join("+", blocks);
+                        stats.MainPolesBlocked[key] = stats.MainPolesBlocked.GetValueOrDefault(key) + 1;
+                    }
+                    continue;
+                }
                 var local = Local(home, [foot], q => SampleAt(a, q), lift);
                 // car heads face the arriving drivers; a pedestrian head faces across its crossing
                 // the second pole carries the left arrow where a lane turns left only (the check: every such arm has one)
                 // (on the island where there is one, the left kerb's pole keeping the walkers' head alone, #1000)
                 var flags = p.Flags | (!p.RightKerb && (p.OnRefuge || ex.Refuge is null) && arms[k].LeftPocket ? SignalPoleFlags.Second : SignalPoleFlags.None);
                 if (!arms[k].In) flags &= ~(SignalPoleFlags.Main | SignalPoleFlags.Second);
-                var pole = new SignalPole(local[0], local[1], local[2], Heading(u), Heading(p.RightKerb ? -right : right), (byte)k, flags);
+                var pole = new SignalPole(local[0], local[1], local[2], Heading(home, foot, u), Heading(home, foot, p.RightKerb ? -right : right), (byte)k, flags);
                 poles.Add(pole);
                 if (p.OnRefuge) refugeFoot = (foot, local[1]);
                 else if (p.RightKerb) mainFoot = (foot, local[1]);
@@ -346,6 +365,36 @@ public static partial class TileRewriter
                         pole.CarHeading, top));
                     stats.SignsOnPoles++;
                 }
+            }
+            // (#1709) no spot on the right kerb is clear (a crossing road's carriageway, a core, a building): the approach's main head
+            // goes on its left, the second head's place (SSV Art. 68: heads stand on the right and may be repeated on the left;
+            // a head on neither side leaves the drivers without one): on the left pole, else a pole of its own at the left kerb
+            if (arms[k].In && mainFoot is null && ex.Poles.FirstOrDefault(q => q.RightKerb && (q.Flags & SignalPoleFlags.Main) != 0) is { } wanted)
+            {
+                int leftPole = poles.FindLastIndex(q => q.Arm == k);
+                if (leftPole >= 0 && (leftFoot is not null || refugeFoot is not null))
+                {
+                    poles[leftPole] = poles[leftPole] with { Flags = poles[leftPole].Flags | SignalPoleFlags.Second };
+                    stats.MainHeadsLeft++;
+                }
+                else if (ClearFoot(wanted with { RightKerb = false, Flags = 0 }, ex, a, P, clear) is var (lf2, lLift2))
+                {
+                    var local = Local(home, [lf2], q => SampleAt(a, q), lLift2);
+                    poles.Add(new SignalPole(local[0], local[1], local[2], Heading(home, lf2, u), Heading(home, lf2, right), (byte)k, SignalPoleFlags.Second));
+                    leftFoot = (lf2, local[1]);
+                    stats.Poles++;
+                    stats.MainHeadsLeft++;
+                }
+                else if (NearestClear(P(wanted.Station, ExteriorPlanner.SectionAt(a, wanted.Station).CarriagewayRight + PoleClear), clear) is { } near)
+                {
+                    // last, the clear spot nearest the right kerb's (a median, a corner of a core several streets share)
+                    var local = Local(home, [near], q => SampleAt(a, q), 0f);
+                    poles.Add(new SignalPole(local[0], local[1], local[2], Heading(home, near, u), Heading(home, near, -right), (byte)k, SignalPoleFlags.Main));
+                    mainFoot = (near, local[1]);
+                    stats.Poles++;
+                    stats.MainHeadsNear++;
+                }
+                else stats.MainHeadsNone++;
             }
             // the far kerb's foot found as a pole's where no pole stands there: for an overhead structure or a gantry
             if (arms[k].In && (ex.Overhead.Count > 0 || gantries is not null) && leftFoot is null && ex.Poles.Count > 0
@@ -396,7 +445,7 @@ public static partial class TileRewriter
             double own = TramPoleSpot(sec.CarriagewayLeft, sec.CarriagewayRight, lateral) ?? double.NaN;
             var foot = axis.At(m0 + stop, own);
             // (each pole's place across the arm, m right of its axis at the stop line)
-            double Across(SignalPole p) => (new Vec2(p.X + home.MinE, home.MaxN - p.Z) - axis.At(m0 + stop, 0)).Dot(axis.RightAt(m0 + stop));
+            double Across(SignalPole p) => (new Vec2(p.X + Plane.West(home), Plane.North(home) - p.Z) - axis.At(m0 + stop, 0)).Dot(axis.RightAt(m0 + stop));
             for (int i = 0; i < poles.Count; i++)
                 if (poles[i].Arm == k && (poles[i].Flags & SignalPoleFlags.Second) != 0 && Across(poles[i]) < lateral)
                     poles[i] = poles[i] with { Flags = poles[i].Flags | SignalPoleFlags.Tram };
@@ -404,7 +453,7 @@ public static partial class TileRewriter
             {
                 var local = Local(home, [foot], q => SampleAt(a, q), 0f);
                 var u = axis.DirAt(m0);
-                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(u), Heading(axis.RightAt(m0)), (byte)k, SignalPoleFlags.Tram));
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(home, foot, u), Heading(home, foot, axis.RightAt(m0)), (byte)k, SignalPoleFlags.Tram));
                 stats.TramPolesOwn++;
                 continue;
             }
@@ -426,7 +475,7 @@ public static partial class TileRewriter
                 double near = 4;
                 for (int i = 0; i < poles.Count; i++)
                     if (poles[i].Arm == arm && (poles[i].Flags & SignalPoleFlags.Pedestrian) != 0
-                        && new Vec2(poles[i].X + home.MinE, home.MaxN - poles[i].Z).DistanceTo(end) is var d && d < near) (near, best) = (d, i);
+                        && new Vec2(poles[i].X + Plane.West(home), Plane.North(home) - poles[i].Z).DistanceTo(end) is var d && d < near) (near, best) = (d, i);
                 if (best >= 0) { poles[best] = poles[best] with { Flags = poles[best].Flags | SignalPoleFlags.MiddleStage }; continue; }
                 // (none there, a leaving carriageway's island: a pole of its own on the island beside the crossing, its head for the
                 // carriageway's walkers facing its far kerb, the middle stage's back to back with it)
@@ -437,7 +486,7 @@ public static partial class TileRewriter
                 var foot = end + a.Axis!.DirAt(m0) * past;
                 if (areas is null && !clear(foot)) continue;
                 var local = Local(home, [foot], q => SampleAt(a, q), 0.12f);
-                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(a.Axis.DirAt(m0)), Heading(-a.Axis.RightAt(m0)), (byte)arm,
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(home, foot, a.Axis.DirAt(m0)), Heading(home, foot, -a.Axis.RightAt(m0)), (byte)arm,
                     SignalPoleFlags.Pedestrian | SignalPoleFlags.MiddleStage));
                 stats.Poles++;
             }
@@ -455,7 +504,7 @@ public static partial class TileRewriter
                 if (ConflictTimes.Crosswalk(jp, a, left) is not var (sm, half, kerb)) continue;
                 var end = a.Axis!.At(sm, kerb);
                 bool has = poles.Any(q => q.Arm == k && (q.Flags & SignalPoleFlags.Pedestrian) != 0
-                    && new Vec2(q.X + home.MinE, home.MaxN - q.Z).DistanceTo(end) < half + IslandPoleBack + 2.5);
+                    && new Vec2(q.X + Plane.West(home), Plane.North(home) - q.Z).DistanceTo(end) < half + IslandPoleBack + 2.5);
                 if (has) continue;
                 // (on a tram reservation's refuge, its own ground: in from its kerb)
                 bool refuge = !left && areas is not null && stageOf.Values.Any(v => v.Twin == k);
@@ -463,7 +512,7 @@ public static partial class TileRewriter
                 if (!refuge && !clear(foot)) continue;
                 var local = Local(home, [foot], q => SampleAt(a, q), 0.12f);
                 var right = a.Axis.RightAt(m0);
-                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(a.Axis.DirAt(m0)), Heading(left ? right : -right), (byte)k, SignalPoleFlags.Pedestrian));
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(home, foot, a.Axis.DirAt(m0)), Heading(home, foot, left ? right : -right), (byte)k, SignalPoleFlags.Pedestrian));
                 stats.Poles++;
                 stats.ExitCrossingPoles++;
             }
@@ -483,7 +532,7 @@ public static partial class TileRewriter
                     if (ConflictTimes.Crosswalk(jp, a, left) is not var (sm, half, kerb)) continue;
                     double o0 = left ? kerb - width : kerb, o1 = left ? kerb : kerb + width;
                     double reach = half + RefugeBeyond;
-                    var refugeHome = TileId.FromLv95(a.Axis!.At(sm, (o0 + o1) / 2).X, a.Axis.At(sm, (o0 + o1) / 2).Y);
+                    var refugeHome = Plane.TileAt(a.Axis!.At(sm, (o0 + o1) / 2).X, a.Axis.At(sm, (o0 + o1) / 2).Y);
                     foreach (var (s0, s1, raised) in (ReadOnlySpan<(double, double, bool)>)[(sm - reach, sm - half, true), (sm - half, sm + half, false), (sm + half, sm + reach, true)])
                     {
                         var ring = new[] { a.Axis.At(s0, o0), a.Axis.At(s1, o0), a.Axis.At(s1, o1), a.Axis.At(s0, o1) };
@@ -504,10 +553,19 @@ public static partial class TileRewriter
         Get(signals, home).Add(record);
         short index = (short)(Get(signals, home).Count - 1);
         foreach (var (k, at, stop) in records)
-            Get(approaches, home).Add(ApproachOf(exterior[k], at, stop, home, index, (byte)k, net));
+            Get(approaches, home).Add(ApproachOf(exterior[k], at, stop, home, index, (byte)k, net, Served(plan, k)));
         stats.Signals++;
         signalStats.Junctions++;
         return plan;
+    }
+
+    /// <summary>The moves an arm's car groups let go (#1709): its car, left-arrow and right-arrow groups'.</summary>
+    private static SignalMoves Served(SignalPlan plan, int arm)
+    {
+        var served = SignalMoves.None;
+        foreach (var g in plan.Groups)
+            if (g.Arm == arm && g.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow) served |= g.Moves;
+        return served;
     }
 
     /// <summary>
@@ -515,13 +573,19 @@ public static partial class TileRewriter
     /// the cars' line left to right, offsets from the street's own arriving lane, each lane full from where it stops changing
     /// (out from the line) and starting where it leaves the street's normal section; riders' lanes stop at their own line.
     /// </summary>
-    private static RoadApproach ApproachOf(ArmExterior ex, Vec2 at, double stop, TileId home, short signal, byte planArm, RoadNetwork net)
+    private static RoadApproach ApproachOf(ArmExterior ex, Vec2 at, double stop, TileId home, short signal, byte planArm, RoadNetwork net,
+        SignalMoves served = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right)
     {
         var a = ex.Arm;
         var sec = ExteriorPlanner.SectionAt(a, stop);
         double centre = a.Normal.CarLanes(StripWay.In).Select(l => a.Normal.Span(l.Index)).Select(s => (s.From + s.To) * 0.5).DefaultIfEmpty(0).First();
         var all = SignalMoves.None;
         foreach (var x in a.Mouth.CarLanes(StripWay.In)) all |= x.Strip.Moves;
+        // (#1709) the arrows are the mouth's, lane by lane: a transition the street shares with the junction at its other end is
+        // that junction's, seen mirrored, and its lanes there carry none (a left pocket's lane read every move, its plan an arrow)
+        var mouthIn = a.Mouth.CarLanes(StripWay.In).Select(l => l.Strip.Moves).ToList();
+        bool byMouth = mouthIn.Count == sec.Strips.Count(x => x.Way == StripWay.In && x.IsCarLane);
+        int carIn = 0;
         var lanes = new List<ApproachLane>();
         for (int k = 0; k < sec.Strips.Count; k++)
         {
@@ -529,7 +593,14 @@ public static partial class TileRewriter
             if (x.Way != StripWay.In || !(x.IsCarLane || x.Kind == StripKind.BikeLane)) continue;
             var (f, t) = sec.Span(k);
             var (full, from) = Reach(a, x.Id, stop);
-            var moves = x.Moves != SignalMoves.None ? x.Moves : all != SignalMoves.None ? all : SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+            var own = x.IsCarLane && byMouth ? mouthIn[carIn] : x.Moves;
+            if (x.IsCarLane) carIn++;
+            // without arrows, the moves its plan lets go (#1709: not all three where a turn has no group, its plan leaving it out)
+            var any = all != SignalMoves.None ? all : SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+            if ((any & served) is var go && go != SignalMoves.None) any = go;
+            var moves = own != SignalMoves.None ? own : x.Moves != SignalMoves.None ? x.Moves : any;
+            // and never a move its plan has no green for (a mouth lane's arrows can name a turn with no street to go into)
+            if (x.IsCarLane && (moves & served) is var lit && lit != SignalMoves.None) moves = lit;
             bool bike = x.Kind == StripKind.BikeLane;
             lanes.Add(new ApproachLane((float)((f + t) * 0.5 - centre), (float)full, (float)Math.Max(full, from), moves,
                 bike ? ApproachLaneKind.Bike : ApproachLaneKind.Car, bike && ex.RiderStop is { } r ? (float)(r - stop) : 0f));
@@ -538,7 +609,7 @@ public static partial class TileRewriter
         var local = Local(home, [at], _ => y, 0f);
         return new RoadApproach
         {
-            X = local[0], Y = local[1], Z = local[2], Heading = (float)a.Heading, Signal = signal, SignalArm = planArm, Banned = a.Wants.Banned,
+            X = local[0], Y = local[1], Z = local[2], Heading = (float)Plane.AngleToTile(home, at, a.Heading), Signal = signal, SignalArm = planArm, Banned = a.Wants.Banned,
             LaneCentre = (float)centre, Lanes = lanes,
         };
     }
@@ -576,7 +647,7 @@ public static partial class TileRewriter
     private static void WriteCoreLines(JunctionPlan jp, RoadGenResult result, RoadJunction? cap, Dictionary<TileId, List<RoadPaint>> paint, LayoutWriteStats stats)
     {
         var core = jp.Core!;
-        var home = TileId.FromLv95(jp.Centre.X, jp.Centre.Y);
+        var home = Plane.TileAt(jp.Centre.X, jp.Centre.Y);
         var anchors = new List<(Vec2 At, float Height)>();
         foreach (var m in core.Mouths)
             if (result.Network.Links[jp.Arms.First(a => a.Arm == m.Arm).LinkId].Tag is Source s)
@@ -750,6 +821,22 @@ public static partial class TileRewriter
         }
     }
 
+    /// <summary>Where nothing beside either kerb is clear, a main pole looks this far round its right kerb's spot (m, #1709), in rings this far apart.</summary>
+    private const double NearReach = 4.0, NearStep = 0.5;
+
+    /// <summary>The clear spot nearest <paramref name="from"/> within <see cref="NearReach"/>, on rings of 16 points; null where none is.</summary>
+    private static Vec2? NearestClear(Vec2 from, Func<Vec2, bool> clear)
+    {
+        for (double r = NearStep; r <= NearReach + 1e-9; r += NearStep)
+            for (int i = 0; i < 16; i++)
+            {
+                double t = i * Math.PI / 8;
+                var q = new Vec2(from.X + r * Math.Cos(t), from.Y + r * Math.Sin(t));
+                if (clear(q)) return q;
+            }
+        return null;
+    }
+
     /// <summary>
     /// A pole's foot beside its kerb (the old layout's <c>PlacePole</c>, #350/#711, restored by #1000): <see cref="PoleClear"/> out of
     /// the kerb, the main one past the approach's path where the arm has a crosswalk, never on a path, stepping out by
@@ -856,7 +943,7 @@ public static partial class TileRewriter
         return new SignalOverhead
         {
             Kind = kind, Arm = arm, X = a[0], Y = a[1], Z = a[2], EndX = b[0], EndY = b[1], EndZ = b[2],
-            Bottom = road + (kind == OverheadKind.Span ? SpanLowerEdge : HeadLowerEdge), Heading = Heading(u),
+            Bottom = road + (kind == OverheadKind.Span ? SpanLowerEdge : HeadLowerEdge), Heading = Heading(home, post, u),
             Heads = placed.Select(h => new OverheadHead((float)h.Along, h.Moves)).ToList(),
         };
     }

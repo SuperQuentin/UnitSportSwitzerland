@@ -20,6 +20,7 @@ uniform bool lying = true;
 uniform float lift = 0.06;
 
 void vertex() {
+    PATTERN_NONE
     vec3 centre = MODEL_MATRIX[3].xyz;
     float spacing = max(2.0, distance(centre, CAMERA_POSITION_WORLD) * 0.008);
     vec2 p = pattern_xz(centre);

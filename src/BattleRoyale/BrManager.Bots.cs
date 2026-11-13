@@ -307,9 +307,14 @@ public partial class BrManager
         var source = _source;
         double e0 = _state.AreaE - h, n0 = _state.AreaN - h, e1 = _state.AreaE + h, n1 = _state.AreaN + h;
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        var leaves = TilesOf?.Invoke(new BrArea(_state.AreaE, _state.AreaN, _state.Side, _state.AreaName)).ToList();
+        var leafRoads = LeafRoads;
         _roads = Task.Run(async () =>
         {
-            var net = await Gpx.RoadNetwork.LoadAsync(source, e0, n0, e1, n1);
+            // an earth server's streets are its leaves' (#1704): its flat world holds no road tile
+            var net = leaves != null && leafRoads != null
+                ? await Gpx.RoadNetwork.LoadLeavesAsync(leaves, leafRoads)
+                : await Gpx.RoadNetwork.LoadAsync(source, e0, n0, e1, n1);
             net.BuildWalkGraph();
             GD.Print($"[br] bots: the streets are in, {net.Edges.Count} edges in {clock.ElapsedMilliseconds} ms");
             return net;
@@ -430,8 +435,7 @@ public partial class BrManager
         foreach (var e in _state.Entrants.Where(e => e.Bot && e.Alive))
             if (BodyOf(e.Peer) is { Eliminated: false } body)
             {
-                var (pe, pn) = (body.Global.E, body.Global.N);
-                if (z.Outside(new Vector2((float)(pe - _state.AreaE), (float)(pn - _state.AreaN))))
+                if (z.Outside(_state.ZonePointOf(body.Global)))
                     body.TakeDamage(z.Dps * (float)dt, 0, DamageCause.Zone);
             }
     }

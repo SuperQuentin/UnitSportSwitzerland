@@ -69,29 +69,29 @@ public sealed class HitGuard
 
     /// <summary>
     /// Whether no ground rises between <paramref name="from"/> (the shooter's eye) and
-    /// <paramref name="to"/> (where the hit landed), both LV95 (E, N, altitude), by
-    /// <paramref name="ground"/> (the surface at E, N; null where unknown) sampled every
+    /// <paramref name="to"/> (where the hit landed), both positions, by
+    /// <paramref name="ground"/> (the surface under a position; null where unknown) sampled every
     /// <paramref name="step"/> metres. A sample counts as blocking only when the ground is more than
     /// <paramref name="margin"/> above the line PLUS what each end itself lies under the surface,
     /// blended along the shot: the ground is a coarse lattice that rounds ridges off and fills
     /// valleys in, and a player in a room or a tunnel is under it already. Pure.
     /// </summary>
-    public static bool TerrainClear((double E, double N, double Alt) from, (double E, double N, double Alt) to,
-        Func<double, double, float?> ground, float step = 10f, float margin = 15f)
+    public static bool TerrainClear(GlobalPos from, GlobalPos to,
+        Func<GlobalPos, float?> ground, float step = 10f, float margin = 15f)
     {
         double under0 = Under(from, ground), under1 = Under(to, ground);
-        double de = to.E - from.E, dn = to.N - from.N;
-        int n = (int)(GlobalPos.HorizontalDistance(to.E, to.N, from.E, from.N) / step);
+        var (de, dn, up) = from.OffsetTo(to);
+        int n = (int)(to.HorizontalDistanceTo(from) / step);
         for (int i = 1; i < n; i++)
         {
             double t = i / (double)n;
-            double e = from.E + de * t, north = from.N + dn * t, alt = from.Alt + (to.Alt - from.Alt) * t;
-            if (ground(e, north) is { } g && g - alt > margin + under0 * (1 - t) + under1 * t) return false;
+            var sample = from.Moved(de * t, dn * t, up * t);
+            if (ground(sample) is { } g && g - sample.Alt > margin + under0 * (1 - t) + under1 * t) return false;
         }
         return true;
     }
 
     /// <summary>How far a point lies under the surface, 0 when it is above it or the ground is unknown.</summary>
-    private static double Under((double E, double N, double Alt) p, Func<double, double, float?> ground) =>
-        ground(p.E, p.N) is { } g ? Math.Max(0, g - p.Alt) : 0;
+    private static double Under(GlobalPos p, Func<GlobalPos, float?> ground) =>
+        ground(p) is { } g ? Math.Max(0, g - p.Alt) : 0;
 }

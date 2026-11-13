@@ -175,6 +175,7 @@ public static class CockpitCheck
             {
                 RideKind.Freighter => AirlinerRig.CreateFreighter(),
                 RideKind.An124 => AirlinerRig.CreateAn124(),
+                RideKind.Shuttle => AirlinerRig.CreateShuttle(),
                 _ => AirlinerRig.CreateA320(Colors.White),
             };
             var tris = OpaqueTriangles(rig);

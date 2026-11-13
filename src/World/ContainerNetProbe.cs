@@ -110,7 +110,7 @@ public partial class ContainerNetProbe : Node
                     _claimed = true;
                     vehicles.Claim(car1, state => vehicles.Park(state with
                     {
-                        Position = new GlobalPos(s1.E + 8, s1.N, s1.Height + 0.3),
+                        Position = GlobalPos.FromLv95(s1.E + 8, s1.N, s1.Height + 0.3),
                         Velocity = Vector3.Zero, EngineOn = false,
                     }));
                 }
@@ -133,7 +133,7 @@ public partial class ContainerNetProbe : Node
                 if (_t < 3) return;
                 _itemOid = dropped.Oid;
                 _itemAt = dropped.Capture().Position;
-                RadioManager.Instance?.Throw(new RadioState("", 0, new GlobalPos(s1.E + 4, s1.N + 6, s1.Height + 0.6), 0f, Vector3.Zero));
+                RadioManager.Instance?.Throw(new RadioState("", 0, GlobalPos.FromLv95(s1.E + 4, s1.N + 6, s1.Height + 0.6), 0f, Vector3.Zero));
                 Next();
                 return;
             case 4:   // the radio, at rest
@@ -145,7 +145,7 @@ public partial class ContainerNetProbe : Node
                 if (_t < 3) return;
                 _radioOid = radio.Oid;
                 _radioAt = radio.Capture().Position;
-                Say(FormattableString.Invariant($"PARKED car {_carOid} {_carAt.E:F3} {_carAt.N:F3} {_carAt.Alt:F3} item {_itemOid} {_itemAt.E:F3} {_itemAt.N:F3} {_itemAt.Alt:F3} radio {_radioOid} {_radioAt.E:F3} {_radioAt.N:F3} {_radioAt.Alt:F3}"));
+                Say(FormattableString.Invariant($"PARKED car {_carOid} {_carAt.Lv95.E:F3} {_carAt.Lv95.N:F3} {_carAt.Alt:F3} item {_itemOid} {_itemAt.Lv95.E:F3} {_itemAt.Lv95.N:F3} {_itemAt.Alt:F3} radio {_radioOid} {_radioAt.Lv95.E:F3} {_radioAt.Lv95.N:F3} {_radioAt.Alt:F3}"));
                 Say("ready: waiting for the go");
                 Next();
                 return;
@@ -250,11 +250,11 @@ public partial class ContainerNetProbe : Node
         if (p.Length != 12) { Done("FAILED (no --containernet-expect)"); return; }
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         _carOid = long.Parse(p[0], inv);
-        _carAt = new GlobalPos(double.Parse(p[1], inv), double.Parse(p[2], inv), double.Parse(p[3], inv));
+        _carAt = GlobalPos.FromLv95(double.Parse(p[1], inv), double.Parse(p[2], inv), double.Parse(p[3], inv));
         _itemOid = long.Parse(p[4], inv);
-        _itemAt = new GlobalPos(double.Parse(p[5], inv), double.Parse(p[6], inv), double.Parse(p[7], inv));
+        _itemAt = GlobalPos.FromLv95(double.Parse(p[5], inv), double.Parse(p[6], inv), double.Parse(p[7], inv));
         _radioOid = long.Parse(p[8], inv);
-        _radioAt = new GlobalPos(double.Parse(p[9], inv), double.Parse(p[10], inv), double.Parse(p[11], inv));
+        _radioAt = GlobalPos.FromLv95(double.Parse(p[9], inv), double.Parse(p[10], inv), double.Parse(p[11], inv));
     }
 
     private RadioBody? Radio(bool mine) =>

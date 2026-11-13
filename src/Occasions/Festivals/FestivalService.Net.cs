@@ -29,7 +29,7 @@ public partial class FestivalService
         if (def.Game(game) == null) return Tell(peer, "There is no such thing to ring.");
         if (!def.IsOpen(game, run.Day)) return Tell(peer, $"The {game} opens on day {def.OpensOn(game)}.");
         if (run.Site is not { } site || _adventure.PositionOf?.Invoke(peer) is not { } at
-            || site.DistanceTo(at.E, at.N) > site.RadiusM + 10)
+            || site.DistanceTo(at) > site.RadiusM + 10)
             return Tell(peer, "Go to the festival ground to ring it.");
         if (!_adventure.Active(peer)) return Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
@@ -127,7 +127,7 @@ public partial class FestivalService
     private void TellFestivals(string json)
     {
         List<RunningFestival> list;
-        try { list = JsonSerializer.Deserialize<List<RunningFestival>>(json, _json) ?? new(); }
+        try { list = JsonSerializer.Deserialize<List<RunningFestival>>(FestivalsWire(json, toWire: false), _json) ?? new(); }
         catch (JsonException e)
         {
             GD.PushWarning($"[festival] unreadable list from the server: {e.Message}");

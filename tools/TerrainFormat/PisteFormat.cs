@@ -102,8 +102,32 @@ public static class PisteFormat
     {
         if (tile.Records.Count > MaxRecords) throw new ArgumentException($"{tile.Records.Count} slopes in a tile, max {MaxRecords}");
         if (tile.Slot.Length != Size * Size || tile.Aux.Length != Size * Size) throw new ArgumentException("piste raster size");
-        new TileHeader(Magic, Version, FlagOsm, tile.Id, (uint)tile.Records.Count).Write(output);
+        TileHeader.WriteHead(output, Magic, Version, FlagOsm, tile.Id);
+        EncodeBody(tile, output, Size);
+    }
+
+    /// <summary>
+    /// The key-free body (#1505, G2 B1): the record count, the records and the deflated rasters, what
+    /// follows the header's tile id. The .pst file is its 16-byte head and then this with
+    /// <paramref name="side"/> = <see cref="Size"/>, byte for byte as before the split; a cube leaf's
+    /// piste section (<see cref="LeafPistes"/>) is this alone, compressed, its <see cref="FlagOsm"/> in
+    /// the leaf's section table.
+    /// <para>
+    /// Inside a leaf: <see cref="PisteRecord.Path"/> is (x, z) in the leaf's anchor frame
+    /// (<see cref="CubeKey.Anchor"/>: x east, z south, metres from the cell centre), not (east, north)
+    /// from the tile's south-west corner; <see cref="PisteTile.Slot"/> and <see cref="PisteTile.Aux"/>
+    /// index the LV95 tile's 1 m grid vertices (row 0 the north edge), so a leaf carries them on its own
+    /// lattice instead: (2^bits + 1)² vertices, row-major from the south-west as the heights,
+    /// <paramref name="side"/> = 2^bits + 1. AltLow and AltHigh stay altitudes above sea level (what
+    /// the snow model is evaluated at), not ENU heights.
+    /// </para>
+    /// </summary>
+    public static void EncodeBody(PisteTile tile, Stream output, int side)
+    {
+        if (tile.Records.Count > MaxRecords) throw new ArgumentException($"{tile.Records.Count} slopes in a tile, max {MaxRecords}");
+        if (tile.Slot.Length != side * side || tile.Aux.Length != side * side) throw new ArgumentException("piste raster size");
         using var w = new BinaryWriter(output, Encoding.UTF8, leaveOpen: true);
+        w.Write((uint)tile.Records.Count);
         foreach (var r in tile.Records)
         {
             w.Write(r.Id);
@@ -124,11 +148,20 @@ public static class PisteFormat
 
     public static PisteTile Decode(Stream input)
     {
-        var header = TileHeader.Read(input, Magic, "piste");
+        var header = TileHeader.ReadHead(input, Magic, "piste");
         header.CheckVersion(Version, "piste");
-        var records = new List<PisteRecord>((int)header.Count);
+        return DecodeBody(input, Size, header.Id);
+    }
+
+    /// <summary>Reads what <see cref="EncodeBody"/> wrote, rasters of <paramref name="side"/>²; <paramref name="tileId"/> is the LV95 tile's (default inside a leaf).</summary>
+    public static PisteTile DecodeBody(Stream input, int side, TileId tileId = default)
+    {
+        Span<byte> head = stackalloc byte[4];
+        input.ReadExactly(head);
+        uint count = BinaryPrimitives.ReadUInt32LittleEndian(head);
+        var records = new List<PisteRecord>((int)count);
         using (var r = new BinaryReader(input, Encoding.UTF8, leaveOpen: true))
-            for (uint i = 0; i < header.Count; i++)
+            for (uint i = 0; i < count; i++)
             {
                 ulong id = r.ReadUInt64();
                 var type = (PisteType)r.ReadByte();
@@ -142,15 +175,15 @@ public static class PisteFormat
                 for (int k = 0; k < path.Length; k++) path[k] = r.ReadSingle();
                 records.Add(new PisteRecord(id, type, diff, groom, area, width, name, reference, path, altLow, altHigh, sun, steep));
             }
-        var slot = new byte[Size * Size];
-        var auxBytes = new byte[Size * Size * 2];
+        var slot = new byte[side * side];
+        var auxBytes = new byte[side * side * 2];
         using (var deflate = new DeflateStream(input, CompressionMode.Decompress, leaveOpen: true))
         {
             deflate.ReadExactly(slot);
             deflate.ReadExactly(auxBytes);
         }
-        var aux = new ushort[Size * Size];
+        var aux = new ushort[side * side];
         for (int i = 0; i < aux.Length; i++) aux[i] = BinaryPrimitives.ReadUInt16LittleEndian(auxBytes.AsSpan(i * 2));
-        return new PisteTile(header.Id, records, slot, aux);
+        return new PisteTile(tileId, records, slot, aux);
     }
 }

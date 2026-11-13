@@ -22,7 +22,8 @@ public partial class TelescopeView : CanvasLayer
     public static TelescopeView? Current { get; private set; }
 
     private static readonly StringName ActUse = PlayerInput.UseItem, ActLeave = PlayerInput.InteractMount, ActCancel = "ui_cancel",
-        ActLookLeft = PlayerInput.LookLeft, ActLookRight = PlayerInput.LookRight, ActLookUp = PlayerInput.LookUp, ActLookDown = PlayerInput.LookDown;
+        ActLookLeft = PlayerInput.LookLeft, ActLookRight = PlayerInput.LookRight, ActLookUp = PlayerInput.LookUp, ActLookDown = PlayerInput.LookDown,
+        ActNext = PlayerInput.TelescopeNext, ActPrev = PlayerInput.TelescopePrev, ActInfo = PlayerInput.TelescopeInfo;
 
     /// <summary>The placed telescope's id.</summary>
     public long Id { get; private set; }
@@ -39,13 +40,17 @@ public partial class TelescopeView : CanvasLayer
 
     private Telescopes _service = null!;
     private Player.FootPlayer? _player;
+    private Core.TrueNorth.Near _north;
     private Node3D _scope = null!;
     private Node3D? _tube;
     private Camera3D? _cam, _own;
     private bool _vr, _closing;
     private SubViewport? _eyepiece;
     private MeshInstance3D? _panel;
-    private Label _readout = null!, _hint = null!;
+    private Label _readout = null!, _hint = null!, _menu = null!, _info = null!;
+    private bool _infoOn;
+    private double _infoAt;
+    private string _menuShown = "", _infoShown = "";
     private Control _mask = null!;
     private string _hintShown = "";
     private (float Focal, bool Locked, string Target) _readoutShown = (-1f, false, "");
@@ -164,6 +169,26 @@ public partial class TelescopeView : CanvasLayer
         return true;
     }
 
+    /// <summary>The target menu (#1530): slews to <paramref name="body"/> and keeps it centred, the moon, a planet or a big moon.</summary>
+    public bool SelectTarget(SkyBody body)
+    {
+        Target = body;
+        Satellite = null;
+        Locked = true;
+        if (TargetDirection() is not { } d)
+        {
+            Locked = false;
+            ItemController.Instance?.Toast($"{TelescopeTargets.Name(body)} is not in the sky here.");
+            return false;
+        }
+        Aim(d);
+        return true;
+    }
+
+    /// <summary>The next (<paramref name="by"/> 1) or previous menu entry, from the one locked on (none: the first).</summary>
+    public bool StepTarget(int by) =>
+        SelectTarget(TelescopeTargets.Step(Locked && Satellite == null ? Target : null, by));
+
     /// <summary>The satellite it follows while <see cref="Locked"/> (its name), or null for <see cref="Target"/>.</summary>
     public string? Satellite { get; private set; }
 
@@ -212,6 +237,9 @@ public partial class TelescopeView : CanvasLayer
             return;
         }
         if (Input.IsActionJustPressed(ActUse)) ToggleLock();
+        if (Input.IsActionJustPressed(ActNext)) StepTarget(1);
+        else if (Input.IsActionJustPressed(ActPrev)) StepTarget(-1);
+        if (Input.IsActionJustPressed(ActInfo)) _infoOn = !_infoOn;
         if (!_vr)
         {
             // the right stick, as PlayerInput.LookRate shapes it (that one is blocked while the view has the focus)
@@ -313,8 +341,20 @@ public partial class TelescopeView : CanvasLayer
         _hint = HudLabel(17);
         _hint.AnchorTop = _hint.AnchorBottom = 1;
         _hint.OffsetLeft = 24;
-        _hint.OffsetTop = -48;
+        _hint.OffsetTop = -76;
         AddChild(_hint);
+        // the target menu down the left, the info of the target down the right: both outside the round picture
+        _menu = HudLabel(17);
+        _menu.OffsetLeft = 24;
+        _menu.OffsetTop = 24;
+        AddChild(_menu);
+        _info = HudLabel(17);
+        _info.AnchorLeft = _info.AnchorRight = 1;
+        _info.OffsetLeft = -280;
+        _info.OffsetRight = -24;
+        _info.OffsetTop = 24;
+        _info.HorizontalAlignment = HorizontalAlignment.Right;
+        AddChild(_info);
     }
 
     private static Label HudLabel(int size)
@@ -336,15 +376,57 @@ public partial class TelescopeView : CanvasLayer
         }
         string hint = Hint();
         if (hint != _hintShown) _hint.Text = _hintShown = hint;
+        UpdateMenu();
+        UpdateInfo();
     }
 
-    /// <summary>The keys while looking through it: zoom, lock, step back.</summary>
+    /// <summary>The target list, the locked one marked: text set only when it changes.</summary>
+    private void UpdateMenu()
+    {
+        string text = MenuText(Locked && Satellite == null ? Target : null);
+        if (text != _menuShown) _menu.Text = _menuShown = text;
+    }
+
+    private static readonly string?[] MenuTexts = new string?[TelescopeTargets.Menu.Length + 1];
+
+    private static string MenuText(SkyBody? marked)
+    {
+        int slot = marked == null ? 0 : 1 + System.Array.IndexOf(TelescopeTargets.Menu, marked.Value);
+        if (MenuTexts[slot] is { } cached) return cached;
+        var sb = new System.Text.StringBuilder();
+        foreach (var b in TelescopeTargets.Menu)
+            sb.Append(b == marked ? "▶ " : "   ").Append(TelescopeTargets.Name(b)).Append('\n');
+        return MenuTexts[slot] = sb.ToString().TrimEnd();
+    }
+
+    /// <summary>The info HUD: the target's readings, worked out four times a second at most, the label set only on change.</summary>
+    private void UpdateInfo()
+    {
+        _info.Visible = _infoOn;
+        if (!_infoOn || RealClock.Now - _infoAt < 0.25) return;
+        _infoAt = RealClock.Now;
+        if (World.DayNight.Instance?.Sky is not { } sky) return;
+        // the satellite (a spacecraft) has no ephemeris reading: it shows its name and place only
+        var body = Target;
+        string text, nl = "\n";
+        (double Azimuth, double Altitude)? horizon = TargetDirection() is { } d ? TelescopeTargets.Horizon(d.X, d.Y, d.Z) : null;
+        // the azimuth from true north at the scope, not the world's −Z (#1504)
+        if (horizon is { } h && _player?.Origin is { } origin)
+            horizon = ((h.Azimuth - Mathf.RadToDeg(_north.World(origin.Frame, _scope.GlobalPosition)) + 360) % 360, h.Altitude);
+        if (Satellite != null) text = Satellite + nl + TelescopeTargets.Where(horizon);
+        else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, SwissTime.ToUtc(sky.Date, sky.Hour)), horizon);
+        if (text != _infoShown) _info.Text = _infoShown = text;
+    }
+
+    /// <summary>The keys while looking through it: zoom, lock, step back, the target menu, the info.</summary>
     private string Hint()
     {
         var device = PlayerInput.HintDevice;
         string zoom = device == InputDevice.Gamepad ? "[D-pad ↑ ↓] zoom" : _vr ? "[right stick ↑ ↓] zoom" : "[wheel] zoom";
         return $"{zoom}   {InputHints.Prompt(PlayerInput.UseItem, Locked ? $"let go of {TargetName}" : "lock on")}   " +
-            $"{InputHints.Prompt(PlayerInput.InteractMount, "step back")}";
+            $"{InputHints.Prompt(PlayerInput.InteractMount, "step back")}\n" +
+            $"{InputHints.Prompt(PlayerInput.TelescopePrev, "previous")}  {InputHints.Prompt(PlayerInput.TelescopeNext, "next target")}   " +
+            InputHints.Prompt(PlayerInput.TelescopeInfo, _infoOn ? "hide info" : "info");
     }
 
     /// <summary>Black round the eyepiece's circle, soft at its edge.</summary>

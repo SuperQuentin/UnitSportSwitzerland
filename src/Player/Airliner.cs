@@ -4,7 +4,7 @@ using UnitSport.Avatar;
 namespace UnitSport.Player;
 
 /// <summary>A pressed airliner control (#414): one step's edges, consumed by the next <see cref="Airliner.Fly"/>.</summary>
-public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot }
+public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot, Drive }
 
 /// <summary>
 /// A heavy aircraft as a ride (#414): the A320, the military freighter (#420) and the AN-124 (#419). Flown by <see cref="AirlinerFlight"/> (its <see cref="State"/>), on the yaw-only body
@@ -13,7 +13,7 @@ public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake
 /// fuselage box, <see cref="HullBoxes"/>), keeps its flaps, gear and brakes when parked
 /// (<see cref="PackFlags"/>) and shows them on every peer (<see cref="WritePose"/>).
 /// </summary>
-public sealed class Airliner : Flyer
+public sealed partial class Airliner : Flyer
 {
     public AirlinerSpec Spec { get; }
     private readonly RideKind _kind;
@@ -49,18 +49,20 @@ public sealed class Airliner : Flyer
         RideKind.A320 => new Airliner(kind, AirlinerCatalog.A320),
         RideKind.Freighter => new Airliner(kind, AirlinerCatalog.Freighter),
         RideKind.An124 => new Airliner(kind, AirlinerCatalog.An124),
+        RideKind.Shuttle => new Airliner(kind, AirlinerCatalog.Shuttle),
         _ => null,
     };
 
-    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter or RideKind.An124;
+    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter or RideKind.An124 or RideKind.Shuttle;
 
     /// <summary>Every airliner kind, in the picker's order.</summary>
-    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter, RideKind.An124 };
+    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter, RideKind.An124, RideKind.Shuttle };
 
     public override RideKind Kind => _kind;
     public override string Label => Spec.Name;
-    public override string Blurb =>
-        "{sprint}/{crouch_slide} thrust levers, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {flaps_down}/{flaps_up} flaps, {car_door} gear, {speedbrake} speedbrake, {parking_brake} parking brake";
+    public override string Blurb => Spec.Spacecraft
+        ? "{sprint}/{crouch_slide} rockets, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {car_door} gear, {speedbrake} speedbrake, above 60 km {engine_toggle} the cruise drive"
+        : "{sprint}/{crouch_slide} thrust levers, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {flaps_down}/{flaps_up} flaps, {car_door} gear, {speedbrake} speedbrake, {parking_brake} parking brake";
 
     /// <summary>What its engines sound like: the A320's turbofans, the freighter's turboprops (#420).</summary>
     public Audio.EngineProfile Sound => Kind == RideKind.Freighter ? Audio.EngineProfile.Turboprop : Audio.EngineProfile.Turbofan;
@@ -90,13 +92,45 @@ public sealed class Airliner : Flyer
         VehicleDeck[] Decks, SeatAnchor[] Seats, Vector3 Entry, int Doors, int GDoors, string GDoorsName,
         System.Func<int, Vector3?> Stand);
 
-    private static Shape? _a320, _freighter, _an124;
+    private static Shape? _a320, _freighter, _an124, _shuttle;
     private Shape Body => Kind switch
     {
         RideKind.Freighter => _freighter ??= FreighterShape(),
         RideKind.An124 => _an124 ??= An124Shape(),
+        RideKind.Shuttle => _shuttle ??= ShuttleShape(),
         _ => _a320 ??= A320Shape(),
     };
+
+    /// <summary>
+    /// The orbiter (#1492): the hull the fuselage's constant section short of the nose and the base, the
+    /// main wing's box (the glove is inside the hull), no deck yet (walkable decks are #1493), seven seats:
+    /// the commander (flies), the pilot, two specialists behind them, three on the mid deck; one door, the
+    /// side hatch on the left, which G works.
+    /// </summary>
+    private static Shape ShuttleShape()
+    {
+        float front = ShuttleLayout.NoseFromZ + 0.5f, rear = ShuttleLayout.BaseZ + 0.5f;
+        var fuselage = new Aabb(
+            new Vector3(-ShuttleLayout.HalfWidth, ShuttleLayout.BellyY, -front),
+            new Vector3(ShuttleLayout.HalfWidth * 2f, ShuttleLayout.TopY - ShuttleLayout.BellyY, front - rear));
+        float pFront = -(ShuttleLayout.HatchZ + 1.2f), pRear = -rear;
+        var parked = (new Vector3(0, ShuttleLayout.TopY * 0.5f, (pFront + pRear) * 0.5f), new Vector3(ShuttleLayout.HalfWidth * 2f, ShuttleLayout.TopY, pRear - pFront));
+        float wingFront = ShuttleLayout.KinkZ, wingRear = ShuttleLayout.RootTrailingZ;
+        var wing = (new Vector3(0, ShuttleLayout.BellyY + 0.6f, -(wingFront + wingRear) * 0.5f),
+            new Vector3(ShuttleLayout.WingTipX * 2f, 1.0f, wingFront - wingRear));
+        var seats = new List<SeatAnchor>
+        {
+            new(0, AircraftMeshBuilder.Flip(ShuttleLayout.CommanderHip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY),
+            new(0, AircraftMeshBuilder.Flip(ShuttleLayout.PilotHip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY),
+        };
+        foreach (var hip in ShuttleLayout.SpecialistHips)
+            seats.Add(new SeatAnchor(0, AircraftMeshBuilder.Flip(hip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY));
+        foreach (var hip in ShuttleLayout.MidDeckHips)
+            seats.Add(new SeatAnchor(0, AircraftMeshBuilder.Flip(hip), AirlinerRig.PilotRecline, ShuttleLayout.MidDeckY));
+        return new Shape(fuselage, parked, wing, System.Array.Empty<VehicleDeck>(), seats.ToArray(),
+            AircraftMeshBuilder.Flip(new Vector3(ShuttleLayout.HalfWidth, 0f, ShuttleLayout.HatchZ)), ShuttleLayout.DoorCount,
+            1, "hatch", _ => null);
+    }
 
     private static Shape A320Shape()
     {
@@ -270,6 +304,7 @@ public sealed class Airliner : Flyer
         {
             RideKind.Freighter => AirlinerRig.CreateFreighter(),
             RideKind.An124 => AirlinerRig.CreateAn124(),
+            RideKind.Shuttle => AirlinerRig.CreateShuttle(),
             _ => AirlinerRig.CreateA320(Color.FromHsv((riderIndex * 0.37f) % 1f, 0.65f, 0.7f)),
         };
         rig.Show(Look(State), 0f);
@@ -289,6 +324,7 @@ public sealed class Airliner : Flyer
             case AirlinerCommand.Lights: LandingLights = !LandingLights; break;
             case AirlinerCommand.Engines: _engines = !_engines; break;
             case AirlinerCommand.Autopilot: _autopilot = !_autopilot; break;
+            case AirlinerCommand.Drive: _drive = !_drive; break;
         }
     }
 
@@ -339,7 +375,10 @@ public sealed class Airliner : Flyer
         _flapsDelta = 0;
         _gear = _speedbrake = _parking = _engines = _autopilot = false;
         Clearance = env.Clearance;
+        // the shuttle above the Space handover flies its orbit or its drive (#1492, Airliner.Shuttle.cs)
+        if (Space is { } space && SpaceStep(space, input, c.GearToggle, dt, ref m)) return FlightEvent.None;
         var ev = AirlinerFlight.Step(Spec, ref State, c, new AirlinerFlight.Env(env.OnFloor, env.Altitude), dt);
+        AirHeat(env.Altitude);
         ToMotion(ref m);
         return ev == AirlinerFlight.Event.Crashed ? FlightEvent.Crashed : FlightEvent.None;
     }
@@ -397,6 +436,8 @@ public sealed class Airliner : Flyer
         Autopilot = s.Autopilot,
         Warning = WarningOf(s),
         Fuel = Spec.FuelCapacity > 0f ? s.Fuel / Spec.FuelCapacity : 0f,
+        Heat = Heat,
+        Drive = DriveOn,
     };
 
     /// <summary>Height over the ground last step, m: the gear warning's "low" (#421).</summary>
@@ -420,6 +461,8 @@ public sealed class Airliner : Flyer
         var s = State;
         bool ground = s.Spoilers > s.SpeedBrake * 0.5f + 0.25f;
         return (s.FlapLever & 7)
+            // the shuttle (#1492) has one flap setting: its lever's top bit carries the drive
+            | (DriveOn ? 1 << 2 : 0)
             | (s.GearDown ? 1 << 3 : 0)
             | (s.GearBroken ? 1 << 4 : 0)
             | (s.SpeedBrake & 3) << 5
@@ -442,7 +485,9 @@ public sealed class Airliner : Flyer
         // the stick as two quantised halves of one float: −1..1 each, 1/50 steps
         float stick = Mathf.Round((look.Stick.X + 1f) * 50f) * 101f + Mathf.Round((look.Stick.Y + 1f) * 50f);
         // and over it, for the cockpit (#421): the fuel in % and the engines running (under 2^24, exact)
-        stick += StickSpan * (Mathf.Clamp(Mathf.RoundToInt(look.Fuel * 100f), 0, 100) + 101 * Mathf.Clamp(look.Lit, 0, 4));
+        // (the shuttle's propellant is unlimited: its fuel's place carries re-entry's heat, #1492)
+        float tank = Spec.Rocket ? look.Heat : look.Fuel;
+        stick += StickSpan * (Mathf.Clamp(Mathf.RoundToInt(tank * 100f), 0, 100) + 101 * Mathf.Clamp(look.Lit, 0, 4));
         return new Vector4(State.Spool, State.Lever, stick, Bits());
     }
 
@@ -485,8 +530,18 @@ public sealed class Airliner : Flyer
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {
-        if (visual is AirlinerRig rig) rig.Show(LookOf(pose), dt);
+        if (visual is AirlinerRig rig) rig.Show(Spec.Rocket ? ShuttleLook(LookOf(pose)) : LookOf(pose), dt);
     }
+
+    /// <summary>The shuttle's look from the generic one (#1492): the flap lever's top bit is the drive, the fuel the heat.</summary>
+    public static AirlinerLook ShuttleLook(AirlinerLook look) => look with
+    {
+        Drive = (look.FlapLever & 4) != 0,
+        Flaps = 0f,
+        FlapLever = 0,
+        Heat = look.Fuel,
+        Fuel = 0f,
+    };
 
     // ---- parked ----------------------------------------------------------------------------
 

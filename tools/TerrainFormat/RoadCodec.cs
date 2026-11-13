@@ -61,12 +61,28 @@ public static class RoadCodec
     /// <param name="legacySections">Write the pre-#116b ATTR and PANT payloads (format self-check only).</param>
     public static void Encode(RoadTile tile, Stream output, bool legacySections = false)
     {
+        using (var w = new BinaryWriter(output, Encoding.ASCII, leaveOpen: true))
+        {
+            w.Write(RoadFormat.Magic);
+            w.Write(RoadFormat.Version);
+            w.Write((ushort)tile.Flags);
+            w.Write(tile.Id.E);
+            w.Write(tile.Id.N);
+        }
+        EncodeBody(tile, output, legacySections);
+    }
+
+    /// <summary>
+    /// The key-free body (#1505, G2 B1): everything after the header's tile id, from the segment count
+    /// on. The .road file is its 16-byte head (magic, version, flags, tile E, N) and then this, byte for
+    /// byte as before the split; a cube leaf's road section (<see cref="LeafRoads"/>) is this alone,
+    /// compressed, its version and flags in the leaf's section table. Inside a leaf every position is in
+    /// the leaf's anchor frame (<see cref="CubeKey.Anchor"/>: x east, y up, z south, metres from the
+    /// cell centre on the ellipsoid, y ENU up and not altitude), not tile-local from the NW corner.
+    /// </summary>
+    public static void EncodeBody(RoadTile tile, Stream output, bool legacySections = false)
+    {
         using var w = new BinaryWriter(output, Encoding.ASCII, leaveOpen: true);
-        w.Write(RoadFormat.Magic);
-        w.Write(RoadFormat.Version);
-        w.Write((ushort)tile.Flags);
-        w.Write(tile.Id.E);
-        w.Write(tile.Id.N);
         w.Write((uint)tile.Segments.Count);
         w.Write((uint)tile.Junctions.Count);
 
@@ -197,6 +213,21 @@ public static class RoadCodec
         var tileFlags = version >= 3 ? (RoadTileFlags)headerFlags : RoadTileFlags.None;
 
         var id = new TileId(r.ReadInt32(), r.ReadInt32());
+        return DecodeBody(input, version, tileFlags, id);
+    }
+
+    /// <summary>
+    /// Reads what <see cref="EncodeBody"/> wrote: the <paramref name="version"/> and
+    /// <paramref name="headFlags"/> come from the .road head or a leaf's section table, the
+    /// <paramref name="id"/> is the LV95 tile's (default inside a leaf, which keys by its cube key).
+    /// The stream must be seekable (sections are skipped by position).
+    /// </summary>
+    public static RoadTile DecodeBody(Stream input, ushort version, RoadTileFlags headFlags, TileId id = default)
+    {
+        if (version < RoadFormat.MinReadableVersion || version > RoadFormat.Version)
+            throw new InvalidDataException($"Unsupported road version {version}");
+        var tileFlags = version >= 3 ? headFlags : RoadTileFlags.None;
+        using var r = new BinaryReader(input, Encoding.ASCII, leaveOpen: true);
         uint count = r.ReadUInt32();
         // v1 wrote a zero here, so a v1 file simply reports no junctions
         uint junctionCount = r.ReadUInt32();

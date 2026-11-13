@@ -124,11 +124,11 @@ public partial class GadgetTool : Node
                     var low = new Transform3D(at.Basis, start);
                     var pointGlobal = placed.Origin.ToGlobal(point);
                     string? swapped = Gadgets.ZipProblem(point, start);
-                    return new Spot(swapped == null, swapped ?? "", low, Gadgets.ZipPayload(pointGlobal.E, pointGlobal.N, pointGlobal.Alt), GadgetMeshes.ZipPost(), low.AffineInverse() * point);
+                    return new Spot(swapped == null, swapped ?? "", low, Gadgets.ZipPayload(pointGlobal), GadgetMeshes.ZipPost(), low.AffineInverse() * point);
                 }
                 string? problem = Gadgets.ZipProblem(start, point);
                 var local = at.AffineInverse() * start;
-                return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(startGlobal.E, startGlobal.N, startGlobal.Alt), GadgetMeshes.ZipPost(), local);
+                return new Spot(problem == null, problem ?? "", at, Gadgets.ZipPayload(startGlobal), GadgetMeshes.ZipPost(), local);
             }
             default:
                 return new Spot(true, "", at, "", GadgetMeshes.Mesh(kind));

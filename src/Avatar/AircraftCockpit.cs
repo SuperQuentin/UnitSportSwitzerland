@@ -33,6 +33,16 @@ public sealed record CockpitLayout(
         An124Layout.UpperCeilingY - 0.17f, An124Layout.PilotHip.Z + 0.3f, false, 0f,
         new[] { new Vector3(0f, An124Layout.UpperCeilingY - 0.05f, 17f), new Vector3(0f, An124Layout.UpperCeilingY - 0.05f, 21f) });
 
+    /// <summary>
+    /// The orbiter (#1492): a glass cockpit, three engines; its rotational hand controller stands between
+    /// each pilot's knees, drawn as the column-and-yoke stand-in (it moves the same way).
+    /// </summary>
+    public static CockpitLayout Shuttle { get; } = new(true, 3, ShuttleLayout.CommanderHip, ShuttleLayout.FlightDeckY,
+        ShuttleLayout.PanelZ, ShuttleLayout.PanelY, ShuttleMeshBuilder.CockpitPanelHalf, ShuttleLayout.GlareY,
+        ShuttleLayout.PedestalZ0, ShuttleLayout.PedestalZ1, ShuttleLayout.PedestalTop, ShuttleLayout.PedestalHalf,
+        ShuttleLayout.OverheadY, ShuttleLayout.OverheadZ, false, 0f,
+        new[] { new Vector3(0f, ShuttleLayout.FlightDeckY - 0.15f, 21.4f) });
+
     /// <summary>The captain's eye, authored.</summary>
     public Vector3 Eye => HumanMeshBuilder.DriverEye(Hip, AirlinerRig.PilotRecline);
 }
@@ -125,6 +135,11 @@ public partial class AircraftCockpit : Node3D
 
     /// <summary>The world's height over the sea at y = 0 (the floating origin's), set by the local player: altitudes read in feet AMSL.</summary>
     public static float WorldAltitude;
+
+    /// <summary>The client's world origin, set by the client world: HDG and track read true north from its frame (#1504).</summary>
+    public static Func<WorldOrigin?>? Origin { get; set; }
+
+    private TrueNorth.Near _north;
 
     private const float Deg = Mathf.Pi / 180f;
 
@@ -573,7 +588,9 @@ public partial class AircraftCockpit : Node3D
 
         var g = GlobalTransform.Basis.Orthonormalized();
         var fwd = -g.Z;
-        float hdg = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z));
+        // headings from true north at the aircraft, not the world's −Z (#1504); grid north without a world (probes)
+        float north = Origin?.Invoke() is { } origin ? Mathf.RadToDeg(_north.World(origin.Frame, pos)) : 0f;
+        float hdg = Mathf.RadToDeg(Mathf.Atan2(fwd.X, -fwd.Z)) - north;
         float pitch = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(fwd.Y, -1f, 1f)));
         float roll = Mathf.RadToDeg(Mathf.Atan2(-g.X.Y, g.Y.Y));
         var flat = _vel with { Y = 0 };
@@ -587,7 +604,7 @@ public partial class AircraftCockpit : Node3D
             Alt: Mathf.RoundToInt(altitude / CockpitInstruments.Foot / 10f) * 10,
             Vs: Mathf.RoundToInt(_vs / CockpitInstruments.Foot * 60f / 50f) * 50,
             Hdg: CockpitInstruments.Wrap360(hdg),
-            Track: flat.Length() > 3f ? CockpitInstruments.Wrap360(Mathf.RadToDeg(Mathf.Atan2(flat.X, -flat.Z))) : -1,
+            Track: flat.Length() > 3f ? CockpitInstruments.Wrap360(Mathf.RadToDeg(Mathf.Atan2(flat.X, -flat.Z)) - north) : -1,
             Pitch: Mathf.RoundToInt(pitch * 2f),
             Roll: Mathf.RoundToInt(roll),
             Gs: Mathf.RoundToInt(flat.Length() / CockpitInstruments.Knot),

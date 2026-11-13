@@ -156,7 +156,7 @@ public partial class SteinService : Node
     private bool AtGround(long peer, ResolvedSite site)
     {
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return peer < 0;   // a bot's body may be unknown to the server's lookup
-        return SteinGround.Of(site).DistanceTo(at.E, at.N) <= SteinRules.ReachM + 1.5;
+        return SteinGround.Of(site).DistanceTo(at) <= SteinRules.ReachM + 1.5;
     }
 
     private SteinAttempt? No(long peer, string why)
@@ -185,10 +185,15 @@ public partial class SteinService : Node
     {
         var g = SteinGround.Of(site);
         if (!_networked) { Landed?.Invoke(l); return; }
+        // (#1503) the landing as ECEF and a heading from true north: Yaw is the throw's direction as a maths angle (from east,
+        // towards north, on the grid), a Godot yaw a quarter turn less
+        var place = GlobalPos.FromLv95(l.E, l.N, 0);
+        var (x, y, z) = place.ToWire();
+        float heading = Lv95Grid.TrueYaw(place, l.Yaw - Mathf.Pi / 2);
         foreach (int p in Multiplayer.GetPeers())
         {
-            bool near = p == l.Thrower || _adventure.PositionOf?.Invoke(p) is { } at && g.DistanceTo(at.E, at.N) <= HearM;
-            if (near) RpcId(p, MethodName.TellLanded, l.Thrower, l.Name, l.Attempt, l.Class, l.Metres, l.Angle, l.Speed, l.Power, l.Batzen, l.Points, l.Foul ?? "", l.E, l.N, l.Yaw);
+            bool near = p == l.Thrower || _adventure.PositionOf?.Invoke(p) is { } at && g.DistanceTo(at) <= HearM;
+            if (near) RpcId(p, MethodName.TellLanded, l.Thrower, l.Name, l.Attempt, l.Class, l.Metres, l.Angle, l.Speed, l.Power, l.Batzen, l.Points, l.Foul ?? "", x, y, z, heading);
         }
         // a dedicated server shows nothing; the host of a listen game is not a case here (offline is not networked)
     }
@@ -235,6 +240,10 @@ public partial class SteinService : Node
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void TellLanded(long thrower, string name, int attempt, int cls, double metres, double angle, double speed, double power,
-        int batzen, int points, string foul, double e, double n, float yaw)
-        => Landed?.Invoke(new SteinLanding(thrower, name, attempt, cls, metres, angle, speed, power, batzen, points, foul.Length == 0 ? null : foul, e, n, yaw));
+        int batzen, int points, string foul, double x, double y, double z, float heading)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        Landed?.Invoke(new SteinLanding(thrower, name, attempt, cls, metres, angle, speed, power, batzen, points, foul.Length == 0 ? null : foul,
+            at.Lv95.E, at.Lv95.N, Lv95Grid.GridYaw(at, heading) + Mathf.Pi / 2));
+    }
 }

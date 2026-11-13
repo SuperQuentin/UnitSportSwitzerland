@@ -86,6 +86,19 @@ public sealed class AirlinerSpec
     public float GearCollapse { get; init; } = 4.6f;
     public float CrashSink { get; init; } = 7.0f;
 
+    /// <summary>
+    /// Rockets, not jets (#1492): the thrust does not lapse with the speed or thin with the air, and the
+    /// propellant never runs out. In Sim the start lights each engine in <see cref="EngineStartTime"/>.
+    /// </summary>
+    public bool Rocket { get; init; }
+    /// <summary>
+    /// A spacecraft (#1492): in thin air its reaction jets turn it (the stick's rates at full authority,
+    /// hands-off it holds its attitude), above the Space handover it flies an orbit, and it has the cruise drive.
+    /// </summary>
+    public bool Spacecraft { get; init; }
+    /// <summary>The highest pitch the protections allow, rad (+30° for an airliner; a rocket climbs steeper).</summary>
+    public float PitchLimit { get; init; } = 0.52f;
+
     public int FlapSettings => FlapNames.Length;
     public float Vmo => FlapLimit[0];
 
@@ -213,5 +226,58 @@ public static class AirlinerCatalog
         TailStrike = 0.17f,
         Wheelbase = 9.8f,
         FlyByWire = false,
+    };
+
+    /// <summary>
+    /// The space shuttle orbiter (#1492, #1430 C2), as a plane that takes off on its own: no tank, no
+    /// boosters. 37.2 m long, 23.8 m span, 250 m² of double delta, 100 t with its crew and payload. Three
+    /// main engines of 700 kN that do not lapse (2.1 g), unlimited propellant. The glide is the real
+    /// orbiter's brick: L/D ~5.4 clean, stall ~150 kt at 100 t, touchdown ~190 kt, tail strike 15.5°.
+    /// One flap setting (it has none: the body flap trims). No reversers: the brakes and the speedbrake.
+    /// </summary>
+    public static readonly AirlinerSpec Shuttle = new()
+    {
+        Name = "Space shuttle",
+        Engines = 3,
+        EmptyMass = 78000f,
+        MaxTakeoffMass = 110000f,
+        OperatingMass = 100000f,
+        FuelCapacity = 0f,
+        WingArea = 249.9f,
+        Span = 23.79f,
+        Length = 37.24f,
+        StaticThrust = 700000f,
+        ThrustLapse = 0f,
+        ReverseShare = 0f,
+        // a rocket has no idle: the levers back, it is out
+        IdleSpool = 0f,
+        SpoolTime = 2.5f,
+        EngineStartTime = 3f,
+        IdleFuelFlow = 0f,
+        FuelPerNewton = 0f,
+        Cd0 = 0.05f,
+        InducedK = 0.17f,
+        LiftSlope = 2.6f,
+        FlapNames = new[] { "0" },
+        FlapCl0 = new[] { 0.10f },
+        FlapClMax = new[] { 1.05f },
+        FlapCd = new[] { 0f },
+        FlapLimit = new[] { 520f },
+        FlapAngles = new[] { 0f },
+        GearCd = 0.03f,
+        GearLimit = 310 * Kt,
+        GearTransit = 6f,
+        // the elevons round a 19° glide out in a few seconds: quicker than an airliner's 6°/s
+        MaxPitchRate = 0.17f,
+        MaxRollRate = 0.35f,
+        TailStrike = 0.27f,
+        Wheelbase = 22.4f,
+        FlyByWire = true,
+        HardLanding = 3.0f,
+        GearCollapse = 5.0f,
+        CrashSink = 8.0f,
+        Rocket = true,
+        Spacecraft = true,
+        PitchLimit = 1.2f,
     };
 }

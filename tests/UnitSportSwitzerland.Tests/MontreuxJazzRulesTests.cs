@@ -1,4 +1,5 @@
 using UnitSport.Concert;
+using UnitSport.Core;
 using UnitSport.Occasions.Festivals;
 using UnitSport.Occasions.Festivals.MontreuxJazz;
 using UnitSport.Terrain.Stadiums;
@@ -7,6 +8,7 @@ using Xunit;
 namespace UnitSport.Tests;
 
 /// <summary>The jazz night, the set's clock, the rules and the festival def (#1394).</summary>
+[Collection(FixtureWorld.Collection)]
 public class MontreuxJazzRulesTests
 {
     private static readonly StadiumSpec Venue = StadiumCatalog.MontreuxJazzOpenAir;
@@ -171,13 +173,13 @@ public class MontreuxJazzRulesTests
         Assert.Equal(Venue.E + (-Venue.FrontHalfV + 1.5 + 7), front.E, 3);
         Assert.Equal(Venue.N, front.N, 3);
         var rail = MontreuxJazzRules.Rail(site);
-        Assert.True(MontreuxJazzRules.AtRail(site, rail.E, rail.N));
-        Assert.False(MontreuxJazzRules.AtRail(site, rail.E + 10, rail.N));
-        Assert.True(MontreuxJazzRules.InZone(site, front.E + 10, front.N));        // ten metres into the audience
-        Assert.True(MontreuxJazzRules.InZone(site, front.E + 30, front.N + 8));
-        Assert.False(MontreuxJazzRules.InZone(site, front.E + 40, front.N));        // 36 m and more: not counted by accident
-        Assert.False(MontreuxJazzRules.InZone(site, front.E - 10, front.N));        // on the deck, behind the front
-        Assert.False(MontreuxJazzRules.InZone(site, front.E + 10, front.N + 40));
+        Assert.True(MontreuxJazzRules.AtRail(site, GlobalPos.FromLv95(rail.E, rail.N, 0)));
+        Assert.False(MontreuxJazzRules.AtRail(site, GlobalPos.FromLv95(rail.E + 10, rail.N, 0)));
+        Assert.True(MontreuxJazzRules.InZone(site, GlobalPos.FromLv95(front.E + 10, front.N, 0)));        // ten metres into the audience
+        Assert.True(MontreuxJazzRules.InZone(site, GlobalPos.FromLv95(front.E + 30, front.N + 8, 0)));
+        Assert.False(MontreuxJazzRules.InZone(site, GlobalPos.FromLv95(front.E + 40, front.N, 0)));        // 36 m and more: not counted by accident
+        Assert.False(MontreuxJazzRules.InZone(site, GlobalPos.FromLv95(front.E - 10, front.N, 0)));        // on the deck, behind the front
+        Assert.False(MontreuxJazzRules.InZone(site, GlobalPos.FromLv95(front.E + 10, front.N + 40, 0)));
         // the round trip of the frame
         var (u, v) = MontreuxJazzRules.ToFrame(site.E, site.N, 270f, front.E + 10, front.N);
         Assert.Equal(0, u, 3);

@@ -200,9 +200,9 @@ public partial class WorldEvents : Node3D, IOriginContainer
         foreach (var s in PlayerSnapshot.Of(GetTree()))
         {
             var p = s.Player;
-            if (p.Origin == null && p.NetGlobal.E == 0) continue;
+            if (p.Origin == null && p.NetGlobal == default) continue;   // never published: the default place is ECEF (0,0,0), whose Lv95 is no zero (#1502)
             var g = p.Global;
-            var spot = new Spot(g.E, g.N);
+            var spot = Spot.At(g);
             _spots.Add(spot);
             long peer = p.GetMultiplayerAuthority();
             _where[peer] = spot;
@@ -219,7 +219,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
         if (forcedDue)
         {
             var who = _humans[0];
-            var (ce, cn) = WorldEventRules.Cell(who.At.E, who.At.N);
+            var (ce, cn) = WorldEventRules.Cell(who.At);
             if (TryPlan(_forced[_forcedCount], (uint)(now * 1000) ^ 0xF0F0u, who.At, ce, cn, now, forced: true) is { } forced)
             {
                 _forcedCount++;
@@ -234,7 +234,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
         var seen = new HashSet<(int, int)>();
         foreach (var (peer, at) in _humans)
         {
-            var (ce, cn) = WorldEventRules.Cell(at.E, at.N);
+            var (ce, cn) = WorldEventRules.Cell(at);
             if (!seen.Add((ce, cn)) || _live.Count >= WorldEventRules.MaxRunning) continue;
             if (_cool.TryGetValue((ce, cn), out double until) && now < until) continue;
             if (_live.Values.Any(l => l.Cell == (ce, cn))) continue;
@@ -263,6 +263,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
         int id = WorldEventRules.Id(ce, cn, forced ? _forcedCount + 1000 : WorldEventRules.Slot(now), kind);
         if (_live.ContainsKey(id)) return null;
         double U(int salt) => ErrandHash.Unit(ErrandHash.Of(seed, salt, 0xE7));
+        var near95 = near.Lv95;   // the events are simulated on the LV95 grid
         Live Make(double e, double n, float ground) => new()
         {
             Id = id, Kind = kind, Start = now, E = e, N = n, Ground = ground, Seed = seed, Cell = (ce, cn), Canton = CantonAt(e, n),
@@ -271,7 +272,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
         {
             case WorldEventKind.RunawayCow:
             {
-                if (Farming.Herds.Instance?.CowNear(near.E, near.N, 600f, SimNow) is not { } cow) return null;
+                if (Farming.Herds.Instance?.CowNear(near95.E, near95.N, 600f, SimNow) is not { } cow) return null;
                 var ev = Make(cow.E, cow.N, cow.Ground);
                 ev.Cow = new CowSim(cow.E, cow.N, U(1));
                 return ev;
@@ -284,10 +285,10 @@ public partial class WorldEvents : Node3D, IOriginContainer
                 ulong bestScore = ulong.MaxValue;
                 foreach (var k in new[] { PoiKind.Peak, PoiKind.Pass, PoiKind.SummitCross })
                 {
-                    pois.Near(near.E, near.N, 2000, list, k);
+                    pois.Near(near, 2000, list, k);
                     foreach (var p in list)
                     {
-                        double d = Math.Sqrt((p.E - near.E) * (p.E - near.E) + (p.N - near.N) * (p.N - near.N));
+                        double d = near.HorizontalDistanceTo(p.Pos);
                         if (d < 600 || p.Elevation < near.Alt + 150 || p.Name.Length == 0) continue;
                         ulong score = ErrandHash.Of(seed, (long)p.Hash);
                         if (score < bestScore) { bestScore = score; best = p; }
@@ -304,7 +305,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
             {
                 for (int i = 0; i < 24; i++)
                 {
-                    double e = near.E + Math.Sin(U(10 + i * 2) * Math.Tau) * (300 + 600 * U(11 + i * 2)), n = near.N + Math.Cos(U(10 + i * 2) * Math.Tau) * (300 + 600 * U(11 + i * 2));
+                    double e = near95.E + Math.Sin(U(10 + i * 2) * Math.Tau) * (300 + 600 * U(11 + i * 2)), n = near95.N + Math.Cos(U(10 + i * 2) * Math.Tau) * (300 + 600 * U(11 + i * 2));
                     if (GroundOf(e, n) is not { } g || g < 1500 && !forced) continue;
                     if (!forced && (SlopeDeg(e, n) is not { } slope || slope is < 28 or > 45)) continue;
                     var ev = Make(e, n, g);
@@ -317,7 +318,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
             {
                 for (int i = 0; i < 24; i++)
                 {
-                    double e = near.E + Math.Sin(U(30 + i * 2) * Math.Tau) * (200 + 600 * U(31 + i * 2)), n = near.N + Math.Cos(U(30 + i * 2) * Math.Tau) * (200 + 600 * U(31 + i * 2));
+                    double e = near95.E + Math.Sin(U(30 + i * 2) * Math.Tau) * (200 + 600 * U(31 + i * 2)), n = near95.N + Math.Cos(U(30 + i * 2) * Math.Tau) * (200 + 600 * U(31 + i * 2));
                     if (GroundOf(e, n) is not { } g || g > 1800 && !forced || !Forest(e, n)) continue;
                     // a forest edge: some neighbour 8 m away is not forest
                     if (Forest(e + 8, n) && Forest(e - 8, n) && Forest(e, n + 8) && Forest(e, n - 8)) continue;
@@ -531,7 +532,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
     {
         if (!Authority) return "Not here.";
         if (!_live.TryGetValue(eventId, out var ev)) return "There is nothing going on here.";
-        var me = new Spot(at.E, at.N);
+        var me = Spot.At(at);
         double reach = WorldEventRules.ActReachM + WorldEventRules.ActSlackM;
         switch (act)
         {
@@ -576,7 +577,7 @@ public partial class WorldEvents : Node3D, IOriginContainer
     {
         foreach (var (peer, at) in _humans)
         {
-            if (peer != actor && Dist(new Spot(at.E, at.N), new Spot(e, n)) > WorldEventRules.PaidNearM) continue;
+            if (peer != actor && Dist(Spot.At(at), new Spot(e, n)) > WorldEventRules.PaidNearM) continue;
             if (_adventure.Progress(peer)?.Get(QuestsProgress.Section).Active.ContainsKey(ev.Card) == true) yield return peer;
         }
     }
@@ -625,13 +626,15 @@ public partial class WorldEvents : Node3D, IOriginContainer
         var (e, n) = ev.At;
         foreach (var (peer, at) in _humans)
         {
-            if (ev.Informed.Contains(peer) || (at.E - e) * (at.E - e) + (at.N - n) * (at.N - n) > WorldEventRules.InformM * WorldEventRules.InformM) continue;
+            if (ev.Informed.Contains(peer) || at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(e, n, at.Alt)) > WorldEventRules.InformM * WorldEventRules.InformM) continue;
             ev.Informed.Add(peer);
             if (Connected(peer))
             {
-                RpcId(peer, MethodName.PlanOut, ev.Id, (int)ev.Kind, ev.E, ev.N, ev.Ground, ev.Canton, (long)ev.Seed, ev.Near, ev.Card);
+                var (px, py, pz) = GlobalPos.FromLv95(ev.E, ev.N, ev.Ground).ToWire();   // (#1503) the wire is ECEF
+                RpcId(peer, MethodName.PlanOut, ev.Id, (int)ev.Kind, px, py, pz, ev.Ground, ev.Canton, (long)ev.Seed, ev.Near, ev.Card);
                 RpcId(peer, MethodName.StateOut, ev.Id, StateOf(ev));
-                RpcId(peer, MethodName.MovedOut, ev.Id, e, n, YawOf(ev), false);
+                var (x, y, z, t) = MovedWire(ev, e, n);
+                RpcId(peer, MethodName.MovedOut, ev.Id, x, y, z, t, false);
             }
             else if (!_networked)
             {
@@ -644,14 +647,23 @@ public partial class WorldEvents : Node3D, IOriginContainer
 
     private static float YawOf(Live ev) => ev.Cow?.Yaw ?? ev.Hiker?.Yaw ?? 0f;
 
+    /// <summary>(#1503) An event's moving figure on the wire: its place as ECEF and its grid yaw as a heading from true north.</summary>
+    private static (double X, double Y, double Z, float Yaw) MovedWire(Live ev, double e, double n)
+    {
+        var g = GlobalPos.FromLv95(e, n, ev.Ground);
+        var (x, y, z) = g.ToWire();
+        return (x, y, z, Lv95Grid.TrueYaw(g, YawOf(ev)));
+    }
+
     private void SendMoved(Live ev)
     {
         if ((ev.Cow ?? (object?)ev.Hiker) == null) return;
         var (e, n) = ev.At;
         bool walking = ev.Hiker?.Walking ?? ev.Cow != null;
+        var (x, y, z, t) = MovedWire(ev, e, n);
         foreach (long peer in ev.Informed)
         {
-            if (Connected(peer)) RpcId(peer, MethodName.MovedOut, ev.Id, e, n, YawOf(ev), walking);
+            if (Connected(peer)) RpcId(peer, MethodName.MovedOut, ev.Id, x, y, z, t, walking);
             else if (!_networked) OnMoved(ev.Id, e, n, YawOf(ev), walking);
         }
     }
@@ -715,18 +727,27 @@ public partial class WorldEvents : Node3D, IOriginContainer
         if (!_server || !Enum.IsDefined((EventAct)act)) return;
         long peer = Multiplayer.GetRemoteSenderId();
         if (!Eligible(peer) || !_where.TryGetValue(peer, out var spot)) return;
-        var at = GetNodeOrNull<FootPlayer>("../Players/" + peer)?.NetGlobal ?? new GlobalPos(spot.E, spot.N, 0);
+        var at = GetNodeOrNull<FootPlayer>("../Players/" + peer)?.NetGlobal ?? GlobalPos.FromLv95(spot.E, spot.N, 0);
         if (Help(peer, at, eventId, (EventAct)act, arg) is { } why) Tell(peer, why);
     }
 
     // ---- server -> client ---------------------------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void PlanOut(int id, int kind, double e, double n, float ground, string canton, long seed, string near, string card) =>
-        OnPlan(id, kind, e, n, ground, canton, (uint)seed, near, card);
+    private void PlanOut(int id, int kind, double x, double y, double z, float ground, string canton, long seed, string near, string card)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        var l = at.Lv95;
+        OnPlan(id, kind, l.E, l.N, ground, canton, (uint)seed, near, card);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered)]
-    private void MovedOut(int id, double e, double n, float yaw, bool walking) => OnMoved(id, e, n, yaw, walking);
+    private void MovedOut(int id, double x, double y, double z, float yaw, bool walking)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        var l = at.Lv95;
+        OnMoved(id, l.E, l.N, Lv95Grid.GridYaw(at, yaw), walking);   // the events keep LV95 and grid yaws (#1502)
+    }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void StateOut(int id, int[] data) => OnState(id, data);

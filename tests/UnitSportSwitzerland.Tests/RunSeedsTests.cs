@@ -55,4 +55,17 @@ public class RunSeedsTests
         Assert.Null(Calendar.DateFrom(["--date"]));
         Assert.Null(Calendar.DateFrom([]));
     }
+
+    [Fact]
+    public void A_test_run_has_a_quiet_date_and_can_ask_for_the_real_one()
+    {
+        // mid-June on a Wednesday: no season window (Halloween 09-01..10-31, Christmas 11-01..12-31), no UFO
+        // Friday (the first Friday and the day after), no festival (#1501)
+        Assert.Equal(6, Calendar.TestDate.Month);
+        Assert.Equal(DayOfWeek.Wednesday, Calendar.TestDate.DayOfWeek);
+        Assert.True(Calendar.TestDate.Day > 8);
+        Assert.True(Calendar.RealDateAsked(["--date", "today"]));
+        Assert.False(Calendar.RealDateAsked(["--date", "2026-07-15"]));
+        Assert.Null(Calendar.DateFrom(["--date", "today"]));
+    }
 }

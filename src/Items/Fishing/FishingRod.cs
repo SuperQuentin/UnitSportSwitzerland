@@ -212,7 +212,7 @@ public partial class FishingRod : Node
         var at = _origin.ToGlobal(target);
         // a lake lies flat, a river's surface falls downstream: compare the wet samples across the float
         double slope = onLayer ? Math.Max(Fall(target, new Vector3(6, 0, 0)), Fall(target, new Vector3(0, 0, 6))) : 0;
-        Spot = FishWaters.Spot(onLayer, at.E, at.N, at.Alt, slope);
+        Spot = FishWaters.Spot(onLayer, at, slope);
         State = Phase.Waiting;
         _waited = 0;
         _toldEmpty = false;

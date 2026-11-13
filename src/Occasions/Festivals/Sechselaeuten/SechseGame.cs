@@ -133,8 +133,8 @@ public partial class SechseGame : CanvasLayer
         if (_svc?.SechseNow() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            _distance = SechselaeutenRules.Dist(g.E, g.N, SechselaeutenRules.PyreAt(m.Site));
-            target = SechselaeutenRules.NearWeibel(m.Site, g.E, g.N) ? FestivalService.SechsePurse : SechselaeutenRules.NearPyre(m.Site, g.E, g.N) ? 0 : -1;
+            _distance = SechselaeutenRules.Dist(g, SechselaeutenRules.PyreAt(m.Site));
+            target = SechselaeutenRules.NearWeibel(m.Site, g) ? FestivalService.SechsePurse : SechselaeutenRules.NearPyre(m.Site, g) ? 0 : -1;
         }
         else _lastMine = 0;
         _target = target;

@@ -29,14 +29,17 @@ namespace UnitSport.Core;
 /// </summary>
 public partial class ChatUi : CanvasLayer
 {
-    /// <summary>Lines kept in the scrollback.</summary>
-    private const int MaxLines = 80;
+    /// <summary>Lines kept in the scrollback (a ring: older ones leave).</summary>
+    public const int MaxScrollback = 300;
 
     /// <summary>How long a floating line stays, then how long it takes to fade.</summary>
     private const double FloatSeconds = 9.0, FadeSeconds = 1.2, FadeInSeconds = 0.18;
 
     /// <summary>Floating lines on screen at once; an older one leaves early.</summary>
     private const int MaxFloating = 7;
+
+    /// <summary>A repeated join/leave or admin line inside this many seconds becomes one line with a count.</summary>
+    private const double CoalesceSeconds = 5;
 
     // PanelBottom clears the hotbar (Items/InventoryUi: 50 px slots, 14 px off the bottom) on a narrow window
     private const int Width = 480, Left = 16, PanelBottom = -76, PanelMargin = 10;
@@ -50,10 +53,37 @@ public partial class ChatUi : CanvasLayer
     private ChatCompleter _completer = null!;
 
     private VBoxContainer _feed = null!;
-    private readonly List<(Control Line, double Age)> _floating = [];
+    private readonly List<Floating> _floating = [];
+
+    private sealed class Floating
+    {
+        public RichTextLabel View = null!;
+        public double Age;
+        public string Base = "";
+        public ChatKind Kind;
+        public int Count = 1;
+    }
 
     private PanelContainer _panel = null!;
     private ScrollContainer _scroll = null!;
+    private Button _newChip = null!;
+    private int _pending;
+
+    // the last line, for repeat coalescing, and the last speaker, for grouped messages
+    private string _lastText = "";
+    private ChatKind _lastKind;
+    private double _lastAt;
+    private int _repeat;
+    private RichTextLabel? _lastLabel;
+    private string _lastSpeaker = "";
+    private double _lastSpeakerAt;
+
+    // the command browser (/help or the Commands button)
+    private Control _helpLayer = null!;
+    private PanelContainer _helpPanel = null!;
+    private LineEdit _helpSearch = null!;
+    private VBoxContainer _helpRows = null!;
+    private ScrollContainer _helpScroll = null!;
     private VBoxContainer _log = null!;
     private PanelContainer _popup = null!;
     private VBoxContainer _rows = null!;
@@ -83,6 +113,13 @@ public partial class ChatUi : CanvasLayer
     public IEnumerable<string> PickerLabels => _pickerOn
         ? _picker.GetChildren().OfType<Button>().Where(b => !b.IsQueuedForDeletion()).Select(b => b.Text) : [];
 
+    /// <summary>The command browser is open (checks).</summary>
+    public bool IsHelpOpen => _helpLayer.Visible;
+
+    /// <summary>The command rows the browser shows, in order (checks).</summary>
+    public IEnumerable<string> HelpLabels => _helpRows.FindChildren("*", "Button", true, false).OfType<Button>()
+        .Where(b => !b.IsQueuedForDeletion() && b.IsVisibleInTree()).Select(b => b.Text);
+
     /// <summary>Lines sent, oldest first; which one is in the box (-1: the draft); what was typed before Up.</summary>
     private readonly List<string> _history = [];
     private int _historyCursor = -1;
@@ -92,6 +129,12 @@ public partial class ChatUi : CanvasLayer
     private IReadOnlyList<Suggestion> _suggestions = [];
     private int _suggestionCursor = -1;
     private int _lastCaret = -1;
+
+    /// <summary>The player's chat text scale, applied to lines as they are drawn.</summary>
+    private static float TextScale => Math.Clamp(GameSettings.Current.ChatFontScale, 0.8f, 1.6f);
+    private static int BodyPx => Mathf.Max(11, Mathf.RoundToInt(UiTheme.FontBody * TextScale));
+    private static int SmallPx => Mathf.Max(10, Mathf.RoundToInt(UiTheme.FontSmall * TextScale));
+    private static int TinyPx => Mathf.Max(9, Mathf.RoundToInt(UiTheme.FontTiny * TextScale));
 
     public static ChatUi Create(ChatManager chat, ChatCompleter completer) =>
         new() { Name = "ChatUi", _chat = chat, _completer = completer };
@@ -103,7 +146,21 @@ public partial class ChatUi : CanvasLayer
 
     public override void _ExitTree()
     {
+        GameSettings.Changed -= OnSettingsChanged;
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>The player moved a chat setting: the open panel follows at once (lines already drawn keep their size).</summary>
+    private void OnSettingsChanged()
+    {
+        if (_panel.Visible)
+        {
+            ApplyPanelStyle();
+            _input.AddThemeFontSizeOverride("font_size", BodyPx);
+            _ghost.AddThemeFontSizeOverride("font_size", BodyPx);
+            _input.CustomMinimumSize = new Vector2(0, Mathf.Max(28, Mathf.RoundToInt(26 * TextScale)));
+            Callable.From(AlignFeed).CallDeferred();
+        }
     }
 
     public override void _Ready()
@@ -125,16 +182,23 @@ public partial class ChatUi : CanvasLayer
 
         BuildPanel();
         BuildChoices();
+        BuildHelp();
+        GameSettings.Changed += OnSettingsChanged;
         // once the input has a height, the floating lines line up with the scrollback's
         Callable.From(AlignFeed).CallDeferred();
 
         _chat.LineReceived += (line, kind) => Callable.From(() => Append(line, kind)).CallDeferred();
         _chat.Kicked += reason => Callable.From(
             () => Append($"You were kicked: {reason}", ChatKind.Error)).CallDeferred();
+        // /help opens the command browser instead of dumping a wall of lines into the chat
+        _chat.HelpRequested += query => Callable.From(() => ShowHelp(query)).CallDeferred();
         // the names a player completion asked for have arrived
         _chat.NamesReceived += () => Callable.From(() => { if (IsTyping) RefreshSuggestions(); }).CallDeferred();
 
-        Append(Platform.IsTouch ? "CHAT (top right) to chat, / for commands." : "Press Enter to chat, / for commands.", ChatKind.System);
+        Append(Platform.IsTouch ? "CHAT (top right) to chat, / for commands." : "Press Enter to chat, / for commands; /help opens the command list.", ChatKind.System);
+        // "--chatdemo" alone floats a line of each kind, for a screenshot of the closed chat's look
+        if (CmdArgs.Has("--chatdemo") && !CmdArgs.Has("--chatopen"))
+            GetTree().CreateTimer(18).Timeout += DemoLines;
         // "--chatopen [seconds]" opens the input after that long, for screenshotting it against the floating lines;
         // "--chatsend <line>" sends a line a few seconds before (a /locate answer to picture, #1277), and
         // "--chatpicker [text]" opens it on the pad's picker instead, with that text in the box
@@ -148,6 +212,10 @@ public partial class ChatUi : CanvasLayer
                 if (!CmdArgs.Has("--chatpicker"))
                 {
                     OpenInput();
+                    // "--chatdemo": a line of every kind, for a screenshot of the look
+                    if (CmdArgs.Has("--chatdemo")) DemoLines();
+                    // "--chathelp [text]": the command browser, for a screenshot or a quick look
+                    if (CmdArgs.Has("--chathelp")) ShowHelp(CmdArgs.Value("--chathelp", notFlag: true) ?? "");
                     // "--chatchoices": the choices of the newest line with a point, as a pad's A opens them
                     if (CmdArgs.Has("--chatchoices") && _log.GetChildren().OfType<RichTextLabel>().LastOrDefault(l => l.HasMeta(FirstPoint)) is { } last)
                         Callable.From(() => OpenChoicesOn(last)).CallDeferred();
@@ -175,15 +243,32 @@ public partial class ChatUi : CanvasLayer
             Visible = false,
         };
         // see-through enough that the world stays in view behind the conversation
-        _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.55f, 10, PanelMargin));
+        ApplyPanelStyle();
         AddChild(_panel);
 
         var column = UiKit.VBox(ColumnGap);
         _panel.AddChild(column);
 
+        // a slim header: what this is, a way to the commands, and a jump-to-newest when reading history
+        var header = UiKit.HBox(6);
+        header.AddChild(UiKit.Text("CHAT", TinyPx, UiTheme.Amber, bold: true));
+        header.AddChild(UiKit.Spacer(0, 0, expand: true));
+        _newChip = Chip("New messages ↓", "Jump to the newest line");
+        _newChip.CustomMinimumSize = new Vector2(0, 24);
+        _newChip.AddThemeFontSizeOverride("font_size", TinyPx);
+        _newChip.Visible = false;
+        _newChip.Pressed += ScrollToEnd;
+        header.AddChild(_newChip);
+        var commands = Chip("Commands", "Every command, searchable (or type /help)");
+        commands.CustomMinimumSize = new Vector2(0, 24);
+        commands.AddThemeFontSizeOverride("font_size", TinyPx);
+        commands.Pressed += () => ShowHelp("");
+        header.AddChild(commands);
+        column.AddChild(header);
+
         _scroll = new ScrollContainer
         {
-            CustomMinimumSize = new Vector2(0, 140),
+            CustomMinimumSize = new Vector2(0, 180),
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
         column.AddChild(_scroll);
@@ -212,17 +297,19 @@ public partial class ChatUi : CanvasLayer
         _popup.AddChild(popupColumn);
         _rows = UiKit.VBox(1);
         popupColumn.AddChild(_rows);
-        _usage = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _usage = UiKit.Text("", SmallPx, UiTheme.TextDim);
         _usage.Visible = false;
         popupColumn.AddChild(UiKit.Margin(_usage, 10, 3, 10, 3));
 
         _input = new LineEdit
         {
-            PlaceholderText = "Say something  ·  / for commands  ·  Tab completes",
-            MaxLength = 240,
+            PlaceholderText = "Message  ·  / commands  ·  Tab completes",
+            MaxLength = ChatManager.MaxMessageLength,
             CaretBlink = true,
             ContextMenuEnabled = false,
         };
+        _input.AddThemeFontSizeOverride("font_size", BodyPx);
+        _input.CustomMinimumSize = new Vector2(0, Mathf.Max(28, Mathf.RoundToInt(26 * TextScale)));
         _input.TextSubmitted += OnSubmitted;
         _input.TextChanged += _ => RefreshSuggestions();
         _input.GuiInput += OnInputGui;
@@ -240,7 +327,7 @@ public partial class ChatUi : CanvasLayer
         _picker.AddThemeConstantOverride("v_separation", 4);
         _pickerScroll.AddChild(_picker);
         // with the picker open, the usage line sits over it rather than in the popup that would cover it
-        _pickerUsage = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _pickerUsage = UiKit.Text("", SmallPx, UiTheme.TextDim);
         _pickerUsage.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _pickerUsage.Visible = false;
         column.AddChild(_pickerUsage);
@@ -265,9 +352,13 @@ public partial class ChatUi : CanvasLayer
         };
         _ghost.AddThemeColorOverride("font_color", UiTheme.TextFaint);
         _ghost.AddThemeFontOverride("font", UiTheme.Font);
-        _ghost.AddThemeFontSizeOverride("font_size", UiTheme.FontBody);
+        _ghost.AddThemeFontSizeOverride("font_size", BodyPx);
         _input.AddChild(_ghost);
     }
+
+    /// <summary>Reads the player's opacity when the panel opens, so a settings change shows at once.</summary>
+    private void ApplyPanelStyle() =>
+        _panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel((float)GameSettings.Current.ChatOpacity, 12, PanelMargin));
 
     /// <summary>
     /// Puts the floating lines exactly where the same lines sit in the open panel's scrollback:
@@ -285,42 +376,123 @@ public partial class ChatUi : CanvasLayer
 
     // ---- lines -----------------------------------------------------------------------------
 
-    /// <summary>Adds a line to the scrollback and floats it up on screen.</summary>
-    /// <summary>Lines in the log (for <c>--chatcheck</c>): never more than <see cref="MaxLines"/>.</summary>
+    /// <summary>Lines in the log (for <c>--chatcheck</c>): never more than <see cref="MaxScrollback"/>.</summary>
     public int LogLines => _log.GetChildCount();
+
+    /// <summary><c>--chatdemo</c>: one line of each kind, to see the scrollback's look.</summary>
+    private void DemoLines()
+    {
+        Append("Quentin: anyone for a fondue on the Gornergrat?", ChatKind.Say);
+        Append("Quentin: I am in, meet you at the station.", ChatKind.Say);
+        Append("* Marie waves at Quentin", ChatKind.System);
+        Append("Alice whispers: psst, over here", ChatKind.Whisper);
+        Append("Teleported to Zermatt", ChatKind.Private);
+        Append("Unknown command '/nope'. Try /help.", ChatKind.Error);
+        Append("[server] The server restarts in 5 minutes.", ChatKind.Admin);
+    }
 
     public void Append(string line, ChatKind kind)
     {
-        var logged = Line(line, kind, floating: false);
+        double now = RealClock.Now;
+        bool stay = !IsTyping || AtBottom();
+
+        // grouped: the same player talking again shortly after keeps the name out of the way
+        string? speaker = ChatManager.SpeakerOf(line, kind);
+        bool grouped = kind == ChatKind.Say && speaker != null
+            && speaker == _lastSpeaker && now - _lastSpeakerAt < 90;
+        if (kind == ChatKind.Say && speaker != null) (_lastSpeaker, _lastSpeakerAt) = (speaker, now);
+        else if (kind != ChatKind.Say) (_lastSpeaker, _lastSpeakerAt) = ("", 0);
+
+        // a repeated join/leave or admin line becomes one line with a count instead of a wall of them
+        bool coalesce = kind is ChatKind.System or ChatKind.Admin
+            && kind == _lastKind && line == _lastText && now - _lastAt < CoalesceSeconds
+            && _lastLabel is { } last && IsInstanceValid(last);
+        if (coalesce)
+        {
+            _repeat++;
+            SetLine(_lastLabel!, $"{line}  ×{_repeat}", kind, false, false);
+        }
+        else
+        {
+            AppendLog(line, kind, grouped);
+        }
+        _lastText = line;
+        _lastKind = kind;
+        _lastAt = now;
+
+        // no floating copy while the panel is open: the scrollback already shows the line
+        if (!IsTyping) AppendFloat(line, kind, now);
+
+        if (IsTyping)
+        {
+            if (stay) ScrollToEnd();
+            else ShowPending();
+        }
+    }
+
+    private void AppendLog(string line, ChatKind kind, bool grouped)
+    {
+        var logged = Line(line, kind, floating: false, grouped);
         if (World.Locate.LocateCoords.FindAll(line).Count > 0) MakeClickable(logged, line, kind);
         _log.AddChild(logged);
+        _lastLabel = logged;
+        _repeat = 1;
         // out of the tree first: QueueFree only frees at the end of the frame, so the count never fell and
-        // this loop spun forever on line 81, queueing it again and again (a frozen client growing ~100 MB/s:
-        // a 100-player match's kill feed passed 80 lines, #837)
-        while (_log.GetChildCount() > MaxLines)
+        // this loop spun forever once the log was full, queueing the same line again and again (a frozen
+        // client growing ~100 MB/s: a 100-player match's kill feed passed 80 lines, #837)
+        while (_log.GetChildCount() > MaxScrollback)
         {
             var old = _log.GetChild(0);
             _log.RemoveChild(old);
             old.QueueFree();
         }
-        if (IsTyping) ScrollToEnd();
+    }
 
-        var floating = Line(line, kind, floating: true);
+    private void AppendFloat(string line, ChatKind kind, double now)
+    {
+        if (_floating.Count > 0)
+        {
+            var last = _floating[^1];
+            if (last.Base == line && last.Kind == kind && last.Age < CoalesceSeconds)
+            {
+                last.Count++;
+                last.Age = 0;
+                SetLine(last.View, $"{line}  ×{last.Count}", kind, floating: true, grouped: false);
+                return;
+            }
+        }
+
+        var floating = Line(line, kind, floating: true, grouped: false);
         floating.Modulate = new Color(1, 1, 1, 0);
         _feed.AddChild(floating);
-        _floating.Add((floating, 0));
+        _floating.Add(new Floating { View = floating, Base = line, Kind = kind });
         while (_floating.Count > MaxFloating)
         {
-            _floating[0].Line.QueueFree();
+            _floating[0].View.QueueFree();
             _floating.RemoveAt(0);
         }
     }
 
-    /// <summary>
-    /// One line as rich text: a player's name in amber, the rest by kind. Floating lines carry an
-    /// outline and a shadow instead of a box, so they read against snow and sky alike.
-    /// </summary>
-    private static RichTextLabel Line(string line, ChatKind kind, bool floating)
+    /// <summary>True when the scrollback is at (or within a few pixels of) its newest line.</summary>
+    private bool AtBottom()
+    {
+        var bar = _scroll.GetVScrollBar();
+        return bar.MaxValue - bar.Page - _scroll.ScrollVertical <= 10;
+    }
+
+    private void ShowPending()
+    {
+        _pending++;
+        _newChip.Text = $"{_pending} new ↓";
+        _newChip.Visible = true;
+    }
+
+    private static string? StampText() =>
+        GameSettings.Current.ChatTimestamps ? System.DateTime.Now.ToString("HH:mm") : null;
+
+    /// <summary>One line as rich text: a player's name in amber, the rest by kind. Floating lines carry an
+    /// outline and a shadow instead of a box, so they read against snow and sky alike.</summary>
+    private static RichTextLabel Line(string line, ChatKind kind, bool floating, bool grouped)
     {
         var label = new RichTextLabel
         {
@@ -331,40 +503,98 @@ public partial class ChatUi : CanvasLayer
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        Fill(label, line, kind);
+        Fill(label, line, kind, floating ? null : StampText(), grouped);
         label.AddThemeFontOverride("normal_font", UiTheme.Font);
         label.AddThemeFontOverride("bold_font", UiTheme.Bold);
         // one size in both lists, so a line does not jump when the panel opens over it
-        label.AddThemeFontSizeOverride("normal_font_size", UiTheme.FontBody);
-        label.AddThemeFontSizeOverride("bold_font_size", UiTheme.FontBody);
+        label.AddThemeFontSizeOverride("normal_font_size", BodyPx);
+        label.AddThemeFontSizeOverride("bold_font_size", BodyPx);
         label.AddThemeColorOverride("default_color", UiTheme.Text);
 
         if (floating)
         {
-            label.AddThemeConstantOverride("outline_size", 4);
-            label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.55f));
-            label.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.45f));
+            // strong enough to read over snow and sky, which is the whole point of the outline
+            label.AddThemeConstantOverride("outline_size", 6);
+            label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.88f));
+            label.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.65f));
             label.AddThemeConstantOverride("shadow_offset_x", 1);
             label.AddThemeConstantOverride("shadow_offset_y", 2);
-            label.AddThemeConstantOverride("shadow_outline_size", 6);
+            label.AddThemeConstantOverride("shadow_outline_size", 9);
         }
         return label;
     }
 
-    private static string Markup(string line, ChatKind kind)
+    private static void SetLine(RichTextLabel label, string line, ChatKind kind, bool floating, bool grouped)
+    {
+        label.Clear();
+        Fill(label, line, kind, floating ? null : StampText(), grouped);
+    }
+
+    /// <summary>A kind's mark, so the difference between kinds does not rely on colour alone.</summary>
+    private static string Glyph(ChatKind kind) => kind switch
+    {
+        ChatKind.System => "·",
+        ChatKind.Admin => "!",
+        ChatKind.Private => ">",
+        ChatKind.Whisper => "@",
+        ChatKind.Error => "×",
+        _ => "",
+    };
+
+    private static string Markup(string line, ChatKind kind, bool grouped)
     {
         if (kind == ChatKind.Say)
         {
             // "Name: text" — the server formats it so; a name never holds ": "
             int colon = line.IndexOf(": ", StringComparison.Ordinal);
             if (colon > 0)
-                return $"[b][color=#{UiTheme.Amber.ToHtml(false)}]{Escape(line[..colon])}[/color][/b]  {Escape(line[(colon + 2)..])}";
+                return grouped
+                    ? $"      {Escape(line[(colon + 2)..])}"
+                    : $"[b][color=#{UiTheme.Amber.ToHtml(false)}]{Escape(line[..colon])}[/color][/b]  {Escape(line[(colon + 2)..])}";
             return Escape(line);
         }
-        return $"[color=#{ColorFor(kind).ToHtml(false)}]{Escape(line)}[/color]";
+        string glyph = Glyph(kind);
+        string prefix = glyph.Length == 0 ? "" : $"[color=#{ColorFor(kind).ToHtml(false)}]{glyph}[/color]  ";
+        return $"{prefix}[color=#{ColorFor(kind).ToHtml(false)}]{Escape(line)}[/color]";
     }
 
-    private static string Escape(string text) => World.Locate.LocateCoords.Highlight(text.Replace("[", "[lb]"), c => Mark + c + Mark);
+    private static string Escape(string text) =>
+        Mentions(World.Locate.LocateCoords.Highlight(text.Replace("[", "[lb]"), c => Mark + c + Mark));
+
+    /// <summary>
+    /// Paints <c>@YourName</c> in amber, so a mention is visible at a glance. Uses the name saved for
+    /// this player; a server may have made it unique with a suffix, in which case there is no match.
+    /// </summary>
+    private static string Mentions(string text)
+    {
+        if (!GameSettings.Current.ChatMentions) return text;
+        string me = PlayerRegistry.Sanitize(GameSettings.Current.PlayerName);
+        if (me.Length < 2) return text;
+
+        var painted = new System.Text.StringBuilder(text.Length + 16);
+        int i = 0;
+        while (i < text.Length)
+        {
+            int at = text.IndexOf('@', i);
+            if (at < 0) { painted.Append(text, i, text.Length - i); break; }
+            painted.Append(text, i, at - i);
+            int end = at + 1 + me.Length;
+            bool match = end <= text.Length
+                && string.Compare(text, at + 1, me, 0, me.Length, StringComparison.OrdinalIgnoreCase) == 0
+                && (end == text.Length || !(char.IsLetterOrDigit(text[end]) || text[end] is '_' or '-'));
+            if (match)
+            {
+                painted.Append($"[b][color=#{UiTheme.Amber.ToHtml(false)}]{text[at..end]}[/color][/b]");
+                i = end;
+            }
+            else
+            {
+                painted.Append('@');
+                i = at + 1;
+            }
+        }
+        return painted.ToString();
+    }
 
     /// <summary>Wraps each coordinate in the markup, for <see cref="Fill"/> to cut at: a character no chat line carries.</summary>
     private const string Mark = "\u0001";
@@ -373,14 +603,16 @@ public partial class ChatUi : CanvasLayer
     /// The line's rich text; each <c>@E,N</c> in it (#1277) drawn as a pin and the coordinates in amber, the two one
     /// link whose meta is "E,N|name" (<see cref="ShowChoices"/>).
     /// </summary>
-    private static void Fill(RichTextLabel label, string line, ChatKind kind)
+    private static void Fill(RichTextLabel label, string line, ChatKind kind, string? stamp, bool grouped)
     {
-        string markup = Markup(line, kind);
+        string prefix = stamp == null ? "" : $"[color=#{UiTheme.TextFaint.ToHtml(false)}]{stamp}[/color]  ";
+        string markup = Markup(line, kind, grouped);
         if (!markup.Contains(Mark))
         {
-            label.Text = markup;
+            label.Text = prefix + markup;
             return;
         }
+        if (prefix.Length > 0) label.AppendText(prefix);
         string? speaker = kind == ChatKind.Say && line.IndexOf(": ", StringComparison.Ordinal) is > 0 and var colon ? line[..colon] : null;
         var coords = World.Locate.LocateCoords.FindAll(line);
         string[] parts = markup.Split(Mark);
@@ -413,7 +645,7 @@ public partial class ChatUi : CanvasLayer
     private static Button Chip(string text, string tooltip = "")
     {
         var b = new Button { Text = text, TooltipText = tooltip, FocusMode = Control.FocusModeEnum.All, CustomMinimumSize = new Vector2(0, 30) };
-        b.AddThemeFontSizeOverride("font_size", UiTheme.FontSmall);
+        b.AddThemeFontSizeOverride("font_size", SmallPx);
         return b;
     }
 
@@ -464,7 +696,7 @@ public partial class ChatUi : CanvasLayer
         _choicesLayer.AddChild(_choices);
         var col = UiKit.VBox(2);
         _choices.AddChild(col);
-        _choiceTitle = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        _choiceTitle = UiKit.Text("", SmallPx, UiTheme.TextDim);
         col.AddChild(UiKit.Margin(_choiceTitle, 6, 2, 6, 2));
         _choiceList = UiKit.VBox(2);
         col.AddChild(_choiceList);
@@ -521,6 +753,168 @@ public partial class ChatUi : CanvasLayer
         if (!_choicesLayer.Visible) return;
         _choicesLayer.Visible = false;
         if (_panel.Visible && !_pickerOn) _input.GrabFocus();
+    }
+
+    // ---- the command browser (/help) -------------------------------------------------------
+
+    /// <summary>
+    /// A proper command list: grouped, searchable, each row clickable. Opened by <c>/help</c>,
+    /// <c>/help &lt;word&gt;</c> (pre-filtered) or the Commands button, and closed with Esc / B.
+    /// Nothing is sent to the server; the table is the same one Tab completes from.
+    /// </summary>
+    private void BuildHelp()
+    {
+        _helpLayer = new Control { Visible = false, MouseFilter = Control.MouseFilterEnum.Stop, Theme = UiTheme.Get() };
+        _helpLayer.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _helpLayer.GuiInput += e => { if (e is InputEventMouseButton { Pressed: true }) HideHelp(); };
+        AddChild(_helpLayer);
+
+        // a dimmer behind the panel, so the world and the chat behind it recede
+        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.45f), MouseFilter = Control.MouseFilterEnum.Ignore };
+        dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _helpLayer.AddChild(dim);
+
+        var centre = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        centre.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _helpLayer.AddChild(centre);
+
+        var view = GetViewport().GetVisibleRect().Size;
+        _helpPanel = new PanelContainer
+        {
+            CustomMinimumSize = new Vector2(Mathf.Max(320, Mathf.Min(760, view.X - 40)), 0),
+            MouseFilter = Control.MouseFilterEnum.Stop,
+        };
+        var style = UiTheme.GlassPanel(0.98f, 14, 18);
+        style.ShadowSize = 26;
+        _helpPanel.AddThemeStyleboxOverride("panel", style);
+        centre.AddChild(_helpPanel);
+
+        var column = UiKit.VBox(8);
+        _helpPanel.AddChild(column);
+
+        var head = UiKit.HBox(10);
+        head.AddChild(UiKit.Text("Commands", UiTheme.FontHeading, UiTheme.Amber, bold: true));
+        head.AddChild(UiKit.Spacer(0, 0, expand: true));
+        var close = Chip("Close", "Esc");
+        close.Pressed += HideHelp;
+        head.AddChild(close);
+        column.AddChild(head);
+
+        _helpSearch = new LineEdit
+        {
+            PlaceholderText = "Search a command, an argument, or what it does",
+            ClearButtonEnabled = true,
+            ContextMenuEnabled = false,
+        };
+        _helpSearch.AddThemeFontSizeOverride("font_size", BodyPx);
+        _helpSearch.TextChanged += _ => BuildHelpRows();
+        column.AddChild(_helpSearch);
+
+        _helpScroll = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0, Mathf.Clamp(view.Y * 0.62f, 160, 420)),
+        };
+        column.AddChild(_helpScroll);
+        _helpRows = UiKit.VBox(0);
+        _helpRows.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _helpScroll.AddChild(_helpRows);
+
+        column.AddChild(UiKit.Text("Click a command to put it in the box.  Esc closes.", TinyPx, UiTheme.TextFaint));
+    }
+
+    /// <summary>Opens the command browser; <paramref name="query"/> filters it (a bare name selects that command's group).</summary>
+    public void ShowHelp(string query = "")
+    {
+        if (!_panel.Visible) OpenInput();
+        _helpLayer.Visible = true;
+        _helpSearch.Text = query;
+        BuildHelpRows();
+        _helpSearch.GrabFocus();
+        _helpSearch.CaretColumn = _helpSearch.Text.Length;
+        UiFocus.Set(this, true);
+    }
+
+    private void HideHelp()
+    {
+        if (!_helpLayer.Visible) return;
+        _helpLayer.Visible = false;
+        if (_panel.Visible && !_pickerOn) _input.GrabFocus();
+    }
+
+    /// <summary>Rebuilds the grouped rows from the completer's table, filtered by the search box.</summary>
+    private void BuildHelpRows()
+    {
+        foreach (Node row in _helpRows.GetChildren())
+        {
+            _helpRows.RemoveChild(row);
+            row.QueueFree();
+        }
+
+        string query = _helpSearch.Text.Trim();
+        var visible = ChatCompleter.Visible(Permissions.Online, Permissions.IsAdmin).ToHashSet();
+        var matching = ChatCompleter.All
+            .Where(c => visible.Contains(c.Name))
+            .Where(c => query.Length == 0
+                || c.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || c.Args.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || c.About.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || c.Group.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matching.Count == 0)
+        {
+            _helpRows.AddChild(UiKit.Text($"Nothing matches “{query}”.", SmallPx, UiTheme.TextDim));
+            return;
+        }
+
+        foreach (string group in ChatCompleter.GroupNames)
+        {
+            var inGroup = matching.Where(c => c.Group == group).ToList();
+            if (inGroup.Count == 0) continue;
+            var heading = UiKit.Text(group.ToUpperInvariant(), TinyPx, UiTheme.TextFaint, bold: true);
+            _helpRows.AddChild(UiKit.Margin(heading, 0, 10, 0, 4));
+            foreach (var c in inGroup) _helpRows.AddChild(HelpRow(c));
+        }
+    }
+
+    /// <summary>
+    /// One command: a clickable name and arguments, then what it does underneath (wrapped, so a long
+    /// <c>/locate</c> argument list never runs off the panel).
+    /// </summary>
+    private Control HelpRow(ChatCompleter.CommandInfo command)
+    {
+        string args = command.Args.Length == 0 ? "" : "  " + command.Args;
+        var box = UiKit.VBox(0);
+        var row = new Button
+        {
+            Text = $"/{command.Name}{args}",
+            Alignment = HorizontalAlignment.Left,
+            CustomMinimumSize = new Vector2(0, 24),
+            ClipText = true,
+            TooltipText = command.Args.Length == 0 ? $"/{command.Name}" : $"/{command.Name} {command.Args}",
+        };
+        row.AddThemeFontSizeOverride("font_size", SmallPx);
+        row.AddThemeColorOverride("font_color", command.Admin ? UiTheme.Amber : UiTheme.Text);
+        row.AddThemeColorOverride("font_hover_color", UiTheme.Amber);
+        row.Pressed += () => CloseHelpInto($"/{command.Name} ");
+        box.AddChild(row);
+
+        var about = UiKit.Text(command.About, TinyPx, UiTheme.TextFaint);
+        about.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        box.AddChild(UiKit.Margin(about, 10, 0, 10, 4));
+        return box;
+    }
+
+    /// <summary>Puts a command in the box and closes the browser, with the caret after it.</summary>
+    private void CloseHelpInto(string text)
+    {
+        _helpLayer.Visible = false;
+        _panel.Visible = true;
+        SetText(text);
+        _input.GrabFocus();
+        _input.CaretColumn = text.Length;
     }
 
     // ---- the picker (#1277) ----------------------------------------------------------------
@@ -582,14 +976,20 @@ public partial class ChatUi : CanvasLayer
         close.Pressed += () => CloseInput();
         _picker.AddChild(close);
         // the panel grows with the words, up to four rows, then the picker scrolls: measured once the flow
-        // has wrapped them at the panel's width
+        // has wrapped them at the panel's width. One connection at a time: several SetText calls in a
+        // frame (pressing picker buttons) would otherwise connect the same callable repeatedly.
+        if (_pickerFitQueued) return;
+        _pickerFitQueued = true;
         GetTree().ProcessFrame += FitPicker;
     }
+
+    private bool _pickerFitQueued;
 
     private const float PickerMaxHeight = 4 * 34;
 
     private void FitPicker()
     {
+        _pickerFitQueued = false;
         GetTree().ProcessFrame -= FitPicker;
         if (!_pickerOn) return;
         _pickerScroll.CustomMinimumSize = new Vector2(0, Math.Min(_picker.GetCombinedMinimumSize().Y, PickerMaxHeight));
@@ -609,20 +1009,31 @@ public partial class ChatUi : CanvasLayer
         ChatKind.System => new Color(0.70f, 0.76f, 0.84f),
         ChatKind.Admin => UiTheme.Amber,
         ChatKind.Private => new Color(0.55f, 0.85f, 0.70f),
+        ChatKind.Whisper => new Color(0.78f, 0.66f, 0.98f),
         ChatKind.Error => UiTheme.Bad,
         _ => UiTheme.Text,
     };
 
-    private void ScrollToEnd() =>
+    private void ScrollToEnd()
+    {
+        _pending = 0;
+        _newChip.Visible = false;
         // after the container has laid the new line out
         Callable.From(() => _scroll.ScrollVertical = (int)_scroll.GetVScrollBar().MaxValue).CallDeferred();
+    }
 
     // ---- open / close ----------------------------------------------------------------------
 
     /// <summary>Opens the panel and takes the keyboard.</summary>
     public void OpenInput(string prefill = "")
     {
+        ApplyPanelStyle();
         _panel.Visible = true;
+        // the text size may have changed in the settings since the panel was built
+        _input.AddThemeFontSizeOverride("font_size", BodyPx);
+        _input.CustomMinimumSize = new Vector2(0, Mathf.Max(28, Mathf.RoundToInt(26 * TextScale)));
+        _ghost.AddThemeFontSizeOverride("font_size", BodyPx);
+        Callable.From(AlignFeed).CallDeferred();
         _feed.Visible = false;   // the scrollback shows the same lines
         _input.Text = prefill;
         _input.CaretColumn = prefill.Length;
@@ -641,10 +1052,13 @@ public partial class ChatUi : CanvasLayer
     {
         if (!_panel.Visible) return;
 
+        _helpLayer.Visible = false;
         _panel.Visible = false;
         _popup.Visible = false;
         _feed.Visible = true;
         _choicesLayer.Visible = false;
+        _newChip.Visible = false;
+        _pending = 0;
         _pickerOn = false;
         _pickerScroll.Visible = false;
         _pickerUsage.Visible = false;
@@ -693,10 +1107,10 @@ public partial class ChatUi : CanvasLayer
             var row = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Stop, MouseDefaultCursorShape = Control.CursorShape.PointingHand };
             var line = UiKit.HBox(12);
             line.MouseFilter = Control.MouseFilterEnum.Ignore;
-            line.AddChild(UiKit.Text(s.Label, UiTheme.FontSmall + 1));
+            line.AddChild(UiKit.Text(s.Label, SmallPx + 1));
             if (s.Detail.Length > 0)
             {
-                var detail = UiKit.Text(s.Detail, UiTheme.FontSmall, UiTheme.TextFaint);
+                var detail = UiKit.Text(s.Detail, SmallPx, UiTheme.TextFaint);
                 detail.ClipText = true;
                 detail.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
                 line.AddChild(detail);
@@ -770,9 +1184,9 @@ public partial class ChatUi : CanvasLayer
 
         var style = _input.GetThemeStylebox("normal");
         float x = style.ContentMarginLeft
-                  + UiTheme.Font.GetStringSize(text, HorizontalAlignment.Left, -1, UiTheme.FontBody).X;
+                  + UiTheme.Font.GetStringSize(text, HorizontalAlignment.Left, -1, BodyPx).X;
         string tail = target[text.Length..];
-        float tailWidth = UiTheme.Font.GetStringSize(tail, HorizontalAlignment.Left, -1, UiTheme.FontBody).X;
+        float tailWidth = UiTheme.Font.GetStringSize(tail, HorizontalAlignment.Left, -1, BodyPx).X;
         // a line that has started scrolling sideways would put the tail in the wrong place
         if (x + tailWidth > _input.Size.X - style.ContentMarginRight) return;
 
@@ -837,6 +1251,13 @@ public partial class ChatUi : CanvasLayer
     /// <summary>Pad B (and a VR hand's, through <c>XrPad</c>) closes the open chat, as Esc does.</summary>
     public override void _Input(InputEvent @event)
     {
+        // the command browser sits above everything: Esc / B closes it before the chat itself
+        if (_helpLayer.Visible && (@event.IsActionPressed("ui_cancel") || @event is InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape }))
+        {
+            HideHelp();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (_choicesLayer.Visible && (@event.IsActionPressed("ui_cancel") || @event is InputEventKey { Pressed: true, PhysicalKeycode: Key.Escape }))
         {
             HideChoices();
@@ -911,20 +1332,19 @@ public partial class ChatUi : CanvasLayer
 
         for (int i = _floating.Count - 1; i >= 0; i--)
         {
-            var (line, age) = _floating[i];
-            age += delta;
-            if (age >= FloatSeconds + FadeSeconds)
+            var entry = _floating[i];
+            entry.Age += delta;
+            if (entry.Age >= FloatSeconds + FadeSeconds)
             {
-                line.QueueFree();
+                entry.View.QueueFree();
                 _floating.RemoveAt(i);
                 continue;
             }
-            _floating[i] = (line, age);
 
-            float alpha = age < FadeInSeconds
-                ? (float)(age / FadeInSeconds)
-                : 1f - (float)Math.Clamp((age - FloatSeconds) / FadeSeconds, 0, 1);
-            line.Modulate = new Color(1, 1, 1, alpha);
+            float alpha = entry.Age < FadeInSeconds
+                ? (float)(entry.Age / FadeInSeconds)
+                : 1f - (float)Math.Clamp((entry.Age - FloatSeconds) / FadeSeconds, 0, 1);
+            entry.View.Modulate = new Color(1, 1, 1, alpha);
         }
     }
 }

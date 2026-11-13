@@ -70,7 +70,7 @@ public partial class SwissNetProbe : ChatProbe
         var at = me.Global;
         for (int tries = 0; tries < 60 && !Said("B", "ready"); tries++)
         {
-            Say(Fmt($"posA {at.E:F2} {at.N:F2} {at.Alt:F2}"));
+            Say(Fmt($"posA {at.Lv95.E:F2} {at.Lv95.N:F2} {at.Alt:F2}"));
             if (await Until(() => Said("B", "ready"), 2.5)) break;
         }
         if (!Said("B", "ready")) { Fail("B never got ready"); return; }
@@ -100,7 +100,7 @@ public partial class SwissNetProbe : ChatProbe
     {
         if (!await Until(() => _heard.Any(l => l.Contains("SW A posA")), 150)) { Fail("A never reported"); return; }
         var p = _heard.First(l => l.Contains("SW A posA")).Split("posA ")[1].Split(' ');
-        _a = new GlobalPos(Lv95(p[0]), Lv95(p[1]), Lv95(p[2]));
+        _a = GlobalPos.FromLv95(Lv95(p[0]), Lv95(p[1]), Lv95(p[2]));
         await Until(() => !GetParent().GetChildren().OfType<SpawnPoint>().Any() && me.IsOnFloor(), 60);
         for (int tries = 0; tries < 4; tries++)
         {

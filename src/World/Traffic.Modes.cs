@@ -26,7 +26,11 @@ public partial class Traffic
     /// just built from them (a mode may tie its edges to theirs, e.g. a tram track embedded in a road). Read on a worker thread:
     /// no Godot node, no live origin.
     /// </summary>
-    public sealed record ModeTiles(IReadOnlyList<RoadTile> Wide, IReadOnlyList<RoadTile> Near, OriginFrame Origin, LaneGraph Roads, LaneGraph Rails);
+    public sealed record ModeTiles(IReadOnlyList<RoadTile> Wide, IReadOnlyList<RoadTile> Near, OriginFrame Origin, LaneGraph Roads, LaneGraph Rails)
+    {
+        /// <summary>The view's place the build was made around, in <see cref="Origin"/>'s frame; null: the middle of the near tiles (LV95).</summary>
+        public Vector3? Around { get; init; }
+    }
 
     /// <summary>The walkers', riders' and trams' graphs (#1060); null until their mode is wanted and its builder returns one.</summary>
     private LaneGraph? _walks, _rides, _tramLines;
@@ -596,23 +600,21 @@ public partial class Traffic
     // ---- the origin --------------------------------------------------------------------------
 
     /// <summary>The origin moved (#185): the modes' graphs, their movers' routes and where they are.</summary>
-    private void ShiftModes(OriginShift shift, HashSet<LaneEdge> done)
+    private void ShiftModes(OriginShift shift, int pass)
     {
-        _walks?.Shift(shift, _origin.Frame, done);
-        _rides?.Shift(shift, _origin.Frame, done);
-        _tramLines?.Shift(shift, _origin.Frame, done);
+        _walks?.Shift(shift, _origin.Frame, pass);
+        _rides?.Shift(shift, _origin.Frame, pass);
+        _tramLines?.Shift(shift, _origin.Frame, pass);
         foreach (var list in (ReadOnlySpan<List<SlowMover>>)[_walkers, _riders])
             foreach (var m in list)
             {
-                foreach (var (edge, _) in m.Route.Legs)
-                    if (done.Add(edge)) edge.Shift(shift);
+                foreach (var (edge, _) in m.Route.Legs) edge.ShiftOnce(shift, pass);
                 m.Head = shift.Point(m.Head);
                 m.Vel = shift.Direction(m.Vel);
             }
         foreach (var t in _trams)
         {
-            foreach (var (edge, _) in t.Route.Legs)
-                if (done.Add(edge)) edge.Shift(shift);
+            foreach (var (edge, _) in t.Route.Legs) edge.ShiftOnce(shift, pass);
             t.Head = shift.Point(t.Head);
             t.Vel = shift.Direction(t.Vel);
             for (int i = 0; i < t.Path.Length; i++) t.Path[i] = shift.Point(t.Path[i]);

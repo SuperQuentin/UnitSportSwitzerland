@@ -68,10 +68,10 @@ public partial class SteinCheck : ChatProbe
         if (open is not { } o) { await Finish(0); return; }
         var ground = SteinGround.Of(o.Site);
         var me0 = Me!;
-        GD.Print(FormattableString.Invariant($"{Log} stone at {ground.E:F1}/{ground.N:F1}, thrown ({ground.DirE:F2}, {ground.DirN:F2}); body at {me0.Global.E:F1}/{me0.Global.N:F1}"));
+        GD.Print(FormattableString.Invariant($"{Log} stone at {ground.E:F1}/{ground.N:F1}, thrown ({ground.DirE:F2}, {ground.DirN:F2}); body at {me0.Global.Lv95.E:F1}/{me0.Global.Lv95.N:F1}"));
 
         // ---- at a distance nothing is offered (the body spawned 12 m from the stone) ------------------------
-        double away = ground.DistanceTo(me0.Global.E, me0.Global.N);
+        double away = ground.DistanceTo(me0.Global);
         Expect(away > 5 && SteinGame.InteractionFor(me0) == null && !SteinGame.TryInteract(me0), $"{away:F0} m from the stone: no prompt, E does nothing");
 
         // ---- beside it: the prompt, E ---------------------------------------------------------------------
@@ -235,7 +235,8 @@ public partial class SteinCheck : ChatProbe
     {
         var me = Me!;
         var g = me.Global;
-        me.GlobalPosition += new Vector3((float)(e - g.E), 0.2f, (float)-(n - g.N));
+        var (jumpE, jumpN, _) = g.OffsetTo(GlobalPos.FromLv95(e, n, g.Alt));
+        me.GlobalPosition += me.Origin!.Frame.WorldOfEnu(g, new Vector3((float)jumpE, 0.2f, (float)-jumpN));
         me.Velocity = Vector3.Zero;
         await Seconds(0.3);
     }

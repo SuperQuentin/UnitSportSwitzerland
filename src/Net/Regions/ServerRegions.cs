@@ -39,10 +39,24 @@ public partial class ServerRegions : Node
     /// <summary><c>--noregions</c>: every body in the main region, as before #1456 (a check's "before").</summary>
     public static bool Off => CmdArgs.Has("--noregions");
 
-    /// <summary>Makes a region's terrain (and its trunks) in a frame: the server's own settings and tile cache.</summary>
-    public Func<WorldOrigin, ChunkManager>? MakeChunks { get; set; }
-    /// <summary>Whatever else a region holds beside its terrain (its trunks).</summary>
-    public Func<ChunkManager, WorldOrigin, Node>? MakeExtras { get; set; }
+    /// <summary>
+    /// Whether new regions are ENU frames at their cluster's Earth mean (#1513, G2 C4): when the main world is an
+    /// anchor frame (<c>--frame earth</c>). Otherwise each is the flat LV95 frame on its whole km, as before, and a
+    /// handover is a plain translation. Not over the flat tiles: the flat <see cref="ChunkManager"/> answers heights as
+    /// LV95 altitudes in world Y, which an ENU frame's Y is not (a body there stands beside its ground).
+    /// </summary>
+    public bool Enu => Main.IsEnu;
+
+    private RegionPlanner.Anchoring Anchoring => Enu ? RegionPlanner.Anchoring.Earth : RegionPlanner.Anchoring.Lv95Km;
+
+    /// <summary>
+    /// Makes a region's terrain in a frame, and the ground it answers: a flat <see cref="ChunkManager"/> on the server's
+    /// own settings and tile cache, or an <see cref="Terrain.Earth.EarthWorld"/> on the leaves under <c>--frame earth</c>
+    /// (#1513), the only ground an ENU region can stand on.
+    /// </summary>
+    public Func<WorldOrigin, (Node Terrain, IWorldGround Ground)>? MakeGround { get; set; }
+    /// <summary>Whatever else a region holds beside its terrain (its trunks), or null.</summary>
+    public Func<Node, WorldOrigin, Node?>? MakeExtras { get; set; }
 
     public ServerRegion Main { get; }
     public IEnumerable<ServerRegion> All => _regions.Values;
@@ -103,7 +117,7 @@ public partial class ServerRegions : Node
         if (Off || at.HorizontalDistanceTo(Main.Anchor) <= RegionPlanner.HomeM) return Main;
         foreach (var body in Bodies())
             if (body.Region is { } r && !_inSpace.Contains(body) && Global(body).HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
-        return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }));
+        return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }, Anchoring));
     }
 
     /// <summary>
@@ -158,7 +172,7 @@ public partial class ServerRegions : Node
                 return;
             }
             // the regions' own, the terrains and trunks (every region has its own), other worlds
-            if (up == this || up == _players || up is ChunkManager or World.TreeColliders or Viewport) return;
+            if (up == this || up == _players || up is ChunkManager or Terrain.Earth.EarthWorld or World.TreeColliders or Viewport) return;
             if (up == GetParent())
             {
                 // the server's own world: solid things the far regions copy round their bots
@@ -207,7 +221,7 @@ public partial class ServerRegions : Node
         }
         _known.Clear();
         foreach (var r in _regions.Values) _known.Add(new RegionPlanner.Region(r.Id, r.Anchor));
-        var plan = RegionPlanner.Decide(_bodies, _known, Main.Anchor, ref _nextId);
+        var plan = RegionPlanner.Decide(_bodies, _known, Main.Anchor, ref _nextId, Anchoring);
         foreach (var made in plan.Create) Create(made.Anchor, made.Id);
 
         int i = 0;
@@ -237,7 +251,9 @@ public partial class ServerRegions : Node
     private ServerRegion Create(GlobalPos anchor, int id = -1)
     {
         if (id < 0) id = _nextId++;
-        var origin = new WorldOrigin(anchor.E, anchor.N);
+        // an ENU frame at the anchor (#1513): true north, true metres, its gravity down its own up (a space's default
+        // gravity is -Y, and Y is the anchor's up); or the flat LV95 frame on the anchor's whole km
+        var origin = Enu ? new WorldOrigin(FrameAxes.Enu(anchor.Ecef)) : new WorldOrigin(anchor.Lv95.E, anchor.Lv95.N);
         // a world of its own, so a physics space of its own (OwnWorld3D would keep it out of reach: World3D null)
         var world = new World3D();
         var root = new SubViewport
@@ -249,10 +265,10 @@ public partial class ServerRegions : Node
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
         };
         AddChild(root);
-        var chunks = MakeChunks!(origin);
-        root.AddChild(chunks);
-        if (MakeExtras?.Invoke(chunks, origin) is { } extras) root.AddChild(extras);
-        var region = new ServerRegion(id, origin, chunks, world, root);
+        var (terrain, ground) = MakeGround!(origin);
+        root.AddChild(terrain);
+        if (MakeExtras?.Invoke(terrain, origin) is { } extras) root.AddChild(extras);
+        var region = new ServerRegion(id, origin, terrain, ground, world, root);
         _regions[id] = region;
         GD.Print($"[regions] made {region}");
         return region;
@@ -272,7 +288,7 @@ public partial class ServerRegions : Node
         // a bot: the target builds collision round a ghost where the bot is before the bot goes there
         var ghost = new Node3D { Name = $"Ghost_{body.Name}", Position = target.Origin.ToWorld(Global(body)) };
         GhostParent(target).AddChild(ghost);
-        target.Chunks.AddAnchor(ghost, collision: true);
+        target.Ground.AddAnchor(ghost, collision: true);
         _pending[body] = new Handover(target, ghost, _clock);
     }
 
@@ -281,7 +297,7 @@ public partial class ServerRegions : Node
     private void DropGhost(Handover h)
     {
         if (h.Ghost == null || !GodotObject.IsInstanceValid(h.Ghost)) return;
-        h.Target.Chunks.RemoveAnchor(h.Ghost);
+        h.Target.Ground.RemoveAnchor(h.Ghost);
         h.Ghost.QueueFree();
         h.Ghost = null;
     }
@@ -298,7 +314,7 @@ public partial class ServerRegions : Node
             if (h.Ghost != null) h.Ghost.Position = at;
             // ready when the target has collision there, when the body has none where it is either (in the
             // air, not placed yet), or after the timeout (a body never waits for good)
-            bool ready = h.Target.Chunks.HasCollisionAt(at)
+            bool ready = h.Target.Ground.HasCollisionAt(at)
                 || body.Terrain?.HasCollisionAt(body.GlobalPosition) != true
                 || _clock - h.Since > HandoverTimeoutSeconds;
             if (!ready) continue;
@@ -317,7 +333,7 @@ public partial class ServerRegions : Node
         GD.Print($"[regions] {body.Name} from {from.Id} to {target}");
         if (target.IsMain && _shadows.Remove(body, out var shadow))
         {
-            Main.Chunks.RemoveAnchor(shadow);
+            Main.Ground.RemoveAnchor(shadow);
             shadow.QueueFree();
         }
         else if (!target.IsMain) EnsureShadow(body);
@@ -330,7 +346,7 @@ public partial class ServerRegions : Node
         var shadow = new Node3D { Name = $"Shadow_{body.Name}", Position = Main.Origin.ToWorld(Global(body)) };
         AddChild(shadow);
         _shadows[body] = shadow;
-        Main.Chunks.AddAnchor(shadow, collision: false);
+        Main.Ground.AddAnchor(shadow, collision: false);
     }
 
     private void Shadow(FootPlayer body)
@@ -356,7 +372,7 @@ public partial class ServerRegions : Node
         foreach (var body in gone)
             if (_shadows.Remove(body, out var shadow))
             {
-                Main.Chunks.RemoveAnchor(shadow);
+                Main.Ground.RemoveAnchor(shadow);
                 shadow.QueueFree();
             }
     }

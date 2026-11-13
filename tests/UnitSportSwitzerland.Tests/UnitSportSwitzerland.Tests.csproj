@@ -10,11 +10,16 @@
     <IsPackable>false</IsPackable>
     <!-- the linked game files' doc comments cref Godot types this project does not compile -->
     <NoWarn>CS1574;CS1584;CS1581;CS1580</NoWarn>
+    <!-- optimized in Debug too (#1716): the simulations and planners linked in here ran several times slower
+         unoptimized; the DEBUG constant and its asserts stay -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
+    <!-- GeoPackageReader, linked for the road stage's frame tests (#1507) -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- Godot's managed maths (Vector3, Mathf) for the linked src/Core/MathX.cs; no engine is loaded -->
     <PackageReference Include="GodotSharp" Version="4.7.2" />
@@ -30,6 +35,7 @@
     <Compile Include="..\..\src\World\Snow\SnowWeather.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\SnowModel.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\Snow\WeatherCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Occasions\SnowCeiling.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SkiDynamics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\MoveSpeedCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the road bike spec and the fit derived from it (#1124): Godot maths only -->
@@ -72,6 +78,12 @@
     <Compile Include="..\..\src\Core\WorldOrigin.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\OriginShift.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\GlobalPos.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1636: where the traffic's graphs put a tile's or a leaf's records, and their join keys -->
+    <Compile Include="..\..\src\World\TilePlace.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1503 G2 A2b: GlobalPos's JSON shape in the saves (on the type) and the stores' in-place migrations -->
+    <Compile Include="..\..\src\Core\SavedPlace.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\TrueNorth.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />
@@ -102,13 +114,26 @@
     <Compile Include="..\..\src\Net\Invites\PartyBook.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\GroundTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\BuildPolicy.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ContainerRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\EntityInterestRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
+    <!-- #1509 G2 B5: the game's producers build cube leaves (the generated world's, and EarthLeaves over it, are checked by BlendCheck, which builds ProceduralWorld) -->
+    <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\Generated*.cs;..\..\src\Terrain\Leaves\EarthLeaves.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1511 G2 C2: the collision patch provider (the patches themselves need the road builders: the harness checks them) -->
+    <Compile Include="..\..\src\Terrain\LeafCollision\CollisionPatches.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1512 G2 C3: patterns from tile coordinates (the bake and pattern space; Godot maths only) -->
+    <Compile Include="..\..\src\Terrain\Earth\LeafPattern.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
+    <!-- #1629 G2 C6: the globe as the earth world's far view: its horizon, holes and ground in the palette (Godot maths only) -->
+    <Compile Include="..\..\src\World\Globe\GlobeGround.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\CoverPalette.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1632 G2 C6: a leaf's lake cut at its edges (Godot maths only) -->
+    <Compile Include="..\..\src\Terrain\Earth\LeafWaterClip.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\TelescopeOptics.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\TelescopeTargets.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the Adventure layer's progress store, events and quests (#1223) -->
     <Compile Include="..\..\src\Adventure\SectionKey.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\PlayerProgress.cs" Link="Game\Adventure\%(Filename)%(Extension)" />
@@ -135,6 +160,8 @@
     <Compile Include="..\..\src\Trainer\CourseProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Trainer\JunctionChoice.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Gpx\WalkGraph.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1514: a GPX track on its own map plane (GlobalPos, MapProjection and Godot maths only) -->
+    <Compile Include="..\..\src\Gpx\GpxTrack.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
@@ -236,6 +263,10 @@
     <Compile Include="..\..\src\Terrain\SignalGlyphs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the water pass's exact distance transform (#298); the rest of the preprocessor is not linked -->
     <Compile Include="..\..\tools\TerrainPreprocessor\DistanceTransform.cs" Link="Tools\%(Filename)%(Extension)" />
+    <!-- the cube comparer's pure half (#1507): statistics, matching, bars -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\CubeCompareCore.cs" Link="Tools\%(Filename)%(Extension)" />
+    <!-- and the LV95 build's rigorous way in for latitudes and longitudes -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\GeoInput.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
     <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />
@@ -382,6 +413,7 @@
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\ShuttleFlight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\CockpitInstruments.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
@@ -434,6 +466,12 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\FileGdb.cs" Link="Gdb\%(Filename)%(Extension)" />
     <!-- which source features a set of tiles needs (#678): pure, over TerrainFormat -->
     <Compile Include="..\..\tools\TerrainPreprocessor\TileRegion.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <!-- the cube-native build's frames, leaf regions and leaf writer with its seam pass (#1507): pure, over TerrainFormat -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\FrameDriver.cs;..\..\tools\TerrainPreprocessor\LeafWriter.cs;..\..\tools\TerrainPreprocessor\TerrainSampler.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <!-- a feature stage's space, LV95 and frame (#1507), and the French buildings built through it: pure -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\FeatureSpace.cs;..\..\tools\TerrainPreprocessor\FranceBuildings.cs;..\..\tools\TerrainPreprocessor\BdTopo.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <!-- the road stage's spaces (#1507): the LV95 and work-frame tile loops, and the reader whose polylines they cut -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\RoadSpace.cs;..\..\tools\TerrainPreprocessor\PolylineClipper.cs;..\..\tools\TerrainPreprocessor\GeoPackageReader.cs;..\..\tools\TerrainPreprocessor\CoverExtractor.cs;..\..\tools\TerrainPreprocessor\FrameCoverSpace.cs;..\..\tools\TerrainPreprocessor\WaterWindow.cs;..\..\tools\TerrainPreprocessor\CubeWaterLattice.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- OSM maxspeed to km/h for the overlay (#711): pure -->
     <Compile Include="..\..\tools\TerrainPreprocessor\OsmSpeed.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- the neighbours' terrain (#965): their grids from LV95, and the gap fill: pure -->

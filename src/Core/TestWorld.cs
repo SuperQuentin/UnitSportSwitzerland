@@ -17,10 +17,24 @@ public partial class TestWorld : Node3D
     public const float GroundY = 0f;
 
     /// <summary>The ground under <paramref name="at"/>: the terrain's, or the flat plane's with no terrain.</summary>
-    public static bool TryGround(ChunkManager? chunks, Vector3 at, out float y)
+    public static bool TryGround(IWorldGround? chunks, Vector3 at, out float y)
     {
         y = GroundY;
         return chunks == null || chunks.TryGetHeight(at, out y);
+    }
+
+    /// <summary>
+    /// The earth world streams leaves only within 900 m of a focus (#1510), and a probe's camera hovers 1.2 km over
+    /// its target: an anchor 500 m up over the target (a collision one) brings the ground there in. Nothing in the
+    /// flat world, whose rings already reach it. The probe registers its body as an anchor when it spawns.
+    /// </summary>
+    public static void AnchorEarthTarget(Node parent, IWorldGround? ground, WorldOrigin origin, double e, double n)
+    {
+        if (ground == null || !origin.Frame.IsAnchor) return;
+        var seed = new Node3D { Name = "EarthTarget" };
+        parent.AddChild(seed);
+        seed.GlobalPosition = origin.ToWorld(e, n, 500);
+        ground.AddAnchor(seed, collision: true);
     }
 
     public override void _Ready()
@@ -30,7 +44,11 @@ public partial class TestWorld : Node3D
         PlayerInput.Install(GetParent());
         MouseCapture.Disabled = true;
         var (e, n) = SpawnPoint.ParseTarget();
-        var origin = new WorldOrigin(e, n);
+        // --frame earth (#1630): the earth world's anchor frame at the start, for the probes that check its frames in Space
+        var origin = GameSettings.Current.Frame == WorldFrame.Earth
+            ? new WorldOrigin(FrameAxes.Enu(Terrain.Format.SwissGeodesy.ToEcef(e, n, 0)))
+            : new WorldOrigin(e, n);
+        FrameReport.Say(GameSettings.Current.Frame == WorldFrame.Earth, "the flat test world");
 
         // 20 km square, its top at GroundY: a box, which every physics engine collides with alike
         var ground = new StaticBody3D { Name = "Ground", Position = new Vector3(0, GroundY - 0.5f, 0) };
@@ -70,6 +88,7 @@ public partial class TestWorld : Node3D
             : FlightCheckProbe.ParseArgs() is { } fly ? new FlightCheckProbe(null, origin, fly.Kind, fly.Shot)
             : BeamCheck.Requested ? new BeamCheck(origin)
             : OrbitCheck.Requested ? new OrbitCheck(origin)
+            : ShuttleCheck.Requested ? new ShuttleCheck(origin)
             : Terrain.Construction.ShellWalkProbe.Requested() ? new Terrain.Construction.ShellWalkProbe()
             : Terrain.Construction.CraneCheck.Requested ? new Terrain.Construction.CraneCheck(origin)
             : Collision.CollisionMatrixProbe.Requested() ? new Collision.CollisionMatrixProbe(origin)
@@ -80,7 +99,7 @@ public partial class TestWorld : Node3D
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --orbitcheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck, --creativecheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --beamcheck, --orbitcheck, --shuttlecheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --cranecheck, --collidecheck, --collidesandbox, --ownbodycheck, --concertwalkcheck, --creativecheck)");
             GetTree().Quit(2);
             return;
         }

@@ -25,7 +25,7 @@ public partial class FestivalService
         public int Next;
         public int Points, Rings, Perfects, Synced;
         public long LastBeat = long.MinValue, LastGoodBeat = long.MinValue, SyncBeat = long.MinValue;
-        public (double E, double N) Ref;
+        public GlobalPos Ref;
         public double MovedAt;
     }
 
@@ -67,32 +67,32 @@ public partial class FestivalService
         if (!_adventure.Active(peer) || _adventure.Progress(peer) is null) return Tell(peer, "No adventuring now.");
         if (Connected(peer) && !Allowed(peer)) return "too fast";
         if (_adventure.PositionOf?.Invoke(peer) is not { } at) return Tell(peer, "Go to the Treichel stand.");
-        return what == ChalandaStart ? ServeMarchStart(peer, run, site, at.E, at.N) : ServeRing(peer, run, site, stamp, at.E, at.N);
+        return what == ChalandaStart ? ServeMarchStart(peer, run, site, at) : ServeRing(peer, run, site, stamp, at);
     }
 
     // ---- the march ------------------------------------------------------------------------------------------
 
-    private string? ServeMarchStart(long peer, RunningFestival run, ResolvedSite site, double e, double n)
+    private string? ServeMarchStart(long peer, RunningFestival run, ResolvedSite site, GlobalPos at)
     {
-        if (!ChalandaRules.NearStand(site, e, n)) return Tell(peer, "Go to the Treichel stand first.");
+        if (!ChalandaRules.NearStand(site, at)) return Tell(peer, "Go to the Treichel stand first.");
         double now = GameClock.Now;
-        _marches[(run.Instance, peer)] = new March { Start = now, Next = 0, Ref = (e, n), MovedAt = now };
+        _marches[(run.Instance, peer)] = new March { Start = now, Next = 0, Ref = at, MovedAt = now };
         ChalandaStarted++;
         NoteChalanda(peer, ChalandaEvent.Started, 0, 0, "The procession sets off: walk the loop and ring the Treichel on the beat!");
         return null;
     }
 
-    private string? ServeRing(long peer, RunningFestival run, ResolvedSite site, double stamp, double e, double n)
+    private string? ServeRing(long peer, RunningFestival run, ResolvedSite site, double stamp, GlobalPos at)
     {
         if (!_marches.TryGetValue((run.Instance, peer), out var march)) return Tell(peer, "You are not in the procession: start at the Treichel stand.");
         double now = GameClock.Now, serverNow = ClockSync.ServerNow;
         if (!ChalandaRules.BelievableStamp(stamp, serverNow)) return Tell(peer, "That ring makes no sense.");
-        NoteMove(march, e, n, now);
+        NoteMove(march, at, now);
         long beat = ChalandaRules.BeatOf(stamp);
         var grade = ChalandaRules.Grade(stamp);
         string line = "";
         if (beat == march.LastBeat) { grade = RingGrade.Miss; line = "Once a beat."; }
-        else if (!ChalandaRules.OnLoop(site, e, n)) { grade = RingGrade.Miss; line = "Back onto the loop!"; }
+        else if (!ChalandaRules.OnLoop(site, at)) { grade = RingGrade.Miss; line = "Back onto the loop!"; }
         else if (now - march.MovedAt > ChalandaRules.MoveWindow) { grade = RingGrade.Miss; line = "Keep walking!"; }
         march.LastBeat = beat;
         march.Rings++;
@@ -109,10 +109,10 @@ public partial class FestivalService
     }
 
     /// <summary>A body that moved at least <see cref="ChalandaRules.MinStep"/> from where it was last seen walking is walking now.</summary>
-    private static void NoteMove(March march, double e, double n, double now)
+    private static void NoteMove(March march, GlobalPos at, double now)
     {
-        if (ChalandaRules.Dist(e, n, march.Ref) < ChalandaRules.MinStep) return;
-        march.Ref = (e, n);
+        if (at.HorizontalDistanceTo(march.Ref) < ChalandaRules.MinStep) return;
+        march.Ref = at;
         march.MovedAt = now;
     }
 
@@ -160,8 +160,8 @@ public partial class FestivalService
                 continue;
             }
             if (_adventure.PositionOf?.Invoke(peer) is not { } at) continue;
-            NoteMove(march, at.E, at.N, now);
-            if (ChalandaRules.Left(site, at.E, at.N))
+            NoteMove(march, at, now);
+            if (ChalandaRules.Left(site, at))
             {
                 done.Add(key);
                 NoteChalanda(peer, ChalandaEvent.Lost, march.Next, march.Points, "You left the procession. Start again at the stand.");
@@ -169,7 +169,7 @@ public partial class FestivalService
             }
             var path = ChalandaRules.Path(site);
             double reach = march.Next >= ChalandaRules.Stations ? ChalandaRules.StandReach : ChalandaRules.StationReach;
-            if (ChalandaRules.Dist(at.E, at.N, path[march.Next]) > reach) continue;
+            if (ChalandaRules.Dist(at, path[march.Next]) > reach) continue;
             march.Next++;
             if (march.Next <= ChalandaRules.Stations)
             {

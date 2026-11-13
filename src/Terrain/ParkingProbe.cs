@@ -21,6 +21,9 @@ namespace UnitSport.Terrain;
 public partial class ParkingProbe : Node
 {
     private readonly ChunkManager _chunks;
+
+    /// <summary>The world's ground: the streamer's, or the earth world's leaves (#1649).</summary>
+    private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly string? _shot;
     private double _t;
@@ -39,10 +42,11 @@ public partial class ParkingProbe : Node
     private Camera3D? _gateCamera;
     private FootPlayer? _player;
 
-    public ParkingProbe(ChunkManager chunks, WorldOrigin origin, string? shot)
+    public ParkingProbe(ChunkManager chunks, WorldOrigin origin, string? shot, IWorldGround? ground = null)
     {
         Name = "ParkingProbe";
         _chunks = chunks;
+        _ground = ground ?? chunks.Ground;
         _origin = origin;
         _shot = shot;
     }
@@ -71,6 +75,15 @@ public partial class ParkingProbe : Node
 
         var loaded = new List<(TileId Id, int Stride)>();
         _chunks.ListTiles(loaded);
+        // the earth world streams leaves, not the streamer's tiles (#1649): the course's tiles round the anchor, read
+        // from the source, are laid where the leaves are
+        if (loaded.Count == 0 && _ground.Anchors.Count > 0)
+        {
+            var under = _origin.TileAt(_ground.Anchors[0].GlobalPosition);
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                    loaded.Add((under.Neighbour(dx, dz), 1));
+        }
         foreach (var (id, _) in loaded)
         {
             var tile = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
@@ -130,14 +143,14 @@ public partial class ParkingProbe : Node
 
         if (_player == null)
         {
-            _player = new FootPlayer { Name = "ParkingProbeBody", Terrain = _chunks };
+            _player = new FootPlayer { Name = "ParkingProbeBody", Terrain = _ground };
             AddChild(_player);
             _player.DebugLaunch(over + Vector3.Up * 1.5f, Vector3.Zero);
             _t = 0;
             return;
         }
         // hold it over the bay until the ground there is solid, as the other probes do
-        if (!_chunks.HasCollisionAt(_floorAt))
+        if (!_ground.HasCollisionAt(_floorAt))
         {
             _player.GlobalPosition = over + Vector3.Up * 1.5f;
             _player.Velocity = Vector3.Zero;
@@ -163,7 +176,7 @@ public partial class ParkingProbe : Node
         string what = (hit["collider"].AsGodotObject() as Node)?.Name.ToString() ?? "?";
         GD.Print($"[parking] floor over an empty bay: {off * 100:F1} cm from the bay's own height, "
             + $"hit '{what}' (player on floor: {_player.IsOnFloor()}, "
-            + $"terrain height {(_chunks.TryGetHeight(over, out float th) ? (th - over.Y).ToString("F2") : "?")} m off)");
+            + $"terrain height {(_ground.TryGetHeight(over, out float th) ? (th - over.Y).ToString("F2") : "?")} m off)");
         if (off > 0.35f) Fail($"the floor over a bay is {off:F2} m off its height");
         Advance();
     }

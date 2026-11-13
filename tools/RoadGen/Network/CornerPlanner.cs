@@ -46,7 +46,7 @@ public static class CornerPlanner
     public static (double E, double N)? Debug;
 
     private static bool Traced(TileId id, Vec2 p) =>
-        Debug is { } d && Math.Abs(id.MinE + p.X - d.E) < 15 && Math.Abs(id.MaxN + p.Y - d.N) < 15;
+        Debug is { } d && Math.Abs(Plane.West(id) + p.X - d.E) < 15 && Math.Abs(Plane.North(id) + p.Y - d.N) < 15;
 
     /// <summary>One arm's sidewalk on the side facing a corner: kerb line from the node out to where the sidewalk starts.</summary>
     private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward, RoadSide Side = default, bool Lowered = false,
@@ -82,7 +82,8 @@ public static class CornerPlanner
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
         Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null, IReadOnlyList<KerbArc>? arcs = null,
         IReadOnlyList<PathEnd>? pathEnds = null, IEnumerable<RoadAreaProp>? bands = null,
-        IReadOnlyDictionary<RoadJunction, List<CornerInput>>? cores = null, IReadOnlyList<RoadTransition>? transitions = null)
+        IReadOnlyDictionary<RoadJunction, List<CornerInput>>? cores = null, IReadOnlyList<RoadTransition>? transitions = null,
+        bool bends = true)
     {
         _pathEnds = pathEnds;
         // a transition's piece (#818): its kerb and its sides from its own section per point
@@ -157,8 +158,8 @@ public static class CornerPlanner
             Corners(id, segments, ends, arms, ring, cap, facades, stats, props, capArcs);
         }
 
-        // bare bends: two street ends sharing a point, no cap
-        foreach (var list in ends.Values)
+        // bare bends: two street ends sharing a point, no cap (#1660: laid once per block, apart from the caps' corners)
+        foreach (var list in bends ? ends.Values : Enumerable.Empty<List<End>>())
         {
             if (list.Count != 2 || claimed.Contains(list[0]) || claimed.Contains(list[1])) continue;
             var a = Outward(segments[list[0].Seg], list[0].AtStart);
@@ -236,7 +237,7 @@ public static class CornerPlanner
         }
         var node = Plan(segments[a.End.Seg].Points, a.End.AtStart ? 0 : segments[a.End.Seg].PointCount - 1);
         if (Traced(id, node))
-            Console.WriteLine($"[corner] node ({id.MinE + node.X:F1},{id.MaxN + node.Y:F1}) {(ring != null ? "cap" : "bend")}: "
+            Console.WriteLine($"[corner] node ({Plane.West(id) + node.X:F1},{Plane.North(id) + node.Y:F1}) {(ring != null ? "cap" : "bend")}: "
                 + $"{segments[a.End.Seg].Class} left -> {(ca == null ? "no sidewalk" : $"{ca.Width:F1} m after {ca.Kerb.Count} kerb points")}, "
                 + $"{segments[b.End.Seg].Class} right -> {(cb == null ? "no sidewalk" : $"{cb.Width:F1} m after {cb.Kerb.Count} kerb points")}");
         if (ca == null && cb == null) return;
@@ -403,7 +404,7 @@ public static class CornerPlanner
         var chord = new List<(Vec2 P, float Y)>(poly);
         if (b.Width > 0) chord.Add((b.Out, yb));
         if (a.Width > 0) chord.Add((a.Out, ya));
-        var bandOuter = Band(poly, a, b, p => facades.Occupied(id.MinE + p.X, id.MaxN + p.Y));
+        var bandOuter = Band(poly, a, b, p => facades.Occupied(Plane.West(id) + p.X, Plane.North(id) + p.Y));
         // squared only where the corner is compact (near a right angle): at an acute junction the
         // outer edges meet deep inside the block, and the band along the kerb is the sidewalk
         bool compact = squared && corner!.Value.DistanceTo(a.Out) < 8 && corner.Value.DistanceTo(b.Out) < 8;
@@ -642,7 +643,7 @@ public static class CornerPlanner
             stats.Gaps++;
             stats.Built++;
             stats.Area += area;
-            if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {id.MinE + chainA.Out.X:F0},{id.MaxN + chainA.Out.Y:F0} {area:F1} m2");
+            if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {Plane.West(id) + chainA.Out.X:F0},{Plane.North(id) + chainA.Out.Y:F0} {area:F1} m2");
             foreach (var ((type, height, isKerb), mesh) in full.Concat(bands.Select(b => (b.Key, b.Value))))
             {
                 var band = new RoadAreaProp
@@ -765,7 +766,7 @@ public static class CornerPlanner
             {
                 var q = new Vec2(x, y);
                 if (!Inside(quad, q)) continue;
-                if (facades.Occupied(id.MinE + x, id.MaxN + y)) return "wall";
+                if (facades.Occupied(Plane.West(id) + x, Plane.North(id) + y)) return "wall";
                 foreach (var s in segments)
                     if (DistanceToLine(s, q) < s.Width * 0.5 - 0.3) return "road";
                 if (OnPavement(q)) return "road";
@@ -935,8 +936,8 @@ public static class CornerPlanner
             {
                 var q = new Vec2(x, y);
                 if (!Inside(plan, q)) continue;
-                if (facades.Occupied(id.MinE + x, id.MaxN + y))
-                    return Debug != null ? string.Create(CultureInfo.InvariantCulture, $"wall at ({id.MinE + x:F1},{id.MaxN + y:F1}), patch of {plan.Count} points, {area:F0} m2") : "wall";
+                if (facades.Occupied(Plane.West(id) + x, Plane.North(id) + y))
+                    return Debug != null ? string.Create(CultureInfo.InvariantCulture, $"wall at ({Plane.West(id) + x:F1},{Plane.North(id) + y:F1}), patch of {plan.Count} points, {area:F0} m2") : "wall";
                 foreach (var s in near)
                     if (DistanceToLine(s, q) < s.Width * 0.5 - 0.3) return "road";
                 if (OnPavement(q)) return "road";

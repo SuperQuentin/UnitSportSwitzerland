@@ -51,6 +51,34 @@ public readonly record struct TileHeader(uint Magic, ushort Version, ushort Flag
         return header;
     }
 
+    /// <summary>The head before <see cref="Count"/>: magic, version, flags and the tile id (#1505).</summary>
+    public const int HeadSize = 16;
+
+    /// <summary>
+    /// Writes the 16-byte head, magic to tile id: a format split into a head and a key-free body
+    /// (#1505, G2 B1) writes this, then its body, which starts with the count word.
+    /// </summary>
+    public static void WriteHead(Stream output, uint magic, ushort version, ushort flags, TileId id)
+    {
+        Span<byte> h = stackalloc byte[HeadSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(h[0..], magic);
+        BinaryPrimitives.WriteUInt16LittleEndian(h[4..], version);
+        BinaryPrimitives.WriteUInt16LittleEndian(h[6..], flags);
+        BinaryPrimitives.WriteInt32LittleEndian(h[8..], id.E);
+        BinaryPrimitives.WriteInt32LittleEndian(h[12..], id.N);
+        output.Write(h);
+    }
+
+    /// <summary>Reads the 16-byte head and checks its magic, as <see cref="Read(Stream, uint, string)"/>; <see cref="Count"/> is left to the body (0 here).</summary>
+    public static TileHeader ReadHead(Stream input, uint magic, string kind)
+    {
+        Span<byte> h = stackalloc byte[Size];
+        input.ReadExactly(h[..HeadSize]);
+        var header = Read(h);
+        header.CheckMagic(magic, kind);
+        return header;
+    }
+
     public void CheckMagic(uint magic, string kind)
     {
         if (Magic != magic) throw new InvalidDataException($"Bad {kind} magic 0x{Magic:X8}");

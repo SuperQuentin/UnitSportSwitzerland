@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.TestRegion;
 
 namespace UnitSport.Core;
@@ -119,52 +120,82 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
     /// <summary>The region's tiles, built by the game itself (<see cref="Prepare"/>).</summary>
     public static string SignalsDir => ProjectSettings.GlobalizePath($"user://worlds/{SignalsId}/chunks");
 
+    /// <summary>
+    /// The region's cube leaves (#1647), built beside its tiles under <c>--frame earth</c>: the chunk folder's <c>_cube</c>
+    /// sibling, where <see cref="TerrainPaths.FindLeafDir"/> looks.
+    /// </summary>
+    public static string SignalsLeafDir => UnitSport.Tools.Preprocessor.CubeTestRegion.RegionOf(SignalsDir);
+
     private static string SignalsStamp => System.IO.Path.Combine(SignalsDir, "built_by.txt");
+
+    private static string SignalsLeafStamp => System.IO.Path.Combine(SignalsLeafDir, "built_by.txt");
 
     private static string RoadGenStamp => typeof(SignalTestRegion).Assembly.ManifestModule.ModuleVersionId.ToString();
 
-    /// <summary>
-    /// Nothing to build before this world loads: a fixture course, or the region already built by
-    /// this RoadGen. When false, <see cref="Prepare"/> takes a while (~15 s in a release build, close to
-    /// a minute in the editor's debug build): the loading screen says so.
-    /// </summary>
-    public bool Prepared
+    /// <summary>The leaves' stamp: RoadGen's and the cube stages' module ids (the preprocessor writes them).</summary>
+    private static string LeafStamp => RoadGenStamp + " " + typeof(UnitSport.Tools.Preprocessor.CubeTestRegion).Assembly.ManifestModule.ModuleVersionId;
+
+    /// <summary>Whether this session stands on leaves (<c>--frame earth</c>): the region is then built as leaves too.</summary>
+    private static bool Earth => GameSettings.Current.Frame == WorldFrame.Earth;
+
+    private static bool Stamped(string stamp, string expected, string needs)
     {
-        get
+        try
         {
-            if (Id != SignalsId) return true;
-            try
-            {
-                return System.IO.File.Exists(SignalsStamp) && System.IO.File.ReadAllText(SignalsStamp).Trim() == RoadGenStamp
-                    && System.IO.File.Exists(System.IO.Path.Combine(SignalsDir, "manifest.json"));
-            }
-            catch (System.IO.IOException) { return false; }
+            return System.IO.File.Exists(stamp) && System.IO.File.ReadAllText(stamp).Trim() == expected && System.IO.File.Exists(needs);
         }
+        catch (System.IO.IOException) { return false; }
     }
 
+    /// <summary>
+    /// Nothing to build before this world loads: a fixture course, or the region already built by
+    /// this RoadGen (and, under <c>--frame earth</c>, its leaves by these cube stages). When false, <see cref="Prepare"/>
+    /// takes a while (~15 s in a release build, close to a minute in the editor's debug build; the leaves ~40 s more):
+    /// the loading screen says so.
+    /// </summary>
+    public bool Prepared => Id != SignalsId
+        || Stamped(SignalsStamp, RoadGenStamp, System.IO.Path.Combine(SignalsDir, "manifest.json"))
+            && (!Earth || Stamped(SignalsLeafStamp, LeafStamp, System.IO.Path.Combine(SignalsLeafDir, CubeManifest.FileName)));
+
     /// <summary>What the loading screen says while <see cref="Prepare"/> builds.</summary>
-    public const string PreparingDetail = "Building the traffic lights region: up to a minute, the first time";
+    public static string PreparingDetail => Earth
+        ? "Building the traffic lights region and its leaves: up to two minutes, the first time"
+        : "Building the traffic lights region: up to a minute, the first time";
 
     /// <summary>
     /// Makes sure this world's tiles exist; run on a worker. A fixture course is built in code as
     /// it streams, so only the traffic lights region has anything to do: the game runs RoadGen's
     /// <c>--test-region</c> into <see cref="SignalsDir"/> (~2 s), again whenever RoadGen changed
-    /// (its module id is the stamp). Returns an error for the player, or null.
+    /// (its module id is the stamp), and under <c>--frame earth</c> the cube stages' copy into
+    /// <see cref="SignalsLeafDir"/> (#1647, again whenever either changed; from the region's design, not the LV95 copy, #1711).
+    /// Keeps the LV95 copy until G2's D.
+    /// Returns an error for the player, or null.
     /// </summary>
     public string? Prepare()
     {
         if (Prepared) return null;
-        string stamp = RoadGenStamp;
         try
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
-            System.IO.Directory.CreateDirectory(SignalsDir);
-            // its verdict on the junctions is a check's; the tiles are written either way
-            SignalTestRegion.Run(SignalsDir, SignalsDir + "_temp", _ => { });
-            if (!System.IO.File.Exists(System.IO.Path.Combine(SignalsDir, "manifest.json")))
-                return "The traffic lights region could not be built. See the log.";
-            System.IO.File.WriteAllText(SignalsStamp, stamp);
-            GD.Print($"[world] built the traffic lights region in {clock.Elapsed.TotalSeconds:F1} s: {SignalsDir}");
+            if (!Stamped(SignalsStamp, RoadGenStamp, System.IO.Path.Combine(SignalsDir, "manifest.json")))
+            {
+                System.IO.Directory.CreateDirectory(SignalsDir);
+                // its verdict on the junctions is a check's; the tiles are written either way
+                SignalTestRegion.Run(SignalsDir, SignalsDir + "_temp", _ => { });
+                if (!System.IO.File.Exists(System.IO.Path.Combine(SignalsDir, "manifest.json")))
+                    return "The traffic lights region could not be built. See the log.";
+                System.IO.File.WriteAllText(SignalsStamp, RoadGenStamp);
+                GD.Print($"[world] built the traffic lights region in {clock.Elapsed.TotalSeconds:F1} s: {SignalsDir}");
+            }
+            if (Earth && !Stamped(SignalsLeafStamp, LeafStamp, System.IO.Path.Combine(SignalsLeafDir, CubeManifest.FileName)))
+            {
+                var leaves = System.Diagnostics.Stopwatch.StartNew();
+                int code = UnitSport.Tools.Preprocessor.CubeTestRegion.Build(SignalsLeafDir, line => GD.Print("[world] " + line));
+                if (code != 0 || !System.IO.File.Exists(System.IO.Path.Combine(SignalsLeafDir, CubeManifest.FileName)))
+                    return "The traffic lights region's leaves could not be built. See the log.";
+                System.IO.File.WriteAllText(SignalsLeafStamp, LeafStamp);
+                GD.Print($"[world] built the traffic lights region's leaves in {leaves.Elapsed.TotalSeconds:F1} s: {SignalsLeafDir}");
+            }
             return null;
         }
         catch (Exception e)

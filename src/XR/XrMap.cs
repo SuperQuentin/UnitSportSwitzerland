@@ -147,10 +147,10 @@ internal sealed partial class XrMap : Node3D
         if (trigger && !_triggerWas && _aim is { } go && BattleRoyale.BrManager.Instance?.InMatch != true
             && Core.Permissions.CanTeleport && Core.Teleporter.Instance is { } teleporter)
         {
-            // map metres to the ground: east is the map's +X, north its −Z, as the world's
-            var g = player.Global;
-            double e = g.E + go.X / Size * Span, n = g.N - go.Y / Size * Span;
-            teleporter.TeleportTo(e, n);
+            // map metres to the ground: east is the map's +X, north its −Z, as the world's: grid metres, and the
+            // map is drawn from world positions, so the step is made on the LV95 grid, not in true east and north
+            var l = player.Global.Lv95;
+            teleporter.TeleportTo(l.E + go.X / Size * Span, l.N - go.Y / Size * Span);
             Visible = false;
         }
         _triggerWas = trigger;

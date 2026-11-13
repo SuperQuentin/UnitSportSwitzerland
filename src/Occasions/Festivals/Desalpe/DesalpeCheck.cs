@@ -70,7 +70,7 @@ public partial class DesalpeCheck : ChatProbe
         var (ce, cn) = herd.CowAt(3)!.Value;
         Teleport(ce + 1.6, cn);
         await Seconds(0.4);
-        Expect(herd.Nearest(Me!.Global.E, Me.Global.N) is var (near, d) && d <= DesalpeGame.CowReach && near >= 0, $"a cow within reach (cow {herd.Nearest(Me.Global.E, Me.Global.N).Cow})");
+        Expect(herd.Nearest(Me!.Global) is var (near, d) && d <= DesalpeGame.CowReach && near >= 0, $"a cow within reach (cow {herd.Nearest(Me.Global).Cow})");
         await Until(() => game.Dressing, 3);
         int cow = game.NearCow;
         Expect(game.Dressing && cow >= 0 && DesalpeGame.TakesUse, "the game takes Use near a cow");

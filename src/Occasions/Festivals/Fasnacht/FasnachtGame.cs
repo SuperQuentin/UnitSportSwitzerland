@@ -276,9 +276,9 @@ public partial class FasnachtGame : CanvasLayer
         if (_svc?.FasnachtNow() is { } m && _local() is { } p)
         {
             var g = p.Global;
-            near = FasnachtRules.NearStage(m.Site, g.E, g.N) ? Near.Stage
-                : FasnachtRules.NearStall(m.Site, g.E, g.N) ? Near.Stall
-                : m.Run.Id == FasnachtRules.BaselId && FasnachtRules.NearLantern(m.Site, g.E, g.N) ? Near.Lantern : Near.None;
+            near = FasnachtRules.NearStage(m.Site, g) ? Near.Stage
+                : FasnachtRules.NearStall(m.Site, g) ? Near.Stall
+                : m.Run.Id == FasnachtRules.BaselId && FasnachtRules.NearLantern(m.Site, g) ? Near.Lantern : Near.None;
         }
         if (near != _near) _view.QueueRedraw();
         _near = near;
@@ -320,7 +320,7 @@ public partial class FasnachtGame : CanvasLayer
         }
         var g = p.Global;
         var site = _svc?.RunningOf(_festival)?.Site;
-        if (site == null || !FasnachtRules.NearStage(site, g.E, g.N, 25) || !_scripted && Input.IsActionJustPressed("ui_cancel"))
+        if (site == null || !FasnachtRules.NearStage(site, g, 25) || !_scripted && Input.IsActionJustPressed("ui_cancel"))
         {
             Abort(site == null ? "The Fasnacht is over." : "You left the stage.");
             return;

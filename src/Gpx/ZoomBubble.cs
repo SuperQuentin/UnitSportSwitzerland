@@ -52,7 +52,7 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
     private static readonly Color Shine = new(1f, 1f, 1f, 0.55f);
     private static readonly Color Sparkle = new(1f, 0.93f, 0.45f);
 
-    private ChunkManager _chunks = null!;
+    private IWorldGround _ground = null!;
     private SubViewport _view = null!;
     private Camera3D _zoomCam = null!;
     private TextureRect _inset = null!;
@@ -73,11 +73,11 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
     /// <summary>Master on/off. Disabling eases the bubble out rather than snapping it away.</summary>
     public bool Enabled { get; set; } = true;
 
-    public static ZoomBubble Create(ChunkManager chunks) => new()
+    public static ZoomBubble Create(IWorldGround ground) => new()
     {
         Name = "ZoomBubble",
         Layer = 6,
-        _chunks = chunks,
+        _ground = ground,
     };
 
     public override void _Ready()
@@ -211,7 +211,7 @@ public partial class ZoomBubble : CanvasLayer, Core.IOriginShiftAware
 
         var want = head - heading * CamBack + Vector3.Up * CamUp;
         // never under a slope rising behind the runner
-        if (_chunks.TryGetHeight(want, out float ground))
+        if (_ground.TryGetHeight(want, out float ground))
             want.Y = Mathf.Max(want.Y, ground + CamMinClearance);
 
         _camPos = !_camPlaced || dt <= 0

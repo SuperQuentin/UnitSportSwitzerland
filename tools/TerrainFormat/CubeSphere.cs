@@ -152,6 +152,22 @@ public static class CubeSphere
         return (best, Clamp1(Unwarp(r.S * c[r.I] / along)), Clamp1(Unwarp(w.S * c[w.I] / along)));
     }
 
+    /// <summary>
+    /// The (u, v) of a geodetic normal on a given face's gnomonic, unclamped (#1507): past the face's edge it
+    /// goes on beyond ±1, where <see cref="Normal"/> takes it back, so a leaf's lattice runs on into its
+    /// margin. Meaningless for a normal more than 90° from the face's axis.
+    /// </summary>
+    public static (double U, double V) OnFace(int face, EcefPos n)
+    {
+        double x = M[0] * n.X + M[3] * n.Y + M[6] * n.Z;
+        double y = M[1] * n.X + M[4] * n.Y + M[7] * n.Z;
+        double z = M[2] * n.X + M[5] * n.Y + M[8] * n.Z;
+        Span<double> c = stackalloc double[] { x, y, z };
+        var (ax, r, w) = (Frame[face, 0], Frame[face, 1], Frame[face, 2]);
+        double along = ax.S * c[ax.I];
+        return (Unwarp(r.S * c[r.I] / along), Unwarp(w.S * c[w.I] / along));
+    }
+
     /// <summary>The face and (u, v) under an ECEF point, and its ellipsoidal height.</summary>
     public static (int Face, double U, double V, double H) FromEcef(EcefPos p)
     {
@@ -194,6 +210,36 @@ public static class CubeSphere
         var (oa, or, ow) = (Frame[other, 0], Frame[other, 1], Frame[other, 2]);
         if (oa.S * p[oa.I] != n) return null;
         return ((or.S * p[or.I] + n) / 2, (ow.S * p[ow.I] + n) / 2);
+    }
+
+    /// <summary>
+    /// The lattice vertex (i, j) of a face at a level, when it may lie past one of the face's edges (i or j
+    /// outside 0..2^level, at most a face away): the face and indices it folds onto, the same distance in from
+    /// the shared edge as it is out (<see cref="CubeKey.Neighbour"/>'s fold, on vertices; #1552). Inside the face
+    /// it is itself; past a cube corner (both out), null, as only three faces meet there. Integer arithmetic on
+    /// the doubled cube lattice, so the point is the other face's own vertex, bit for bit.
+    /// </summary>
+    public static (int Face, long I, long J)? Fold(int face, int level, long i, long j)
+    {
+        long n = 1L << level;
+        long a = 2 * i - n, b = 2 * j - n;
+        bool outA = Math.Abs(a) > n, outB = Math.Abs(b) > n;
+        if (!outA && !outB) return (face, i, j);
+        if (outA && outB) return null;
+        if (Math.Abs(a) >= 3 * n || Math.Abs(b) >= 3 * n) throw new ArgumentOutOfRangeException(nameof(i), "at most one face away");
+        var (ax, r, w) = (Frame[face, 0], Frame[face, 1], Frame[face, 2]);
+        Span<long> p = stackalloc long[3];
+        long e = (outA ? Math.Abs(a) : Math.Abs(b)) - n;
+        p[ax.I] = ax.S * (n - e);
+        p[r.I] = r.S * (outA ? Math.Sign(a) * n : a);
+        p[w.I] = w.S * (outA ? b : Math.Sign(b) * n);
+        for (int f = 0; f < Faces; f++)
+        {
+            var (fa, fr, fw) = (Frame[f, 0], Frame[f, 1], Frame[f, 2]);
+            if (f == face || fa.S * p[fa.I] != n) continue;
+            return (f, (fr.S * p[fr.I] + n) / 2, (fw.S * p[fw.I] + n) / 2);
+        }
+        throw new InvalidOperationException($"no face holds face {face}'s vertex {i},{j} at level {level}");
     }
 
     /// <summary>A face's frame in the cube's: the axis indices and signs of its outward axis, right and up (for <see cref="CubeKey"/>).</summary>

@@ -22,6 +22,12 @@ public sealed class Corridor
     private readonly Dictionary<TileId, BuildingTile?> _buildings = new();
     private readonly Dictionary<TileId, RoadTile?> _roads = new();
 
+    /// <summary>The track's plane, which <see cref="HeightAt"/> is asked on (#1514).</summary>
+    private MapProjection _plane = null!;
+
+    /// <summary>Whether the tiles are an earth world's leaves, by their stand-ins (#1752), rather than LV95 tiles.</summary>
+    private bool _leaves;
+
     public int TileCount => _grids.Count;
     public int BuildingCount { get; private set; }
 
@@ -40,29 +46,34 @@ public sealed class Corridor
     /// gives up, which is correct for gameplay streaming and ruinous for a survey — measured at
     /// 117 seconds to gather 12 tiles before this filter existed.
     /// </param>
+    public static Task<Corridor> LoadAsync(GpxTrack track, IChunkSource source,
+        IReadOnlySet<TileId>? known = null, double pad = 400, CancellationToken ct = default) =>
+        LoadAsync(track, source, known == null ? null : known.Contains, pad, ct);
+
+    /// <summary><see cref="LoadAsync(GpxTrack, IChunkSource, IReadOnlySet{TileId}?, double, CancellationToken)"/> with the
+    /// tiles that exist as a test: the manifest's and the generated fill's (#1752).</summary>
     public static async Task<Corridor> LoadAsync(GpxTrack track, IChunkSource source,
-        IReadOnlySet<TileId>? known = null, double pad = 400, CancellationToken ct = default)
+        Func<TileId, bool>? known, double pad = 400, CancellationToken ct = default)
     {
-        var corridor = new Corridor();
-
-        double minE = double.MaxValue, minN = double.MaxValue;
-        double maxE = double.MinValue, maxN = double.MinValue;
-        foreach (var p in track.Points)
-        {
-            minE = Math.Min(minE, p.E); maxE = Math.Max(maxE, p.E);
-            minN = Math.Min(minN, p.N); maxN = Math.Max(maxN, p.N);
-        }
-
-        var from = TileId.FromLv95(minE - pad, minN - pad);
-        var to = TileId.FromLv95(maxE + pad, maxN + pad);
+        // an earth world's tiles are its leaves, asked by their stand-ins (#1752)
+        bool leaves = source is Terrain.Leaves.StandInChunkSource;
+        var corridor = new Corridor { _plane = track.Plane, _leaves = leaves };
 
         var wanted = new List<TileId>();
-        for (int e = from.E; e <= to.E; e++)
-            for (int n = from.N; n <= to.N; n++)
-            {
-                var id = new TileId(e, n);
-                if (known == null || known.Contains(id)) wanted.Add(id);
-            }
+        if (leaves) wanted = track.StandInsAlong(pad);
+        else
+        {
+            // the LV95 tiles under the track's plane box (#1514)
+            var (minE, minN, maxE, maxN) = track.Lv95Bounds(pad);
+            var from = TileId.FromLv95(minE, minN);
+            var to = TileId.FromLv95(maxE, maxN);
+            for (int e = from.E; e <= to.E; e++)
+                for (int n = from.N; n <= to.N; n++)
+                {
+                    var id = new TileId(e, n);
+                    if (known == null || known(id)) wanted.Add(id);
+                }
+        }
 
         // In parallel, because these are three independent file reads per tile and the survey is
         // a wait the player sits through before the mode starts. Serially it was one chain at a
@@ -104,7 +115,7 @@ public sealed class Corridor
     }
 
     /// <summary>
-    /// Terrain height at an LV95 position, or null outside the loaded tiles.
+    /// Terrain height at a point of the track's plane (#1514), or null outside the loaded tiles.
     ///
     /// <para>
     /// Every boundary vertex belongs to two tiles and every corner to four, and
@@ -113,8 +124,12 @@ public sealed class Corridor
     /// fix the preprocessor's sampler uses.
     /// </para>
     /// </summary>
-    public double? HeightAt(double e, double n)
+    public double? HeightAt(double x, double y)
     {
+        if (_leaves) return LeafHeightAt(x, y);
+
+        // the tiles are LV95 (until G2 D): the plane point's LV95 to ~10 cm, a twentieth of a grid cell
+        var (e, n) = _plane.Lv95Of(x, y);
         var id = TileId.FromLv95(e, n);
         if (_grids.TryGetValue(id, out var grid)) return grid.SampleHeight(e, n);
 
@@ -122,6 +137,22 @@ public sealed class Corridor
             if (_grids.TryGetValue(neighbour, out var other)) return other.SampleHeight(e, n);
 
         return null;
+    }
+
+    /// <summary>
+    /// <see cref="HeightAt"/> on the leaves (#1752): the grid of the leaf under the point, read in its stand-in's names,
+    /// and that ground's height above sea level (what the track's elevations are). A leaf's stand-in grid reaches past
+    /// its edges with the nearest heights, so a point on a seam needs no neighbour.
+    /// </summary>
+    private double? LeafHeightAt(double x, double y)
+    {
+        var place = _plane.At(x, y, 0);
+        var id = Terrain.Leaves.LeafStandIn.Id(CubeKey.FromEcef(place.Ecef, Terrain.Leaves.LeafFrames.LeafLevel));
+        if (!_grids.TryGetValue(id, out var grid)) return null;
+        var (le, ln, _) = place.InTileEn(id);
+        double h = grid.SampleHeight(le, ln);
+        if (double.IsNaN(h)) return null;
+        return Core.GlobalPos.OfTileEn(id, le, ln, h).Alt;
     }
 
     private static IEnumerable<TileId> Sharing(double e, double n)

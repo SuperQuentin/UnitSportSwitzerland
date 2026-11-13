@@ -27,25 +27,24 @@ public partial class AfricaTwinEgg : Node
     public const double Lat = 46.16664300470599, Lon = 7.214410897465706;
     private const string EggName = "veh_africatwin_egg";
 
-    private readonly ChunkManager _chunks;
-    private readonly TileId _tile;
+    private readonly IWorldGround _ground;
     private readonly double _e, _n;
     private List<Slot>? _slots;   // computed once; the data does not change while running
     private bool _busy;
 
     public readonly record struct Slot(double E, double N, double Height, float Yaw, bool Parking);
 
-    public AfricaTwinEgg(ChunkManager chunks)
+    /// <param name="ground">The world's ground, flat or leaves (#1684): its tiles' events, its origin, the tile files beneath.</param>
+    public AfricaTwinEgg(IWorldGround ground)
     {
         Name = "AfricaTwinEgg";
-        _chunks = chunks;
+        _ground = ground;
         (_e, _n) = SwissGeodesy.ToLv95(Lat, Lon);
-        _tile = TileId.FromLv95(_e, _n);
     }
 
     public override void _Ready()
     {
-        _chunks.TileEntered += OnTileEntered;
+        _ground.TileEntered += OnTileEntered;
         // a local egg from an offline session would double the server's: the server's word wins
         // (a method, not a lambda: the multiplayer API outlives this node, and a static lambda would
         // stay connected after the world is left, and be connected again by the next one)
@@ -56,7 +55,7 @@ public partial class AfricaTwinEgg : Node
 
     public override void _ExitTree()
     {
-        _chunks.TileEntered -= OnTileEntered;
+        _ground.TileEntered -= OnTileEntered;
         Multiplayer.ConnectedToServer -= DropLocalEgg;
     }
 
@@ -64,12 +63,12 @@ public partial class AfricaTwinEgg : Node
     private bool Decides => Net.NetworkManager.DedicatedServer
         || Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer;
 
-    private async void OnTileEntered(TileId id)
+    private async void OnTileEntered(GroundTile tile)
     {
-        if (id != _tile || _busy || !Decides) return;
+        if (_busy || !Decides || _ground.Origin is not { } origin || tile != _ground.TileAt(origin.ToWorld(_e, _n, 0))) return;
         if (VehicleManager.Instance is not { } vehicles) return;
         if (vehicles.GetNodeOrNull<VehicleBody>(EggName) is { Wrecked: false }) return;   // still parked there
-        if (_chunks.Source is not { } source || _chunks.Origin is not { } origin) return;
+        if (_ground.Content is not { } source) return;
 
         _busy = true;
         try
@@ -89,7 +88,7 @@ public partial class AfricaTwinEgg : Node
             var ride = Rideable.Create(kind)!;
             // nose in or backed in, as the cars beside it would be
             float yaw = slot.Yaw + (rng.Next(2) == 0 ? 0f : Mathf.Pi);
-            var state = new VehicleState(kind, new GlobalPos(slot.E, slot.N, slot.Height), yaw,
+            var state = new VehicleState(kind, GlobalPos.FromLv95(slot.E, slot.N, slot.Height), yaw,
                 Vector3.Zero, ride.MaxHealth, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
             if (vehicles.Place(state, EggName) != null)
                 GD.Print($"[egg] {MotorbikeCatalog.For(kind)!.Label} parked at LV95 {slot.E:F1}/{slot.N:F1} "

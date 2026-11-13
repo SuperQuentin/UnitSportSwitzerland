@@ -80,7 +80,11 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
 - **`SiteFront`** (`Vehicles/VehicleSlot.cs`): the yard plus the facade's real span and the doors on
   it, in the yard's u, from `SiteYards.Fronts`. **The yard is centred on the main door, not on the
   facade**: deriving the facade from the yard's width put pallets past one corner and short of the
-  other wherever the door is off-centre; the span comes from the plan box (`PlanBox.Along`).
+  other wherever the door is off-centre; the span is the main door's own straight run of wall
+  (`DoorSpot.Run`, the door in its middle) within the plan box's extent along it (`SiteFront.Span`, #1769). The box
+  alone was wrong on a city block whose door wall stands at an angle to it: 188 m along a 158 x 102 m Geneva block
+  ran 28 pallets out across a street and parked the forklift 90 m off, over the Rhône (any frame; the earth world's
+  other site rolls put a works there).
 - **A forklift in the fleet** (`DormantSlots.ForkliftOf`): a warehouse's and a works' yard keep one,
   1.5 m past one end of the facade on the apron, forks to the building, ordinal
   `ForkliftOrdinal` (1000) so no existing vehicle was renamed. It is a slot like any other — woken by

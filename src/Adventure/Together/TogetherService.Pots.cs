@@ -95,13 +95,13 @@ public partial class TogetherService
             {
                 if (o.Kind != PlacedKind.Campfire || !Crafting.CampfireClock.Burning(o.Payload, now)) continue;
                 var g = placed.Origin.ToGlobal(o.WorldTransform(placed.Origin).Origin);
-                if (g.DistanceTo(at) <= FireReach) return (PotSpot.Campfire, $"fire:{o.Id}", g.E, g.N, (float)g.Alt);
+                if (g.DistanceTo(at) <= FireReach) return (PotSpot.Campfire, $"fire:{o.Id}", g.Lv95.E, g.Lv95.N, (float)g.Alt);
             }
         }
         if (campfireOnly) return null;
         // a mountain hut (or a chalet restaurant, which the places map to one)
         var near = new List<Places.Poi>();
-        Places.PoiCatalogueHost.Current.Near(at.E, at.N, HutReach, near, PoiKind.Hut);
+        Places.PoiCatalogueHost.Current.Near(at, HutReach, near, PoiKind.Hut);
         if (near.Count > 0) return (PotSpot.Hut, $"hut:{near[0].Id}", near[0].E, near[0].N, (float)at.Alt);
         // a dining venue is no spot by itself: its pots stand on its tables (ServeStartAt, #1384)
         return null;
@@ -189,7 +189,7 @@ public partial class TogetherService
         return null;
     }
 
-    private static double Dist(GlobalPos a, double e, double n) => Math.Sqrt((a.E - e) * (a.E - e) + (a.N - n) * (a.N - n));
+    private static double Dist(GlobalPos a, double e, double n) => a.HorizontalDistanceTo(GlobalPos.FromLv95(e, n, a.Alt));
 
     /// <summary>An ingredient in (the owner took it from its pack first; a refusal gives it back). Null when added.</summary>
     public string? ServeAdd(long peer, int potId, ItemId item)
@@ -372,10 +372,11 @@ public partial class TogetherService
         if (!force && _potSent.GetValueOrDefault(pot.Id) == key) return;
         _potSent[pot.Id] = key;
         var seats = pot.Seats.ToArray();
+        var (x, y, z) = GlobalPos.FromLv95(pot.E, pot.N, pot.Alt).ToWire();   // (#1503) the wire is ECEF
         foreach (long s in seats)
         {
-            if (Connected(s)) RpcId(s, MethodName.PotState, pot.Id, (byte)pot.Spot, flags, pot.E, pot.N, pot.Alt, split, pot.DipsLeft, seats, bits, pot.Cheese, quality);
-            else if (!_networked && s == AdventureService.LocalPeer) PotState(pot.Id, (byte)pot.Spot, flags, pot.E, pot.N, pot.Alt, split, pot.DipsLeft, seats, bits, pot.Cheese, quality);
+            if (Connected(s)) RpcId(s, MethodName.PotState, pot.Id, (byte)pot.Spot, flags, x, y, z, split, pot.DipsLeft, seats, bits, pot.Cheese, quality);
+            else if (!_networked && s == AdventureService.LocalPeer) ApplyPot(pot.Id, (byte)pot.Spot, flags, pot.E, pot.N, pot.Alt, split, pot.DipsLeft, seats, bits, pot.Cheese, quality);
         }
     }
 
@@ -433,9 +434,15 @@ public partial class TogetherService
     public string LastFeast { get; private set; } = "";
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void PotState(int id, byte spot, byte flags, double e, double n, float alt, byte split, int dips, long[] seats, byte[] bits, int cheese, byte quality)
+    private void PotState(int id, byte spot, byte flags, double x, double y, double z, byte split, int dips, long[] seats, byte[] bits, int cheese, byte quality)
     {
-        var v = MyPot?.Id == id ? MyPot : new PotView { Id = id };
+        var at = GlobalPos.FromWire(x, y, z);
+        ApplyPot(id, spot, flags, at.Lv95.E, at.Lv95.N, (float)at.Alt, split, dips, seats, bits, cheese, quality);
+    }
+
+    private void ApplyPot(int id, byte spot, byte flags, double e, double n, float alt, byte split, int dips, long[] seats, byte[] bits, int cheese, byte quality)
+    {
+        var v =MyPot?.Id == id ? MyPot : new PotView { Id = id };
         bool wasSplit = v.Splitted;
         v.Spot = (PotSpot)spot;
         v.Raclette = (flags & 1) != 0;
@@ -581,13 +588,16 @@ public partial class TogetherService
     public void AskStartAt(Vector3 top, bool raclette = false)
     {
         if (Me?.Invoke() is not { } me) return;
-        // the table's place in LV95: the player's, moved by the table's offset (x east, z south, y up)
-        var d = top - me.GlobalPosition;
-        var g = me.Global;
-        double e = g.E + d.X, n = g.N - d.Z;
-        float alt = (float)(g.Alt + d.Y);
+        // the table's place: its world point as a place (a world offset is the grid's, not the ENU, #1502)
+        var table = me.Origin!.ToGlobal(top);
+        double e = table.Lv95.E, n = table.Lv95.N;
+        float alt = (float)table.Alt;
         if (Authority) ServeStartAt(Self, raclette, e, n, alt);
-        else RpcId(1, MethodName.RequestStartAt, raclette, e, n, alt);
+        else
+        {
+            var (x, y, z) = table.ToWire();   // (#1503) the wire is ECEF
+            RpcId(1, MethodName.RequestStartAt, raclette, x, y, z);
+        }
     }
 
     public void AskSit(int pot)
@@ -649,7 +659,12 @@ public partial class TogetherService
     private void RequestStart(bool atFire, bool raclette) { if (_server) ServeStart(Multiplayer.GetRemoteSenderId(), atFire, raclette); }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestStartAt(bool raclette, double e, double n, float alt) { if (_server) ServeStartAt(Multiplayer.GetRemoteSenderId(), raclette, e, n, alt); }
+    private void RequestStartAt(bool raclette, double x, double y, double z)
+    {
+        if (!_server) return;
+        var at = GlobalPos.FromWire(x, y, z);
+        ServeStartAt(Multiplayer.GetRemoteSenderId(), raclette, at.Lv95.E, at.Lv95.N, (float)at.Alt);
+    }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestSit(int pot) { if (_server) ServeSit(Multiplayer.GetRemoteSenderId(), pot); }
@@ -725,17 +740,27 @@ public partial class TogetherService
         var me = MyPot == null && !Permissions.InMatch ? Me?.Invoke() : null;
         _spotHere = me != null && SpotNear(Self) is { Spot: PotSpot.Hut };
         _tableHere = me != null && PotTables.Near(me.GlobalPosition) is { } top
-            && PositionOf(Self) is { } at && DiningVenueNear(at.E, at.N) != null ? top : null;
+            && PositionOf(Self) is { } at && DiningVenueNear(at.Lv95.E, at.Lv95.N) != null ? top : null;
     }
 
     private void OfferPot(long peer, Pot pot)
     {
-        if (Connected(peer)) RpcId(peer, MethodName.PotOffered, pot.Id, pot.E, pot.N);
-        else if (!_networked && peer == AdventureService.LocalPeer) PotOffered(pot.Id, pot.E, pot.N);
+        if (Connected(peer))
+        {
+            var (x, y, z) = GlobalPos.FromLv95(pot.E, pot.N, pot.Alt).ToWire();   // (#1503) the wire is ECEF
+            RpcId(peer, MethodName.PotOffered, pot.Id, x, y, z);
+        }
+        else if (!_networked && peer == AdventureService.LocalPeer) ApplyOffered(pot.Id, pot.E, pot.N);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void PotOffered(int id, double e, double n)
+    private void PotOffered(int id, double x, double y, double z)
+    {
+        var at = GlobalPos.FromWire(x, y, z);
+        ApplyOffered(id, at.Lv95.E, at.Lv95.N);
+    }
+
+    private void ApplyOffered(int id, double e, double n)
     {
         _offers[id] = (e, n, GameClock.Now + 600);
         GD.Print($"[fondue] pot {id} offered");
