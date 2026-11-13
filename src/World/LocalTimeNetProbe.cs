@@ -46,7 +46,14 @@ public partial class LocalTimeNetProbe : ChatProbe
         var date = SunPath.Today();
         Expect(DayNight.RealSun && !LocalHours.IsHome(place.E, place.N),
             $"A stands far from home under the real sun ({place.E:F0},{place.N:F0}, real {DayNight.RealSun})");
-        if (!await Heard("B", "ready", 90)) { Fail("B never came"); return; }
+        // whoever joins first says so until the other answers: a single line can go before the other listens
+        bool met = false;
+        for (int i = 0; i < 40 && !met; i++)
+        {
+            Say("hello");
+            met = await Heard("B", "ready", 3);
+        }
+        if (!met) { Fail("B never answered"); return; }
         if (!await LogIn("test")) return;
         // a stopped clock: what each peer reads is what was set, however late it reads it
         Chat!.Send("/time speed 0");
@@ -77,6 +84,7 @@ public partial class LocalTimeNetProbe : ChatProbe
     private async Task RunB()
     {
         var day = DayNight.Instance!;
+        if (!await Heard("A", "hello", 150)) { Fail("A never came"); return; }
         Say("ready");
         foreach (var word in new[] { "noon", "twelve" })
         {
