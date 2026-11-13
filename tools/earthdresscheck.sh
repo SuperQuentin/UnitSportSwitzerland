@@ -3,19 +3,19 @@
 # a server and one client under --frame earth at each stop, both counting what the services placed round it (parked
 # fleets, airport stands, herds, birds, the Nyon steamer) and checking it stands on the leaves' ground. Skipped
 # without the leaves. One stop at a time (a server and a client, ~3 GB): about 3-4 min a stop.
-#   GODOT=<exe> [LEAVES=] [CHUNKS=] [STOPS="geneva nyon airport riddes"] tools/earthdresscheck.sh
+#   GODOT=<exe> [LEAVES=] [CHUNKS=] [STOPS="geneva nyon airport riddes yard"; rhone on request] [DRESSARGS=--dressverbose] tools/earthdresscheck.sh
 #   output in test_output/dress_<stop>_{server,client}.log
 . "$(dirname "$0")/lib/twoclient.sh" dress
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
 CHUNKS=${CHUNKS:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks}
 PORT=${PORT:-7917}
-STOPS=${STOPS:-geneva nyon airport riddes}
+STOPS=${STOPS:-geneva nyon airport riddes yard}
 if [ ! -d "$LEAVES" ] || [ ! -d "$CHUNKS" ]; then echo "[earthdresscheck] no LEAVES/CHUNKS on D:: skipped"; echo "[earthdresscheck] RESULT: ok (skipped)"; exit 0; fi
 fail=
 
 stop() { # name at expect
   local name=$1 at=$2 expect=$3
-  local world=(--frame earth --leaves "$LEAVES" --chunks "$CHUNKS" --traffic 0 --dresscheck "$at" --dressexpect "$expect")
+  local world=(--frame earth --leaves "$LEAVES" --chunks "$CHUNKS" --traffic 0 --dresscheck "$at" --dressexpect "$expect" ${DRESSARGS:-})
   tc_server 400 180 "$OUT/dress_${name}_server.log" --server --port $PORT --no-query "${world[@]}" \
     || { fail="${fail:+$fail; }$name: the server did not start"; return; }
   tc_client 400 "$OUT/dress_${name}_client.log" --connect 127.0.0.1:$PORT --name Dress --at "$at" "${world[@]}" &
@@ -40,6 +40,9 @@ for s in $STOPS; do
     nyon)    stop nyon    2508092,1137444 steamer ;;
     airport) stop airport 2497653,1121360 stands@server,fleet ;;
     riddes)  stop riddes  2581500,1113300 herds ;;
+    # #1769: a works' apron pallets by the road at Les Acacias, and the yard forklift by the Rhône west of Pont des Bergues
+    yard)    stop yard    2501046,1117167 pallets@client,fleet ;;
+    rhone)   stop rhone   2500306,1118000 fleet ;;
   esac
 done
 if [ -z "$fail" ]; then echo "[earthdresscheck] RESULT: ok"; exit 0; fi
