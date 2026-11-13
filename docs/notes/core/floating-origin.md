@@ -100,7 +100,10 @@
   - the shifter turns `RigidBody3D` linear and angular velocities, and `CharacterBody3D.Velocity`
     of a body that is not `IOriginShiftAware` (one that is turns its own);
   - a heading kept as an angle adds `shift.Yaw` (`FootPlayer._viewYaw`, `SpectatorCamera._yaw`,
-    `FlightMotion.Yaw`); a flight's velocity and attitude turn with `Direction` / the basis
+    `FlightMotion.Yaw`); a camera rebuilt from kept angles must also drop the shift's tilt, or it rolls and pitches
+    with the Earth's turn and the next look snaps it back: `SpectatorCamera.OnOriginShifted` reads its pitch and
+    heading off its placement before the shift and keeps them against the new horizon, no roll (#1800; flown from
+    Geneva toward Asia it stood 18° off after 116 re-anchors; `--spectatorturncheck --frame earth --chunks fixture:straight`); a flight's velocity and attitude turn with `Direction` / the basis
     (`FootPlayer`, `VehicleBody` handlers);
   - a ride with world-space state of its own overrides `Rideable.OnOriginShifted` (the boat turns
     its velocity, spin and attitude; its position is read back from the body);
