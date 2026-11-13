@@ -96,7 +96,19 @@ public partial class TelescopeProbe : Node
         me.Velocity = Vector3.Zero;
         await Seconds(0.5);
         Expect(Telescopes.InteractionFor(me) is { Text: var prompt } && prompt.Contains("Look through"), "the prompt at the tripod");
-        Expect(Telescopes.TryInteract(me), "E takes it");
+        // a real E press (#1813): offline the view opens in the frame of the press, and E is also
+        // its "step back" key, so it must not read the press that opened it
+        var opened = new List<ulong>();
+        void Track(Node n) { if (n is TelescopeView) opened.Add(Engine.GetProcessFrames()); }
+        GetTree().NodeAdded += Track;
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = true });
+        await Seconds(0.15);
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = false });
+        await Seconds(1.0);
+        GetTree().NodeAdded -= Track;
+        Expect(opened.Count > 0, "E takes it: the view opened");
+        Expect(TelescopeView.Current != null, $"the view is still open 1 s after E (opened {opened.Count}×)");
+        if (TelescopeView.Current == null) Telescopes.TryInteract(me);   // failed: open it directly to check the rest
         Expect(await Until(() => TelescopeView.Current != null, 3), "the view through it opens");
         if (TelescopeView.Current is not { } view) return;
         var cam = GetViewport().GetCamera3D();
@@ -157,6 +169,16 @@ public partial class TelescopeProbe : Node
             if (aim.Kind == FlagAimKind.PickUp) break;
         }
         Expect(aim is { Kind: FlagAimKind.PickUp, Target: PlacedKind.Telescope }, $"an empty hand points at the telescope ({aim.Kind}, {aim.Target})");
+        // the pick-up halo hangs on the drawn parts, the turned tube's included (#1813: it was the
+        // level set-up mesh at the record's yaw, off the tube and the legs on the earth frame)
+        if (aim.Kind == FlagAimKind.PickUp && MouseCapture.Mode == Input.MouseModeEnum.Captured)
+        {
+            await Seconds(0.2);
+            var tube = node?.GetNodeOrNull<Node3D>(TelescopeVisual.TubeName);
+            int onTube = tube != null ? tube.FindChildren(FlagGhost.HaloName, owned: false).Count : 0;
+            int onAll = node != null ? node.FindChildren(FlagGhost.HaloName, owned: false).Count : 0;
+            Expect(onTube > 0 && onAll > onTube, $"the halo is on the drawn parts, the tube's too ({onTube} on the tube, {onAll} in all)");
+        }
         if (aim.Kind == FlagAimKind.PickUp) _items.UseHeld(me);
         Expect(await Until(() => !placed.All.ContainsKey(scope.Id), 4), "it is packed up");
         Expect(inv.CountPlain(ItemId.Telescope) == 1, "and back in the pack");

@@ -1002,3 +1002,11 @@ Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4
 Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-4-reanchor-flight`, traffic on.
 
 - [ ] Fly and drive across Geneva's re-anchors (every 3 km, the `[origin] shift` line) → no lag spike you notice; the line reads well under the 117-203 ms of Nov 12 (headless on a loaded machine: 23-48 ms), traffic keeps driving on its roads after each.
+
+## A view opened by E keeps the press (PR #1814?, [#1813](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1813))
+
+Offline, in a window (any frame).
+
+- [ ] Set a telescope up, walk to it, press E (keyboard), then pad Y, then VR grip → the view through it opens and stays; E again steps back.
+- [ ] E at a pinball machine → you step up, no game starts (and no coin goes) until you press E again.
+- [ ] E at a pool table or dartboard → you step up without sitting down; E again sits.

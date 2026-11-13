@@ -228,15 +228,22 @@ public partial class TelescopeView : CanvasLayer
         }
     }
 
+    /// <summary>
+    /// The press that opened the view is not its own (#1813): offline it opens in the frame of E's
+    /// press, and E is also the key that steps back, still "just pressed" that frame.
+    /// </summary>
+    private FreshPress _leave, _cancel, _use;
+
     public override void _Process(double delta)
     {
         if (_closing) return;
-        if (Input.IsActionJustPressed(ActLeave) || Input.IsActionJustPressed(ActCancel))
+        bool leave = _leave.Take(ActLeave), cancel = _cancel.Take(ActCancel), use = _use.Take(ActUse);
+        if (leave || cancel)
         {
             Close();
             return;
         }
-        if (Input.IsActionJustPressed(ActUse)) ToggleLock();
+        if (use) ToggleLock();
         if (Input.IsActionJustPressed(ActNext)) StepTarget(1);
         else if (Input.IsActionJustPressed(ActPrev)) StepTarget(-1);
         if (Input.IsActionJustPressed(ActInfo)) _infoOn = !_infoOn;

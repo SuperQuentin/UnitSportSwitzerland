@@ -44,6 +44,7 @@
   (a `SubViewport`) floats 0.5 m before the eyes, the tube follows the head. Rows in `ControlsHelp`,
   `xr/vr-action-map`, `bots/bot-capability-map` (n/a).
 - **Checks**: `--telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23`
+  (opened with a real E press and still open 1 s later: offline the view opens in the frame of E, #1813, `Core.FreshPress`)
   (the item path, the view, a 0.58° frustum, the lock holding the moon to 0.0000° over 8 s, the menu slewing to Jupiter and holding it, refused
   packing up, E steps back, packed up into the pack; windowed it saves
   `test_output/telescope_moon.png`). `tools/telescopecheck.sh`: two clients, busy, refused, freed.
