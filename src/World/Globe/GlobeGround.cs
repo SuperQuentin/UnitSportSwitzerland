@@ -164,7 +164,7 @@ public static class GlobeGround
     }
 
     /// <summary>
-    /// How much a place is the world's own region, 0..1 (#1802), from its geocentric latitude and longitude, degrees:
+    /// How much a place is the world's own region, 0..1 (#1802), from its geodetic latitude and longitude, degrees:
     /// 1 over Switzerland's box (the pyramid's Swiss levels are the palette's colour there, <see cref="OurColours"/>),
     /// falling to 0 over <see cref="OwnFeatherDeg"/> past it. The palette by cover class paints it; past it, the photo.
     /// </summary>
@@ -176,7 +176,7 @@ public static class GlobeGround
         return 1f - (float)Mathf.SmoothStep(0, OwnFeatherDeg, outside);
     }
 
-    /// <summary>Switzerland's box, degrees (geocentric: a sixth of a degree south of the geodetic one, inside the feather).</summary>
+    /// <summary>Switzerland's box, degrees, with a little room round the country.</summary>
     public const double OwnSouthDeg = 45.6, OwnNorthDeg = 48.0, OwnWestDeg = 5.8, OwnEastDeg = 10.6;
 
     /// <summary>The box's feather, degrees (about 55 km).</summary>

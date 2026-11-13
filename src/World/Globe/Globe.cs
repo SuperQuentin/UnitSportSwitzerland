@@ -886,8 +886,10 @@ public partial class Globe : Node
                     if (under[k] > hs[k]) Bed(k, under[k] - hs[k]);
                     hs[k] = under[k];
                 }
-        // how much each vertex is the world's own region (GlobeGround.OwnPalette): the palette there, the photo away
+        // how much each vertex is the world's own region (GlobeGround.OwnPalette): the palette there, the photo away; and
+        // the sea's surface there (EGM2008's geoid: the pyramid's sea stands on it, as the fill's does, #1808)
         var own = palette != null ? new float[n * n] : null;
+        var geoid = palette != null && Egm2008.Available ? new float[n * n] : null;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -896,7 +898,12 @@ public partial class Globe : Node
                 pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
                 var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, ((long)key.X << bits) + i * stride), CubeSphere.Lattice(key.Level + bits, ((long)key.Y << bits) + j * stride));
                 if (own != null)
-                    own[j * n + i] = GlobeGround.OwnPalette(Mathf.RadToDeg(Math.Asin(Math.Clamp(normal.Z, -1, 1))), Mathf.RadToDeg(Math.Atan2(normal.Y, normal.X)));
+                {
+                    // the geodetic normal's latitude is the geodetic latitude
+                    double lat = Mathf.RadToDeg(Math.Asin(Math.Clamp(normal.Z, -1, 1))), lon = Mathf.RadToDeg(Math.Atan2(normal.Y, normal.X));
+                    own[j * n + i] = GlobeGround.OwnPalette(lat, lon);
+                    if (geoid != null) geoid[j * n + i] = (float)Egm2008.Undulation(lat, lon);
+                }
                 var (ux, uy, uz) = anchor.DirectionToLocal(normal);
                 up[j * n + i] = new Vector3((float)ux, (float)uy, (float)uz);
             }
@@ -908,8 +915,9 @@ public partial class Globe : Node
         var norms = new Vector3[total];
         var uvs = new Vector2[total];
         var colours = palette != null || cover != null ? new Color[total] : null;
-        // the vertices painted as water, for the lakes' own surface (#1669)
+        // the vertices painted as water, for the lakes' own surface (#1669), and which of them are the sea's
         var lakeAt = lakesOut != null && colours != null ? new bool[n * n] : null;
+        var seaAt = lakeAt != null ? new bool[n * n] : null;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
@@ -936,14 +944,19 @@ public partial class Globe : Node
                         // (the Salève's) is painted so, but a water surface there caught the sky (#1669); or at one of the
                         // pyramid's lake levels, where Blue Marble's dark shore read as forest and left 2 km of Léman ground
                         isWater = onLake || weights.X > GlobeGround.LakeWeight;
+                        // a level patch of the sea is the sea's (its shore drawn as the sea's, #1802)
+                        if (isWater && seaAt != null && geoid != null && hs[k] <= geoid[k] + Terrain.Leaves.PyramidBase.SeaTolM) seaAt[k] = true;
                         weights = new Vector4(1, 0, 0, 0);
                     }
-                    // the sea (#1802): drawn at the geoid, so seldom level, and none of the pyramid's lakes; where the image
-                    // says water plainly under the sea's reach it is the sea's surface, as a lake's: some tiles drew it as
-                    // water and others as painted ground, meeting at a tile edge, and the lake list painted it as land
-                    else if (guessed?[k] != true && hs[k] <= GlobeGround.SeaReachM && weights.X > GlobeGround.LakeWeight)
+                    // the sea (#1802): drawn at the geoid, so seldom level, and none of the pyramid's lakes. Ground at the geoid
+                    // is the sea, as the fill takes it (PyramidBase.SeaTolM: the coasts meet); with no geoid grid, where the
+                    // image says water plainly under the sea's reach. Some tiles drew it as water and others as painted
+                    // ground, meeting at a tile edge, and the lake list painted it as land
+                    else if (guessed?[k] != true && (geoid != null ? hs[k] <= geoid[k] + Terrain.Leaves.PyramidBase.SeaTolM
+                        : hs[k] <= GlobeGround.SeaReachM && weights.X > GlobeGround.LakeWeight))
                     {
                         isWater = true;
+                        if (seaAt != null) seaAt[k] = true;
                         weights = new Vector4(1, 0, 0, 0);
                     }
                     // the pyramid knows its lakes (#1678): ground that is none of them is dry, whatever the colour image
@@ -972,7 +985,7 @@ public partial class Globe : Node
         bool flip = (pos[1] - a0).Cross(pos[n] - a0).Dot(up[0]) > 0;
         // before the skirts: they hang from the ground the lakes sank (#1678), not from the surface, where every
         // tile edge stood a wall a few metres under the water and drew a pale line
-        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM, bedOf);
+        if (lakeAt != null && Array.IndexOf(lakeAt, true) >= 0) lakesOut!.Mesh = Lakes(pos, up, verts, lakeAt, n, flip, (float)cellM, bedOf, hs, seaAt);
 
         // the edge ring, counter-clockwise in (i, j), then its lowered copy
         var ring = new int[edge];
@@ -1044,7 +1057,7 @@ public partial class Globe : Node
     /// at; that ground sinks <see cref="LakeSinkM"/> under it. No waves this far (wave scale 0, as flat's far tiles).
     /// </summary>
     private static Terrain.WaterMeshBuilder.MeshData? Lakes(Vector3[] pos, Vector3[] up, Vector3[] verts, bool[] lakeAt, int n, bool flip, float cellM,
-        float[]? bedOf = null)
+        float[]? bedOf = null, float[]? hs = null, bool[]? seaAt = null)
     {
         var map = new int[n * n];
         Array.Fill(map, -1);
@@ -1077,6 +1090,23 @@ public partial class Globe : Node
                 {
                     Tri(k00, k10, k11);
                     Tri(k00, k11, k01);
+                }
+                else if (wet > 0 && hs != null && seaAt != null && (!w00 || seaAt[k00]) && (!w10 || seaAt[k10])
+                    && (!w01 || seaAt[k01]) && (!w11 || seaAt[k11]))
+                {
+                    // the sea's shore (#1802): the whole cell, its dry corners lowered to the water's level under the
+                    // land, so the coast is where the ground meets the water, not the cells' steps a kilometre wide
+                    float level = ((w00 ? hs[k00] : 0) + (w10 ? hs[k10] : 0) + (w01 ? hs[k01] : 0) + (w11 ? hs[k11] : 0)) / wet;
+                    int Q(int k, bool w)
+                    {
+                        if (w) return V(k);
+                        vs.Add(pos[k] + up[k] * (level - hs[k]));
+                        uvs.Add(new Vector2(0, cellM));
+                        return vs.Count - 1;
+                    }
+                    int a = Q(k00, w00), b = Q(k10, w10), c = Q(k11, w11), d = Q(k01, w01);
+                    if (flip) { idx.Add(a); idx.Add(c); idx.Add(b); idx.Add(a); idx.Add(d); idx.Add(c); }
+                    else { idx.Add(a); idx.Add(b); idx.Add(c); idx.Add(a); idx.Add(c); idx.Add(d); }
                 }
                 else if (wet == 3)
                 {
