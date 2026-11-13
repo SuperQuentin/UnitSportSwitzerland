@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
+
+On Windows, a real keyboard, in a window.
+
+- [ ] In the spectator (Shift+T), hold Shift a second or more and let go, twenty times, some while turning the mouse, some during a load hitch, some after an Alt tap with the cursor free → the camera stops sinking every time; a `[input] Shift repeated after its key-up: released` line in the log is that case caught.
+- [ ] On foot, sprint with Shift+W and let go of Shift first, then W, a dozen times → back to a walk every time.
+
 ## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.
