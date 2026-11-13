@@ -56,6 +56,7 @@ public partial class TableGamePlay : CanvasLayer
     private Label _line = null!, _hint = null!, _told = null!;
     private double _clock, _toldUntil;
     private bool _placed;
+    private FreshPress _bot;
 
     private static readonly StringName ActCancel = "ui_cancel", ActView = PlayerInput.CameraToggle, ActBot = PlayerInput.InteractMount;
 
@@ -129,7 +130,8 @@ public partial class TableGamePlay : CanvasLayer
         var g = Game;
         int seat = g?.SeatOf(TableGames.Instance!.MyId) ?? -1;
         if (Input.IsActionJustPressed(ActView)) AltView = !AltView;
-        if (Input.IsActionJustPressed(ActBot) && g != null)
+        // E stepped up to the table: that press does not also sit down or add a bot (#1813)
+        if (_bot.Take(ActBot) && g != null)
         {
             if (seat < 0) TableGames.Instance!.AskSit(Key, Index);
             else if (g.Bots && g.FreeSeat() >= 0) TableGames.Instance!.AskBot(Key, Index);
