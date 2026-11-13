@@ -61,8 +61,8 @@ public partial class DayNight : Node
 
     private double _placeE = SunPath.BernE, _placeN = SunPath.BernN;
 
-    /// <summary>The LV95 place the sky is read at: where <c>/time</c>'s named hours and zone are read offline (#1801).</summary>
-    public (double E, double N) Place => (_placeE, _placeN);
+    /// <summary>The place the sky is read at: where <c>/time</c>'s named hours and zone are read offline (#1801).</summary>
+    public GlobalPos Place { get; private set; } = LocalHours.Bern;
 
     /// <summary>The real sun lights this world (not the fixed day, not the fun world's dusk).</summary>
     public static bool RealSun => SunPath.Model == SunModel.Real && !WorldChoice.FunActive;
@@ -336,6 +336,7 @@ public partial class DayNight : Node
         var at = cam.GlobalPosition;
         if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
         var place = Origin.ToGlobal(at);
+        Place = place;
         (_placeE, _placeN) = (place.Lv95.E, place.Lv95.N);
     }
 

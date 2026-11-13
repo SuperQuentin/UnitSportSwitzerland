@@ -1954,7 +1954,7 @@ public partial class ChatManager : Node
         if (parts.Length == 0 || !parts[0].Equals("time", StringComparison.OrdinalIgnoreCase)) return null;
         if (!World.TimeCommand.TryParse(parts[1..], out World.TimeRequest request, out _) || request.Op != World.TimeOp.Query) return null;
         var date = World.SunPath.Today();
-        var zone = request.Zone ?? World.LocalHours.ZoneAt(clock.Place.E, clock.Place.N, World.DayNight.RealSun);
+        var zone = request.Zone ?? World.LocalHours.ZoneAt(clock.Place, World.DayNight.RealSun);
         string at = zone.IsSwiss ? clock.Clock : World.TimeCommand.Describe(clock.Hour, zone, date);
         return $"It is {at} ({World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}).";
     }
@@ -2011,8 +2011,7 @@ public partial class ChatManager : Node
         if (request.Op == World.TimeOp.Query)
         {
             // a player's own client answers this; this is the console's, or a client with no clock
-            var (qe, qn) = place ?? (World.SunPath.BernE, World.SunPath.BernN);
-            var qzone = request.Zone ?? World.LocalHours.ZoneAt(qe, qn, realSun);
+            var qzone = request.Zone ?? World.LocalHours.ZoneAt(place ?? World.LocalHours.Bern, realSun);
             ReplyTo(sender, $"It is {World.TimeCommand.Describe(World.WorldClock.Hour, qzone, date)} ({World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}).",
                 ChatKind.Private);
             return;
@@ -2049,7 +2048,7 @@ public partial class ChatManager : Node
         GD.Print($"[admin] {NameOf(sender)} set the clock to {shown}, {World.TimeCommand.DescribeSpeed(speed)}");
 
         string who = NameOf(sender);
-        bool away = realSun && place is { } p && !World.LocalHours.IsHome(p.E, p.N);
+        bool away = realSun && place is { } p && !World.LocalHours.IsHome(p);
         string named = request.Named is { } nm && away ? $", {nm} where they stand" : "";
         Broadcast(request.Op != World.TimeOp.Speed ? $"{who} set the time to {shown}{named}"
             : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
@@ -2057,15 +2056,11 @@ public partial class ChatManager : Node
     }
 
     /// <summary>
-    /// Where a player stands, LV95, from the position their client published and the server already
+    /// Where a player stands on the Earth, from the position their client published and the server already
     /// keeps (#1801); null for the console or a player with no body yet.
     /// </summary>
-    private (double E, double N)? PlaceOf(long sender)
-    {
-        if (_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is not { } node) return null;
-        var lv = node.Global.Lv95;
-        return (lv.E, lv.N);
-    }
+    private GlobalPos? PlaceOf(long sender) =>
+        _players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is { } node ? node.Global : null;
 
     // ---- /weather (#887) ----------------------------------------------------------------------
 

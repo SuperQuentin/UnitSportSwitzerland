@@ -635,11 +635,13 @@ public partial class DebugMenu : CanvasLayer
             ? string.Format(ci, "{0:F1} m, {1:F0} m below", h, pos.Y - h) : "not loaded";
         string cover = ground.TryGetCover(pos, out var c) ? c.ToString() : "-";
         var shifter = OriginShifter.Instance;
+        // the anchor in LV95 notation: where the frame's world zero lies on the Earth (#1837)
+        var (ae, an) = _origin.ToLv95(Vector3.Zero);
         return string.Format(ci,
             "LV95   {0:F0} / {1:F0}  alt {2:F0} m\nleaf   {3}  {4}  {5}\nground {6}  {7}\n"
             + "anchor {8:F0} / {9:F0}  re-anchors {10}\nleaves {11} loaded, {12} loading{13}{14}",
             e, n, alt, leaf, _earth.IsReal(leaf) ? "real" : "fill", state, under, cover,
-            _origin.E, _origin.N, shifter?.ShiftCount ?? 0,
+            ae, an, shifter?.ShiftCount ?? 0,
             _earth.NearCount, _earth.LoadingCount, _earth.Frozen ? "  FROZEN" : "",
             _zfight.Status.Length > 0 ? "\nzfight " + _zfight.Status : "");
     }

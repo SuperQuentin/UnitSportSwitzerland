@@ -1,4 +1,5 @@
 using System.Globalization;
+using UnitSport.Core;
 
 namespace UnitSport.World;
 
@@ -165,19 +166,19 @@ public static class TimeCommand
     }
 
     /// <summary>
-    /// The world clock's (Swiss) hour a set asks for, from a player at <paramref name="at"/> (LV95;
+    /// The world clock's (Swiss) hour a set asks for, from a player at <paramref name="at"/> (an Earth place;
     /// null: nobody's place, the console, read as home), and the zone its hours read in: the one
     /// named, or the player's own (<see cref="LocalHours.ZoneAt"/>). A named hour is the sun's at the
     /// place whatever the zone. False, with a reason, when the sun does not rise or set there today.
     /// </summary>
-    public static bool Resolve(TimeRequest request, (double E, double N)? at, DateOnly date, bool realSun,
+    public static bool Resolve(TimeRequest request, GlobalPos? at, DateOnly date, bool realSun,
         out double swissHour, out ClockZone zone, out string error)
     {
         error = "";
-        var (e, n) = at ?? (SunPath.BernE, SunPath.BernN);
-        zone = request.Zone ?? LocalHours.ZoneAt(e, n, realSun);
+        var place = at ?? LocalHours.Bern;
+        zone = request.Zone ?? LocalHours.ZoneAt(place, realSun);
         if (request.Named is { } name)
-            return LocalHours.TryNamed(name, e, n, date, realSun, out swissHour, out error);
+            return LocalHours.TryNamed(name, place, date, realSun, out swissHour, out error);
         swissHour = zone.ToSwiss(request.Value, date);
         return true;
     }

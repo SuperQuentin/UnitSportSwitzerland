@@ -27,12 +27,13 @@ public partial class LocalTimeProbe : Node
     public override async void _Ready()
     {
         bool home = CmdArgs.Value("--localtimecheck") == "home";
-        var target = SpawnPoint.ParseLv95("--at") ?? (SunPath.BernE, SunPath.BernN);
+        // --at is LV95 notation, typed: the place it names on the Earth
+        var target = SpawnPoint.ParseLv95("--at") is (double te, double tn) ? GlobalPos.FromLv95(te, tn, 500) : LocalHours.Bern;
         // the sky reads its place off the camera: wait until it stands where we were sent
         if (!await Until(() => Chat != null && DayNight.Instance is { } d && DayNight.RealSun
                 && Near(d.Place, target), 120))
         {
-            Fail($"no real sky at {target.E:F0},{target.N:F0} (sky at {DayNight.Instance?.Place}, real sun {DayNight.RealSun})");
+            Fail($"no real sky at {Where(target)} (sky at {(DayNight.Instance is { } d ? Where(d.Place) : "-")}, real sun {DayNight.RealSun})");
             Done();
             return;
         }
@@ -48,25 +49,27 @@ public partial class LocalTimeProbe : Node
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }
 
-    private static bool Near((double E, double N) a, (double E, double N) b)
+    private static bool Near(GlobalPos a, GlobalPos b) => a.HorizontalDistanceTo(b) < 5000;
+
+    /// <summary>A place as latitude / longitude, for the log.</summary>
+    internal static string Where(GlobalPos at)
     {
-        var (la, oa) = LocalHours.LatLon(a.E, a.N);
-        var (lb, ob) = LocalHours.LatLon(b.E, b.N);
-        return LocalHours.DistanceKm(la, oa, lb, ob) < 5;
+        var (lat, lon) = LocalHours.LatLon(at);
+        return string.Format(CultureInfo.InvariantCulture, "{0:F4}°, {1:F4}°", lat, lon);
     }
 
     private async Task Run(DayNight day, bool home)
     {
         var date = SunPath.Today();
         var place = day.Place;
-        var zone = LocalHours.ZoneAt(place.E, place.N, realSun: true);
-        GD.Print($"[localtimecheck] at {place.E:F0},{place.N:F0} on {date:yyyy-MM-dd}, home {LocalHours.IsHome(place.E, place.N)}, zone {zone.Label}");
-        Expect(home == LocalHours.IsHome(place.E, place.N), home ? "Geneva is home" : "the place is far from home");
+        var zone = LocalHours.ZoneAt(place, realSun: true);
+        GD.Print($"[localtimecheck] at {Where(place)} on {date:yyyy-MM-dd}, home {LocalHours.IsHome(place)}, zone {zone.Label}");
+        Expect(home == LocalHours.IsHome(place), home ? "Geneva is home" : "the place is far from home");
 
         var elevations = new Dictionary<string, float>();
         foreach (var (name, fixedHour) in TimeCommand.Named)
         {
-            if (!LocalHours.TryNamed(name, place.E, place.N, date, true, out double want, out string why))
+            if (!LocalHours.TryNamed(name, place, date, true, out double want, out string why))
             {
                 // the polar day or night: the chat must say so and leave the clock
                 Fail($"{name}: {why}");
@@ -99,9 +102,8 @@ public partial class LocalTimeProbe : Node
             Expect(Within(elevations, "sunset", -2.0f, 0.5f), $"the sun on the horizon at sunset ({Of(elevations, "sunset")}°)");
             Expect(Of(elevations, "day") > 5, $"day is daylight ({Of(elevations, "day")}°)");
             Expect(Of(elevations, "noon") > Of(elevations, "day"), "the sun is higher at noon than at day");
-            double noon = LocalHours.SolarNoon(date, place.E, place.N);
-            SunPath.Toward(SkyBody.Sun, date, noon - 0.25, place.E, place.N, out float before);
-            SunPath.Toward(SkyBody.Sun, date, noon + 0.25, place.E, place.N, out float after);
+            double noon = LocalHours.SolarNoon(date, place);
+            float before = SunPath.ElevationAt(date, noon - 0.25, place), after = SunPath.ElevationAt(date, noon + 0.25, place);
             Expect(Of(elevations, "noon") > before && Of(elevations, "noon") > after,
                 $"noon is the sun's highest ({Of(elevations, "noon")}° against {before:F2}° and {after:F2}° a quarter-hour either side)");
             Expect(Of(elevations, "night") < -6, $"night is dark ({Of(elevations, "night")}°)");

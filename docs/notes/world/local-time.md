@@ -13,7 +13,7 @@ wire are unchanged.
 
 | Word | Home (≤ 250 km of Bern) or the fixed sun | Away, under the real sun |
 |---|---|---|
-| `sunrise` / `sunset` | today's at Bern (`SunPath.RiseOrSet(date, rise)`), the fixed day's 06 / 18 | the real ones at the place: upper limb on the horizon (−0.833°), `SunPath.RiseOrSet(date, rise, e, n)` |
+| `sunrise` / `sunset` | today's at Bern (`SunPath.RiseOrSet(date, rise)`), the fixed day's 06 / 18 | the real ones at the place: upper limb on the horizon (−0.833°), `SunPath.RiseOrSet(date, rise, at)` on the `GlobalPos` (#1837) |
 | `noon` | 12:00 | local solar noon: Bern's highest sun (golden-section search) moved by the longitude, 4 min a degree |
 | `midnight` | 00:00 | noon + 12 h |
 | `day` | 08:00 | sunrise + 2 h, held to at most half the way to noon (the fixed day's 6 → 8) |
@@ -40,7 +40,7 @@ wire are unchanged.
 
 ## Who reads which place
 
-- **Offline**: `DayNight.Place`, the camera's LV95 place the sky is read at.
+- **Offline**: `DayNight.Place`, the camera's Earth place (`GlobalPos`) the sky is read at; `LocalHours` takes places as `GlobalPos` (lat/lon off `Geodetic`), never LV95 tuples (#1837).
 - **Online**: the server reads the admin's place from the body it already keeps
   (`ChatManager.PlaceOf` → `FootPlayer.Global`), resolves the hour and sets its one clock, which goes to
   everyone as before (`WorldTime`). No protocol change. The console has no place: Swiss time.
