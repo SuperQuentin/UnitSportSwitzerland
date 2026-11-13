@@ -58,6 +58,9 @@ public partial class Atmosphere : Node3D
         AddChild(_shell);
     }
 
+    /// <summary>How far into space the camera is this frame (<see cref="SpaceAt"/>; 0 without a globe): the moon reads it.</summary>
+    public static float Space { get; private set; }
+
     /// <summary>The last <c>world_true_sun</c> written, in world axes (zero before the first): <c>--fly --flyterminator</c> reads it.</summary>
     public static Vector3 TrueSunWritten { get; private set; }
 
@@ -105,6 +108,7 @@ public partial class Atmosphere : Node3D
         // atmosphere runs after the globe, which places its tiles again at a re-anchor)
         var axes = Globe.Axes ?? Origin.EcefAxes;
         var sun = TrueSun(axes);
+        Space = space;
         DimSky(space);
         // the stars by day up here (sky_point.gdshader)
         if (space != _space) RenderingServer.GlobalShaderParameterSet(WorldSpace, space);

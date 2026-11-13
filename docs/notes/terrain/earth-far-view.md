@@ -28,6 +28,10 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   13 km a read at the game's day speed. Check: `--fly 0,500000,0,30,100000,6 --flyterminator [file.csv]` under
   `--frame earth --sun real` (the globe's sun taken back to the Earth each frame: steps past the sun's own motion,
   and the offset off the ephemeris; 53 km before, 0.00 after).
+- **The sun above the air** (#1798): the style's sky (and its sun disc) dims to black as the camera climbs, so
+  `atmosphere.gdshader` draws the sun itself where nothing was drawn and the Earth's ball is not in the way (its true
+  0.27° radius and a glare, faded in with the space factor, dimmed through the air on the way): over the night side
+  it shows above the limb, behind the Earth it is gone. `--skyshot sun,1050000,...` (`world/day-night`).
 - **Colour per vertex, in the palette** (`GlobeGround`): each texel of a tile's colour image is read back through the
   bake's encoding (`Unstore`, the exact inverse of `OurColours.ForCartoonShader`) and classified as cover weights
   (water, forest, rock, snow; the rest open ground). A vertex is painted `CoverPalette.ColorFor` of those classes at

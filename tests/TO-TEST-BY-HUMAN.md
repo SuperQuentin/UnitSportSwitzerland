@@ -1004,3 +1004,6 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] Change the speed (wheel, `^` / `'` on a Swiss keyboard, RB / LB) → the speed shows bottom right under the key hints, clear of the F3 overlay at top right, and fades 1.5 s later.
 - [ ] On a Swiss keyboard the hints read "Wheel ↑ / ^" and "Wheel ↓ / '"; on a US keyboard "=" and "-".
 - [ ] On a phone (`--mobile`) the speed shows at top centre, not under the pedals.
+- [ ] At night in Geneva (`--date 2026-11-13`, after sunset) → no dim blue blob in the sky; the crescent moon low in the south-west, its dark part faintly lit, no star through it.
+- [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
+- [ ] With the telescope on the moon → the moon at its true size, as before.
