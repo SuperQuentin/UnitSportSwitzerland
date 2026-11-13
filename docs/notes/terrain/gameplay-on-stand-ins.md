@@ -17,8 +17,8 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
 - **Headings and directions** (#1799) are the tile's too: a stand-in is turned in the world by its leaf's frame, and
   far from Switzerland (the world's axes carried along a long flight, `FrameAxes.Tangent`) by a lot, so a tile-frame
   direction is never a world one. A direction goes through `TileTransform(tile).Basis` (`DoorLink.Create`'s outward and
-  up, `DoorIndex.SetTile`); a record's yaw through `WorldOrigin.WorldYawAt(e, n, yaw)` (a parked slot, a yard pallet),
-  and into a `VehicleState` (grid axes) through `RecordYawAt`. LV95 tiles keep the yaw as it is. Near Geneva the turn
+  up, `DoorIndex.SetTile`); a record's yaw through `WorldOrigin.WorldYawInTile(slot.Tile, yaw)` (a parked slot, a yard pallet),
+  and into a `VehicleState` (grid axes) through `RecordYawIn`. LV95 tiles keep the yaw as it is. Near Geneva the turn
   is ~1°, so only a far place shows it: `--doorframecheck` (`door-portals`). The same goes the other way: a world
   direction compared with tile records goes into the tile's frame (`LootService.NearestYard`'s look). A node-local
   heading under a leaf's node goes through the node (`SiteCranes.Live.WorldYaw`: the ladder, the cab, the remote, the
