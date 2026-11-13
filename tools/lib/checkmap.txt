@@ -413,8 +413,8 @@ src/Core/OriginShifter    full   tools/reanchorcheck.sh
 src/Player/LongDriveCheck full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/AutoPilot      full   @timeout=7400 tools/longdrivecheck.sh
 src/Player/RaceRoute      full   @timeout=7400 tools/longdrivecheck.sh
-src/Player/LongFlightCheck full  @timeout=3700 tools/longflightcheck.sh
-src/World/Globe/Globe.cs  full   @timeout=3700 tools/longflightcheck.sh
+src/Player/LongFlightCheck full  @timeout=1400 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=1400 tools/longflightcheck.sh
 tools/lib/barprobe        full   tools/reanchorcheck.sh
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
