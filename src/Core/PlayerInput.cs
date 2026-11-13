@@ -163,6 +163,12 @@ public partial class PlayerInput : Node
     public const string ToggleMode = "toggle_mode";
     /// <summary>The spectator fly camera and back (#1002): Shift+T; a pad holds D-pad down (<c>ClientWorld</c>), VR the wrist menu.</summary>
     public const string Spectator = "spectator";
+    /// <summary>
+    /// The spectator camera's speed (#1796), a notch each press, ramping while held: the wheel, = / -; a pad's RB / LB,
+    /// free while spectating (no body, no item); VR's triggers send those there (<c>XrPad</c>: the shoulders on foot).
+    /// </summary>
+    public const string SpectatorFaster = "spectator_faster";
+    public const string SpectatorSlower = "spectator_slower";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
     public const string Ping = "ping";
@@ -739,6 +745,9 @@ public partial class PlayerInput : Node
         Bind(ViewZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
+        // the spectator's speed (#1796): the same keys as a zoom, the shoulders a pad leaves free while spectating
+        Bind(SpectatorFaster, Keys(Key.Equal), Mouse(MouseButton.WheelUp), Button(JoyButton.RightShoulder));
+        Bind(SpectatorSlower, Keys(Key.Minus), Mouse(MouseButton.WheelDown), Button(JoyButton.LeftShoulder));
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));

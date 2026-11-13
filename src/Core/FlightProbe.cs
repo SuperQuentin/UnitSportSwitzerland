@@ -27,6 +27,12 @@ public partial class FlightProbe : Node
     private readonly List<double> _frames = new();
     private double _elapsed;
     private bool _done;
+    // the origin's re-anchors during the flight: how many, and what they cost (#1796: a fast flight is a shift storm first)
+    private int _shiftsSeen = -1, _shifts;
+    private double _shiftMs, _shiftMaxMs;
+
+    /// <summary>The earth world's streaming state, printed at the end (null on the flat world).</summary>
+    public Func<string?>? Status { get; init; }
 
     public FlightProbe(SpectatorCamera camera, ChunkManager chunks, Vector3 start, float yawDeg,
         float speed, double seconds)
@@ -54,6 +60,16 @@ public partial class FlightProbe : Node
         if (_elapsed < _warmup) return;
         _camera.Position += _velocity * (float)delta;
         _frames.Add(delta * 1000);
+        if (OriginShifter.Instance is { } shifter)
+        {
+            if (_shiftsSeen >= 0 && shifter.ShiftCount != _shiftsSeen)
+            {
+                _shifts += shifter.ShiftCount - _shiftsSeen;
+                _shiftMs += shifter.LastShiftMs;
+                _shiftMaxMs = Math.Max(_shiftMaxMs, shifter.LastShiftMs);
+            }
+            _shiftsSeen = shifter.ShiftCount;
+        }
 
         if (_elapsed < _warmup + _seconds) return;
         _done = true;
@@ -65,6 +81,11 @@ public partial class FlightProbe : Node
         GD.Print($"[fly] {n} frames over {_seconds:F0} s at {_velocity.Length():F0} m/s: "
             + $"p50 {_frames[n / 2]:F1} ms, p95 {_frames[(int)(n * 0.95)]:F1}, p99 {_frames[(int)(n * 0.99)]:F1}, "
             + $"max {worst:F1}; >20 ms: {over20}, >33 ms: {over33}");
+        var shifterNow = OriginShifter.Instance;
+        double altitude = shifterNow?.Origin.AltitudeOf(_camera.Position) ?? _camera.Position.Y;
+        GD.Print($"[fly] origin shifts {_shifts} ({_shifts / _seconds:F1}/s), {_shiftMs:F0} ms in all, worst {_shiftMaxMs:F1} ms; "
+            + $"ends {altitude / 1000:F1} km up, {_camera.Position.Length():F0} m from the origin");
+        if (Status?.Invoke() is { } status) GD.Print($"[fly] streaming: {status}");
         GD.Print($"[fly] {_chunks.SettleReport(_camera.GlobalPosition)}");
         GD.Print($"[fly] worker time: {_chunks.BuildTimeReport()}");
         GD.Print($"[fly] mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB "
