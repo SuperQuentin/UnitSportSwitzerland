@@ -140,7 +140,7 @@ release server check for the new release at once. The mismatch lasts from D2's r
 The steps below keep it to the `/update` download (1-2 min).
 
 **Before merging (any day; harmless to the 95 server):**
-0. Build the leaves on the NAS (`tools/cube-nas-run`, #1794), from the repo on a branch that has it:
+0. Build the leaves on the NAS (`tools/cube-nas-run`, #1794), from the repo on `main`:
    `tools/build-swiss-nas.sh cube check` (every source there, or what to fetch), `cube test` (Geneva, ~10-15 min), then
    `cube start` and `cube status` until `ALL STAGES DONE` (~2 h; the server's region by default: B4's 825 tiles). The
    output is `X:\UnitSportSwitzerland\terrain_chunks_cube` (`/mnt/Data/Documents/UnitSportSwitzerland/terrain_chunks_cube`).
