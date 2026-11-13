@@ -59,8 +59,8 @@ public partial class DoorFrameCheck : Node3D
         _cam.MakeCurrent();
         if (_dir != null) System.IO.Directory.CreateDirectory(_dir);
         Log($"start LV95 {e:F0}/{n:F0}, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}");
-        if (_to != null) { _phase = 5; Log($"then on to LV95 {_to.Value.E:F0}/{_to.Value.N:F0}"); }
-        else if (_toGeo != null) { _phase = 5; Log($"then on to lat {_toGeo.Value.E:F3}, lon {_toGeo.Value.N:F3}"); }
+        if (_to is var (te, tn)) { _phase = 5; Log($"then on to LV95 {te:F0}/{tn:F0}"); }
+        else if (_toGeo is var (lat, lon)) { _phase = 5; Log($"then on to lat {lat:F3}, lon {lon:F3}"); }
     }
 
     /// <summary>
@@ -87,7 +87,8 @@ public partial class DoorFrameCheck : Node3D
         {
             if (!_ground.TryGetHeight(Position, out float g) || _phaseT < 5) return;
             _from = _origin.ToGlobal(Position).Geodetic;
-            _dest = _to is { } to ? GlobalPos.FromLv95(to.E, to.N, 3000).Geodetic : new Geodetic(_toGeo!.Value.E, _toGeo.Value.N, 3000);
+            _dest = _to is var (te, tn) ? GlobalPos.FromLv95(te, tn, 3000).Geodetic
+                : _toGeo is var (lat, lon) ? new Geodetic(lat, lon, 3000) : default;
             var (ax, ay, az) = Unit(_from);
             var (bx, by, bz) = Unit(_dest);
             double arc = Math.Acos(Math.Clamp(ax * bx + ay * by + az * bz, -1, 1)) * 6_371_000;

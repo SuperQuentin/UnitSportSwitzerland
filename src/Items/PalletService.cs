@@ -99,7 +99,7 @@ public partial class PalletService : Node
         {
             var node = PalletNode.Create(p.Id, p.Load, material);
             // its yaw is its tile's: turned with an earth leaf's stand-in (#1799)
-            node.Transform = new Transform3D(new Basis(Vector3.Up, _origin.WorldYawAt(p.E, p.N, p.Yaw)), _origin.ToWorld(p.E, p.N, p.Height));
+            node.Transform = new Transform3D(new Basis(Vector3.Up, _origin.WorldYawInTile(p.Tile, p.Yaw)), _origin.ToWorld(p.E, p.N, p.Height));
             AddChild(node);
             nodes.Add(node);
         }

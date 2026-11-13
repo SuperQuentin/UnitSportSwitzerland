@@ -765,19 +765,18 @@ public sealed class WorldOrigin
         return Mathf.Atan2(-f.X, -f.Z);
     }
 
-    /// <summary><see cref="WorldYawInTile"/> for a record placed by E/N in its tile's frame (a stand-in's past <c>LeafStandIn.FirstPlaceE</c>).</summary>
-    public float WorldYawAt(double e, double n, float tileYaw) => WorldYawInTile(TileId.FromLv95(e, n), tileYaw);
-
     /// <summary>
     /// A tile record's heading as a <see cref="GlobalPos"/> record's (a <c>VehicleState</c>'s: the LV95 grid's axes at
     /// its place, <see cref="OriginFrame.WorldYawOfGrid"/>): unchanged on an LV95 tile; on a stand-in, its world heading
     /// taken back to the grid's (#1799), so a car woken from a leaf's parked slot faces the way its slot was drawn.
     /// </summary>
-    public float RecordYawAt(double e, double n, float tileYaw)
+    /// <param name="id">The record's tile (a record placed by E/N: <c>TileId.FromLv95</c> of them, past
+    /// <c>LeafStandIn.FirstPlaceE</c> a stand-in's).</param>
+    /// <param name="world">Where the record stands in the world.</param>
+    public float RecordYawIn(TileId id, Vector3 world, float tileYaw)
     {
-        var id = TileId.FromLv95(e, n);
         if (StandIns?.Invoke(id) is null) return tileYaw;
-        return _frame.GridYawOf(ToWorld(e, n, 0), WorldYawInTile(id, tileYaw));
+        return _frame.GridYawOf(world, WorldYawInTile(id, tileYaw));
     }
 
     public double AltitudeOf(Vector3 world) => _frame.AltitudeOf(world);
