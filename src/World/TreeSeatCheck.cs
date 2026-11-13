@@ -41,11 +41,11 @@ public partial class TreeSeatCheck : Node
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly string? _shot;
-    private readonly (double E, double N)? _to;
+    private readonly GlobalPos? _to;
     private readonly List<string> _faults = new();
     private readonly List<Vector3> _drawn = new();
     private Camera3D _cam = null!;
-    private (double E, double N) _from, _at;
+    private GlobalPos _from, _at;
     private double _alt, _phaseT, _stableT, _flown, _said;
     private int _phase, _lastCount = -1, _shifts;
 
@@ -54,7 +54,7 @@ public partial class TreeSeatCheck : Node
         _ground = ground;
         _origin = origin;
         _shot = shot;
-        _to = SpawnPoint.ParseLv95("--treeseatto");
+        _to = SpawnPoint.ParseLv95("--treeseatto") is var (te, tn) ? GlobalPos.FromLv95(te, tn, 0) : null;
         Name = "TreeSeatCheck";
         // after the shifter and NearTrees' refill
         ProcessPriority = int.MaxValue;
@@ -62,12 +62,13 @@ public partial class TreeSeatCheck : Node
 
     public override void _Ready()
     {
-        _from = _at = SpawnPoint.ParseTarget();
+        var (se, sn) = SpawnPoint.ParseTarget();
+        _from = _at = GlobalPos.FromLv95(se, sn, 0);
         AddChild(_cam = new Camera3D { Name = "TreeSeat", Far = 30_000, Current = true });
-        _cam.GlobalPosition = _origin.ToWorld(_at.E, _at.N, 0) + Vector3.Up * 2000f;
+        _cam.GlobalPosition = _origin.ToWorld(_at) + Vector3.Up * 2000f;
         _ground.AddAnchor(_cam, collision: true);
         _origin.Shifted += OnShifted;
-        Log(Inv($"start LV95 {_at.E:F0}/{_at.N:F0}{(_to is { } t ? Inv($", then to {t.E:F0}/{t.N:F0}") : "")}, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "flat")}"));
+        Log(Inv($"start LV95 {_at.Lv95}{(_to is { } t ? $", then to {t.Lv95}" : "")}, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "flat")}"));
     }
 
     public override void _ExitTree()
@@ -95,11 +96,11 @@ public partial class TreeSeatCheck : Node
     /// <summary>Holds the camera over <see cref="_at"/>; true once the leaves' trees round it are in and steady.</summary>
     private bool Settle(double delta)
     {
-        var at = _origin.ToWorld(_at.E, _at.N, 0);
+        var at = _origin.ToWorld(_at);
         if (_phaseT > _said + 15)
         {
             _said = _phaseT;
-            Log(Inv($"waiting {_phaseT:F0} s at {_at.E:F0}/{_at.N:F0}: collision {_ground.HasCollisionAt(at)}, trees {_lastCount}"));
+            Log(Inv($"waiting {_phaseT:F0} s at {_at.Lv95}: collision {_ground.HasCollisionAt(at)}, trees {_lastCount}"));
         }
         if (!_ground.HasCollisionAt(at) || !_ground.TryGetHeight(at, out float h)) return false;
         // looking north and down a little: the trees ahead in the picture
@@ -117,17 +118,18 @@ public partial class TreeSeatCheck : Node
     private void Fly(double delta)
     {
         var to = _to!.Value;
-        double de = to.E - _from.E, dn = to.N - _from.N, len = System.Math.Sqrt(de * de + dn * dn);
+        var (east, north, _) = _from.OffsetTo(to);
+        double len = _from.HorizontalDistanceTo(to);
         if (_phaseT < HopS * (_flown / HopM + 1)) return;
         _flown = System.Math.Min(len, _flown + HopM);
         double f = len > 0 ? _flown / len : 1;
-        _at = (_from.E + de * f, _from.N + dn * f);
-        var at = _origin.ToWorld(_at.E, _at.N, 0);
+        _at = _from.Moved(east * f, north * f);
+        var at = _origin.ToWorld(_at);
         if (_ground.TryGetHeight(at, out float h)) _alt = System.Math.Max(_alt, h + FlyAbove);
         _alt = System.Math.Max(_alt, at.Y + FlyAbove);
         _cam.GlobalPosition = at with { Y = (float)_alt };
         if (_flown < len) return;
-        Log(Inv($"flown {len:F0} m to {_at.E:F0}/{_at.N:F0} across {_shifts} re-anchors"));
+        Log(Inv($"flown {len:F0} m to {_at.Lv95} across {_shifts} re-anchors"));
         Next(3);
     }
 
