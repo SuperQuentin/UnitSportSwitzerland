@@ -275,6 +275,7 @@ public partial class OriginShifter : Node
             : _origin.MoveTo(newE, newN, alt0);
         var pass = new Pass(shift) { Owner = this };
         Visit(GetTree().Root, pass, childrenAreGlobal: true);
+        double visitMs = clock.Elapsed.TotalMilliseconds;
         foreach (var body in pass.Kinematic) Teleport(body);
         foreach (var node in pass.Doppler) ResetDoppler(node);
         double nodesMs = clock.Elapsed.TotalMilliseconds;
@@ -298,7 +299,7 @@ public partial class OriginShifter : Node
         LastShiftMs = clock.Elapsed.TotalMilliseconds;
         if (!_stress || ShiftCount <= 50 || ShiftCount % 50 == 0)
             GD.Print($"[origin] shift {ShiftCount} by {shift}{(shift.Turns ? Turn(shift) : "")} to LV95 {newE:F0}/{newN:F0}: "
-                + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms, "
+                + $"{pass.Moved} nodes ({pass.Kinematic.Count} kinematic) in {nodesMs:F1} ms (teleports {nodesMs - visitMs:F1}), "
                 + $"{pass.Aware.Count} handlers, {LastShiftMs:F1} ms in all{SlowestSaid()}");
         return true;
     }

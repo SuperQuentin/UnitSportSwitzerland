@@ -109,7 +109,7 @@ public static class OriginCheck
         Expect(here.Edges[0].KeyEnd == here.Edges[1].KeyStart, "the two roads meet at one junction");
 
         var shift = there.Frame.Since(here.Frame);
-        here.Shift(shift, there.Frame, new());
+        here.Shift(shift, there.Frame, World.LaneEdge.NewShiftPass());
         Expect(here.Edges[1].Points[1].IsEqualApprox(there.Edges[1].Points[1]), "a shifted graph lies where a fresh one does");
     }
 
