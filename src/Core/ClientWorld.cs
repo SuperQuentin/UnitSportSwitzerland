@@ -961,6 +961,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
             new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
+            // the doors round the start against their buildings, far from Switzerland too (#1799)
+            new(() => Interiors.DoorFrameCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.DoorFrameCheck(Ground!, origin, Interiors.DoorFrameCheck.ParseArgs().Shot)),
             // the fill far away (another face, Asia) against the globe round it (#1800)
             new(Terrain.Earth.FarFillCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.FarFillCheck(Ground!, origin,
                 () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus,

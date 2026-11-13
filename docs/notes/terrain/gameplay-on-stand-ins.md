@@ -14,6 +14,16 @@ dormant fleets) runs on it as on an LV95 tile, by these rules.
   `GlobalPos.FromLv95` and `OriginFrame.ToWorld(e, n, h)` recognise a stand-in's E/N (past
   `LeafStandIn.FirstPlaceE`, 100,000 km E: never an LV95 place) and place it so, so flat-world code that places records
   by E/N lands right without a change. D removes both.
+- **Headings and directions** (#1799) are the tile's too: a stand-in is turned in the world by its leaf's frame, and
+  far from Switzerland (the world's axes carried along a long flight, `FrameAxes.Tangent`) by a lot, so a tile-frame
+  direction is never a world one. A direction goes through `TileTransform(tile).Basis` (`DoorLink.Create`'s outward and
+  up, `DoorIndex.SetTile`); a record's yaw through `WorldOrigin.WorldYawInTile(slot.Tile, yaw)` (a parked slot, a yard pallet),
+  and into a `VehicleState` (grid axes) through `RecordYawIn`. LV95 tiles keep the yaw as it is. Near Geneva the turn
+  is ~1°, so only a far place shows it: `--doorframecheck` (`door-portals`). The same goes the other way: a world
+  direction compared with tile records goes into the tile's frame (`LootService.NearestYard`'s look). A node-local
+  heading under a leaf's node goes through the node (`SiteCranes.Live.WorldYaw`: the ladder, the cab, the remote, the
+  jib a pallet is set down along); a record stored with real LV95 E/N but a heading measured in a turned interior
+  stores the grid's (`HallCars` / `HallForklifts.SlotOf`). Building shaders turn `CUSTOM0` by `MODEL_MATRIX`.
 - **The tile under a body** is the ground's name for it: `ground.ContentName(ground.TileAt(world))`, never
   `origin.TileAt` (always an LV95 tile) or `GlobalPos.Tile`. A stand-in's `Neighbour(dx, dz)` is the next leaf's on the
   same cube face; leaves are ~610 m, so rings cover less ground than LV95 ones.

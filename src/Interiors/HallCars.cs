@@ -53,7 +53,12 @@ public static class HallCars
         var kinds = DormantVehicles.ParkedKinds;
         int pick = HallCarRule.Pick(l.Key, index, kinds.Length);
         if (pick < 0) return null;
+        // the slot's yaw is a record's (the grid's at its place, what a woken car is given): the bay's heading in the
+        // world taken back to the grid's in an anchor frame, where a leaf's interior is turned with its leaf (#1799)
+        float yaw = origin.Frame.IsAnchor
+            ? DormantSlots.Wrap(origin.Frame.GridYawOf(world.Origin, Mathf.Atan2(world.Basis.Z.X, world.Basis.Z.Z)))
+            : HallCarRule.NoseYaw(f.Turns, l.Yaw);
         return new VehicleSlot(HallCarRule.OwnerOf(l.Key), index, at.Lv95.E, at.Lv95.N, at.Alt,
-            HallCarRule.NoseYaw(f.Turns, l.Yaw), kinds[pick], (byte)((uint)Fnv.Hash($"{l.Key}|paint|{index}") & 7), false);
+            yaw, kinds[pick], (byte)((uint)Fnv.Hash($"{l.Key}|paint|{index}") & 7), false);
     }
 }
