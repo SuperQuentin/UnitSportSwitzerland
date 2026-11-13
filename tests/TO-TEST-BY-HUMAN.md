@@ -17,6 +17,13 @@ In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_
 - [ ] At a far building site: climb a tower crane's ladder, sit in the cab, set a pallet down with the hook, and work a self-erecting crane from its remote → you face the mast on the ladder, the jib in the cab, the mast at the remote; the pallet lands along the jib.
 - [ ] Walk up to a site's skip or rebar and look at it, then at another → the prompt and outline go to the one you face, the outline square on it.
 - [ ] Get into a car in a far underground car park (or a hall's forklift) → it wakes facing the way it stood.
+## `/time` where you stand ([#1804](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1804))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator far from Switzerland (e.g. `/tp -4679383 7259183`).
+
+- [ ] `/time set day`, `noon`, `sunset`, `night` there → morning daylight, the sun high, the sun on the horizon, dark; `/time` → "It is … UTC-7 (… Swiss time)".
+- [ ] Back in Switzerland, `/time set noon` → 12:00, as before; `/time set 12:00 utc` → 13:00 or 14:00.
+- [ ] Online on a server, as admin far away: `/time set noon` → the broadcast names your zone and "noon where they stand", and a second player at home sees the same clock.
 ## The debug menu on the earth world ([#1820](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1820), [#1743](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1743))
 
 In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2027-07-15`, F9.
@@ -1055,3 +1062,14 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] At night in Geneva (`--date 2026-11-13`, after sunset) → no dim blue blob in the sky; the crescent moon low in the south-west, its dark part faintly lit, no star through it.
 - [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
 - [ ] With the telescope on the moon → the moon at its true size, as before.
+
+## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
+
+Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
+
+- [ ] Noon (`--time 13`) → a small bright disc with a soft corona and faint spikes, no 20° blob; stars and planets near it hidden.
+- [ ] Sunset (`--time 20.6`, then 21) → an orange disc low over the Jura, a wider warm corona; it sets behind the ridge, cut by it.
+- [ ] Walk so trees or buildings stand in front of the low sun → beams between them; Settings → Graphics → "Sun rays" off → gone, on → back.
+- [ ] Night (`--time 23`) → no blob anywhere; the moon at its own place.
+- [ ] Fly up past 40 km (spectator) → the sun stays where it was, gains strong spikes over black; behind the Earth it is gone.
+- [ ] VR (Link): the sun and the beams in both eyes at the same place.

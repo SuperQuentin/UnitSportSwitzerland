@@ -820,6 +820,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(_dayNight);
             // the real moon in the sky (#1440), drawn under the real sun only
             AddChild(new World.MoonDisc());
+            // the real sun (#1479): a disc at its place, the sky no longer draws the light
+            AddChild(new World.SunDisc());
             // the stars (#1444), the real sky's too
             AddChild(new World.StarField());
             AddChild(new World.SkyBodies());
@@ -1313,6 +1315,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Items.TelescopeProbe.Requested) AddChild(new Items.TelescopeProbe(items));
         if (World.SkyProbe.Requested) AddChild(new World.SkyProbe());
+        if (World.LocalTimeProbe.Requested) AddChild(new World.LocalTimeProbe());   // #1801
         if (Items.TelescopeNetProbe.Role != null) AddChild(new Items.TelescopeNetProbe(items));
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
@@ -1334,6 +1337,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
+        if (World.LocalTimeNetProbe.Role != null) AddChild(new World.LocalTimeNetProbe(items));   // #1801
         if (World.Ropeways.LiftNetProbe.Role != null) AddChild(new World.Ropeways.LiftNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (AutoUpdateNetProbe.Role != null) AddChild(new AutoUpdateNetProbe(items));

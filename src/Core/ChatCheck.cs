@@ -47,6 +47,7 @@ public static class ChatCheck
         ExpectTexts(completer, "/occasion start h", ["/occasion start halloween"], "occasion ids");
         ExpectTexts(completer, "/time s", ["/time set", "/time speed"], "time sub-commands");
         ExpectTexts(completer, "/time set n", ["/time set noon", "/time set night"], "named times");
+        ExpectTexts(completer, "/time speed ", ["/time speed normal", "/time speed real"], "named speeds");
         Expect(completer.Complete("hello").Count == 0, "plain chat with no name in it is not completed");
 
         // player names in free text
@@ -85,6 +86,8 @@ public static class ChatCheck
         Expect(TimeParses(["14:00"], World.TimeOp.Set, 14), "a bare hour is a set");
         Expect(TimeParses(["add", "-2.5"], World.TimeOp.Add, -2.5), "add goes back too");
         Expect(TimeParses(["speed", "0"], World.TimeOp.Speed, 0), "speed 0 stops the clock");
+        Expect(TimeParses(["speed", "normal"], World.TimeOp.Speed, 24), "speed normal is 24 min a day");
+        Expect(TimeParses(["speed", "real"], World.TimeOp.Speed, 1440), "speed real is a day a day");
         Expect(!World.TimeCommand.TryParse(["set", "25"], out _, out _, out _), "hour 25 refused");
         Expect(!World.TimeCommand.TryParse(["set", "12:60"], out _, out _, out _), "minute 60 refused");
         Expect(!World.TimeCommand.TryParse(["set"], out _, out _, out _), "set needs an hour");

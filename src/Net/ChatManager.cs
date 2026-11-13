@@ -1943,16 +1943,20 @@ public partial class ChatManager : Node
     // ---- /time --------------------------------------------------------------------------
 
     /// <summary>
-    /// Client: <c>/time</c> or <c>/time query</c> is answered from the clock on this screen, which
-    /// is the one the player is asking about. Null when it is another command, or there is no clock.
+    /// Client: <c>/time</c>, <c>/time query</c> or <c>/time [query] &lt;zone&gt;</c> is answered from the
+    /// clock on this screen, which is the one the player is asking about, in the zone they are in
+    /// unless they name one (#1801). Null when it is another command, or there is no clock.
     /// </summary>
     private static string? LocalClock(string text)
     {
         if (!text.StartsWith('/') || World.DayNight.Instance is not { } clock) return null;
         string[] parts = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0 || !parts[0].Equals("time", StringComparison.OrdinalIgnoreCase)) return null;
-        if (!World.TimeCommand.TryParse(parts[1..], out var op, out _, out _) || op != World.TimeOp.Query) return null;
-        return $"It is {clock.Clock} ({World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}).";
+        if (!World.TimeCommand.TryParse(parts[1..], out World.TimeRequest request, out _) || request.Op != World.TimeOp.Query) return null;
+        var date = World.SunPath.Today();
+        var zone = request.Zone ?? World.LocalHours.ZoneAt(clock.Place.E, clock.Place.N, World.DayNight.RealSun);
+        string at = zone.IsSwiss ? clock.Clock : World.TimeCommand.Describe(clock.Hour, zone, date);
+        return $"It is {at} ({World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}).";
     }
 
     /// <summary>Offline <c>/time</c>: this machine's clock, with operator rights. The reply, and whether it failed.</summary>
@@ -1960,37 +1964,56 @@ public partial class ChatManager : Node
     {
         failed = true;
         if (World.DayNight.Instance is not { } clock) return "There is no clock here.";
-        if (!World.TimeCommand.TryParse(args, out var op, out double value, out string error)) return error;
+        if (!World.TimeCommand.TryParse(args, out World.TimeRequest request, out string error)) return error;
 
-        failed = false;
-        switch (op)
+        // the named hours and the zone are read where the sky is: the camera's place (#1801)
+        var date = World.SunPath.Today();
+        var zone = World.ClockZone.Swiss;
+        switch (request.Op)
         {
-            case World.TimeOp.Set: clock.Hour = value; break;
-            case World.TimeOp.Add: clock.Hour = World.TimeCommand.Wrap(clock.Hour + value); break;
-            case World.TimeOp.Speed: clock.DayLengthOverride = (float)value; break;
+            case World.TimeOp.Query:
+                failed = false;
+                return LocalClock("/time " + string.Join(' ', args)) ?? $"It is {clock.Clock}.";
+            case World.TimeOp.Set:
+                if (!World.TimeCommand.Resolve(request, clock.Place, date, World.DayNight.RealSun,
+                        out double hour, out zone, out error))
+                    return error;
+                clock.Hour = hour;
+                break;
+            case World.TimeOp.Add: clock.Hour = World.TimeCommand.Wrap(clock.Hour + request.Value); break;
+            case World.TimeOp.Speed: clock.DayLengthOverride = (float)request.Value; break;
         }
-        return op == World.TimeOp.Speed
+        failed = false;
+        return request.Op == World.TimeOp.Speed
             ? $"The clock runs at {World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}."
-            : $"Time set to {clock.Clock}.";
+            : zone.IsSwiss ? $"Time set to {clock.Clock}."
+            : $"Time set to {World.TimeCommand.Describe(clock.Hour, zone, date)}.";
     }
 
     /// <summary>
     /// Server <c>/time</c>. Changing it is an admin's, and it changes it for everyone: the server
     /// always keeps the world's clock (<see cref="World.WorldClock"/>, #452), re-bases it here and
-    /// sends it to each client, as it does to whoever joins (<see cref="SendWorldTimeTo"/>).
+    /// sends it to each client, as it does to whoever joins (<see cref="SendWorldTimeTo"/>). A named
+    /// hour or a typed hour is read where the admin stands, from the position their client published
+    /// (#1801); the console, with no place, reads Swiss time.
     /// </summary>
     private void CommandTime(long sender, string[] args)
     {
-        if (!World.TimeCommand.TryParse(args, out var op, out double value, out string error))
+        if (!World.TimeCommand.TryParse(args, out World.TimeRequest request, out string error))
         {
             ReplyTo(sender, error, ChatKind.Error);
             return;
         }
 
-        if (op == World.TimeOp.Query)
+        var date = World.SunPath.Today();
+        bool realSun = World.DayNight.RealSun;
+        var place = PlaceOf(sender);
+        if (request.Op == World.TimeOp.Query)
         {
             // a player's own client answers this; this is the console's, or a client with no clock
-            ReplyTo(sender, $"It is {World.TimeCommand.Format(World.WorldClock.Hour)} ({World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}).",
+            var (qe, qn) = place ?? (World.SunPath.BernE, World.SunPath.BernN);
+            var qzone = request.Zone ?? World.LocalHours.ZoneAt(qe, qn, realSun);
+            ReplyTo(sender, $"It is {World.TimeCommand.Describe(World.WorldClock.Hour, qzone, date)} ({World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}).",
                 ChatKind.Private);
             return;
         }
@@ -2003,23 +2026,45 @@ public partial class ChatManager : Node
 
         // set/add turn the sky by moving HourShift; speed rebases the monotonic counter. Neither
         // ever winds WorldClock.EnvNow back, so nothing growing in environment time goes backwards.
-        switch (op)
+        var zone = World.ClockZone.Swiss;
+        switch (request.Op)
         {
-            case World.TimeOp.Set: World.WorldClock.SetHour(value); break;
-            case World.TimeOp.Add: World.WorldClock.AddHours(value); break;
-            case World.TimeOp.Speed: World.WorldClock.Rebase((float)value); break;
+            case World.TimeOp.Set:
+                if (!World.TimeCommand.Resolve(request, place, date, realSun, out double target, out zone, out error))
+                {
+                    ReplyTo(sender, error, ChatKind.Error);
+                    return;
+                }
+                World.WorldClock.SetHour(target);
+                break;
+            case World.TimeOp.Add: World.WorldClock.AddHours(request.Value); break;
+            case World.TimeOp.Speed: World.WorldClock.Rebase((float)request.Value); break;
         }
         double hour = World.WorldClock.Hour;
         float speed = World.WorldClock.MinutesPerDay;
         World.WorldClock.Save();
         Rpc(MethodName.WorldTime, World.WorldClock.Env0, World.WorldClock.EnvEpoch,
             World.WorldClock.HourShift, World.WorldClock.MinutesPerDay);
-        GD.Print($"[admin] {NameOf(sender)} set the clock to {World.TimeCommand.Format(hour)}, {World.TimeCommand.DescribeSpeed(speed)}");
+        string shown = World.TimeCommand.Describe(hour, zone, date);
+        GD.Print($"[admin] {NameOf(sender)} set the clock to {shown}, {World.TimeCommand.DescribeSpeed(speed)}");
 
         string who = NameOf(sender);
-        Broadcast(op != World.TimeOp.Speed ? $"{who} set the time to {World.TimeCommand.Format(hour)}"
+        bool away = realSun && place is { } p && !World.LocalHours.IsHome(p.E, p.N);
+        string named = request.Named is { } nm && away ? $", {nm} where they stand" : "";
+        Broadcast(request.Op != World.TimeOp.Speed ? $"{who} set the time to {shown}{named}"
             : speed > 0 ? $"{who} set the day to {World.TimeCommand.DescribeSpeed(speed)}"
-            : $"{who} stopped the clock at {World.TimeCommand.Format(hour)}", ChatKind.Admin);
+            : $"{who} stopped the clock at {shown}", ChatKind.Admin);
+    }
+
+    /// <summary>
+    /// Where a player stands, LV95, from the position their client published and the server already
+    /// keeps (#1801); null for the console or a player with no body yet.
+    /// </summary>
+    private (double E, double N)? PlaceOf(long sender)
+    {
+        if (_players?.GetNodeOrNull<Player.FootPlayer>(sender.ToString()) is not { } node) return null;
+        var lv = node.Global.Lv95;
+        return (lv.E, lv.N);
     }
 
     // ---- /weather (#887) ----------------------------------------------------------------------

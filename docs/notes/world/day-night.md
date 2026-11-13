@@ -11,7 +11,7 @@
   displayed as 0.40. Buildings light far more windows at night and those glow through the dark.
   Settings → Time of day (start hour, day length, default 24 min, 0 = stopped); `--time <h>` fixes
   the hour for one run. **`/time`** (#202, `World/TimeCommand` parses, `Net/ChatManager` applies):
-  `set <hh:mm|sunrise|day|noon|sunset|night|midnight>`, `add <hours>`, `speed <min a day, 0 stops>`;
+  `set <hh:mm|sunrise|day|noon|sunset|night|midnight> [zone]`, `add <hours>`, `speed <min a day, 0 stops | normal | real>` (`normal` = 24 min, `real` = 1440 min, a day a day; `TimeCommand.MaxMinutesPerDay` is a real day, the settings' slider stops at 240);
   bare `/time` answers from this screen's clock. Offline it moves this machine's clock
   (`DayNight.DayLengthOverride` for speed).
 - **The real sky** (#1430 phase H6, `World/SunPath`, `Core/Ephemeris`, `Core/SwissTime`): the
@@ -20,7 +20,8 @@
   camera's LV95 place (`DayNight.Origin`; Bern before a camera is out, the last place indoors),
   turned from true north to grid north (the meridian convergence, ±1-2° at the borders). Bern's day
   runs 08:13-16:44 at the December solstice and 05:36-21:29 in June, 66.5° high at noon.
-  `/time set sunrise|sunset` are today's at Bern (`SunPath.RiseOrSet`). The thermals read the same
+  `/time set sunrise|sunset` are today's at Bern (`SunPath.RiseOrSet`) at home; away from Switzerland every
+  named hour is the sun's where the player stands and hours read in their zone (`world/local-time`, #1801). The thermals read the same
   sun at the thermal's place (`AirLift`), so they follow the season. One date per process: the
   server's and the clients' are each their own `Calendar.Today` (`--date` pins it).
   **The fixed day** (`SunModel.Fixed`): up 6h, due south and 62° at noon, down 18h, the moon
