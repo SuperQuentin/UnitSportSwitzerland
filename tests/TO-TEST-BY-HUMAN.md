@@ -7,6 +7,12 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## `/locate + parking entrance` on leaves ([#1772](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1772))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2502137,1117793`.
+
+- [ ] `/locate building + parking entrance`, then `/go` on the first answer → you land at a garage door with its access road (no longer at 2502137,1117793, whose earth building is a shop without one); a car drives down its ramp.
+
 ## GPX replay and its video export on leaves ([#1752](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1752))
 
 In a window, `--frame earth` with a real recording on real leaves (e.g. `--leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --gpx <a ride in the region>`), each against the same without `--frame earth`.
