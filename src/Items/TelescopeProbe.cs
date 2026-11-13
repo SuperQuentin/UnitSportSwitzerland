@@ -171,9 +171,17 @@ public partial class TelescopeProbe : Node
         Expect(aim is { Kind: FlagAimKind.PickUp, Target: PlacedKind.Telescope }, $"an empty hand points at the telescope ({aim.Kind}, {aim.Target})");
         // the pick-up halo hangs on the drawn parts, the turned tube's included (#1813: it was the
         // level set-up mesh at the record's yaw, off the tube and the legs on the earth frame)
+        // the ghost and its halo show only with the pointer captured (a test window keeps the game's own word for it)
+        if (MouseCapture.Mode != Input.MouseModeEnum.Captured) MouseCapture.Mode = Input.MouseModeEnum.Captured;
         if (aim.Kind == FlagAimKind.PickUp && MouseCapture.Mode == Input.MouseModeEnum.Captured)
         {
             await Seconds(0.2);
+            if (DisplayServer.GetName() != "headless")
+            {
+                await Seconds(0.5);
+                GetViewport().GetTexture().GetImage().SavePng("res://test_output/telescope_halo.png");
+                GD.Print("[telescopecheck] wrote test_output/telescope_halo.png");
+            }
             var tube = node?.GetNodeOrNull<Node3D>(TelescopeVisual.TubeName);
             int onTube = tube != null ? tube.FindChildren(FlagGhost.HaloName, owned: false).Count : 0;
             int onAll = node != null ? node.FindChildren(FlagGhost.HaloName, owned: false).Count : 0;

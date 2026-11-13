@@ -1003,10 +1003,11 @@ Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4
 
 - [ ] Fly and drive across Geneva's re-anchors (every 3 km, the `[origin] shift` line) → no lag spike you notice; the line reads well under the 117-203 ms of Nov 12 (headless on a loaded machine: 23-48 ms), traffic keeps driving on its roads after each.
 
-## A view opened by E keeps the press (PR #1814?, [#1813](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1813))
+## A view opened by E keeps the press (PR [#1815](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1815), [#1813](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1813))
 
 Offline, in a window (any frame).
 
 - [ ] Set a telescope up, walk to it, press E (keyboard), then pad Y, then VR grip → the view through it opens and stays; E again steps back.
 - [ ] E at a pinball machine → you step up, no game starts (and no coin goes) until you press E again.
 - [ ] E at a pool table or dartboard → you step up without sitting down; E again sits.
+- [ ] Empty hand, point at a set-up telescope (Geneva, `--frame earth`), after looking through it with the tube tilted → the yellow "pack it up" halo sits on the tube and the legs as drawn, tilted with the tube; same on a flag, a campfire and a workbench.
