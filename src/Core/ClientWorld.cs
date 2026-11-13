@@ -959,6 +959,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
             new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
+            // the doors round the start against their buildings, far from Switzerland too (#1799)
+            new(() => Interiors.DoorFrameCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.DoorFrameCheck(Ground!, origin, Interiors.DoorFrameCheck.ParseArgs().Shot)),
             // G2 D's bar (#1710): no pop at a re-anchor; a long drive and a long flight across many
             new(ReanchorCheck.Requested, ToolAnchor.AtTarget, _ => ReanchorCheckFor(origin)),
             new(LongDriveCheck.Requested, ToolAnchor.AtTarget, _ => new LongDriveCheck(Ground!, origin, _earth == null ? null : _earth.Leaves.RoadsOf)),
