@@ -104,6 +104,9 @@ public sealed class EarthLeaves : ILeafSource
     /// <summary>The fill's domain now; null without a fill.</summary>
     public LeafFillDomain? Domain => _domain;
 
+    /// <summary>The pyramid the fill stands on, null without one (a probe's read-out, #1808).</summary>
+    public PyramidBase? Pyramid => _generated?.Pyramid;
+
     /// <summary>The fill's domain grown so it holds a place (a camera, a body, a teleport's target).</summary>
     public void Reach(double latDeg, double lonDeg)
     {

@@ -197,6 +197,56 @@ public class PyramidFillTests
         Assert.Equal(ground.Heights[256 * N + 480], hEll, 0.5);
     }
 
+    [Fact]
+    public void The_pyramids_sea_is_water_at_the_geoid_and_an_all_sea_leaf_has_no_roads()
+    {
+        // #1808: the same ground, its low side the sea (no lake levels): the pyramid at the geoid there
+        var p = new PyramidBase(key => key.Level == 13 ? Tile13(key) : null, Array.Empty<float>(), 13) { SeaSurface = (_, _) => Lake - 0.4 };
+        var (g, baseAt, t) = Generator(Fill);
+        var ground = PyramidFill.Build(p, t, g, baseAt)!;
+        int j = 256;
+        Assert.Equal(Lake - 0.4f, ground.Lake[j * N + 10], 3);
+        Assert.True(ground.Heights[j * N + 10] < Lake - 10);
+        Assert.True(float.IsNaN(ground.Lake[j * N + 480]));
+        // without a sea surface it is dry land, as before
+        var dry = PyramidFill.Build(new PyramidBase(Tile13, Array.Empty<float>(), 13), t, g, baseAt)!;
+        Assert.True(float.IsNaN(dry.Lake[j * N + 10]));
+
+        // a leaf all sea: water, no trees, no roads
+        var sea = new PyramidBase(key => key.Level == 13 ? Flat13(key) : null, Array.Empty<float>(), 13) { SeaSurface = (_, _) => Lake };
+        var content = new CubeLeafContent
+        {
+            Key = Fill,
+            Heights = new CubeTile { Key = Fill, Bits = 9, Heights = (float[])g.Clone() },
+            Cover = new byte[N * N],
+            Trees = new() { Tree(t, 480, 256, g) },
+            Buildings = new BuildingTile { Buildings = new() },
+            Roads = new RoadTile { Segments = new() },
+        };
+        var all = PyramidFill.Build(sea, t, g, baseAt)!;
+        Assert.All(all.Lake, l => Assert.Equal(Lake, l));
+        PyramidFill.Apply(content, all, t);
+        Assert.Null(content.Roads);
+        Assert.Empty(content.Trees);
+        Assert.Equal((byte)CoverClass.Water, content.Cover![256 * N + 480]);
+    }
+
+    private static CubeTile Tile13(CubeKey key)
+    {
+        var h = new float[N * N];
+        for (int j = 0; j < N; j++)
+            for (int i = 0; i < N; i++)
+                h[j * N + i] = P13(((long)key.X << 9) + i, ((long)key.Y << 9) + j);
+        return new CubeTile { Key = key, Bits = 9, Heights = h };
+    }
+
+    private static CubeTile Flat13(CubeKey key)
+    {
+        var h = new float[N * N];
+        Array.Fill(h, Lake + 0.2f);
+        return new CubeTile { Key = key, Bits = 9, Heights = h };
+    }
+
     private static TreeInstance Tree(LeafTransform t, int i, int j, float[] heights)
     {
         var (x, y, z) = t.LatticeToLocal(i, j, heights[j * N + i]);

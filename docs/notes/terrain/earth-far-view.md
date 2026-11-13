@@ -15,12 +15,37 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   `ClientWorld`). A drawn leaf's globe tile is left out, and every ancestor of a drawn leaf always splits, so the
   globe's coarser ground (every 8th vertex) never shows through a leaf; the leaf's neighbours stay the globe's. Its
   skirts close the seam. While a split's children load, the parent still draws (a frame or two of overlap).
+  **Past the pyramid's levels (#1800)**: outside Switzerland `cube_global` holds levels 0-4 only (a level-4 tile is
+  ~600 km), and a split waits for all four children, so over a fill leaf in Ladakh (face F1) the split never came: the
+  level-4 tile (every 8th vertex) stayed drawn over the leaves, up to 317 m over them on the Himalaya's slopes. A child
+  of a tile holding a drawn leaf that the pyramid (or the fill's domain, at the leaves' level) lacks is now built from
+  its ancestors alone (`Globe.Synthesise`: `FillFromAncestors`, bilinear in the nearest ancestor's lattice, which is
+  what the fill's `PyramidBase` reads, so they agree; its ancestor's colour). Only those: elsewhere the globe stays at
+  the levels it has. `tools/farfillcheck.sh` (`--farfillcheck`, `Globe.SurfaceAt`): the globe's drawn ground and lakes
+  against the near leaves' over a 600 m grid, at the user's spot or any `AT`, and the world's up against the
+  ellipsoid's (the "rolled" view there was the mountainside's 17° slope; the frame's up was exact).
+- **The leaves' sea level is Switzerland's everywhere** (`SwissSeaLevel`: Bessel 1841 + CHGeo2004, extrapolated): 345 m
+  under the ellipsoid in Ladakh where the geoid is ~-30 m, 1.3 km off over the Pacific. The fill's heights do not
+  depend on it (the pyramid is EGM2008-ellipsoidal and the generator's sea level cancels in `P + D(G - L)`), but every
+  LHN95 read-out does far away: the HUD's altitude and the palette's altitude bands (`EarthWorld.Mesh`'s geoid: more
+  snow). G3's EGM2008 replaces it.
 - **Near the ground in the style's terrain material** (below `TerrainBelowM`, 20 km): every tile takes
   `StyleKit.Material(Terrain)` (one shared instance, restyled by the kit), so it is lit, hazed, banded (PS1) and
   lifted by refraction as the flat terrain is. Above 20 km, `globe.gdshader` (the true sun's terminator over the whole
   Earth); refraction's lift is gone by then, so the two meet. `world_fill_hide` is 0 in this world (it is the flat
   world's fill dissolve: at 1 `flat_hide` discards every terrain fragment) and `globe.gdshader`'s fill push is off by
   its own `fill_push` uniform.
+- **The terminator holds still** (#1798): `world_true_sun` (`Atmosphere.TrueSun`) is the ephemeris' sun as an
+  Earth-fixed direction, read every frame and turned into `Globe.Axes`, the axes the tiles are placed in (the
+  atmosphere runs after the globe, which places its tiles again at each re-anchor). Read twice a second in world
+  axes it lagged twice over: behind each re-anchor while the globe turned under it (20 km a turn in Space) and
+  13 km a read at the game's day speed. Check: `--fly 0,500000,0,30,100000,6 --flyterminator [file.csv]` under
+  `--frame earth --sun real` (the globe's sun taken back to the Earth each frame: steps past the sun's own motion,
+  and the offset off the ephemeris; 53 km before, 0.00 after).
+- **The sun above the air** (#1798): the style's sky (and its sun disc) dims to black as the camera climbs, so
+  `atmosphere.gdshader` draws the sun itself where nothing was drawn and the Earth's ball is not in the way (its true
+  0.27° radius and a glare, faded in with the space factor, dimmed through the air on the way): over the night side
+  it shows above the limb, behind the Earth it is gone. `--skyshot sun,1050000,...` (`world/day-night`).
 - **Colour per vertex, in the palette** (`GlobeGround`): each texel of a tile's colour image is read back through the
   bake's encoding (`Unstore`, the exact inverse of `OurColours.ForCartoonShader`) and classified as cover weights
   (water, forest, rock, snow; the rest open ground). A vertex is painted `CoverPalette.ColorFor` of those classes at

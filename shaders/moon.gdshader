@@ -3,7 +3,9 @@ shader_type spatial;
 // The real moon in the sky (#1440, src/World/MoonDisc.cs): its face from NASA's LROC colour map,
 // turned by its own axes (libration included) and lit by the real sun, so its phase is right.
 // Added onto the sky: its unlit part lets the sky through, as the real one does by day.
-render_mode unshaded, fog_disabled, blend_add, depth_draw_never, cull_back, shadows_disabled;
+// It writes its depth a step nearer than the stars and is drawn before them (MoonDisc: render priority -1), so the
+// stars behind it, its dark part's too, fail the depth test (#1798: they shone through it).
+render_mode unshaded, fog_disabled, blend_add, depth_draw_always, cull_back, shadows_disabled;
 
 uniform sampler2D albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 // world axes, toward the sun
@@ -12,8 +14,8 @@ uniform vec3 sun_dir = vec3(0.0, 1.0, 0.0);
 uniform mat3 face = mat3(1.0);
 // day 0.45, night 1 (the sky behind it does the rest)
 uniform float brightness = 1.0;
-// the night side, faintly lit by the Earth
-uniform float earthshine = 0.012;
+// the night side, faintly lit by the Earth: a crescent's dark disc shows beside it (0.012 vanished into the night sky, #1798)
+uniform float earthshine = 0.04;
 
 varying vec3 world_normal;
 
@@ -22,6 +24,7 @@ varying vec3 world_normal;
 void vertex() {
 	world_normal = (MODEL_MATRIX * vec4(VERTEX, 0.0)).xyz;
 	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
+	POSITION.z = max(POSITION.z, POSITION.w * SKY_MIN_DEPTH * 2.0);
 }
 
 void fragment() {
