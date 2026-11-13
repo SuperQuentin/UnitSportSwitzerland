@@ -15,7 +15,8 @@ namespace UnitSport.Player;
 /// Geneva → Brest): an A320 put in the air 3 km over the start, on its own autopilot and autothrust
 /// (<see cref="AirlinerFlight"/>'s, light sim), climbing to the cruise (10 km) and steered toward Brest's airport
 /// (48.4479 N, 4.4185 W) along the great circle, the heading knob turned every second; 220 km out it descends to
-/// 1,500 m and the time warp ends. Over the pyramid (<c>cube_global</c>) all the way, it fails on:
+/// 1,500 m; 15 km out the time warp ends, and over the destination it crawls (0.05x) until its leaves are drawn, 180 s
+/// on the wall clock at most. Over the pyramid (<c>cube_global</c>) all the way, it fails on:
 /// <list type="bullet">
 /// <item>the ground missing under the aircraft (no globe tile or leaf drawn there, <see cref="World.Globe.DrawnLevelAt"/>)
 /// for 3 s, or the pyramid holding no height there;</item>
@@ -25,8 +26,9 @@ namespace UnitSport.Player;
 /// <item>a jump at a re-anchor (<see cref="ReanchorWatch"/>: the aircraft and the chase camera; not the ground, km under it);</item>
 /// <item>with the destination's leaves (<c>--leaves</c> on Brest's): none drawn under it once down at 1,500 m.</item>
 /// </list>
-/// <c>--flightkm</c> stops after that many km (a shorter run); <c>--flightwarp</c> (4) is the engine's time scale for
-/// the cruise. <c>tools/longflightcheck.sh</c> runs the whole flight. RESULT ok or FAILED.
+/// <c>--flightkm</c> stops after that many km (a shorter run); <c>--flightwarp</c> (16, #1762: the highest with
+/// re-anchors at a few cm and the leaves streamed in time; ~6 min on the wall clock) is the engine's time scale until
+/// 15 km out. <c>tools/longflightcheck.sh</c> runs the whole flight. RESULT ok or FAILED.
 /// </summary>
 public partial class LongFlightCheck : Node
 {
@@ -34,11 +36,14 @@ public partial class LongFlightCheck : Node
 
     private const float StartAltM = 3000f, DescendM = 1500f, DescendFromKm = 220f, ClearanceM = 300f;
     private const double HoleS = 3, FarHoleS = 10;
+    // #1762: the warp lasts to ApproachKm out; over the destination, its leaves waited for LeafWaitS (wall) at CrawlScale
+    private const double ApproachKm = 15, LeafWaitS = 180, CrawlScale = 0.05;
+    private double _waitFrom = -1;
     private readonly WorldOrigin _origin;
     private readonly IWorldGround? _ground;
     private readonly List<string> _faults = new();
     private readonly float _cruise = CmdArgs.Float("--cruise") ?? 10_000f;
-    private readonly double _warp = CmdArgs.Double("--flightwarp") ?? 4.0;
+    private readonly double _warp = CmdArgs.Double("--flightwarp") ?? 16.0;
     private readonly double? _stopKm = CmdArgs.Double("--flightkm");
     private GlobalPos _to;
     private FootPlayer? _player;
@@ -121,8 +126,9 @@ public partial class LongFlightCheck : Node
         return best;
     }
 
-    // the whole flight at the warp, the descent at 1x, the start
-    private double TimeoutS => 300 + (_stopKm ?? _startKm) * 1000 / 220 / _warp + 900;
+    // on the wall clock (#1762): the start, the flight at the warp (150 m/s, the slowest it flies), the approach at 1x, the
+    // wait over the destination, and a margin
+    private double TimeoutS => 300 + (_stopKm ?? _startKm) * 1000 / 150 / _warp + ApproachKm * 1000 / 150 + LeafWaitS + 300;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -232,10 +238,14 @@ public partial class LongFlightCheck : Node
         if (!_descending && toGo < DescendFromKm * 1000)
         {
             _descending = true;
-            Log(Inv($"{toGo / 1000:F0} km out: descending to {DescendM:F0} m, warp off"));
+            Log(Inv($"{toGo / 1000:F0} km out: descending to {DescendM:F0} m"));
         }
-        // the warp ends on the way down: the leaves under it stream at 1x
-        if (_descending && Engine.TimeScale != 1.0 && here.Geodetic.H < DescendM + 2500) Engine.TimeScale = 1.0;
+        // the warp lasts down to the final approach (#1762): 1x over the last km, where the destination's leaves stream
+        if (_waitFrom < 0 && Engine.TimeScale > 1.0 && toGo < ApproachKm * 1000)
+        {
+            Engine.TimeScale = 1.0;
+            Log(Inv($"{toGo / 1000:F0} km out: the final approach at 1x ({Now:F0} s on the wall clock)"));
+        }
 
         _check += delta / Engine.TimeScale;   // real seconds: the streaming's clock
         if (_check >= 0.5) { Check(here, _check); _check = 0; }
@@ -249,12 +259,21 @@ public partial class LongFlightCheck : Node
             if (_real?.IsLocal(LeafUnder(here)) == true && World.Globe.Current?.DrawnLevelAt(here.Ecef) == World.Globe.LeafLevelDrawn)
             {
                 _leafSeen = 1;
-                Log(Inv($"the destination's leaves are drawn under the aircraft, {toGo / 1000:F1} km out at {alt:F0} m"));
+                string waited = _waitFrom >= 0 ? Inv($", after {Now - _waitFrom:F0} s over it on the wall clock") : "";
+                Log(Inv($"the destination's leaves are drawn under the aircraft, {toGo / 1000:F1} km out at {alt:F0} m{waited}"));
                 Finish();
                 return;
             }
-            // until it is over the destination: a destination's leaves may reach only 2-3 km round it (D:'s Brest: 8 x 8 leaves)
-            if (toGo < 300) { _leafSeen = 0; Finish(); return; }
+            // over the destination (its leaves may reach only 2-3 km round it: D:'s Brest is 8 x 8 leaves) and none drawn
+            // yet: the streaming still works through what the warped route asked for (#1762). The aircraft crawls
+            // (CrawlScale) and the leaves are waited for on the wall clock, the threads' clock, LeafWaitS at most.
+            if (toGo < 300 && _waitFrom < 0)
+            {
+                _waitFrom = Now;
+                Engine.TimeScale = CrawlScale;
+                Log(Inv($"over the destination with none of its leaves drawn: crawling at {CrawlScale}x, waiting {LeafWaitS:F0} s at most on the wall clock"));
+            }
+            if (_waitFrom >= 0 && Now - _waitFrom > LeafWaitS) { _leafSeen = 0; Finish(); return; }
         }
     }
 
