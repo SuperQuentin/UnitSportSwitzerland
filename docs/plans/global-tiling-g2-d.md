@@ -8,8 +8,8 @@ default and deletes the flat LV95 runtime. The end state, agreed with the user o
 format**. No LV95 tile, key, record or position in the game, the wire, saves or the build's intermediate files. LV95
 survives only as notation: how swisstopo sources are read, and how a person types or reads a Swiss coordinate.
 
-Status: **planned** (2026-11-10, from a survey of `main` at `862ddb3e`). Nothing built. D starts once C6 and C7 are
-done, plus the three gaps this survey found (G1-G3 below).
+Status: **D2 ready for the user's merge** (2026-11-13): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7).
+Planned 2026-11-10 from a survey of `main` at `862ddb3e`.
 
 ## In short
 
@@ -273,7 +273,7 @@ of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the
 
 ## 7. What D still waits for
 
-State on 2026-11-10.
+State on 2026-11-13 (D2's bar recorded; first written 2026-11-10).
 
 | Item | Issue / PR | State | Blocks |
 |---|---|---|---|
@@ -286,15 +286,18 @@ State on 2026-11-10.
 | **G2**: fixture courses online on leaves | #1683 | **done** (#1692): every net check states and checks its frame | — |
 | **G3**: the server's flat-held services | #1684 | **done** (#1694); their net rows under earth #1722 **done** (#1724) | — |
 | Collision patch 27 m over the height at the region's border | #1626 | **done** (#1713) | — |
-| Generated-world gameplay under earth; open doors vs leaf building collision | #1704, #1705, PR #1707 | session working: interiors, doors, the leaf stand-in grid; dress check on B4's real leaves passes | D2 |
-| Stadium bowls on leaves | #1723, PR #1725 | waits for #1707 (same collision code) | D2 |
+| Generated-world gameplay under earth; open doors vs leaf building collision | #1704, #1705, PR #1707 | **done** (#1707) | — |
+| Stadium bowls on leaves | #1723, PR #1725 | **done** (#1725) | — |
+| The earth playtest (scenarios in `tests/playtests/earth-*`) | #1774, PR #1775 | **done** (Nov 12-13): 4, 5, 6, 8 validated; 1, 2, 3, 7 failed. Fixed and merged: re-anchor camera #1763 (#1780), re-anchor stall #1764 (#1784, 27-52 ms left, under 16 ms is a follow-up), yard pallets #1769 (#1781), sprint-fly patches #1773 (#1782), earth height 20x #1751 (#1785), GPX replay #1752 (#1786), long flight's runaway fill generation #1762 (#1783). Then the earth-only rest: floating trees #1776 (#1789), fill walls #1778 and far-ground ledge #1779 (#1788, with the pyramid rebuilt on D:), `/locate`'s garages on leaves #1772 (#1790). Flat too: #1765-#1768, #1770, #1771 | #1763 and #1752 were D2 blockers (user, Nov 13): both merged |
+| Rows red under earth on `main` itself | #1743 (debugcheck), #1745, #1787 (containernet, versteckis, fasnacht; brsquad flaky) | open; fail the same on plain `main`, so not D2's | not D2 |
 | Farm, hunt and hairpin training under earth | #1729 | **done** (#1730) | — |
 | Interior check red on clean `main` | #1728 | open | not D |
 | Net checks failing on `main` | #1628, #1706 | open (flat too) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
-| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | probes and `TEST_FRAME` built (`core/earth-bar-probes`); dry run 297/375, failures rerun and compared on flat; the flight flew 831 km to Brest clean (its end check fixed, rerun pending); the long drive (Versoix → Nyon) stops on real roads on flat too (the racing pilot, not the frame) | D2 |
+| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | **done** (#1712); the long drive's route #1744 (#1750), the long flight at 16x #1762 (#1783) | — |
 | **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
-| **D2**: the flip | #1726, PR #1727 | code done (earth default, protocol 96, stores at `user://earth/` with migrations; pinball scores dropped, the user's call), quick tier green; the bar waits for #1731 (PR #1732), #1712, and the ski slopes and marina boats on leaves | user's merge |
+| **D2**: the flip | #1726, PR #1727 | **ready, the bar recorded** (Nov 13, main merged in at b947a4886): full tier flat 357/378, earth 338/378; of the 20 rows red only under earth, 12 pass alone and 8 fail the same on plain `main` (#1743, #1745, #1787), so none is D2's; refshot parity 0 over the floor (31 judged expected); long drive, re-anchor, long flight (16x, 337 s) and `--replaycheck` ok in earth | the user's merge |
+| **D3**: the flat runtime deleted | — | waits for D2 merged, a full tier on `main`, the user's playtest of it, and #1650 | — |
 
 ## Decided without the user
 

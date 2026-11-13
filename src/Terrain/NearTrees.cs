@@ -95,6 +95,31 @@ public partial class NearTrees : Node3D, IOriginShiftAware
 
     public override void _Ready() => _tilesChanged = true;
 
+    /// <summary>The live set, for the probes (<c>--treeseatcheck</c>); null when the style draws its trees per tile.</summary>
+    public static NearTrees? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>The registered tiles' trees, as their buffers hold them (each in its tile's frame). For the probes.</summary>
+    public static IEnumerable<KeyValuePair<ChunkNode, ChunkNode.TreeBuffers>> Registered => Tiles;
+
+    /// <summary>Where each drawn tree's base is in the world, as the renderer places it. For the probes.</summary>
+    public void DrawnBases(List<Vector3> into)
+    {
+        var g = GlobalTransform;
+        foreach (var (mm, buf) in new[] { (_conifers, _coniferBuf), (_broadleaves, _broadleafBuf) })
+            for (int i = 0, n = mm.VisibleInstanceCount; i < n; i++)
+            {
+                int s = i * FloatsPerInstance;
+                into.Add(g * new Vector3(buf[s + 3], buf[s + 7], buf[s + 11]));
+            }
+    }
+
     public override void _Process(double delta)
     {
         _sinceUpdate += delta;
@@ -114,7 +139,12 @@ public partial class NearTrees : Node3D, IOriginShiftAware
 
         var cone = new Cone(_range, zoom > 0 ? Styles.LodScale.Step * Styles.LodScale.StepRatio : 1f, at, dir, Styles.LodScale.ConeHalfDeg);
         int nc = 0, nb = 0;
-        var self = GlobalPosition;
+        // the instances are refilled in world space, so the node goes back to the identity: a shift moved it with the
+        // tiles, and the earth world's turning re-anchor turned it too (#1776). Placed relative to its position alone,
+        // every tree was drawn turned about it by the turns since it was made: metres up or down once the camera was
+        // a few km from where that was (four re-anchors from Geneva, trees floating over the leaves)
+        GlobalTransform = Transform3D.Identity;
+        var self = Vector3.Zero;
         foreach (var (tile, b) in Tiles)
         {
             if (!IsInstanceValid(tile) || !tile.IsInsideTree() || !tile.IsVisibleInTree()) continue;

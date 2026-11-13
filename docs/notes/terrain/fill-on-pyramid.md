@@ -37,6 +37,12 @@ untouched (`FallbackChunkSource` / `ProceduralWorld.Blend` on LV95).
   of ground 3-35 m over Léman below Lavaux. `--cube-swiss` now blends with a continuous field and snaps swissTLM3D's
   big lakes (`--tlm`).
 
+- **Walls in the fill are the pyramid's (#1778)**: the fill leaves agree on every edge, so a wall along a straight line
+  (a V where two meet) is the pyramid stepping, where `PyramidBase` falls back to a coarser level that disagrees with
+  the finer one. `tools/fillseamscheck.sh` (BlendCheck `--fill-seams`, `--why` prints every level at the worst step)
+  measures it at the playtest's spots: steps between samples, the leaves' edges, the far ground, and the coarse levels'
+  mean miss along the leaves' edges (the globe's ledge, #1779). The fix is in the pyramid's build (`tools/cube-tiles`).
+
 Checks: `PyramidFillTests` (sampler, distance transform, fill, edges, hand-over); `BlendCheck --leaf-blend --at
 2547200,1147800 --side 5 --pyramid D:/UnitSportSwitzerland/cube_global --out DIR` (the Lavaux staircase: seam p99
 34 cm against 34 on the old blend, edges 0.01 cm, the shaded relief with water in blue).

@@ -30,6 +30,11 @@ riddes_night      night  2583400 1113100 g2      -3  315  21.5
 tzoumaz_slope     mid    2583954 1108837 g110   -18  0    14    2026-07-15
 tzoumaz_winter    mid    2583954 1108837 g110   -18  0    14    2027-01-15
 tzoumaz_alps      mid    2583954 1109157 g80     -8  120
+# the earth playtest's walls (Nov 12, #1778, #1779): the fill north of Riddes and the region's edge from the air, where
+# the pyramid's levels stood tens of metres apart (notes 31, 30 and 32)
+riddes_fill_v     mid    2578980 1116051 1506   -28  298
+riddes_fill_meadow mid   2579661 1108305 1345   -30  263
+riddes_fill_edge  mid    2580090 1116823 1837   -12  39
 
 # --- Chablais, Lavaux: the lake and the Alps across it
 villeneuve_a9     mid    2559000 1137000 g40     -6  300

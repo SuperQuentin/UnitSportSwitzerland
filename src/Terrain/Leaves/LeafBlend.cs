@@ -91,8 +91,8 @@ public sealed class LeafBlend
     public const double SoftHandOverM = 40;
 
     /// <summary>
-    /// On the pyramid: within this of the real ground the hand-over's target is that ground continued (its slope carried
-    /// as far), handing over to the pyramid's relief past it, metres.
+    /// On the pyramid: how far the real ground's difference from the pyramid is continued to first order (its slope
+    /// across the seam fading out over this), metres; the pyramid carries the broad slope (#1779).
     /// </summary>
     public const double NearM = 60;
 
@@ -347,12 +347,12 @@ public sealed class LeafBlend
 
     /// <summary>
     /// On the pyramid (#1678): the hand-over at a global lattice point. <paramref name="f"/> is 1 at a block and 0 from
-    /// <see cref="HandOverM"/> out, flat at both ends; <paramref name="target"/> what it hands over to: within
-    /// <see cref="NearM"/> of the real ground that ground continued to first order from each block's nearest point (as
-    /// <see cref="Continued"/>, its slope carried over <see cref="NearM"/>), past it the pyramid plus the real ground's
-    /// difference from it there, each inverse-distance weighted over the blocks. The pyramid steps a little at the leaves'
-    /// edge (the leaves inside, ETOPO blended outside), so near the seam the real ground itself is continued; further
-    /// out the pyramid carries the relief. A lake's bed is carried into the fill's lake only (<paramref name="lake"/>):
+    /// <see cref="HandOverM"/> out, flat at both ends; <paramref name="target"/> what it hands over to: the pyramid plus
+    /// the real ground's difference from it at each block's nearest point, continued to first order (its slope across the
+    /// seam over <see cref="NearM"/>), inverse-distance weighted over the blocks. The pyramid meets the real ground at
+    /// the leaves' edge since #1779 (its build starts the correction past them from each edge vertex's exact miss), so it
+    /// carries the relief from the seam out; where it has no height, the real ground itself is continued (as
+    /// <see cref="Continued"/>). A lake's bed is carried into the fill's lake only (<paramref name="lake"/>):
     /// on the fill's land beside it the real lake counts as the pyramid's surface, so a shore never dips towards the bed.
     /// True with the block's own height (ellipsoidal) when the point lies on one.
     /// </summary>
@@ -383,20 +383,26 @@ public sealed class LeafBlend
             }
             else
             {
-                // the real ground continued from q, its slope from inside the block over NearM (whole cells: a
-                // neighbour inside is real)
-                var h = x.H;
-                c = h[q];
+                // continued from q to first order, its slope from inside the block over NearM (whole cells: a neighbour
+                // inside is real): on the pyramid the real ground's difference from it (#1779), else the real ground
+                var h = double.IsNaN(pyramid) ? x.H : rl.R;
+                double v = h[q];
                 long di = gi - qi, dj = gj - qj;
                 if (di != 0)
                 {
                     double s = di < 0 ? h[q + 1] - h[q] : h[q] - h[q - 1];
-                    c += di * s * (1 - SmoothStep(0, NearM, Math.Abs(di) * leaf.ScaleI));
+                    v += di * s * (1 - SmoothStep(0, NearM, Math.Abs(di) * leaf.ScaleI));
                 }
                 if (dj != 0)
                 {
                     double s = dj < 0 ? h[q + n] - h[q] : h[q] - h[q - n];
-                    c += dj * s * (1 - SmoothStep(0, NearM, Math.Abs(dj) * leaf.ScaleJ));
+                    v += dj * s * (1 - SmoothStep(0, NearM, Math.Abs(dj) * leaf.ScaleJ));
+                }
+                if (double.IsNaN(pyramid)) c = v;
+                else
+                {
+                    c = pyramid + v;
+                    r = v;
                 }
             }
             double fd = 1 - SmoothStep(0, HandOverM, dist);
@@ -409,10 +415,13 @@ public sealed class LeafBlend
         if (sw == 0) return false;
         double reach = soft <= 0 ? HandOverM : Math.Clamp(-SoftHandOverM * Math.Log(soft), 0, HandOverM);
         f = 1 - SmoothStep(0, HandOverM, reach);
-        // the nearest distance's soft minimum is at most the nearest distance: a block's own edge is the real ground
-        double g = SmoothStep(0, NearM, reach);
-        double far = double.IsNaN(pyramid) ? swc / sw : pyramid + swr / sw;
-        target = (1 - g) * (swc / sw) + g * far;
+        // the pyramid plus the real ground's difference from it, continued from the seam (#1779): the pyramid's build starts
+        // its correction past the leaves from each edge vertex's exact miss (tools/cube-tiles), so it meets the real ground
+        // there and carries its broad slope on; only the difference is carried to first order, so the seam stays C1. The
+        // real ground's own slope continued over NearM ran a gully's walls on downhill: a trench 40 m under the pyramid
+        // beside the region north of Riddes, and a ledge where the globe's coarser ground (the pyramid) met the fill's
+        // leaves. Where the pyramid has no height, the real ground continued.
+        target = double.IsNaN(pyramid) ? swc / sw : pyramid + swr / sw;
         return false;
     }
 

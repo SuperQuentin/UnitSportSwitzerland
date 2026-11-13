@@ -16,6 +16,19 @@ On a copy of a real player's `user://` from before the flip (containers with par
 - [ ] Open the phone's map → the recent places are the ones you travelled to before.
 - [ ] Quit, start again with `--frame flat` → the flat world comes back with the flat saves as they were.
 
+## The earth fill's walls and ledges north of Riddes ([#1788](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1788))
+
+In a window, the earth playtest's launch (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2578113,1115406 --date 2027-07-15`), the rebuilt pyramid on D: (`cube_global`, Nov 13).
+
+- [ ] Fly from Riddes north over the generated slopes (2578980,1116051) and south over the meadow at 2579661,1108305, low and at 1.5 km → no pale wall along a straight line or a V anywhere in the generated ground.
+- [ ] Climb to ~1.8 km over 2580090,1116823 and look NE while the far ground loads, then fly towards it → no wall or overhang where the finer ground takes over; a step of a few metres at most where the bare far ground meets the forested leaves.
+
+## `/locate + parking entrance` on leaves ([#1772](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1772))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2502137,1117793`.
+
+- [ ] `/locate building + parking entrance`, then `/go` on the first answer → you land at a garage door with its access road (no longer at 2502137,1117793, whose earth building is a shop without one); a car drives down its ramp.
+
 ## GPX replay and its video export on leaves ([#1752](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1752))
 
 In a window, `--frame earth` with a real recording on real leaves (e.g. `--leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --gpx <a ride in the region>`), each against the same without `--frame earth`.
