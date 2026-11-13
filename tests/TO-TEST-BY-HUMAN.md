@@ -960,3 +960,9 @@ Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4
 
 - [ ] Walk (third person) across a re-anchor (the `[origin] shift` line, every 3 km) → the camera holds its place over the shoulder: no jump up, no ease back down.
 - [ ] Drive a car across one in chase view, then in cockpit view → no jump. The headless check measured 0.0 cm in the car before the fix too: if a jump remains while driving, note what was driven and from which view.
+
+## The earth re-anchor's stall (PR [#1784](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1784), [#1764](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1764))
+
+Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-4-reanchor-flight`, traffic on.
+
+- [ ] Fly and drive across Geneva's re-anchors (every 3 km, the `[origin] shift` line) → no lag spike you notice; the line reads well under the 117-203 ms of Nov 12 (headless on a loaded machine: 23-48 ms), traffic keeps driving on its roads after each.

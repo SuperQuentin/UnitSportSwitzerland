@@ -142,7 +142,28 @@ public sealed class LaneEdge
     /// <summary>The origin moved (#185): the line is somewhere else in world space, the same shape.</summary>
     public void Shift(OriginShift shift)
     {
-        for (int i = 0; i < Points.Length; i++) Points[i] = shift.Point(Points[i]);
+        var t = shift.Transform;
+        var points = Points;
+        for (int i = 0; i < points.Length; i++) points[i] = t * points[i];
+    }
+
+    /// <summary>The last shift pass that moved it (<see cref="ShiftOnce"/>): 0 for none.</summary>
+    private int _shiftPass;
+
+    /// <summary>A fresh pass for <see cref="ShiftOnce"/>: one per whole move of the lane graphs, never reused.</summary>
+    public static int NewShiftPass() => System.Threading.Interlocked.Increment(ref _passes);
+    private static int _passes;
+
+    /// <summary>
+    /// Moves it once per <paramref name="pass"/> (#1764): a mode's graph shares the roads' and rails' edges, and a vehicle may still
+    /// drive on an edge of an older graph, but an edge must move exactly once. Safe from several threads (the graphs' edges are
+    /// moved in parallel); replaces a set of every edge moved, which cost more than the move itself on a city's 110,000 edges.
+    /// </summary>
+    public bool ShiftOnce(OriginShift shift, int pass)
+    {
+        if (System.Threading.Interlocked.Exchange(ref _shiftPass, pass) == pass) return false;
+        Shift(shift);
+        return true;
     }
 
     /// <summary>Position and unit tangent at arc length <paramref name="s"/> along the drawing order.</summary>
@@ -752,18 +773,28 @@ public sealed partial class LaneGraph
     }
 
     /// <summary>
-    /// The origin moved (#185): every edge follows, and the graph is in the frame <paramref name="now"/>.
-    /// <paramref name="done"/> holds edges already moved, since a vehicle may still drive on an edge
-    /// of an older graph, and an edge must move exactly once.
+    /// The origin moved (#185): every edge follows, and the graph is in the frame <paramref name="now"/>. Each edge moves once per
+    /// <paramref name="pass"/> (<see cref="LaneEdge.ShiftOnce"/>), since a vehicle may still drive on an edge of an older graph
+    /// and a mode's graph holds the roads' own. A city's graphs hold a million points (Geneva: 110,000 edges, 1.1 million
+    /// points; 100-380 ms a re-anchor on one thread, #1764): they move in parallel, in blocks.
     /// </summary>
-    public void Shift(OriginShift shift, OriginFrame now, HashSet<LaneEdge> done)
+    public void Shift(OriginShift shift, OriginFrame now, int pass)
     {
-        foreach (var e in Edges)
-            if (done.Add(e)) e.Shift(shift);
+        var edges = Edges;
+        if (edges.Count < ParallelShiftEdges)
+            foreach (var e in edges) e.ShiftOnce(shift, pass);
+        else
+            System.Threading.Tasks.Parallel.ForEach(System.Collections.Concurrent.Partitioner.Create(0, edges.Count, ShiftBlock), range =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++) edges[i].ShiftOnce(shift, pass);
+            });
         foreach (var a in Approaches) a.Stop = shift.Point(a.Stop);
         foreach (var s in Signals) s.Shift(shift);
         Frame = now;
     }
+
+    /// <summary>Under this many edges a graph moves on the calling thread; past it, in blocks of <see cref="ShiftBlock"/> on the pool.</summary>
+    private const int ParallelShiftEdges = 4096, ShiftBlock = 2048;
 
     /// <summary>Road ends with nothing joining them: cul-de-sacs, and the edge of what is loaded.</summary>
     public int DeadEnds => Edges.Sum(e => (Degree(e.KeyStart) == 1 ? 1 : 0) + (Degree(e.KeyEnd) == 1 ? 1 : 0));

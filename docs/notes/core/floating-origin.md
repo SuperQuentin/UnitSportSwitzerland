@@ -66,6 +66,14 @@
   ripples) goes through `pattern_turn`.
 - **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km; 22-47 ms in a
   window at Riddes (~530 nodes, 120 kinematic), so the frame that shifts takes 50-90 ms.
+  **The `[origin]` line says where it goes** (#1764): the node pass (and its kinematic teleports' share), and the
+  slowest three handlers by type, summed (`OriginShifter.SlowestHandlers`). On Geneva's leaves with traffic (the earth
+  playtest's 117-203 ms stall), traffic's lane graphs were most of it: 110,000 edges and 1.1 million points moved on
+  the main thread through a set of every edge, 100-380 ms. Each edge now moves once per pass by a stamp
+  (`LaneEdge.ShiftOnce`) and a graph past 4,096 edges moves in blocks on the pool: 10-16 ms. The whole shift took
+  27-48 ms there (a machine at 100% CPU): the node walk 13-24 ms (teleports under 1.1 ms), traffic 13-16 ms, the rest
+  under 3 ms. A handler that keeps a million of anything in world space moves it in parallel, or keeps it in a frame
+  of its own.
 - **The renderer across a shift** (phase 4, measured in a window at Riddes, RTX 4070, 1600x900,
   a `shift 1000,0` shot-queue line with the camera still):
   - **SDFGI** (Realistic+ with `--sdfgi`, Forward+): its cascades sit on the world grid round the
