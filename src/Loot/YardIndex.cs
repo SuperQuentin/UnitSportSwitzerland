@@ -78,7 +78,14 @@ internal sealed class YardIndex
     /// The container a player with feet at <paramref name="at"/> looking along <paramref name="look"/> faces best
     /// (<see cref="SiteLoot.Score"/>, in each tile's own frame), skipping one <paramref name="skip"/> says is gone.
     /// </summary>
-    public bool Nearest(GlobalPos at, Vector2 look, Func<YardStock, bool> skip, out YardStock best)
+    public bool Nearest(GlobalPos at, Vector2 look, Func<YardStock, bool> skip, out YardStock best) =>
+        Nearest(at, _ => look, skip, out best);
+
+    /// <summary>
+    /// As <see cref="Nearest(GlobalPos, Vector2, Func{YardStock, bool}, out YardStock)"/> with the look given in each
+    /// tile's own frame (x east, z south): an earth leaf's stand-in is turned in the world (#1799).
+    /// </summary>
+    public bool Nearest(GlobalPos at, Func<TileId, Vector2> lookIn, Func<YardStock, bool> skip, out YardStock best)
     {
         best = default;
         float bestScore = float.MaxValue;
@@ -89,6 +96,7 @@ internal sealed class YardIndex
                 var id = _here.Neighbour(dx, dz);
                 if (!_tiles.TryGetValue(id, out var list) || list.Length == 0) continue;
                 var (e, n, h) = at.InTileEn(id);
+                var look = lookIn(id);
                 float alt = (float)h;
                 for (int i = 0; i < list.Length; i++)
                 {
