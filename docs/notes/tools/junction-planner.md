@@ -433,9 +433,11 @@ off, `--junctions new` plans and reports without writing.
   Neither the core's area against today's caps (1.6x) nor the paving no move crosses (3 %: the fallback's moves themselves
   run 70 m across the verge) told it apart. `RoadGen --cap-check --chunks DIR [--at E,N] [--list]` (`CapCheck`): a ground cap
   with an at-grade car road's or track's point over 8 m inside it swallows a street (the planner's own residues, a stub's end
-  under the paving or one node's cut mouth, reach 7.1 m). The D: region as built: 51 of 43,531 ground caps; Geneva's block
-  2499-2503 / 1116-1119 as built 14 (37 over 4 m), with the fix 0 (14 over 4 m, all residues); 41 merged junctions of its
-  plan went back to their members' caps.
+  under the paving or one node's cut mouth, reach 7.1 m). The D: region as built: 51 of 43,531 ground caps. Geneva's block
+  2499-2503 / 1116-1119 rewritten by main: 14; with the fix 0 (14 over 4 m, all residues), the old layout 26 -> 83 junctions
+  (41 merged groups refused, 17 more sharing a transition with one); kerb check zebras 32 -> 35 and bike crossings 23 -> 19
+  on a vertical kerb, signal check main heads missing 7 -> 11, bad junction paths 207 -> 194. Leaves pick it up from a
+  `--cube-network` run (Geneva's frame F0/L9/249_254: 4 refused).
 - **Today's caps as cores** (#854, the user, Oct 20): what no plain core holds (a road joining within a join margin of the node,
   a path's or slip lane's stub meeting it) is written as today's cap by the planner (`CorePlanner.Cap`, `JunctionCore.IsCap`):
   the cap's boundary with each mouth at today's trim across the planner's carriageway there (its transition starts at the
