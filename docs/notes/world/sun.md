@@ -8,7 +8,7 @@
   depth as the moon's (`sky_depth`): ridges, trees and buildings hide it. One direction for the sun, the moon and the
   stars (`DayNight`'s sky frame); the globe's sun (`Atmosphere.TrueSunWritten`, `Globe.Axes`) agrees to 0.002°.
 - **The look** (`shaders/common/sun_look.gdshaderinc`, shared with the space sun in `atmosphere.gdshader`): a
-  limb-darkened core at the true 0.27° radius (never under `MoonDisc.MinScreenShare` of the view, so it reads like
+  limb-darkened core at the true 0.27° radius (true since #1842, its corona the halo; at least `MoonDisc.ScreenShare` when `--sky-disc-share` sets it, so it reads like
   the moon), a corona that widens and warms through more air (`warm`: 0 high, 1 on the horizon), a starburst along
   the screen's axes (0.15 on the ground, gone once the disc is big on screen, as through the telescope; full in space).
   Parameters are `sl_`-prefixed: a shader's uniform of the same name (`warm`) broke the include.

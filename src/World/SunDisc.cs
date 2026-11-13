@@ -101,7 +101,7 @@ public partial class SunDisc : MeshInstance3D
             return;
         }
         float fov = Mathf.DegToRad(CameraLens.FovOf(cam));
-        float core = Mathf.Max(TrueRadius, fov * MoonDisc.MinScreenShare);
+        float core = Mathf.Max(TrueRadius, fov * MoonDisc.ScreenShare);
         // through more air low down: warmer and wider (0 high, 1 on the horizon)
         float warm = 1f - Mathf.SmoothStep(0.02f, 0.35f, toSun.Y);
 
