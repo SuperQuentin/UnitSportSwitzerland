@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Player;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Core;
 
@@ -43,6 +44,18 @@ public partial class FlightProbe : Node
     private readonly bool _byInput = CmdArgs.Has("--flyinput"), _boost = CmdArgs.Value("--flyinput") == "boost";
     private readonly string? _shot = CmdArgs.Value("--flyshot");
     private readonly float _askedSpeed;
+    // --flyterminator (#1798): the globe's sun (world_true_sun) taken back to the Earth through the axes its tiles are
+    // placed in, every frame: how far the terminator moved on the ground between frames, and how far it is from the
+    // ephemeris' sun. A sun left in the scene's axes across a re-anchor moves with the globe, 20 km a turn in Space.
+    private readonly bool _terminator = CmdArgs.Has("--flyterminator");
+    private EcefPos _sunLast, _truthLast;
+    private bool _sunHave;
+    private int _sunFrames, _sunJumps;
+    private double _sunStepWorstKm, _sunOffWorstKm, _sunOwnWorstKm;
+
+    /// <summary>The terminator may move this far on the ground between two frames, or be this far off the ephemeris, km.</summary>
+    public const double TerminatorStepKm = 0.5, TerminatorOffKm = 2;
+
     private double _flown, _startAltitude = double.NaN;
     private bool _started, _shotTaken;
 
@@ -58,7 +71,45 @@ public partial class FlightProbe : Node
         var forward = -camera.GlobalTransform.Basis.Z with { Y = 0 };
         _velocity = forward.Normalized() * speed;
         _askedSpeed = speed;
+        // the terminator is read once the frame's shift, globe and atmosphere have run: last of the frame
+        if (_terminator) ProcessPriority = int.MaxValue;
     }
+
+    /// <summary>The globe's sun this frame against the last one and the ephemeris, on the ground (<c>--flyterminator</c>).</summary>
+    private void WatchTerminator()
+    {
+        if (World.Globe.Axes is not { } axes || World.DayNight.Instance?.Sky is not { } sky) return;
+        var w = World.Atmosphere.TrueSunWritten;
+        if (w == Vector3.Zero) return;
+        // world axes to the Earth: the axes' columns are the world's X, Y, Z as Earth directions
+        var sun = Unit(new EcefPos(
+            axes.X.X * w.X + axes.Y.X * w.Y + axes.Z.X * w.Z,
+            axes.X.Y * w.X + axes.Y.Y * w.Y + axes.Z.Y * w.Z,
+            axes.X.Z * w.X + axes.Y.Z * w.Y + axes.Z.Z * w.Z));
+        var truth = Unit(Ephemeris.Ecef(SkyBody.Sun, SwissTime.ToUtc(sky.Date, sky.Hour)));
+        double r = Ellipsoid.Wgs84.A / 1000;
+        double off = Angle(sun, truth) * r;
+        _sunOffWorstKm = Math.Max(_sunOffWorstKm, off);
+        if (_sunHave)
+        {
+            // past the sun's own motion: the game's day runs faster than the wall clock, kilometres a frame
+            double step = Math.Abs(Angle(sun, _sunLast) - Angle(truth, _truthLast)) * r;
+            _sunStepWorstKm = Math.Max(_sunStepWorstKm, step);
+            _sunOwnWorstKm = Math.Max(_sunOwnWorstKm, Angle(truth, _truthLast) * r);
+            if (step > TerminatorStepKm) _sunJumps++;
+        }
+        (_sunLast, _truthLast, _sunHave) = (sun, truth, true);
+        _sunFrames++;
+    }
+
+    private static EcefPos Unit(EcefPos v)
+    {
+        double l = v.Length;
+        return new EcefPos(v.X / l, v.Y / l, v.Z / l);
+    }
+
+    private static double Angle(EcefPos a, EcefPos b) =>
+        Math.Acos(Math.Clamp(a.X * b.X + a.Y * b.Y + a.Z * b.Z, -1, 1));
 
     /// <summary>Parses "--fly x,y,z,yaw,speed,seconds".</summary>
     public static string[]? ParseArgs() => CmdArgs.Value("--fly")?.Split(',') is { Length: 6 } parts ? parts : null;
@@ -71,6 +122,7 @@ public partial class FlightProbe : Node
 
         // let the first arrival settle before moving, or the report is the teleport, not the flight
         if (_elapsed < _warmup) return;
+        if (_terminator) WatchTerminator();
         if (!_byInput) _camera.Position += _velocity * (float)delta;
         else if (!_started)
         {
@@ -122,6 +174,16 @@ public partial class FlightProbe : Node
         GD.Print($"[fly] worker time: {_chunks.BuildTimeReport()}");
         GD.Print($"[fly] mem={Performance.GetMonitor(Performance.Monitor.MemoryStatic) / 1048576.0:F0}MB "
             + $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)}");
+        if (_terminator)
+        {
+            bool held = _sunFrames > 0 && _sunJumps == 0 && _sunOffWorstKm <= TerminatorOffKm;
+            GD.Print($"RESULT {(held ? "PASS" : "FAIL")} flyterminator: {_sunFrames} frames, the terminator moved up to "
+                + $"{_sunStepWorstKm:F2} km on the ground between frames past the sun's own motion (up to {_sunOwnWorstKm:F2} km at the "
+                + $"game's day speed; {_sunJumps} over {TerminatorStepKm} km), "
+                + $"up to {_sunOffWorstKm:F2} km off the ephemeris (limit {TerminatorOffKm} km)");
+            GetTree().Quit(held ? 0 : 1);
+            return;
+        }
         // a stall a player can feel is a failure, not a statistic
         GetTree().Quit(over33 > 0 ? 1 : 0);
     }

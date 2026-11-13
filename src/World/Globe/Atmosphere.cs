@@ -58,23 +58,41 @@ public partial class Atmosphere : Node3D
         AddChild(_shell);
     }
 
-    private Vector3 _trueSun = Vector3.Up;
-    private double _sunAge = double.MaxValue;
+    /// <summary>The last <c>world_true_sun</c> written, in world axes (zero before the first): <c>--fly --flyterminator</c> reads it.</summary>
+    public static Vector3 TrueSunWritten { get; private set; }
+
+    private Vector3 _trueSun = Vector3.Up, _fixedSun = Vector3.Up;
+    private EcefPos _sunEcef;
+    private bool _realSun, _sunWritten;
 
     /// <summary>
-    /// Toward the real sun (the ephemeris, twice a second), not the scene's light: at night that is
-    /// the moon. Under the fixed sun of checks and shots there is no real one: the light it is.
+    /// Toward the real sun, not the scene's light: at night that is the moon. Under the fixed sun of checks and
+    /// shots there is no real one: the light it is. The ephemeris is read every frame as an Earth-fixed direction
+    /// and turned into <paramref name="axes"/>, the axes the globe's tiles are placed in (#1798). Read twice a
+    /// second in world axes, the terminator lagged twice over: it stayed behind each re-anchor while the globe
+    /// turned under it (20 km a turn in Space), and the game's day, faster than the wall clock, moved it 13 km a
+    /// read. A few trigonometric calls, no allocation; written every frame the game's clock runs.
     /// </summary>
-    private Vector3 TrueSun(double delta)
+    private Vector3 TrueSun(FrameAxes axes)
     {
-        _sunAge += delta;
-        if (_sunAge < 0.5) return _trueSun;
-        _sunAge = 0;
         if (DayNight.Instance is { Sky: { } sky })
-            _trueSun = SunPath.Toward(Core.SkyBody.Sun, sky.Date, sky.Hour, sky.E, sky.N, out _).Normalized();
-        else if (DayNight.Instance?.Sun is { } light && IsInstanceValid(light))
-            _trueSun = light.GlobalBasis.Z.Normalized();
-        RenderingServer.GlobalShaderParameterSet(TrueSunParam, _trueSun);
+        {
+            // from the Earth's centre: the parallax of a place on it is 4e-5 rad
+            var s = Ephemeris.Ecef(Core.SkyBody.Sun, SwissTime.ToUtc(sky.Date, sky.Hour));
+            double l = s.Length;
+            (_sunEcef, _realSun) = (new EcefPos(s.X / l, s.Y / l, s.Z / l), true);
+        }
+        else
+        {
+            _realSun = false;
+            if (DayNight.Instance?.Sun is { } light && IsInstanceValid(light)) _fixedSun = light.GlobalBasis.Z.Normalized();
+        }
+        var sun = _realSun
+            ? new Vector3((float)FrameAxes.Dot(_sunEcef, axes.X), (float)FrameAxes.Dot(_sunEcef, axes.Y), (float)FrameAxes.Dot(_sunEcef, axes.Z))
+            : _fixedSun;
+        if (_sunWritten && sun == _trueSun) return _trueSun;
+        _sunWritten = true;
+        RenderingServer.GlobalShaderParameterSet(TrueSunParam, TrueSunWritten = _trueSun = sun);
         return _trueSun;
     }
 
@@ -83,6 +101,10 @@ public partial class Atmosphere : Node3D
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
         var c = cam.GlobalPosition;
         float space = Globe.Present ? SpaceAt(Origin.AltitudeOf(c)) : 0;
+        // the globe's sun at every height the globe draws, in the axes it is placed in this frame (the
+        // atmosphere runs after the globe, which places its tiles again at a re-anchor)
+        var axes = Globe.Axes ?? Origin.EcefAxes;
+        var sun = TrueSun(axes);
         DimSky(space);
         // the stars by day up here (sky_point.gdshader)
         if (space != _space) RenderingServer.GlobalShaderParameterSet(WorldSpace, space);
@@ -94,7 +116,6 @@ public partial class Atmosphere : Node3D
         }
 
         // the planet's centre and its radius under the camera, in this world
-        var axes = Globe.Axes ?? Origin.EcefAxes;
         var (px, py, pz) = axes.FromEcef(new EcefPos(0, 0, 0));
         var centre = new Vector3((float)px, (float)py, (float)pz);
         _shell.GlobalPosition = centre;
@@ -103,7 +124,6 @@ public partial class Atmosphere : Node3D
         var nadir = CubeSphere.OnEllipsoid(CubeSphere.NormalAt(g.LatDeg, g.LonDeg), 0);
         double r = Math.Sqrt(FrameAxes.Dot(nadir, nadir));
 
-        var sun = TrueSun(delta);
         // written on change only (perf-no-per-frame-allocations): the centre moves with a shift, the
         // radius and the sun slowly, the far plane with the altitude
         if (centre != _centre) _material.SetShaderParameter(PlanetCentre, _centre = centre);
