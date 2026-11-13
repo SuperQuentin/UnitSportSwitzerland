@@ -57,8 +57,8 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   (`Classify`: saturation under 0.16, blue not under red).
 - **Far lakes at their own depth** (#1802): a far leaf knows its lake's bed, and its ground under the surface sinks by that
   depth (3 to 100 m), as the near leaves draw it; the coarser levels keep 100 m. A shallow harbour past the near leaves
-  was the abyss's blue, a hard line against the near water's shallows. The near water's mottling is its bed's depth
-  through the toon bands (the flat world draws it alike).
+  was the abyss's blue, a hard line against the near water's shallows. Not yet judged in a window: the near water's
+  mottling (its bed's depth through the toon bands, by its look) and whether the line is gone at the user's view.
 - **The sky down to the limb** (#1802, `Atmosphere.DimSky`): between the horizontal and the Earth's limb (3° under it at
   10 km, 8° at 60 km) the procedural sky's ground half shows. It was dimmed as `keep³` from 15 km and turned to its dark
   bottom colour within 2° (`ground_curve` 0.02): a grey band with a hard edge at eye level. Now it dims with the sky
