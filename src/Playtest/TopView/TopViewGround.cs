@@ -134,6 +134,11 @@ public static class TopViewGround
         CoverClass.Wetland => (186, 214, 200),
         CoverClass.Glacier or CoverClass.Snowfield => (236, 242, 247),
         CoverClass.Vineyard or CoverClass.Orchard => (214, 214, 164),
+        // the earth fill's biomes (#1809)
+        CoverClass.Sand => (236, 222, 186),
+        CoverClass.DryGrass => (222, 216, 176),
+        CoverClass.Tundra => (206, 204, 184),
+        CoverClass.LushGround => (178, 210, 156),
         CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea => (212, 208, 202),
         CoverClass.Park or CoverClass.Allotment or CoverClass.Cemetery => (198, 222, 176),
         CoverClass.Institution or CoverClass.Industrial or CoverClass.Quarry or CoverClass.Landfill => (216, 206, 198),

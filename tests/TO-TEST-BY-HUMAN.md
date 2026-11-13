@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
+
+In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.
+
+- [ ] Land in the Sahara (`--at 1829400,-515818 --origin 1829400,-515818`) → sand, a few low shrubs, no farms, no green. From 350 m, note how much paler the globe draws past the loaded leaves (sRGB ~243,233,230 against the fill's ~233,220,199 on Nov 13).
+- [ ] Fly to Kazakhstan, Yamal, Greenland and the Amazon (LV95 6653598,2940530; 5034504,4850762; 902899,4677347; -6055442,-697411) → dry grass with scattered shrubs; olive tundra with dwarf shrubs; ice; a broadleaf canopy with clearings.
+- [ ] Fly from Geneva out of the generator's map (west of LV95 2,385,000 or south of 974,000) → the Swiss look fades into the biome over ~20 km, no straight seam; Geneva, Lavaux and the Salève look as before.
+
 ## The globe's 20 km handover ([#1803](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1803))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, the spectator (Shift+T) over the coast at LV95 -5011173,8685903.
@@ -28,6 +36,7 @@ In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_
 - [ ] At a far building site: climb a tower crane's ladder, sit in the cab, set a pallet down with the hook, and work a self-erecting crane from its remote → you face the mast on the ladder, the jib in the cab, the mast at the remote; the pallet lands along the jib.
 - [ ] Walk up to a site's skip or rebar and look at it, then at another → the prompt and outline go to the one you face, the outline square on it.
 - [ ] Get into a car in a far underground car park (or a hall's forklift) → it wakes facing the way it stood.
+
 ## `/time` where you stand ([#1804](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1804))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator far from Switzerland (e.g. `/tp -4679383 7259183`).
@@ -35,6 +44,7 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] `/time set day`, `noon`, `sunset`, `night` there → morning daylight, the sun high, the sun on the horizon, dark; `/time` → "It is … UTC-7 (… Swiss time)".
 - [ ] Back in Switzerland, `/time set noon` → 12:00, as before; `/time set 12:00 utc` → 13:00 or 14:00.
 - [ ] Online on a server, as admin far away: `/time set noon` → the broadcast names your zone and "noon where they stand", and a second player at home sees the same clock.
+
 ## The debug menu on the earth world ([#1820](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1820), [#1743](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1743))
 
 In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2027-07-15`, F9.

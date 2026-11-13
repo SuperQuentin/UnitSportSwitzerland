@@ -13,6 +13,7 @@ using static System.Console;
 //   dotnet run --project tools/BlendCheck -c Release
 
 if (args.Contains("--fill-seams")) return FillSeamsCheck.Run(args);
+if (args.Contains("--fill-biomes")) return FillBiomesCheck.Run(args);
 if (args.Contains("--roads")) return RoadBlendCheck.Run(args);
 if (args.Contains("--generated-water")) return GeneratedWaterCheck.Run(args);
 if (args.Contains("--generated-roads")) return await GeneratedRoadsCheck.Run(args);
@@ -665,6 +666,28 @@ static class Png
         BigEndian(ihdr, 0, (uint)width);
         BigEndian(ihdr, 4, (uint)height);
         ihdr[8] = 8;   // bit depth; colour type 0 (grey), default compression, filter, no interlace
+        Chunk(f, "IHDR", ihdr);
+        Chunk(f, "IDAT", raw.ToArray());
+        Chunk(f, "IEND", []);
+    }
+
+    /// <summary>An 8-bit RGB PNG (#1809's top views), the same way.</summary>
+    public static void WriteRgb(string path, byte[] rgb, int width, int height)
+    {
+        using var raw = new MemoryStream();
+        using (var z = new System.IO.Compression.ZLibStream(raw, System.IO.Compression.CompressionLevel.Optimal, true))
+            for (int y = 0; y < height; y++)
+            {
+                z.WriteByte(0);
+                z.Write(rgb, y * width * 3, width * 3);
+            }
+        using var f = File.Create(path);
+        f.Write([137, 80, 78, 71, 13, 10, 26, 10]);
+        var ihdr = new byte[13];
+        BigEndian(ihdr, 0, (uint)width);
+        BigEndian(ihdr, 4, (uint)height);
+        ihdr[8] = 8;
+        ihdr[9] = 2;   // colour type 2: RGB
         Chunk(f, "IHDR", ihdr);
         Chunk(f, "IDAT", raw.ToArray());
         Chunk(f, "IEND", []);

@@ -117,7 +117,7 @@ public static class Surfaces
         CoverClass.Glacier or CoverClass.Snowfield => Surface.Snow,
         CoverClass.Rock or CoverClass.LooseRock or CoverClass.Boulders => Surface.Rock,
         CoverClass.Scree or CoverClass.LooseScree or CoverClass.Quarry or CoverClass.Landfill
-            or CoverClass.Military or CoverClass.Campsite => Surface.Gravel,
+            or CoverClass.Military or CoverClass.Campsite or CoverClass.Sand => Surface.Gravel,
         CoverClass.Forest or CoverClass.OpenForest or CoverClass.Woodland or CoverClass.Shrub => Surface.Forest,
         CoverClass.Water or CoverClass.Wetland => Surface.Water,
         CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea or CoverClass.TownPaving or CoverClass.TunnelRoof
