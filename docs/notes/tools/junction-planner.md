@@ -424,6 +424,16 @@ off, `--junctions new` plans and reports without writing.
   fault is a road joining short of a mouth is laid as a fallback held in short of it: old layout 128 -> 57 (118 plain cores),
   JPTH points off their core 48, path ends off their lane 78. The fallback's outline is pushed in up to four rounds while it
   helps (a push reaches only the connector points beside each kerb point), its kerbs right up to the mouths: points off 24.
+- **A merged fallback that cuts a mouth away is not written** (#1821): the star outline (the mouths joined round their centre)
+  of a long merged group swallows the streets between its members. Geneva's quay (2501060,1117896, 3 members, a road and a
+  lane side by side for 70 m with a track crossing both) lost 9 of its 20 mouth ends and paved the verge between them: 1,846
+  m2 in 70 m ear-clip slivers, half under the ground, that read as a deep pit from above (flat and earth alike: the heights
+  were right). `CorePlanner.Fallback` sets `MouthEndsCut`; on a group of two members or more any is a refusal ("a merged
+  fallback cut a mouth away", `WHYDBG`), and the members keep their own caps. One node's cut mouth stays a small residue.
+  Neither the core's area against today's caps (1.6x) nor the paving no move crosses (3 %: the fallback's moves themselves
+  run 70 m across the verge) told it apart. `RoadGen --cap-check --chunks DIR [--at E,N] [--list]` (`CapCheck`): a ground cap
+  with an at-grade car road's or track's point over 4 m inside it swallows a street; the D: region before the fix: 135 of
+  43,531 caps.
 - **Today's caps as cores** (#854, the user, Oct 20): what no plain core holds (a road joining within a join margin of the node,
   a path's or slip lane's stub meeting it) is written as today's cap by the planner (`CorePlanner.Cap`, `JunctionCore.IsCap`):
   the cap's boundary with each mouth at today's trim across the planner's carriageway there (its transition starts at the
