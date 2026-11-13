@@ -7,6 +7,17 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The globe's 20 km handover ([#1803](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1803))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, the spectator (Shift+T) over the coast at LV95 -5011173,8685903.
+
+- [ ] At the spot's night, climb slowly from 14 km to 26 km and back → the ground darkens from moonlit to night over 15-20 km with no jump at 20 km; the coast and sea stay where they are, no green land over the sea below 20 km.
+- [ ] The same by day → no jump in colour or relief at 20 km; the photo's sea and fields fade in over 20-25 km.
+- [ ] While spectating over the ground with the body falling below → no "open WINGSUIT" prompt.
+- [ ] Over Agadir (LV95 909680,-472439) and the Sahara, 2-25 km by day → sand coloured, never green or snow-white; the coast follows the ground, not kilometre steps; one sea colour across tile edges.
+- [ ] Facing the horizon from 10 to 60 km, day and night → no grey band with a hard edge between the sky and the Earth's limb.
+- [ ] Over Geneva's harbour at ~600 m looking up the lake → note whether the near water and the far lake still meet at a hard line (the far leaves now take their own depth).
+
 ## Doors, interiors and parked cars far from Switzerland ([#1799](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1799))
 
 In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at -4679383,7259173` (the generated village where the FARM CO-OP stood turned), or fly the spectator there.
