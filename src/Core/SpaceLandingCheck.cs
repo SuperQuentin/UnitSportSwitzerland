@@ -21,7 +21,7 @@ public partial class SpaceLandingCheck : Node
 
     private const double TopM = 1_500_000, AwayM = 8_000_000, LowM = 30_000, LandM = 1_000;
     // wall clock: the leaves stream on threads
-    private const double TimeoutS = 300;
+    private const double TimeoutS = 480;
 
     private readonly System.Func<FootPlayer?> _local;
     private readonly System.Func<Camera3D?> _spectator;
@@ -112,6 +112,7 @@ public partial class SpaceLandingCheck : Node
 
         await Climb(cam, TopM, 6_000);
         Log($"up at {AltitudeOf(cam.GlobalPosition) / 1000:F0} km, near {cam.Near:F1} far {cam.Far:F0}, {OriginShifter.Instance.ShiftCount - shifts0} shifts");
+        var home = Origin.ToGlobal(me.GlobalPosition);
         await Cruise(cam, AwayM, 19_000);
         Log($"away: {Origin.ToGlobal(cam.GlobalPosition).Geodetic}, {OriginShifter.Instance.ShiftCount - shifts0} shifts");
         await Climb(cam, LowM, 6_000);
@@ -123,35 +124,80 @@ public partial class SpaceLandingCheck : Node
         }
         await Climb(cam, LowM, 2_000);
         await Cruise(cam, 900_000, 2_900);
+        if (Home)
+        {
+            // the fixture world has ground at home only: back over it through Space
+            await Climb(cam, TopM, 6_000);
+            await FlyTo(cam, home, 19_000);
+            Log($"home again: {Origin.ToGlobal(cam.GlobalPosition).Geodetic}, {OriginShifter.Instance.ShiftCount - shifts0} shifts");
+        }
         // T pressed in Space, as the user did: the body waits for the ground under the camera, known only once the
-        // descent is back in the 3 km regime, and steps in on that frame
+        // descent is back in the 3 km regime, and steps in then
         await Climb(cam, 70_000, 2_000);
         Log($"T at {AltitudeOf(cam.GlobalPosition) / 1000:F1} km: {Origin.ToGlobal(cam.GlobalPosition).Geodetic}, {OriginShifter.Instance.ShiftCount - shifts0} shifts");
         _toggle();
-        while (!me.Camera.Current && AltitudeOf(cam.GlobalPosition) > LandM + 1 && RealClock.Now - _startS < TimeoutS)
+        double landM = Home ? home.Alt + LandM - 500 : LandM;
+        while (!me.Camera.Current && AltitudeOf(cam.GlobalPosition) > landM + 1 && RealClock.Now - _startS < TimeoutS)
         {
-            Step(cam, 0, 0, -System.Math.Min(1_500, AltitudeOf(cam.GlobalPosition) - LandM));
+            Step(cam, 0, 0, -System.Math.Min(1_500, AltitudeOf(cam.GlobalPosition) - landM));
             await Frame();
         }
-        Log($"into the body with the camera at {AltitudeOf(cam.GlobalPosition) / 1000:F1} km, {OriginShifter.Instance.ShiftCount - shifts0} shifts");
-        // a few frames for the body to place its camera, then watch it a while
-        for (int i = 0; i < 5; i++) await Frame();
-        string? firstBad = null;
-        bool grounded = false;
-        double until = RealClock.Now + 20;
-        while (RealClock.Now < until)
-        {
-            var current = GetViewport().GetCamera3D();
-            string? bad = current != me.Camera ? $"the camera drawn is {current?.Name ?? "none"}, not the body's" : Bad(me.Camera, me);
-            if (bad != null) { firstBad ??= bad; }
-            if (me.IsOnFloor() || _ground.TryGetSurface(me.GlobalPosition, out _)) grounded = true;
-            if (grounded && RealClock.Now > until - 15) break;
-            await Frame();
-        }
+        // the ground under the camera streams in first (the earth world's leaves, far from home the fill's)
+        for (double said = RealClock.Now, giveUp = RealClock.Now + 120; !me.Camera.Current && RealClock.Now < giveUp; await Frame())
+            if (RealClock.Now - said > 10)
+            {
+                said = RealClock.Now;
+                Log($"waiting for the ground under the camera: {(_ground.TryGetSurface(cam.GlobalPosition, out float gy) ? $"at {gy:F0}" : "none")}");
+            }
+        Log($"into the body {(me.Camera.Current ? "" : "NOT ")}with the camera at {AltitudeOf(cam.GlobalPosition) / 1000:F1} km, {OriginShifter.Instance.ShiftCount - shifts0} shifts");
+        if (!me.Camera.Current) { Finish("the body never took over from the fly camera"); return; }
+        // the body straight after the switch: where the fly camera put it, upright (world up is the local up to
+        // 0.03° in the 3 km regime)
+        Expect(me.GlobalBasis.Y.Dot(Vector3.Up) > Mathf.Cos(Mathf.DegToRad(1f)),
+            $"the body stands upright ({Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(me.GlobalBasis.Y.Dot(Vector3.Up), -1f, 1f))):F1}° off: {me.GlobalBasis})");
+        string? firstBad = await Watch(me, 10);
         Log($"after: body {me.GlobalTransform}, camera {me.Camera.GlobalTransform}, near {me.Camera.Near} far {me.Camera.Far} fov {me.Camera.Fov}");
         Expect(firstBad == null, $"the body's camera draws a sane frustum{(firstBad == null ? "" : ": " + firstBad)}");
-        Expect(grounded, $"ground under the body ({me.GlobalPosition}, on floor {me.IsOnFloor()})");
+        Expect(me.IsOnFloor(), $"the body stands on the ground ({me.GlobalPosition}, velocity {me.Velocity})");
+
+        // what a non-finite velocity spreads into (the landing spring, the arm, the zoom) must not latch: before the
+        // guard it drew nothing ever again
+        me.DebugPoisonView();
+        for (int i = 0; i < 3; i++) await Frame();
+        firstBad = await Watch(me, 3);
+        Expect(firstBad == null, $"a poisoned view is put right{(firstBad == null ? "" : ": " + firstBad)}");
+        Expect(me.IsOnFloor() && me.Velocity.IsFinite(), $"the poisoned body stands on the ground again ({me.GlobalPosition}, velocity {me.Velocity})");
         Finish(null);
+    }
+
+    /// <summary><c>--spacelandcheck home</c>: back over the start before landing (the fixture world has ground there only).</summary>
+    private static bool Home => CmdArgs.Value("--spacelandcheck", notFlag: true) == "home";
+
+    /// <summary>Flies at the camera's altitude toward <paramref name="target"/>, <paramref name="perFrameM"/> a frame.</summary>
+    private async Task FlyTo(Camera3D cam, GlobalPos target, double perFrameM)
+    {
+        while (RealClock.Now - _startS < TimeoutS)
+        {
+            var at = Origin.ToGlobal(cam.GlobalPosition);
+            var (east, north, _) = at.OffsetTo(target);
+            double d = System.Math.Sqrt(east * east + north * north);
+            if (d < 1) return;
+            double k = System.Math.Min(1, perFrameM / d);
+            Step(cam, east * k, north * k, 0);
+            await Frame();
+        }
+    }
+
+    /// <summary>The body's camera watched <paramref name="seconds"/>: the first thing wrong with it, or null.</summary>
+    private async Task<string?> Watch(FootPlayer me, double seconds)
+    {
+        string? firstBad = null;
+        for (double until = RealClock.Now + seconds; RealClock.Now < until; await Frame())
+        {
+            var current = GetViewport().GetCamera3D();
+            firstBad ??= current != me.Camera ? $"the camera drawn is {current?.Name ?? "none"}, not the body's" : Bad(me.Camera, me);
+        }
+        return firstBad;
     }
 
     /// <summary>What is wrong with the camera, or the body that holds it, for the renderer; null when nothing.</summary>
