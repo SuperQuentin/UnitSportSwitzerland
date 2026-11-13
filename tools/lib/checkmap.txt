@@ -148,6 +148,9 @@ src/Items/Placeables     quick  --campfirecheck --systems ui,physics
 src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SunDisc        quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+shaders/sun              quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+shaders/sky_point        quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none

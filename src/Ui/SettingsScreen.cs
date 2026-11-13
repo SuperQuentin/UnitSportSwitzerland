@@ -87,6 +87,7 @@ public partial class SettingsScreen : Screen
             if (!Platform.IsStandaloneVr) // the headset paces the frames
                 UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
+            UiKit.ToggleRow(rows, "Sun rays", s.SunRays, on => GameSettings.Current.SunRays = on, "Light shafts when the sun is low behind ridges, trees and buildings");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
             SkinRows(rows);
             // VR is a relaunch with OpenXR (#63); a standalone headset is always in it (#1112)

@@ -308,10 +308,11 @@ public partial class DayNight : Node
             Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
         // the sky draws the light's disc only while the light is the sun (#1798): at night it is the moon's shading,
         // lifted to 25° and night-tinted, and the procedural sky drew it as a dim blue blob where no body is (the moon
-        // itself is MoonDisc, the sun above the air is the atmosphere's)
+        // itself is MoonDisc, the sun above the air is the atmosphere's). Under the real sun never (#1479): SunDisc is
+        // the sun, at the ephemeris place; the sky's disc was a 20° glow along the light, lifted 3° at sunrise.
         if (Sun != null)
         {
-            var mode = SunElevationDeg > 3f ? DirectionalLight3D.SkyModeEnum.LightAndSky : DirectionalLight3D.SkyModeEnum.LightOnly;
+            var mode = Sky == null && SunElevationDeg > 3f ? DirectionalLight3D.SkyModeEnum.LightAndSky : DirectionalLight3D.SkyModeEnum.LightOnly;
             if (Sun.SkyMode != mode) Sun.SkyMode = mode;
         }
         if (_portalOutdoor != null)
