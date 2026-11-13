@@ -1210,8 +1210,9 @@ public partial class PlayerFeel : Node3D
                 text = InputHints.Format("{interact_mount}  take a sack (hold: 10)");
                 break;
             case RideKind.OnFoot:
-                // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below
-                if (!_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null
+                // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below; never while the
+                // spectator's camera is the one drawn (the body left behind falls, but Space flies the camera)
+                if (GetViewport().GetCamera3D() is not SpectatorCamera && !_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null
                     && _player.Terrain.TryGetHeight(_player.GlobalPosition, out float g)
                     && _player.GlobalPosition.Y - g > 12f)
                     text = $"{jump}  open WINGSUIT";
