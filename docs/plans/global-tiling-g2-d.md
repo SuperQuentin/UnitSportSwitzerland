@@ -8,7 +8,7 @@ default and deletes the flat LV95 runtime. The end state, agreed with the user o
 format**. No LV95 tile, key, record or position in the game, the wire, saves or the build's intermediate files. LV95
 survives only as notation: how swisstopo sources are read, and how a person types or reads a Swiss coordinate.
 
-Status: **D2 ready for the user's merge** (2026-11-13): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7).
+Status: **D2 ready, waiting on the server side** (2026-11-13): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7). Only SuperQuentin has the server: he builds the leaves (MapSetup's `cube-only` layer), runs the runbook's steps 1-5 (`general/linux-deploy`), then the merge and `/update` (handover: PR #1727's comment of Nov 13).
 Planned 2026-11-10 from a survey of `main` at `862ddb3e`.
 
 ## In short
@@ -302,7 +302,7 @@ State on 2026-11-13 (D2's bar recorded; first written 2026-11-10).
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
 | **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | **done** (#1712); the long drive's route #1744 (#1750), the long flight at 16x #1762 (#1783) | — |
 | **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
-| **D2**: the flip | #1726, PR #1727 | **ready, the bar recorded** (Nov 13, main merged in at b947a4886): full tier flat 357/378, earth 338/378; of the 20 rows red only under earth, 12 pass alone and 8 fail the same on plain `main` (#1743, #1745, #1787), so none is D2's; refshot parity 0 over the floor (31 judged expected); long drive, re-anchor, long flight (16x, 337 s) and `--replaycheck` ok in earth | the user's merge |
+| **D2**: the flip | #1726, PR #1727 | **ready, the bar recorded** (Nov 13, main merged in at b947a4886): full tier flat 357/378, earth 338/378; of the 20 rows red only under earth, 12 pass alone and 8 fail the same on plain `main` (#1743, #1745, #1787), so none is D2's; refshot parity 0 over the floor (31 judged expected); long drive, re-anchor, long flight (16x, 337 s) and `--replaycheck` ok in earth | SuperQuentin: the leaves built and deployed (runbook 1-5), then the merge and `/update` |
 | **D3**: the flat runtime deleted | — | waits for D2 merged, a full tier on `main`, the user's playtest of it, and #1650 | — |
 
 ## Decided without the user
