@@ -44,14 +44,16 @@ panel, nothing slow, direct gestures.
 |---|---|
 | Overall direction | The phone is the hub |
 | Inventory | Stays its own panel (the bag is not an app) |
-| Map | A flat map on the phone screen and a hologram mode; the hologram is the default in VR |
-| Phone feel | Opens in one press on the last app; the body walks while it is open |
+| Map | A large see-through map over the view (it fades further while you move) and a hologram mode with real heights; the hologram is the default in VR |
+| Phone feel | Out folded on the first press, open on the last app on the second; the body walks in both |
 | Mouse with the phone open | The cursor works the screen; hold right mouse to look |
 | Equip gesture | Double-click, and a drop on a figure of the character |
 | Crafting | Search, a pinned recipe on the HUD, crafting from a bench or a fire |
 | F2 quick menu ring | Stays as it is |
 | Pause menu | Used only for Settings and Leave: it shrinks to those |
 | VR wrist menu | Remembered as "not very functional", not re-tested: test on a headset before planning |
+| Inventory look | A see-through glass panel: the world stays visible behind it |
+| Motion | Fluid and juicy everywhere it can be: every interaction answers back |
 | First slice | The phone |
 
 Not chosen, so not planned: the inventory as a phone app, a physical backpack, retiring the ring,
@@ -61,21 +63,20 @@ a single phone key replacing M / J / P / R.
 
 ### 1A. Open in one press, walk while it is open ([#1825](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1825))
 
-- The `phone` action goes from the pocket straight to **open on the last app**, in about 0.25 s:
-  `Stage.Drawing` and `Stage.Opening` run together, the view move is one short ease. The folded cover
-  stays reachable (fold from Home, as today) and still shows when a call rings, but it is no longer
-  a stop on the way in.
+- **Folded first** (owner's review of M01): the first press of `phone` takes it out folded, in about
+  0.15 s; the second opens it on the **last app** in about 0.2 s (against 0.5 + 0.55 s today). A digit
+  on the cover still runs its tile straight into that app.
 - **The body walks on every app**, as it already does on the camera app (#1149). This replaces the
   rule from #1253, "folded walks, open stands, camera walks", with "the phone never stops the body".
   The phone keeps the events it needs and leaves the rest to the body.
 - **Views**: no app dollies square onto the screen any more, since the world must stay visible to
-  walk. The open phone is framed large in the lower part of the view. The black backdrop stays only
+  walk. The phone is framed in the lower part of the view, folded or open. The black backdrop stays only
   for the Travel curtain, which still has to hide the jump.
 - **Sprint** puts the phone away, by the same rule that holsters an item on a sprint start.
 
 | | Keyboard / mouse | Gamepad | VR | Touch |
 |---|---|---|---|---|
-| take out and open | Up (as now), one press | quick menu (hold Back) › Phone, lands open | pocket grip or wrist entry (unchanged) | PHONE pill, lands open |
+| take out (folded), then open | Up, then Up again (or a digit for a tile) | quick menu (hold Back) › Phone lands folded; A on Open | pocket grip or wrist entry (unchanged) | PHONE pill, then tap Open |
 | walk | WASD | left stick | as today | floating stick |
 | look | hold right mouse (cursor hidden while held) | right stick | head | drag off the phone |
 | work the screen | cursor, click, wheel, arrows, Enter | D-pad, A | fingertip or ray (unchanged) | tap, drag |
@@ -92,9 +93,12 @@ a single phone key replacing M / J / P / R.
 
 ### 1B. The Map app is a real map ([#1826](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1826))
 
-- `Page.Map` shows a **pan-and-zoom map** filling the screen: relief, canton borders, places, the
-  player's arrow, online friends, pins, travel points. Drag pans, the wheel zooms, a click selects a
-  place and its card offers Travel.
+- `Page.Map` projects a **large see-through map over the view**, about three quarters of it, not a
+  picture on the phone's screen: relief, canton borders, places, the player's arrow, online friends,
+  pins, travel points. The world stays visible behind it (its background about 60 % opaque at rest).
+  **While the player moves the fills fade further** (to about 20 %, over 0.2 s; borders, labels and
+  markers stay crisp) and come back when they stop. The phone stays in the hand as its source. Drag
+  pans, the wheel zooms, a click selects a place and its card offers Travel.
 - The list of #1253 stage 3 (Recent, Near you, the chips, the optional search) becomes a **drawer**
   over the map, so a pad still travels without touching the map.
 - **One map, not two**: the drawing is `AdventureMap`'s, made embeddable (its canvas and its
@@ -104,6 +108,9 @@ a single phone key replacing M / J / P / R.
 
 ### 1C. The hologram ([#1827](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1827))
 
+- **Real heights**: every summit in proportion, from the real elevation data. True 1:1 would look
+  almost flat at country size (4.6 km of height over 350 km), so one uniform vertical factor is chosen
+  in the slice; nothing is exaggerated place by place.
 - A button on the Map app (and the default in VR) projects a **3D relief above the open phone**:
   the country from the `MapRelief` lattice, and the ground round the player from heights the client
   already has, as `XR/XrMap` does today for 3 km. Markers (you, friends, pins, quests, travel points)
@@ -141,6 +148,8 @@ a single phone key replacing M / J / P / R.
   holds it. It replaces the 5x2 "Wearing" card. The figure is rebuilt only when the outfit changes.
 - Devices: pad, A held 0.3 s equips (a tap still picks up); VR, a second trigger pull on the same
   slot, and the figure's slots are laser targets; touch, a double tap.
+- **See-through glass** (owner's review of M04): the panel's background lets the world show behind
+  it; slot tiles and text keep enough backing to read.
 - The panel gets wider with a figure in it. Layout to settle in the slice: figure left, grid in the
   middle, and the right column as tabs (item card / crafting) instead of two columns side by side.
 
@@ -157,9 +166,17 @@ a single phone key replacing M / J / P / R.
 
 ### 3A. One motion language ([#1831](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1831))
 
-- One helper in `UiKit`: open (a fade and a short rise, about 0.12 s), close (about 0.08 s), and
-  hover / selection feedback. Used by the shell pages, the pause menu, the ring, the Journal,
-  Activities, the inventory and the travel menu.
+- The owner's brief: fluid and juicy animation everywhere it can be, so that interacting with things
+  is nice. Sheets M06 (panels and controls) and M07 (interactions).
+- One helper in `UiKit` for **panels and controls**: a spring open (scale .94 to 1 with a slight
+  overshoot, about 0.18 s), a faster close (about 0.10 s), a selection that slides between rows
+  instead of jumping, a press squash with a ripple, a tab underline that slides. Used by the shell
+  pages, the pause menu, the ring, the Journal, Activities, the inventory and the travel menu.
+- The same helper's pieces for **interactions**: an item lifts on pick-up and squashes on landing, an
+  equipped item flies to its slot, a count pops when it changes, crafting ends in a burst, a pinned
+  recipe flies to the HUD, the phone's hinge overshoots and an app grows out of its tile, a map pin
+  drops with a bounce, the hologram is built by a scan line.
+- Everything under 0.25 s except progress fills.
 - Motion never delays input: a panel takes keys from its first frame.
 - A "Reduce motion" setting makes it a plain fade; VR panels only fade.
 - Goes into `ui/ux-guidelines` as the rule for new panels.
@@ -172,9 +189,10 @@ a single phone key replacing M / J / P / R.
 
 ## Order
 
-1A, 1B, 1C, 1D, then 2A and 2B, then 3A. 1A comes first because every other phone slice is judged
-through it. 2A, 2B and 3A touch other files than the phone and can run beside it; 3A should land
-after 1D and 2A so it does not conflict with their layout changes.
+The motion helper of 3A first (the helper alone, small), then 1A, 1B, 1C, 1D, then 2A and 2B, each
+building the juice of what it touches on that helper; 3A's pass over the older panels (pause, ring,
+Journal, Activities, travel menu) comes last. 1A leads the phone slices because the others are judged
+through it. 2A and 2B touch other files than the phone and can run beside it.
 
 ## Rules every slice follows
 
@@ -207,5 +225,9 @@ after 1D and 2A so it does not conflict with their layout changes.
 - **`[E] Search  [R] Craft`** puts two verbs on one object, against the one-interact-key habit of
   `core/input-conventions`; it is the smallest change, not the only one.
 - **Panel width** with a figure, a grid and crafting must still fit 1152 px.
-- **The mock-ups are a first pass** (M01 to M06), not yet judged by the owner. The inventory figure's
-  slot positions in M04 are placeholders.
+- **The mock-ups** (M01 to M07) carry the owner's first review: M03 and M05 approved, M01, M02 and M04
+  revised to it, M06 reworked and M07 added for the motion. The revisions are not yet re-judged.
+- **A see-through map and inventory** must stay readable over snow, night and busy scenes; check both
+  on real screenshots, not only on the mock-ups' scenery.
+- **Juice costs frames if done carelessly**: no per-frame allocations, and nothing that moves rebuilds
+  a mesh.
