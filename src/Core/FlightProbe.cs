@@ -8,8 +8,14 @@ namespace UnitSport.Core;
 /// Streaming smoothness check: flies the spectator camera in a straight line at a fixed speed
 /// and prints the frame-time distribution, then quits.
 ///
-///   godot --path . -- --fly x,y,z,yawDeg,speedMps,seconds
+///   godot --path . -- --fly x,y,z,yawDeg,speedMps,seconds [--flyinput [boost]] [--flyshot file.png]
 ///
+/// <para>
+/// <c>--flyinput</c> (#1796) flies the camera by its own controls instead: the speed asked for is set one notch under
+/// <c>speedMps</c>, a <c>spectator_faster</c> press brings it there (and shows the readout), forward is held (and boost
+/// with <c>boost</c>), so the altitude's cap applies; the report adds the speed flown. <c>--flyshot</c> saves the
+/// window 1 s into the flight, the speed readout showing.
+/// </para>
 /// <para>
 /// The thing this measures cannot be seen in a screenshot and is not what the settle report
 /// says either: a world that loads completely can still hitch every time a ring boundary
@@ -34,6 +40,12 @@ public partial class FlightProbe : Node
     /// <summary>The earth world's streaming state, printed at the end (null on the flat world).</summary>
     public Func<string?>? Status { get; init; }
 
+    private readonly bool _byInput = CmdArgs.Has("--flyinput"), _boost = CmdArgs.Value("--flyinput") == "boost";
+    private readonly string? _shot = CmdArgs.Value("--flyshot");
+    private readonly float _askedSpeed;
+    private double _flown, _startAltitude = double.NaN;
+    private bool _started, _shotTaken;
+
     public FlightProbe(SpectatorCamera camera, ChunkManager chunks, Vector3 start, float yawDeg,
         float speed, double seconds)
     {
@@ -45,6 +57,7 @@ public partial class FlightProbe : Node
         camera.Rotation = new Vector3(Mathf.DegToRad(-6), Mathf.DegToRad(yawDeg), 0);
         var forward = -camera.GlobalTransform.Basis.Z with { Y = 0 };
         _velocity = forward.Normalized() * speed;
+        _askedSpeed = speed;
     }
 
     /// <summary>Parses "--fly x,y,z,yaw,speed,seconds".</summary>
@@ -58,7 +71,23 @@ public partial class FlightProbe : Node
 
         // let the first arrival settle before moving, or the report is the teleport, not the flight
         if (_elapsed < _warmup) return;
-        _camera.Position += _velocity * (float)delta;
+        if (!_byInput) _camera.Position += _velocity * (float)delta;
+        else if (!_started)
+        {
+            _started = true;
+            _camera.Speed = _askedSpeed / Player.SpectatorSpeed.Notch;
+            Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.SpectatorFaster, Pressed = true });
+            Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.SpectatorFaster, Pressed = false });
+            Input.ActionPress(PlayerInput.MoveForward);
+            if (_boost) Input.ActionPress(PlayerInput.FlyBoost);
+        }
+        else _flown += _camera.FlownSpeed * (_boost ? _camera.BoostMultiplier : 1f) * delta;
+        if (double.IsNaN(_startAltitude)) _startAltitude = OriginShifter.Instance?.Origin.AltitudeOf(_camera.Position) ?? _camera.Position.Y;
+        if (_shot != null && !_shotTaken && _elapsed > _warmup + 1.0)
+        {
+            _shotTaken = true;
+            GD.Print($"[fly] wrote {_shot}: {GetViewport().GetTexture().GetImage().SavePng(_shot)}");
+        }
         _frames.Add(delta * 1000);
         if (OriginShifter.Instance is { } shifter)
         {
@@ -85,6 +114,9 @@ public partial class FlightProbe : Node
         double altitude = shifterNow?.Origin.AltitudeOf(_camera.Position) ?? _camera.Position.Y;
         GD.Print($"[fly] origin shifts {_shifts} ({_shifts / _seconds:F1}/s), {_shiftMs:F0} ms in all, worst {_shiftMaxMs:F1} ms; "
             + $"ends {altitude / 1000:F1} km up, {_camera.Position.Length():F0} m from the origin");
+        if (_byInput)
+            GD.Print($"[fly] by its controls: asked {_camera.Speed:F0} m/s{(_boost ? ", boosted" : "")}, flown {_flown / 1000:F0} km "
+                + $"({_flown / _seconds:F0} m/s on average), from {_startAltitude / 1000:F1} km up");
         if (Status?.Invoke() is { } status) GD.Print($"[fly] streaming: {status}");
         GD.Print($"[fly] {_chunks.SettleReport(_camera.GlobalPosition)}");
         GD.Print($"[fly] worker time: {_chunks.BuildTimeReport()}");

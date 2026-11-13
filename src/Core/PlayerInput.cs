@@ -746,8 +746,9 @@ public partial class PlayerInput : Node
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
         // the spectator's speed (#1796): the same keys as a zoom, the shoulders a pad leaves free while spectating
-        Bind(SpectatorFaster, Keys(Key.Equal), Mouse(MouseButton.WheelUp), Button(JoyButton.RightShoulder));
-        Bind(SpectatorSlower, Keys(Key.Minus), Mouse(MouseButton.WheelDown), Button(JoyButton.LeftShoulder));
+        // (the wheel first: the hints name it first)
+        Bind(SpectatorFaster, Mouse(MouseButton.WheelUp), Keys(Key.Equal), Button(JoyButton.RightShoulder));
+        Bind(SpectatorSlower, Mouse(MouseButton.WheelDown), Keys(Key.Minus), Button(JoyButton.LeftShoulder));
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
