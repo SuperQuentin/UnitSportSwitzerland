@@ -82,5 +82,10 @@ sheets, the GWR, the 2026 TLM, OSM, Lake Geneva's bathymetry, no LWB).
   bytes; the ground of a dry leaf is the same to the centimetre at every sampled vertex (`--cube-dump`), a lake leaf
   differs at one bed vertex by 1.97 m (the water stage's #1577/#1677 since). The digest's roads: junctions 543/544 matched,
   signals 53/55.
+- **Stop and resume** (Geneva box, on D:): `cube stop` during buildings (SIGTERM, the log's `stopped`), then `cube start`
+  again. The selection was linked again and the sources checked for the 11 unfinished stages only. Heights and roads
+  were `done earlier, skipped`, buildings started over, and the run ended with `ALL STAGES DONE`: 9 leaves, network 543
+  junction records and 53 signals, as in the uninterrupted run. Through D:'s 9p mount the TLM-reading stages were slow
+  (buildings' setup 822 s, fields 745 s, region files 1689 s), which the NAS's local disks should not be.
 - Not run here: the whole server region on Linux (2 h and 18 GB of cache; B4's numbers stand in), the real NAS.
 - `--cube-dump` writes its JSON into the region folder: never point it at a reference set.
