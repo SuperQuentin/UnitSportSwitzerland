@@ -1037,6 +1037,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _spectator!.Position = origin.ToWorld(w[0], w[1], 1200);
                 return new Terrain.WaterProbe(Ground!, origin, w[0], w[1], w[2], w.Length > 3 ? w[3] : 0);
             }),
+            new(() => World.SkyShot.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                // the sun, the moon or the light's direction from a height (#1798)
+                var s = World.SkyShot.ParseArgs()!;
+                FreeSpectator();
+                return new World.SkyShot(_spectator!, origin, s[0],
+                    float.Parse(s[1], System.Globalization.CultureInfo.InvariantCulture), s[2]);
+            }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;
@@ -2707,7 +2715,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             yield return (PlayerInput.ToggleMode, "Walk");
             yield return (PlayerInput.FlyUp, "Up");
             yield return (PlayerInput.FlyDown, "Down");
-            // the speed (#1796): the readout in the top-right corner says what it is
+            // the speed (#1796): the readout under these rows says what it is (#1798)
             yield return (PlayerInput.SpectatorFaster, "Faster");
             yield return (PlayerInput.SpectatorSlower, "Slower");
             yield return (PlayerInput.Teleport, "Map");
