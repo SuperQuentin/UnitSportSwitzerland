@@ -18,16 +18,18 @@ namespace UnitSport.Interiors;
 /// and is up the tile's up within 0.5°;</item>
 /// <item>its sill is the door's, 3 cm in, within 5 cm;</item>
 /// <item>the interior node's up is the building's (the tile's) within 0.5°, and the interior doorway faces out of the
-/// plan the way the door does within 6° (the plan box's own small turn);</item>
+/// plan the way the door does within 20° (the plan box's own turn: up to 12.8° on a Geneva garage in the flat world;
+/// a turned leaf put it 70-100° off);</item>
 /// <item>the built leaf stands up its interior doorway's up within 0.5°.</item>
 /// </list>
-/// With an out dir (windowed), a picture of each door from 7 m out in front, open. RESULT ok or FAILED.
+/// A locked door (no doorway in its plan) is skipped for the next one. With an out dir (windowed), three pictures of
+/// each door (<see cref="Pose"/>). <c>--doorframeto</c> / <c>--doorframetogeo</c> fly there first. RESULT ok or FAILED.
 /// </summary>
 public partial class DoorFrameCheck : Node3D
 {
     public static (bool Requested, string? Shot) ParseArgs() => CmdArgs.FlagWithShot("--doorframecheck");
 
-    private const float AngleBar = 0.5f, PlanTurnBar = 6f, SillBar = 0.05f;
+    private const float AngleBar = 0.5f, PlanTurnBar = 20f, SillBar = 0.05f;
     private readonly IWorldGround _ground;
     private readonly WorldOrigin _origin;
     private readonly string? _dir;
@@ -36,7 +38,7 @@ public partial class DoorFrameCheck : Node3D
     private readonly List<DoorIndex.Entry> _todo = new();
     private Camera3D? _cam;
     private double _t, _phaseT;
-    private int _phase, _checked;
+    private int _phase, _checked, _measured;
     private string? _door;
 
     public DoorFrameCheck(IWorldGround ground, WorldOrigin origin, string? shot)
@@ -152,6 +154,7 @@ public partial class DoorFrameCheck : Node3D
     /// <summary>The nearest street doors round the start, of different buildings, once they are drawn.</summary>
     private double _said, _asked;
     private bool _moved;
+    private double _firstDoorT = -1;
 
     private void Pick()
     {
@@ -180,6 +183,7 @@ public partial class DoorFrameCheck : Node3D
             .OrderBy(d => d.World.DistanceTo(Position)).ToList();
         // let the leaves round the start be furnished: a few seconds after the first doors show
         // no village here: after a while, on to the nearest door drawn within 3 km (a far place picked by degrees)
+        if (doors.Count > 0 && _firstDoorT < 0) _firstDoorT = _t;
         if (doors.Count == 0 && _phaseT > 40 && !_moved && DoorIndex.All().Where(d => d.World.DistanceTo(Position) < 3000)
                 .OrderBy(d => d.World.DistanceTo(Position)).FirstOrDefault() is { Width: > 0 } village)
         {
@@ -187,15 +191,17 @@ public partial class DoorFrameCheck : Node3D
             Log($"no door within 500 m: on to {village.Key}, {village.World.DistanceTo(Position):F0} m");
             Position = village.World;
             _phaseT = 0;
+            _firstDoorT = -1;
             return;
         }
-        if (doors.Count == 0 || _phaseT < 20) { if (doors.Count == 0 && _moved) _phaseT = 0; return; }
+        // the leaves round the start furnished: 20 s after the first door near it showed
+        if (doors.Count == 0 || _t - _firstDoorT < 20) return;
         var seen = new HashSet<string>();
         // a vehicle door (garage, barn) among them when there is one: its leaves stand on the facade
         if (doors.FirstOrDefault(d => d.Vehicle) is { Width: > 0 } v) { _todo.Add(v); seen.Add(v.Key.Building.ToString()); }
         foreach (var d in doors)
         {
-            if (_todo.Count >= _count) break;
+            if (_todo.Count >= _count * 3) break;   // spares: a locked door is skipped
             if (seen.Add(d.Key.Building.ToString())) _todo.Add(d);
         }
         Log($"{doors.Count} doors within 500 m; checking {_todo.Count}: {string.Join(", ", _todo.Select(d => $"{d.Key} {d.Kind}{(d.Vehicle ? " vehicle" : "")}"))}");
@@ -204,7 +210,7 @@ public partial class DoorFrameCheck : Node3D
 
     private void Next()
     {
-        if (_checked >= _todo.Count) { Finish(); return; }
+        if (_checked >= _todo.Count || _measured >= _count) { Finish(); return; }
         var d = _todo[_checked];
         // the free camera stands in front of the door, so the manager builds it (offline, the camera's doors): no
         // player, whose body may be at the start, thousands of km back
@@ -227,6 +233,15 @@ public partial class DoorFrameCheck : Node3D
         {
             // the ask expires after 3 s while the plan is still being made, and an open door nobody stands at shuts
             // after a minute: ask again while it is shut
+            // a door its plan has no doorway for is locked (#498): not this check's business, the next one instead
+            if (InteriorManager.Instance!.GetOrCreate(_door!) is { IsCompletedSuccessfully: true, Result: { } layout }
+                && layout.EntranceOf(_door!) == null)
+            {
+                Log($"  {_door}: locked (no doorway in its plan), skipped");
+                _checked++;
+                Next();
+                return;
+            }
             if (_t - _asked > 10 && !InteriorManager.Instance!.IsOpen(_door!))
             {
                 _asked = _t;
@@ -282,6 +297,7 @@ public partial class DoorFrameCheck : Node3D
         Log($"{d.Key} {d.Kind}{(d.Vehicle ? " vehicle" : "")} hang {d.Hang}: facade doorway {face:F2}° off the wall, up {tilt:F2}°, sill {sill * 100:F1} cm; "
             + $"interior up {inTilt:F2}°, its doorway {planTurn:F2}° off the door; leaf up {leafTilt:F2}° -> {(bad.Count == 0 ? "ok" : string.Join("; ", bad))}");
         foreach (var b in bad) _faults.Add($"{d.Key}: {b}");
+        _measured++;
         _phase = 3;
         _phaseT = 0;
     }
@@ -332,9 +348,9 @@ public partial class DoorFrameCheck : Node3D
     {
         _phase = -1;
         SetProcess(false);
-        if (_todo.Count == 0) _faults.Add("no door checked");
+        if (_measured == 0) _faults.Add("no door checked");
         foreach (var f in _faults) Log("FAIL " + f);
-        Log(_faults.Count == 0 ? $"RESULT: ok ({_todo.Count} doors)" : $"RESULT: FAILED ({_faults.Count})");
+        Log(_faults.Count == 0 ? $"RESULT: ok ({_measured} doors)" : $"RESULT: FAILED ({_faults.Count})");
         GetTree().Quit(_faults.Count == 0 ? 0 : 1);
     }
 

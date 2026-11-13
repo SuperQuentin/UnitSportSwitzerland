@@ -202,7 +202,7 @@ changed is how you get there.
   outward was read straight from the tile frame as a world direction, right only where a tile is not turned: under
   `--frame earth` far from Switzerland the doorway, its leaves and the portal's view stood turned against the walls.
   `--frame earth --doorframecheck[,dir] --at E,N` opens the nearest doors offline (a vehicle door among them) and
-  compares each link's facade doorway (0.5°, 5 cm), the interior's up (0.5°) and its doorway's facing (6°: the plan
+  compares each link's facade doorway (0.5°, 5 cm), the interior's up (0.5°) and its doorway's facing (20°: the plan
   box's own turn) and the leaf's up with the door index's door; with a dir, windowed, a picture of each.
 - **Demo.** `--portaldemo[,out.png]` (`PortalDemo`): a hand-laid street with no terrain and no
   server. Two houses side by side, a house with a front and a back door (seen through, to a red
