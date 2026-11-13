@@ -82,7 +82,12 @@ uniform sampler2D tex_roof : source_color, filter_linear_mipmap_anisotropic, rep
 
 varying vec2 facade;   // x = metres along the facade, y = storey coordinate (<0 = none)
 varying float storey_count; // whole storeys in the wall; grid stops below this
-varying vec3 wall_frame; // xy = the wall's horizontal tangent (x, z), z = storey height in metres
+varying vec3 wall_frame; // xy = the wall's horizontal tangent (x, z), z = storey height in metres (the mesh's own frame)
+// wall_frame's direction in world space (#1799): the wall's tangent, a pitched roof's up-slope, a solar roof's across
+// direction, turned by MODEL_MATRIX. A building mesh is built in its tile's frame, and an earth leaf's stand-in node is
+// turned in the world (far from Switzerland by a lot): read as a world direction, the fake rooms behind the glass and
+// the window reveals were turned against their wall. A flat-world tile's node is not turned: the same values.
+varying vec3 wall_dir;
 
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
@@ -577,6 +582,9 @@ void vertex() {
     facade = UV;
     wall_frame = CUSTOM0.xyz;
     roof_kind = CUSTOM0.w;
+    vec3 frame_dir = roof_kind > 1.5 ? vec3(cos(CUSTOM0.z), 0.0, sin(CUSTOM0.z))
+        : roof_kind > 0.5 ? CUSTOM0.xyz : vec3(CUSTOM0.x, 0.0, CUSTOM0.y);
+    wall_dir = (MODEL_MATRIX * vec4(frame_dir, 0.0)).xyz;
     roof_uv = vec2(UV.x, UV2.x);
     roof_len = UV2.y;
     // a roof's UV2 is its own frame, not a storey count or a garage flag
@@ -615,9 +623,9 @@ void fragment() {
     float glass = 0.0;
     float roof_px = max(fwidth(roof_uv.x), fwidth(roof_uv.y));
     if (roof_kind > 1.5) {
-        col = solar_field(col, n, glass, roof_uv, wall_frame.xy, wall_frame.z, roof_px);
+        col = solar_field(col, n, glass, roof_uv, wall_frame.xy, atan(wall_dir.z, wall_dir.x), roof_px);
     } else if (roof_kind > 0.5) {
-        col = roof_tiles(col, n, normalize(wall_frame), roof_uv, roof_len, roof_px);
+        col = roof_tiles(col, n, normalize(wall_dir), roof_uv, roof_len, roof_px);
     }
     // a running occasion's snow on the roofs (walls are vertical and stay clear)
     col = occasion_snow(col, n, 1.0);
@@ -658,7 +666,7 @@ void fragment() {
         float px = detail * storey_h; // metres a pixel spans on this wall
 
         // the wall's frame: along (u grows that way), out toward the viewer, and the sun in it
-        vec3 along = normalize(vec3(wall_frame.x, 0.0, wall_frame.y));
+        vec3 along = normalize(vec3(wall_dir.x, 0.0, wall_dir.z));
         vec3 out_n = vec3(-along.z, 0.0, along.x);
         if (dot(out_n, n) < 0.0) {
             out_n = -out_n;
@@ -727,7 +735,7 @@ void fragment() {
                     if (storey_h > 5.5) {
                         win = stained_glass(gq, cell, lit);
                     } else {
-                        win = room_behind(world_pos + ray * th, CAMERA_POSITION_WORLD, wall_frame.xy, window_spacing, storey_h,
+                        win = room_behind(world_pos + ray * th, CAMERA_POSITION_WORLD, wall_dir.xz, window_spacing, storey_h,
                             gq.x / window_spacing, gq.y / storey_h, cell, lit, busy, TIME);
                     }
                 }

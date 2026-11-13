@@ -98,15 +98,17 @@ public sealed class DoorLink
         DoorKey.TryParse(e.Door, out var door);
         var xf = origin.TileTransform(door.Tile);
 
-        // the door spot stands 3 cm proud of the facade; the plane is the facade itself
-        var outward = new Vector3(e.DoorOutX, 0, e.DoorOutZ).Normalized();
+        // the door spot stands 3 cm proud of the facade; the plane is the facade itself. Its outward is in the tile's
+        // frame, turned into the world's with the tile, as the building is (#1799): an earth leaf's stand-in tile far
+        // from Switzerland is turned a lot against the world, and the doorway stood turned against its wall
+        var outward = (xf.Basis * new Vector3(e.DoorOutX, 0, e.DoorOutZ)).Normalized();
         var sill = xf * new Vector3(e.DoorX, e.DoorY, e.DoorZ) - outward * 0.03f;
-        var outside = Frame(sill, outward);
+        var outside = Frame(sill, outward, xf.Basis.Y);
 
         var placement = InteriorManager.PlacementFor(layout, origin);
         var inward = placement.Basis * new Vector3(e.InX, 0, e.InZ);
         // on its floor: a raised door's (#827) doorway is a storey or more up, as its sill is outside
-        var inside = Frame(placement * new Vector3(e.X, layout.EntranceY(e), e.Z), -inward.Normalized());
+        var inside = Frame(placement * new Vector3(e.X, layout.EntranceY(e), e.Z), -inward.Normalized(), placement.Basis.Y);
 
         var kind = layout.DressedKind();
         var (width, top) = layout.OpeningOf(e);
@@ -138,12 +140,22 @@ public sealed class DoorLink
     /// </summary>
     public static float SwingSecondsFor(float leafWidth) => 0.6f + 0.4f * Math.Max(0f, leafWidth - 1f);
 
-    /// <summary>A doorway frame: origin on the sill, Z out of the building, Y up.</summary>
-    private static Transform3D Frame(Vector3 origin, Vector3 outward)
+    /// <summary>
+    /// A doorway frame: origin on the sill, Z out of the building, Y its building's <paramref name="up"/> (the tile's,
+    /// or the interior's placement's: the world's Y on a flat tile, an earth leaf's own up on a stand-in, #1799).
+    /// </summary>
+    private static Transform3D Frame(Vector3 origin, Vector3 outward, Vector3 up)
     {
-        var z = new Vector3(outward.X, 0, outward.Z).Normalized();
-        var x = Vector3.Up.Cross(z);
-        return new Transform3D(new Basis(x, Vector3.Up, z), origin);
+        // up the world's (a flat-world tile, an unturned plan): exactly as before, to the bit (--doorcheck's baseline)
+        if (up.IsEqualApprox(Vector3.Up))
+        {
+            var flat = new Vector3(outward.X, 0, outward.Z).Normalized();
+            return new Transform3D(new Basis(Vector3.Up.Cross(flat), Vector3.Up, flat), origin);
+        }
+        var y = up.Normalized();
+        var z = (outward - y * outward.Dot(y)).Normalized();
+        var x = y.Cross(z);
+        return new Transform3D(new Basis(x, y, z), origin);
     }
 
     /// <summary>

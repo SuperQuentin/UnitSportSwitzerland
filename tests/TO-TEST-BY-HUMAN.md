@@ -15,6 +15,17 @@ In a window, `--frame earth --date 2027-07-15 --time 12:00`, the spectator at fu
 - [ ] Fly to Kazakhstan, Yamal, Greenland and the Amazon (LV95 6653598,2940530; 5034504,4850762; 902899,4677347; -6055442,-697411) → dry grass with scattered shrubs; olive tundra with dwarf shrubs; ice; a broadleaf canopy with clearings.
 - [ ] Fly from Geneva out of the generator's map (west of LV95 2,385,000 or south of 974,000) → the Swiss look fades into the biome over ~20 km, no straight seam; Geneva, Lavaux and the Salève look as before.
 
+## Doors, interiors and parked cars far from Switzerland ([#1799](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1799))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at -4679383,7259173` (the generated village where the FARM CO-OP stood turned), or fly the spectator there.
+
+- [ ] Walk up to a house door, open it (E / pad A), look through, walk in and back out, in first and third person → the open leaf, the doorway and the rooms seen through it line up with the facade; you step through the doorway, not the wall beside it.
+- [ ] Open a garage or barn door and drive a car through it → its leaves swing on the facade, the car passes the doorway.
+- [ ] Look at the parked cars along the street and wake one (get in) → they stand along their bays and road, and the one you wake keeps its heading.
+- [ ] At a far building site: climb a tower crane's ladder, sit in the cab, set a pallet down with the hook, and work a self-erecting crane from its remote → you face the mast on the ladder, the jib in the cab, the mast at the remote; the pallet lands along the jib.
+- [ ] Walk up to a site's skip or rebar and look at it, then at another → the prompt and outline go to the one you face, the outline square on it.
+- [ ] Get into a car in a far underground car park (or a hall's forklift) → it wakes facing the way it stood.
+
 ## `/time` where you stand ([#1804](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1804))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator far from Switzerland (e.g. `/tp -4679383 7259183`).

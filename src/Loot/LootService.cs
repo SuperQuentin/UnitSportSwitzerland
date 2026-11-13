@@ -275,8 +275,13 @@ public partial class LootService : Node
         var here = p.Terrain is { } ground ? ground.ContentName(ground.TileAt(p.GlobalPosition)) : at.Tile;
         _yards.Around(source, here, at);
         var look = -p.Camera.GlobalTransform.Basis.Z;
-        // the world's x is east and its z south, as a tile's frame
-        return _yards.Nearest(at, new Vector2(look.X, look.Z), MovedYard, out found);
+        // the look in each tile's own frame (x east, z south): an earth leaf's stand-in is turned in the world (#1799)
+        var origin = p.Origin;
+        return _yards.Nearest(at, id =>
+        {
+            var l = origin == null ? look : origin.TileTransform(id).Basis.Inverse() * look;
+            return new Vector2(l.X, l.Z);
+        }, MovedYard, out found);
     }
 
     /// <summary>The prompt line for the yard container the player faces outdoors (#627), or null.</summary>
@@ -296,7 +301,9 @@ public partial class LootService : Node
         // the world's x is east and its z south, as the stock's axes
         if (p.Origin is not { } origin) return new(InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}"), default);
         var middle = origin.ToWorld(c.E, c.N, (c.Bottom + c.Top) / 2);
-        var basis = new Basis(new Vector3(c.AxisU.X, 0, c.AxisU.Y), Vector3.Up, new Vector3(c.AxisV.X, 0, c.AxisV.Y));
+        // the stock's axes are its tile's: turned with an earth leaf's stand-in (#1799)
+        var basis = origin.TileTransform(TileOf(c)).Basis
+                    * new Basis(new Vector3(c.AxisU.X, 0, c.AxisU.Y), Vector3.Up, new Vector3(c.AxisV.X, 0, c.AxisV.Y));
         return new(InputHints.Prompt(PlayerInput.InteractMount, empty ? $"Search the {what} (empty)" : $"Search the {what}"),
             Outline.Box(null, new Transform3D(basis, middle), new Vector3(2 * c.HalfU, c.Top - c.Bottom, 2 * c.HalfV)));
     }
