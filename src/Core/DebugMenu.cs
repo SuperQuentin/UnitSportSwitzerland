@@ -1,6 +1,7 @@
 using System.Globalization;
 using Godot;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Earth;
 using UnitSport.Ui;
 
 namespace UnitSport.Core;
@@ -32,6 +33,8 @@ public partial class DebugMenu : CanvasLayer
     public static bool Allowed => Permissions.AdminTools;
 
     private readonly ChunkManager _chunks;
+    private readonly EarthWorld? _earth;
+    private readonly Func<World.Globe?> _globe;
     private readonly WorldOrigin _origin;
     private readonly Func<Node3D?> _nearTrees;
     private readonly Action<string> _say;
@@ -62,11 +65,14 @@ public partial class DebugMenu : CanvasLayer
     internal DebugViewMode View => _view;
     internal DebugOverlay Overlay => _overlay;
     internal LanePlanDebug Lanes => _lanes;
+    internal string ReadoutText => _readout.Text;
 
     public DebugMenu(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> nearTrees, Action<string> say,
-        Action<double>? askSpeed = null)
+        Action<double>? askSpeed = null, EarthWorld? earth = null, Func<World.Globe?>? globe = null)
     {
         _chunks = chunks;
+        _earth = earth;
+        _globe = globe ?? (() => null);
         _origin = origin;
         _nearTrees = nearTrees;
         _say = say;
@@ -80,12 +86,12 @@ public partial class DebugMenu : CanvasLayer
     {
         // over the chat (15), under the place search (20) and the menus
         Layer = 16;
-        _overlay = new DebugOverlay(_chunks, _origin);
+        _overlay = new DebugOverlay(_chunks, _origin, _earth);
         // the overlay draws in the world: it belongs under the world, not this canvas layer
         GetParent().CallDeferred(Node.MethodName.AddChild, _overlay);
         _zfight = new ZFightOverlay(_origin);
         GetParent().CallDeferred(Node.MethodName.AddChild, _zfight);
-        _lanes = new LanePlanDebug(_chunks, _origin);
+        _lanes = new LanePlanDebug(_chunks, _origin, _earth);
         GetParent().CallDeferred(Node.MethodName.AddChild, _lanes);
 
         var panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
@@ -122,14 +128,21 @@ public partial class DebugMenu : CanvasLayer
 
         rows.AddChild(UiKit.Section("Overlays"));
         var overlays = Grid(rows);
-        Switch(overlays, "tiles", "Tile boundaries", false, on => _overlay.Tiles = on,
-            "Each loaded tile outlined on its ground, coloured by the stride it is drawn at: green full\n"
-            + "resolution, through yellow, to red coarse; grey not built yet. Generated tiles are dashed.");
-        Switch(overlays, "labels", "Tile labels", false, on => _overlay.Labels = on,
-            "Tile id, stride and real or generated over the tiles around the camera.");
-        Switch(overlays, "origin", "World origin", false, on => _overlay.WorldOrigin = on,
-            "The floating origin's mast (seen through the ground), its east (red) and north (blue)\n"
-            + "axes, and the circle past which the camera moves it.");
+        // the earth world (#1743): its ground is cube leaves, not LV95 tiles; each switch says what it acts on there
+        bool earth = _earth != null;
+        Switch(overlays, "tiles", earth ? "Leaf edges" : "Tile boundaries", false, on => _overlay.Tiles = on, earth
+            ? "Each leaf loaded or loading outlined on its ground along its own edges, a mast at a corner:\n"
+              + "green furnished, yellow its ground only, grey loading. Fill leaves are dashed."
+            : "Each loaded tile outlined on its ground, coloured by the stride it is drawn at: green full\n"
+              + "resolution, through yellow, to red coarse; grey not built yet. Generated tiles are dashed.");
+        Switch(overlays, "labels", earth ? "Leaf labels" : "Tile labels", false, on => _overlay.Labels = on, earth
+            ? "Cube key, real or fill, and furnished, ground only or loading, over the leaves round the camera."
+            : "Tile id, stride and real or generated over the tiles around the camera.");
+        Switch(overlays, "origin", earth ? "Earth anchor" : "World origin", false, on => _overlay.WorldOrigin = on, earth
+            ? "The anchor frame's mast (seen through the ground), its east (red) and north (blue) axes,\n"
+              + "and the circle past which the camera re-anchors it (3 km near the ground, 20 km in Space)."
+            : "The floating origin's mast (seen through the ground), its east (red) and north (blue)\n"
+              + "axes, and the circle past which the camera moves it.");
         Switch(overlays, "zfight", "Z-fighting", false, on => _zfight.On = on,
             $"Faces that fight for the depth buffer within {ZFightOverlay.Radius:0} m of the camera, in magenta through\n"
             + "everything: same-facing faces under 8 mm apart that overlap and can be seen (#788).\n"
@@ -147,19 +160,31 @@ public partial class DebugMenu : CanvasLayer
         LayerSwitch(terrain, "buildings", "Buildings", TileLayers.Buildings);
         LayerSwitch(terrain, "trees", "Trees", TileLayers.Trees);
         LayerSwitch(terrain, "water", "Water", TileLayers.Water);
-        Switch(terrain, "horizon", "Far horizon", true, on => { _hideHorizon = !on; ApplyHidden(); },
-            "The decimated ring of the whole country beyond the streamed tiles.");
-        Switch(terrain, "curvature", "Earth curvature", Curvature.Drawn, on => Curvature.Drawn = on,
+        Switch(terrain, "horizon", earth ? "Globe" : "Far horizon", true, on => { _hideHorizon = !on; ApplyHidden(); }, earth
+            ? "The globe: the far view beyond the loaded leaves, at every altitude."
+            : "The decimated ring of the whole country beyond the streamed tiles.");
+        var curvature = Switch(terrain, "curvature", "Earth curvature", Curvature.Drawn, on => Curvature.Drawn = on,
             "The ground drops away with distance as on the real Earth (246 m at 60 km). Off: the flat world, as before #187.");
-        Switch(terrain, "real", "Real tiles", true, on => { _hideReal = !on; ApplyHidden(); },
-            "Tiles built from swisstopo data.");
-        Switch(terrain, "generated", "Generated tiles", true, on => { _hideGenerated = !on; ApplyHidden(); },
-            "Tiles the generator made where there is no real data.");
+        if (earth)
+        {
+            // the leaves are round themselves: nothing left for the switch to flatten (disabled, with the reason, not removed)
+            curvature.Disabled = true;
+            curvature.TooltipText = "Not on the earth world: its leaves stand in their true Earth positions, so the ground\n"
+                + "is round itself; the shaders only add refraction's lift. Nothing to turn off.";
+        }
+        Switch(terrain, "real", earth ? "Real leaves" : "Real tiles", true, on => { _hideReal = !on; ApplyHidden(); }, earth
+            ? "Leaves built from swisstopo data (a border leaf, part real, part fill, counts as real)."
+            : "Tiles built from swisstopo data.");
+        Switch(terrain, "generated", earth ? "Fill leaves" : "Generated tiles", true, on => { _hideGenerated = !on; ApplyHidden(); }, earth
+            ? "Leaves the fill made round the region, where there is no real data."
+            : "Tiles the generator made where there is no real data.");
         Switch(terrain, "fill", "Generated fill", GameSettings.Current.GeneratedFill, on =>
         {
             GameSettings.Current.GeneratedFill = on;
             GameSettings.Current.Commit();
-        }, "The saved setting (also in Settings): off unloads every generated tile and stops making them.");
+        }, earth
+            ? "The saved setting (also in Settings): off, no fill leaf is made from now on; those loaded stay until they are let go."
+            : "The saved setting (also in Settings): off unloads every generated tile and stops making them.");
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("View"));
@@ -185,10 +210,11 @@ public partial class DebugMenu : CanvasLayer
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Streaming"));
-        Switch(rows, "freeze", "Freeze tile streaming", false, on => _chunks.FreezeRings = on,
-            "What is loaded stays loaded at the stride it has: fly away and look at it from outside.");
+        Switch(rows, "freeze", earth ? "Freeze leaf streaming" : "Freeze tile streaming", false, on => SetFrozen(on), earth
+            ? "What is loaded stays loaded: no leaf is asked for or let go. Fly away and look at it from outside."
+            : "What is loaded stays loaded at the stride it has: fly away and look at it from outside.");
         var buttons = UiKit.HBox(6);
-        buttons.AddChild(ActionButton("Rebuild tiles", _chunks.RebuildVisuals));
+        buttons.AddChild(ActionButton(earth ? "Rebuild leaves" : "Rebuild tiles", RebuildWorld));
         buttons.AddChild(ActionButton("Copy position", CopyPosition));
         rows.AddChild(buttons);
         var flicker = ActionButton("Flicker shot", () => _ = TakeFlickerShot());
@@ -252,6 +278,7 @@ public partial class DebugMenu : CanvasLayer
         box.AddThemeStyleboxOverride("pressed", Row);
         box.AddThemeStyleboxOverride("hover", RowHover);
         box.AddThemeStyleboxOverride("hover_pressed", RowHover);
+        box.AddThemeStyleboxOverride("disabled", Row);
         // the theme's focus outline has menu-sized margins, which a button counts in its height
         box.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
         box.Toggled += pressed => set(pressed);
@@ -301,6 +328,9 @@ public partial class DebugMenu : CanvasLayer
     {
         _chunks.SetDebugHidden(_hiddenLayers, _hideReal, _hideGenerated);
         if (_chunks.Horizon != null) _chunks.Horizon.Visible = !_hideHorizon;
+        // the earth world (#1743): the leaves' meshes and furnished nodes, and the globe as its far view
+        _earth?.SetDebugHidden(_hiddenLayers, _hideReal, _hideGenerated);
+        if (_globe() is { } globe) globe.DebugHidden = _hideHorizon;
         // the high-detail styles' trees near the camera are one node of their own
         if (_nearTrees() is { } near) near.Visible = (_hiddenLayers & TileLayers.Trees) == 0;
     }
@@ -308,8 +338,22 @@ public partial class DebugMenu : CanvasLayer
     private void SetView(DebugViewMode mode)
     {
         if (mode == _view) return;
-        DebugView.Apply(GetViewport(), _chunks, mode, _view);
+        DebugView.Apply(GetViewport(), RebuildWorld, mode, _view);
         _view = mode;
+    }
+
+    /// <summary>The streaming held where it is: the flat tiles' rings, and the earth world's leaves.</summary>
+    private void SetFrozen(bool on)
+    {
+        _chunks.FreezeRings = on;
+        if (_earth != null) _earth.Frozen = on;
+    }
+
+    /// <summary>The streamed world's meshes built again (the wireframe view needs it): the leaves on earth, else the tiles.</summary>
+    private void RebuildWorld()
+    {
+        if (_earth != null) _earth.RebuildVisuals();
+        else _chunks.RebuildVisuals();
     }
 
     /// <summary>
@@ -370,7 +414,7 @@ public partial class DebugMenu : CanvasLayer
         _hiddenLayers = TileLayers.None;
         _hideHorizon = _hideReal = _hideGenerated = false;
         ApplyHidden();
-        _chunks.FreezeRings = false;
+        SetFrozen(false);
         SetView(DebugViewMode.Normal);
         _viewPicker.Selected = 0;
         if (_timeScaled) _askSpeed(SimClock.Normal);
@@ -535,6 +579,7 @@ public partial class DebugMenu : CanvasLayer
         if (GetViewport().GetCamera3D() is not { } cam) return "no camera";
         var ci = CultureInfo.InvariantCulture;
         var pos = cam.GlobalPosition;
+        if (_earth != null) return EarthReadout(pos, ci);
         var (e, n) = _origin.ToLv95(pos);
         var tile = _origin.TileAt(pos);
         int stride = _chunks.StrideAt(tile);
@@ -549,6 +594,36 @@ public partial class DebugMenu : CanvasLayer
             _chunks.IsGenerated(tile) ? "generated" : "real", ground, cover,
             _origin.E, _origin.N, shifter?.ShiftCount ?? 0,
             _chunks.ActiveChunkCount, _chunks.FreezeRings ? "  FROZEN" : "",
+            _zfight.Status.Length > 0 ? "\nzfight " + _zfight.Status : "");
+    }
+
+    /// <summary>
+    /// The earth world's readout (#1743): where the camera is in LV95 notation and altitude, the leaf under it (real or
+    /// fill, and how far it has come), the ground, the anchor and its re-anchors, and the leaves loaded and loading.
+    /// </summary>
+    private string EarthReadout(Vector3 pos, CultureInfo ci)
+    {
+        var (e, n) = _origin.ToLv95(pos);
+        double alt = _origin.AltitudeOf(pos);
+        var leaf = Terrain.Format.CubeKey.FromEcef(_origin.ToEcef(pos), Terrain.Leaves.LeafFrames.LeafLevel);
+        string state = _earth!.StateOf(leaf) switch
+        {
+            EarthWorld.LeafState.Furnished => "furnished",
+            EarthWorld.LeafState.Ground => "ground only",
+            EarthWorld.LeafState.Loading => "loading",
+            _ => "not loaded",
+        };
+        var ground = _earth.Ground;
+        string under = ground.TryGetHeight(pos, out float h)
+            ? string.Format(ci, "{0:F1} m, {1:F0} m below", h, pos.Y - h) : "not loaded";
+        string cover = ground.TryGetCover(pos, out var c) ? c.ToString() : "-";
+        var shifter = OriginShifter.Instance;
+        return string.Format(ci,
+            "LV95   {0:F0} / {1:F0}  alt {2:F0} m\nleaf   {3}  {4}  {5}\nground {6}  {7}\n"
+            + "anchor {8:F0} / {9:F0}  re-anchors {10}\nleaves {11} loaded, {12} loading{13}{14}",
+            e, n, alt, leaf, _earth.IsReal(leaf) ? "real" : "fill", state, under, cover,
+            _origin.E, _origin.N, shifter?.ShiftCount ?? 0,
+            _earth.NearCount, _earth.LoadingCount, _earth.Frozen ? "  FROZEN" : "",
             _zfight.Status.Length > 0 ? "\nzfight " + _zfight.Status : "");
     }
 }

@@ -82,3 +82,26 @@
   `--chunks test_output/signal-region --generated off --origin 2910500,1322500 --at 2910500,1322500 --debugview lanes`
   with a top-down shot `0,g95,0,-90,0,6,out.png`.
 - **Z-fighting** overlay (`zfight`) and **Flicker shot** button (`--debugview flicker`): `general/zfight` (#788).
+- **On the earth world** (`--frame earth`, #1743): the menu acts on `EarthWorld` (`EarthWorld.Debug.cs`) and the globe, the
+  flat `ChunkManager` an earth client still holds being empty there. Each switch says what it acts on in its text and tip.
+  - "Leaf edges" / "Leaf labels": every leaf loaded or loading outlined along its own lattice edges (`CubeKey.Vertex`, 2^8
+    steps, inset two), draped on the leaves' ground; green furnished, yellow its ground only, grey loading; fill leaves
+    dashed; a mast at a corner; labels (cube key, real or fill, state) on the leaves within 900 m.
+  - "Earth anchor": the anchor frame's mast and axes and the re-anchor circle (`OriginShifter.GroundMode`, 3 km; `SpaceMode`
+    in Space), the shifts counted as re-anchors.
+  - Layers: the leaf's own mesh is the ground; roads, buildings, trees and water are its furnished `ChunkNode`'s
+    (`HideLayers`); "Real leaves" / "Fill leaves" hide whole leaves (`EarthWorld.IsReal`: in `LeafStore`, a part-real
+    border leaf counts as real); "Globe" sets `Globe.DebugHidden` (no patch drawn). New leaves take the flags in `Add`.
+  - "Earth curvature" is disabled there with its reason: the leaves are round themselves, the shaders only add refraction.
+  - "Freeze leaf streaming": `EarthWorld.Frozen` skips the plan (no leaf asked for or dropped; queued ones still land;
+    the collision patches still follow the bodies). "Rebuild leaves" and the wireframe view: `EarthWorld.RebuildVisuals`
+    marks every loaded leaf stale, built again in place.
+  - Clay and vertex colours reach the leaves and the globe below 20 km through the kit's terrain material (the globe's own
+    far shader above that is not swapped).
+  - The lane plan reads the loaded leaves' stand-in road records (`EarthWorld.StandRoadsNear`) instead of LV95 road tiles.
+  - The readout: LV95 notation and altitude, the leaf under the camera (real or fill, state), the anchor, re-anchors,
+    leaves loaded and loading. Traffic's tools draw from `World.Traffic`, which runs on the leaves' roads already.
+  - Not drawn: the globe's tile levels by altitude (follow-up if wanted).
+  - `--debugcheck` clicks every tool on and off in either frame and asserts what it draws or hides (lines, labels, the
+    roads mesh, real and fill leaves, the globe, freeze and the readout, each view); under earth it waits for a leaf's ground
+    first: `--frame earth --leaves <b4> --chunks <D:> --at 2500956,1117569 --debugcheck --systems ui`.

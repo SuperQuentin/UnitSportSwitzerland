@@ -1662,10 +1662,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // F9 or /debug: overlays, terrain layers and view modes, alone or as an admin (#339)
         var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast,
-            scale => _chat?.Send($"/speed {scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}"));
+            scale => _chat?.Send($"/speed {scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}"),
+            _earth, () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null);
         AddChild(debug);
         _chat.DebugRequested += debug.Open;
-        if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));
+        if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks, _earth));
 
         // G opens a GPX track for playback; the session owns its own camera and HUD
         // on the world's ground in either frame (#1752): the leaves and their stand-ins under --frame earth

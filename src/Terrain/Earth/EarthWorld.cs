@@ -367,6 +367,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>Which leaves are wanted: every leaf within <see cref="NearM"/> of a focus, by a walk over cube neighbours.</summary>
     private void Plan()
     {
+        // the debug menu's freeze: what is loaded stays, nothing more is asked for
+        if (Frozen) return;
         _foci.Clear();
         bool lifted = false;
         if (Camera?.Invoke() is { } cam && cam.IsFinite()) AddFocus(cam, ref lifted);
@@ -554,6 +556,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             leaf.Node = Commit(leaf.Key, f);
             leaf.Furniture = null;
         }
+        if (_debugHidden != TileLayers.None || _hideReal || _hideFill) ApplyDebugHidden(leaf);
         _spent.LeafFurnish += Ms(t);
     }
 

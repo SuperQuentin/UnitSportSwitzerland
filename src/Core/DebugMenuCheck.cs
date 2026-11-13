@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Items;
 using UnitSport.Styles;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Earth;
 
 namespace UnitSport.Core;
 
@@ -13,7 +14,13 @@ namespace UnitSport.Core;
 /// Offline (<c>--debugcheck --systems ui</c>, tier quick): F9 opens it; a click hides the ground of
 /// every tile; Space does not flip the switch clicked last (no keyboard focus); Esc closes it and
 /// does not open the pause menu, and the ground stays hidden; <c>/debug</c> opens it again; the clay
-/// view survives a <c>/style</c> restyle and Normal gives the new style's shader back.
+/// view survives a <c>/style</c> restyle and Normal gives the new style's shader back. Then every
+/// tool is clicked on and off, each asserted on what it draws or hides (#1743).
+/// </para>
+///
+/// <para>
+/// In either frame: under <c>--frame earth</c> the ground is the earth world's leaves (their meshes and
+/// furnished nodes, the globe for the far view), and the same clicks are held to them.
 /// </para>
 ///
 /// <para>
@@ -34,15 +41,19 @@ public partial class DebugMenuCheck : ChatProbe
 
     private readonly DebugMenu _menu;
     private readonly ChunkManager _chunks;
+    private readonly EarthWorld? _earth;
 
-    public DebugMenuCheck(ItemController items, DebugMenu menu, ChunkManager chunks) : base(items, "debugcheck")
+    public DebugMenuCheck(ItemController items, DebugMenu menu, ChunkManager chunks, EarthWorld? earth = null) : base(items, "debugcheck")
     {
         _menu = menu;
         _chunks = chunks;
+        _earth = earth;
         Name = "DebugMenuCheck";
     }
 
     public DebugMenuCheck() : this(null!, null!, null!) { }
+
+    private string World => _earth != null ? "leaf" : "tile";
 
     public override async void _Ready()
     {
@@ -50,13 +61,19 @@ public partial class DebugMenuCheck : ChatProbe
         if (online)
         {
             if (!await Joined(150)) return;
+            // a leaf's ground drawn before the tools are looked at
+            if (_earth != null && !await Until(() => GroundMesh() != null, 180))
+            {
+                Fail("no leaf ground built");
+                return;
+            }
             await Online();
         }
         else
         {
-            if (!await Until(() => Chat != null && TileGround() != null, 90))
+            if (!await Until(() => Chat != null && GroundMesh() != null, _earth != null ? 240 : 90))
             {
-                Fail("no tile ground built");
+                Fail($"no {World} ground built");
                 return;
             }
             Chat!.LineReceived += (line, _) => _heard.Add(line);
@@ -77,8 +94,8 @@ public partial class DebugMenuCheck : ChatProbe
         var ground = _menu.SwitchBox("ground");
         await Click(ground);
         Expect(!ground.ButtonPressed, "a click turns the Ground switch off");
-        Expect((_chunks.HiddenLayers & TileLayers.Ground) != 0, "the click hides the ground layer");
-        Expect(TileGround() is { Visible: false }, "a loaded tile's ground mesh is hidden");
+        Expect((HiddenLayers & TileLayers.Ground) != 0, "the click hides the ground layer");
+        Expect(GroundMesh() is { Visible: false }, $"a loaded {World}'s ground mesh is hidden");
         Expect(GetViewport().GuiGetFocusOwner() == null, $"no control holds the keyboard ({GetViewport().GuiGetFocusOwner()?.Name})");
 
         await Key(Godot.Key.Space);
@@ -87,16 +104,17 @@ public partial class DebugMenuCheck : ChatProbe
         await Key(Godot.Key.Escape);
         Expect(!_menu.IsOpen, "Esc closes the menu");
         Expect(!PauseMenuOpen(), "Esc on the debug menu does not open the pause menu");
-        Expect(TileGround() is { Visible: false }, "the ground stays hidden with the menu closed");
+        Expect(GroundMesh() is { Visible: false }, "the ground stays hidden with the menu closed");
 
         Chat!.Send("/debug");
         await Frames(3);
         Expect(_menu.IsOpen, "/debug opens it again");
         await Click(ground);
-        Expect(TileGround() is { Visible: true }, "a second click shows the ground again");
+        Expect(GroundMesh() is { Visible: true }, "a second click shows the ground again");
 
         await Restyle();
         await LanePlan();
+        await Tools();
 
         await Key(Godot.Key.F9);
         Expect(!_menu.IsOpen, "F9 closes it");
@@ -119,6 +137,8 @@ public partial class DebugMenuCheck : ChatProbe
         await Frames(30);
         Expect(lanes.Builds == builds, $"and not drawn again while the camera stays ({lanes.Builds - builds} more)");
         GD.Print($"[debugcheck] lane plan: {lanes.StripQuads} strip quads, {lanes.MouthLabels} labels, {lanes.Arrows} arrows");
+        // on the leaves the plan is read from their stand-in road records: a furnished leaf with roads draws strips
+        if (_earth?.LeafNodeWithRoads() != null) Expect(lanes.StripQuads > 0, "the lane plan draws the leaves' streets");
         await Click(box);
         Expect(!lanes.On && lanes.Triangles == 0 && !lanes.LegendShown, "a second click clears it and hides the legend");
     }
@@ -150,6 +170,96 @@ public partial class DebugMenuCheck : ChatProbe
         Expect(GroundShader() == want, $"Normal gives back {to}'s terrain shader ({GroundShader()?.ResourcePath})");
     }
 
+    /// <summary>
+    /// Every other tool clicked on, held to what it draws or hides, and clicked off again (#1743): the overlays, the
+    /// terrain layers, real and generated (leaves or tiles), the far view, the views, freezing and the readout.
+    /// </summary>
+    private async Task Tools()
+    {
+        var overlay = _menu.Overlay;
+
+        await Toggle("tiles", true);
+        Expect(await Until(() => overlay.GroundLines > 0, 5), $"{(_earth != null ? "leaf edges" : "tile boundaries")} are drawn ({overlay.GroundLines} lines)");
+        await Toggle("tiles", false);
+        Expect(await Until(() => overlay.GroundLines == 0, 3), "and cleared");
+
+        await Toggle("labels", true);
+        Expect(await Until(() => overlay.LabelsShown > 0, 5), $"{World} labels are shown ({overlay.LabelsShown})");
+        await Toggle("labels", false);
+
+        await Toggle("origin", true);
+        Expect(await Until(() => overlay.GroundLines > 0, 5), $"the {(_earth != null ? "earth anchor's" : "world origin's")} circle is drawn ({overlay.GroundLines} lines)");
+        await Toggle("origin", false);
+
+        // a layer that stands on the ground: the roads of a loaded tile or leaf
+        if (RoadNode() is { } roads)
+        {
+            await Toggle("roads", false);
+            Expect(roads.RoadMesh is { Visible: false }, $"Roads off hides a {World}'s roads");
+            await Toggle("roads", true);
+            Expect(roads.RoadMesh is { Visible: true }, "and on shows them");
+        }
+        else GD.Print($"[debugcheck] no {World} with roads loaded: the roads switch not checked");
+
+        if (_earth != null)
+        {
+            if (_earth.LeafMesh(real: true) is { } real)
+            {
+                await Toggle("real", false);
+                Expect(!real.Visible, "Real leaves off hides a real leaf");
+                await Toggle("real", true);
+                Expect(real.Visible, "and on shows it");
+            }
+            if (_earth.LeafMesh(real: false) is { } fill)
+            {
+                await Toggle("generated", false);
+                Expect(!fill.Visible, "Fill leaves off hides a fill leaf");
+                await Toggle("generated", true);
+                Expect(fill.Visible, "and on shows it");
+            }
+            if (GetTree().Root.FindChild("Globe", true, false) is World.Globe globe)
+            {
+                await Toggle("horizon", false);
+                Expect(globe.DebugHidden, "Globe off hides the globe");
+                await Toggle("horizon", true);
+                Expect(!globe.DebugHidden, "and on shows it");
+            }
+            else GD.Print("[debugcheck] no globe: its switch not checked");
+            Expect(_menu.SwitchBox("curvature").Disabled && _menu.SwitchBox("curvature").TooltipText.Contains("Not on the earth world"),
+                "Earth curvature is disabled on the earth world, with its reason");
+        }
+        else if (_chunks.Horizon is { } horizon)
+        {
+            await Toggle("horizon", false);
+            Expect(!horizon.Visible, "Far horizon off hides the horizon");
+            await Toggle("horizon", true);
+        }
+
+        await Toggle("freeze", true);
+        Expect(_earth != null ? _earth.Frozen : _chunks.FreezeRings, $"Freeze holds the {World} streaming");
+        await Seconds(0.4);
+        Expect(_menu.ReadoutText.Contains("FROZEN"), "and the readout says so");
+        await Toggle("freeze", false);
+        Expect(_earth != null ? !_earth.Frozen : !_chunks.FreezeRings, "and lets it go");
+
+        string readout = _menu.ReadoutText;
+        Expect(readout.Contains(_earth != null ? "leaf   F" : "tile   "), $"the readout names the {World} under the camera ({readout.Replace('\n', '|')})");
+        Expect(!readout.Contains("ground not loaded"), "and the ground under it");
+
+        await PickView(DebugViewMode.VertexColours);
+        Expect(GroundShader() is { } colours && colours != DebugView.Clay && colours.Code.Contains("COLOR.rgb"), "vertex colours replace the ground's shader");
+        await PickView(DebugViewMode.Overdraw);
+        Expect(GetViewport().DebugDraw == Viewport.DebugDrawEnum.Overdraw, "overdraw is the viewport's");
+
+        // wireframe builds the ground again: Godot draws the lines of a mesh made after the switch only
+        var before = GroundMesh()?.Mesh;
+        await PickView(DebugViewMode.Wireframe);
+        Expect(GetViewport().DebugDraw == Viewport.DebugDrawEnum.Wireframe, "wireframe is the viewport's");
+        Expect(await Until(() => GroundMesh() is { Mesh: { } now } && now != before, 60), $"and the {World}s' meshes are built again for it");
+        await PickView(DebugViewMode.Normal);
+        Expect(GetViewport().DebugDraw == Viewport.DebugDrawEnum.Disabled, "Normal clears the viewport's draw");
+    }
+
     private static BaseMaterial3D.ShadingModeEnum ShadingIn(VisualStyle style) =>
         style == VisualStyle.Ps1 ? BaseMaterial3D.ShadingModeEnum.Unshaded : BaseMaterial3D.ShadingModeEnum.PerPixel;
 
@@ -173,7 +283,7 @@ public partial class DebugMenuCheck : ChatProbe
         await Click(_menu.SwitchBox("tiles"));
         await Click(_menu.SwitchBox("lanes"));
         await PickView(DebugViewMode.Clay);
-        Expect((_chunks.HiddenLayers & TileLayers.Ground) != 0 && _menu.Overlay.Tiles && _menu.View == DebugViewMode.Clay,
+        Expect((HiddenLayers & TileLayers.Ground) != 0 && _menu.Overlay.Tiles && _menu.View == DebugViewMode.Clay,
             "ground hidden, tile boundaries and clay on");
 
         Chat.Send($"/admin remove {CmdArgs.Value("--name")}");
@@ -184,7 +294,7 @@ public partial class DebugMenuCheck : ChatProbe
         }
         await Frames(3);
         Expect(!_menu.IsOpen, "losing admin closes the menu");
-        Expect(_chunks.HiddenLayers == TileLayers.None, "and shows every layer again");
+        Expect(HiddenLayers == TileLayers.None, "and shows every layer again");
         Expect(!_menu.Overlay.Tiles && _menu.View == DebugViewMode.Normal, "and turns the overlay and the clay view off");
         Expect(!_menu.Lanes.On && !_menu.SwitchBox("lanes").ButtonPressed, "and the lane plan");
         Expect(_menu.SwitchBox("ground").ButtonPressed && !_menu.SwitchBox("tiles").ButtonPressed, "and puts the switches back");
@@ -209,6 +319,12 @@ public partial class DebugMenuCheck : ChatProbe
     /// <summary>A left click at the middle of a control, pushed into the viewport as the mouse would.</summary>
     private async Task Click(Control control)
     {
+        // a switch below the fold: brought into the panel's view first, as a player scrolls to it
+        if (control.GetParent() is { } parent && FindScroll(parent) is { } scroll)
+        {
+            scroll.EnsureControlVisible(control);
+            await Frames(2);
+        }
         var at = control.GetGlobalRect().GetCenter();
         foreach (bool pressed in new[] { true, false })
         {
@@ -219,6 +335,21 @@ public partial class DebugMenuCheck : ChatProbe
             }, inLocalCoords: true);
             await Frames(2);
         }
+    }
+
+    private static ScrollContainer? FindScroll(Node from)
+    {
+        for (var n = from; n != null; n = n.GetParent())
+            if (n is ScrollContainer s) return s;
+        return null;
+    }
+
+    /// <summary>A switch clicked into the state wanted (no click when it is already there).</summary>
+    private async Task Toggle(string key, bool on)
+    {
+        var box = _menu.SwitchBox(key);
+        if (box.ButtonPressed != on) await Click(box);
+        Expect(box.ButtonPressed == on, $"a click turns {box.Text} {(on ? "on" : "off")}");
     }
 
     private async Task PickView(DebugViewMode mode)
@@ -239,17 +370,35 @@ public partial class DebugMenuCheck : ChatProbe
 
     private readonly List<(Terrain.Format.TileId Id, int Stride)> _tiles = new();
 
-    /// <summary>The ground mesh of a loaded tile, or null while none is built.</summary>
-    private MeshInstance3D? TileGround()
+    private TileLayers HiddenLayers => _earth?.HiddenLayers ?? _chunks.HiddenLayers;
+
+    /// <summary>The ground mesh of a loaded tile (a leaf under earth), or null while none is built.</summary>
+    private MeshInstance3D? GroundMesh()
     {
+        if (_earth != null) return _earth.LeafMesh();
         _chunks.ListTiles(_tiles);
         foreach (var (id, _) in _tiles)
             if (_chunks.GroundMeshAt(id) is { Mesh: not null } ground) return ground;
         return null;
     }
 
-    private Shader? GroundShader() =>
-        (TileGround()?.Mesh?.SurfaceGetMaterial(0) as ShaderMaterial)?.Shader;
+    /// <summary>A loaded tile's (or leaf's) node with roads drawn.</summary>
+    private ChunkNode? RoadNode()
+    {
+        if (_earth != null) return _earth.LeafNodeWithRoads();
+        _chunks.ListTiles(_tiles);
+        foreach (var (id, _) in _tiles)
+            if (_chunks.GroundMeshAt(id)?.GetParent() is ChunkNode { RoadMesh: not null } node) return node;
+        return null;
+    }
+
+    private Shader? GroundShader()
+    {
+        var ground = GroundMesh();
+        // a leaf's material is its instance's override; a tile's is its surface's
+        var material = ground?.MaterialOverride ?? ground?.Mesh?.SurfaceGetMaterial(0);
+        return (material as ShaderMaterial)?.Shader;
+    }
 
     private bool PauseMenuOpen() => GetTree().Root.FindChild("Menus", true, false) is CanvasLayer { Visible: true };
 }
