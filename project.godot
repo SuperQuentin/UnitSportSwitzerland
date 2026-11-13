@@ -210,6 +210,22 @@ world_true_sun={
 "type": "vec3",
 "value": Vector3(0, 1, 0)
 }
+world_globe_ambient={
+"type": "vec3",
+"value": Vector3(0.4, 0.48, 0.74)
+}
+world_globe_sun={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+world_globe_band={
+"type": "float",
+"value": 0.0
+}
+world_globe_palette={
+"type": "float",
+"value": 0.0
+}
 world_lod_scale={
 "type": "float",
 "value": 1.0

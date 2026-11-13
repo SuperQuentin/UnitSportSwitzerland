@@ -9,11 +9,22 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 
 ## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
 
-In a window, `--frame earth --date 2027-07-15 --time 12:00`, the spectator at full speed. Best once the globe draws under the fill far away (the asia-globe-over-fill work) and paints sand as sand (#1802).
+In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.
 
-- [ ] Land in the Sahara (`--at 1829400,-515818 --origin 1829400,-515818`) → sand, a few low shrubs, no farms, no green.
+- [ ] Land in the Sahara (`--at 1829400,-515818 --origin 1829400,-515818`) → sand, a few low shrubs, no farms, no green. From 350 m, note how much paler the globe draws past the loaded leaves (sRGB ~243,233,230 against the fill's ~233,220,199 on Nov 13).
 - [ ] Fly to Kazakhstan, Yamal, Greenland and the Amazon (LV95 6653598,2940530; 5034504,4850762; 902899,4677347; -6055442,-697411) → dry grass with scattered shrubs; olive tundra with dwarf shrubs; ice; a broadleaf canopy with clearings.
 - [ ] Fly from Geneva out of the generator's map (west of LV95 2,385,000 or south of 974,000) → the Swiss look fades into the biome over ~20 km, no straight seam; Geneva, Lavaux and the Salève look as before.
+
+## The globe's 20 km handover ([#1803](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1803))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, the spectator (Shift+T) over the coast at LV95 -5011173,8685903.
+
+- [ ] At the spot's night, climb slowly from 14 km to 26 km and back → the ground darkens from moonlit to night over 15-20 km with no jump at 20 km; the coast and sea stay where they are, no green land over the sea below 20 km.
+- [ ] The same by day → no jump in colour or relief at 20 km; the photo's sea and fields fade in over 20-25 km.
+- [ ] While spectating over the ground with the body falling below → no "open WINGSUIT" prompt.
+- [ ] Over Agadir (LV95 909680,-472439) and the Sahara, 2-25 km by day → sand coloured, never green or snow-white; the coast follows the ground, not kilometre steps; one sea colour across tile edges.
+- [ ] Facing the horizon from 10 to 60 km, day and night → no grey band with a hard edge between the sky and the Earth's limb.
+- [ ] Over Geneva's harbour at ~600 m looking up the lake → note whether the near water and the far lake still meet at a hard line (the far leaves now take their own depth).
 
 ## Doors, interiors and parked cars far from Switzerland ([#1799](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1799))
 
@@ -1083,3 +1094,8 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 - [ ] Night (`--time 23`) → no blob anywhere; the moon at its own place.
 - [ ] Fly up past 40 km (spectator) → the sun stays where it was, gains strong spikes over black; behind the Earth it is gone.
 - [ ] VR (Link): the sun and the beams in both eyes at the same place.
+
+## Placed things after a restart (PR for [#1835](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1835))
+
+- [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
+- [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.

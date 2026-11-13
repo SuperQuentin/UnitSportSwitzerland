@@ -7,9 +7,10 @@
 shader_type spatial;
 render_mode unshaded, cull_back;
 
-// toward the real sun, world axes (World/Globe/Atmosphere): the scene's light is the moon at night,
-// and one light cannot put the terminator across the whole Earth anyway
-global uniform vec3 world_true_sun;
+// the true sun, the style's ambient and sun colour, and the 20 km handover's band (#1802)
+#include "res://shaders/common/globe_light.gdshaderinc"
+// facet_normal, style_lake: what the terrain body draws with at the handover
+#include "res://shaders/common/style.gdshaderinc"
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
 // the part of albedo_tex over this tile: a tile with no colour of its own (the leaves' level) takes its
@@ -25,10 +26,6 @@ global uniform float world_fill_hide;
 const float FILL_PUSH = 0.25, FILL_PUSH_MAX = 50000.0;
 // off in the earth world (--frame earth): it has no generated fill (World/Globe/Globe.cs)
 uniform bool fill_push = true;
-// lit as the style lights the world (World/Globe/Globe.cs keeps these the environment's): its
-// ambient on the day side, the sun's colour; the night side dark
-uniform vec3 ambient = vec3(0.40, 0.48, 0.74);
-uniform vec3 sun_color = vec3(1.0);
 // Cartoon: the photo's colours moved onto the world's own palette (Terrain/CoverPalette) by what
 // they show, and the style's grade, so the Earth reads as the same world as the flat tiles
 uniform bool cartoon = false;
@@ -41,28 +38,45 @@ void vertex() {
 	POSITION = PROJECTION_MATRIX * view;
 }
 
-// Blue Marble (linear) brought to the world's palette (Terrain/CoverPalette): the photo is real albedo,
-// far darker than the palette (forest 0.04 against 0.25), so it is lifted by a square root (forest 0.2,
-// meadow 0.35, snow 0.9), a little more saturated, then given the style's grade
-// (shaders/common/style.gdshaderinc). The photo's own coasts, forests and fields stay.
-vec3 cartoon_earth(vec3 photo) {
-	vec3 col = sqrt(max(photo, vec3(0.0)));
-	float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-	col = max(mix(vec3(l), col, 1.25), vec3(0.0));
+// Cartoon's grade (shaders/common/style.gdshaderinc's style_grade, which only a Cartoon wrapper defines):
+// greens toward yellow, a touch lighter and less saturated
+vec3 cartoon_grade(vec3 col) {
 	float g = max(col.g - max(col.r, col.b), 0.0);
 	col.r += g * 0.45;
 	col.b -= g * 0.15;
-	l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+	float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
 	col = mix(vec3(l), col, 0.92);
 	return pow(max(col, vec3(0.0)), vec3(0.92)) * 0.95;
 }
 
+// Blue Marble (linear) brought to the world's palette (Terrain/CoverPalette): the photo is real albedo,
+// far darker than the palette (forest 0.04 against 0.25), so it is lifted by a square root (forest 0.2,
+// meadow 0.35, snow 0.9), a little more saturated, then given the style's grade. The photo's own coasts,
+// forests and fields stay.
+vec3 cartoon_earth(vec3 photo) {
+	vec3 col = sqrt(max(photo, vec3(0.0)));
+	float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+	col = max(mix(vec3(l), col, 1.25), vec3(0.0));
+	return cartoon_grade(col);
+}
+
 void fragment() {
 	vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	float ndl = dot(n, world_true_sun);
-	// a soft terminator (twilight): the ambient and the sun on the day side, the night side all but black
-	float day = smoothstep(-0.08, 0.25, ndl);
 	vec3 col = texture(albedo_tex, uv_rect.xy + UV * uv_rect.zw).rgb;
 	if (cartoon) col = cartoon_earth(col);
-	ALBEDO = col * max(ambient * day + sun_color * max(ndl, 0.0), vec3(0.015));
+	// just over the handover (20..25 km, #1802): what the terrain body drew at 20 km, its palette per vertex
+	// (GlobeGround) with its lakes, bare rock and grade, on its facets, eased into the photo and smooth relief
+	float p = world_globe_palette;
+	if (p > 0.0) {
+		vec3 f = facet_normal(VERTEX, INV_VIEW_MATRIX);
+		if (dot(f, n) < 0.0) f = -f;
+		// steep ground by the smooth normal (#883), as the terrain body
+		f = normalize(mix(f, n, smoothstep(0.8, 0.55, n.y)));
+		vec3 ground = style_lake(COLOR.rgb, length(VERTEX));
+		ground = mix(ground, vec3(0.30, 0.28, 0.26), smoothstep(0.62, 0.38, f.y) * 0.75);
+		if (cartoon) ground = cartoon_grade(ground);
+		col = mix(col, ground, p);
+		n = normalize(mix(n, f, p));
+	}
+	ALBEDO = globe_lit(col, n);
 }

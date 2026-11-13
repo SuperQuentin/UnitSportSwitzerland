@@ -317,8 +317,21 @@ public partial class PlacedObjects : Node
         if (!_objects.Remove(id, out var o)) return;
         if (_lastRemoved.Count > 32) _lastRemoved.Clear();
         _lastRemoved[id] = o;
-        if (_visuals.Remove(id, out var node) && IsInstanceValid(node)) node.QueueFree();
+        if (_visuals.Remove(id, out var node)) Discard(node);
         Removed?.Invoke(id);
+    }
+
+    /// <summary>
+    /// Takes a drawn node out of the tree now, and frees it: only queued, it kept its name "P{id}" until the frame's
+    /// end, so the one drawn again in its place (a redraw when a kind's factory registers after the save loaded, or a
+    /// replaced object) was renamed by Godot, and everything finding it by name lost it (the telescope could not be
+    /// looked through after a restart, #1813).
+    /// </summary>
+    private void Discard(Node3D node)
+    {
+        if (!IsInstanceValid(node)) return;
+        if (node.GetParent() == this) RemoveChild(node);
+        node.QueueFree();
     }
 
     private void Draw(PlacedObject o)
@@ -345,8 +358,7 @@ public partial class PlacedObjects : Node
     private void Redraw()
     {
         if (_server) return;
-        foreach (var node in _visuals.Values)
-            if (IsInstanceValid(node)) node.QueueFree();
+        foreach (var node in _visuals.Values) Discard(node);
         _visuals.Clear();
         foreach (var o in _objects.Values) Draw(o);
     }

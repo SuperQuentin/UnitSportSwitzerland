@@ -62,3 +62,5 @@ photo + refused far flag, B joins after and must get the snapshot, hear 3 shots 
 removing A's photo (screenshot `test_output/placedcheck_b.png`); server restarted, C finds the flag
 and pulls it up. Writes the real `user://placed/server.json` (it ends empty again).
 - Kinds 9-10 (#493): `FishCast` / `FishEnd`, sent with no direction so the remote keeps the position (the float), not the hand (`fishing`).
+
+- **Drawn nodes are found by name `P{id}`** (telescopes, farm stands, cakes, photos, the pick-up halo): `PlacedObjects.Discard` takes an old visual out of the tree before freeing it, or the one redrawn in its place the same frame (a `RegisterFactory` after the save loaded, a replaced object) is renamed by Godot and lost (#1835).
