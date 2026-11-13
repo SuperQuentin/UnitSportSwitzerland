@@ -48,11 +48,34 @@ public partial class SkyShot : Node
     public override void _Process(double delta)
     {
         if (_done) return;
-        _camera.Current = true;
         _t += delta;
+        if (Walk)
+        {
+            // --skyshot-walk: the walking player's own camera on the ground at --at, turned by its look (the moon went
+            // when looked at head-on there, #1835 follow-up)
+            if (GetParentOrNull<Core.ClientWorld>() is not { } world) return;
+            if (world.StudioPlayer is not { } walker)
+            {
+                if (!_toggled) { _toggled = true; world.ToggleMode(); }
+                _t = 0;
+                return;
+            }
+            // first person, as the eye sees it (third person stands the camera behind the body)
+            if (!walker.IsFirstPerson) walker.ViewForCheck(thirdPerson: false);
+            if (Toward() is not { } toward) return;
+            walker.LookYaw = Mathf.Atan2(-toward.X, -toward.Z) + (Sweep && _t > SweepFrom ? Mathf.DegToRad(25f) * Mathf.Sin((float)(_t - SweepFrom) * 2.2f) : 0f);
+            if (Sweep && _body == "moon" && _t > SweepFrom && Swept()) return;
+            if (Sweep) return;   // settling: nothing measured, nothing hidden
+            walker.LookPitch = Mathf.Asin(Mathf.Clamp(toward.Y, -1f, 1f));
+        }
+        else
+        {
+            _camera.Current = true;
+            if (Toward() is not { } aim) return;
+            _camera.LookAt(_camera.GlobalPosition + aim, Mathf.Abs(aim.Y) > 0.99f ? Vector3.Forward : Vector3.Up);
+        }
         if (Toward() is not { } dir) return;
-        var at = _camera.GlobalPosition;
-        _camera.LookAt(at + dir, Mathf.Abs(dir.Y) > 0.99f ? Vector3.Forward : Vector3.Up);
+        var at = GetViewport().GetCamera3D()?.GlobalPosition ?? _camera.GlobalPosition;
         if (Slats && _body == "sun" && Slatted(dir)) return;
         // the picture as the eye sees it, then the stars, planets and satellites out of the measure (not what it
         // checks; a star at the centre read as a body)
@@ -159,6 +182,69 @@ public partial class SkyShot : Node
     /// with "Sun rays" on, one with them off, and the stripes the shafts draw measured on a row above the posts: the RESULT, and quits. Only with <c>sun</c>.
     /// </summary>
     private static bool Slats => CmdArgs.Has("--skyshot-slats");
+
+    /// <summary><c>--skyshot-walk</c>: the shot from the walking player's camera, not the spectator's.</summary>
+    private static bool Walk => CmdArgs.Has("--skyshot-walk");
+
+    private bool _toggled;
+
+    /// <summary><c>--skyshot-sweep</c> (with <c>-walk</c>, the moon): the view swings ±25° across it for 4 s, as a player turning, and every
+    /// drawn frame the moon's pixel is read where it should be on screen: lit, or culled (it went near the screen's middle).</summary>
+    private static bool Sweep => CmdArgs.Has("--skyshot-sweep");
+
+    /// <summary>The sweep starts once the world has settled (the sky streams in for a few seconds).</summary>
+    private const double SweepFrom = SettleSeconds + 2;
+
+    private int _seen, _missed;
+    private float _worstX;
+
+    private bool _sampling;
+
+    private bool Swept()
+    {
+        if (!_sampling)
+        {
+            _sampling = true;
+            RenderingServer.FramePostDraw += SampleSweep;
+        }
+        if (_t > SweepFrom + 4.5)
+        {
+            if (_done) return true;
+            _done = true;
+            RenderingServer.FramePostDraw -= SampleSweep;
+            bool ok = _seen > 20 && _missed == 0;
+            GD.Print($"RESULT {(ok ? "PASS" : "FAIL")} skyshot sweep: the moon drawn in every frame on screen ({_seen} lit, {_missed} missing, worst at {_worstX:0} px from the middle)");
+            GetTree().Quit(ok ? 0 : 1);
+        }
+        return true;
+    }
+
+    /// <summary>After a frame is drawn: the moon's pixel where that frame's camera put it.</summary>
+    private void SampleSweep()
+    {
+        if (_done || GetTree().Root.FindChild("MoonDisc", true, false) is not Node3D moon || GetViewport().GetCamera3D() is not { } cam
+            || cam.IsPositionBehind(moon.GlobalPosition)) return;
+        var image = GetViewport().GetTexture().GetImage();
+        // the picture is the viewport's texture, larger than its coordinates under a content scale
+        var px = cam.UnprojectPosition(moon.GlobalPosition) * (new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size);
+        if (px.X < 4 || px.Y < 4 || px.X > image.GetWidth() - 5 || px.Y > image.GetHeight() - 5) return;
+        float lit = 0;
+        for (int y = -2; y <= 2; y++)
+            for (int x = -2; x <= 2; x++)
+                lit = Mathf.Max(lit, Lum(image.GetPixel((int)px.X + x, (int)px.Y + y)));
+        if (lit > 0.45f) _seen++;
+        else
+        {
+            _missed++;
+            _worstX = Mathf.Abs(px.X - image.GetWidth() / 2f);
+            if (_missed <= 10) GD.Print($"[skyshot] moon missing at {px} (lit {lit:F2})");
+            if (_missed == 5)
+            {
+                for (int k = -6; k <= 6; k++) { image.SetPixel((int)px.X + k, (int)px.Y - 8, Colors.Red); image.SetPixel((int)px.X - 8, (int)px.Y + k, Colors.Red); }
+                image.SavePng(_out.Replace(".png", "_missing.png"));
+            }
+        }
+    }
 
     private Node3D? _posts;
     private Image? _raysOn;

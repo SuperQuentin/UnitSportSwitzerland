@@ -52,6 +52,7 @@ public partial class SunDisc : MeshInstance3D
         TopLevel = true;
         Visible = false;
         CastShadow = ShadowCastingSetting.Off;
+        IgnoreOcclusionCulling = true;   // the sky: depth hides it, never the occlusion buffer (MoonDisc)
         GIMode = GIModeEnum.Disabled;
         Mesh = new QuadMesh { Size = new Vector2(2f, 2f) };
         _material = NewMaterial();
@@ -66,6 +67,7 @@ public partial class SunDisc : MeshInstance3D
             MaterialOverride = _shaftMaterial,
             CastShadow = ShadowCastingSetting.Off,
             GIMode = GIModeEnum.Disabled,
+            IgnoreOcclusionCulling = true,
             Visible = false,
         };
         AddChild(_shafts);

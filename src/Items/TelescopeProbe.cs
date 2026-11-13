@@ -186,6 +186,17 @@ public partial class TelescopeProbe : Node
         Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = false });
         Expect(await Until(() => TelescopeView.Current == null, 2), "E steps back");
         Expect(GetViewport().GetCamera3D() == me.Camera, "the player's own camera again");
+        // by eye after stepping back, the tube still on the moon (#1835 follow-up: "with the naked eye the moon
+        // disappears when looked at head-on")
+        if (DisplayServer.GetName() != "headless" && World.DayNight.Instance?.Sky is { } eyeSky)
+        {
+            me.LookYaw = Mathf.Atan2(-eyeSky.Moon.X, -eyeSky.Moon.Z);
+            me.LookPitch = Mathf.Asin(Mathf.Clamp(eyeSky.Moon.Y, -1f, 1f));
+            await Seconds(1.0);
+            float lit = MoonLit(out var where);
+            Expect(lit > 0.45f, $"the moon by eye, head-on, after stepping back (lit {lit:F2} at {where})");
+            if (lit <= 0.45f) GetViewport().GetTexture().GetImage().SavePng("res://test_output/telescope_moon_by_eye.png");
+        }
         // looked through again, it is where it was left (#1813: it reset to the tripod's facing)
         Expect(Telescopes.TryInteract(me) && await Until(() => TelescopeView.Current != null, 3), "looked through again");
         if (TelescopeView.Current is { } again)
@@ -349,5 +360,25 @@ public partial class TelescopeProbe : Node
         float worst = steps.Max(st => (st - mean).Length());
         GD.Print($"[telescopecheck] moon on screen over {points.Count} frames: from {points[0]} to {points[^1]}, worst jump {worst:0.00} px");
         return (worst, mean.Length());
+    }
+
+    /// <summary>The brightest pixel round where the moon is drawn on screen (0 when it is not in view), and where.</summary>
+    private float MoonLit(out Vector2 where)
+    {
+        where = Vector2.Zero;
+        if (GetTree().Root.FindChild("MoonDisc", true, false) is not Node3D moon || GetViewport().GetCamera3D() is not { } cam
+            || cam.IsPositionBehind(moon.GlobalPosition)) return 0f;
+        var image = GetViewport().GetTexture().GetImage();
+        where = cam.UnprojectPosition(moon.GlobalPosition) * (new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size);
+        float lit = 0;
+        for (int y = -2; y <= 2; y++)
+            for (int x = -2; x <= 2; x++)
+            {
+                int px = (int)where.X + x, py = (int)where.Y + y;
+                if (px < 0 || py < 0 || px >= image.GetWidth() || py >= image.GetHeight()) continue;
+                var c = image.GetPixel(px, py);
+                lit = Mathf.Max(lit, 0.2126f * c.R + 0.7152f * c.G + 0.0722f * c.B);
+            }
+        return lit;
     }
 }

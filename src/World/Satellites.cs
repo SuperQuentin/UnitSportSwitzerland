@@ -58,6 +58,7 @@ public partial class Satellites : MultiMeshInstance3D
         TopLevel = true;
         Visible = false;
         CastShadow = ShadowCastingSetting.Off;
+        IgnoreOcclusionCulling = true;   // the sky: depth hides it, never the occlusion buffer (SkyBodies)
         GIMode = GIModeEnum.Disabled;
         CustomAabb = new Aabb(-Vector3.One * 1e7f, Vector3.One * 2e7f);
         _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sky_point.gdshader") };
