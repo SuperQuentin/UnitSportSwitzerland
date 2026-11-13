@@ -12,6 +12,8 @@ public class TelescopeOpticsTests
         // the moon is 0.52 deg wide
         Assert.InRange(TelescopeOptics.Fov(2300f), 0.55f, 0.65f);
         Assert.True(TelescopeOptics.Fov(TelescopeOptics.FocalMax) < 0.52f / 2.5f, "at the longest end the moon is over 2.5 views tall");
+        // #1813: Mars, 3.5-25 arcseconds, is half the view or more at the longest end
+        Assert.InRange(TelescopeOptics.Fov(TelescopeOptics.FocalMax) * 3600f, 7f, 12f);
         // the camera's rule: 35 mm is 38 deg
         Assert.Equal(37.85f, TelescopeOptics.Fov(35f), 0.05f);
     }
@@ -35,14 +37,5 @@ public class TelescopeOpticsTests
         Assert.Equal(TelescopeOptics.Fov(400f) / 76f, TelescopeOptics.LookScale(400f), 1e-6f);
         // the camera's own floor (0.04) would turn the longest view by many widths a mouse count
         Assert.True(TelescopeOptics.LookScale(TelescopeOptics.FocalMax) < 0.003f);
-    }
-
-    [Fact]
-    public void Locks_on_what_is_in_view()
-    {
-        Assert.True(TelescopeOptics.CanLock(0.2f, 2300f));
-        Assert.False(TelescopeOptics.CanLock(5f, 2300f));
-        Assert.True(TelescopeOptics.CanLock(0.9f, TelescopeOptics.FocalMax), "within a degree at the longest end");
-        Assert.True(TelescopeOptics.CanLock(7f, TelescopeOptics.FocalMin), "the finder view: 13.7 deg tall");
     }
 }

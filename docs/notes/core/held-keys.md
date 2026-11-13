@@ -44,3 +44,13 @@ report; code that reads `Input.IsActionPressed` itself is not covered.
   it also fakes a W Windows never saw and expects it let go), `--creativecheck --world flat` (the hold-off
   on `Held`/`Move`, the 26 letters mapping to 26 letter VKs on this layout). `--spectatorcheck` also sends Shift let go with
   a repeat behind its key-up (left, right, with W, Q, after Shift+T, an Alt tap, a 300 ms hitch).
+
+## The press that opened a view (#1813)
+
+A view opened from E's press (`TryInteract`) opens in that same frame wherever its open is not a
+server round trip: offline every server-granted view, and pinball / table games online too. Its
+`_Process` then sees E `IsActionJustPressed` as its own: the telescope stepped straight back
+("looked through by 1" then "free" in the log), pinball started a game, the table sat you down.
+A view reading its keys with `Input.IsActionJustPressed` takes them through `Core.FreshPress`
+(`_leave.Take(ActLeave)`: only once the key has been up since it opened). Views reading events
+(`_UnhandledInput`) do not see the opening event again; `FloorPicker`'s `fresh` is the same guard.

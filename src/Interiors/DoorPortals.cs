@@ -77,6 +77,23 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     private readonly HashSet<DoorLink> _shown = new();
     /// <summary>The screen's camera changed near a doorway for this frame, and how it was.</summary>
     private (Camera3D Camera, Transform3D Local, float Near)? _restore;
+
+    /// <summary>
+    /// The camera a doorway's lens holds this frame, and its own near plane (#1811): set in <c>_Process</c>, cleared once
+    /// the frame is drawn. <c>Styles.CameraGlobal</c> leaves that camera's planes to the lens, which keeps them within
+    /// <see cref="MaxDepthRatio"/>: it used to take the lens's 5 mm as the camera's own near plane and write it back for
+    /// good, under a 160 km far plane (far / near 3.2e7, past what the renderer's float frustum takes: nothing drew).
+    /// </summary>
+    private static (Camera3D Camera, float Near)? _lens;
+
+    /// <summary>The own near plane of <paramref name="cam"/> while a doorway's lens holds it this frame, else null.</summary>
+    public static float? LensHolds(Camera3D cam) => _lens is { } l && l.Camera == cam ? l.Near : null;
+
+    /// <summary>A lens takes <paramref name="cam"/> for this frame (its own near plane <paramref name="ownNear"/>); the first one counts.</summary>
+    internal static void TakeLens(Camera3D cam, float ownNear) => _lens ??= (cam, ownNear);
+
+    /// <summary>The frame is drawn: no lens holds a camera.</summary>
+    internal static void DropLens() => _lens = null;
     /// <summary>Within this of an open doorway, the screen's camera gets <see cref="DoorwayNear"/>.</summary>
     private const float NearZone = 1f;
     /// <summary>
@@ -372,6 +389,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
             if (!Around(local, hw, top, DoorLink.LensSlabMin(NearZone), DoorLink.LensSlabMax(NearZone), NearZone)) continue;
 
             _restore ??= (cam, cam.Transform, cam.Near);
+            TakeLens(cam, _restore.Value.Near);
             // as small as the distance to the nearer quad needs: its corners must not reach it
             float perNear = NearReach(cam) / Mathf.Max(cam.Near, 1e-4f) * 1.2f;
             float gap = local.Z > DoorLink.OutsideQuadOffset ? local.Z - DoorLink.OutsideQuadOffset
@@ -444,6 +462,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// <summary>Once the frame is drawn, the screen's camera goes back where whatever placed it put it.</summary>
     private void PutCameraBack()
     {
+        DropLens();
         if (_restoreFar is { } f)
         {
             _restoreFar = null;

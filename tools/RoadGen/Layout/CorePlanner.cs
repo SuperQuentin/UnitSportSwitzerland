@@ -366,8 +366,14 @@ public static class CorePlanner
             else { core.Mouths.Clear(); core.Mouths.AddRange(mouths); }
         }
         core.Outline.AddRange(outline);
+        core.MouthEndsCut = ends.Count(e => !outline.Contains(e));
+        // a merged group's star outline that cut a mouth away swallows the streets between its members: Geneva 2501060,1117896
+        // paved the verge between a road and a lane running side by side, 1,846 m2 in 70 m slivers that read as a pit from
+        // above. Its members keep their own caps instead (the old layout); one node's cut mouth is a small residue, kept.
+        if (core.MouthEndsCut > 0 && jp.Merged?.Members is { Count: > 1 })
+            core.Refused = "a merged fallback cut a mouth away";
         if (Environment.GetEnvironmentVariable("FALLBACKDBG") is not null)
-            Console.WriteLine(FormattableString.Invariant($"[fallback] {jp.Centre.X:F0},{jp.Centre.Y:F0} star {starred} simple {Simple(outline)} mouths {ends.Count(outline.Contains)}/{ends.Count} centre points out {core.Connectors.Sum(c => c.Centre.Count(p => Outside(outline, p) > 0.05))} (most {core.Connectors.SelectMany(c => c.Centre).Select(p => Outside(outline, p)).DefaultIfEmpty(0).Max():F2})"));
+            Console.WriteLine(FormattableString.Invariant($"[fallback] {jp.Centre.X:F0},{jp.Centre.Y:F0} area {Math.Abs(SignedArea(outline)):F0} members {jp.Merged?.Members?.Count ?? 1} refused {core.Refused is not null} star {starred} simple {Simple(outline)} mouths {ends.Count(outline.Contains)}/{ends.Count} centre points out {core.Connectors.Sum(c => c.Centre.Count(p => Outside(outline, p) > 0.05))} (most {core.Connectors.SelectMany(c => c.Centre).Select(p => Outside(outline, p)).DefaultIfEmpty(0).Max():F2})"));
         var at = core.Mouths.Select(m => (L: outline.IndexOf(m.Left), R: outline.IndexOf(m.Right))).ToList();
         for (int k = 0; k < n; k++)
         {

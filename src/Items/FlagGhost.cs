@@ -100,6 +100,7 @@ public partial class FlagGhost : Node
         if (player == null || !active || MouseCapture.Mode != Input.MouseModeEnum.Captured)
         {
             _ghost.Visible = false;
+            HaloOff();
             _hint.Visible = false;
             Last = default;
             return;
@@ -109,6 +110,7 @@ public partial class FlagGhost : Node
         switch (aim.Kind)
         {
             case FlagAimKind.Plant:
+                HaloOff();
                 _ghost.Mesh = spec!.Mesh();
                 _ghost.GlobalTransform = new Transform3D(new Basis(Vector3.Up, aim.Yaw), aim.Point);
                 _ghost.Visible = true;
@@ -117,19 +119,73 @@ public partial class FlagGhost : Node
                 break;
             case FlagAimKind.PickUp:
                 // a halo: the same thing a little fatter, over the real one (a flag: fatter round its thin pole)
-                _ghost.Mesh = Placeables.ForKind(aim.Target)?.Mesh() ?? ItemDefs.PlantedFlagMesh();
                 var fat = aim.Target == PlacedKind.Flag ? new Vector3(1.6f, 1.02f, 1.6f) : new Vector3(1.06f, 1.06f, 1.06f);
-                _ghost.GlobalTransform = new Transform3D(new Basis(Vector3.Up, aim.Yaw).Scaled(fat), aim.Point);
-                _ghost.Visible = true;
                 _material.AlbedoColor = new Color(1f, 0.9f, 0.3f, 0.35f);
+                if (PlacedObjects.Instance?.GetNodeOrNull<Node3D>($"P{aim.Id}") is { } real)
+                {
+                    // on the drawn parts themselves (#1813): a part that turns (the telescope's tube)
+                    // carries its halo, and the frame's tilt and the yaw are the node's, not re-derived
+                    _ghost.Visible = false;
+                    HaloOn(real, aim.Id, fat);
+                }
+                else
+                {
+                    HaloOff();
+                    _ghost.Mesh = Placeables.ForKind(aim.Target)?.Mesh() ?? ItemDefs.PlantedFlagMesh();
+                    _ghost.GlobalTransform = new Transform3D(new Basis(Vector3.Up, aim.Yaw).Scaled(fat), aim.Point);
+                    _ghost.Visible = true;
+                }
                 string verb = PlacedObjects.Instance?.All.GetValueOrDefault(aim.Id) is { } o ? Placeables.TakeVerb(o) : "pick up";
                 _hint.Text = InputHints.Format("{use_item}: " + verb);
                 break;
             default:
                 _ghost.Visible = false;
+                HaloOff();
                 _hint.Text = "";
                 break;
         }
         _hint.Visible = _hint.Text.Length > 0;
+    }
+
+    /// <summary>The pick-up halo's meshes, one per drawn part of the placed thing (children of the parts, so they turn with them).</summary>
+    public static readonly StringName HaloName = "PickUpHalo";
+
+    private readonly List<MeshInstance3D> _halos = new();
+    private long _haloId;
+
+    /// <summary>Puts the halo on <paramref name="real"/>'s parts, each fattened about its own middle; built once per target.</summary>
+    private void HaloOn(Node3D real, long id, Vector3 fat)
+    {
+        if (_haloId == id && _halos.Count > 0 && IsInstanceValid(_halos[0])) return;
+        HaloOff();
+        _haloId = id;
+        AddHalos(real, fat);
+    }
+
+    private void AddHalos(Node node, Vector3 fat)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child.Name == HaloName) continue;
+            AddHalos(child, fat);
+        }
+        if (node is not MeshInstance3D { Mesh: { } mesh, Visible: true } part) return;
+        var middle = mesh.GetAabb().GetCenter();
+        var halo = new MeshInstance3D
+        {
+            Name = HaloName, Mesh = mesh, MaterialOverride = _material,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Transform = new Transform3D(Basis.Identity.Scaled(fat), middle - middle * fat),
+        };
+        part.AddChild(halo);
+        _halos.Add(halo);
+    }
+
+    private void HaloOff()
+    {
+        foreach (var halo in _halos)
+            if (IsInstanceValid(halo)) halo.QueueFree();
+        _halos.Clear();
+        _haloId = 0;
     }
 }

@@ -13,6 +13,8 @@ global uniform float world_night;
 // 0 in the air, 1 above it (#1430 H4, World/Globe/Atmosphere): no sky to hide the stars by day, and
 // the horizon far below the horizontal (the Earth hides what is behind it, by depth)
 global uniform float world_space;
+// toward the real sun, world axes (World/Globe/Atmosphere keeps it current): its glare hides what is near it (#1479)
+global uniform vec3 world_true_sun;
 
 // world axes: the celestial sphere's (stars), or a body's direction in its first column (a planet)
 uniform mat3 sky = mat3(1.0);
@@ -44,7 +46,15 @@ void vertex() {
 	vec4 c = single ? point_color : COLOR;
 	// a satellite shows only while it is sunlit over a dark sky: the node hides the rest
 	if (instanced) dark = 1.0;
-	tint = vec4(c.rgb, c.a * horizon * dark);
+	// the sun's glare (#1479): nothing within about a twentieth of the view's height of it, back by a quarter, on screen
+	// (a telescope's narrow view brings what is near it out), while the sun is in front of the camera
+	vec4 sun_clip = PROJECTION_MATRIX * (VIEW_MATRIX * vec4(cam + normalize(world_true_sun) * distance, 1.0));
+	float glare = 1.0;
+	if (sun_clip.w > 0.0 && clip.w > 0.0) {
+		vec2 off = (clip.xy / clip.w - sun_clip.xy / sun_clip.w) * vec2(VIEWPORT_SIZE.x / VIEWPORT_SIZE.y, 1.0) * 0.5;
+		glare = smoothstep(0.05, 0.25, length(off));
+	}
+	tint = vec4(c.rgb, c.a * horizon * dark * glare);
 }
 
 void fragment() {

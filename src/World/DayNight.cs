@@ -61,6 +61,12 @@ public partial class DayNight : Node
 
     private double _placeE = SunPath.BernE, _placeN = SunPath.BernN;
 
+    /// <summary>The LV95 place the sky is read at: where <c>/time</c>'s named hours and zone are read offline (#1801).</summary>
+    public (double E, double N) Place => (_placeE, _placeN);
+
+    /// <summary>The real sun lights this world (not the fixed day, not the fun world's dusk).</summary>
+    public static bool RealSun => SunPath.Model == SunModel.Real && !WorldChoice.FunActive;
+
     /// <summary>0 in daylight, 1 at night. Headlights, lamps and windows read this.</summary>
     public float Night { get; private set; }
 
@@ -257,7 +263,7 @@ public partial class DayNight : Node
         // horizon the shading follows the moon instead, never lower than ~25°, so a night-time
         // mountain still has a lit side and a dark one rather than going flat.
         Vector3 sun, shade;
-        if (SunPath.Model == SunModel.Real && !WorldChoice.FunActive)
+        if (RealSun)
         {
             TrackPlace();
             SunPath.Frame = Origin?.Frame;
@@ -306,6 +312,15 @@ public partial class DayNight : Node
         _applied = applied;
         if (_environment != null)
             Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
+        // the sky draws the light's disc only while the light is the sun (#1798): at night it is the moon's shading,
+        // lifted to 25° and night-tinted, and the procedural sky drew it as a dim blue blob where no body is (the moon
+        // itself is MoonDisc, the sun above the air is the atmosphere's). Under the real sun never (#1479): SunDisc is
+        // the sun, at the ephemeris place; the sky's disc was a 20° glow along the light, lifted 3° at sunrise.
+        if (Sun != null)
+        {
+            var mode = Sky == null && SunElevationDeg > 3f ? DirectionalLight3D.SkyModeEnum.LightAndSky : DirectionalLight3D.SkyModeEnum.LightOnly;
+            if (Sun.SkyMode != mode) Sun.SkyMode = mode;
+        }
         if (_portalOutdoor != null)
             Styles.StyleKit.DriveEnvironment(_portalOutdoor, null, shade, tint, sky, Night, SunElevationDeg, moved);
         bool disco = Disco != _appliedDisco;

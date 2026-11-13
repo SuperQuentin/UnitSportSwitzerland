@@ -53,7 +53,8 @@
   with `--fly x,y,z,yaw,speed,s --flyinput [boost]` (the camera flown by its own controls; the report adds the
   speed flown and the origin's re-anchors) under `--frame earth` and `flat`.
 - **The readout** (`Player/SpectatorSpeedHud`): "Spectator 3.2 km/s", "· boost", "climb to go faster" in amber when
-  the altitude holds it back; top-right, floating text, shown on a notch or a boost change, gone 1.5 s after the
+  the altitude holds it back; bottom right under the key hints, where a vehicle's readout stands (top centre on a
+  phone; #1798: top right was under the perf overlay), floating text, shown on a notch or a boost change, gone 1.5 s after the
   last (0.6 s fade). Faster / Slower are rows of the spectator's key hints (`ClientWorld`'s context rows).
 - Bots: not for bots (a client toggle); a bot's body never reads it.
 - Check: `--creativecheck --world flat` (`Player/CreativeCheck`).
