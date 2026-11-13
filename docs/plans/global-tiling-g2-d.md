@@ -250,7 +250,11 @@ After D5: G2 marked built in `global-tiling.md` and the G2 plan, #1443 commented
 
 **Not on this machine, and not G2's bar** (the NAS, `tools/france-nas-run`): 0.5 m heights the whole way, the rest
 of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the cube-native tools. It's also
-#1650's nationwide release data: until it exists, the release ships the D: region's leaves and the pyramid.
+#1650's nationwide release data. Until it exists, **the release ships no terrain** (CI has no data; it ships only the
+globe's levels 0-2, `assets/globe`). Online, the server streams the D: region's leaves (B4's 2,412, 775 MB, deployed by
+`tools/deploy-linux.sh --leaves`, #1792), and the generated fill stands everywhere else. Offline, a fresh install has
+the fill alone. The full `cube_global` pyramid stays on D:: a server given it alone would build its fill ~20 m off the
+clients' (measured, `general/linux-deploy`) until #1656 streams it.
 
 ## 6. Risks and rollback
 
@@ -260,7 +264,9 @@ of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the
   - D3 deletes the old files only once their migration has run (a marker per store).
 - **A wrong drop**: dropping loot masks, shop counts, farm cells and contracts loses a few days' state. That's accepted; it's listed in the release notes.
   - Pinball high scores are the one dropped store a player might mind. If the user objects, D2 can convert them through the leaf buildings' `BuildingId` at the old key's tile centre plus the building index, while LV95 tiles still exist on the server.
-- **Shipping**: after D3 a fresh install has no terrain unless the release ships leaves (#1650) or a server streams them (#1662). D3 doesn't merge before #1650.
+- **Shipping**: from D2 on, a fresh install's real ground is what a server streams (#1662, the leaves deployed with
+  `tools/deploy-linux.sh --leaves`, #1792); the release ships none. The protocol 96 rollout (leaves and `--leaves`
+  first, then the merge, then `/update` on the server) is the runbook in `general/linux-deploy`. D3 doesn't merge before #1650.
 - **The net tier on fixtures**: until G2 lands, `--frame earth` online on a fixture is silently flat. A green earth net tier would then prove nothing. D0's dry run asserts the frame in each net check's log.
 - **Performance**: an earth client is measured against flat (`--perfcheck` on the D: region, phone build too), because flat's ring policy and `HorizonLayer` were tuned for years. To record in D2.
 - **Parallel LV95 work**: PRs still open against the LV95 build: #1422 (whole Swiss map v3), #1420 (grading), #1540 (builder performance), #1562/#1567 (water stage memory, SIMD), #1565, #1575.
