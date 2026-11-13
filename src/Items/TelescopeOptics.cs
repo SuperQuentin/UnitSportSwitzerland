@@ -7,13 +7,15 @@ namespace UnitSport.Items;
 /// <summary>
 /// The telescope's lens (#1440): a focal length in 35 mm-equivalent millimetres, as the camera's
 /// (<c>items/camera-zoom</c>), from a wide finder view to the moon filling the view and past it.
-/// The moon is 0.52° wide: it fills the view at ~2,300 mm; Jupiter (~45″) is a fifth of the view at
-/// the longest end, 20,000 mm, where the moon goes soft (its map is 2.7 km a texel, a pixel 0.45 km).
+/// The moon is 0.52° wide: it fills the view at ~2,300 mm and goes soft past ~20,000 mm (its map is
+/// 2.7 km a texel). The longest end, 500,000 mm, is a 9.9″ view (#1813): Mars (3.5-25″) is half the
+/// view or more, Jupiter (~45″) and Saturn's rings overflow it. The terrain's detail stops following
+/// the zoom past ~20,000 mm (<c>Styles.ZoomRule.MaxZoom</c>): only the sky is looked at that close.
 /// Each notch zooms by <see cref="Step"/>.
 /// </summary>
 public static class TelescopeOptics
 {
-    public const float FocalMin = 100f, FocalMax = 20000f, FocalStart = 400f, Step = 1.25f;
+    public const float FocalMin = 100f, FocalMax = 500_000f, FocalStart = 400f, Step = 1.25f;
 
     /// <summary>The vertical field of view, degrees, of a focal length: 2·atan(12 / f), the camera's rule.</summary>
     public static float Fov(float focalMm) => MathF.Atan(12f / focalMm) * 2f * 180f / MathF.PI;
@@ -30,10 +32,4 @@ public static class TelescopeOptics
 
     /// <summary>"×N": how many times larger than the naked eye's 50 mm.</summary>
     public static float Magnification(float focalMm) => focalMm / 50f;
-
-    /// <summary>
-    /// Whether a body <paramref name="offDeg"/> degrees off the view's centre is close enough to lock on:
-    /// inside the view, or within a degree of it at the longest focal lengths.
-    /// </summary>
-    public static bool CanLock(float offDeg, float focalMm) => offDeg <= MathF.Max(Fov(focalMm) * 0.6f, 1f);
 }
