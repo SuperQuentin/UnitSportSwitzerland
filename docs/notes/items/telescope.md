@@ -51,6 +51,8 @@
   (the item path, the view, a 0.58° frustum, the drive holding the moon to 0.0000° over 8 s, reopened where it was left, the menu slewing to Jupiter and holding it, refused
   packing up, E steps back, packed up into the pack; windowed it saves
   `test_output/telescope_moon.png`). `tools/telescopecheck.sh`: two clients, busy, refused, freed.
+  Across a restart (#1835): `--telescopecheck place`, then `--telescopecheck reload` in the same user folder
+  (a `PlacedObjects.Redraw` used to leave the telescope's node renamed, so `NodeOf` found nothing).
   Unit: `TelescopeOpticsTests`, `TelescopeTargetsTests`, `EphemerisTests.The_moons_face_matches_Horizons`.
 - Not yet: the tube's aim replicated (others see it level), planets and far markers (H7, C3),
   lunar elevation and finer moon levels, the POI viewpoint telescopes (`Adventure/Places`) opening

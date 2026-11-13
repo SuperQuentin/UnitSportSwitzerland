@@ -37,8 +37,15 @@ public partial class TelescopeProbe : Node
             return;
         }
         await Seconds(1.0);
-        await ClearLeftovers(Me!, PlacedObjects.Instance!);
-        try { await Run(Me!, PlacedObjects.Instance!); }
+        // across a restart: "place" sets one up and quits leaving it saved, "reload" looks through it in the next run
+        string? restart = CmdArgs.Value("--telescopecheck") is "place" or "reload" ? CmdArgs.Value("--telescopecheck") : null;
+        if (restart == null) await ClearLeftovers(Me!, PlacedObjects.Instance!);
+        try
+        {
+            if (restart == "place") await PlaceForRestart(Me!, PlacedObjects.Instance!);
+            else if (restart == "reload") await LookAfterRestart(Me!, PlacedObjects.Instance!);
+            else await Run(Me!, PlacedObjects.Instance!);
+        }
         catch (Exception e) { Expect(false, $"threw: {e.Message}"); }
         // whatever a failure left: the view closed, so nothing refuses the packing up
         TelescopeView.Current?.Close();
@@ -257,5 +264,49 @@ public partial class TelescopeProbe : Node
     {
         GD.Print($"[telescopecheck] RESULT: FAILED - {why}");
         GetTree().Quit(1);
+    }
+
+    /// <summary><c>--telescopecheck place</c>: sets one up through the item's path and leaves it, saved, for <c>reload</c>.</summary>
+    private async Task PlaceForRestart(FootPlayer me, PlacedObjects placed)
+    {
+        await ClearLeftovers(me, placed);
+        var before = placed.All.Keys.ToHashSet();
+        _items.Inventory.Add(ItemId.Telescope, 1);
+        int slot = Hold(ItemId.Telescope);
+        me.LookYaw = 0f;
+        me.LookPitch = -0.6f;
+        await Seconds(0.3);
+        _items.UseSlot(me, slot);
+        Expect(await Until(() => New(placed, before) != null, 4), "the telescope is set up, left for the next run");
+        await Seconds(1.5);   // the save is written in the background
+    }
+
+    /// <summary>
+    /// <c>--telescopecheck reload</c>: the telescope a <c>place</c> run left, loaded from the save, looked through with a
+    /// real E press (#1813 follow-up: after a restart one could not), then packed up.
+    /// </summary>
+    private async Task LookAfterRestart(FootPlayer me, PlacedObjects placed)
+    {
+        var scope = placed.All.Values.Where(o => o.Kind == PlacedKind.Telescope)
+            .OrderBy(o => o.WorldTransform(placed.Origin).Origin.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        Expect(scope != null, "a telescope loaded from the save");
+        if (scope == null) return;
+        _placedHere.Add(scope.Id);
+        var at = scope.WorldTransform(placed.Origin).Origin;
+        GD.Print($"[telescopecheck] loaded #{scope.Id} {at.DistanceTo(me.GlobalPosition):0.0} m away, node {(Telescopes.Instance!.NodeOf(scope.Id) is { } n ? $"at {n.GlobalPosition.DistanceTo(at):0.00} m off its record" : "missing")}");
+        var away = (me.GlobalPosition - at) with { Y = 0 };
+        away = away.LengthSquared() > 0.01f ? away.Normalized() : Vector3.Back;
+        me.GlobalPosition = new Vector3(at.X, me.GlobalPosition.Y, at.Z) + away * 1.2f;
+        me.Velocity = Vector3.Zero;
+        await Seconds(0.8);
+        Expect(Telescopes.InteractionFor(me) is { Text: var prompt } && prompt.Contains("Look through"),
+            $"the prompt at the loaded tripod ({Telescopes.InteractionFor(me)?.Text ?? "none"}, at {me.GlobalPosition.DistanceTo(at):0.0} m)");
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = true });
+        await Seconds(0.15);
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.InteractMount, Pressed = false });
+        await Seconds(1.0);
+        Expect(TelescopeView.Current != null, $"looked through it after a restart ({Telescopes.Instance!.LastRefused})");
+        TelescopeView.Current?.Close();
+        await Seconds(0.3);
     }
 }

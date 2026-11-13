@@ -1063,3 +1063,7 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 - [ ] Night (`--time 23`) → no blob anywhere; the moon at its own place.
 - [ ] Fly up past 40 km (spectator) → the sun stays where it was, gains strong spikes over black; behind the Earth it is gone.
 - [ ] VR (Link): the sun and the beams in both eyes at the same place.
+
+## Placed things after a restart (PR for [#1835](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1835))
+
+- [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
