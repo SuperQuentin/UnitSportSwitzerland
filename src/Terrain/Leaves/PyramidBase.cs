@@ -91,9 +91,13 @@ public sealed class PyramidBase
     /// of 2^<paramref name="latticeLevel"/> cells a side (a leaf's level plus its bits: 23 at the leaves'), bilinear in the
     /// finest tile that holds the point with all four of its samples; NaN where none does.
     /// </summary>
-    public double HeightAt(int face, long gi, long gj, int latticeLevel)
+    public double HeightAt(int face, long gi, long gj, int latticeLevel) => HeightAt(face, gi, gj, latticeLevel, out _);
+
+    /// <summary><see cref="HeightAt(int, long, long, int)"/>, and the level that answered (-1 when none did).</summary>
+    public double HeightAt(int face, long gi, long gj, int latticeLevel, out int answered, int finest = int.MaxValue)
     {
-        for (int level = Math.Min(FinestLevel, latticeLevel); level >= 0; level--)
+        answered = -1;
+        for (int level = Math.Min(Math.Min(FinestLevel, finest), latticeLevel); level >= 0; level--)
         {
             int bits = CubeKey.LatticeBits(level), shift = latticeLevel - level - bits;
             if (shift < 0) continue;
@@ -115,6 +119,7 @@ public sealed class PyramidBase
             float a = tile.HeightAt(i0, j0), b = tile.HeightAt(i0 + 1, j0), c = tile.HeightAt(i0, j0 + 1), d = tile.HeightAt(i0 + 1, j0 + 1);
             if (float.IsNaN(a) || float.IsNaN(b) || float.IsNaN(c) || float.IsNaN(d)) continue;
             // exact at a sample: a vertex on it reads it to the bit
+            answered = level;
             if (u == 0 && v == 0) return a;
             double south = a + (b - a) * u, north = c + (d - c) * u;
             return south + (north - south) * v;

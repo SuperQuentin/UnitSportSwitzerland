@@ -371,6 +371,13 @@ src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
+# #1778/#1779: the earth fill and the globe on the pyramid, at the playtest's walls north of Riddes (Godot-free, D: data; skipped without it)
+src/Terrain/Leaves/PyramidBase full tools/fillseamscheck.sh
+src/Terrain/Leaves/PyramidFill full tools/fillseamscheck.sh
+src/Terrain/Leaves/LeafBlend full tools/fillseamscheck.sh
+src/Terrain/Leaves/GeneratedLeaves full tools/fillseamscheck.sh
+tools/TerrainPreprocessor/CubeSwiss full tools/fillseamscheck.sh
+tools/BlendCheck/FillSeamsCheck full tools/fillseamscheck.sh
 # #1510 PR 3: the earth world on a fixture course's own leaves (no map; real time: it streams at 60 m/s on the wall clock)
 src/Terrain/Earth        quick  @realtime --frame earth --earthcheck --chunks fixture:straight
 src/Terrain/Leaves       quick  @realtime --frame earth --earthcheck --chunks fixture:straight
