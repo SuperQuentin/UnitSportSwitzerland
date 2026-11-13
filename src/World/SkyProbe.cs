@@ -79,19 +79,25 @@ public partial class SkyProbe : Node
         day.HourOverride = 6.3;
         await Seconds(3.0);   // the worker propagates them all to the new moment
         Expect(Satellites.Instance.Shown > 0, $"satellites show before dawn ({Satellites.Instance.Shown})");
-        if (Satellites.Instance.Nearest(Vector3.Up) is { } sat)
+
+        // the drive (Use, #1813) tracks the sky, not a body: a spot well up stays on the same point of
+        // the celestial sphere while the sky turns, so whatever is there (a star, a nebula) stays centred
+        if (view.Locked) view.ToggleLock();   // still on Saturn
+        while (view.Focal < 20000f) view.Zoom(1);
+        view.Aim(new Vector3(0.3f, 0.8f, -0.5f));
+        await Frame();
+        var startWorld = view.Direction;
+        Expect(view.ToggleLock() && view.Locked && !view.FollowsBody, "Use: the drive tracks the sky");
+        var startSky = DayNight.Instance!.Sky!.Value.Stars.Inverse() * view.Direction;
+        day.HourOverride = null;   // the sky runs again
+        await Seconds(4.0);
+        if (DayNight.Instance.Sky is { } skyNow)
         {
-            if (view.Locked) view.ToggleLock();   // still on Saturn
-            while (view.Focal > 800f) view.Zoom(-1);
-            view.Aim(sat.Direction);
-            await Frame();
-            Expect(view.ToggleLock() && view.Satellite == sat.Name, $"locked on a satellite ({view.Satellite})");
-            day.HourOverride = null;   // the sky runs again: the satellite moves fast
-            await Seconds(1.0);
-            float off = Satellites.Instance.DirectionOf(sat.Name) is { } now ? Mathf.RadToDeg(view.Direction.AngleTo(now)) : 99f;
-            Expect(!view.Locked || off < 0.05f, $"followed it ({off:0.000}° off, or it set)");
-            await Shot("satellite");
+            float skyOff = Mathf.RadToDeg((skyNow.Stars.Inverse() * view.Direction).AngleTo(startSky)) * 3600f;
+            float turned = Mathf.RadToDeg(view.Direction.AngleTo(startWorld)) * 3600f;
+            Expect(skyOff < 0.5f && turned > skyOff * 10f, $"held on the same spot of the sky ({skyOff:0.00}″ off on the sphere, turned {turned:0.0}″ with it)");
         }
+        view.ToggleLock();
     }
 
     /// <summary>At <paramref name="hour"/>, aims at <paramref name="body"/>, zooms all the way, locks, and checks it stays in the middle.</summary>
@@ -101,17 +107,28 @@ public partial class SkyProbe : Node
         day.HourOverride = hour;
         await Seconds(1.0);
         Expect(SkyBodies.Instance!.DirectionOf(body) is { Y: > 0.2f }, $"{body} well up at {hour:0}:00");
-        if (SkyBodies.Instance.DirectionOf(body) is not { } dir) return;
-        view.Aim(dir);
+        if (SkyBodies.Instance.DirectionOf(body) is null) return;
         while (view.Focal < TelescopeOptics.FocalMax) view.Zoom(1);
+        Expect(view.SelectTarget(body) && view.Locked && view.FollowsBody && view.Target == body, $"the menu follows {body} ({view.Target})");
         await Frame();
-        Expect(view.ToggleLock() && view.Locked && view.Target == body && view.Satellite == null, $"locked on {body} ({view.Target})");
         day.HourOverride = null;   // the sky turns again
         await Seconds(3.0);
         float off = SkyBodies.Instance.DirectionOf(body) is { } now ? Mathf.RadToDeg(view.Direction.AngleTo(now)) : 99f;
         // a tenth of the view: at the longest end (#1813) the view is 9.9″ tall
         float within = TelescopeOptics.Fov(view.Focal) * 0.1f;
         Expect(off < within, $"{body} held in the middle as the sky turns ({off * 3600f:0.00}″, within {within * 3600f:0.00}″)");
+        // steady as drawn (#1813): where the body is drawn against the middle of the frame, every frame for 2 s
+        // (the lock aimed in _Process at the bodies' last place, a frame behind a sky turning ~330″ a second)
+        float worst = 0f;
+        void Sample()
+        {
+            if (GetViewport().GetCamera3D() is { } c && SkyBodies.Instance?.DirectionOf(body) is { } drawn)
+                worst = Mathf.Max(worst, Mathf.RadToDeg((-c.GlobalBasis.Z).AngleTo(drawn)) * 3600f);
+        }
+        RenderingServer.FramePostDraw += Sample;
+        await Seconds(2.0);
+        RenderingServer.FramePostDraw -= Sample;
+        Expect(worst < within * 3600f, $"{body} steady as drawn (worst {worst:0.00}″ off the middle over 2 s, within {within * 3600f:0.00}″)");
         await Shot(name);
     }
 

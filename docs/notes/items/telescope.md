@@ -23,7 +23,10 @@
   The view is PinballPlay's pattern: `UiFocus` blocks walking, a `Camera3D` rides the tube at
   `EyeOffset`, the body walks round the tripod behind the eyepiece. Focal 100-500,000 mm (a 9.9″ view at the end, Mars half of it or more; #1813)
   (`TelescopeOptics`, ×1.25 a notch; the moon fills the view at ~2,300 mm), look × fov/76 with no
-  floor, Use locks on the moon when it is within the view (or a degree) and follows it each frame.
+  floor. Use switches the drive on or off (#1813): it holds the tube on one spot of the celestial sphere
+  (`Stars`), turning it against the Earth's rotation, so anything centred stays (a star, a nebula; the moon and planets
+  drift off it slowly). Turning the mouse or stick with the drive on moves the spot, never lets go. The target menu follows a body
+  itself (`FollowsBody`). Looked through again, the tube is where it was left (its own turn) and the zoom too (per telescope, client-side).
   A round eyepiece mask, the focal length and ×, the keys.
 - **Targets and info** (#1530, `Items/TelescopeTargets`, plain C#): the target menu lists the moon, the
   planets and Io, Europa, Ganymede, Callisto and Titan (never the sun) down the left of the view; Left / Right
@@ -45,7 +48,7 @@
   `xr/vr-action-map`, `bots/bot-capability-map` (n/a).
 - **Checks**: `--telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23`
   (opened with a real E press and still open 1 s later: offline the view opens in the frame of E, #1813, `Core.FreshPress`)
-  (the item path, the view, a 0.58° frustum, the lock holding the moon to 0.0000° over 8 s, the menu slewing to Jupiter and holding it, refused
+  (the item path, the view, a 0.58° frustum, the drive holding the moon to 0.0000° over 8 s, reopened where it was left, the menu slewing to Jupiter and holding it, refused
   packing up, E steps back, packed up into the pack; windowed it saves
   `test_output/telescope_moon.png`). `tools/telescopecheck.sh`: two clients, busy, refused, freed.
   Unit: `TelescopeOpticsTests`, `TelescopeTargetsTests`, `EphemerisTests.The_moons_face_matches_Horizons`.

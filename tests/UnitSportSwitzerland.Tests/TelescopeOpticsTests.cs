@@ -38,13 +38,4 @@ public class TelescopeOpticsTests
         // the camera's own floor (0.04) would turn the longest view by many widths a mouse count
         Assert.True(TelescopeOptics.LookScale(TelescopeOptics.FocalMax) < 0.003f);
     }
-
-    [Fact]
-    public void Locks_on_what_is_in_view()
-    {
-        Assert.True(TelescopeOptics.CanLock(0.2f, 2300f));
-        Assert.False(TelescopeOptics.CanLock(5f, 2300f));
-        Assert.True(TelescopeOptics.CanLock(0.9f, TelescopeOptics.FocalMax), "within a degree at the longest end");
-        Assert.True(TelescopeOptics.CanLock(7f, TelescopeOptics.FocalMin), "the finder view: 13.7 deg tall");
-    }
 }

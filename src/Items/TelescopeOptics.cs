@@ -32,10 +32,4 @@ public static class TelescopeOptics
 
     /// <summary>"×N": how many times larger than the naked eye's 50 mm.</summary>
     public static float Magnification(float focalMm) => focalMm / 50f;
-
-    /// <summary>
-    /// Whether a body <paramref name="offDeg"/> degrees off the view's centre is close enough to lock on:
-    /// inside the view, or within a degree of it at the longest focal lengths.
-    /// </summary>
-    public static bool CanLock(float offDeg, float focalMm) => offDeg <= MathF.Max(Fov(focalMm) * 0.6f, 1f);
 }
