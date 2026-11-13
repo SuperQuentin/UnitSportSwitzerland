@@ -156,9 +156,12 @@ CUBE_OUT=${CUBE_OUT:-$NAS_ROOT/terrain_chunks_cube}
 cube_region() {
   CUBE_TILES=$(mktemp)
   if [ -n "${BOX:-}" ] && [ -z "${TILES:-}" ]; then
-    # every km tile the box touches (max exclusive); the box itself as given
-    awk -v b="$BOX" 'BEGIN { split(b, v, ","); for (e = int(v[1] / 1000); e * 1000 < v[3]; e++) for (n = int(v[2] / 1000); n * 1000 < v[4]; n++) print e "-" n }' > "$CUBE_TILES"
+    # the box picks the leaves (by their centre); their sources are every km tile within 1 km of it, since a leaf
+    # (~600 m) reaches up to ~430 m past the box: without them its outer samples would have no heights
+    awk -v b="$BOX" 'BEGIN { split(b, v, ","); for (e = int(v[1] / 1000) - 1; e * 1000 < v[3] + 1000; e++) for (n = int(v[2] / 1000) - 1; n * 1000 < v[4] + 1000; n++) print e "-" n }' > "$CUBE_TILES"
     CUBE_BOX=$BOX
+    # the margin's tiles may lie abroad or in a lake: a box's missing tiles are reported, not fatal
+    MISSING_TILES_OK=${MISSING_TILES_OK-1}
   else
     local f=${TILES:-tools/regions/d2-server.tiles}
     [ -f "$f" ] || { echo "no tile list $f" >&2; exit 2; }
