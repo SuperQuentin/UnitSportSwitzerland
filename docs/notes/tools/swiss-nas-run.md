@@ -43,3 +43,5 @@ masks of the 8k edge tiles of France: a fixed cost of each start of that stage),
 hash 1; wall 722 s. Peak RSS: terrain 0.6 GB, frdem 1.3 GB, osm 1.7 GB, features 4.0 GB. All `.terr` carry version
 word 3, the manifest says `formatVersion` 3, `heightOffsetM` -50. Fixed costs dominate a small box, so these do not
 extrapolate to the 43,621 tiles; the stage log of the first full run is the real number.
+
+The earth leaves (cube-sphere L14, G2) of a region go through the same script: `tools/build-swiss-nas.sh cube ...`, `tools/cube-nas-run` (#1794). The publish lands in `${TMPDIR:-/tmp}/unitsport-nas`, outside the checkout (`PUBLISH=` moves it).
