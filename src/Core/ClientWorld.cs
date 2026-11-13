@@ -959,10 +959,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(HitboxProbe.Requested, ToolAnchor.Own, _ => new HitboxProbe(chunks, origin)),
             // the earth world on real leaves (#1510): collision, streaming and the re-anchor
             new(Terrain.Earth.EarthCheck.Requested, ToolAnchor.AtTarget, _ => EarthCheckFor(origin)),
+            // the fill far away (another face, Asia) against the globe round it (#1800)
+            new(Terrain.Earth.FarFillCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.FarFillCheck(Ground!, origin,
+                () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus,
+                () => _earth?.Leaves.Pyramid)),
             // G2 D's bar (#1710): no pop at a re-anchor; a long drive and a long flight across many
             new(ReanchorCheck.Requested, ToolAnchor.AtTarget, _ => ReanchorCheckFor(origin)),
             new(LongDriveCheck.Requested, ToolAnchor.AtTarget, _ => new LongDriveCheck(Ground!, origin, _earth == null ? null : _earth.Leaves.RoadsOf)),
             new(LongFlightCheck.Requested, ToolAnchor.AtTarget, _ => new LongFlightCheck(Ground, origin)),
+            // the spectator's view across many turning re-anchors: level, no snap at the next look (#1800)
+            new(SpectatorTurnCheck.Requested, ToolAnchor.AtTarget, _ => new SpectatorTurnCheck(_spectator!, origin)),
             // the player's own camera across the earth ground's re-anchor, on foot and in a car (#1763)
             new(ReanchorCamCheck.Requested, ToolAnchor.AtTarget, _ => new ReanchorCamCheck(Ground!, origin)),
             new(SyncProbe.Requested, ToolAnchor.AtTarget, _ => new SyncProbe(chunks, origin)),

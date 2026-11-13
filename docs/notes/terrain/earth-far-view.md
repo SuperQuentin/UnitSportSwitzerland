@@ -15,6 +15,20 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   `ClientWorld`). A drawn leaf's globe tile is left out, and every ancestor of a drawn leaf always splits, so the
   globe's coarser ground (every 8th vertex) never shows through a leaf; the leaf's neighbours stay the globe's. Its
   skirts close the seam. While a split's children load, the parent still draws (a frame or two of overlap).
+  **Past the pyramid's levels (#1800)**: outside Switzerland `cube_global` holds levels 0-4 only (a level-4 tile is
+  ~600 km), and a split waits for all four children, so over a fill leaf in Ladakh (face F1) the split never came: the
+  level-4 tile (every 8th vertex) stayed drawn over the leaves, up to 317 m over them on the Himalaya's slopes. A child
+  of a tile holding a drawn leaf that the pyramid (or the fill's domain, at the leaves' level) lacks is now built from
+  its ancestors alone (`Globe.Synthesise`: `FillFromAncestors`, bilinear in the nearest ancestor's lattice, which is
+  what the fill's `PyramidBase` reads, so they agree; its ancestor's colour). Only those: elsewhere the globe stays at
+  the levels it has. `tools/farfillcheck.sh` (`--farfillcheck`, `Globe.SurfaceAt`): the globe's drawn ground and lakes
+  against the near leaves' over a 600 m grid, at the user's spot or any `AT`, and the world's up against the
+  ellipsoid's (the "rolled" view there was the mountainside's 17° slope; the frame's up was exact).
+- **The leaves' sea level is Switzerland's everywhere** (`SwissSeaLevel`: Bessel 1841 + CHGeo2004, extrapolated): 345 m
+  under the ellipsoid in Ladakh where the geoid is ~-30 m, 1.3 km off over the Pacific. The fill's heights do not
+  depend on it (the pyramid is EGM2008-ellipsoidal and the generator's sea level cancels in `P + D(G - L)`), but every
+  LHN95 read-out does far away: the HUD's altitude and the palette's altitude bands (`EarthWorld.Mesh`'s geoid: more
+  snow). G3's EGM2008 replaces it.
 - **Near the ground in the style's terrain material** (below `TerrainBelowM`, 20 km): every tile takes
   `StyleKit.Material(Terrain)` (one shared instance, restyled by the kit), so it is lit, hazed, banded (PS1) and
   lifted by refraction as the flat terrain is. Above 20 km, `globe.gdshader` (the true sun's terminator over the whole

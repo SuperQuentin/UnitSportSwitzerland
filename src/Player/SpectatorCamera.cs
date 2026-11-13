@@ -31,10 +31,29 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
 
     private float _yaw;
 
-    /// <summary>The camera's rotation is rebuilt from its yaw each frame: a turning shift (#1430 H3) turns the yaw.</summary>
+    /// <summary>
+    /// A turning shift (#1430 H3, the earth world's re-anchors #1512) keeps the view as it was against the local
+    /// horizon: its pitch, its heading turned by the shift's yaw, no roll (#1800). The shifter turned the camera rigidly
+    /// with the world, tilt and all: after a long flight with the look untouched (every 3 km on the ground, every 20 km
+    /// in Space, ~50° of the Earth's turn from Geneva to Asia) the view stood rolled and pitched, and the next look
+    /// input rebuilt it from the angles kept here, a snap. The angles are read off the camera's own placement before
+    /// the shift, so a tool that turned the camera itself keeps its view too.
+    /// </summary>
     public void OnOriginShifted(Core.OriginShift shift)
     {
-        if (shift.Turns) _yaw += shift.Yaw;
+        if (!shift.Turns) return;
+        var before = (shift.Transform.Basis.Inverse() * GlobalTransform.Basis).GetEuler();
+        _pitch = Mathf.Clamp(before.X, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+        _yaw = before.Y + shift.Yaw;
+        Rotation = new Vector3(_pitch, _yaw, 0);
+    }
+
+    /// <summary>The look's angles from the camera as it is (a tool or the spawn may have turned it): a look input turns that view, never a stale one.</summary>
+    private void SyncLook()
+    {
+        var r = Rotation;
+        _pitch = Mathf.Clamp(r.X, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+        _yaw = r.Y;
     }
     private float _pitch;
 
@@ -45,6 +64,15 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         Core.MouseCapture.Capture();
     }
 
+    /// <summary>A mouse look by <paramref name="relative"/> pixels (also a check's, <c>--spectatorturncheck</c>).</summary>
+    public void Look(Vector2 relative)
+    {
+        SyncLook();
+        _yaw -= relative.X * MouseSensitivity;
+        _pitch = Mathf.Clamp(_pitch - relative.Y * MouseSensitivity, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+        Rotation = new Vector3(_pitch, _yaw, 0);
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         if (UnitSport.Core.UiFocus.TextEntryActive) return;
@@ -52,10 +80,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         switch (@event)
         {
             case InputEventMouseMotion motion when Core.PlayerInput.IsLookMotion(motion):
-                _yaw -= motion.Relative.X * MouseSensitivity;
-                _pitch = Mathf.Clamp(_pitch - motion.Relative.Y * MouseSensitivity,
-                    -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
-                Rotation = new Vector3(_pitch, _yaw, 0);
+                Look(motion.Relative);
                 break;
 
             case InputEventMouseButton { Pressed: true } button
@@ -124,6 +149,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         var look = UnitSport.Core.PlayerInput.LookRate;
         if (look != Vector2.Zero)
         {
+            SyncLook();
             _yaw -= look.X * dt;
             _pitch = Mathf.Clamp(_pitch - look.Y * dt, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
             Rotation = new Vector3(_pitch, _yaw, 0);

@@ -13,6 +13,8 @@ namespace UnitSport.Core;
 /// (Windows' "not responding" ghost window takes the input), so a key let go then stays held.
 /// On Windows the keys believed down are checked against the OS's live state a few times a second,
 /// and a key up there twice running is released.</item>
+/// <item>Late repeats: an auto-repeat that Godot parses after its key's key-up (Shift on Windows)
+/// presses the actions again; it is let go at once (#1805).</item>
 /// </list>
 /// </summary>
 public partial class PlayerInput
@@ -69,16 +71,43 @@ public partial class PlayerInput
 
     private static void TrackKey(InputEventKey k)
     {
-        if (k.Echo) return;
         var key = k.PhysicalKeycode;
         if (key == Key.None) return;
-        if (k.Pressed) DownKeys[key] = k;
+        if (k.Echo)
+        {
+            if (k.Pressed && !Input.IsPhysicalKeyPressed(key)) ReleaseLateRepeat(k);
+            return;
+        }
+        if (k.Pressed)
+        {
+            DownKeys[key] = k;
+            LateRepeatLogged.Remove(key);
+        }
         else
         {
             DownKeys.Remove(key);
             UpOnce.Remove(key);
         }
     }
+
+    /// <summary>
+    /// A repeat of a key Godot already holds up: it came after the key's own key-up (#1805). Godot on
+    /// Windows reads Shift's key-up from raw input, drained before the message queue each frame, so
+    /// an auto-repeat queued just before the release is parsed after it (at a frame boundary, and
+    /// surely across a hitch). <c>Input</c> leaves an echo out of its pressed keys but presses
+    /// the actions on it, so Shift reads up while sprint and Down stay held, and no key-up follows.
+    /// Its own key-up lets go of that key's part of each action (another key or button holding the
+    /// same action keeps it).
+    /// </summary>
+    private static void ReleaseLateRepeat(InputEventKey echo)
+    {
+        if (LateRepeatLogged.Add(echo.PhysicalKeycode))
+            GD.Print($"[input] {echo.PhysicalKeycode} repeated after its key-up: released");
+        Input.ParseInputEvent(KeyUp(echo));
+    }
+
+    /// <summary>Keys whose late repeat was logged since their last real press: one line per release.</summary>
+    private static readonly HashSet<Key> LateRepeatLogged = new();
 
     /// <summary>A few times a second: keys down for Godot and up for Windows, twice running, are let go.</summary>
     private static void ReleaseStuckKeys()

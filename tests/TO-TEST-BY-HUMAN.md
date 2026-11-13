@@ -15,6 +15,19 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] Back in Switzerland, `/time set noon` → 12:00, as before; `/time set 12:00 utc` → 13:00 or 14:00.
 - [ ] Online on a server, as admin far away: `/time set noon` → the broadcast names your zone and "noon where they stand", and a second player at home sees the same clock.
 
+## A join from the menu reaches the ground ([#1816](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1816), PR [#1819](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1819))
+
+The exported Windows build, joined from the title screen (saved server or address), not `--connect`.
+
+- [ ] Delete `chunk_2583_1113.terr` (and its neighbours `2582-2584_1112-1114`) from `chunk_cache` (keep the `.terrc`), join `unitsport.infrack.ch` from the menu as a returning player → the loading screen ends, on foot at the spawn or where you fell asleep; no `[spawn] no terrain streamed under the spawn point` warning in the log.
+
+## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
+
+On Windows, a real keyboard, in a window.
+
+- [ ] In the spectator (Shift+T), hold Shift a second or more and let go, twenty times, some while turning the mouse, some during a load hitch, some after an Alt tap with the cursor free → the camera stops sinking every time; a `[input] Shift repeated after its key-up: released` line in the log is that case caught.
+- [ ] On foot, sprint with Shift+W and let go of Shift first, then W, a dozen times → back to a walk every time.
+
 ## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.
