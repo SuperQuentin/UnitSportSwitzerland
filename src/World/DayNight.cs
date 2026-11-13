@@ -61,6 +61,12 @@ public partial class DayNight : Node
 
     private double _placeE = SunPath.BernE, _placeN = SunPath.BernN;
 
+    /// <summary>The LV95 place the sky is read at: where <c>/time</c>'s named hours and zone are read offline (#1801).</summary>
+    public (double E, double N) Place => (_placeE, _placeN);
+
+    /// <summary>The real sun lights this world (not the fixed day, not the fun world's dusk).</summary>
+    public static bool RealSun => SunPath.Model == SunModel.Real && !WorldChoice.FunActive;
+
     /// <summary>0 in daylight, 1 at night. Headlights, lamps and windows read this.</summary>
     public float Night { get; private set; }
 
@@ -257,7 +263,7 @@ public partial class DayNight : Node
         // horizon the shading follows the moon instead, never lower than ~25°, so a night-time
         // mountain still has a lit side and a dark one rather than going flat.
         Vector3 sun, shade;
-        if (SunPath.Model == SunModel.Real && !WorldChoice.FunActive)
+        if (RealSun)
         {
             TrackPlace();
             SunPath.Frame = Origin?.Frame;

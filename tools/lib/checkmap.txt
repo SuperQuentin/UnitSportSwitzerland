@@ -105,6 +105,11 @@ src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
+# #1801: /time's named hours and zone where the player stands, far away and at home (Geneva)
+src/World/LocalHours     quick  --localtimecheck --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at -4679383,7259183
+src/World/LocalHours     quick  --localtimecheck home --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at 2500300,1117900
+src/World/LocalTimeProbe quick  --localtimecheck --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at -4679383,7259183
+src/World/TimeCommand    quick  --localtimecheck home --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at 2500300,1117900
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
 # #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
@@ -630,6 +635,9 @@ src/World/TimeCommand    net    tools/clocknetcheck.sh
 src/World/ClockNetProbe  net    tools/clocknetcheck.sh
 src/Net/ClockSync        net    tools/clocknetcheck.sh
 src/Net/ChatManager      net    tools/clocknetcheck.sh
+src/World/LocalHours       net    tools/localtimenetcheck.sh
+src/World/LocalTimeNetProbe net   tools/localtimenetcheck.sh
+src/World/TimeCommand      net    tools/localtimenetcheck.sh
 tools/TerrainFormat/SignalPlan net tools/signalnetcheck.sh
 src/Player/Steamer       net    tools/steamernetcheck.sh
 src/Player/FootPlayer.St net    tools/steamernetcheck.sh

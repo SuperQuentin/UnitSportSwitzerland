@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## `/time` where you stand ([#1804](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1804))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator far from Switzerland (e.g. `/tp -4679383 7259183`).
+
+- [ ] `/time set day`, `noon`, `sunset`, `night` there → morning daylight, the sun high, the sun on the horizon, dark; `/time` → "It is … UTC-7 (… Swiss time)".
+- [ ] Back in Switzerland, `/time set noon` → 12:00, as before; `/time set 12:00 utc` → 13:00 or 14:00.
+- [ ] Online on a server, as admin far away: `/time set noon` → the broadcast names your zone and "noon where they stand", and a second player at home sees the same clock.
 ## The debug menu on the earth world ([#1820](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1820), [#1743](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1743))
 
 In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2027-07-15`, F9.
