@@ -18,7 +18,22 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
 - **Near the ground in the style's terrain material** (below `TerrainBelowM`, 20 km): every tile takes
   `StyleKit.Material(Terrain)` (one shared instance, restyled by the kit), so it is lit, hazed, banded (PS1) and
   lifted by refraction as the flat terrain is. Above 20 km, `globe.gdshader` (the true sun's terminator over the whole
-  Earth); refraction's lift is gone by then, so the two meet. `world_fill_hide` is 0 in this world (it is the flat
+  Earth); refraction's lift is gone by then, so the two meet.
+- **The handover is a band, 15-25 km** (#1802, `shaders/common/globe_light.gdshaderinc`, `Globe.Blend`): it was a hard
+  switch, and at night the moonlit green ground (the style's shade is the moon, held ~25° high) went black at 20 km, the
+  sea green land below and blue photo above. Now from 15 km the terrain body's light eases into the globe's (true sun,
+  `world_globe_band`: its colour moves from ALBEDO to EMISSION as `globe_lit`), and up to 25 km `globe.gdshader` eases from
+  what the terrain drew at 20 km (the vertex palette, `style_lake`, bare rock, Cartoon's grade, facet normals) into the
+  photo and smooth relief (`world_globe_palette`). Both globals are 0 outside the earth world and below 15 km, written
+  on change; the globe's ambient and sun colour are globals too (`world_globe_ambient`/`_sun`, no per-tile writes). The
+  lakes' surfaces show below 15 km only (scene-lit, they would stand out of a true-sun-lit ground). The step between
+  shots 500 m apart at 20 km went from a mean 25 (night) / 22 (day) of 255 to 1 / 3. A LITE (headset) variant and the
+  PS1 unlit path keep the hard switch. Shots at a far spot need `--sun real` (the fixed sun of shots lights the globe
+  by the scene's light, so it is never night there); at LV95 -5011173,8685903 `--time 12` is night, `--time 0` day.
+- **The sea's bed** (#1802): the pyramid holds ETOPO's bathymetry (a shelf sea 20-50 m down), so most of the sea is not
+  level, and the pyramid's lake list (`lakes != null`, any copy with the Swiss levels) dried every water vertex that was
+  not one of its lakes: the sea was painted as green land below 20 km. Under `GlobeGround.SeaReachM` (10 m) the colour
+  image's water stays. The deep ocean's bed is still drawn as ground with no sea surface over it. `world_fill_hide` is 0 in this world (it is the flat
   world's fill dissolve: at 1 `flat_hide` discards every terrain fragment) and `globe.gdshader`'s fill push is off by
   its own `fill_push` uniform.
 - **Colour per vertex, in the palette** (`GlobeGround`): each texel of a tile's colour image is read back through the

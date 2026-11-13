@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The globe's 20 km handover ([#1803](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1803))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, the spectator (Shift+T) over the coast at LV95 -5011173,8685903.
+
+- [ ] At the spot's night, climb slowly from 14 km to 26 km and back → the ground darkens from moonlit to night over 15-20 km with no jump at 20 km; the coast and sea stay where they are, no green land over the sea below 20 km.
+- [ ] The same by day → no jump in colour or relief at 20 km; the photo's sea and fields fade in over 20-25 km.
+- [ ] While spectating over the ground with the body falling below → no "open WINGSUIT" prompt.
+
 ## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.
