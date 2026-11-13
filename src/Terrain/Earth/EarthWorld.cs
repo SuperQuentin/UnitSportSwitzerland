@@ -195,7 +195,12 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         /// <summary>The building sites' pits in its anchor frame (#1653), null without any.</summary>
         public List<Construction.PitCut>? Pits;
         public LeafTransform? Lattice;
-        public (int I, int J) Hint;
+        /// <summary>The world it is loaded in: a thread's recent leaves (<see cref="t_recent"/>) are told apart by it.</summary>
+        public EarthWorld? World;
+        /// <summary>Unloaded (<see cref="Remove"/>): a thread that still holds it in its recent leaves drops it.</summary>
+        public volatile bool Gone;
+        /// <summary>Its last view from the origin (<see cref="ViewOf"/>), swapped whole by whichever thread re-anchors it first.</summary>
+        public volatile LeafView? View;
         public MeshInstance3D? Mesh;
         public Furniture? Furniture;
         public ChunkNode? Node;
@@ -495,6 +500,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             Furniture = BuildMeshes ? Furnish(prepared.Stand, content, side) : null,
             Bores = content.Roads is { } roads ? RoadTunnels.Bores(roads) : null,
             Lattice = LeafFrames.Swiss.TransformOf(key),
+            World = this,
             Pits = pits,
         };
     }
@@ -555,6 +561,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     {
         _stale.Remove(key);
         if (!_near.Remove(key, out var leaf)) return;
+        leaf.Gone = true;
         long t = Stopwatch.GetTimestamp();
         if (_collisionSource.PinnedOf(key) == leaf.Prepared) _collisionSource.Unpin(key);
         leaf.Mesh?.QueueFree();
@@ -928,17 +935,151 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     // --- the queries -------------------------------------------------------------------------------------------
 
-    /// <summary>The loaded leaf under a world point, and the point in its anchor frame; false off the loaded leaves.</summary>
-    private bool LeafAt(Vector3 worldPos, out Near leaf, out double x, out double y, out double z)
+    /// <summary>The leaves a thread asked last (#1751), most recent first: successive queries are nearly always on one of them.</summary>
+    [ThreadStatic] private static Near?[]? t_recent;
+
+    private const int RecentLeaves = 4;
+
+    /// <summary>
+    /// How far inside a recent leaf's lattice (cells, ~1.2 m each) a point must be for that leaf to answer without asking
+    /// the cube key (#1751). It covers the affine lattice guess (a few cm) and the key's other projection: the key follows
+    /// the point's geodetic normal down, the mesh lookup the anchor's up, which part by height × the normals' tilt
+    /// (≤ 0.07 mrad at a corner: 0.7 m at <see cref="RecentMaxHeight"/>).
+    /// </summary>
+    private const double RecentMargin = 4;
+
+    /// <summary>Above this height over the anchor the recent leaves are not trusted (space): the cube key decides.</summary>
+    private const double RecentMaxHeight = 10_000;
+
+    /// <summary>
+    /// A loaded leaf seen from one origin frame (#1751): world → anchor frame, world → lattice guess and anchor frame →
+    /// world height composed into plain affine rows, so a query is a few dot products instead of the world → ECEF →
+    /// anchor round trip and back. Immutable; made again when the origin re-anchors (once a leaf every 3 km).
+    /// </summary>
+    private sealed class LeafView
     {
+        public readonly FrameAxes Axes;
+        // world (x, y, z) -> the anchor frame's x, y, z
+        public readonly double X0, Xx, Xy, Xz, Y0, Yx, Yy, Yz, Z0, Zx, Zy, Zz;
+        // world -> the lattice guess (LeafTransform.LocalToLatticeGuess)
+        public readonly double I0, Ix, Iy, Iz, J0, Jx, Jy, Jz;
+        // the anchor frame's (x, y, z) -> world y
+        public readonly double W0, Wx, Wy, Wz;
+        /// <summary>The highest lattice coordinate well inside (<see cref="RecentMargin"/>).</summary>
+        public readonly double Hi;
+
+        public LeafView(EnuFrame anchor, LeafTransform lattice, FrameAxes axes)
+        {
+            Axes = axes;
+            EcefPos e = anchor.East, u = anchor.Up, n = anchor.North;
+            var o = new EcefPos(axes.Origin.X - anchor.Origin.X, axes.Origin.Y - anchor.Origin.Y, axes.Origin.Z - anchor.Origin.Z);
+            (X0, Xx, Xy, Xz) = (Dot(e, o), Dot(e, axes.X), Dot(e, axes.Y), Dot(e, axes.Z));
+            (Y0, Yx, Yy, Yz) = (Dot(u, o), Dot(u, axes.X), Dot(u, axes.Y), Dot(u, axes.Z));
+            (Z0, Zx, Zy, Zz) = (-Dot(n, o), -Dot(n, axes.X), -Dot(n, axes.Y), -Dot(n, axes.Z));
+            var g0 = lattice.LocalToLatticeGuess(0, 0);
+            var gx = lattice.LocalToLatticeGuess(1, 0);
+            var gz = lattice.LocalToLatticeGuess(0, 1);
+            double ix = gx.I - g0.I, iz = gz.I - g0.I, jx = gx.J - g0.J, jz = gz.J - g0.J;
+            (I0, Ix, Iy, Iz) = (g0.I + ix * X0 + iz * Z0, ix * Xx + iz * Zx, ix * Xy + iz * Zy, ix * Xz + iz * Zz);
+            (J0, Jx, Jy, Jz) = (g0.J + jx * X0 + jz * Z0, jx * Xx + jz * Zx, jx * Xy + jz * Zy, jx * Xz + jz * Zz);
+            // world y = Y·(A + E x + U y − N z − O)
+            (W0, Wx, Wy, Wz) = (-Dot(axes.Y, o), Dot(axes.Y, e), Dot(axes.Y, u), -Dot(axes.Y, n));
+            Hi = lattice.Cells - RecentMargin;
+        }
+
+        private static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+    }
+
+    /// <summary>A leaf's view from these axes: its last one, or a new one after a re-anchor. Any thread.</summary>
+    private static LeafView? ViewOf(Near leaf, FrameAxes axes)
+    {
+        if (leaf.View is { } v && ReferenceEquals(v.Axes, axes)) return v;
+        if (leaf.Lattice is not { } t) return null;
+        return leaf.View = new LeafView(leaf.Anchor, t, axes);
+    }
+
+    /// <summary>The loaded leaf under a world point, and the point in its anchor frame; false off the loaded leaves.</summary>
+    private bool LeafAt(Vector3 worldPos, out Near leaf, out double x, out double y, out double z) =>
+        Locate(worldPos, out leaf, out _, out x, out y, out z, out _, out _);
+
+    /// <summary>
+    /// <see cref="LeafAt"/>, and the leaf's view from the current frame (null in an LV95 frame) and the lattice guess
+    /// (NaN when not known). A thread's recent leaf answers when the point is well inside it (<see cref="RecentMargin"/>,
+    /// <see cref="RecentMaxHeight"/>): the leaf the cube key names, without the key's geodetic round trip (#1751).
+    /// </summary>
+    private bool Locate(Vector3 worldPos, out Near leaf, out LeafView? view, out double x, out double y, out double z, out double i, out double j)
+    {
+        var axes = Origin.Frame.Axes;
+        var recent = t_recent ??= new Near?[RecentLeaves];
+        if (axes != null)
+        {
+            double wx = worldPos.X, wy = worldPos.Y, wz = worldPos.Z;
+            for (int k = 0; k < RecentLeaves; k++)
+            {
+                if (recent[k] is not { } r) break;
+                if (r.World != this || r.Gone || ViewOf(r, axes) is not { } v) continue;
+                i = v.I0 + v.Ix * wx + v.Iy * wy + v.Iz * wz;
+                j = v.J0 + v.Jx * wx + v.Jy * wy + v.Jz * wz;
+                if (!(i >= RecentMargin && i <= v.Hi && j >= RecentMargin && j <= v.Hi)) continue;
+                y = v.Y0 + v.Yx * wx + v.Yy * wy + v.Yz * wz;
+                if (Math.Abs(y) > RecentMaxHeight) continue;
+                x = v.X0 + v.Xx * wx + v.Xy * wy + v.Xz * wz;
+                z = v.Z0 + v.Zx * wx + v.Zy * wy + v.Zz * wz;
+                for (int m = k; m > 0; m--) recent[m] = recent[m - 1];
+                recent[0] = r;
+                leaf = r;
+                view = v;
+                return true;
+            }
+        }
+
+        i = j = double.NaN;
         var ecef = Origin.ToEcef(worldPos);
-        var key = CubeKey.FromEcef(ecef, LeafFrames.LeafLevel);
-        if (!_near.TryGetValue(key, out leaf!))
+        if (!_near.TryGetValue(CubeKey.FromEcef(ecef, LeafFrames.LeafLevel), out leaf!))
         {
             x = y = z = 0;
+            view = null;
             return false;
         }
         (x, y, z) = leaf.Anchor.ToLocal(ecef);
+        view = axes != null ? ViewOf(leaf, axes) : null;
+        // newest first; a leaf already held moves to the front, the oldest (or a gone one) falls off
+        int at = RecentLeaves - 1;
+        for (int k = 0; k < RecentLeaves; k++)
+            if (recent[k] == leaf || recent[k] == null || recent[k]!.Gone) { at = k; break; }
+        for (int m = at; m > 0; m--) recent[m] = recent[m - 1];
+        recent[0] = leaf;
+        return true;
+    }
+
+    /// <summary>
+    /// The leaf mesh's height under a local (x, z), NaN off it: the walk starts at the quad of the lattice guess (i, j)
+    /// (#1751; worked out here when NaN), so it ends in a step or two whoever asked before, and no state is shared between
+    /// threads.
+    /// </summary>
+    private static double MeshHeight(Near leaf, double x, double z, double i = double.NaN, double j = double.NaN)
+    {
+        if (double.IsNaN(i) && leaf.Lattice is { } t) (i, j) = t.LocalToLatticeGuess(x, z);
+        int top = leaf.Side - 2;
+        // NaN-safe: a NaN fails both tests and starts at 0
+        var hint = (i > 0 ? (int)Math.Min(i, top) : 0, j > 0 ? (int)Math.Min(j, top) : 0);
+        return CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref hint);
+    }
+
+    /// <summary>
+    /// <see cref="HeightAt"/> the way it was before #1751, for <c>--worldgroundcheck</c>'s parity: always through the cube
+    /// key and the ECEF round trip, the mesh walked from its corner.
+    /// </summary>
+    internal bool HeightAtByKey(Vector3 worldPos, out float height)
+    {
+        height = 0f;
+        var ecef = Origin.ToEcef(worldPos);
+        if (!_near.TryGetValue(CubeKey.FromEcef(ecef, LeafFrames.LeafLevel), out var leaf)) return false;
+        var (x, _, z) = leaf.Anchor.ToLocal(ecef);
+        var hint = (0, 0);
+        double h = CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref hint);
+        if (double.IsNaN(h)) return false;
+        height = ToWorld(leaf, x, h, z).Y;
         return true;
     }
 
@@ -953,10 +1094,10 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     internal bool HeightAt(Vector3 worldPos, out float height)
     {
         height = 0f;
-        if (!LeafAt(worldPos, out var leaf, out double x, out _, out double z)) return false;
-        double h = CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref leaf.Hint);
+        if (!Locate(worldPos, out var leaf, out var view, out double x, out _, out double z, out double i, out double j)) return false;
+        double h = MeshHeight(leaf, x, z, i, j);
         if (double.IsNaN(h)) return false;
-        height = ToWorld(leaf, x, h, z).Y;
+        height = view != null ? (float)(view.W0 + view.Wx * x + view.Wy * h + view.Wz * z) : ToWorld(leaf, x, h, z).Y;
         return true;
     }
 
@@ -970,7 +1111,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         height = 0;
         if (!_near.TryGetValue(CubeKey.FromEcef(p, LeafFrames.LeafLevel), out var leaf)) return false;
         var (x, _, z) = leaf.Anchor.ToLocal(p);
-        double h = CubeGeometry.MeshHeightAt(leaf.Vertices, leaf.Side, x, z, ref leaf.Hint);
+        double h = MeshHeight(leaf, x, z);
         if (double.IsNaN(h)) return false;
         height = Ellipsoid.Wgs84.ToGeodetic(leaf.Anchor.ToEcef(x, h, z)).H;
         return true;

@@ -31,6 +31,13 @@ decisions were made with the user on 2026-11-08.
   - A leaf's mesh is its collision's (`LeafCollision.Prepare`, road blend at clearance 0): what is drawn is what is stood on. Its look: "The ground's look (C6)" below.
   - Each leaf is placed by one rigid transform from its anchor (`LeafToWorld`) and placed again from the frame at each shift, never accumulated.
   - Queries compose in doubles: world → ECEF → the leaf it lies in → that leaf's anchor frame → its mesh (`CubeGeometry.MeshHeightAt`) → back.
+  - Fast path (#1751): each thread keeps its 4 recent leaves; a point at least 4 lattice cells inside one, under 10 km, is
+    answered by it without the cube key (`CubeKey.FromEcef`'s geodetic iteration was most of the old 6-7.6 µs). Each leaf
+    keeps a `LeafView` per origin frame: world → anchor frame, world → lattice guess (`LeafTransform.LocalToLatticeGuess`)
+    and anchor frame → world y as affine rows, made again after a re-anchor. The mesh walk starts at the guessed quad (no
+    shared hint). Cost 288 ns against flat's 249 ns (lake fixture, Debug JIT); the old path stays as `HeightAtByKey`,
+    which `--worldgroundcheck --frame earth` holds it to (bit for bit but a handful of points at ≤ 0.03 mm), before and
+    after a re-anchor with its turn, on a 0.4 m grid round a leaf corner and 3 km up.
   - Water comes from `CubeWater` (ellipsoidal level, every second vertex) with the flat world's wave scale, cover from the lattice byte, tunnels from the leaf's road bores.
   - `TileEntered`/`TileUnloaded` carry `GroundTile.FromLeaf(key)`. Furnishing and replacement events come with PR 2 and PR 3.
 - **Collision**: C2's `CollisionPatches` round the collision anchors (look-ahead 10 s, at most 600 m; none 200 m up).
@@ -132,7 +139,7 @@ decisions were made with the user on 2026-11-08.
   - the ball 0.5 cm off;
   - 4.5 km with the ground never missing;
   - 1 re-anchor, marks 0.00 cm.
-- The flat world: `--worldgroundcheck --chunks fixture:lake` (quick).
+- `--worldgroundcheck --chunks fixture:lake`, flat and `--frame earth` (quick): parity with the cube-key path and the query's cost.
 
 ## The ground's look (G2 C6, #1634, #1632)
 
