@@ -26,8 +26,9 @@ public enum TimeOp
 public static class TimeCommand
 {
     /// <summary>
-    /// Names for <c>/time set</c>. Sunrise and sunset are the fixed day's here; under the real sun
-    /// (#1430) they are today's at Bern (<see cref="SunPath.RiseOrSet"/>).
+    /// Names for <c>/time set</c>, with their hours in Switzerland. Sunrise and sunset are the fixed
+    /// day's here; under the real sun (#1430) they are today's at Bern (<see cref="SunPath.RiseOrSet(bool)"/>).
+    /// Far from Switzerland they are read off the sun where the player stands (<see cref="LocalHours"/>, #1801).
     /// </summary>
     public static readonly (string Name, double Hour)[] Named =
     [
@@ -41,16 +42,32 @@ public static class TimeCommand
 
     public static readonly string[] Verbs = ["query", "set", "add", "speed"];
 
-    public const string Usage = "Usage: /time [query] | set <hh:mm | sunrise | day | noon | sunset | night | midnight> | add <hours> | speed <minutes per day, 0 stops>";
+    public const string Usage = "Usage: /time [query] [zone] | set <hh:mm | sunrise | day | noon | sunset | night | midnight> [zone] | add <hours> | speed <minutes per day, 0 stops>."
+        + " Hours read in the zone you are in unless you name one (here, swiss, utc, utc+8); the named hours are the sun's where you stand.";
 
     /// <summary>Longest day <c>/time speed</c> takes, the same bound as the settings.</summary>
     public const float MaxMinutesPerDay = 240f;
 
-    /// <summary>Parses the words after <c>/time</c>. A bare hour (<c>/time 14:00</c>) is a set.</summary>
+    /// <summary>
+    /// Parses the words after <c>/time</c>. A bare hour (<c>/time 14:00</c>) is a set. Named hours
+    /// come back as their hour at Bern; <see cref="TryParse(string[], out TimeRequest, out string)"/>
+    /// keeps the name and the zone for <see cref="Resolve"/>.
+    /// </summary>
     public static bool TryParse(string[] args, out TimeOp op, out double value, out string error)
     {
-        op = TimeOp.Query;
-        value = 0;
+        bool ok = TryParse(args, out var request, out error);
+        op = request.Op;
+        value = request.Value;
+        return ok;
+    }
+
+    /// <summary>
+    /// Parses the words after <c>/time</c> (#1801): <c>[query] [zone]</c>, <c>set &lt;hour&gt; [zone]</c>,
+    /// <c>&lt;hour&gt; [zone]</c>, <c>add &lt;hours&gt;</c>, <c>speed &lt;minutes&gt;</c>.
+    /// </summary>
+    public static bool TryParse(string[] args, out TimeRequest request, out string error)
+    {
+        request = new TimeRequest(TimeOp.Query, 0, null, null);
         error = "";
 
         if (args.Length == 0) return true;
@@ -59,37 +76,98 @@ public static class TimeCommand
         string arg = args.Length > 1 ? args[1] : "";
         switch (verb)
         {
-            case "query" when args.Length == 1:
-                return true;
-
-            case "set" when args.Length == 2:
-                op = TimeOp.Set;
-                if (TryParseHour(arg, out value)) return true;
-                error = $"'{arg}' is not a time of day. {Usage}";
+            case "query" when args.Length <= 2:
+                if (args.Length == 1) return true;
+                if (ClockZone.TryParse(arg, out var queryZone))
+                {
+                    request = request with { Zone = queryZone, ZoneNamed = true };
+                    return true;
+                }
+                error = $"'{arg}' is not a time zone. {Usage}";
                 return false;
 
+            case "set" when args.Length is 2 or 3:
+                return TrySet(arg, args.Length == 3 ? args[2] : null, out request, out error);
+
             case "add" when args.Length == 2:
-                op = TimeOp.Add;
-                if (TryParseNumber(arg, out value)) return true;
+                if (TryParseNumber(arg, out double hours))
+                {
+                    request = request with { Op = TimeOp.Add, Value = hours };
+                    return true;
+                }
+                request = request with { Op = TimeOp.Add };
                 error = $"'{arg}' is not a number of hours.";
                 return false;
 
             case "speed" when args.Length == 2:
-                op = TimeOp.Speed;
-                if (TryParseNumber(arg, out value) && value >= 0 && value <= MaxMinutesPerDay) return true;
+                request = request with { Op = TimeOp.Speed };
+                if (TryParseNumber(arg, out double speed) && speed >= 0 && speed <= MaxMinutesPerDay)
+                {
+                    request = request with { Value = speed };
+                    return true;
+                }
                 error = $"Speed is real minutes per game day, 0 to {MaxMinutesPerDay:0} (0 stops the clock).";
                 return false;
         }
 
-        if (args.Length == 1 && TryParseHour(args[0], out value))
+        if (args.Length <= 2 && TryParseHour(args[0], out _))
+            return TrySet(args[0], args.Length == 2 ? args[1] : null, out request, out error);
+
+        if (args.Length == 1 && ClockZone.TryParse(args[0], out var zone))
         {
-            op = TimeOp.Set;
+            request = request with { Zone = zone, ZoneNamed = true };
             return true;
         }
 
         error = Usage;
         return false;
     }
+
+    private static bool TrySet(string hourWord, string? zoneWord, out TimeRequest request, out string error)
+    {
+        request = new TimeRequest(TimeOp.Set, 0, null, null);
+        error = "";
+        if (!TryParseHour(hourWord, out double hour))
+        {
+            error = $"'{hourWord}' is not a time of day. {Usage}";
+            return false;
+        }
+        string word = hourWord.Trim().ToLowerInvariant();
+        string? named = Array.Exists(Named, n => n.Name == word) ? word : null;
+        ClockZone? zone = null;
+        if (zoneWord != null && !ClockZone.TryParse(zoneWord, out zone))
+        {
+            error = $"'{zoneWord}' is not a time zone (here, swiss, utc, utc+8, utc-3:30).";
+            return false;
+        }
+        request = new TimeRequest(TimeOp.Set, hour, named, zone) { ZoneNamed = zoneWord != null };
+        return true;
+    }
+
+    /// <summary>
+    /// The world clock's (Swiss) hour a set asks for, from a player at <paramref name="at"/> (LV95;
+    /// null: nobody's place, the console, read as home), and the zone its hours read in: the one
+    /// named, or the player's own (<see cref="LocalHours.ZoneAt"/>). A named hour is the sun's at the
+    /// place whatever the zone. False, with a reason, when the sun does not rise or set there today.
+    /// </summary>
+    public static bool Resolve(TimeRequest request, (double E, double N)? at, DateOnly date, bool realSun,
+        out double swissHour, out ClockZone zone, out string error)
+    {
+        error = "";
+        var (e, n) = at ?? (SunPath.BernE, SunPath.BernN);
+        zone = request.Zone ?? LocalHours.ZoneAt(e, n, realSun);
+        if (request.Named is { } name)
+            return LocalHours.TryNamed(name, e, n, date, realSun, out swissHour, out error);
+        swissHour = zone.ToSwiss(request.Value, date);
+        return true;
+    }
+
+    /// <summary>
+    /// A world clock (Swiss) hour as a player reads it: "14:05" on Swiss time, "22:05 UTC+8
+    /// (14:05 Swiss time)" in another zone.
+    /// </summary>
+    public static string Describe(double swissHour, ClockZone zone, DateOnly date) =>
+        zone.IsSwiss ? Format(swissHour) : $"{Format(zone.FromSwiss(swissHour, date))} {zone.Label} ({Format(swissHour)} Swiss time)";
 
     /// <summary>"14", "14:30", "14.5" or a name, to an hour in 0..24.</summary>
     public static bool TryParseHour(string text, out double hour)
@@ -186,4 +264,15 @@ public static class TimeCommand
     /// <summary>Invariant culture: the French locale would read "1.5" as 15.</summary>
     private static bool TryParseNumber(string text, out double value) =>
         double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
+}
+
+/// <summary>
+/// A parsed <c>/time</c> line (#1801): the operation and its number, the named hour when one was
+/// given (resolved at the player's place, <see cref="TimeCommand.Resolve"/>), and the zone named, if
+/// any (null: the player's own). <see cref="ZoneNamed"/> is true when a zone word was typed, even
+/// <c>here</c>.
+/// </summary>
+public readonly record struct TimeRequest(TimeOp Op, double Value, string? Named, ClockZone? Zone)
+{
+    public bool ZoneNamed { get; init; }
 }
