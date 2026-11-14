@@ -14,6 +14,14 @@ Format: `- [ ] what to do → what should happen` under the feature's heading, w
 - [ ] Walk south across Pont des Bergues through the branch to Île Rousseau (`--at 2500310,1117990`) → you stay on the deck all the way, no fall into the Rhône at N 1117986-1117972.
 - [ ] Drive west on the Major across Place des Nations (`--at 2500300,1119935`) → the car crosses the bridge over the railway without dropping or stopping.
 
+## A facade door is drawn only where it opens ([#1766](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1766), [#1767](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1767))
+
+In a window, `--chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, on foot in Geneva's old town (`--at 2501414,1117284`), flat and `--frame earth`, with a fresh user:// (or `user://door_locks` deleted).
+
+- [ ] Walk the streets for a few minutes and press E at every door you pass → every door opens; none says "This door is locked". A side door that had no way in vanishes about 2 s after you first come within ~160 m, far enough off not to catch the eye; note any that goes close by.
+- [ ] Go in by a door, look at the facade walls from inside → every door seen from the street has its doorway inside.
+- [ ] Quit and start again at the same spot → the doors that vanished are absent from the start.
+
 ## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
 
 In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.

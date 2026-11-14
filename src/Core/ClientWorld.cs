@@ -570,6 +570,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
         // under earth the flat streamer draws nothing: no horizon, whose lattice is 40,401 generated tiles (#1699)
+        // the doors known to have no doorway inside, before the first tile is built (#1766)
+        if (Interiors.DoorWarden.Wanted) Interiors.DoorWarden.UseRecords();
         _chunks = new ChunkManager { Name = "Terrain", WithHorizon = !earth };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
@@ -733,6 +735,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     GetTree().CreateTimer(0.5).Timeout += Go;
                 }
             }
+            // a facade door is drawn only if it opens (#1766): the buildings round the camera planned in the background
+            if (Interiors.DoorWarden.Wanted)
+                Interiors.DoorWarden.Create(this, WorldSource!).Rebuild = tile =>
+                {
+                    if (_earth != null && Terrain.Leaves.LeafStandIn.IsStandIn(tile)) _earth.RefreshDoors(tile);
+                    else _chunks?.RebuildTile(tile);
+                };
             var chunksForDoors = _chunks;
             interiors.BuildingBodies = (tile, at, into) =>
             {
@@ -967,6 +976,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the doors round the start against their buildings, far from Switzerland too (#1799)
             new(() => Interiors.DoorFrameCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Interiors.DoorFrameCheck(Ground!, origin, Interiors.DoorFrameCheck.ParseArgs().Shot)),
+            // every drawn door opens: the warden left out those with no doorway inside (#1766)
+            new(Interiors.DoorWardenCheck.Requested, ToolAnchor.AtTarget, _ => new Interiors.DoorWardenCheck(Ground!, origin)),
             // the fill far away (another face, Asia) against the globe round it (#1800)
             new(Terrain.Earth.FarFillCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.FarFillCheck(Ground!, origin,
                 () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus,
