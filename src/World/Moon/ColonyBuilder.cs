@@ -29,17 +29,18 @@ public static class ColonyBuilder
 
         foreach (var m in plan.Modules)
         {
-            var mesh = ColonyKit.Module(m.Kind, m.Length, m.Width, m.Height, m.Storeys, c.Theme);
+            int side = plan.SideDoor(m.Id);
+            var mesh = ColonyKit.Module(m.Kind, m.Length, m.Width, m.Height, m.Storeys, c.Theme, side);
             var mi = m.Kind == ModuleKind.Biodome ? Glazed(mesh) : ColonyKit.Instance(mesh);
             // authored along +Z, turned to -Z by the scratch: -Z along the module's axis
             var t = new Transform3D(new Basis(Vector3.Up, -(float)m.Yaw), new Vector3((float)m.X, 0, (float)m.Z));
             mi.Transform = t;
             mi.Name = $"{m.Kind}{m.Id}";
             root.AddChild(mi);
-            var (inside, solids) = ColonyInteriors.Furnish(m.Kind, plan.Rooms[m.Id], m.Length, m.Width, c.Theme);
+            var (inside, solids) = ColonyInteriors.Furnish(m.Kind, plan.Rooms[m.Id], m.Length, m.Width, c.Theme, side);
             root.AddChild(new MeshInstance3D { Name = $"Inside{m.Id}", Mesh = inside, Transform = t, MaterialOverride = null }.Painted());
             foreach (var (centre, size) in solids) Solid(t * new Transform3D(Basis.Identity, centre), size);
-            foreach (var (at, size) in Hollow(m)) Solid(t * at, size);
+            foreach (var (at, size) in Hollow(m, side)) Solid(t * at, size);
         }
         var links = new List<(Vector3, Vector3, bool)>();
         foreach (var l in plan.Links)
@@ -70,12 +71,13 @@ public static class ColonyBuilder
             stairs.Add((new Vector3((float)d.X, 0, (float)d.Z), (float)d.Out));
             var dir = new Vector3(Mathf.Sin((float)d.Out), 0, -Mathf.Cos((float)d.Out));
             var basis = new Basis(Vector3.Up, Mathf.Atan2(dir.X, dir.Z));
-            for (int k = 0; k < ColonyKit.Steps; k++)
-            {
-                float top = F - k * F / ColonyKit.Steps;
-                var centre = new Vector3((float)d.X, top / 2, (float)d.Z) + dir * (k * ColonyKit.Tread + ColonyKit.Tread / 2);
-                Solid(new Transform3D(basis, centre), new Vector3(1.6f, top, ColonyKit.Tread));
-            }
+            // solid as a ramp along the treads' noses (#1976): a walker coming back up met each 0.22 m riser as a wall
+            float run = ColonyKit.Steps * ColonyKit.Tread, slope = Mathf.Atan2(F, run);
+            var tilt = new Basis(Vector3.Right, slope);
+            var normal = tilt * Vector3.Up;
+            var mid = new Vector3(0, F / 2, run / 2) - normal * 0.15f;
+            Solid(new Transform3D(basis * tilt, new Vector3((float)d.X, 0, (float)d.Z) + basis * mid),
+                new Vector3(1.6f, 0.3f, Mathf.Sqrt(run * run + F * F) + 0.3f));
         }
         if (stairs.Count > 0) root.AddChild(ColonyKit.Instance(ColonyKit.Stairs(stairs, c.Theme)));
         root.AddChild(new ColonyAirlocks(c, plan));
@@ -123,7 +125,7 @@ public static class ColonyBuilder
     /// not matter, except the hangar's landing, flipped here): a floor at the sill, walls of boxes round, end walls with
     /// the doorway open, a ceiling.
     /// </summary>
-    private static IEnumerable<(Transform3D At, Vector3 Size)> Hollow(ColonyModule m)
+    private static IEnumerable<(Transform3D At, Vector3 Size)> Hollow(ColonyModule m, int sideDoor = 0)
     {
         float l = (float)m.Length, w = (float)m.Width, h = (float)m.Height, r = w / 2;
         float dw = ColonyKit.DoorW, top = F + ColonyKit.DoorH;
@@ -138,12 +140,32 @@ public static class ColonyBuilder
                 yield return (At(0, F - 0.1f, 0), new Vector3(chord, 0.2f, l));
                 // the shell: boxes round the axis (the floor's chord up to the crown)
                 const int n = 12;
+                float gap = ColonyKit.SideGap;
                 for (int i = 0; i < n; i++)
                 {
                     float a = Mathf.Tau * (i + 0.5f) / n;
                     var c = new Vector3(Mathf.Cos(a) * (r + Wall / 2), y + Mathf.Sin(a) * (r + Wall / 2), 0);
                     if (c.Y < F) continue;
-                    yield return (new Transform3D(new Basis(Vector3.Back, a), c), new Vector3(Wall, 2 * r * Mathf.Sin(Mathf.Pi / n) * 1.15f, l));
+                    var size = new Vector3(Wall, 2 * r * Mathf.Sin(Mathf.Pi / n) * 1.15f, l);
+                    // a side doorway (#1976, a dome's tube): the panels it cuts stand either side of it only
+                    float across = sideDoor * Mathf.Cos(a);
+                    if (sideDoor != 0 && ColonyKit.SideCut(y, r, Mathf.Atan2(Mathf.Sin(a), across)))
+                    {
+                        float half = (l / 2 - gap) / 2;
+                        foreach (float sz in new[] { -1f, 1f })
+                            yield return (new Transform3D(new Basis(Vector3.Back, a), c + new Vector3(0, 0, sz * (gap + half))), size with { Z = l / 2 - gap });
+                        continue;
+                    }
+                    yield return (new Transform3D(new Basis(Vector3.Back, a), c), size);
+                }
+                if (sideDoor != 0)
+                {
+                    // round the doorway: cheeks either side of it and a lintel over it, at the shell; the landing under it
+                    float x = sideDoor * (r - 0.03f), top2 = F + ColonyKit.DoorH, cheek = gap - dw / 2;
+                    foreach (float sz in new[] { -1f, 1f })
+                        yield return (At(x, y, sz * (dw / 2 + cheek / 2)), new Vector3(0.1f, 2 * r * 0.75f, cheek));
+                    yield return (At(x, (top2 + y + r) / 2, 0), new Vector3(0.1f, y + r - top2, dw));
+                    yield return (At(sideDoor * (r - 0.4f), F - 0.1f, 0), new Vector3(0.9f, 0.2f, dw + 0.3f));
                 }
                 foreach (float z in new[] { -l / 2, l / 2 })
                 {
@@ -192,6 +214,9 @@ public static class ColonyBuilder
                     yield return (new Transform3D(new Basis(Vector3.Up, a), dir * rr + Vector3.Up * (F + 1.6f)), new Vector3(pw, 3.2f, Wall));
                 }
                 yield return (At(0, F + r * 0.75f, 0), new Vector3(w * 0.8f, 0.2f, w * 0.8f));
+                // the doorway's sill, from the floor's edge out to the tube's floor (#1976: a walker's foot found a gap there)
+                float sill0 = r * 0.85f, sill1 = r + 0.3f;
+                yield return (At(0, F / 2, -(sill0 + sill1) / 2), new Vector3(ColonyKit.DoorW + 0.4f, F, sill1 - sill0));
                 break;
             }
             case ModuleKind.Hangar:

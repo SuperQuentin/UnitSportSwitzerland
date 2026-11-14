@@ -57,6 +57,9 @@ public partial class MoonSurface : Node
     /// <summary>Whether the anchor is on the Moon (the suit's question).</summary>
     public bool OnMoon => _origin.Body == BodyId.Moon;
 
+    /// <summary>The frame the sites and colonies are placed in.</summary>
+    public WorldOrigin Origin => _origin;
+
     public MoonSurface(BodyGround ground, WorldOrigin origin)
     {
         _ground = ground;

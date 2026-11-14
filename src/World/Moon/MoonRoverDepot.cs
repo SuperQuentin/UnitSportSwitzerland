@@ -20,6 +20,9 @@ public static class MoonRoverDepot
     /// <summary>The camera's ground point must be this near the colony's centre to park its rovers, metres.</summary>
     public const double NearM = 200;
 
+    /// <summary>A depot rover's name begins so (<c>moonrover_&lt;colony&gt;_&lt;slot&gt;</c>); parked again it keeps it (<c>VehicleManager.Kept</c>).</summary>
+    public const string Prefix = "moonrover_";
+
     /// <summary>A hangar lane's offset from its axis, metres: a rover parks in one, the other is the way out.</summary>
     public const float HangarLane = 2.5f;
 
@@ -53,7 +56,7 @@ public static class MoonRoverDepot
         var slots = Slots(c, plan);
         for (int i = 0; i < slots.Count; i++)
         {
-            string name = $"moonrover_{c.Id}_{i}";
+            string name = $"{Prefix}{c.Id}_{i}";
             if (vehicles.GetNodeOrNull(name) != null) continue;
             var s = slots[i];
             var world = frame * (s.At + Vector3.Up * 0.4f);

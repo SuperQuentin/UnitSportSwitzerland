@@ -71,11 +71,16 @@ public static class PlayerReplication
     /// <summary>Driver kinds at index 8 of the NPC spawn data: a race NPC (the default) or a bot.</summary>
     private const int DriverRace = 0, DriverBot = 1;
 
-    /// <summary>A bot's spawn data: the NPC layout, then the driver kind and its display name.</summary>
+    /// <summary>
+    /// A bot's spawn data: the NPC layout, then the driver kind, its display name and the body its place is on (#1976:
+    /// the wire's three doubles are that body's fixed frame; without index 10 a peer reads the Earth). On the Earth
+    /// <paramref name="yaw"/> is an LV95 grid heading, elsewhere one from true north (no grid there).
+    /// </summary>
     public static Godot.Collections.Array BotData(int n, GlobalPos at, float yaw, string name)
     {
         var (x, y, z) = at.ToWire();
-        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, Lv95Grid.TrueYaw(at, yaw), 0, DriverBot, name };
+        float trueYaw = at.Body == BodyId.Earth ? Lv95Grid.TrueYaw(at, yaw) : yaw;
+        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, trueYaw, 0, DriverBot, name, (int)at.Body };
     }
 
     public static FootPlayer CreateNpc(Godot.Collections.Array d, WorldOrigin origin)
@@ -83,6 +88,8 @@ public static class PlayerReplication
         long owner = d[0].AsInt64();
         int n = d[1].AsInt32();
         var at = GlobalPos.FromWire(d[3].AsDouble(), d[4].AsDouble(), d[5].AsDouble());
+        // a bot on another body (#1976): its place in that body's frame
+        if (d.Count > 10 && (BodyId)d[10].AsInt32() is var body && body != BodyId.Earth) at = GlobalPos.On(body, at.Ecef);
         // on the dedicated server it starts in the frame of the region it spawns in (#1456): a bot far
         // from the server's origin never passes through the main frame's coarse floats
         var region = Regions.ServerRegions.Instance?.For(at);

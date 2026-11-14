@@ -27,13 +27,14 @@ public static class ColonyInteriors
     private static readonly object Lock = new();
 
     /// <summary>A module's furniture mesh and its solid boxes (centre, size: node space), cached.</summary>
-    public static (ArrayMesh Mesh, (Vector3 Centre, Vector3 Size)[] Solid) Furnish(ModuleKind kind, RoomKind room, double length, double width, ColonyTheme theme)
+    public static (ArrayMesh Mesh, (Vector3 Centre, Vector3 Size)[] Solid) Furnish(ModuleKind kind, RoomKind room, double length, double width, ColonyTheme theme, int sideDoor = 0)
     {
-        string key = FormattableString.Invariant($"{kind}/{room}/{length:F1}/{width:F1}/{theme}");
+        string key = FormattableString.Invariant($"{kind}/{room}/{length:F1}/{width:F1}/{theme}/{sideDoor}");
         lock (Lock)
         {
             if (Cache.TryGetValue(key, out var hit)) return hit;
-            var f = new Furnisher(ColonyKit.Of(theme));
+            // a can's side doorway (#1976) on the node's sideDoor side: drawn on the other (the scratch's half turn)
+            var f = new Furnisher(ColonyKit.Of(theme)) { ClearSide = -sideDoor };
             float l = (float)length, w = (float)width;
             switch (kind)
             {
@@ -60,17 +61,20 @@ public static class ColonyInteriors
             double len = r == RoomKind.Airlock ? 4 : 12;
             yield return ($"Can: {r}", () => Show(kind, rr, len, 4.6));
         }
+        // a can whose side a dome's tube comes in at (#1976): the furniture clear of the doorway
+        yield return ("Can: quarters, side door", () => Show(ModuleKind.Can, RoomKind.Quarters, 12, 4.6, 1));
+        yield return ("Can: lab, side door", () => Show(ModuleKind.Can, RoomKind.Lab, 12, 4.6, 1));
         yield return ("Hub: control", () => Show(ModuleKind.Hub, RoomKind.Control, 10, 10));
         yield return ("Dome: greenhouse", () => Show(ModuleKind.Dome, RoomKind.Greenhouse, 18, 18));
         yield return ("Hangar: garage", () => Show(ModuleKind.Hangar, RoomKind.Garage, 26, 14));
     }
 
-    private static Node3D Show(ModuleKind kind, RoomKind room, double l, double w)
+    private static Node3D Show(ModuleKind kind, RoomKind room, double l, double w, int sideDoor = 0)
     {
         var root = new Node3D();
-        var shell = ColonyKit.Instance(ColonyKit.Module(kind, l, w, kind == ModuleKind.Hub ? 7.5 : kind == ModuleKind.Hangar ? 8 : w / 2, kind == ModuleKind.Hub ? 2 : 1, ColonyTheme.Artemis));
+        var shell = ColonyKit.Instance(ColonyKit.Module(kind, l, w, kind == ModuleKind.Hub ? 7.5 : kind == ModuleKind.Hangar ? 8 : w / 2, kind == ModuleKind.Hub ? 2 : 1, ColonyTheme.Artemis, sideDoor));
         root.AddChild(shell);
-        root.AddChild(ColonyKit.Instance(Furnish(kind, room, l, w, ColonyTheme.Artemis).Mesh));
+        root.AddChild(ColonyKit.Instance(Furnish(kind, room, l, w, ColonyTheme.Artemis, sideDoor).Mesh));
         return root;
     }
 
@@ -82,8 +86,28 @@ public static class ColonyInteriors
         private readonly ColonyKit.Palette _p = p;
         private const float F = ColonyKit.FloorY;
 
-        /// <summary>A box, solid when <paramref name="solid"/> (the walker bumps into it).</summary>
+        /// <summary>The drawn side of a can's side doorway (-1, 1), or 0: nothing stands in front of it.</summary>
+        public float ClearSide;
+
+        /// <summary>Half the length kept clear in front of a side doorway, metres.</summary>
+        private const float ClearHalf = ColonyKit.DoorW / 2 + 0.55f;
+
+        /// <summary>A box, solid when <paramref name="solid"/> (the walker bumps into it); one along the wall a side doorway cuts is cut too.</summary>
         private void Box(Vector3 c, Vector3 size, Color col, bool solid = false)
+        {
+            if (ClearSide != 0 && c.X * ClearSide > 0.3f && c.Z - size.Z / 2 < ClearHalf && c.Z + size.Z / 2 > -ClearHalf)
+            {
+                // a piece (a bunk, a table) goes; a counter along the wall is cut either side of the doorway
+                if (size.Z < 2.5f) return;
+                float z0 = c.Z - size.Z / 2, z1 = c.Z + size.Z / 2;
+                if (-ClearHalf - z0 > 0.1f) Draw(c with { Z = (z0 - ClearHalf) / 2 }, size with { Z = -ClearHalf - z0 }, col, solid);
+                if (z1 - ClearHalf > 0.1f) Draw(c with { Z = (z1 + ClearHalf) / 2 }, size with { Z = z1 - ClearHalf }, col, solid);
+                return;
+            }
+            Draw(c, size, col, solid);
+        }
+
+        private void Draw(Vector3 c, Vector3 size, Color col, bool solid)
         {
             S.Box(c, size, col);
             // MeshScratch turns the mesh half a turn: the solid goes where the drawn box ends up
@@ -92,6 +116,7 @@ public static class ColonyInteriors
 
         private void Lit(Vector3 c, Vector3 normal, float w, float h, Color col)
         {
+            if (ClearSide != 0 && c.X * ClearSide > 0.3f && Mathf.Abs(c.Z) < ClearHalf + w / 2) return;
             var right = Vector3.Up.Cross(normal).Normalized() * (w / 2);
             if (right.LengthSquared() < 1e-6f) right = Vector3.Right * (w / 2);
             var up = normal.Cross(right).Normalized() * (h / 2);
