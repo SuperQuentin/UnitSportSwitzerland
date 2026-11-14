@@ -41,6 +41,11 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   (Mars' ground is kilometres under its reference).
 - **Earth-only systems off the Earth**: guard on `Origin.Body` (`Traffic.RebuildIfMoved`, `DormantVehicles`), or a
   Moon place names an Earth tile and fills it.
+- **`/goto <body> <lat> <lon> [km]`** (#1850, `Core/BodyGoto`, `ClientWorld.GoToBody`): the fly camera to a place on any
+  body (the chat line, offline; online it waits for C3b): the fly camera taken if on foot, the anchor relabelled to the body
+  (nothing moves), the world shifted to the place's tangent frame, the camera over it (30 km over a body with ground by
+  default, never under a body's floor), T steps in after flying down. Planetocentric latitude, east longitude (−180..360).
+  `--gotocheck` (quick, no body data): the Apollo 15 site, Gale crater, back over Bern, an unknown body refused.
 - **Check**: `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --bodies
   E:/UnitSportSwitzerland/planets --mooncheck [mars|phobos|deimos|...] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
   T, standing, a 120 m sprint over a new square, the body's jump (5.4 m on the Moon, 2.4 m on Mars). `mars` flies Earth →
