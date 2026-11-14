@@ -43,6 +43,27 @@ public class LeafStreamTests
     }
 
     [Fact]
+    public void A_remote_leafs_sections_are_asked_one_by_one_never_the_whole_entry()
+    {
+        // #1657: the far band of a streaming client reads heights, water, cover, trees and buildings, each its own section
+        var bytes = Entry(A, 512f);
+        var asked = new List<LeafKind?>();
+        var store = LeafStore.None();
+        store.UseRemote(new LeafIndex(new Dictionary<CubeKey, LeafIndex.Entry> { [A] = new(bytes.Length, 1) }),
+            (key, entry, section) => { asked.Add(section); return section is { } k ? LeafStore.OneSection(bytes, k) : bytes; });
+        var c = store.Sections(A, LeafKind.Heights, LeafKind.Trees)!;
+        Assert.NotNull(c.Heights);
+        Assert.NotNull(c.Trees);
+        Assert.Equal(new LeafKind?[] { LeafKind.Heights, LeafKind.Trees }, asked);
+
+        // the first section not come: nothing (asked again later); a later one missing: left out
+        var none = LeafStore.None();
+        none.UseRemote(new LeafIndex(new Dictionary<CubeKey, LeafIndex.Entry> { [A] = new(bytes.Length, 1) }),
+            (key, entry, section) => section == LeafKind.Heights ? null : LeafStore.OneSection(bytes, section!.Value));
+        Assert.Null(none.Sections(A, LeafKind.Heights, LeafKind.Trees));
+    }
+
+    [Fact]
     public void A_remote_leaf_that_did_not_come_is_asked_again_and_then_kept()
     {
         var bytes = Entry(A, 512f);

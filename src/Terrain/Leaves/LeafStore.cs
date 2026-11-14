@@ -159,11 +159,21 @@ public sealed class LeafStore : ILeafSource
     public CubeLeafContent? Sections(CubeKey key, params LeafKind[] kinds)
     {
         if (Cached(key) is { } held) return held;
-        if (Entry(key) is not { } bytes) return null;
+        // a leaf the server holds (#1657, the far band of a streaming client): each section asked alone (the tile cache keeps
+        // each; the heights are the globe's own leaf level's), never the whole entry (~2 MB in a town); null when the first
+        // did not come, a later one missing is left out
+        bool remote = !_index.ContainsKey(key);
+        byte[]? bytes = remote ? null : Entry(key);
+        if (!remote && bytes == null) return null;
         var c = new CubeLeafContent { Key = key };
         foreach (var kind in kinds)
         {
-            if (CubeLeafCodec.ReadSection(bytes, kind) is not { } s) continue;
+            if (remote && (bytes = Entry(key, kind)) == null)
+            {
+                if (kind == kinds[0]) return null;
+                continue;
+            }
+            if (CubeLeafCodec.ReadSection(bytes!, kind) is not { } s) continue;
             switch (kind)
             {
                 case LeafKind.Heights: c.Heights = LeafHeights.Decode(s); break;
