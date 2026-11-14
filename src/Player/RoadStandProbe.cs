@@ -107,6 +107,7 @@ public partial class RoadStandProbe : Node
             if (_roads is not { IsCompleted: true } || !_chunks.Ground.HasCollisionAt(at) || _wait < 8) return;
             if ((Embankments || Sidewalks || FloorAtArg() != null) && _grid is not { IsCompleted: true }) return;
             if (CmdArgs.Value("--raygrid") is { } rg) { RayGrid(rg, at); return; }
+            if (CmdArgs.Value("--facesnear") is { } fr && _roads.Result is { } roadTile) { FacesNear(fr, at, tile, roadTile); return; }
             _points =Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
             if (FloorAtArg() is { } fa && _roads.Result is { } ft && _grid?.Result is { } fg)
             {
@@ -170,6 +171,67 @@ public partial class RoadStandProbe : Node
     {
         var (e, n) = _origin.ToLv95(p);
         return $"{e:F1},{n:F1}";
+    }
+
+    /// <summary>
+    /// <c>--facesnear R</c> (with <c>--at E,N</c>, #1929): which part of the road collision builds the faces within R m of the
+    /// point, builder by builder (the same list ChunkManager commits): triangles, how many stand upright (a wall a car runs
+    /// into), their height over the ground, and the upright ones' LV95 spans. Finds a face no downward ray sees.
+    /// </summary>
+    private void FacesNear(string arg, Vector3 at, TileId tile, RoadTile road)
+    {
+        float r = float.Parse(arg, System.Globalization.CultureInfo.InvariantCulture);
+        var xf = _origin.TileTransform(tile);
+        var inv = xf.AffineInverse();
+        var local = inv * at;
+        (string Name, Func<Vector3[]> Faces)[] parts =
+        [
+            ("bridge decks", () => RoadMeshBuilder.BuildBridgeCollisionFaces(road)),
+            ("walls", () => RoadWallBuilder.BuildCollisionFaces(road)),
+            ("railings", () => RailingBuilder.BuildCollisionFaces(road)),
+            ("islands", () => IslandBuilder.BuildCollisionFaces(road)),
+            ("sign poles", () => RoadSignBuilder.BuildCollisionFaces(road)),
+            ("catenary masts", () => CatenaryBuilder.BuildCollisionFaces(road)),
+            ("car park props", () => ParkingBuilder.BuildCollisionFaces(road)),
+            ("signal poles", () => SignalBuilder.BuildCollisionFaces(road)),
+            ("sidewalks and kerbs", () => RoadStreetBuilder.BuildCollisionFaces(road)),
+        ];
+        // the point props there (signs, poles, posts): what a pole's face belongs to
+        foreach (var p in road.PointProps)
+            if (new Vector2(p.X - local.X, p.Z - local.Z).Length() <= r)
+                GD.Print($"[roadcheck] prop {p.Type} variant {p.Variant} flags {p.Flags} at {Lv95(xf * new Vector3(p.X, p.Y, p.Z))}, heading {Mathf.RadToDeg(p.Heading):F0}°, {p.Height:F2} m");
+        foreach (var (name, faces) in parts)
+        {
+            var f = faces();
+            int near = 0, upright = 0;
+            float lo = float.MaxValue, hi = float.MinValue;
+            var spans = new List<string>();
+            for (int i = 0; i + 2 < f.Length; i += 3)
+            {
+                var c = (f[i] + f[i + 1] + f[i + 2]) / 3f;
+                if (new Vector2(c.X - local.X, c.Z - local.Z).Length() > r) continue;
+                near++;
+                var normal = (f[i + 1] - f[i]).Cross(f[i + 2] - f[i]);
+                if (normal.LengthSquared() < 1e-12f) continue;
+                normal = normal.Normalized();
+                _chunks.Ground.TryGetHeight(xf * c, out float g);
+                float up = (xf * c).Y - g;
+                lo = Mathf.Min(lo, up); hi = Mathf.Max(hi, up);
+                if (Mathf.Abs(normal.Y) > 0.3f) continue;
+                upright++;
+                if (spans.Count < 8)
+                {
+                    float y0 = Mathf.Min(f[i].Y, Mathf.Min(f[i + 1].Y, f[i + 2].Y)), y1 = Mathf.Max(f[i].Y, Mathf.Max(f[i + 1].Y, f[i + 2].Y));
+                    spans.Add($"{Lv95(xf * f[i])}..{Lv95(xf * f[i + 1])}..{Lv95(xf * f[i + 2])} (dy {y1 - y0:F2} m)");
+                }
+            }
+            if (near == 0) continue;
+            GD.Print($"[roadcheck] faces {name}: {near} near, {upright} upright, {lo:F2}..{hi:F2} m over the ground");
+            foreach (var s in spans) GD.Print($"[roadcheck]   upright {s}");
+        }
+        GD.Print("[roadcheck] RESULT: facesnear done");
+        GetTree().Quit(0);
+        SetPhysicsProcess(false);
     }
 
     /// <summary>

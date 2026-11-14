@@ -602,7 +602,7 @@ var endDir = Flat(cur.F ? endT : -endT);
             foreach (var next in Onward(graph, ends, cur.Edge, cur.F, key, endP, against))
             {
                 if (next.Item1 == cur.Edge || banned?.Contains(next.Item1) == true) continue;
-                if (TurnsBackAtMouth(cur.Edge, endDir, next.Item1, next.Item2)) continue;
+                if (TurnsBackAtMouth(cur.Edge, endDir, next.Item1, next.Item2, keepRight)) continue;
                 // across a gap between two roads only ahead of both (#1880, as LaneGraph.JoinTrimmedEnds): any road end within 18 m let
                 // a way hop 13 m from a street's end back to a ramp's foot, under the ramp it then climbed (Place des Nations)
                 if (!Joins(next, endP, endDir.Normalized(), cur.Edge, cur.F)) continue;
@@ -690,16 +690,22 @@ var endDir = Flat(cur.F ? endT : -endT);
     /// at the mouth, never driving the street (Geneva 2501310,1124903: the route turned there and the car climbed the corner's
     /// kerb). Between connectors alone (junction paths, and the short links <see cref="LaneGraph.JoinTrimmedEnds"/> lays between
     /// road ends, which can sit between the two paths): a street's own dead-end turn is not judged here. Two paths going on (two
-    /// cores a 0 m street apart) still join.
+    /// cores a 0 m street apart) still join. A drive (<paramref name="drive"/>) also never turns back more than 135 degrees on
+    /// the spot between any two edges (#1929): down one carriageway of a divided road to where it meets its twin and straight
+    /// back up the other is a hairpin no car makes (Bellevue's start, after #1880 put it on the carriageway heading away).
     /// </summary>
-    internal static bool TurnsBackAtMouth(LaneEdge cur, Vector3 endDir, LaneEdge next, bool nextForward)
+    internal static bool TurnsBackAtMouth(LaneEdge cur, Vector3 endDir, LaneEdge next, bool nextForward, bool drive = false)
     {
-        if (!cur.Connector || !next.Connector) return false;
+        bool connectors = cur.Connector && next.Connector;
+        if (!connectors && !drive) return false;
         var (_, t) = next.Sample(nextForward ? 0f : next.Length);
         var startDir = Flat(nextForward ? t : -t);
         if (endDir.LengthSquared() < 1e-6f || startDir.LengthSquared() < 1e-6f) return false;
-        return endDir.Normalized().Dot(startDir.Normalized()) < 0f;
+        return endDir.Normalized().Dot(startDir.Normalized()) < (connectors ? 0f : HairpinCos);
     }
+
+    /// <summary>cos 135°: a drive's sharpest turn on the spot between two edges.</summary>
+    private const float HairpinCos = -0.7071f;
 
     /// <summary>
     /// A drive's way across a junction whose roads stop short of it (RoadGen trims them back): from the last point,
