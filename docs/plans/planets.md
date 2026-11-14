@@ -3,7 +3,7 @@
 
 # Planets: every body, the Earth included, on one world system (H7 and C3 of #1430)
 
-Status: **planned, waiting for the user's approval** (2026-11-14). Issue: #1430 (H7, C3), sub-issues #1847-#1854,
+Status: **approved by the user** (2026-11-14); the clock rule (section 2) is still the user's to confirm after the research below. Issue: #1430 (H7, C3), sub-issues #1847-#1854,
 one per phase (section 12). Planned from `main` at `0ab431fd6`.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
@@ -65,10 +65,10 @@ chain take a body.
 
 | Question | Proposal | Alternatives |
 |---|---|---|
-| One system for every body | **Yes, the Earth included** (the user's direction): `Body` records and one surface chain; the Earth's code paths become the general ones with Earth's data plugged in, its results unchanged | A Moon-only special case beside the Earth (cheaper first step, two systems for ever: rejected by the goal) |
+| One system for every body | **Approved (2026-11-14)**: the Earth included (the user's direction): `Body` records and one surface chain; the Earth's code paths become the general ones with Earth's data plugged in, its results unchanged | A Moon-only special case beside the Earth (cheaper first step, two systems for ever: rejected by the goal) |
 | Time (section 2) | **Bodies move on the sky clock** (24-minute day: the Moon goes round the Earth in 11 real hours and rises every ~25 minutes, as it does on the ground today); **physics runs on sim time** with each body's real spin; **handovers keep the velocity relative to the body** | (a) Everything on the sky clock: the Earth would spin once in 24 real minutes under an orbit, the ground at 28 km/s, no re-entry possible. (b) A real-time solar system in space: physically exact, but the Moon you fly to would not be the Moon in the sky (the telescope's markers wrong) |
-| First bodies | **The Moon (H7c), then Mars (H7e)**, then the rest by data family (H7f) | Mars first (better story, harder: air, dust); or all the solid bodies at once from their 2k sky maps and generation only, then data |
-| Mars' finest heights | **MOLA 463 m only** (CC0) with Viking colour (public domain), generation below | Also the MOLA-HRSC blend at 200 m: HRSC is **CC BY-SA 3.0 IGO**, so tiles made from it would be share-alike: a licence question for the shipped and served data |
+| First bodies | **Decided (2026-11-14): the Moon (H7c), then Mars (H7e)**, then the rest by data family (H7f) | Mars first (better story, harder: air, dust); or all the solid bodies at once from their 2k sky maps and generation only, then data |
+| Mars' finest heights | **Decided (2026-11-14): MOLA 463 m only** (CC0) with Viking colour (public domain), generation below | Also the MOLA-HRSC blend at 200 m: HRSC is **CC BY-SA 3.0 IGO**, so tiles made from it would be share-alike: a licence question for the shipped and served data |
 
 ## 1. Bodies: one registry
 
@@ -124,6 +124,27 @@ needs a rule for where the other bodies are.
   `--sun fixed` keeps its fixed light for everything else and puts the bodies at the fixed date's noon).
 
 ## 3. Frames and positions
+
+### How other games solve it (researched 2026-11-14, at the user's request)
+
+No game keeps a short day, real orbits and a 1:1 planet at once; each gives one up.
+
+| Game | Day | Orbits | How the clocks agree |
+|---|---|---|---|
+| Kerbal Space Program | 6 h on Kerbin | real patched conics, time warp | **one clock**: the planets are shrunk (Kerbin 600 km) so a short day and fast orbits come together. Low it flies in the body's rotating frame, higher in an inertial one (a switch at an altitude per body) |
+| Outer Wilds | minutes | real-time, physics-driven | **one clock**: a solar system of island-sized planets tens of km apart |
+| Elite Dangerous | real (hours to days) | real time, positions from fixed elements and elapsed time | **one clock, real time**: no short day |
+| Space Engineers | 1 min to 24 h (a setting) | none: the planets stand still | **only a sky clock**: the sun goes round the world. Its Real Solar Systems mod adds orbits with two zones: in orbit you follow the planet along its orbit while it spins beneath; near the surface you follow the surface while the sky turns |
+| No Man's Sky | ~15-30 min | none: planets fixed in their system | **only a sky clock**, no orbital physics |
+| Star Citizen | a few hours | none | a planet's zone turns with it, space round it does not; its developers had to align zone boundaries with the pole axis because the two frames turn differently |
+
+What it says for us: we can't shrink the Earth (KSP, Outer Wilds), and we keep the 24-minute day (Elite has a real-time
+one). So we do what Space Engineers' orbit mod and Star Citizen do: **the sky is a clock-driven picture, and physics
+runs in each body's own frame**, with a rule at the boundary. Star Citizen's trouble is a boundary between frames that
+turn differently. Our sphere-of-influence handover avoids it: the anchor is re-expressed, not moved, and the velocity
+relative to the body is kept. KSP's rotating frame low and inertial frame high is what H5 already does (body-fixed
+anchor, inertial integration). One more property: a server that sets `DayLengthMinutes` to 1,440 (a real 24 h day)
+gets Elite's model exactly. The sky clock is then sim time, and the boundary rule changes nothing.
 
 ### The frame tree (`Core/Frames`, plain C#)
 
