@@ -6,11 +6,11 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.World.Bodies;
 
 /// <summary>
-/// A picture from another body (#1848): <c>--bodyshot moon,LAT,LON,HEIGHT_KM[,PITCH_DEG[,YAW_DEG]][,earth]</c> puts the
-/// anchor on the Moon (the crossing's relabelling, <see cref="WorldOrigin.Rebase"/>, then a shift to the tangent frame
+/// A picture from another body (#1848): <c>--bodyshot BODY,LAT,LON,HEIGHT_KM[,PITCH_DEG[,YAW_DEG]][,earth]</c> puts the
+/// anchor on that body (moon, mars: any whose pyramid is under <c>--bodies</c>; the crossing's relabelling, <see cref="WorldOrigin.Rebase"/>, then a shift to the tangent frame
 /// there), the spectator camera HEIGHT_KM over that place looking PITCH_DEG down toward YAW_DEG (from north), or straight
 /// at the Earth with <c>earth</c>; waits for the globe's tiles to settle and saves
-/// <c>test_output/bodies/moon_LAT_LON_HEIGHTkm[_earth].png</c>, then quits (it waits 8 s for the world first). Windowed (a headless run draws nothing). Pass
+/// <c>test_output/bodies/BODY_LAT_LON_HEIGHTkm[_earth].png</c>, then quits (it waits 8 s for the world first). Windowed (a headless run draws nothing). Pass
 /// <c>--frame earth --bodies DIR --sun real --date ...</c>; the RESULT line says what it drew.
 /// </summary>
 public partial class BodyShot : Node

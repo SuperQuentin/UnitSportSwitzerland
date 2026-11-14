@@ -76,7 +76,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var index = globe.HeightIndex;
         Heights = new BodyHeights(cube, level,
             key => index.TryGetValue(key, out var at) ? CubeTileCodec.Decode(GlobeFiles.ReadBytes(at)) : null,
-            new CraterField((ulong)globe.Body.Id, cube.Shape.A));
+            globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null);
     }
 
     public override void _EnterTree()

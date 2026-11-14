@@ -69,7 +69,7 @@ public partial class BodyViews : Node
             AddChild(_earth);
             _globes.Add(_earth);
         }
-        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _moon));
+        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _moon?.Ground));
     }
 

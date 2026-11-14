@@ -18,8 +18,11 @@ public static class CubeBodyHeights
     /// <summary>Half a lattice step at a face centre, metres, at a lattice level: the footprint's half side.</summary>
     public static double HalfStep(CubeShape cube, int latticeLevel) => 0.5 * cube.Shape.A * Math.PI / 2 / (1L << latticeLevel);
 
-    /// <summary>A tile's (2^bits + 1)² heights, each from its own lattice point alone.</summary>
-    public static float[] Heights(CubeShape cube, CylRaster.Window dem, CubeKey key, int bits)
+    /// <summary>
+    /// A tile's (2^bits + 1)² heights, each from its own lattice point alone; <paramref name="datum"/> (Mars' areoid,
+    /// #1853) turns the DEM's heights into heights over the body's ellipsoid.
+    /// </summary>
+    public static float[] Heights(CubeShape cube, CylRaster.Window dem, CubeKey key, int bits, Areoid? datum = null)
     {
         int n = (1 << bits) + 1, lv = key.Level + bits;
         long gi0 = (long)key.X << bits, gj0 = (long)key.Y << bits;
@@ -29,7 +32,8 @@ public static class CubeBodyHeights
             for (int i = 0; i < n; i++)
             {
                 var (lat, lon) = LatLonOf(cube, key.Face, lv, gi0 + i, gj0 + j);
-                h[j * n + i] = (float)dem.Footprint(lat, lon, half, cube.Shape.A);
+                double t = dem.Footprint(lat, lon, half, cube.Shape.A);
+                h[j * n + i] = (float)(datum == null || !double.IsFinite(t) ? t : t + datum.Correction(lat, lon, cube.Shape));
             }
         return h;
     }
