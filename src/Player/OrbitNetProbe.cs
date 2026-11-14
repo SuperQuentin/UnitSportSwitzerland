@@ -12,7 +12,8 @@ namespace UnitSport.Player;
 /// saucers put on orbit 400 km up by an admin's <c>/orbit</c> (the server's check, then <c>OrbitForced</c> to
 /// each pilot's client), side by side, everything checked on the remote peer.
 /// <list type="bullet">
-/// <item>both take a saucer on the ground, 16 m apart, and ask for <c>/orbit 400</c> together;</item>
+/// <item>both take a saucer on the ground, 16 m apart, and ask for <c>/orbit 400</c> together; B then joins A's orbit,
+/// 16 m beside A's copy (each orbit starts when its own reply comes back, which may be a second apart);</item>
 /// <item>each flies its own orbit in doubles on its own client and sees the other's copy beside it,
 /// at 7.7 km/s, drawn without a jump for a minute;</item>
 /// <item>A thrusts down out of orbit: B sees it fall away; A comes down into the hover below 50 km.</item>
@@ -29,6 +30,7 @@ public partial class OrbitNetProbe : ChatProbe
     protected override void Fail(string why) => Expect(false, why);
 
     private float _down;
+    private float _lastApart;
     private double _logAt;
 
     public override async void _Ready()
@@ -47,6 +49,35 @@ public partial class OrbitNetProbe : ChatProbe
     /// <summary>How far the other saucer is drawn from this one, m; infinite when it is not drawn here (out of view).</summary>
     private float Apart(FootPlayer me) =>
         Other() is { } o && IsInstanceValid(o) && o.Ride == RideKind.Ufo ? o.GlobalPosition.DistanceTo(me.GlobalPosition) : float.PositiveInfinity;
+
+    /// <summary>
+    /// Puts <paramref name="me"/>'s saucer on the orbit of <paramref name="other"/>'s copy: this saucer's own orbit (the same
+    /// /orbit, from the same spot, the same heading) turned about its pole by the distance along the track to where the copy
+    /// is drawn here (its sender's present, #1869). Not from the copy's velocity: a published velocity carries up to ~1 % of
+    /// the frame's share of the Earth's turn, and a saucer set from it flew off at 110 m/s. The set orbit takes the body there.
+    /// </summary>
+    private static void JoinOrbit(FootPlayer me, Ufo ufo, FootPlayer other)
+    {
+        var own = ufo.Orbit!.Value;
+        var ahead = me.Velocity.Normalized();
+        double along = (other.GlobalPosition - me.GlobalPosition).Dot(ahead);
+        double theta = along / own.R.Length;
+        var k = own.R.Cross(own.V).Normalized();
+        double cos = Math.Cos(theta), sin = Math.Sin(theta);
+        DVec3 Turn(DVec3 v) => v * cos + k.Cross(v) * sin + k * (k.Dot(v) * (1 - cos));
+        ufo.SetOrbit(new OrbitState(Turn(own.R), Turn(own.V)));
+        GD.Print(FormattableString.Invariant($"[orbitnet B] joined A's orbit {along:F0} m along the track"));
+    }
+
+    /// <summary>How far <paramref name="velocity"/> is from the average velocity of the move <paramref name="from"/> → <paramref name="to"/> over <paramref name="seconds"/>, m/s.</summary>
+    private static double VelocityError(EcefPos to, EcefPos from, double seconds, EcefPos velocity)
+    {
+        var d = to - from;
+        double ex = d.X / seconds - velocity.X, ey = d.Y / seconds - velocity.Y, ez = d.Z / seconds - velocity.Z;
+        return Math.Sqrt(ex * ex + ey * ey + ez * ez);
+    }
+
+    private static double Median(System.Collections.Generic.List<double> sorted) => sorted.Count == 0 ? double.NaN : sorted[sorted.Count / 2];
 
     /// <summary>The other client's player, as drawn here.</summary>
     private FootPlayer? Other()
@@ -98,6 +129,22 @@ public partial class OrbitNetProbe : ChatProbe
         Say("orbit");
         if (!await Heard(other, "orbit", 30)) { Fail($"{other} never got to orbit"); return; }
 
+        // each client builds its orbit when its own /orbit comes back, over where it is then: two replies a second apart
+        // (a loaded server) are two saucers 7.7 km apart on one track, which is no test of the copy (#1869). So B joins A's
+        // orbit, 16 m to the side of A's copy as B draws it now: from then on the two fly together in truth
+        if (_role == "B")
+        {
+            if (!await Until(() => Other() is { } a && IsInstanceValid(a) && a.Ride == RideKind.Ufo
+                    && a.WorldVelocity.LengthSquared() > Net.RemoteInterpolator.FastSpeed * Net.RemoteInterpolator.FastSpeed, 20))
+            {
+                Fail($"A's copy never showed in orbit ({Apart(me):F0} m)");
+                return;
+            }
+            JoinOrbit(me, ufo, Other()!);
+            Say("joined");
+        }
+        else if (!await Heard("B", "joined", 40)) { Fail("B never joined A's orbit"); return; }
+
         // a minute side by side: the other's copy beside this one, moving with it, never jumping
         if (!await Until(() => Apart(me) < 5_000, 15))
         {
@@ -112,16 +159,41 @@ public partial class OrbitNetProbe : ChatProbe
         var speeds = new System.Collections.Generic.List<double>();
         EcefPos? lastAt = null;
         double lastWall = 0;
+        // how far each velocity is from how its body moved, m/s (#1869): the copy's published one against its motion on the
+        // wall clock it is drawn by, this body's own against its motion on the physics clock it moves by
+        var copyVelErr = new System.Collections.Generic.List<double>();
+        var ownVelErr = new System.Collections.Generic.List<double>();
+        EcefPos? ownAt = null;
+        double ownT = 0;
         while (GameClock.Now - t0 < 60)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             float d = Apart(me);
+            if (float.IsInfinity(d) != float.IsInfinity(_lastApart))
+            {
+                var gone = Other();
+                GD.Print(FormattableString.Invariant($"{Log} t {GameClock.Now - t0:F1} s: the other's copy {(float.IsInfinity(d) ? "lost" : "back")}: {(gone == null ? "no copy" : !IsInstanceValid(gone) ? "freed" : $"ride {gone.Ride}, {gone.InterpState}")}"));
+            }
+            _lastApart = d;
             near = Mathf.Min(near, d);
             far = Mathf.Max(far, d);
             if (GameClock.Now - t0 >= _logAt)
             {
                 _logAt += 10;
-                GD.Print(FormattableString.Invariant($"{Log} t {GameClock.Now - t0:F0} s: the other {d:F0} m away"));
+                var seen = Other();
+                string why = seen == null ? "no copy" : !IsInstanceValid(seen) ? "freed" : $"ride {seen.Ride}, visible {seen.Visible}, {seen.InterpState}";
+                GD.Print(FormattableString.Invariant($"{Log} t {GameClock.Now - t0:F0} s: the other {d:F0} m away ({why}; own frame {me.GetProcessDeltaTime() * 1000:F0} ms)"));
+            }
+            if (me.Origin is { } own)
+            {
+                var mine = own.Frame.ToEcef(me.GlobalPosition);
+                if (ownAt is { } was && GameClock.Now - ownT >= 0.1)
+                {
+                    ownVelErr.Add(VelocityError(mine, was, GameClock.Now - ownT, own.Frame.EcefDirection(me.GlobalPosition, me.Velocity)));
+                    ownAt = mine;
+                    ownT = GameClock.Now;
+                }
+                else if (ownAt == null) { ownAt = mine; ownT = GameClock.Now; }
             }
             if (Other() is not { } o || !IsInstanceValid(o) || me.Origin is not { } origin) { lastAt = null; continue; }
             var at = origin.Frame.ToEcef(o.GlobalPosition);
@@ -132,11 +204,16 @@ public partial class OrbitNetProbe : ChatProbe
             else if (wall - lastWall >= 0.1)
             {
                 speeds.Add(Math.Abs(at.DistanceTo(before) / (wall - lastWall) / start.V.Length - 1));
+                copyVelErr.Add(VelocityError(at, before, wall - lastWall, origin.Frame.EcefDirection(o.GlobalPosition, o.WorldVelocity)));
                 lastAt = at;
                 lastWall = wall;
             }
         }
         double alt = me.Origin!.AltitudeOf(me.GlobalPosition);
+        copyVelErr.Sort();
+        ownVelErr.Sort();
+        GD.Print(FormattableString.Invariant(
+            $"{Log} velocity against motion, median: the copy's {Median(copyVelErr):F1} m/s, this body's {Median(ownVelErr):F1} m/s"));
         speeds.Sort();
         double p95 = speeds.Count > 0 ? speeds[(int)(speeds.Count * 0.95)] : 1;
         double worst = speeds.Count > 0 ? speeds[^1] : 1;
