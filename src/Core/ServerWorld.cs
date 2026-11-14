@@ -909,7 +909,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
     /// <summary>
     /// The interest of an earth server (#1513, G2 C4): the ground's ellipsoidal height from the main earth world's loaded
-    /// leaves (round every body, shadows included), else the <c>cube_global</c> pyramid (<see cref="World.Globe.DataDir"/>);
+    /// leaves (round every body, shadows included), else the pyramid on its disk (<see cref="World.GlobeData.Earth"/>);
     /// line of sight by <see cref="EarthSight.Clear"/>, heights above ground in LHN95 as <see cref="GlobalPos.Alt"/>.
     /// With no pyramid, sight is free (as a flat server with no horizon file).
     /// </summary>
@@ -929,7 +929,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private InterestService CreateEarthInterest(Terrain.Earth.EarthWorld earth)
     {
         // a fixture course is all the ground there is: the real pyramid's mountains round it would hide it from itself
-        var pyramid = !earth.Leaves.IsFixture && World.Globe.DataDir is { } dir ? new PyramidGround(dir) : null;
+        var pyramid = !earth.Leaves.IsFixture && World.Globe.DataSource is { Count: > 0 } source ? new PyramidGround(source) : null;
         GD.Print($"[interest] earth: line of sight over the leaves and {(pyramid != null ? $"the pyramid in {pyramid.Dir} ({pyramid.Count} tiles, level {pyramid.Level})" : "no pyramid")}");
         double? Ellipsoidal(EcefPos p) => earth.EllipsoidalHeightAt(p, out double h) ? h : pyramid?.HeightAt(p);
         var interest = InterestService.CreateServer(this, _players!, at =>

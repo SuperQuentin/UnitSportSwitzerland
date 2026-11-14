@@ -164,7 +164,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // --frame earth's line of sight on the real cube pyramid (#1513): Mont Blanc from La Dôle, valley floors hidden
-        (() => Has("--earthsightcheck"), () => Verdict("earthsightcheck", EarthSight.RealCheck(World.Globe.DataDir))),
+        (() => Has("--earthsightcheck"), () => Verdict("earthsightcheck", EarthSight.RealCheck(World.Globe.DataSource))),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck() & Audio.Cd.VocalSeparator.SelfCheck())),
         // a real song's vocal separated both ways, written to test_output/vocal (#1153)
@@ -828,13 +828,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
             // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
-            if (World.Globe.DataDir is { } globe && !WorldChoice.FunActive)
+            // the earth world's globe is its far view, drawn from the server's pyramid too once it comes (#1656), so it is
+            // there even when this copy has none of its own
+            if (World.Globe.DataSource is { } globe && (globe.Count > 0 || _earth != null) && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
                 var g = _earth != null
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
-                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
-                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
+                    ? new World.Globe { Name = "Globe", Pyramid = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
+                    : new World.Globe { Name = "Globe", Pyramid = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
                 // the globe steps aside where a leaf is drawn whole, and is the far view at every altitude (#1629): the
                 // region's leaves furnished out to the flat world's rings, in the world's own materials
                 if (_earth != null)

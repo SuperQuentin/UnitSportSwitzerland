@@ -24,23 +24,11 @@ namespace UnitSport.World;
 /// </summary>
 public partial class Globe : Node
 {
-    public const string DefaultDir = "D:/UnitSportSwitzerland/cube_global";
-
     /// <summary>
-    /// The region to draw: <c>--globe DIR</c> ("off" none), else the full one on D: when it is there, else the
-    /// levels the game ships (<see cref="GlobeFiles.Shipped"/>, 0-2: 23.5 MB in Git LFS); null leaves the globe out.
+    /// The pyramid to draw (#1656, <see cref="GlobeData.Earth"/>): the local install, the server's once it is known, the
+    /// shipped base; null with <c>--globe off</c>, which leaves the globe out.
     /// </summary>
-    public static string? DataDir
-    {
-        get
-        {
-            string? dir = CmdArgs.Value("--globe");
-            if (dir is "off" or "0") return null;
-            if (dir != null) return GlobeFiles.HasManifest(dir) ? dir : null;
-            if (GlobeFiles.HasManifest(DefaultDir)) return DefaultDir;
-            return GlobeFiles.HasManifest(GlobeFiles.Shipped) ? GlobeFiles.Shipped : null;
-        }
-    }
+    public static Terrain.Leaves.PyramidSource? DataSource => GlobeData.Earth;
 
     /// <summary>
     /// Drawn above this camera altitude, metres: where the far plane starts reaching past the flat world's
@@ -114,7 +102,8 @@ public partial class Globe : Node
 
     private double _axesE = double.NaN, _axesN;
 
-    public string Dir { get; set; } = DefaultDir;
+    /// <summary>The pyramid this globe draws (<see cref="DataSource"/>; another body's, H7).</summary>
+    public Terrain.Leaves.PyramidSource Pyramid { get; set; } = null!;
 
     /// <summary>
     /// The earth world (<c>--frame earth</c>, #1510): no flat world to give way to, so the globe is drawn at every
@@ -231,12 +220,9 @@ public partial class Globe : Node
     /// <summary>Main-thread time a frame spends adding built tiles in the earth world, ms.</summary>
     public double CommitBudgetMs { get; set; } = 3;
 
-    private CubeManifest _manifest = null!;
-
     // the pyramid's lake levels (#1669), null for one built before them
     private float[]? _lakeLevels;
     private int _maxLevel;
-    private Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights = new(), _albedo = new();
     private readonly Dictionary<CubeKey, MeshInstance3D> _patches = new();
     private readonly Dictionary<CubeKey, EnuFrame> _anchors = new();
     private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array Arrays, Image? Colour, int Month, Terrain.ChunkNode.TreeMeshes? Trees, Terrain.WaterMeshBuilder.MeshData? Water)> _ready = new();
@@ -349,18 +335,34 @@ public partial class Globe : Node
 
     public override void _Ready()
     {
-        var files = new GlobeFiles(Dir);
-        _manifest = files.Manifest();
-        _lakeLevels = _manifest.Lakes?.ToArray();
-        _maxLevel = _manifest.LevelsOrLeaf.Max(l => l.Level);
-        if (Leaves != null) _maxLevel = Math.Max(_maxLevel, Terrain.Leaves.LeafFrames.LeafLevel);
-        (_heights, _albedo) = files.Index(_manifest);
+        Levels();
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
-        GD.Print($"[globe] {_heights.Count} tiles to level {_maxLevel}, {_albedo.Count} coloured, month {_month}, from {Dir}");
+        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}");
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         Present = true;
         Current = this;
+    }
+
+    /// <summary>The deepest level and the lakes, from the chain as it stands.</summary>
+    private void Levels()
+    {
+        _lakeLevels = Pyramid.Lakes is { Length: > 0 } lakes ? lakes : null;
+        _maxLevel = Math.Max(Pyramid.MaxLevel, 0);
+        if (Leaves != null) _maxLevel = Math.Max(_maxLevel, Terrain.Leaves.LeafFrames.LeafLevel);
+    }
+
+    /// <summary>
+    /// The pyramid's chain changed (#1656: the server's index arrived): every built tile whose best copy changed is read
+    /// again, the old one drawn until the new one lands, and tiles it now holds deeper split as they come. Main thread.
+    /// </summary>
+    public void RefreshPyramid(IReadOnlyCollection<CubeKey> changed)
+    {
+        Levels();
+        foreach (var key in changed)
+            if (_patches.ContainsKey(key)) _leafStale.Add(key);
+        _nextPlan = 0;
+        GD.Print($"[globe] the pyramid now {Pyramid.Count} tiles to level {_maxLevel}: {changed.Count} changed");
     }
 
     public override void _ExitTree()
@@ -711,14 +713,14 @@ public partial class Globe : Node
             });
             return;
         }
-        if (!_heights.TryGetValue(key, out var at))
+        if (!Pyramid.Has(key))
         {
             if (Earth && Bridges(key)) Synthesise(key);
             return;
         }
         _loading.Add(key);
         MarkAsked(key);
-        _albedo.TryGetValue(key, out var colourAt);
+        bool coloured = Pyramid.HasColour(key);
         int month = _month;
         _ = Spawn(async () =>
         {
@@ -726,13 +728,13 @@ public partial class Globe : Node
             try
             {
                 if (Unwanted(key)) { _leafMissed.Enqueue(key); return; }
-                var tile = CubeTileCodec.Decode(ReadBytes(at));
+                // a streamed tile not come yet (#1656): freed and asked again by a later plan
+                if (Pyramid.Heights(key) is not { } tile) { _leafMissed.Enqueue(key); return; }
                 Image? colour = null;
-                if (colourAt.Path != null)
+                if (coloured && Pyramid.Colour(key, month) is { } image)
                 {
-                    var a = CubeAlbedoCodec.Decode(ReadBytes(colourAt));
                     colour = new Image();
-                    if (colour.LoadWebpFromBuffer(a.ForMonth(month)) != Error.Ok) colour = null;
+                    if (colour.LoadWebpFromBuffer(image) != Error.Ok) colour = null;
                 }
                 byte[]? palette = null;
                 var rect = new Vector4(0, 0, 1, 1);
@@ -745,7 +747,8 @@ public partial class Globe : Node
                 colour?.GenerateMipmaps();
                 // no height at all: the parent's tile stays (the key stays loading, never asked again)
                 var lakes = Earth ? new WaterOut() : null;
-                if (Build(tile, palette, rect, ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels) is { } arrays) _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
+                if (Build(tile, palette, rect, stride: StrideOf(tile.Bits), ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels) is { } arrays)
+                    _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
             }
             catch (Exception e)
             {
@@ -758,7 +761,14 @@ public partial class Globe : Node
         });
     }
 
-    private static byte[] ReadBytes((string Path, long Offset, int Length) at) => GlobeFiles.ReadBytes(at);
+    /// <summary>
+    /// The stride a tile is drawn at: <see cref="Cells"/> cells whatever its lattice (#1656: the shipped base holds 65²,
+    /// a streamed tile 513²; every 8th vertex of the one is the other's lattice point).
+    /// </summary>
+    public static int StrideOf(int bits) => Math.Max(1, (1 << bits) / Cells);
+
+    /// <summary>Cells a side a tile is drawn with.</summary>
+    public const int Cells = 64;
 
     /// <summary>
     /// Whether a tile the pyramid does not hold must still be built (#1800): its parent holds a drawn leaf, so it splits,
@@ -809,7 +819,7 @@ public partial class Globe : Node
     }
 
     /// <summary>A pyramid tile's heights, decoded on the asking worker (a coarser level filling a finer one's holes); null where none.</summary>
-    private CubeTile? AncestorTile(CubeKey key) => _heights.TryGetValue(key, out var at) ? CubeTileCodec.Decode(ReadBytes(at)) : null;
+    private CubeTile? AncestorTile(CubeKey key) => Pyramid.Heights(key);
 
     /// <summary>
     /// A tile's mesh around its anchor: every <see cref="Stride"/>-th lattice vertex, rigorous, with
@@ -1250,36 +1260,33 @@ public partial class Globe : Node
     /// <summary>
     /// The globe in the model viewer: the whole Earth at level 1 (24 tiles, Earth-fixed axes, north up)
     /// and one level-4 tile over Switzerland, built as the game builds them, coloured for July and
-    /// lit from +Y. Needs a <c>--cube-global</c> region (<see cref="DataDir"/>); none, nothing shown.
+    /// lit from +Y. Needs a <c>--cube-global</c> region (<see cref="DataSource"/>); none, nothing shown.
     /// </summary>
     [Showcase("Space", "Globe")]
     private static IEnumerable<(string Name, Func<Node3D> Make)> GlobeShowcase()
     {
-        if (DataDir is not { } dir) yield break;
-        yield return ("whole Earth, level 1", () => Showcase(dir, k => k.Level == 1, earthFixed: true));
+        if (DataSource is not { Count: > 0 } pyramid) yield break;
+        yield return ("whole Earth, level 1", () => Showcase(pyramid, k => k.Level == 1, earthFixed: true));
         var bern = CubeKey.FromLatLon(46.95, 7.44, 4);
-        yield return ("a level-4 tile over Switzerland", () => Showcase(dir, k => k == bern, earthFixed: false));
+        if (pyramid.Has(bern)) yield return ("a level-4 tile over Switzerland", () => Showcase(pyramid, k => k == bern, earthFixed: false));
     }
 
-    private static Node3D Showcase(string dir, Func<CubeKey, bool> which, bool earthFixed)
+    private static Node3D Showcase(Terrain.Leaves.PyramidSource pyramid, Func<CubeKey, bool> which, bool earthFixed)
     {
         var root = new Node3D { Name = "Globe" };
-        var files = new GlobeFiles(dir);
-        var (heights, albedo) = files.Index(files.Manifest());
         var shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         // Earth-fixed with the north pole up (+Y), or one tile in its own frame
         var earth = new FrameAxes(new EcefPos(0, 0, 0), new EcefPos(0, 1, 0), new EcefPos(0, 0, 1), new EcefPos(1, 0, 0));
-        foreach (var (key, at) in heights)
+        foreach (var key in pyramid.Keys)
         {
-            if (!which(key)) continue;
-            var tile = CubeTileCodec.Decode(ReadBytes(at));
+            if (!which(key) || pyramid.IsStreamed(key) || pyramid.Heights(key) is not { } tile) continue;
             Image? colour = null;
-            if (albedo.TryGetValue(key, out var c))
+            if (pyramid.Colour(key, 7) is { } image)
             {
                 colour = new Image();
-                if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(ReadBytes(c)).ForMonth(7)) != Error.Ok) colour = null;
+                if (colour.LoadWebpFromBuffer(image) != Error.Ok) colour = null;
             }
-            if (Build(tile) is not { } arrays) continue;
+            if (Build(tile, stride: StrideOf(tile.Bits)) is not { } arrays) continue;
             var node = Patch(key, arrays, colour, shader);
             root.AddChild(node);
             if (earthFixed) node.Transform = PlaceIn(earth, key.Anchor);
