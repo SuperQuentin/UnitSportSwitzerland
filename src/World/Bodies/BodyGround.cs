@@ -60,7 +60,12 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     public const double TrueHalfM = Cells * CellM / 2 - BlendM;
 
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength",
-        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half",
+        LampPos = "lamp_pos", LampDir = "lamp_dir", LampCol = "lamp_col", LampCount = "lamp_count";
+
+    // the lamps on the ground (#1942, GroundLamps): one set of arrays, rewritten on a change, a re-anchor or each second
+    private static readonly Vector4[] LampPosArr = new Vector4[GroundLamps.Max], LampDirArr = new Vector4[GroundLamps.Max],
+        LampColArr = new Vector4[GroundLamps.Max];
 
     public CelestialBody Body => _globe.Body;
 
@@ -95,6 +100,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public StaticBody3D? Node;
         public ShaderMaterial? Material;
         public float ExposureWritten;
+        public int LampsVersion = -1, LampsEpoch = -1;
+        public double LampsAge;
         public EnuFrame? Frame;
         public Task<Square>? Task;
         public int Epoch = -1, Built;
@@ -229,6 +236,24 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         // (Phobos' near square at 1.6 in a globe at 0.9, a bright patch, #1853)
         if (l.Material != null && l.ExposureWritten != _globe.Exposure)
             l.Material.SetShaderParameter(SunStrength, l.ExposureWritten = _globe.Exposure);
+        if (l.Material != null) WriteLamps(l);
+    }
+
+    /// <summary>The nearest lamps into a square's shader (#1942): on a change of the set, a re-anchor, or once a second.</summary>
+    private void WriteLamps(Layer l)
+    {
+        l.LampsAge += GetProcessDeltaTime();
+        if (l.LampsVersion == GroundLamps.Version && l.LampsEpoch == _origin.Epoch && (l.LampsAge < 1 || GroundLamps.All.Count == 0)) return;
+        l.LampsVersion = GroundLamps.Version;
+        l.LampsEpoch = _origin.Epoch;
+        l.LampsAge = 0;
+        var eye = GetViewport()?.GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
+        int n = GroundLamps.Fill(eye, LampPosArr, LampDirArr, LampColArr);
+        l.Material!.SetShaderParameter(LampCount, n);
+        if (n == 0) return;
+        l.Material.SetShaderParameter(LampPos, LampPosArr);
+        l.Material.SetShaderParameter(LampDir, LampDirArr);
+        l.Material.SetShaderParameter(LampCol, LampColArr);
     }
 
     /// <summary>A layer needs a new square round <paramref name="p"/>: none yet, or the camera past its move distance.</summary>

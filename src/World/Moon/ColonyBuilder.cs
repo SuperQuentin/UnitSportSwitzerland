@@ -56,7 +56,9 @@ public static class ColonyBuilder
             Solid(at * new Transform3D(Basis.Identity, new Vector3(half + Wall / 2, F + 1.3f, 0)), new Vector3(Wall, 2.6f, len));
             Solid(at * new Transform3D(Basis.Identity, new Vector3(0, F + 2.5f, 0)), new Vector3(2 * half + 0.4f, 0.2f, len));
         }
-        if (links.Count > 0) root.AddChild(ColonyKit.Instance(ColonyKit.Links(links, c.Theme)));
+        if (links.Exists(l => !l.Item3)) root.AddChild(ColonyKit.Instance(ColonyKit.Links(links, c.Theme)));
+        var alleys = links.FindAll(l => l.Item3).ConvertAll(l => (l.Item1, l.Item2));
+        if (alleys.Count > 0) root.AddChild(Glazed(ColonyKit.Alleys(alleys, c.Theme)));
         // the steps down from each airlock's outer door to the plateau
         var stairs = new List<(Vector3, float)>();
         foreach (var a in plan.Airlocks)
@@ -87,6 +89,9 @@ public static class ColonyBuilder
             });
         }
         if (plan.Road.Count > 1) root.AddChild(ColonyKit.Instance(ColonyKit.RoadMesh(plan.Road)));
+        // the industry on the plateau (y = 0): arrays turned to the sun, the digger round its pit
+        if (plan.Industry.Count > 0)
+            root.AddChild(MoonIndustry.Build(plan.Industry, c.Theme, c.Lat, c.Lon, (e, n) => new Vector3((float)e, 0, (float)-n), body));
         return root;
     }
 

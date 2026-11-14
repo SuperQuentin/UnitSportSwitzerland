@@ -52,6 +52,8 @@ public partial class MoonSitesCheck : Node
     {
         if (MoonSites.Find(id) is { } s) return s;
         var baseId = id.Split(':')[0];
+        if (MoonOutposts.Find(baseId) is { } o)
+            return new MoonSite(id, o.Name, MoonSiteKind.Industry, o.Lat, o.Lon, [new SitePart(MoonPart.Flag, 0, 0, 0)]);
         if (MoonColonies.Find(baseId) is not { } c) return null;
         return new MoonSite(id, c.Name, MoonSiteKind.Colony, c.Lat, c.Lon, [new SitePart(MoonPart.Flag, 0, 0, 0)]);
     }
@@ -93,7 +95,9 @@ public partial class MoonSitesCheck : Node
         var site = _sites[_index];
         var ground = _ground()!;
         bool placed = MoonSurface.Active?.Sites.TryGetValue(PlacedId(site), out var p) == true && p!.TracesIn;
-        if (ground.Built > _builtAt && placed && ground.MediumBuilt > 0) _frames++;
+        // a second look at the same place (artemis, then artemis:close) may need no new square
+        bool again = _index > 0 && PlacedId(_sites[_index - 1]) == PlacedId(site) && _t > 2;
+        if ((ground.Built > _builtAt || again) && placed && ground.MediumBuilt > 0) _frames++;
         // a second of frames on the built ground, then the picture and the next site
         if (_frames > 60 && _t > 3)
         {
@@ -160,10 +164,29 @@ public partial class MoonSitesCheck : Node
                 or MoonPart.LunaRampStage => 11, MoonPart.Flag => 5.5, _ => 7,
         };
         bool close = s.Id.EndsWith(":close");
+        // <colony>:<industry kind> (#1942): a close look at the first piece of that kind, from the sun's side
+        IndustryKind? piece = null;
+        if (s.Kind == MoonSiteKind.Colony && s.Id.Split(':') is { Length: 2 } idParts
+            && Enum.TryParse<IndustryKind>(idParts[1], true, out var kind) && MoonColonies.Find(idParts[0]) is { } pc)
+        {
+            foreach (var i in ColonyPlan.For(pc).Industry)
+                if (i.Kind == kind)
+                {
+                    main = new SitePart(MoonPart.Flag, i.X, -i.Z, 0);
+                    piece = kind;
+                    az = sunAz + 0.6;
+                    break;
+                }
+        }
         if (s.Kind == MoonSiteKind.Colony) dist = close ? 34 : 170;
-        double up = s.Kind == MoonSiteKind.Colony ? (close ? 2.2 : 70) : Math.Max(1.8, dist * 0.32);
+        if (s.Kind == MoonSiteKind.Industry) dist = close ? 40 : 110;
+        // an outpost from the side, looking across it (the mass driver: from its start, along the rail)
+        if (s.Kind == MoonSiteKind.Industry && MoonOutposts.Find(PlacedId(s)) is { } op)
+            az = op.Heading * Math.PI / 180 + (op.Kind == OutpostKind.MassDriver ? Math.PI + 0.35 : 2.4);
+        if (piece != null) { dist = piece == IndustryKind.SolarArray ? 34 : 30; close = true; }
+        double up = piece != null ? 9 : s.Kind == MoonSiteKind.Colony ? (close ? 2.2 : 70) : s.Kind == MoonSiteKind.Industry ? (close ? 6 : 35) : Math.Max(1.8, dist * 0.32);
         var eye = new Vector3((float)(main.East + Math.Sin(az) * dist), (float)up, (float)-(main.North + Math.Cos(az) * dist));
-        var look = new Vector3((float)main.East, (float)(s.Kind == MoonSiteKind.Colony ? (close ? 4 : 0) : dist * 0.06), (float)-main.North);
+        var look = new Vector3((float)main.East, (float)(piece != null ? 3 : s.Kind == MoonSiteKind.Colony ? (close ? 4 : 0) : s.Kind == MoonSiteKind.Industry ? 6 : dist * 0.06), (float)-main.North);
         // the frame is the site's tangent at its ground point: lift the eye over the ground under it
         var eyeN = MoonSites.Offset(s, eye.X, -eye.Z);
         var axes = _origin.Frame.Axes!;
@@ -480,7 +503,7 @@ public partial class MoonSitesCheck : Node
         }
         foreach (var part in s.Parts)
         {
-            if (s.Kind == MoonSiteKind.Colony) break;
+            if (s.Kind is MoonSiteKind.Colony or MoonSiteKind.Industry) break;
             if (part.Part is MoonPart.SivbDebris or MoonPart.WreckDebris or MoonPart.RocketWreck or MoonPart.Alsep) continue;
             double worst = 0;
             double c = h.At(MoonSites.Offset(s, part.East, part.North));

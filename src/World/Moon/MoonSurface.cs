@@ -115,6 +115,45 @@ public partial class MoonSurface : Node
             if (!have && d < ColonyReachM) BuildColony(c, axes);
             else if (have && d > ColonyReachM + 600) Drop(c.Id);
         }
+        foreach (var o in MoonOutposts.All)
+        {
+            double d = Math.Acos(Math.Clamp(Dot(n, o.Normal), -1, 1)) * r;
+            bool have = _placed.ContainsKey(o.Id);
+            if (!have && d < OutpostReachM + o.Extent) BuildOutpost(o, axes);
+            else if (have && d > OutpostReachM + o.Extent + 600) Drop(o.Id);
+        }
+    }
+
+    /// <summary>An outpost (#1942) is built while the camera's ground point is this close to it (plus its extent), metres.</summary>
+    public const double OutpostReachM = 5000;
+
+    /// <summary>
+    /// An industrial outpost (the ice mine, the radio telescope, the mass driver): its pieces in its own ENU frame on its
+    /// stamp's ground (each piece at the ground under it: the mass driver's strip slopes between its ends), in the colours
+    /// of the colony that runs it.
+    /// </summary>
+    private void BuildOutpost(MoonOutpost o, FrameAxes axes)
+    {
+        var heights = _ground.Heights;
+        var g0 = Ellipsoid.Moon.ToGeodetic(heights.Ground(o.Normal));
+        var frame = new EnuFrame(g0, Ellipsoid.Moon);
+        var probe = o.Probe;
+        Vector3 Ground(double e, double n)
+        {
+            var (x, y, z) = frame.ToLocal(heights.Ground(MoonSites.Offset(probe, e, n)));
+            return new Vector3((float)x, (float)y, (float)z);
+        }
+        var root = new Node3D { Name = o.Id };
+        var body = new StaticBody3D { Name = "Solid" };
+        root.AddChild(body);
+        var theme = MoonColonies.Find(o.Colony)?.Theme ?? ColonyTheme.Artemis;
+        root.AddChild(MoonIndustry.Build(MoonOutposts.Plan(o), theme, o.Lat, o.Lon, Ground, body));
+        AddChild(root);
+        var placed = new Placed(null, root, frame) { TracesIn = true };
+        _placed[o.Id] = placed;
+        Place(placed, axes);
+        GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[moon] {o.Name}: built ({root.GetChildCount()} nodes, ground {g0.H:F1} m)"));
     }
 
     /// <summary>A colony is built while the camera's ground point is this close to its centre, metres (its lights take over past it, phase 8).</summary>

@@ -257,3 +257,84 @@ public class ColonyAirlockPlanTests
         }
     }
 }
+
+/// <summary>The other staffed colonies and the industry (#1942).</summary>
+public class MoonIndustryPlanTests
+{
+    private static double Metres(EcefPos a, EcefPos b) =>
+        Math.Acos(Math.Clamp(a.X * b.X + a.Y * b.Y + a.Z * b.Z, -1, 1)) * Ellipsoid.Moon.A;
+
+    [Theory]
+    [InlineData(ColonyTheme.Artemis)]
+    [InlineData(ColonyTheme.MoonVillage)]
+    [InlineData(ColonyTheme.Ilrs)]
+    public void The_industry_stands_clear_of_the_modules_the_road_and_the_pads(ColonyTheme theme)
+    {
+        for (int seed = 1; seed < 40; seed++)
+        {
+            var plan = ColonyPlan.For(new MoonColony("t", "t", theme, 0, 0, seed, 420, seed * 17 % 360, true));
+            Assert.True(plan.Industry.FindAll(i => i.Kind == IndustryKind.SolarArray).Count >= 8, $"seed {seed}: few arrays");
+            Assert.Single(plan.Industry, i => i.Kind == IndustryKind.Digger);
+            foreach (var i in plan.Industry)
+            {
+                double reach = ColonyPlan.IndustryReach(i);
+                Assert.True(plan.Clear(i.X, i.Z, reach + 2), $"seed {seed}: {i.Kind} at {i.X:F0},{i.Z:F0} on a module");
+                foreach (var p in plan.Pads)
+                    Assert.True(Math.Sqrt((p.X - i.X) * (p.X - i.X) + (p.Z - i.Z) * (p.Z - i.Z)) > p.Radius + reach + 10, $"seed {seed}: {i.Kind} on a pad");
+                // the road: from the hangar's door straight out
+                var (a, b) = (plan.Road[0], plan.Road[^1]);
+                double dx = b.X - a.X, dz = b.Z - a.Z, l = Math.Sqrt(dx * dx + dz * dz);
+                double t = Math.Clamp(((i.X - a.X) * dx + (i.Z - a.Z) * dz) / (l * l), 0, 1);
+                double ex = a.X + dx * t - i.X, ez = a.Z + dz * t - i.Z;
+                Assert.True(Math.Sqrt(ex * ex + ez * ez) > reach + 6, $"seed {seed}: {i.Kind} on the road");
+            }
+        }
+    }
+
+    [Fact]
+    public void Moon_village_keeps_out_of_tranquility_base_and_ilrs_of_change_4()
+    {
+        var mv = MoonColonies.Find("moonvillage")!;
+        double d = Metres(mv.Normal, MoonSites.Find("apollo11")!.Normal);
+        Assert.InRange(d, 1800, 3000);
+        Assert.True(d > mv.PlateauM + 150 + 300, "the plateau's falloff reaches the heritage zone");
+        Assert.True(Metres(MoonColonies.Find("ilrs")!.Normal, MoonSites.Find("change4")!.Normal) > 10000);
+    }
+
+    [Fact]
+    public void Every_outpost_has_its_pieces_and_its_ground_touches_no_site_or_colony()
+    {
+        foreach (var o in MoonOutposts.All)
+        {
+            Assert.NotEmpty(MoonOutposts.Plan(o));
+            Assert.NotNull(MoonColonies.Find(o.Colony));
+            foreach (var c in MoonColonies.All)
+                Assert.True(Metres(o.Normal, c.Normal) > c.PlateauM + 150 + o.RadiusM + 40, $"{o.Id} on {c.Id}'s plateau");
+            foreach (var s in MoonSites.All)
+                Assert.True(Metres(o.Normal, s.Normal) > o.Extent + 500, $"{o.Id} near {s.Id}");
+        }
+        var md = MoonOutposts.Find("massdriver")!;
+        Assert.InRange(Metres(md.Normal, md.End!.Value), 1990, 2010);
+        var dishes = MoonOutposts.Plan(MoonOutposts.Find("radiotelescope")!).FindAll(i => i.Kind == IndustryKind.Dish);
+        Assert.Equal(19, dishes.Count);
+        for (int i = 0; i < dishes.Count; i++)
+            for (int j = i + 1; j < dishes.Count; j++)
+                Assert.True(Math.Sqrt(Math.Pow(dishes[i].X - dishes[j].X, 2) + Math.Pow(dishes[i].Z - dishes[j].Z, 2)) > 20);
+    }
+
+    [Fact]
+    public void A_level_outpost_is_one_height_inside_its_disc()
+    {
+        var stamps = new SurfaceStamps(MoonColonies.Stamps(), Ellipsoid.Moon.A);
+        Func<EcefPos, double> slope = n => 500 * n.Y + 200 * n.Z;
+        foreach (var o in MoonOutposts.All)
+        {
+            if (o.LengthM > 0) continue;
+            for (int k = 0; k < 8; k++)
+            {
+                var n = MoonSites.Offset(o.Probe, Math.Sin(k) * o.RadiusM * 0.9, Math.Cos(k) * o.RadiusM * 0.9);
+                Assert.Equal(slope(o.Normal), stamps.Apply(n, slope(n), 2, slope), 6);
+            }
+        }
+    }
+}

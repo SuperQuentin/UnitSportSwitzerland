@@ -45,6 +45,12 @@ public static class MoonColonies
         // high ground 19 km from the pole between Shackleton and de Gerlache (1,498 m, long sunlit): --moonsurvey
         // -89.45,-137,6,450 found it the flattest 450 m disc there (6.3 m RMS round a plane tilted 0.4°)
         new("artemis", "Artemis Base", ColonyTheme.Artemis, ArtemisLat, ArtemisLon, 1001, 420, ArtemisHeading, Staffed: true),
+        // the mare 2.1 km north-east of Tranquility Base, outside its heritage zone: --moonsurvey 0.70,23.56,3,420
+        // (1.0 m RMS round a plane tilted 0.01°, -1,952 m); the pads lead on away from Apollo 11
+        new("moonvillage", "Moon Village", ColonyTheme.MoonVillage, 0.7198, 23.5270, 2002, 420, 45, Staffed: true),
+        // Von Karman's mare floor on the far side, 18 km north-west of Chang'e 4: --moonsurvey -45.0,176.6,8,420
+        // (0.22 m RMS, 0.02°, -5,914 m); radio-quiet, the telescope 4.7 km south-west
+        new("ilrs", "ILRS", ColonyTheme.Ilrs, -44.8549, 176.7306, 3003, 420, 300, Staffed: true),
     ];
 
     /// <summary>Artemis Base's centre and main spine (from <c>--moonsurvey</c>).</summary>
@@ -54,6 +60,7 @@ public static class MoonColonies
     public static IEnumerable<SurfaceStamp> Stamps()
     {
         foreach (var c in All) yield return new SurfaceStamp(c.Normal, null, c.PlateauM, 150, StampMode.Level);
+        foreach (var o in MoonOutposts.All) yield return o.Stamp;
     }
 
     public static MoonColony? Find(string id)
