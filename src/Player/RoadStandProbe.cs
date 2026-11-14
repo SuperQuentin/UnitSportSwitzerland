@@ -106,7 +106,8 @@ public partial class RoadStandProbe : Node
         {
             if (_roads is not { IsCompleted: true } || !_chunks.Ground.HasCollisionAt(at) || _wait < 8) return;
             if ((Embankments || Sidewalks || FloorAtArg() != null) && _grid is not { IsCompleted: true }) return;
-            _points = Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
+            if (CmdArgs.Value("--raygrid") is { } rg) { RayGrid(rg, at); return; }
+            _points =Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
             if (FloorAtArg() is { } fa && _roads.Result is { } ft && _grid?.Result is { } fg)
             {
                 // --floorat E,N: the blend's height at the four lattice vertices around a point
@@ -169,6 +170,41 @@ public partial class RoadStandProbe : Node
     {
         var (e, n) = _origin.ToLv95(p);
         return $"{e:F1},{n:F1}";
+    }
+
+    /// <summary>
+    /// <c>--raygrid half,step</c> (with <c>--at E,N</c>, #1759): every collision surface a ray straight down meets over a square
+    /// round the point, top first, with its body: what stands above a deck or a ribbon where a car stops dead.
+    /// </summary>
+    private void RayGrid(string arg, Vector3 at)
+    {
+        var a = arg.Split(',');
+        float half = float.Parse(a[0], System.Globalization.CultureInfo.InvariantCulture);
+        float step = float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture);
+        var space = _player!.GetWorld3D().DirectSpaceState;
+        for (float dz = -half; dz <= half + 1e-3f; dz += step)
+            for (float dx = -half; dx <= half + 1e-3f; dx += step)
+            {
+                var top = (at + new Vector3(dx, 0, dz)) with { Y = 5000 };
+                var hits = new List<string>();
+                var exclude = new Godot.Collections.Array<Rid> { _player.GetRid() };
+                for (int k = 0; k < 4; k++)
+                {
+                    var q = PhysicsRayQueryParameters3D.Create(top, top with { Y = -1000 });
+                    q.Exclude = exclude;
+                    q.HitBackFaces = true;
+                    var hit = space.IntersectRay(q);
+                    if (hit.Count == 0) break;
+                    var p = hit["position"].AsVector3();
+                    var body = hit["collider"].AsGodotObject() as Node;
+                    hits.Add($"{p.Y:F2} {body?.GetParent()?.Name}/{body?.Name}");
+                    top = p - new Vector3(0, 0.02f, 0);   // the next surface below this one
+                }
+                GD.Print($"[roadcheck] raygrid {Lv95(at + new Vector3(dx, 0, dz))}: {string.Join(" | ", hits)}");
+            }
+        GD.Print("[roadcheck] RESULT: raygrid done");
+        SetPhysicsProcess(false);
+        GetTree().Quit(0);
     }
 
     private void Next()
