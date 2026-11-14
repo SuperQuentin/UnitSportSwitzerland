@@ -91,9 +91,12 @@ public partial class MoonDisc : MeshInstance3D
 
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Place;
 
+    /// <summary>The Moon's own globe draws it this frame (#1848, World/Bodies/BodyViews): the sky's picture steps aside.</summary>
+    public static bool HiddenByGlobe { get; set; }
+
     private void Place()
     {
-        if (DayNight.Instance is not { Sky: { } sky } day || GetViewport()?.GetCamera3D() is not { } cam)
+        if (HiddenByGlobe || DayNight.Instance is not { Sky: { } sky } day || GetViewport()?.GetCamera3D() is not { } cam)
         {
             Visible = false;
             _halo.Visible = false;

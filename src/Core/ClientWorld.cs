@@ -826,6 +826,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the stars (#1444), the real sky's too
             AddChild(new World.StarField());
             AddChild(new World.SkyBodies());
+            // the other bodies' globes, and the Earth's from them (#1848): the earth world only
+            if (_earth != null) AddChild(new World.Bodies.BodyViews(origin));
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
             // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)

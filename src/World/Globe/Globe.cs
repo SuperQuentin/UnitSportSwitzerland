@@ -476,7 +476,8 @@ public partial class Globe : Node
             Hide(altitude, cam.GlobalPosition);
             Edge(altitude, cam.GlobalPosition);
         }
-        bool show = !DebugHidden && (Earth || altitude > ShowAboveM);
+        // the Earth's globe on the Earth's anchor only: from another body it is a BodyGlobe (World/Bodies, #1848)
+        bool show = !DebugHidden && Origin.Body == Core.BodyId.Earth && (Earth || altitude > ShowAboveM);
         if (show != _shown)
         {
             _shown = show;

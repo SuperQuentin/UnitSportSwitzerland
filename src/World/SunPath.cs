@@ -136,6 +136,12 @@ public static class SunPath
     {
         var h = Ephemeris.Topocentric(body, SwissTime.ToUtc(date, hour), place.Geo);
         elevationDeg = (float)h.ElevationDeg;
+        // over another body's horizon (#1848): the direction against that body's own up
+        if (place.BodyUp is { } bodyUp)
+        {
+            var d = EcefOf(h, place.Geo);
+            elevationDeg = (float)(Math.Asin(Math.Clamp(d.X * bodyUp.X + d.Y * bodyUp.Y + d.Z * bodyUp.Z, -1, 1)) * 180 / Math.PI);
+        }
         distance = h.Distance;
         return ToWorld(h, place);
     }
@@ -213,18 +219,27 @@ public static class SunPath
 
     [ThreadStatic] private static OriginFrame? _frame;
 
+    /// <summary>A direction given in the east / north / up at a place as an Earth-fixed unit vector.</summary>
+    private static EcefPos EcefOf(Horizontal h, Geodetic g)
+    {
+        double lat = g.LatDeg * Math.PI / 180, lon = g.LonDeg * Math.PI / 180;
+        double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
+        return new EcefPos(
+            -so * h.East - sl * co * h.North + cl * co * h.Up,
+            co * h.East - sl * so * h.North + cl * so * h.Up,
+            cl * h.North + sl * h.Up);
+    }
+
     /// <summary>True east / north / up into world axes: turned by the meridian convergence to grid north.</summary>
     private static Vector3 ToWorld(Horizontal h, Place place)
     {
         if (Frame is { IsAnchor: true } frame)
         {
             // east / north / up at the place, as Earth-fixed directions, into the anchor's axes
-            double lat = place.Geo.LatDeg * Math.PI / 180, lon = place.Geo.LonDeg * Math.PI / 180;
-            double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
-            var ecef = new EcefPos(
-                -so * h.East - sl * co * h.North + cl * co * h.Up,
-                co * h.East - sl * so * h.North + cl * so * h.Up,
-                cl * h.North + sl * h.Up);
+            var ecef = EcefOf(h, place.Geo);
+            // an anchor counted from another body (#1848): its axes are that body's
+            if (frame.Axes!.Body != BodyId.Earth)
+                ecef = Frames.ConvertDirection(BodyId.Earth, new DVec3(ecef.X, ecef.Y, ecef.Z), frame.Axes.Body, SkyClock.Now).AsEcef;
             return frame.DirectionOf(ecef);
         }
         double gridE = h.East * place.NorthN + h.North * place.NorthE;
@@ -286,8 +301,12 @@ public static class SunPath
         return null;
     }
 
-    /// <summary>A place on the Earth, and true north as a unit vector in LV95 grid east / north.</summary>
-    private sealed record Place(long CellE, long CellN, Geodetic Geo, double NorthE, double NorthN);
+    /// <summary>
+    /// A place on the Earth, and true north as a unit vector in LV95 grid east / north. A place on another body (#1848) is
+    /// read as the Earth-fixed point it is (the sky's ephemeris is the Earth's), with <paramref name="BodyUp"/> its own
+    /// body's up there as an Earth-fixed unit vector: a body's elevation is over that horizon, not the Earth's.
+    /// </summary>
+    private sealed record Place(long CellE, long CellN, Geodetic Geo, double NorthE, double NorthN, EcefPos? BodyUp = null);
 
     /// <summary>The last place asked for, per kilometre: swapped whole, so threads never see half of one.</summary>
     private static Place? _place;
@@ -306,7 +325,15 @@ public static class SunPath
         bool anchor = Frame is { IsAnchor: true };
         if (_point is { } p && p.Anchor == anchor && p.At == at) return p.Place;
         Place place;
-        if (anchor) place = new Place(long.MinValue, long.MinValue, at.Geodetic, 0, 1);
+        if (anchor && at.Body != BodyId.Earth)
+        {
+            // another body (#1848): the point counted from the Earth, its own up turned into the Earth's axes
+            var sky = SkyClock.Now;
+            var up = at.Enu.Up;
+            var earthUp = Frames.ConvertDirection(at.Body, new DVec3(up.X, up.Y, up.Z), BodyId.Earth, sky);
+            place = new Place(long.MinValue, long.MinValue, at.In(BodyId.Earth, sky).Geodetic, 0, 1, earthUp.AsEcef);
+        }
+        else if (anchor) place = new Place(long.MinValue, long.MinValue, at.Geodetic, 0, 1);
         else
         {
             var lv95 = at.Lv95;
