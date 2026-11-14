@@ -25,6 +25,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   E:; Viking's 925 m colour), exposure by the photo's mean, the sky's disc hidden under a globe, craters by body.
 - **H7d/H7e**, this branch: `--mooncheck mars`, the spectator from the Earth to Mars through the Sun's sphere (two
   crossings, 249 million km at light speed in 860 s, no shift on either), landing and walking on Mars at 3.72 m/s².
+- **H7e**, this branch: every body's air as data (`BodyAir`): Mars' butterscotch sky, its blue sunset, its haze from orbit,
+  its drag; the shell's sun from the anchor body's own offset.
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.

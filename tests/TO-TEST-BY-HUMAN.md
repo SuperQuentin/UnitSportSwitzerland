@@ -23,6 +23,7 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Come down to a few hundred metres and press T → you stand on the ground (no fall from the camera's height, no wait). Walk and sprint for a few hundred metres → the ground keeps coming under you, with craters down to a few metres, and no seam or step where the near ground meets the farther one.
 - [ ] Jump → about 5.4 m up and over 5 s in the air (0.9 m on the Earth). Do the same with the pad (its jump and step-in buttons) and in VR → the same.
 - [ ] From the Earth, fly toward Mars at the wheel's top (PR [#1899](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1899): about 15 min at light speed) → the speed reads in c past the Moon; nothing jumps leaving the Earth's sphere (~1 million km) or entering Mars'; Mars' globe takes over from its sky dot. Step in → you stand on Mars and a jump reaches ~2.4 m.
+- [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
 
