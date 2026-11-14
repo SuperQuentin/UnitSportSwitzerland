@@ -95,6 +95,8 @@ public static class ColonyBuilder
         // the empty colonies (#1944): the pit's ruins and tower, the Cold War dome's lamps, their terminals' logs
         ColonyRuins.Dress(root, body, c, plan, groundY ?? ((_, _) => 0f));
         if (ColonyLogs.For(c.Theme).Length > 0) root.AddChild(new ColonyTerminals(c, plan));
+        // the staffed colonies' crews (#1945): decoration figures offline, the same schedule a server bot would follow
+        if (c.Staffed) root.AddChild(new ColonyColonists(c, plan));
         // the industry on the plateau (y = 0): arrays turned to the sun, the digger round its pit
         if (plan.Industry.Count > 0)
             root.AddChild(MoonIndustry.Build(plan.Industry, c.Theme, c.Lat, c.Lon, (e, n) => new Vector3((float)e, 0, (float)-n), body));

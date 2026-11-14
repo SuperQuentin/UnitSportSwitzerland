@@ -25,6 +25,9 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
   tube's mouth, no air, dead lamps, red emergency lights, drifts and rubble, the stair tower to the rim, five terminals
   with logs) and Plaskett station, the Cold War base on Plaskett's floor near the north pole (olive modules, the walk-in
   overgrown biodome with its grow lamps, the turning radar, lattice masts, the quarry, two terminals), `--ruinscheck`.
+- Phase 7 (#1945): the staffed colonies' crews (`ColonyCrew`: spots from the plan, 300 s windows of work, meals, gym,
+  visits and EVAs, three sleep shifts by UTC, walks through the doors and tubes), played offline by decoration figures in
+  the suit (`ColonyColonists`), designed for server bots through the same schedule and intents, `--colonistcheck`.
 
 ## The user's decisions (fixed)
 
@@ -299,3 +302,7 @@ Tracking: #1938. Phases: 1 #1939, 2 #1940, 3 #1941, 4 #1942, 5 #1943, 6 #1944, 7
   shown on the terminals' screens (no menu). The Cold War base is "Plaskett station", named after its crater, and empty;
   its biodome is the largest (64 m), its door back toward the hub. The names, layout and art take only the mood of the
   user's reference.
+- Phase 7: the bot system cannot run on the Moon before a server hosts it (D2, C3b), so the offline figures came first
+  and the bots are the schedule's other player (a row in `bots/bot-capability-map`). Crews of 8 (Moon Village 10); windows
+  of 300 s of the simulation clock; the sleep shifts by the sky's UTC hour; the EVA colonists appear and leave outside
+  only out of view (no walk through the airlocks offline); colonists are not drawn in their bunks.
