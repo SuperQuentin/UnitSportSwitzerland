@@ -79,6 +79,12 @@ public partial class MoonSitesCheck : Node
             if (_pending == null) AirStep(delta);
             return;
         }
+        if (_crewStage > 0)
+        {
+            SavePending();
+            if (_pending == null) CrewStep(delta);
+            return;
+        }
         if (_ruin > 0)
         {
             SavePending();
@@ -134,6 +140,7 @@ public partial class MoonSitesCheck : Node
             if (AirlockCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _air = 1; return; }
             if (RoverCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _rover = 1; return; }
             if (RuinsCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _ruin = 1; return; }
+            if (ColonistCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _crewStage = 1; return; }
             Finish(_fails.Count == 0 ? null : string.Join("; ", _fails));
             return;
         }

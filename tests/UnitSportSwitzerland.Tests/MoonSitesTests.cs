@@ -443,3 +443,91 @@ public class MoonRuinsPlanTests
         Assert.True(plan.Extent < c.PlateauM);
     }
 }
+
+/// <summary>The colonists (#1945).</summary>
+public class ColonyCrewTests
+{
+    private static bool Inside(ColonyPlan plan, double x, double z)
+    {
+        foreach (var m in plan.Modules)
+        {
+            double dx = x - m.X, dz = z - m.Z;
+            if (m.Kind is ModuleKind.Hub or ModuleKind.Stack or ModuleKind.Dome or ModuleKind.Biodome)
+            {
+                if (dx * dx + dz * dz < m.Width * m.Width / 4) return true;
+                continue;
+            }
+            var (ax, az) = ColonyPlan.Along(m.Yaw);
+            double v = dx * ax + dz * az, u = -dx * az + dz * ax;
+            if (Math.Abs(v) < m.Length / 2 + 0.3 && Math.Abs(u) < m.Width / 2) return true;
+        }
+        foreach (var l in plan.Links)
+        {
+            var a = plan.Doors[l.DoorA];
+            var b = plan.Doors[l.DoorB];
+            double ex = b.X - a.X, ez = b.Z - a.Z, len2 = ex * ex + ez * ez;
+            double t = Math.Clamp(((x - a.X) * ex + (z - a.Z) * ez) / len2, 0, 1);
+            double px = a.X + ex * t - x, pz = a.Z + ez * t - z;
+            if (px * px + pz * pz < 1.2 * 1.2) return true;
+        }
+        return false;
+    }
+
+    [Fact]
+    public void The_staffed_colonies_have_a_crew_and_the_empty_ones_none()
+    {
+        foreach (var c in MoonColonies.All)
+        {
+            var crew = new ColonyCrew(c, ColonyPlan.For(c));
+            if (c.Staffed) Assert.InRange(crew.Crew.Count, 8, 10);
+            else Assert.Empty(crew.Crew);
+        }
+    }
+
+    [Fact]
+    public void Every_walk_between_two_inside_spots_stays_inside_the_colony()
+    {
+        foreach (var c in MoonColonies.All)
+        {
+            if (!c.Staffed) continue;
+            var plan = ColonyPlan.For(c);
+            var crew = new ColonyCrew(c, plan);
+            for (int i = 0; i < crew.Spots.Count; i++)
+                for (int j = 0; j < crew.Spots.Count; j++)
+                {
+                    if (i == j || crew.Spots[i].Module < 0 || crew.Spots[j].Module < 0) continue;
+                    var path = crew.Path(i, j);
+                    double len = ColonyCrew.Length(path);
+                    for (double d = 0; d <= len; d += 0.5)
+                    {
+                        var (p, _) = ColonyCrew.Walk(path, d);
+                        Assert.True(Inside(plan, p.X, p.Z), $"{c.Id}: spot {i} to {j} leaves the colony at {p.X:F1}, {p.Z:F1}");
+                    }
+                }
+        }
+    }
+
+    [Fact]
+    public void The_day_is_the_same_every_time_a_third_asleep_and_some_out_on_eva()
+    {
+        var c = MoonColonies.Find("artemis")!;
+        var crew = new ColonyCrew(c, ColonyPlan.For(c));
+        var again = new ColonyCrew(c, ColonyPlan.For(c));
+        int asleep = 0, eva = 0, walking = 0, total = 0;
+        for (double t = 0; t < 86400; t += 97)
+        {
+            double hour = t / 3600 % 24;
+            foreach (var who in crew.Crew)
+            {
+                var a = crew.At(who, t, hour);
+                Assert.Equal(a.Activity, again.At(who, t, hour).Activity);
+                total++;
+                if (!a.Shown) asleep++;
+                if (a.Outside) eva++;
+                if (a.Path != null) walking++;
+            }
+        }
+        Assert.InRange(asleep / (double)total, 0.25, 0.42);
+        Assert.True(eva > 0 && walking > 0, $"eva {eva}, walking {walking}");
+    }
+}

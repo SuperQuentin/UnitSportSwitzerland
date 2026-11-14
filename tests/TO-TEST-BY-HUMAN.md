@@ -42,6 +42,14 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Moon colonists ([#1945](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1945))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites artemis:close`, step in and walk the colony for ten minutes → colonists in their suits at the consoles and on the cans' aisles, now and then one walking through a tube to another room; nobody pops in or out where you are looking; nobody walks through a wall or into furniture.
+- [ ] Outside by the solar field or the digger, wait a while → a colonist in a helmet appears there only while you are not looking that way.
+- [ ] Note the frame time with a full crew in view (should stay as without them).
+
 ## The empty colonies: Marius Hills station and Plaskett station ([#1944](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1944))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
