@@ -188,6 +188,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (SlotOf(node.Name) is not { } key) return;
         _gone.Remove(key.Key);
         _asked.Remove(key.Key);
+        _sleptWithNode.Remove(key.Key);
         bool fresh = !_awake.Contains(key.Key);
         MarkAwake(key.Key);
         if (fresh && Decides && World.ObjectContainers.Instance is { } containers)
@@ -279,6 +280,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             GD.Print($"[dormant] {vehicle.Name} is back in its bay: slot {key} dormant again");
             return true;
         }
+        // a woken slot's own car that is not taken back: why, so a bay that should be scenery again can be told apart
+        if (SlotOf(vehicle.Name) is { } own && _awakeInfo.TryGetValue(own.Key, out var bay) && bay.E is { } be && bay.N is { } bn)
+            GD.Print(FormattableString.Invariant(
+                $"[dormant] {vehicle.Name} stays awake: {s.Position.HorizontalDistanceTo(GlobalPos.FromLv95(be, bn, 0)):F2} m from its bay, turned {Mathf.RadToDeg((float)Math.IEEERemainder(s.Yaw - bay.Yaw, Math.Tau)):F2}°, kind {(int)s.Kind}/{bay.KindId}, pristine {pristine}"));
         return false;
     }
 
@@ -320,6 +325,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     private void OnVehicleRemoved(Node node)
     {
+        // a slot slept while its node stood here: the node is gone, its dormant copy is drawn now
+        if (_sleptWithNode.Count > 0 && SlotOf(node.Name) is { } slept && _sleptWithNode.Remove(slept.Key))
+        {
+            var tile = slept.Tile;
+            if (_slots.ContainsKey(tile)) Callable.From(() => { if (_slots.ContainsKey(tile)) Draw(tile); }).CallDeferred();
+            return;
+        }
         // gone to sleep in a container (#689), not gone: the slot is still that vehicle's
         if (World.ObjectContainers.IsFiling(node)) return;
         if (SlotOf(node.Name) is not { } key || !_awake.Contains(key.Key)) return;
@@ -413,8 +425,17 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             return;
         }
         if (!_awake.Remove(key)) return;
+        // its node may still stand here: the server frees it after this, and a client within the car's interest
+        // (wider than a container's reach) loses it a moment later. Until then it is neither awake nor drawn (#1787)
+        if (VehicleManager.Instance?.GetNodeOrNull($"veh_slot_{owner}_{ordinal}") != null) _sleptWithNode.Add(key);
         if (TileOf(owner) is { } id && _slots.ContainsKey(id)) Draw(id);
     }
+
+    /// <summary>
+    /// Slots put back to sleep while their vehicle's node was still here (<see cref="Slept"/>): <see cref="Draw"/>
+    /// must not take that node for a late joiner's woken slot and mark it awake again; its copy is drawn once it goes.
+    /// </summary>
+    private readonly HashSet<string> _sleptWithNode = new();
 
     /// <summary>
     /// The state a slot wakes with. <see cref="Promote"/> places exactly this, and the dormant look
@@ -846,6 +867,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             if (_awake.Contains(KeyOf(s))) continue;
             if (VehicleManager.Instance?.GetNodeOrNull(s.NodeName) != null)
             {
+                // slept by the server, its node still on its way out: no copy yet, and not awake (#1787)
+                if (_sleptWithNode.Contains(KeyOf(s))) continue;
                 // a late joiner: the vehicle is already in the world, so this slot woke before we arrived
                 _awake.Add(KeyOf(s));
                 continue;
