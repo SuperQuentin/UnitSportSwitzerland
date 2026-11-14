@@ -29,14 +29,8 @@ public sealed class LinkBook
     /// <summary>More than this apart for <see cref="BreakSeconds"/>: the link breaks (lag, a teleport).</summary>
     public const float BreakDistance = 25f;
     public const float BreakSeconds = 3f;
-    /// <summary>Hands more than <see cref="HandLength"/> + <see cref="PayOutSlack"/> apart this long pay out to a rope.</summary>
+    /// <summary>Hands more than <see cref="HandLength"/> apart this long pay out to a rope.</summary>
     public const float PayOutSeconds = 1f;
-    /// <summary>
-    /// What the server's distance between two hands may run over <see cref="HandLength"/> before it counts, m (#1706):
-    /// a led follower aims 1.1 m behind its leader's replicated place and runs once 0.45 m short of it, so a steady
-    /// walk alone left 5 cm for the replication lag, and holding hands paid out to a rope at a walk.
-    /// </summary>
-    public const float PayOutSlack = 0.35f;
     /// <summary>A rope team: four at most.</summary>
     public const int MaxChain = 4;
 
@@ -247,7 +241,7 @@ public static class LinkRules
         if (mode == LinkMode.Hand)
         {
             if (rough) { apart = 0; return LinkMode.Rope; }
-            apart = dist > LinkBook.HandLength + LinkBook.PayOutSlack ? apart + dt : 0;
+            apart = dist > LinkBook.HandLength ? apart + dt : 0;
             if (apart < LinkBook.PayOutSeconds) return LinkMode.Hand;
             apart = 0;
             return LinkMode.Rope;
