@@ -263,9 +263,10 @@ public partial class OriginShifter : Node
     private bool CrossSphere(Vector3 at)
     {
         if (!InSpace || _origin.Frame.Axes is not { } axes) return false;
-        double now = Time.GetTicksMsec() / 1000.0;
-        if (now - _sphereCheckAt < 0.25) return false;
-        _sphereCheckAt = now;
+        // a throttle on the work, not on what the world does: real time (docs/notes/core/three-clocks.md)
+        double now = RealClock.Now;
+        if (now < _sphereCheckAt) return false;
+        _sphereCheckAt = now + 0.25;
         var sky = SkyClock.Now;
         var p = axes.ToEcef(at.X, at.Y, at.Z);
         var body = Frames.SphereAt(axes.Body, new DVec3(p.X, p.Y, p.Z), sky);
