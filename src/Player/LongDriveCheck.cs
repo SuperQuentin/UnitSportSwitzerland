@@ -337,7 +337,8 @@ public partial class LongDriveCheck : Node
             var c = r.Centre[r.NearestCentreIndexAt(s)];
             string ground = _ground.TryGetHeight(c, out float g) ? Inv($"{c.Y - g:+0.0;-0.0}") : "?";
             var kind = r.Kinds is { Count: > 0 } k ? k[Mathf.Min(r.NearestCentreIndexAt(s), k.Count - 1)] : default;
-            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
+            var (ce, cn) = _origin.ToLv95(c);
+            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground at {ce:F1}/{cn:F1} y {c.Y:F2}, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
         }
         return "the route here: " + string.Join("; ", parts);
     }
