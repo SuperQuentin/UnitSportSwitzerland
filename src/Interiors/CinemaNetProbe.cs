@@ -192,10 +192,13 @@ public partial class CinemaNetProbe : ChatProbe
                 Expect(Math.Abs(t0 - t0Said) < 0.002, $"{_role} holds A's T0 ({t0:F3} against {t0Said:F3})");
                 if (_role == "B") booths.AskVideo(plan, 0, "https://example.org/b.mp4");
                 Say("watching");
+                // B's refused ask went to the server before its "watching": checked now, not after the watch, by when A
+                // may have moved the hall on to its live share (#1706: C read the link after A's change)
+                if (_role == "B" || await Heard("B", "watching", 30)) await Seconds(1.0);
+                Expect(booths.VideoOf(plan, 0).Link == VideoLink, $"{_role}: the server refused B's link (B is outside)");
                 // C only checks what it was sent: two decoding peers prove the clock, a third ffmpeg pair costs the RAM floor
                 if (_role == "B") await Watch(VideoLink, t0);
                 else await Seconds(WatchSeconds);
-                Expect(booths.VideoOf(plan, 0).Link == VideoLink, $"{_role}: the server refused B's link (B is outside)");
                 if (_role == "B")
                 {
                     // A's live share: only from inside, so B walks in
