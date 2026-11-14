@@ -100,6 +100,11 @@ public partial class PigeonNetProbe : ChatProbe
 
     private async Task RunB(FootPlayer me, BirdLife life)
     {
+        // both join at the one --at, B on A's head (#1249): A then hovered "over B" inside B's body, the physics threw
+        // B 100 m up, and A's drop and crash, aimed at B's copy, went wrong. B stands 6 m east, on the ground, first.
+        me.PlaceAt(me.GlobalPosition + new Vector3(6f, 0.5f, 0f), 0f);
+        me.Velocity = Vector3.Zero;
+        if (!await Until(() => me.IsOnFloor(), 10)) Fail("B never stood 6 m east");
         if (!await Heard("A", "pigeon", 60)) { Fail("A never turned into a pigeon"); return; }
         var a = Other()!;
         // the visual is named Body, but the one it replaces may still be in the tree for a frame
