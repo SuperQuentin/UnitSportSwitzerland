@@ -142,10 +142,33 @@ public partial class MoonCheck : Node
         }
     }
 
+    /// <summary>
+    /// <c>--fromorbit</c>: no flight, the camera starts 100 km over the target where the sun is 45° up (the anchor relabelled
+    /// there, as <c>--bodyshot</c> does) and goes straight to the landing, the walk and the jump: the ground's check in a
+    /// minute, whatever the body's distance.
+    /// </summary>
+    public static bool FromOrbit => CmdArgs.Has("--fromorbit");
+
     private void Start()
     {
         _cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as Camera3D;
         if (_cam == null || OriginShifter.Instance is not { } shifter) { Finish("no spectator camera or shifter"); return; }
+        if (FromOrbit)
+        {
+            var sky = SkyClock.Now;
+            var toSun = Frames.Convert(BodyId.Sun, DVec3.Zero, Target.Id, sky);
+            double sunLat = Math.Atan2(toSun.Z, Math.Sqrt(toSun.X * toSun.X + toSun.Y * toSun.Y)) * 180 / Math.PI;
+            double sunLon = Math.Atan2(toSun.Y, toSun.X) * 180 / Math.PI;
+            var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - 45, 360), 100_000);
+            _origin.Rebase(Target.Id, sky);
+            shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(Target.Shape.ToEcef(place), Target.Id));
+            _cam.MakeCurrent();
+            _cam.GlobalPosition = Vector3.Zero;
+            _crossings = Crossings;
+            Log($"from orbit: 100 km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun 45° up");
+            Arrive(Target.Id, Target.Id, 100_000);
+            return;
+        }
         // 400 km over the point right under the target now: the way out is straight up, never through the Earth
         var target = Frames.Convert(Target.Id, DVec3.Zero, BodyId.Earth, SkyClock.Now);
         var under = Ellipsoid.Wgs84.ToGeodetic(target.AsEcef);
@@ -336,7 +359,7 @@ public partial class MoonCheck : Node
         {
             double rise = _apex - _jumpFrom;
             double want = me.JumpVelocity * me.JumpVelocity / (2 * BodyGravity.Ground);
-            Log($"jumped {rise:F2} m (the Moon's {want:F2} m, the Earth's {me.JumpVelocity * me.JumpVelocity / (2 * CelestialBody.Earth.GroundGravity):F2} m), down after {_stageT:F1} s");
+            Log($"jumped {rise:F2} m ({Target.Name}'s {want:F2} m, the Earth's {me.JumpVelocity * me.JumpVelocity / (2 * CelestialBody.Earth.GroundGravity):F2} m), down after {_stageT:F1} s");
             Finish(Math.Abs(rise - want) <= 0.25 * want ? null : string.Create(CultureInfo.InvariantCulture, $"the jump rose {rise:F2} m, not {want:F2} m"));
             return;
         }

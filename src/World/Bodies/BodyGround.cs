@@ -114,12 +114,19 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     public (Vector3 Centre, Vector3 Up, Vector3 East, float Half)? Hole =>
         _static is { } s && _origin.Body == Body.Id ? (s.GlobalPosition, s.GlobalBasis.Y.Normalized(), s.GlobalBasis.X.Normalized(), HoleM) : null;
 
-    /// <summary>The square is in place on the anchor's body and a world point stands over it (within <see cref="MoveM"/> of its centre).</summary>
+    /// <summary>How far each way from the centre the square holds the true ground (inside the band eased into the globe), metres.</summary>
+    public const double TrueHalfM = Cells * CellM / 2 - BlendM;
+
+    /// <summary>
+    /// The square is in place on the anchor's body and a world point stands over its true ground (within
+    /// <see cref="TrueHalfM"/> each way of its centre, twice <see cref="MoveM"/>: the next square is there before the
+    /// walker is past it).
+    /// </summary>
     public bool Covers(Vector3 world)
     {
         if (_static == null || Frame is not { } f || _origin.Body != Body.Id || _origin.Frame.Axes is not { } axes) return false;
         var (x, _, z) = f.ToLocal(axes.ToEcef(world.X, world.Y, world.Z));
-        return x * x + z * z < MoveM * MoveM;
+        return Math.Abs(x) < TrueHalfM && Math.Abs(z) < TrueHalfM;
     }
 
     public override void _Process(double delta)
@@ -282,7 +289,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         old?.QueueFree();
         Built++;
         GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"[bodies] {Body.Name}'s ground: square {Built} at {sq.Frame.Origin.Length - Body.Shape.A:F0} m over the reference, {Cells * CellM:F0} m a side"));
+            $"[bodies] {Body.Name}'s ground: square {Built} at {Body.Shape.ToGeodetic(sq.Frame.Origin).H:F0} m over the reference, {Cells * CellM:F0} m a side"));
     }
 
     /// <summary>The square from its frame into world space, in doubles from the anchor (once a re-anchor).</summary>

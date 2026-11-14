@@ -4758,7 +4758,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else
         {
-            if (GlobalPosition.Y > VoidY) return false;
+            // the void's depth is Switzerland's (#1850): another body's ground goes kilometres under its reference (Mars'
+            // Hellas 7.6 km), and its own ground (IBodyGround) catches a fall through it in the branch above
+            if (GlobalPosition.Y > VoidY || Origin is { Body: not BodyId.Earth }) return false;
             to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
         }
 

@@ -81,6 +81,8 @@ public partial class BodyViews : Node
 
     private void OnBodyChanged(BodyId from, BodyId to)
     {
+        // a body one cannot stand on (the Sun, crossed on the way to Mars) has no ground game: the last one's stays
+        if (!CelestialBody.Of(to).Landable) return;
         BodyGravity.On(to);
         // the space's own gravity (props, wrecks, a ragdoll): the project's on the Earth, untouched there
         if (from == to && to == BodyId.Earth) return;
