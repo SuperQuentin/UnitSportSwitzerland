@@ -44,6 +44,21 @@ The model: `avatar/shuttle-model`. Walkable decks and zero-g aboard are a follow
 - **Re-entry**: `Heat` = √ρ·v³ against the orbiter's peak (7 km/s at 70 km), white hot at 1, a glow from
   5 % of it; no damage. Shown by the rig's plasma, heard, on the HUD.
 - **`/orbit <km>`** works in the shuttle too (`FootPlayer.PutInOrbit`): level along its heading, gear up.
+- **To another body: the target and its hold** (#1851, C3a): in Space at the commander's seat the spectator's target
+  action works (] / D-pad → / VR right stick →; the lights' D-pad → is the cue's up there, `HandleAirlinerInput`): a tap
+  steps through `TargetList` (the Moon first from the Earth), the HUD reads `TARGET Moon [ ] ]` and the cue rings it with
+  the distance and the drive's time at full lever (τ · ln(d / arrival height)). **Held**, `Airliner.Aim` flies the nose
+  (`ShuttleFlight.TurnToward`, 0.25 rad/s, nose and wings together, the wings level to the local horizon; the stick and
+  the drive's bank-turn are out of it meanwhile) onto `ShuttleFlight.TangentAim`: the tangent from the craft to the
+  sphere of the target's arrival orbit (`ArrivalM`: 100 km, or half a small moon's room in its sphere). Driven along it
+  the craft passes that sphere level at its height, slowed to lever · 100 km / τ; switched off there it is in a
+  circular orbit round the target (`DriveOff` round `SpaceOrbit.BodyHere`).
+- **Crossings in the drive**: the orbit seam's `Body` is the last orbit's while the drive carries the craft, so the
+  drive reads `SpaceOrbit.BodyHere` (the frame's body): its floor, its drop-out, the drive-off orbit, and the level-keeping
+  (`Relevel`), which is not turned through a crossing: between the Earth and the Moon one's up is nearly the other's
+  down, and it turned the craft about (the anchor then flickered between the two every 0.7 s).
+- **A target behind the Earth**: the hold aims through it, and the drive would slow to the Earth's surface and drop out
+  at 50 km. Coast round until it rises (`--shuttlemooncheck` does, at 8x).
 
 ## Controls (keyboard / pad / VR)
 
@@ -92,6 +107,15 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   the retrograde direction in the craft's own axes: a roll brings it into the pitch plane, a pitch closes on it, both
   slowing as they close. Pitching alone missed it off that plane and looped the craft until it passed close.
 - The taxi: square to the centreline, round onto it from 40 m out, on a whisper of rocket (6 %) and the brakes.
+
+## To the Moon (`--shuttlemooncheck`, #1851)
+
+`--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --shuttlemooncheck`
+(`World/Bodies/ShuttleMoonCheck`, headless, ~6 min, most of it a coast at 8x until the Moon rises over the orbit): T
+into a walker, the shuttle, `/orbit 400`, a real ] tap targets the Moon, the ] held aligns the nose within 1°, the
+drive at full lever (~17,500 km/s at mid-way), across the Moon's sphere with the craft's place continuous within its
+own step, off where it passes 100 km over the Moon: a circular lunar orbit (80-120 km), closed within 10 m after one
+turn at 8x. Windowed: `test_output/shuttlemoon/{drive,lunar_orbit}.png`.
 
 ## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
 
