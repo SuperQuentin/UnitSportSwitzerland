@@ -141,6 +141,10 @@ public partial class MoonSitesCheck
             _airCam.MakeCurrent();
         }
         bool helmet = body.HeadwearId == (int)Avatar.Headwear.SpaceHelmet;
+        // where it is every 10 s, for a run that stalls
+        if (_crewStage >= 11 && Math.Floor(_crewT / 10) != Math.Floor((_crewT - GetProcessDeltaTime()) / 10))
+            CrewLog(string.Create(CultureInfo.InvariantCulture,
+                $"  {_crewT:F0} s: {brain.Status}, at {colonyNode.ToLocal(body.GlobalPosition)}, {body.RideSpeed:F1} m/s on {body.Ride}, placed {body.Placed}"));
         bool air = ColonyAirlocks.Pressurised(body.GlobalPosition + Vector3.Up * 1.6f);
         switch (_crewStage)
         {

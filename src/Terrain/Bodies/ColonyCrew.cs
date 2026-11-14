@@ -244,6 +244,8 @@ public sealed class ColonyCrew
             var dOut = _plan.Doors[link.DoorA].Module == route[i] ? _plan.Doors[link.DoorA] : _plan.Doors[link.DoorB];
             var dIn = _plan.Doors[link.DoorA].Module == route[i] ? _plan.Doors[link.DoorB] : _plan.Doors[link.DoorA];
             RoundHub(pts, route[i], (pts[^1].Item1, pts[^1].Item3), (dOut.X, dOut.Z));
+            // out of a can's side door from its aisle, never across its furniture (#1976)
+            if (Aisle(route[i], dOut) is { } aisleOut) pts.Add(aisleOut);
             // a step in from each doorway, so the walk turns inside the room, not in the doorway
             var (ix, iz) = ColonyPlan.Along(dOut.Out);
             pts.Add((dOut.X - ix * 0.8, 1.55, dOut.Z - iz * 0.8));
@@ -251,6 +253,7 @@ public sealed class ColonyCrew
             pts.Add((dIn.X, 1.55, dIn.Z));
             var (jx, jz) = ColonyPlan.Along(dIn.Out);
             pts.Add((dIn.X - jx * 0.8, 1.55, dIn.Z - jz * 0.8));
+            if (Aisle(route[i + 1], dIn) is { } aisleIn) pts.Add(aisleIn);
         }
         RoundHub(pts, toModule, (pts[^1].Item1, pts[^1].Item3), (b.X, b.Z));
         pts.Add((b.X, b.Y, b.Z));
@@ -333,6 +336,18 @@ public sealed class ColonyCrew
         var b = Spots[to];
         var way = Lock(index);
         return Path(way.Centre, way.Module, (b.X, b.Y, b.Z), b.Module);
+    }
+
+    /// <summary>The point on a can's aisle level with its side door (a dome's way in, #1976); null for any other door.</summary>
+    private (double X, double Y, double Z)? Aisle(int module, ColonyDoor door)
+    {
+        var m = _plan.Modules[module];
+        if (m.Kind != ModuleKind.Can) return null;
+        double c = Math.Cos(m.Yaw), s = Math.Sin(m.Yaw);
+        double dx = door.X - m.X, dz = door.Z - m.Z, along = -dx * s + dz * c;
+        if (Math.Abs(along) >= m.Length / 2 - 0.5) return null;
+        var (x, z) = Local(m, 0, along);
+        return (x, 1.55, z);
     }
 
     /// <summary>In the hub, from one point to another round its map table: by the ring 3.1 m out when they are far apart round it.</summary>

@@ -48,6 +48,16 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] In the shuttle in a 100 km lunar orbit (`/orbit 100` on the Moon), over the night side → the staffed colonies show as small clusters of warm light (Artemis Base with its runway's line), none on the day side; they fade out as you come down within ~10 km and the colony itself takes over, with no jump.
 - [ ] From the Earth at night with the telescope (`--date 2027-08-06 --time 21.5`, the waxing crescent low in the west), zoom on the earthshine side → a small spark at Moon Village (Mare Tranquillitatis, near the terminator); judge whether it reads too bright or too big at the longest end.
 
+## Moon colonists as real bots ([#1976](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1976))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites artemis:close`, step in and follow one colonist (the name tag over them) for a few windows of five minutes → they walk the tubes on the aisle's middle, never into a bunk or a counter, turn in the rooms (not in the doorways), and stand at a console or a bench facing it.
+- [ ] Follow one out on an EVA (or `--colonisteva`, which sends the first EVA colonist out at once) → it walks to an airlock, the lamp turns amber and the inner door shuts behind it, the outer opens, its helmet goes on as the chamber empties, it walks down the stairs; a far EVA spot is reached in the open rover, which it drives back to its slot later.
+- [ ] Walk into a moondust dome off a can's side (a greenhouse) → the can has a doorway in its side, the tube joins it, and the dome's entrance faces the tube; nothing blocks the way in. Walk back out up the outer stairs of an airlock → no step holds you.
+- [ ] Walk 450 m away from the colony and back → the colonists turn into figures and back into bots without a jump anyone near would notice; none falls through the ground while you are far.
+- [ ] Note the frame time with the whole crew as bots in view (8 bodies).
+
 ## Moon colonists ([#1945](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1945))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
