@@ -223,7 +223,7 @@ public sealed class EarthMapView
     private Vector2[] _borderScreen = [];
 
     /// <summary>Canton borders in one <see cref="CanvasItem.DrawMultiline"/> call, off-screen segments culled.</summary>
-    public void DrawBorders(CanvasItem on, CountryData? country, Color color)
+    public void DrawBorders(CanvasItem on, CountryData? country, Color color, float width = -1f)
     {
         if (country == null) return;
         var borders = MapView.Borders(country);
@@ -242,6 +242,6 @@ public sealed class EarthMapView
         if (kept == 0) return;
         var parked = new Vector2(-1e4f, -1e4f);
         for (int i = kept; i < _borderScreen.Length; i++) _borderScreen[i] = parked;
-        on.DrawMultiline(_borderScreen, color);
+        on.DrawMultiline(_borderScreen, color, width);
     }
 }

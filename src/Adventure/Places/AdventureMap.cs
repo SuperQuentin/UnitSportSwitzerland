@@ -313,6 +313,19 @@ public partial class AdventureMap : Screen, IMapHost
             }
         }
 
+        /// <summary>
+        /// The relief and background through a brightening shader (#1826): over a see-through fill the relief's dark ramp would read as
+        /// a murky blur, so the phone's map lifts and spreads its tones. The fog child has its own material and is not touched.
+        /// </summary>
+        public bool Boosted
+        {
+            set
+            {
+                if (!value) { Material = null; return; }
+                Material = new ShaderMaterial { Shader = GD.Load<Shader>("res://src/Adventure/Places/map_boost.gdshader") };
+            }
+        }
+
         private (GlobalPos At, float Yaw)? Me() => MeOverride?.Invoke() ?? AdventureMap.Me?.Invoke();
 
         public MapCanvasView(IMapHost map)
@@ -397,7 +410,13 @@ public partial class AdventureMap : Screen, IMapHost
 
         private void DrawTop(CanvasItem on)
         {
-            View.DrawBorders(on, _country, new Color(1, 1, 1, 0.22f));
+            if (Driven)
+            {
+                // over the world's blur the borders must read: a dark halo under a bright line (#1826)
+                View.DrawBorders(on, _country, new Color(0, 0, 0, 0.55f), 4f);
+                View.DrawBorders(on, _country, new Color(1, 0.97f, 0.85f, 0.95f), 1.8f);
+            }
+            else View.DrawBorders(on, _country, new Color(1, 1, 1, 0.22f));
             DrawPlaces(on);
             DrawMe(on);
             foreach (var overlay in Overlays)
@@ -469,9 +488,10 @@ public partial class AdventureMap : Screen, IMapHost
         }
 
         /// <summary>
-        /// The place search's places, with the adventure off (#1826): no fog, nothing found or sighted, so the towns, summits and
-        /// passes the index holds, the bigger ones at the far zoom steps and the rest as the view closes in; labels decluttered,
-        /// the biggest first so the names that stay are the ones that matter.
+        /// The place search's places, with the adventure off (#1826): no fog, nothing found or sighted. Towns outrank summits and
+        /// passes, bigger first; a mark is drawn only when its name fits at this zoom (to its right, else its left) and its mark
+        /// touches no other, so there are never bare dots crowding the labels. A town is a disc, a summit a triangle, a pass a
+        /// diamond (<see cref="DrawPlaceMarker"/>); the colours repeat it.
         /// </summary>
         private void DrawIndexPlaces(CanvasItem on)
         {
@@ -479,7 +499,7 @@ public partial class AdventureMap : Screen, IMapHost
             var (w, s, e, n) = View.Bounds();
             int ppk = View.PxPerKm;
             var font = UiTheme.Font;
-            // the smallest rank worth a dot at this zoom: a town's rank is its buildings, a summit's or pass's its height
+            // the smallest rank worth a mark at this zoom: a town's rank is its buildings, a summit's or pass's its height
             int minTown = ppk >= 64 ? 0 : ppk >= 32 ? 120 : ppk >= 16 ? 700 : ppk >= 8 ? 3000 : ppk >= 4 ? 10000 : 40000;
             int minHeight = ppk >= 64 ? 0 : ppk >= 32 ? 2400 : ppk >= 16 ? 2900 : ppk >= 8 ? 3400 : 3900;
             var picked = _map.SelectedPlace;
@@ -491,24 +511,100 @@ public partial class AdventureMap : Screen, IMapHost
                 if (place != picked && place.Rank < (place.Kind == PlaceKind.Town ? minTown : minHeight)) continue;
                 _visible.Add(place);
             }
-            _visible.Sort(static (a, b) => b.Rank.CompareTo(a.Rank));
+            // the picked one first (it always shows), then every town, then the summits and passes, each the biggest first
+            var chosen = picked;
+            _visible.Sort((a, b) =>
+            {
+                if (a == chosen) return b == chosen ? 0 : -1;
+                if (b == chosen) return 1;
+                int ka = a.Kind == PlaceKind.Town ? 0 : 1, kb = b.Kind == PlaceKind.Town ? 0 : 1;
+                return ka != kb ? ka.CompareTo(kb) : b.Rank.CompareTo(a.Rank);
+            });
+            _boxes.Clear();
             foreach (var place in _visible)
             {
                 var (placeE, placeN) = place.Lv95;
                 var at = View.ToScreen(placeE, placeN);
                 bool selected = place == picked;
-                float r = place.Kind == PlaceKind.Town ? (ppk >= 16 ? 5f : 4f) : 4.5f;
-                on.DrawCircle(at, r + 2, new Color(0, 0, 0, 0.55f));
-                on.DrawCircle(at, r + 1, selected ? UiTheme.Amber : new Color(0.96f, 0.94f, 0.88f));
-                on.DrawCircle(at, r - 1.5f, place.Kind switch { PlaceKind.Summit => new Color(0.45f, 0.30f, 0.20f), PlaceKind.Pass => new Color(0.20f, 0.42f, 0.70f), _ => new Color(0.78f, 0.16f, 0.14f) });
+                float r = place.Kind == PlaceKind.Town ? (ppk >= 16 ? 5f : 4f) : 5f;
+                float width = font.GetStringSize(place.Name, HorizontalAlignment.Left, -1, 12).X;
+                var right = new Rect2(at.X - r - 1, at.Y - 8, r * 2 + 8 + width, 16);
+                var left = new Rect2(at.X - r - 8 - width, at.Y - 8, r * 2 + 8 + width, 16);
+                Rect2 box;
+                bool onLeft = false;
+                if (!Overlaps(right)) box = right;
+                else if (!Overlaps(left)) { box = left; onLeft = true; }
+                else if (selected) box = right;
+                else continue;   // no room for its name: no mark either
+                _boxes.Add(box);
+                DrawPlaceMarker(on, place.Kind, at, r, selected);
                 _drawnPlaces.Add((place, at));
-                if (ppk < 8 && !selected) continue;
-                float width = place.Name.Length * 6.2f;
-                if (!selected && Collides(at, width)) continue;
-                _labels.Add((at, width));
-                on.DrawString(font, at + new Vector2(r + 5, 5), place.Name, HorizontalAlignment.Left, -1, 12, new Color(0, 0, 0, 0.8f));
-                on.DrawString(font, at + new Vector2(r + 4, 4), place.Name, HorizontalAlignment.Left, -1, 12, new Color(1, 1, 1, 0.95f));
+                var text = onLeft ? new Vector2(at.X - r - 5 - width, at.Y + 5) : at + new Vector2(r + 5, 5);
+                on.DrawString(font, text + new Vector2(1, 1), place.Name, HorizontalAlignment.Left, -1, 12, new Color(0, 0, 0, 0.85f));
+                on.DrawString(font, text, place.Name, HorizontalAlignment.Left, -1, 12, new Color(1, 1, 1, 0.97f));
             }
+        }
+
+        private readonly List<Rect2> _boxes = new();
+
+        private bool Overlaps(Rect2 box)
+        {
+            // a name cut by the map's edge is no name: that side does not fit
+            if (box.Position.X < 2 || box.End.X > Size.X - 2 || box.Position.Y < 2 || box.End.Y > Size.Y - 2) return true;
+            var grown = box.Grow(1.5f);
+            foreach (var other in _boxes)
+                if (grown.Intersects(other)) return true;
+            return false;
+        }
+
+        private static readonly Vector2[] Triangle = new Vector2[3], Diamond = new Vector2[4];
+
+        /// <summary>
+        /// A place's mark (#1826): a town a disc, a summit a triangle, a pass a diamond, with a dark rim, in the kind's colour (red, brown, blue);
+        /// amber when selected. Also drawn by the phone map's legend.
+        /// </summary>
+        public static void DrawPlaceMarker(CanvasItem on, PlaceKind kind, Vector2 at, float r, bool selected)
+        {
+            var dark = new Color(0, 0, 0, 0.7f);
+            var fill = selected ? UiTheme.Amber : kind switch
+            {
+                PlaceKind.Summit => new Color(0.62f, 0.40f, 0.22f),
+                PlaceKind.Pass => new Color(0.25f, 0.52f, 0.86f),
+                _ => new Color(0.86f, 0.20f, 0.18f),
+            };
+            switch (kind)
+            {
+                case PlaceKind.Summit:
+                    Tri(at, r + 2.5f); on.DrawColoredPolygon(Triangle, dark);
+                    Tri(at, r + 0.5f); on.DrawColoredPolygon(Triangle, new Color(0.97f, 0.95f, 0.90f));
+                    Tri(at, r - 1.8f); on.DrawColoredPolygon(Triangle, fill);
+                    break;
+                case PlaceKind.Pass:
+                    Dia(at, r + 2.5f); on.DrawColoredPolygon(Diamond, dark);
+                    Dia(at, r + 0.5f); on.DrawColoredPolygon(Diamond, new Color(0.97f, 0.95f, 0.90f));
+                    Dia(at, r - 1.8f); on.DrawColoredPolygon(Diamond, fill);
+                    break;
+                default:
+                    on.DrawCircle(at, r + 2, dark);
+                    on.DrawCircle(at, r + 0.5f, new Color(0.97f, 0.95f, 0.90f));
+                    on.DrawCircle(at, r - 1.8f, fill);
+                    break;
+            }
+        }
+
+        private static void Tri(Vector2 at, float r)
+        {
+            Triangle[0] = at + new Vector2(0, -r * 1.1f);
+            Triangle[1] = at + new Vector2(r * 1.05f, r * 0.8f);
+            Triangle[2] = at + new Vector2(-r * 1.05f, r * 0.8f);
+        }
+
+        private static void Dia(Vector2 at, float r)
+        {
+            Diamond[0] = at + new Vector2(0, -r * 1.15f);
+            Diamond[1] = at + new Vector2(r * 1.15f, 0);
+            Diamond[2] = at + new Vector2(0, r * 1.15f);
+            Diamond[3] = at + new Vector2(-r * 1.15f, 0);
         }
 
         private bool Collides(Vector2 at, float width)

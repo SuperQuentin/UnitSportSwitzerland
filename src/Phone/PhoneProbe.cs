@@ -54,6 +54,14 @@ public partial class PhoneProbe : Node
         if (Rendered && !Platform.IsTouch) GetWindow().Size = new Vector2I(1280, 720);
         await Wait(1.0);
         Shot("phone_0_before.png");
+        if (CmdArgs.Has("--mapshots"))
+        {
+            // just the Map app (a quick look at the picture while it is being tuned)
+            await MapChecks(me, phone);
+            Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
+            GetTree().Quit(_failed == 0 ? 0 : 1);
+            return;
+        }
 
         // the camera's own zoom (#1149, #1369): the plain wheel zooms whatever is held (Shift too: it is sprint),
         // in to the face, the hotbar left as it was; - back out

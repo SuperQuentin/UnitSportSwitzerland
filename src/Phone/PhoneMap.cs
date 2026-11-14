@@ -29,8 +29,8 @@ public sealed partial class PhoneMap : Node, IMapHost
     /// <summary>Metres a second above which the player moves, below which they stand (with a short delay so a step is not a flicker).</summary>
     private const float MovingSpeed = 0.5f, StandingSpeed = 0.2f, StandingDelay = 0.25f;
     /// <summary>The share of the view the map covers: left, top, right, bottom (anchors); the phone stays in the lower right corner.</summary>
-    private static readonly Vector4 Area = new(0.02f, 0.035f, 0.78f, 0.80f);
-    private const int PlaceZoom = 32, BarHeight = 36;
+    private static readonly Vector4 Area = new(0.02f, 0.035f, 0.775f, 0.765f);
+    private const int PlaceZoom = 32, BarHeight = 36, StripHeight = 30;
     private const float GlideSeconds = 0.3f, MarkerRefresh = 0.2f, PeerScan = 1f;
 
     private readonly Func<FootPlayer?> _player;
@@ -156,7 +156,9 @@ public sealed partial class PhoneMap : Node, IMapHost
             FocusMode = Control.FocusModeEnum.None,
         };
         _canvas.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _canvas.OffsetLeft = _canvas.OffsetTop = 2; _canvas.OffsetRight = _canvas.OffsetBottom = -2;
+        // between the bars, not under them: the title bar above and the keys' strip below are part of the layout
+        _canvas.OffsetLeft = 2; _canvas.OffsetRight = -2; _canvas.OffsetTop = BarHeight; _canvas.OffsetBottom = -StripHeight;
+        _canvas.Boosted = true;
         _panel.AddChild(_canvas);
         _canvas.AddExtra(new PeersOverlay(this));
         _canvas.FillAlpha = RestAlpha;
@@ -176,7 +178,7 @@ public sealed partial class PhoneMap : Node, IMapHost
 
         var strip = new Panel { Name = "KeysStrip", MouseFilter = Control.MouseFilterEnum.Ignore };
         strip.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
-        strip.OffsetTop = -28; strip.OffsetLeft = 2; strip.OffsetRight = -2; strip.OffsetBottom = -2;
+        strip.OffsetTop = -StripHeight; strip.OffsetLeft = 2; strip.OffsetRight = -2; strip.OffsetBottom = -2;
         strip.AddThemeStyleboxOverride("panel", UiTheme.Flat(new Color(0.03f, 0.04f, 0.06f, 0.62f), 3, 0, 0));
         _panel.AddChild(strip);
         _hint = new Label { Name = "Keys", MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -187,6 +189,11 @@ public sealed partial class PhoneMap : Node, IMapHost
         _hint.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         _hint.OffsetLeft = 12; _hint.OffsetTop = -26; _hint.OffsetBottom = -4;
         _panel.AddChild(_hint);
+        var legend = new Legend { Name = "Legend", MouseFilter = Control.MouseFilterEnum.Ignore };
+        legend.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+        legend.OffsetLeft = -250; legend.OffsetTop = -StripHeight; legend.OffsetRight = -8; legend.OffsetBottom = -2;
+        legend.GrowHorizontal = Control.GrowDirection.Begin;
+        _panel.AddChild(legend);
     }
 
     public override void _ExitTree()
@@ -294,6 +301,7 @@ public sealed partial class PhoneMap : Node, IMapHost
     {
         if (_shown) return;
         _shown = true;
+        if (_player() is { } away) away.PhoneMapAway = true;
         UiMotion.Open(_panel);
         _panel.Visible = true;
         _pointer = true;
@@ -312,6 +320,7 @@ public sealed partial class PhoneMap : Node, IMapHost
     {
         if (!_shown) return;
         _shown = false;
+        if (_player() is { } back) back.PhoneMapAway = false;
         _glide?.Kill();
         if (_query.HasFocus()) _query.ReleaseFocus();
         UiMotion.Close(_panel, () => { if (!_shown) _panel.Visible = false; });
@@ -628,9 +637,25 @@ public sealed partial class PhoneMap : Node, IMapHost
     {
         _pad = InputHints.Pad;
         string text = _pad
-            ? "D-pad  move      LB RB  zoom      A  select, then travel      X  places      B  back (hold: put away)"
-            : "Drag  move      Wheel  zoom      Click  select      /  search      Home  centre on you      Esc  back (hold: put away)";
+            ? "D-pad  move      LB RB  zoom      A  select, then travel      X  places      B  back"
+            : "Drag  move      Wheel  zoom      Click  select      /  search      Home  centre      Esc  back";
         if (text != _hintShown) _hint.Text = _hintShown = text;
+    }
+
+    /// <summary>The three kinds of place as the map draws them: a disc, a triangle, a diamond.</summary>
+    private sealed partial class Legend : Control
+    {
+        public override void _Draw()
+        {
+            var font = UiTheme.Font;
+            float x = 6;
+            foreach (var (kind, name) in new[] { (PlaceKind.Town, "town"), (PlaceKind.Summit, "summit"), (PlaceKind.Pass, "pass") })
+            {
+                AdventureMap.MapCanvasView.DrawPlaceMarker(this, kind, new Vector2(x + 6, 14), 4f, false);
+                DrawString(font, new Vector2(x + 16, 19), name, HorizontalAlignment.Left, -1, 12, new Color(0.95f, 0.96f, 0.98f));
+                x += 16 + font.GetStringSize(name, HorizontalAlignment.Left, -1, 12).X + 14;
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------------- nearby players

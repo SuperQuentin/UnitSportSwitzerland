@@ -37,6 +37,14 @@ public static class MapRelief
         (4000, new Color(0.92f, 0.94f, 0.96f)),
     ];
 
+    /// <summary>
+    /// Rivers (#1826): the drainage the generated terrain already routes (<c>Relief.Area</c>, the nodes draining through each node),
+    /// drawn where it passes <see cref="RiverKm2"/>: the Rhone, the Aare, the Rhine and their big tributaries; wider and bluer the
+    /// more water they carry. No new data: the same flow network the terrain's rivers come from.
+    /// </summary>
+    private const double RiverKm2 = 120;
+    private static readonly Color River = new(0.30f, 0.55f, 0.82f);
+
     private static ImageTexture? _texture;
     private static Task<Image>? _building;
 
@@ -108,7 +116,15 @@ public static class MapRelief
                 double shade = (hx - hy + 1.0) / Math.Sqrt(hx * hx + hy * hy + 1.0) * invRoot3;
                 shade = Math.Clamp(0.45 + 0.75 * shade, 0.25, 1.35);
 
-                var colour = relief.LakeOf[k] >= 0 ? Water : Ramp(relief.H[k]);
+                bool lake = relief.LakeOf[k] >= 0;
+                var colour = lake ? Water : Ramp(relief.H[k]);
+                if (!lake && relief.Area[k] * relief.NodeAreaKm2 is var km2 && km2 >= RiverKm2)
+                {
+                    // water is not shaded like rock: the more it carries, the bluer and the lighter
+                    double flow = Math.Clamp(0.5 + Math.Log10(km2 / RiverKm2) * 0.35, 0.5, 1.0);
+                    colour = colour.Lerp(River, (float)flow);
+                    shade += (1.05 - shade) * flow;
+                }
                 pixels[k * 3 + 0] = Byte(colour.R * shade);
                 pixels[k * 3 + 1] = Byte(colour.G * shade);
                 pixels[k * 3 + 2] = Byte(colour.B * shade);

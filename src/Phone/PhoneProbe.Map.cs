@@ -53,6 +53,21 @@ public partial class PhoneProbe
             $"covering about three quarters of the view ({rect.Size.X / view.X:P0} by {rect.Size.Y / view.Y:P0})");
         Check(Mathf.Abs(map.FillAlpha - PhoneMap.RestAlpha) < 0.01f, $"standing still the fills are {PhoneMap.RestAlpha:P0} opaque ({map.FillAlpha:F2})");
         Check(me.PhoneCover == 0f && me.PhoneBackdropShown == 0f, "the world is not hidden: no cover, no black");
+        // the phone gets out of the map's rectangle: every corner of its screen is right of it (the map and the phone never overlap)
+        await Wait(0.5);
+        if (me.PhoneViewmodel is { Visible: true } && me.CameraOrNull is { } lens)
+        {
+            float minX = float.MaxValue, minY = float.MaxValue;
+            foreach (var uv in new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) })
+            {
+                var corner = lens.UnprojectPosition(me.PhoneScreenToWorld(uv, false, 0f) ?? Vector3.Zero);
+                minX = Mathf.Min(minX, corner.X);
+                minY = Mathf.Min(minY, corner.Y);
+            }
+            Check(minX > rect.End.X + 4f || minY > rect.End.Y + 4f,
+                $"the phone is wholly outside the map's rectangle (its screen from x {minX:F0}, y {minY:F0}; the map ends at x {rect.End.X:F0}, y {rect.End.Y:F0})");
+        }
+        else Log("skip the phone's place (no viewmodel drawn)");
         Check(map.Canvas.GetChildCount() > 0 && map.Canvas.SelfModulate.A < 0.7f, $"the relief and background are see-through (self alpha {map.Canvas.SelfModulate.A:F2})");
 
         // places: the index's when it has some, else a few of the check's own, near the player
