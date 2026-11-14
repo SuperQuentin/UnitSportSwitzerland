@@ -126,7 +126,8 @@ public partial class DoorWarden : Node
 
     public override void _Process(double delta)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        // a rebuild waits on real seconds, whatever the game speed: the warden works at the machine's pace
+        double now = RealClock.Now;
         while (_changed.TryDequeue(out var tile)) _due[tile] = now + RebuildDelay;
         if (_due.Count > 0)
         {
