@@ -263,6 +263,13 @@ public static class ConstructionSites
     /// <summary>On a site with a pit, the way kept across the materials where there is room, m: a telehandler coming at a pallet.</summary>
     public const float MaterialsApproach = 8f;
 
+    /// <summary>
+    /// How far the way in reaches past either end of the materials, m (#1926): a pallet at the row's end lies 0.8 m from
+    /// it, and a telehandler (2.6 m wide) centred on it overhung a way only as wide as the materials into what stood
+    /// beside, which pushed the machine 0.5 m aside, its tines off the pallet.
+    /// </summary>
+    public const float MaterialsWayPast = 0.7f;
+
     public static bool IsSmall(PlanBox box, int targetStoreys) => box.Area < SmallArea && targetStoreys <= SmallStoreys;
 
     /// <summary>
@@ -376,7 +383,7 @@ public static class ConstructionSites
         var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width + 2 * Scaffold, s.Box.Depth + 2 * Scaffold);
         // the side the pallets face: away from the building (the dressing turns them to)
         int sign = (r.Center - s.Box.Center).Dot(r.AxisV) >= 0 ? 1 : -1;
-        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
+        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width + 2 * MaterialsWayPast, MaterialsApproach - 0.1f);
         return way.Corners().All(c => s.Area.Contains(c)) && !way.Overlaps(keep)
             && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
             && !s.Machines.Any(x => way.Contains(x.At))
@@ -486,7 +493,7 @@ public static class ConstructionSites
             if (kind == SiteZoneKind.Materials)
                 foreach (float scale in new[] { 1f, 0.7f })
                     foreach (var axis in new[] { front, along })
-                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center) is { } r)
+                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center, MaterialsWayPast) is { } r)
                         {
                             zones.Add(new SiteZone(kind, r));
                             return;
@@ -792,7 +799,8 @@ public static class ConstructionSites
         /// apron) but not over the first clear rectangle (the building or its pit), nothing placed, the
         /// hoarding's line, a road or a building; it is kept as taken.
         /// </summary>
-        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building)
+        /// <param name="past">How far the way reaches past either end of the rectangle (#1926).</param>
+        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building, float past = 0f)
         {
             var u = new Vector2(axis.Y, -axis.X);
             var order = new int[_grid.Count];
@@ -808,7 +816,7 @@ public static class ConstructionSites
                 var r = new SiteRect(_grid[k], u, width, depth);
                 if (!Fits(r)) continue;
                 int sign = (r.Center - building).Dot(axis) >= 0 ? 1 : -1;
-                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
+                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width + 2 * past, way);
                 if (!WayFits(w)) continue;
                 _taken.Add(r);
                 _taken.Add(w);

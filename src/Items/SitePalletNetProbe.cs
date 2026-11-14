@@ -177,6 +177,10 @@ public partial class SitePalletNetProbe : ChatProbe
         if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;
         me.PlaceAt(at, Yaw(-outward));
         await Seconds(2);
+        {
+            var placed = (me.GlobalTransform * th.TinesFrame).AffineInverse() * pallet.GlobalPosition;
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   set down: the pallet {placed.X:F2} aside, {-placed.Z:F2} ahead of the tines (asked {at.X:F2},{at.Z:F2}, at {me.GlobalPosition.X:F2},{me.GlobalPosition.Z:F2}, tines x {tines.X:F2})"));
+        }
 
         XrPad.Press(PlayerInput.DigMode, true);
         await Seconds(0.1);
@@ -187,6 +191,16 @@ public partial class SitePalletNetProbe : ChatProbe
         await Until(() => Ahead() < Pallets.LoadAhead + 0.05f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
         await BrakeToStop(me);
         GD.Print(FormattableString.Invariant($"[sitepalletnet A]   telehandler stopped: {Ahead():F2} m ahead of the heel"));
+        {
+            // the fork rule's terms (Pallets.OnTines, #1926): what the server reads when the boom goes up
+            var tinesAt = me.GlobalTransform * th.TinesFrame;
+            var local = tinesAt.AffineInverse() * pallet.GlobalPosition;
+            var aheadDir = new Vector2(-tinesAt.Basis.Z.X, -tinesAt.Basis.Z.Z).Normalized();
+            var runners = pallet.GlobalTransform.Basis.X;
+            float along = Mathf.Abs(aheadDir.Dot(new Vector2(runners.X, runners.Z).Normalized()));
+            bool on = Pallets.OnTines(local.X, -local.Z, along, th.ForkHeight, me.GroundSpeed, th.TineLength, th.TineHalfSpan);
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   on the tines: {on} (aside {local.X:F2} of {th.TineHalfSpan:F2}, ahead {-local.Z:F2} of {th.TineLength:F2}, fork height {th.ForkHeight:F2} under {ForkliftLayout.ForkEntry:F2}, along {along:F2}, speed {me.GroundSpeed:F2})"));
+        }
         if (Ahead() > Pallets.LoadAhead + 0.5f)
         {
             // what stops it: rays ahead of the machine at a few heights (#1704)
