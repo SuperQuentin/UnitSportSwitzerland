@@ -50,15 +50,18 @@ chain take a body.
 - **One renderer from a dot in the sky to the ground under your feet** (`BodyView`): a point by magnitude, the textured
   sphere of `SkyBodies`, the globe pyramid drawn in scaled space past the far plane, the globe at true scale, the leaves.
   `MoonDisc` and the planets of `SkyBodies` become its far stages.
-- **Travel (C3)**: the shuttle's cruise drive measures `d` to the nearest surface of any body; a target selector and an
+- **Travel, first by spectator** (the user's order, 2026-11-14): the spectator camera's speed follows the distance to
+  the nearest surface of any body, so it crosses from the Earth to the Moon in about a minute; it steps in as a walker
+  wherever it is, the Moon included. Online play comes next, the shuttle after that.
+- **Travel by craft (C3a, after online play)**: the shuttle's cruise drive measures `d` to the nearest surface of any body; a target selector and an
   "align" hold aim it; switched off it leaves a circular orbit of the body it is in; on an airless body the levers become
   belly jets for a vertical landing and take-off. The UFO's hover lands on the Moon as it is.
 - **The network (C3b)**: a body byte with every position, interest and server regions per body, the far-marker list
   (every player at 1 Hz) for the telescope's labels. The protocol bump goes on top of D2's 96: the next free number when
   C3b merges, after D2.
-- **Tests**: a headless `--mooncheck` from Earth orbit to lunar orbit to the lunar ground and back, asserting that the
-  world does not move on the handover frame; `tools/moonnetcheck.sh` where B on the ground sees A's marker on the Moon
-  through the telescope, then stands beside A's landed shuttle. The Earth's own checks and reference shots stay
+- **Tests**: a headless `--mooncheck` where the spectator flies from Geneva to the Moon and steps in there, asserting
+  that the world does not move on the handover frame; `tools/moonnetcheck.sh` where B on the ground sees A's marker on
+  the Moon through the telescope, then stands beside A there; later `--shuttlemooncheck`, the shuttle's round trip. The Earth's own checks and reference shots stay
   identical through every phase.
 
 ## Decisions for the user
@@ -124,6 +127,26 @@ needs a rule for where the other bodies are.
   `--sun fixed` keeps its fixed light for everything else and puts the bodies at the fixed date's noon).
 
 ## 3. Frames and positions
+
+### A worked example: from Geneva to the Moon and back
+
+- **On the ground in Geneva**, as today: the sky clock runs 60 game seconds a real second. The Moon rises, crosses and
+  sets in about 25 real minutes, and its phase goes round in about 12 real hours. Physics is real time.
+- **Climbing by spectator**: the position is in the Earth's coordinates. The Moon is where the sky clock says, 384,000 km
+  away, and it crosses the sky at the sky's usual pace (a quarter of a degree a real second). Measured in Earth
+  coordinates, that is ~1,650 km/s. The spectator's speed grows with the distance to the nearest surface (tens of
+  thousands of km/s halfway), so it catches up, and the target cue leads it.
+- **66,000 km from the Moon** (its sphere of influence): on that frame the position is re-expressed in the Moon's
+  coordinates. Same place, same view, nothing moves on screen. From now on the Moon stands still under you, and the
+  Earth hangs in its sky, turning once a game day.
+- **Landing and walking**: physics in the Moon's frame, real time, gravity 1.62 m/s². The Moon's own spin is slow (one
+  turn in ~11 real hours at the game's pace), so the ground under a walker effectively does not turn. The sun crosses
+  the lunar sky in ~6 real hours, then ~6 hours of night (with an ambient floor).
+- **A craft coasting across the boundary** (C3a, later): it keeps its speed relative to the body it leaves as its speed
+  relative to the body it enters. Physically it would arrive at ~1,650 km/s relative to the Moon, because the sky clock
+  swings the Moon round that fast; the rule avoids that. The spectator and the cruise drive never meet it: their speed is
+  always relative to the body they are near.
+- **Going home**: the same in reverse; at 66,000 km the position goes back to Earth coordinates, invisibly.
 
 ### How other games solve it (researched 2026-11-14, at the user's request)
 
@@ -304,7 +327,25 @@ starlight floor on the far side) so it stays playable.
 - **Sphere-of-influence handovers in `SpaceOrbit`**: the double state re-expressed in the new body's frame (section 2's
   velocity rule); the HUD's `ORBIT` line names the body (`ORBIT Moon 1.63 km/s, 100 km, Pe, Ap`).
 
-## 8. Travel (C3a)
+## 8. Travel
+
+### First: the spectator (H7d)
+
+The spectator camera is the first way between bodies (the user's order: online play before the shuttle).
+
+- **Its speed follows the nearest surface of any body**: `SpectatorSpeed.AltitudeCap` (today 0.5 m/s per metre of
+  altitude, at least 3 km/s, the wheel up to 100 km/s) takes `Bodies.NearestSurface(pos)` instead of the Earth's
+  altitude, and the wheel's top grows past the Earth's sphere so the cap rules (the ground slides by at the same angular
+  rate everywhere, as a map zooms). From 400 km over the Earth to 100 km over the Moon at full wheel: about a minute.
+  The same keys, pad buttons and VR way as today.
+- **Aiming**: the target list (the telescope's: the bodies, later the far markers) as a HUD cue while spectating, with
+  the distance and the time at the current speed. Choosing a target is the one new action (section 11).
+- **Crossing a sphere of influence** is the anchor's relabelling (section 3): nothing moves on screen.
+- **Stepping in** (`StepInFromSpectator`) works on any body: the walker lands under the camera with that body's ground
+  gravity. Offline at once; online the server agrees and the body is published with its body (C3b).
+- `/goto <body> <lat> <lon>` stays as the admin's and the checks' shortcut.
+
+### Then: craft (C3a, after online play)
 
 - **The cruise drive between bodies**: v = lever · d / τ (τ = 10 s), **d the distance to the nearest surface of any
   body** (`Bodies.NearestSurface(pos)`: min over the bodies of the distance to the centre less the datum radius; the
@@ -375,7 +416,8 @@ starlight floor on the far side) so it stays playable.
 
   | Action | Keyboard | Pad | VR |
   |---|---|---|---|
-  | next / previous target (in the shuttle or UFO, above the Space entry) | T / Shift+T (to confirm free at C3a) | D-pad → / ← | a target knob on the centre console to grip and turn; or `XrPad`'s D-pad |
+  | next / previous target while spectating (H7d) | T / Shift+T (to confirm free) | a free D-pad direction of the spectator's (to confirm) | `XrPad`'s D-pad |
+  | next / previous target (in the shuttle or UFO, above the Space entry; C3a) | T / Shift+T (to confirm free at C3a) | D-pad → / ← | a target knob on the centre console to grip and turn; or `XrPad`'s D-pad |
   | align with the target (hold) | hold T | hold D-pad → | grip the knob and hold |
   | belly jets | the levers (no new key) | the triggers (as the rockets) | the levers by hand |
 
@@ -391,13 +433,14 @@ gated on `WorldFrame.Earth`. The Earth's results stay identical through H7a and 
 | **H7a** (#1847) Bodies, the sky clock, frames and positions | `Core/Body` (Earth, Moon, Mars, the rest with what `Ephemeris` has), `Planet` folded into it; `SkyClock`; `Core/Frames` and SOIs; `Ephemeris`' heliocentric functions public; `GlobalPos.Body` and the per-body datum (Earth's = today's code); `FrameAxes` with a body. No visible change. | none | unit tests: frame round trips Earth-fixed → Sun → Moon-fixed → back < 1 mm at the Moon, < 1 cm at Mars; the Moon's place against `Ephemeris.Ecef`; SOI radii; `GlobalPos` on the Earth bit for bit; the quick tier unchanged |
 | **H7b** (#1848) One surface chain for any body (the Earth through it) | `Body.Cube` (instance `CubeSphere`, Earth's statics kept), `BodySurface` (pyramid, leaves, fill, datum, sea per body), the leaf level and radii from the body, `ISurfaceProfile` with `EarthProfile` = today's fill, data roots per body (with #1656), `BodyView` folding `MoonDisc` and `SkyBodies` into one renderer, air per body. Split into two PRs (surface; view) | H7a; H6's space sky merged; #1656's request shape | the Earth's reference shots (Cartoon) and coords tier identical; `--orbitcheck`/`--shuttlecheck --frame earth` the same numbers; the moon in the sky looks as it does today |
 | **H7c** (#1849) The Moon | the tools build the Moon's pyramid from LOLA and LROC (E: data, ships L0-2); `CrateredProfile`; the sky from the Moon; ground gravity; `/goto <body> <lat> <lon>` (offline, admin online) to stand there | H7b | standing at the Apollo 15 site the relief matches LOLA, craters and boulders under it, the Earth in the sky; walking and jumping at 1.62; shots in Cartoon |
-| **H7d** (#1850) Orbits and handovers on any body | `SpaceOrbit`/`Orbit` per body, Space regimes per body, SOI crossings in the orbit and the anchor's relabelling, `/orbit <km> [body]` | H7a, H7b | a 100 km lunar orbit closes after a period, energy drift < 10⁻⁶; a scripted SOI crossing with the world not moving on that frame |
-| **C3a** (#1851) The drive between bodies | `d` over every body, the target selector and align hold, arrival in orbit, belly jets and take-off on airless bodies, the UFO's drive, `ShuttlePilot`'s Moon mission, `--mooncheck` | H7c, H7d | `--mooncheck` passes: 400 km Earth orbit → lunar orbit → landed → walked → back to Earth orbit |
-| **C3b** (#1852) Online | `NetBody`, interest and server regions per body, the server's lunar collision, the far-marker list, the telescope's labels, the protocol bump on top of D2 | C3a, **D2 merged** | `tools/moonnetcheck.sh` passes (section 13) |
+| **H7d** (#1850) The spectator between bodies | the anchor's body and its relabelling at a sphere of influence, the spectator's speed by the nearest surface of any body, the target cue, stepping in on any body with its ground gravity, `--mooncheck` | H7a, H7b (H7c for the Moon's ground) | `--mooncheck`: the spectator from Geneva to 100 m over the Apollo 15 site with the world still on the handover frame, steps in, walks 50 m and jumps ~6 times as high |
+| **C3b** (#1852) Online | `NetBody`, stepping in on another body through the server, interest and server regions per body, the server's lunar collision, the far-marker list, the telescope's labels, the protocol bump on top of D2 | H7c, H7d, **D2 merged** | `tools/moonnetcheck.sh` passes (section 13) |
+| **C3a** (#1851) Craft between bodies | orbits per body (`SpaceOrbit`/`Orbit`, Space regimes, SOI crossings in the double state with section 2's velocity rule, `/orbit <km> [body]`), the drive's `d` over every body, its target and align hold, arrival in orbit, belly jets and take-off on airless bodies, the UFO's drive, `ShuttlePilot`'s Moon mission, `--shuttlemooncheck`; online from the start (C3b's wire) | C3b | a 100 km lunar orbit closes, energy drift < 10⁻⁶; `--shuttlemooncheck`: 400 km Earth orbit → lunar orbit → landed → walked → back to Earth orbit; the net check sees the shuttle land on the Moon |
 | **H7e** (#1853) Mars | MOLA + Viking pyramid, `MarsProfile`, the thin air (drag, heat, sky colour), Phobos and Deimos (shape models, generated surface) | C3a | land in Gale crater from orbit; the sky butterscotch at noon, blue at dusk |
 | **H7f** (#1854) The rest by data family | Mercury, Venus, the Galilean moons, Titan (`CrateredProfile`, `IcyProfile`, `VolcanicProfile`); the giants and the Sun as orbit-only bodies | H7e | each lands from orbit with its profile; the giants refuse below their cloud deck |
 
-H7c and H7d can run in parallel after H7b. C3a needs both. C3b waits for D2.
+The order (the user's, 2026-11-14): H7a → H7b → H7c and H7d (in parallel; the spectator's check needs the Moon's
+ground at its end) → C3b online (waits for D2) → C3a craft → H7e Mars → H7f the rest.
 
 ## 13. Tests
 
@@ -407,18 +450,23 @@ H7c and H7d can run in parallel after H7b. C3a needs both. C3b waits for D2.
   threads), the velocity rule at a handover.
 - **The Earth unchanged** (every H7 PR): the quick tier, the coords tier, Cartoon reference shots against `main`
   (`regression-net`), `--orbitcheck`/`--shuttlecheck --frame earth`.
-- **`--mooncheck`** (`Player/MoonCheck`, headless, ~3 min at `--fixed-fps 60` and a time scale; `--sun real --date
-  2027-07-15 --time 10`): the shuttle `/orbit 400`, `ShuttlePilot` targets the Moon, aligns, drives; across the SOI frame
+- **`--mooncheck`** (H7d, `Player/MoonCheck`, headless, ~1-2 min; `--sun real --date 2027-07-15 --time 10`): the
+  spectator from Geneva, up, aimed at the Moon by the target cue, at the wheel's top; across the SOI frame the camera's
+  and every body's world transform change by < 1 mm and < 10⁻⁶ rad; down to 100 m over a landing site in that date's
+  lunar daylight; steps in; the walker stands on the generated ground, walks 50 m, jumps (apex ~6× the Earth's).
+  Windowed, a shot either side of the handover and on the ground (`test_output/moon/`).
+- **`--shuttlemooncheck`** (C3a, `Player/ShuttleMoonCheck`, headless, ~3 min at `--fixed-fps 60` and a time scale): the shuttle `/orbit 400`, `ShuttlePilot` targets the Moon, aligns, drives; across the SOI frame
   the camera's and every body's world transform change by < 1 mm and < 10⁻⁶ rad (no visible handover, by
   construction and checked); drive off at 100 km: one lunar orbit closes within 10 m; retro, belly-jet descent to a
   landing site in daylight on that date, touchdown < 2 m/s on the generated ground, upright; the pilot walks 50 m and
   jumps (apex ~6× the Earth's); back aboard, belly jets up, drive home, drive off at 400 km over the Earth. Fails on any
   contact in free flight, a frame whose anchor jumps, a stage too long. Windowed, it saves a shot either side of each
   handover (`test_output/moon/`).
-- **`tools/moonnetcheck.sh`** (net tier, two clients, server): A flies the Moon mission; B stands in Geneva with a set-up
-  telescope locked on the Moon and reads A's far marker within 0.01° of where the server says A is; B `/goto moon` beside
-  A's landing site and sees A's shuttle land (remote peer: place within 1 m, the pose, the belly jets' sound); both walk;
-  B's anchor body is the Moon, A's too, the server's region for them is the Moon's.
+- **`tools/moonnetcheck.sh`** (C3b, net tier, two clients, server): A spectates to the Moon and steps in; B stands in
+  Geneva with a set-up telescope locked on the Moon and reads A's far marker within 0.01° of where the server says A is;
+  B spectates there and steps in beside A; each sees the other walk and jump (remote peer: place within 1 m, the pose,
+  the animation); both anchors' body is the Moon, and so is the server's region for them. C3a adds the shuttle landing
+  there, seen by B.
 - **Shots**: Cartoon, `--date 2027-07-15`, snow and occasions off; landing sites chosen in that date's lunar daylight.
 - **Before/after on the Earth**: none should differ; any that do are a bug in H7b.
 
