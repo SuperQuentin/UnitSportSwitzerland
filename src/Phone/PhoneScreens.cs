@@ -519,8 +519,27 @@ public partial class PhoneScreens : Node
 
     private Control BuildMap()
     {
-        var col = UiKit.VBox(12);
-        col.AddChild(Title("Map"));
+        var page = UiKit.VBox(12);
+        page.AddChild(Title("Map"));
+        // with the big map over the view (#1826) the glass says so, and what is picked there
+        _mapRemote = UiKit.VBox(14);
+        _mapRemote.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        _mapRemote.Visible = false;
+        _mapRemote.AddChild(UiKit.Spacer(expand: true));
+        var big = Big("The map is over your view.", 34);
+        big.HorizontalAlignment = HorizontalAlignment.Center;
+        _mapRemote.AddChild(big);
+        _mapNote = Big("", 26, InkDim);
+        _mapNote.HorizontalAlignment = HorizontalAlignment.Center;
+        _mapNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _mapRemote.AddChild(_mapNote);
+        _mapRemote.AddChild(UiKit.Spacer(expand: true));
+        var remoteHint = Hint("travel", "back");
+        _mapRemote.AddChild(remoteHint);
+        page.AddChild(_mapRemote);
+        var col = _mapList = UiKit.VBox(12);
+        col.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+        page.AddChild(col);
         _query = new LineEdit { PlaceholderText = "Search (press /)", CustomMinimumSize = new Vector2(0, 64) };
         _query.AddThemeFontSizeOverride("font_size", 30);
         _query.TextChanged += _ => FillResults();
@@ -544,8 +563,32 @@ public partial class PhoneScreens : Node
         scroll.AddChild(_results);
         col.AddChild(scroll);
         col.AddChild(Hint("travel there", "back"));
-        return col;
+        return page;
     }
+
+    private VBoxContainer _mapRemote = null!, _mapList = null!;
+    private Label _mapNote = null!;
+    private bool _mapOnView;
+
+    /// <summary>
+    /// The big map is over the view (#1826): the Map page on the glass is a note, not the list. Off in VR and on touch,
+    /// where the glass keeps the list.
+    /// </summary>
+    public bool MapOnView
+    {
+        get => _mapOnView;
+        set
+        {
+            if (_mapOnView == value) return;
+            _mapOnView = value;
+            _mapRemote.Visible = value;
+            _mapList.Visible = !value;
+            if (Shown == Page.Map && !value) FillResults();
+        }
+    }
+
+    /// <summary>What the map over the view has picked, said on the glass; set only when it changes.</summary>
+    public void SetMapNote(string text) => SetText(_mapNote, text);
 
     /// <summary>The Map's place rows, for the checks.</summary>
     internal bool HasPlaces => _places() is { All.Count: > 0 };   // an index with no places.json lists nothing to pick
@@ -569,7 +612,7 @@ public partial class PhoneScreens : Node
     private static bool _recentsLoaded;
 
     /// <summary>Recents kept between sessions: the places' LV95 coordinates, matched back to the index.</summary>
-    private static void LoadRecents(PlaceSearchUi places)
+    private static void LoadRecents(PlaceIndex places)
     {
         if (_recentsLoaded) return;
         _recentsLoaded = true;
@@ -580,7 +623,7 @@ public partial class PhoneScreens : Node
             if (Json.ParseString(f.GetAsText()).Obj is not Godot.Collections.Array list) return;
             foreach (var item in list)
                 if (item.Obj is Godot.Collections.Array pair && pair.Count == 2
-                    && places.All.FirstOrDefault(p => Math.Abs(p.E - (double)pair[0]) < 1 && Math.Abs(p.N - (double)pair[1]) < 1) is { } place
+                    && places.Places.FirstOrDefault(p => p.Lv95 is var (pe, pn) && Math.Abs(pe - (double)pair[0]) < 1 && Math.Abs(pn - (double)pair[1]) < 1) is { } place
                     && !Recents.Contains(place))
                     Recents.Add(place);
         }
@@ -602,10 +645,62 @@ public partial class PhoneScreens : Node
     private PlaceKind? _mapKind;
     private readonly List<(Button Chip, PlaceKind? Kind, string Name)> _chips = new();
 
+    /// <summary>One row of the Map's place list: a heading, or a place with its distance from the player (#1826).</summary>
+    internal readonly record struct MapRow(string? Heading, Place? Place = null, string Distance = "");
+
     /// <summary>
-    /// The Map's list is rows you can reach without typing (#1253): Recent, Near you with the distance,
-    /// then the biggest places; a category chip narrows them and the search box is optional.
+    /// The Map's rows you can reach without typing (#1253): Recent, Near you with the distance, then the biggest
+    /// places; a category chip narrows them. A query lists the matches instead. Shared by the list on the phone's glass
+    /// (VR, touch) and the search drawer over the big map (#1826).
     /// </summary>
+    internal static void BuildRows(PlaceIndex places, string q, PlaceKind? kind, GlobalPos? here, List<MapRow> into)
+    {
+        into.Clear();
+        LoadRecents(places);
+        bool Fits(Place p) => kind == null || p.Kind == kind;
+        string Dist(Place p) => here is { } h ? $"   ·  {Distance(h, p)}" : "";
+        q = q.Trim();
+        if (q.Length > 0)
+        {
+            var found = places.Search(q, 30).Where(Fits).Take(10).ToList();
+            if (found.Count == 0) into.Add(new MapRow("Nothing by that name"));
+            foreach (var place in found) into.Add(new MapRow(null, place, Dist(place)));
+            return;
+        }
+        var recent = Recents.Where(Fits).Take(RecentsShown).ToList();
+        if (recent.Count > 0)
+        {
+            into.Add(new MapRow("Recent"));
+            foreach (var place in recent) into.Add(new MapRow(null, place, Dist(place)));
+        }
+        if (here is { } me)
+        {
+            var near = places.Places.Where(Fits).Where(p => !recent.Contains(p))
+                .Select(p => (Place: p, D: me.HorizontalDistanceTo(GlobalOf(p, me.Alt))))
+                .Where(x => x.D > 500).OrderBy(x => x.D).Take(NearShown).ToList();
+            if (near.Count > 0)
+            {
+                into.Add(new MapRow("Near you"));
+                foreach (var (place, _) in near) into.Add(new MapRow(null, place, Dist(place)));
+            }
+        }
+        var big = places.Places.Where(Fits).OrderByDescending(p => p.Rank).Take(TownsShown + RecentsShown + NearShown)
+            .Where(p => !recent.Contains(p)).Take(TownsShown).ToList();
+        into.Add(new MapRow(kind switch { PlaceKind.Summit => "Summits", PlaceKind.Pass => "Passes", PlaceKind.Town => "Towns", _ => "Popular places" }));
+        foreach (var place in big) into.Add(new MapRow(null, place, Dist(place)));
+    }
+
+    /// <summary>A place travelled to from the phone: first among the recents, kept for the next session.</summary>
+    internal static void NoteTravel(Place place)
+    {
+        Recents.Remove(place);
+        Recents.Insert(0, place);
+        SaveRecents();
+    }
+
+    private readonly List<MapRow> _rows = new();
+
+    /// <summary>The list on the phone's glass (VR, touch, or while the big map is not up).</summary>
     private void FillResults()
     {
         foreach (var child in _results.GetChildren())
@@ -613,7 +708,7 @@ public partial class PhoneScreens : Node
             _results.RemoveChild(child);
             child.QueueFree();
         }
-        var places = _places();
+        var places = _places()?.Index;
         if (places == null)
         {
             SetText(_mapHint, "No map here.");
@@ -621,50 +716,19 @@ public partial class PhoneScreens : Node
         }
         LoadRecents(places);
         foreach (var (chip, kind, name) in _chips) chip.Text = _mapKind == kind ? $"● {name}" : name;
-        string q = _query.Text.Trim();
         SetText(_mapHint, !Permissions.CanTeleport ? "This server does not allow travelling: ask a player in Contacts to bring you." : "");
-        bool Fits(Place p) => _mapKind == null || p.Kind == _mapKind;
-        var here = Here?.Invoke();
-        string Dist(Place p) => here is { } h ? $"   ·  {Distance(h, p)}" : "";
-
-        if (q.Length > 0)
+        BuildRows(places, _query.Text, _mapKind, Here?.Invoke(), _rows);
+        foreach (var row in _rows)
         {
-            var found = places.Search(q, 30).Where(Fits).Take(10).ToList();
-            if (found.Count == 0) AddHeading("Nothing by that name");
-            foreach (var place in found) AddPlace(place, Dist(place));
-            return;
-        }
-        var recent = Recents.Where(Fits).Take(RecentsShown).ToList();
-        if (recent.Count > 0)
-        {
-            AddHeading("Recent");
-            foreach (var place in recent) AddPlace(place, Dist(place));
-        }
-        if (here is { } me)
-        {
-            var near = places.All.Where(Fits).Where(p => !recent.Contains(p))
-                .Select(p => (Place: p, D: me.HorizontalDistanceTo(GlobalPos.FromLv95(p.E, p.N, me.Alt))))
-                .Where(x => x.D > 500).OrderBy(x => x.D).Take(NearShown).ToList();
-            if (near.Count > 0)
+            if (row.Place is not { } place)
             {
-                AddHeading("Near you");
-                foreach (var (place, _) in near) AddPlace(place, Dist(place));
+                _results.AddChild(Big(row.Heading ?? "", 22, InkDim));
+                continue;
             }
-        }
-        var big = places.All.Where(Fits).OrderByDescending(p => p.Rank).Take(TownsShown + RecentsShown + NearShown)
-            .Where(p => !recent.Contains(p)).Take(TownsShown).ToList();
-        AddHeading(_mapKind switch { PlaceKind.Summit => "Summits", PlaceKind.Pass => "Passes", PlaceKind.Town => "Towns", _ => "Popular places" });
-        foreach (var place in big) AddPlace(place, Dist(place));
-
-        void AddHeading(string text) => _results.AddChild(Big(text, 22, InkDim));
-        void AddPlace(Place place, string distance)
-        {
-            var b = Row(PlaceSearchUi.Describe(place) + distance);
+            var b = Row(PlaceSearchUi.Describe(place) + row.Distance);
             b.Pressed += () =>
             {
-                Recents.Remove(place);
-                Recents.Insert(0, place);
-                SaveRecents();
+                NoteTravel(place);
                 TravelPicked?.Invoke(place);
             };
             b.Disabled = !Permissions.CanTeleport;
@@ -673,11 +737,29 @@ public partial class PhoneScreens : Node
     }
 
     /// <summary>"850 m" or "12 km" from the player to a place.</summary>
-    internal static string Distance(GlobalPos from, Place to)
+    internal static string Distance(GlobalPos from, Place to) => Metres(from.HorizontalDistanceTo(GlobalOf(to, from.Alt)));
+
+    /// <summary>Where a place is, on the Earth.</summary>
+    internal static GlobalPos GlobalOf(Place place, double alt = 0)
     {
-        double d = from.HorizontalDistanceTo(GlobalPos.FromLv95(to.E, to.N, from.Alt));
-        return d < 1000 ? $"{Math.Round(d / 10) * 10:0} m" : d < 10000 ? $"{d / 1000:0.0} km" : $"{d / 1000:0} km";
+        var (e, n) = place.Lv95;
+        return GlobalPos.FromLv95(e, n, alt);
     }
+
+    /// <summary>A distance as the Map says it: "850 m", "4.2 km", "12 km".</summary>
+    internal static string Metres(double d) =>
+        d < 1000 ? $"{Math.Round(d / 10) * 10:0} m" : d < 10000 ? $"{d / 1000:0.0} km" : $"{d / 1000:0} km";
+
+    /// <summary>A row of the place list: the place as the search describes it, then the distance.</summary>
+    internal static string RowText(Place place, string distance) => PlaceSearchUi.Describe(place) + distance;
+
+    /// <summary>What a place is, for its card: "Summit · 3042 m", "Town, VS · 1200 buildings".</summary>
+    internal static string DetailOf(Place place) => place.Kind switch
+    {
+        PlaceKind.Summit => $"Summit · {place.Elevation} m",
+        PlaceKind.Pass => $"Pass · {place.Elevation} m",
+        _ => string.IsNullOrEmpty(place.Canton) ? $"Town · {place.Buildings} buildings" : $"Town, {place.Canton} · {place.Buildings} buildings",
+    };
 
     // ---------------------------------------------------------------- contacts (#1253)
 
@@ -1478,6 +1560,7 @@ public partial class PhoneScreens : Node
                 break;
             case Page.Map:
                 _query.Clear();
+                if (_mapOnView) break;   // the map over the view has the keys (#1826)
                 FillResults();
                 // the rows have the keys; the search box is optional ("/" or a click)
                 Callable.From(() => FocusFirst(_results)).CallDeferred();

@@ -20,6 +20,24 @@ public interface IMapOverlay
 }
 
 /// <summary>
+/// What a <see cref="AdventureMap.MapCanvasView"/> asks of the screen it sits in (#1826): the adventure's map
+/// (<see cref="AdventureMap"/>) and the phone's Map app (<c>Phone/PhoneMap</c>) both host the one canvas.
+/// </summary>
+public interface IMapHost
+{
+    /// <summary>The adventure's places and this player's fog; null while the adventure is off (no fog, no found or seen state).</summary>
+    PlacesService? Places { get; }
+    /// <summary>The place search's places, drawn instead of the adventure's when <see cref="Places"/> is null.</summary>
+    IReadOnlyList<Place>? Index { get; }
+    /// <summary>The adventure place selected, if any.</summary>
+    Poi? Selected { get; }
+    /// <summary>The place-search place selected, if any.</summary>
+    Place? SelectedPlace { get; }
+    void Select(Poi poi, bool centre);
+    void Select(Place place, bool centre);
+}
+
+/// <summary>
 /// The adventure map (#1224, places plan 6), on an oblique stereographic projection centred on the view
 /// (<see cref="EarthMapView"/>, #1514): M while the adventure is on for the player (the place search
 /// otherwise, the Battle Royale map in a round). The relief of <see cref="MapRelief"/>, this player's fog
@@ -28,7 +46,7 @@ public interface IMapOverlay
 /// panel searches the places and shows the selected one's card (Track, Show in Atlas). Redrawn only when
 /// something changes (<c>general/perf-no-per-frame-allocations</c>). Docs: <c>docs/notes/adventure/map.md</c>.
 /// </summary>
-public partial class AdventureMap : Screen
+public partial class AdventureMap : Screen, IMapHost
 {
     public const double LatticeE = FogMask.MinE, LatticeN = FogMask.MinN;
 
@@ -63,6 +81,10 @@ public partial class AdventureMap : Screen
 
     /// <summary>The place selected (checks).</summary>
     public Poi? Selected { get; private set; }
+    PlacesService? IMapHost.Places => _places;
+    IReadOnlyList<Place>? IMapHost.Index => null;
+    Place? IMapHost.SelectedPlace => null;
+    void IMapHost.Select(Place place, bool centre) { }
 
     public static AdventureMap Create(Poi? focus = null) => new() { Name = "AdventureMap", _focus = focus };
 
@@ -250,7 +272,7 @@ public partial class AdventureMap : Screen
         private static readonly int[] Steps = [2, 4, 8, 16, 32, 64, 128];
 
         public readonly EarthMapView View = new(Steps);
-        private readonly AdventureMap _map;
+        private readonly IMapHost _map;
         private readonly Control _fog, _top;
         private static CountryData? _country;
         private Vector2 _last;
@@ -260,8 +282,40 @@ public partial class AdventureMap : Screen
         private bool _reliefDrawn;
         private readonly List<(Poi Poi, Vector2 At)> _drawn = new();
         private readonly List<(Vector2 At, float Width)> _labels = new();
+        private readonly List<(Place Place, Vector2 At)> _drawnPlaces = new();
+        private readonly List<IMapOverlay> _extras = new();
+        private readonly List<Place> _visible = new();
 
-        public MapCanvasView(AdventureMap map)
+        /// <summary>
+        /// Embedded in the phone (#1826): the host drives it (<see cref="PanBy"/>, <see cref="ZoomStep"/>, <see cref="PickAtCentre"/>),
+        /// so it does not read the arrow keys, the sticks or Enter itself.
+        /// </summary>
+        public bool Driven { get; set; }
+        /// <summary>Where the player is, when the world's own <see cref="AdventureMap.Me"/> is not set (a check, a world without the adventure).</summary>
+        public Func<(GlobalPos At, float Yaw)?>? MeOverride { get; set; }
+
+        /// <summary>Layers only this canvas draws (the phone's nearby players), after the shared overlays.</summary>
+        public void AddExtra(IMapOverlay overlay) => _extras.Add(overlay);
+
+        private float _fillAlpha = 1f;
+        /// <summary>
+        /// How opaque the fills are (#1826): the background and the relief, and the fog on it; the borders, labels and
+        /// markers stay crisp. A modulate on the fills alone, set by the caller only when it changes.
+        /// </summary>
+        public float FillAlpha
+        {
+            get => _fillAlpha;
+            set
+            {
+                _fillAlpha = value;
+                SelfModulate = new Color(1, 1, 1, value);
+                _fog.SelfModulate = new Color(1, 1, 1, value);
+            }
+        }
+
+        private (GlobalPos At, float Yaw)? Me() => MeOverride?.Invoke() ?? AdventureMap.Me?.Invoke();
+
+        public MapCanvasView(IMapHost map)
         {
             _map = map;
             FocusMode = FocusModeEnum.All;
@@ -274,7 +328,7 @@ public partial class AdventureMap : Screen
             _top.SetAnchorsPreset(LayoutPreset.FullRect);
         }
 
-        public MapCanvasView() : this(null!) { }
+        public MapCanvasView() : this((IMapHost)null!) { }
 
         public override void _Ready()
         {
@@ -299,6 +353,9 @@ public partial class AdventureMap : Screen
             _fog.QueueRedraw();
             _top.QueueRedraw();
         }
+
+        /// <summary>Redraws only the top layer (borders, places, the arrow, the overlays): the player moved or turned, the relief did not change.</summary>
+        public void RedrawMarkers() => _top.QueueRedraw();
 
         public override void _Draw()
         {
@@ -348,6 +405,11 @@ public partial class AdventureMap : Screen
                 try { overlay.Draw(View, on); }
                 catch (Exception e) { GD.PushWarning($"[map] overlay {overlay.GetType().Name}: {e.Message}"); }
             }
+            foreach (var overlay in _extras)
+            {
+                try { overlay.Draw(View, on); }
+                catch (Exception e) { GD.PushWarning($"[map] overlay {overlay.GetType().Name}: {e.Message}"); }
+            }
             // the centre, for the stick and the A button
             var c = Size / 2;
             on.DrawLine(c - new Vector2(7, 0), c + new Vector2(7, 0), new Color(1, 1, 1, 0.5f), 1);
@@ -357,8 +419,13 @@ public partial class AdventureMap : Screen
         private void DrawPlaces(CanvasItem on)
         {
             _drawn.Clear();
+            _drawnPlaces.Clear();
             _labels.Clear();
-            if (_map._places is not { } places) return;
+            if (_map.Places is not { } places)
+            {
+                DrawIndexPlaces(on);
+                return;
+            }
             var cat = places.Catalogue;
             var fog = places.MyFog;
             var mine = AdventureService.Instance?.Mine.Get(PlacesProgress.Section);
@@ -401,6 +468,49 @@ public partial class AdventureMap : Screen
             }
         }
 
+        /// <summary>
+        /// The place search's places, with the adventure off (#1826): no fog, nothing found or sighted, so the towns, summits and
+        /// passes the index holds, the bigger ones at the far zoom steps and the rest as the view closes in; labels decluttered,
+        /// the biggest first so the names that stay are the ones that matter.
+        /// </summary>
+        private void DrawIndexPlaces(CanvasItem on)
+        {
+            if (_map.Index is not { Count: > 0 } index) return;
+            var (w, s, e, n) = View.Bounds();
+            int ppk = View.PxPerKm;
+            var font = UiTheme.Font;
+            // the smallest rank worth a dot at this zoom: a town's rank is its buildings, a summit's or pass's its height
+            int minTown = ppk >= 64 ? 0 : ppk >= 32 ? 120 : ppk >= 16 ? 700 : ppk >= 8 ? 3000 : ppk >= 4 ? 10000 : 40000;
+            int minHeight = ppk >= 64 ? 0 : ppk >= 32 ? 2400 : ppk >= 16 ? 2900 : ppk >= 8 ? 3400 : 3900;
+            var picked = _map.SelectedPlace;
+            _visible.Clear();
+            foreach (var place in index)
+            {
+                var (pe, pn) = place.Lv95;
+                if (pe < w || pe > e || pn < s || pn > n) continue;
+                if (place != picked && place.Rank < (place.Kind == PlaceKind.Town ? minTown : minHeight)) continue;
+                _visible.Add(place);
+            }
+            _visible.Sort(static (a, b) => b.Rank.CompareTo(a.Rank));
+            foreach (var place in _visible)
+            {
+                var (placeE, placeN) = place.Lv95;
+                var at = View.ToScreen(placeE, placeN);
+                bool selected = place == picked;
+                float r = place.Kind == PlaceKind.Town ? (ppk >= 16 ? 5f : 4f) : 4.5f;
+                on.DrawCircle(at, r + 2, new Color(0, 0, 0, 0.55f));
+                on.DrawCircle(at, r + 1, selected ? UiTheme.Amber : new Color(0.96f, 0.94f, 0.88f));
+                on.DrawCircle(at, r - 1.5f, place.Kind switch { PlaceKind.Summit => new Color(0.45f, 0.30f, 0.20f), PlaceKind.Pass => new Color(0.20f, 0.42f, 0.70f), _ => new Color(0.78f, 0.16f, 0.14f) });
+                _drawnPlaces.Add((place, at));
+                if (ppk < 8 && !selected) continue;
+                float width = place.Name.Length * 6.2f;
+                if (!selected && Collides(at, width)) continue;
+                _labels.Add((at, width));
+                on.DrawString(font, at + new Vector2(r + 5, 5), place.Name, HorizontalAlignment.Left, -1, 12, new Color(0, 0, 0, 0.8f));
+                on.DrawString(font, at + new Vector2(r + 4, 4), place.Name, HorizontalAlignment.Left, -1, 12, new Color(1, 1, 1, 0.95f));
+            }
+        }
+
         private bool Collides(Vector2 at, float width)
         {
             foreach (var (other, ow) in _labels)
@@ -410,7 +520,7 @@ public partial class AdventureMap : Screen
 
         private void DrawMe(CanvasItem on)
         {
-            if (Me?.Invoke() is not { } me) return;
+            if (Me() is not { } me) return;
             var at = View.ToScreen(me.At);
             // off the view (or far round the Earth): no arrow; a polygon thousands of km off screen is drawn as a sliver across it
             if (!float.IsFinite(at.X) || !float.IsFinite(at.Y) || at.X < -40 || at.Y < -40 || at.X > Size.X + 40 || at.Y > Size.Y + 40) return;
@@ -497,14 +607,48 @@ public partial class AdventureMap : Screen
                 float d = p.DistanceSquaredTo(at);
                 if (d < bd) { bd = d; best = poi; }
             }
-            if (best != null) _map.Select(best, centre: false);
+            if (best != null) { _map.Select(best, centre: false); return; }
+            Place? bestPlace = null;
+            bd = 14 * 14;
+            foreach (var (place, p) in _drawnPlaces)
+            {
+                float d = p.DistanceSquaredTo(at);
+                if (d < bd) { bd = d; bestPlace = place; }
+            }
+            if (bestPlace != null) _map.Select(bestPlace, centre: false);
+        }
+
+        /// <summary>The host's pan (#1826): <paramref name="dir"/> is the arrows or the D-pad (-1..1), the map moves 620 px a second.</summary>
+        public void PanBy(Vector2 dir, float dt)
+        {
+            if (dir == Vector2.Zero) return;
+            View.Pan(-dir * (620f * dt));
+            Redraw();
+        }
+
+        /// <summary>One zoom step about the centre cross (a key, the shoulders, the on-map buttons). False at the end of the range.</summary>
+        public bool ZoomStep(int steps)
+        {
+            if (!View.ZoomAt(Size / 2, steps)) return false;
+            Redraw();
+            return true;
+        }
+
+        /// <summary>A on the pad, Enter: selects what is nearest the centre cross (or an overlay's point there).</summary>
+        public void PickAtCentre() => ClickAt(Size / 2, MouseButton.Left);
+
+        /// <summary>Centres on a point, at least at <paramref name="pxPerKm"/> pixels to the kilometre.</summary>
+        public void CentreOn(GlobalPos at, int pxPerKm)
+        {
+            View.FocusOn(at, pxPerKm);
+            Redraw();
         }
 
         public override void _Process(double delta)
         {
             if (!_reliefDrawn && MapRelief.TryGet() != null) { _reliefDrawn = true; Redraw(); }
             if (FogTexture.Version != _fogVersion) { _fogVersion = FogTexture.Version; _fog.QueueRedraw(); _top.QueueRedraw(); }
-            if (!HasFocus()) return;
+            if (Driven || !HasFocus()) return;
             var pan = Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");
             if (pan != Vector2.Zero)
             {

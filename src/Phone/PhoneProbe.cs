@@ -163,7 +163,10 @@ public partial class PhoneProbe : Node
         else Check(me.PhoneCover == 0f && me.PhoneBackdropShown == 0f, $"the map is in the hands, the world shows ({me.PhoneCover:F2}, {me.PhoneBackdropShown:F2})");
         Shot("phone_5d_map.png");
         Save(phone.Screens.Inner, "phone_5d_map_screen.png");
-        Check(phone.Screens.MapRowCount > 0 || !phone.Screens.HasPlaces, $"the Map lists places without typing ({phone.Screens.MapRowCount} rows) (#1253)");
+        if (phone.MapUp) phone.Map.OpenDrawer(typing: false);
+        await Wait(0.4);
+        Check(phone.MapRowCount > 0 || !phone.Screens.HasPlaces, $"the Map lists places without typing ({phone.MapRowCount} rows) (#1253)");
+        if (phone.MapUp) phone.Map.CloseDrawer();
         await Key(Godot.Key.Escape, 1.0);
 
         // the camera app: raised before the face, the lens out of its back; Enter shoots into the album
@@ -322,6 +325,8 @@ public partial class PhoneProbe : Node
         Check(Math.Abs(backOff) < 5, $"then moved behind it ({backE:F0} m)");
         Check(!phone.IsOut, "and put away");
 
+        await MapChecks(me, phone);
+
         // Esc puts a folded phone away
         await Press(PlayerInput.Phone, 1.0);
         await Key(Godot.Key.Down, 1.0);
@@ -417,12 +422,12 @@ public partial class PhoneProbe : Node
         await Key(Godot.Key.Up, 0.7);
         phone.Open(PhoneScreens.Page.Map);
         await Wait(0.6);
-        phone.Screens.FocusSearch();
+        phone.FocusSearch();
         await Wait(0.3);
         Input.ParseInputEvent(new InputEventKey { Keycode = Godot.Key.Y, PhysicalKeycode = Godot.Key.Y, Unicode = 'y', Pressed = true });
         Input.ParseInputEvent(new InputEventKey { Keycode = Godot.Key.Y, PhysicalKeycode = Godot.Key.Y, Unicode = 'y', Pressed = false });
         await Wait(0.4);
-        Check(phone.IsCovering && phone.Screens.SearchText.EndsWith('y'), $"Y typed in the search types and keeps the phone open ({phone.Screens.SearchText})");
+        Check(phone.IsCovering && phone.SearchText.EndsWith('y'), $"Y typed in the search types and keeps the phone open ({phone.SearchText})");
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
     }
@@ -609,7 +614,7 @@ public partial class PhoneProbe : Node
             // typing in the Map's search: letters type, the body stands
             phone.Open(PhoneScreens.Page.Map);
             await Wait(0.6);
-            phone.Screens.FocusSearch();
+            phone.FocusSearch();
             await Wait(0.3);
             var from = me.GlobalPosition;
             foreach (var (key, ch) in new[] { (Godot.Key.W, 'w'), (Godot.Key.A, 'a'), (Godot.Key.S, 's'), (Godot.Key.D, 'd') })
@@ -619,7 +624,7 @@ public partial class PhoneProbe : Node
                 Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Unicode = ch, Pressed = false });
             }
             Check(me.GlobalPosition.DistanceTo(from) < 0.1f, $"typing W A S D in the search does not walk the body ({me.GlobalPosition.DistanceTo(from):F2} m)");
-            Check(phone.Screens.SearchText == "wasd", $"the letters were typed ({phone.Screens.SearchText})");
+            Check(phone.SearchText == "wasd", $"the letters were typed ({phone.SearchText})");
             await Key(Godot.Key.Escape, 0.4);
             phone.Screens.ShowPage(PhoneScreens.Page.Home);
             await Wait(0.3);
@@ -687,7 +692,13 @@ public partial class PhoneProbe : Node
         await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(6f, 0f));
         Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"a 6 mm sideways stroke is not Back ({phone.Screens.Shown})");
         await FingerTap(me, new Vector2(0.5f, 0.5f), cover: false, new Vector2(12f, 0f));
-        Check(phone.Screens.Shown == PhoneScreens.Page.Home, $"a 12 mm swipe right is Back ({phone.Screens.Shown})");
+        if (phone.MapUp)
+        {
+            // the pointer is the big map's (#1826): a swipe over it pans, Back is Esc, button 4 or the chevron
+            Check(phone.Screens.Shown == PhoneScreens.Page.Map, $"over the big map a swipe pans it, it is not Back ({phone.Screens.Shown})");
+            await Key(Godot.Key.Escape, 0.5);
+        }
+        else Check(phone.Screens.Shown == PhoneScreens.Page.Home, $"a 12 mm swipe right is Back ({phone.Screens.Shown})");
         if (!Rendered) return;
         phone.Screens.ShowPage(PhoneScreens.Page.Photos);
         await Wait(0.4);

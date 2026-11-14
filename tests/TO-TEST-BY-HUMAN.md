@@ -1121,3 +1121,15 @@ In a window (`--menu`, or Esc in a world), Cartoon.
 - [ ] Click Resume, Settings, Controls → each button squashes a little and springs back; the page it opens is not delayed.
 - [ ] Settings › Gameplay › Reduce motion on, then open and close the pause menu → a plain fade, no scale and no squash.
 - [ ] In a headset, open the pause menu → a plain fade, no scale.
+
+## The Map app is a real map ([#1826](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1826))
+
+In a window on a real map, Cartoon, first and third person.
+
+- [ ] Open the phone on the Map (Y twice from the pocket): a large see-through map springs in over about three quarters of the view, the world visible behind it, the phone peeking at the lower right. Drag with the real mouse: it follows the hand without lag; the wheel zooms about the cursor.
+- [ ] Walk (WASD) with the map up: the background fades to about 20 % over a fraction of a second, the labels, borders and arrow stay crisp; stop and it comes back. Judge it over snow, a bright sky and night.
+- [ ] `/` (or the bar's Search): the drawer opens, type a town, Enter: the map glides to it and the card shows Travel; Enter again travels behind the black curtain. Esc closes the drawer, then the card, then the app.
+- [ ] On a real gamepad: D-pad pans, LB / RB zoom, X opens the drawer, D-pad down to a row, A picks it, A again travels; the left stick keeps walking.
+- [ ] Hold the right mouse button over the map: the view turns, the cursor returns where it was; click a marker right after.
+- [ ] Adventure on: fog over unexplored land, found places as discs; off: every town, summit and pass, no fog.
+- [ ] In a headset: the Map app still lists places on the glass (no map over the view); touch (`--mobile`): the same list.
