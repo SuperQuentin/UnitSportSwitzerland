@@ -253,7 +253,9 @@ public class BodyPlaceTests
         var earth = GlobalPos.FromLv95(2_600_000, 1_200_000, 550);
         var moon = OnMoon(0, 0, 0);
         Assert.NotEqual(earth, GlobalPos.On(BodyId.Moon, earth.Ecef));
-        Assert.Throws<InvalidOperationException>(() => earth.DistanceTo(moon));
+        // "is it near" across two bodies is "no" (#1852: a server with players on both asks it everywhere); arithmetic throws
+        Assert.Equal(double.PositiveInfinity, earth.DistanceTo(moon));
+        Assert.Equal(double.PositiveInfinity, earth.HorizontalDistanceTo(moon));
         Assert.Throws<InvalidOperationException>(() => earth - moon);
         Assert.Throws<InvalidOperationException>(() => earth.OffsetTo(moon));
         // through a sky moment they are: the moon's near side is ~384,000 km away less its radius
