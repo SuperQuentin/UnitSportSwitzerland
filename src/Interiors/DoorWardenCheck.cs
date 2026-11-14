@@ -60,10 +60,13 @@ public partial class DoorWardenCheck : Node3D
         var warden = DoorWarden.Instance;
         if (_t > 900) { Fault($"not settled after 15 minutes ({warden?.Counts})"); Finish(); return; }
         // the tiles round the start in, and the warden through them
-        if (_t < 10 || warden == null || !warden.Settled || DoorsNear().Count == 0) { _settledAt = -1; return; }
-        // then the tiles it asked to build again committed: no drawn door left that is on record as locked
+        // an extra door drawn near the start (its tile in), and the warden settled for 5 s since: a scan that ran
+        // before the tile came in found nothing to plan and called itself settled
+        if (_t < 10 || warden == null || !warden.Settled || !DoorsNear().Any(d => d.Key.Slot > 0)) { _settledAt = -1; return; }
         if (_settledAt < 0) _settledAt = _t;
-        if (StillDrawn() > 0 && _t - _settledAt < 90) return;
+        if (_t - _settledAt < 5) return;
+        // then the tiles it asked to build again committed: no drawn door left that is on record as locked
+        if (StillDrawn() > 0 && _t - _settledAt < 95) return;
         GD.Print($"[doorwarden] the tiles built again {_t - _settledAt:F1} s after the warden settled");
         _asking = true;
         _ = Ask(warden);
