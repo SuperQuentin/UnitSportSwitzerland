@@ -79,6 +79,12 @@ public partial class MoonSitesCheck : Node
             if (_pending == null) AirStep(delta);
             return;
         }
+        if (_rover > 0)
+        {
+            SavePending();
+            RoverStep(delta);
+            return;
+        }
         if (_dance > 0)
         {
             DanceStep(delta);
@@ -120,6 +126,7 @@ public partial class MoonSitesCheck : Node
         {
             if (Dance && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _dance = 1; return; }
             if (AirlockCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _air = 1; return; }
+            if (RoverCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _rover = 1; return; }
             Finish(_fails.Count == 0 ? null : string.Join("; ", _fails));
             return;
         }
@@ -440,13 +447,22 @@ public partial class MoonSitesCheck : Node
     }
 
     /// <summary>
-    /// <c>--moonsurvey LAT,LON,SEARCH_KM,RADIUS_M</c>: the flattest discs on LOLA's heights near a place (a colony's
+    /// <c>--moonsurvey LAT,LON,SEARCH_KM,RADIUS_M</c> (or <c>LAT,LON,FROM_KM,TO_KM,LENGTH_M,HALF_WIDTH_M</c> for a strip): the flattest discs on LOLA's heights near a place (a colony's
     /// plateau), best first, then quits.
     /// </summary>
     private void Survey(string arg)
     {
         var p = arg.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
         var h = _ground()!.Heights;
+        // LAT,LON,FROM_KM,TO_KM,LENGTH_M,HALF_WIDTH_M: the flattest strip (a runway, #1943)
+        if (p.Length == 6)
+        {
+            foreach (var (lat, lon, hd, rms, grade) in MoonColonies.FlattestStrip(h.Data, p[0], p[1], p[2] * 1000, p[3] * 1000, p[4], p[5]))
+                GD.Print(string.Create(CultureInfo.InvariantCulture,
+                    $"[moonsites] strip survey: {lat:F4}, {lon:F4} heading {hd:F0}°: rms {rms:F2} m round the line, grade {grade:F2} %"));
+            Finish(null);
+            return;
+        }
         foreach (var (lat, lon, rms, tilt, height) in MoonColonies.Flattest(h.Data, p[0], p[1], p[2] * 1000, p[3]))
             GD.Print(string.Create(CultureInfo.InvariantCulture,
                 $"[moonsites] survey: {lat:F4}, {lon:F4}: rms {rms:F2} m round a plane tilted {tilt:F2}°, {height:F0} m"));

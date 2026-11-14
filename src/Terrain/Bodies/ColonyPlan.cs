@@ -66,6 +66,10 @@ public enum IndustryKind : byte
     Dish,
     /// <summary>The mass driver's rail on pylons from here along Yaw, Size its length; the bucket runs it on the shared clock.</summary>
     DriverTrack,
+    /// <summary>A runway from here along Yaw, Size its length (#1943): sintered, painted, edge lights.</summary>
+    Runway,
+    /// <summary>A lander standing on a pad (#1943), Size its pad's radius.</summary>
+    Lander,
 }
 
 /// <summary>An industrial piece in its colony's (or outpost's) frame (x east, z south): kind, place, heading (radians from north), size.</summary>
@@ -218,7 +222,8 @@ public sealed class ColonyPlan
     /// <summary>How far an industrial piece reaches from its point, metres.</summary>
     public static double IndustryReach(ColonyIndustry i) => i.Kind switch
     {
-        IndustryKind.SolarArray => 6, IndustryKind.Digger => i.Size + 8, IndustryKind.DriverTrack => i.Size,
+        IndustryKind.SolarArray => 6, IndustryKind.Digger => i.Size + 8, IndustryKind.DriverTrack or IndustryKind.Runway => i.Size,
+        IndustryKind.Lander => 6,
         IndustryKind.Dish => i.Size / 2, IndustryKind.Hut => i.Size / 2 + 1, _ => Math.Max(i.Size, 4),
     };
 
@@ -248,6 +253,8 @@ public sealed class ColonyPlan
         Industry.Add(new ColonyIndustry(IndustryKind.Digger, dx * 250, dz * 250, digYaw, loop));
         var (hx, hz) = Along(digYaw + Math.PI / 2);
         Industry.Add(new ColonyIndustry(IndustryKind.SpoilHeap, dx * 250 + hx * (loop + 22), dz * 250 + hz * (loop + 22), digYaw, 11));
+        // a lander on the first pad (#1943); the others stay free for the shuttle (MoonPads)
+        if (Pads.Count > 0) Industry.Add(new ColonyIndustry(IndustryKind.Lander, Pads[0].X, Pads[0].Z, h0 + rng.NextDouble() * Math.Tau, Pads[0].Radius));
     }
 
     /// <summary>Whether a circle is clear of every module's footprint (a rectangle along its axis, or its circle).</summary>

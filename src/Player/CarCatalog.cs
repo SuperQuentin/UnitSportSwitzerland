@@ -697,6 +697,60 @@ public static class CarCatalog
             MaxSteer = 0.6f, DragArea = 0.56f,
             LockTurns = 3.2f, // lock to lock, est.: electric power steering
         },
+        // ---- 38: the open Moon rover (#1943) ----
+        new CarSpec
+        {
+            Label = "Lunar terrain vehicle",
+            Style = DriveStyle.Grip,
+            Blurb = "An open two-seat Moon rover for the Artemis crews: four electric hub motors, wire-mesh wheels with titanium chevrons, "
+                + "a dish on the front and a tool pallet behind. 20 km/h on the Moon's sixth of a g: it floats over every bump. {throttle} drive, {brake} brake",
+            Body = new CarBody
+            {
+                Shape = BodyShape.RoverOpen, Length = 3.2f, Width = 2.1f, Height = 1.6f, WheelRadius = 0.41f,
+                Paint = new Color(0.82f, 0.18f, 0.16f), Rim = new Color(0.62f, 0.62f, 0.60f), LeftHandDrive = true,
+            },
+            Engine = EngineLayout.Single,
+            // source: the Apollo LRV (3.1 m long, 2.3 m wheelbase, 1.83 m track, 81.8 cm wire-mesh wheels, four 190 W hub motors,
+            // 13 km/h) scaled to NASA's Artemis LTV brief (two suited crew, ~20 km/h); 700 kg loaded with its crew in their suits;
+            // the hub motors as one 4 kW motor through a fixed ratio that gives 20 km/h at its top speed
+            Mass = 700f, FrontAxle = 1.15f, RearAxle = 1.15f, CgHeight = 0.75f, Grip = 0.85f,
+            PeakKw = 4f, PeakRpm = 5000f, IdleRpm = 500f, Redline = 6000f,
+            Gears = new[] { 1f }, FinalDrive = 46f, Reverse = 1f,
+            Torque = new (float, float)[] { (500f, 9f), (2000f, 8.5f), (4000f, 8f), (5000f, 7.6f), (6000f, 6.5f) },
+            Tyre = "230/100R16", BrakeDecel = 2.5f, Diff = Differential.Open,
+            RefZeroTo100 = 0f, RefTopKmh = 20f,
+            Drive = Drivetrain.All,
+            MaxSteer = 0.5f, DragArea = 0.05f,
+            LockTurns = 0.6f,
+            TyreType = TyreType.Road, Travel = 0.2f, Stiffness = 0.6f,
+        },
+        // ---- 39: the pressurised Moon rover (#1943) ----
+        new CarSpec
+        {
+            Label = "Pressurised rover",
+            Style = DriveStyle.Grip,
+            Blurb = "A pressurised Moon rover: a cabin for four in shirtsleeves, a big windscreen, two suitports on the back to step "
+                + "straight into a docked suit. Slow and heavy on its four big airless tyres, 15 km/h. {throttle} drive, {brake} brake",
+            Body = new CarBody
+            {
+                Shape = BodyShape.RoverCabin, Length = 6.0f, Width = 3.2f, Height = 3.7f, WheelRadius = 0.6f,
+                Paint = new Color(0.93f, 0.94f, 0.95f), Lower = new Color(0.12f, 0.31f, 0.66f), Rim = new Color(0.4f, 0.42f, 0.45f),
+                LeftHandDrive = true,
+            },
+            Engine = EngineLayout.Single,
+            // source: JAXA/Toyota's Lunar Cruiser concept (6 m x 5.2 m x 3.8 m, ~10 t, four crew in shirtsleeves): narrowed to
+            // the colonies' tubes and doors, its six wheels as four big airless tyres; 6 t; 20 kW through a fixed ratio, 15 km/h
+            Mass = 6000f, FrontAxle = 1.9f, RearAxle = 1.9f, CgHeight = 1.4f, Grip = 0.85f,
+            PeakKw = 20f, PeakRpm = 5000f, IdleRpm = 500f, Redline = 6000f,
+            Gears = new[] { 1f }, FinalDrive = 90f, Reverse = 1f,
+            Torque = new (float, float)[] { (500f, 44f), (2000f, 42f), (4000f, 40f), (5000f, 38f), (6000f, 32f) },
+            Tyre = "360/80R24", BrakeDecel = 2.0f, Diff = Differential.Open,
+            RefZeroTo100 = 0f, RefTopKmh = 15f,
+            Drive = Drivetrain.All,
+            MaxSteer = 0.45f, DragArea = 0.1f,
+            LockTurns = 1.2f,
+            TyreType = TyreType.Road, Travel = 0.25f, Stiffness = 0.7f,
+        },
     });
 
     /// <summary>The spec for a car kind, or null when the kind is not a car.</summary>
