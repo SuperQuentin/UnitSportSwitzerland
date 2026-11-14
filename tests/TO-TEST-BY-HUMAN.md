@@ -42,6 +42,11 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## The colonies' lights from afar ([#1946](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1946))
+
+- [ ] In the shuttle in a 100 km lunar orbit (`/orbit 100` on the Moon), over the night side → the staffed colonies show as small clusters of warm light (Artemis Base with its runway's line), none on the day side; they fade out as you come down within ~10 km and the colony itself takes over, with no jump.
+- [ ] From the Earth at night with the telescope (`--date 2027-08-06 --time 21.5`, the waxing crescent low in the west), zoom on the earthshine side → a small spark at Moon Village (Mare Tranquillitatis, near the terminator); judge whether it reads too bright or too big at the longest end.
+
 ## Moon colonists ([#1945](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1945))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.

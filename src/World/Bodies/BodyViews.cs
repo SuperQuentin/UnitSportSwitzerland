@@ -68,6 +68,8 @@ public partial class BodyViews : Node
                     if (body.CraterDensity > 0) AddChild(new BodyBoulders(g, _origin));
                     // the Moon's historic and invented sites near the camera (#1939)
                     if (body.Id == BodyId.Moon) AddChild(new Moon.MoonSurface(g.Ground, _origin));
+                    // and the colonies' lights from afar, on the night side (#1946)
+                    if (body.Id == BodyId.Moon) AddChild(new Moon.ColonyLights(g));
                 }
             }
         // the ground game's gravity follows the anchor's body: the walker's fall, and the physics space's

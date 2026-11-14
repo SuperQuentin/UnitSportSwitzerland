@@ -28,6 +28,9 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
 - Phase 7 (#1945): the staffed colonies' crews (`ColonyCrew`: spots from the plan, 300 s windows of work, meals, gym,
   visits and EVAs, three sleep shifts by UTC, walks through the doors and tubes), played offline by decoration figures in
   the suit (`ColonyColonists`), designed for server bots through the same schedule and intents, `--colonistcheck`.
+- Phase 8 (#1946): the colonies' lights from orbit on the night side (`ColonyLights`, one mesh of screen-sized points in
+  the Moon's fixed frame, `BodyGlobe.AddBodyFixed`) and in the telescope from the Earth (sparks on the sky disc's dark
+  part, `moon.gdshader`), `--moonsites <colony>:night`. **The Moon surface feature is complete (phases 1-8).**
 
 ## The user's decisions (fixed)
 
@@ -306,3 +309,6 @@ Tracking: #1938. Phases: 1 #1939, 2 #1940, 3 #1941, 4 #1942, 5 #1943, 6 #1944, 7
   and the bots are the schedule's other player (a row in `bots/bot-capability-map`). Crews of 8 (Moon Village 10); windows
   of 300 s of the simulation clock; the sleep shifts by the sky's UTC hour; the EVA colonists appear and leave outside
   only out of view (no walk through the airlocks offline); colonists are not drawn in their bunks.
+- Phase 8: from the Earth the telescope sees the sky's disc (the globe draws within 10 Moon radii only), so the colonies
+  are sparks in the disc's shader there and points on the globe from orbit. The runway's lights every 150 m from afar (the
+  plan's every 60 m near), the Cold War base a third of its windows and its dome lit, the pit station one red light.
