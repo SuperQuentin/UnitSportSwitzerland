@@ -1113,3 +1113,11 @@ In a window on a real map, Cartoon, first and third person.
 - [ ] A Map pick still hides the jump behind a black curtain, however you walk meanwhile.
 - [ ] In a headset: the phone still opens by the free hand, the fingertip works the glass, the body walks (nothing changed).
 - [ ] On a phone or tablet (touch): the PHONE pill takes it out folded, a tap opens it, the apps are square on and the stick does not walk meanwhile (unchanged).
+## The shared motion helper, on the pause menu ([#1831](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1831))
+
+In a window (`--menu`, or Esc in a world), Cartoon.
+
+- [ ] Open and close the pause menu with Esc, a few times fast → it springs in (a slight overshoot, about 0.18 s) and shrinks out quicker (0.10 s); keys and the pointer work at once, Esc twice in a row never leaves it half-faded.
+- [ ] Click Resume, Settings, Controls → each button squashes a little and springs back; the page it opens is not delayed.
+- [ ] Settings › Gameplay › Reduce motion on, then open and close the pause menu → a plain fade, no scale and no squash.
+- [ ] In a headset, open the pause menu → a plain fade, no scale.
