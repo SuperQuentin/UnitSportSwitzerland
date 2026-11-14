@@ -57,3 +57,7 @@
   quickest way on traffic's car graph, each street's rightmost lane, a curve across a trimmed junction; ends found in a
   grid on the same level (`EndIndex`, also every `BuildAsync`: the old scan was quadratic). Driven by `LaneFollower`, not
   this pilot (`core/earth-bar-probes`).
+- Planned cores (#1903, `RaceRoute.Onward`): a junction path joins only at its own mouth (its lane's offset + 2 m from the
+  road end: path and road keys differ by a rounding step, so by distance), and a mouth offers nothing farther: no jump
+  across the core. Two connectors turning back > 90° are not chained (`TurnsBackAtMouth`): no U-turn at a mouth. A start
+  snapped onto a path into a dead end now has no way out (it took that U-turn before): give `--at` on a street.

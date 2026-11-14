@@ -28,12 +28,13 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 - **H7e**, this branch: every body's air as data (`BodyAir`): Mars' butterscotch sky, its blue sunset, its haze from orbit,
   its drag; the shell's sun from the anchor body's own offset.
 - **H7d**, this branch: a medium ground square (4 km of 16 m cells, the craters from 40 m) to the walker's horizon.
+- **H7d**, this branch: the spectator's target cue (] / D-pad → / VR right stick down: tap the next body, hold to turn to
+  it; a ring or edge arrow, the distance, the trip at full speed).
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
 
 **Still to come**:
-- the target cue and the align hold;
 - belly jets;
 - C3b online (after D2, #1727);
 - Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);
