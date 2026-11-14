@@ -116,6 +116,8 @@ public partial class MoonSitesCheck : Node
         // a second look at the same place (artemis, then artemis:close) may need no new square
         bool again = _index > 0 && PlacedId(_sites[_index - 1]) == PlacedId(site) && _t > 2;
         if ((ground.Built > _builtAt || again) && placed && ground.MediumBuilt > 0) _frames++;
+        // a night view from 18 km up (#1946): over the ground squares' reach, the globe's tiles and the lights only
+        if (Night(site) && _t > 4 && (ColonyLights.Active?.Count ?? 0) > 0) _frames++;
         // a second of frames on the built ground, then the picture and the next site
         if (_frames > 60 && _t > 3)
         {
@@ -148,7 +150,7 @@ public partial class MoonSitesCheck : Node
         var ground = _ground()!;
         _builtAt = ground.Built;
         // a morning there: whole hours of the bodies' clock until the sun stands ~30° up, rising
-        _days = MorningDays(s);
+        _days = Night(s) ? NightDays(s) : MorningDays(s);
         var baseSky = _baseSky;
         double days = _days;
         SkyClock.Live = () =>
@@ -200,6 +202,7 @@ public partial class MoonSitesCheck : Node
                 }
         }
         if (s.Kind == MoonSiteKind.Colony) dist = close ? 34 : 170;
+        if (Night(s)) dist = 40000;
         if (s.Kind == MoonSiteKind.Industry) dist = close ? 40 : 110;
         // an outpost from the side, looking across it (the mass driver: from its start, along the rail)
         if (s.Kind == MoonSiteKind.Industry && MoonOutposts.Find(PlacedId(s)) is { } op)
@@ -219,7 +222,7 @@ public partial class MoonSitesCheck : Node
                     insideLook = new Vector3((float)m.X, 2.2f, (float)-m.Z);
                     break;
                 }
-        double up = piece != null ? 9 : s.Kind == MoonSiteKind.Colony ? (close ? 2.2 : 70) : s.Kind == MoonSiteKind.Industry ? (close ? 6 : 35) : Math.Max(1.8, dist * 0.32);
+        double up = Night(s) ? 18000 : piece != null ? 9 : s.Kind == MoonSiteKind.Colony ? (close ? 2.2 : 70) : s.Kind == MoonSiteKind.Industry ? (close ? 6 : 35) : Math.Max(1.8, dist * 0.32);
         var eye = new Vector3((float)(main.East + Math.Sin(az) * dist), (float)up, (float)-(main.North + Math.Cos(az) * dist));
         if (inside is { } ins)
         {
@@ -514,6 +517,23 @@ public partial class MoonSitesCheck : Node
     }
 
     /// <summary>Days to add to the bodies' clock for a morning with the sun ~30° up at a site (a lunar day is 29.5 days).</summary>
+    /// <summary><c>&lt;colony&gt;:night</c> (#1946): the colony at night from 40 km off and 18 km up, its lights on the globe.</summary>
+    private static bool Night(MoonSite s) => s.Id.EndsWith(":night");
+
+    /// <summary>Days to add to the bodies' clock for a deep night at a site: the sun ~20° under its horizon.</summary>
+    private double NightDays(MoonSite s)
+    {
+        var baseNow = _baseSky?.Invoke() ?? SkyMoment.At(DateTime.UtcNow);
+        double best = 0, bestErr = double.MaxValue;
+        for (double d = 0; d < 29.6; d += 0.05)
+        {
+            var sun = SunLocal(s, baseNow with { Utc = baseNow.Utc.AddDays(d) });
+            double el = Math.Asin(Math.Clamp(sun.Up, -1, 1)) * 180 / Math.PI;
+            if (Math.Abs(el + 20) < bestErr) { bestErr = Math.Abs(el + 20); best = d; }
+        }
+        return best;
+    }
+
     private double MorningDays(MoonSite s)
     {
         var baseNow = _baseSky?.Invoke() ?? SkyMoment.At(DateTime.UtcNow);

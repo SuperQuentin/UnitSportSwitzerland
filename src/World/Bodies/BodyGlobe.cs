@@ -423,6 +423,34 @@ public partial class BodyGlobe : Node
         _epoch = _origin.Epoch;
         if (own) _root.Transform = Transform3D.Identity;
         foreach (var (key, tile) in _tiles) Place(key, tile.Node);
+        foreach (var n in _bodyFixed) PlaceBodyFixed(n, axes, own);
+    }
+
+    private readonly List<Node3D> _bodyFixed = new();
+
+    /// <summary>
+    /// A node whose children are in this body's fixed frame (metres from its centre, its own axes): under the root, which is
+    /// that frame when the body is another's (and shrinks it about the camera), or turned from it into the anchor's world on
+    /// its own body, again at each shift (#1946: the colonies' lights).
+    /// </summary>
+    public void AddBodyFixed(Node3D node)
+    {
+        _bodyFixed.Add(node);
+        _root.AddChild(node);
+        if (_origin.Frame.Axes is { } axes && _placedIn == axes.Body) PlaceBodyFixed(node, axes, OwnPlacing(axes));
+    }
+
+    private static void PlaceBodyFixed(Node3D node, FrameAxes axes, bool own)
+    {
+        if (!own)
+        {
+            node.Transform = Transform3D.Identity;
+            return;
+        }
+        Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
+        var (ox, oy, oz) = axes.FromEcef(new EcefPos(0, 0, 0));
+        node.Transform = new Transform3D(new Basis(Turn(new EcefPos(1, 0, 0)), Turn(new EcefPos(0, 1, 0)), Turn(new EcefPos(0, 0, 1))),
+            new Vector3((float)ox, (float)oy, (float)oz));
     }
 
     /// <summary>A tile's node: from the anchor in doubles on its own body, from the body's centre under the root elsewhere.</summary>

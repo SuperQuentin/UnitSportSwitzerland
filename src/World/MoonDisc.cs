@@ -84,6 +84,18 @@ public partial class MoonDisc : MeshInstance3D
         // drawn before the stars, which its depth then hides behind it (moon.gdshader)
         var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon.gdshader"), RenderPriority = -1 };
         material.SetShaderParameter("albedo", GD.Load<Texture2D>(MapPath));
+        // the colonies' lights as sparks on the dark part (#1946): each one's direction in the moon's own axes, its strength
+        var colonies = new Vector4[8];
+        int n = 0;
+        foreach (var c in Terrain.Bodies.MoonColonies.All)
+        {
+            float strength = c.Staffed ? 1f : c.Theme == Terrain.Bodies.ColonyTheme.ColdWar ? 0.45f : 0f;
+            if (strength <= 0 || n >= colonies.Length) continue;
+            double la = c.Lat * Mathf.Pi / 180, lo = c.Lon * Mathf.Pi / 180;
+            colonies[n++] = new Vector4((float)(Math.Cos(la) * Math.Cos(lo)), (float)(Math.Cos(la) * Math.Sin(lo)), (float)Math.Sin(la), strength);
+        }
+        material.SetShaderParameter("colonies", colonies);
+        material.SetShaderParameter("colony_count", n);
         return material;
     }
 

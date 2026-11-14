@@ -58,6 +58,7 @@ public class MeshRebuildDisciplineTests
     private static readonly Dictionary<string, string> Allowed = new()
     {
         // ---- built when what it is changes ----
+        ["src/World/Moon/ColonyLights.cs:Build"] = "on change: the colonies' lights once, the first frame the Moon's ground has its heights; the shader places and fades every point, never rebuilt (#1946)",
         ["src/Terrain/CubeHarness.cs:Commit"] = "on change: a streamed cube tile when it loads or its LOD step changes, one commit a frame at most (#1443 G1 harness)",
         ["src/Terrain/Earth/EarthWorld.Furnish.cs:Furnish"] = "on change: a leaf's roads, buildings, trees and water once, on the worker that loads it; never rebuilt, a shift only places its node again (#1510)",
         ["src/Terrain/Earth/EarthWorld.cs:Add"] = "on change: a leaf's ground once, when its worker has meshed it (under the commit budget); never rebuilt, a shift only places it again (#1510)",
