@@ -110,9 +110,17 @@
   - turn round, Rejoin: 0.1 km back onto the course east of the T;
   - ERG on at 240 W, +10 W, off: the rig's trainer decodes each (`Mode`, `TargetWatts`);
   - finished, worst 1.6 m off the way.
-  - `--traffic 0`: a car queued at the T stopped the bike dead (the ride does not ghost through
-    traffic yet).
-- **Not yet**: riding through traffic (a car in the way stops the bike), loading roads beyond the course's 1 km margin (off there, the way ends), the elevation profile,
+  - `--traffic 0` keeps the junction work clear of cars; the traffic has its own check below.
+- **Through the traffic** (#1467, as in Zwift): a queued car stopped the bike dead (the pilot sensed it and
+  queued, and its body was solid).
+  - The pilot is a ghost (`AutoPilot.Ghost`): it still rides round a car stopped in the way where the road has
+    room (#1729), but slows for no traffic, queued or moving. Other players still count.
+  - The rider's body is excepted from the traffic's bodies within 60 m (`Traffic.MovingBodiesNear`: cars, trains,
+    trams, walkers, riders), at 4 Hz, and given them back once past, at a stop, or 6 s after the finish.
+  - **Check**: `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60`: down
+    the side road into the T's give-way queue, then east. Without the ghost the bike stood at 0 km/h in the queue;
+    with it, never under 20 km/h, 0.3 m from a car, every exception given back.
+- **Not yet**: loading roads beyond the course's 1 km margin (off there, the way ends), the elevation profile,
   the FTP test's `PowerMeasured` (#903), ANT+ (no USB stick yet). RideLink's WinRT path has not met a
   real trainer.
 - **Devices**:

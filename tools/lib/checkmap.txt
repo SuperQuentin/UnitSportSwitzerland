@@ -105,6 +105,7 @@ src/Phone/               quick  --trainingcheck --trainer-sim --world fixture --
 tools/RideLink/          quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
 src/Trainer/             quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
 src/Gpx/RoadNetwork      quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
+src/Trainer/             quick  --trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60
 src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck

@@ -1087,13 +1087,21 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
 
+## A trainer's ride goes through the traffic ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+In a window, Cartoon, `--date 2027-07-15 --time 12`, the phone's Training app, a GPX through a town (or `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60` windowed).
+
+- [ ] Ride into a queue at a junction or a red light → the bike rides on through the queued cars at its own speed, no jolt, no stop; judge whether passing through a car looks acceptable from the chase camera and in first person.
+- [ ] A car stopped at the road's edge on a wide road → the bike steps round it rather than through it.
+- [ ] After the finish, ride the bike yourself into a parked traffic car → it is solid again.
+
 ## Farm fields, Christmas gifts and the trainer under `--frame earth` (PR [#1730](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1730), [#1729](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1729))
 
 Offline, in a window, each against the same without `--frame earth`.
 
 - [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
 - [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
-- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.
+- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider rides round a car stopped at the edge where the road has room, and through the traffic otherwise (#1467): it never queues behind a car.
 
 ## No camera jump at the earth re-anchor (PR [#1780](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1780), [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763))
 
