@@ -1143,6 +1143,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         {
             TickDoors(delta);
             TickLifts();
+            TickBotRooms(delta);
         }
         if (!_presenting) return;
         PresentLifts();
