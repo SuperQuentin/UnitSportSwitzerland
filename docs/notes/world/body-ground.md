@@ -24,6 +24,8 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 - **One ground a body, the anchor's answers**: every landable body with a pyramid has its `BodyGround`; the one whose
   body the anchor is on claims `BodyGround.Active` and `EarthWorld.OtherBody`. `Covers` is the square's true ground
   (192 m each way), twice the 96 m at which the next is built.
+- **The Earth's leaves answer nothing off the Earth** (`EarthWorld.Locate`, #1854): another body's place read as an
+  Earth one found a leaf and its sea, cover, tunnels or pits there.
 - **The void**: `FootPlayer.RescueFromVoid`'s "under −500 m with no height known" is Switzerland's floor, Earth only
   (Mars' ground is kilometres under its reference).
 - **Earth-only systems off the Earth**: guard on `Origin.Body` (`Traffic.RebuildIfMoved`, `DormantVehicles`), or a

@@ -33,6 +33,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 - **H7f** (#1854), this branch: Mercury (MESSENGER 665 m, levels 0-4, the grey 250 m mosaic) and Venus (Magellan
   4.6 km, levels 0-2, the radar colour, a thick amber haze), each on its data's own reference sphere; landing, walking
   and jumping on both (`--mooncheck mercury|venus --fromorbit`).
+- **H7f** (#1854), this branch: Io, Europa, Ganymede, Callisto and Titan from their mosaics (`--dem flat`: no global
+  heights, the profile's craters by body), Titan's orange haze; landing and walking on Callisto and Titan.
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.

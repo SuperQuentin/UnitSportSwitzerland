@@ -79,11 +79,11 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Europa = new(BodyId.Europa, "Europa", SkyBody.Europa, Ellipsoid.Sphere(1_560_800),
         3.202739e12, DegPerDay(360 / 3.551181041), BodyId.Jupiter, 671_034_000, landable: true, spaceEnterM: 10_000,
-        spaceExitM: 8_000);
+        spaceExitM: 8_000, craterDensity: 0.03);
 
     public static readonly CelestialBody Ganymede = new(BodyId.Ganymede, "Ganymede", SkyBody.Ganymede,
         Ellipsoid.Sphere(2_634_100), 9.887834e12, DegPerDay(360 / 7.15455296), BodyId.Jupiter, 1_070_412_000,
-        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000);
+        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 0.5);
 
     public static readonly CelestialBody Callisto = new(BodyId.Callisto, "Callisto", SkyBody.Callisto,
         Ellipsoid.Sphere(2_410_300), 7.179289e12, DegPerDay(360 / 16.6890184), BodyId.Jupiter, 1_882_709_000,
@@ -91,7 +91,7 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Titan = new(BodyId.Titan, "Titan", SkyBody.Titan, Ellipsoid.Sphere(2_574_730),
         8.978138e12, DegPerDay(360 / 15.945421), BodyId.Saturn, 1_221_870_000, landable: true, spaceEnterM: 200_000,
-        spaceExitM: 180_000);
+        spaceExitM: 180_000, craterDensity: 0.02, air: BodyAir.Titan);
 
     private static readonly CelestialBody[] ById =
         [Earth, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan];
@@ -131,6 +131,11 @@ public sealed class CelestialBody
         BodyId.Mars => CubeShape.Mars,
         BodyId.Mercury => CubeShape.Mercury,
         BodyId.Venus => CubeShape.Venus,
+        BodyId.Io => CubeShape.Io,
+        BodyId.Europa => CubeShape.Europa,
+        BodyId.Ganymede => CubeShape.Ganymede,
+        BodyId.Callisto => CubeShape.Callisto,
+        BodyId.Titan => CubeShape.Titan,
         _ => new CubeShape(Shape),
     };
 
@@ -176,9 +181,9 @@ public sealed class CelestialBody
 
     /// <summary>
     /// How cratered its ground is under its data (#1850, the cratered profile of docs/plans/planets.md section 5): a
-    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.15 on Mars
-    /// (wind and dust have filled most of its small craters), 0 where nothing is generated (the Earth's own fill, the
-    /// icy and volcanic bodies, the giants).
+    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.5 on
+    /// Ganymede, 0.15 on Mars (wind and dust have filled most of its small craters), 0.03 on young Europa, 0.02 on Titan
+    /// (its rain and dunes), 0 where nothing is generated (the Earth's own fill, volcanic Io, Venus, the giants).
     /// </summary>
     public double CraterDensity { get; }
 
