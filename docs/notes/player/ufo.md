@@ -12,6 +12,14 @@
   pure maths linked into the tier-0 tests (`UfoFlightTests`). Keep it free of nodes.
 - **Above 60 km it flies an orbit** (#1480): real gravity, the space drive on the same keys, `/orbit <km>`,
   back to the hover below 50 km. `player/orbits`.
+- **Between bodies: the cruise drive** (#1851, the shuttle's, `player/shuttle`): above the Space handover of the body it
+  is near, Z / D-pad ↑ (the saucer has no engine to switch) throws it on at the speed it has; v = lever · d / τ (d the
+  nearest surface of any body), the lever on the climb / descend keys (half travel a second), boost full; it goes where
+  the pilot looks, its way turning at 0.6 rad/s. The target cue works in it (] / D-pad →, `IAimable`): held, the way
+  turns onto the tangent of the target's arrival orbit. Off: a circular orbit round the body it is counted from. Taken
+  below the handover it drops out at its speed and the hover's dampers brake it; nobody aboard, it goes off onto an orbit.
+  HUD `DRIVE km/s, height, LEVER %` and `DRIVE ON/OFF [Z]  TARGET Moon [ ] ]`. `--ufomooncheck` (`World/Bodies`): 400 km
+  Earth orbit to a lunar one, and with `--bodies` down onto its legs on the Moon.
 - **Arcade hover, no aerodynamics.** There is no gravity and no stall in flight.
   - Letting go of the climb keys holds the height.
   - The stick wishes for a horizontal velocity in the heading frame, forward and sideways alike:

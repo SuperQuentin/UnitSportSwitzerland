@@ -12,7 +12,7 @@ namespace UnitSport.Player;
 /// (<see cref="TractorBeams"/>). Its state lives here, like an airliner's; the four numbers a remote
 /// copy needs travel in <see cref="Rideable.WritePose"/>.
 /// </summary>
-public sealed class Ufo : Flyer, ISpacecraft
+public sealed class Ufo : Flyer, ISpacecraft, IAimable
 {
     public UfoFlight.State State = UfoFlight.Parked(0f);
 
@@ -119,8 +119,9 @@ public sealed class Ufo : Flyer, ISpacecraft
         else
             // nobody aboard: an empty saucer sinks gently onto its legs and stays there, beam off
             c = new UfoFlight.Controls(Vector2.Zero, 0f, env.OnFloor ? 0f : 0.3f, false, m.Yaw);
-        // above the Space handover it flies its orbit (#1430 H5); below, the arcade hover
-        if (!SpaceFly(input.Piloted ? c : c with { Up = 0f, Down = 0f }, dt, ref m))
+        // between bodies (#1851): the cruise drive; above the Space handover its orbit (#1430 H5); below, the arcade hover
+        if (DriveStep(input, c, dt)) { }
+        else if (!SpaceFly(input.Piloted ? c : c with { Up = 0f, Down = 0f }, dt, ref m))
             State = UfoFlight.Step(State, c, new UfoFlight.Env(env.OnFloor, below), dt);
         if (!input.Piloted) State.Beam = false;
 
@@ -172,6 +173,116 @@ public sealed class Ufo : Flyer, ISpacecraft
         State = UfoFlight.SpaceStep(State, c, thrustWorld, step.Track, dt);
         State.Velocity = step.Velocity;
         return true;
+    }
+
+    // ---- the cruise drive (#1851): the shuttle's, the saucer's way to the Moon and beyond -------------
+
+    /// <summary>The cruise drive is on: the saucer carried at v = lever · d / τ (<see cref="ShuttleFlight.DriveSpeed"/>).</summary>
+    public bool DriveOn { get; private set; }
+
+    /// <summary>The drive's lever, 0..1: the climb and descend keys move it (half travel a second), boost puts it full.</summary>
+    public float DriveLever { get; private set; }
+
+    /// <summary>The distance the drive measures last step: to the nearest surface of any body (NaN out of Space).</summary>
+    public double DriveDistance { get; private set; } = double.NaN;
+
+    /// <summary>The target hold (<see cref="SpectatorTargets"/>): the way the drive goes while held; null: the look's.</summary>
+    public Vector3? Aim { get; set; }
+
+    /// <summary>The way the drive carries it now (world axes): the look's, or the hold's.</summary>
+    public Vector3 Nose => _driveDir != Vector3.Zero ? _driveDir : UfoFlight.Heading(State.Yaw);
+
+    /// <summary>In Space: on its orbit or in the drive (the target cue is the pilot's then).</summary>
+    public bool InSpace => Space.Orbit != null || DriveOn;
+
+    /// <summary>The drive may be thrown now: above the Space handover of the body it is near, or it is on.</summary>
+    public bool DriveAvailable => DriveOn || Space.Place is { } p && p.Altitude > Space.BodyHere.SpaceEnterM;
+
+    private Vector3 _driveDir;
+    private bool _driveToggle;
+
+    /// <summary>The drive switch (Z / D-pad ↑ in its seat, a script, a bot): taken by the next step.</summary>
+    public void ToggleDrive() => _driveToggle = true;
+
+    /// <summary>The drive's lever set directly (a script, a bot), 0..1.</summary>
+    public void SetDriveLever(float lever) => DriveLever = Mathf.Clamp(lever, 0f, 1f);
+
+    /// <summary>How fast the drive's way turns to the look or the hold, rad/s.</summary>
+    private const float DriveTurn = 0.6f;
+
+    /// <summary>
+    /// One step of the drive; false when it is not on (the orbit or the hover flies it). On above the handover at the speed
+    /// it has; off, a circular orbit where it is along its way; taken below the handover it drops out at its speed, and the
+    /// hover's dampers brake it.
+    /// </summary>
+    private bool DriveStep(in FlightInput input, in UfoFlight.Controls c, float dt)
+    {
+        bool toggle = _driveToggle;
+        _driveToggle = false;
+        if (Space.Place is not { } place)
+        {
+            DriveOn = false;
+            DriveDistance = double.NaN;
+            return false;
+        }
+        var body = Space.BodyHere;
+        DriveDistance = SurfaceReach.Of(place.Frame, place.At, place.Altitude);
+        if (toggle && DriveOn)
+        {
+            DriveOn = false;
+            var dir = _driveDir;
+            double angle = Core.Orbit.RotationAngle(body, place.SimTime);
+            var r = Core.Orbit.ToEci(place.Frame.ToEcef(place.At), angle);
+            var toward = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, dir), angle);
+            var orbit = Core.Orbit.Circular(body, r, toward);
+            Space.Set(orbit, body);
+            GD.Print(FormattableString.Invariant($"[ufo] cruise drive off at {place.Altitude / 1000:F1} km: a circular orbit round {body.Name}, {orbit.V.Length:F0} m/s"));
+            return false;
+        }
+        if (toggle && !DriveOn && place.Altitude > body.SpaceEnterM)
+        {
+            DriveOn = true;
+            Space.Drop();
+            float speed = State.Velocity.Length();
+            _driveDir = speed > 1f ? State.Velocity / speed : UfoFlight.Heading(State.Yaw);
+            DriveLever = ShuttleFlight.DriveLever(speed, DriveDistance);
+            GD.Print(FormattableString.Invariant($"[ufo] cruise drive on at {place.Altitude / 1000:F1} km"));
+        }
+        if (DriveOn && !body.SpaceRegime(true, place.Altitude))
+        {
+            DriveOn = false;
+            GD.Print(FormattableString.Invariant($"[ufo] out of the drive at {place.Altitude / 1000:F1} km, {State.Velocity.Length():F0} m/s"));
+        }
+        if (!DriveOn) return false;
+        if (!input.Piloted)
+        {
+            // nobody aboard: off onto an orbit, as the shuttle
+            _driveToggle = true;
+            return true;
+        }
+        DriveLever = c.Boost ? 1f : Mathf.Clamp(DriveLever + (c.Up - c.Down) * 0.5f * dt, 0f, 1f);
+        // the way: the hold's aim, or where the pilot looks (a script with no look keeps its way)
+        var want = Aim ?? (input.ViewPitch is { } pitch
+            ? new Vector3(-Mathf.Sin(input.ViewYaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), -Mathf.Cos(input.ViewYaw) * Mathf.Cos(pitch))
+            : _driveDir);
+        _driveDir = TurnTo(_driveDir, want, DriveTurn * dt);
+        State.Velocity = _driveDir * ShuttleFlight.DriveSpeed(DriveLever, DriveDistance);
+        State.Yaw += UfoFlight.TurnStep(State.Yaw, c.ViewYaw, dt);
+        State.Landed = false;
+        State.Hum = Mathf.Lerp(State.Hum, 0.4f + 0.6f * DriveLever, Mathf.Min(1f, 3f * dt));
+        return true;
+    }
+
+    /// <summary>A unit direction turned toward another by at most <paramref name="maxAngle"/>.</summary>
+    private static Vector3 TurnTo(Vector3 from, Vector3 to, float maxAngle)
+    {
+        to = to.Normalized();
+        if (from == Vector3.Zero) return to;
+        var axis = from.Cross(to);
+        float sin = axis.Length(), angle = Mathf.Atan2(sin, from.Dot(to));
+        if (angle <= maxAngle) return to;
+        if (sin < 1e-6f) axis = Mathf.Abs(from.Y) < 0.9f ? from.Cross(Vector3.Up) : from.Cross(Vector3.Right);
+        return from.Rotated(axis.Normalized(), maxAngle).Normalized();
     }
 
     // ---- switches set directly: scripts (the trailer director), bots, the server ------------------

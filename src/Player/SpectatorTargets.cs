@@ -50,8 +50,8 @@ public partial class SpectatorTargets : CanvasLayer
     private readonly System.Func<FootPlayer?> _local;
     private SpectatorCamera? _cam;
 
-    /// <summary>The shuttle whose nose the hold turns, while it does (its aim is let go when the hold is).</summary>
-    private Airliner? _aimed;
+    /// <summary>The craft whose way the hold turns, while it does (its aim is let go when the hold is).</summary>
+    private IAimable? _aimed;
     private Cue _cue = null!;
     private Label _name = null!, _detail = null!;
     private Control _labels = null!;
@@ -137,7 +137,8 @@ public partial class SpectatorTargets : CanvasLayer
         var spectator = _cam;
         bool spectating = spectator != null && (GetViewport()?.GetCamera3D() == spectator || XR.XrSession.Anchor == spectator);
         // or flying the shuttle in Space (#1851): its commander's seat, its own view
-        var shuttle = !spectating && _local() is { SeatIndex: 0, Vehicle: Airliner { InSpace: true } jet } ? jet : null;
+        // (the UFO too, #1851: its drive goes where the hold points)
+        var shuttle = !spectating && _local() is { SeatIndex: 0, Vehicle: IAimable { InSpace: true } craft } ? craft : null;
         Camera3D? cam = spectating ? spectator : shuttle != null ? GetViewport()?.GetCamera3D() : null;
         _active = cam != null;
         if (cam == null || UiFocus.TextEntryActive)
@@ -167,7 +168,7 @@ public partial class SpectatorTargets : CanvasLayer
             // the nose onto the arrival orbit's tangent, on the side it leans to
             var body = CelestialBody.Of(Target!.Value);
             double arrival = body.Shape.A + ShuttleFlight.ArrivalM(body);
-            shuttle.Aim = ShuttleFlight.TangentAim(toward.Direction, toward.Distance + body.Shape.A, arrival, -shuttle.State.Attitude.Z);
+            shuttle.Aim = ShuttleFlight.TangentAim(toward.Direction, toward.Distance + body.Shape.A, arrival, shuttle.Nose);
             _aimed = shuttle;
         }
         else LetGo();
@@ -196,7 +197,7 @@ public partial class SpectatorTargets : CanvasLayer
         return (world.Normalized(), Math.Max(0, length - CelestialBody.Of(target).Shape.A));
     }
 
-    private void Show(Camera3D cam, (Vector3 Direction, double Distance) toward, double delta, Airliner? shuttle)
+    private void Show(Camera3D cam, (Vector3 Direction, double Distance) toward, double delta, IAimable? shuttle)
     {
         var rect = GetViewport().GetVisibleRect().Size;
         var ahead = cam.GlobalPosition + toward.Direction * 100f;
