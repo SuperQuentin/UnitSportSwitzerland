@@ -124,7 +124,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             key => pyramid.Heights(key),
             globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null,
             // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
-            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null);
+            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
+            // the body's relief family under its data (#1853, #1854): dunes, ridges, grooves, lava flows
+            SurfaceProfile.For(globe.Body.Id, cube.Shape.A));
         _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
         _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
     }

@@ -30,6 +30,10 @@ public sealed class BodyHeights
     /// <summary>The generated craters (null where the body has none): the boulders read their fresh ones.</summary>
     public CraterField? Craters => _craters;
     private readonly SurfaceStamps? _stamps;
+    private readonly SurfaceProfile? _profile;
+
+    /// <summary>The profile's relief under the data (Mars' dunes, Europa's ridges...), or null.</summary>
+    public SurfaceProfile? Profile => _profile;
     private readonly Dictionary<CubeKey, CubeTile?> _tiles = new();
     private readonly object _lock = new();
 
@@ -39,8 +43,11 @@ public sealed class BodyHeights
     /// <param name="craters">The profile's craters under the data, or null for the data alone.</param>
     /// <param name="stamps">Where the ground is made ready for a site (#1939: craters calmed under a lander, a colony's
     /// level plateau), or null for none.</param>
-    public BodyHeights(CubeShape cube, int level, Func<CubeKey, CubeTile?> load, CraterField? craters, SurfaceStamps? stamps = null)
+    /// <param name="profile">The body's relief family under the data (<see cref="SurfaceProfile.For"/>), or null.</param>
+    public BodyHeights(CubeShape cube, int level, Func<CubeKey, CubeTile?> load, CraterField? craters, SurfaceStamps? stamps = null,
+        SurfaceProfile? profile = null)
     {
+        _profile = profile;
         _cube = cube;
         _level = level;
         _load = load;
@@ -54,11 +61,11 @@ public sealed class BodyHeights
     public CubeShape Cube => _cube;
 
     /// <summary>The height over the reference surface at a unit normal (body-fixed), metres: the data, the craters and the stamps.</summary>
-    public double At(EcefPos n) => Stamped(n, Data(n), _craters?.At(n.X, n.Y, n.Z) ?? 0);
+    public double At(EcefPos n) => Stamped(n, Data(n), (_craters?.At(n.X, n.Y, n.Z) ?? 0) + (_profile?.At(n.X, n.Y, n.Z) ?? 0));
 
     /// <summary>The data, the craters from <paramref name="smallestCrater"/> metres up (a coarser mesh's ground) and the stamps.</summary>
     public double At(EcefPos n, double smallestCrater) =>
-        Stamped(n, Data(n), _craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0);
+        Stamped(n, Data(n), (_craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0) + (_profile?.At(n.X, n.Y, n.Z, smallestCrater) ?? 0));
 
     private double Stamped(EcefPos n, double data, double craters) =>
         _stamps == null ? data + craters : _stamps.Apply(n, data, craters, Data);
