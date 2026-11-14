@@ -33,6 +33,8 @@ public static class CubeBody
     {
         "moon" => CubeShape.Moon,
         "mars" => CubeShape.Mars,
+        "mercury" => CubeShape.Mercury,
+        "venus" => CubeShape.Venus,
         _ => null,
     };
 

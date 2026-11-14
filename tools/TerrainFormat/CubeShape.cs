@@ -23,6 +23,12 @@ public sealed class CubeShape
     /// <summary>Mars': its IAU ellipsoid, face 0 on 0° N 0° E.</summary>
     public static readonly CubeShape Mars = new(Ellipsoid.Mars);
 
+    /// <summary>Mercury's: MESSENGER's 2,439.4 km sphere, face 0 on 0° N 0° E (#1854).</summary>
+    public static readonly CubeShape Mercury = new(Ellipsoid.Mercury);
+
+    /// <summary>Venus': Magellan's 6,051.0 km sphere, face 0 on 0° N 0° E (#1854).</summary>
+    public static readonly CubeShape Venus = new(Ellipsoid.Venus);
+
     /// <summary>The ellipsoid it is laid on: latitudes, longitudes and heights are on it.</summary>
     public Ellipsoid Shape { get; }
 

@@ -59,6 +59,18 @@ LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
 MD5s checked; from `asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/` and PDS Geosciences' MEGDR), `work/` (the
 JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and "NASA Viking, USGS Astrogeology".
 
+## Mercury and Venus (#1854)
+
+- **Mercury**: USGS's `Mercury_Messenger_USGS_DEM_Global_665m_v2_32bit_clon0.tif`. Despite the name it is int16 in
+  metres, LZW in 256 px tiles; `CylRaster` reads strips only, so GDAL makes an uncompressed strip copy first
+  (`gdal.Translate(..., creationOptions=['TILED=NO','COMPRESS=NONE','BLOCKYSIZE=16'])`). The heights are over a
+  2,439.4 km sphere, which becomes Mercury's reference (`Ellipsoid.Mercury`, `CubeShape.Mercury`). Colour: the greyscale
+  250 m mosaic of 2013 (61,324 px across), averaged to 21,600 by GDAL first. The "EnhancedColor" mosaics are false
+  colour (blue and orange): not used.
+- **Venus**: Magellan's `Venus_Magellan_Topography_Global_4641m_v02.tif` (8,192 × 4,096, int16 metres over 6,051.0 km,
+  `Ellipsoid.Venus`), levels 0-2; colour: the colourised radar mosaic `Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif`.
+- `--globealbedo --body NAME` takes any body of the registry but the Earth.
+
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
 | Run | Tiles | Size | Heights | Time | Peak |
@@ -69,6 +81,10 @@ JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and
 
 | Mars, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 319.5 MB (L4: 219 MB) | −7,643 to +22,923 m over the ellipsoid (Hellas, Olympus Mons) | 164 s | 5.3 GB |
 | Mars colour, levels 0-4 | 2,046 | 6.4 MB WebP | | 32 s | |
+
+| Mercury, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 222 MB | −5,382 to +4,490 m | 55 s | 4.2 GB |
+| Venus, levels 0-2 `--cube-check` | 126 | 28 MB | −2,886 to +11,589 m (Maxwell Montes) | 4 s | 0.4 GB |
+| Mercury colour / Venus colour | 2,046 / 126 | 46.5 / 2.9 MB WebP | | 45 / 2 s | |
 
 Mars' `--cube-check`: 4,198,392 edge vertices, 0 differ. `--cube-check` on levels 0-2: 128,904 shared edge points, 0 differ. Shipping levels 0-1 would be ~10 MB of heights, 0-2
 ~36 MB (with ~1.3 MB of colour): what ships is #1656's call.
