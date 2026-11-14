@@ -39,10 +39,20 @@ public partial class InteriorManager
     {
         public required InteriorLayout Layout;
         public Vector3[]? Collision;
+        /// <summary>Where a body can walk, in the plan's frame: baked from the collision, so stairs, holes and furniture are in it.</summary>
+        public NavigationMesh? Nav;
         public bool Building;
         public double Idle;
-        /// <summary>The collision in each region a bot wants it in: the body, and the placement it was put at.</summary>
-        public readonly Dictionary<int, (StaticBody3D Body, ServerRegion? Region, Transform3D Placed)> Bodies = new();
+        /// <summary>
+        /// The collision and the walkable surface in each region a bot wants it in: the body, the navigation region on that
+        /// region's map, the placement they were put at, and the physics frames since (a map takes a sync to know it).
+        /// </summary>
+        public readonly Dictionary<int, Placed> Bodies = new();
+    }
+
+    private sealed record Placed(StaticBody3D Body, Rid NavRegion, Rid Map, Transform3D At)
+    {
+        public int Frames;
     }
 
     private readonly Dictionary<string, BotRoom> _botRooms = new();
@@ -90,22 +100,82 @@ public partial class InteriorManager
         if (room.Bodies.TryGetValue(id, out var have) && IsInstanceValid(have.Body))
         {
             // the region re-anchored, or the origin shifted: the interior moves with its frame
-            if (have.Placed != placed)
+            if (have.At != placed)
             {
                 have.Body.GlobalTransform = placed;
-                room.Bodies[id] = have with { Placed = placed };
+                NavigationServer3D.RegionSetTransform(have.NavRegion, placed);
+                room.Bodies[id] = have with { At = placed, Frames = 0 };
             }
             return true;
         }
+        if (have != null) Free(have);
         // BackfaceCollision: every wall is a single face, met from whichever side the body is on (InteriorNode.AddBody)
         var body = new StaticBody3D { Name = $"BotInterior_{layout.Key}_{id}" };
         body.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = room.Collision, BackfaceCollision = true } });
         if (region?.Root is { } root) root.AddChild(body);
         else AddChild(body);
         body.GlobalTransform = placed;
-        room.Bodies[id] = (body, region, placed);
-        GD.Print($"[interior] bots: {layout.Key} solid in region {id} ({room.Collision.Length / 3} triangles)");
+        // the walkable surface on that region's navigation map, in the same frame
+        var map = (region?.World ?? GetWorld3D()).NavigationMap;
+        FitMap(map);
+        var nav = NavigationServer3D.RegionCreate();
+        NavigationServer3D.RegionSetMap(nav, map);
+        if (room.Nav != null) NavigationServer3D.RegionSetNavigationMesh(nav, room.Nav);
+        NavigationServer3D.RegionSetTransform(nav, placed);
+        room.Bodies[id] = new Placed(body, nav, map, placed);
+        GD.Print($"[interior] bots: {layout.Key} solid in region {id} ({room.Collision.Length / 3} triangles, {room.Nav?.GetPolygonCount() ?? 0} walkable polygons)");
         return true;
+    }
+
+    private static void Free(Placed p)
+    {
+        if (IsInstanceValid(p.Body)) p.Body.QueueFree();
+        if (p.NavRegion.IsValid) NavigationServer3D.FreeRid(p.NavRegion);
+    }
+
+    /// <summary>The baked surfaces' cell size: a map merges a region's edges only on its own cells.</summary>
+    private const float NavCell = 0.1f, NavCellHeight = 0.05f;
+
+    private readonly HashSet<Rid> _fitMaps = new();
+
+    /// <summary>A region's navigation map on the interiors' cells (only bots' interiors use the server's maps).</summary>
+    private void FitMap(Rid map)
+    {
+        if (!_fitMaps.Add(map)) return;
+        NavigationServer3D.MapSetCellSize(map, NavCell);
+        NavigationServer3D.MapSetCellHeight(map, NavCellHeight);
+    }
+
+    /// <summary>
+    /// Bakes where a body can walk from an interior's collision faces (on a worker): a body 0.3 m round and 1.7 m tall,
+    /// steps of 0.3 m (a stair's), slopes to 50°. Up to ~2 s for a block; a house is a few hundred milliseconds.
+    /// </summary>
+    private static NavigationMesh Bake(Vector3[] faces)
+    {
+        var source = new NavigationMeshSourceGeometryData3D();
+        source.AddFaces(faces, Transform3D.Identity);
+        var mesh = new NavigationMesh
+        {
+            CellSize = NavCell, CellHeight = NavCellHeight,
+            AgentRadius = 0.3f, AgentHeight = 1.7f, AgentMaxClimb = 0.3f, AgentMaxSlope = 50f,
+            GeometryParsedGeometryType = NavigationMesh.ParsedGeometryType.StaticColliders,
+        };
+        NavigationServer3D.BakeFromSourceGeometryData(mesh, source);
+        return mesh;
+    }
+
+    /// <summary>
+    /// Server: a walkable way from <paramref name="from"/> to <paramref name="to"/> inside the interior a bot is in, in its
+    /// frame, round furniture, over stairs and past holes; empty while the surface is not on the map yet or no way joins
+    /// them. The last point is the nearest walkable one to <paramref name="to"/>.
+    /// </summary>
+    public Vector3[] BotPath(FootPlayer bot, Vector3 from, Vector3 to)
+    {
+        if (bot.InteriorKey is not { } plan || !_botRooms.TryGetValue(plan, out var room)) return [];
+        int id = bot.Region is { IsMain: false } r ? r.Id : 0;
+        // a map knows a region after its next sync (a physics frame or two)
+        if (!room.Bodies.TryGetValue(id, out var p) || p.Frames < 3 || room.Nav == null) return [];
+        return NavigationServer3D.MapGetPath(p.Map, from, to, true);
     }
 
     private async Task BuildBotRoom(BotRoom room)
@@ -113,7 +183,11 @@ public partial class InteriorManager
         try
         {
             var layout = room.Layout;
-            room.Collision = await Task.Run(() => InteriorMeshBuilder.Build(layout).Collision);
+            (room.Collision, room.Nav) = await Task.Run(() =>
+            {
+                var faces = InteriorMeshBuilder.Build(layout).Collision;
+                return (faces, Bake(faces));
+            });
         }
         catch (System.Exception e)
         {
@@ -137,7 +211,7 @@ public partial class InteriorManager
         var link = DoorLink.Create(layout, e, OriginOf(bot), null);
         var frame = (inward ? link.Outside : link.Inside).AffineInverse();
         var local = frame * bot.GlobalPosition;
-        float half = (inward ? link.HalfPass : link.InsideWidth / 2) - 0.1f;
+        float half = inward ? link.HalfPass : link.InsideWidth / 2;
         // both frames' Z points out of the building: outside a bot stands at +Z (the street), inside at −Z (the room)
         float z = inward ? local.Z : -local.Z;
         if (z < -0.3f || z > BotCrossReach || Mathf.Abs(local.X) > Mathf.Max(half, 0.2f) || Mathf.Abs(local.Y) > 1.2f) return false;
@@ -173,12 +247,13 @@ public partial class InteriorManager
             foreach (var n in Players.GetChildren())
                 if (n is FootPlayer { Bot: true, InteriorKey: { } plan } && _botRooms.TryGetValue(plan, out var held)) held.Idle = 0;
         _botRoomsGone.Clear();
+        foreach (var room in _botRooms.Values)
+            foreach (var placed in room.Bodies.Values) placed.Frames++;
         foreach (var (plan, room) in _botRooms)
         {
             room.Idle += delta;
             if (room.Idle < BotRoomKeepSeconds || room.Building) continue;
-            foreach (var (body, _, _) in room.Bodies.Values)
-                if (IsInstanceValid(body)) body.QueueFree();
+            foreach (var placed in room.Bodies.Values) Free(placed);
             _botRoomsGone.Add(plan);
         }
         foreach (var plan in _botRoomsGone)

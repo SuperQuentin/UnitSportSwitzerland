@@ -4,17 +4,14 @@ using Godot;
 namespace UnitSport.Interiors;
 
 /// <summary>
-/// The way through an interior on one floor (#1330), for bots: its rooms as a graph whose edges are the doorways and
+/// The rooms of an interior's floor as a graph (#1330), for bots choosing where to go: its edges are the doorways and
 /// arches between them, in plan coordinates (x, z). A room's neighbour through an opening is the room just beyond it
 /// (half a metre past its centre), so a cut whose <see cref="OpeningPlan.Other"/> was never set still links. Windows
-/// and street entries are no ways through. The path is a list of points: before and after each opening, square to its
-/// wall, then the goal. Stairs are not followed: a bot stays on the floor it came in on.
+/// and street entries are no ways through. The walking itself goes over the interior's baked surface
+/// (<see cref="InteriorManager.BotPath"/>), which knows stairs, holes and furniture.
 /// </summary>
 public static class InteriorNav
 {
-    /// <summary>How far before and after an opening's centre the path passes, square to its wall.</summary>
-    public const float Approach = 0.7f;
-
     /// <summary>The room of <paramref name="floor"/> holding a plan point, or −1.</summary>
     public static int RoomAt(FloorPlan floor, Vector2 at)
     {
@@ -34,39 +31,6 @@ public static class InteriorNav
             int next = RoomAt(floor, at + outward * 0.5f);
             if (next >= 0 && next != room) yield return (at, outward, next);
         }
-    }
-
-    /// <summary>
-    /// Plan points from <paramref name="from"/> to <paramref name="to"/> on <paramref name="floor"/>, through the fewest
-    /// openings (breadth first); null when either is in no room or no way joins them.
-    /// </summary>
-    public static List<Vector2>? Path(FloorPlan floor, Vector2 from, Vector2 to)
-    {
-        int start = RoomAt(floor, from), goal = RoomAt(floor, to);
-        if (start < 0 || goal < 0) return null;
-        var came = new Dictionary<int, (int From, Vector2 At, Vector2 Out)> { [start] = (-1, default, default) };
-        var queue = new Queue<int>();
-        queue.Enqueue(start);
-        while (queue.Count > 0 && !came.ContainsKey(goal))
-        {
-            int room = queue.Dequeue();
-            foreach (var (at, outward, next) in Ways(floor, room))
-            {
-                if (came.ContainsKey(next)) continue;
-                came[next] = (room, at, outward);
-                queue.Enqueue(next);
-            }
-        }
-        if (!came.ContainsKey(goal)) return null;
-        var path = new List<Vector2> { to };
-        for (int room = goal; came[room].From >= 0; room = came[room].From)
-        {
-            var (_, at, outward) = came[room];
-            path.Add(at + outward * Approach);
-            path.Add(at - outward * Approach);
-        }
-        path.Reverse();
-        return path;
     }
 
     /// <summary>The rooms reachable from <paramref name="start"/> on a floor, nearest (in openings) first.</summary>
