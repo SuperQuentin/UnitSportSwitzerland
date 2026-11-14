@@ -79,6 +79,12 @@ public partial class MoonSitesCheck : Node
             if (_pending == null) AirStep(delta);
             return;
         }
+        if (_ruin > 0)
+        {
+            SavePending();
+            if (_pending == null || _ruin == 7) RuinStep(delta);
+            return;
+        }
         if (_rover > 0)
         {
             SavePending();
@@ -127,6 +133,7 @@ public partial class MoonSitesCheck : Node
             if (Dance && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _dance = 1; return; }
             if (AirlockCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _air = 1; return; }
             if (RoverCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _rover = 1; return; }
+            if (RuinsCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _ruin = 1; return; }
             Finish(_fails.Count == 0 ? null : string.Join("; ", _fails));
             return;
         }
@@ -191,8 +198,28 @@ public partial class MoonSitesCheck : Node
         if (s.Kind == MoonSiteKind.Industry && MoonOutposts.Find(PlacedId(s)) is { } op)
             az = op.Heading * Math.PI / 180 + (op.Kind == OutpostKind.MassDriver ? Math.PI + 0.35 : 2.4);
         if (piece != null) { dist = piece == IndustryKind.SolarArray ? 34 : 30; close = true; }
+        // <colony>:<module kind> (#1944): inside the first module of that kind, by its door, looking across it
+        Vector3? inside = null, insideLook = null;
+        if (piece == null && s.Kind == MoonSiteKind.Colony && s.Id.Split(':') is { Length: 2 } mParts
+            && Enum.TryParse<ModuleKind>(mParts[1], true, out var mk) && MoonColonies.Find(mParts[0]) is { } mc)
+            foreach (var m in ColonyPlan.For(mc).Modules)
+                if (m.Kind == mk)
+                {
+                    var (ax2, az2) = ColonyPlan.Along(m.Yaw);
+                    float reach = (float)(Math.Max(m.Length, m.Width) / 2 * 0.8);
+                    // east, up, north in the site's frame
+                    inside = new Vector3((float)(m.X + ax2 * reach), 3.2f, (float)-(m.Z + az2 * reach));
+                    insideLook = new Vector3((float)m.X, 2.2f, (float)-m.Z);
+                    break;
+                }
         double up = piece != null ? 9 : s.Kind == MoonSiteKind.Colony ? (close ? 2.2 : 70) : s.Kind == MoonSiteKind.Industry ? (close ? 6 : 35) : Math.Max(1.8, dist * 0.32);
         var eye = new Vector3((float)(main.East + Math.Sin(az) * dist), (float)up, (float)-(main.North + Math.Cos(az) * dist));
+        if (inside is { } ins)
+        {
+            // the colony's frame is the site's: east, up, south (z = -north)
+            eye = new Vector3(ins.X, ins.Y, -ins.Z);
+            main = new SitePart(MoonPart.Flag, insideLook!.Value.X, insideLook.Value.Z, 0);
+        }
         var look = new Vector3((float)main.East, (float)(piece != null ? 3 : s.Kind == MoonSiteKind.Colony ? (close ? 4 : 0) : s.Kind == MoonSiteKind.Industry ? 6 : dist * 0.06), (float)-main.North);
         // the frame is the site's tangent at its ground point: lift the eye over the ground under it
         var eyeN = MoonSites.Offset(s, eye.X, -eye.Z);

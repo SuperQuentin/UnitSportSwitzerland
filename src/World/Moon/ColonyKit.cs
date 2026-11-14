@@ -19,7 +19,11 @@ public static class ColonyKit
     private static Color C(string hex) { var c = new Color(hex); c.A = 0; return c; }
 
     /// <summary>A theme's colours: the shell, the trim, a darker band, the legs and frames, the windows.</summary>
-    public readonly record struct Palette(Color Shell, Color Trim, Color Band, Color Frame, Color Window, Color Accent);
+    public readonly record struct Palette(Color Shell, Color Trim, Color Band, Color Frame, Color Window, Color Accent, Color? DeadLamps = null)
+    {
+        /// <summary>The ceiling lamps: lit, or dead in the abandoned colony (#1944).</summary>
+        public Color LampColour => DeadLamps ?? Lamp;
+    }
 
     public static Palette Of(ColonyTheme t) => t switch
     {
@@ -27,7 +31,7 @@ public static class ColonyKit
         ColonyTheme.MoonVillage => new(C("e7dfcb"), C("163a8c"), C("cbbf9f"), C("9aa0a6"), C("e8f2ff"), C("f0b429")),
         ColonyTheme.Ilrs => new(C("d6dadf"), C("c4262e"), C("b9a46a"), C("7f868d"), C("ffc977"), C("e8c547")),
         ColonyTheme.ColdWar => new(C("6b7048"), C("3f4430"), C("8b8d74"), C("4a4d48"), C("f5d26b"), C("b03a2e")),
-        _ => new(C("5a5c5e"), C("3b3d40"), C("4a4b4c"), C("35373a"), C("3a3020"), C("7a2a22")),
+        _ => new(C("5a5c5e"), C("3b3d40"), C("4a4b4c"), C("35373a"), C("3a3020"), C("7a2a22"), C("26231e")),
     };
 
     private static readonly Color Regolith = C("8d8a84"), RegolithDark = C("77746e"), Sinter = C("6e6b66"),
@@ -222,7 +226,7 @@ public static class ColonyKit
         for (int i = 0; i < 8; i++)
         {
             float a = Mathf.Tau * i / 8;
-            Window(s, new Vector3(Mathf.Sin(a) * r * 0.55f, h - 0.16f, Mathf.Cos(a) * r * 0.55f), Vector3.Down, Vector3.Forward, 0.8f, 0.3f, Lamp);
+            Window(s, new Vector3(Mathf.Sin(a) * r * 0.55f, h - 0.16f, Mathf.Cos(a) * r * 0.55f), Vector3.Down, Vector3.Forward, 0.8f, 0.3f, p.LampColour);
         }
     }
 
@@ -278,7 +282,7 @@ public static class ColonyKit
                 Window(s, new Vector3(0, y, z) + nrm * (r + 0.01f), nrm, Vector3.Forward, 0.55f, 0.55f, p.Window);
             }
             // a lamp on the ceiling
-            Window(s, new Vector3(0, y + r - 0.03f, z), Vector3.Down, Vector3.Forward, 0.4f, 1.2f, airlock ? AmberLamp : Lamp);
+            Window(s, new Vector3(0, y + r - 0.03f, z), Vector3.Down, Vector3.Forward, 0.4f, 1.2f, airlock ? p.LampColour == Lamp ? AmberLamp : p.LampColour : p.LampColour);
         }
         s.Box(new(0, y + r + 0.3f, 0), new(1.6f, 0.08f, l * 0.6f), p.Band);
         s.Tube(new(0, y + r, l * 0.3f), new(0, y + r + 0.4f, l * 0.3f), 0.05f, p.Frame, 4);
@@ -321,7 +325,7 @@ public static class ColonyKit
         for (int i = 0; i < 6; i++)
         {
             float a = Mathf.Tau * i / 6;
-            Window(s, new Vector3(Mathf.Sin(a) * r * 0.3f, r * 0.85f, Mathf.Cos(a) * r * 0.3f), Vector3.Down, Vector3.Forward, 0.5f, 0.5f, Lamp);
+            Window(s, new Vector3(Mathf.Sin(a) * r * 0.3f, r * 0.85f, Mathf.Cos(a) * r * 0.3f), Vector3.Down, Vector3.Forward, 0.5f, 0.5f, pal.LampColour);
         }
     }
 
@@ -329,6 +333,31 @@ public static class ColonyKit
     /// A glass biodome: a ring wall, a geodesic-looking frame of meridians and rings, glass panes between them (the glass
     /// surface), a garden inside: grass, beds, paths, trees. The Cold War one is overgrown and has cracked panes.
     /// </summary>
+    /// <summary>
+    /// A biodome's trees (authored: x, z as the mesh before its half turn): trunk foot, height, crown radius; off the paths
+    /// and under the glass. The same list for the mesh and the trunks' solids (#1944).
+    /// </summary>
+    public static List<(Vector3 At, float Height, float Crown)> Trees(float r, bool overgrown)
+    {
+        var rng = new Random(overgrown ? 1971 : 2031);
+        var list = new List<(Vector3, float, float)>();
+        int trees = (int)(r * (overgrown ? 2.2f : 1.0f));
+        for (int i = 0; i < trees; i++)
+        {
+            float az = (float)rng.NextDouble() * Mathf.Tau, rr = (0.2f + 0.7f * (float)rng.NextDouble()) * r;
+            var at = new Vector3(Mathf.Sin(az) * rr, 1.25f, Mathf.Cos(az) * rr);
+            float th = (overgrown ? 7 : 4) + (float)rng.NextDouble() * (overgrown ? 9 : 4);
+            float cr = 1.2f + (float)rng.NextDouble() * (overgrown ? 2.8f : 1.4f);
+            if (Math.Abs(at.X) < 1.6f || Math.Abs(at.Z) < 1.6f) continue;   // off the paths
+            // under the glass: the crown never pokes through
+            float roof = 1.2f + Mathf.Sqrt(Mathf.Max(0, r * r - rr * rr)) - cr - 0.5f;
+            th = Mathf.Min(th, roof);
+            if (th < 2) continue;
+            list.Add((at, th, cr));
+        }
+        return list;
+    }
+
     private static void Biodome(MeshScratch s, Palette p, float r, bool overgrown)
     {
         var rng = new Random(overgrown ? 1970 : 2030);
@@ -349,6 +378,8 @@ public static class ColonyKit
                 var d = At(i + 1, k + 1);
                 s.Tube(a, b, 0.12f, p.Frame, 4);
                 s.Tube(a, c, 0.1f, p.Frame, 4);
+                // the doorway at +Z (#1944): no pane across it, an upright of the frame either side
+                if (k == 0 && (i == 0 || i == meridians - 1)) continue;
                 if (overgrown && rng.NextDouble() < 0.12) continue;   // a cracked, missing pane
                 if (k == rings - 1) s.Pane([a, c, b], Glass);
                 else s.Pane([a, c, d, b], Glass);
@@ -357,20 +388,11 @@ public static class ColonyKit
         s.Box(new(0, 1.3f, 0), new(2.2f, 0.08f, 2 * r - 3), Paint);
         s.Box(new(0, 1.3f, 0), new(2 * r - 3, 0.08f, 2.2f), Paint);
         s.Tube(new(r * 0.4f, 1.25f, r * 0.4f), new(r * 0.4f, 1.32f, r * 0.4f), r * 0.12f, C("3d7fb8"), 16);
-        int trees = (int)(r * (overgrown ? 2.2f : 1.0f));
-        for (int i = 0; i < trees; i++)
+        int i0 = 0;
+        foreach (var (at, th, cr) in Trees(r, overgrown))
         {
-            float az = (float)rng.NextDouble() * Mathf.Tau, rr = (0.2f + 0.7f * (float)rng.NextDouble()) * r;
-            var at = new Vector3(Mathf.Sin(az) * rr, 1.25f, Mathf.Cos(az) * rr);
-            if (Math.Abs(at.X) < 1.6f || Math.Abs(at.Z) < 1.6f) continue;   // off the paths
-            float th = (overgrown ? 7 : 4) + (float)rng.NextDouble() * (overgrown ? 9 : 4);
-            float cr = 1.2f + (float)rng.NextDouble() * (overgrown ? 2.8f : 1.4f);
-            // under the glass: the crown never pokes through
-            float roof = 1.2f + Mathf.Sqrt(Mathf.Max(0, r * r - rr * rr)) - cr - 0.5f;
-            th = Mathf.Min(th, roof);
-            if (th < 2) continue;
             s.Tube(at, at + Vector3.Up * th, 0.18f, 0.12f, Bark, 6);
-            s.Tube(at + Vector3.Up * (th - cr * 0.6f), at + Vector3.Up * (th + cr * 0.9f), cr, cr * 0.25f, i % 2 == 0 ? Leaf : LeafDark, 8);
+            s.Tube(at + Vector3.Up * (th - cr * 0.6f), at + Vector3.Up * (th + cr * 0.9f), cr, cr * 0.25f, i0++ % 2 == 0 ? Leaf : LeafDark, 8);
         }
         for (int i = 0; i < (overgrown ? 30 : 10); i++)
         {
@@ -378,8 +400,9 @@ public static class ColonyKit
             var at = new Vector3(Mathf.Sin(az) * rr, 1.45f, Mathf.Cos(az) * rr);
             s.Box(at, new(1.6f, 0.35f, 1.0f), overgrown ? LeafDark : Soil, Yaw(az));
         }
-        // the door through the ring wall at +Z
-        s.Box(new(0, 1.3f, r + 0.3f), new(1.4f, 2.4f, 0.8f), p.Frame);
+        // the doorway at +Z where its tube arrives (#1944), its frame at the tubes' sill
+        DoorFrame(s, new Vector3(0, 0, r + 0.3f), Basis.Identity, p);
+        s.Box(new(0, (FloorY + 1.25f) / 2, r - 0.4f), new(2.2f, FloorY - 1.25f, 1.6f), p.Frame);
     }
 
     /// <summary>
@@ -458,7 +481,7 @@ public static class ColonyKit
             s.Box(new(-dh + 0.4f + i * (2 * dh - 0.8f) / 5, HangarSlab / 2 + 0.04f, l / 2 + 0.3f + RampLen / 2), new(0.3f, 0.02f, RampLen * 0.9f), p.Accent,
                 new Basis(Vector3.Right, ramp));
         for (int k = 0; k < 4; k++)
-            Window(s, new(0, 0.6f + h - 0.4f, -l / 2 + (k + 0.5f) * l / 4), Vector3.Down, Vector3.Forward, 1.2f, 0.4f, Lamp);
+            Window(s, new(0, 0.6f + h - 0.4f, -l / 2 + (k + 0.5f) * l / 4), Vector3.Down, Vector3.Forward, 1.2f, 0.4f, p.LampColour);
         s.Box(new(0, 0.6f + h + 0.15f, 0), new(3.5f, 0.05f, 6f), p.Trim);
     }
 
@@ -497,7 +520,7 @@ public static class ColonyKit
                     if (i % 2 == 1)
                         foreach (float sd in new[] { -0.7f, 0.7f })
                             s.Tube(c + side * sd, c + side * sd + Vector3.Up * (y - TubeR + 0.1f), 0.08f, p.Frame, 5);
-                    if (i < n) Window(s, a.Lerp(b, (i + 0.5f) / n) + Vector3.Up * (y + TubeR - 0.03f), Vector3.Down, dir, 0.3f, 0.8f, Lamp);
+                    if (i < n) Window(s, a.Lerp(b, (i + 0.5f) / n) + Vector3.Up * (y + TubeR - 0.03f), Vector3.Down, dir, 0.3f, 0.8f, p.LampColour);
                 }
                 float chord = 2 * Mathf.Sqrt(TubeR * TubeR - (y - FloorY) * (y - FloorY));
                 s.Box((a + b) / 2 + Vector3.Up * (FloorY - 0.05f), new(chord, 0.1f, len), p.Frame, Yaw(yaw));
@@ -566,7 +589,7 @@ public static class ColonyKit
                     s.Pane([c0 + o + Vector3.Up * wallTop, c1 + o + Vector3.Up * wallTop, c1 + Vector3.Up * ridge, c0 + Vector3.Up * ridge], Glass);
                 }
                 // a lamp under the ridge: a lit box (the panes are glass here)
-                s.Box(a.Lerp(b, (i + 0.5f) / n) + Vector3.Up * (ridge - 0.14f), new(0.2f, 0.06f, 0.9f), Lamp, yaw);
+                s.Box(a.Lerp(b, (i + 0.5f) / n) + Vector3.Up * (ridge - 0.14f), new(0.2f, 0.06f, 0.9f), p.LampColour, yaw);
             }
         }
         return s.Build();

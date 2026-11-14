@@ -159,6 +159,7 @@ public class ColonyPlanTests
     [InlineData(ColonyTheme.Artemis)]
     [InlineData(ColonyTheme.MoonVillage)]
     [InlineData(ColonyTheme.Ilrs)]
+    [InlineData(ColonyTheme.ColdWar)]
     public void Modules_never_overlap_and_tubes_are_short(ColonyTheme theme)
     {
         for (int seed = 1; seed < 40; seed++)
@@ -188,7 +189,7 @@ public class ColonyPlanTests
         Func<EcefPos, double> slope = n => 500 * n.Y + 200 * n.Z;
         foreach (var c in MoonColonies.All)
         {
-            double level = slope(c.Normal);
+            double level = slope(c.Normal) - c.DepthM;
             var probe = new MoonSite("p", "p", MoonSiteKind.Colony, c.Lat, c.Lon, []);
             for (int k = 0; k < 12; k++)
             {
@@ -348,6 +349,7 @@ public class MoonPadsTests
     {
         foreach (var c in MoonColonies.All)
         {
+            if (!c.Staffed) continue;
             var pads = new List<MoonPad>();
             foreach (var p in MoonPads.All)
                 if (p.Colony == c.Id && !p.IsRunway) pads.Add(p);
@@ -370,7 +372,7 @@ public class MoonPadsTests
             if (p.IsRunway) continue;
             var c = MoonColonies.Find(p.Colony)!;
             // the pad is on its colony's plateau: the plateau's height
-            Assert.Equal(slope(c.Normal), stamps.Apply(p.Centre, slope(p.Centre), 2, slope), 6);
+            Assert.Equal(slope(c.Normal) - c.DepthM, stamps.Apply(p.Centre, slope(p.Centre), 2, slope), 6);
         }
         // the runway: straight between its ends' heights (a level strip)
         var r = MoonPads.Find("runway")!.Value;
@@ -390,5 +392,54 @@ public class MoonPadsTests
             if (!p.Occupied) Assert.Equal(p.Id, near.Pad.Id);
             else Assert.NotEqual(p.Id, near.Pad.Id);
         }
+    }
+}
+
+/// <summary>The abandoned pit colony and the Cold War base (#1944).</summary>
+public class MoonRuinsPlanTests
+{
+    private static double R(double x, double z) => Math.Sqrt(x * x + z * z);
+
+    [Fact]
+    public void The_pit_colony_fits_its_floor_its_sealed_airlock_reaches_the_wall_and_its_tower_stands_by_its_way_out()
+    {
+        var c = MoonColonies.Find("lavatube")!;
+        var plan = ColonyPlan.For(c);
+        Assert.Empty(plan.Pads);
+        Assert.Empty(plan.Industry);
+        Assert.NotNull(plan.Sealed);
+        foreach (var m in plan.Modules)
+        {
+            if (m.Id == plan.Sealed) continue;
+            Assert.True(R(m.X, m.Z) + Math.Max(m.Length, m.Width) / 2 < c.PlateauM - 1, $"{m.Kind} {m.Id} past the pit's floor");
+        }
+        var s = plan.Modules[plan.Sealed!.Value];
+        Assert.InRange(R(s.X, s.Z) + s.Length / 2, c.PlateauM - 0.5, c.PlateauM + 1);
+        var t = plan.Tower!.Value;
+        Assert.True(R(t.X, t.Z) + ColonyPlan.TowerHalf < c.PlateauM + 1);
+        Assert.Single(plan.Airlocks);
+        var outer = plan.Doors[plan.Airlocks[0].Outer];
+        Assert.True(R(t.X - outer.X, t.Z - outer.Z) < 8, "the tower is not by the way out");
+        foreach (var l in plan.Links)
+        {
+            var a = plan.Doors[l.DoorA];
+            var b = plan.Doors[l.DoorB];
+            Assert.InRange(R(a.X - b.X, a.Z - b.Z), 2, 16);
+        }
+    }
+
+    [Fact]
+    public void The_cold_war_base_has_its_big_biodome_the_radar_masts_and_quarry_and_no_crew()
+    {
+        var c = MoonColonies.Find("coldwar")!;
+        Assert.False(c.Staffed);
+        var plan = ColonyPlan.For(c);
+        var bio = plan.Modules.Find(m => m.Kind == ModuleKind.Biodome);
+        Assert.Equal(2 * ColonyPlan.BiodomeR, bio.Width);
+        Assert.Single(plan.Industry, i => i.Kind == IndustryKind.Radar);
+        Assert.True(plan.Industry.FindAll(i => i.Kind == IndustryKind.Mast).Count >= 2);
+        Assert.True(plan.Industry.FindAll(i => i.Kind == IndustryKind.Digger).Count >= 1);
+        Assert.DoesNotContain(plan.Industry, i => i.Kind is IndustryKind.SolarArray or IndustryKind.Lander);
+        Assert.True(plan.Extent < c.PlateauM);
     }
 }

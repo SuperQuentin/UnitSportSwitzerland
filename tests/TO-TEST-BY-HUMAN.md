@@ -40,6 +40,16 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## The empty colonies: Marius Hills station and Plaskett station ([#1944](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1944))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites lavatube`, step in (T) at the rim, walk out onto the tower's bridge and down the stairs to the pit's floor → the flights take you down without a stumble, the rails hold you; the pit's wall looks like a wall (no gap where the ground squares meet).
+- [ ] In the station, read the five terminals in order (E, pad Y, VR grip) → each page fits its screen and reads in the headset; the logs feel unsettling, not explained. Note whether the text is too small on a monitor.
+- [ ] Walk the modules → dark, only the red lights stuttering; the helmet never comes off; the dust and drifts do not block the doorways.
+- [ ] `--moonsites coldwar:close`, walk in through an airlock and along the spine into the biodome → the doorway lets you in, the trunks are solid, you cannot walk out through the glass; the radar turns outside.
+- [ ] Judge the mood of both against the reference you gave (mood only, nothing copied).
+
 ## Moon rovers, the hangar door, landers and the runway ([#1943](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1943))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.

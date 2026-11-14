@@ -48,6 +48,7 @@ public partial class InteriorManager
         outranks = Outranking.Vehicle;
         if (p.CraneInteraction() is { } crane) return crane;
         if (World.Moon.ColonyAirlocks.InteractionFor(p) is { } airlock) return airlock;
+        if (World.Moon.ColonyTerminals.InteractionFor(p) is { } terminal) return terminal;
         if ((Occasions.Birthdays.BirthdayService.InteractionFor(p) ?? Farming.FarmSales.InteractionFor(p) ?? Items.Telescopes.InteractionFor(p) ?? Adventure.Rewards.RewardWorld.InteractionFor(p)
             ?? Adventure.Places.PoiMarkers.InteractionFor(p) ?? Adventure.Errands.ErrandGivers.InteractionFor(p) ?? Adventure.Errands.WorldEvents.InteractionFor(p)
             ?? Occasions.Festivals.Fahnen.FahnenGame.InteractionFor(p) ?? Occasions.Festivals.Desalpe.DesalpeGame.InteractionFor(p)

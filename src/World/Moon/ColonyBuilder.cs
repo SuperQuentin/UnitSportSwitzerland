@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using UnitSport.Terrain.Bodies;
@@ -16,7 +17,9 @@ public static class ColonyBuilder
 {
     private const float F = ColonyKit.FloorY, Wall = 0.2f;
 
-    public static Node3D Build(MoonColony c, ColonyPlan plan)
+    /// <param name="groundY">The ground's height in the colony's frame at an east, north offset (the pit's rim, #1944); the
+    /// plateau's 0 when null.</param>
+    public static Node3D Build(MoonColony c, ColonyPlan plan, Func<double, double, float>? groundY = null)
     {
         var root = new Node3D { Name = c.Id };
         var body = new StaticBody3D { Name = "Solid" };
@@ -89,6 +92,9 @@ public static class ColonyBuilder
             });
         }
         if (plan.Road.Count > 1) root.AddChild(ColonyKit.Instance(ColonyKit.RoadMesh(plan.Road)));
+        // the empty colonies (#1944): the pit's ruins and tower, the Cold War dome's lamps, their terminals' logs
+        ColonyRuins.Dress(root, body, c, plan, groundY ?? ((_, _) => 0f));
+        if (ColonyLogs.For(c.Theme).Length > 0) root.AddChild(new ColonyTerminals(c, plan));
         // the industry on the plateau (y = 0): arrays turned to the sun, the digger round its pit
         if (plan.Industry.Count > 0)
             root.AddChild(MoonIndustry.Build(plan.Industry, c.Theme, c.Lat, c.Lon, (e, n) => new Vector3((float)e, 0, (float)-n), body));
@@ -215,8 +221,27 @@ public static class ColonyBuilder
                 break;
             }
             case ModuleKind.Biodome:
-                yield return (At(0, 0.6f, 0), new Vector3(w * 0.7f, 1.4f, w * 0.7f));
+            {
+                // the garden's floor at 1.25, the ring wall and the glass's low band round it with the doorway open at the
+                // node's -Z (authored +Z), the landing inside the doorway, the trees' trunks (#1944)
+                yield return (At(0, 0.6f, 0), new Vector3(w * 0.72f, 1.3f, w * 0.72f));
+                yield return (At(0, 0.6f, 0), new Vector3(w * 0.45f, 1.3f, w * 0.96f));
+                yield return (At(0, 0.6f, 0), new Vector3(w * 0.96f, 1.3f, w * 0.45f));
+                const int n = 28;
+                float band = 1.2f + r * 0.3f, pw = 2 * r * Mathf.Sin(Mathf.Pi / n) * 1.1f;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = Mathf.Tau * (i + 0.5f) / n;
+                    if (Mathf.Abs(Mathf.Wrap(a - Mathf.Pi, -Mathf.Pi, Mathf.Pi)) < 0.12f) continue;
+                    var dir = new Vector3(Mathf.Sin(a), 0, Mathf.Cos(a));
+                    yield return (new Transform3D(new Basis(Vector3.Up, a), dir * (r + 0.2f) + Vector3.Up * (band / 2)), new Vector3(pw, band, Wall));
+                }
+                yield return (At(0, (F + 1.25f) / 2, -(r - 0.4f)), new Vector3(2.2f, F - 1.25f, 1.6f));
+                // the overgrown garden is the Cold War's 64 m dome (the only one this wide)
+                foreach (var (at, th, _) in ColonyKit.Trees(r, w >= 60))
+                    yield return (At(-at.X, at.Y + th / 2, -at.Z), new Vector3(0.4f, th, 0.4f));
                 break;
+            }
         }
     }
 }

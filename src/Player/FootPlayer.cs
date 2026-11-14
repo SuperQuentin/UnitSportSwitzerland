@@ -3014,6 +3014,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (TryCrane()) return true;
         // a Moon colony's airlock door: cycle it (#1941)
         if (World.Moon.ColonyAirlocks.TryUse(this)) return true;
+        // an empty colony's terminal: its log's next page (#1944)
+        if (World.Moon.ColonyTerminals.TryUse(this)) return true;
 
         // a slice of a birthday cake at hand (#1423)
         if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
