@@ -830,6 +830,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
             // the earth world's globe is its far view, drawn from the server's pyramid too once it comes (#1656), so it is
             // there even when this copy has none of its own
+            // a world left behind took its server's pyramid with it
+            World.Globe.DataSource?.DropRemote();
             if (World.Globe.DataSource is { } globe && (globe.Count > 0 || _earth != null) && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
@@ -2312,6 +2314,29 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     GD.Print($"[earth] the server's leaves: {earthWorld.Store.RemoteCount} this copy lacks, {changed.Count} changed");
                     earthWorld.Refresh(changed);
                     if (changed.Count > 0) GetNodeOrNull<World.Globe>("Globe")?.RefreshLeaves();
+                }).CallDeferred();
+        }
+        // and its globe's pyramid (#1656): every level the globe draws, by quadtree request through the tile cache; the fill
+        // stands on the server's own pyramid (or on the generator, as the server's, when it has none), so it waits for it
+        if (_earth is { } pyramidWorld && _chunkSource is { } pyramidCache && !pyramidWorld.Leaves.IsFixture && World.GlobeData.Earth is { } chain)
+        {
+            _terrainSync.WantsPyramid = true;
+            pyramidWorld.Leaves.AwaitPyramid();
+            _terrainSync.PyramidIndexSettled += index =>
+                Callable.From(() =>
+                {
+                    if (!IsInstanceValid(pyramidWorld)) return;
+                    var changed = index != null ? chain.UseRemote(index, pyramidCache.FetchPyramid) : [];
+                    var fill = index != null ? chain.ServerBase() : null;
+                    pyramidWorld.Leaves.UsePyramid(fill);
+                    GD.Print($"[earth] the server's pyramid: {(index != null ? $"{index.Count} tiles, {changed.Count} changed" : "none")}; the fill on "
+                        + (fill != null ? $"it (to level {fill.FinestLevel})" : "the generator's own relief"));
+                    pyramidWorld.Reread("the fill's base settled");
+                    if (GetNodeOrNull<World.Globe>("Globe") is { } globe)
+                    {
+                        if (changed.Count > 0) globe.RefreshPyramid(changed);
+                        globe.RefreshLeaves();
+                    }
                 }).CallDeferred();
         }
         // the sync runs its continuations on the thread pool, and the chat log is UI

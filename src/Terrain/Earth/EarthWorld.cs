@@ -144,13 +144,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void Refresh(IReadOnlyCollection<CubeKey> changed)
     {
         if (changed.Count == 0) return;
-        _generation++;
         Leaves.Refresh(changed);
+        Reread($"{changed.Count} leaves changed ({Store.RemoteCount} from the server)");
+    }
+
+    /// <summary>
+    /// Every loaded leaf read again in place, its collision rebuilt (the old ones stay until the new ones land): the leaves
+    /// changed (<see cref="Refresh"/>), or the base the fill stands on did (#1656, <c>EarthLeaves.UsePyramid</c>). Main thread.
+    /// </summary>
+    public void Reread(string why)
+    {
+        _generation++;
         _collisionSource.Forget();
         foreach (var key in _near.Keys) _stale.Add(key);
         _patches.Rebuild(_ => true);
         _nextPlan = 0;
-        GD.Print($"[earth] {changed.Count} leaves changed ({Store.RemoteCount} from the server): {_near.Count} loaded leaves read again");
+        GD.Print($"[earth] {why}: {_near.Count} loaded leaves read again");
     }
 
     /// <summary>

@@ -74,6 +74,41 @@ public sealed partial class ClientTerrainSync : Node
                 LeafIndexReceived?.Invoke(index);
             });
 
+    /// <summary>
+    /// Under <c>--frame earth</c> (#1656): ask for the server's <see cref="Terrain.Leaves.PyramidIndex"/> on join, and raise
+    /// <see cref="PyramidIndexSettled"/> once it came or did not.
+    /// </summary>
+    public bool WantsPyramid { get; set; }
+
+    /// <summary>
+    /// The server's pyramid index came (#1656), or null: it has none, or it did not come. Fired once a join on the sync task's
+    /// thread (listeners defer to the main thread), either way: the fill waits for it to know what it stands on.
+    /// </summary>
+    public event Action<Terrain.Leaves.PyramidIndex?>? PyramidIndexSettled;
+
+    private async Task SyncPyramidIndexAsync(CancellationToken ct)
+    {
+        Terrain.Leaves.PyramidIndex? got = null;
+        try
+        {
+            await SyncFileAsync(AssetKind.PyramidIndex, Terrain.Leaves.PyramidIndex.FileName, "pyramid index", "the server holds no pyramid", ct,
+                bytes =>
+                {
+                    if (Terrain.Leaves.PyramidIndex.FromBytes(bytes) is not { } index)
+                    {
+                        GD.PushWarning("[stream] the server's pyramid index did not read: no pyramid from it");
+                        return;
+                    }
+                    GD.Print($"[stream] pyramid index received: {index.Count} tiles, {bytes.Length / 1024} KB");
+                    got = index;
+                }).ConfigureAwait(false);
+        }
+        finally
+        {
+            PyramidIndexSettled?.Invoke(got);
+        }
+    }
+
     /// <summary>True once the server manifest has been merged.</summary>
     public bool Synced { get; private set; }
 
@@ -104,12 +139,15 @@ public sealed partial class ClientTerrainSync : Node
         long digestMs = clock.ElapsedMilliseconds;
         // the earth world's leaves the server holds (#1655), beside the flat index: its ground waits on it, not on the tiles
         var leaves = WantsLeaves ? SyncLeafIndexAsync(ct) : Task.CompletedTask;
+        // and its globe's pyramid (#1656), beside it: the far view and the fill
+        var pyramid = WantsPyramid ? SyncPyramidIndexAsync(ct) : Task.CompletedTask;
         bool merged;
         try { merged = await SyncIndex(digest, ct); }
         finally { IndexFinished = true; }
         long indexMs = clock.ElapsedMilliseconds;
         await http.ConfigureAwait(false);
         await leaves.ConfigureAwait(false);
+        await pyramid.ConfigureAwait(false);
         if (!merged) return;
         await Task.WhenAll(
             SyncPlacesAsync(digest, ct), SyncLandingsAsync(digest, ct), SyncRopewaysAsync(digest, ct),

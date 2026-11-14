@@ -326,11 +326,14 @@ public partial class ChunkStreamer : Node
             AssetKind.LeafIndex => LeafIndexBytes,
             _ => ManifestOverride,
         };
+        // the pyramid's index (#1656) is built off the main thread once (every heights entry read for its stamp): the
+        // worker that prepares the answer waits for it
+        var pyramidIndex = assetKind == AssetKind.PyramidIndex ? PyramidIndexTask : null;
         var digestManifest = ManifestOverride;
         var digestLandings = LandingsOverride;
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
             ? PrepareDigest(peer, requestId, directory, digestManifest, digestLandings)
-            : Prepare(peer, requestId, assetKind, path, manifestOverride)));
+            : Prepare(peer, requestId, assetKind, path, pyramidIndex != null ? pyramidIndex.GetAwaiter().GetResult() : manifestOverride)));
     }
 
     /// <summary>
@@ -340,6 +343,33 @@ public partial class ChunkStreamer : Node
     public Terrain.Leaves.LeafStore? Leaves { get; set; }
 
     private byte[]? _leafIndexBytes;
+
+    /// <summary>
+    /// Server, under <c>--frame earth</c> (#1656): the globe's pyramid it serves (<see cref="AssetKind.Pyramid"/>,
+    /// <see cref="AssetKind.PyramidIndex"/>), the tiles on its own disk only (every client has the shipped base). Null: none.
+    /// Its index starts building as it is set.
+    /// </summary>
+    public Terrain.Leaves.PyramidSource? Pyramid
+    {
+        get => _pyramid;
+        set
+        {
+            _pyramid = value;
+            _pyramidIndex = value == null ? null : System.Threading.Tasks.Task.Run(() =>
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                var index = Terrain.Leaves.PyramidIndex.Of(value);
+                if (index.Count == 0) return null;
+                var bytes = index.ToBytes();
+                GD.Print($"[stream] pyramid index: {index.Count} tiles, {bytes.Length / 1024} KB, built in {clock.ElapsedMilliseconds} ms");
+                return bytes;
+            });
+        }
+    }
+
+    private Terrain.Leaves.PyramidSource? _pyramid;
+    private System.Threading.Tasks.Task<byte[]?>? _pyramidIndex;
+    private System.Threading.Tasks.Task<byte[]?> PyramidIndexTask => _pyramidIndex ?? System.Threading.Tasks.Task.FromResult<byte[]?>(null);
 
     /// <summary>The served leaves' index, built on the first ask; null with no leaves.</summary>
     private byte[]? LeafIndexBytes => Leaves is { Count: > 0 } leaves
@@ -360,7 +390,10 @@ public partial class ChunkStreamer : Node
 
         long peer = Multiplayer.GetRemoteSenderId();
         var key = new CubeKey(face, level, x, y);
-        if ((AssetKind)kind != AssetKind.Leaf || !key.IsValid || Leaves is not { } leaves || !leaves.IsLocal(key))
+        var cubeKind = (AssetKind)kind;
+        bool leaf = cubeKind == AssetKind.Leaf && key.IsValid && Leaves is { } l && l.IsLocal(key);
+        bool pyramid = cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= 12 && _pyramid is { } p && p.IsLocal(key);
+        if (!leaf && !pyramid)
         {
             RpcId(peer, MethodName.AssetMissing, requestId, true);
             return;
@@ -374,7 +407,32 @@ public partial class ChunkStreamer : Node
         }
 
         queue.Preparing++;
-        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PrepareLeaf(peer, requestId, leaves, key, section)));
+        if (pyramid)
+        {
+            var source = _pyramid!;
+            System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PreparePyramid(peer, requestId, source, key, section)));
+        }
+        else
+        {
+            var leaves = Leaves!;
+            System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PrepareLeaf(peer, requestId, leaves, key, section)));
+        }
+    }
+
+    /// <summary>A pyramid tile's heights (section 0) or one month's colour (1-12), as stored: both are compressed already.</summary>
+    private static Prepared PreparePyramid(long peer, uint requestId, Terrain.Leaves.PyramidSource source, CubeKey key, int section)
+    {
+        try
+        {
+            byte[]? payload = section == 0 ? source.HeightsBytes(key) : source.ColourEntry(key, section);
+            if (payload == null) return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            return new Prepared(peer, requestId, payload, payload.Length, AssetStream.Crc32(payload), false, false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] cannot read pyramid tile {key}: {e.Message}");
+            return new Prepared(peer, requestId, null, 0, 0, false, Missing: false);
+        }
     }
 
     /// <summary>A leaf's entry read off the bundle, cut to one section when asked, deflated as the files are.</summary>
@@ -427,9 +485,10 @@ public partial class ChunkStreamer : Node
         try
         {
             byte[] payload;
-            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase or AssetKind.LeafIndex && manifestOverride is { } manifest)
+            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.PyramidIndex
+                && manifestOverride is { } manifest)
                 payload = manifest;
-            else if (kind is AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.Leaf)
+            else if (kind is AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.Leaf or AssetKind.PyramidIndex or AssetKind.Pyramid)
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             else if (!System.IO.File.Exists(path))
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);

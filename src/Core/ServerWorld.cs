@@ -615,6 +615,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _streamer = ChunkStreamer.CreateServer(chunkDir);
         // --frame earth (#1655): the leaves on this server's disk, streamed by key to clients that lack them
         if (_earth != null) _streamer.Leaves = _earth.Store;
+        // and the globe's pyramid on its disk (#1656), streamed by key to clients for every level they draw and the fill stands on
+        if (_earth != null && World.GlobeData.HasLocal) _streamer.Pyramid = World.GlobeData.Earth;
         _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)

@@ -98,6 +98,14 @@ public sealed class PyramidSource
         return changed;
     }
 
+    /// <summary>The server's layer dropped (a world left: the next server, or none, brings its own). Main thread.</summary>
+    public void DropRemote()
+    {
+        if (_remote == null) return;
+        _remote = null;
+        Rebuild();
+    }
+
     public bool Has(CubeKey key) => _now.Best.ContainsKey(key);
 
     /// <summary>Whether a tile's best copy is on this copy's disk (the server serves those).</summary>
@@ -148,11 +156,53 @@ public sealed class PyramidSource
         return CubeAlbedoCodec.Encode(new CubeAlbedo { Key = all.Key, Size = all.Size, Format = all.Format, Months = [all.ForMonth(month)] });
     }
 
-    /// <summary>The fill's ground on this chain (<see cref="PyramidBase"/>); null where it holds nothing at the full lattice from <see cref="PyramidBase.MinFinestLevel"/> down.</summary>
+    /// <summary>
+    /// The fill's ground (<see cref="PyramidBase"/>, #1678) as this copy stands it: the tiles on its own disk at their full
+    /// lattice, nothing streamed and nothing resampled (the shipped base), so a server and an offline copy with the same
+    /// pyramid build the same fill. Null where they reach no deeper than <see cref="PyramidBase.MinFinestLevel"/>.
+    /// </summary>
     public PyramidBase? Base()
     {
-        if (FinestRealLevel < PyramidBase.MinFinestLevel) return null;
-        return new PyramidBase(Heights, Lakes, FinestRealLevel) { SeaSurface = Egm2008.Available ? Egm2008.Undulation : null };
+        var tiles = new Dictionary<CubeKey, Tile>();
+        float[]? lakes = null;
+        foreach (var layer in _before)
+        {
+            if (lakes == null && layer.Lakes is { Count: > 0 } l) lakes = l.ToArray();
+            foreach (var (k, t) in layer.Tiles)
+                if (t.Bits >= CubeKey.LatticeBits(k.Level)) tiles.TryAdd(k, t);
+        }
+        return BaseOf(tiles, lakes, (_, t) => t.Heights());
+    }
+
+    /// <summary>
+    /// The fill's ground as the server stands it (#1656): the server's tiles alone (its index), each read from this copy's
+    /// disk where its stamp is the server's, else streamed. Null with no server pyramid, or one no deeper than
+    /// <see cref="PyramidBase.MinFinestLevel"/> (the server's fill is the generator's then, and so is this one).
+    /// ponytail: a tile that does not come stays unread for as long as <see cref="PyramidBase"/> keeps it (its
+    /// <see cref="PyramidBase.Kept"/>), and the leaves made meanwhile stand on a coarser level there.
+    /// </summary>
+    public PyramidBase? ServerBase()
+    {
+        if (_remote is not { } remote) return null;
+        var locals = _before.ToList();
+        var tiles = remote.Tiles.Where(kv => kv.Value.Bits >= CubeKey.LatticeBits(kv.Key.Level)).ToDictionary(kv => kv.Key, kv => kv.Value);
+        return BaseOf(tiles, remote.Lakes?.ToArray(), (key, t) =>
+        {
+            foreach (var layer in locals)
+                if (layer.Tiles.TryGetValue(key, out var own) && own.Bits == t.Bits && own.Heights() is { } bytes
+                    && PyramidIndex.StampOf(key, bytes) == t.Remote!.Value.Stamp) return bytes;
+            return t.Heights();
+        });
+    }
+
+    private static PyramidBase? BaseOf(Dictionary<CubeKey, Tile> tiles, float[]? lakes, Func<CubeKey, Tile, byte[]?> read)
+    {
+        int finest = tiles.Count == 0 ? -1 : tiles.Keys.Max(k => k.Level);
+        if (finest < PyramidBase.MinFinestLevel) return null;
+        return new PyramidBase(k => tiles.TryGetValue(k, out var t) && read(k, t) is { } b ? CubeTileCodec.Decode(b) : null, lakes, finest)
+        {
+            SeaSurface = Egm2008.Available ? Egm2008.Undulation : null,
+        };
     }
 
     // ---- layers on disk --------------------------------------------------------------------------------
