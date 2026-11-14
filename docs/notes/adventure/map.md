@@ -30,3 +30,10 @@
 ## How to check
 
 `--placescheck` opens it and selects a place (windowed: `test_output/places_map.png`).
+
+## Embedded in the phone (#1826)
+
+`AdventureMap.MapCanvasView` is public and takes an `IMapHost` (the places service or null, the place search's places, the selection):
+`AdventureMap` is one host, `Phone/PhoneMap` the other (the phone's Map app, a see-through map over the view). `Driven` makes the host do
+the pan, zoom and pick; `FillAlpha` fades only the fills (relief, background, fog); `AddExtra` adds a layer of its own. Adventure off: no
+fog, the place search's places. See `ui/phone`.

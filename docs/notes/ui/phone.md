@@ -328,3 +328,51 @@
   (16:9 strict: open 38-47 % wide and left of 50 % excluded, the centre point outside the rect, cover 13-17 % wide and 38-52 % high,
   the cover clear of the key list and hand chip rects, the key list hidden open), asserts the gameplay camera equal with the phone open, and
   clicks a Home tile through real window coordinates.
+
+## The Map app is a real map (#1826, 1B of #1824)
+
+- **One map, embedded.** `Phone/PhoneMap` hosts the adventure map's own canvas (`AdventureMap.MapCanvasView`, now behind `IMapHost`
+  and `Driven`: relief, canton borders, places, the player's arrow, the shared `IMapOverlay` layers, so pins and travel points are
+  drawn) on a screen-space `CanvasLayer` (6), about 76 % x 76 % of the view at its top left (`PhoneMap.Area`), the world visible
+  behind, the phone's viewmodel peeking out at the lower right. It is not on the phone's glass; the glass says "The map is over
+  your view" and what is selected. Only the Travel curtain hides the world (the map gives way to it).
+- **See-through, and more while you move.** The fills (background, relief, the fog) are 60 % opaque standing
+  (`PhoneMap.RestAlpha`); moving (`FootPlayer.GroundSpeed` above 0.5 m/s) they ease to 20 % in 0.2 s and come back in 0.35 s once
+  the body stands for 0.25 s (a `Tween`, no step). It is the canvas's `SelfModulate` (and the fog shader's `COLOR.a`), so borders,
+  labels and markers stay crisp. Set only when it changes.
+- **Places.** Adventure on (`AdventureLog.Adventuring`): the adventure's places and this player's fog, as on M. Adventure off: no
+  fog, and the place search's places (`PlaceIndex`, towns / summits / passes by zoom, labels decluttered).
+- **The old list is a search drawer** (left 38 % of the map): a box, the All / Towns / Summits / Passes chips, "Where I am", then
+  Recent, Near you, Popular (`PhoneScreens.BuildRows`, shared with the glass list that VR and touch keep). A pick centres the map
+  on the place (a 0.3 s glide, then the zoom step) and shows its card: name, kind, distance, **Travel** (`Teleporter.Curtain`,
+  `Permissions.CanTeleport`, recents saved as before).
+- **Motion** (`UiMotion`): the map springs in and shrinks out, the drawer and card likewise, the drawer's first dozen rows stagger,
+  buttons squash; Reduce motion makes them plain fades.
+- **Input** (desktop and pad; VR and touch keep the list on the glass, no map over the view):
+
+  | | Keyboard + mouse | Pad | Touch / VR |
+  |---|---|---|---|
+  | pan | drag, arrows | D-pad (the left stick still walks) | list on the glass |
+  | zoom | wheel about the cursor, `=` `-` | RB / LB | list on the glass |
+  | select | click a place, Enter at the centre cross | A at the centre cross | tap / fingertip on the list |
+  | travel | the card's Travel, Enter | A again on the card | the list's row |
+  | centre on me | Home, the bar's "Me" | "Where I am" in the drawer | (the glass list's "Near you") |
+  | search | `/`, the bar's Search | X opens the drawer, D-pad ↓ to a row, A | the glass's box |
+  | back | Esc / Backspace / button 4 / ‹: drawer, then card, then the app | B, the same order | as before |
+  | look | hold the right button (the map does not see the pointer meanwhile) | right stick | - |
+
+  The body walks throughout; typing in the drawer's box stands it (`UiFocus`). The adventure's own M map is unchanged (its right
+  click still places pins and its side panel still has the cards; the phone map draws the overlays but does not open overlay cards).
+- **Not done:** nearby players are drawn as dots with names (`PeersOverlay`, the ones this client has) but there is no friends
+  list; overlay cards (pins, travel points) are M's; the hologram is 1C (#1827); a touch pinch map.
+- **Check:** `--phonecheck` (`PhoneProbe.Map`: up, 76 %, 60 % fills, arrows, drag, wheel about the cursor, Home, click, search,
+  pick, Esc order, right-button look, the 20 % while walking and back, Travel behind the curtain), `--mapcheck` / `--placescheck`
+  for M's map. Screenshots `test_output/phone_1826/`.
+- **Round 2 (#1826 review):** while the map is up the phone viewmodel eases (0.28 s, 0.08 s Reduced) to a small open pose wholly right of the map
+  (`FootPlayer.PhoneMapAway`, `ViewMapShare` 0.16: the same node posed, no rebuild); `--phonecheck` projects its screen's corners against the
+  map's rectangle. The canvas sits between the title bar and the keys strip. The relief carries **rivers** from the terrain's own drainage
+  (`Relief.Area` over 120 km², `MapRelief.River`) and the phone's canvas draws it through `map_boost.gdshader` (gamma, contrast, gain) so valley
+  floor, slope and ridge read at 60 %; borders get a dark halo. Limit: the relief is the embedded 500 m lattice, so zoomed in it is soft and the
+  rivers are stair-stepped, about a cell wide. Places (adventure off): towns first, a mark only where its name fits (right, else left, never cut
+  by the edge, never touching another), a disc / triangle / diamond for town / summit / pass (`MapCanvasView.DrawPlaceMarker`) and a legend.
+  The pad has no recentre key: R3 is the camera toggle on foot, so "Where I am" in the drawer stays the pad's way.

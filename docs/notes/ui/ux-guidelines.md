@@ -258,6 +258,7 @@ If any answer is "no", fix it or say why in the PR.
 - [ ] Fully usable with mouse, keyboard, gamepad, touch and VR, focus order logical.
 - [ ] Back/close behaves as everywhere else.
 - [ ] Every action gives feedback; destructive ones are protected.
+- [ ] New panels open, close and press through `UiMotion` (`ui/motion`): input is dropped at once, never after the tween; Reduce motion and VR fade only.
 
 **Readability**
 - [ ] Contrast holds over a bright scene (snow, sky) and a dark one.

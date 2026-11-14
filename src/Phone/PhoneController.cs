@@ -59,6 +59,7 @@ public partial class PhoneController : Node
     private readonly Func<FootPlayer?> _player;
     private readonly Func<bool> _blocked;
     private PhoneScreens _screens = null!;
+    private PhoneMap _map = null!;
     private Label _hint = null!;
     private AudioStreamPlayer _sound = null!;
     private readonly Random _rng = new();
@@ -114,6 +115,26 @@ public partial class PhoneController : Node
     /// <summary>The two screens, for the checks.</summary>
     internal PhoneScreens Screens => _screens;
 
+    /// <summary>The Map app's big map over the view (#1826).</summary>
+    internal PhoneMap Map => _map;
+
+    /// <summary>The Map app is a large map over the view (desktop and pad); in VR and on touch it stays the list on the glass.</summary>
+    private static bool MapWanted => !XR.XrSession.Active && !Platform.IsTouch;
+
+    /// <summary>The big map is up: the Map app is shown on an open (or opening) phone and the device shows it over the view.</summary>
+    internal bool MapUp => _map.IsUp;
+
+    /// <summary>Puts the keys in the Map's search box ("/"), in the drawer over the map or on the glass.</summary>
+    internal void FocusSearch() { if (_mapShown) _map.FocusSearch(); else _screens.FocusSearch(); }
+
+    /// <summary>What the Map's search box holds, for the checks.</summary>
+    internal string SearchText => _mapShown ? _map.SearchText : _screens.SearchText;
+
+    /// <summary>The Map's place rows, for the checks.</summary>
+    internal int MapRowCount => _mapShown ? _map.RowCount : _screens.MapRowCount;
+
+    private bool _mapShown;
+
     public bool IsOut => _stage != Stage.Pocket;
     /// <summary>Out and folded, settled (for the checks).</summary>
     internal bool IsFolded => _stage == Stage.Folded;
@@ -140,6 +161,7 @@ public partial class PhoneController : Node
         _blocked = blocked;
         Name = "Phone";
         _screens = new PhoneScreens(places, chat);
+        _map = new PhoneMap(player, places, chat);
     }
 
     public PhoneController() : this(() => null, () => true, () => null, () => null) { }
@@ -163,6 +185,12 @@ public partial class PhoneController : Node
     public override void _Ready()
     {
         AddChild(_screens);
+        AddChild(_map);
+        _map.TravelAsked += Travel;
+        _map.BackPressed += () => { if (_stage is Stage.Open or Stage.Opening) Back(); };
+        _map.NoteChanged += note => _screens.SetMapNote(note.Length > 0 ? note : "Drag to move, wheel to zoom, click a place.");
+        _screens.SetMapNote("Drag to move, wheel to zoom, click a place.");
+        _screens.MapOnView = MapWanted;
         _screens.Here = () => _player() is { } pl ? pl.Global : null;
         _screens.BackPressed += () => { if (_stage is Stage.Open or Stage.Opening) Back(); };
         _screens.TravelPicked += place => Travel(place.E, place.N, place.Name);
@@ -237,6 +265,12 @@ public partial class PhoneController : Node
     /// <summary>Back from an app to home; from home, folds the phone.</summary>
     private void Back()
     {
+        // over the big map: the drawer closes first, then the card, then the app (#1826)
+        if (_mapShown && _screens.Shown == PhoneScreens.Page.Map && _map.StepBack())
+        {
+            Play(PhoneSounds.Tap);
+            return;
+        }
         if (_screens.Shown == PhoneScreens.Page.Contacts && _screens.CloseContactsSheet())
         {
             Play(PhoneSounds.Tap);
@@ -281,7 +315,7 @@ public partial class PhoneController : Node
     /// <summary>Esc or the pad's B held for <see cref="StowHoldSeconds"/> puts the phone away from wherever it is (#1253).</summary>
     private void HoldBackToStow(float dt)
     {
-        bool held = _stage is Stage.Folded or Stage.Open && !_blocked() && !XR.XrSession.Active && _screens.Inner.GuiGetFocusOwner() is not LineEdit
+        bool held = _stage is Stage.Folded or Stage.Open && !_blocked() && !XR.XrSession.Active && !Typing
             && _screens.Shown != PhoneScreens.Page.Travel && (Input.IsActionPressed("ui_cancel") || Input.IsActionPressed(PlayerInput.Menu));
         _backHeld = held ? _backHeld + dt : 0f;
         if (_backHeld < StowHoldSeconds) return;
@@ -296,6 +330,7 @@ public partial class PhoneController : Node
         GD.Print("[phone] fold");
         _stage = Stage.Closing;
         _lookHeld = false;
+        _map.PointerEnabled = true;
         if (_screens.Shown == PhoneScreens.Page.Camera) _screens.ShowPage(PhoneScreens.Page.Home);
         Grip();
         Play(PhoneSounds.Hinge);
@@ -328,6 +363,8 @@ public partial class PhoneController : Node
         _cursorUv = null;
         HidesHud = false;
         _pressed = _dragging = _lookHeld = false;
+        _map.PointerEnabled = true;
+        SyncMap();
         if (_selfie) SetSelfie(false);
         _screens.SetActive(false);
         _hint.Visible = false;
@@ -364,7 +401,7 @@ public partial class PhoneController : Node
         && (Typing || Platform.IsTouch && !(_stage == Stage.Open && _screens.Shown == PhoneScreens.Page.Camera));
 
     /// <summary>A text box on the phone's screen has the keys (Map search).</summary>
-    private bool Typing => _stage != Stage.Pocket && _screens.Inner.GuiGetFocusOwner() is LineEdit;
+    private bool Typing => _stage != Stage.Pocket && (_screens.Inner.GuiGetFocusOwner() is LineEdit || _map.Typing);
 
     /// <summary>The right button went down: the mouse is captured and turns the view until it is let go (the cursor hidden meanwhile).</summary>
     private void StartLook()
@@ -373,6 +410,7 @@ public partial class PhoneController : Node
         _lookHeld = true;
         _lookFrom = GetViewport().GetMousePosition();
         _pressed = _dragging = false;
+        _map.PointerEnabled = false;
         Grip();
     }
 
@@ -381,6 +419,7 @@ public partial class PhoneController : Node
     {
         if (!_lookHeld) return;
         _lookHeld = false;
+        _map.PointerEnabled = true;
         Grip();
         if (!MouseCapture.TestWindow && !MouseCapture.Disabled) Input.WarpMouse(_lookFrom);
     }
@@ -466,6 +505,10 @@ public partial class PhoneController : Node
                 return;
         }
 
+        _screens.MapOnView = MapWanted;
+        SyncMap();
+        if (_mapShown && open && !_lookHeld && !Typing && !_map.DrawerOpen) _map.PanBy(MapPanDirection(), dt);
+
         p.PhoneState = !open ? FootPlayer.PhoneFoldedState
             : _screens.Shown == PhoneScreens.Page.Camera ? _selfie ? FootPlayer.PhoneSelfieState : FootPlayer.PhoneCameraState
             : FootPlayer.PhoneOpenState;
@@ -495,6 +538,32 @@ public partial class PhoneController : Node
         _screens.ShowCover(_quicks, _quick, _callText);
         StepTravel();
         ShowHint();
+    }
+
+    /// <summary>
+    /// The big map over the view is up while the phone is open (or opening) on the Map app and the device shows it (#1826): it
+    /// springs in with the phone and goes with it, or when the app changes (the Travel curtain's black replaces it).
+    /// </summary>
+    private void SyncMap()
+    {
+        bool want = _stage is Stage.Opening or Stage.Open && _screens.Shown == PhoneScreens.Page.Map && MapWanted;
+        if (want == _mapShown) return;
+        _mapShown = want;
+        if (want) _map.Show();
+        else _map.Hide();
+    }
+
+    /// <summary>The arrows and the D-pad as a pan (-1..1); the sticks are the body's (#1826). Read as keys, so it works while a key is held.</summary>
+    private static Vector2 MapPanDirection()
+    {
+        float x = (Input.IsKeyPressed(Key.Right) ? 1f : 0f) - (Input.IsKeyPressed(Key.Left) ? 1f : 0f);
+        float y = (Input.IsKeyPressed(Key.Down) ? 1f : 0f) - (Input.IsKeyPressed(Key.Up) ? 1f : 0f);
+        for (int pad = 0; pad < 4; pad++)
+        {
+            x += (Input.IsJoyButtonPressed(pad, JoyButton.DpadRight) ? 1f : 0f) - (Input.IsJoyButtonPressed(pad, JoyButton.DpadLeft) ? 1f : 0f);
+            y += (Input.IsJoyButtonPressed(pad, JoyButton.DpadDown) ? 1f : 0f) - (Input.IsJoyButtonPressed(pad, JoyButton.DpadUp) ? 1f : 0f);
+        }
+        return new Vector2(Mathf.Clamp(x, -1f, 1f), Mathf.Clamp(y, -1f, 1f));
     }
 
     private static void Release(FootPlayer p)
@@ -719,6 +788,16 @@ public partial class PhoneController : Node
     // ------------------------------------------------------------------ travel
 
     /// <summary>The Map app's pick: a teleport, run behind the phone.</summary>
+    private void Travel(GlobalPos at, string label)
+    {
+        if (!Permissions.CanTeleport)
+        {
+            InviteToasts.Instance?.Flash("This server does not allow travelling.");
+            return;
+        }
+        Teleporter.Instance?.TeleportTo(at, label);
+    }
+
     private void Travel(double e, double n, string label)
     {
         if (!Permissions.CanTeleport)
@@ -854,6 +933,11 @@ public partial class PhoneController : Node
         || e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)
         || !typing && (e is InputEventKey { PhysicalKeycode: Key.Backspace } || e is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1 });
 
+    /// <summary>The Map app's own keys (#1826): zoom (= - and the shoulders), centre on you (Home), the places drawer (the pad's X).</summary>
+    private static bool IsMapKey(InputEvent e) =>
+        e.IsActionPressed(PlayerInput.MapZoomIn) || e.IsActionPressed(PlayerInput.MapZoomOut)
+        || e is InputEventKey { PhysicalKeycode: Key.Home } || e is InputEventJoypadButton { ButtonIndex: JoyButton.X };
+
     private static bool IsDigit(InputEvent e) => e is InputEventKey { PhysicalKeycode: >= Key.Key1 and <= Key.Key9 };
 
     /// <summary>
@@ -866,6 +950,7 @@ public partial class PhoneController : Node
         if (Direction(e) != null || IsSelect(e) || IsBack(e, typing)) return true;
         if (_stage != Stage.Open) return IsDigit(e);
         if (e is InputEventKey { PhysicalKeycode: Key.Slash }) return !typing;
+        if (_mapShown && !typing && IsMapKey(e)) return true;
         return e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder or JoyButton.RightShoulder }
                && _screens.Shown is PhoneScreens.Page.Photos or PhoneScreens.Page.Photo;
     }
@@ -904,6 +989,11 @@ public partial class PhoneController : Node
             }
             return;
         }
+        if (e is InputEventMouse mapMouse && _mapShown)
+        {
+            MapMouse(mapMouse);
+            return;
+        }
         if (e is InputEventMouse mouse)
         {
             // the right button held: the mouse is captured and its motion is the body's look, not the phone's
@@ -921,6 +1011,17 @@ public partial class PhoneController : Node
             return;
         }
         bool typing = Typing;
+        if (typing && _map.Typing && e is InputEventKey && !IsBack(e, typing))
+        {
+            // the map's search box has the keys: the body stands, the letters go to the box; Up and Down walk the rows below it
+            UiFocus.Set(this, true);
+            if (e.IsPressed() && Direction(e) is { Y: not 0f } way)
+            {
+                GetViewport().SetInputAsHandled();
+                _map.MoveFocus(way.Y < 0f ? -1 : 1);
+            }
+            return;
+        }
         if (typing && e is InputEventKey && !IsBack(e, typing))
         {
             // a text box has the keys: letters type, the body stands (UiFocus), nothing reaches the world
@@ -936,6 +1037,26 @@ public partial class PhoneController : Node
         if (_stage is Stage.Opening or Stage.Closing or Stage.Stowing or Stage.Drawing && !e.IsActionPressed(PlayerInput.Phone)) return;
         if (_stage is Stage.Open) OpenKey(e);
         else FoldedKey(e);
+    }
+
+    /// <summary>
+    /// The mouse with the big map over the view (#1826): the pointer works the map directly (a screen-space layer), so only
+    /// the right button (hold to look, as on every app) and the fourth button (back) are the phone's; the captured motion
+    /// while the right button is held goes on to the body.
+    /// </summary>
+    private void MapMouse(InputEventMouse m)
+    {
+        if (m is InputEventMouseButton { ButtonIndex: MouseButton.Right } rmb)
+        {
+            if (rmb.Pressed) StartLook();
+            else EndLook();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (m is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1, Pressed: true })
+        {
+            if (_stage == Stage.Open) Back();
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     /// <summary>Folded (or coming out): Up opens it on the last app, Down puts away, Left Right pick, Enter runs; the finger swipes along.</summary>
@@ -983,9 +1104,10 @@ public partial class PhoneController : Node
         }
         if (!typing && e.IsPressed() && !e.IsEcho() && _screens.Shown == PhoneScreens.Page.Map && e is InputEventKey { PhysicalKeycode: Key.Slash })
         {
-            _screens.FocusSearch();
+            FocusSearch();
             return;
         }
+        if (_mapShown && !typing && MapKey(e)) return;
         // LB / RB: page the Photos grid, previous / next in the viewer (the pad's page keys, #1253)
         if (!typing && e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder or JoyButton.RightShoulder, Pressed: true } bumper
             && _screens.Shown is PhoneScreens.Page.Photos or PhoneScreens.Page.Photo)
@@ -1017,6 +1139,37 @@ public partial class PhoneController : Node
             return;
         }
         _screens.Inner.PushInput(e, true);
+    }
+
+    /// <summary>
+    /// The keys on the big map (#1826). The arrows and the D-pad pan it (polled each frame, <see cref="MapPanDirection"/>) or, with the
+    /// drawer open, walk its rows; = - and the shoulders zoom, Home centres on you, the pad's X opens the drawer; Enter / A presses the
+    /// focused row, else Travel on the card, else selects what is at the centre cross. True when the event was the map's.
+    /// </summary>
+    private bool MapKey(InputEvent e)
+    {
+        if (Direction(e) is { } dir)
+        {
+            if (e.IsPressed() && !e.IsEcho() && _map.DrawerOpen && dir.Y != 0f) _map.MoveFocus(dir.Y < 0f ? -1 : 1);
+            return true;
+        }
+        if (!e.IsPressed() || e.IsEcho()) return IsSelect(e) || IsMapKey(e);
+        if (e.IsActionPressed(PlayerInput.MapZoomIn)) { _map.Zoom(+1); return true; }
+        if (e.IsActionPressed(PlayerInput.MapZoomOut)) { _map.Zoom(-1); return true; }
+        if (e is InputEventKey { PhysicalKeycode: Key.Home }) { _map.Recentre(); Play(PhoneSounds.Tap); return true; }
+        if (e is InputEventJoypadButton { ButtonIndex: JoyButton.X })
+        {
+            _map.ToggleDrawer(typing: false);
+            Play(PhoneSounds.Tap);
+            return true;
+        }
+        if (IsSelect(e))
+        {
+            _map.Accept();
+            Play(PhoneSounds.Tap);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>

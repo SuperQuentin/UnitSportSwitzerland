@@ -16,6 +16,7 @@ float noise(vec2 p) {
 }
 
 void fragment() {
+	float fade = COLOR.a;   // the canvas's self modulate: the phone's map fades its fills (#1826)
 	float f = texture(TEXTURE, UV).r;
 	vec2 cell = UV * cells;
 	float n = noise(cell * 0.35 + vec2(TIME * 0.05, 0.0)) * 0.66 + noise(cell * 1.1 - vec2(0.0, TIME * 0.03)) * 0.34;
@@ -35,5 +36,5 @@ void fragment() {
 		col = vec3(0.80, 0.83, 0.87) + (n - 0.5) * 0.06;
 		fog *= 0.9;
 	}
-	COLOR = vec4(col, fog * 0.95);
+	COLOR = vec4(col, fog * 0.95 * fade);
 }

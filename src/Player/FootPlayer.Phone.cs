@@ -222,6 +222,16 @@ public partial class FootPlayer
     /// <summary>The phone's viewmodel on the owner's camera, when it is what is drawn (desktop and pad, folded or open).</summary>
     public Phone.PhoneModel? PhoneViewmodel => _phoneView;
 
+    /// <summary>
+    /// The phone's Map app has the big map up (#1826): the viewmodel eases to a small pose in the lower right, wholly outside the map's
+    /// rectangle (the right fifth of the view), and back when it closes. Set by <c>PhoneMap</c>; posed on the same node, nothing rebuilt.
+    /// </summary>
+    public bool PhoneMapAway { get; set; }
+    private float _mapAway;
+
+    /// <summary>The share of the view's width the phone has while the map is up.</summary>
+    internal const float ViewMapShare = 0.16f;
+
     /// <summary>The viewmodel is on screen now (the pointing finger and the in-world phone's screen yield to it).</summary>
     public bool PhoneViewShown { get; private set; }
 
@@ -258,6 +268,8 @@ public partial class FootPlayer
         // by width, but never taller than the view allows
         float openW = Mathf.Min(ViewOpenShare, 0.58f * (Phone.PhoneModel.InnerW / Phone.PhoneModel.InnerH) / aspect);
         float coverW = Mathf.Min(ViewCoverShare, 0.46f * (Phone.PhoneModel.CoverSize.X / Phone.PhoneModel.CoverSize.Y) / aspect);
+        _mapAway = Mathf.MoveToward(_mapAway, PhoneMapAway ? 1f : 0f, dt / (Ui.UiMotion.Reduced ? 0.08f : 0.28f));
+        openW = Mathf.Lerp(openW, Mathf.Min(openW, ViewMapShare), Mathf.SmoothStep(0f, 1f, _mapAway));
         float w = Mathf.Lerp(coverW, openW, open);
         var refSize = new Vector2(Mathf.Lerp(Phone.PhoneModel.CoverSize.X, Phone.PhoneModel.InnerW, open), Mathf.Lerp(Phone.PhoneModel.CoverSize.Y, Phone.PhoneModel.InnerH, open));
         float scale = w * 2f * ViewDepth * tanH / refSize.X;
