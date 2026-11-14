@@ -85,6 +85,14 @@ public partial class InterestService : Node
     private readonly List<Lv95Coord> _lv95 = new();
     private readonly List<float> _agl = new();
     private readonly List<RideKind> _ride = new();
+    /// <summary>Per round, parallel to <see cref="_targets"/>: how far each one's place may be off, m (a fast body's way in <see cref="SlackSeconds"/>).</summary>
+    private readonly List<float> _slack = new();
+
+    /// <summary>
+    /// How much of a fast body's travel the interest test forgives, s: what the server knows of two saucers flying 16 m
+    /// apart in orbit came through two latencies, up to a second apart on a loaded server, 3-8 km at 7.7 km/s (#1869).
+    /// </summary>
+    private const float SlackSeconds = 1f;
     private readonly List<int> _viewerIndex = new();
     /// <summary>The pairs that race each other this round, asked once per pair.</summary>
     private readonly HashSet<(long Viewer, long Target)> _together = new();
@@ -177,7 +185,7 @@ public partial class InterestService : Node
         _scratch.Clear();
         _targets.Clear();
         _byId.Clear();
-        _at.Clear(); _lv95.Clear(); _agl.Clear(); _ride.Clear(); _viewerIndex.Clear(); _together.Clear();
+        _at.Clear(); _lv95.Clear(); _agl.Clear(); _ride.Clear(); _slack.Clear(); _viewerIndex.Clear(); _together.Clear();
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
             {
@@ -190,6 +198,9 @@ public partial class InterestService : Node
                 // height above ground does not depend on the viewer's frame
                 _agl.Add(Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f);
                 _ride.Add(p.Ride);
+                // a fast body is known only to a latency: the way it flies in a second (#1869)
+                float speed = p.NetVel.Length();
+                _slack.Add(speed > RemoteInterpolator.FastSpeed ? speed * SlackSeconds : 0f);
             }
 
         for (int vi = 0; vi < _scratch.Count; vi++)
@@ -226,7 +237,7 @@ public partial class InterestService : Node
                 bool together = !withheld && Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
                 bool now_ = !withheld && Interest.Relevant(eye, Local(_lv95[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
-                    together, Ground == null && Sight == null ? null : _sight);
+                    together, Ground == null && Sight == null ? null : _sight, _slack[ti] + _slack[_viewerIndex[vi]]);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second (a withholding is never held back)
