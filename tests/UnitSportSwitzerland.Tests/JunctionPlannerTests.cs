@@ -274,6 +274,48 @@ public class JunctionPlannerTests(JunctionPlannerFixture region) : IClassFixture
     }
 
     [Fact]
+    public void Two_exits_making_the_same_turn_each_get_a_path_from_the_approach()
+    {
+        // #1903 (Geneva, a merged core at 2501300,1124905): arriving from the south, two exits leave to the right, at 60 and 20
+        // degrees off east; the signal rule names both Right. The core took the first and no car could reach the other
+        var street = new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600, Left: Town, Right: Town);
+        double[] headings = [-Math.PI / 2, Math.PI / 3, Math.PI / 9, Math.PI / 2];   // south (the approach), two rights, north
+        var signal = headings.Select(h => new SignalArm(h, In: true, Out: true)).ToList();
+        Assert.Equal(SignalMoves.Right, SignalPlan.Turn(signal, 0, 1));
+        Assert.Equal(SignalMoves.Right, SignalPlan.Turn(signal, 0, 2));
+
+        var jp = new JunctionPlan { Node = 1, Centre = new UnitSport.Tools.RoadGen.Geometry.Vec2(2600000, 1200000), Lights = false };
+        for (int i = 0; i < headings.Length; i++)
+        {
+            var normal = Section.Normal(street, 6f, junctionAtEnd: true);
+            var wants = new ArmWants(false, AllMoves, SignalMoves.None, [], null, [], false, false);
+            var mouth = MouthPlanner.Wanted(normal, wants);
+            var arm = new ArmPlan
+            {
+                Arm = i, LinkId = i, Heading = headings[i], Normal = normal, Wants = wants, Wanted = mouth, Mouth = mouth,
+                Axis = ArmAxis.Straight(jp.Centre, headings[i]),
+            };
+            // as the rewriter fills them: every exit of each move, the first of them in Toward
+            foreach (var move in new[] { SignalMoves.Left, SignalMoves.Through, SignalMoves.Right })
+            {
+                var all = Enumerable.Range(0, headings.Length).Where(k => k != i && SignalPlan.Turn(signal, i, k) == move).ToList();
+                if (all.Count == 0) continue;
+                arm.Toward[move] = all[0];
+                arm.TowardAll[move] = all;
+            }
+            jp.Arms.Add(arm);
+        }
+        var core = CorePlanner.Plan(jp);
+        var cars = core.Connectors.Where(c => c.Kind == ConnectorKind.Car).ToList();
+        Assert.Contains(cars, c => c.FromArm == 0 && c.ToArm == 1 && c.Move == SignalMoves.Right);
+        Assert.Contains(cars, c => c.FromArm == 0 && c.ToArm == 2 && c.Move == SignalMoves.Right);
+        // every arm reaches every other arm
+        for (int a = 0; a < headings.Length; a++)
+            for (int b = 0; b < headings.Length; b++)
+                if (a != b) Assert.Contains(cars, c => c.FromArm == a && c.ToArm == b);
+    }
+
+    [Fact]
     public void A_turn_between_two_major_roads_is_laid_for_a_truck_where_it_fits_untouched()
     {
         var street = new RoadAttributes(LanesForward: 1, LanesBackward: 1, WidthCm: 600, Left: Town, Right: Town);
