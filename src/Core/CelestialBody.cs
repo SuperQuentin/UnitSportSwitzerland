@@ -136,6 +136,10 @@ public sealed class CelestialBody
         BodyId.Ganymede => CubeShape.Ganymede,
         BodyId.Callisto => CubeShape.Callisto,
         BodyId.Titan => CubeShape.Titan,
+        BodyId.Jupiter => CubeShape.Jupiter,
+        BodyId.Saturn => CubeShape.Saturn,
+        BodyId.Uranus => CubeShape.Uranus,
+        BodyId.Neptune => CubeShape.Neptune,
         _ => new CubeShape(Shape),
     };
 
@@ -234,6 +238,13 @@ public sealed class CelestialBody
     /// <c>Curvature.SpaceRegime</c>).
     /// </summary>
     public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
+
+    /// <summary>
+    /// How close a camera may come to a body one cannot stand on (#1854), metres over its reference: a giant's cloud tops
+    /// (50 km over its 1-bar radius: below them there is no ground, only crushing gas), the Sun's 0.2 radii (139,000 km
+    /// over the photosphere); 0 for a body with ground.
+    /// </summary>
+    public double FloorM => Landable ? 0 : Id == BodyId.Sun ? 0.2 * Shape.A : 50_000;
 
     /// <summary>Its air (#1853): what drags a craft and what its sky scatters; null where there is none (the Moon).</summary>
     public BodyAir? Air { get; }

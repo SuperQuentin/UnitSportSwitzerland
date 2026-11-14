@@ -52,6 +52,8 @@ public partial class BodyViews : Node
                 AddChild(g);
                 _globes.Add(g);
                 if (body.Id == BodyId.Moon) _moon = g;
+                // Saturn's rings round its globe (#1854): the sky's ring map, its radii (SkyBodies')
+                if (body.Id == BodyId.Saturn) g.AddRings(74_500_000, 140_220_000, GD.Load<Texture2D>("res://assets/space/saturn_ring_2k.png"));
                 // the ground under your feet where one can stand (#1850)
                 if (body.Landable)
                 {
@@ -72,6 +74,7 @@ public partial class BodyViews : Node
         // the spectator's target cue (#1850): any body, with or without its data
         AddChild(new Player.SpectatorTargets(_origin));
         if (Player.SpectatorTargetCheck.Requested) AddChild(new Player.SpectatorTargetCheck());
+        if (OrbitOnlyCheck.Requested) AddChild(new OrbitOnlyCheck(_origin));
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }

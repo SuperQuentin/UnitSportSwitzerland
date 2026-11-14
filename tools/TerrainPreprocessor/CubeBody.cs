@@ -42,6 +42,10 @@ public static class CubeBody
         "ganymede" => CubeShape.Ganymede,
         "callisto" => CubeShape.Callisto,
         "titan" => CubeShape.Titan,
+        "jupiter" => CubeShape.Jupiter,
+        "saturn" => CubeShape.Saturn,
+        "uranus" => CubeShape.Uranus,
+        "neptune" => CubeShape.Neptune,
         _ => null,
     };
 
