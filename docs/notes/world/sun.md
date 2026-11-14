@@ -30,3 +30,9 @@
   stripes measured above the posts. At 1,050 km the shot reads 4.9 px off on main too: the check's own camera, not
   the sun (a `SunDisc` kept on in space lands at the same place as the atmosphere's).
 - **Never occlusion-culled** (#1839): `MoonDisc`, `SunDisc` and its shafts, `StarField`, `SkyBodies`, `Satellites` and the atmosphere's shell set `IgnoreOcclusionCulling`: depth hides the sky behind ridges; the buildings' coarse occlusion buffer is no test for it (the moon went when looked at head-on, not reproduced). `--skyshot moon,... --skyshot-walk --skyshot-sweep`: the walking first-person view swings across the moon and reads its pixel every drawn frame (scaled to the picture under a content scale).
+- **On an airless body** (#1989, the Moon, Mercury, the airless moons; `Atmosphere.Airless`): there is no shell, so
+  `SunDisc` is the sun at any height there, the vacuum's: white down to the horizon (`warm` 0), the full starburst
+  (`VacuumSpikes`), a wide bloom (`sun.gdshader`'s `glare`: two exponentials of 0.02 and 0.055 rad on a 20° quad,
+  `VacuumReach`, faded from a tenth of it: against black the faintest glow showed the quad's edge), no light shafts
+  (they are the air's). Before, it faded out with `Atmosphere.Space` (1 off the Earth) and nothing drew a sun on the Moon.
+  A body with air (Mars) keeps the shell's sun as before.
