@@ -236,6 +236,20 @@ public static class AssetStream
     public static string PyramidCacheName(CubeKey key, uint stamp, int section) =>
         $"pyr_{key.FileStem}_{stamp:x8}.s{section}.cubt";
 
+    /// <summary>
+    /// The body a cube request is for (#1656, room for H7's planets): <c>RequestCubeAsset</c>'s section argument carries it in
+    /// its high bits, the section (a <c>LeafKind</c>, a pyramid month) in the low byte. The Earth is body 0, so its requests are
+    /// the same bytes as before (protocol 95's RPC unchanged); a server answers "missing" for a body it does not serve. The
+    /// index asks (<see cref="AssetKind.LeafIndex"/>, <see cref="AssetKind.PyramidIndex"/>) name a body by their tile's E
+    /// the same way, 0 the Earth. <c>CubeKey</c> stays body-free.
+    /// </summary>
+    public static class CubeSection
+    {
+        public static int Pack(int body, int section) => (body & 0xFF) << 8 | (section & 0xFF);
+
+        public static (int Body, int Section) Unpack(int packed) => ((packed >> 8) & 0xFF, packed & 0xFF);
+    }
+
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)
     {

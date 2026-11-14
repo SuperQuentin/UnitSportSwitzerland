@@ -202,13 +202,15 @@ public partial class ChunkStreamer : Node
     /// Asks the server for a cube tile's asset by its key (#1655): a leaf's entry (<see cref="AssetKind.Leaf"/>), whole
     /// (<paramref name="section"/> 0) or holding one <see cref="LeafKind"/> section. The pyramid's tiles (#1656) take the
     /// same request with their own kind. Metered, answered and failed as <see cref="FetchAsync"/>; ENet only (the HTTP
-    /// mirror holds files, not entries). Any thread.
+    /// mirror holds files, not entries). <paramref name="body"/> (#1656, for H7): the Earth 0, the only one served today.
+    /// Any thread.
     /// </summary>
-    public Task<AssetResult> FetchCubeAsync(AssetKind kind, CubeKey key, int section, CancellationToken ct = default)
+    public Task<AssetResult> FetchCubeAsync(AssetKind kind, CubeKey key, int section, CancellationToken ct = default, int body = 0)
     {
         if (IsServing) return Task.FromResult(new AssetResult(null, true));
-        return SendAsync(kind, default, section == 0 ? key.ToString() : $"{key} section {section}",
-            requestId => RpcId(1, MethodName.RequestCubeAsset, requestId, (int)kind, key.Face, key.Level, key.X, key.Y, section), ct);
+        int packed = AssetStream.CubeSection.Pack(body, section);
+        return SendAsync(kind, default, (body != 0 ? $"body {body} " : "") + (section == 0 ? key.ToString() : $"{key} section {section}"),
+            requestId => RpcId(1, MethodName.RequestCubeAsset, requestId, (int)kind, key.Face, key.Level, key.X, key.Y, packed), ct);
     }
 
     private Task<AssetResult> SendAsync(AssetKind kind, TileId id, string label, Action<uint> send, CancellationToken ct)
@@ -323,12 +325,14 @@ public partial class ChunkStreamer : Node
         {
             AssetKind.Landings => LandingsOverride,
             AssetKind.HttpBase => TilesUrl is { } url ? System.Text.Encoding.UTF8.GetBytes(url) : null,
-            AssetKind.LeafIndex => LeafIndexBytes,
+            // the Earth's leaves (a body other than 0 named by the tile's E, AssetStream.CubeSection: none served yet)
+            AssetKind.LeafIndex => tile.E == 0 ? LeafIndexBytes : null,
             _ => ManifestOverride,
         };
         // the pyramid's index (#1656) is built off the main thread once (every heights entry read for its stamp): the
         // worker that prepares the answer waits for it
-        var pyramidIndex = assetKind == AssetKind.PyramidIndex ? PyramidIndexTask : null;
+        var pyramidIndex = assetKind == AssetKind.PyramidIndex
+            ? tile.E == 0 ? PyramidIndexTask : System.Threading.Tasks.Task.FromResult<byte[]?>(null) : null;
         var digestManifest = ManifestOverride;
         var digestLandings = LandingsOverride;
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
@@ -391,8 +395,10 @@ public partial class ChunkStreamer : Node
         long peer = Multiplayer.GetRemoteSenderId();
         var key = new CubeKey(face, level, x, y);
         var cubeKind = (AssetKind)kind;
-        bool leaf = cubeKind == AssetKind.Leaf && key.IsValid && Leaves is { } l && l.IsLocal(key);
-        bool pyramid = cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= 12 && _pyramid is { } p && p.IsLocal(key);
+        // the body rides in the section's high bits (AssetStream.CubeSection): this server serves the Earth's (0) alone
+        (int body, section) = AssetStream.CubeSection.Unpack(section);
+        bool leaf = body == 0 && cubeKind == AssetKind.Leaf && key.IsValid && Leaves is { } l && l.IsLocal(key);
+        bool pyramid = body == 0 && cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= 12 && _pyramid is { } p && p.IsLocal(key);
         if (!leaf && !pyramid)
         {
             RpcId(peer, MethodName.AssetMissing, requestId, true);

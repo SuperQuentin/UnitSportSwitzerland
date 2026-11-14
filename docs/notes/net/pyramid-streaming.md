@@ -22,6 +22,10 @@ Body-agnostic: another body's pyramid is another `PyramidSource` (H7).
   is set (`ServerWorld`, earth servers with a local pyramid), the answer's worker waits for it.
 - `AssetKind.Pyramid` (23) by key through `RequestCubeAsset` (protocol 95's RPC): section 0 the heights (`CUBT` as
   stored), 1-12 one month's colour (a one-image `CUBC`, `PyramidSource.ColourEntry`). Sent as stored (both compressed).
+- **Room for a body** (H7's planets): `AssetStream.CubeSection` packs the body in the high bits of `RequestCubeAsset`'s
+  section (the Earth 0: the same bytes as before), and the index asks name it by their tile's E. A server answers
+  "missing" for a body it does not serve (all but the Earth today). `CubeKey` stays body-free; a body's local install
+  is meant to live at `<root>/<body>/cube_global` (and `<body>/leaves`), the Earth's keeping today's paths.
 - An older server answers "missing" to both: the client keeps its local data and the shipped base. An older client
   never asks. So D2's protocol 96 is untouched.
 - Client: `NetworkChunkSource.FetchPyramid`: cache `pyr_<stem>_<stamp>.s<section>.cubt` in the tile cache (cap, Clear,
