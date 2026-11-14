@@ -87,8 +87,8 @@ Jupiter, Saturn, Uranus and Neptune are globes too: `--cube-body NAME --dem flat
 ellipsoids (`CubeShape.Jupiter`...), coloured from the sky's own 2k maps (`--colour res://assets/space/NAME_2k.jpg`, ~220
 km a pixel on Jupiter). A giant's globe always hangs from its centre under `BodyGlobe`'s root, shrunk past the far plane
 (its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane; no ground to
-hold to the millimetre). Saturn's rings are a ring mesh under the same root (`BodyGlobe.AddRings`,
-`shaders/body_rings.gdshader`: the sky's ring shader without the sky's depth). Finer maps (Cassini's, Juno's) are a later
+hold to the millimetre). Saturn's rings are a slab drawn over the whole screen under the same root (`BodyGlobe.AddRings`,
+`shaders/ring_slab.gdshader`), with ice chunks round the camera (`world/saturn-rings`). Finer maps (Cassini's, Juno's) are a later
 swap of the colour alone.
 
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)

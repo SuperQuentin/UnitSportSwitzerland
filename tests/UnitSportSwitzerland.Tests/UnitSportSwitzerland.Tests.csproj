@@ -203,6 +203,7 @@
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1849: the Moon's generated craters -->
     <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\RingField.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\BodyHeights.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />

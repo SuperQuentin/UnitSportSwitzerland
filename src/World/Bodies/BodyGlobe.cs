@@ -181,6 +181,7 @@ public partial class BodyGlobe : Node
             eyeAnchor = new DVec3(e.X, e.Y, e.Z);
         }
         var eye = own ? eyeAnchor : Frames.Convert(axes.Body, eyeAnchor, Body.Id, sky);
+        _eyeHere = eye;
         // inside a giant (#1854): its globe is the cloud deck at 1 bar, a picture to see from above; once the camera is
         // under it the air is the view (the shell's clouds and the dark below), so the deck steps aside
         if (!Body.Landable && Body.Shape.ToGeodetic(eye.AsEcef).H < -CloudDeckM)
@@ -353,45 +354,67 @@ public partial class BodyGlobe : Node
     /// </summary>
     private bool OwnPlacing(FrameAxes axes) => axes.Body == Body.Id && Body.Landable;
 
-    private MeshInstance3D? _rings;
+    private MeshInstance3D? _ring;
     private ShaderMaterial? _ringMaterial;
-    private (Vector3 Sun, Vector3 Pole, Vector4 Occluder) _ringsWritten;
-    private static readonly StringName RingSun = "sun_dir", RingPole = "pole", RingOccluder = "occluder";
+    private double _ringOuter, _ringHalf;
+    private DVec3 _eyeHere;
+    private (Vector3 Sun, Vector3 Pole, Vector3 Centre, float Shrink, float Height) _ringsWritten;
+    private static readonly StringName RingSun = "sun_dir", RingPole = "pole", RingCentre = "centre", RingShrink = "shrink",
+        RingOuter = "outer_world", RingHalf = "half_thick", RingHeight = "cam_height", RingPlanet = "planet_r";
 
     /// <summary>
-    /// Rings in the body's equator (Saturn's, #1854): an annulus from <paramref name="inner"/> to <paramref name="outer"/>
-    /// metres from the centre under the root (turned and shrunk with the globe), its radial strip from <paramref name="map"/>.
-    /// The sky's rings step aside with its disc while the globe draws.
+    /// Rings in the body's equator (Saturn's, #1854): a slab from <paramref name="inner"/> to <paramref name="outer"/> metres
+    /// from the centre, <paramref name="halfThickness"/> each side of the equator, drawn by one pass over the screen
+    /// (<c>ring_slab.gdshader</c>: each pixel's ray through the slab, measured from the camera in the globe's shrunk
+    /// units), its radial strip from <paramref name="map"/>. The sky's rings step aside with its disc while the globe draws.
     /// </summary>
-    public void AddRings(double inner, double outer, Texture2D map)
+    public void AddRings(double inner, double outer, double halfThickness, Texture2D map)
     {
-        _ringMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/body_rings.gdshader") };
+        _ringOuter = outer;
+        _ringHalf = halfThickness;
+        _ringMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ring_slab.gdshader") };
         _ringMaterial.SetShaderParameter("rings", map);
         _ringMaterial.SetShaderParameter("inner", (float)(inner / outer));
-        _rings = new MeshInstance3D
+        _ring = new MeshInstance3D
         {
-            Name = "Rings", Mesh = new QuadMesh { Size = new Vector2(2f, 2f) }, MaterialOverride = _ringMaterial,
-            // the quad's plane is the body's XY: its equator (Z is the pole)
-            Scale = Vector3.One * (float)outer, Visible = false,
+            Name = "Rings", Mesh = new QuadMesh { Size = new Vector2(2f, 2f) }, MaterialOverride = _ringMaterial, Visible = false,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // the shader lays the quad over the whole screen: never culled. Under the root (placed every frame): a node
+            // under this plain Node was carried off by the origin's shifts (10^12 m by the one to Saturn) out of its box
+            CustomAabb = new Aabb(new Vector3(-1e9f, -1e9f, -1e9f), new Vector3(2e9f, 2e9f, 2e9f)),
+            IgnoreOcclusionCulling = true,
         };
-        _root.AddChild(_rings);
+        _root.AddChild(_ring);
     }
 
-    /// <summary>The rings with the globe: lit by its sun, hidden behind it, shown while it draws.</summary>
+    /// <summary>The rings with the globe: what the slab's shader measures from (written when it changes), shown while it draws.</summary>
     private void KeepRings(bool drawn)
     {
-        if (_rings == null || _ringMaterial == null) return;
-        if (_rings.Visible != drawn) _rings.Visible = drawn;
+        if (_ring == null || _ringMaterial == null) return;
+        if (_ring.Visible != drawn) _ring.Visible = drawn;
         if (!drawn) return;
-        float scale = _root.Transform.Basis.X.Length();
-        var written = (_sun, _root.GlobalBasis.Z.Normalized(), new Vector4(_root.GlobalPosition.X, _root.GlobalPosition.Y, _root.GlobalPosition.Z, (float)Body.Shape.A * scale));
+        float shrink = _root.Transform.Basis.X.Length();
+        // the camera's height over the equator from doubles (the body-fixed Z of the eye), shrunk as the system is
+        var written = (_sun, _root.GlobalBasis.Z.Normalized(), _root.GlobalPosition, shrink, (float)(_eyeHere.Z * shrink));
         if (written == _ringsWritten) return;
         _ringsWritten = written;
-        _ringMaterial.SetShaderParameter(RingSun, written.Item1);
-        _ringMaterial.SetShaderParameter(RingPole, written.Item2);
-        _ringMaterial.SetShaderParameter(RingOccluder, written.Item3);
+        WriteRing(_ringMaterial, written, shrink);
     }
+
+    private void WriteRing(ShaderMaterial m, (Vector3 Sun, Vector3 Pole, Vector3 Centre, float Shrink, float Height) w, float shrink)
+    {
+        m.SetShaderParameter(RingSun, w.Sun);
+        m.SetShaderParameter(RingPole, w.Pole);
+        m.SetShaderParameter(RingCentre, w.Centre);
+        m.SetShaderParameter(RingShrink, shrink);
+        m.SetShaderParameter(RingHeight, w.Height);
+        m.SetShaderParameter(RingOuter, (float)(_ringOuter * shrink));
+        m.SetShaderParameter(RingHalf, (float)(_ringHalf * shrink));
+        m.SetShaderParameter(RingPlanet, (float)(Body.Shape.A * shrink));
+    }
+
+    /// <summary>The camera's body-fixed place (this body's frame), as this frame's selection read it.</summary>
+    public DVec3 Eye => _eyeHere;
 
     /// <summary>Every tile moved to the anchor's way of placing them (its own body, or another's under the root).</summary>
     private void Replace(FrameAxes axes, bool own)
