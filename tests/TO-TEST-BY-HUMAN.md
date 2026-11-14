@@ -1072,6 +1072,14 @@ Offline, in a window (any frame).
 - [ ] E at a pool table or dartboard → you step up without sitting down; E again sits.
 - [ ] Empty hand, point at a set-up telescope (Geneva, `--frame earth`), after looking through it with the tube tilted → the yellow "pack it up" halo sits on the tube and the legs as drawn, tilted with the tube; same on a flag, a campfire and a workbench.
 
+## The sky from space (PR [#1855](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1855), [#1845](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1845))
+
+In a window, `--frame earth --sun real --date 2027-12-22`, Cartoon, the spectator, `/orbit 400` or the speed up to 20,000 km.
+
+- [ ] Over the night side at `--time 5`, look at the moon (a waning crescent) → a glow with its lit side bright, never a black disc in a ring; the same from the ground at night.
+- [ ] From 20,000 km with dawn or dusk under the camera → the Earth's day side as bright as with noon under it; the twilight band where the sun sets, about as wide on both sides of the line.
+- [ ] From 400 km over the night side before dawn → satellites as moving points above and below the horizontal, gone behind the Earth's limb.
+
 ## The globe's terminator and the spectator speed readout (PR [#1806](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1806), [#1798](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1798))
 
 In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator camera (Shift+T).

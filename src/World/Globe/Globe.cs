@@ -551,17 +551,15 @@ public partial class Globe : Node
     }
 
     /// <summary>
-    /// The tiles lit as the style lights the world: its ambient (colour by energy) and its sun's colour by
-    /// energy, written to the globals every globe tile and the handover's terrain read (common/globe_light) when
-    /// they change (the night's moonlight never: the sun stays the real one).
+    /// The tiles lit as the style lights the world at a clear midday (<see cref="Styles.StyleKit.Daylight"/>): its
+    /// ambient (colour by energy) and its sun's colour by energy, written to the globals every globe tile and the
+    /// handover's terrain read (common/globe_light) when they change. Never the hour under the camera (#1845): the
+    /// globe's day side is the sun's wherever one looks from, and the terminator (<c>world_true_sun</c>) says where night is.
     /// </summary>
     private void Relight()
     {
         if (GetViewport()?.FindWorld3D()?.Environment is not { } env) return;
-        var a = env.AmbientLightColor * env.AmbientLightEnergy;
-        var ambient = new Vector3(a.R, a.G, a.B);
-        var sun = DayNight.Instance?.Sun is { } light && IsInstanceValid(light) && (DayNight.Instance?.Night ?? 0) < 0.5f
-            ? new Vector3(light.LightColor.R, light.LightColor.G, light.LightColor.B) * light.LightEnergy : _sunColor;
+        var (ambient, sun) = Styles.StyleKit.Daylight(env);
         if (ambient.IsEqualApprox(_ambient) && sun.IsEqualApprox(_sunColor)) return;
         (_ambient, _sunColor) = (ambient, sun);
         RenderingServer.GlobalShaderParameterSet(Ambient, ambient);

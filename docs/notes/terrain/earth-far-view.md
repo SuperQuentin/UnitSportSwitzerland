@@ -72,6 +72,15 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   13 km a read at the game's day speed. Check: `--fly 0,500000,0,30,100000,6 --flyterminator [file.csv]` under
   `--frame earth --sun real` (the globe's sun taken back to the Earth each frame: steps past the sun's own motion,
   and the offset off the ephemeris; 53 km before, 0.00 after).
+- **The twilight and the day's light from space** (#1845): `globe_lit`'s ambient ramp runs from the sun 6° up to 6° down
+  (`GLOBE_TWILIGHT`, sin 6°, civil twilight), its middle where the sun's centre sets, 90° from the subsolar point; it
+  ran -4.6° to +14.5°. The globe's ambient and sun colour are the style's clear midday (`StyleKit.Daylight`, the
+  palette at 60°), never the hour under the camera: its night ambient dimmed the day side, and a night under the camera
+  kept the sun term at its first value (a flat day side). Drawn, from 20,000 km in a window (`--terminatorcheck shots`:
+  the twilight alone over the full day, a linear tone curve, 41 great circles): its middle 88.3° before, 90.6° after;
+  90 % / 10 % of the day at 80.8° / 92.4° before, 86.9° / 94.0° after. Left: a 0.6° shift toward night, the same
+  morning and evening, with the camera's ground point 0.007° off 90° from the globe's sun (not found; under the
+  check's 1°).
 - **The sun above the air** (#1798): the style's sky (and its sun disc) dims to black as the camera climbs, so
   `atmosphere.gdshader` draws the sun itself where nothing was drawn and the Earth's ball is not in the way (its true
   0.27° radius and a glare, faded in with the space factor, dimmed through the air on the way): over the night side

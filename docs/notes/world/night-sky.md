@@ -19,6 +19,16 @@ earthshine 0.04 (0.012 vanished into the night sky), at night's brightness above
 it writes its depth a step nearer than the stars and is drawn before them (render priority -1): no star shows
 through it (#1798).
 
+- **From space** (#1845, PR #1855): in an anchor frame (the earth world, Space) `DayNight.Sky` is read at the camera's
+  own ECEF place (`RealSky.At`, a `GlobalPos`, its height included, no LV95: `SunPath.Toward/Face/SkyFrame/EarthFrame`
+  take a `GlobalPos`); the flat ground frame keeps its LV95 kilometre cell. From the ground cell under it the moon was
+  0.06° off at 400 km and up to 3.1° at 20,000 km, and satellites were drawn as seen from the ground. Satellites from
+  50 km up are hidden only behind the Earth's ball (`Satellites.BehindEarth`) and show by day above the air
+  (`Atmosphere.Space` ≥ 0.5). The stars' sphere and true north read 0.0000° off the Earth-fixed truth at any anchor.
+  **The moon's halo is drawn over its disc** (`MoonDisc.PlaceHalo`: its quad two radii in front of the disc's centre):
+  pushed 1 % in clip z near the far plane it was ~0.1 % of the distance nearer, the disc bulges by its angular radius,
+  and the unlit part hid the glow, a black moon in a bright ring, worst from space over the night side (the user's
+  report). `--terminatorcheck` (`world/day-night`) checks all of it.
 - **Stars** (`World/StarField`, `shaders/sky_point.gdshader`): the Yale Bright Star Catalogue's 9,096
   stars (`assets/space/stars_bsc5.json`, J2000 RA/Dec, V, B-V), one mesh of quads built once, each
   vertex its catalogue direction, turned each frame by `Sky.Stars` (`SunPath.SkyFrame`:

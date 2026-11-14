@@ -22,8 +22,8 @@ uniform vec3 colour = vec3(0.82, 0.87, 1.0);
 
 void vertex() {
 	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
-	// a hair nearer than the disc's front (1.0045 of its centre's depth at the true size): a ridge 600 m in front of the far
-	// plane's 0.9 still hides it
+	// MoonDisc stands the quad in front of the disc's nearest point (#1845: a step in clip z near the far plane is a
+	// tenth of that in distance, and the disc's unlit part hid the glow); the step keeps it over the disc at the floor
 	POSITION.z = max(POSITION.z * 1.01, POSITION.w * SKY_MIN_DEPTH * 3.0);
 }
 

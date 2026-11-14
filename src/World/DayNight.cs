@@ -438,6 +438,9 @@ public partial class DayNight : Node
     /// Light and sky by sun elevation, keyed like a colour script: night, blue hour, the orange
     /// of a low sun, and plain daylight. Linear between keys.
     /// </summary>
+    /// <summary>The palette's clear midday (the sun 60° up): what the globe's day side is lit by from space (#1845).</summary>
+    public static (Color Tint, Color Sky) Midday => Palette(60f);
+
     private static (Color Tint, Color Sky) Palette(float elevation)
     {
         var keys = PaletteKeys;
