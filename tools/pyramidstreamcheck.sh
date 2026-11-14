@@ -43,6 +43,12 @@ pops() { grep -ho "RESULT PASS globeclimb: [0-9]* pops" "$1" | grep -o "[0-9]* p
 pa=$(pops "$OUT/pyramidstream_A.log"); pb=$(pops "$OUT/pyramidstream_B.log")
 echo "[pyramidstreamcheck] pops over 2 px: A ${pa:-?}, B ${pb:-?}; B's cache: $(ls "$CACHE" | grep -c '^pyr_') pyramid entries, $(du -sm "$CACHE" | cut -f1) MB"
 [ "$(ls "$CACHE" | grep -c '^pyr_')" -gt 0 ] || fail="${fail:+$fail; }B cached no pyramid tile"
+# a pyramid with far features (#1657) streams them too: section 13 entries in B's cache
+if grep -q '"features"' "$PYRAMID/cube_manifest.json"; then
+  f13=$(ls "$CACHE" | grep -c '\.s13\.cubt$')
+  echo "[pyramidstreamcheck] B's far features: $f13 tiles"
+  [ "$f13" -gt 0 ] || fail="${fail:+$fail; }B streamed no far features"
+fi
 [ -n "$pb" ] && [ -n "$pa" ] && [ "$pb" -le $((pa + 2)) ] || fail="${fail:+$fail; }B popped more than A"
 if [ -z "$fail" ]; then echo "[pyramidstreamcheck] RESULT: ok"; exit 0; fi
 echo "[pyramidstreamcheck] RESULT: FAILED ($fail; see $OUT/pyramidstream_*.log)"; exit 1
