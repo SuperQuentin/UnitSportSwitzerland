@@ -191,6 +191,9 @@ public sealed class CubeManifest
         FormattableString.Invariant($"face 0 at {CubeSphere.CentreLatDeg}N {CubeSphere.CentreLonDeg}E, twist {CubeSphere.TwistDeg}");
     [JsonPropertyName("sources")] public List<string> Sources { get; set; } = new();
 
+    /// <summary>The body the pyramid tiles (#1849): "Moon", "Mars"; null (not written) for the Earth.</summary>
+    [JsonPropertyName("body"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Body { get; set; }
+
     /// <summary>A leaf region's (<c>.cubl</c>, #1507): every kind some leaf holds; null (not written) for a pyramid.</summary>
     [JsonPropertyName("kinds"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? Kinds { get; set; }
     /// <summary>
