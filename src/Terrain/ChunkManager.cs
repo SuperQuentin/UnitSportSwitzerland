@@ -615,6 +615,25 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// One tile's meshes built again, in place, as <see cref="RebuildVisuals"/> does every tile's: its doors changed
+    /// (<see cref="Interiors.DoorWarden"/> found some with no doorway inside, #1766). Its collision is left alone. Main thread.
+    /// </summary>
+    public void RebuildTile(TileId id)
+    {
+        if (!BuildMeshes || !_chunks.TryGetValue(id, out var state)) return;
+        if (state.ActiveStride < 0 && !state.HasRoads && !state.HasBuildings) return;
+        if (state.Cts != null)
+        {
+            state.CancelPending();
+            Interlocked.Increment(ref _cancelledBuilds);
+        }
+        state.ActiveStride = -1;
+        state.HasRoads = false;
+        state.HasBuildings = false;
+        _sinceEval = double.MaxValue;
+    }
+
+    /// <summary>
     /// Dissolves world geometry lying on the segment between two points - used to clear the line
     /// between a camera and what it is filming.
     ///
@@ -2529,7 +2548,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         // choice would depend on load order and disagree between peers.
                         var doorRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                         ct.ThrowIfCancellationRequested();
-                        doors = Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites);
+                        // a door its plan has no doorway for is not drawn (#1766)
+                        doors = Interiors.DoorWarden.Openable(bTile, Interiors.BuildingFootprint.ComputeDoors(bTile, doorRoads, grid.Stride == 1 ? grid : null, sites));
                         if (BuildingMeshBuilder.Build(bTile, doors, detail, grid, stride) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
@@ -2562,7 +2582,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         {
                             var linkRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
                             ct.ThrowIfCancellationRequested();
-                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites);
+                            linkDoors = Interiors.DoorWarden.Openable(bTile, Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null, sites));
                         }
                         buildingFaces = ChunkNode.SplitByCell(bTile != null
                             ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile, grid), .. BuildingMeshBuilder.LinkFaces(linkDoors), .. BuildingMeshBuilder.StoopFaces(linkDoors), .. officeFaces ?? []] : []);

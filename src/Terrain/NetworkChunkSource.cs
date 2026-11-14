@@ -42,7 +42,10 @@ public sealed class NetworkChunkSource : IChunkSource
     /// <summary>What one transfer asks for: a tile's file, or a cube key's entry and section (#1655).</summary>
     private readonly record struct Ask(AssetKind Kind, TileId Tile, CubeKey Cube = default, int Section = 0)
     {
-        public override string ToString() => Kind == AssetKind.Leaf ? $"{Kind} {Cube}" : $"{Kind} {Tile}";
+        public override string ToString() => Kind is AssetKind.Leaf or AssetKind.Pyramid ? $"{Kind} {Cube}" : $"{Kind} {Tile}";
+
+        /// <summary>Through the two section slots: a leaf's one section, never ahead of the near ground.</summary>
+        public bool Bounded => Section != 0 && Kind != AssetKind.Pyramid;
     }
 
     /// <summary>
@@ -67,6 +70,13 @@ public sealed class NetworkChunkSource : IChunkSource
     /// hundreds of far asks never queue the near ground (whole entries) behind them on the server's metered link.
     /// </summary>
     private readonly SemaphoreSlim _sectionSlots = new(2, 2);
+
+    /// <summary>
+    /// The globe's pyramid tiles (#1656) take these, none of the others: a climb asks for hundreds, and through the two
+    /// section slots (shared with the leaves' far heights) it streamed three tiles a second and drew levels 4 coarser than
+    /// a copy with the pyramid on its disk. The server's meter paces them with the rest.
+    /// </summary>
+    private readonly SemaphoreSlim _pyramidSlots = new(3, 3);
 
     private readonly object _gate = new();
     private bool _trimming;
@@ -280,6 +290,58 @@ public sealed class NetworkChunkSource : IChunkSource
         }
     }
 
+    /// <summary>
+    /// Under Low data (#63) the pyramid's levels deeper than this come from the cache only (#1656): the globe from orbit
+    /// and the country's shape still come (levels 0-6, a few MB), the fine relief round the player does not.
+    /// </summary>
+    public const int LowDataPyramidLevel = 6;
+
+    /// <summary>
+    /// A tile of the server's pyramid this copy lacks (#1656, <see cref="Leaves.PyramidSource.UseRemote"/>'s
+    /// <see cref="Leaves.PyramidFetch"/>): section 0 its heights, 1-12 a month's colour. The cache first
+    /// (<see cref="AssetStream.PyramidCacheName"/>), else the stream, with the leaves' retries, slots and memory of what the
+    /// server lacks; written into the cache. Called on a worker: blocks for the transfer. Null when it did not come.
+    /// </summary>
+    public byte[]? FetchPyramid(CubeKey key, Leaves.PyramidIndex.Entry entry, int section)
+    {
+        string path = Path.Combine(_cacheDirectory, AssetStream.PyramidCacheName(key, entry.Stamp, section));
+        if (ReadCache(path) is { } cached && Fits(cached)) return cached;
+        if (key.Level > LowDataPyramidLevel && Core.GameSettings.Current.LowDataActive) return null;
+
+        // through the pyramid's own slots: the near leaves keep theirs
+        var ask = new Ask(AssetKind.Pyramid, default, key, section);
+        lock (_gate)
+        {
+            if (_knownMissing.Contains(ask)) return null;
+        }
+        if (!_streamer.ServerReachable) return null;
+        var bytes = FetchWithRetryAsync(ask, CancellationToken.None).GetAwaiter().GetResult();
+        if (bytes == null) return null;
+        if (!Fits(bytes))
+        {
+            GD.PushWarning($"[stream] pyramid tile {key} section {section} came as {bytes.Length} bytes that do not read as it: not used");
+            return null;
+        }
+        WriteCache(path, bytes);
+        StreamedFiles++;
+        return bytes;
+
+        // the heights are the index's size and this tile's; a colour entry is this tile's
+        bool Fits(byte[] b)
+        {
+            try
+            {
+                return section switch
+                {
+                    0 => b.Length == entry.Length && CubeTileCodec.ReadHeader(b).Key == key,
+                    Leaves.PyramidSource.FeaturesSection => CubeFarFeaturesCodec.Decode(b).Key == key,
+                    _ => CubeAlbedoCodec.Decode(b).Key == key,
+                };
+            }
+            catch (Exception e) when (e is InvalidDataException or ArgumentException or IndexOutOfRangeException or EndOfStreamException) { return false; }
+        }
+    }
+
     // ---- cache and fetch ------------------------------------------------------------------
 
     /// <summary>
@@ -380,9 +442,13 @@ public sealed class NetworkChunkSource : IChunkSource
     {
         try
         {
-            if (key.Section != 0) await _sectionSlots.WaitAsync(ct).ConfigureAwait(false);
-            try { await _slots.WaitAsync(ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) { if (key.Section != 0) _sectionSlots.Release(); throw; }
+            if (key.Kind == AssetKind.Pyramid) await _pyramidSlots.WaitAsync(ct).ConfigureAwait(false);
+            else
+            {
+                if (key.Bounded) await _sectionSlots.WaitAsync(ct).ConfigureAwait(false);
+                try { await _slots.WaitAsync(ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { if (key.Bounded) _sectionSlots.Release(); throw; }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -395,8 +461,12 @@ public sealed class NetworkChunkSource : IChunkSource
         }
         finally
         {
-            _slots.Release();
-            if (key.Section != 0) _sectionSlots.Release();
+            if (key.Kind == AssetKind.Pyramid) _pyramidSlots.Release();
+            else
+            {
+                _slots.Release();
+                if (key.Bounded) _sectionSlots.Release();
+            }
         }
     }
 
@@ -439,7 +509,7 @@ public sealed class NetworkChunkSource : IChunkSource
         {
             if (_inFlight.TryGetValue(key, out var existing)) return existing;
 
-            var task = key.Kind == AssetKind.Leaf
+            var task = key.Kind is AssetKind.Leaf or AssetKind.Pyramid
                 ? _streamer.FetchCubeAsync(key.Kind, key.Cube, key.Section, ct)
                 : _streamer.FetchAsync(key.Kind, key.Tile, ct);
             _inFlight[key] = task;

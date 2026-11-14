@@ -14,7 +14,7 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
 - **Stepping aside for the leaves**: `EarthWorld.TileEntered`/`TileUnloaded` reach `Globe.SetLeafDrawn` (wired in
   `ClientWorld`). A drawn leaf's globe tile is left out, and every ancestor of a drawn leaf always splits, so the
   globe's coarser ground (every 8th vertex) never shows through a leaf; the leaf's neighbours stay the globe's. Its
-  skirts close the seam. While a split's children load, the parent still draws (a frame or two of overlap).
+  skirts close the seam (a tenth of a cell since #1656's geomorph, `terrain/globe-geomorph`). While a split's children load, the parent still draws (a frame or two of overlap).
   **Past the pyramid's levels (#1800)**: outside Switzerland `cube_global` holds levels 0-4 only (a level-4 tile is
   ~600 km), and a split waits for all four children, so over a fill leaf in Ladakh (face F1) the split never came: the
   level-4 tile (every 8th vertex) stayed drawn over the leaves, up to 317 m over them on the Himalaya's slopes. A child
@@ -72,6 +72,15 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   13 km a read at the game's day speed. Check: `--fly 0,500000,0,30,100000,6 --flyterminator [file.csv]` under
   `--frame earth --sun real` (the globe's sun taken back to the Earth each frame: steps past the sun's own motion,
   and the offset off the ephemeris; 53 km before, 0.00 after).
+- **The twilight and the day's light from space** (#1845): `globe_lit`'s ambient ramp runs from the sun 6° up to 6° down
+  (`GLOBE_TWILIGHT`, sin 6°, civil twilight), its middle where the sun's centre sets, 90° from the subsolar point; it
+  ran -4.6° to +14.5°. The globe's ambient and sun colour are the style's clear midday (`StyleKit.Daylight`, the
+  palette at 60°), never the hour under the camera: its night ambient dimmed the day side, and a night under the camera
+  kept the sun term at its first value (a flat day side). Drawn, from 20,000 km in a window (`--terminatorcheck shots`:
+  the twilight alone over the full day, a linear tone curve, 41 great circles): its middle 88.3° before, 90.6° after;
+  90 % / 10 % of the day at 80.8° / 92.4° before, 86.9° / 94.0° after. Left: a 0.6° shift toward night, the same
+  morning and evening, with the camera's ground point 0.007° off 90° from the globe's sun (not found; under the
+  check's 1°).
 - **The sun above the air** (#1798): the style's sky (and its sun disc) dims to black as the camera climbs, so
   `atmosphere.gdshader` draws the sun itself where nothing was drawn and the Earth's ball is not in the way (its true
   0.27° radius and a glare, faded in with the space factor, dimmed through the air on the way): over the night side
@@ -105,6 +114,11 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   material with no waves (as flat's far tiles), shown below 20 km; the ground under it sinks 3 m by the shore and 100 m
   inside (the water shaders shade by depth). Only a real leaf's heights are taken for a bed: a generated fill leaf
   under a mountain the generator lacks (the Salève) drew a lake on its slope.
+- **Smooth shores** (#1689): a shore cell whose wet corners stand on one level (`GlobeGround.LakeShore`, within 0.5 m)
+  is drawn whole, as the sea's (#1802), its sheet passing under the dry corners (0.3 m under, lower where a far leaf's
+  shore stands under its lake). The shore is then where the ground crosses the sheet, and each shore vertex sinks so that
+  crossing follows the water smoothed over 5 x 5 cells, crossing one half (`GlobeGround.ShoreSink`, marching squares by
+  depth); the cells' 10-40 m staircase is gone. A river's steps and the tile's edge vertices keep the 3 m sink.
 - **The pyramid's Swiss levels** are built from B4's leaves at their surface, ETOPO's lakes at the leaves' level and a
   1.5 km blend past the region's edge (#1654, `tools/cube-tiles`): the trench east of Lavaux and the lake at two levels
   are gone. A far leaf takes the same surface (`CubeSurface.SurfaceAt`: a bed left dry by the leaf's edge is water).

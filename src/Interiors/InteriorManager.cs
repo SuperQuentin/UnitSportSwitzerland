@@ -496,7 +496,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var layout = DoorKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
             // a facade door the plan could fit no doorway for (#498) has no entrance: it is locked
             var way = layout?.EntranceOf(door);
-            if (layout == null || way == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
+            if (layout == null || way == null || Origin == null)
+            {
+                // why, in the log: no plan, or a plan whose doorways are for other doors (#1766)
+                GD.Print($"[interior] door {door} locked: " + (layout == null ? "no plan" : way == null
+                    ? $"plan {layout.Key} has doorways for {string.Join(", ", layout.AllEntrances().Select(e => e.Door))}" : "no origin"));
+                Refuse(sender, "This door is locked.");
+                return;
+            }
             // measured to the door's centre, so a wide door, and its open leaves, reach further; a
             // garage or a barn opens for a vehicle driving up to it (OpenForVehicle), further off still
             float reach = ServerDoorReach + way.Width;

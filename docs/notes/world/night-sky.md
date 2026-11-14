@@ -7,12 +7,28 @@ Everything here is drawn only under the real sun (`SunPath.Model == Real`: not i
 screenshots or the fun world unless `--sun real`), placed just inside the camera's far plane at its
 true angular size, and read from `DayNight.Sky` (the date, hour and camera place, the celestial
 sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`; it is drawn at least
-`MoonDisc.MinScreenShare` of the view's height in angular radius (24 px across at 1080p and 70°; true, it was 7 px, a
-star among stars, and a 4-day crescent a one-pixel sliver), the telescope's narrow views at the true size, with
+`MoonDisc.DefaultShare` of the view's height in angular radius (#1842: 12 px across at 1080p and 70°, 1.5 times the
+true 8 px; the true size from a 47° view down; the user chose this halfway one over the true size side by side), its brightness a halo round it as a star's glow is (`MoonHalo`,
+`shaders/moon_halo.gdshader`): its width a share of the view (`MoonDisc.HaloShare`), its strength by the phase
+(`MoonDisc.PhaseGlow`, Allen's magnitude law mapped 0.25-1) and the night, centred on the lit part and drawn over the
+disc (a crescent's dark disc ringed by a centred glow read as an eclipse), gone once the disc is big on screen. It was
+boosted to 1.1 % (#1798), which zooming took back: the moon shrank against the land as one
+zoomed in. `--sky-disc-share <f>` (the moon's and sun's least radius as a share of the view) and `--moon-halo 0`
+make the comparison shots. With
 earthshine 0.04 (0.012 vanished into the night sky), at night's brightness above the air (`Atmosphere.Space`), and
 it writes its depth a step nearer than the stars and is drawn before them (render priority -1): no star shows
 through it (#1798).
 
+- **From space** (#1845, PR #1855): in an anchor frame (the earth world, Space) `DayNight.Sky` is read at the camera's
+  own ECEF place (`RealSky.At`, a `GlobalPos`, its height included, no LV95: `SunPath.Toward/Face/SkyFrame/EarthFrame`
+  take a `GlobalPos`); the flat ground frame keeps its LV95 kilometre cell. From the ground cell under it the moon was
+  0.06° off at 400 km and up to 3.1° at 20,000 km, and satellites were drawn as seen from the ground. Satellites from
+  50 km up are hidden only behind the Earth's ball (`Satellites.BehindEarth`) and show by day above the air
+  (`Atmosphere.Space` ≥ 0.5). The stars' sphere and true north read 0.0000° off the Earth-fixed truth at any anchor.
+  **The moon's halo is drawn over its disc** (`MoonDisc.PlaceHalo`: its quad two radii in front of the disc's centre):
+  pushed 1 % in clip z near the far plane it was ~0.1 % of the distance nearer, the disc bulges by its angular radius,
+  and the unlit part hid the glow, a black moon in a bright ring, worst from space over the night side (the user's
+  report). `--terminatorcheck` (`world/day-night`) checks all of it.
 - **Stars** (`World/StarField`, `shaders/sky_point.gdshader`): the Yale Bright Star Catalogue's 9,096
   stars (`assets/space/stars_bsc5.json`, J2000 RA/Dec, V, B-V), one mesh of quads built once, each
   vertex its catalogue direction, turned each frame by `Sky.Stars` (`SunPath.SkyFrame`:

@@ -120,11 +120,38 @@ public static class SunPath
         Toward(body, date, hour, e, n, out elevationDeg, out _);
 
     /// <summary><see cref="Toward(SkyBody, DateOnly, double, double, double, out float)"/>, and how far the body is, metres.</summary>
-    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg, out double distance)
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg, out double distance) =>
+        Toward(body, date, hour, PlaceAt(e, n), out elevationDeg, out distance);
+
+    /// <summary>
+    /// The real direction to <paramref name="body"/> from <paramref name="at"/>, in world axes (#1845). In an anchor
+    /// frame (the earth world, Space) it is read from that very point, its height included and no LV95 in it: from
+    /// orbit the moon's parallax is the camera's (up to ~3° at 20,000 km), not the ground's under it. In the flat
+    /// ground frame, as from <c>at</c>'s LV95 place (<see cref="Toward(SkyBody, DateOnly, double, double, double, out float, out double)"/>).
+    /// </summary>
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, GlobalPos at, out float elevationDeg, out double distance) =>
+        Toward(body, SkyMoment.Calendar(date, hour), PlaceOf(at), out elevationDeg, out distance);
+
+    /// <summary>
+    /// <see cref="Toward(SkyBody, DateOnly, double, GlobalPos, out float, out double)"/> at a sky moment (#1850): the body where
+    /// it is at the moment's time, the Earth turned by its angle, so the Moon in the sky is the Moon the frame tree places.
+    /// </summary>
+    public static Vector3 Toward(SkyBody body, SkyMoment m, GlobalPos at, out float elevationDeg, out double distance) =>
+        Toward(body, m, PlaceOf(at), out elevationDeg, out distance);
+
+    private static Vector3 Toward(SkyBody body, DateOnly date, double hour, Place place, out float elevationDeg, out double distance) =>
+        Toward(body, SkyMoment.Calendar(date, hour), place, out elevationDeg, out distance);
+
+    private static Vector3 Toward(SkyBody body, SkyMoment m, Place place, out float elevationDeg, out double distance)
     {
-        var place = PlaceAt(e, n);
-        var h = Ephemeris.Topocentric(body, SwissTime.ToUtc(date, hour), place.Geo);
+        var h = Ephemeris.Topocentric(body, m, place.Geo);
         elevationDeg = (float)h.ElevationDeg;
+        // over another body's horizon (#1848): the direction against that body's own up
+        if (place.BodyUp is { } bodyUp)
+        {
+            var d = EcefOf(h, place.Geo);
+            elevationDeg = (float)(Math.Asin(Math.Clamp(d.X * bodyUp.X + d.Y * bodyUp.Y + d.Z * bodyUp.Z, -1, 1)) * 180 / Math.PI);
+        }
         distance = h.Distance;
         return ToWorld(h, place);
     }
@@ -136,11 +163,24 @@ public static class SunPath
     /// </summary>
     public static Basis MoonFace(DateOnly date, double hour, double e, double n) => Face(SkyBody.Moon, date, hour, e, n);
 
+    /// <summary><see cref="MoonFace(DateOnly, double, double, double)"/> from <paramref name="at"/> (see <see cref="Toward(SkyBody, DateOnly, double, GlobalPos, out float, out double)"/>).</summary>
+    public static Basis MoonFace(DateOnly date, double hour, GlobalPos at) => Face(SkyBody.Moon, SkyMoment.Calendar(date, hour), PlaceOf(at));
+
+    /// <summary><see cref="MoonFace(DateOnly, double, GlobalPos)"/> at a sky moment (#1850).</summary>
+    public static Basis MoonFace(SkyMoment m, GlobalPos at) => Face(SkyBody.Moon, m, PlaceOf(at));
+
     /// <summary>Any body's own axes in world axes, as <see cref="MoonFace"/> (#1444): a planet's map and its rings' plane.</summary>
-    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n)
+    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n) => Face(body, SkyMoment.Calendar(date, hour), PlaceAt(e, n));
+
+    /// <summary><see cref="Face(SkyBody, DateOnly, double, double, double)"/> from <paramref name="at"/>.</summary>
+    public static Basis Face(SkyBody body, DateOnly date, double hour, GlobalPos at) => Face(body, SkyMoment.Calendar(date, hour), PlaceOf(at));
+
+    /// <summary><see cref="Face(SkyBody, DateOnly, double, GlobalPos)"/> at a sky moment (#1850).</summary>
+    public static Basis Face(SkyBody body, SkyMoment m, GlobalPos at) => Face(body, m, PlaceOf(at));
+
+    private static Basis Face(SkyBody body, SkyMoment m, Place place)
     {
-        var place = PlaceAt(e, n);
-        var (pole, prime, east) = Ephemeris.Axes(body, SwissTime.ToUtc(date, hour));
+        var (pole, prime, east) = Ephemeris.Axes(body, m);
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(prime), Axis(east), Axis(pole));
     }
@@ -150,10 +190,17 @@ public static class SunPath
     /// (the north celestial pole) as seen from LV95 <paramref name="e"/> / <paramref name="n"/>. A
     /// star's catalogue direction times it is where it shines.
     /// </summary>
-    public static Basis SkyFrame(DateOnly date, double hour, double e, double n)
+    public static Basis SkyFrame(DateOnly date, double hour, double e, double n) => SkyFrame(SkyMoment.Calendar(date, hour), PlaceAt(e, n));
+
+    /// <summary><see cref="SkyFrame(DateOnly, double, double, double)"/> from <paramref name="at"/>.</summary>
+    public static Basis SkyFrame(DateOnly date, double hour, GlobalPos at) => SkyFrame(SkyMoment.Calendar(date, hour), PlaceOf(at));
+
+    /// <summary><see cref="SkyFrame(DateOnly, double, GlobalPos)"/> at a sky moment (#1850).</summary>
+    public static Basis SkyFrame(SkyMoment m, GlobalPos at) => SkyFrame(m, PlaceOf(at));
+
+    private static Basis SkyFrame(SkyMoment m, Place place)
     {
-        var place = PlaceAt(e, n);
-        var (x, y, z) = Ephemeris.Celestial(SwissTime.ToUtc(date, hour));
+        var (x, y, z) = Ephemeris.Celestial(m);
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(x), Axis(y), Axis(z));
     }
@@ -163,9 +210,16 @@ public static class SunPath
     /// Earth-fixed offset (metres) into world axes, and the place itself on the ellipsoid. A satellite's
     /// direction is <c>Basis * (its ECEF - Observer)</c>.
     /// </summary>
-    public static (Basis ToWorld, EcefPos Observer) EarthFrame(double e, double n)
+    public static (Basis ToWorld, EcefPos Observer) EarthFrame(double e, double n) => EarthFrame(PlaceAt(e, n));
+
+    /// <summary>
+    /// <see cref="EarthFrame(double, double)"/> from <paramref name="at"/>: in an anchor frame the observer is that
+    /// point itself, its height included (a satellite seen from orbit, #1845).
+    /// </summary>
+    public static (Basis ToWorld, EcefPos Observer) EarthFrame(GlobalPos at) => EarthFrame(PlaceOf(at));
+
+    private static (Basis ToWorld, EcefPos Observer) EarthFrame(Place place)
     {
-        var place = PlaceAt(e, n);
         Vector3 Axis(double x, double y, double z)
         {
             var h = Ephemeris.Local(new EcefPos(x, y, z), place.Geo);
@@ -184,18 +238,27 @@ public static class SunPath
 
     [ThreadStatic] private static OriginFrame? _frame;
 
+    /// <summary>A direction given in the east / north / up at a place as an Earth-fixed unit vector.</summary>
+    private static EcefPos EcefOf(Horizontal h, Geodetic g)
+    {
+        double lat = g.LatDeg * Math.PI / 180, lon = g.LonDeg * Math.PI / 180;
+        double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
+        return new EcefPos(
+            -so * h.East - sl * co * h.North + cl * co * h.Up,
+            co * h.East - sl * so * h.North + cl * so * h.Up,
+            cl * h.North + sl * h.Up);
+    }
+
     /// <summary>True east / north / up into world axes: turned by the meridian convergence to grid north.</summary>
     private static Vector3 ToWorld(Horizontal h, Place place)
     {
         if (Frame is { IsAnchor: true } frame)
         {
             // east / north / up at the place, as Earth-fixed directions, into the anchor's axes
-            double lat = place.Geo.LatDeg * Math.PI / 180, lon = place.Geo.LonDeg * Math.PI / 180;
-            double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
-            var ecef = new EcefPos(
-                -so * h.East - sl * co * h.North + cl * co * h.Up,
-                co * h.East - sl * so * h.North + cl * so * h.Up,
-                cl * h.North + sl * h.Up);
+            var ecef = EcefOf(h, place.Geo);
+            // an anchor counted from another body (#1848): its axes are that body's
+            if (frame.Axes!.Body != BodyId.Earth)
+                ecef = Frames.ConvertDirection(BodyId.Earth, new DVec3(ecef.X, ecef.Y, ecef.Z), frame.Axes.Body, SkyClock.Now).AsEcef;
             return frame.DirectionOf(ecef);
         }
         double gridE = h.East * place.NorthN + h.North * place.NorthE;
@@ -257,11 +320,47 @@ public static class SunPath
         return null;
     }
 
-    /// <summary>A place on the Earth, and true north as a unit vector in LV95 grid east / north.</summary>
-    private sealed record Place(long CellE, long CellN, Geodetic Geo, double NorthE, double NorthN);
+    /// <summary>
+    /// A place on the Earth, and true north as a unit vector in LV95 grid east / north. A place on another body (#1848) is
+    /// read as the Earth-fixed point it is (the sky's ephemeris is the Earth's), with <paramref name="BodyUp"/> its own
+    /// body's up there as an Earth-fixed unit vector: a body's elevation is over that horizon, not the Earth's.
+    /// </summary>
+    private sealed record Place(long CellE, long CellN, Geodetic Geo, double NorthE, double NorthN, EcefPos? BodyUp = null);
 
     /// <summary>The last place asked for, per kilometre: swapped whole, so threads never see half of one.</summary>
     private static Place? _place;
+
+    /// <summary>The last point asked for in an anchor frame, and its place: swapped whole, as <see cref="_place"/>.</summary>
+    private sealed record PointPlace(GlobalPos At, bool Anchor, Place Place);
+
+    private static PointPlace? _point;
+
+    /// <summary>
+    /// A point's place (#1845): in an anchor frame the point itself (its geodetic latitude, longitude and height; the
+    /// grid's north is never used there), in the flat ground frame its LV95 kilometre cell as <see cref="PlaceAt"/>.
+    /// </summary>
+    private static Place PlaceOf(GlobalPos at)
+    {
+        bool anchor = Frame is { IsAnchor: true };
+        if (_point is { } p && p.Anchor == anchor && p.At == at) return p.Place;
+        Place place;
+        if (anchor && at.Body != BodyId.Earth)
+        {
+            // another body (#1848): the point counted from the Earth, its own up turned into the Earth's axes
+            var sky = SkyClock.Now;
+            var up = at.Enu.Up;
+            var earthUp = Frames.ConvertDirection(at.Body, new DVec3(up.X, up.Y, up.Z), BodyId.Earth, sky);
+            place = new Place(long.MinValue, long.MinValue, at.In(BodyId.Earth, sky).Geodetic, 0, 1, earthUp.AsEcef);
+        }
+        else if (anchor) place = new Place(long.MinValue, long.MinValue, at.Geodetic, 0, 1);
+        else
+        {
+            var lv95 = at.Lv95;
+            place = PlaceAt(lv95.E, lv95.N);
+        }
+        _point = new PointPlace(at, anchor, place);
+        return place;
+    }
 
     private static Place PlaceAt(double e, double n)
     {

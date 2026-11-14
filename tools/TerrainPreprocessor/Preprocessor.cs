@@ -139,8 +139,10 @@ public static partial class Preprocessor
         if (CubeStage.Wants(args)) return await CubeStage.RunAsync(args, ct);
         // the globe's coarse levels from ETOPO 2022 (#1430 H4), in the same format
         if (CubeGlobal.Wants(args)) return CubeGlobal.Run(args, ct);
+        if (CubeBody.Wants(args)) return CubeBody.Run(args, ct);
         // and its finer levels averaged from a --cube build's leaves
         if (CubeSwiss.Wants(args)) return CubeSwiss.Run(args, ct);
+        if (CubeFeatureStage.Wants(args)) return CubeFeatureStage.Run(args);
         // the levels the game ships, on their own
         if (CubeSubset.Wants(args)) return CubeSubset.Run(args);
 

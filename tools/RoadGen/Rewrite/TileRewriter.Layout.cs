@@ -37,7 +37,8 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<TileId, List<RoadSegment>> output,
         HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, IGround? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, Action<string>? log,
-        CrossingNodes? crossings = null, IReadOnlyDictionary<int, JunctionPlan>? alone = null)
+        CrossingNodes? crossings = null, IReadOnlyDictionary<int, JunctionPlan>? alone = null,
+        Func<int, LinkEnd, bool, double, RoadSide>? streetSideAlong = null)
     {
         var net = result.Network;
         // a merged junction's members are all lit where it is (#818 phase 5c)
@@ -200,8 +201,26 @@ public static partial class TileRewriter
                 {
                     var so = segmentOf[a.LinkId];
                     double reach = Math.Max(TurnExit, a.Sizes.Count > 0 ? a.Sizes.Max(z => z.Max(o => o.Taper * Lanes(z, o) + o.Storage)) : 0);
+                    // the street's own sidewalk beside the section where its normal section has none on that side (#1879): the
+                    // transition keeps it (#1770), at least SidewalkMin of it, so the carriageway widens only up to it
+                    Func<double, bool, double>? keep = null;
+                    if (streetSideAlong is not null)
+                    {
+                        var n = a.Normal;
+                        bool lb = n.Strips.Take(Math.Max(0, n.FirstCarriageway)).Any(x => x.Kind == StripKind.Sidewalk);
+                        bool rb = n.Strips.Skip(n.LastCarriageway + 1).Any(x => x.Kind == StripKind.Sidewalk);
+                        var link = a.LinkId;
+                        var end = a.AtEnd ? LinkEnd.End : LinkEnd.Start;
+                        keep = (d, driverRight) =>
+                        {
+                            if (driverRight ? rb : lb) return 0;
+                            // driving in along the drawing (junction at its end) its right is the drawing's right
+                            var side = streetSideAlong(link, end, driverRight == a.AtEnd, d);
+                            return Math.Min(side.SidewalkDm / 10.0, MouthPlanner.SidewalkMin);
+                        };
+                    }
                     a.Room = MeasureRoom(so.Segment, so.Tile, ListOf(so.Tile).IndexOf(so.Segment), a.AtEnd, a.MouthShift, Math.Min(reach, a.Length),
-                        Lines(so.Tile), grids, buildings);
+                        Lines(so.Tile), grids, buildings, keep);
                 }
             // 5. line the through lanes up and fit each section to its room, trying the pockets' sizes longest first (step 6: a
             // shorter storage before no pocket); then line them up again as they fitted and fit once more. An exit that cannot
@@ -699,6 +718,11 @@ public static partial class TileRewriter
                     if (!a.FitSteps.Contains(step)) a.FitSteps.Add(step);
                 // what the fit dropped no longer opens
                 a.Openings.RemoveAll(o => !a.Mouth.Strips.Any(x => x.Id == o.Id));
+                // the report (#1879): would it have kept more without the street's sidewalk beside it?
+                if (search)
+                    a.SidewalkHeld = a.Room.Keeps && steps.Count > 0
+                        && !MouthPlanner.Same(MouthPlanner.Fit(aligned, a.Normal, a.Room.WithoutKeep(), LeftStretch(a), RightStretch(a), [], jp.Lights,
+                            keepPockets: a.Wants.FromData, keepHatch: fedByData), a.Mouth);
                 break;
             }
         }
@@ -921,8 +945,10 @@ public static partial class TileRewriter
     /// more than <see cref="TurnGroundStep"/> off the road (never a tile edge: the arm is a whole line, #1660); per station (the transition checks its own width there).
     /// </summary>
     private static ArmRoom MeasureRoom(RoadSegment seg, TileId tile, int self, bool atEnd, double from, double reach, EmbankmentPlanner.LineIndex lines,
-        IGround? grids, Footprints buildings)
+        IGround? grids, Footprints buildings, Func<double, bool, double>? keep = null)
     {
+        var keepLefts = keep is null ? null : new List<double>();
+        var keepRights = keep is null ? null : new List<double>();
         double half = seg.Width * 0.5;
         double length = SegmentLength(seg);
         var stations = new List<double>();
@@ -951,8 +977,11 @@ public static partial class TileRewriter
             stations.Add(d);
             lefts.Add(left);
             rights.Add(right);
+            // (stations count from the mouth; the street from today's trim)
+            keepLefts?.Add(keep!(Math.Max(0, from + d), false));
+            keepRights?.Add(keep!(Math.Max(0, from + d), true));
         }
-        return new ArmRoom(stations.ToArray(), lefts.ToArray(), rights.ToArray());
+        return new ArmRoom(stations.ToArray(), lefts.ToArray(), rights.ToArray(), keepLefts?.ToArray(), keepRights?.ToArray());
     }
 
     /// <summary>

@@ -1,13 +1,14 @@
 using Godot;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.World;
 
 /// <summary>
-/// A cube region's files for the globe (#1430 H4): a folder on disk (the full region on D:) or the
-/// levels the game ships, <c>res://assets/globe</c>, which in an export live inside the pack, where .NET's
-/// file API cannot reach: <c>res://</c> goes through Godot's <see cref="Godot.FileAccess"/>. The bundles
-/// are named from the manifest (each level's bundle levels), so no folder is ever listed.
+/// A cube region's files for the globe (#1430 H4): a folder on disk (the local install) or the levels the game ships,
+/// <c>res://assets/globe</c>, which in an export live inside the pack, where .NET's file API cannot reach: <c>res://</c>
+/// goes through Godot's <see cref="Godot.FileAccess"/>. The bundles are named from the manifest (each level's bundle
+/// levels), so no folder is ever listed. Read as a layer of the pyramid's chain (<see cref="PyramidSource"/>, #1656).
 /// </summary>
 public sealed class GlobeFiles
 {
@@ -33,32 +34,11 @@ public sealed class GlobeFiles
         ? Godot.FileAccess.GetFileAsString(PathOf(CubeManifest.FileName))
         : File.ReadAllText(PathOf(CubeManifest.FileName)));
 
-    /// <summary>Every tile's place (file, offset, length), heights and colour, from the bundles the manifest's levels name.</summary>
-    public (Dictionary<CubeKey, (string Path, long Offset, int Length)> Heights, Dictionary<CubeKey, (string Path, long Offset, int Length)> Albedo) Index(CubeManifest manifest)
-    {
-        var heights = new Dictionary<CubeKey, (string, long, int)>();
-        var albedo = new Dictionary<CubeKey, (string, long, int)>();
-        var levels = manifest.LevelsOrLeaf.ToDictionary(l => l.Level);
-        var heightBundles = new HashSet<CubeKey>();
-        var colourBundles = new HashSet<CubeKey>();
-        foreach (var t in manifest.Tiles)
-        {
-            var k = CubeKey.Parse(t.Key);
-            var lv = levels.GetValueOrDefault(k.Level);
-            heightBundles.Add(k.AncestorAt(lv?.BundleLevel ?? CubeKey.PyramidBundleLevel(k.Level)));
-            if (lv is { Albedo: > 0 }) colourBundles.Add(k.AncestorAt(lv.AlbedoBundleLevel));
-        }
-        foreach (var b in heightBundles) Read(PathOf(CubeBundle.FileName(b)), CubeBundle.Magic, heights);
-        foreach (var b in colourBundles) Read(PathOf(CubeBundle.AlbedoFileName(b)), CubeBundle.AlbedoMagic, albedo);
-        return (heights, albedo);
-    }
-
-    private void Read(string path, uint magic, Dictionary<CubeKey, (string, long, int)> into)
-    {
-        if (_res ? !Godot.FileAccess.FileExists(path) : !File.Exists(path)) return;
-        using Stream s = _res ? new MemoryStream(Godot.FileAccess.GetFileAsBytes(path)) : File.OpenRead(path);
-        foreach (var (key, at) in CubeBundle.ReadIndex(s, magic)) into[key] = (path, at.Offset, at.Length);
-    }
+    /// <summary>The folder as a layer of the pyramid's chain; <paramref name="local"/>: this copy's own data (served on).</summary>
+    public PyramidSource.Layer Layer(string name, bool local) => PyramidSource.FromFiles(name, Manifest(),
+        f => _res ? Godot.FileAccess.FileExists(PathOf(f)) : File.Exists(PathOf(f)),
+        f => _res ? new MemoryStream(Godot.FileAccess.GetFileAsBytes(PathOf(f))) : File.OpenRead(PathOf(f)),
+        (f, offset, length) => ReadBytes((PathOf(f), offset, length)), local);
 
     /// <summary>One entry's bytes; any thread.</summary>
     public static byte[] ReadBytes((string Path, long Offset, int Length) at)
@@ -74,4 +54,36 @@ public sealed class GlobeFiles
         RandomAccess.Read(handle, bytes, at.Offset);
         return bytes;
     }
+}
+
+/// <summary>
+/// The Earth's pyramid for this process (#1656): one <see cref="PyramidSource"/> the globe, the fill, the server's sight
+/// lines and the probes all read. Its layers, finest copy first: the local install (<see cref="Core.TerrainPaths.FindGlobeDir"/>),
+/// then the server's (<see cref="PyramidSource.UseRemote"/>, once its index arrives), then the base the game ships.
+/// Null with <c>--globe off</c>; empty (until a server's comes) where this copy has nothing.
+/// </summary>
+public static class GlobeData
+{
+    private static PyramidSource? _earth;
+    private static bool _opened;
+
+    public static PyramidSource? Earth
+    {
+        get
+        {
+            if (_opened) return _earth;
+            _opened = true;
+            if (Core.TerrainPaths.GlobeOff) return null;
+            var local = new List<PyramidSource.Layer>();
+            if (Core.TerrainPaths.FindGlobeDir() is { } dir) local.Add(new GlobeFiles(dir).Layer(dir, local: true));
+            var shipped = new List<PyramidSource.Layer>();
+            if (GlobeFiles.HasManifest(GlobeFiles.Shipped)) shipped.Add(new GlobeFiles(GlobeFiles.Shipped).Layer("the shipped base", local: false));
+            _earth = new PyramidSource(local, shipped);
+            GD.Print($"[globe] the pyramid: {(_earth.Count > 0 ? _earth.Describe() : "nothing")}");
+            return _earth;
+        }
+    }
+
+    /// <summary>Whether this copy has the pyramid on its own disk (the fill may stand on it before any server's comes).</summary>
+    public static bool HasLocal => Earth is { } e && e.Keys.Any(e.IsLocal);
 }

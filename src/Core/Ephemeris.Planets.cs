@@ -53,15 +53,19 @@ public static partial class Ephemeris
     /// models (2015; the gas giants' prime meridians are their System III), taken at the moment the
     /// light we see left the planet (Jupiter turns 26° in its 43 light-minutes).
     /// </summary>
-    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc)
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc) =>
+        Axes(body, SkyMoment.At(utc));
+
+    /// <summary>A body's axes in the Earth-fixed frame at a sky moment (#1850), as <see cref="Axes(SkyBody, DateTime)"/>.</summary>
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, SkyMoment m)
     {
-        if (body == SkyBody.Moon) return MoonAxes(utc);
+        if (body == SkyBody.Moon) return MoonAxes(m);
         body = ParentOf(body);   // a big moon: its planet's frame (it keeps a face to it)
-        double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0;
-        if (body != SkyBody.Sun) d -= Equatorial(body, utc).Distance / AuMetres / LightAuPerDay;
+        double d = JulianDay(m.Utc) + DeltaT / 86400.0 - 2451545.0;
+        if (body != SkyBody.Sun) d -= Equatorial(body, m.Utc).Distance / AuMetres / LightAuPerDay;
         double t = d / 36525.0;
         var (a0, d0, w) = Rotation(body, d, t);
-        return Frame(a0, d0, w, utc, t);
+        return Frame(a0, d0, w, m.EarthAngle, t);
     }
 
     /// <summary>The IAU pole (ICRF right ascension, declination) and prime meridian angle, degrees, at <paramref name="d"/> days and <paramref name="t"/> centuries from J2000.</summary>
@@ -129,6 +133,9 @@ public static partial class Ephemeris
     /// The ICRF (J2000 equator and equinox) axes in the Earth-fixed frame at <paramref name="utc"/>:
     /// precessed to the date and turned by sidereal time. The stars' catalogue places go through it.
     /// </summary>
+    public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(SkyMoment m) =>
+        CelestialAt(m.Utc, m.EarthAngle);
+
     public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(DateTime utc)
     {
         double t = (JulianDay(utc) + DeltaT / 86400.0 - 2451545.0) / 36525.0;

@@ -438,7 +438,7 @@ public partial class TelescopeView : CanvasLayer
             horizon = ((h.Azimuth - Mathf.RadToDeg(_north.World(origin.Frame, _scope.GlobalPosition)) + 360) % 360, h.Altitude);
         // tracking the sky: where the tube points, no body's readings
         if (!(Locked && FollowsBody)) text = "Tracking the sky" + nl + TelescopeTargets.Where(horizon);
-        else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, SwissTime.ToUtc(sky.Date, sky.Hour)), horizon);
+        else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, sky.Moment.Utc), horizon);
         if (text != _infoShown) _info.Text = _infoShown = text;
     }
 

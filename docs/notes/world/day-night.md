@@ -17,8 +17,9 @@
 - **The real sky** (#1430 phase H6, `World/SunPath`, `Core/Ephemeris`, `Core/SwissTime`): the
   sun and moon by Meeus (sun 0.008°, moon 0.0013° against JPL Horizons) on `Calendar.Today` at the
   game's hour, read as Swiss civil time (CET/CEST, the EU rule, no `TimeZoneInfo`), from the
-  camera's LV95 place (`DayNight.Origin`; Bern before a camera is out, the last place indoors),
-  turned from true north to grid north (the meridian convergence, ±1-2° at the borders). Bern's day
+  camera's place (`DayNight.Place`; Bern before a camera is out, the last place indoors): in an anchor frame the
+  camera itself, its height included (#1845, `world/night-sky`), on the flat ground its LV95 kilometre, turned from
+  true north to grid north (the meridian convergence, ±1-2° at the borders). Bern's day
   runs 08:13-16:44 at the December solstice and 05:36-21:29 in June, 66.5° high at noon.
   `/time set sunrise|sunset` are today's at Bern (`SunPath.RiseOrSet`) at home; away from Switzerland every
   named hour is the sun's where the player stands and hours read in their zone (`world/local-time`, #1801). The thermals read the same
@@ -39,6 +40,14 @@
   --weather clear --occasion none` (`World/SkyShot`): the camera turned to the body, a picture, and a RESULT by the
   rule a body in view is drawn, one behind the Earth is not, and the light's own direction shows no disc unless it
   is the sun (stars hidden for the measure). Before #1798 it failed the space sun and both blobs.
+- **`--terminatorcheck`** (#1845, `World/TerminatorCheck`, quick: `--frame earth --sun real --chunks fixture:straight
+  --globe res://assets/globe --occasion none`): at the 2027 solstices and equinoxes, 04:00 and 15:30 UTC, the camera
+  400 km and 20,000 km over Bern and over the evening terminator: the globe's subsolar point (`world_true_sun` through
+  `Globe.Axes`) against NOAA's solar position algorithm written apart (`TerminatorCheck.Noaa`: 0.001-0.007°, under
+  0.75 km), the sky's sun against it (0.0025° at 400 km, 0.010° at 20,000 km: the sun's true parallax from the
+  camera), the ground's light against the sky's sun, the moon from the camera, the stars' sphere and true north
+  (0.0000°), and `/time speed real` (the subsolar point 0.0833° in 20 s). Windowed (`--terminatorcheck shots`) also
+  the drawn twilight from 20,000 km and the moon over the night side (`test_output/terminator_*.png`, `.csv`).
 - **Online, one clock for everyone** (#452, `World/WorldClock`): the server always owns it, from its
   own settings at start (`StartHour`, `DayLengthMinutes`, `--time`), or, on a dedicated server, from `user://world_clock.cfg`
   where it stopped last (saved every 60 s, on `/time` and on exit; not when hosted from the menu,

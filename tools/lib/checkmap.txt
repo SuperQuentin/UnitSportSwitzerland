@@ -160,6 +160,7 @@ src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real -
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+shaders/moon_halo        quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -378,6 +379,12 @@ src/Terrain/Leaves/LeafBlend net   tools/fillagreenetcheck.sh
 src/Terrain/Leaves/PyramidFill net tools/fillagreenetcheck.sh
 src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
 src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
+# the globe's pyramid streamed to a client with none, the climb's pops, the fill on the server's pyramid (#1656; D: data)
+src/Terrain/Leaves/PyramidSource full tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidIndex full tools/pyramidstreamcheck.sh
+src/World/Globe          full   tools/pyramidstreamcheck.sh
+shaders/common/geomorph  full   tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidSource net tools/fillagreenetcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
@@ -420,6 +427,13 @@ src/Core/TestWorld       quick  --frame earth --synccheck --world flat
 # #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
 src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
 src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+# #1845: the sky from space against NOAA (the subsolar point, the sky's sun, the ground's light, the moon from the camera,
+# the stars, true north, /time speed real) from 400 and 20,000 km at the solstices and equinoxes; windowed it also
+# measures the drawn twilight and the moon over the night side (not here: needs a window)
+src/World/TerminatorCheck quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/SunPath         quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/DayNight        quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/Globe/Globe.cs  quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
 # G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
 # the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
 src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
@@ -626,9 +640,11 @@ src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
+# a lift rider on another peer's screen (#915), on the fun course's chairlift: no terrain data (#1609)
+src/World/Ropeways       net    tools/liftnetcheck.sh
+src/Player/FootPlayer.Lift net   tools/liftnetcheck.sh
+src/Terrain/Fixture/FunCourse net tools/liftnetcheck.sh
 # the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
-src/World/Ropeways       full   tools/liftnetcheck.sh
-src/Player/FootPlayer.Lift full  tools/liftnetcheck.sh
 src/World/DayNight       net    tools/clocknetcheck.sh
 src/World/WorldClock     net    tools/clocknetcheck.sh
 src/World/TimeCommand    net    tools/clocknetcheck.sh
@@ -663,6 +679,8 @@ src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
 src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
+src/Loot/Bank            full   tools/bankcheck.sh
+src/Items/Bank           full   tools/bankcheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
 src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh

@@ -34,8 +34,8 @@ public partial class ContainerNetProbe : Node
     private double _t;
     private int _phase;
     private VehicleSlot? _slot1, _slot2;
-    /// <summary>Where the probe keeps its player, LV95 and height; null = let it be.</summary>
-    private (double E, double N, double Alt)? _hold;
+    /// <summary>Where the probe keeps its player; null = let it be.</summary>
+    private GlobalPos? _hold;
     private long _carOid, _itemOid, _radioOid;
     private GlobalPos _carAt, _itemAt, _radioAt;
     private bool _claimed, _ok = true;
@@ -53,6 +53,14 @@ public partial class ContainerNetProbe : Node
         ProcessPhysicsPriority = 1000;
     }
 
+    /// <summary>
+    /// A place <paramref name="east"/> and <paramref name="north"/> true metres from a slot, <paramref name="up"/> over it. Never LV95
+    /// arithmetic on the slot's E/N: on earth leaves a fixture's slots are named by stand-in records, and E + 5000 is another
+    /// stand-in tile, put down wherever its leaf is (#1787: "5 km east" was 3 km north-east, inside a car's interest).
+    /// </summary>
+    private static GlobalPos Near(VehicleSlot s, double east, double north, double up) =>
+        GlobalPos.FromLv95(s.E, s.N, s.Height + up).Moved(east, north);
+
     private static FootPlayer? Me(SceneTree tree) =>
         tree.GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
             .FirstOrDefault(p => p.IsMultiplayerAuthority() && FootPlayer.NetId(p.Name) is > 0);
@@ -64,7 +72,7 @@ public partial class ContainerNetProbe : Node
         var me = Me(GetTree());
         if (me != null && _hold is { } h)
         {
-            me.GlobalPosition = _origin.ToWorld(h.E, h.N, h.Alt);
+            me.GlobalPosition = _origin.ToWorld(h);
             me.Velocity = Vector3.Zero;
         }
         if (me == null || DormantVehicles.Instance is not { } dormant || VehicleManager.Instance is not { } vehicles
@@ -110,7 +118,7 @@ public partial class ContainerNetProbe : Node
                     _claimed = true;
                     vehicles.Claim(car1, state => vehicles.Park(state with
                     {
-                        Position = GlobalPos.FromLv95(s1.E + 8, s1.N, s1.Height + 0.3),
+                        Position = Near(s1, 8, 0, 0.3),
                         Velocity = Vector3.Zero, EngineOn = false,
                     }));
                 }
@@ -121,7 +129,7 @@ public partial class ContainerNetProbe : Node
                 if (_t < 4) return;
                 _carOid = parked.Oid;
                 _carAt = parked.Global;
-                items.Drop(new ItemStack(ItemId.WaterBottle, 1), _origin.ToWorld(s1.E, s1.N + 6, s1.Height + 0.5), Vector3.Zero, Vector3.Zero, Vector3.Zero);
+                items.Drop(new ItemStack(ItemId.WaterBottle, 1), _origin.ToWorld(Near(s1, 0, 6, 0.5)), Vector3.Zero, Vector3.Zero, Vector3.Zero);
                 Next();
                 return;
             case 3:   // the dropped item, at rest
@@ -133,7 +141,7 @@ public partial class ContainerNetProbe : Node
                 if (_t < 3) return;
                 _itemOid = dropped.Oid;
                 _itemAt = dropped.Capture().Position;
-                RadioManager.Instance?.Throw(new RadioState("", 0, GlobalPos.FromLv95(s1.E + 4, s1.N + 6, s1.Height + 0.6), 0f, Vector3.Zero));
+                RadioManager.Instance?.Throw(new RadioState("", 0, Near(s1, 4, 6, 0.6), 0f, Vector3.Zero));
                 Next();
                 return;
             case 4:   // the radio, at rest
@@ -152,13 +160,13 @@ public partial class ContainerNetProbe : Node
             case 5:   // the script says B is done
                 if (CmdArgs.Value("--containernet-go") is not { } go || !System.IO.File.Exists(go)) return;
                 Say("go: standing 5 km away for the containers");
-                _hold = (s1.E + Away, s1.N, s1.Height + 2);
+                _hold = Near(s1, Away, 0, 2);
                 Next();
                 return;
             case 6:   // away: nothing near, so everything sleeps on the server
                 if (_t < 20) return;
                 Say("back at the lot");
-                _hold = (s1.E, s1.N - 20, s1.Height + 2);
+                _hold = Near(s1, 0, -20, 2);
                 Next();
                 return;
             case 7:
@@ -190,15 +198,19 @@ public partial class ContainerNetProbe : Node
                 _radioAt = radio.Capture().Position;
                 Expect(dormant.IsAwake($"{s1.Owner}|{s1.Ordinal}"), "the bay A's car left is empty here too");
                 Say($"sees A's car {car.Name} and item {item.Name}; going 5 km away");
-                _hold = (s1.E + Away, s1.N, s1.Height + 2);
+                _hold = Near(s1, Away, 0, 2);
                 Next();
                 return;
             case 2:   // out of everyone's range: none of it exists here
                 if (_t < 6) return;
                 int cars = vehicles.GetChildren().OfType<VehicleBody>().Count(), drops = items.Items.Count(i => !i.Proxy);
                 int radios = RadioManager.Instance?.GetChildren().OfType<RadioBody>().Count() ?? 0;
-                Expect(cars == 0 && drops == 0 && radios == 0, $"5 km away: {cars} vehicles, {drops} items and {radios} radios here (want none)");
-                _hold = (s1.E, s1.N - 30, s1.Height + 2);
+                var here = Me(GetTree())!.Global;
+                string far = string.Join(", ", vehicles.GetChildren().OfType<VehicleBody>()
+                    .Select(v => FormattableString.Invariant($"{v.Name} {v.Global.HorizontalDistanceTo(here):F0} m, size {v.InterestSize:F1} m")));
+                Expect(cars == 0 && drops == 0 && radios == 0,
+                    FormattableString.Invariant($"5 km away ({here.HorizontalDistanceTo(Near(s1, 0, 0, 0)):F0} m from the lot): {cars} vehicles, {drops} items and {radios} radios here (want none) {far}"));
+                _hold = Near(s1, 0, -30, 2);
                 Next();
                 return;
             case 3:   // back: they come again, where they were
