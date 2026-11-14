@@ -26,6 +26,12 @@ tc_client 900 "$OUT/pyramidstream_A.log" --connect 127.0.0.1:$PORT --name Owner 
 ( tc_userdata "$(mkdir -p "$OUT/userdata_pyramidstream_B" && cd "$OUT/userdata_pyramidstream_B" && pwd)"
   tc_client 900 "$OUT/pyramidstream_B.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES" \
     --globe res://assets/globe --cache "$CACHE" "${LOOK[@]}" )
+# a pyramid with far features (#1657): B again from its cache, hovering 40 s at 3 km over the start, so its deep levels
+# (9-13, where the features are) come in: their section-13 entries must
+if grep -q '"features"' "$PYRAMID/cube_manifest.json"; then
+  ( tc_userdata "$OUT/userdata_pyramidstream_B"
+    tc_client 900 "$OUT/pyramidstream_B2.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES"       --globe res://assets/globe --cache "$CACHE" "${LOOK[@]/$CLIMB/3000,3000,1,40}" )
+fi
 tc_stop
 grep -h "\[stream\] pyramid index" "$OUT/pyramidstream_server.log" | head -1 | sed 's/^/server: /'
 for c in A B; do grep -h "\[globeclimb\] [0-9]\|\[globeclimb\] deepest\|\[earth\] the server's pyramid\|\[stream\] pyramid index received" "$OUT/pyramidstream_$c.log" | sed "s/^/$c: /"; done
@@ -43,6 +49,12 @@ pops() { grep -ho "RESULT PASS globeclimb: [0-9]* pops" "$1" | grep -o "[0-9]* p
 pa=$(pops "$OUT/pyramidstream_A.log"); pb=$(pops "$OUT/pyramidstream_B.log")
 echo "[pyramidstreamcheck] pops over 2 px: A ${pa:-?}, B ${pb:-?}; B's cache: $(ls "$CACHE" | grep -c '^pyr_') pyramid entries, $(du -sm "$CACHE" | cut -f1) MB"
 [ "$(ls "$CACHE" | grep -c '^pyr_')" -gt 0 ] || fail="${fail:+$fail; }B cached no pyramid tile"
+# a pyramid with far features (#1657) streams them too: section 13 entries in B's cache
+if grep -q '"features"' "$PYRAMID/cube_manifest.json"; then
+  f13=$(ls "$CACHE" | grep -c '\.s13\.cubt$')
+  echo "[pyramidstreamcheck] B's far features: $f13 tiles"
+  [ "$f13" -gt 0 ] || fail="${fail:+$fail; }B streamed no far features"
+fi
 [ -n "$pb" ] && [ -n "$pa" ] && [ "$pb" -le $((pa + 2)) ] || fail="${fail:+$fail; }B popped more than A"
 if [ -z "$fail" ]; then echo "[pyramidstreamcheck] RESULT: ok"; exit 0; fi
 echo "[pyramidstreamcheck] RESULT: FAILED ($fail; see $OUT/pyramidstream_*.log)"; exit 1

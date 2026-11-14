@@ -20,7 +20,11 @@ public delegate byte[]? PyramidFetch(CubeKey key, PyramidIndex.Entry entry, int 
 public sealed class PyramidSource
 {
     /// <summary>A tile's place in a layer: its lattice bits, and how to read its heights and its colour (null: none).</summary>
-    public sealed record Tile(int Bits, Func<byte[]?> Heights, Func<int, byte[]?>? Colour, bool Local, PyramidIndex.Entry? Remote = null);
+    public sealed record Tile(int Bits, Func<byte[]?> Heights, Func<int, byte[]?>? Colour, bool Local, PyramidIndex.Entry? Remote = null,
+        Func<byte[]?>? Features = null);
+
+    /// <summary>The section a tile's far features are asked by (#1657): after the twelve months' colour.</summary>
+    public const int FeaturesSection = 13;
 
     /// <summary>A layer of the chain: its name (for the log), its lakes, the tiles it holds.</summary>
     public sealed record Layer(string Name, IReadOnlyList<float>? Lakes, IReadOnlyDictionary<CubeKey, Tile> Tiles);
@@ -85,7 +89,8 @@ public sealed class PyramidSource
             var key = k;
             var entry = e;
             tiles[key] = new Tile(entry.Bits, () => fetch(key, entry, 0),
-                entry.ColourLength > 0 ? month => fetch(key, entry, Math.Clamp(month, 1, 12)) : null, Local: false, Remote: entry);
+                entry.HasColour ? month => fetch(key, entry, Math.Clamp(month, 1, 12)) : null, Local: false, Remote: entry,
+                Features: entry.HasFeatures ? () => fetch(key, entry, FeaturesSection) : null);
         }
         _remote = new Layer("the server's", index.Lakes, tiles);
         Rebuild();
@@ -115,6 +120,16 @@ public sealed class PyramidSource
     public bool IsStreamed(CubeKey key) => _now.Best.TryGetValue(key, out var t) && t.Remote != null;
 
     public bool HasColour(CubeKey key) => _now.Best.TryGetValue(key, out var t) && t.Colour != null;
+
+    /// <summary>Whether a tile's best copy carries far features (#1657).</summary>
+    public bool HasFeatures(CubeKey key) => _now.Best.TryGetValue(key, out var t) && t.Features != null;
+
+    /// <summary>A tile's far features (#1657), decoded; null where none, or streamed and not come. Any thread.</summary>
+    public CubeFarFeatures? Features(CubeKey key) =>
+        _now.Best.TryGetValue(key, out var t) && t.Features?.Invoke() is { } bytes ? CubeFarFeaturesCodec.Decode(bytes) : null;
+
+    /// <summary>A tile's far features entry as stored (the server sends it on); null where none.</summary>
+    public byte[]? FeaturesEntry(CubeKey key) => _now.Best.TryGetValue(key, out var t) ? t.Features?.Invoke() : null;
 
     /// <summary>A tile's lattice bits in its best copy, 0 where none.</summary>
     public int BitsOf(CubeKey key) => _now.Best.TryGetValue(key, out var t) ? t.Bits : 0;
@@ -218,15 +233,18 @@ public sealed class PyramidSource
         var levels = manifest.LevelsOrLeaf.ToDictionary(l => l.Level);
         var heightBundles = new HashSet<CubeKey>();
         var colourBundles = new HashSet<CubeKey>();
+        var featureBundles = new HashSet<CubeKey>();
         foreach (var t in manifest.Tiles)
         {
             var k = CubeKey.Parse(t.Key);
             var lv = levels.GetValueOrDefault(k.Level);
             heightBundles.Add(k.AncestorAt(lv?.BundleLevel ?? CubeKey.PyramidBundleLevel(k.Level)));
             if (lv is { Albedo: > 0 }) colourBundles.Add(k.AncestorAt(lv.AlbedoBundleLevel));
+            if (lv is { Features: > 0 }) featureBundles.Add(k.AncestorAt(lv.BundleLevel));
         }
         var heights = new Dictionary<CubeKey, (string Path, long Offset, int Length)>();
         var colour = new Dictionary<CubeKey, (string Path, long Offset, int Length)>();
+        var features = new Dictionary<CubeKey, (string Path, long Offset, int Length)>();
         void Index(string path, uint magic, Dictionary<CubeKey, (string, long, int)> into)
         {
             if (!exists(path)) return;
@@ -235,13 +253,15 @@ public sealed class PyramidSource
         }
         foreach (var b in heightBundles) Index(CubeBundle.FileName(b), CubeBundle.Magic, heights);
         foreach (var b in colourBundles) Index(CubeBundle.AlbedoFileName(b), CubeBundle.AlbedoMagic, colour);
+        foreach (var b in featureBundles) Index(CubeFarFeaturesCodec.FileName(b), CubeFarFeaturesCodec.BundleMagic, features);
         var tiles = new Dictionary<CubeKey, Tile>(heights.Count);
         foreach (var (k, at) in heights)
         {
             int bits = levels.GetValueOrDefault(k.Level)?.Bits ?? CubeKey.LatticeBits(k.Level);
             var h = at;
             Func<int, byte[]?>? c = colour.TryGetValue(k, out var cat) ? _ => read(cat.Path, cat.Offset, cat.Length) : null;
-            tiles[k] = new Tile(bits, () => read(h.Path, h.Offset, h.Length), c, local);
+            Func<byte[]?>? f = features.TryGetValue(k, out var fat) ? () => read(fat.Path, fat.Offset, fat.Length) : null;
+            tiles[k] = new Tile(bits, () => read(h.Path, h.Offset, h.Length), c, local, Features: f);
         }
         return new Layer(name, manifest.Lakes, tiles);
     }

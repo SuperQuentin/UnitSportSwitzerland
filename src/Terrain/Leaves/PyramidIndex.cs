@@ -21,7 +21,17 @@ public sealed class PyramidIndex
     private const int HeadBytes = 16, RowBytes = 23;
 
     /// <summary>A tile's lattice bits, heights entry size, whether it has colour (nonzero: a month is asked as its own section) and stamp.</summary>
-    public readonly record struct Entry(int Bits, int Length, int ColourLength, uint Stamp);
+    public readonly record struct Entry(int Bits, int Length, int ColourLength, uint Stamp)
+    {
+        /// <summary>Bit 0 of <see cref="ColourLength"/>: a month is asked as its own section.</summary>
+        public bool HasColour => (ColourLength & ColourBit) != 0;
+
+        /// <summary>Bit 1 (#1657): its far features, section <see cref="PyramidSource.FeaturesSection"/>. A #1656 client reads any
+        /// nonzero value as colour: a tile with features and no colour costs it one "missing" a month.</summary>
+        public bool HasFeatures => (ColourLength & FeaturesBit) != 0;
+    }
+
+    public const int ColourBit = 1, FeaturesBit = 2;
 
     public IReadOnlyDictionary<CubeKey, Entry> Tiles { get; }
 
@@ -100,19 +110,22 @@ public sealed class PyramidIndex
         foreach (var key in source.Keys)
         {
             if (!source.IsLocal(key) || source.HeightsBytes(key) is not { } h) continue;
-            rows[key] = new Entry(source.BitsOf(key), h.Length, source.HasColour(key) ? 1 : 0, StampOf(key, h));
+            var f = source.FeaturesEntry(key);
+            rows[key] = new Entry(source.BitsOf(key), h.Length, (source.HasColour(key) ? ColourBit : 0) | (f != null ? FeaturesBit : 0), StampOf(key, h, f));
         }
         return new PyramidIndex(rows, source.Lakes);
     }
 
     /// <summary>A tile's stamp: FNV-1a over its key and its heights entry (a rebuilt tile changes it).</summary>
-    public static uint StampOf(CubeKey key, byte[] heights)
+    public static uint StampOf(CubeKey key, byte[] heights, byte[]? features = null)
     {
         uint h = 2166136261;
         void Mix(byte b) => h = (h ^ b) * 16777619;
         long k = key.Face | ((long)key.Level << 8) | ((long)key.X << 16) | ((long)key.Y << 40);
         for (int b = 0; b < 8; b++, k >>= 8) Mix((byte)k);
         foreach (byte b in heights) Mix(b);
+        // the far features (#1657) too: baked again, the tile's cached copies miss
+        if (features != null) foreach (byte b in features) Mix(b);
         return h;
     }
 }
