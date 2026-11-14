@@ -64,6 +64,8 @@ public partial class NetworkManager : Node
         }
 
         Multiplayer.MultiplayerPeer = peer;
+
+        NetLink.Invalidate();
         Multiplayer.PeerConnected += id => TolerateStalls(peer, (int)id);
 
         bool boundToOne = !string.IsNullOrWhiteSpace(bindIp);
@@ -88,6 +90,7 @@ public partial class NetworkManager : Node
             return false;
         }
         Multiplayer.MultiplayerPeer = peer;
+        NetLink.Invalidate();
         // the server as a peer of this client (id 1): as patient with a stalled server as it is with us
         Multiplayer.ConnectedToServer += () => { if (Multiplayer.MultiplayerPeer == peer) TolerateStalls(peer, 1); };
         GD.Print($"[net] connecting to {Format(host, port)}");

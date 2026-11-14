@@ -39,6 +39,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-no-main-thread-periodic-jobs` — No per-player `GD.Print` on a server timer (blocks ms on Windows), file writes on a worker, `/proc` reads Linux-only
 - `perf-mcp-logger-gated` — godot_ai `game_helper` adds its Logger only when `EngineDebugger.is_active()`; keep the gate on addon updates (it leaked every log line)
 - `perf-player-snapshot-size` — `BodyPose`/`TrainPose` go as one `float[] NetPose` (quat + offset + squash, train angles only on a train); no Transform3D on the wire
+- `perf-netlink-once-a-frame` — `NetLink` reads the link once a frame from the tree's API (never `node.Multiplayer` per call: the engine builds the node's path), keyed on `NetLink.Tick`, `Invalidate()` on every peer swap and on the API's signals; `LocalPlayer` once a frame (#1910)
 - `perf-relay-delta-interval` — `RelayNear`/`RelayFar` check their OnChange properties at 10 Hz (`DeltaInterval = 0.1f`); per-packet state stays `Always`
 - `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
 - `arrival` — The server decides where a joining player starts (`--spawn E,N`) and whether players may teleport (`--no-teleport`): `World/Arrival.Rules` on accept, the client's loading screen waits for it; `--at` still wins; `tools/arrivalcheck.sh` (#799)
