@@ -1087,7 +1087,17 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
 
-## A trainer's ride goes through the traffic ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+## Group rides on the home trainer, and the trainer itself ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+Two PCs (or two windows) on one server, Cartoon, `--date 2027-07-15 --time 12`; the owner's smart trainer on one of them.
+
+- [ ] Pair the real trainer (Training app → Search, then the trainer), load a GPX, ride 2 km → watts and cadence in the HUD, the resistance felt changing on a climb (SIM), ERG holding its target: the first run of RideLink's WinRT path on real FTMS hardware.
+- [ ] On the trainer's PC: Training app → Host a group ride; on the other: Training app → Join → both on the same course, each sees the other's bike on the road and "Group:" in the HUD with both names and the gap in metres.
+- [ ] Ride close behind the other rider on a flat → the speed rises a little at the same watts (the draft).
+- [ ] Join from a pad and in VR (the app's buttons by stick and by poke) → the same as with the mouse.
+- [ ] One rider stops the training → it leaves the group; the other's HUD shows only itself; when it stops too, the group is gone from the list.
+
+ ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
 
 In a window, Cartoon, `--date 2027-07-15 --time 12`, the phone's Training app, a GPX through a town (or `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60` windowed).
 

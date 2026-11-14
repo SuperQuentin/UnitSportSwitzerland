@@ -152,7 +152,7 @@ public partial class GroupRides : Node
         for (int i = 0; i < _standings.Count && i < 6; i++)
         {
             var r = _standings[i];
-            string gap = r.Peer == me ? "(you)" : string.Create(CultureInfo.InvariantCulture, $"{r.Along - mine:+0;-0} m");
+            string gap = r.Peer == me ? "(you)" : string.Create(CultureInfo.InvariantCulture, $"{(int)MathF.Round(r.Along - mine):+0;-0;0} m");
             if (i > 0) sb.Append('\n');
             sb.Append(CultureInfo.InvariantCulture, $"{i + 1}. {r.Name}  {r.Along / 1000:0.00} km  {r.Speed * 3.6f:0} km/h  {gap}");
         }
@@ -317,7 +317,7 @@ public partial class GroupRides : Node
         string path = System.IO.Path.Combine(dir, $"{safe}_{id}.gpx");
         System.IO.File.WriteAllText(path, gpx);
         Said?.Invoke($"Joined the group ride \"{name}\": off to its start.");
-        TrainingSession.Instance?.LoadAndStart(path);
+        TrainingSession.Instance?.LoadAndStart(path, name);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

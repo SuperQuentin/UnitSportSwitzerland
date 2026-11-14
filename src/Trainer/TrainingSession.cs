@@ -151,11 +151,14 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
     /// Loads <paramref name="path"/> and starts riding it as soon as it is ready: a group ride's course, joined from the
     /// Training app (<see cref="GroupRides"/>, #1467), whose riders are off to its start.
     /// </summary>
-    public async void LoadAndStart(string path)
+    /// <param name="name">The course's name to show (the group's), else the file's.</param>
+    public async void LoadAndStart(string path, string? name = null)
     {
         Load(path);
         for (int i = 0; i < 600 && State == Phase.Loading; i++) await ToSignal(GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
-        if (State == Phase.Ready && CoursePath == path) Start();
+        if (State != Phase.Ready || CoursePath != path) return;
+        if (!string.IsNullOrWhiteSpace(name)) CourseName = name;
+        Start();
     }
 
     /// <summary>The rider's speed on the bike, m/s (0 off it): what a group ride's standings show.</summary>
