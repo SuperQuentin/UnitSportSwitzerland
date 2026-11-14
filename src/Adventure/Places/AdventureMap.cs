@@ -375,6 +375,7 @@ public partial class AdventureMap : Screen, IMapHost
             View.Size = Size;
             DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.05f, 0.06f, 0.08f));
             if (MapRelief.TryGet() is { } relief) View.DrawSampled(this, relief, MapRelief.Lattice());
+            if (!Driven && MapLines.TryGet()) MapLines.DrawRivers(View, this);
         }
 
         private sealed partial class FogLayer : Control
@@ -413,7 +414,8 @@ public partial class AdventureMap : Screen, IMapHost
             // rivers and borders as smooth lines, not cells (#1826); the straight tile borders until the lines are built
             if (MapLines.TryGet())
             {
-                MapLines.DrawRivers(View, on);
+                // the phone's map keeps its rivers crisp in the top layer; the adventure's lie under the fog, so unexplored land shows none
+                if (Driven) MapLines.DrawRivers(View, on);
                 if (Driven) MapLines.DrawBorders(View, on, new Color(1, 0.97f, 0.85f, 0.95f), 1.6f, halo: true);
                 else MapLines.DrawBorders(View, on, new Color(1, 1, 1, 0.35f), 1.2f, halo: false);
             }
@@ -745,7 +747,7 @@ public partial class AdventureMap : Screen, IMapHost
         public override void _Process(double delta)
         {
             if (!_reliefDrawn && MapRelief.TryGet() != null) { _reliefDrawn = true; Redraw(); }
-            if (!_linesDrawn && MapLines.Ready) { _linesDrawn = true; _top.QueueRedraw(); }
+            if (!_linesDrawn && MapLines.Ready) { _linesDrawn = true; QueueRedraw(); _top.QueueRedraw(); }
             if (FogTexture.Version != _fogVersion) { _fogVersion = FogTexture.Version; _fog.QueueRedraw(); _top.QueueRedraw(); }
             if (Driven || !HasFocus()) return;
             var pan = Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");

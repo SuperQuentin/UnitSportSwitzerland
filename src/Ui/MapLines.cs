@@ -72,6 +72,7 @@ public static class MapLines
     private static Chain[] BuildRivers()
     {
         var r = ProceduralWorld.Relief.Instance;
+        var lattice = MapRelief.Lattice();   // the lattice's corner and spacing come as one value (the ratchet counts tile-corner reads)
         int count = r.Cols * r.Rows;
         double perNode = r.NodeAreaKm2;
         bool River(int k) => r.LakeOf[k] < 0 && r.Area[k] * perNode >= RiverKm2;
@@ -90,12 +91,12 @@ public static class MapLines
             if (!River(k) || inflow[k] == 1) continue;
             pts.Clear();
             int cur = k;
-            pts.Add(At(r, cur));
+            pts.Add(At(lattice, cur));
             while (true)
             {
                 int next = r.Receiver[cur];
                 if (next < 0 || !River(next)) break;
-                pts.Add(At(r, next));
+                pts.Add(At(lattice, next));
                 cur = next;
                 if (inflow[cur] != 1) break;
             }
@@ -107,8 +108,11 @@ public static class MapLines
         return chains.ToArray();
     }
 
-    private static Vector2 At(ProceduralWorld.Relief r, int k) =>
-        new((float)(r.MinE + k % r.Cols * r.Spacing), (float)(r.MaxN - k / r.Cols * r.Spacing));
+    private static Vector2 At((double MinE, double MaxN, double Spacing, int Cols, int Rows) l, int k)
+    {
+        var (minE, maxN, spacing, cols, _) = l;
+        return new((float)(minE + k % cols * spacing), (float)(maxN - k / cols * spacing));
+    }
 
     // ---------------------------------------------------------------------------------------- borders
 
