@@ -11,7 +11,7 @@ namespace UnitSport.Player;
 /// switched off it leaves the craft on a circular orbit where it is. Taken down out of Space (below 50 km)
 /// the drive drops out and the craft flies on at its drive speed: an aircraft again, gliding home.
 /// </summary>
-public sealed partial class Airliner : ISpacecraft
+public sealed partial class Airliner : ISpacecraft, IAimable
 {
     private SpaceOrbit? _space;
 
@@ -57,6 +57,9 @@ public sealed partial class Airliner : ISpacecraft
     /// pilot holds the target action (<see cref="SpectatorTargets"/>: the tangent of the arrival orbit) or by a bot; null: none.
     /// </summary>
     public Vector3? Aim { get; set; }
+
+    /// <summary>Where the nose points (the target hold's side).</summary>
+    public Vector3 Nose => -State.Attitude.Z;
 
     /// <summary>
     /// Above the Space handover: the orbit (or the drive) instead of <see cref="AirlinerFlight.Step"/>. False
