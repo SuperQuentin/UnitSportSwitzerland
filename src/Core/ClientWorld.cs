@@ -768,6 +768,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
+        // Without the system, the server's RPC still finds its node and is dropped there (#1890): RPCs to a missing node
+        // are refused one by one with native errors, and their flood held a lean client's reliable traffic up for minutes
+        if (!Systems.On(Systems.Occasions)) AddChild(new Net.SwarmOccasions { Name = Occasions.OccasionManager.NodeName });
         if (Systems.On(Systems.Occasions))
         {
             Occasions.OccasionManager.Create(this);
@@ -1654,6 +1657,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
         }
+        // without birds the server's snapshots still land on a BirdNet, one with no life that drops them, as a swarm bot's
+        // (#1890: 8 a second, 32 at x4, each a refused RPC and a native error; they held a net check's reliable traffic up)
+        else AddChild(new Birds.BirdNet { Name = Birds.BirdNet.NodeName });
         // the rising air made visible (#1225): specks in the thermals near the camera, a cumulus over strong ones
         if (_chunks != null && DisplayServer.GetName() != "headless") AddChild(new World.ThermalCues(_chunks, origin));
 
