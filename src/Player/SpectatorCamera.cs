@@ -42,17 +42,10 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         return _cap;
     }
 
-    /// <summary>How far the nearest surface of any body is (#1850): the altitude near the anchor's body, the frame tree's beyond.</summary>
-    private double SurfaceDistance()
-    {
-        double altitude = Altitude;
-        if (altitude < NearSurfaceM || Core.OriginShifter.Instance?.Origin.Frame.Axes is not { } axes) return altitude;
-        var p = axes.ToEcef(Position.X, Position.Y, Position.Z);
-        return Core.Frames.NearestSurface(axes.Body, new Core.DVec3(p.X, p.Y, p.Z), Core.SkyClock.Now).Distance;
-    }
-
-    /// <summary>Under this altitude the anchor's own body is the nearest surface for certain (the Moon's is 356,000 km away at the least).</summary>
-    private const double NearSurfaceM = 10_000_000;
+    /// <summary>How far the nearest surface of any body is (#1850, <see cref="SurfaceReach"/>).</summary>
+    private double SurfaceDistance() => Core.OriginShifter.Instance?.Origin.Frame is { } frame
+        ? SurfaceReach.Of(frame, Position, Altitude)
+        : Altitude;
 
     private SpectatorSpeedHud? _hud;
     private bool _boosted;
