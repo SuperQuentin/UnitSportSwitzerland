@@ -34,6 +34,9 @@ public partial class ColonyColonists : Node3D
         public int Spot = -1;
         public double PosedAt = -1, Phase;
         public bool Walking;
+        /// <summary>Its bot while the colony runs its crew as bots (#1976), and that bot's brain.</summary>
+        public Bots.Bot? Bot;
+        public ColonistBrain? Brain;
     }
 
     private readonly ColonyCrew _crew;
@@ -48,6 +51,8 @@ public partial class ColonyColonists : Node3D
     public ColonyColonists(MoonColony c, ColonyPlan plan)
     {
         Name = "Colonists";
+        Colony = c;
+        Plan = plan;
         _crew = new ColonyCrew(c, plan);
         foreach (var who in _crew.Crew) _members.Add(new Member { Who = who });
     }
@@ -74,12 +79,19 @@ public partial class ColonyColonists : Node3D
 
     public override void _Process(double delta)
     {
-        double t = SimClock.SimAt(ClockSync.ServerNow) + ClockOffset;
-        var utc = SkyClock.Now.Utc;
-        double hour = utc.Hour + utc.Minute / 60.0;
+        double t = CrewClock;
+        double hour = Hour;
         var cam = GetViewport()?.GetCamera3D();
+        RunBots(cam);
         foreach (var m in _members)
         {
+            // a colonist the bots run (#1976): the bot is the colonist, the figure stays hidden
+            if (_botsOn)
+            {
+                if (m.Figure.Visible) m.Figure.Visible = false;
+                m.Window = long.MinValue;
+                continue;
+            }
             long w = (long)Math.Floor(t / ColonyCrew.Window);
             if (w != m.Window)
             {
@@ -148,9 +160,19 @@ public partial class ColonyColonists : Node3D
             if (n is ColonyColonists c) yield return c;
     }
 
-    /// <summary>The figures: where each stands (world), shown or not, walking, outside.</summary>
+    /// <summary>The colonists: where each stands (world), shown or not, walking, outside; a bot's body when bots run them.</summary>
     public IEnumerable<(Vector3 At, bool Shown, bool Walking, bool Outside)> Figures()
     {
-        foreach (var m in _members) yield return (m.Figure.GlobalPosition, m.Figure.Visible, m.Walking, m.Outside);
+        foreach (var m in _members)
+        {
+            if (_botsOn)
+            {
+                if (m.Bot is { } b && IsInstanceValid(b.Body) && m.Brain is { } brain)
+                    yield return (b.Body.GlobalPosition, true, brain.Moving, brain.Outside);
+                else yield return (Vector3.Zero, false, false, false);
+                continue;
+            }
+            yield return (m.Figure.GlobalPosition, m.Figure.Visible, m.Walking, m.Outside);
+        }
     }
 }

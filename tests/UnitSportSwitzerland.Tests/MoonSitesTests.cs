@@ -554,4 +554,42 @@ public class ColonyCrewTests
         Assert.InRange(asleep / (double)total, 0.25, 0.42);
         Assert.True(eva > 0 && walking > 0, $"eva {eva}, walking {walking}");
     }
+    [Fact]
+    public void Every_way_out_to_an_eva_stays_inside_until_the_airlock_and_ends_outside_it()
+    {
+        foreach (var c in MoonColonies.All)
+        {
+            if (!c.Staffed) continue;
+            var plan = ColonyPlan.For(c);
+            var crew = new ColonyCrew(c, plan);
+            for (int i = 0; i < crew.Spots.Count; i++)
+            {
+                if (crew.Spots[i].Module >= 0) continue;
+                int l = crew.LockFor(i);
+                Assert.True(l >= 0, $"{c.Id}: EVA spot {i} has no airlock");
+                var way = crew.Lock(l);
+                // the ground past the outer stairs is outside every module
+                Assert.False(Inside(plan, way.Outside.X, way.Outside.Z), $"{c.Id}: airlock {l}'s way out ends inside");
+                for (int j = 0; j < crew.Spots.Count; j++)
+                {
+                    if (crew.Spots[j].Module < 0) continue;
+                    foreach (var path in new[] { crew.ToLock(j, l), crew.FromLock(l, j) })
+                    {
+                        double len = ColonyCrew.Length(path);
+                        for (double d = 0; d <= len; d += 0.5)
+                        {
+                            var (p, _) = ColonyCrew.Walk(path, d);
+                            Assert.True(Inside(plan, p.X, p.Z), $"{c.Id}: spot {j} and airlock {l} leave the colony at {p.X:F1}, {p.Z:F1}");
+                        }
+                    }
+                    // the wait is in the tube, before the inner door: not in the chamber
+                    var w = crew.ToLock(j, l)[^1];
+                    Assert.Equal(way.Wait, w);
+                    var m = plan.Modules[way.Module];
+                    Assert.True(Math.Sqrt((w.X - m.X) * (w.X - m.X) + (w.Z - m.Z) * (w.Z - m.Z)) > Math.Sqrt((way.Inner.X - m.X) * (way.Inner.X - m.X) + (way.Inner.Z - m.Z) * (way.Inner.Z - m.Z)),
+                        $"{c.Id}: the wait for airlock {l} is not behind its inner door");
+                }
+            }
+        }
+    }
 }

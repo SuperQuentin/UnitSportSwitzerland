@@ -230,8 +230,14 @@ public sealed class ColonyCrew
     {
         var a = Spots[from];
         var b = Spots[to];
+        return Path((a.X, a.Y, a.Z), a.Module, (b.X, b.Y, b.Z), b.Module);
+    }
+
+    /// <summary>The way between two inside points, each in its module: <see cref="Path(int, int)"/>'s walk for any two points.</summary>
+    public (double X, double Y, double Z)[] Path((double X, double Y, double Z) a, int fromModule, (double X, double Y, double Z) b, int toModule)
+    {
         var pts = new List<(double, double, double)> { (a.X, a.Y, a.Z) };
-        var route = Route(a.Module, b.Module);
+        var route = Route(fromModule, toModule);
         for (int i = 0; i + 1 < route.Count; i++)
         {
             var link = Between(route[i], route[i + 1]);
@@ -246,9 +252,87 @@ public sealed class ColonyCrew
             var (jx, jz) = ColonyPlan.Along(dIn.Out);
             pts.Add((dIn.X - jx * 0.8, 1.55, dIn.Z - jz * 0.8));
         }
-        RoundHub(pts, b.Module, (pts[^1].Item1, pts[^1].Item3), (b.X, b.Z));
+        RoundHub(pts, toModule, (pts[^1].Item1, pts[^1].Item3), (b.X, b.Z));
         pts.Add((b.X, b.Y, b.Z));
         return pts.ToArray();
+    }
+
+    // ---- out on an EVA, through an airlock (#1976: the colonists as bots) -------------------------------------------
+
+    /// <summary>The outer stairs' run (<c>ColonyKit</c>: 7 treads of 0.34 m) and a step past it: where outside begins.</summary>
+    public const double StairsOut = 7 * 0.34 + 1.2;
+
+    /// <summary>How far before an airlock's inner door a colonist waits in the tube while it cycles, metres.</summary>
+    public const double WaitBack = 1.2;
+
+    /// <summary>
+    /// An airlock's places a colonist walks through (colony frame): where it waits in the tube before the inner door,
+    /// that door, the chamber's middle, the outer door, and the ground past the outer stairs.
+    /// </summary>
+    public readonly record struct LockWay((double X, double Y, double Z) Wait, (double X, double Y, double Z) Inner,
+        (double X, double Y, double Z) Centre, (double X, double Y, double Z) Outer, (double X, double Y, double Z) Outside, int Module);
+
+    /// <summary>The way through airlock <paramref name="index"/> (of the plan's <c>Airlocks</c>, the hangar not among them).</summary>
+    public LockWay Lock(int index)
+    {
+        var a = _plan.Airlocks[index];
+        var m = _plan.Modules[a.Module];
+        var inner = _plan.Doors[a.Inner];
+        var outer = _plan.Doors[a.Outer];
+        // the tube behind the inner door: wait part way along it (a short tube: half way)
+        double tube = WaitBack;
+        foreach (int li in _links[a.Module])
+        {
+            var l = _plan.Links[li];
+            if (l.DoorA != a.Inner && l.DoorB != a.Inner) continue;
+            var other = _plan.Doors[l.DoorA == a.Inner ? l.DoorB : l.DoorA];
+            tube = Math.Min(WaitBack, Math.Sqrt((other.X - inner.X) * (other.X - inner.X) + (other.Z - inner.Z) * (other.Z - inner.Z)) / 2);
+        }
+        var (ix, iz) = ColonyPlan.Along(inner.Out);
+        var (ox, oz) = ColonyPlan.Along(outer.Out);
+        return new LockWay((inner.X + ix * tube, 1.55, inner.Z + iz * tube), (inner.X, 1.55, inner.Z), (m.X, 1.55, m.Z),
+            (outer.X, 1.55, outer.Z), (outer.X + ox * StairsOut, 0, outer.Z + oz * StairsOut), a.Module);
+    }
+
+    /// <summary>The airlock nearest an outside spot (by the ground past its stairs), or -1 with none.</summary>
+    public int LockFor(int outsideSpot)
+    {
+        var s = Spots[outsideSpot];
+        int best = -1;
+        double bestD = double.MaxValue;
+        for (int i = 0; i < _plan.Airlocks.Count; i++)
+        {
+            var o = Lock(i).Outside;
+            double d = (o.X - s.X) * (o.X - s.X) + (o.Z - s.Z) * (o.Z - s.Z);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+
+    /// <summary>From an inside spot to the place before airlock <paramref name="index"/>'s inner door, in the tube.</summary>
+    public (double X, double Y, double Z)[] ToLock(int from, int index)
+    {
+        var a = Spots[from];
+        var way = Lock(index);
+        var through = Path((a.X, a.Y, a.Z), a.Module, way.Centre, way.Module);
+        // the walk up to the inner door, stopping before it: the door itself and the chamber come after the cycle
+        var pts = new List<(double X, double Y, double Z)>();
+        foreach (var p in through)
+        {
+            if (Math.Abs(p.X - way.Inner.X) < 1e-6 && Math.Abs(p.Z - way.Inner.Z) < 1e-6) break;
+            pts.Add(p);
+        }
+        // the tube's far door is the last point before the inner one: the wait is along the tube from it
+        pts.Add(way.Wait);
+        return pts.ToArray();
+    }
+
+    /// <summary>From airlock <paramref name="index"/>'s chamber, through its inner door, to an inside spot.</summary>
+    public (double X, double Y, double Z)[] FromLock(int index, int to)
+    {
+        var b = Spots[to];
+        var way = Lock(index);
+        return Path(way.Centre, way.Module, (b.X, b.Y, b.Z), b.Module);
     }
 
     /// <summary>In the hub, from one point to another round its map table: by the ring 3.1 m out when they are far apart round it.</summary>
