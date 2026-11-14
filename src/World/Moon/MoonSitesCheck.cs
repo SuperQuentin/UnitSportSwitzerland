@@ -237,6 +237,7 @@ public partial class MoonSitesCheck : Node
                 double we = main.East + Math.Sin(az) * 9, wn = main.North + Math.Cos(az) * 9;
                 _walkerAt = World(we, wn, 0);
                 _lookAt = World(main.East, main.North, 1.5);
+                _lookEcef = axes.ToEcef(_lookAt.X, _lookAt.Y, _lookAt.Z);
                 var cam = (Camera3D)GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false)!;
                 cam.GlobalPosition = _walkerAt + Vector3.Up * 1.7f;
                 cam.LookAt(_lookAt, Vector3.Up);
@@ -259,10 +260,13 @@ public partial class MoonSitesCheck : Node
                     _walkerAt = me.GlobalPosition;
                     _film = new Camera3D { Name = "DanceFilm", Fov = 60 };
                     AddChild(_film);
-                    _film.MakeCurrent();
-                    var why = ClipRecorder.Film(GetTree(), "moon-twerk");
-                    GD.Print($"[moonsites] the walker twerks at {_walkerAt}{(why == null ? ", filming" : $"; no film: {why}")}");
-                    _dance = 4;
+                    // the dive starts with the whole Moon in view: the spectator camera (its far plane and the globe
+                    // drawn round it are set up for space), straight over the walker
+                    _zoomCam = (Camera3D)GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false)!;
+                    _zoomCam.MakeCurrent();
+                    ZoomPose(0);
+                    GD.Print($"[moonsites] the walker twerks at {_walkerAt}; the globe loads round the far view");
+                    _dance = 7;
                     _danceT = 0;
                 }
                 else if (_danceT > 20) Finish("the walker did not stand within 20 s of T");
@@ -270,13 +274,15 @@ public partial class MoonSitesCheck : Node
             case 4:
             {
                 // a slow arc behind the walker, the lander over its shoulder
-                var back = (_walkerAt - _lookAt) with { Y = 0 };
-                back = back.Normalized();
-                float a = Mathf.DegToRad(-45 + 90 * (float)Math.Clamp(_danceT / 9, 0, 1));
-                var dir = back.Rotated(Vector3.Up, a);
-                _film!.GlobalPosition = _walkerAt + dir * 3.4f + Vector3.Up * 1.1f;
-                _film.LookAt(_walkerAt + Vector3.Up * 1.0f + ((_lookAt - _walkerAt) with { Y = 0 }).Normalized() * 2.5f, Vector3.Up);
-                if (_danceT > 9)
+                if (_local() is { } dancer) _walkerAt = dancer.GlobalPosition;
+                var up = Up();
+                var toLander = Level(Lander() - _walkerAt, up);
+                float a = Mathf.DegToRad(-45 + 90 * (float)Math.Clamp(_danceT / 8, 0, 1));
+                var dir = (-toLander).Rotated(up, a);
+                _film!.GlobalPosition = _walkerAt + dir * 3.4f + up * 1.1f;
+                _film.LookAt(_walkerAt + up * 1.0f + toLander * 2.5f, up);
+                Steady(_film);
+                if (_danceT > 8)
                 {
                     ClipRecorder.Cut();
                     _dance = 5;
@@ -285,9 +291,152 @@ public partial class MoonSitesCheck : Node
                 break;
             }
             case 5:
-                if (!ClipRecorder.Busy || _danceT > 60) Finish(null);
+                if (!ClipRecorder.Busy || _danceT > 60)
+                {
+                    GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"[moonsites] the film's camera turned at most {_worstTurn:F1}° in a frame (on the Moon's own axes)"));
+                    Finish(_worstTurn > MaxTurnDeg ? $"the film's camera jumped {_worstTurn:F1}° in a frame" : null);
+                }
+                break;
+            case 7:
+                // a pre-roll on the far view: the globe's tiles there load before the film starts
+                ZoomPose(0);
+                if (_danceT < 3) break;
+                {
+                    var why = ClipRecorder.Film(GetTree(), "moon-twerk");
+                    GD.Print(why == null ? "[moonsites] filming from orbit" : $"[moonsites] no film: {why}");
+                }
+                _dance = 6;
+                _danceT = 0;
+                break;
+            case 6:
+                // the dive: from 4,500 km to the walker's shoulder in ZoomSeconds, then the arc behind it
+                if (_danceT < ZoomSeconds)
+                {
+                    ZoomPose(_danceT / ZoomSeconds);
+                    break;
+                }
+                _film!.Far = _zoomCam!.Far;
+                _film.MakeCurrent();
+                _dance = 4;
+                _danceT = 0;
                 break;
         }
+    }
+
+    /// <summary>The dive from orbit, seconds.</summary>
+    private const double ZoomSeconds = 5.0;
+
+    /// <summary>Where the dive starts, metres over the walker: the whole Moon in a 75° view.</summary>
+    private const double ZoomFromM = 4_500_000;
+
+    private Camera3D? _zoomCam;
+
+    private Terrain.Format.EcefPos _lookEcef;
+
+    // The world is re-anchored 30-odd times during the dive (past ~1,000 km the origin follows the camera in 3D; at 863 km
+    // it drops back to the ground): world positions are relabelled each time, so a point kept as a world Vector3 goes
+    // stale. The first film's camera kept the lander as one (`_lookAt`, from before the dive) and took the picture's up
+    // from the direction to it: the up slid during the dive and swung 33° when the origin came back down (0:01), and its
+    // straight-down workaround switched its up reference outright at 640 m (135°, 0:03). The Moon's axes themselves never
+    // turned (logged at every re-anchor). So here the lander and the vertical are kept on the Moon (ECEF) and read into
+    // the world every frame, and the picture's up turns smoothly; `Steady` measures each frame's turn on the Moon's axes.
+
+    /// <summary>The most the film's camera may turn in a frame, degrees, on the Moon's own axes: the dive's swing stays well under.</summary>
+    private const float MaxTurnDeg = 8;
+
+    private Vector3 _lastForward, _lastScreenUp;
+    private float _worstTurn;
+
+    /// <summary>
+    /// How far the camera turned since the last frame, read on the Moon's own axes (the world's axes turn at a re-anchor,
+    /// the Moon's never do): a jump in the picture is a jump here.
+    /// </summary>
+    private void Steady(Camera3D cam)
+    {
+        if (_origin.Frame.Axes is not { } axes) return;
+        Vector3 Moon(Vector3 v) => new(
+            (float)(axes.X.X * v.X + axes.Y.X * v.Y + axes.Z.X * v.Z),
+            (float)(axes.X.Y * v.X + axes.Y.Y * v.Y + axes.Z.Y * v.Z),
+            (float)(axes.X.Z * v.X + axes.Y.Z * v.Y + axes.Z.Z * v.Z));
+        var f = Moon(-cam.GlobalBasis.Z);
+        var u = Moon(cam.GlobalBasis.Y);
+        if (_lastForward != default)
+        {
+            float turn = Mathf.RadToDeg(Mathf.Max(_lastForward.AngleTo(f), _lastScreenUp.AngleTo(u)));
+            if (turn > MaxTurnDeg)
+                GD.PrintErr(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"[moonsites] the film's camera turned {turn:F1}° in one frame at {_danceT:F2} s (stage {_dance})"));
+            _worstTurn = Mathf.Max(_worstTurn, turn);
+        }
+        _lastForward = f;
+        _lastScreenUp = u;
+    }
+
+    /// <summary>The vertical at the walker, in the world's axes now.</summary>
+    private Vector3 Up()
+    {
+        if (_origin.Frame.Axes is not { } axes || _local() is not { } me) return Vector3.Up;
+        var p = axes.ToEcef(me.GlobalPosition.X, me.GlobalPosition.Y, me.GlobalPosition.Z);
+        double l = p.Length;
+        return new Vector3((float)(FrameAxes.Dot(p, axes.X) / l), (float)(FrameAxes.Dot(p, axes.Y) / l), (float)(FrameAxes.Dot(p, axes.Z) / l));
+    }
+
+    /// <summary>The lander's look point, in the world's axes now.</summary>
+    private Vector3 Lander()
+    {
+        if (_origin.Frame.Axes is not { } axes) return _lookAt;
+        var (x, y, z) = axes.FromEcef(_lookEcef);
+        return new Vector3((float)x, (float)y, (float)z);
+    }
+
+    /// <summary>A direction made level (its vertical part taken out) and unit.</summary>
+    private static Vector3 Level(Vector3 v, Vector3 up) => (v - up * v.Dot(up)).Normalized();
+
+    /// <summary>The arc's first pose (where the dive lands): behind the walker, 45° round, at its shoulder.</summary>
+    private (Vector3 Eye, Vector3 Look) ArcStart()
+    {
+        var up = Up();
+        var toLander = Level(Lander() - _walkerAt, up);
+        var dir = (-toLander).Rotated(up, Mathf.DegToRad(-45));
+        return (_walkerAt + dir * 3.4f + up * 1.1f, _walkerAt + up * 1.0f + toLander * 2.5f);
+    }
+
+    /// <summary>
+    /// The dive at <paramref name="s"/> (0..1): the distance falls geometrically (the same zoom every instant, eased in and
+    /// out), straight down from orbit; the last kilometres swing round to the arc's first pose behind the walker.
+    /// </summary>
+    private void ZoomPose(double s)
+    {
+        if (_zoomCam == null || _local() is not { } me) return;
+        _walkerAt = me.GlobalPosition;
+        var (eye, look) = ArcStart();
+        var vertical = Up();
+        var head = _walkerAt + vertical * 1.0f;
+        var toEnd = eye - head;
+        double end = toEnd.Length();
+        double e = s * s * (3 - 2 * s);
+        double d = ZoomFromM * Math.Pow(end / ZoomFromM, e);
+        // the swing round: none over 3 km, all of it at the end, by the log of the distance
+        float w = (float)Math.Clamp((Math.Log(3000) - Math.Log(d)) / (Math.Log(3000) - Math.Log(end)), 0, 1);
+        w = w * w * (3 - 2 * w);
+        var dir = vertical.Lerp(toEnd / (float)end, w).Normalized();
+        _zoomCam.GlobalPosition = head + dir * (float)d;
+        // framed on the Moon's centre at first, on the walker after the first quarter
+        var target = head.Lerp(look, w);
+        if (_origin.Frame.Axes is { } axes)
+        {
+            var (cx, cy, cz) = axes.FromEcef(new Terrain.Format.EcefPos(0, 0, 0));
+            float c = (float)Math.Clamp(1 - e / 0.25, 0, 1);
+            c = c * c * (3 - 2 * c);
+            target = target.Lerp(new Vector3((float)cx, (float)cy, (float)cz), c);
+        }
+        // the picture's up: toward the lander while the view looks straight down, turning smoothly to the vertical as
+        // the view comes level (never a switch: it stays a right angle off the view all the way)
+        var toLander = Level(Lander() - _walkerAt, vertical);
+        var up = toLander.Slerp(vertical, w);
+        _zoomCam.LookAt(target, up);
+        Steady(_zoomCam);
     }
 
     /// <summary>

@@ -30,5 +30,12 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938). Phase 1 of 8.
   E:/UnitSportSwitzerland/planets --moonsites [id,id,...]`: each site in a morning (the bodies' clock shifted by days
   until the sun is ~30° up there: `SkyClock.Live` wrapped), the ground slope under every part (max 12°), windowed a
   picture `test_output/moon/site_<id>.png` (1280x720, no HUD). All 33: ~4 min windowed, headless ~15 s a site.
-  `--moondance` after the last named site: the walker steps in 9 m before it, twerks, and a camera arcs behind it
+  `--moondance` after the last named site: the walker steps in 9 m before it and twerks; the film opens on the whole
+  Moon from 4,500 km (a 3 s pre-roll first: the globe's tiles there load, or the first frames had square holes), dives
+  in 5 s on the spectator camera (the distance falls geometrically, framed on the Moon's centre, swinging round in the
+  last 3 km), then a camera arcs behind the walker for 8 s. **Nothing in a film is kept as a world point across a
+  re-anchor**: the dive re-anchors ~32 times (the origin follows the camera past ~1,000 km and drops back at 863 km),
+  relabelling world positions; the lander kept as a world `Vector3` went stale and the picture rolled 33° and 135° in
+  the first film. The lander and the vertical are now held on the Moon (ECEF) and read into the world each frame, and
+  the run fails if the camera turns over 8° in a frame on the Moon's own axes (the smooth dive peaks at 3.1°)
   (`test_output/clips/moon-twerk`; with `--fixed-fps 30` before `--` and `--clip-hq`, every frame is kept).
