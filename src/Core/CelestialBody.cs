@@ -50,12 +50,12 @@ public sealed class CelestialBody
         landable: true, spaceEnterM: 40_000, spaceExitM: 30_000, craterDensity: 0.15, air: BodyAir.Mars);
 
     public static readonly CelestialBody Mercury = new(BodyId.Mercury, "Mercury", SkyBody.Mercury,
-        Ellipsoid.FromRadii(2_440_530, 2_438_260), 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
+        Ellipsoid.Mercury, 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
         landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 1);
 
-    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Sphere(6_051_800),
+    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Venus,
         3.24859e14, DegPerDay(-1.4813688), BodyId.Sun, 0.72333566 * Au, landable: true, spaceEnterM: 120_000,
-        spaceExitM: 100_000);
+        spaceExitM: 100_000, air: BodyAir.Venus);
 
     public static readonly CelestialBody Jupiter = new(BodyId.Jupiter, "Jupiter", SkyBody.Jupiter,
         Ellipsoid.FromRadii(71_492_000, 66_854_000), 1.26686534e17, DegPerDay(870.536), BodyId.Sun, 5.20288700 * Au,
@@ -129,6 +129,8 @@ public sealed class CelestialBody
         BodyId.Earth => CubeShape.Earth,
         BodyId.Moon => CubeShape.Moon,
         BodyId.Mars => CubeShape.Mars,
+        BodyId.Mercury => CubeShape.Mercury,
+        BodyId.Venus => CubeShape.Venus,
         _ => new CubeShape(Shape),
     };
 

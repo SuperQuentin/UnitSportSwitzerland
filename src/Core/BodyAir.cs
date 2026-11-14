@@ -55,6 +55,17 @@ public sealed record BodyAir(
         120_000, 20_000, 60_000,
         FineAbsorption: (0, 6e-6, 20e-6), SunPower: 7);
 
+    /// <summary>
+    /// Venus' (#1854): CO₂ at 65 kg/m³ and 15.9 km scale height (NASA's fact sheet), under a sulphuric-acid deck. The
+    /// shell is single scattering, which cannot draw an opaque deck: a thick, bright yellow haze instead (a vertical depth
+    /// of ~1 in blue), so the radar-mapped ground still reads from orbit and the sky from the ground is a dim amber.
+    /// </summary>
+    public static readonly BodyAir Venus = new(65, 15_900,
+        (28e-6, 14e-6, 6e-6), 15_900,
+        (12e-6, 9e-6, 6e-6), 25_000, 0.7, 1.4,
+        250_000, 60_000, 150_000,
+        FineAbsorption: (0, 6e-6, 24e-6), SunPower: 9);
+
     /// <summary>The gas's density at a height over the reference, kg/m³ (0 above the shell).</summary>
     public double Density(double h) => h > ThicknessM ? 0 : SurfaceDensity * Math.Exp(-Math.Max(h, -ScaleHeightM * 3) / ScaleHeightM);
 
