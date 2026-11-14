@@ -65,7 +65,7 @@ public partial class MoonSitesCheck : Node
         _headless = DisplayServer.GetName() == "headless";
         _baseSky = SkyClock.Live;
         // the pictures at 1280x720 (the test profile's window is 640x360)
-        if (!_headless && !Showcase) DisplayServer.WindowSetSize(new Vector2I(1280, 720));
+        if (!_headless && !Showcase && !Trailer) DisplayServer.WindowSetSize(new Vector2I(1280, 720));
         GD.Print($"[moonsites] {_sites.Count} site(s) to visit{(_headless ? " (headless: no pictures)" : "")}");
     }
 
@@ -123,6 +123,7 @@ public partial class MoonSitesCheck : Node
         {
             // the showcase film (dev): a glide filmed at the site, then on
             if (Showcase && !_headless) { if (ShowStep(site, delta)) Next(); return; }
+            if (Trailer && !_headless) { if (TrailerStep(site, ground, delta)) Next(); return; }
             Judge(site, ground);
             Next();
         }
@@ -152,7 +153,7 @@ public partial class MoonSitesCheck : Node
         var ground = _ground()!;
         _builtAt = ground.Built;
         // a morning there: whole hours of the bodies' clock until the sun stands ~30° up, rising
-        _days = Night(s) ? NightDays(s) : MorningDays(s);
+        _days = TrailerShot(_index) is { } shot ? SunDays(s, shot.SunDeg) : Night(s) ? NightDays(s) : MorningDays(s);
         var baseSky = _baseSky;
         double days = _days;
         SkyClock.Live = () =>

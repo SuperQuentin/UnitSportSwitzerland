@@ -48,4 +48,11 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938). Phase 1 of 8.
   after, and a user:// of its own (no test profile: it renders at half scale). Seen: a chase camera 2.6 m back crosses the
   airlock's walls and rings while the colonist waits in the chamber, and the ground darkens in one frame when a square
   finishes building (Apollo 11, ~1.4 s in): cut round both.
+- **Trailer moves** (dev, `MoonSitesCheck.Trailer`): `--moonsites a,b,... --moontrailer <file>`, one line a site in order:
+  `name|sun°|eye e,n,u>e,n,u|look e,n,u>e,n,u|seconds|fov|flags`: metres east and north of the site's main part and up
+  over the ground there, the sun at that height and setting (`SunDays`), flags `drift` (a handheld sway), `lin`/`in`,
+  `at=<module kind>` (from that module), `terminal=<title start>:<page>` (out from that terminal's screen, to its right and
+  up; the screen turned to that page, `ColonyTerminals.ShowPage`). Each move its own clip, `trailer_<name>`. The Moon teaser
+  "LOWER LOCK" was cut from these (Nov 2026). Seen: the Marius Hills lower lock's terminal stands behind a rack and its lit
+  inner door from every reachable angle; Okafor's and the galley's read from the front.
   (`test_output/clips/moon-twerk`; with `--fixed-fps 30` before `--` and `--clip-hq`, every frame is kept).

@@ -175,4 +175,18 @@ public partial class ColonyTerminals : Node3D
     public Vector3 Facing(int i) => -_terminals[i].Node.GlobalBasis.Z;
 
     public string Shown(int i) => _terminals[i].Screen.Text;
+
+    /// <summary>A terminal's log title.</summary>
+    public string Title(int i) => _terminals[i].Log.Title;
+
+    /// <summary>The middle of a terminal's screen (world).</summary>
+    public Vector3 ScreenAt(int i) => _terminals[i].Screen.GlobalPosition;
+
+    /// <summary>Turns a terminal to a page of its log (a film's shot, <c>--moontrailer</c>): what E would show there.</summary>
+    public void ShowPage(int i, int page)
+    {
+        var t = _terminals[i];
+        t.Page = Math.Clamp(page, -1, t.Log.Pages.Length - 1);
+        t.Screen.Text = t.Page < 0 ? t.Log.Title : $"{t.Log.Title}   {t.Page + 1}/{t.Log.Pages.Length}\n\n{t.Log.Pages[t.Page]}";
+    }
 }
