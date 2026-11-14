@@ -7,6 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 
 ## Architecture
 
+- `plancues` — #1572: `tools/plancues/` reads architectural PDFs into plan cues (sort, scale bar or known object, walls and rooms, fit to the footprint or aerial, StadiumSpec row and house-layout proposals, review overlays); outputs on X:, never in the repo; Tuilière measured, UniS a documented miss, local model findings
 - `feature-clips` (general) — `tools/record-clip.sh`: one launch films a probe to a GIF (+ MP4); `RELEASE=1` stages it, `release.sh` shows it under Highlights
 - `delta-updates` — per-release `.delta` files (rsync-style binary patches, SHA-256 checked, Brotli) made by `tools/deltas.sh` from the published archives and uploaded by `release.sh`; staging + swap script; measured 8 KB vs 176 MB (#532)
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
