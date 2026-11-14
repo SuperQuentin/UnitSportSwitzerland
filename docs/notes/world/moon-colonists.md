@@ -37,9 +37,16 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
   - **off the ground**: outside the air with no ground under it (the body ground's 512 m square follows the camera), the
     body is held still (`RequestReplacement`) until the ground is there again.
   The bot's spawn data carries its body (`PlayerReplication.BotData` index 10), or a peer reads a Moon place as the Earth's.
-- **The domes faced away** (found by the first colonist bot, #1976): a moondust dome's yaw was the can's way out, so its
-  entrance and the gap in its walls' collision were at the far side from its tube; nobody could walk in. Turned to face the
-  can (`ColonyPlan`, yaw + π), with a sill box under the doorway (a 0.5 m gap between its floor and the tube's).
+- **What the first colonist bot found** (#1976; the figures walked through all of it):
+  - a moondust dome's entrance and the gap in its walls' collision faced away from its tube (its yaw was the can's way
+    out): turned to face the can (`ColonyPlan`, yaw + π), with a sill box under the doorway;
+  - the can a dome's tube joins had no side doorway: `ColonyPlan.SideDoor(module)` (+1/-1 on the node's X), the shell cut
+    there (`ColonyKit.SideCut`, `SideDoorway`: the shell either side, panels round it, a collar, a landing, the frame;
+    viewer "Can, side door"), its collision cut the same way (`ColonyBuilder.Hollow`), the furniture kept clear
+    (`ColonyInteriors.Furnish(..., sideDoor)`: pieces in front of it left out, counters cut either side); a walk through a
+    side door goes by the can's aisle (`ColonyCrew.Aisle`), never across its bunks;
+  - each of the airlock's outer steps was a 0.22 m wall to a body coming back up: the stairs are solid as one ramp along
+    the treads' noses (drawn as steps still).
 - **Figures** where no bot runs (`World/Moon/ColonyColonists`, a child of each staffed colony): one `SkinnedFigure` a
   colonist in the silver suit (`Outfit.Of(SilverSuit)`), the space helmet outside; standing posed once, walking posed by
   `PoseStride` at 15 Hz within 15 m, 5 Hz beyond; a figure faces its node's −Z. A change that is not a walk (asleep,

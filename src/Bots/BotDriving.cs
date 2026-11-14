@@ -29,6 +29,9 @@ public sealed class BotDrive
     public Vector3? Direct;
     /// <summary>The top speed of a drive across, m/s.</summary>
     public float DirectSpeed = 4f;
+    /// <summary>A drive across's nearest yet to its point, and when: no nearer in 10 s and it gives up (circling it).</summary>
+    public float DirectBest = float.MaxValue;
+    public double DirectBestAt;
 }
 
 /// <summary>
@@ -169,13 +172,33 @@ public static class BotDriving
     {
         var body = bot.Body;
         var drive = bot.Drive;
-        if (drive.Direct == null) drive.StillSince = now;
+        if (drive.Direct == null)
+        {
+            drive.StillSince = now;
+            drive.DirectBest = float.MaxValue;
+            drive.DirectBestAt = now;
+        }
         drive.Direct = goal;
         drive.DirectSpeed = speed;
-        if (Flat(goal - body.GlobalPosition) < AcrossArrive)
+        float dist = Flat(goal - body.GlobalPosition);
+        var fwd = -body.GlobalBasis.Z;
+        var to = goal - body.GlobalPosition;
+        bool behind = new Vector2(fwd.X, fwd.Z).Dot(new Vector2(to.X, to.Z)) < 0;
+        // there, or close by with it behind (a turn round it would circle it)
+        if (dist < AcrossArrive || dist < AcrossArrive * 2.5f && behind)
         {
             drive.Direct = null;
             return Stop(drive, Progress.Arrived, "at the goal");
+        }
+        if (dist < drive.DirectBest - 1f)
+        {
+            drive.DirectBest = dist;
+            drive.DirectBestAt = now;
+        }
+        else if (now - drive.DirectBestAt > 10)
+        {
+            drive.Direct = null;
+            return Stop(drive, Progress.Failed, $"no nearer in 10 s ({dist:F0} m off)");
         }
         if (body.RideSpeed > StuckSpeed) drive.StillSince = now;
         else if (now - drive.StillSince > StuckSeconds)
