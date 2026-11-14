@@ -1064,6 +1064,11 @@ src/Terrain/CollisionReach net  tools/botcheck.sh
 src/Net/Regions/         net    tools/regioncheck.sh
 src/Player/FootPlayer.Region net tools/regioncheck.sh
 src/Bots/RegionCheck     net    tools/regioncheck.sh
+# bots inside buildings (#1330): a bot visits a generated village's house on a dedicated server, seen from two clients
+src/Bots/BotVisit        net    tools/botindoorcheck.sh
+src/Bots/WanderBrain     net    tools/botindoorcheck.sh
+src/Interiors/InteriorManager.Bots net tools/botindoorcheck.sh
+src/Interiors/InteriorNav net   tools/botindoorcheck.sh
 src/Bots/Bot.cs          net    tools/regioncheck.sh
 src/Core/OriginShifter   net    tools/regioncheck.sh
 tools/regioncheck        net    tools/regioncheck.sh
