@@ -58,6 +58,11 @@ public class FunCourseTests
         var lift = Assert.Single(Course.Roads, r => r.Class == RoadClass.SkiLift).Points;
         Assert.True(lift[^1].Z - lift[0].Z > 90);
         Assert.All(slope.Outline, p => Assert.True(p.X < FunCourse.LiftX));
+        // the chairlift (#1609, liftnetcheck): up the west edge, clear of the run, bottom first by altitude
+        var chair = Assert.Single(Course.Roads, r => r.Class == RoadClass.Chairlift).Points;
+        Assert.True(chair[^1].Z - chair[0].Z > 90);
+        Assert.All(slope.Outline, p => Assert.True(p.X > FunCourse.ChairX + 10));
+        Assert.All(chair, p => Assert.InRange(p.Z - FunCourse.Ground(p.X, p.Y), 2.9, 9.1));
     }
 
     [Fact]
@@ -93,7 +98,7 @@ public class FunCourseTests
         Assert.InRange(length, 8000, 11000);
         Assert.Equal(2 * Math.PI, turned, 1);   // once round, anticlockwise, never crossing itself back
         // clear of every other area by more than its half width
-        var others = Course.Roads.Where(r => r.Class != RoadClass.SkiLift && r.Points.Count != lap.Count).SelectMany(r => r.Points).ToList();
+        var others = Course.Roads.Where(r => !RoadFormat.IsAerial(r.Class) && r.Points.Count != lap.Count).SelectMany(r => r.Points).ToList();
         var (px0, py0, px1, py1) = FunCourse.PvpBox;
         foreach (var (x, y, _) in lap.Where((_, i) => i % 5 == 0))
         {
