@@ -114,14 +114,13 @@ public partial class PhoneProbe : Node
         Check(me.PhoneState == FootPlayer.PhoneOpenState, $"open on the wire (state {me.PhoneState})");
         if (Platform.IsTouch) Check(me.PhoneCover > 0f, $"touch: Home is seen square on, enlarged ({me.PhoneCover:F2})");
         else Check(me.PhoneCover == 0f, "home is seen in the hands, not square on");
-        // the cursor over the screen: the free hand's index finger comes to point at it
-        var mid = me.CameraOrNull is { } eye && me.PhoneModel is { } pm
-            ? eye.UnprojectPosition(pm.GlobalTransform * PhoneModel.InnerScreenCentre) : GetViewport().GetVisibleRect().Size / 2f;
-        // a parsed event is in the window's pixels: the stretched canvas's units scaled up
-        var atWindow = GetViewport().GetScreenTransform() * mid;
+        // the cursor over the screen's middle: the ray lands exactly there; the viewmodel has no arm and no finger (the cursor is the pointer)
+        var mid = GetViewport().GetVisibleRect().Size / 2f;
+        var atWindow = WindowAt(me, new Vector2(0.5f, 0.5f), false);
         Input.ParseInputEvent(new InputEventMouseMotion { Position = atWindow, GlobalPosition = atWindow });
         await Wait(0.4);
-        Check(me.PhonePointTip != null || Platform.IsTouch, $"the cursor on the screen: the index finger points at it (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
+        Check(Platform.IsTouch || phone.CursorUv is { } cu && cu.DistanceTo(new Vector2(0.5f, 0.5f)) < 0.03f && me.PhonePointTip == null,
+            $"the cursor on the screen's middle: the ray lands there, no finger on the viewmodel (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
         Log($"finger: tip {me.PhonePointTip}, built {me.DrawnPoint}, body {me.GlobalPosition}, phone {me.PhoneModel?.GlobalPosition}");
         Shot("phone_5_open.png");
         Save(phone.Screens.Inner, "phone_5_open_screen.png");
@@ -428,12 +427,12 @@ public partial class PhoneProbe : Node
         await Wait(0.3);
     }
 
-    /// <summary>The screen's four corners through the lens: size as shares of the view, and whether all are inside it.</summary>
-    private (float W, float H, float Bottom, bool Inside) ProjectScreen(FootPlayer me, bool cover)
+    /// <summary>The screen's four corners through the lens: its box as shares of the view, and whether all are inside it.</summary>
+    private (float W, float H, float Left, float Right, float Top, float Bottom, bool Inside) ProjectScreen(FootPlayer me, bool cover)
     {
         var size = GetViewport().GetVisibleRect().Size;
         var cam = me.CameraOrNull;
-        if (cam == null) return (0, 0, 0, false);
+        if (cam == null) return (0, 0, 0, 0, 0, 0, false);
         bool inside = true;
         var pts = new List<Vector2>();
         foreach (var uv in new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) })
@@ -443,7 +442,17 @@ public partial class PhoneProbe : Node
             inside &= !cam.IsPositionBehind(world) && at.X >= 0 && at.Y >= 0 && at.X <= size.X && at.Y <= size.Y;
             pts.Add(at);
         }
-        return ((pts[1] - pts[0]).Length() / size.X, (pts[2] - pts[0]).Length() / size.Y, Mathf.Max(pts[2].Y, pts[3].Y) / size.Y, inside);
+        float minX = pts.Min(q => q.X), maxX = pts.Max(q => q.X), minY = pts.Min(q => q.Y), maxY = pts.Max(q => q.Y);
+        return ((pts[1] - pts[0]).Length() / size.X, (pts[2] - pts[0]).Length() / size.Y, minX / size.X, maxX / size.X, minY / size.Y, maxY / size.Y, inside);
+    }
+
+    private static void FindAll<T>(Node root, List<T> into) where T : Node
+    {
+        foreach (var child in root.GetChildren())
+        {
+            if (child is T t) into.Add(t);
+            FindAll(child, into);
+        }
     }
 
     /// <summary>The mouse ray lands on what is under the cursor: aim at a point of the screen in window pixels, read where the phone says it is.</summary>
@@ -458,39 +467,55 @@ public partial class PhoneProbe : Node
     }
 
     /// <summary>
-    /// The framing (#1825): the phone is read and worked while walking, so its screen is wholly in view, in the lower right,
-    /// above the hint bar, at the size the design asks (open 40-45 % of the width, the cover 14-16 % wide and 40-50 % high).
+    /// The framing (#1825): the phone is a viewmodel in the lower right of the view and the gameplay camera is not touched. Run at 16:9
+    /// (1280 x 720, the strict shares), 4:3 and 21:9 (inside the view, clamped by height).
     /// </summary>
     private async Task FramingChecks(FootPlayer me, PhoneController phone)
     {
         if (Platform.IsTouch) { Log("skip (touch is seen square on)"); return; }
-        // the shares are for a 16:9 view (a headless window is nearly square)
         var window = GetWindow();
         var oldSize = window.Size;
-        window.Size = new Vector2I(1280, 720);
-        await Wait(0.5);
-        var view = GetViewport().GetVisibleRect().Size;
-        Log($"view {view}, window {window.Size}");
-        await FramingBody(me, phone);
+        foreach (var (w, h, name) in new[] { (1280, 720, "16:9"), (1024, 768, "4:3"), (1680, 720, "21:9") })
+        {
+            window.Size = new Vector2I(w, h);
+            await Wait(0.5);
+            Log($"view {GetViewport().GetVisibleRect().Size} for the {name} window {window.Size}");
+            await FramingBody(me, phone, name, strict: name == "16:9");
+        }
         window.Size = oldSize;
         await Wait(0.3);
     }
 
-    private async Task FramingBody(FootPlayer me, PhoneController phone)
+    private async Task FramingBody(FootPlayer me, PhoneController phone, string name, bool strict)
     {
-        phone.Screens.ShowPage(PhoneScreens.Page.Home);
-        if (!phone.IsCovering) { phone.Open(PhoneScreens.Page.Home); }
+        // the gameplay camera is not touched: the same transform and field of view in the pocket and with the phone open
+        if (phone.IsOut) { phone.PutAway(); for (int i = 0; i < 60 && phone.IsOut; i++) await Wait(0.1); }
         await Wait(1.5);
+        var cam = me.CameraOrNull!;
+        var before = cam.GlobalTransform;
+        float fovBefore = cam.Fov;
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        phone.Open(PhoneScreens.Page.Home);
+        await Wait(1.5);
+        float moved = cam.GlobalTransform.Origin.DistanceTo(before.Origin);
+        float turned = cam.GlobalTransform.Basis.GetRotationQuaternion().AngleTo(before.Basis.GetRotationQuaternion());
+        Check(moved < 0.02f && turned < 0.01f && Mathf.Abs(cam.Fov - fovBefore) < 0.01f,
+            $"{name}: the gameplay camera is the same with the phone open ({moved:F3} m, {Mathf.RadToDeg(turned):F2} degrees, fov {fovBefore:F1} to {cam.Fov:F1})");
+        var view = GetViewport().GetVisibleRect().Size;
         var home = ProjectScreen(me, cover: false);
-        Log($"open Home: width {home.W:P0}, height {home.H:P0}, bottom {home.Bottom:P0}");
-        Check(home.Inside && home.W is > 0.38f and < 0.47f && home.Bottom < 0.90f, $"open on Home the screen is wholly in view at {home.W:P0} of the width, its bottom at {home.Bottom:P0}");
-        await RayCheck(me, phone, false, "open");
-        Shot("phone_1825/framing_open_home.png");
+        Log($"{name} open Home: width {home.W:P0}, left {home.Left:P0}, right {home.Right:P0}, top {home.Top:P0}, bottom {home.Bottom:P0}");
+        bool centreClear = !(home.Left <= 0.5f && home.Right >= 0.5f && home.Top <= 0.5f && home.Bottom >= 0.5f);
+        Check(home.Inside && centreClear && (strict ? home.W is > 0.38f and < 0.47f && home.Left > 0.5f : home.W is > 0.30f and < 0.47f),
+            $"{name}: open the screen is wholly in view at {home.W:P0} of the width, from {home.Left:P0}, the view's centre clear");
+        var hud = new List<PromptBar>();
+        FindAll(GetTree().Root, hud);
+        Check(hud.Count == 0 || hud.All(b => b.GetChildCount() == 0 || b.GetChild(0) is not Control c || !c.IsVisibleInTree()), "open, the corner key list is hidden");
+        await RayCheck(me, phone, false, name + " open");
+        Shot("phone_1825/framing_open_home_" + name.Replace(':', 'x') + ".png");
         phone.Open(PhoneScreens.Page.Map);
         await Wait(0.8);
         var map = ProjectScreen(me, cover: false);
-        Log($"open Map: width {map.W:P0}, height {map.H:P0}, bottom {map.Bottom:P0}");
-        Check(map.Inside && map.W is > 0.38f and < 0.47f && map.Bottom < 0.90f, $"open on the Map the screen is wholly in view at {map.W:P0} of the width");
+        Check(map.Inside && map.Left > 0.4f, $"{name}: open on the Map the screen is wholly in view ({map.W:P0}, from {map.Left:P0})");
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
         // a click through real window coordinates on the focused tile opens its app
@@ -502,22 +527,33 @@ public partial class PhoneProbe : Node
             foreach (bool down in new[] { true, false })
                 Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down, Position = at, GlobalPosition = at });
             await Wait(0.4);
-            Check(phone.Screens.Shown != PhoneScreens.Page.Home, $"a mouse click on a Home tile through real window coordinates opens it ({phone.Screens.Shown})");
+            Check(phone.Screens.Shown != PhoneScreens.Page.Home, $"{name}: a mouse click on a Home tile through real window coordinates opens it ({phone.Screens.Shown})");
             phone.Screens.ShowPage(PhoneScreens.Page.Home);
             await Wait(0.3);
         }
         // folded
         await Key(Godot.Key.Escape, 1.5);
-        Check(phone.IsFolded, "folded again for the framing");
+        Check(phone.IsFolded, $"{name}: folded again for the framing");
         var cov = ProjectScreen(me, cover: true);
-        Log($"folded: width {cov.W:P0}, height {cov.H:P0}, bottom {cov.Bottom:P0}");
-        Check(cov.Inside && cov.W is > 0.13f and < 0.17f && cov.H is > 0.38f and < 0.52f && cov.Bottom < 0.90f,
-            $"folded the cover is wholly in view, {cov.W:P0} wide and {cov.H:P0} high, its bottom at {cov.Bottom:P0}");
-        // folded the mouse is the view's, so the ray is read straight off the lens: a window point lands on the cover point aimed at
+        Log($"{name} folded: width {cov.W:P0}, height {cov.H:P0}, left {cov.Left:P0}, right {cov.Right:P0}, top {cov.Top:P0}, bottom {cov.Bottom:P0}");
+        Check(cov.Inside && (strict ? cov.W is > 0.13f and < 0.17f && cov.H is > 0.38f and < 0.52f : cov.W is > 0.11f and < 0.17f),
+            $"{name}: folded the cover is wholly in view, {cov.W:P0} wide and {cov.H:P0} high");
+        // clear of the key list and the hand chip
+        var boxes = new List<Rect2>();
+        var bars = new List<PromptBar>();
+        FindAll(GetTree().Root, bars);
+        foreach (var bar in bars)
+            if (bar.GetChildCount() > 0 && bar.GetChild(0) is Control lines && lines.IsVisibleInTree() && lines.Size.X > 1) boxes.Add(lines.GetGlobalRect());
+        var chips = new List<Items.HandChip>();
+        FindAll(GetTree().Root, chips);
+        foreach (var chip in chips) if (chip.IsVisibleInTree()) boxes.Add(chip.GetGlobalRect());
+        var phoneBox = new Rect2(cov.Left * view.X, cov.Top * view.Y, (cov.Right - cov.Left) * view.X, (cov.Bottom - cov.Top) * view.Y);
+        Check(!boxes.Any(r => r.Intersects(phoneBox)), $"{name}: folded, the cover does not overlap the key list or the hand chip ({boxes.Count} boxes)");
+        // folded the mouse is the view's, so the ray is read straight off the lens
         var aim = new Vector2(0.3f, 0.4f);
         var hit = me.PhoneScreenPoint(GetViewport().GetScreenTransform().AffineInverse() * WindowAt(me, aim, true), out bool onCover);
-        Check(onCover && hit is { } h && h.DistanceTo(aim) < 0.02f, $"folded: a window point lands on the cover point aimed at ({hit} for {aim})");
-        Shot("phone_1825/framing_folded.png");
+        Check(onCover && hit is { } h && h.DistanceTo(aim) < 0.02f, $"{name}: folded, a window point lands on the cover point aimed at ({hit} for {aim})");
+        Shot("phone_1825/framing_folded_" + name.Replace(':', 'x') + ".png");
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
     }

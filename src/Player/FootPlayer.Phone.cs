@@ -162,21 +162,12 @@ public partial class FootPlayer
     {
         StepPhone(dt);
         if (_camera == null) return;
-        // the lens eases in and out on its own clock, a little slower than the phone comes and goes (#1825)
-        bool want = PhoneLook > 0f && !XR.XrSession.Active;
-        _phoneLens = Mathf.MoveToward(_phoneLens, want ? 1f : 0f, dt / PhoneLensSeconds);
-        float look = Mathf.SmoothStep(0f, 1f, _phoneLens), cover = Mathf.SmoothStep(0f, 1f, PhoneCover);
-        if (_phoneModel is { Visible: true } && want)
-        {
-            var seen = _phoneModel.GlobalTransform.Orthonormalized();
-            _phoneLocal = GlobalTransform.AffineInverse() * seen;
-        }
-        if (_phoneLens <= 0f)
-        {
-            _framePitch0 = _pitch;
-            _frameYaw0 = _walker != null ? Mathf.AngleDifference(Mathf.Atan2(_walker.GlobalBasis.Z.X, _walker.GlobalBasis.Z.Z), _viewYaw) : 0f;
-        }
-        if (look <= 0f || _walker == null || float.IsNaN(_phoneLocal.Origin.X))
+        StepPhoneViewmodel(dt);
+        float look = Mathf.SmoothStep(0f, 1f, PhoneLook), cover = Mathf.SmoothStep(0f, 1f, PhoneCover);
+        float camApp = Mathf.SmoothStep(0f, 1f, PhoneCameraApp);
+        // folded or open on desktop and pad the gameplay camera is not touched (#1825): only the camera app, the selfie and
+        // the travel curtain (and the touch screen) move it
+        if (look <= 0f || _phoneModel is not { Visible: true } || XR.XrSession.Active || cover <= 0f && camApp <= 0f)
         {
             if (!float.IsNaN(_phoneNear))
             {
@@ -185,9 +176,7 @@ public partial class FootPlayer
                 _phoneNear = float.NaN;
             }
             _phoneSeen.Origin = new Vector3(float.NaN, 0, 0);
-            _phoneLocal.Origin = new Vector3(float.NaN, 0, 0);
-            _frameInit = false;
-            ShowBackdrop(0f, dt);
+            ShowBackdrop(look > 0f && !XR.XrSession.Active ? PhoneBackdrop : 0f, dt);
             return;
         }
         if (float.IsNaN(_phoneNear))
@@ -196,15 +185,13 @@ public partial class FootPlayer
             _phoneFov = _camera.Fov;
         }
         // the lens follows the phone a beat late: the hands' sway, a step, a turn show as the phone moving
-        // (the phone is where it was last in the hands while it goes back in the pocket)
-        var phone = GlobalTransform * _phoneLocal;
+        var phone = _phoneModel.GlobalTransform.Orthonormalized();
         if (float.IsNaN(_phoneSeen.Origin.X) || _phoneSeen.Origin.DistanceTo(phone.Origin) > 1f) _phoneSeen = phone;
         else _phoneSeen = _phoneSeen.InterpolateWith(phone, MathX.Damp(PhoneCover > 0.5f ? 9f : 6f, dt)).Orthonormalized();
 
-        // from the game's own lens over the shoulder onto the phone, folded or open, the world round it; behind
-        // it, level, for the camera app; square onto it, close, for the travel curtain (and the touch screen)
-        float camApp = Mathf.SmoothStep(0f, 1f, PhoneCameraApp);
-        var target = PhoneFramingView(phone, dt);
+        // from the game's own lens: behind the raised phone, level, for the camera app; square onto the screen, close,
+        // for the travel curtain (and the touch screen)
+        var target = _camera.GlobalTransform;
         if (camApp > 0f)
         {
             float selfie = Mathf.SmoothStep(0f, 1f, _phoneTurn);
@@ -214,97 +201,95 @@ public partial class FootPlayer
         }
         if (cover > 0f) target = target.InterpolateWith(PhoneScreenView(_phoneSeen), cover);
         _camera.GlobalTransform = _camera.GlobalTransform.InterpolateWith(target, look);
-        // the screen ends up a few centimetres from the lens only when it covers the view
-        _camera.Near = Mathf.Lerp(_phoneNear, 0.01f, look);
+        _camera.Near = Mathf.Lerp(_phoneNear, 0.01f, Mathf.Max(cover, camApp));
         // set from the saved FOV each frame, not eased from the last: the game's own easing starts again from it
-        float framed = Mathf.Lerp(_phoneFov, PhoneFramingFov, look);
-        _camera.Fov = Mathf.Lerp(Mathf.Lerp(framed, PhoneFov, cover), CameraAppFov, camApp * (1f - cover));
+        _camera.Fov = Mathf.Lerp(Mathf.Lerp(_phoneFov, PhoneFov, cover), CameraAppFov, camApp * (1f - cover));
         // on its way to the screen or behind the raised phone the lens passes the face: the body is seen
         // from the eye then (only its shadow drawn), the phone stays
         if (cover > 0.12f || camApp > 0.4f) SeeBodyFromEye(true);
         ShowBackdrop(PhoneBackdrop, dt);
     }
 
-    /// <summary>Seconds the lens takes to come over the shoulder and to go back (the phone itself is out in about a tenth of that).</summary>
-    private const float PhoneLensSeconds = 0.3f;
-    /// <summary>The lens's field of view framing the phone in the hands: the world still shows round it.</summary>
-    private const float PhoneFramingFov = 65f;
-    private float _phoneLens;
-    /// <summary>The phone in this body's frame as last drawn in the hands (NaN origin: none yet).</summary>
-    private Transform3D _phoneLocal = new(Basis.Identity, new Vector3(float.NaN, 0, 0));
+    /// <summary>The phone moves the lens: the camera app and selfie, the travel curtain, the touch screen (not folded or open on desktop and pad, #1825).</summary>
+    private bool PhoneMovesLens => PhoneLook > 0f && !XR.XrSession.Active
+        && (PhoneState >= PhoneCameraState || PhoneCover > 0f || PhoneBackdrop > 0f || Core.Platform.IsTouch);
 
-    private bool _frameInit;
-    private Quaternion _frameQ;
-    private float _framePitch0, _frameYaw0;
+    // ------------------------------------------------------------------ the owner's viewmodel (#1825)
 
-    /// <summary>The share of the view's width the open inner screen / the folded cover fills, and where their middles sit (0 centre, ±1 an edge).</summary>
-    private const float OpenWidthShare = 0.43f, CoverWidthShare = 0.15f, OpenAtX = 0.20f, CoverAtX = 0.50f, CoverAtY = -0.2f, OpenAtY = -0.02f, FramingTip = 0.26f;
+    private Phone.PhoneModel? _phoneView;
+    private bool _worldPhoneHidden;
+
+    /// <summary>The phone's viewmodel on the owner's camera, when it is what is drawn (desktop and pad, folded or open).</summary>
+    public Phone.PhoneModel? PhoneViewmodel => _phoneView;
+
+    /// <summary>The viewmodel is on screen now (the pointing finger and the in-world phone's screen yield to it).</summary>
+    public bool PhoneViewShown { get; private set; }
+
+    /// <summary>The share of the view's width the open inner screen and the folded cover fill (16:9), and where they sit.</summary>
+    internal const float ViewOpenShare = 0.40f, ViewCoverShare = 0.15f, ViewDepth = 0.45f;
 
     /// <summary>
-    /// The phone framed to be read and worked while walking (#1825): the lens on the screen's normal (it faces the
-    /// lens square on, the phone's own sway kept by a damped copy of its turn), at the distance where the open inner
-    /// screen fills 43 % of the view's width (the folded cover 15 %), turned so the screen sits in the lower right,
-    /// wholly in view above the hint bar, the upper left and the horizon free. The player's look since the phone came
-    /// out (the pitch, the turn the body has not caught up with) turns the lens on from there.
+    /// The phone drawn in camera space, lower right: open, the inner screen 43 % of the view's width, its right edge 2 % from the
+    /// view's edge and its bottom 3 % up; folded, the cover 15 % wide, above the hint line and left of the key list. Square to the
+    /// picture with a few degrees of tilt and a light walk sway; the hinge unfolds as a node. The share is by width, clamped by
+    /// height so it never leaves the view (4:3, 21:9). The lens is not touched.
     /// </summary>
-    private Transform3D PhoneFramingView(Transform3D phone, float dt)
+    private void StepPhoneViewmodel(float dt)
     {
-        float open = _phoneModel != null ? Mathf.SmoothStep(0f, 1f, _phoneModel.Fold) : 0f;
+        bool want = IsMultiplayerAuthority() && !Npc && !XR.XrSession.Active && !Core.Platform.IsTouch
+            && PhoneState is PhoneFoldedState or PhoneOpenState && PhoneCover <= 0.001f && PhoneCameraApp <= 0.001f && PhoneBackdrop <= 0.001f;
+        // in first person the in-world copy would show twice (and float where the hidden body's hand is)
+        HideWorldPhone(want && !_thirdPerson);
+        if (!want)
+        {
+            PhoneViewShown = false;
+            if (_phoneView != null) _phoneView.Visible = false;
+            return;
+        }
+        if (_phoneView == null)
+        {
+            _phoneView = new Phone.PhoneModel { Viewmodel = true };
+            _camera!.AddChild(_phoneView);
+        }
         var size = GetViewport().GetVisibleRect().Size;
         float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
-        float tanV = Mathf.Tan(Mathf.DegToRad(PhoneFramingFov) * 0.5f), tanH = tanV * aspect;
-        // the phone's turn, damped: its sway and lean show as the screen moving a little in the picture
-        var q = phone.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
-        _frameQ = _frameInit ? _frameQ.Slerp(q, MathX.Damp(10f, dt)).Normalized() : q;
-        _frameInit = true;
-        var seen = new Basis(_frameQ);
-        // the player's look since the phone came out
-        float bodyYaw = _walker != null ? Mathf.Atan2(_walker.GlobalBasis.Z.X, _walker.GlobalBasis.Z.Z) : _viewYaw;
-        float yawDelta = Mathf.Clamp(Mathf.AngleDifference(bodyYaw, _viewYaw), -1.2f, 1.2f);
-        float pitchDelta = Mathf.Clamp(_pitch - _framePitch0, -1f, 1f);
+        float tanV = Mathf.Tan(Mathf.DegToRad(_camera!.Fov) * 0.5f), tanH = tanV * aspect;
+        float open = Mathf.SmoothStep(0f, 1f, _phoneView.Fold);
+        // by width, but never taller than the view allows
+        float openW = Mathf.Min(ViewOpenShare, 0.58f * (Phone.PhoneModel.InnerW / Phone.PhoneModel.InnerH) / aspect);
+        float coverW = Mathf.Min(ViewCoverShare, 0.46f * (Phone.PhoneModel.CoverSize.X / Phone.PhoneModel.CoverSize.Y) / aspect);
+        float w = Mathf.Lerp(coverW, openW, open);
+        var refSize = new Vector2(Mathf.Lerp(Phone.PhoneModel.CoverSize.X, Phone.PhoneModel.InnerW, open), Mathf.Lerp(Phone.PhoneModel.CoverSize.Y, Phone.PhoneModel.InnerH, open));
+        float scale = w * 2f * ViewDepth * tanH / refSize.X;
+        float hFrac = refSize.Y * scale / (2f * ViewDepth * tanV);   // the screen's height as a share of the view's
+        // the screen's middle in the picture (ndc): open at the corner, 2 % in and 3 % up; folded 15 % in from the right edge
+        // (clear of the key list) and above the hint line
+        var openAt = new Vector2(1f - 0.07f - w, -1f + 0.07f + hFrac);
+        var coverAt = new Vector2(1f - 0.30f - w, -1f + 0.24f + hFrac);
+        var at = coverAt.Lerp(openAt, open);
+        // comes up from below as it comes out
+        at.Y -= (1f - Mathf.SmoothStep(0f, 1f, PhoneLook)) * 1.3f;
+        // a few degrees of tilt and a light sway with the walk
+        float t = (float)GameClock.Now, speed = MathX.FlatLength(Velocity);
+        var tilt = Basis.FromEuler(new Vector3(0.02f * Mathf.Sin(t * 0.9f), -0.07f + 0.012f * Mathf.Sin(t * 1.3f), 0.04f + 0.01f * Mathf.Sin(t * 0.7f)));
+        at.Y += Mathf.Min(speed, 6f) * 0.004f * Mathf.Sin(t * 8f);
+        var centre = Phone.PhoneModel.CoverScreenCentre.Lerp(Phone.PhoneModel.InnerScreenCentre, open);
+        var targetPos = new Vector3(at.X * tanH * ViewDepth, at.Y * tanV * ViewDepth, -ViewDepth);
+        _phoneView.Basis = tilt.Scaled(Vector3.One * scale);
+        _phoneView.Position = targetPos - tilt * (centre * scale);
+        _phoneView.Fold = PhoneFold;
+        _phoneView.Visible = true;
+        PhoneViewShown = true;
+    }
 
-        // the lens on the screen's normal at a distance, the screen's middle put at (ax, ay) of the picture
-        Transform3D Lens(Vector3 centre, float dist, float ax, float ay)
-        {
-            // the lens looks along the screen's normal, so the screen is square to the picture (no stretch at its
-            // edge), tipped up a little so the horizon shows; it is moved aside so the screen sits at (ax, ay)
-            var up = (Vector3.Up * 0.5f + seen.Y * 0.5f).Normalized();
-            var basis = Basis.LookingAt(-seen.Z, up) * new Basis(Vector3.Right, FramingTip);
-            basis = new Basis(Vector3.Up, yawDelta) * basis * new Basis(Vector3.Right, pitchDelta * 0.9f);
-            var local = new Vector3(ax * tanH, ay * tanV, -1f).Normalized();
-            return new Transform3D(basis, centre - basis * (local * dist));
-        }
-        // the distance at which a screen's top edge spans `share` of the view's width: the near edge of a tilted
-        // screen is bigger than a flat one, so it is solved on the projection itself
-        float Solve(Vector3 centre, Vector3 left, Vector3 rightEdge, float share, float ax, float ay)
-        {
-            float dist = 0.2f;
-            for (int i = 0; i < 4; i++)
-            {
-                var inv = Lens(centre, dist, ax, ay).AffineInverse();
-                Vector2 Px(Vector3 w)
-                {
-                    var l = inv * w;
-                    float z = Mathf.Max(0.01f, -l.Z);
-                    return new Vector2((l.X / z / tanH * 0.5f + 0.5f) * size.X, (0.5f - l.Y / z / tanV * 0.5f) * size.Y);
-                }
-                float got = (Px(rightEdge) - Px(left)).Length() / size.X;
-                dist = Mathf.Clamp(dist * got / share, 0.05f, 1.5f);
-            }
-            return dist;
-        }
-        Vector3 Corner(bool cover, float u, float v)
-        {
-            var (centre, sz) = cover
-                ? (Phone.PhoneModel.CoverScreenCentre, Phone.PhoneModel.CoverSize)
-                : (Phone.PhoneModel.InnerScreenCentre, new Vector2(Phone.PhoneModel.InnerW, Phone.PhoneModel.InnerH));
-            return phone * (centre + new Vector3((u - 0.5f) * sz.X, (0.5f - v) * sz.Y, 0f));
-        }
-        var cc = phone * Phone.PhoneModel.CoverScreenCentre;
-        var ic = phone * Phone.PhoneModel.InnerScreenCentre;
-        float dc = Solve(cc, Corner(true, 0, 0), Corner(true, 1, 0), CoverWidthShare, CoverAtX, CoverAtY);
-        float di = Solve(ic, Corner(false, 0, 0), Corner(false, 1, 0), OpenWidthShare, OpenAtX, OpenAtY);
-        return Lens(cc.Lerp(ic, open), Mathf.Lerp(dc, di, open), Mathf.Lerp(CoverAtX, OpenAtX, open), Mathf.Lerp(CoverAtY, OpenAtY, open));
+    /// <summary>First person: the in-world phone is put on the layer the eye never draws, back on the default one otherwise.</summary>
+    private void HideWorldPhone(bool hide)
+    {
+        if (hide == _worldPhoneHidden || _phoneModel == null) return;
+        _worldPhoneHidden = hide;
+        uint layers = hide ? Avatar.OwnBody.Layer : 1u;
+        foreach (var node in _phoneModel.FindChildren("*", "MeshInstance3D", true, false))
+            if (node is MeshInstance3D mi) mi.Layers = layers;
     }
 
     /// <summary>The camera app's lens: wide enough that the world shows round the raised phone.</summary>
@@ -349,11 +334,14 @@ public partial class FootPlayer
         return new Transform3D(basis, cover + toPlayer * 0.3f + phone.Basis.Y * 0.03f);
     }
 
+    /// <summary>The phone whose screen the owner sees and points at: the viewmodel when it is drawn, else the one in the hands.</summary>
+    private Phone.PhoneModel? ScreenModel => _phoneView is { Visible: true } ? _phoneView : _phoneModel is { Visible: true } ? _phoneModel : null;
+
     /// <summary>A point of a screen (0..1 across and down) in world space, <paramref name="lift"/> metres off the glass.</summary>
     public Vector3? PhoneScreenToWorld(Vector2 uv, bool cover, float lift)
     {
-        if (_phoneModel is not { Visible: true }) return null;
-        var phone = _phoneModel.GlobalTransform.Orthonormalized();
+        if (ScreenModel is not { } model) return null;
+        var phone = model.GlobalTransform;   // scaled for the viewmodel: the model's own sizes below stay true
         var (centre, size) = cover
             ? (Phone.PhoneModel.CoverScreenCentre, Phone.PhoneModel.CoverSize)
             : (Phone.PhoneModel.InnerScreenCentre, new Vector2(Phone.PhoneModel.InnerW, Phone.PhoneModel.InnerH));
@@ -416,14 +404,14 @@ public partial class FootPlayer
     public Vector2? PhoneScreenPoint(Vector2 window, out bool cover)
     {
         cover = false;
-        if (_camera == null || _phoneModel is not { Visible: true } model) return null;
+        if (_camera == null || ScreenModel is not { } model) return null;
         if (model.Fold < 0.01f) cover = true;
         else if (model.Fold <= 0.99f) return null;
-        var phone = model.GlobalTransform.Orthonormalized();
+        var phone = model.GlobalTransform;
         var (centre, size) = cover
             ? (Phone.PhoneModel.CoverScreenCentre, Phone.PhoneModel.CoverSize)
             : (Phone.PhoneModel.InnerScreenCentre, new Vector2(Phone.PhoneModel.InnerW, Phone.PhoneModel.InnerH));
-        var plane = new Godot.Plane(phone.Basis.Z, phone * centre);
+        var plane = new Godot.Plane(phone.Basis.Z.Normalized(), phone * centre);
         if (plane.IntersectsRay(_camera.ProjectRayOrigin(window), _camera.ProjectRayNormal(window)) is not { } hit) return null;
         var local = phone.AffineInverse() * hit - centre;
         return new Vector2(local.X / size.X + 0.5f, 0.5f - local.Y / size.Y);

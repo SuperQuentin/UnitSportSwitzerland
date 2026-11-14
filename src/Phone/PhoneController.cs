@@ -53,6 +53,9 @@ public partial class PhoneController : Node
 
     public static PhoneController? Instance { get; private set; }
 
+    /// <summary>The open phone's viewmodel sits where the corner key list and the hand chip are: they hide meanwhile (#1825).</summary>
+    public static bool HidesHud { get; private set; }
+
     private readonly Func<FootPlayer?> _player;
     private readonly Func<bool> _blocked;
     private PhoneScreens _screens = null!;
@@ -150,7 +153,7 @@ public partial class PhoneController : Node
 
     public override void _ExitTree()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this) { Instance = null; HidesHud = false; }
         if (Teleporter.Curtain == Curtain) Teleporter.Curtain = null;
         Teleporter.Arrived -= OnArrived;
         if (_invites != null) _invites.Arrived -= OnCall;
@@ -323,6 +326,7 @@ public partial class PhoneController : Node
         _travelSince = -1;
         _stowWhenFolded = false;
         _cursorUv = null;
+        HidesHud = false;
         _pressed = _dragging = _lookHeld = false;
         if (_selfie) SetSelfie(false);
         _screens.SetActive(false);
@@ -482,6 +486,9 @@ public partial class PhoneController : Node
         _screens.SetTouch(Platform.IsTouch && !XR.XrSession.Active, view.Y / Mathf.Max(_pxPerMm, 0.01f));
         _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
+        if (p.PhoneViewmodel is { HasLiveScreens: false } vm) vm.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
+        // the viewmodel fills the lower right while open: the corner's key list and hand chip step aside
+        HidesHud = p.PhoneViewShown && _stage == Stage.Open;
         if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
         _screens.Tick(ClockText(), DateText(), dt);
         RefreshQuick();
@@ -527,7 +534,7 @@ public partial class PhoneController : Node
             p.PhonePointTip = p.PhonePointDir = null;
             return;
         }
-        bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f;
+        bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f && !p.PhoneViewShown;
         Vector2? uv = null;
         bool cover = _cursorOnCover;
         if (_keysLead)

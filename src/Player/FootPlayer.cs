@@ -2637,8 +2637,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
+        // the phone (#889) lends third person too when its camera moves (the camera app, the travel curtain, touch: PhoneCamera); not in VR (#920).
+        // Folded or open on desktop and pad (#1825) the gameplay camera is left exactly as it is: the phone is a viewmodel
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneMovesLens ? 1f : 0f);
         // a prop (#1268) is seen from behind, from the ordinary third-person camera, on a desktop; VR stays first person (comfort)
         bool prop = !XR.XrSession.Active && PropWalk?.Invoke(this) != null;
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;

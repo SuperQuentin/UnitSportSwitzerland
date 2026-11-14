@@ -1178,7 +1178,7 @@ public partial class InventoryUi : CanvasLayer
         StepHotbar();
         _hotbar.Visible = ItemsActive && !IsOpen && Scope == null && _hotbarOn;
         _cashHud.Visible = _hotbar.Visible;
-        _chip.Visible = ItemsActive && !IsOpen && Scope == null && !_alwaysBar;
+        _chip.Visible = ItemsActive && !IsOpen && Scope == null && !_alwaysBar && !Phone.PhoneController.HidesHud;
         _readoutPanel.Visible = Readout != null && !IsOpen;
         if (Readout != null) _readout.Text = Readout;
 
