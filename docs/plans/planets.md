@@ -3,7 +3,7 @@
 
 # Planets: every body, the Earth included, on one world system (H7 and C3 of #1430)
 
-Status: **approved by the user** (2026-11-14); the clock rule (section 2) is still the user's to confirm after the research below. Issue: #1430 (H7, C3), sub-issues #1847-#1854,
+Status: **approved by the user** (2026-11-14), the clock rule included (section 2). Issue: #1430 (H7, C3), sub-issues #1847-#1854,
 one per phase (section 12). Planned from `main` at `0ab431fd6`.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
@@ -34,10 +34,11 @@ chain take a body.
   1 mm steps).
 - **A frame tree** in doubles: Sun → planets → moons, each body with an inertial frame (ICRF axes) and a body-fixed one
   (its IAU rotation). `Frames.Transform(from, to, t)` is the one way between two bodies.
-- **Two clocks, one rule** (the main decision for the user, section 2): where the bodies are and how they turn follows
-  the **sky clock** (the game's date and hour, the 24-minute day), so what you see in the sky is where you fly to;
+- **Two clocks, one rule** (decided with the user, section 2): where the bodies are and how they turn follows the
+  **sky clock** (the game's date and hour, the 24-minute day), so what you see in the sky is where you fly to;
   **physics** inside a sphere of influence runs on sim time with the body's real spin, as H5 does today. A handover
-  keeps the craft's velocity **relative to the body**, so crossing into the Moon's sphere never flings anyone.
+  subtracts the body's **true** orbital velocity (patched conics), never the sky clock's swing, so arrival speeds are
+  real. `/time speed real` (it exists) puts both on one clock, and then everything is physically consistent.
 - **Handovers are invisible by construction**: at a sphere-of-influence crossing the floating-origin anchor is the same
   pose re-expressed in the new body's frame. Nothing in world space moves on that frame.
 - **One surface chain for every body** (section 4): leaves from fine data, then the global pyramid from global data,
@@ -69,7 +70,7 @@ chain take a body.
 | Question | Proposal | Alternatives |
 |---|---|---|
 | One system for every body | **Approved (2026-11-14)**: the Earth included (the user's direction): `Body` records and one surface chain; the Earth's code paths become the general ones with Earth's data plugged in, its results unchanged | A Moon-only special case beside the Earth (cheaper first step, two systems for ever: rejected by the goal) |
-| Time (section 2) | **Bodies move on the sky clock** (24-minute day: the Moon goes round the Earth in 11 real hours and rises every ~25 minutes, as it does on the ground today); **physics runs on sim time** with each body's real spin; **handovers keep the velocity relative to the body** | (a) Everything on the sky clock: the Earth would spin once in 24 real minutes under an orbit, the ground at 28 km/s, no re-entry possible. (b) A real-time solar system in space: physically exact, but the Moon you fly to would not be the Moon in the sky (the telescope's markers wrong) |
+| Time (section 2) | **Decided (2026-11-14)**: **bodies move on the sky clock** (24-minute day: the Moon goes round the Earth in 11 real hours and rises every ~25 minutes, as it does on the ground today); **physics runs on sim time** with each body's real spin; **handovers subtract the body's true orbital velocity** (patched conics), never the sky clock's swing; `/time speed real` makes it all one clock | (a) Everything on the sky clock: the Earth would spin once in 24 real minutes under an orbit, the ground at 28 km/s, no re-entry possible. (b) A real-time solar system in space: physically exact, but the Moon you fly to would not be the Moon in the sky (the telescope's markers wrong) |
 | First bodies | **Decided (2026-11-14): the Moon (H7c), then Mars (H7e)**, then the rest by data family (H7f) | Mars first (better story, harder: air, dust); or all the solid bodies at once from their 2k sky maps and generation only, then data |
 | Mars' finest heights | **Decided (2026-11-14): MOLA 463 m only** (CC0) with Viking colour (public domain), generation below | Also the MOLA-HRSC blend at 200 m: HRSC is **CC BY-SA 3.0 IGO**, so tiles made from it would be share-alike: a licence question for the shipped and served data |
 
@@ -115,18 +116,23 @@ needs a rule for where the other bodies are.
   its body-fixed axes at sim time 0, turned by `Spin`·t. A lunar orbit, a landing, a walk on the Moon run in the Moon's
   frame exactly as an Earth orbit runs in the Earth's today. `Orbit.RotationAngle` takes the body; nothing else in H5
   changes.
-- **Across a sphere-of-influence boundary: velocity relative to the body is kept.** The Moon sweeps through the Earth's
-  integration frame at ~1,650 km/s (the sky's turn at its distance), so a physical handover would fling a coasting craft
-  at that speed. The rule: the craft's position is re-expressed exactly; its velocity relative to the body it leaves
-  becomes its velocity relative to the body it enters. Arcade, invisible, and the drive (whose speed is always relative
-  to the body it is in) never notices.
+- **Across a sphere-of-influence boundary: patched conics with the body's true velocity.** The position is re-expressed
+  exactly. The velocity loses the entered body's **true orbital velocity** (its real motion about its parent: the
+  ephemeris' derivative per real second, ~1.02 km/s for the Moon, turned into the integration frame), and gains it back on
+  the way out. It never takes the sky clock's swing: at the 24-minute day the Moon sweeps through the Earth's integration
+  frame at ~1,650 km/s (the sky's turn at its distance), and subtracting that would fling a coasting craft at the Moon at
+  that speed. So arrival speeds are the real ones (a coast from the Earth reaches the Moon at about 1 km/s relative to
+  it) whatever the day length; only the Moon's place moves on faster.
+- **`/time speed real` makes it exact.** The command already exists (a game day a real day, `World/TimeCommand`): the
+  sky clock then ticks with sim time, the Earth's turn in the sky equals its turn under an orbit, the Moon goes round in
+  27.3 days, there is no swing, and the rule above is plain patched conics, KSP's model. What stays arcade even then is
+  by choice: the cruise drive's and the spectator's speeds, patched conics instead of n-body, the ground game's tuned
+  9.81 m/s².
 - **The anchor** stays body-fixed (today's rotating ECEF anchor, generalised). Bodies other than the anchor's are
   placed every frame from the frame tree at the sky moment. In the Earth's anchor the Moon moves at the sky's pace; in
   the Moon's, the Earth hangs still on the near side and spins once a game day.
 - **Checks** pin it: planet checks run `--sun real --date 2027-07-15 --time <h>` (the frame tree needs a real date;
   `--sun fixed` keeps its fixed light for everything else and puts the bodies at the fixed date's noon).
-
-## 3. Frames and positions
 
 ### A worked example: from Geneva to the Moon and back
 
@@ -142,10 +148,9 @@ needs a rule for where the other bodies are.
 - **Landing and walking**: physics in the Moon's frame, real time, gravity 1.62 m/s². The Moon's own spin is slow (one
   turn in ~11 real hours at the game's pace), so the ground under a walker effectively does not turn. The sun crosses
   the lunar sky in ~6 real hours, then ~6 hours of night (with an ambient floor).
-- **A craft coasting across the boundary** (C3a, later): it keeps its speed relative to the body it leaves as its speed
-  relative to the body it enters. Physically it would arrive at ~1,650 km/s relative to the Moon, because the sky clock
-  swings the Moon round that fast; the rule avoids that. The spectator and the cruise drive never meet it: their speed is
-  always relative to the body they are near.
+- **A craft coasting across the boundary** (C3a, later): it loses the Moon's true ~1 km/s, not the sky clock's
+  ~1,650 km/s swing, so it arrives as a real transfer would. The spectator and the cruise drive never meet it: their
+  speed is always relative to the body they are near.
 - **Going home**: the same in reverse; at 66,000 km the position goes back to Earth coordinates, invisibly.
 
 ### How other games solve it (researched 2026-11-14, at the user's request)
@@ -165,9 +170,10 @@ What it says for us: we can't shrink the Earth (KSP, Outer Wilds), and we keep t
 one). So we do what Space Engineers' orbit mod and Star Citizen do: **the sky is a clock-driven picture, and physics
 runs in each body's own frame**, with a rule at the boundary. Star Citizen's trouble is a boundary between frames that
 turn differently. Our sphere-of-influence handover avoids it: the anchor is re-expressed, not moved, and the velocity
-relative to the body is kept. KSP's rotating frame low and inertial frame high is what H5 already does (body-fixed
-anchor, inertial integration). One more property: a server that sets `DayLengthMinutes` to 1,440 (a real 24 h day)
-gets Elite's model exactly. The sky clock is then sim time, and the boundary rule changes nothing.
+changes only by the body's true orbital velocity. KSP's rotating frame low and inertial frame high is what H5 already
+does (body-fixed anchor, inertial integration). And `/time speed real` gives one clock, as KSP and Elite have.
+
+## 3. Frames and positions
 
 ### The frame tree (`Core/Frames`, plain C#)
 
