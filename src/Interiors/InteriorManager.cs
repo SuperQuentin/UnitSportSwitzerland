@@ -171,7 +171,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath("user://interiors");
+        // a cache: under earth (#1726, G2 D2) world-scoped at user://earth/interiors, by leaf and BuildingId (regenerated)
+        _storeDir = ProjectSettings.GlobalizePath(GameSettings.Current.Frame == WorldFrame.Earth ? WorldChoice.StorePath("user://interiors") : "user://interiors");
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;
         _presenting = true;
 
@@ -1302,7 +1303,10 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         var building = tile.Buildings[key.Index];
         string print = InteriorGenerator.GroupPrint(tile, key.Index);
 
-        string path = Path.Combine(storeDir, $"{key.TileE}_{key.TileN}", $"{key.Index}.json");
+        // a leaf's building by its Earth identity in its leaf's folder (#1726), a flat tile's by its index
+        string path = Terrain.Leaves.LeafTileName.TryLeaf(key.Tile, out var leaf)
+            ? Path.Combine(storeDir, leaf.FileStem, $"{EarthStores.Building(key.ToString())}.json")
+            : Path.Combine(storeDir, $"{key.TileE}_{key.TileN}", $"{key.Index}.json");
         if (File.Exists(path) && InteriorLayout.FromJson(await File.ReadAllTextAsync(path)) is { } stored
             && stored.Matches(building, print))
             return stored;

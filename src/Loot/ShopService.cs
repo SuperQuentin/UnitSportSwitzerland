@@ -83,7 +83,8 @@ public partial class ShopService : Node
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://shops"));
+        // under earth (#1726, G2 D2) at user://earth/shops, by leaf and BuildingId (ShopLedger.Split): the flat counts are dropped
+        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.StorePath("user://shops"));
         _ledger = new ShopLedger(LoadTile, SaveTile, InteriorLayout.CurrentVersion);
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--shopstuck") >= 0) ForceStuck = true;
         if (DisplayServer.GetName() == "headless" && Multiplayer.IsServer() && Online) return;

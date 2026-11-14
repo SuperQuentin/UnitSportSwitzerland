@@ -115,6 +115,12 @@ public sealed record WorldChoice(string Id, string Title, string Blurb, string? 
         return path;
     }
 
+    /// <summary>
+    /// A store's save path for the frame being played (#1726, G2 D2): <see cref="EarthStores.Earth"/> under
+    /// <c>--frame earth</c>, the flat path under <c>--frame flat</c>, then mapped as <see cref="SavePath"/> maps it.
+    /// </summary>
+    public static string StorePath(string path) => SavePath(EarthStores.For(path, GameSettings.Current.Frame == WorldFrame.Earth));
+
     // ---- the traffic lights region ---------------------------------------------------------------
 
     /// <summary>The region's tiles, built by the game itself (<see cref="Prepare"/>).</summary>
