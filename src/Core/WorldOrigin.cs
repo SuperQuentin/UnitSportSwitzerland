@@ -248,12 +248,19 @@ public sealed class OriginFrame
     /// <summary>An anchor frame (#1430 H3): world (0, 0, 0) at <paramref name="axes"/>' origin, its axes the world's.</summary>
     public OriginFrame(FrameAxes axes, int epoch)
     {
-        var (e, n, _) = SwissGeodesy.FromEcef(axes.Origin);
+        // LV95 names a place on the Earth only: another body's anchor has none (#1850)
+        var (e, n, _) = axes.Body == BodyId.Earth ? SwissGeodesy.FromEcef(axes.Origin) : (double.NaN, double.NaN, 0.0);
         E = e;
         N = n;
         Epoch = epoch;
         Axes = axes;
     }
+
+    /// <summary>
+    /// The sky moment this frame's body was entered at (#1850, <see cref="WorldOrigin.Rebase"/>): what maps a frame of the
+    /// body before into this one (<see cref="Since"/>). Carried by every move after it; null before any crossing.
+    /// </summary>
+    public SkyMoment? BodySince { get; init; }
 
     /// <summary>The same place and axes (whatever the epoch): nothing to map between them.</summary>
     public bool SameFrame(OriginFrame other) =>
@@ -308,8 +315,9 @@ public sealed class OriginFrame
             var (e, n, h) = SwissGeodesy.FromEcef(p.Ecef);
             return new((float)(e - E), (float)(h - Alt0), (float)-(n - N));
         }
-        if (p.Body != Axes.Body)
-            throw new System.InvalidOperationException($"a place on {p.Body} in a frame on {Axes.Body}: convert it at a sky moment first (#1850)");
+        // a place on another body: where it is now from this frame's body (#1850), through the frame tree at the sky's
+        // moment (far away: the Earth's things seen from the Moon)
+        if (p.Body != Axes.Body) p = p.In(Axes.Body, SkyClock.Now);
         var (x, y, z) = Axes.FromEcef(p.Ecef);
         return new((float)x, (float)y, (float)z);
     }
@@ -563,6 +571,10 @@ public sealed class OriginFrame
     /// </summary>
     public OriginShift Since(OriginFrame earlier)
     {
+        // a frame of the body before a crossing (#1850): the same frame counted from this body at the crossing, which
+        // is where it stood in world space then; nothing moved at the crossing itself
+        if (Axes != null && earlier.Axes is { } before && before.Body != Axes.Body && BodySince is { } crossed)
+            earlier = new OriginFrame(before.Rebased(Axes.Body, crossed), earlier.Epoch);
         if (Axes == null && earlier.Axes == null)
             return new(new Transform3D(Basis.Identity,
                 new Vector3((float)(earlier.E - E), (float)(earlier.Alt0 - Alt0), (float)-(earlier.N - N))));
@@ -721,11 +733,31 @@ public sealed class WorldOrigin
     internal OriginShift MoveTo(FrameAxes axes)
     {
         var old = _frame;
-        _frame = new OriginFrame(axes, old.Epoch + 1);
+        _frame = new OriginFrame(axes, old.Epoch + 1) { BodySince = old.BodySince };
         return _frame.Since(old);
     }
 
     internal void RaiseShifted(OriginShift shift) => Shifted?.Invoke(shift);
+
+    /// <summary>
+    /// A sphere-of-influence crossing (#1850, docs/plans/planets.md section 3): the same anchor counted from another
+    /// body at a sky moment (<see cref="FrameAxes.Rebased"/>). Every world point keeps its place, so nothing is shifted
+    /// and no handler runs; <see cref="BodyChanged"/> tells the few systems that keep a body (the globe, the sky,
+    /// gravity, the HUD). A frame taken before it maps into the new one through <see cref="OriginFrame.Since"/>.
+    /// </summary>
+    internal void Rebase(BodyId body, SkyMoment at)
+    {
+        var old = _frame;
+        if (old.Axes is not { } axes || axes.Body == body) return;
+        _frame = new OriginFrame(axes.Rebased(body, at), old.Epoch + 1) { BodySince = at };
+        BodyChanged?.Invoke(axes.Body, body);
+    }
+
+    /// <summary>Main thread: the anchor's body changed (from, to), nothing moved (<see cref="Rebase"/>).</summary>
+    public event Action<BodyId, BodyId>? BodyChanged;
+
+    /// <summary>The body the anchor is on (the Earth for a flat frame).</summary>
+    public BodyId Body => _frame.Axes?.Body ?? BodyId.Earth;
 
     /// <summary>What turns a position in <paramref name="earlier"/>'s world space into the current one's.</summary>
     public OriginShift Since(OriginFrame earlier) => _frame.Since(earlier);
