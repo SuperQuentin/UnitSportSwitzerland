@@ -23,11 +23,12 @@ public static class LaneQuery
 
     private static string Inv(FormattableString s) => s.ToString(CultureInfo.InvariantCulture);
 
-    private static (double E, double N, double R)? Place(string? v, double r)
+    // a place given in LV95 notation (E,N[,R]) and the radius round it
+    private static (GlobalPos At, double R)? Place(string? v, double r)
     {
         if (v?.Split(',') is not { Length: >= 2 } p) return null;
         double P(int i) => double.Parse(p[i], CultureInfo.InvariantCulture);
-        return (P(0), P(1), p.Length > 2 ? P(2) : r);
+        return (GlobalPos.FromLv95(P(0), P(1), 0), p.Length > 2 ? P(2) : r);
     }
 
     public static int Run()
@@ -42,12 +43,12 @@ public static class LaneQuery
 
         if (Place(CmdArgs.Value("--at"), 0) is { } at && Place(CmdArgs.Value("--to"), 0) is { } to)
         {
-            var frame = OriginFrame.Anchor(Math.Round(at.E), Math.Round(at.N));
-            var a = frame.ToWorld(at.E, at.N, 0);
-            var b = frame.ToWorld(to.E, to.N, 0);
+            var frame = OriginFrame.AnchorNear(at.At);
+            var a = frame.ToWorld(at.At);
+            var b = frame.ToWorld(to.At);
             // the start's height: the nearest road point's, as the drive starts on the ground there
             var tiles0 = new List<RoadTile>();
-            if (src.LoadRoadsAsync(TileId.FromLv95(at.E, at.N)).GetAwaiter().GetResult() is { } t0) tiles0.Add(t0);
+            if (src.LoadRoadsAsync(at.At.Tile).GetAwaiter().GetResult() is { } t0) tiles0.Add(t0);
             var g0 = LaneGraph.Build(tiles0, frame, Traffic.IsCarRoad);
             float y = g0.Edges.SelectMany(e => e.Points).DefaultIfEmpty(a)
                 .MinBy(p => new Vector2(p.X - a.X, p.Z - a.Z).LengthSquared()).Y;
@@ -77,13 +78,13 @@ public static class LaneQuery
         return !((d0 < 0 || d1 < 0 || d2 < 0) && (d0 > 0 || d1 > 0 || d2 > 0));
     }
 
-    private static void Around(LocalChunkSource src, (double E, double N, double R) at, Action<string> log,
+    private static void Around(LocalChunkSource src, (GlobalPos At, double R) at, Action<string> log,
         List<(double E, double N)>? routeLv = null)
     {
-        var frame = OriginFrame.Anchor(Math.Round(at.E), Math.Round(at.N));
-        var c = frame.ToWorld(at.E, at.N, 0);
+        var frame = OriginFrame.AnchorNear(at.At);
+        var c = frame.ToWorld(at.At);
         var tiles = new List<RoadTile>();
-        var home = TileId.FromLv95(at.E, at.N);
+        var home = at.At.Tile;
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = -1; dz <= 1; dz++)
                 if (src.LoadRoadsAsync(home.Neighbour(dx, dz)).GetAwaiter().GetResult() is { } t) tiles.Add(t);
@@ -105,7 +106,7 @@ public static class LaneQuery
                 var vs = Enumerable.Range(0, p.Vertices.Length / 3).Select(i => W(p.Vertices[3 * i], p.Vertices[3 * i + 1], p.Vertices[3 * i + 2])).ToArray();
                 if (vs.Length == 0 || vs.Min(Dist) > at.R) continue;
                 var mid = vs.Aggregate(Vector3.Zero, (s, v) => s + v) / vs.Length;
-                string name = Inv($"island {t.Id.E}_{t.Id.N}#{k} v{p.Variant} at {Lv(mid)}");
+                string name = Inv($"island {t.Id}#{k} v{p.Variant} at {Lv(mid)}");
                 log(Inv($"{name}: {vs.Length} vertices, {p.Height:F2} m"));
                 for (int i = 0; i + 2 < p.Indices.Length; i += 3)
                 {
