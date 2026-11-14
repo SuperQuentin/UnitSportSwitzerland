@@ -88,7 +88,7 @@ public partial class FlightProbe : Node
             axes.X.X * w.X + axes.Y.X * w.Y + axes.Z.X * w.Z,
             axes.X.Y * w.X + axes.Y.Y * w.Y + axes.Z.Y * w.Z,
             axes.X.Z * w.X + axes.Y.Z * w.Y + axes.Z.Z * w.Z));
-        var truth = Unit(Ephemeris.Ecef(SkyBody.Sun, SwissTime.ToUtc(sky.Date, sky.Hour)));
+        var truth = Unit(Ephemeris.Ecef(SkyBody.Sun, sky.Moment));
         double r = Ellipsoid.Wgs84.A / 1000;
         double off = Angle(sun, truth) * r;
         _sunOffWorstKm = Math.Max(_sunOffWorstKm, off);

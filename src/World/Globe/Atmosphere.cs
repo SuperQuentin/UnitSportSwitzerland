@@ -82,7 +82,7 @@ public partial class Atmosphere : Node3D
         if (DayNight.Instance is { Sky: { } sky })
         {
             // from the Earth's centre: the parallax of a place on it is 4e-5 rad
-            var s = Ephemeris.Ecef(Core.SkyBody.Sun, SwissTime.ToUtc(sky.Date, sky.Hour));
+            var s = Ephemeris.Ecef(Core.SkyBody.Sun, sky.Moment);
             double l = s.Length;
             (_sunEcef, _realSun) = (new EcefPos(s.X / l, s.Y / l, s.Z / l), true);
         }
