@@ -59,19 +59,23 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Jupiter = new(BodyId.Jupiter, "Jupiter", SkyBody.Jupiter,
         Ellipsoid.FromRadii(71_492_000, 66_854_000), 1.26686534e17, DegPerDay(870.536), BodyId.Sun, 5.20288700 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Jupiter);
 
     public static readonly CelestialBody Saturn = new(BodyId.Saturn, "Saturn", SkyBody.Saturn,
         Ellipsoid.FromRadii(60_268_000, 54_364_000), 3.7931187e16, DegPerDay(810.7939024), BodyId.Sun, 9.53667594 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Saturn);
 
     public static readonly CelestialBody Uranus = new(BodyId.Uranus, "Uranus", SkyBody.Uranus,
         Ellipsoid.FromRadii(25_559_000, 24_973_000), 5.793939e15, DegPerDay(-501.1600928), BodyId.Sun, 19.18916464 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Uranus);
 
     public static readonly CelestialBody Neptune = new(BodyId.Neptune, "Neptune", SkyBody.Neptune,
         Ellipsoid.FromRadii(24_764_000, 24_341_000), 6.836529e15, DegPerDay(541.1397757), BodyId.Sun, 30.06992276 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Neptune);
 
     // the big moons turn once an orbit (they keep a face to their planet)
     public static readonly CelestialBody Io = new(BodyId.Io, "Io", SkyBody.Io, Ellipsoid.Sphere(1_821_600), 5.959916e12,
@@ -240,11 +244,18 @@ public sealed class CelestialBody
     public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
 
     /// <summary>
-    /// How close a camera may come to a body one cannot stand on (#1854), metres over its reference: a giant's cloud tops
-    /// (50 km over its 1-bar radius: below them there is no ground, only crushing gas), the Sun's 0.2 radii (139,000 km
+    /// How close a camera may come to a body one cannot stand on (#1854), metres over its reference: a giant with air is
+    /// flown into (<see cref="GasFloorM"/>, deep under its 1-bar level), the Sun stops the camera at 0.2 radii (139,000 km
     /// over the photosphere); 0 for a body with ground.
     /// </summary>
-    public double FloorM => Landable ? 0 : Id == BodyId.Sun ? 0.2 * Shape.A : 50_000;
+    public double FloorM => Landable ? 0 : Id == BodyId.Sun ? 0.2 * Shape.A : Air != null ? GasFloorM : 50_000;
+
+    /// <summary>
+    /// How deep a camera may dive into a giant (#1854, the spectator): 500 km under the 1-bar level, past where Galileo's
+    /// probe went silent (150 km, 23 bar), where it is already black and the gas hundreds of bars; deeper is no more to
+    /// see. Negative: under the reference.
+    /// </summary>
+    public const double GasFloorM = -500_000;
 
     /// <summary>Its air (#1853): what drags a craft and what its sky scatters; null where there is none (the Moon).</summary>
     public BodyAir? Air { get; }

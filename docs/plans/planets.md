@@ -37,6 +37,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   heights, the profile's craters by body), Titan's orange haze; landing and walking on Callisto and Titan.
 - **H7f** (#1854), this branch: the giants and the Sun as bodies to orbit, not land on: a floor for the spectator (cloud
   tops, 0.2 solar radii), T refused there; the giants as globes from their 2k maps, Saturn's rings round its globe.
+- **H7f** (#1854), this branch: flying into the giants: their air as data (`BodyAir.Jupiter`...), the deck stepping
+  aside inside, the spectator down to 500 km under the 1-bar level.
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.

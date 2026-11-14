@@ -7,9 +7,10 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.World.Bodies;
 
 /// <summary>
-/// <c>--orbitonlycheck</c> (#1854), headless, under <c>--frame earth</c>: the bodies one can orbit but not stand on. The
-/// spectator put 10 km over Jupiter's 1-bar radius is pushed back up to its cloud tops' floor (50 km); T there keeps the
-/// camera (no ground); the same over the Sun at 100,000 km, pushed back to 0.2 radii.
+/// <c>--orbitonlycheck</c> (#1854), headless, under <c>--frame earth</c>: the bodies one can orbit but not stand on. Put
+/// 100 km into Jupiter's air the spectator stays (a giant is flown into); put 300 km under its floor (500 km under the 1-bar
+/// level) it is pushed back up to it; T there keeps the camera (no ground). Put 300 km under the Sun's floor (0.2 radii)
+/// it is pushed back too.
 /// </summary>
 public partial class OrbitOnlyCheck : Node
 {
@@ -55,8 +56,20 @@ public partial class OrbitOnlyCheck : Node
         var cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as Camera3D;
         if (cam == null || OriginShifter.Instance is not { } shifter) { Finish("no spectator camera or shifter"); return; }
 
-        foreach (var (body, below) in new[] { (CelestialBody.Jupiter, 10_000.0), (CelestialBody.Sun, 1e8) })
+        // into Jupiter's air: allowed
         {
+            var sky0 = SkyClock.Now;
+            _origin.Rebase(BodyId.Jupiter, sky0);
+            shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(CelestialBody.Jupiter.Shape.ToEcef(new Geodetic(10, 30, 0)), BodyId.Jupiter));
+            cam.MakeCurrent();
+            cam.GlobalPosition = new Vector3(0, -100_000f, 0);
+            await Wait(0.3);
+            double into = _origin.AltitudeOf(cam.GlobalPosition);
+            Expect(Math.Abs(into + 100_000) < 100, string.Create(CultureInfo.InvariantCulture, $"Jupiter: 100 km into its air the camera stays ({into / 1000:F1} km)"));
+        }
+        foreach (var body in new[] { CelestialBody.Jupiter, CelestialBody.Sun })
+        {
+            double below = body.FloorM - 300_000;
             // the anchor relabelled onto the body, the camera under its floor (the origin on the reference, the camera over it)
             var sky = SkyClock.Now;
             _origin.Rebase(body.Id, sky);
@@ -66,8 +79,8 @@ public partial class OrbitOnlyCheck : Node
             cam.GlobalPosition = new Vector3(0, (float)below, 0);
             await Wait(0.3);
             double alt = _origin.AltitudeOf(cam.GlobalPosition);
-            Expect(alt >= body.FloorM * 0.999, string.Create(CultureInfo.InvariantCulture,
-                $"{body.Name}: put {below / 1000:F0} km over it, held at {alt / 1000:F0} km (its floor {body.FloorM / 1000:F0} km)"));
+            Expect(alt >= body.FloorM - 100, string.Create(CultureInfo.InvariantCulture,
+                $"{body.Name}: put {below / 1000:F0} km over its reference, held at {alt / 1000:F0} km (its floor {body.FloorM / 1000:F0} km)"));
 
             Key(true);
             await Wait(0.05);

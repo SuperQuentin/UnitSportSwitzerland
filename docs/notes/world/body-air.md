@@ -19,6 +19,13 @@ Every body's air is data: `Core/BodyAir` on `CelestialBody.Air` (null for the ai
   ground, as Venera's pictures. Sun power 9.
 - **Titan's** (#1854): N2 at 5.4 kg/m3, ~20 km scale height near the ground, an orange organic haze to hundreds of km
   (shell top 600 km): dim and orange from the ground and from orbit.
+- **The giants'** (#1854): air all the way down, heights over the 1-bar radius (negative inside). The hydrogen's
+  Rayleigh blue as the fine part (Uranus' and Neptune's methane takes the red: `FineAbsorption` on red), the cloud decks
+  as the coarse part (Jupiter's beige ammonia at 20 km scale height), so a dive goes from a blue-grey sky over the white
+  deck, into a bright fog, and on into the dark. The globe (the deck) steps aside 2 km under the 1-bar level
+  (`BodyGlobe.CloudDeckM`), and the march stops 15 cloud scale heights along while the camera is inside (`max_march`:
+  20 steps over hundreds of km of dense gas showed their jitter as grain). The shell quad's culling box is 10⁶ km: the
+  Earth-sized one left the camera outside it over Jupiter, and the shell was culled.
 - **`World/Globe/Atmosphere`**: the shell round the anchor's body when it has air.
   - The Earth's fades in over the style's sky from 15 km, as before.
   - Another body's paints its whole sky from the ground up (the style's sky is the Earth's: dimmed to black there).

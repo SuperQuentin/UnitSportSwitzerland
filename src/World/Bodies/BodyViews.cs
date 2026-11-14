@@ -118,7 +118,8 @@ public partial class BodyViews : Node
                 || eye is { } p && Frames.Convert(anchor, p, g.Body.Id, sky).Length < NearRadii * g.Body.Shape.A;
             g.Wanted = near;
             // the sky's disc of a body its globe draws steps aside (the Moon's own disc, a planet's in SkyBodies)
-            if (g.Drawn && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
+            // and the anchor's own body is never a disc in its own sky (inside a giant its globe steps aside, #1854)
+            if ((g.Drawn || g.Body.Id == anchor) && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
         }
         MoonDisc.HiddenByGlobe = _moon is { Drawn: true };
     }
