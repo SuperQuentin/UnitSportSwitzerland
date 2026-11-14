@@ -48,6 +48,16 @@ public readonly record struct SiteRect(Vector2 Center, Vector2 AxisU, float Widt
         return new[] { Center - u - v, Center + u - v, Center + u + v, Center - u + v };
     }
 
+    /// <summary>Points over the rectangle about <paramref name="step"/> m apart, edges and corners included (#1926).</summary>
+    public IEnumerable<Vector2> Grid(float step = 1f)
+    {
+        int nu = Math.Max(1, (int)MathF.Ceiling(Width / step)), nv = Math.Max(1, (int)MathF.Ceiling(Depth / step));
+        var c0 = Center - AxisU * (Width / 2) - AxisV * (Depth / 2);
+        for (int i = 0; i <= nu; i++)
+            for (int j = 0; j <= nv; j++)
+                yield return c0 + AxisU * (Width * i / nu) + AxisV * (Depth * j / nv);
+    }
+
     public bool Contains(Vector2 p, float margin = 0f)
     {
         var d = p - Center;
@@ -253,6 +263,13 @@ public static class ConstructionSites
     /// <summary>On a site with a pit, the way kept across the materials where there is room, m: a telehandler coming at a pallet.</summary>
     public const float MaterialsApproach = 8f;
 
+    /// <summary>
+    /// How far the way in reaches past either end of the materials, m (#1926): a pallet at the row's end lies 0.8 m from
+    /// it, and a telehandler (2.6 m wide) centred on it overhung a way only as wide as the materials into what stood
+    /// beside, which pushed the machine 0.5 m aside, its tines off the pallet.
+    /// </summary>
+    public const float MaterialsWayPast = 0.7f;
+
     public static bool IsSmall(PlanBox box, int targetStoreys) => box.Area < SmallArea && targetStoreys <= SmallStoreys;
 
     /// <summary>
@@ -356,20 +373,22 @@ public static class ConstructionSites
     /// <summary>
     /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
     /// deep on the side the pallets face (away from the building), inside the hoarding, out of the building's
-    /// scaffolding or its pit and clear of every other zone and machine. Where the yard has no room for one,
-    /// the pallets cannot be reached.
+    /// scaffolding or its pit and clear of every other zone and machine, and (given the site's <paramref name="blocked"/>, #1926)
+    /// of every road. Where the yard has no room for one, the pallets cannot be reached.
     /// </summary>
-    public static bool MaterialsWayIn(ConstructionSite s)
+    public static bool MaterialsWayIn(ConstructionSite s, Func<Vector2, bool>? blocked = null)
     {
         if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
         var r = m.Rect;
         var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width + 2 * Scaffold, s.Box.Depth + 2 * Scaffold);
         // the side the pallets face: away from the building (the dressing turns them to)
         int sign = (r.Center - s.Box.Center).Dot(r.AxisV) >= 0 ? 1 : -1;
-        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
+        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width + 2 * MaterialsWayPast, MaterialsApproach - 0.1f);
         return way.Corners().All(c => s.Area.Contains(c)) && !way.Overlaps(keep)
             && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
-            && !s.Machines.Any(x => way.Contains(x.At));
+            && !s.Machines.Any(x => way.Contains(x.At))
+            // nor over a road (#1926): a site's yard can reach across its street, and a way over the carriageway is the street
+            && (blocked == null || !way.Grid().Any(blocked));
     }
 
     /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
@@ -474,7 +493,7 @@ public static class ConstructionSites
             if (kind == SiteZoneKind.Materials)
                 foreach (float scale in new[] { 1f, 0.7f })
                     foreach (var axis in new[] { front, along })
-                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center) is { } r)
+                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center, MaterialsWayPast) is { } r)
                         {
                             zones.Add(new SiteZone(kind, r));
                             return;
@@ -780,7 +799,8 @@ public static class ConstructionSites
         /// apron) but not over the first clear rectangle (the building or its pit), nothing placed, the
         /// hoarding's line, a road or a building; it is kept as taken.
         /// </summary>
-        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building)
+        /// <param name="past">How far the way reaches past either end of the rectangle (#1926).</param>
+        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building, float past = 0f)
         {
             var u = new Vector2(axis.Y, -axis.X);
             var order = new int[_grid.Count];
@@ -796,7 +816,7 @@ public static class ConstructionSites
                 var r = new SiteRect(_grid[k], u, width, depth);
                 if (!Fits(r)) continue;
                 int sign = (r.Center - building).Dot(axis) >= 0 ? 1 : -1;
-                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
+                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width + 2 * past, way);
                 if (!WayFits(w)) continue;
                 _taken.Add(r);
                 _taken.Add(w);
@@ -813,9 +833,11 @@ public static class ConstructionSites
             var corners = w.Corners();
             foreach (var p in corners)
                 if (!area.Contains(p, -Gap)) return false;
-            foreach (var p in corners)
+            // all over it, not only at its corners (#1926: a yard reaching across its street kept a way whose corners stood
+            // either side of the carriageway, so the materials' pallets faced the road)
+            foreach (var p in w.Grid())
                 if (blocked(p)) return false;
-            return !blocked(w.Center);
+            return true;
         }
 
         /// <summary>
@@ -902,12 +924,54 @@ public sealed class SiteObstacles
                 }
             }
         }
+        // the carriageway where roads meet (#1918): RoadGen trims every road back to its junction cap, so the cap is road no
+        // segment covers (a hoarding panel stood in the cap at Place des Nations' south corner and stopped a car turning
+        // there); and the flush pavement beside a road (turn-lane widenings). A bridge's or a bore's cap is not the ground's
+        foreach (var j in roads.Junctions)
+            if (j.Layer == 0) AddArea(j.Vertices, j.Indices, own.Center, reach, _carriageway);
+        foreach (var area in roads.AreaProps)
+        {
+            if (area.Type == AreaPropType.Pavement) AddArea(area.Vertices, area.Indices, own.Center, reach, _carriageway);
+            // a pit keeps off the corner sidewalks, paths and verges laid as areas too, as off a segment's sides
+            else if (StreetAreas.Is(area.Type)) AddArea(area.Vertices, area.Indices, own.Center, reach, _streetSides);
+        }
     }
+
+    /// <summary>Triangles (plan a, b, c) of the junction caps and flush pavement near the site: carriageway.</summary>
+    private readonly List<(Vector2 A, Vector2 B, Vector2 C)> _carriageway = new();
+
+    /// <summary>Triangles of the street areas beside it (corner sidewalks, paths, verges, kerbs): kept out of a pit.</summary>
+    private readonly List<(Vector2 A, Vector2 B, Vector2 C)> _streetSides = new();
+
+    private static void AddArea(float[] vertices, ushort[] indices, Vector2 centre, float reach, List<(Vector2, Vector2, Vector2)> into)
+    {
+        Vector2 V(int i) => new(vertices[i * 3], vertices[i * 3 + 2]);
+        for (int t = 0; t + 2 < indices.Length; t += 3)
+        {
+            var (a, b, c) = (V(indices[t]), V(indices[t + 1]), V(indices[t + 2]));
+            if (Math.Min(a.DistanceTo(centre), Math.Min(b.DistanceTo(centre), c.DistanceTo(centre))) < reach + 10f) into.Add((a, b, c));
+        }
+    }
+
+    /// <summary>Whether a plan point is inside a triangle of <paramref name="tris"/> or within <paramref name="margin"/> of one.</summary>
+    private static bool OnArea(List<(Vector2 A, Vector2 B, Vector2 C)> tris, Vector2 p, float margin)
+    {
+        foreach (var (a, b, c) in tris)
+        {
+            float d1 = Cross(p, a, b), d2 = Cross(p, b, c), d3 = Cross(p, c, a);
+            bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+            if (!(neg && pos)) return true;
+            if (Distance(p, a, b) < margin || Distance(p, b, c) < margin || Distance(p, c, a) < margin) return true;
+        }
+        return false;
+    }
+
+    private static float Cross(Vector2 p, Vector2 a, Vector2 b) => (p.X - b.X) * (a.Y - b.Y) - (a.X - b.X) * (p.Y - b.Y);
 
     /// <summary>Each road piece's sidewalks, verges and paths beside its carriageway, m: its wider side.</summary>
     private readonly List<float> _sides = new();
 
-    public int Count => _boxes.Count + _roads.Count;
+    public int Count => _boxes.Count + _roads.Count + _carriageway.Count + _streetSides.Count;
 
     /// <summary>Whether a plan point is on a road or in another building.</summary>
     public bool Blocked(Vector2 p)
@@ -916,7 +980,7 @@ public sealed class SiteObstacles
             if (b.DistanceTo(p) < _clearance) return true;
         foreach (var (a, c, half) in _roads)
             if (Distance(p, a, c) < half + _clearance) return true;
-        return false;
+        return OnArea(_carriageway, p, _clearance);
     }
 
     /// <summary>
@@ -932,7 +996,7 @@ public sealed class SiteObstacles
             var (a, c, half) = _roads[k];
             if (Distance(p, a, c) < half + _sides[k] + _clearance) return true;
         }
-        return false;
+        return OnArea(_carriageway, p, _clearance) || OnArea(_streetSides, p, _clearance);
     }
 
     private static float Distance(Vector2 p, Vector2 a, Vector2 c)

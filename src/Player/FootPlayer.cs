@@ -3012,6 +3012,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (TryClimbAboard()) return true;
         // a building site crane's ladder or its remote's box (#618)
         if (TryCrane()) return true;
+        // a Moon colony's airlock door: cycle it (#1941)
+        if (World.Moon.ColonyAirlocks.TryUse(this)) return true;
+        // an empty colony's terminal: its log's next page (#1944)
+        if (World.Moon.ColonyTerminals.TryUse(this)) return true;
 
         // a slice of a birthday cake at hand (#1423)
         if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
@@ -3926,6 +3930,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             ebike.CycleAssist();
             AssistChanged?.Invoke(ebike.Level);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // the saucer has no engine to switch: in Space Z is its cruise drive (#1851), as the shuttle's
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is Ufo { DriveAvailable: true } saucer && SeatIndex == 0)
+        {
+            Announced?.Invoke(saucer.DriveOn ? "Cruise drive off: a circular orbit" : "Cruise drive on: climb and descend set its speed", true);
+            saucer.ToggleDrive();
             GetViewport().SetInputAsHandled();
             return;
         }

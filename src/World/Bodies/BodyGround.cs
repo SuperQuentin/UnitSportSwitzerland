@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using UnitSport.Core;
@@ -58,8 +59,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How far each way from the centre the near square holds the true ground (inside its eased band), metres.</summary>
     public const double TrueHalfM = Cells * CellM / 2 - BlendM;
 
+    private static readonly StringName AirTau = "air_tau";
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength",
-        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half",
+        LampPos = "lamp_pos", LampDir = "lamp_dir", LampCol = "lamp_col", LampCount = "lamp_count";
+
+    // the lamps on the ground (#1942, GroundLamps): one set of arrays, rewritten on a change, a re-anchor or each second
+    private static readonly Vector4[] LampPosArr = new Vector4[GroundLamps.Max], LampDirArr = new Vector4[GroundLamps.Max],
+        LampColArr = new Vector4[GroundLamps.Max];
 
     public CelestialBody Body => _globe.Body;
 
@@ -93,6 +100,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public readonly bool Solid = solid;
         public StaticBody3D? Node;
         public ShaderMaterial? Material;
+        public float ExposureWritten;
+        public int LampsVersion = -1, LampsEpoch = -1;
+        public double LampsAge;
         public EnuFrame? Frame;
         public Task<Square>? Task;
         public int Epoch = -1, Built;
@@ -113,7 +123,11 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var pyramid = globe.Pyramid;
         Heights = new BodyHeights(cube, level,
             key => pyramid.Heights(key),
-            globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null);
+            globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null,
+            // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
+            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
+            // the body's relief family under its data (#1853, #1854): dunes, ridges, grooves, lava flows
+            SurfaceProfile.For(globe.Body.Id, cube.Shape.A));
         _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
         _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
     }
@@ -221,6 +235,28 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     {
         if (l.Node != null && _origin.Epoch != l.Epoch) Place(l, axes);
         if (l.Material != null && _globe.Sun != Vector3.Zero) l.Material.SetShaderParameter(SunDir, _globe.Sun);
+        // the globe's exposure comes once its six faces' colour is in: a square made before kept the shader's default
+        // (Phobos' near square at 1.6 in a globe at 0.9, a bright patch, #1853)
+        if (l.Material != null && l.ExposureWritten != _globe.Exposure)
+            l.Material.SetShaderParameter(SunStrength, l.ExposureWritten = _globe.Exposure);
+        if (l.Material != null) WriteLamps(l);
+    }
+
+    /// <summary>The nearest lamps into a square's shader (#1942): on a change of the set, a re-anchor, or once a second.</summary>
+    private void WriteLamps(Layer l)
+    {
+        l.LampsAge += GetProcessDeltaTime();
+        if (l.LampsVersion == GroundLamps.Version && l.LampsEpoch == _origin.Epoch && (l.LampsAge < 1 || GroundLamps.All.Count == 0)) return;
+        l.LampsVersion = GroundLamps.Version;
+        l.LampsEpoch = _origin.Epoch;
+        l.LampsAge = 0;
+        var eye = GetViewport()?.GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
+        int n = GroundLamps.Fill(eye, LampPosArr, LampDirArr, LampColArr);
+        l.Material!.SetShaderParameter(LampCount, n);
+        if (n == 0) return;
+        l.Material.SetShaderParameter(LampPos, LampPosArr);
+        l.Material.SetShaderParameter(LampDir, LampDirArr);
+        l.Material.SetShaderParameter(LampCol, LampColArr);
     }
 
     /// <summary>A layer needs a new square round <paramref name="p"/>: none yet, or the camera past its move distance.</summary>
@@ -252,15 +288,33 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             for (int i = 0; i < n; i++)
                 pos[j * n + i] = new Vector3((i - cells / 2) * cellM, y[j * n + i], (j - cells / 2) * cellM);
 
-        // the colour: the finest coloured tile over the centre, its UVs from each vertex's place on that tile
+        // the colour: the finest coloured tile over the centre that holds the whole square (on a moon of a few km, #1853,
+        // the finest tile is smaller than the 4 km square, whose edges read past it), its UVs from each vertex's place on
+        // that tile; where none holds it (across a face's edge), the finest over the centre
         var cube = heights.Cube;
         Image? colour = null;
         CubeKey? colourKey = null;
         var n0 = heights.NormalUnder(frame.Origin);
+        double half = cells / 2 * cellM;
+        var corners = new EcefPos[4];
+        for (int c = 0; c < 4; c++) corners[c] = heights.NormalUnder(frame.ToEcef((c & 1) == 0 ? -half : half, 0, (c & 2) == 0 ? -half : half));
+        bool Holds(CubeKey k)
+        {
+            double side = 1 << k.Level;
+            foreach (var pc in corners)
+            {
+                var (fu, fv) = cube.OnFace(k.Face, pc);
+                double tu = (fu + 1) * 0.5 * side - k.X, tv = (fv + 1) * 0.5 * side - k.Y;
+                if (!(tu >= 0 && tu <= 1 && tv >= 0 && tv <= 1)) return false;
+            }
+            return true;
+        }
+        for (int pass = 0; pass < 2 && colourKey == null; pass++)
         for (int level = globe.MaxLevel; level >= 0 && colourKey == null; level--)
         {
             var (face, u, v) = cube.FromNormal(n0);
             var k = CubeKey.FromFace(face, u, v, level);
+            if (pass == 0 && !Holds(k)) continue;
             if (!globe.Pyramid.HasColour(k) || globe.Pyramid.Colour(k, 1) is not { } webp) continue;
             colour = new Image();
             if (colour.LoadWebpFromBuffer(webp) != Error.Ok) { colour = null; continue; }
@@ -348,6 +402,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         if (sq.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(sq.Colour));
         material.SetShaderParameter(SunDir, _globe.Sun == Vector3.Zero ? Vector3.Up : _globe.Sun);
         material.SetShaderParameter(SunStrength, _globe.Exposure);
+        material.SetShaderParameter(AirTau, BodyGlobe.AirTauOf(_globe.Body));
         var body = new StaticBody3D { Name = l.Name };
         if (l.Solid)
         {

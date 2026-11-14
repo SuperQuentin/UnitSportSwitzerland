@@ -55,6 +55,68 @@ public sealed record BodyAir(
         120_000, 20_000, 60_000,
         FineAbsorption: (0, 6e-6, 20e-6), SunPower: 7);
 
+    /// <summary>
+    /// Venus' (#1854): CO₂ at 65 kg/m³ and 15.9 km scale height (NASA's fact sheet), under a sulphuric-acid deck. The
+    /// shell is single scattering, which cannot draw an opaque deck: a thick, bright yellow haze instead (a vertical depth
+    /// of ~1 in blue), so the radar-mapped ground still reads from orbit and the sky from the ground is a dim amber.
+    /// </summary>
+    public static readonly BodyAir Venus = new(65, 15_900,
+        (28e-6, 14e-6, 6e-6), 15_900,
+        (12e-6, 9e-6, 6e-6), 25_000, 0.7, 1.4,
+        250_000, 60_000, 150_000,
+        FineAbsorption: (0, 6e-6, 24e-6), SunPower: 9);
+
+    /// <summary>
+    /// Titan's (#1854): N₂ at 5.4 kg/m³ (1.5 bar at 94 K) with a ~20 km scale height near the ground (NASA's fact sheet)
+    /// under an orange organic haze that reaches hundreds of km: a thick orange haze over the ISS mosaic's ground, the
+    /// sky from the ground a dim orange. The haze takes green and blue far more than red (vertical depths 0.76, 1.16, 1.72
+    /// with the coarse part): the first values took red about as much as green, and the sun and sky came out olive green.
+    /// </summary>
+    public static readonly BodyAir Titan = new(5.4, 20_000,
+        (10e-6, 7e-6, 4e-6), 40_000,
+        (4e-6, 4e-6, 4e-6), 60_000, 0.75, 1.5,
+        600_000, 150_000, 400_000,
+        FineAbsorption: (0, 13e-6, 30e-6), SunPower: 8);
+
+    /// <summary>
+    /// The giants' (#1854): air all the way down, heights over their 1-bar radius (negative inside). The fine part is the
+    /// hydrogen's Rayleigh blue (Uranus' and Neptune's methane takes the red: cyan, blue); the coarse part the cloud decks
+    /// (Jupiter's beige ammonia, Saturn's paler, the ice giants' white methane), thickening fast below the 1-bar level, so
+    /// a dive goes through haze into cloud and on into the dark. Densities at 1 bar and scale heights from NASA's fact
+    /// sheets; the colours tuned by eye against Juno's, Cassini's and Voyager 2's pictures.
+    /// </summary>
+    public static readonly BodyAir Jupiter = new(0.16, 27_000,
+        (3e-6, 6e-6, 13e-6), 27_000,
+        (12e-6, 10.5e-6, 8e-6), 20_000, 0.6, 1.05,
+        1_500_000, 300_000, 1_000_000, SunPower: 6);
+
+    /// <inheritdoc cref="Jupiter"/>
+    public static readonly BodyAir Saturn = new(0.19, 59_500,
+        (3e-6, 5e-6, 10e-6), 59_500,
+        (11e-6, 10.5e-6, 8.5e-6), 40_000, 0.6, 1.05,
+        2_500_000, 500_000, 1_800_000, SunPower: 6);
+
+    /// <inheritdoc cref="Jupiter"/>
+    public static readonly BodyAir Uranus = new(0.42, 27_700,
+        (2e-6, 6e-6, 10e-6), 27_700,
+        (8e-6, 10e-6, 11e-6), 20_000, 0.6, 1.05,
+        1_500_000, 300_000, 1_000_000, FineAbsorption: (8e-6, 1e-6, 0), SunPower: 7);
+
+    /// <inheritdoc cref="Jupiter"/>
+    public static readonly BodyAir Neptune = new(0.45, 19_700,
+        (2e-6, 5e-6, 14e-6), 19_700,
+        (6e-6, 8e-6, 11e-6), 20_000, 0.6, 1.05,
+        1_500_000, 300_000, 1_000_000, FineAbsorption: (10e-6, 2e-6, 0), SunPower: 7);
+
+    /// <summary>
+    /// The vertical optical depth of the whole column per channel (#1854): the fine part's scattering and absorption over its
+    /// scale height, the coarse part's extinction over its. What dims and tints the sun on the ground.
+    /// </summary>
+    public (double R, double G, double B) VerticalDepth =>
+        ((Fine.R + FineAbsorption.R) * FineHeightM + Coarse.R * CoarseExtinction * CoarseHeightM,
+         (Fine.G + FineAbsorption.G) * FineHeightM + Coarse.G * CoarseExtinction * CoarseHeightM,
+         (Fine.B + FineAbsorption.B) * FineHeightM + Coarse.B * CoarseExtinction * CoarseHeightM);
+
     /// <summary>The gas's density at a height over the reference, kg/m³ (0 above the shell).</summary>
     public double Density(double h) => h > ThicknessM ? 0 : SurfaceDensity * Math.Exp(-Math.Max(h, -ScaleHeightM * 3) / ScaleHeightM);
 

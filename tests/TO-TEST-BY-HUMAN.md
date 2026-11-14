@@ -41,7 +41,79 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Jump → about 5.4 m up and over 5 s in the air (0.9 m on the Earth). Do the same with the pad (its jump and step-in buttons) and in VR → the same.
 - [ ] From the Earth, fly toward Mars at the wheel's top (PR [#1899](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1899): about 15 min at light speed) → the speed reads in c past the Moon; nothing jumps leaving the Earth's sphere (~1 million km) or entering Mars'; Mars' globe takes over from its sky dot. Step in → you stand on Mars and a jump reaches ~2.4 m.
 - [ ] In the spectator, tap ] (pad: D-pad →, VR: right stick down) a few times, then hold it → the ring steps Moon, Mars, the Sun..., an arrow at the edge when the body is off screen, and the hold turns the view onto it; fly toward the ring and it grows into the body. In VR, check the cue is readable on the HUD.
+- [ ] Fly to Saturn and into its B ring, slowly (Wheel down) → over it a flat ring surface, then a haze with ice chunks round you (most small, a few house-sized), denser in the B ring than in the Cassini division; past the outer edge, level with the ring, a thin band. In a craft or on foot with gravity off, bump a chunk → it is solid. In VR, check the haze is not nauseating.
+- [ ] Fly to Phobos (target cue: after Mars) and land with T → a potato-shaped moon with Stickney's big crater at one end; the walker drifts down for ~17 s; a jump climbs for minutes; walking bounces off every bump. Same on Deimos (smoother, 25 s to settle). In VR, check the slow float is not nauseating.
+- [ ] In the shuttle, `/orbit 400`, tap ] (pad: D-pad →, VR: right stick →) → `TARGET Moon` on the HUD and a ring on the Moon; hold it → the nose swings calmly onto the Moon with the wings level; Z for the drive, full levers, keep holding → about 4 minutes to the Moon, slowing down by itself; Z when the HUD's height reads ~100 km → in lunar orbit. In VR, check the swing and the arrival are comfortable.
+- [ ] From a lunar orbit in the shuttle, nose down and a slow drive to 8 km, then the levers: the HUD reads BELLY JETS; bring it down on its gear (G) at under 3 m/s with the stick holding the slide; step out, walk, get back in at the hatch (left side), and lift off on the jets → into Space at 10 km. On a pad and in VR too.
+- [ ] In the UFO, `/orbit 400`, Z (pad D-pad ↑, VR right stick ↑): `DRIVE ON`; Space / Ctrl set its lever, it goes where you look; tap ] for the Moon and hold it: the way turns onto the Moon; slowing by itself, Z again near 100 km: a lunar orbit; then down past 8 km the hover brings it onto its legs.
+- [ ] Type `/goto moon 26.13 3.63` (on foot or spectating) → the fly camera 30 km over the Apollo 15 site; fly down and T stands you there. Then `/goto earth 46.95 7.45 3` → back over Bern; `/goto pluto 0 0` → an error listing the bodies.
+- [ ] On the Moon (or Mercury) on foot: boulders round the fresh craters near you, mostly small, a few a metre or two; walk into one → it stops you; jump onto a big one.
+- [ ] Walk on Mars (`/goto mars ...`, T): dune fields of low waves 120 m apart in places; on Europa, double ridges and cracks; on Ganymede, long gentle grooves; on Io, low lava-flow steps; on Titan near the equator, big dunes.
+- [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
+
+## The colonies' lights from afar ([#1946](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1946))
+
+- [ ] In the shuttle in a 100 km lunar orbit (`/orbit 100` on the Moon), over the night side → the staffed colonies show as small clusters of warm light (Artemis Base with its runway's line), none on the day side; they fade out as you come down within ~10 km and the colony itself takes over, with no jump.
+- [ ] From the Earth at night with the telescope (`--date 2027-08-06 --time 21.5`, the waxing crescent low in the west), zoom on the earthshine side → a small spark at Moon Village (Mare Tranquillitatis, near the terminator); judge whether it reads too bright or too big at the longest end.
+
+## Moon colonists ([#1945](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1945))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites artemis:close`, step in and walk the colony for ten minutes → colonists in their suits at the consoles and on the cans' aisles, now and then one walking through a tube to another room; nobody pops in or out where you are looking; nobody walks through a wall or into furniture.
+- [ ] Outside by the solar field or the digger, wait a while → a colonist in a helmet appears there only while you are not looking that way.
+- [ ] Note the frame time with a full crew in view (should stay as without them).
+
+## The empty colonies: Marius Hills station and Plaskett station ([#1944](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1944))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites lavatube`, step in (T) at the rim, walk out onto the tower's bridge and down the stairs to the pit's floor → the flights take you down without a stumble, the rails hold you; the pit's wall looks like a wall (no gap where the ground squares meet).
+- [ ] In the station, read the five terminals in order (E, pad Y, VR grip) → each page fits its screen and reads in the headset; the logs feel unsettling, not explained. Note whether the text is too small on a monitor.
+- [ ] Walk the modules → dark, only the red lights stuttering; the helmet never comes off; the dust and drifts do not block the doorways.
+- [ ] `--moonsites coldwar:close`, walk in through an airlock and along the spine into the biodome → the doorway lets you in, the trunks are solid, you cannot walk out through the glass; the radar turns outside.
+- [ ] Judge the mood of both against the reference you gave (mood only, nothing copied).
+
+## Moon rovers, the hangar door, landers and the runway ([#1943](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1943))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites artemis:close`, step in (T), walk to the two open rovers by the road past the hangar, E at one → you drive it; it floats over bumps on the Moon's gravity, tops out near 20 km/h, brakes long. Same with the pad and in VR (the wheel or the hand controller).
+- [ ] Walk into the hangar (through the tube), get into the pressurised rover (E) → the helmet comes off in its cabin; drive at the rolling door → the inner door shuts, a hiss, the rolling door rolls up, and you drive down the ramp onto the plateau without a bump.
+- [ ] On foot outside the hangar's rolling door, E (pad Y, VR grip) → "Open the hangar: out" opens it; inside, E at the inner door → "Cycle the hangar: in" shuts the rolling door and opens the inner one.
+- [ ] `--moonsites runway`: the 3 km runway lies on the ground with no step at its edges (its strip eases out over 90 m); edge lights read at night.
+- [ ] Land the shuttle on a free pad or the runway once the planets session's landing reads `MoonPads`.
+
+## Moon Village, ILRS and the industry ([#1942](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1942))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites moonvillage:close`, step in (T), go through an airlock and along the glazed alleys between the stacks → no bumping, no invisible wall at either end, the helmet stays off inside an alley; the sky shows through the glass roof.
+- [ ] By a solar array field (`--moonsites artemis:solararray`), speed time (`/time speed`) → the wings follow the sun smoothly, never snapping; at Artemis Base they stand near vertical.
+- [ ] Watch the digger (`--moonsites moonvillage:digger`) for a minute → it crawls round its dark pit, its wheel turning; walking into it pushes you, never through it.
+- [ ] `--moonsites icemine:close`: in Shackleton's dark the four floods light the mine and the ground round it; judge whether it reads (too bright, too dim, the pool's edge).
+- [ ] `--moonsites massdriver:close`, wait a minute → the bucket sits on the cradle, then shoots along the rail and is gone; `--moonsites radiotelescope` for ten minutes → all dishes slew together to a new point.
+
+## Into Artemis Base through an airlock ([#1941](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1941))
+
+- [ ] At Artemis Base (`--moonsites artemis:close`), step in (T) outside: you wear the silver suit and the gold-visored helmet. Walk to the end of a spine, up the steps to the airlock's outer door, press E → the inner door (if open) slides shut, the lamp goes amber, a hiss, then the outer door slides open. Walk in, E again → the reverse; the helmet comes off once the outer door is shut.
+- [ ] With the pad: the same with Y; the prompt reads "Cycle the airlock: in/out".
+- [ ] In VR: reach out at a shut airlock door and grip → it cycles. Check the helmet does not block your view (first person draws no head).
+- [ ] Walk the whole colony inside: the tubes (no bumping your head), the hub's control room, the cans' rooms (bunks, galley, lab...), a moondust dome's greenhouse, the hangar down its steps. Nothing to fall through, no invisible wall in a doorway.
+
+## Artemis Base ([#1940](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1940))
+
+- [ ] Go to Artemis Base (89.384° S, 150.055° W; `--moonsites artemis:close` drops the camera among its modules), step in and walk round the hub and along a spine → you bump into the cans, tubes and domes (they are solid, not yet walk-in: that is phase 3); the plateau is flat underfoot and eases into the natural ground past the pads with no step.
+- [ ] Walk the road out of the hangar to the pads → three numbered pads with red edge lights, the road's dashes along its middle.
+- [ ] In VR, stand under a can → its height (4.6 m across on its legs) and the tubes (2.4 m across, their axis 2.6 m up) feel right.
+
+## The Moon's historic sites ([#1939](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1939))
+
+- [ ] `--bodyshot`-style trip to Apollo 11 (0.674° N, 23.473° E; `--moonsites apollo11` puts you there), step in (T) and walk to the descent stage → you bump into its body and footpads, not through them; the knocked-over flag lies a few metres off; the footpaths look like faint trodden bands, not painted lines, and never flicker into the ground as you walk over them.
+- [ ] At Apollo 15, 16 or 17, find the rover parked ~90-150 m east of the lander and follow its tracks out → two thin parallel bands that keep to the ground over crater rims.
+- [ ] Walk up to an S-IVB crater (e.g. `--moonsites sivb14`) → a fresh bowl ~35 m across with a raised rim, bright rays fading out across the ground, twisted pieces on the rim.
+- [ ] In VR, stand next to the Apollo 17 descent stage → the scale feels right (body ~3 m up, footpads ~9 m apart diagonally), nothing floats.
 
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
 
@@ -1093,13 +1165,31 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
 
+## Group rides on the home trainer, and the trainer itself ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+Two PCs (or two windows) on one server, Cartoon, `--date 2027-07-15 --time 12`; the owner's smart trainer on one of them.
+
+- [ ] Pair the real trainer (Training app → Search, then the trainer), load a GPX, ride 2 km → watts and cadence in the HUD, the resistance felt changing on a climb (SIM), ERG holding its target: the first run of RideLink's WinRT path on real FTMS hardware.
+- [ ] On the trainer's PC: Training app → Host a group ride; on the other: Training app → Join → both on the same course, each sees the other's bike on the road and "Group:" in the HUD with both names and the gap in metres.
+- [ ] Ride close behind the other rider on a flat → the speed rises a little at the same watts (the draft).
+- [ ] Join from a pad and in VR (the app's buttons by stick and by poke) → the same as with the mouse.
+- [ ] One rider stops the training → it leaves the group; the other's HUD shows only itself; when it stops too, the group is gone from the list.
+
+ ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+In a window, Cartoon, `--date 2027-07-15 --time 12`, the phone's Training app, a GPX through a town (or `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60` windowed).
+
+- [ ] Ride into a queue at a junction or a red light → the bike rides on through the queued cars at its own speed, no jolt, no stop; judge whether passing through a car looks acceptable from the chase camera and in first person.
+- [ ] A car stopped at the road's edge on a wide road → the bike steps round it rather than through it.
+- [ ] After the finish, ride the bike yourself into a parked traffic car → it is solid again.
+
 ## Farm fields, Christmas gifts and the trainer under `--frame earth` (PR [#1730](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1730), [#1729](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1729))
 
 Offline, in a window, each against the same without `--frame earth`.
 
 - [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
 - [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
-- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.
+- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider rides round a car stopped at the edge where the road has room, and through the traffic otherwise (#1467): it never queues behind a car.
 
 ## No camera jump at the earth re-anchor (PR [#1780](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1780), [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763))
 

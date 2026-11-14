@@ -60,6 +60,9 @@ public partial class BodyGlobe : Node
     /// <summary>Tiles drawn last frame (the shots' log).</summary>
     public int DrawnTiles { get; private set; }
 
+    /// <summary>How far under a giant's 1-bar level its globe (the cloud deck) still draws, metres (#1854): inside the clouds.</summary>
+    public const double CloudDeckM = 2_000;
+
     /// <summary>The pyramid's finest level.</summary>
     public int MaxLevel => _maxLevel;
 
@@ -106,7 +109,20 @@ public partial class BodyGlobe : Node
     {
         public readonly MeshInstance3D Node = node;
         public readonly ShaderMaterial Material = material;
+
+        /// <summary>The sun last written into this tile's material (a hidden tile misses the sun's moves: written when shown again).</summary>
+        public Vector3 Sun;
     }
+
+    private static readonly StringName AirTau = "air_tau", TerminatorWrap = "terminator_wrap", NightFloor = "night_floor";
+
+    /// <summary>
+    /// The air's vertical depth the ground's sunlight goes through (#1854): a landable body with air (Mars, Venus, Titan); none
+    /// for the airless, the Earth (its own look, tuned elsewhere) and the giants (their globe is their cloud deck).
+    /// </summary>
+    public static Vector3 AirTauOf(CelestialBody body) =>
+        body is { Landable: true, Air: { } air } && body.Id != BodyId.Earth
+            ? new Vector3((float)air.VerticalDepth.R, (float)air.VerticalDepth.G, (float)air.VerticalDepth.B) : Vector3.Zero;
 
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
         SunStrength = "sun_strength", HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
@@ -143,7 +159,7 @@ public partial class BodyGlobe : Node
             return;
         }
         var sky = SkyClock.Now;
-        bool own = axes.Body == Body.Id;
+        bool own = OwnPlacing(axes);
         if (axes.Body != _placedIn || (own && _origin.Epoch != _epoch)) Replace(axes, own);
 
         // the body's frame in world space (doubles): a point p of the body is W (R p + c - O) in world
@@ -167,7 +183,6 @@ public partial class BodyGlobe : Node
         var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky.Utc);
         var sunAnchor = Frames.Orientation(axes.Body, sky).ApplyInverse(sunIcrf);
         var sun = ToVector(w.ApplyInverse(sunAnchor).Normalized());
-        bool sunMoved = sun.DistanceSquaredTo(_sun) > 1e-8f;
         _sun = sun;
 
         // the eye in the body's own frame, for the levels
@@ -178,6 +193,14 @@ public partial class BodyGlobe : Node
             eyeAnchor = new DVec3(e.X, e.Y, e.Z);
         }
         var eye = own ? eyeAnchor : Frames.Convert(axes.Body, eyeAnchor, Body.Id, sky);
+        _eyeHere = eye;
+        // inside a giant (#1854): its globe is the cloud deck at 1 bar, a picture to see from above; once the camera is
+        // under it the air is the view (the shell's clouds and the dark below), so the deck steps aside
+        if (!Body.Landable && Body.Shape.ToGeodetic(eye.AsEcef).H < -CloudDeckM)
+        {
+            if (Drawn) Hide();
+            return;
+        }
         float fov = Mathf.DegToRad(CameraLens.FovOf(cam));
         double focal = GetViewport().GetVisibleRect().Size.Y / (2 * Math.Tan(fov / 2));
         _show.Clear();
@@ -196,12 +219,15 @@ public partial class BodyGlobe : Node
             if (on)
             {
                 shown++;
-                if (sunMoved) tile.Material.SetShaderParameter(SunDir, sun);
+                // per tile: one hidden while the sun moved (or the frame turned) kept its old sun, and two neighbours were lit
+                // as two halves (Jupiter from Io split down a meridian)
+                if (tile.Sun.DistanceSquaredTo(sun) > 1e-8f) tile.Material.SetShaderParameter(SunDir, tile.Sun = sun);
             }
             if (holeMoved) SetHole(tile.Material);
         }
         DrawnTiles = shown;
         Drawn = shown > 0;
+        KeepRings(Drawn);
     }
 
     /// <summary>A colour image's mean brightness (Rec. 709 luma of a 32 × 32 sample), 0 to 1.</summary>
@@ -228,6 +254,7 @@ public partial class BodyGlobe : Node
 
     private void Hide()
     {
+        KeepRings(false);
         foreach (var t in _tiles.Values) t.Node.Visible = false;
         Drawn = false;
         DrawnTiles = 0;
@@ -321,6 +348,13 @@ public partial class BodyGlobe : Node
                     $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2}"));
             }
             material.SetShaderParameter(SunStrength, Exposure);
+            material.SetShaderParameter(AirTau, AirTauOf(Body));
+            // a giant: a soft terminator through its deep air, and a night side as dark as space's (no ground to play on)
+            if (!Body.Landable && Body.Air != null)
+            {
+                material.SetShaderParameter(TerminatorWrap, 0.3f);
+                material.SetShaderParameter(NightFloor, 0.015f);
+            }
             var node = new MeshInstance3D
             {
                 Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,
@@ -333,6 +367,76 @@ public partial class BodyGlobe : Node
         }
     }
 
+    /// <summary>
+    /// Tiles placed one by one from the anchor in doubles (the ground holds to the millimetre): on the anchor's own body
+    /// when it has ground. A giant (#1854) always hangs from its centre under the root, shrunk with it past the far plane:
+    /// its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane, and it has
+    /// no ground to hold (4 m in a float at Jupiter's cloud tops, 0.005° from the camera's floor 50 km over them).
+    /// </summary>
+    private bool OwnPlacing(FrameAxes axes) => axes.Body == Body.Id && Body.Landable;
+
+    private MeshInstance3D? _ring;
+    private ShaderMaterial? _ringMaterial;
+    private double _ringOuter, _ringHalf;
+    private DVec3 _eyeHere;
+    private (Vector3 Sun, Vector3 Pole, Vector3 Centre, float Shrink, float Height) _ringsWritten;
+    private static readonly StringName RingSun = "sun_dir", RingPole = "pole", RingCentre = "centre", RingShrink = "shrink",
+        RingOuter = "outer_world", RingHalf = "half_thick", RingHeight = "cam_height", RingPlanet = "planet_r";
+
+    /// <summary>
+    /// Rings in the body's equator (Saturn's, #1854): a slab from <paramref name="inner"/> to <paramref name="outer"/> metres
+    /// from the centre, <paramref name="halfThickness"/> each side of the equator, drawn by one pass over the screen
+    /// (<c>ring_slab.gdshader</c>: each pixel's ray through the slab, measured from the camera in the globe's shrunk
+    /// units), its radial strip from <paramref name="map"/>. The sky's rings step aside with its disc while the globe draws.
+    /// </summary>
+    public void AddRings(double inner, double outer, double halfThickness, Texture2D map)
+    {
+        _ringOuter = outer;
+        _ringHalf = halfThickness;
+        _ringMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ring_slab.gdshader") };
+        _ringMaterial.SetShaderParameter("rings", map);
+        _ringMaterial.SetShaderParameter("inner", (float)(inner / outer));
+        _ring = new MeshInstance3D
+        {
+            Name = "Rings", Mesh = new QuadMesh { Size = new Vector2(2f, 2f) }, MaterialOverride = _ringMaterial, Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // the shader lays the quad over the whole screen: never culled. Under the root (placed every frame): a node
+            // under this plain Node was carried off by the origin's shifts (10^12 m by the one to Saturn) out of its box
+            CustomAabb = new Aabb(new Vector3(-1e9f, -1e9f, -1e9f), new Vector3(2e9f, 2e9f, 2e9f)),
+            IgnoreOcclusionCulling = true,
+        };
+        _root.AddChild(_ring);
+    }
+
+    /// <summary>The rings with the globe: what the slab's shader measures from (written when it changes), shown while it draws.</summary>
+    private void KeepRings(bool drawn)
+    {
+        if (_ring == null || _ringMaterial == null) return;
+        if (_ring.Visible != drawn) _ring.Visible = drawn;
+        if (!drawn) return;
+        float shrink = _root.Transform.Basis.X.Length();
+        // the camera's height over the equator from doubles (the body-fixed Z of the eye), shrunk as the system is
+        var written = (_sun, _root.GlobalBasis.Z.Normalized(), _root.GlobalPosition, shrink, (float)(_eyeHere.Z * shrink));
+        if (written == _ringsWritten) return;
+        _ringsWritten = written;
+        WriteRing(_ringMaterial, written, shrink);
+    }
+
+    private void WriteRing(ShaderMaterial m, (Vector3 Sun, Vector3 Pole, Vector3 Centre, float Shrink, float Height) w, float shrink)
+    {
+        m.SetShaderParameter(RingSun, w.Sun);
+        m.SetShaderParameter(RingPole, w.Pole);
+        m.SetShaderParameter(RingCentre, w.Centre);
+        m.SetShaderParameter(RingShrink, shrink);
+        m.SetShaderParameter(RingHeight, w.Height);
+        m.SetShaderParameter(RingOuter, (float)(_ringOuter * shrink));
+        m.SetShaderParameter(RingHalf, (float)(_ringHalf * shrink));
+        m.SetShaderParameter(RingPlanet, (float)(Body.Shape.A * shrink));
+    }
+
+    /// <summary>The camera's body-fixed place (this body's frame), as this frame's selection read it.</summary>
+    public DVec3 Eye => _eyeHere;
+
     /// <summary>Every tile moved to the anchor's way of placing them (its own body, or another's under the root).</summary>
     private void Replace(FrameAxes axes, bool own)
     {
@@ -340,6 +444,34 @@ public partial class BodyGlobe : Node
         _epoch = _origin.Epoch;
         if (own) _root.Transform = Transform3D.Identity;
         foreach (var (key, tile) in _tiles) Place(key, tile.Node);
+        foreach (var n in _bodyFixed) PlaceBodyFixed(n, axes, own);
+    }
+
+    private readonly List<Node3D> _bodyFixed = new();
+
+    /// <summary>
+    /// A node whose children are in this body's fixed frame (metres from its centre, its own axes): under the root, which is
+    /// that frame when the body is another's (and shrinks it about the camera), or turned from it into the anchor's world on
+    /// its own body, again at each shift (#1946: the colonies' lights).
+    /// </summary>
+    public void AddBodyFixed(Node3D node)
+    {
+        _bodyFixed.Add(node);
+        _root.AddChild(node);
+        if (_origin.Frame.Axes is { } axes && _placedIn == axes.Body) PlaceBodyFixed(node, axes, OwnPlacing(axes));
+    }
+
+    private static void PlaceBodyFixed(Node3D node, FrameAxes axes, bool own)
+    {
+        if (!own)
+        {
+            node.Transform = Transform3D.Identity;
+            return;
+        }
+        Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
+        var (ox, oy, oz) = axes.FromEcef(new EcefPos(0, 0, 0));
+        node.Transform = new Transform3D(new Basis(Turn(new EcefPos(1, 0, 0)), Turn(new EcefPos(0, 1, 0)), Turn(new EcefPos(0, 0, 1))),
+            new Vector3((float)ox, (float)oy, (float)oz));
     }
 
     /// <summary>A tile's node: from the anchor in doubles on its own body, from the body's centre under the root elsewhere.</summary>
@@ -347,7 +479,7 @@ public partial class BodyGlobe : Node
     {
         var a = key.AnchorOn(Body.Cube);
         if (node.GetParent() == null) _root.AddChild(node);
-        if (_origin.Frame.Axes is { } axes && axes.Body == Body.Id)
+        if (_origin.Frame.Axes is { } axes && OwnPlacing(axes))
         {
             Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
             var (ox, oy, oz) = axes.FromEcef(a.Origin);

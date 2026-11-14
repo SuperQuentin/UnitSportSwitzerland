@@ -693,7 +693,7 @@ public static partial class TileRewriter
 
     private static void WriteExterior(JunctionPlan jp, RoadGenResult result, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
         Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
-        Dictionary<TileId, List<RoadPointProp>> signs, SignalStats signalStats, LayoutWriteStats stats)
+        Dictionary<TileId, List<RoadPointProp>> signs, SignalStats signalStats, LayoutWriteStats stats, Func<Vec2, bool>? clear = null)
     {
         var net = result.Network;
         foreach (var ex in jp.Exterior)
@@ -803,22 +803,53 @@ public static partial class TileRewriter
                 // (a lit approach's goes on its main pole: WriteSignals)
                 if (sign.OnMainPole) continue;
                 // beside the kerb, its plate clear of the carriageway, on the sidewalk where the side has one
-                var sec = ExteriorPlanner.SectionAt(a, sign.Station);
                 var side = sign.RightKerb ? rightSide : leftSide;
                 bool urban = side.KerbCm > 0;
-                double clear = RoadSigns.Clearance(urban) + RoadSigns.Side(sign.Type, sign.Variant) * 0.5;
-                double o = sign.RightKerb ? sec.CarriagewayRight + clear : sec.CarriagewayLeft - clear;
-                var at = P(sign.Station, o);
-                bool onSidewalk = side.OuterDm / 10.0 >= clear;
-                float road = source.SampleHeight(P(sign.Station, 0));
+                double clearOut = RoadSigns.Clearance(urban) + RoadSigns.Side(sign.Type, sign.Variant) * 0.5;
+                // its pole clear of every car's way, as a signal pole's (#1929: a give-way sign of a divided Minor stood 1.4 m into
+                // the core, on the path into the Major, and stopped the long drive): out from the kerb, then back along the arm;
+                // none written where nothing is clear
+                if (SignFoot(a, sign, clearOut, P, clear) is not { } spot)
+                {
+                    stats.SignsNoRoom++;
+                    continue;
+                }
+                var (station, o, moved) = spot;
+                if (moved) stats.SignsMoved++;
+                var at = P(station, o);
+                bool onSidewalk = !moved && side.OuterDm / 10.0 >= clearOut;
+                float road = source.SampleHeight(P(station, 0));
                 float kerb = onSidewalk ? side.KerbCm / 100f : 0f;
-                var facing = sign.FacesArriving ? axis.DirAt(m0 + sign.Station) : -axis.DirAt(m0 + sign.Station);
+                var facing = sign.FacesArriving ? axis.DirAt(m0 + station) : -axis.DirAt(m0 + station);
                 var local = Local(tile, [at], _ => road, 0f);
                 Get(signs, tile).Add(new RoadPointProp(sign.Type, sign.Variant, PropFlags.Solid, local[0], road + kerb, local[2],
                     (float)Math.Atan2(-facing.X, facing.Y), (onSidewalk ? RoadSigns.LowerEdgeSidewalk : RoadSigns.LowerEdge) + RoadSigns.PlateHeight(sign.Type, sign.Variant)));
                 stats.Signs++;
             }
         }
+    }
+
+    /// <summary>
+    /// A sign's spot (#1929): its station and offset beside the kerb, its plate clear of the carriageway; where
+    /// <paramref name="clear"/> says a car's way, a core or a building is there, stepped out from the kerb by
+    /// <see cref="PoleStep"/> up to <see cref="PoleTries"/> times, then <see cref="PoleBackStep"/> further out along the arm,
+    /// as a signal pole's (<see cref="ClearFoot"/>). Moved: not where it was planned. Null where nothing is clear.
+    /// </summary>
+    private static (double Station, double Offset, bool Moved)? SignFoot(ArmPlan a, SignSpot sign, double clearOut,
+        Func<double, double, Vec2> at, Func<Vec2, bool>? clear)
+    {
+        foreach (double back in (ReadOnlySpan<double>)[0, PoleBackStep, 2 * PoleBackStep, 3 * PoleBackStep, 4 * PoleBackStep])
+        {
+            double station = sign.Station + back;
+            var sec = ExteriorPlanner.SectionAt(a, station);
+            for (int k = 0; k < PoleTries; k++)
+            {
+                double off = clearOut + k * PoleStep;
+                double o = sign.RightKerb ? sec.CarriagewayRight + off : sec.CarriagewayLeft - off;
+                if (clear is null || clear(at(station, o))) return (station, o, back > 0 || k > 0);
+            }
+        }
+        return null;
     }
 
     /// <summary>Where nothing beside either kerb is clear, a main pole looks this far round its right kerb's spot (m, #1709), in rings this far apart.</summary>

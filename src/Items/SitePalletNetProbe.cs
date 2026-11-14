@@ -58,6 +58,30 @@ public partial class SitePalletNetProbe : ChatProbe
         .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
         .OrderBy(n => n.GlobalPosition.DistanceSquaredTo(from)).FirstOrDefault();
 
+    /// <summary>Half the telehandler's width and a margin, m: how far either side of a pallet's centreline the way in must be clear.</summary>
+    private const float MachineHalfWidth = 1.3f;
+
+    /// <summary>The most the floor may rise or fall along the way in, m.</summary>
+    private const float MaxStep = 0.12f;
+
+    /// <summary>
+    /// The sites whose materials the planner kept a way in to (#1926): a topped-out site was assumed to have one, and on
+    /// <c>fixture:site</c> under flat none did (a yard 14.5 m deep between the scaffolding and the street).
+    /// </summary>
+    private static HashSet<string> ReachableSites(IEnumerable<Terrain.Format.TileId> tiles)
+    {
+        var keys = new HashSet<string>();
+        if (Loot.LootService.Instance?.Source?.Invoke() is not { } source) return keys;
+        foreach (var tile in tiles)
+        {
+            var t = Terrain.Construction.SitePlans.OfTile(source, tile);
+            if (t.Tile is not { } bt) continue;
+            foreach (var site in t.Sites)
+                if (Terrain.Construction.SitePlans.MaterialsReachable(bt, t.Roads, site)) keys.Add(site.Key);
+        }
+        return keys;
+    }
+
     private static float Yaw(Vector3 toward) => Mathf.Atan2(-toward.X, -toward.Z);
 
     private static string F(float v) => v.ToString("F3", CultureInfo.InvariantCulture);
@@ -75,12 +99,6 @@ public partial class SitePalletNetProbe : ChatProbe
 
         // the dormant layer draws the site's pallets with its machines, round the spawn
         if (!await Until(() => NearestSitePallet(me.GlobalPosition) != null, 60)) { Fail("no site pallet drawn near the spawn"); return; }
-        var pallet = NearestSitePallet(me.GlobalPosition)!;
-        Expect(me.SetRide(RideKind.Telehandler) && me.Vehicle is Telehandler, $"A takes a telehandler for {pallet.Id}");
-        if (me.Vehicle is not Telehandler th) { Fail("not a telehandler"); return; }
-
-        // across its runners (they run along the row of materials), from whichever side is clear
-        var across = (pallet.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
         var space = me.GetWorld3D().DirectSpaceState;
         // A's own body aside: it spawns at the site, and is placed at the side found anyway
         Godot.Collections.Dictionary Ray(Vector3 a, Vector3 b)
@@ -89,27 +107,80 @@ public partial class SitePalletNetProbe : ChatProbe
             q.Exclude = new Godot.Collections.Array<Rid> { me.GetRid() };
             return space.IntersectRay(q);
         }
-        Vector3? side = null;
-        foreach (var dir in new[] { across, -across })
+        // across its runners (they run along the row of materials), from whichever side is clear
+        Vector3? ClearSide(PalletNode pallet)
         {
-            var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
-            var hit = Ray(from, from + dir * 7.5f);
-            // nothing low either: the materials' rebar bundle is 0.35 m high (#619 turns it to the building)
-            var low = from - Vector3.Up * 0.95f;
-            if (hit.Count == 0) hit = Ray(low, low + dir * 7.5f);
-            // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
-            bool overPit = false;
-            for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
-            if (hit.Count == 0 && !overPit) { side = dir; break; }
-            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: {(hit.Count == 0 ? "clear" : $"hits {(hit["collider"].AsGodotObject() as Node)?.GetPath()} at {hit["position"]}")}{(overPit ? ", over the pit" : "")}"));
+            var across = (pallet.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            Vector3? side = null;
+            foreach (var dir in new[] { across, -across })
+            {
+                var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
+                // the machine's width, not a line (#1718: a ray down the middle passed a way the telehandler stuck in):
+                // its centre and either side, high and low (the materials' rebar bundle is 0.35 m high, #619 turns it
+                // to the building)
+                var aside = new Vector3(-dir.Z, 0, dir.X) * MachineHalfWidth;
+                var hit = new Godot.Collections.Dictionary();
+                foreach (var off in new[] { Vector3.Zero, aside, -aside })
+                    foreach (var up in new[] { 0f, -0.95f })
+                    {
+                        if (hit.Count > 0) break;
+                        var at = from + off + Vector3.Up * up;
+                        hit = Ray(at, at + dir * 7.5f);
+                    }
+                // and ground to stand on: a site's pit (#619) is clear at that height, and empty under it
+                bool overPit = false;
+                for (float k = 0f; k <= 7.5f && !overPit; k += 0.5f) overPit = me.Terrain?.InPit(from + dir * k) == true;
+                // and level all the way in, at the pallet's own floor: a slab's edge or a kerb stops the machine short of it
+                bool step = false;
+                float floor = float.NaN;
+                for (float k = 1f; k <= 7.5f && !step; k += 0.5f)
+                {
+                    var top = pallet.GlobalPosition + dir * k + Vector3.Up * 3f;
+                    var down = Ray(top, top - Vector3.Up * 6f);
+                    if (down.Count == 0) continue;
+                    float y = down["position"].AsVector3().Y;
+                    if (float.IsNaN(floor)) floor = y;
+                    step = Math.Abs(y - floor) > MaxStep;
+                }
+                if (hit.Count == 0 && !overPit && !step) { side = dir; break; }
+                if (step) GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: a step on the way in"));
+                GD.Print(FormattableString.Invariant($"[sitepalletnet A]   side {dir.X:F2},{dir.Z:F2}: {(hit.Count == 0 ? "clear" : $"hits {(hit["collider"].AsGodotObject() as Node)?.GetPath()} at {hit["position"]}")}{(overPit ? ", over the pit" : "")}"));
+            }
+            return side;
         }
-        if (side is not { } outward) { Fail($"no clear side to come at {pallet.Id} from"); return; }
+
+        // the nearest site pallet a machine can come at: one beside a pit or hemmed in by a slab is passed over (#1718:
+        // on the fixture the nearest stands by the foundations' pit)
+        // a site's whose materials have a way in first (#1926: the planner keeps one where the yard has room; a topped-out
+        // site was taken for one, and on fixture:site under flat none of them had room)
+        var palletTiles = new HashSet<Terrain.Format.TileId>();
+        foreach (var n in PalletNode.All.Values)
+            if (Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site && Interiors.BuildingKey.TryParse(r.Building, out var b))
+                palletTiles.Add(b.Tile);
+        var reachable = await Task.Run(() => ReachableSites(palletTiles));
+        PalletNode? pallet = null;
+        Vector3? clear = null;
+        foreach (var candidate in PalletNode.All.Values
+                     .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
+                     .OrderBy(n => Pallets.TryParse(n.Id, out var r) && reachable.Contains(r.Building) ? 0 : 1)
+                     .ThenBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(40).ToList())
+        {
+            GD.Print($"[sitepalletnet A]   trying {candidate.Id}");
+            if (ClearSide(candidate) is { } found) { pallet = candidate; clear = found; break; }
+        }
+        if (pallet == null || clear is not { } outward) { Fail("no site pallet with a clear side to come at near the spawn"); return; }
+        Expect(me.SetRide(RideKind.Telehandler) && me.Vehicle is Telehandler, $"A takes a telehandler for {pallet.Id}");
+        if (me.Vehicle is not Telehandler th) { Fail("not a telehandler"); return; }
         var tines = th.TinesFrame.Origin;
         var right = new Vector3(outward.Z, 0, -outward.X);
         var at = pallet.GlobalPosition + outward * (-tines.Z + Pallets.LoadAhead + 3f) - right * tines.X;
         if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;
         me.PlaceAt(at, Yaw(-outward));
         await Seconds(2);
+        {
+            var placed = (me.GlobalTransform * th.TinesFrame).AffineInverse() * pallet.GlobalPosition;
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   set down: the pallet {placed.X:F2} aside, {-placed.Z:F2} ahead of the tines (asked {at.X:F2},{at.Z:F2}, at {me.GlobalPosition.X:F2},{me.GlobalPosition.Z:F2}, tines x {tines.X:F2})"));
+        }
 
         XrPad.Press(PlayerInput.DigMode, true);
         await Seconds(0.1);
@@ -120,6 +191,16 @@ public partial class SitePalletNetProbe : ChatProbe
         await Until(() => Ahead() < Pallets.LoadAhead + 0.05f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
         await BrakeToStop(me);
         GD.Print(FormattableString.Invariant($"[sitepalletnet A]   telehandler stopped: {Ahead():F2} m ahead of the heel"));
+        {
+            // the fork rule's terms (Pallets.OnTines, #1926): what the server reads when the boom goes up
+            var tinesAt = me.GlobalTransform * th.TinesFrame;
+            var local = tinesAt.AffineInverse() * pallet.GlobalPosition;
+            var aheadDir = new Vector2(-tinesAt.Basis.Z.X, -tinesAt.Basis.Z.Z).Normalized();
+            var runners = pallet.GlobalTransform.Basis.X;
+            float along = Mathf.Abs(aheadDir.Dot(new Vector2(runners.X, runners.Z).Normalized()));
+            bool on = Pallets.OnTines(local.X, -local.Z, along, th.ForkHeight, me.GroundSpeed, th.TineLength, th.TineHalfSpan);
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   on the tines: {on} (aside {local.X:F2} of {th.TineHalfSpan:F2}, ahead {-local.Z:F2} of {th.TineLength:F2}, fork height {th.ForkHeight:F2} under {ForkliftLayout.ForkEntry:F2}, along {along:F2}, speed {me.GroundSpeed:F2})"));
+        }
         if (Ahead() > Pallets.LoadAhead + 0.5f)
         {
             // what stops it: rays ahead of the machine at a few heights (#1704)

@@ -97,6 +97,35 @@ public sealed class CraterField
         return h;
     }
 
+    /// <summary>
+    /// The craters of <paramref name="minDiameter"/> and up whose centre is within <paramref name="reach"/> of a point
+    /// (body-fixed, on or near the surface): the boulders round fresh rims (<see cref="BoulderField"/>).
+    /// </summary>
+    public IEnumerable<Crater> Near(double x, double y, double z, double reach, double minDiameter)
+    {
+        double len = Math.Sqrt(x * x + y * y + z * z);
+        double px = x / len * _radius, py = y / len * _radius, pz = z / len * _radius;
+        for (int b = 0; b < _bins.Length; b++)
+        {
+            var bin = _bins[b];
+            if (bin.DMax <= minDiameter) continue;
+            int span = (int)Math.Ceiling(reach / bin.Cell) + 1;
+            long cx = (long)Math.Floor(px / bin.Cell), cy = (long)Math.Floor(py / bin.Cell), cz = (long)Math.Floor(pz / bin.Cell);
+            for (long i = cx - span; i <= cx + span; i++)
+                for (long j = cy - span; j <= cy + span; j++)
+                    for (long k = cz - span; k <= cz + span; k++)
+                        foreach (var c in CratersIn(b, i, j, k))
+                        {
+                            if (2 * c.Radius < minDiameter) continue;
+                            double dx = c.X - px, dy = c.Y - py, dz = c.Z - pz;
+                            if (dx * dx + dy * dy + dz * dz <= reach * reach) yield return c;
+                        }
+        }
+    }
+
+    /// <summary>A crater's freshness, 0 old .. 1 just made: its depth over its diameter against the fresh 0.2.</summary>
+    public static double Freshness(in Crater c) => Math.Clamp((c.Depth / (2 * c.Radius) - 0.04) / 0.16, 0, 1);
+
     /// <summary>The craters a cell holds (a few at most), for tests and the boulders round fresh rims.</summary>
     public IEnumerable<Crater> CratersIn(int bin, long i, long j, long k)
     {

@@ -125,8 +125,10 @@ public partial class GlobeAlbedoBake : Node
     private async Task RunBodyAsync(string body)
     {
         string dir = CmdArgs.Value("--globealbedo")!, file = CmdArgs.Value("--colour") ?? "";
-        var cube = body.ToLowerInvariant() switch { "moon" => CubeShape.Moon, "mars" => CubeShape.Mars, _ => null };
-        if (cube == null) { Fail($"no body called {body} (moon, mars)"); return; }
+        // any body of the registry but the Earth (whose pyramid is baked without --body): its own cube (#1854)
+        var known = Core.CelestialBody.All.ToArray().FirstOrDefault(c => c.Id != Core.BodyId.Earth && c.Name.Equals(body, StringComparison.OrdinalIgnoreCase));
+        var cube = known?.Cube;
+        if (cube == null) { Fail($"no body called {body} (moon, mars, mercury, venus...)"); return; }
         string manifestPath = System.IO.Path.Combine(dir, CubeManifest.FileName);
         var manifest = CubeManifest.FromJson(File.ReadAllText(manifestPath));
         if (!string.Equals(manifest.Body, body, StringComparison.OrdinalIgnoreCase)) { Fail($"{dir} is the pyramid of {manifest.Body ?? "Earth"}, not {body}"); return; }

@@ -33,7 +33,7 @@
 - **Not solved yet**:
   - ~~Float precision~~: solved by server regions (#1456, `net/server-regions`): each cluster of bodies
     has a frame, a physics space and a `ChunkManager` of its own, so a bot 300 km out walks as one at home.
-  - **Interiors**: they are not built on the server. A bot cannot go through a door into a building yet
-    (phase 2's looting).
+  - ~~Interiors~~: built on the server for the bots that want them since #1330 (`interiors`): the collision of
+    an interior a bot is in or heading into, in its region, freed 20 s after.
   - **Commit budget**: the server keeps the default 4 ms, and one piece can take 8-14 ms. Measure it with
     `--serverstats` once 20 bots spread out.

@@ -43,6 +43,19 @@ public static class VehicleReach
 
     private static Node3D? _outlined;
 
+    // asked every frame for the player on foot (#1910): one reused query, and the player's own exclude array, kept while
+    // its body is the same (a new query and array per frame were ~1.6 % of a client's main thread)
+    private static readonly Core.RayQuery AimRay = new();
+    private static Godot.Collections.Array<Rid>? _exclude;
+    private static Rid _excluded;
+
+    private static Godot.Collections.Array<Rid> ExcludeOf(FootPlayer player)
+    {
+        var rid = player.GetRid();
+        if (_exclude == null || rid != _excluded) (_exclude, _excluded) = (new Godot.Collections.Array<Rid> { rid }, rid);
+        return _exclude;
+    }
+
     /// <summary>The vehicle and door <paramref name="player"/> can act on, or null.</summary>
     public static VehicleAim? Find(FootPlayer player)
     {
@@ -53,9 +66,8 @@ public static class VehicleReach
         var camera = player.Camera;
         var from = camera.GlobalPosition;
         var forward = -camera.GlobalTransform.Basis.Z;
-        var query = PhysicsRayQueryParameters3D.Create(from, from + forward * (AimRange + from.DistanceTo(chest)), uint.MaxValue,
-            new Godot.Collections.Array<Rid> { player.GetRid() });
-        var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var hit = AimRay.Cast(player.GetWorld3D().DirectSpaceState, from, from + forward * (AimRange + from.DistanceTo(chest)), uint.MaxValue,
+            ExcludeOf(player));
         if (hit.Count > 0 && VehicleOf(hit["collider"].AsGodotObject() as Node) is { } aimed && vehicles.Enterable(aimed) && FromOutside(aimed)
             && At(player, aimed, hit["position"].AsVector3()) is { } pointed)
             return pointed;

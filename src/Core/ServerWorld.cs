@@ -264,6 +264,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
+        // group rides on the home trainer (#1467): who rides which course, and how far along
+        Trainer.GroupRides.Create(this, peer => _chat?.NameOfPeer(peer) ?? $"Player {peer}");
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
         // the fun world's sky is held at dusk (#1396): its clock stopped there

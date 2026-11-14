@@ -26,10 +26,16 @@ public partial class Atmosphere : Node3D
 
     public WorldOrigin? Origin { get; set; }
 
+    /// <summary>The shell quad's culling box half side, metres: past the largest body and its shell, so it is never culled.</summary>
+    private const float ShellBoxM = 1e9f;
+
     private static readonly StringName PlanetCentre = "planet_centre", PlanetR = "planet_r", AtmoR = "atmo_r",
         SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", TrueSunParam = "world_true_sun",
         BetaR = "beta_r", BetaM = "beta_m", HeightR = "h_r", HeightM = "h_m", GM = "g_m", MExt = "m_ext",
-        AbsorbR = "absorb_r", SunPower = "sun_power";
+        AbsorbR = "absorb_r", SunPower = "sun_power", MaxMarch = "max_march";
+
+    /// <summary>The march's cap written last (0: none).</summary>
+    private float _maxMarch;
 
     /// <summary>The body whose air the shell has now (its uniforms written when it changes).</summary>
     private BodyId _airOf = (BodyId)255;
@@ -48,14 +54,15 @@ public partial class Atmosphere : Node3D
     public override void _Ready()
     {
         _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/atmosphere.gdshader") };
-        float r = (float)(Ellipsoid.Wgs84.A + ThicknessM);
         _shell = new MeshInstance3D
         {
             Name = "Shell",
             // a quad the shader lays over the whole screen (atmosphere.gdshader), never culled: the air is marched
             // per pixel from the screen and the depth; a sphere's clamped back faces were clipped round the view (#1528)
             Mesh = new QuadMesh { Size = new Vector2(2f, 2f) },
-            CustomAabb = new Aabb(new Vector3(-r, -r, -r), new Vector3(2 * r, 2 * r, 2 * r)),
+            // a box far larger than any body (#1854): placed at the body's centre, the Earth's own radius left the camera
+            // outside it over a giant (Jupiter's centre 71,000 km away), and the shell was culled
+            CustomAabb = new Aabb(new Vector3(-ShellBoxM, -ShellBoxM, -ShellBoxM), new Vector3(2 * ShellBoxM, 2 * ShellBoxM, 2 * ShellBoxM)),
             MaterialOverride = _material,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             IgnoreOcclusionCulling = true,
@@ -162,6 +169,10 @@ public partial class Atmosphere : Node3D
         }
         if (!sun.IsEqualApprox(_sun)) _material.SetShaderParameter(SunDir, _sun = sun);
         if (shell != _intensity) _material.SetShaderParameter(Intensity, _intensity = shell);
+        // inside a giant's cloud deck (#1854): the march stops 15 of the clouds' scale heights along, where nothing
+        // comes back any more
+        float march = !body.Landable && altitude < 0 ? (float)(15 * air.CoarseHeightM) : 0f;
+        if (march != _maxMarch) _material.SetShaderParameter(MaxMarch, _maxMarch = march);
         _space = space;
     }
 

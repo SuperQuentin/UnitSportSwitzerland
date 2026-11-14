@@ -14,9 +14,9 @@
 | Junction choice, Rejoin, U-turn | built (PR #1142) | not the edge sequence of design 1: junctions are read off the road network's walking graph along whatever the bike rides (`JunctionChoice`) |
 | ERG button | built (PR #1142) | `\`, ±10 W `[` `]`; pad and VR through the Training app |
 | Junction arrows | built (PR on `feat/901-arrows`) | a row of arrows over the junction, the road taken lit |
-| Ride through traffic | next | a queued car stops the bike |
+| Ride through traffic | built (#1467) | the pilot slows for no traffic, the rider's body ghosts through it (`--trainingcheck traffic`) |
 | FTP test hookup | after #903 | `Bicycle.PowerMeasured = TrainerLink.PowerLive` |
-| Group rides | later | phase 4 |
+| Group rides | built (#1467) | host / join a group ride on a course, standings in the HUD and the app, riders drafting each other; bots riding courses on the server: a gap |
 
 Notes: `docs/notes/player/home-trainer-training.md`.
 
