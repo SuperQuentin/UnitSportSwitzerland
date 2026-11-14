@@ -423,7 +423,7 @@ public sealed partial class PhoneMap : Node, IMapHost
             _canvas.RedrawMarkers();
         }
         if (_pad != InputHints.Pad) UpdateHint();
-        if (_card.Visible && Time.GetTicksMsec() / 1000.0 - _cardDistanceAt > 1.0) RefreshDistance();
+        if (_card.Visible && RealClock.Now - _cardDistanceAt > 1.0) RefreshDistance();
     }
 
     private void SetMoving(bool moving)
@@ -473,7 +473,7 @@ public sealed partial class PhoneMap : Node, IMapHost
 
     private void RefreshDistance()
     {
-        _cardDistanceAt = Time.GetTicksMsec() / 1000.0;
+        _cardDistanceAt = RealClock.Now;
         if (_player() is not { } p) return;
         string d = PhoneScreens.Metres(p.Global.HorizontalDistanceTo(_cardAt));
         if (d == _cardDistance) return;
