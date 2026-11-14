@@ -49,7 +49,7 @@ public static class CrossSectionPlanner
     /// <summary>Off (<c>--rewrite --no-shift</c>) keeps every centreline where TLM drew it: the "before" of the median measurement.</summary>
     public static bool ShiftCarriageways { get; set; } = true;
 
-    public enum Origin : byte { None, Source, Roundabout, Partner, Connectivity, PartnerFallback, Osm }
+    public enum Origin : byte { None, Source, Roundabout, Partner, Connectivity, PartnerFallback, Osm, Chain }
 
     /// <summary>One raw extractor segment of the block or its halo.</summary>
     public sealed class Line
@@ -94,10 +94,12 @@ public static class CrossSectionPlanner
     /// <summary>Region numbers, over written lines only.</summary>
     public sealed class Stats
     {
-        public int Divided, DividedPartner, DividedConnectivity, DividedFallback, DividedOsm, DividedNone;
+        public int Divided, DividedPartner, DividedConnectivity, DividedFallback, DividedOsm, DividedNone, DividedChain;
         public int Ramps, RampsOsm, RampsConnectivity, RampsFallback, RampsBoth, RampsAgree, OsmChecked, OsmAgree;
         public int RoundaboutLines, OsmOneWay, OsmLanes, OsmWidth, OsmPriority, ConnectivityConflicts;
         public int ShiftedLines, PinnedEnds, DraggedLines, LooseAttachments;
+        /// <summary>Where a piece was turned to agree with the carriageway it carries on into (#1876), for the log.</summary>
+        public readonly SortedSet<string> ChainTurned = new(StringComparer.Ordinal);
         public double ShiftedKm;
         /// <summary>km per (class, width to 0.1 m).</summary>
         public readonly SortedDictionary<(RoadClass, double), double> WidthKm = new();
@@ -112,7 +114,9 @@ public static class CrossSectionPlanner
             string Pct(int n, int of) => of == 0 ? "-" : (100.0 * n / of).ToString("F1", c) + "%";
             var sb = new StringBuilder();
             sb.Append(c, $"  carriageways (#117, raw lines):\n");
-            sb.Append(c, $"    divided {Divided:N0}: direction {Divided - DividedNone:N0} ({Pct(Divided - DividedNone, Divided)}) = partner {DividedPartner:N0}, connectivity {DividedConnectivity:N0}, partner fallback {DividedFallback:N0}, OSM {DividedOsm:N0}; none {DividedNone:N0}\n");
+            sb.Append(c, $"    divided {Divided:N0}: direction {Divided - DividedNone:N0} ({Pct(Divided - DividedNone, Divided)}) = partner {DividedPartner:N0}, connectivity {DividedConnectivity:N0}, partner fallback {DividedFallback:N0}, OSM {DividedOsm:N0}, turned to agree with the carriageway they carry on (#1876) {DividedChain:N0}; none {DividedNone:N0}\n");
+            if (ChainTurned.Count > 0)
+                sb.Append(c, $"      turned: {string.Join("; ", ChainTurned.Take(40))}{(ChainTurned.Count > 40 ? $"; ... {ChainTurned.Count - 40} more" : "")}\n");
             sb.Append(c, $"    check against OSM one-way on divided lines (OSM rows left after the overlay's conflict rule): agree {OsmAgree}/{OsmChecked}\n");
             sb.Append(c, $"    ramps {Ramps:N0}: OSM {RampsOsm:N0}, connectivity {RampsConnectivity:N0} (partner rule agrees {RampsAgree}/{RampsBoth}), partner fallback {RampsFallback:N0}\n");
             sb.Append(c, $"    roundabout lines oriented {RoundaboutLines:N0}; connectivity conflicts {ConnectivityConflicts}\n");
@@ -167,6 +171,8 @@ public static class CrossSectionPlanner
 
         foreach (var line in divided)
             if (line.OneWay == 0 && line.PartnerVote != 0) Set(line, line.PartnerVote, Origin.PartnerFallback);
+
+        AlignCarriageways(divided, ends, stats);
 
         foreach (var line in lines)
             if (line.OneWay == 0 && line.Osm is { OneWay: "1" or "-1" } row && IsCarRoad(line.Segment))
@@ -409,6 +415,83 @@ public static class CrossSectionPlanner
         return conflicts;
     }
 
+    /// <summary>Straight on: two carriageway pieces carry on into each other when their outward headings are this near opposite (20 deg).</summary>
+    private const double StraightOnCos = -0.94;
+
+    /// <summary>
+    /// #1876: a carriageway never changes direction where it carries straight on. The partner rule votes each piece on
+    /// its own, from where the other carriageway lies beside its middle; where TLM draws the two crossing over (Chambesy,
+    /// 2500521/1121460: the southbound line runs east of the northbound's first 32 m, west of the rest) a short piece
+    /// votes the wrong way, and a junction got no exit for one direction. Pieces of divided roads (not ramps) that carry
+    /// straight on into each other at a node (each the other's most nearly opposite outward heading, within 20 deg) form
+    /// one carriageway; it runs the way its pieces' directions say, weighted by length (a direction from the source or a
+    /// ring counts ten times), and a piece the partner rule or connectivity set the other way is turned (<see cref="Origin.Chain"/>).
+    /// </summary>
+    private static void AlignCarriageways(List<Line> divided, Dictionary<(long, long), List<(Line Line, bool AtStart)>> ends, Stats stats)
+    {
+        var pieces = divided.Where(l => l.Segment.Class != RoadClass.Ramp && l.Plan.Length >= 2).ToHashSet();
+        // each end's straight-on piece, if any
+        (Line Line, bool AtStart)? StraightOn(Line line, bool atStart)
+        {
+            var p = atStart ? line.Plan[0] : line.Plan[^1];
+            var outward = Outward(line, atStart);
+            (Line, bool)? best = null;
+            double bestCos = StraightOnCos;
+            foreach (var (v, vStart) in ends[Key(p)])
+            {
+                if (ReferenceEquals(v, line) || !pieces.Contains(v)) continue;
+                double cos = outward.Dot(Outward(v, vStart));
+                if (cos < bestCos) (best, bestCos) = ((v, vStart), cos);
+            }
+            return best;
+        }
+        // the chains, each piece with its drawing's sense along the chain (+1 or -1 against the first piece's)
+        var chainOf = new Dictionary<Line, int>(ReferenceEqualityComparer.Instance);
+        var chains = new List<List<(Line Line, int Sense)>>();
+        foreach (var first in pieces)
+        {
+            if (chainOf.ContainsKey(first)) continue;
+            var chain = new List<(Line, int)> { (first, 1) };
+            chainOf[first] = chains.Count;
+            var queue = new Queue<(Line, int)>();
+            queue.Enqueue((first, 1));
+            while (queue.Count > 0)
+            {
+                var (line, sense) = queue.Dequeue();
+                foreach (bool atStart in new[] { true, false })
+                {
+                    if (StraightOn(line, atStart) is not var (v, vStart) || chainOf.ContainsKey(v)) continue;
+                    // mutual: v's straight-on piece at that end is this one
+                    if (StraightOn(v, vStart) is not var (back, _) || !ReferenceEquals(back, line)) continue;
+                    // end to start (or start to end) keeps the drawing's sense; end to end or start to start turns it
+                    int vSense = atStart != vStart ? sense : -sense;
+                    chainOf[v] = chains.Count;
+                    chain.Add((v, vSense));
+                    queue.Enqueue((v, vSense));
+                }
+            }
+            chains.Add(chain);
+        }
+        foreach (var chain in chains)
+        {
+            if (chain.Count < 2) continue;
+            double vote = 0;
+            foreach (var (line, sense) in chain)
+                vote += line.OneWay * sense * line.Length * (line.Why is Origin.Source or Origin.Roundabout ? 10 : 1);
+            if (vote == 0) continue;
+            int way = Math.Sign(vote);
+            foreach (var (line, sense) in chain)
+                if (line.OneWay != 0 && line.OneWay * sense != way
+                    && line.Why is Origin.Partner or Origin.PartnerFallback or Origin.Connectivity)
+                {
+                    Set(line, (sbyte)(way * sense), Origin.Chain);
+                    var mid = line.Plan[line.Plan.Length / 2];
+                    lock (stats.ChainTurned)
+                        stats.ChainTurned.Add(string.Create(CultureInfo.InvariantCulture, $"{line.Segment.Class} {line.Length:F0} m at {mid.X:F0}/{mid.Y:F0} OSM {(line.Osm is { OneWay: "1" or "-1" } o ? ((o.OneWay == "1") == (line.OneWay > 0) ? "agrees" : "DISAGREES") : "none")} (chain of {chain.Count}:{string.Join(" ", chain.Select(x => $"{x.Line.Segment.Class.ToString()[..2]}{x.Line.Length:F0}{(x.Line.OneWay * x.Sense > 0 ? "+" : "-")}{(x.Line.Why == Origin.Chain ? "*" : "")}"))})"));
+                }
+        }
+    }
+
     /// <summary>The point ~10 m in from the line's end (where <see cref="Outward"/> aims).</summary>
     private static Vec2 Ahead(Line line, bool atStart) =>
         (atStart ? line.Plan[0] : line.Plan[^1]) + Outward(line, atStart) * Math.Min(10, line.Length);
@@ -564,6 +647,7 @@ public static class CrossSectionPlanner
                 case Origin.Connectivity: st.DividedConnectivity++; break;
                 case Origin.PartnerFallback: st.DividedFallback++; break;
                 case Origin.Osm: st.DividedOsm++; break;
+                case Origin.Chain: st.DividedChain++; break;
                 case Origin.None: st.DividedNone++; break;
                 default: if (line.OneWay == 0) st.DividedNone++; else st.DividedPartner++; break;
             }
@@ -646,7 +730,13 @@ public static class CrossSectionPlanner
         var ring = Make(RoadClass.Road, RoadFlags.None, new RoadAttributes(Flags: RoadAttrFlags.Roundabout),
             (2600300, 1199700), (2600320, 1199680), (2600300, 1199660), (2600280, 1199680), (2600300, 1199700));
         var road = Make(RoadClass.Major, RoadFlags.None, new RoadAttributes(WidthCm: 800), (2600100, 1199800), (2600900, 1199800));
-        var lines = new List<Line> { north, southA, south, ramp, ring, road };
+        // #1876: a divided road whose two carriageways TLM draws crossing over, as at Chambesy. The north-bound one in two
+        // pieces (32 m, then 140 m on), the south-bound one east of the first piece's middle and west of the second's:
+        // the first piece's partner vote alone says south-bound; it carries straight on into the second, so north-bound
+        var upA = Make(RoadClass.Road, div, default, (2601200, 1199000), (2601200, 1199032));
+        var upB = Make(RoadClass.Road, div, default, (2601200, 1199032), (2601210, 1199172));
+        var down = Make(RoadClass.Road, div, default, (2601196, 1199172), (2601203, 1199000));
+        var lines = new List<Line> { north, southA, south, ramp, ring, road, upA, upB, down };
         var stats = new Stats();
         Plan(lines, null, stats);
 
@@ -654,6 +744,9 @@ public static class CrossSectionPlanner
         void Check(bool cond, string what) { log((cond ? "  ok    " : "  FAIL  ") + what); ok &= cond; }
         Check(north.OneWay == -1 && south.OneWay == -1, "partner rule at 2.3 m: both carriageways run against their drawing (west / east)");
         Check(ramp.OneWay == 1 && ramp.Why == Origin.Connectivity, "exit ramp leaves the node beside the carriageway it diverges from");
+        Check(upA.PartnerVote == -1, "crossed carriageways: the short piece's own partner vote is wrong (the case under test)");
+        Check(upB.OneWay == 1 && down.OneWay == 1 && upA.OneWay == 1 && upA.Why == Origin.Chain,
+            $"crossed carriageways: the short piece runs on as the piece it carries on into (north-bound), got {upA.OneWay} ({upA.Why}), {upB.OneWay}, {down.OneWay}");
         Check(ring.OneWay == -1, "a ring drawn clockwise runs against its drawing (counter-clockwise)");
         Check(Math.Abs(north.Width - 10.5f) < 0.01f && Math.Abs(ramp.Width - 5.75f) < 0.01f && Math.Abs(road.Width - 8f) < 0.01f,
             "widths: motorway carriageway 10.5 m, ramp 5.75 m, 8m Strasse 8 m");
