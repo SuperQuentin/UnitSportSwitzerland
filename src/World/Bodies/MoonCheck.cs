@@ -131,6 +131,7 @@ public partial class MoonCheck : Node
                 Walk();
                 break;
             case Stage.Settle when _stageT > 1.5:
+                if (Boulders() is { } stones) { Finish(stones); return; }
                 _jumpFrom = Over(_local()!);
                 _apex = _jumpFrom;
                 Input.ActionPress(PlayerInput.Jump);
@@ -329,6 +330,24 @@ public partial class MoonCheck : Node
 
     /// <summary>How long a tiny body's jump is watched before it is judged, seconds.</summary>
     private const double TinyJumpS = 5;
+
+    /// <summary>
+    /// The boulders round fresh craters (#1849) on a well-cratered body: some made round the walker, and a ray down onto
+    /// the nearest solid one hits it. Null when fine or nothing to check (a body with few craters, no data).
+    /// </summary>
+    private string? Boulders()
+    {
+        if (Target.CraterDensity < 0.5 || !BodyBoulders.Active.TryGetValue(Target.Id, out var stones)) return null;
+        if (stones.Built == 0) return "no boulders made round the walker";
+        Log($"boulders round the walker: {stones.Drawn} drawn, {stones.Solid} solid (field {stones.Built})");
+        if (stones.NearestSolid(_local()!.GlobalPosition) is not { } near) return stones.Drawn > 0 ? null : "no boulders within reach";
+        var up = _origin.Frame.UpAt(near.At);
+        var from = near.At + up * (near.Radius + 20f);
+        var hit = GetViewport().World3D.DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, near.At - up * near.Radius * 2f));
+        float off = hit.Count > 0 ? ((Vector3)hit["position"]).DistanceTo(near.At) : float.NaN;
+        Log(string.Create(CultureInfo.InvariantCulture, $"a ray down on the nearest solid boulder ({near.Radius:F1} m): {(hit.Count > 0 ? $"hit {off:F2} m from its centre" : "no hit")}"));
+        return hit.Count > 0 && off <= near.Radius * 1.1f ? null : "the nearest boulder is not solid";
+    }
 
     private void Stand()
     {
