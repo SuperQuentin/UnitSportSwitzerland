@@ -129,7 +129,7 @@ public partial class SkyShot : Node
                     if (Lum(image.GetPixel(cx + x, cy + y)) >= top - 0.02f) { sx += x; sy += y; n++; }
             offPx = n > 0 ? new Vector2(sx / n, sy / n).Length() : 99;
             float perRad = image.GetHeight() * 0.5f / Mathf.Tan(Mathf.DegToRad(Core.CameraLens.FovOf(shotCam)) * 0.5f);
-            float disc = Mathf.Max(SunDisc.TrueRadius, Mathf.DegToRad(Core.CameraLens.FovOf(shotCam)) * MoonDisc.MinScreenShare) * perRad;
+            float disc = Mathf.Max(SunDisc.TrueRadius, Mathf.DegToRad(Core.CameraLens.FovOf(shotCam)) * MoonDisc.ScreenShare) * perRad;
             spot = Mathf.Sqrt(n / Mathf.Pi) / Mathf.Max(disc, 1f);
         }
 

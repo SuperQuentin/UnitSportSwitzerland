@@ -7,8 +7,14 @@ Everything here is drawn only under the real sun (`SunPath.Model == Real`: not i
 screenshots or the fun world unless `--sun real`), placed just inside the camera's far plane at its
 true angular size, and read from `DayNight.Sky` (the date, hour and camera place, the celestial
 sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`; it is drawn at least
-`MoonDisc.MinScreenShare` of the view's height in angular radius (24 px across at 1080p and 70°; true, it was 7 px, a
-star among stars, and a 4-day crescent a one-pixel sliver), the telescope's narrow views at the true size, with
+`MoonDisc.DefaultShare` of the view's height in angular radius (#1842: 12 px across at 1080p and 70°, 1.5 times the
+true 8 px; the true size from a 47° view down; the user chose this halfway one over the true size side by side), its brightness a halo round it as a star's glow is (`MoonHalo`,
+`shaders/moon_halo.gdshader`): its width a share of the view (`MoonDisc.HaloShare`), its strength by the phase
+(`MoonDisc.PhaseGlow`, Allen's magnitude law mapped 0.25-1) and the night, centred on the lit part and drawn over the
+disc (a crescent's dark disc ringed by a centred glow read as an eclipse), gone once the disc is big on screen. It was
+boosted to 1.1 % (#1798), which zooming took back: the moon shrank against the land as one
+zoomed in. `--sky-disc-share <f>` (the moon's and sun's least radius as a share of the view) and `--moon-halo 0`
+make the comparison shots. With
 earthshine 0.04 (0.012 vanished into the night sky), at night's brightness above the air (`Atmosphere.Space`), and
 it writes its depth a step nearer than the stars and is drawn before them (render priority -1): no star shows
 through it (#1798).
