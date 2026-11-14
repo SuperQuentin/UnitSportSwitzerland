@@ -4,7 +4,7 @@
 # pyramid on its disk, client B with no leaves, no pyramid (the shipped base alone) and an empty cache. Both climb from
 # 2 km to 2,000 km over Lavaux (--globeclimb, src/World/Globe/Globe.Climb.cs), counting the globe's pops on the way.
 # B must stream its tiles from the server ("N tiles best from the server", and pyramid entries in its cache), draw the
-# same deepest levels as A 2.5 altitudes ahead from 50 km up, and pop no more than A. A streams nothing.
+# same deepest level as A 2.5 altitudes ahead after a hover at the top, and pop no more than A. A streams nothing.
 #   GODOT=<exe> [LEAVES=<dir>] [PYRAMID=<dir>] [AT=E,N] [CLIMB=from,to,seconds] [PORT=] tools/pyramidstreamcheck.sh
 #   logs: test_output/pyramidstream_*.log
 . "$(dirname "$0")/lib/twoclient.sh" pyramidstream
@@ -33,11 +33,12 @@ fail=
 for c in A B; do grep -q "RESULT PASS globeclimb" "$OUT/pyramidstream_$c.log" || fail="${fail:+$fail; }$c's climb did not finish"; done
 grep -q ", 0 tiles best from the server" "$OUT/pyramidstream_A.log" || fail="${fail:+$fail; }A streamed tiles it has"
 grep -q ", [1-9][0-9]* tiles best from the server" "$OUT/pyramidstream_B.log" || fail="${fail:+$fail; }B streamed no tile"
-# the deepest level under the nadir from 50 km up: the same on both
-levels() { grep -ho "deepest level ahead: .*;" "$1" | tr ',' '\n' | awk '/km: level/ { km = $1 + 0; if (km >= 50) print $NF }' | tr -d ';' | tr '\n' ' '; }
-la=$(levels "$OUT/pyramidstream_A.log"); lb=$(levels "$OUT/pyramidstream_B.log")
-echo "[pyramidstreamcheck] deepest levels from 50 km up: A $la, B $lb"
-[ -n "$la" ] && [ "$la" = "$lb" ] || fail="${fail:+$fail; }B drew other levels than A"
+# the deepest level 2.5 altitudes ahead after the hover at the top: B has caught up with A (the climb's own levels are
+# printed for the lag on the way: a 60 s climb to orbit outruns any stream)
+top() { grep -ho "at the top after [0-9]* s: level [0-9-]*" "$1" | grep -o "[0-9-]*$"; }
+la=$(top "$OUT/pyramidstream_A.log"); lb=$(top "$OUT/pyramidstream_B.log")
+echo "[pyramidstreamcheck] deepest level ahead at the top: A ${la:-?}, B ${lb:-?}"
+[ -n "$la" ] && [ "$la" = "$lb" ] || fail="${fail:+$fail; }B drew another level than A at the top"
 pops() { grep -ho "RESULT PASS globeclimb: [0-9]* pops" "$1" | grep -o "[0-9]* pops" | grep -o "[0-9]*"; }
 pa=$(pops "$OUT/pyramidstream_A.log"); pb=$(pops "$OUT/pyramidstream_B.log")
 echo "[pyramidstreamcheck] pops over 2 px: A ${pa:-?}, B ${pb:-?}; B's cache: $(ls "$CACHE" | grep -c '^pyr_') pyramid entries, $(du -sm "$CACHE" | cut -f1) MB"

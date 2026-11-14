@@ -79,6 +79,9 @@ public partial class GlobeClimb : Node
 {
     public const float PopPx = 2f;
 
+    /// <summary>Seconds hovering at the top before the last read-out.</summary>
+    public const double HoldS = 10;
+
     // the grid's point 2.5 altitudes ahead, straight on
     private const int FarMiddle = 6 * 7 + 3;
 
@@ -174,12 +177,14 @@ public partial class GlobeClimb : Node
             _nextDecade *= 3;
         }
         _lastLevel = deepest;
-        if (_t < _seconds) return;
+        // then a hover at the top (HoldS): what the climb streamed too late to draw on the way has come by its end
+        if (_t < _seconds + HoldS) return;
         var pyramid = Globe.DataSource;
         int streamed = pyramid?.Keys.Count(pyramid.IsStreamed) ?? 0;
-        GD.Print($"[globeclimb] {_frames} frames from {_from / 1000:F1} to {_to / 1000:F0} km in {_seconds:F0} s{(Globe.MorphOff ? ", geomorph off" : "")}: "
+        GD.Print($"[globeclimb] {_frames} frames from {_from / 1000:F1} to {_to / 1000:F0} km in {_seconds:F0} s and {HoldS:F0} s at the top{(Globe.MorphOff ? ", geomorph off" : "")}: "
             + $"worst ground step {_worstPx:F1} px (at {_worstAlt / 1000:F1} km, level {_worstLevel}), {_pops} steps over {PopPx} px");
-        GD.Print($"[globeclimb] deepest level ahead: {string.Join(", ", _levels)}; the pyramid: {pyramid?.Describe()}, {streamed} tiles best from the server");
+        GD.Print($"[globeclimb] deepest level ahead: {string.Join(", ", _levels)}; at the top after {HoldS:F0} s: level {deepest}; "
+            + $"the pyramid: {pyramid?.Describe()}, {streamed} tiles best from the server");
         GD.Print($"RESULT {(_frames > 0 ? "PASS" : "FAIL")} globeclimb: {_pops} pops over {PopPx} px, worst {_worstPx:F1} px");
         GetTree().Quit(_frames > 0 ? 0 : 1);
     }

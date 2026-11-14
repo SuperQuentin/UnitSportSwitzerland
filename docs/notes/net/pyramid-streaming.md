@@ -25,8 +25,9 @@ Body-agnostic: another body's pyramid is another `PyramidSource` (H7).
 - An older server answers "missing" to both: the client keeps its local data and the shipped base. An older client
   never asks. So D2's protocol 96 is untouched.
 - Client: `NetworkChunkSource.FetchPyramid`: cache `pyr_<stem>_<stamp>.s<section>.cubt` in the tile cache (cap, Clear,
-  trim), the leaves' retries and "the server has none" memory, through the two **section slots** (`Ask.Bounded`) so the
-  near ground's whole leaves keep the other six. Low data: levels past `LowDataPyramidLevel` (6) from the cache only.
+  trim), the leaves' retries and "the server has none" memory, through **three slots of its own** (`_pyramidSlots`, none
+  of the near ground's six or the two section slots). Through the section slots (shared with the leaves' far heights) a
+  climb streamed ~3 tiles a second and drew levels 4 coarser than a copy with the pyramid on disk (Nov 14). Low data: levels past `LowDataPyramidLevel` (6) from the cache only.
 - `ClientTerrainSync.WantsPyramid` / `PyramidIndexSettled` (fired either way); `ClientWorld` hands the index to the
   chain, `Globe.RefreshPyramid(changed)` (a changed tile is read again in place) and the fill (below). A world left
   drops the server's layer (`DropRemote`).
@@ -60,6 +61,7 @@ tile and a 513² one draw the same vertices. Needs a pyramid built with `--cube-
 - `PyramidStreamTests`: the index, the chain (finest wins, ties local, the same index changes nothing, `DropRemote`),
   the server's base (local where the stamp agrees).
 - `tools/pyramidstreamcheck.sh`: a server with leaves and the pyramid, client A with both, client B with neither; both
-  climb 2 km to 2,000 km (`--globeclimb`): B streams, draws A's levels from 50 km up, pops no more.
+  climb 2 km to 2,000 km in 60 s and hover 10 s (`--globeclimb`): B streams and caches tiles, draws A's level 2.5
+  altitudes ahead at the top, and pops no more. The levels on the way show the stream's lag.
 - `tools/fillagreenetcheck.sh` run `pyramid`: the client with no pyramid builds the server's fill to the centimetre.
 - `--globeclimb FROM,TO,SECONDS` (`World/GlobeClimb`): pops on a climb, `--nomorph` for the before (`globe-geomorph`).

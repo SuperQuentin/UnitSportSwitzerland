@@ -44,8 +44,8 @@ public sealed class NetworkChunkSource : IChunkSource
     {
         public override string ToString() => Kind is AssetKind.Leaf or AssetKind.Pyramid ? $"{Kind} {Cube}" : $"{Kind} {Tile}";
 
-        /// <summary>Through the two section slots: a leaf's one section, or any pyramid tile (#1656), never ahead of the near ground.</summary>
-        public bool Bounded => Section != 0 || Kind == AssetKind.Pyramid;
+        /// <summary>Through the two section slots: a leaf's one section, never ahead of the near ground.</summary>
+        public bool Bounded => Section != 0 && Kind != AssetKind.Pyramid;
     }
 
     /// <summary>
@@ -70,6 +70,13 @@ public sealed class NetworkChunkSource : IChunkSource
     /// hundreds of far asks never queue the near ground (whole entries) behind them on the server's metered link.
     /// </summary>
     private readonly SemaphoreSlim _sectionSlots = new(2, 2);
+
+    /// <summary>
+    /// The globe's pyramid tiles (#1656) take these, none of the others: a climb asks for hundreds, and through the two
+    /// section slots (shared with the leaves' far heights) it streamed three tiles a second and drew levels 4 coarser than
+    /// a copy with the pyramid on its disk. The server's meter paces them with the rest.
+    /// </summary>
+    private readonly SemaphoreSlim _pyramidSlots = new(3, 3);
 
     private readonly object _gate = new();
     private bool _trimming;
@@ -301,7 +308,7 @@ public sealed class NetworkChunkSource : IChunkSource
         if (ReadCache(path) is { } cached && Fits(cached)) return cached;
         if (key.Level > LowDataPyramidLevel && Core.GameSettings.Current.LowDataActive) return null;
 
-        // through the section slots (Bounded): the near leaves' whole entries keep the rest
+        // through the pyramid's own slots: the near leaves keep theirs
         var ask = new Ask(AssetKind.Pyramid, default, key, section);
         lock (_gate)
         {
@@ -432,9 +439,13 @@ public sealed class NetworkChunkSource : IChunkSource
     {
         try
         {
-            if (key.Bounded) await _sectionSlots.WaitAsync(ct).ConfigureAwait(false);
-            try { await _slots.WaitAsync(ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) { if (key.Bounded) _sectionSlots.Release(); throw; }
+            if (key.Kind == AssetKind.Pyramid) await _pyramidSlots.WaitAsync(ct).ConfigureAwait(false);
+            else
+            {
+                if (key.Bounded) await _sectionSlots.WaitAsync(ct).ConfigureAwait(false);
+                try { await _slots.WaitAsync(ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { if (key.Bounded) _sectionSlots.Release(); throw; }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -447,8 +458,12 @@ public sealed class NetworkChunkSource : IChunkSource
         }
         finally
         {
-            _slots.Release();
-            if (key.Bounded) _sectionSlots.Release();
+            if (key.Kind == AssetKind.Pyramid) _pyramidSlots.Release();
+            else
+            {
+                _slots.Release();
+                if (key.Bounded) _sectionSlots.Release();
+            }
         }
     }
 
