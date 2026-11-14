@@ -32,6 +32,8 @@ src/Ui/AccountPage        quick  --welcomecheck
 src/Core/GameShell        quick  --welcomecheck
 src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
 src/Player/SpectatorTargets quick --frame earth --chunks fixture:straight --targetcheck
+src/Core/BodyGoto         quick  --frame earth --chunks fixture:straight --gotocheck
+src/World/Bodies/GotoCheck quick --frame earth --chunks fixture:straight --gotocheck
 src/Player/SpectatorCamera quick --frame earth --chunks fixture:straight --orbitonlycheck
 src/World/Bodies/OrbitOnlyCheck quick --frame earth --chunks fixture:straight --orbitonlycheck
 src/Player/TargetList     quick  --frame earth --chunks fixture:straight --targetcheck
