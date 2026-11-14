@@ -685,6 +685,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
+        // group rides on the home trainer (#1467): the open ones, the one joined, its standings
+        Trainer.GroupRides.Create(this).Said += Toast;
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
         {
@@ -1252,7 +1254,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null || Net.IdsNetProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.OrbitNetProbe.Role != null || Player.ShuttleNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.OrbitNetProbe.Role != null || Trainer.GroupRideNetProbe.Role != null || Player.ShuttleNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Items.TelescopeProbe.Requested || Items.TelescopeNetProbe.Role != null || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
@@ -1320,6 +1322,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
         if (Player.UfoNetProbe.Role != null) AddChild(new Player.UfoNetProbe(items));
         if (Player.OrbitNetProbe.Role != null) AddChild(new Player.OrbitNetProbe(items));
+        if (Trainer.GroupRideNetProbe.Role != null && _chunks != null && _worldOrigin != null)
+            AddChild(new Trainer.GroupRideNetProbe(items, () => LocalPlayer, _chunks, _worldOrigin));
         if (Player.ShuttleNetProbe.Role != null) AddChild(new Player.ShuttleNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
