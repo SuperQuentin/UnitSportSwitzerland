@@ -41,13 +41,22 @@ public sealed partial class Airliner : ISpacecraft
     public bool DriveAvailable => Spec.Spacecraft && (DriveOn || Altitude > DriveFloor);
 
     /// <summary>The drive's floor over the body the craft is near (#1851): its Space handover.</summary>
-    private double DriveFloor => Space is { } space ? space.Body.SpaceEnterM : ShuttleFlight.DriveFloorM;
+    private double DriveFloor => Space is { } space ? space.BodyHere.SpaceEnterM : ShuttleFlight.DriveFloorM;
 
     /// <summary>The distance the drive measures last step (#1851): to the nearest surface of any body.</summary>
     public double DriveDistance { get; private set; } = double.NaN;
 
     /// <summary>The way up last step, world axes: the attitude is carried with it as the craft moves round.</summary>
     private Vector3 _up = Vector3.Zero;
+
+    /// <summary>The body that up was over: crossing into another's sphere (#1851) the up changes body, and is not turned through.</summary>
+    private Core.BodyId _upBody;
+
+    /// <summary>
+    /// The target hold (#1851): a world direction the nose turns to at <see cref="ShuttleFlight.AimRate"/>, set while the
+    /// pilot holds the target action (<see cref="SpectatorTargets"/>: the tangent of the arrival orbit) or by a bot; null: none.
+    /// </summary>
+    public Vector3? Aim { get; set; }
 
     /// <summary>
     /// Above the Space handover: the orbit (or the drive) instead of <see cref="AirlinerFlight.Step"/>. False
@@ -67,12 +76,16 @@ public sealed partial class Airliner : ISpacecraft
         // what the drive measures: the nearest surface of any body, the Moon's as it comes up (#1851)
         DriveDistance = SurfaceReach.Of(place.Frame, place.At, place.Altitude);
         var up = place.Frame.UpAt(place.At);
-        if (_up != Vector3.Zero) State.Attitude = ShuttleFlight.Relevel(State.Attitude, _up, up);
+        // carried level as it goes round, but not through a crossing (#1851): between the Earth and the Moon one's up is
+        // nearly the other's down, and turning the attitude through that flipped the craft
+        var body = space.BodyHere;
+        if (_up != Vector3.Zero && _upBody == body.Id) State.Attitude = ShuttleFlight.Relevel(State.Attitude, _up, up);
         _up = up;
+        _upBody = body.Id;
 
         // nobody at the controls in the drive (a pilot gone, a client dropped): it leaves the drive on an orbit
         if (DriveOn && (toggle || !input.Piloted)) DriveOff(space, place);
-        else if (toggle && !DriveOn && place.Altitude > space.Body.SpaceEnterM)
+        else if (toggle && !DriveOn && place.Altitude > body.SpaceEnterM)
         {
             DriveOn = true;
             space.Drop();
@@ -81,7 +94,7 @@ public sealed partial class Airliner : ISpacecraft
             GD.Print(FormattableString.Invariant($"[shuttle] cruise drive on at {place.Altitude / 1000:F1} km"));
         }
         // taken down out of Space the drive drops out: an aircraft again, at the speed it had
-        if (DriveOn && !space.Body.SpaceRegime(true, place.Altitude))
+        if (DriveOn && !body.SpaceRegime(true, place.Altitude))
         {
             DriveOn = false;
             GD.Print(FormattableString.Invariant($"[shuttle] out of the drive at {place.Altitude / 1000:F1} km, {m.Velocity.Length():F0} m/s"));
@@ -90,9 +103,12 @@ public sealed partial class Airliner : ISpacecraft
         bool running = input.Engine && (Handling == AirlinerHandling.Arcade || State.Lit >= 1f);
         // in the drive the levers set its speed and the rockets are quiet
         float thrust = ShuttleFlight.Levers(Spec, ref State, input.LeverUp, input.LeverDown, !input.Piloted, running && !DriveOn, dt);
+        // the target hold flies the nose onto it, wings level (and the drive's bank-turn is out of it while it does)
+        bool holding = Aim is { } && input.Piloted;
+        if (holding) State.Attitude = ShuttleFlight.TurnToward(State.Attitude, Aim!.Value, up, ShuttleFlight.AimRate * dt);
         if (DriveOn)
         {
-            ShuttleFlight.Jets(ref State, input.Piloted ? input.Stick : Vector2.Zero, drive: true, dt);
+            ShuttleFlight.Jets(ref State, input.Piloted && !holding ? input.Stick : Vector2.Zero, drive: !holding, dt);
             var nose = -State.Attitude.Z;
             State.Velocity = nose * ShuttleFlight.DriveSpeed(State.Lever, DriveDistance);
             Air(place.Altitude, State.Velocity.Length());
@@ -135,8 +151,8 @@ public sealed partial class Airliner : ISpacecraft
         // the levers set the drive's speed: back to idle, or the rockets would fire off the new orbit
         State.Lever = 0f;
         State.Spool = Mathf.Min(State.Spool, Spec.IdleSpool);
-        // round the body it is near (#1851): the Earth's or the Moon's
-        var earth = space.Body;
+        // round the body it is counted from now (#1851): the Earth's or the Moon's (the drive crossed into its sphere)
+        var earth = space.BodyHere;
         double angle = Core.Orbit.RotationAngle(earth, place.SimTime);
         var r = Core.Orbit.ToEci(place.Frame.ToEcef(place.At), angle);
         var toward = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, -State.Attitude.Z), angle);
@@ -180,6 +196,7 @@ public sealed partial class Airliner : ISpacecraft
     {
         if (!shift.Turns) return;
         State.Attitude = shift.Transform.Basis * State.Attitude;
+        if (Aim is { } aim) Aim = shift.Direction(aim);
         State.Velocity = shift.Direction(State.Velocity);
         State.Yaw += shift.Yaw;
         if (_up != Vector3.Zero) _up = shift.Direction(_up);

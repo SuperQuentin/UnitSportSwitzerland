@@ -951,6 +951,13 @@ public partial class PlayerFeel : Node3D
         // re-entry's glow, and the drive's switch where it may be thrown (#1492)
         if (a.Heat > 0.02f) sb.Append("HEAT ").Append((int)(a.Heat * 100f + 0.5f)).Append("%    ");
         if (a.DriveAvailable) sb.Append(a.DriveOn ? "DRIVE ON [" : "DRIVE OFF [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]    ");
+        // the target cue in Space (#1851): a tap the next body, a hold turns the nose onto its arrival orbit
+        if (a.InSpace)
+        {
+            sb.Append("TARGET ");
+            if (SpectatorTargets.Instance?.Target is { } t) sb.Append(Core.CelestialBody.Of(t).Name).Append(' ');
+            sb.Append('[').Append(Core.InputHints.Label(Core.PlayerInput.SpectatorTarget)).Append("]    ");
+        }
         sb.Append(s.GearBroken ? "GEAR DAMAGED" : s.Gear >= 1f ? "GEAR DOWN" : s.Gear <= 0f ? "GEAR UP" : "GEAR MOVING");
         if (s.SpeedBrake > 0) sb.Append(s.SpeedBrake == 1 ? "    SPD BRK ½" : "    SPD BRK FULL");
         if (s.ParkingBrake) sb.Append("    PARK BRK");

@@ -46,7 +46,9 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   chunks round the camera, the same on every client from one seed, solid near it (`--ringcheck`).
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
-  - PR #1883: the drive by the nearest surface.
+  - PR #1883: the drive by the nearest surface;
+  - this branch: the target and its hold in the shuttle (the tangent of a 100 km arrival orbit), crossings in the drive,
+    `--shuttlemooncheck` from a 400 km Earth orbit to a closed lunar one.
 
 **Still to come**:
 - belly jets;

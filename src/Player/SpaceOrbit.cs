@@ -125,6 +125,12 @@ public sealed class SpaceOrbit
     /// <summary>Whether it is in the Space regime now (its orbit is live), with the regime's hysteresis.</summary>
     public bool InSpace(double altitude) => BodyOf(Place).SpaceRegime(Orbit != null || _jump, altitude);
 
+    /// <summary>
+    /// The body the craft is counted from now (its frame's), whether or not an orbit is stepped: in the shuttle's drive
+    /// <see cref="Body"/> stays the last orbit's, and the crossing into the Moon's sphere happens there (#1851).
+    /// </summary>
+    public Core.CelestialBody BodyHere => BodyOf(Place);
+
     /// <summary>The body a place's frame is on (the Earth for a flat frame or none).</summary>
     private static Core.CelestialBody BodyOf(SpacePlace? place) =>
         Core.CelestialBody.Of(place?.Frame.Axes?.Body ?? Core.BodyId.Earth);
@@ -133,6 +139,8 @@ public sealed class SpaceOrbit
     public void Set(Core.OrbitState state)
     {
         Orbit = state;
+        // given round the body it is counted from now (the drive off by the Moon): no crossing to make on the next step
+        if (Place != null) Body = BodyOf(Place);
         _jump = true;
     }
 
