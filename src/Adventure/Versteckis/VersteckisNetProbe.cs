@@ -31,12 +31,16 @@ public partial class VersteckisNetProbe : ChatProbe
     public VersteckisNetProbe() : this(null!) { }
 
     private static VersteckisManager Vs => VersteckisManager.Instance!;
+    private readonly HashSet<(VsPhase Phase, int Round)> _told = new();
     private VsState? S => Vs.Mine;
 
     public override async void _Ready()
     {
         _role = Role ?? "A";
         if (!await Joined(150, () => VersteckisManager.Instance != null)) return;
+        // every phase this client was told of, as it arrived: a short one (Gather is 5 s, 1.25 s at x4) can come and go while a
+        // frame stalls longer than that (an earth client building its leaves round the square), and polling S would miss it (#1787)
+        Vs.StateChanged += () => { if (S is { } st) _told.Add((st.Phase, st.Round)); };
         await Until(() => Me!.Down == 0 && !Me.KnockedOut, 30);
         // B says it is on; A, the first in, waits for it (B may join after A spoke)
         Say("ready");
@@ -49,8 +53,9 @@ public partial class VersteckisNetProbe : ChatProbe
     private FootPlayer? Body(long peer) => GetNodeOrNull<FootPlayer>("../Players/" + PlayerReplication.NodeName(peer));
     private long Other => S?.Entrants.FirstOrDefault(e => e.Peer != Vs.Me)?.Peer ?? 0;
 
+    /// <summary>The server told this client of that phase of that round (now or a moment ago: see <see cref="_told"/>).</summary>
     private async Task<bool> Phase(VsPhase phase, int round, double seconds) =>
-        await Until(() => S is { } s && s.Phase == phase && s.Round == round, seconds);
+        await Until(() => _told.Contains((phase, round)), seconds);
 
     /// <summary>Walks the body in small steps, under a disguised walk's check (1 m a half second of game time).</summary>
     private void ProbeTag(GlobalPos at) => Vs.ProbeTag(at.Lv95.E, at.Lv95.N, (float)at.Alt);
@@ -77,13 +82,16 @@ public partial class VersteckisNetProbe : ChatProbe
 
     private async Task A()
     {
-        if (!await SpeedUp(Password)) return;
+        if (!await LogIn(Password)) return;
+        // the lobby at normal speed: at x4 its 90 s are 22 s of real time, and a loaded machine's B accepted the invite after
+        // the server had closed the game ("Nobody started the game in time", #1787); the rounds at x4 once both are in
         Chat!.Send("/vs open nearest 2 bots off");
         Expect(await Until(() => S is { Phase: VsPhase.Lobby, Kinds.Count: > 0 }, 60), $"A's game is open and its village read ({S?.Label})");
         Say("open");
         Expect(await Until(() => S is { } s && s.Humans == 2, 60), "B joined from the invite");
+        if (!await SpeedUp(Password)) return;
         Chat.Send("/vs start");
-        Expect(await Until(() => S?.Phase == VsPhase.Gather, 15), "the game gathers on the square");
+        Expect(await Until(() => _told.Any(t => t.Phase == VsPhase.Gather), 15), "the game gathers on the square");
         Expect(await Until(() => Body(Other) != null, 15), "on the square A sees B");
 
         // round 1: A seeks; in Hide B is withheld from A and A is held at the door

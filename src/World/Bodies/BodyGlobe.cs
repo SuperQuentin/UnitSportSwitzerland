@@ -60,14 +60,41 @@ public partial class BodyGlobe : Node
     /// <summary>Tiles drawn last frame (the shots' log).</summary>
     public int DrawnTiles { get; private set; }
 
+    /// <summary>The pyramid's finest level.</summary>
+    public int MaxLevel => _maxLevel;
+
+    /// <summary>The body's pyramid (#1656's chain; any thread may read it).</summary>
+    public Terrain.Leaves.PyramidSource Pyramid => _pyramid;
+
+    /// <summary>The near ground on this body (#1850): its own tiles step aside under it.</summary>
+    public BodyGround? Ground { get; set; }
+
     private readonly WorldOrigin _origin;
-    private readonly GlobeFiles _files;
-    private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights, _albedo;
+    // the body's pyramid (#1656's chain): its folder, or for the Earth the game's own (local, the server's, the shipped base)
+    private readonly Terrain.Leaves.PyramidSource _pyramid;
     private readonly int _maxLevel;
     private readonly Node3D _root = new() { Name = "Frame" };
     private readonly Dictionary<CubeKey, Tile> _tiles = new();
     private readonly HashSet<CubeKey> _loading = new();
-    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array? Arrays, Image? Colour)> _done = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array? Arrays, Image? Colour, float Mean)> _done = new();
+
+    /// <summary>
+    /// What ground square to the sun comes out at on average (#1853), after the shader's Cartoon lift (the photo to the
+    /// power 0.8): every body's photo is exposed to it, whatever its source's own scale. Six-face means of the level-0
+    /// colour: the Moon's CGI Moon Kit 0.567 (exposed 0.94), Mars' Viking mosaic 0.332 (1.45), the Earth's Blue Marble
+    /// 0.172 (2.2, mostly ocean, at the cap).
+    /// </summary>
+    public const float LitMean = 0.6f;
+
+    /// <summary>
+    /// The sun's strength on this body's photo (<c>sun_strength</c>), from its level-0 colour's mean brightness over all
+    /// six faces (<see cref="LitMean"/> over that mean lifted as the shader lifts it, 0.7 to 2.2); the shader's 1.6 until
+    /// the six have come.
+    /// </summary>
+    public float Exposure { get; private set; } = 1.6f;
+
+    private bool _exposed;
+    private readonly Dictionary<int, float> _faceMeans = new();
     private readonly HashSet<CubeKey> _show = new();
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
     private readonly int _month;
@@ -81,21 +108,29 @@ public partial class BodyGlobe : Node
         public readonly ShaderMaterial Material = material;
     }
 
-    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex";
+    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
+        SunStrength = "sun_strength", HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+
+    /// <summary>The hole every tile has now (half side 0: none), set on a tile only when it changes.</summary>
+    private (Vector3 Centre, Vector3 Up, Vector3 East, float Half) _hole;
 
     public BodyGlobe(CelestialBody body, string dir, WorldOrigin origin)
+        : this(body, new Terrain.Leaves.PyramidSource([new GlobeFiles(dir).Layer(dir, local: true)]), dir, origin)
+    {
+    }
+
+    /// <summary>A body's globe on a pyramid chain (#1656: the Earth's is <see cref="GlobeData.Earth"/>).</summary>
+    public BodyGlobe(CelestialBody body, Terrain.Leaves.PyramidSource pyramid, string describe, WorldOrigin origin)
     {
         Body = body;
-        Dir = dir;
+        Dir = describe;
         _origin = origin;
         Name = $"{body.Name}Globe";
-        _files = new GlobeFiles(dir);
-        var manifest = _files.Manifest();
-        (_heights, _albedo) = _files.Index(manifest);
-        _maxLevel = manifest.LevelsOrLeaf.Max(l => l.Level);
+        _pyramid = pyramid;
+        _maxLevel = Math.Max(pyramid.MaxLevel, 0);
         _month = Calendar.Month;
         AddChild(_root);
-        GD.Print($"[bodies] {body.Name}'s globe: {_heights.Count} tiles to level {_maxLevel}, {_albedo.Count} coloured, from {dir}");
+        GD.Print($"[bodies] {body.Name}'s globe: {pyramid.Count} tiles to level {_maxLevel}, from {describe}");
     }
 
     public override void _Process(double delta)
@@ -148,6 +183,11 @@ public partial class BodyGlobe : Node
         _show.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, focal);
 
+        // the near ground's hole (own body only): moved with the square and at each re-anchor, so rarely
+        var hole = own && Ground?.Hole is { } h ? h : default;
+        bool holeMoved = hole != _hole;
+        _hole = hole;
+
         int shown = 0;
         foreach (var (key, tile) in _tiles)
         {
@@ -158,9 +198,32 @@ public partial class BodyGlobe : Node
                 shown++;
                 if (sunMoved) tile.Material.SetShaderParameter(SunDir, sun);
             }
+            if (holeMoved) SetHole(tile.Material);
         }
         DrawnTiles = shown;
         Drawn = shown > 0;
+    }
+
+    /// <summary>A colour image's mean brightness (Rec. 709 luma of a 32 × 32 sample), 0 to 1.</summary>
+    private static float MeanBrightness(Image image)
+    {
+        int w = image.GetWidth(), h = image.GetHeight();
+        double sum = 0;
+        for (int j = 0; j < 32; j++)
+            for (int i = 0; i < 32; i++)
+            {
+                var c = image.GetPixel((int)((i + 0.5) * w / 32), (int)((j + 0.5) * h / 32));
+                sum += 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+            }
+        return (float)(sum / 1024);
+    }
+
+    private void SetHole(ShaderMaterial m)
+    {
+        m.SetShaderParameter(HoleCentre, _hole.Centre);
+        m.SetShaderParameter(HoleUp, _hole.Up);
+        m.SetShaderParameter(HoleEast, _hole.East);
+        m.SetShaderParameter(HoleHalf, _hole.Half);
     }
 
     private void Hide()
@@ -173,7 +236,7 @@ public partial class BodyGlobe : Node
     /// <summary>The tiles to draw: a tile splits when its drawn cells would be big on screen and its four are loaded.</summary>
     private void Select(CubeKey key, DVec3 eye, double focal)
     {
-        if (!_heights.ContainsKey(key)) return;
+        if (!_pyramid.Has(key)) return;
         var cube = Body.Cube;
         var centre = (DVec3)cube.ToEcef(key.Face, CubeSphere.Lattice(key.Level + 1, 2L * key.X + 1), CubeSphere.Lattice(key.Level + 1, 2L * key.Y + 1), 0);
         double edge = Body.Shape.A * Math.PI / 2 / key.Side;
@@ -188,7 +251,7 @@ public partial class BodyGlobe : Node
         {
             bool all = true;
             foreach (var child in key.Children())
-                if (!_tiles.ContainsKey(child)) { all = false; if (_heights.ContainsKey(child)) Request(child); }
+                if (!_tiles.ContainsKey(child)) { all = false; if (_pyramid.Has(child)) Request(child); }
             if (all)
             {
                 foreach (var child in key.Children()) Select(child, eye, focal);
@@ -202,30 +265,34 @@ public partial class BodyGlobe : Node
     {
         if (_running >= Workers || !_loading.Add(key)) return;
         _running++;
-        var at = _heights[key];
-        (string, long, int)? colourAt = _albedo.TryGetValue(key, out var c) ? c : null;
+        bool coloured = _pyramid.HasColour(key);
         var cube = Body.Cube;
         int month = _month;
         Task.Run(() =>
         {
             Godot.Collections.Array? arrays = null;
             Image? colour = null;
+            float mean = float.NaN;
             try
             {
-                var tile = CubeTileCodec.Decode(GlobeFiles.ReadBytes(at));
-                arrays = Build(tile, cube);
-                if (colourAt is { } ca)
+                // a streamed tile not come yet: none this time, asked again
+                if (_pyramid.Heights(key) is { } tile) arrays = Build(tile, cube);
+                if (arrays != null && coloured && _pyramid.Colour(key, month) is { } webp)
                 {
                     colour = new Image();
-                    if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(GlobeFiles.ReadBytes(ca)).ForMonth(month)) != Error.Ok) colour = null;
-                    else colour.GenerateMipmaps();
+                    if (colour.LoadWebpFromBuffer(webp) != Error.Ok) colour = null;
+                    else
+                    {
+                        if (key.Level == 0) mean = MeanBrightness(colour);
+                        colour.GenerateMipmaps();
+                    }
                 }
             }
             catch (Exception ex)
             {
                 GD.PrintErr($"[bodies] {key}: {ex.Message}");
             }
-            _done.Enqueue((key, arrays, colour));
+            _done.Enqueue((key, arrays, colour, mean));
         });
     }
 
@@ -242,6 +309,18 @@ public partial class BodyGlobe : Node
             var material = new ShaderMaterial { Shader = _shader };
             if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
+            SetHole(material);
+            if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
+            if (!_exposed && _faceMeans.Count == CubeSphere.Faces)
+            {
+                _exposed = true;
+                float mean = _faceMeans.Values.Sum() / CubeSphere.Faces;
+                Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
+                foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
+                GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2}"));
+            }
+            material.SetShaderParameter(SunStrength, Exposure);
             var node = new MeshInstance3D
             {
                 Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,
@@ -290,15 +369,16 @@ public partial class BodyGlobe : Node
     public static Godot.Collections.Array Build(CubeTile tile, CubeShape cube)
     {
         var key = tile.Key;
-        int bits = tile.Bits, m = (1 << bits) / Stride, n = m + 1;
+        // 64 cells whatever the lattice (#1656: the Earth's shipped base holds 65² tiles)
+        int bits = tile.Bits, stride = Globe.StrideOf(bits), m = (1 << bits) / stride, n = m + 1;
         var anchor = key.AnchorOn(cube);
         var pos = new Vector3[n * n];
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
-                float h = tile.HeightAt(i * Stride, j * Stride);
+                float h = tile.HeightAt(i * stride, j * stride);
                 if (!float.IsFinite(h)) h = 0;
-                var p = key.VertexOn(cube, bits, i * Stride, j * Stride, h);
+                var p = key.VertexOn(cube, bits, i * stride, j * stride, h);
                 var (x, y, z) = anchor.ToLocal(p);
                 pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
             }

@@ -110,12 +110,17 @@ public static class WorldClock
             double now = Net.ClockSync.ServerNow;
             if (Math.Abs(now - _skyAt) < 0.01) return _sky;
             _skyAt = now;
-            _sky = Core.SkyClock.Moment(
-                Core.SkyClock.BodiesUtc(Core.Calendar.Pinned, Core.GameSettings.Current.StartHour, Core.SimClock.SimAt(now), Net.ClockSync.ServerUnixNow),
-                Core.Calendar.Today, CurrentHour);
+            _sky = Core.SkyClock.Moment(BodiesUtc, Core.Calendar.Today, CurrentHour);
             return _sky;
         }
     }
+
+    /// <summary>
+    /// When the bodies are now (#1850, <see cref="Core.SkyClock.BodiesUtc"/>): the server's real UTC, or with a pinned date
+    /// its start hour plus the shared sim time.
+    /// </summary>
+    public static DateTime BodiesUtc => Core.SkyClock.BodiesUtc(Core.Calendar.Pinned, Core.GameSettings.Current.StartHour,
+        Core.SimClock.SimAt(Net.ClockSync.ServerNow), Net.ClockSync.ServerUnixNow);
 
     /// <summary>Takes the clock as given, by the server or from its saved state.</summary>
     public static void Set(double env0, double envEpoch, double hourShift, float minutesPerDay)

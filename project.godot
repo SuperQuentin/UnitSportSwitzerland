@@ -226,6 +226,10 @@ world_globe_palette={
 "type": "float",
 "value": 0.0
 }
+world_globe_morph={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
 world_lod_scale={
 "type": "float",
 "value": 1.0

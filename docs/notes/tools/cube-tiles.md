@@ -224,11 +224,21 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   (`--globealbedo`, 660 s for 4,090 tiles x 12 months); the previous pyramid kept as `cube_global.pre1778`. The fill's
   hand-over (`LeafBlend`) relies on the pyramid meeting the leaves now: on an older pyramid its seam steps (Lavaux p99
   192 cm against 50).
-- **What ships** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
+- **Every level from the finest data (#1656)**: `--cube-levels 0-13` merges the global levels 0-4 (`CubeSwiss.GlobalLevels`):
+  only the tiles over the leaves (and their siblings) are rebuilt from the finer level, the rest of the level and every
+  other entry of a shared bundle are carried over; levels 5-13 are rebuilt whole as before. `--cube-country
+  minLat,minLon,maxLat,maxLon,maxLevel` adds every tile over a box down to `maxLevel` (siblings too): a coarse country past
+  the leaves (the relief, then ETOPO), what the shipped base's Switzerland is cut from. Nov 14 2026 on a copy on E:
+  (`--cube-country 45.8,5.9,47.85,10.55,8`, `--jobs 6`): 304 s, peak 13.6 GB, 4,210 tiles, 0 of 4.5 M edge vertices differ;
+  the new levels 5-8 tiles over the country have no colour yet (`--globealbedo`).
+- **Far features (#1657)**: `--cube-features` bakes canopy, roofs, paving and a height skin per tile of levels 9-13 into
+  `.cubf` bundles beside the heights (`terrain/far-features`).
+- **What ships since #1656**: `--globebase` (`net/pyramid-streaming`), 1.5 MB. Before it:
+- **What shipped** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
   assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
   export preset's `include_filter` (no Godot resources). The game reads them through `World/Globe/GlobeFiles`
-  (`res://` by Godot's FileAccess: inside a pack .NET's file API sees nothing); the full region on D: wins when it is there. The leaves are G1's local region (825 km² of swissALTI3D
+  (`res://` by Godot's FileAccess: inside a pack .NET's file API sees nothing); the local install wins where it has a tile (`PyramidSource`). The leaves are G1's local region (825 km² of swissALTI3D
   0.5 m, all the 0.5 m on D:, plus RGE ALTI samples): the rest of Switzerland's 0.5 m is on the NAS
   (`france-nas-run`); a `--cube` run over it there gives the rest of the country, then this again.
 

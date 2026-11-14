@@ -220,6 +220,11 @@ public sealed class CubeManifestLevel
     /// <summary>The colour's side in pixels (<c>.cuba</c> bundles at <see cref="AlbedoBundleLevel"/>), 0 when the level has none.</summary>
     [JsonPropertyName("albedo")] public int Albedo { get; set; }
     [JsonPropertyName("albedoBundleLevel")] public int AlbedoBundleLevel { get; set; }
+    /// <summary>
+    /// What stands on the level's tiles, baked for the far view (#1657, <see cref="CubeFarFeatures"/>): its grid's cells a side in
+    /// <c>.cubf</c> bundles at <see cref="BundleLevel"/>, 0 when the level has none.
+    /// </summary>
+    [JsonPropertyName("features"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int Features { get; set; }
 }
 
 public sealed class CubeManifestTile

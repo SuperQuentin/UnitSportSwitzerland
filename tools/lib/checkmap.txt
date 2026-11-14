@@ -31,6 +31,8 @@ src/Ui/CharacterPage      quick  --welcomecheck
 src/Ui/AccountPage        quick  --welcomecheck
 src/Core/GameShell        quick  --welcomecheck
 src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
+src/Player/SpectatorTargets quick --frame earth --chunks fixture:straight --targetcheck
+src/Player/TargetList     quick  --frame earth --chunks fixture:straight --targetcheck
 src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
 src/Core/SpectatorSwitchCheck quick --spectatorcheck --world fixture
@@ -379,6 +381,12 @@ src/Terrain/Leaves/LeafBlend net   tools/fillagreenetcheck.sh
 src/Terrain/Leaves/PyramidFill net tools/fillagreenetcheck.sh
 src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
 src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
+# the globe's pyramid streamed to a client with none, the climb's pops, the fill on the server's pyramid (#1656; D: data)
+src/Terrain/Leaves/PyramidSource full tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidIndex full tools/pyramidstreamcheck.sh
+src/World/Globe          full   tools/pyramidstreamcheck.sh
+shaders/common/geomorph  full   tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidSource net tools/fillagreenetcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
@@ -634,9 +642,11 @@ src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
+# a lift rider on another peer's screen (#915), on the fun course's chairlift: no terrain data (#1609)
+src/World/Ropeways       net    tools/liftnetcheck.sh
+src/Player/FootPlayer.Lift net   tools/liftnetcheck.sh
+src/Terrain/Fixture/FunCourse net tools/liftnetcheck.sh
 # the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
-src/World/Ropeways       full   tools/liftnetcheck.sh
-src/Player/FootPlayer.Lift full  tools/liftnetcheck.sh
 src/World/DayNight       net    tools/clocknetcheck.sh
 src/World/WorldClock     net    tools/clocknetcheck.sh
 src/World/TimeCommand    net    tools/clocknetcheck.sh
@@ -671,6 +681,8 @@ src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
 src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
+src/Loot/Bank            full   tools/bankcheck.sh
+src/Items/Bank           full   tools/bankcheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
 src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh
@@ -681,8 +693,10 @@ src/Player/              full   tools/decknetcheck.sh
 src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
-# the trailer (#706): a boat, a car on the race autopilot and an airliner staged on the real map (CHUNKS=)
-src/Trailer/             full   tools/trailer.sh stills 2,5,12
+# the trailer (#706): the story film's door, road bike on the race autopilot and works machinery staged on the real
+# map (CHUNKS=); shots 2, 3 and 9 stand on the D: test region's tiles (Lausanne, Pully), so no tile round them is the
+# generated fill (#1861). The song is not needed: stills only pin its hash
+src/Trailer/             full   tools/trailer.sh stills 2,3,9
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat

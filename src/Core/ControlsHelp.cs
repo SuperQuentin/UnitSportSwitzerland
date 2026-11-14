@@ -420,6 +420,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Creative mode / survival", PlayerInput.ToggleMode),
             new("Spectator fly camera / back", PlayerInput.Spectator, Pad: "hold {toggle_mode}"),
             new("Spectator: faster / slower (hold to ramp; up to 100 km/s high up)", Keys: "{spectator_faster} / {spectator_slower}", Pad: "{spectator_faster} / {spectator_slower}"),
+            new("Spectator: next target, a body to fly to (tap); turn to it (hold)", PlayerInput.SpectatorTarget),
             new("Creative: take off / land", Keys: "{jump} {jump}", Pad: "{jump} {jump}"),
             new("Creative: up / down", Keys: "{jump} / {sprint}", Pad: "{jump} / {crouch_slide}"),
             new("Up", PlayerInput.FlyUp),

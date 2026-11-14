@@ -68,7 +68,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public WorldOrigin? Origin { get => _origin ?? Terrain?.Origin; set => _origin = value; }
     private WorldOrigin? _origin;
 
-    private const float Gravity = 9.81f;
+    /// <summary>The ground's gravity where the anchor is (#1850): 9.81 m/s² on the Earth, the Moon's 1.63 there.</summary>
+    private static float Gravity => BodyGravity.Ground;
     private const float EyeHeight = 1.68f;   // average adult eye level
     public const float BaseFov = 68f;
     private const float RunFov = 76f;
@@ -452,6 +453,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool Puppet { get; init; }
 
     private readonly Net.RemoteInterpolator _interp = new();
+
+    /// <summary>A copy's stream as a probe logs it (#1869).</summary>
+    public string InterpState => _interp.Describe(Time.GetTicksUsec() / 1e6);
     private MultiplayerSynchronizer? _sync, _relayNear, _relayFar, _vis;
 
     /// <summary>A server-owned copy of <paramref name="source"/>'s properties, sent at <paramref name="interval"/>.</summary>
@@ -1890,7 +1894,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 NetYaw = enu.TrueYaw(Rotation.Y);
             }
             else { NetVel = Velocity; NetYaw = Rotation.Y; }
-            NetTime = Time.GetTicksUsec() / 1e6;
+            // stamped when the body was there: its last physics step, which is up to a tick before this frame (the rest
+            // of the tick is the interpolation fraction). The frame's own clock put up to 128 m of jitter on an orbit's
+            // states at 7.7 km/s (#1869), 0.7 m on a car at 150 km/h
+            NetTime = Time.GetTicksUsec() / 1e6
+                - Engine.GetPhysicsInterpolationFraction() / Engine.PhysicsTicksPerSecond / Math.Max(Engine.TimeScale, 1e-3);
             float dt = (float)delta;
             UpdateLiftSeat();
             // an NPC or a bot reads no keys (#837): a server has no look actions at all
@@ -4750,7 +4758,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else
         {
-            if (GlobalPosition.Y > VoidY) return false;
+            // the void's depth is Switzerland's (#1850): another body's ground goes kilometres under its reference (Mars'
+            // Hellas 7.6 km), and its own ground (IBodyGround) catches a fall through it in the branch above
+            if (GlobalPosition.Y > VoidY || Origin is { Body: not BodyId.Earth }) return false;
             to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
         }
 

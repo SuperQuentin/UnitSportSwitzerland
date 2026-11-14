@@ -62,6 +62,32 @@ public sealed class SpaceOrbit
     /// <summary>Seconds the orbit has been stepped, summed in doubles (the orbit check times its period by it).</summary>
     public double Seconds { get; private set; }
 
+    /// <summary>The orbit's own sim time (#1894): the body's turn and the orbit's steps both go by it; NaN below the regime.</summary>
+    private double _clock = double.NaN;
+
+    /// <summary>The lowest lag of <see cref="_clock"/> behind the shared sim clock in the current window, and when the window began.</summary>
+    private double _lagMin = double.MaxValue, _windowFrom;
+
+    /// <summary>Drift still to catch up, s (negative: the orbit's clock is ahead).</summary>
+    private double _owed;
+
+    /// <summary>How long the lag is watched before a drift is owed, s: several frames, so the within-frame swing is out of it.</summary>
+    private const double DriftWindow = 0.25;
+
+    /// <summary>A drift past this is a jump of the clock (a resync, a pause), s: the orbit's clock is set to it, not flown to it.</summary>
+    private const double MaxCatchUp = 2.0;
+
+    /// <summary>The longest single integration step, s: a catch-up step stays as precise as the ticks around it.</summary>
+    private const double MaxSubstep = 1.0 / 30.0;
+
+    private void ResetClock(double simTime)
+    {
+        _clock = simTime;
+        _owed = 0;
+        _lagMin = double.MaxValue;
+        _windowFrom = simTime;
+    }
+
     /// <summary>The next step goes straight to the orbit's place, however far: a set orbit, not a contact.</summary>
     private bool _jump;
 
@@ -109,6 +135,7 @@ public sealed class SpaceOrbit
             _expectedIn = null;
             if (Orbit != null) GD.Print(FormattableString.Invariant($"[{_tag}] out of orbit at {place.Altitude / 1000:F1} km"));
             Orbit = null;
+            _clock = double.NaN;
             return null;
         }
         // the anchor crossed into another body's sphere of influence (#1851): the orbit goes with it
@@ -123,7 +150,24 @@ public sealed class SpaceOrbit
             }
             Body = earth;
         }
-        double angle = Core.Orbit.RotationAngle(earth, place.SimTime);
+        // the orbit's own clock (#1894): the body turns by it and the orbit is stepped by it, so each step's move (and the
+        // velocity published from it) is one consistent thing. The frame's sim clock stands still across the several physics
+        // steps of one frame: turning the body by it put a frame's turn into one step's velocity and none into the next
+        // (60-170 m/s of noise at 7.7 km/s), while stepping the orbit by dt alone let a client that drops physics time fall
+        // behind on its track. The clock follows the shared sim clock: the drift (the lowest lag over a window, out of the
+        // within-frame swing) is caught up at most a tick per step, and a jump past MaxCatchUp (a resync) is taken at once.
+        if (_jump || Orbit == null || double.IsNaN(_clock)) ResetClock(place.SimTime);
+        else if (place.SimTime - _windowFrom >= DriftWindow)
+        {
+            if (Math.Abs(_lagMin) > MaxCatchUp) ResetClock(place.SimTime);
+            else if (Math.Abs(_lagMin) > 2.0 * dt) _owed = _lagMin;
+            _lagMin = double.MaxValue;
+            _windowFrom = place.SimTime;
+        }
+        double take = Math.Clamp(_owed, -dt, dt);
+        _owed -= take;
+        double elapsed = dt + take;
+        double angle = Core.Orbit.RotationAngle(earth, _clock);
         var here = place.Frame.ToEcef(place.At);
         float off = _expectedIn == null ? float.MaxValue
             : place.At.DistanceTo(place.Frame.SameFrame(_expectedIn) ? _expected : place.Frame.Since(_expectedIn).Point(_expected));
@@ -143,16 +187,20 @@ public sealed class SpaceOrbit
         _jump = false;
 
         var thrust = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, thrustWorld), angle);
-        // the air turns with the Earth: drag against the ground-relative velocity (none round an airless body)
-        double rho = earth.HasAir ? Core.Atmosphere.Density(place.Altitude) : 0;
+        // the air turns with its body: drag against the ground-relative velocity (none round an airless body; Mars'
+        // thin CO2 by its own scale height, #1853)
+        double rho = earth.AirDensity(place.Altitude);
         if (rho > 0)
         {
             var (_, air) = Core.Orbit.ToEcef(earth, s, angle);
             thrust += Core.Orbit.ToEci(air * (-0.5 * rho * air.Length / ballisticCoefficient), angle);
         }
-        s = Core.Orbit.Step(earth, s, thrust, dt);
-        Seconds += dt;
-        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.Spin * dt);
+        int steps = (int)Math.Ceiling(elapsed / MaxSubstep);
+        for (int i = 0; i < steps; i++) s = Core.Orbit.Step(earth, s, thrust, elapsed / steps);
+        Seconds += elapsed;
+        _clock += elapsed;
+        _lagMin = Math.Min(_lagMin, place.SimTime - _clock);
+        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.Spin * elapsed);
         Orbit = s;
 
         var target = place.Frame.FromEcef(r.AsEcef);

@@ -77,11 +77,13 @@ public static class Interest
     /// <param name="wasRelevant">Last round's answer: a target already shown leaves further out.</param>
     /// <param name="together">In the same race: always shown, however far back.</param>
     /// <param name="lineOfSight">Terrain test, only asked when distance alone says yes.</param>
+    /// <param name="slack">Metres the two places may be off, taken off the distance: a fast pair's states arrive a
+    /// latency apart, a kilometre or more at orbital speed (#1869).</param>
     public static bool Relevant(Vector3 viewer, Vector3 target, RideKind kind, float targetAgl, View view,
-        bool wasRelevant, bool together, Func<Vector3, Vector3, bool>? lineOfSight)
+        bool wasRelevant, bool together, Func<Vector3, Vector3, bool>? lineOfSight, float slack = 0f)
     {
         if (together) return true;
-        float d = viewer.DistanceTo(target);
+        float d = Mathf.Max(viewer.DistanceTo(target) - slack, 0f);
         if (d <= AlwaysWithin) return true;
         float range = Range(kind, targetAgl, view) * (wasRelevant ? LeaveFactor : 1f);
         if (d > range) return false;

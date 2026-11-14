@@ -66,6 +66,12 @@ public partial class ChatManager : Node
         public int Strikes;
     }
 
+    /// <summary>
+    /// A test run's server lets every line through (#1857): the net probes speak their steps in the chat, faster
+    /// than the gate's refill, and it dropped them without a word. <c>--chat-flood</c> keeps it on.
+    /// </summary>
+    private static bool FloodGateOff => GameSettings.TestRun && !CmdArgs.Has("--chat-flood");
+
     /// <summary>Server only: one bucket per peer, dropped when it leaves.</summary>
     private readonly Dictionary<long, FloodGate> _flood = new();
 
@@ -901,7 +907,10 @@ public partial class ChatManager : Node
 
         // How often a client talks is the one thing it fully controls: the bucket is checked before
         // any parsing, so neither chat nor commands can be used to flood the server.
-        if (!AcceptLine(sender, out string? slow)) return;
+        // A test run lets every line through (#1857): a probe talks faster than a person, and a dropped step
+        // marker or command failed checks at random; --chat-flood keeps the gate for a check of the gate.
+        string? slow = null;
+        if (!FloodGateOff && !AcceptLine(sender, out slow)) return;
         if (slow != null) ReplyTo(sender, slow, ChatKind.Error);
 
         // Trim and scrub before anything else: length and control characters are a client's to choose.

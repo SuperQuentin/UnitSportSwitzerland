@@ -14,7 +14,7 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
 - **Stepping aside for the leaves**: `EarthWorld.TileEntered`/`TileUnloaded` reach `Globe.SetLeafDrawn` (wired in
   `ClientWorld`). A drawn leaf's globe tile is left out, and every ancestor of a drawn leaf always splits, so the
   globe's coarser ground (every 8th vertex) never shows through a leaf; the leaf's neighbours stay the globe's. Its
-  skirts close the seam. While a split's children load, the parent still draws (a frame or two of overlap).
+  skirts close the seam (a tenth of a cell since #1656's geomorph, `terrain/globe-geomorph`). While a split's children load, the parent still draws (a frame or two of overlap).
   **Past the pyramid's levels (#1800)**: outside Switzerland `cube_global` holds levels 0-4 only (a level-4 tile is
   ~600 km), and a split waits for all four children, so over a fill leaf in Ladakh (face F1) the split never came: the
   level-4 tile (every 8th vertex) stayed drawn over the leaves, up to 317 m over them on the Himalaya's slopes. A child
@@ -99,9 +99,9 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   flat building rings, 3.5 km) its buildings come as boxes (`BuildingMeshBuilder.BuildProxies`, what flat draws past
   1 km), asked after each plan and dropped 500 m past it. Built in the leaf's anchor frame under the tile's node; the
   materials are the flat streamer's (`FurnishMaterials`), the terrain one is the world's (`FogUniforms`, restyled).
-  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes. Only leaves on
-  this copy's disk (`LeafStore.IsLocal`): a leaf the server streams (#1655) is never fetched for the far band, and its
-  spot keeps the coarser level.
+  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes. Leaves on
+  this copy's disk out to the band's end; a leaf the server streams (#1655) out to 4 km, section by section, and past it
+  the pyramid's baked features (#1657, `terrain/far-features`).
 - **Water**: a leaf-level tile's heights are the lake's bed (#298, Lavaux's 310 m down). It is lifted to the leaf's own
   water, and to the coarser level's surface sampled under it (`FillFromAncestors`) where that is level or the leaf lies
   more than `BedM` (20 m) under it (shore vertices outside the leaf's water mask drew a wall that deep). Coarser levels

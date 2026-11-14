@@ -26,15 +26,17 @@ public partial class BodyViews : Node
     public const double NearRadii = 10;
 
     private readonly WorldOrigin _origin;
+    private readonly Func<Player.FootPlayer?> _local;
     private readonly List<BodyGlobe> _globes = new();
     private BodyGlobe? _earth, _moon;
 
     /// <summary>The root of the bodies' data (<c>--bodies</c>), or null.</summary>
     public static string? DataRoot => CmdArgs.Value("--bodies");
 
-    public BodyViews(WorldOrigin origin)
+    public BodyViews(WorldOrigin origin, Func<Player.FootPlayer?> local)
     {
         _origin = origin;
+        _local = local;
         Name = "BodyViews";
     }
 
@@ -50,15 +52,48 @@ public partial class BodyViews : Node
                 AddChild(g);
                 _globes.Add(g);
                 if (body.Id == BodyId.Moon) _moon = g;
+                // the ground under your feet where one can stand (#1850)
+                if (body.Landable)
+                {
+                    g.Ground = new BodyGround(g, _origin);
+                    AddChild(g.Ground);
+                }
             }
+        // the ground game's gravity follows the anchor's body: the walker's fall, and the physics space's
+        _origin.BodyChanged += OnBodyChanged;
+        OnBodyChanged(BodyId.Earth, _origin.Body);
         // the Earth seen from another body: its pyramid as the Earth's globe has it
-        if (Globe.DataDir is { } earthDir)
+        if (Globe.DataSource is { Count: > 0 } earthPyramid)
         {
-            _earth = new BodyGlobe(CelestialBody.Earth, earthDir, _origin);
+            _earth = new BodyGlobe(CelestialBody.Earth, earthPyramid, earthPyramid.Describe(), _origin);
             AddChild(_earth);
             _globes.Add(_earth);
         }
-        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _moon));
+        // the spectator's target cue (#1850): any body, with or without its data
+        AddChild(new Player.SpectatorTargets(_origin));
+        if (Player.SpectatorTargetCheck.Requested) AddChild(new Player.SpectatorTargetCheck());
+        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
+        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
+    }
+
+    public override void _ExitTree()
+    {
+        _origin.BodyChanged -= OnBodyChanged;
+        BodyGravity.On(BodyId.Earth);
+    }
+
+    private void OnBodyChanged(BodyId from, BodyId to)
+    {
+        // a body one cannot stand on (the Sun, crossed on the way to Mars) has no ground game: the last one's stays
+        if (!CelestialBody.Of(to).Landable) return;
+        BodyGravity.On(to);
+        // the space's own gravity (props, wrecks, a ragdoll): the project's on the Earth, untouched there
+        if (from == to && to == BodyId.Earth) return;
+        float space = to == BodyId.Earth ? (float)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8f) : BodyGravity.Ground;
+        if (GetViewport()?.World3D is { } world)
+            PhysicsServer3D.AreaSetParam(world.Space, PhysicsServer3D.AreaParameter.Gravity, space);
+        if (from != to) GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[bodies] on {to}: the ground's gravity {BodyGravity.Ground:F2} m/s²"));
     }
 
     public override void _Process(double delta)
@@ -72,12 +107,15 @@ public partial class BodyViews : Node
             eye = new DVec3(e.X, e.Y, e.Z);
         }
         var sky = SkyClock.Now;
+        SkyBodies.HiddenByGlobe.Clear();
         foreach (var g in _globes)
         {
             if (g == _earth) { g.Wanted = anchor != BodyId.Earth; continue; }
             bool near = g.Body.Id == anchor
                 || eye is { } p && Frames.Convert(anchor, p, g.Body.Id, sky).Length < NearRadii * g.Body.Shape.A;
             g.Wanted = near;
+            // the sky's disc of a body its globe draws steps aside (the Moon's own disc, a planet's in SkyBodies)
+            if (g.Drawn && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
         }
         MoonDisc.HiddenByGlobe = _moon is { Drawn: true };
     }

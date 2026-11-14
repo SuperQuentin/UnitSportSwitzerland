@@ -15,6 +15,7 @@ needed (#1112) were keyed to the headset; #1216 made them this preset, on every 
 | Decor drawn to (`OccasionDecor.DrawnM`) | 150 m | 300 m | 600 m | all |
 | Parked cars to (`DormantVehicles.DrawnM`) | 250 m | 250 m | 400 m | 400 m |
 | Herd poses, bird budget | halved | halved | | |
+| Earth far band (furnished far leaves, `Globe.FarCap`, #1657; the frame budget scales it under that) | none: baked features | half | full | full |
 
 - **Every preset:** the buildings of the tiles within `LodPolicy.CellRings` (those whose near edge is nearer than the
   box distance: 1 ring, 2 on High) are 125 m cells, each its own mesh or its boxes by the cell's 3D distance; a tile
