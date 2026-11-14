@@ -342,19 +342,12 @@ EGM2008 out) differ by metres, under one coarse cell.
 
 ### 8. Multiplanetary (H7)
 
-The same pattern one level up:
-
-- **`Planet` registry**: Earth, Moon, Mars first; each with a, f, GM, rotation (IAU pole and prime
-  meridian), atmosphere model and data sources.
-- **Frame tree**: heliocentric inertial (ICRF / J2000) → body-centred inertial → body-fixed. An
-  anchor always lives in one body-fixed frame; `EcefPos` generalises to a position in a named
-  body frame.
-- **Sphere-of-influence handovers**: patched conics; crossing r_SOI = a·(m/M)^(2/5) re-expresses
-  the craft's double state in the new body's frame and re-anchors, exactly like Ground ↔ Space.
-  Moon in Earth: ~66,000 km; Earth in the Sun: ~925,000 km.
-- Doubles are enough: at 4.5·10¹² m (Neptune) their step is 1 mm. Planet positions from JPL's
-  approximate Keplerian elements.
-- Each body's ground regime uses the global tiling of #1443 with that body's ellipsoid.
+**Its own plan now: `docs/plans/planets.md`** (2026-11-14). Every body, the Earth included, on one world system: a
+`Body` registry (the Earth as body 0), a frame tree in doubles with spheres of influence, `GlobalPos` with a body, one
+surface chain per body (leaves, the global pyramid, the shipped base, then generation by the body's profile), one
+renderer from a dot in the sky to the ground, the Moon first and Mars next. The sketch that stood here (registry, frame
+tree, patched conics, doubles to Neptune) is kept and detailed there, with the rule for the two clocks (bodies on the
+sky clock, physics on sim time).
 
 ### 10. Global tiling: the ground anywhere on Earth
 
@@ -474,13 +467,13 @@ speed).
 | **Showcase** (asked 2026-11-03; **first take filmed** on #1478, recipe in `general/feature-clips`) | a smooth pull-back from a Lausanne street to the whole Earth in space, an altitude readout on screen, as a clip (`/clip`, `tools/record-clip.sh`) | H3, H4 | the first clip once the globe draws: no pop at any handover, the readout continuous from metres to thousands of km |
 | **H5** Orbital gravity (**built**, PR #1484) | US Standard Atmosphere 1976, GM/r², ECI double integration, Jolt for contacts only. **Decided with the user**: the UFO flies orbits (the space drive on its hover keys, `/orbit <km>`); the pilot's client integrates, the server an empty one (its orbit the only truth); the space shuttle is C2, next; the wire stays LV95 until G2 (others see an orbit crossing the LV95 sliver at 172.56° W up to 31 km off, logged). **Decided with #1443's coordinator**: `SpaceMode.Rotates` on **above 250 km only** (in above 250, out below 240), where the flat tiles are gone: below, the curvature shader wraps them as one plane and the Space frame stays flat; coming down is one rigid move back to the flat frame at 240 km and to the ground frame (identity, whole-km corner) at 50; turned anchors built in ECEF (`FrameAxes.Tangent`); bodies above the handover out of the server's region planner, in the main region. G2 still turns rotation on for the ground, with round tiles (`player/orbits`) | H3 | a 400 km circular orbit closes after one period; energy drift < 10⁻⁶ (**0.32 m and 5·10⁻¹⁴** through 2,080 turned shifts, then down and landed in a ground frame, `--orbitcheck`; the band, `--spacebandcheck`) |
 | **H6** Ephemeris sky (**built**: the ground PR #1436, from space PR #1855) | sun and moon from date and lat/lon, stars, true north in Space, the real sun on the ground | H2 (sky), H3 (Space) | solstice and equinox sun angles at Bern match NOAA within 0.05°; the terminator from orbit matches the time |
-| **H7** Planets | registry, frame tree, SOI handovers, scaled space | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
+| **H7** Planets (**planned**: `docs/plans/planets.md`, phases H7a-H7f) | registry, frame tree, SOI handovers, scaled space, one surface chain for every body | H4, H5 | a transfer from Earth orbit to lunar orbit with both handovers invisible |
 
 | **C0** Detail by size on screen (**done**, #1433) | `world_lod_scale`, trees, terrain rings and visibility ranges by on-screen size | none | at 200 mm a house 300 m away is drawn as it is at 50 m with the normal lens, and frame time stays within budget |
 | **C1** Telescope on the moon (**built**, PR #1441) | the tripod telescope, long zoom, tracking, the moon as a textured sphere in the sky | H6, C0 | on a full-moon date the moon's phase and face match a reference photo; the view stays on it for a minute |
 | **C1b** The solar system and satellites in the sky (**built**, PR #1445, #1444) | stars, planets and their axes, Jupiter's moons and Titan, Saturn's rings, satellites by SGP4 and CelesTrak, the telescope's lock on any of them | C1 | the bodies against Horizons; Jupiter and Saturn held in the telescope (`docs/notes/world/night-sky.md`) |
 | **C2** Spaceplane to orbit (**built**, #1492, PR #1494: `player/shuttle`) | spec, model, sounds, rocket thrust, the cruise drive round the Earth, glide home and runway landing. **Decided with the user**: a Cartoon Space Shuttle orbiter that takes off on its own (no tank, no boosters), parked at Geneva and at Zurich; the thrust levers are rockets; the plan's cruise drive above 60 km on the engine switch (Z, D-pad up, a gripped cockpit switch in VR), off = a circular orbit; re-entry glows, no damage; 2 pilots + 5 seats, not walkable (walkable decks and zero-g: #1493); unlimited fuel; bots ride as passengers. **Built**: the H5 seam shared (`SpaceOrbit`), the drive keeps the speed it has when switched on and drops out below 50 km at its speed (the arcade way home), re-entry heat √ρ·v³; `--shuttlecheck` flies the whole mission headless, `tools/shuttlenetcheck.sh` | H4, H5 | take off at an airfield, reach 400 km, drive round the Earth, drop into orbit, re-enter and land on a runway |
-| **C3** Out to the moon and planets | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
+| **C3** Out to the moon and planets (**planned**: `docs/plans/planets.md`, C3a and C3b) | the drive between bodies, the far-marker list, planets and markers in the telescope | H7, C1, C2 | A drives to lunar orbit; B on the ground locks the telescope on the moon and sees A's marker at the right place |
 
 H2 and the sky part of H6 can land early and in parallel; H1 needs only #187. C0 is done (#1433,
 `docs/notes/styles/zoom-lod.md`: at 200 mm the step is x9.31, GPU time unchanged, VRAM +1.15 GB,
