@@ -8,7 +8,9 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938), section 4. The sites of pha
 - **The table** (`Terrain/Bodies/MoonColonies`, plain C#): a colony is a centre (LOLA's selenographic frame), a theme
   (`Artemis`, `MoonVillage`, `Ilrs`, `Abandoned`, `ColdWar`), a seed, a plateau radius and a heading (its first
   spine). Artemis Base: 89.384° S, 150.055° W, 1,488 m, the flattest 450 m disc near the pole between Shackleton and
-  de Gerlache. Centres are picked with `--moonsurvey LAT,LON,SEARCH_KM,RADIUS_M` (the flattest discs on the data,
+  de Gerlache. Moon Village (#1942): 0.7198° N, 23.5270° E, -1,952 m, 2.1 km north-east of Tranquility Base (outside its
+  heritage zone, the pads leading away from it); ILRS: 44.8549° S, 176.7306° E, -5,914 m, Von Karman's floor 18 km from
+  Chang'e 4. Centres are picked with `--moonsurvey LAT,LON,SEARCH_KM,RADIUS_M` (the flattest discs on the data,
   RMS round a fitted plane plus its tilt) and committed.
 - **The plateau**: a `Level` stamp (`SurfaceStamps`) of the plateau radius, eased out over 150 m: everything stands at
   y = 0 in the colony's ENU frame. `--moonsites artemis` checks it level to 2 cm.
@@ -17,7 +19,7 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938), section 4. The sites of pha
   head of the first spine, the road 220 m on to three pads across it. Moondust domes in a second pass, each only
   where a circle 4 m wider than it clears every module (`Clear`): placed during the spines they overlapped a
   neighbouring spine's dome (the test found it). Doors carry the way out; a link joins two doors (an alley in the
-  Moon Village's theme, a tube otherwise). Pure from the record: every peer plans the same colony.
+  Moon Village's theme, glazed and walk-in since #1942: `moon-industry`; a tube otherwise). Pure from the record: every peer plans the same colony.
 - **The kit** (`World/Moon/ColonyKit`, `[Showcase("Moon colony")]`): hub, can, stack, moondust dome, glass biodome
   (geodesic frame, panes on the glass surface with `GlassMaterial`, a garden of trees under the glass, the Cold War's
   overgrown with cracked panes), hangar, tubes and alleys (one mesh a colony, in its frame, points pre-turned for

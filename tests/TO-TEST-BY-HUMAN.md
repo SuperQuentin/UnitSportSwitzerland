@@ -38,6 +38,16 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Moon Village, ILRS and the industry ([#1942](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1942))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites moonvillage:close`, step in (T), go through an airlock and along the glazed alleys between the stacks → no bumping, no invisible wall at either end, the helmet stays off inside an alley; the sky shows through the glass roof.
+- [ ] By a solar array field (`--moonsites artemis:solararray`), speed time (`/time speed`) → the wings follow the sun smoothly, never snapping; at Artemis Base they stand near vertical.
+- [ ] Watch the digger (`--moonsites moonvillage:digger`) for a minute → it crawls round its dark pit, its wheel turning; walking into it pushes you, never through it.
+- [ ] `--moonsites icemine:close`: in Shackleton's dark the four floods light the mine and the ground round it; judge whether it reads (too bright, too dim, the pool's edge).
+- [ ] `--moonsites massdriver:close`, wait a minute → the bucket sits on the cradle, then shoots along the rail and is gone; `--moonsites radiotelescope` for ten minutes → all dishes slew together to a new point.
+
 ## Into Artemis Base through an airlock ([#1941](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1941))
 
 - [ ] At Artemis Base (`--moonsites artemis:close`), step in (T) outside: you wear the silver suit and the gold-visored helmet. Walk to the end of a spine, up the steps to the airlock's outer door, press E → the inner door (if open) slides shut, the lamp goes amber, a hiss, then the outer door slides open. Walk in, E again → the reverse; the helmet comes off once the outer door is shut.

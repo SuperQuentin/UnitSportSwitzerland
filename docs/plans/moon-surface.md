@@ -13,6 +13,10 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
   plateau (`--moonsurvey` picked it), its hub, cans, moondust domes, hangar, road and three pads.
 - Phase 3 (#1941): the modules hollow and walk-in, rooms furnished, airlocks at the spine ends that cycle (E / pad Y /
   VR grip), the air inside, the suit always on the Moon and its helmet off inside (`Headwear.SpaceHelmet`), `--airlockcheck`.
+- Phase 4 (#1942): Moon Village 2.1 km off Tranquility Base and ILRS in Von Karman (`--moonsurvey`), the Moon Village's
+  alleys glazed and walk-in, solar arrays turned to the sun, regolith diggers round their pits, the Shackleton ice mine
+  under flood lights, the far-side radio telescope, the mass driver on a levelled strip (`MoonOutposts`), lamps that
+  light the Moon's ground (`GroundLamps`).
 
 ## The user's decisions (fixed)
 
@@ -271,3 +275,7 @@ Tracking: #1938. Phases: 1 #1939, 2 #1940, 3 #1941, 4 #1942, 5 #1943, 6 #1944, 7
 - Ground stamps inside `BodyHeights` (one height function for every peer and square) rather than meshes laid over the
   ground.
 - Offline colonists as decoration figures until a server can host the Moon.
+- Phase 4: the industry outposts (ice mine, radio telescope, mass driver) are their own table (`MoonOutposts`), built
+  like a colony, not `MoonSites` entries; a colony's own industry (arrays, digger) is in its plan. The ice mine is 20 km
+  from Artemis Base with no haul road. The mass driver is at the Moon Village (equatorial, flinging east). `GroundLamps`
+  added to light the unshaded body ground (the floods lit nothing on it).
