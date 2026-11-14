@@ -37,3 +37,21 @@ Every body's air is data: `Core/BodyAir` on `CelestialBody.Air` (null for the ai
   sun 90 − DEG up.
 - **Not yet**: the Earth's limb seen from the Moon (the shell draws round the anchor's body only); a dust storm
   (raise the fine and coarse parts); Mars' sound and its thin air on a parachute or a wing.
+
+## The sunlight on the ground, Titan's colour, the airless sun (#1854)
+
+- **The ground's sunlight takes the air's hue** (`BodyGlobe.AirTauOf`, `BodyAir.VerticalDepth`, `body_globe.gdshader`'s
+  `air_tau`): Mars, Venus and Titan (landable with air; not the Earth, nor the giants whose globe is their cloud deck).
+  The light is exp(-(τ - its least channel) / cos zenith): the least-dimmed channel at full strength (the ground stays
+  playable under Titan's haze), the others falling away, more with a low sun.
+- **Titan's haze takes green and blue far more than red** (vertical depths 0.76, 1.16, 1.72): the first values took
+  red about as much as green, and the sun and the sky from the ground came out olive green. Its ground near the
+  equator stays dark: Cassini's mosaic has the dune seas dark.
+- **No air, no sunrise colour**: on a body with no air the figures' tint (`DayNight`'s palette) is the day's white
+  whenever the sun is up, however low; the Earth's sunrise pink had tinted the Moon's south pole.
+- **The giants' terminator** (`terminator_wrap` 0.3, `night_floor` 0.015): the light wraps past the line through
+  their deep air and their night is space-dark. With the Moon's playable night floor (0.06) the falling light
+  stopped on a flat floor, a kink that read as a hard line across Jupiter seen from Io.
+- **A globe tile keeps the sun it was given** (`BodyGlobe.Tile.Sun`): a tile hidden while the sun moved or the frame
+  turned is given the sun again when shown.
+

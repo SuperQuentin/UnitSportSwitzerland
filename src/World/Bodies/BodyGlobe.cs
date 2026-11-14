@@ -109,7 +109,20 @@ public partial class BodyGlobe : Node
     {
         public readonly MeshInstance3D Node = node;
         public readonly ShaderMaterial Material = material;
+
+        /// <summary>The sun last written into this tile's material (a hidden tile misses the sun's moves: written when shown again).</summary>
+        public Vector3 Sun;
     }
+
+    private static readonly StringName AirTau = "air_tau", TerminatorWrap = "terminator_wrap", NightFloor = "night_floor";
+
+    /// <summary>
+    /// The air's vertical depth the ground's sunlight goes through (#1854): a landable body with air (Mars, Venus, Titan); none
+    /// for the airless, the Earth (its own look, tuned elsewhere) and the giants (their globe is their cloud deck).
+    /// </summary>
+    public static Vector3 AirTauOf(CelestialBody body) =>
+        body is { Landable: true, Air: { } air } && body.Id != BodyId.Earth
+            ? new Vector3((float)air.VerticalDepth.R, (float)air.VerticalDepth.G, (float)air.VerticalDepth.B) : Vector3.Zero;
 
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
         SunStrength = "sun_strength", HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
@@ -170,7 +183,6 @@ public partial class BodyGlobe : Node
         var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky.Utc);
         var sunAnchor = Frames.Orientation(axes.Body, sky).ApplyInverse(sunIcrf);
         var sun = ToVector(w.ApplyInverse(sunAnchor).Normalized());
-        bool sunMoved = sun.DistanceSquaredTo(_sun) > 1e-8f;
         _sun = sun;
 
         // the eye in the body's own frame, for the levels
@@ -207,7 +219,9 @@ public partial class BodyGlobe : Node
             if (on)
             {
                 shown++;
-                if (sunMoved) tile.Material.SetShaderParameter(SunDir, sun);
+                // per tile: one hidden while the sun moved (or the frame turned) kept its old sun, and two neighbours were lit
+                // as two halves (Jupiter from Io split down a meridian)
+                if (tile.Sun.DistanceSquaredTo(sun) > 1e-8f) tile.Material.SetShaderParameter(SunDir, tile.Sun = sun);
             }
             if (holeMoved) SetHole(tile.Material);
         }
@@ -334,6 +348,13 @@ public partial class BodyGlobe : Node
                     $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2}"));
             }
             material.SetShaderParameter(SunStrength, Exposure);
+            material.SetShaderParameter(AirTau, AirTauOf(Body));
+            // a giant: a soft terminator through its deep air, and a night side as dark as space's (no ground to play on)
+            if (!Body.Landable && Body.Air != null)
+            {
+                material.SetShaderParameter(TerminatorWrap, 0.3f);
+                material.SetShaderParameter(NightFloor, 0.015f);
+            }
             var node = new MeshInstance3D
             {
                 Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,

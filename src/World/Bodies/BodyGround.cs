@@ -59,6 +59,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How far each way from the centre the near square holds the true ground (inside its eased band), metres.</summary>
     public const double TrueHalfM = Cells * CellM / 2 - BlendM;
 
+    private static readonly StringName AirTau = "air_tau";
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength",
         HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half",
         LampPos = "lamp_pos", LampDir = "lamp_dir", LampCol = "lamp_col", LampCount = "lamp_count";
@@ -401,6 +402,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         if (sq.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(sq.Colour));
         material.SetShaderParameter(SunDir, _globe.Sun == Vector3.Zero ? Vector3.Up : _globe.Sun);
         material.SetShaderParameter(SunStrength, _globe.Exposure);
+        material.SetShaderParameter(AirTau, BodyGlobe.AirTauOf(_globe.Body));
         var body = new StaticBody3D { Name = l.Name };
         if (l.Solid)
         {
