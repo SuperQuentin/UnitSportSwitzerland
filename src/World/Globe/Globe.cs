@@ -743,7 +743,7 @@ public partial class Globe : Node
                         var water = leaves is Terrain.Leaves.EarthLeaves earthLeaves ? earthLeaves.WaterOf(key) ?? CubeWater.Dry(tile.Bits) : null;
                         var lakes = Earth ? new WaterOut() : null;
                         if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves,
-                            lakes: _lakeLevels, parent: AncestorTile(key.Parent)) is { } arrays)
+                            lakes: _lakeLevels, parent: ParentOf(key)) is { } arrays)
                             _ready.Enqueue((key, arrays, null, leafMonth, null, lakes?.Mesh));
                         else _leafMissed.Enqueue(key);
                     }
@@ -794,7 +794,7 @@ public partial class Globe : Node
                 colour?.GenerateMipmaps();
                 // no height at all: the parent's tile stays (the key stays loading, never asked again)
                 var lakes = Earth ? new WaterOut() : null;
-                var parent = key.Level > 0 ? AncestorTile(key.Parent) : null;
+                var parent = ParentOf(key);
                 if (Build(tile, palette, rect, stride: StrideOf(tile.Bits), ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels, parent: parent) is { } arrays)
                     _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
             }
@@ -868,6 +868,21 @@ public partial class Globe : Node
 
     /// <summary>A pyramid tile's heights, decoded on the asking worker (a coarser level filling a finer one's holes); null where none.</summary>
     private CubeTile? AncestorTile(CubeKey key) => Pyramid.Heights(key);
+
+    /// <summary>
+    /// The ground a tile's parent is drawn with, for the geomorph (#1656): the pyramid's tile, else what
+    /// <see cref="Synthesise"/> draws for it, its own ancestors at its drawn vertices (a 65² tile); null at level 0.
+    /// </summary>
+    private CubeTile? ParentOf(CubeKey key)
+    {
+        if (key.Level == 0) return null;
+        if (AncestorTile(key.Parent) is { } own) return own;
+        int bits = CubeKey.LatticeBits(key.Level - 1), stride = StrideOf(bits), n = Cells + 1;
+        var hs = new float[n * n];
+        Array.Fill(hs, float.NaN);
+        GlobeGround.FillFromAncestors(hs, n, key.Parent, bits, stride, AncestorTile);
+        return Array.Exists(hs, float.IsNaN) ? null : new CubeTile { Key = key.Parent, Bits = 6, Heights = hs };
+    }
 
     /// <summary>
     /// A tile's mesh around its anchor: every <see cref="Stride"/>-th lattice vertex, rigorous, with

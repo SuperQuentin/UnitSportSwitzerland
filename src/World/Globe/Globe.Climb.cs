@@ -79,6 +79,9 @@ public partial class GlobeClimb : Node
 {
     public const float PopPx = 2f;
 
+    // the grid's point 2.5 altitudes ahead, straight on
+    private const int FarMiddle = 6 * 7 + 3;
+
     public static string[]? ParseArgs() => CmdArgs.Value("--globeclimb")?.Split(',') is { Length: 3 } p ? p : null;
 
     private readonly Camera3D _camera;
@@ -141,7 +144,8 @@ public partial class GlobeClimb : Node
             var g = GlobalPos.FromEcef(_points[k]);
             var world = _origin.ToWorld(g);
             float wy = globe.DrawnSurfaceAt(world, _points[k], cam, out int level);
-            if (k == 3) deepest = globe.DrawnLevelAt(_points[k]);
+            // the far middle of the view (2.5 altitudes ahead): under the nadir the near leaves round the body draw
+            if (k == FarMiddle) deepest = globe.DrawnLevelAt(_points[k]);
             // its height over the ellipsoid: the same whatever the frame (a re-anchor turns world y)
             float y = float.IsNaN(wy) ? float.NaN : (float)_origin.ToGlobal(world with { Y = wy }).Geodetic.H;
             // a change within one tile is the morph's own motion or a lake's surface shown or hidden (15 km): a pop is a
@@ -175,7 +179,7 @@ public partial class GlobeClimb : Node
         int streamed = pyramid?.Keys.Count(pyramid.IsStreamed) ?? 0;
         GD.Print($"[globeclimb] {_frames} frames from {_from / 1000:F1} to {_to / 1000:F0} km in {_seconds:F0} s{(Globe.MorphOff ? ", geomorph off" : "")}: "
             + $"worst ground step {_worstPx:F1} px (at {_worstAlt / 1000:F1} km, level {_worstLevel}), {_pops} steps over {PopPx} px");
-        GD.Print($"[globeclimb] deepest level under the nadir: {string.Join(", ", _levels)}; the pyramid: {pyramid?.Describe()}, {streamed} tiles from the server");
+        GD.Print($"[globeclimb] deepest level ahead: {string.Join(", ", _levels)}; the pyramid: {pyramid?.Describe()}, {streamed} tiles best from the server");
         GD.Print($"RESULT {(_frames > 0 ? "PASS" : "FAIL")} globeclimb: {_pops} pops over {PopPx} px, worst {_worstPx:F1} px");
         GetTree().Quit(_frames > 0 ? 0 : 1);
     }

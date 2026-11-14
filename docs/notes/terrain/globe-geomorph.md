@@ -10,7 +10,8 @@ hid the cracks between levels.
   point; an odd one: the middle of the parent's edge; an odd-odd one: the middle of the parent's quad diagonal
   (i, j)-(i+1, j+1), as the parent triangulates), and its drawn cell in `w`. Two tiles sharing an edge read the same
   parent points there, so the morph never opens a seam. Only tiles drawn at `Cells` (64) cells (not the far leaves at
-  stride 16, not tiles built from their ancestors alone).
+  stride 16, not tiles built from their ancestors alone). A parent the pyramid lacks (past its levels: the shipped base
+  alone, the far fill) is taken as `Synthesise` draws it, from its own ancestors (`Globe.ParentOf`).
 - **The shader** (`shaders/common/geomorph.gdshaderinc`, in `globe.gdshader` and in the terrain body under
   `globe_morph`, set on the earth globe's terrain material only): `k = smoothstep(1.3 S, 1.9 S, distance)` with
   `S = cell * world_globe_morph.x` (focal / split pixels, written by `Globe.Plan` on change); a tile is its parent's
@@ -23,6 +24,7 @@ hid the cracks between levels.
   where tiles split for drawn leaves (#1800).
 - The CPU replica for the probe: `Globe.DrawnSurfaceAt` (the deepest visible tile, morphed, its lake's surface over it).
 - `--globeclimb FROM,TO,SECONDS` (`World/GlobeClimb`): an exponential climb over the start looking down 60°, 7 x 7
-  points across the view (laid again every 30 % of climb), each frame's change in height over the ellipsoid where a
+  points across the view (laid again every 30 % of climb; the deepest level read 2.5 altitudes ahead, since the player's body keeps the near
+  leaves under the nadir), each frame's change in height over the ellipsoid where a
   point's level changed, in screen pixels; `--nomorph` turns the morph and the grow-in off. Changes within one tile (the
   morph's own motion, the lakes' surfaces hidden at 15 km) are not pops.
