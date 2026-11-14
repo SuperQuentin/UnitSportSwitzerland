@@ -85,6 +85,12 @@ per site. Measured: all 569 real sites in 21.8 s, **38 ms a site on average, 320
 not finish in 10 minutes. It runs off the main thread with the tile; if a busy tile ever shows,
 the grid sort is the lever.
 
+**Junction caps are road** (#1918): RoadGen trims every segment back to its junction cap, so a site that knew roads only
+by their segments' ribbons put hoarding in the caps (a panel at the corner south of Place des Nations stopped a car
+turning there, `RoadBody` 1.3 m up). `SiteObstacles` takes the at-grade caps (`Layer` 0) and flush `Pavement` strips as
+carriageway (`Blocked`), and a pit also keeps off the street areas laid as areas: corner sidewalks, paths, verges, kerbs
+(`Undiggable`). Sites are planned in the game: no rebuild. A thin post (hoarding, a board) needs `--raygrid` at 0.1 m.
+
 ## Checks
 
 `ConstructionSiteTests` (tier 0, 20 tests): determinism, the phase on the measured cases, the site

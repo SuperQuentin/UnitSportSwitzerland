@@ -902,12 +902,54 @@ public sealed class SiteObstacles
                 }
             }
         }
+        // the carriageway where roads meet (#1918): RoadGen trims every road back to its junction cap, so the cap is road no
+        // segment covers (a hoarding panel stood in the cap at Place des Nations' south corner and stopped a car turning
+        // there); and the flush pavement beside a road (turn-lane widenings). A bridge's or a bore's cap is not the ground's
+        foreach (var j in roads.Junctions)
+            if (j.Layer == 0) AddArea(j.Vertices, j.Indices, own.Center, reach, _carriageway);
+        foreach (var area in roads.AreaProps)
+        {
+            if (area.Type == AreaPropType.Pavement) AddArea(area.Vertices, area.Indices, own.Center, reach, _carriageway);
+            // a pit keeps off the corner sidewalks, paths and verges laid as areas too, as off a segment's sides
+            else if (StreetAreas.Is(area.Type)) AddArea(area.Vertices, area.Indices, own.Center, reach, _streetSides);
+        }
     }
+
+    /// <summary>Triangles (plan a, b, c) of the junction caps and flush pavement near the site: carriageway.</summary>
+    private readonly List<(Vector2 A, Vector2 B, Vector2 C)> _carriageway = new();
+
+    /// <summary>Triangles of the street areas beside it (corner sidewalks, paths, verges, kerbs): kept out of a pit.</summary>
+    private readonly List<(Vector2 A, Vector2 B, Vector2 C)> _streetSides = new();
+
+    private static void AddArea(float[] vertices, ushort[] indices, Vector2 centre, float reach, List<(Vector2, Vector2, Vector2)> into)
+    {
+        Vector2 V(int i) => new(vertices[i * 3], vertices[i * 3 + 2]);
+        for (int t = 0; t + 2 < indices.Length; t += 3)
+        {
+            var (a, b, c) = (V(indices[t]), V(indices[t + 1]), V(indices[t + 2]));
+            if (Math.Min(a.DistanceTo(centre), Math.Min(b.DistanceTo(centre), c.DistanceTo(centre))) < reach + 10f) into.Add((a, b, c));
+        }
+    }
+
+    /// <summary>Whether a plan point is inside a triangle of <paramref name="tris"/> or within <paramref name="margin"/> of one.</summary>
+    private static bool OnArea(List<(Vector2 A, Vector2 B, Vector2 C)> tris, Vector2 p, float margin)
+    {
+        foreach (var (a, b, c) in tris)
+        {
+            float d1 = Cross(p, a, b), d2 = Cross(p, b, c), d3 = Cross(p, c, a);
+            bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+            if (!(neg && pos)) return true;
+            if (Distance(p, a, b) < margin || Distance(p, b, c) < margin || Distance(p, c, a) < margin) return true;
+        }
+        return false;
+    }
+
+    private static float Cross(Vector2 p, Vector2 a, Vector2 b) => (p.X - b.X) * (a.Y - b.Y) - (a.X - b.X) * (p.Y - b.Y);
 
     /// <summary>Each road piece's sidewalks, verges and paths beside its carriageway, m: its wider side.</summary>
     private readonly List<float> _sides = new();
 
-    public int Count => _boxes.Count + _roads.Count;
+    public int Count => _boxes.Count + _roads.Count + _carriageway.Count + _streetSides.Count;
 
     /// <summary>Whether a plan point is on a road or in another building.</summary>
     public bool Blocked(Vector2 p)
@@ -916,7 +958,7 @@ public sealed class SiteObstacles
             if (b.DistanceTo(p) < _clearance) return true;
         foreach (var (a, c, half) in _roads)
             if (Distance(p, a, c) < half + _clearance) return true;
-        return false;
+        return OnArea(_carriageway, p, _clearance);
     }
 
     /// <summary>
@@ -932,7 +974,7 @@ public sealed class SiteObstacles
             var (a, c, half) = _roads[k];
             if (Distance(p, a, c) < half + _sides[k] + _clearance) return true;
         }
-        return false;
+        return OnArea(_carriageway, p, _clearance) || OnArea(_streetSides, p, _clearance);
     }
 
     private static float Distance(Vector2 p, Vector2 a, Vector2 c)

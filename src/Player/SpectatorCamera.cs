@@ -87,6 +87,21 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     }
 
     /// <summary>A mouse look by <paramref name="relative"/> pixels (also a check's, <c>--spectatorturncheck</c>).</summary>
+    /// <summary>
+    /// Turns the view toward a world direction by at most <paramref name="maxStep"/> radians (the target's align hold,
+    /// #1850): yaw and pitch eased as a mouse look would move them, never a roll.
+    /// </summary>
+    public void TurnToward(Vector3 direction, float maxStep)
+    {
+        if (direction.LengthSquared() < 1e-12f) return;
+        var d = direction.Normalized();
+        float yaw = Mathf.Atan2(-d.X, -d.Z), pitch = Mathf.Asin(Mathf.Clamp(d.Y, -1f, 1f));
+        float dy = Mathf.Wrap(yaw - _yaw, -Mathf.Pi, Mathf.Pi), dp = pitch - _pitch;
+        _yaw += Mathf.Clamp(dy, -maxStep, maxStep);
+        _pitch = Mathf.Clamp(_pitch + Mathf.Clamp(dp, -maxStep, maxStep), -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+        Rotation = new Vector3(_pitch, _yaw, 0);
+    }
+
     public void Look(Vector2 relative)
     {
         SyncLook();
@@ -205,5 +220,20 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
             if (!Core.OriginShifter.CrossBodies && altitude > Core.Curvature.SpectatorCeilingM)
                 Position -= Vector3.Up * (float)(altitude - Core.Curvature.SpectatorCeilingM);
         }
+        KeepOverFloor();
+    }
+
+    /// <summary>
+    /// Over a body one cannot stand on (#1854: a giant, the Sun) the camera stays above its floor
+    /// (<see cref="Core.CelestialBody.FloorM"/>), pushed back out along the vertical: no flying into Jupiter's gas or the
+    /// Sun. Near a giant the anchor is the giant (its sphere of influence is millions of km), so its altitude is the one.
+    /// </summary>
+    private void KeepOverFloor()
+    {
+        if (Core.OriginShifter.Instance?.Origin is not { } origin) return;
+        var body = Core.CelestialBody.Of(origin.Body);
+        if (body.Landable) return;
+        double altitude = origin.AltitudeOf(Position);
+        if (altitude < body.FloorM) Position += origin.UpAt(Position) * (float)(body.FloorM - altitude);
     }
 }

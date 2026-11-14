@@ -80,6 +80,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | creative mode (#1002): toggle_mode, then jump twice to fly, jump / crouch up and down, boost | T, Space Space, Space / Shift, Ctrl / D-pad ↓, A A, A / B, L3 | ok: wrist menu, then the pad's A A, A / B, L3 | keep |
 | spectator camera and back (#1002) | Shift+T / hold D-pad ↓ | ok: wrist menu "Spectator camera" | keep |
 | spectator camera's speed, faster / slower (#1796) | wheel, = / - / RB / LB (tap a notch, hold to ramp) | ok: the right / left trigger (`XrPad` sends RB / LB while spectating, as on foot); the readout is a HUD CanvasLayer | keep |
+| spectator's target: next body (tap), turn to it (hold) (#1850) | ] / D-pad → | ok: the right stick down (`XrPad` sends D-pad → while spectating, the shoulders' layout); the cue is a HUD CanvasLayer, as the speed readout | keep |
 | climb ladder; free climbing (#1225) | W / S on a ladder; on a face: push W into it (in the air, or 0.25 s on the ground), then WASD / L stick | ok: stick as on a pad (seated play); rock faces and walls hand over hand (`XrClimb`, #439), drawing from the stamina meter (1 /s, 9 a metre) where it counts | keep |
 | climb-jump / kick off / let go (#1225, on a face) | Space, S + Space, Ctrl / A, stick back + A, B | ok: the pad's A, stick back + A, B; by hand: a fast pull is the hand climb, push off with both hands and let go, open both hands | a fast pull > 2 m/s as the climb-jump's boost (not yet) |
 

@@ -138,7 +138,13 @@ public static partial class TileRewriter
             foreach (var a in jp.Arms)
             {
                 foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
+                {
                     if (Toward(a, move) is { } to) a.Toward[move] = to.Arm;
+                    // every exit making the move (#1903: the first alone left a second right with no path into it)
+                    var all = jp.Arms.Where(x => x.Arm != a.Arm && x.Arm < armsHere.Count && armsHere[x.Arm].Out
+                        && SignalPlan.Turn(armsHere, a.Arm, x.Arm) == move).Select(x => x.Arm).ToList();
+                    if (all.Count > 0) a.TowardAll[move] = all;
+                }
                 var straight = Toward(a, SignalMoves.Through);
                 bool carriesOn = straight is not null && straight.Normal.CarriesBikesAway;
                 bool between = a.Wants.BikeBetween;

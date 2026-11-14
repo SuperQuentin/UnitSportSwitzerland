@@ -23,6 +23,21 @@ public sealed class CubeShape
     /// <summary>Mars': its IAU ellipsoid, face 0 on 0° N 0° E.</summary>
     public static readonly CubeShape Mars = new(Ellipsoid.Mars);
 
+    /// <summary>Mercury's: MESSENGER's 2,439.4 km sphere, face 0 on 0° N 0° E (#1854).</summary>
+    public static readonly CubeShape Mercury = new(Ellipsoid.Mercury);
+
+    /// <summary>Venus': Magellan's 6,051.0 km sphere, face 0 on 0° N 0° E (#1854).</summary>
+    public static readonly CubeShape Venus = new(Ellipsoid.Venus);
+
+    /// <summary>Jupiter's big moons and Titan (#1854): their IAU mean spheres, face 0 on 0° N 0° E; no global heights.</summary>
+    public static readonly CubeShape Io = new(Ellipsoid.Sphere(1_821_600)), Europa = new(Ellipsoid.Sphere(1_560_800)),
+        Ganymede = new(Ellipsoid.Sphere(2_634_100)), Callisto = new(Ellipsoid.Sphere(2_410_300)), Titan = new(Ellipsoid.Sphere(2_574_730));
+
+    /// <summary>The giants (#1854): their IAU 1-bar ellipsoids, face 0 on 0° N 0° E; no ground, a globe from their maps.</summary>
+    public static readonly CubeShape Jupiter = new(Ellipsoid.FromRadii(71_492_000, 66_854_000)),
+        Saturn = new(Ellipsoid.FromRadii(60_268_000, 54_364_000)), Uranus = new(Ellipsoid.FromRadii(25_559_000, 24_973_000)),
+        Neptune = new(Ellipsoid.FromRadii(24_764_000, 24_341_000));
+
     /// <summary>The ellipsoid it is laid on: latitudes, longitudes and heights are on it.</summary>
     public Ellipsoid Shape { get; }
 

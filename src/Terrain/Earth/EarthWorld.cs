@@ -1035,6 +1035,15 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private bool Locate(Vector3 worldPos, out Near leaf, out LeafView? view, out double x, out double y, out double z, out double i, out double j)
     {
         var axes = Origin.Frame.Axes;
+        // off the Earth (#1854) no leaf of the Earth's is under any point: another body's place read as an Earth one found
+        // a leaf, and its sea (Titan's ground at 0 m was the Earth's sea level: the walker waded and could not jump)
+        if (OffEarth)
+        {
+            leaf = default!;
+            view = null;
+            x = y = z = i = j = double.NaN;
+            return false;
+        }
         var recent = t_recent ??= new Near?[RecentLeaves];
         if (axes != null)
         {

@@ -70,6 +70,11 @@ public sealed class ArmPlan
     public double Split { get; set; }
     /// <summary>The arm each move leaves by (as the signal plans name the turns).</summary>
     public Dictionary<Terrain.Format.SignalMoves, int> Toward { get; } = new();
+    /// <summary>
+    /// Every arm each move leaves by: two exits may make one move (two rights at a skewed or merged junction, #1903), and the
+    /// car paths go into each (<see cref="Toward"/> names the first, for the pockets and bike crossings).
+    /// </summary>
+    public Dictionary<Terrain.Format.SignalMoves, List<int>> TowardAll { get; } = new();
     /// <summary>The arm the through lane leaves by (-1 none).</summary>
     public int Exit { get; init; } = -1;
     /// <summary>The street is too short for this pocket and the exit at its other end apart: one transition holds both (#325).</summary>

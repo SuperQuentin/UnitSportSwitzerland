@@ -59,6 +59,38 @@ LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
 MD5s checked; from `asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/` and PDS Geosciences' MEGDR), `work/` (the
 JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and "NASA Viking, USGS Astrogeology".
 
+## Mercury and Venus (#1854)
+
+- **Mercury**: USGS's `Mercury_Messenger_USGS_DEM_Global_665m_v2_32bit_clon0.tif`. Despite the name it is int16 in
+  metres, LZW in 256 px tiles; `CylRaster` reads strips only, so GDAL makes an uncompressed strip copy first
+  (`gdal.Translate(..., creationOptions=['TILED=NO','COMPRESS=NONE','BLOCKYSIZE=16'])`). The heights are over a
+  2,439.4 km sphere, which becomes Mercury's reference (`Ellipsoid.Mercury`, `CubeShape.Mercury`). Colour: the greyscale
+  250 m mosaic of 2013 (61,324 px across), averaged to 21,600 by GDAL first. The "EnhancedColor" mosaics are false
+  colour (blue and orange): not used.
+- **Venus**: Magellan's `Venus_Magellan_Topography_Global_4641m_v02.tif` (8,192 × 4,096, int16 metres over 6,051.0 km,
+  `Ellipsoid.Venus`), levels 0-2; colour: the colourised radar mosaic `Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif`.
+- `--globealbedo --body NAME` takes any body of the registry but the Earth.
+
+## Bodies with no global heights: `--dem flat` (#1854)
+
+Io, Europa, Ganymede, Callisto and Titan have global mosaics (Voyager/Galileo SSI 0.5-1.4 km; Titan's Cassini ISS
+4 km) but no global DEM. `--cube-body NAME --dem flat` writes the pyramid's tiles at the reference sphere (levels 0-3, 0-2
+for Titan, a few seconds); the colour carries the body from orbit, and the near ground's relief is its profile's
+(`CelestialBody.CraterDensity`: Callisto 1, Ganymede 0.5, Europa 0.03, Titan 0.02, Io none). Sources, all -180..180 and
+2:1 within a pixel: `Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif`, `Europa_Voyager_GalileoSSI_global_mosaic_500m.tif`,
+`Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif`, `Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif`,
+`Titan_ISS_P19658_Mosaic_Global_4km.tif`; their colour bakes take 1-21 s.
+
+## The giants (#1854)
+
+Jupiter, Saturn, Uranus and Neptune are globes too: `--cube-body NAME --dem flat --cube-levels 0-1` on their IAU 1-bar
+ellipsoids (`CubeShape.Jupiter`...), coloured from the sky's own 2k maps (`--colour res://assets/space/NAME_2k.jpg`, ~220
+km a pixel on Jupiter). A giant's globe always hangs from its centre under `BodyGlobe`'s root, shrunk past the far plane
+(its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane; no ground to
+hold to the millimetre). Saturn's rings are a ring mesh under the same root (`BodyGlobe.AddRings`,
+`shaders/body_rings.gdshader`: the sky's ring shader without the sky's depth). Finer maps (Cassini's, Juno's) are a later
+swap of the colour alone.
+
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
 | Run | Tiles | Size | Heights | Time | Peak |
@@ -69,6 +101,10 @@ JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and
 
 | Mars, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 319.5 MB (L4: 219 MB) | −7,643 to +22,923 m over the ellipsoid (Hellas, Olympus Mons) | 164 s | 5.3 GB |
 | Mars colour, levels 0-4 | 2,046 | 6.4 MB WebP | | 32 s | |
+
+| Mercury, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 222 MB | −5,382 to +4,490 m | 55 s | 4.2 GB |
+| Venus, levels 0-2 `--cube-check` | 126 | 28 MB | −2,886 to +11,589 m (Maxwell Montes) | 4 s | 0.4 GB |
+| Mercury colour / Venus colour | 2,046 / 126 | 46.5 / 2.9 MB WebP | | 45 / 2 s | |
 
 Mars' `--cube-check`: 4,198,392 edge vertices, 0 differ. `--cube-check` on levels 0-2: 128,904 shared edge points, 0 differ. Shipping levels 0-1 would be ~10 MB of heights, 0-2
 ~36 MB (with ~1.3 MB of colour): what ships is #1656's call.

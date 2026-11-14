@@ -50,12 +50,12 @@ public sealed class CelestialBody
         landable: true, spaceEnterM: 40_000, spaceExitM: 30_000, craterDensity: 0.15, air: BodyAir.Mars);
 
     public static readonly CelestialBody Mercury = new(BodyId.Mercury, "Mercury", SkyBody.Mercury,
-        Ellipsoid.FromRadii(2_440_530, 2_438_260), 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
+        Ellipsoid.Mercury, 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
         landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 1);
 
-    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Sphere(6_051_800),
+    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Venus,
         3.24859e14, DegPerDay(-1.4813688), BodyId.Sun, 0.72333566 * Au, landable: true, spaceEnterM: 120_000,
-        spaceExitM: 100_000);
+        spaceExitM: 100_000, air: BodyAir.Venus);
 
     public static readonly CelestialBody Jupiter = new(BodyId.Jupiter, "Jupiter", SkyBody.Jupiter,
         Ellipsoid.FromRadii(71_492_000, 66_854_000), 1.26686534e17, DegPerDay(870.536), BodyId.Sun, 5.20288700 * Au,
@@ -79,11 +79,11 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Europa = new(BodyId.Europa, "Europa", SkyBody.Europa, Ellipsoid.Sphere(1_560_800),
         3.202739e12, DegPerDay(360 / 3.551181041), BodyId.Jupiter, 671_034_000, landable: true, spaceEnterM: 10_000,
-        spaceExitM: 8_000);
+        spaceExitM: 8_000, craterDensity: 0.03);
 
     public static readonly CelestialBody Ganymede = new(BodyId.Ganymede, "Ganymede", SkyBody.Ganymede,
         Ellipsoid.Sphere(2_634_100), 9.887834e12, DegPerDay(360 / 7.15455296), BodyId.Jupiter, 1_070_412_000,
-        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000);
+        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 0.5);
 
     public static readonly CelestialBody Callisto = new(BodyId.Callisto, "Callisto", SkyBody.Callisto,
         Ellipsoid.Sphere(2_410_300), 7.179289e12, DegPerDay(360 / 16.6890184), BodyId.Jupiter, 1_882_709_000,
@@ -91,7 +91,7 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Titan = new(BodyId.Titan, "Titan", SkyBody.Titan, Ellipsoid.Sphere(2_574_730),
         8.978138e12, DegPerDay(360 / 15.945421), BodyId.Saturn, 1_221_870_000, landable: true, spaceEnterM: 200_000,
-        spaceExitM: 180_000);
+        spaceExitM: 180_000, craterDensity: 0.02, air: BodyAir.Titan);
 
     private static readonly CelestialBody[] ById =
         [Earth, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan];
@@ -129,6 +129,17 @@ public sealed class CelestialBody
         BodyId.Earth => CubeShape.Earth,
         BodyId.Moon => CubeShape.Moon,
         BodyId.Mars => CubeShape.Mars,
+        BodyId.Mercury => CubeShape.Mercury,
+        BodyId.Venus => CubeShape.Venus,
+        BodyId.Io => CubeShape.Io,
+        BodyId.Europa => CubeShape.Europa,
+        BodyId.Ganymede => CubeShape.Ganymede,
+        BodyId.Callisto => CubeShape.Callisto,
+        BodyId.Titan => CubeShape.Titan,
+        BodyId.Jupiter => CubeShape.Jupiter,
+        BodyId.Saturn => CubeShape.Saturn,
+        BodyId.Uranus => CubeShape.Uranus,
+        BodyId.Neptune => CubeShape.Neptune,
         _ => new CubeShape(Shape),
     };
 
@@ -174,9 +185,9 @@ public sealed class CelestialBody
 
     /// <summary>
     /// How cratered its ground is under its data (#1850, the cratered profile of docs/plans/planets.md section 5): a
-    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.15 on Mars
-    /// (wind and dust have filled most of its small craters), 0 where nothing is generated (the Earth's own fill, the
-    /// icy and volcanic bodies, the giants).
+    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.5 on
+    /// Ganymede, 0.15 on Mars (wind and dust have filled most of its small craters), 0.03 on young Europa, 0.02 on Titan
+    /// (its rain and dunes), 0 where nothing is generated (the Earth's own fill, volcanic Io, Venus, the giants).
     /// </summary>
     public double CraterDensity { get; }
 
@@ -227,6 +238,13 @@ public sealed class CelestialBody
     /// <c>Curvature.SpaceRegime</c>).
     /// </summary>
     public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
+
+    /// <summary>
+    /// How close a camera may come to a body one cannot stand on (#1854), metres over its reference: a giant's cloud tops
+    /// (50 km over its 1-bar radius: below them there is no ground, only crushing gas), the Sun's 0.2 radii (139,000 km
+    /// over the photosphere); 0 for a body with ground.
+    /// </summary>
+    public double FloorM => Landable ? 0 : Id == BodyId.Sun ? 0.2 * Shape.A : 50_000;
 
     /// <summary>Its air (#1853): what drags a craft and what its sky scatters; null where there is none (the Moon).</summary>
     public BodyAir? Air { get; }
