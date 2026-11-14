@@ -32,10 +32,14 @@ public partial class DayNight : Node
     /// The real sky in world axes: unit directions to the sun and the moon from the camera's place,
     /// the moon's distance (metres) and its own axes (<see cref="SunPath.MoonFace"/>), the celestial
     /// sphere's axes for the stars (<see cref="SunPath.SkyFrame"/>), and the date, hour and place
-    /// it was read at, for anything else in the sky (#1444).
+    /// it was read at, for anything else in the sky (#1444). <c>At</c> is the camera itself in an anchor frame (its
+    /// height too: the moon's parallax and satellites from orbit, #1845), its LV95 kilometre on the flat ground.
+    /// <c>Moment</c> is the sky's moment it was read at (#1850, <see cref="SkyClock"/>): the bodies at their own time, the
+    /// Earth turned by the hour; whatever else draws a body reads it at that moment, so the Moon in the sky is the Moon the
+    /// frame tree places (the Moon's globe takes over from it without a jump).
     /// </summary>
     public readonly record struct RealSky(Vector3 Sun, Vector3 Moon, double MoonDistance, Basis MoonFace, Basis Stars,
-        DateOnly Date, double Hour, double E, double N);
+        DateOnly Date, double Hour, GlobalPos At, SkyMoment Moment);
 
     public static DayNight? Instance { get; private set; }
 
@@ -58,8 +62,6 @@ public partial class DayNight : Node
     /// until a camera is out in the world; a camera in the interiors' space keeps the last place.
     /// </summary>
     public WorldOrigin? Origin { get; set; }
-
-    private double _placeE = SunPath.BernE, _placeN = SunPath.BernN;
 
     /// <summary>The place the sky is read at: where <c>/time</c>'s named hours and zone are read offline (#1801).</summary>
     public GlobalPos Place { get; private set; } = LocalHours.Bern;
@@ -268,11 +270,17 @@ public partial class DayNight : Node
             TrackPlace();
             SunPath.Frame = Origin?.Frame;
             var date = SunPath.Today();
-            sun = SunPath.Toward(SkyBody.Sun, date, Hour, _placeE, _placeN, out float elevationDeg);
+            var at = Place;
+            // the bodies at their own time, the Earth turned by the hour (#1850): the sun's hour angle is today's exactly.
+            // A check that moves the sky to a date of its own (SunPath.Today: the terminator against NOAA) reads it there
+            var m = date == Calendar.Today
+                ? SkyClock.Moment(WorldClock.BodiesUtc, date, Hour)
+                : SkyMoment.Calendar(date, Hour);
+            sun = SunPath.Toward(SkyBody.Sun, m, at, out float elevationDeg, out _);
             SunElevationDeg = elevationDeg;
-            var moon = SunPath.Toward(SkyBody.Moon, date, Hour, _placeE, _placeN, out _, out double moonDistance);
-            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, _placeE, _placeN),
-                SunPath.SkyFrame(date, Hour, _placeE, _placeN), date, Hour, _placeE, _placeN);
+            var moon = SunPath.Toward(SkyBody.Moon, m, at, out _, out double moonDistance);
+            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(m, at),
+                SunPath.SkyFrame(m, at), date, Hour, at, m);
             shade = SunElevationDeg > 3f ? sun : MoonShade(moon);
         }
         else
@@ -337,7 +345,6 @@ public partial class DayNight : Node
         if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
         var place = Origin.ToGlobal(at);
         Place = place;
-        (_placeE, _placeN) = (place.Lv95.E, place.Lv95.N);
     }
 
     /// <summary>The night's shading from the real moon: its bearing, at least ~25° up (sin 25° = 0.42).</summary>
@@ -439,6 +446,9 @@ public partial class DayNight : Node
     /// Light and sky by sun elevation, keyed like a colour script: night, blue hour, the orange
     /// of a low sun, and plain daylight. Linear between keys.
     /// </summary>
+    /// <summary>The palette's clear midday (the sun 60° up): what the globe's day side is lit by from space (#1845).</summary>
+    public static (Color Tint, Color Sky) Midday => Palette(60f);
+
     private static (Color Tint, Color Sky) Palette(float elevation)
     {
         var keys = PaletteKeys;

@@ -247,7 +247,8 @@ public partial class Satellites : MultiMeshInstance3D
             _job = Task.Run(() => Propagate(sats, utc));
         }
         // nothing to carry on from that is near enough, or a sky too bright: none shows
-        if (_snap == null || age > 300 || day.SunElevationDeg > -4f)
+        // above the air the sky is black whatever the sun does below (#1845): only the Earth's shadow hides them
+        if (_snap == null || age > 300 || (day.SunElevationDeg > -4f && Atmosphere.Space < 0.5f))
         {
             Visible = false;
             if (Multimesh != null) Multimesh.VisibleInstanceCount = 0;
@@ -261,7 +262,7 @@ public partial class Satellites : MultiMeshInstance3D
             _material.SetShaderParameter("distance", distance);
         }
 
-        var (toWorld, obs) = SunPath.EarthFrame(sky.E, sky.N);
+        var (toWorld, obs) = SunPath.EarthFrame(sky.At);
         double ox = obs.X, oy = obs.Y, oz = obs.Z, olen = Math.Sqrt(ox * ox + oy * oy + oz * oz);
         var sunEcef = Ephemeris.Ecef(SkyBody.Sun, utc);
         double sl = sunEcef.Length, sx = sunEcef.X / sl, sy = sunEcef.Y / sl, sz = sunEcef.Z / sl;
@@ -278,8 +279,10 @@ public partial class Satellites : MultiMeshInstance3D
             double py = snap.Position[i * 3 + 1] + snap.Velocity[i * 3 + 1] * dt;
             double pz = snap.Position[i * 3 + 2] + snap.Velocity[i * 3 + 2] * dt;
             double dx = px - ox, dy = py - oy, dz = pz - oz;
-            // above the horizon (the local up is near enough the ellipsoid's here)
-            if ((dx * ox + dy * oy + dz * oz) / olen <= 0) continue;
+            // above the horizon (the local up is near enough the ellipsoid's here); from high up, anything the Earth's
+            // ball is not in front of (#1845: from orbit the limb is far under the horizontal)
+            double up = (dx * ox + dy * oy + dz * oz) / olen;
+            if (up <= 0 && (olen < earthRadius + 50_000 || BehindEarth(ox, oy, oz, dx, dy, dz, earthRadius))) continue;
             // in the Earth's shadow: behind it from the sun and within its radius of the line
             double along = px * sx + py * sy + pz * sz;
             if (along < 0)
@@ -300,5 +303,18 @@ public partial class Satellites : MultiMeshInstance3D
             n++;
         }
         mm.VisibleInstanceCount = n;
+    }
+
+    /// <summary>
+    /// The segment from the observer <c>o</c> along <c>d</c> (to the satellite) passes through a ball of radius
+    /// <paramref name="radius"/> round the Earth's centre: hidden from an observer high up (#1845).
+    /// </summary>
+    internal static bool BehindEarth(double ox, double oy, double oz, double dx, double dy, double dz, double radius)
+    {
+        double dd = dx * dx + dy * dy + dz * dz;
+        // the point of the segment nearest the centre
+        double t = Math.Clamp(-(ox * dx + oy * dy + oz * dz) / dd, 0, 1);
+        double cx = ox + dx * t, cy = oy + dy * t, cz = oz + dz * t;
+        return cx * cx + cy * cy + cz * cz < radius * radius;
     }
 }

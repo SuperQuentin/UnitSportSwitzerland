@@ -30,21 +30,58 @@ namespace UnitSport.Core;
 /// JSON save <c>{"x", "y", "z"}</c> (<see cref="GlobalPosJson"/>). Two positions are equal when their doubles are:
 /// compare places that went through a conversion with a tolerance, never with <c>==</c>.
 /// </para>
+///
+/// <para>
+/// <b>Its body</b> (#1847, docs/plans/planets.md): <see cref="Body"/>, the Earth by default, whose fixed frame the
+/// doubles are in (ECEF for the Earth). The local maths above use that body's shape; on the Earth they are exactly
+/// what they were. Two places on different bodies are compared only through <see cref="In"/> at a sky moment: the
+/// distances and the operators refuse a mix. The wire carries the Earth only until #1852 adds the body to it; a JSON
+/// save writes <c>"b"</c> for any other body.
+/// </para>
 /// </summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(GlobalPosJson))]
 public readonly record struct GlobalPos
 {
     private readonly double _x, _y, _z;
+    private readonly BodyId _body;
 
-    private GlobalPos(double x, double y, double z)
+    private GlobalPos(double x, double y, double z, BodyId body = BodyId.Earth)
     {
         _x = x;
         _y = y;
         _z = z;
+        _body = body;
     }
 
-    /// <summary>This place on the Earth: ECEF metres, WGS84.</summary>
+    /// <summary>The body this place is on or near, whose fixed frame <see cref="Ecef"/> is in (#1847).</summary>
+    public BodyId Body => _body;
+
+    /// <summary>This place on the Earth: ECEF metres, WGS84. On another body: the same in its fixed frame.</summary>
     public EcefPos Ecef => new(_x, _y, _z);
+
+    /// <summary>A place in <paramref name="body"/>'s fixed frame (#1847): ECEF for the Earth.</summary>
+    public static GlobalPos On(BodyId body, EcefPos p) => new(p.X, p.Y, p.Z, body);
+
+    /// <summary>
+    /// This place in <paramref name="body"/>'s fixed frame at a sky moment (#1847, <see cref="Frames.Convert"/>): the
+    /// same point, counted from another body. Itself when it is already there.
+    /// </summary>
+    public GlobalPos In(BodyId body, SkyMoment m)
+    {
+        if (body == _body) return this;
+        var q = Frames.Convert(_body, new DVec3(_x, _y, _z), body, m);
+        return new(q.X, q.Y, q.Z, body);
+    }
+
+    /// <summary>The reference ellipsoid of <see cref="Body"/> (WGS84 on the Earth).</summary>
+    private Ellipsoid Shape => _body == BodyId.Earth ? Ellipsoid.Wgs84 : CelestialBody.Of(_body).Shape;
+
+    /// <summary>A place on another body was mixed with this one: their doubles are in different frames.</summary>
+    private void Same(in GlobalPos other)
+    {
+        if (other._body != _body)
+            throw new System.InvalidOperationException($"places on {_body} and {other._body}: convert one with In(body, moment) first");
+    }
 
     /// <summary>The same as <see cref="Ecef"/>.</summary>
     public EcefPos ToEcef() => new(_x, _y, _z);
@@ -123,15 +160,16 @@ public readonly record struct GlobalPos
 
     /// <summary>
     /// The height above sea level (LHN95, <see cref="SwissGeodesy.Lhn95Height"/>), computed (~0.5 µs): what
-    /// <see cref="FromLv95"/> and <see cref="WithAlt"/> take, and a flat frame's world Y.
+    /// <see cref="FromLv95"/> and <see cref="WithAlt"/> take, and a flat frame's world Y. On another body, the height
+    /// above its reference ellipsoid (its own datum comes with its surface, #1848).
     /// </summary>
-    public double Alt => SwissGeodesy.Lhn95Height(Ecef);
+    public double Alt => _body == BodyId.Earth ? SwissGeodesy.Lhn95Height(Ecef) : Shape.ToGeodetic(Ecef).H;
 
-    /// <summary>Latitude, longitude and the WGS84 ellipsoidal height.</summary>
-    public Geodetic Geodetic => Ellipsoid.Wgs84.ToGeodetic(Ecef);
+    /// <summary>Latitude, longitude and the WGS84 ellipsoidal height (another body's: on its ellipsoid).</summary>
+    public Geodetic Geodetic => Shape.ToGeodetic(Ecef);
 
     /// <summary>The local east-up-south here (<see cref="EnuFrame.ToLocal"/>: x east, y up, z south, its origin this place).</summary>
-    public EnuFrame Enu => new(Geodetic);
+    public EnuFrame Enu => _body == BodyId.Earth ? new(Geodetic) : new(Geodetic, Shape);
 
     /// <summary>
     /// Where <paramref name="other"/> is from here, in metres east, north and up of the local horizon at this place
@@ -142,10 +180,11 @@ public readonly record struct GlobalPos
     /// </summary>
     public (double East, double North, double Up) OffsetTo(GlobalPos other)
     {
+        Same(other);
         var here = Geodetic;
         var there = other.Geodetic;
-        var foot = Ellipsoid.Wgs84.ToEcef(there with { H = here.H });
-        var (x, _, z) = new EnuFrame(here).ToLocal(foot);
+        var foot = Shape.ToEcef(there with { H = here.H });
+        var (x, _, z) = new EnuFrame(here, Shape).ToLocal(foot);
         return (x, -z, there.H - here.H);
     }
 
@@ -157,26 +196,27 @@ public readonly record struct GlobalPos
     public GlobalPos Moved(double east, double north, double up = 0)
     {
         var here = Geodetic;
-        var f = new EnuFrame(here);
+        var shape = Shape;
+        var f = new EnuFrame(here, shape);
         // the point of this place's level whose ENU east and north are these: down the ENU vertical from the tangent
         // plane (each round takes the height error off along f's up, which keeps east and north exact; the error
         // shrinks by the angle's square each round: micrometres after two at 10 km)
         var p = f.ToEcef(east, 0, -north);
-        var g = Ellipsoid.Wgs84.ToGeodetic(p);
+        var g = shape.ToGeodetic(p);
         for (int i = 0; i < 8 && System.Math.Abs(g.H - here.H) > 1e-7; i++)
         {
             double dh = g.H - here.H;
             p = new EcefPos(p.X - f.Up.X * dh, p.Y - f.Up.Y * dh, p.Z - f.Up.Z * dh);
-            g = Ellipsoid.Wgs84.ToGeodetic(p);
+            g = shape.ToGeodetic(p);
         }
-        return FromEcef(Ellipsoid.Wgs84.ToEcef(g with { H = here.H + up }));
+        return On(_body, shape.ToEcef(g with { H = here.H + up }));
     }
 
     /// <summary>This place at another altitude (above sea level, LHN95), straight up or down its plumb line.</summary>
     public GlobalPos WithAlt(double alt)
     {
         var g = Geodetic;
-        return FromEcef(Ellipsoid.Wgs84.ToEcef(g with { H = g.H + (alt - Alt) }));
+        return On(_body, Shape.ToEcef(g with { H = g.H + (alt - Alt) }));
     }
 
     /// <summary>The compass bearing to <paramref name="other"/>, radians clockwise from true north here.</summary>
@@ -220,9 +260,10 @@ public readonly record struct GlobalPos
     /// <summary>The square of <see cref="HorizontalDistanceTo"/>, for comparisons that skip the root.</summary>
     public double HorizontalDistanceSquaredTo(GlobalPos other)
     {
+        Same(other);
         double dx = other._x - _x, dy = other._y - _y, dz = other._z - _z;
-        var (ux, uy, uz) = Normal(_x, _y, _z);
-        var (vx, vy, vz) = Normal(other._x, other._y, other._z);
+        var (ux, uy, uz) = Normal(_x, _y, _z, _body);
+        var (vx, vy, vz) = Normal(other._x, other._y, other._z, _body);
         double mx = ux + vx, my = uy + vy, mz = uz + vz;
         double m2 = mx * mx + my * my + mz * mz;
         double along = dx * mx + dy * my + dz * mz;
@@ -231,10 +272,17 @@ public readonly record struct GlobalPos
     }
 
     // the WGS84 normal at a point near the surface, the ellipsoid's gradient (x/a², y/a², z/b²) made a unit vector:
-    // within 10⁻⁶ rad of the true normal 10 km up
-    private static (double X, double Y, double Z) Normal(double x, double y, double z)
+    // within 10⁻⁶ rad of the true normal 10 km up; another body's by its own radii
+    private static (double X, double Y, double Z) Normal(double x, double y, double z, BodyId body)
     {
-        const double a2 = 6_378_137.0 * 6_378_137.0, b2 = 6_356_752.314245179 * 6_356_752.314245179;
+        const double ea2 = 6_378_137.0 * 6_378_137.0, eb2 = 6_356_752.314245179 * 6_356_752.314245179;
+        double a2 = ea2, b2 = eb2;
+        if (body != BodyId.Earth)
+        {
+            var shape = CelestialBody.Of(body).Shape;
+            a2 = shape.A * shape.A;
+            b2 = shape.B * shape.B;
+        }
         double gx = x / a2, gy = y / a2, gz = z / b2;
         double l = System.Math.Sqrt(gx * gx + gy * gy + gz * gz);
         return (gx / l, gy / l, gz / l);
@@ -243,6 +291,7 @@ public readonly record struct GlobalPos
     /// <summary>The straight-line distance to <paramref name="other"/> (the chord through the Earth, metres).</summary>
     public double DistanceTo(GlobalPos other)
     {
+        Same(other);
         double dx = other._x - _x, dy = other._y - _y, dz = other._z - _z;
         return System.Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
@@ -271,9 +320,11 @@ public readonly record struct GlobalPos
     /// </summary>
     public static GlobalPos Midpoint(GlobalPos a, GlobalPos b)
     {
-        var m = Ellipsoid.Wgs84.ToGeodetic(new EcefPos((a._x + b._x) / 2, (a._y + b._y) / 2, (a._z + b._z) / 2));
+        a.Same(b);
+        var shape = a.Shape;
+        var m = shape.ToGeodetic(new EcefPos((a._x + b._x) / 2, (a._y + b._y) / 2, (a._z + b._z) / 2));
         double h = (a.Geodetic.H + b.Geodetic.H) / 2;
-        return FromEcef(Ellipsoid.Wgs84.ToEcef(m with { H = h }));
+        return On(a._body, shape.ToEcef(m with { H = h }));
     }
 
     /// <summary>
@@ -285,7 +336,7 @@ public readonly record struct GlobalPos
     public static GlobalPos operator +(GlobalPos p, Vector3 d)
     {
         var (e, u, n) = p.Axes();
-        return new(p._x + e.X * d.X + u.X * d.Y - n.X * d.Z, p._y + e.Y * d.X + u.Y * d.Y - n.Y * d.Z, p._z + u.Z * d.Y - n.Z * d.Z);
+        return new(p._x + e.X * d.X + u.X * d.Y - n.X * d.Z, p._y + e.Y * d.X + u.Y * d.Y - n.Y * d.Z, p._z + u.Z * d.Y - n.Z * d.Z, p._body);
     }
 
     /// <summary>
@@ -294,6 +345,7 @@ public readonly record struct GlobalPos
     /// </summary>
     public static Vector3 operator -(GlobalPos a, GlobalPos b)
     {
+        b.Same(a);
         var (e, u, n) = b.Axes();
         double dx = a._x - b._x, dy = a._y - b._y, dz = a._z - b._z;
         return new((float)(e.X * dx + e.Y * dy), (float)(u.X * dx + u.Y * dy + u.Z * dz), (float)-(n.X * dx + n.Y * dy + n.Z * dz));
@@ -304,7 +356,7 @@ public readonly record struct GlobalPos
     // square to the axis, north up × east. Rounds the same both ways, so b + (a - b) is a.
     private ((double X, double Y, double Z) East, (double X, double Y, double Z) Up, (double X, double Y, double Z) North) Axes()
     {
-        var up = Normal(_x, _y, _z);
+        var up = Normal(_x, _y, _z, _body);
         double rho = System.Math.Sqrt(_x * _x + _y * _y);
         var east = rho > 1e-9 ? (-_y / rho, _x / rho, 0.0) : (0.0, 1.0, 0.0);
         var north = (up.Y * east.Item3 - up.Z * east.Item2, up.Z * east.Item1 - up.X * east.Item3, up.X * east.Item2 - up.Y * east.Item1);
@@ -341,6 +393,7 @@ public readonly record struct GlobalPos
     public override string ToString()
     {
         if (!IsFinite) return $"ECEF {_x}/{_y}/{_z}";
+        if (_body != BodyId.Earth) return $"{_body} {Geodetic}";
         var (e, n, h) = SwissGeodesy.FromEcef(Ecef);
         return $"LV95 {e:F2}/{n:F2} alt {h:F2}";
     }

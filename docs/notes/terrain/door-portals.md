@@ -92,7 +92,14 @@ changed is how you get there.
   colour) or mostly black (≥ 40 % near black). Saves the poses (and bad walk frames, all with
   `--film`); `--doorcam-trace` prints the lens, the arm and whether the doorway has its portal
   on every walk frame. Run it per `--style`: the old code fails ~30 pictures in PS1.
-- **Linked spaces.** `InteriorManager.Linked(a, b)`: an interior and the outside see each other
+- **Standing in the frame** (#1765): `--interiorcheck,shot.png --doorstand --horizon 60` (windowed) stands the player,
+  first person, in the open door's frame: from inside at 0.3, 0.1 and 0 m from the doorway, and from the street from
+  0.3 m out to 0.3 m in, facing in and out. Each picture is judged as `--doorcam`'s and must not be the sky alone
+  (33 of 36 rows one colour). Give it the default horizon: the test profile's short one hides a far/near ratio the
+  depth buffer cannot hold (#1811/#1823's cause). Passed flat and earth on Nov 14 (generated world, 16 poses each).
+- **A probe's camera and the window's shape** (#1728): a headless run's window is 1152 x 1152, so a camera's vertical
+  75° is only 75° across. The church check's demo camera keeps 90° across (`KeepAspect = Width`), as its spot search
+  allows 70° between the two doors; `DoorPortals.Why(link)` says why a doorway was or was not shown.- **Linked spaces.** `InteriorManager.Linked(a, b)`: an interior and the outside see each other
   while one of its doors is open. It drives remote visibility and the synchroniser filter, so
   players are seen (and move) through the doorway.
 - **Drawn on both sides** (`DoorwayGhosts`), as Portal did it. Anything in the

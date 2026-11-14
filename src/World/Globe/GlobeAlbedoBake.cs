@@ -18,7 +18,15 @@ namespace UnitSport.World;
 ///
 /// <code>
 /// &lt;godot&gt; --headless --path . -- --globealbedo &lt;region dir&gt; --bmng &lt;dir of world.topo.bathy.2004MM.3x21600x10800.jpg&gt; [--months 1-12]
+/// &lt;godot&gt; --headless --path . -- --globealbedo &lt;region dir&gt; --body moon --colour &lt;equirectangular JPEG or PNG&gt;
 /// </code>
+///
+/// <para>
+/// <b>Another body</b> (#1849, <c>--body</c>): a pyramid that <c>--cube-body</c> built on that body's cube gets one
+/// colour that never changes (no months), from one whole-body equirectangular map (the Moon's: the CGI Moon Kit's LROC
+/// colour, Hapke-normalised so it carries no shadows of its own), on the body's cube and radius; no lakes, no colour of
+/// our own.
+/// </para>
 ///
 /// <para>
 /// A pixel's colour is a function of the pixel's own place (its centre's geodetic normal): the mean of
@@ -36,6 +44,7 @@ public partial class GlobeAlbedoBake : Node
 
     private async Task RunAsync()
     {
+        if (CmdArgs.Value("--body") is { } body) { await RunBodyAsync(body); return; }
         string dir = CmdArgs.Value("--globealbedo")!, bmng = CmdArgs.Value("--bmng") ?? "D:/UnitSportSwitzerland/data/global/bmng";
         var months = (CmdArgs.Value("--months") ?? "1-12").Split('-').Select(s => int.Parse(s, CultureInfo.InvariantCulture)).ToArray();
         int first = months[0], last = months[^1];
@@ -109,6 +118,52 @@ public partial class GlobeAlbedoBake : Node
         File.WriteAllText(manifestPath, manifest.ToJson());
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[globealbedo] RESULT: ok — {keys.Count} tiles x {last - first + 1} months, {bytes / 1e6:F1} MB, {sw.Elapsed.TotalSeconds:F0} s"));
+        GetTree().Quit();
+    }
+
+    /// <summary>Another body's colour (#1849): one image a tile from <c>--colour</c>, on the body's cube.</summary>
+    private async Task RunBodyAsync(string body)
+    {
+        string dir = CmdArgs.Value("--globealbedo")!, file = CmdArgs.Value("--colour") ?? "";
+        var cube = body.ToLowerInvariant() switch { "moon" => CubeShape.Moon, "mars" => CubeShape.Mars, _ => null };
+        if (cube == null) { Fail($"no body called {body} (moon, mars)"); return; }
+        string manifestPath = System.IO.Path.Combine(dir, CubeManifest.FileName);
+        var manifest = CubeManifest.FromJson(File.ReadAllText(manifestPath));
+        if (!string.Equals(manifest.Body, body, StringComparison.OrdinalIgnoreCase)) { Fail($"{dir} is the pyramid of {manifest.Body ?? "Earth"}, not {body}"); return; }
+        var keys = manifest.Tiles.Select(t => CubeKey.Parse(t.Key)).ToList();
+        var sw = Stopwatch.StartNew();
+        var src = Image.LoadFromFile(file);
+        if (src == null || src.IsEmpty()) { Fail($"cannot read {file}"); return; }
+        if (src.GetFormat() != Image.Format.Rgb8) src.Convert(Image.Format.Rgb8);
+        var map = new EquirectMap(src.GetData(), src.GetWidth(), src.GetHeight());
+        GD.Print($"[globealbedo] {body}: {keys.Count} tiles from {System.IO.Path.GetFileName(file)} {src.GetWidth()} x {src.GetHeight()}");
+        src.Dispose();
+        var images = new ConcurrentDictionary<CubeKey, byte[]>();
+        await Task.Run(() => Parallel.ForEach(keys, key =>
+        {
+            int size = SizeFor(key.Level);
+            var img = Image.CreateFromData(size, size, false, Image.Format.Rgb8, Pixels(map, key, size, cube));
+            images[key] = img.SaveWebpToBuffer(true, 0.85f);
+            img.Dispose();
+        }));
+        long bytes = 0;
+        foreach (var bundle in keys.GroupBy(k => k.AncestorAt(CubeKey.PyramidBundleLevel(k.Level))))
+        {
+            var entries = bundle.OrderBy(k => k.Level).ThenBy(k => k.Y).ThenBy(k => k.X)
+                .Select(k => (k, CubeAlbedoCodec.Encode(new CubeAlbedo { Key = k, Size = SizeFor(k.Level), Months = [images[k]] }))).ToList();
+            CubeBundle.Write(System.IO.Path.Combine(dir, CubeBundle.AlbedoFileName(bundle.Key)), bundle.Key, entries, CubeBundle.AlbedoMagic);
+            bytes += entries.Sum(e => (long)e.Item2.Length);
+        }
+        foreach (var lv in manifest.Levels)
+        {
+            lv.Albedo = SizeFor(lv.Level);
+            lv.AlbedoBundleLevel = CubeKey.PyramidBundleLevel(lv.Level);
+        }
+        manifest.Sources.RemoveAll(s => s.StartsWith("colour:", StringComparison.Ordinal));
+        manifest.Sources.Add($"colour: {System.IO.Path.GetFileName(file)} (NASA, public domain)");
+        File.WriteAllText(manifestPath, manifest.ToJson());
+        GD.Print(string.Create(CultureInfo.InvariantCulture,
+            $"[globealbedo] RESULT: ok — {body}, {keys.Count} tiles, {bytes / 1e6:F1} MB, {sw.Elapsed.TotalSeconds:F0} s"));
         GetTree().Quit();
     }
 
@@ -201,19 +256,25 @@ public partial class GlobeAlbedoBake : Node
         }
     }
 
-    /// <summary>A tile's size² RGB pixels, row-major from its south-west corner (row 0 along its south edge).</summary>
-    public static byte[] Pixels(EquirectMap map, CubeKey key, int size)
+    /// <summary>
+    /// A tile's size² RGB pixels, row-major from its south-west corner (row 0 along its south edge). On the Earth's cube by
+    /// default; on another body's (#1849) a pixel's latitude is planetocentric, as its maps are gridded.
+    /// </summary>
+    public static byte[] Pixels(EquirectMap map, CubeKey key, int size, CubeShape? cube = null)
     {
         var px = new byte[size * size * 3];
         double step = key.Size / size;
+        double radius = cube?.Shape.A ?? 6_371_000;
         // half a pixel at a face centre, metres: the footprint's half side
-        double half = 0.5 * (Math.PI / 2 * 6_371_000 / key.Side / size);
+        double half = 0.5 * (Math.PI / 2 * radius / key.Side / size);
         for (int py = 0; py < size; py++)
             for (int pxi = 0; pxi < size; pxi++)
             {
-                var n = CubeSphere.Normal(key.Face, key.U0 + (pxi + 0.5) * step, key.V0 + (py + 0.5) * step);
+                var n = cube == null
+                    ? CubeSphere.Normal(key.Face, key.U0 + (pxi + 0.5) * step, key.V0 + (py + 0.5) * step)
+                    : cube.ToEcef(key.Face, key.U0 + (pxi + 0.5) * step, key.V0 + (py + 0.5) * step, 0);
                 double lat = Math.Atan2(n.Z, Math.Sqrt(n.X * n.X + n.Y * n.Y)) * 180 / Math.PI, lon = Math.Atan2(n.Y, n.X) * 180 / Math.PI;
-                var (r, g, b) = map.Footprint(lat, lon, half);
+                var (r, g, b) = map.Footprint(lat, lon, half, radius);
                 int o = (py * size + pxi) * 3;
                 px[o] = r; px[o + 1] = g; px[o + 2] = b;
             }
@@ -239,10 +300,9 @@ public sealed class EquirectMap(byte[] rgb, int width, int height)
         return (Mix(0), Mix(1), Mix(2));
     }
 
-    /// <summary>The mean colour over a square footprint <paramref name="halfM"/> metres each way: k × k bilinear samples, k 1 to 6.</summary>
-    public (byte R, byte G, byte B) Footprint(double lat, double lon, double halfM)
+    /// <summary>The mean colour over a square footprint <paramref name="halfM"/> metres each way: k × k bilinear samples, k 1 to 6, on a body of radius <paramref name="R"/>.</summary>
+    public (byte R, byte G, byte B) Footprint(double lat, double lon, double halfM, double R = 6_371_000)
     {
-        const double R = 6_371_000;
         double pixelM = 360.0 / width * Math.PI / 180 * R;
         int k = Math.Clamp((int)Math.Ceiling(2 * halfM / pixelM), 1, 6);
         double cos = Math.Max(Math.Cos(lat * Math.PI / 180), 0.01), sr = 0, sg = 0, sb = 0;

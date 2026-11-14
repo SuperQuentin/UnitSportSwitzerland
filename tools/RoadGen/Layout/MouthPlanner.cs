@@ -65,17 +65,31 @@ public readonly record struct DataLanes(SignalMoves[] Left, SignalMoves[] Own, S
 /// The free room beside an arm (#818): at stations out from the mouth (m), how far each way from its axis the section may
 /// reach before a facade, another line, the ground off the road or the tile's edge (m, left and right of a driver arriving).
 /// </summary>
-public sealed class ArmRoom(double[] stations, double[] left, double[] right)
+/// <param name="keepLeft">Per station, the room the street's own sidewalk keeps on that side beyond the section (#1879: a
+/// transition keeps the street's bands its normal section lacks, so the carriageway may widen only up to them); null for none.</param>
+public sealed class ArmRoom(double[] stations, double[] left, double[] right, double[]? keepLeft = null, double[]? keepRight = null)
 {
     public static readonly ArmRoom Unbounded = new([0], [double.MaxValue], [double.MaxValue]);
 
     public double[] Stations { get; } = stations;
     public double[] LeftAt { get; } = left;
     public double[] RightAt { get; } = right;
+    public double[]? KeepLeft { get; } = keepLeft;
+    public double[]? KeepRight { get; } = keepRight;
 
     /// <summary>The least room each side over every station.</summary>
     public double Left => LeftAt.Min();
     public double Right => RightAt.Min();
+
+    /// <summary>The room the section itself may take at station <paramref name="k"/>: less what the street's sidewalk keeps.</summary>
+    public double FreeLeft(int k) => LeftAt[k] - (KeepLeft is { } l ? l[k] : 0);
+    public double FreeRight(int k) => RightAt[k] - (KeepRight is { } r ? r[k] : 0);
+
+    /// <summary>Whether the street's sidewalk keeps any room beside the section.</summary>
+    public bool Keeps => KeepLeft is { } l && l.Any(x => x > 0) || KeepRight is { } r && r.Any(x => x > 0);
+
+    /// <summary>The same room with nothing kept for the street's sidewalk (the fit before #1879, for the report).</summary>
+    public ArmRoom WithoutKeep() => new(Stations, LeftAt, RightAt);
 
     public static ArmRoom Flat(double left, double right) => new([0], [left], [right]);
 }
@@ -316,7 +330,8 @@ public static class MouthPlanner
 
     /// <summary>
     /// The most a mouth section may reach from the axis on each side: at every station its extra over the street's own reach
-    /// must fit the room there, as much of it as the transition still holds there (<paramref name="left"/>, <paramref name="right"/>).
+    /// must fit the room there, as much of it as the transition still holds there (<paramref name="left"/>, <paramref name="right"/>),
+    /// beside the street's own sidewalk where the section has none (#1879, <see cref="ArmRoom.FreeLeft"/>).
     /// Where the street already reaches past its room (its sidewalks were laid to the facades), as far as the street does.
     /// </summary>
     public static (double Left, double Right) MouthRoom(Section normal, ArmRoom room, Stretch left, Stretch right)
@@ -326,13 +341,13 @@ public static class MouthPlanner
         for (int k = 0; k < room.Stations.Length; k++)
         {
             double sl = left.Share(room.Stations[k]), sr = right.Share(room.Stations[k]);
-            if (sl > 1e-9) roomL = Math.Min(roomL, nl + Math.Max(0, room.LeftAt[k] - nl) / sl);
-            if (sr > 1e-9) roomR = Math.Min(roomR, nr + Math.Max(0, room.RightAt[k] - nr) / sr);
+            if (sl > 1e-9) roomL = Math.Min(roomL, nl + Math.Max(0, room.FreeLeft(k) - nl) / sl);
+            if (sr > 1e-9) roomR = Math.Min(roomR, nr + Math.Max(0, room.FreeRight(k) - nr) / sr);
         }
         return (roomL, roomR);
     }
 
-    private static bool Same(Section a, Section b) =>
+    public static bool Same(Section a, Section b) =>
         a.Strips.Count == b.Strips.Count && Math.Abs(a.CarriagewayLeft - b.CarriagewayLeft) < 1e-9 && a.Strips.SequenceEqual(b.Strips);
 
     /// <summary>The strips of kinds <paramref name="drop"/> left out, the carriageway's left edge moving by what went on its left.</summary>

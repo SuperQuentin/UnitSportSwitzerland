@@ -170,6 +170,9 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   only one side has a path, the corner is sidewalk. A turning side still lays its path's straight strip, from the mouth on
   to the kerb (its crossing leaves straight from the corner): it cuts through the turning corner's verge there (the user's
   review, LV95 2507355,1138482), a grass triangle staying at the kerb between two crossings. Beside any carried side the corner is now this banded fill first.
+  Its mesh (#1877): the outline split every 1 m and triangulated Delaunay, then a triangle is bisected (to `CornerCell`
+  0.35 m at most) only over `CornerCoarse` 6 m or where the height or, at a band edge, the kerb's distance bends over 1 cm.
+  Cutting every triangle to 0.35 m put 32k triangles in one Geneva corner (r 78 m arc); now ~1k.
   A footpath arm no longer splits a junction's corner (`Corners`: corners between the streets only). Carried sides are laid
   after every junction (`carriedSides`); two that overlap are both left to the corner. `PAIRDBG=E,N` traces the pairs and
   each side's decision. Sion tiles: 22 sides turn; corners built 1,601 -> ~1,860 (footpath arms no longer split them).

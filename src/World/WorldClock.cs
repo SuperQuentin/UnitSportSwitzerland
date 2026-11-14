@@ -93,6 +93,35 @@ public static class WorldClock
     /// </summary>
     public static double CurrentHour => DayNight.Instance?.Hour ?? (Active ? Hour : 12.0);
 
+    static WorldClock() => Core.SkyClock.Live = () => Sky;
+
+    private static double _skyAt = double.NaN;
+    private static Core.SkyMoment _sky;
+
+    /// <summary>
+    /// The sky's moment now (#1850, <see cref="Core.SkyClock"/>): the bodies at the server's real UTC (with a pinned date:
+    /// its start hour plus the shared sim time), the Earth turned by <see cref="CurrentHour"/>. Worked out at most once
+    /// every 10 ms (~40 µs of ephemeris).
+    /// </summary>
+    public static Core.SkyMoment Sky
+    {
+        get
+        {
+            double now = Net.ClockSync.ServerNow;
+            if (Math.Abs(now - _skyAt) < 0.01) return _sky;
+            _skyAt = now;
+            _sky = Core.SkyClock.Moment(BodiesUtc, Core.Calendar.Today, CurrentHour);
+            return _sky;
+        }
+    }
+
+    /// <summary>
+    /// When the bodies are now (#1850, <see cref="Core.SkyClock.BodiesUtc"/>): the server's real UTC, or with a pinned date
+    /// its start hour plus the shared sim time.
+    /// </summary>
+    public static DateTime BodiesUtc => Core.SkyClock.BodiesUtc(Core.Calendar.Pinned, Core.GameSettings.Current.StartHour,
+        Core.SimClock.SimAt(Net.ClockSync.ServerNow), Net.ClockSync.ServerUnixNow);
+
     /// <summary>Takes the clock as given, by the server or from its saved state.</summary>
     public static void Set(double env0, double envEpoch, double hourShift, float minutesPerDay)
     {

@@ -292,11 +292,11 @@ public sealed class ShuttlePilot
             {
                 Fly(Vector2.Zero, 0f);
                 if (jet.DriveOn || jet.Space!.Orbit is not { } o) { if (StageTime > 2) Fail("no orbit after the drive went off"); return; }
-                var (peri, apo, _) = Orbit.Apsides(Planet.Earth, o);
+                var (peri, apo, _) = Orbit.Apsides(CelestialBody.Earth, o);
                 if (OrbitApsides == null && StageTime >= 0.5)
                 {
                     OrbitApsides = (peri, apo);
-                    double r0 = Planet.Earth.Shape.A;
+                    double r0 = CelestialBody.Earth.Shape.A;
                     Say(FormattableString.Invariant($"in orbit: perigee {(peri - r0) / 1000:F1} km, apogee {(apo - r0) / 1000:F1} km, {o.V.Length:F0} m/s"));
                 }
                 if (StageTime > Plan.CoastSeconds) Next(Stage.Retro, Fast);
@@ -316,7 +316,7 @@ public sealed class ShuttlePilot
                 float rollErr = off > 0.2f ? Mathf.Atan2(t.X, Mathf.Abs(t.Y) + 1e-3f) * Mathf.Sign(t.Y == 0 ? 1f : t.Y) : 0f;
                 var o = jet.Space!.Orbit;
                 double target = Plan.PerigeeKm * 1000;
-                double perigee = o is { } orbit ? Orbit.Apsides(Planet.Earth, orbit).Periapsis - Planet.Earth.Shape.A : double.NaN;
+                double perigee = o is { } orbit ? Orbit.Apsides(CelestialBody.Earth, orbit).Periapsis - CelestialBody.Earth.Shape.A : double.NaN;
                 bool burn = off < 0.05f && perigee > target;
                 Fly(off > 0.03f ? new Vector2(Mathf.Clamp(rollErr, -0.4f, 0.4f), Mathf.Clamp(pitchErr * 0.8f, -0.4f, 0.4f)) : Vector2.Zero, burn ? 1f : 0f);
                 if (o != null && perigee <= target && s.Spool <= jet.Spec.IdleSpool + 0.02f)

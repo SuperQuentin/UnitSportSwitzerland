@@ -155,6 +155,22 @@ public static class RoadMeshBuilder
                 }
         }
 
+        // the paved cap where a deck's (or a bore's) roads meet (#1768): RoadGen trims the arms back to its edge, so
+        // without it the deck has a hole the size of the junction (Pont des Bergues' branch to Île Rousseau, 12 m of
+        // Rhône under a walker). At the lift AppendJunction draws it at; ground caps are the blended heightfield's
+        foreach (var junction in tile.Junctions)
+        {
+            if (junction.Layer == 0 || junction.VertexCount < 3) continue;
+            float lift = junction.Layer > 0 ? BridgeLift : 0f;
+            var v = junction.Vertices;
+            for (int i = 0; i + 2 < junction.Indices.Length; i += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    int at = junction.Indices[i + k] * 3;
+                    faces.Add(new Vector3(v[at], v[at + 1] + lift, v[at + 2]));
+                }
+        }
+
         return faces.ToArray();
     }
 

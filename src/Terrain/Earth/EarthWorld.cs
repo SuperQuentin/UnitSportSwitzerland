@@ -170,6 +170,18 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     }
 
     /// <summary>
+    /// The loaded leaves whose buildings stand on a stand-in tile, furnished again (<see cref="RefreshFurniture"/>): its doors
+    /// changed (<see cref="Interiors.DoorWarden"/> found some with no doorway inside, #1766). Main thread.
+    /// </summary>
+    public void RefreshDoors(TileId tile)
+    {
+        var leaves = new List<CubeKey>();
+        foreach (var key in _near.Keys)
+            if (StandOf(key)?.Id == tile) leaves.Add(key);
+        RefreshFurniture(leaves);
+    }
+
+    /// <summary>
     /// The group of the leaves' collision patches (their ground with its roads and buildings): what a climb reads the cover
     /// of, as a flat chunk's own body (#1649).
     /// </summary>
@@ -424,7 +436,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>A focus of the streaming, unless it is in Space (<see cref="CameraCeilingM"/>): then <paramref name="lifted"/>.</summary>
     private void AddFocus(Vector3 at, ref bool lifted)
     {
-        if (Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
+        // off the Earth (#1848: the anchor on the Moon) no Earth leaf is wanted
+        if (Origin.Body != Core.BodyId.Earth || Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
         else _foci.Add(Origin.ToEcef(at));
     }
 

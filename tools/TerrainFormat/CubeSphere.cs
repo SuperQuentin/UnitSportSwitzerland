@@ -2,7 +2,8 @@ namespace UnitSport.Terrain.Format;
 
 /// <summary>
 /// The Earth's tiling (#1443, phase G1, docs/plans/global-tiling.md §1): a cube projected onto the
-/// WGS84 ellipsoid, six faces, each a quadtree of <see cref="CubeKey"/> cells.
+/// WGS84 ellipsoid, six faces, each a quadtree of <see cref="CubeKey"/> cells. Its placing statics are
+/// <see cref="CubeShape.Earth"/>'s; another body's cube is a <see cref="CubeShape"/> of its own (#1848).
 ///
 /// <para>
 /// <b>Mapping.</b> Equal-angle gnomonic: a face point (u, v) in [−1, 1]² is the cube point
@@ -59,27 +60,8 @@ public static class CubeSphere
         { (2, -1), (1, 1), (0, 1) },
     };
 
-    /// <summary>Cube frame to ECEF, row-major: column 0 is face 0's axis (up at Bern), 1 its u, 2 its v.</summary>
-    private static readonly double[] M = BuildOrientation();
-
-    /// <summary>The rotation from the cube's frame to ECEF, row-major (for tests and tools).</summary>
-    public static ReadOnlySpan<double> Orientation => M;
-
-    private static double[] BuildOrientation()
-    {
-        double lat = CentreLatDeg * Math.PI / 180, lon = CentreLonDeg * Math.PI / 180, t = TwistDeg * Math.PI / 180;
-        double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
-        double[] up = { cl * co, cl * so, sl }, east = { -so, co, 0 }, north = { -sl * co, -sl * so, cl };
-        double ct = Math.Cos(t), st = Math.Sin(t);
-        var m = new double[9];
-        for (int r = 0; r < 3; r++)
-        {
-            m[r * 3 + 0] = up[r];
-            m[r * 3 + 1] = ct * east[r] + st * north[r];
-            m[r * 3 + 2] = -st * east[r] + ct * north[r];
-        }
-        return m;
-    }
+    /// <summary>The rotation from the cube's frame to ECEF, row-major (for tests and tools): the Earth's cube's (<see cref="CubeShape.Earth"/>).</summary>
+    public static ReadOnlySpan<double> Orientation => CubeShape.Earth.Orientation;
 
     /// <summary>tan(a·π/4), odd to the bit and exactly ±1 at ±1: what makes face edges shared exactly.</summary>
     public static double Warp(double a)
@@ -105,76 +87,29 @@ public static class CubeSphere
     }
 
     /// <summary>The geodetic normal (unit, ECEF) of a face's (u, v).</summary>
-    public static EcefPos Normal(int face, double u, double v)
-    {
-        var (x, y, z) = CubePoint(face, u, v);
-        double inv = 1.0 / Math.Sqrt(x * x + y * y + z * z);
-        x *= inv; y *= inv; z *= inv;
-        return new(M[0] * x + M[1] * y + M[2] * z, M[3] * x + M[4] * y + M[5] * z, M[6] * x + M[7] * y + M[8] * z);
-    }
+    public static EcefPos Normal(int face, double u, double v) => CubeShape.Earth.Normal(face, u, v);
 
     /// <summary>The ECEF point at an ellipsoidal height above a face's (u, v).</summary>
-    public static EcefPos ToEcef(int face, double u, double v, double h) => OnEllipsoid(Normal(face, u, v), h);
+    public static EcefPos ToEcef(int face, double u, double v, double h) => CubeShape.Earth.ToEcef(face, u, v, h);
 
     /// <summary>The point of WGS84 whose geodetic normal is <paramref name="n"/> (unit), raised by <paramref name="h"/> along it.</summary>
-    public static EcefPos OnEllipsoid(EcefPos n, double h)
-    {
-        var e = Ellipsoid.Wgs84;
-        double big = e.A / Math.Sqrt(1.0 - e.E2 * n.Z * n.Z);
-        return new((big + h) * n.X, (big + h) * n.Y, (big * (1.0 - e.E2) + h) * n.Z);
-    }
+    public static EcefPos OnEllipsoid(EcefPos n, double h) => CubeShape.Earth.OnEllipsoid(n, h);
 
     /// <summary>Latitude and longitude (degrees) and height of a face's (u, v) at an ellipsoidal height.</summary>
-    public static Geodetic ToGeodetic(int face, double u, double v, double h = 0)
-    {
-        var n = Normal(face, u, v);
-        return new(Math.Atan2(n.Z, Math.Sqrt(n.X * n.X + n.Y * n.Y)) * 180 / Math.PI, Math.Atan2(n.Y, n.X) * 180 / Math.PI, h);
-    }
+    public static Geodetic ToGeodetic(int face, double u, double v, double h = 0) => CubeShape.Earth.ToGeodetic(face, u, v, h);
 
     /// <summary>The face and (u, v) a geodetic normal (unit, ECEF) falls on. On an edge either face is right; the lower index wins a tie.</summary>
-    public static (int Face, double U, double V) FromNormal(EcefPos n)
-    {
-        // into the cube frame: the transpose
-        double x = M[0] * n.X + M[3] * n.Y + M[6] * n.Z;
-        double y = M[1] * n.X + M[4] * n.Y + M[7] * n.Z;
-        double z = M[2] * n.X + M[5] * n.Y + M[8] * n.Z;
-        Span<double> c = stackalloc double[] { x, y, z };
-        int best = 0;
-        double bestDot = double.NegativeInfinity;
-        for (int f = 0; f < Faces; f++)
-        {
-            var a = Frame[f, 0];
-            double d = a.S * c[a.I];
-            if (d > bestDot) { bestDot = d; best = f; }
-        }
-        var (ax, r, w) = (Frame[best, 0], Frame[best, 1], Frame[best, 2]);
-        double along = ax.S * c[ax.I];
-        return (best, Clamp1(Unwarp(r.S * c[r.I] / along)), Clamp1(Unwarp(w.S * c[w.I] / along)));
-    }
+    public static (int Face, double U, double V) FromNormal(EcefPos n) => CubeShape.Earth.FromNormal(n);
 
     /// <summary>
     /// The (u, v) of a geodetic normal on a given face's gnomonic, unclamped (#1507): past the face's edge it
     /// goes on beyond ±1, where <see cref="Normal"/> takes it back, so a leaf's lattice runs on into its
     /// margin. Meaningless for a normal more than 90° from the face's axis.
     /// </summary>
-    public static (double U, double V) OnFace(int face, EcefPos n)
-    {
-        double x = M[0] * n.X + M[3] * n.Y + M[6] * n.Z;
-        double y = M[1] * n.X + M[4] * n.Y + M[7] * n.Z;
-        double z = M[2] * n.X + M[5] * n.Y + M[8] * n.Z;
-        Span<double> c = stackalloc double[] { x, y, z };
-        var (ax, r, w) = (Frame[face, 0], Frame[face, 1], Frame[face, 2]);
-        double along = ax.S * c[ax.I];
-        return (Unwarp(r.S * c[r.I] / along), Unwarp(w.S * c[w.I] / along));
-    }
+    public static (double U, double V) OnFace(int face, EcefPos n) => CubeShape.Earth.OnFace(face, n);
 
     /// <summary>The face and (u, v) under an ECEF point, and its ellipsoidal height.</summary>
-    public static (int Face, double U, double V, double H) FromEcef(EcefPos p)
-    {
-        var g = Ellipsoid.Wgs84.ToGeodetic(p);
-        var (f, u, v) = FromNormal(NormalAt(g.LatDeg, g.LonDeg));
-        return (f, u, v, g.H);
-    }
+    public static (int Face, double U, double V, double H) FromEcef(EcefPos p) => CubeShape.Earth.FromEcef(p);
 
     /// <summary>The geodetic normal (unit, ECEF) at a latitude and longitude, degrees.</summary>
     public static EcefPos NormalAt(double latDeg, double lonDeg)
@@ -243,8 +178,7 @@ public static class CubeSphere
     }
 
     /// <summary>A face's frame in the cube's: the axis indices and signs of its outward axis, right and up (for <see cref="CubeKey"/>).</summary>
-    internal static ((int I, int S) Axis, (int I, int S) Right, (int I, int S) Up) FaceFrame(int face) =>
+    public static ((int I, int S) Axis, (int I, int S) Right, (int I, int S) Up) FaceFrame(int face) =>
         (Frame[face, 0], Frame[face, 1], Frame[face, 2]);
 
-    private static double Clamp1(double x) => x < -1 ? -1 : x > 1 ? 1 : x;
 }

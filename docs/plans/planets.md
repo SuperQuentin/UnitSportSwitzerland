@@ -5,6 +5,29 @@
 
 Status: **approved by the user** (2026-11-14), the clock rule included (section 2). Issue: #1430 (H7, C3), sub-issues #1847-#1854,
 one per phase (section 12). Planned from `main` at `0ab431fd6`.
+
+**Built so far (2026-11-14)**, each merged:
+- **H7a** (#1847, PR #1864): `CelestialBody`, `Frames` (the tree, spheres of influence), `GlobalPos.Body`, `FrameAxes.Rebased`.
+- **H7b**:
+  - (#1848, PR #1867): `CubeShape`, a cube per body;
+  - (PR #1887): `BodyGlobe`/`BodyViews`, other bodies' globes through the frame tree, the sky from another body, `--bodies`, `--bodyshot`.
+- **H7c** (#1849, PR #1872): the Moon's pyramid (`--cube-body`, LOLA 118 m to level 5, 1.23 GB on E:; the CGI Moon Kit's colour), `CraterField`.
+- **H7d** (#1850):
+  - PR #1873: `SkyClock`, `WorldOrigin.Rebase`, the sphere check behind `--crossbodies`;
+  - PR #1881: the spectator's speed by the nearest surface;
+  - this branch: the sky read at `SkyMoment`.
+- **C3a** (#1851):
+  - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
+  - PR #1883: the drive by the nearest surface.
+
+**Still to come**:
+- the Moon's ground under your feet: leaves from the pyramid and `CraterField`, collision, walking at 1.62 m/s²;
+- `--mooncheck`, and `--crossbodies` on by default;
+- the target cue and the align hold;
+- belly jets;
+- C3b online (after D2, #1727);
+- Mars (H7e), the rest (H7f);
+- the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
 flat LV95 world, which D3 deletes.
@@ -70,7 +93,7 @@ chain take a body.
 | Question | Proposal | Alternatives |
 |---|---|---|
 | One system for every body | **Approved (2026-11-14)**: the Earth included (the user's direction): `Body` records and one surface chain; the Earth's code paths become the general ones with Earth's data plugged in, its results unchanged | A Moon-only special case beside the Earth (cheaper first step, two systems for ever: rejected by the goal) |
-| Time (section 2) | **Decided (2026-11-14)**: **bodies move on the sky clock** (24-minute day: the Moon goes round the Earth in 11 real hours and rises every ~25 minutes, as it does on the ground today); **physics runs on sim time** with each body's real spin; **handovers subtract the body's true orbital velocity** (patched conics), never the sky clock's swing; `/time speed real` makes it all one clock | (a) Everything on the sky clock: the Earth would spin once in 24 real minutes under an orbit, the ground at 28 km/s, no re-entry possible. (b) A real-time solar system in space: physically exact, but the Moon you fly to would not be the Moon in the sky (the telescope's markers wrong) |
+| Time (section 2) | **Decided (2026-11-14)**: **bodies move on the sky clock** (the Earth turned by the game hour, so the Moon rises every ~25 minutes as on the ground today; the bodies' orbits and spins at the shared sim clock's pace from the calendar date, refined while building H7a); **physics runs on sim time** with each body's real spin; **handovers subtract the body's true orbital velocity** (patched conics), never the sky clock's swing; `/time speed real` makes it all one clock | (a) Everything on the sky clock: the Earth would spin once in 24 real minutes under an orbit, the ground at 28 km/s, no re-entry possible. (b) A real-time solar system in space: physically exact, but the Moon you fly to would not be the Moon in the sky (the telescope's markers wrong) |
 | First bodies | **Decided (2026-11-14): the Moon (H7c), then Mars (H7e)**, then the rest by data family (H7f) | Mars first (better story, harder: air, dust); or all the solid bodies at once from their 2k sky maps and generation only, then data |
 | Mars' finest heights | **Decided (2026-11-14): MOLA 463 m only** (CC0) with Viking colour (public domain), generation below | Also the MOLA-HRSC blend at 200 m: HRSC is **CC BY-SA 3.0 IGO**, so tiles made from it would be share-alike: a licence question for the shipped and served data |
 
@@ -108,10 +131,12 @@ ephemeris) turns 60 times faster than the real one. H5's orbits integrate on sim
 (`Orbit.RotationAngle` = ω·t), or the ground would race under an orbit at 28 km/s. Both are right for what they do; H7
 needs a rule for where the other bodies are.
 
-- **Where bodies are and how they are turned: the sky clock**, one moment for every peer (`SkyClock.Utc`: the
-  server-owned environment time, H6's date plus the hour). The Moon in the sky, the Moon in the telescope and the Moon
-  you land on are the same Moon: C3's test (B sees A's marker) depends on it. Seen from the Earth, the Moon moves at the
-  game's pace (it rises about every 25 minutes); its synchronous spin follows, so a lunar day lasts ~12 real hours.
+- **Where bodies are and how they are turned: the sky clock**, one moment for every peer (`SkyMoment`, two parts,
+  both from server-owned clocks): **how the Earth is turned** follows the game hour (the 24-minute day, as the sky does
+  today), and **when the bodies are** (each one's place on its orbit, the Moon's and the planets' spins) follows the
+  shared sim clock from the calendar date. The Moon in the sky, the Moon in the telescope and the Moon you land on are
+  the same Moon: C3's test (B sees A's marker) depends on it. Seen from the Earth, the Moon rises about every 25 minutes
+  and its phase follows the real calendar, exactly as today; on the Moon, a lunar day lasts its real 29.5 days.
 - **Physics inside a sphere of influence: sim time, the body's real spin.** Every body gets H5's integration frame:
   its body-fixed axes at sim time 0, turned by `Spin`·t. A lunar orbit, a landing, a walk on the Moon run in the Moon's
   frame exactly as an Earth orbit runs in the Earth's today. `Orbit.RotationAngle` takes the body; nothing else in H5
@@ -133,11 +158,20 @@ needs a rule for where the other bodies are.
   the Moon's, the Earth hangs still on the near side and spins once a game day.
 - **Checks** pin it: planet checks run `--sun real --date 2027-07-15 --time <h>` (the frame tree needs a real date;
   `--sun fixed` keeps its fixed light for everything else and puts the bodies at the fixed date's noon).
+- **Found building H7a (#1847, 2026-11-14): the sky's date does not advance with game days.** The sky's moment is
+  today's calendar date plus the game hour (`SunPath.Today`, `DayNight`), so at game midnight the bodies jump back a
+  day (the Moon by ~13° of its orbit, ~87,000 km). Nobody sees it on the ground; a frame tree on it would. Three ways
+  out: (a) the bodies at the sim clock's pace from the calendar date; (b) the bodies at the game's pace (the date
+  advancing each game day: a lunar day of ~12 real hours, but the Sun's season drifting away from the calendar 60 times
+  as fast, and with it the thermals, the snow line, the occasions' light); (c) today's, with the jump. **Decided: (a)**
+  (logged below): continuous, nothing changes on the ground, the seasons stay the calendar's, and with `/time speed
+  real` it is the real sky to the second. The price is the real lunar day: two weeks of sun, two of night, so the night
+  gets its ambient floor and checks and shots pick landing sites in daylight. Wired in #1850.
 
 ### A worked example: from Geneva to the Moon and back
 
 - **On the ground in Geneva**, as today: the sky clock runs 60 game seconds a real second. The Moon rises, crosses and
-  sets in about 25 real minutes, and its phase goes round in about 12 real hours. Physics is real time.
+  sets in about 25 real minutes, and its phase follows the real calendar. Physics is real time.
 - **Climbing by spectator**: the position is in the Earth's coordinates. The Moon is where the sky clock says, 384,000 km
   away, and it crosses the sky at the sky's usual pace (a quarter of a degree a real second). Measured in Earth
   coordinates, that is ~1,650 km/s. The spectator's speed grows with the distance to the nearest surface (tens of
@@ -146,8 +180,8 @@ needs a rule for where the other bodies are.
   coordinates. Same place, same view, nothing moves on screen. From now on the Moon stands still under you, and the
   Earth hangs in its sky, turning once a game day.
 - **Landing and walking**: physics in the Moon's frame, real time, gravity 1.62 m/s². The Moon's own spin is slow (one
-  turn in ~11 real hours at the game's pace), so the ground under a walker effectively does not turn. The sun crosses
-  the lunar sky in ~6 real hours, then ~6 hours of night (with an ambient floor).
+  turn in 27.3 days), so the ground under a walker effectively does not turn. The sun crosses the lunar sky in two
+  real weeks, then two weeks of night (with an ambient floor): a landing site is in daylight or not for days.
 - **A craft coasting across the boundary** (C3a, later): it loses the Moon's true ~1 km/s, not the sky clock's
   ~1,650 km/s swing, so it arrives as a real transfer would. The spectator and the cruise drive never meet it: their
   speed is always relative to the body they are near.
@@ -245,7 +279,7 @@ and the others far; the server holds every body that has a player on or near it.
 **Where data comes from, in order** (as #1656 designs it for the Earth): the server, the local install, the shipped
 base, generation. The request carries `(Body, CubeKey)`; directories are per body (`<data root>/<body>/cube_global`,
 `<body>/leaves`); the Earth's present paths are its entries. Nothing hard-codes a drive letter (the Earth's
-`Globe.DefaultDir` D: path is #1656's to remove). Planet source data during development: `E:/UnitSportSwitzerland/data/bodies/<body>/`.
+`Globe.DefaultDir` D: path is #1656's to remove). Planet source data during development: `E:/UnitSportSwitzerland/planets/<body>/`.
 
 ### The cube per body
 
@@ -317,7 +351,7 @@ the anchor's body and for any body in view that has air (the Earth's limb seen f
 **The sky from another body** (with H6's space sky, now being built in its own session): the observer is a `GlobalPos`
 on any body; the sun's direction, the stars' frame and every other body come from the frame tree. On the Moon: a black
 sky at noon, the stars by day, the Earth hanging still in the near side's sky with its phase, earthshine on the night side.
-The lunar night lasts ~6 real hours at the game's pace: it gets an ambient floor (earthshine on the near side, a
+The lunar night lasts two real weeks: it gets an ambient floor (earthshine on the near side, a
 starlight floor on the far side) so it stays playable.
 
 ## 7. Physics on and around any body
@@ -502,7 +536,10 @@ ground at its end) → C3b online (waits for D2) → C3a craft → H7e Mars → 
 - **The anchor stays body-fixed**; inertial frames are only for integration.
 - **SOI by Laplace's formula**, left at 1.05 r; Phobos and Deimos get a 20 km floor.
 - **Ground gravity scaled from the Earth's tuned 9.81** by the true ratio.
-- **The lunar night gets an ambient floor** so a 6-hour night stays playable.
+- **The bodies run on the sim clock from the calendar date** (section 2, option (a)): the sky's date jumped back a
+  day at every game midnight; this keeps the ground's sky as it is and the seasons the calendar's. The lunar day is its
+  real 29.5 days.
+- **The lunar night gets an ambient floor** so a two-week night stays playable.
 - **Space regime thresholds per body** (Moon 10/8 km, Mars 40/30 km).
 - **The Moon's pyramid stops at level 5** (167 m cells, from LOLA's 118 m); the rest is generated.
 - **Belly jets on the existing levers**, switched on by the regime: no new key for landing.

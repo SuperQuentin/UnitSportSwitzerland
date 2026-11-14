@@ -150,6 +150,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Interiors.OutlineSurvey.Requested, Interiors.OutlineSurvey.Run),
         (() => Interiors.ShopSurvey.Requested, Interiors.ShopSurvey.Run),
+        (() => World.LaneQuery.Requested, World.LaneQuery.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
         (() => Terrain.GroundCheck.Requested, Terrain.GroundCheck.Run),
@@ -569,6 +570,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _cache = fallback?.Cached(cacheBytes) ?? new CachingChunkSource(streamedSource, cacheBytes);
 
         // under earth the flat streamer draws nothing: no horizon, whose lattice is 40,401 generated tiles (#1699)
+        // the doors known to have no doorway inside, before the first tile is built (#1766)
+        if (Interiors.DoorWarden.Wanted) Interiors.DoorWarden.UseRecords();
         _chunks = new ChunkManager { Name = "Terrain", WithHorizon = !earth };
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
@@ -732,6 +735,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     GetTree().CreateTimer(0.5).Timeout += Go;
                 }
             }
+            // a facade door is drawn only if it opens (#1766): the buildings round the camera planned in the background
+            if (Interiors.DoorWarden.Wanted)
+                Interiors.DoorWarden.Create(this, WorldSource!).Rebuild = tile =>
+                {
+                    if (_earth != null && Terrain.Leaves.LeafStandIn.IsStandIn(tile)) _earth.RefreshDoors(tile);
+                    else _chunks?.RebuildTile(tile);
+                };
             var chunksForDoors = _chunks;
             interiors.BuildingBodies = (tile, at, into) =>
             {
@@ -825,6 +835,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the stars (#1444), the real sky's too
             AddChild(new World.StarField());
             AddChild(new World.SkyBodies());
+            // the other bodies' globes, and the Earth's from them (#1848): the earth world only
+            if (_earth != null) AddChild(new World.Bodies.BodyViews(origin));
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
             // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
@@ -964,6 +976,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the doors round the start against their buildings, far from Switzerland too (#1799)
             new(() => Interiors.DoorFrameCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Interiors.DoorFrameCheck(Ground!, origin, Interiors.DoorFrameCheck.ParseArgs().Shot)),
+            // every drawn door opens: the warden left out those with no doorway inside (#1766)
+            new(Interiors.DoorWardenCheck.Requested, ToolAnchor.AtTarget, _ => new Interiors.DoorWardenCheck(Ground!, origin)),
             // the fill far away (another face, Asia) against the globe round it (#1800)
             new(Terrain.Earth.FarFillCheck.Requested, ToolAnchor.AtTarget, _ => new Terrain.Earth.FarFillCheck(Ground!, origin,
                 () => _earthGlobe != null && IsInstanceValid(_earthGlobe) ? _earthGlobe : null, () => _earth != null && EarthIdle, () => EarthStatus,
@@ -1049,6 +1063,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 return new World.SkyShot(_spectator!, origin, s[0],
                     float.Parse(s[1], System.Globalization.CultureInfo.InvariantCulture), s[2]);
+            }),
+            new(() => World.TerminatorCheck.Requested, ToolAnchor.Own, _ =>
+            {
+                // the terminator, the sky and north from 400 and 20,000 km against NOAA (#1845)
+                FreeSpectator();
+                return new World.TerminatorCheck(_spectator!, origin, () => _earth == null || EarthIdle);
             }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
