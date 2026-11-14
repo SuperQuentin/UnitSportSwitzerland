@@ -163,6 +163,12 @@ public partial class PlayerInput : Node
     public const string ToggleMode = "toggle_mode";
     /// <summary>The spectator fly camera and back (#1002): Shift+T; a pad holds D-pad down (<c>ClientWorld</c>), VR the wrist menu.</summary>
     public const string Spectator = "spectator";
+    /// <summary>
+    /// The spectator camera's speed (#1796), a notch each press, ramping while held: the wheel, = / -; a pad's RB / LB,
+    /// free while spectating (no body, no item); VR's triggers send those there (<c>XrPad</c>: the shoulders on foot).
+    /// </summary>
+    public const string SpectatorFaster = "spectator_faster";
+    public const string SpectatorSlower = "spectator_slower";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
     public const string Ping = "ping";
@@ -513,13 +519,23 @@ public partial class PlayerInput : Node
         ProcessMode = ProcessModeEnum.Always;
         GameSettings.Changed += ApplyDeadzones;
         ApplyDeadzones();
+        // keys are tracked from the window's own input, before any node's _Input can handle them away
+        GetTree().Root.WindowInput += OnWindowInput;
     }
 
-    public override void _ExitTree() => GameSettings.Changed -= ApplyDeadzones;
+    public override void _ExitTree()
+    {
+        GameSettings.Changed -= ApplyDeadzones;
+        GetTree().Root.WindowInput -= OnWindowInput;
+    }
+
+    private static void OnWindowInput(InputEvent e)
+    {
+        if (e is InputEventKey key) TrackKey(key);
+    }
 
     public override void _Input(InputEvent e)
     {
-        if (e is InputEventKey key) TrackKey(key);
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
         // VR replays the controllers as a pad, and points at the UI panel with mouse events: it
@@ -739,6 +755,10 @@ public partial class PlayerInput : Node
         Bind(ViewZoomOut, Keys(Key.Minus), Mouse(MouseButton.WheelDown));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         Bind(Spectator, new InputEvent[] { new InputEventKey { PhysicalKeycode = Key.T, ShiftPressed = true } });
+        // the spectator's speed (#1796): the same keys as a zoom, the shoulders a pad leaves free while spectating
+        // (the wheel first: the hints name it first)
+        Bind(SpectatorFaster, Mouse(MouseButton.WheelUp), Keys(Key.Equal), Button(JoyButton.RightShoulder));
+        Bind(SpectatorSlower, Mouse(MouseButton.WheelDown), Keys(Key.Minus), Button(JoyButton.LeftShoulder));
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
@@ -910,5 +930,25 @@ public partial class PlayerInput : Node
             if (FindFocusable(child) is { } found) return found;
         }
         return null;
+    }
+}
+
+/// <summary>
+/// A key a view opened by E (or any key) takes only once it has been up since the view opened (#1813).
+/// A view that opens in the frame of the press (offline the client is the server; pinball and table
+/// games open on every client at once) would otherwise read that press as its own the same frame:
+/// E stepped straight back from the telescope, started a pinball game, sat at the table. A field per
+/// key in the view, not readonly: <c>if (_leave.Take(ActLeave)) ...</c> each frame.
+/// </summary>
+public struct FreshPress
+{
+    private bool _up;
+
+    /// <summary><see cref="Input.IsActionJustPressed(StringName, bool)"/>, once the key has been up since this view opened.</summary>
+    public bool Take(StringName action)
+    {
+        if (_up) return Input.IsActionJustPressed(action);
+        _up = !Input.IsActionPressed(action);
+        return false;
     }
 }

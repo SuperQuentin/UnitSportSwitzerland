@@ -73,13 +73,20 @@ public partial class CabinCheck : Node
 
     private static bool Drawn => DisplayServer.GetName() != "headless";
 
-    /// <summary>An authored cabin point (+Z forward, +X left) in the world, as the aircraft is drawn now.</summary>
-    private Vector3 Cabin(float x, float z) => Frame()!.GlobalTransform * AircraftMeshBuilder.Flip(new Vector3(x, A320Layout.FloorY + 0.05f, z));
+    /// <summary>
+    /// The aircraft's frame as the walker aboard stands in it (<see cref="FootPlayer.DeckFrame"/>, where the last carry put
+    /// it), else as it is drawn now. In flight the drawn frame leads the walker's by a frame's motion (2 m at 122 m/s): a
+    /// walk aimed from it pointed forward, into the cockpit's front, and never got out of the cockpit (#1741).
+    /// </summary>
+    private Transform3D Pose() => _player()?.DeckFrame ?? Frame()!.GlobalTransform;
+
+    /// <summary>An authored cabin point (+Z forward, +X left) in the world, in <see cref="Pose"/>.</summary>
+    private Vector3 Cabin(float x, float z) => Pose() * AircraftMeshBuilder.Flip(new Vector3(x, A320Layout.FloorY + 0.05f, z));
 
     /// <summary>The player's spot in the cabin, authored (x, height over the floor, z).</summary>
     private Vector3 Local(FootPlayer me)
     {
-        var l = AircraftMeshBuilder.Flip(Frame()!.GlobalTransform.AffineInverse() * me.GlobalPosition);
+        var l = AircraftMeshBuilder.Flip(Pose().AffineInverse() * me.GlobalPosition);
         return l with { Y = l.Y - A320Layout.FloorY };
     }
 

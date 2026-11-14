@@ -42,5 +42,25 @@
 - **`SpectatorCamera` level flight** (`GameSettings.LevelFlight`, default on): WASD on the ground
   plane from `Rotation.Y` (not `_yaw`: `FlightProbe` sets the rotation directly), Space / Shift height;
   off, forward follows the look.
+- **The spectator's speed** (#1796, `Player/SpectatorSpeed`): `spectator_faster` / `spectator_slower` (the wheel,
+  = / -, a pad's RB / LB, free while spectating; VR's triggers send those there, `XrPad`'s shoulders on foot), a
+  notch of x1.25 a press, held it ramps (a notch every 0.08 s after 0.35 s), read only while the spectator is the
+  camera. 2 m/s to 100 km/s asked, but flown no faster than the altitude over 2 s (`AltitudeCap`: at least 3 km/s,
+  the old cap; 30 km/s at 60 km, 100 km/s from 200 km), boost x6 on top: Geneva to Asia ~1 min, round the Earth
+  ~7 min (~1 boosted). A notch down slows from what is flown. Why the cap: low down the frame re-anchors every
+  3 km, and 100 km/s there was 28 re-anchors a second (#1784: 27-52 ms each on a loaded world) with nothing
+  streamed in to see; in Space (20 km re-anchors, nothing streams above 60 km) 600 km/s holds 60 fps. Measured
+  with `--fly x,y,z,yaw,speed,s --flyinput [boost]` (the camera flown by its own controls; the report adds the
+  speed flown and the origin's re-anchors) under `--frame earth` and `flat`.
+- **The readout** (`Player/SpectatorSpeedHud`): "Spectator 3.2 km/s", "· boost", "climb to go faster" in amber when
+  the altitude holds it back; bottom right under the key hints, where a vehicle's readout stands (top centre on a
+  phone; #1798: top right was under the perf overlay), floating text, shown on a notch or a boost change, gone 1.5 s after the
+  last (0.6 s fade). Faster / Slower are rows of the spectator's key hints (`ClientWorld`'s context rows).
 - Bots: not for bots (a client toggle); a bot's body never reads it.
 - Check: `--creativecheck --world flat` (`Player/CreativeCheck`).
+- Perf probe (#1773): `--creativefly heading,seconds[,boost[,agl]] --at E,N [--frame earth|flat] [--allocs]`
+  (`Player/CreativeFlyProbe`): a creative player flies level along a compass heading, the fly boost held (60 m/s)
+  or not, `agl` m over the start's ground (default 40: east of Geneva's centre the hill stops it; 80 along 300°
+  flies 2.4 km). After the arrival settles it prints frame percentiles, GC counts and pause time, MB/s allocated,
+  peak working set, and the worst frames with what the earth world spent in them (`EarthWorld.Spent`);
+  `--allocs` adds MB/s by type. Allocation stacks: `core/alloc-profiling`.

@@ -8,8 +8,8 @@ default and deletes the flat LV95 runtime. The end state, agreed with the user o
 format**. No LV95 tile, key, record or position in the game, the wire, saves or the build's intermediate files. LV95
 survives only as notation: how swisstopo sources are read, and how a person types or reads a Swiss coordinate.
 
-Status: **planned** (2026-11-10, from a survey of `main` at `862ddb3e`). Nothing built. D starts once C6 and C7 are
-done, plus the three gaps this survey found (G1-G3 below).
+Status: **D2 ready, the server leaves building** (2026-11-14): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7), main merged in again and green on Nov 14. SuperQuentin is building the leaves on his NAS (`tools/build-swiss-nas.sh cube`, #1795); then he runs the runbook's steps 1-5 (`general/linux-deploy`), then the merge and `/update` (handover: PR #1727's comment of Nov 13).
+Planned 2026-11-10 from a survey of `main` at `862ddb3e`.
 
 ## In short
 
@@ -111,6 +111,7 @@ The fix: the network and cover stages read buildings from the leaves' building s
   - The `Layers` flags are re-meant as cube flags, and the cube layer stops being opt-in (#1650).
 - **Scripts**:
   - `tools/rebuild-map.sh` (223) and `tools/build-france.sh` (171) are deleted or redone on `--cube*`.
+  - `tools/build-swiss-nas.sh`: the flat v3 commands (`start`/`status`/`test`, `tools/lib/swiss-nas-chain.sh`) are deleted; its `cube` commands (`tools/lib/cube-nas-chain.sh`, #1794) are the NAS build from then on (`tools/swiss-nas-run`).
   - `tools/deploy-linux.sh` (lines 271-330) and `tools/deploy/gzip-tiles.sh` ship `.cubl` (#1650).
   - About 20 `*netcheck.sh` scripts and `refshots.sh`, `trailer.sh`, `run-worktree.sh` and `wt.ps1` take `CHUNKS=` pointing at `terrain_chunks`. They move to the leaf dir (`TerrainPaths.FindLeafDir`: `<chunks>_cube`).
 - **Tests** (`tests/UnitSportSwitzerland.Tests`):
@@ -250,7 +251,11 @@ After D5: G2 marked built in `global-tiling.md` and the G2 plan, #1443 commented
 
 **Not on this machine, and not G2's bar** (the NAS, `tools/france-nas-run`): 0.5 m heights the whole way, the rest
 of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the cube-native tools. It's also
-#1650's nationwide release data: until it exists, the release ships the D: region's leaves and the pyramid.
+#1650's nationwide release data. Until it exists, **the release ships no terrain** (CI has no data; it ships only the
+globe's levels 0-2, `assets/globe`). Online, the server streams the D: region's leaves (B4's 2,412, 775 MB, deployed by
+`tools/deploy-linux.sh --leaves`, #1792), and the generated fill stands everywhere else. Offline, a fresh install has
+the fill alone. The full `cube_global` pyramid stays on D:: a server given it alone would build its fill ~20 m off the
+clients' (measured, `general/linux-deploy`) until #1656 streams it.
 
 ## 6. Risks and rollback
 
@@ -260,7 +265,9 @@ of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the
   - D3 deletes the old files only once their migration has run (a marker per store).
 - **A wrong drop**: dropping loot masks, shop counts, farm cells and contracts loses a few days' state. That's accepted; it's listed in the release notes.
   - Pinball high scores are the one dropped store a player might mind. If the user objects, D2 can convert them through the leaf buildings' `BuildingId` at the old key's tile centre plus the building index, while LV95 tiles still exist on the server.
-- **Shipping**: after D3 a fresh install has no terrain unless the release ships leaves (#1650) or a server streams them (#1662). D3 doesn't merge before #1650.
+- **Shipping**: from D2 on, a fresh install's real ground is what a server streams (#1662, the leaves deployed with
+  `tools/deploy-linux.sh --leaves`, #1792); the release ships none. The protocol 96 rollout (leaves and `--leaves`
+  first, then the merge, then `/update` on the server) is the runbook in `general/linux-deploy`. D3 doesn't merge before #1650.
 - **The net tier on fixtures**: until G2 lands, `--frame earth` online on a fixture is silently flat. A green earth net tier would then prove nothing. D0's dry run asserts the frame in each net check's log.
 - **Performance**: an earth client is measured against flat (`--perfcheck` on the D: region, phone build too), because flat's ring policy and `HorizonLayer` were tuned for years. To record in D2.
 - **Parallel LV95 work**: PRs still open against the LV95 build: #1422 (whole Swiss map v3), #1420 (grading), #1540 (builder performance), #1562/#1567 (water stage memory, SIMD), #1565, #1575.
@@ -273,24 +280,31 @@ of Switzerland, France at 1 m between Geneva and Brest. That's G3's run with the
 
 ## 7. What D still waits for
 
-State on 2026-11-10.
+State on 2026-11-13 (D2's bar recorded; first written 2026-11-10).
 
 | Item | Issue / PR | State | Blocks |
 |---|---|---|---|
 | C6: visual parity | #1678, #1679, #1696, gate PRs #1690, #1697, #1698 | **done** (Nov 10): 0 over the floor, the rest judged; accepted differences in the G2 plan, near-ground shading follow-up #1695 | — |
 | C7: site pits on leaves | #1653 | **done** (#1687) | — |
 | C7: junctions the same wherever the tile edges are | #1660, #1691 | **done** (#1666, #1700): Geneva and the test region pass every tiling | — |
-| C7: the leaf build against LV95 | #1676 | judged by the user, not blocking: half the differences are an LV95 wall bug (filed only), the rest thresholds; a junction sanity check follows, not blocking | — |
+| C7: the leaf build against LV95 | #1676 | judged by the user, closed: LV95 wall bug #1708 (filed only), junction sanity check #1709 (#1715) | — |
 | C7: the shipping pipeline on cube data | #1650 | open, waits on G3's nationwide data | D3 |
 | **G1**: the earth server builds the fill and generated world | #1682 | **done** (#1693); fill leaves made fast (#1699, #1701) | — |
-| **G2**: fixture courses online on leaves | #1683, PR #1692 | code done, the full earth net tier running | D2 and the net bar |
-| **G3**: the server's flat-held services | #1684 | **done** (#1694): no `ChunkManager` on the earth server, escape hatches 0 | — |
-| Generated-world gameplay under earth | #1704, PR #1707 | session working | D2 |
-| Collision patch 27 m over the height at the region's border | #1626 | session working | D2 (a fall-through at the data edge would be a flip regression) |
-| Net checks failing on `main` | #1628 | open (orbit and movespeed, flat) | the net bar's baseline |
+| **G2**: fixture courses online on leaves | #1683 | **done** (#1692): every net check states and checks its frame | — |
+| **G3**: the server's flat-held services | #1684 | **done** (#1694); their net rows under earth #1722 **done** (#1724) | — |
+| Collision patch 27 m over the height at the region's border | #1626 | **done** (#1713) | — |
+| Generated-world gameplay under earth; open doors vs leaf building collision | #1704, #1705, PR #1707 | **done** (#1707) | — |
+| Stadium bowls on leaves | #1723, PR #1725 | **done** (#1725) | — |
+| The earth playtest (scenarios in `tests/playtests/earth-*`) | #1774, PR #1775 | **done** (Nov 12-13): 4, 5, 6, 8 validated; 1, 2, 3, 7 failed. Fixed and merged: re-anchor camera #1763 (#1780), re-anchor stall #1764 (#1784, 27-52 ms left, under 16 ms is a follow-up), yard pallets #1769 (#1781), sprint-fly patches #1773 (#1782), earth height 20x #1751 (#1785), GPX replay #1752 (#1786), long flight's runaway fill generation #1762 (#1783). Then the earth-only rest: floating trees #1776 (#1789), fill walls #1778 and far-ground ledge #1779 (#1788, with the pyramid rebuilt on D:), `/locate`'s garages on leaves #1772 (#1790). Flat too: #1765-#1768, #1770, #1771 | #1763 and #1752 were D2 blockers (user, Nov 13): both merged |
+| Rows red under earth on `main` itself | #1743 (debugcheck), #1745, #1787 (containernet, versteckis, fasnacht; brsquad flaky) | open; fail the same on plain `main`, so not D2's | not D2 |
+| Farm, hunt and hairpin training under earth | #1729 | **done** (#1730) | — |
+| Interior check red on clean `main` | #1728 | open | not D |
+| Net checks failing on `main` | #1628, #1706 | open (flat too) | the net bar's baseline |
 | C1/C4 issues left open | #1510, #1513 | built (PRs #1614, #1610, #1617) but not closed | close them |
-| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1515 | session working | D2 |
-| **D1**: the build tools independent of LV95 | #1711, PR #1714 | **done**: the cube build from the sources and its leaves (`cube-only` in MapSetup); test region leaves byte-identical, Geneva differs only by the LV95 detour (`cube-region-files` note); castles, venues, givers still read `.bldg` (D4) | D4 |
+| **D0**: the bar's probes, `TEST_FRAME` on every tier, the dry run under earth | #1710, PR #1712 | **done** (#1712); the long drive's route #1744 (#1750), the long flight at 16x #1762 (#1783) | — |
+| **D1**: the build tools independent of LV95 | #1711 | **done** (#1714) | — |
+| **D2**: the flip | #1726, PR #1727 | **ready, the bar recorded** (Nov 13, main merged in at b947a4886): full tier flat 357/378, earth 338/378; of the 20 rows red only under earth, 12 pass alone and 8 fail the same on plain `main` (#1743, #1745, #1787), so none is D2's; refshot parity 0 over the floor (31 judged expected); long drive, re-anchor, long flight (16x, 337 s) and `--replaycheck` ok in earth | SuperQuentin: the leaves built and deployed (runbook 1-5), then the merge and `/update` |
+| **D3**: the flat runtime deleted | — | waits for D2 merged, a full tier on `main`, the user's playtest of it, and #1650 | — |
 
 ## Decided without the user
 

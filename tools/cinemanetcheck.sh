@@ -19,8 +19,9 @@ if [ "$VIDEO" = local ]; then
   if command -v ffmpeg >/dev/null; then
     VDIR="${TEMP:-${TMPDIR:-/tmp}}/unitsport-cinemavideo"
     mkdir -p "$VDIR"
-    VIDEO="$VDIR/testfilm.mp4"
-    [ -s "$VIDEO" ] || ffmpeg -nostdin -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i sine=frequency=440       -t 60 -c:v mpeg4 -q:v 5 -c:a aac -shortest "$VIDEO"
+    # ten minutes: an earth run's peers can take a minute or more to come, and a film over before the relay opens has ended (#1742)
+    VIDEO="$VDIR/testfilm600.mp4"
+    [ -s "$VIDEO" ] || ffmpeg -nostdin -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i sine=frequency=440       -t 600 -c:v mpeg4 -q:v 5 -c:a aac -shortest "$VIDEO"
     command -v cygpath >/dev/null && VIDEO=$(cygpath -w "$VIDEO")   # a Windows Godot reads a native path
     VARGS=(--cinemavideolocal --cinemavideo "$VIDEO")
   else

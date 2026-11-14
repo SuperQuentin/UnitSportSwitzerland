@@ -30,6 +30,24 @@ public partial class SwordNetProbe : ChatProbe
 
     protected override void Fail(string why) => Expect(false, why);
 
+    /// <summary>
+    /// /pvp on|off, until the server says it is so (#1742): the probe's own lines (its step markers and commands) can run
+    /// past the server's chat flood gate (a burst of 5, then 0.6 a second), which drops a line without a word, and a
+    /// dropped /pvp off left PvP on for the rest of the check, flat or earth alike.
+    /// </summary>
+    private async Task<bool> SetPvp(bool on)
+    {
+        string word = on ? "PvP is ON" : "PvP is off";
+        for (int tries = 0; tries < 4; tries++)
+        {
+            int before = _heard.Count;
+            Chat.Send(on ? "/pvp on" : "/pvp off");
+            if (await Until(() => _heard.Skip(before).Any(l => l.Contains(word, StringComparison.Ordinal)), 3)) return true;
+            await Seconds(4.0);   // the gate's pause, and a token back
+        }
+        return false;
+    }
+
     private static SwordService Svc => SwordService.Instance!;
 
     public override async void _Ready()
@@ -174,8 +192,7 @@ public partial class SwordNetProbe : ChatProbe
         await Seconds(1.0);
 
         // PvP on: A walks up to B and hits it
-        Chat.Send("/pvp on");
-        await Seconds(0.6);
+        if (!await SetPvp(true)) { Fail("the server never turned PvP on"); return; }
         await WalkTo(me, 1.9f);
         Say("close");
         await Seconds(0.5);
@@ -191,8 +208,7 @@ public partial class SwordNetProbe : ChatProbe
         if (!await Heard("B", "hurt", 15)) Fail("B never reported the hit");
 
         // PvP off: the same blow does nothing to a player
-        Chat.Send("/pvp off");
-        await Seconds(0.8);
+        if (!await SetPvp(false)) { Fail("the server never turned PvP off"); return; }
         await WalkTo(me, 1.9f);
         before = _landed.Count;
         for (int i = 0; i < 3; i++)

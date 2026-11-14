@@ -155,6 +155,8 @@ public sealed class AutoPilot
 
     /// <summary>A runner on foot waits for this (a vehicle gets it through <see cref="Drive"/>).</summary>
     public bool Go = true;
+    /// <summary>A top speed in m/s it never goes past, whatever the line allows (a probe's drive on open roads, #1710); none by default.</summary>
+    public float MaxSpeed = float.MaxValue;
 
     public float Arc => Route.Line.Arc[D.Near];
     public string Label => Spec?.Label ?? Player.Vehicle?.Label ?? "Runner";
@@ -855,7 +857,7 @@ public sealed class AutoPilot
         float steer = Mathf.Clamp(-angle * 2.6f * Mathf.Clamp(15f / Mathf.Max(v, 1f), 0.25f, 1f), -1f, 1f);
 
         // this car's own speed along its own profile, a beat ahead
-        float want = Mathf.Min(d.Cap, Mathf.Min(Profile[d.Near], Profile[line.IndexAt(s0 + v * 0.3f)]));
+        float want = Mathf.Min(Mathf.Min(d.Cap, MaxSpeed), Mathf.Min(Profile[d.Near], Profile[line.IndexAt(s0 + v * 0.3f)]));
         // off the line toward the inside of a bend (beside a rival, up the inside): a tighter radius
         // than the profile's, √(R'/R) of its speed
         float kHere = line.Curvature[line.IndexAt(s0 + v * 0.3f)];
@@ -1098,7 +1100,9 @@ public sealed class AutoPilot
         // riders queue behind a moving one (nobody on two wheels is squeezed past on a Jura road);
         // one STOPPED in the way — a finisher, a faller — is ridden round, not queued behind for
         // good (a moto race ended "DNF" behind the winner stopped past the line)
-        foreach (var q in others)
+        // the traffic too, as a car pilot senses it (#1729): a car stopped at the edge of a narrow road to let the
+        // rider by was ridden into by a trainer's rider, who does not steer and was only ever told of players
+        foreach (var q in others.Concat(Sensed(dt, travel)))
         {
             var rel = RaceRoute.Flat(q.Position - pos);
             float a = rel.Dot(travel);

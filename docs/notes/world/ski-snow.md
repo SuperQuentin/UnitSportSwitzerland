@@ -79,3 +79,39 @@
   terrain-download map screen.
   - The HUD follows the local player on skis, else a non-bot skier this peer drives (a `--ride` probe's own rider).
 - **Opt-in**: `Systems.Snow` ("snow").
+
+## On earth leaves (#1735)
+
+Under `--frame earth` the slopes come from the leaves' `Pistes` section (`--cube-pistes`,
+`tools/cube-fields-pistes-photos`), through each leaf's stand-in tile (`terrain/gameplay-on-stand-ins`):
+
+- **The stand-in's slopes**: `StandInChunkSource.LoadPistesAsync` → `LeafStandIn.Pistes`: the records' paths moved
+  from the anchor's (x, z) to the tile's (east, north), altitudes kept; `Slot`/`Aux` on the tile's 1 m grid, each vertex
+  taking the lattice vertex nearest its 2 m sample (`LeafStand.Nearest`, grown 2 samples past the leaf so the drawn
+  slope reaches its edges). Off the leaf: no slope. Everything keyed by a `TileId` (`PisteIndex`, `SlopeMarkers`,
+  `PisteLayer`) reads it unchanged.
+- **The skier's lookup** (`PisteIndex.At`): the ground's tile under the point (`ContentName(TileAt)`) and the point in
+  its frame (`GlobalPos.InTileEn`). `SnowService.TryAt` and `Surfaces` evaluate the snow at `WorldOrigin.AltitudeOf`,
+  never the world's y (an earth frame's y is a height over its own tangent plane).
+- **The layer** (`PisteLayer`, given the `EarthWorld`): polls the leaves round the camera by their stand-in names,
+  tags each leaf's ground mesh (`IWorldGround.GroundAt`) and its furnished roads (`EarthWorld.RoadsAt`). The leaf's
+  mesh is in its anchor frame, the stand-in's square less 500 m: the leaves' ground material has `piste_offset`
+  (500, 500) (`piste_snow.gdshaderinc`; 0 for a tile's mesh and the roads, which are in the stand-in's frame). The
+  mesh's local y is the height over the ellipsoid, so a layer's altitudes go into the state texture shifted by the
+  geoid there (`ShiftOf`, ~50 m).
+- **The poles**: a stand-in's 1000 m square overlaps its neighbours' (a leaf is ~610 m): `SlopeMarkers` keeps only the
+  poles whose ground tile is the stand-in's own leaf, so none stands twice. A tile's pole spots are kept as meta
+  (`SlopeMarkers.PolesMeta`): a headless MultiMesh keeps no transforms.
+- **The ski map** (#1737, `SlopeMap.PaintLeaves`): a pixel's place is the skier's local east and north
+  (`GlobalPos.Enu`), its leaf `CubeKey.FromEcef`, its slope the stand-in's at the skier's place in that leaf's frame plus
+  the pixel's offset (a leaf's axes are within ~0.01° of the skier's over the map). Per leaf on the map once a paint.
+- **Ski races** (#1737, `RaceRoute.BuildPisteOnLeavesAsync`, when the source is a `StandInChunkSource`): the leaves
+  within 6 rings of the start's (~3.7 km); every run moved into the start leaf's stand-in frame
+  (`PisteCourse.Runs(tiles, place)`), the height at a point from the grid of the leaf it is on, the course's points
+  placed by that frame's E/N. The server's `RaceManager` reads the ground's content (stand-ins under earth).
+- **Fixture line runs**: `FixtureCourse.Slope.Line` makes a slope a line of its outline's width along it (its raster
+  still the outline's): the fun course's "Neon run" is one, so a ski race has a run to chain.
+- **Check**: `--pistecheck --chunks fixture:fun --frame earth|flat` (the course's slope found, drawn, poled; the ski
+  map shows it under the skier; a 300 m ski race goes down it; the jetty's boats afloat), `--pisteat E,N[,ALT]` for a real slope: La Tzoumaz on B3's row-7 leaves
+  (`--leaves D:/UnitSportSwitzerland/test_b3/row7/cube`, the only D: leaves with slopes; `test_b3/row7/lv95` is the
+  same region flat) draws the same runs, poles and snow state (corduroy, ice 0.45 on 15 Jan) as flat.

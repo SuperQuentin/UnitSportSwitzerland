@@ -98,7 +98,8 @@ public partial class PalletService : Node
         foreach (var p in pallets)
         {
             var node = PalletNode.Create(p.Id, p.Load, material);
-            node.Transform = new Transform3D(new Basis(Vector3.Up, p.Yaw), _origin.ToWorld(p.E, p.N, p.Height));
+            // its yaw is its tile's: turned with an earth leaf's stand-in (#1799)
+            node.Transform = new Transform3D(new Basis(Vector3.Up, _origin.WorldYawInTile(p.Tile, p.Yaw)), _origin.ToWorld(p.E, p.N, p.Height));
             AddChild(node);
             nodes.Add(node);
         }
@@ -717,6 +718,7 @@ public partial class PalletService : Node
             if (stack is not { } yard) { Refuse(peer, id, "No such pallet."); return; }
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
             load = yard.Load;
+            // in the site tile's own frame: an LV95 tile, or an earth leaf's stand-in (FromLv95 places either, #1704)
             at = GlobalPos.FromLv95(yard.E, yard.N, yard.Height);
         }
 
@@ -729,7 +731,7 @@ public partial class PalletService : Node
         // the server's own copy, and offline the client's: the same call
         Took(id, load, peer);
         // a crane's hook (#618) carries it on the crane's own record, which everyone is told
-        Terrain.Construction.CraneService.Instance?.Hooked(peer, Pallets.Carried(load), (float)at.Alt);
+        Terrain.Construction.CraneService.Instance?.Hooked(peer, Pallets.Carried(load), at);
     }
 
     private void ServeDrop(long peer, byte load, GlobalPos at, float yaw)

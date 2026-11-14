@@ -71,7 +71,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             await Until(() => me.IsOnFloor(), 10);
             // B is waiting to see it open: it starts shut
             Expect(!interiors.IsOpen(doorKey), $"{doorKey} starts shut");
-            if (!await Heard("B", "watching", 120)) { Fail("B never came to watch"); return; }
+            if (!await Heard("B", "watching", 300)) { Fail("B never came to watch"); return; }   // on earth B stands on its own fill leaves first (#1704)
             me.TryInteract();
             if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
             { Fail($"the door {doorKey} never opened (E took the loot panel {loot.IsOpen}, a machine {Vehicles.VehicleReach.Find(me)?.Vehicle.Name})"); return; }
@@ -246,7 +246,25 @@ public partial class SiteOfficeNetProbe : ChatProbe
     private async Task<bool> WalkIn(FootPlayer me, InteriorManager interiors, string doorKey)
     {
         bool inside = await WalkUntil(me, -me.Camera.GlobalTransform.Basis.Z, () => me.Indoors && interiors.Current != null, 8);
-        if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
+        if (!inside)
+        {
+            // the ground at the doorstep as the walker has it (the leaves' collision) and as the office was planned on (#1704)
+            if (DoorKey.TryParse(doorKey, out var dk) && DoorIndex.Find(dk) is { } d && me.Terrain is { } ground)
+            {
+                var step = d.World + d.Outward * 1.2f;
+                string col = ground.TryGetHeight(step, out float h) ? $"{h:F2}" : "none";
+                string grid = "none";
+                if (ground.Content is { } src && await src.LoadChunkAsync(d.Key.Tile) is { } g && me.Origin is { } o)
+                {
+                    var local = o.TileLocal(d.Key.Tile, step);
+                    var (ge, gn) = d.Key.Tile.Global(local.X, local.Z);
+                    grid = $"{g.SampleMeshHeight(ge, gn):F2} (tile y; the sill {o.TileLocal(d.Key.Tile, d.World).Y:F2})";
+                }
+                GD.Print($"{Log} the doorstep's ground: collision {col} (world y; the sill {d.World.Y:F2}), grid {grid}");
+            }
+            Fail($"could not walk in through {doorKey}");
+            return false;
+        }
         await Seconds(1.0);   // the server learns the space a round trip after the sill
         Expect(interiors.Current!.Kind == BuildingKind.UnderConstruction, $"{_role} walked into the site office {interiors.Current.Key}");
         return true;

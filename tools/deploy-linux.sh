@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
 # Build the Linux x64 dedicated server and deploy it to a Debian/Ubuntu host over SSH.
-# Usage: tools/deploy-linux.sh [--check] [--setup] [--build] [--chunks] [--nakama] [--restart] [--no-chunks] [--dry-run] [--checksum] [--prune] [--smtp-check <to>]
-#   no step flag = everything: setup, build + upload, chunk sync, Nakama (when NAKAMA=1), restart.  --check = report only.
+# Usage: tools/deploy-linux.sh [--check] [--setup] [--build] [--chunks] [--leaves] [--nakama] [--restart] [--no-chunks] [--no-leaves] [--dry-run] [--checksum] [--prune] [--smtp-check <to>]
+#   no step flag = everything: setup, build + upload, chunk sync, leaf sync (when LEAVES_SRC has leaves), Nakama (when NAKAMA=1), restart.
+#   --check = report only.  --leaves = the earth world's L14 leaves (LEAVES_SRC -> DEPLOY_LEAVES_DIR); FRAME=earth|flat pins --frame.
 #   --smtp-check <to> = a step of its own: the layout service sends a test mail to <to> with the host's SMTP settings.
 # Config: tools/deploy.env (copy tools/deploy.env.example); env vars override it. Details: docs/notes/general/linux-deploy.md
 # Needs (local, Git Bash or Linux): ssh with key auth to the host, tar, dotnet SDK, Godot mono + Linux export templates.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
-S_SETUP=0 S_BUILD=0 S_CHUNKS=0 S_NAKAMA=0 S_RESTART=0 CHECK=0 DRY=0 CHECKSUM=0 PRUNE=0 NOCHUNKS=0 S_SMTP=0 SMTP_TO=
+usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+S_SETUP=0 S_BUILD=0 S_CHUNKS=0 S_LEAVES=0 S_NAKAMA=0 S_RESTART=0 CHECK=0 DRY=0 CHECKSUM=0 PRUNE=0 NOCHUNKS=0 NOLEAVES=0 S_SMTP=0 SMTP_TO=
 while [ $# -gt 0 ]; do
   a=$1; shift
   case $a in
     --smtp-check) [ $# -gt 0 ] && [ "${1#-}" = "$1" ] || { echo "--smtp-check needs an address"; usage 1; }; S_SMTP=1 SMTP_TO=$1; shift ;;
-    --check) CHECK=1 DRY=1 S_SETUP=1 S_CHUNKS=1 ;;
-    --setup) S_SETUP=1 ;; --build) S_BUILD=1 ;; --chunks) S_CHUNKS=1 ;; --nakama) S_NAKAMA=1 ;; --restart) S_RESTART=1 ;;
-    --no-chunks) NOCHUNKS=1 ;; --dry-run) DRY=1 ;; --checksum) CHECKSUM=1 ;; --prune) PRUNE=1 ;;
+    --check) CHECK=1 DRY=1 S_SETUP=1 S_CHUNKS=1 S_LEAVES=2 ;;
+    --setup) S_SETUP=1 ;; --build) S_BUILD=1 ;; --chunks) S_CHUNKS=1 ;; --leaves) S_LEAVES=1 ;; --nakama) S_NAKAMA=1 ;; --restart) S_RESTART=1 ;;
+    --no-chunks) NOCHUNKS=1 ;; --no-leaves) NOLEAVES=1 ;; --dry-run) DRY=1 ;; --checksum) CHECKSUM=1 ;; --prune) PRUNE=1 ;;
     -h|--help) usage ;; *) echo "Unknown option $a"; usage 1 ;;
   esac
 done
-[ $((S_SETUP + S_BUILD + S_CHUNKS + S_NAKAMA + S_RESTART + S_SMTP)) = 0 ] && S_SETUP=1 S_BUILD=1 S_CHUNKS=1 S_NAKAMA=2 S_RESTART=1
+# S_LEAVES=2: part of everything (and of --check), skipped (not fatal) when LEAVES_SRC holds no leaves
+[ $((S_SETUP + S_BUILD + S_CHUNKS + S_LEAVES + S_NAKAMA + S_RESTART + S_SMTP)) = 0 ] && S_SETUP=1 S_BUILD=1 S_CHUNKS=1 S_LEAVES=2 S_NAKAMA=2 S_RESTART=1
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
+[ $NOLEAVES = 1 ] && S_LEAVES=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
-VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS"
+VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR DEPLOY_LEAVES_DIR LEAVES LEAVES_SRC FRAME GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA WEB_ANTENNAS"
 VARS+=" LAYOUTS LAYOUTS_ADMINS LAYOUTS_PUBLIC_URL LAYOUTS_DB LAYOUTS_PORT LAYOUTS_TRUSTED_PROXIES SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM"
 VARS+=" NAKAMA NAKAMA_DIR NAKAMA_PORT NAKAMA_URL ACCOUNTS NAKAMA_ADMIN_EMAILS DASHBOARD ADMIN_HTTP_PORT"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
@@ -34,6 +37,11 @@ for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
 DEPLOY_PORT_SSH=${DEPLOY_PORT_SSH:-22} DEPLOY_DIR=${DEPLOY_DIR:-/opt/unitsport} GAME_PORT=${GAME_PORT:-7777}
 WEB_PORTS=${WEB_PORTS-80 443} MDNS_NAME=${MDNS_NAME:-UnitSport Server} SERVER_ARGS=${SERVER_ARGS:-}
 SPACE_MARGIN_MB=${SPACE_MARGIN_MB:-2048} CHUNKS_DIR=${DEPLOY_CHUNKS_DIR:-$DEPLOY_DIR/terrain_chunks}
+# the earth world's leaves (G2 D2, #1792): the region's L14 bundles the server reads (--leaves) and streams to clients over
+# ENet (net/leaf-streaming; no HTTP mirror for leaves). Default dir: the chunk dir's _cube sibling, where the game looks too
+LEAVES=${LEAVES:-1} LEAVES_DIR=${DEPLOY_LEAVES_DIR:-${CHUNKS_DIR%/}_cube} FRAME=${FRAME:-}
+case $FRAME in ''|earth|flat) ;; *) echo "ERROR: FRAME=$FRAME: use earth, flat or leave it empty (the build's default)" >&2; exit 1 ;; esac
+[ "$LEAVES" = 1 ] || S_LEAVES=0
 # tiles over HTTP (#651): Caddy on the host serves the chunk directory, the game server names it to clients
 TILES=${TILES:-1} TILES_DOMAIN=${TILES_DOMAIN:-} TILES_PRECOMPRESS=${TILES_PRECOMPRESS:-1} TILES_SITE=${TILES_DOMAIN:-:80}
 if [ "$TILES" != 1 ]; then TILES_URL=
@@ -124,7 +132,7 @@ runnable=false
 dedicated_server=true
 custom_features=""
 export_filter="all_resources"
-include_filter="assets/music/*"
+include_filter="assets/music/*, assets/globe/*"
 exclude_filter="$excl"
 export_path="$BUILD/$BIN"
 patches=PackedStringArray()
@@ -200,7 +208,7 @@ web_accounts() {
 }
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}$([ "$LAYOUTS" = 1 ] && echo " --house-layouts $LAYOUTS_DIR/house-layouts.json")$([ "$DASHBOARD" = 1 ] && echo " --admin-http $ADMIN_HTTP_PORT --admin-nakama http://127.0.0.1:$NAKAMA_PORT")" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}$([ "$ACCOUNTS" != off ] && echo " --accounts $ACCOUNTS --nakama-url $NAKAMA_URL")${WEB:+ --status-file $WEB/status.json --livemap-file $WEB/players.json}$([ "$LAYOUTS" = 1 ] && echo " --house-layouts $LAYOUTS_DIR/house-layouts.json")$([ "$DASHBOARD" = 1 ] && echo " --admin-http $ADMIN_HTTP_PORT --admin-nakama http://127.0.0.1:$NAKAMA_PORT")$([ "$LEAVES" = 1 ] && echo " --leaves $LEAVES_DIR")${FRAME:+ --frame $FRAME}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   # the status page (#740), served by the same Caddy as the tiles; the server keeps status.json beside it
   [ -n "$WEB" ] && rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
@@ -269,54 +277,89 @@ if [ $S_BUILD = 1 ]; then
 fi
 
 # --- 5. terrain chunks: copy what differs, never delete unless --prune ------------------------------
-if [ $S_CHUNKS = 1 ]; then
-  if [ -z "${CHUNKS_SRC:-}" ]; then  # same lookup as the game: MapSetup's terrain_location.json, then terrain_chunks/
-    CHUNKS_SRC=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json 2>/dev/null | sed 's/\\\\/\\/g' | head -1) || true  # no terrain_location.json: sed fails, pipefail would exit
-    [ -n "$CHUNKS_SRC" ] && command -v cygpath >/dev/null && CHUNKS_SRC=$(cygpath -u "$CHUNKS_SRC")
-    : "${CHUNKS_SRC:=terrain_chunks}"
-  fi
-  say "Terrain chunks $CHUNKS_SRC -> $DEPLOY_HOST:$CHUNKS_DIR"
-  [ -f "$CHUNKS_SRC/manifest.json" ] || die "no $CHUNKS_SRC/manifest.json (set CHUNKS_SRC=, or run from the main checkout)"
-  L=$OUT/chunks.local.tsv R=$OUT/chunks.remote.tsv SEND=$OUT/chunks.send.txt EXTRA=$OUT/chunks.extra.txt
+# sync_files <tag> <src> <dst> <last>: copy the files of <src> whose name, size or mtime differ (md5 with --checksum) to
+# $DEPLOY_HOST:<dst>, after a free-space check; <last> (the index the server reads) goes last, so it never names a file
+# still missing. Files only on the server are kept unless --prune. Lists in $OUT/<tag>.*. Sets SYNC_COUNT.
+sync_files() {
+  local tag=$1 src=$2 dst=$3 last=$4
+  local L=$OUT/$tag.local.tsv R=$OUT/$tag.remote.tsv SEND=$OUT/$tag.send.txt EXTRA=$OUT/$tag.extra.txt
   # the .gz copies the host makes for HTTP (step 5b) are not ours to compare or prune
-  list='find . -maxdepth 1 -type f ! -name "*.gz" -printf "%P\t%s\t%T@\n"'
+  local list='find . -maxdepth 1 -type f ! -name "*.gz" -printf "%P\t%s\t%T@\n"'
   norm() { awk -F'\t' '{printf "%s\t%s\t%d\n", $1, $2, $3}' | LC_ALL=C sort; }
-  echo "  listing local files..."; (cd "$CHUNKS_SRC" && eval "$list") | norm > "$L"
-  echo "  listing remote files..."; rq "cd $(qd "$CHUNKS_DIR") 2>/dev/null && $list || true" | norm > "$R"
+  echo "  listing local files..."; (cd "$src" && eval "$list") | norm > "$L"
+  echo "  listing remote files..."; rq "cd $(qd "$dst") 2>/dev/null && $list || true" | norm > "$R"
   if [ $CHECKSUM = 1 ]; then  # content compare: slow (reads every byte on both sides)
     sums() { awk '{n=$2; sub(/^\*/, "", n); print n "\t" $1}' | LC_ALL=C sort; }
-    echo "  hashing local files..."; (cd "$CHUNKS_SRC" && find . -maxdepth 1 -type f -printf '%P\0' | xargs -0 md5sum) | sums > "$L.md5"
-    echo "  hashing remote files..."; rq "cd $(qd "$CHUNKS_DIR") 2>/dev/null && find . -maxdepth 1 -type f ! -name '*.gz' -printf '%P\0' | xargs -0 -r md5sum || true" | sums > "$R.md5"
+    echo "  hashing local files..."; (cd "$src" && find . -maxdepth 1 -type f -printf '%P\0' | xargs -0 md5sum) | sums > "$L.md5"
+    echo "  hashing remote files..."; rq "cd $(qd "$dst") 2>/dev/null && find . -maxdepth 1 -type f ! -name '*.gz' -printf '%P\0' | xargs -0 -r md5sum || true" | sums > "$R.md5"
     LC_ALL=C comm -23 "$L.md5" "$R.md5" | cut -f1 > "$SEND"
   else  # name + size + mtime (tar keeps mtimes, so a synced file matches on the next run)
     LC_ALL=C comm -23 "$L" "$R" | cut -f1 > "$SEND"
   fi
   LC_ALL=C comm -13 <(cut -f1 "$L") <(cut -f1 "$R") > "$EXTRA"
-  # manifest.json goes last so the server never sees a manifest pointing at tiles still missing
-  if grep -qx manifest.json "$SEND"; then grep -vx manifest.json "$SEND" > "$SEND.tmp" || true; echo manifest.json >> "$SEND.tmp"; mv "$SEND.tmp" "$SEND"; fi
+  if grep -qx "$last" "$SEND"; then grep -vx "$last" "$SEND" > "$SEND.tmp" || true; echo "$last" >> "$SEND.tmp"; mv "$SEND.tmp" "$SEND"; fi
+  local nbytes obytes count free need
   read -r nbytes obytes < <(awk -F'\t' 'FILENAME==ARGV[1]{s[$1]=1;next} FILENAME==ARGV[2]{if($1 in s)o+=$2;next} ($1 in s){n+=$2} END{printf "%d %d\n",n,o}' "$SEND" "$R" "$L")
-  count=$(wc -l < "$SEND" | tr -d ' ')
-  echo "  local $(wc -l < "$L" | tr -d ' ') files, remote $(wc -l < "$R" | tr -d ' '), to copy $count ($(human "$nbytes")), only on server $(wc -l < "$EXTRA" | tr -d ' ')"
+  count=$(wc -l < "$SEND" | tr -d ' '); SYNC_COUNT=$count
+  echo "  local $(wc -l < "$L" | tr -d ' ') files ($(human "$(awk -F'\t' '{t+=$2} END{printf "%d", t}' "$L")")), remote $(wc -l < "$R" | tr -d ' '), to copy $count ($(human "$nbytes")), only on server $(wc -l < "$EXTRA" | tr -d ' ')"
   if [ "$count" -gt 0 ]; then
-    free=$(avail "$CHUNKS_DIR"); need=$(( nbytes - obytes + SPACE_MARGIN_MB * 1048576 ))
-    [ "$free" -ge "$need" ] || die "not enough space for chunks: need $(human $need) (new - replaced + margin), $(human "$free") free in $CHUNKS_DIR"
+    free=$(avail "$dst"); need=$(( nbytes - obytes + SPACE_MARGIN_MB * 1048576 ))
+    [ "$free" -ge "$need" ] || die "not enough space for $tag: need $(human $need) (new - replaced + margin), $(human "$free") free in $dst"
     echo "  space OK: $(human "$free") free, $(human $need) needed"
     if [ $DRY = 1 ]; then echo "  [dry] copy $count files (list: $SEND)"
     else
-      stop_server
+      [ "$tag" = leaves ] && ! earth_running || stop_server
       if command -v rsync >/dev/null && rq 'command -v rsync' >/dev/null; then
-        rsync -a --info=progress2 --files-from="$SEND" -e "ssh -p $DEPLOY_PORT_SSH" "$CHUNKS_SRC/" "$DEPLOY_HOST:$CHUNKS_DIR/"
+        rsync -a --info=progress2 --files-from="$SEND" -e "ssh -p $DEPLOY_PORT_SSH" "$src/" "$DEPLOY_HOST:$dst/"
       else
         # one progress line per ~1 GB (tar records are 10 KB)
-        tar -C "$CHUNKS_SRC" --checkpoint=100000 --checkpoint-action='echo=  %T' -cf - -T "$SEND" \
-          | rq "mkdir -p $(qd "$CHUNKS_DIR") && tar -xf - -C $(qd "$CHUNKS_DIR")"
+        tar -C "$src" --checkpoint=100000 --checkpoint-action='echo=  %T' -cf - -T "$SEND" \
+          | rq "mkdir -p $(qd "$dst") && tar -xf - -C $(qd "$dst")"
       fi
       echo "  copied $count files"
     fi
   fi
   if [ -s "$EXTRA" ]; then
-    if [ $PRUNE = 1 ]; then rx "cd $(qd "$CHUNKS_DIR") && xargs -d '\n' rm -f" < "$EXTRA"; echo "  pruned $(wc -l < "$EXTRA" | tr -d ' ') server-only files"
+    if [ $PRUNE = 1 ]; then rx "cd $(qd "$dst") && xargs -d '\n' rm -f" < "$EXTRA"; echo "  pruned $(wc -l < "$EXTRA" | tr -d ' ') server-only files"
     else echo "  kept server-only files (--prune deletes them; list: $EXTRA)"; fi
+  fi
+}
+# whether the running server plays the earth world (its log since the last start says "[frame] earth"): a flat server
+# never reads the leaves, so they are replaced under it; an earth server holds their index and is stopped first
+earth_running() {
+  rq "tmux has-session -t =unitsport 2>/dev/null && awk '/^=== start/{e=0} /\[frame\] earth/{e=1} END{exit !e}' $(qd "$DEPLOY_DIR/server.log")" 2>/dev/null
+}
+chunks_src() { # same lookup as the game: MapSetup's terrain_location.json, then terrain_chunks/
+  [ -n "${CHUNKS_SRC:-}" ] && return
+  CHUNKS_SRC=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json 2>/dev/null | sed 's/\\/\/g' | head -1) || true  # no terrain_location.json: sed fails, pipefail would exit
+  [ -n "$CHUNKS_SRC" ] && command -v cygpath >/dev/null && CHUNKS_SRC=$(cygpath -u "$CHUNKS_SRC")
+  : "${CHUNKS_SRC:=terrain_chunks}"
+}
+if [ $S_CHUNKS = 1 ]; then
+  chunks_src
+  say "Terrain chunks $CHUNKS_SRC -> $DEPLOY_HOST:$CHUNKS_DIR"
+  [ -f "$CHUNKS_SRC/manifest.json" ] || die "no $CHUNKS_SRC/manifest.json (set CHUNKS_SRC=, or run from the main checkout)"
+  sync_files chunks "$CHUNKS_SRC" "$CHUNKS_DIR" manifest.json
+fi
+
+# --- 5a. the earth world's leaves (G2 D2, #1792): the region's .cubl bundles and cube_manifest.json -------------------
+# Read by an earth server (--leaves, passed by start-server.sh) and streamed to clients over ENet; harmless to a flat
+# server, which never opens them. Not the cube_global pyramid: the server's fill must stand on what every client's does,
+# and a release client has the shipped levels only (docs/notes/general/linux-deploy.md, "Earth").
+if [ $S_LEAVES != 0 ]; then
+  if [ -z "${LEAVES_SRC:-}" ]; then chunks_src; LEAVES_SRC=${CHUNKS_SRC%/}_cube; fi
+  if [ ! -f "$LEAVES_SRC/cube_manifest.json" ]; then
+    [ $S_LEAVES = 1 ] && die "no $LEAVES_SRC/cube_manifest.json: set LEAVES_SRC= to the built leaves (B4's: D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube)"
+    say "Leaves: none in $LEAVES_SRC (set LEAVES_SRC=), skipped"
+  else
+    say "Leaves $LEAVES_SRC -> $DEPLOY_HOST:$LEAVES_DIR"
+    sync_files leaves "$LEAVES_SRC" "$LEAVES_DIR" cube_manifest.json
+    if [ $CHECK = 1 ]; then
+      rq "test -f $(qd "$LEAVES_DIR/cube_manifest.json")" && echo "  on the host: $LEAVES_DIR/cube_manifest.json present" \
+        || echo "  on the host: no leaves yet (an earth server there would stand on the generated fill alone)"
+    fi
+    # an earth server reads the leaves' index once: it was stopped above and starts again on the new set (step 6)
+    if [ $stopped = 1 ]; then echo "  the server was stopped for the new leaves: it starts again below"; fi
   fi
 fi
 
@@ -376,6 +419,22 @@ if [ $S_NAKAMA = 1 ]; then
     echo "  official server of a build: put both in assets/account-server.json (url, serverKey) before releasing"
     echo "  admin console: ssh -L 7351:127.0.0.1:7351 -p $DEPLOY_PORT_SSH $DEPLOY_HOST, then http://127.0.0.1:7351 (login in $NAKAMA_DIR/.env)"
   fi
+fi
+
+# --- 5d. what runs (--check): the build, whether it updates itself, its frame and leaves ------------------------------
+if [ $CHECK = 1 ]; then
+  say "Server (report only)"
+  cur=$(rq "readlink $(qd "$DEPLOY_DIR/current") 2>/dev/null" | tr -d '\r' || true)
+  case ${cur##*/} in
+    v[0-9]*) echo "  current -> $cur: a release, it installs newer releases by itself once nobody plays (net/server-update)" ;;
+    '') echo "  no current build" ;;
+    *) echo "  current -> $cur: a deploy build, it stays as deployed (an admin's /update still installs a release)" ;;
+  esac
+  if rq "tmux has-session -t =unitsport 2>/dev/null"; then
+    echo "  running: $(rq "awk '/^=== start/{f=\"\"; l=\"\"} /\[frame\]/{f=\$0} /\[earth\] [0-9]+ leaves from/{l=\$0} END{print (f ? f : \"[frame] not logged (before G2)\") (l ? \"; \" l : \"\")}' $(qd "$DEPLOY_DIR/server.log")" | sed 's/^.*\[frame\]/[frame]/' | cut -c1-200)"
+  else echo "  not running"; fi
+  flags=$(rq "grep -o -- '--leaves [^ ]*\|--frame [a-z]*' $(qd "$DEPLOY_DIR/start-server.sh") 2>/dev/null" | tr '\n' ' ' || true)
+  echo "  start-server.sh: ${flags:-no --leaves, no --frame (a deploy with --restart adds them)}"
 fi
 
 # --- 6. (re)start --------------------------------------------------------------------------------------

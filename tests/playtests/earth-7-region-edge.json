@@ -1,0 +1,30 @@
+{
+  "id": "earth-7-region-edge",
+  "title": "The region\u0027s edge and the fill",
+  "verdict": "failed",
+  "by": "Nicolas Maitre",
+  "date": "2026-11-12T22:36Z",
+  "commit": "8edf1d3be",
+  "coverHash": "4385ab0dcb998961",
+  "covers": [
+    "src/Terrain/Earth/**",
+    "src/Terrain/Leaves/**",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Terrain/Earth/GameLeaves.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-11-12T22:17Z",
+      "by": "Nicolas Maitre",
+      "verdict": "failed",
+      "text": "vsiible ledge here. floating trees bug"
+    },
+    {
+      "date": "2026-11-12T22:36Z",
+      "by": "Nicolas Maitre",
+      "verdict": "failed",
+      "text": "both issues i mentioned"
+    }
+  ]
+}

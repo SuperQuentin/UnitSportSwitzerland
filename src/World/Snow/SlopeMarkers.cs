@@ -5,6 +5,7 @@ using UnitSport.Core;
 using UnitSport.Styles;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.World.Snow;
 
@@ -19,6 +20,12 @@ namespace UnitSport.World.Snow;
 public partial class SlopeMarkers : Node
 {
     private const string NodeName = "SlopeMarkers";
+
+    /// <summary>
+    /// Meta on a tile's poles node: where each pole stands in the node's frame (a <c>Vector3[]</c>), written once with
+    /// them. What a check reads (#1735): a headless run's MultiMesh keeps no transforms.
+    /// </summary>
+    public static readonly StringName PolesMeta = "poles";
     public const float Spacing = 30f;
     public const float Height = 1.8f;
     /// <summary>How far outside the slope's edge a pole stands: a little inside it, in front of the trees that line the run.</summary>
@@ -90,12 +97,15 @@ public partial class SlopeMarkers : Node
                 Place(node, tile, r, spots);
         if (spots.Count == 0) return;
         var root = new Node3D { Name = NodeName };
+        var all = new List<Vector3>();
         foreach (var (key, list) in spots)
         {
+            foreach (var t in list) all.Add(t.Origin);
             var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = MeshOf(key.Item1, key.Item2), InstanceCount = list.Count };
             for (int i = 0; i < list.Count; i++) mm.SetInstanceTransform(i, list[i]);
             root.AddChild(new MultiMeshInstance3D { Multimesh = mm, MaterialOverride = _material, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
         }
+        root.SetMeta(PolesMeta, all.ToArray());
         node.AddChild(root);
     }
 
@@ -152,6 +162,8 @@ public partial class SlopeMarkers : Node
         var (e, n) = tile.Id.Global(east, ChunkFormat.TileSizeM - north);
         int i = tile.IndexAt(e, n);
         if (i >= 0 && tile.Slot[i] != 0 && tile.Records[tile.Slot[i] - 1].Id != r.Id && PisteFormat.MaskOf(tile.Aux[i]) > 0.5f) return;
+        // an earth leaf's stand-in reaches past its leaf into its neighbours' (#1735): only the poles on its own leaf
+        if (LeafStandIn.IsStandIn(tile.Id) && _ground.ContentName(_ground.TileAt(node.ToGlobal(new Vector3(east, 0, 1000 - north)))) != tile.Id) return;
         float y = Ground(node, east, north);
         if (float.IsNaN(y)) return;
         var key = (level, right);

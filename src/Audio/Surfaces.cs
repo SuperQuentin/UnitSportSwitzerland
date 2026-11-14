@@ -97,7 +97,8 @@ public static class Surfaces
 
         // a ski slope (#887): snow all year, ice where its state says so
         if (World.Snow.SnowService.Instance is { } snow && snow.Index?.At(feet, out float mask) is { } slope && mask > 0.3f)
-            return snow.StateAt(slope, feet.Y).Ice > 0.5f ? Surface.Ice : Surface.Snow;
+            // at the altitude: an earth frame's y is no altitude (#1735)
+            return snow.StateAt(slope, chunks.Origin is { } origin ? (float)origin.AltitudeOf(feet) : feet.Y).Ice > 0.5f ? Surface.Ice : Surface.Snow;
 
         bool known = chunks.TryGetCover(feet, out var cover);
 
@@ -116,7 +117,7 @@ public static class Surfaces
         CoverClass.Glacier or CoverClass.Snowfield => Surface.Snow,
         CoverClass.Rock or CoverClass.LooseRock or CoverClass.Boulders => Surface.Rock,
         CoverClass.Scree or CoverClass.LooseScree or CoverClass.Quarry or CoverClass.Landfill
-            or CoverClass.Military or CoverClass.Campsite => Surface.Gravel,
+            or CoverClass.Military or CoverClass.Campsite or CoverClass.Sand => Surface.Gravel,
         CoverClass.Forest or CoverClass.OpenForest or CoverClass.Woodland or CoverClass.Shrub => Surface.Forest,
         CoverClass.Water or CoverClass.Wetland => Surface.Water,
         CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea or CoverClass.PavedArea or CoverClass.TownPaving or CoverClass.TunnelRoof

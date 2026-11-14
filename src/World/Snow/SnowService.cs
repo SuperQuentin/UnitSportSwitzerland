@@ -92,7 +92,8 @@ public partial class SnowService : Node
         slope = null!;
         if (_index?.At(world, out mask) is not { } found) { mask = 0; return false; }
         slope = found;
-        state = StateAt(found, world.Y);
+        // the altitude, not the world's y: an earth frame's y is a height over its own tangent plane (#1735)
+        state = StateAt(found, _terrain?.Origin is { } origin ? (float)origin.AltitudeOf(world) : world.Y);
         return true;
     }
 

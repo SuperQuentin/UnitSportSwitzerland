@@ -35,6 +35,8 @@ src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
 src/Core/SpectatorSwitchCheck quick --spectatorcheck --world fixture
 src/Player/SpectatorCamera quick --spectatorcheck --world fixture
+src/Player/SpectatorCamera quick --spectatorturncheck --frame earth --chunks fixture:straight
+src/Player/SpectatorTurnCheck quick --spectatorturncheck --frame earth --chunks fixture:straight
 src/Player/FootPlayer.Fight quick --ownbodycheck --world flat
 src/Player/OwnBodyCheck   quick  --ownbodycheck --world flat
 src/Avatar/OwnBody       quick  --ownbodycheck --world flat
@@ -103,6 +105,11 @@ src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
+# #1801: /time's named hours and zone where the player stands, far away and at home (Geneva)
+src/World/LocalHours     quick  --localtimecheck --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at -4679383,7259183
+src/World/LocalHours     quick  --localtimecheck home --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at 2500300,1117900
+src/World/LocalTimeProbe quick  --localtimecheck --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at -4679383,7259183
+src/World/TimeCommand    quick  --localtimecheck home --systems ui,physics,sky --sun real --date 2026-06-21 --occasion none --at 2500300,1117900
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
 # #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
@@ -146,10 +153,14 @@ src/Items/Placeables     quick  --campfirecheck --systems ui,physics
 src/Items/Telescope      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/World/StarField      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/SkyBodies      quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+src/World/SunDisc        quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+shaders/sun              quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
+shaders/sky_point        quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+shaders/moon_halo        quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -371,6 +382,13 @@ src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
+# #1778/#1779: the earth fill and the globe on the pyramid, at the playtest's walls north of Riddes (Godot-free, D: data; skipped without it)
+src/Terrain/Leaves/PyramidBase full tools/fillseamscheck.sh
+src/Terrain/Leaves/PyramidFill full tools/fillseamscheck.sh
+src/Terrain/Leaves/LeafBlend full tools/fillseamscheck.sh
+src/Terrain/Leaves/GeneratedLeaves full tools/fillseamscheck.sh
+tools/TerrainPreprocessor/CubeSwiss full tools/fillseamscheck.sh
+tools/BlendCheck/FillSeamsCheck full tools/fillseamscheck.sh
 # #1510 PR 3: the earth world on a fixture course's own leaves (no map; real time: it streams at 60 m/s on the wall clock)
 src/Terrain/Earth        quick  @realtime --frame earth --earthcheck --chunks fixture:straight
 src/Terrain/Leaves       quick  @realtime --frame earth --earthcheck --chunks fixture:straight
@@ -400,6 +418,35 @@ src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site -
 # the --world flat probe plane (Core/TestWorld) under earth: its anchor is an ENU frame there
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
+# #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
+src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+# G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
+# the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
+src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
+src/Core/ReanchorWatch    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
+src/Core/OriginShifter    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
+src/Player/LongDriveCheck quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
+src/Core/ReanchorWatch    quick  @realtime --frame earth --longdrivecheck --chunks fixture:hairpin --originshift 300 --traffic 0 --car 4
+src/Player/ReanchorCamCheck quick @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
+src/Player/FootPlayer.cs  quick  @realtime --frame earth --reanchorcamcheck --chunks fixture:straight --traffic 0
+# #1776: the trees on the ground, as their leaves hold them and as drawn, after a flight across the re-anchors
+src/Terrain/NearTrees     quick  @realtime --frame earth --treeseatcheck --systems terrain,generated --at 2580761,1116825 --treeseatto 2579661,1108305 --traffic 0
+src/World/TreeSeatCheck   quick  @realtime --frame earth --treeseatcheck --systems terrain,generated --at 2580761,1116825 --treeseatto 2579661,1108305 --traffic 0
+src/Terrain/NearTrees     full   tools/treeseatcheck.sh
+src/World/TreeSeatCheck   full   tools/treeseatcheck.sh
+tools/treeseatcheck       full   tools/treeseatcheck.sh
+src/Core/ReanchorCheck    full   tools/reanchorcheck.sh
+src/Core/ReanchorWatch    full   tools/reanchorcheck.sh
+src/Core/OriginShifter    full   tools/reanchorcheck.sh
+src/Player/LongDriveCheck full   @timeout=7400 tools/longdrivecheck.sh
+src/Player/AutoPilot      full   @timeout=7400 tools/longdrivecheck.sh
+src/Player/RaceRoute      full   @timeout=7400 tools/longdrivecheck.sh
+src/Player/LongFlightCheck full  @timeout=1400 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=1400 tools/longflightcheck.sh
+src/World/Globe/Globe.cs  full   @timeout=500 tools/farfillcheck.sh
+src/Terrain/Earth/FarFillCheck full @timeout=500 tools/farfillcheck.sh
+tools/lib/barprobe        full   tools/reanchorcheck.sh
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
 # swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit
@@ -589,6 +636,9 @@ src/World/TimeCommand    net    tools/clocknetcheck.sh
 src/World/ClockNetProbe  net    tools/clocknetcheck.sh
 src/Net/ClockSync        net    tools/clocknetcheck.sh
 src/Net/ChatManager      net    tools/clocknetcheck.sh
+src/World/LocalHours       net    tools/localtimenetcheck.sh
+src/World/LocalTimeNetProbe net   tools/localtimenetcheck.sh
+src/World/TimeCommand      net    tools/localtimenetcheck.sh
 tools/TerrainFormat/SignalPlan net tools/signalnetcheck.sh
 src/Player/Steamer       net    tools/steamernetcheck.sh
 src/Player/FootPlayer.St net    tools/steamernetcheck.sh
@@ -1264,6 +1314,9 @@ src/Terrain/TerrainMeshBuilder quick --horizoncheck --at 2563500,1112500 --horiz
 src/Core/OriginShifter       quick  --horizoncheck --at 2563500,1112500 --horizon 20 --systems terrain,generated
 src/Gpx/                     quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
 src/Core/OriginShifter       quick  --gpxcheck --at 2563500,1112500 --systems terrain,generated
+# #1752: the replay mode on the world's ground, flat and earth: runner, ribbon, route survey, road snap, export warm-up
+src/Gpx/                     quick  --replaycheck --chunks fixture:straight --snaproads
+src/Gpx/                     quick  --replaycheck --chunks fixture:straight --snaproads --frame earth
 # probes that existed without a row
 src/World/Traffic            quick  --trafficcheck --chunks fixture:junction
 src/World/LaneGraph          quick  --trafficcheck --chunks fixture:junction
@@ -1332,3 +1385,27 @@ tools/sitemachinenetcheck    net    tools/sitemachinenetcheck.sh
 tools/siteofficenetcheck     net    tools/siteofficenetcheck.sh
 tools/sitepalletnetcheck     net    tools/sitepalletnetcheck.sh
 tools/siteuppernetcheck      net    tools/siteuppernetcheck.sh
+# #1735: the fun course's ski slope (its snow layer, poles, the skier's lookup) and its jetty's moored boats, on both frames
+src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+shaders/body/piste_snow      quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/LeafCollision/StandInChunkSource quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Leaves/LeafStandIn quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/Vehicles/DormantVehicles quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Vehicles/VehicleSlot     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+# #1736: piers, landings and jetty decks on earth leaves (drawn, collided), the fixture's landing walked and its marina boats
+src/Terrain/Leaves/LeafPiers quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/LeafCollision/LeafCollision quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/Earth/EarthWorld quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Terrain/PierMesh     quick  --frame earth --steamercheck pier --chunks fixture:lake
+src/Vehicles/DormantVehicles quick --frame earth --steamercheck pier --chunks fixture:lake
+src/Player/SteamerCheck  quick  --frame earth --steamercheck pier --chunks fixture:lake
+# #1737: the ski map and a ski race on the fun course's line run, on both frames
+src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
+src/Player/RaceRoute     quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Fixture/FunCourse quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
+# #1811: back into the body after a long spectator flight: upright, its camera sane, a poisoned view put right
+src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
+src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0

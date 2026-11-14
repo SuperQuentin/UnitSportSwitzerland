@@ -195,7 +195,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             // where it stood and what it was, while its tile is known here: for putting it back (#689)
             int bar = key.Key.LastIndexOf('|');
             _awakeInfo[key.Key] = Find(key.Key[..bar], int.Parse(key.Key[(bar + 1)..])) is { } s
-                ? new World.AwakeSlot(VehicleState.Now, s.E, s.N, s.Yaw, s.KindId, s.Train, s.Load)
+                ? new World.AwakeSlot(VehicleState.Now, s.E, s.N, _origin.RecordYawIn(s.Tile, WorldOf(s), s.Yaw), s.KindId, s.Train, s.Load)
                 : new World.AwakeSlot(VehicleState.Now);
             containers.SaveAwake(_awakeInfo);
         }
@@ -523,7 +523,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
         _anchorTilesNow.Clear();
         foreach (var anchor in _ground.Anchors)
-            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_origin.TileAt(anchor.GlobalPosition));
+            // the ground's names for the tiles (#1704): an earth leaf's stand-in, whose neighbours are the next leaves', so the
+            // fleets, yards and site pallets are the leaves' own, as drawn and as the server reads them
+            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_ground.ContentName(_ground.TileAt(anchor.GlobalPosition)));
         if (SameTiles(_anchorTilesNow, _anchorTiles))
         {
             if (_pending.Count > 0) _ = Fill();
@@ -771,6 +773,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into, CancellationToken ct)
     {
         var jetties = Landings.Current.Jetties;
+        if (Terrain.Leaves.LeafStandIn.TryLeaf(id, out var leaf))
+        {
+            LeafMarina(source, id, leaf, jetties, into, ct);
+            return;
+        }
         bool here = false;
         foreach (var j in jetties)
         {
@@ -784,6 +791,29 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
+            var (lx, lz) = id.Local(e, n);
+            double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
+            if (!water.TrySample(x, z, out float level, out _)) return null;
+            var (ge, gn) = id.Global(x, z);
+            return (level, (float)grid.SampleHeight(ge, gn));
+        }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
+    }
+
+    /// <summary>
+    /// <see cref="Marina"/> on an earth leaf's stand-in (#1735): the jetties whose middle lies on the leaf, their berths
+    /// named in the stand-in's frame, afloat on the leaf's own water (<see cref="Terrain.Leaves.StandInChunkSource.LoadLeafWaterAsync"/>),
+    /// as the server and every client read it.
+    /// </summary>
+    private static void LeafMarina(IChunkSource source, TileId id, CubeKey leaf, IReadOnlyList<Jetty> jetties, List<VehicleSlot> into, CancellationToken ct)
+    {
+        bool here = false;
+        foreach (var j in jetties)
+            if (DormantSlots.LeafOf(j) == leaf) { here = true; break; }
+        if (!here || source is not Terrain.Leaves.StandInChunkSource stands) return;
+        if (stands.LoadLeafWaterAsync(id, ct).GetAwaiter().GetResult() is not { } water) return;
+        if (source.LoadChunkAsync(id, ct).GetAwaiter().GetResult() is not { } grid) return;
+        DormantSlots.ForLeafMarina(id, leaf, jetties, (e, n) =>
+        {
             var (lx, lz) = id.Local(e, n);
             double x = Math.Clamp(lx, 0, ChunkFormat.TileSizeM), z = Math.Clamp(lz, 0, ChunkFormat.TileSizeM);
             if (!water.TrySample(x, z, out float level, out _)) return null;
@@ -824,8 +854,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             var body = new DormantBody
             {
                 Slot = s,
-                Position = _origin.ToWorld(s.E, s.N, s.Height),
-                Basis = new Basis(Vector3.Up, s.Yaw),
+                Position = WorldOf(s),
+                Basis = new Basis(Vector3.Up, _origin.WorldYawInTile(s.Tile, s.Yaw)),
             };
             foreach (var (pose, shape) in look.Boxes)
                 body.AddChild(new CollisionShape3D { Shape = shape, Transform = pose });
@@ -904,7 +934,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>Where a slot stands, a vehicle in one piece: its place and its heading.</summary>
     private Transform3D SlotTransform(VehicleSlot s) =>
         // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
-        new(new Basis(Vector3.Up, s.Yaw), _origin.ToWorld(s.E, s.N, s.Height));
+        // its tile's heading turned with the tile: an earth leaf's stand-in is turned in the world (#1799)
+        new(new Basis(Vector3.Up, _origin.WorldYawInTile(s.Tile, s.Yaw)), WorldOf(s));
+
+    /// <summary>A slot's place in the world (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    public Vector3 WorldOf(VehicleSlot s) => _origin.ToWorld(s.E, s.N, s.Height);
 
     /// <summary>
     /// A goods vehicle's sections where the live one stands them (#560): <see cref="HeavyGround.Stand"/>
@@ -1032,11 +1066,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     public VehicleSlot? SlotAt(double e, double n, double within = 1.5)
     {
+        // on the Earth: a slot on an earth leaf's stand-in is named by the stand-in's E/N, not the place's LV95 (#1736)
+        var at = GlobalPos.FromLv95(e, n, 0);
         foreach (var (_, slots) in _slots)
             foreach (var s in slots)
-                if ((s.E - e) * (s.E - e) + (s.N - n) * (s.N - n) < within * within) return s;
+                if (at.HorizontalDistanceTo(PlaceOf(s)) < within) return s;
         return null;
     }
+
+    /// <summary>A slot's place on the Earth (its tile's frame: LV95, or an earth leaf's stand-in, #1704).</summary>
+    private static GlobalPos PlaceOf(VehicleSlot s) => GlobalPos.FromLv95(s.E, s.N, s.Height);
 
     /// <summary>Every slot worked out round the anchors, woken or not: what a check picks one from.</summary>
     public IEnumerable<VehicleSlot> Slots()
@@ -1137,7 +1176,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
         // the state first, then its own ride: CreateRide is what knows a lone trailer from a truck
         // with one coupled to it from a plain car, so the wake path must not assume a mountable kind
-        var state = StateOf(slot);
+        // its heading as a record's (the grid's at its place), not its stand-in tile's (#1799)
+        var state = StateOf(slot) with { Yaw = _origin.RecordYawIn(slot.Tile, WorldOf(slot), slot.Yaw) };
         if (state.CreateRide() is not { } ride) return false;
         state = state with { Health = ride.MaxHealth };
         // exactly where the dormant copy stood, asleep: not dropped a hand's breadth onto the ground (#560)

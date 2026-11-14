@@ -131,7 +131,7 @@ public partial class ConcertService : Node
     {
         var venues = _hosted.Where(kv => kv.Value.Seed >= 0 && kv.Key >= 0 && kv.Key < StadiumCatalog.All.Length)
             .OrderBy(kv => kv.Key).Select(kv => StadiumCatalog.All[kv.Key]);
-        return at is { } p ? [.. venues.OrderBy(v => p.HorizontalDistanceTo(GlobalPos.FromLv95(v.E, v.N, 0)))] : [.. venues];
+        return at is { } p ? [.. venues.OrderBy(v => p.HorizontalDistanceTo(v.Centre))] : [.. venues];
     }
 
     /// <summary>The cues in force at a stadium, if a set is hosted there.</summary>
@@ -165,7 +165,7 @@ public partial class ConcertService : Node
         for (int i = 0; i < StadiumCatalog.All.Length; i++)
         {
             var s = StadiumCatalog.All[i];
-            double d = at.HorizontalDistanceTo(GlobalPos.FromLv95(s.E, s.N, 0));
+            double d = at.HorizontalDistanceTo(s.Centre);
             if (d < bestD) { bestD = d; best = i; }
         }
         return best;
@@ -344,7 +344,7 @@ public partial class ConcertService : Node
         long sender = Multiplayer.GetRemoteSenderId();
         if (!_crew.TryGetValue((stadium, cam), out long op) || op != sender) return;
         var s = StadiumCatalog.All[stadium];
-        var here = GlobalPos.FromLv95(s.E, s.N, 0);
+        var here = s.Centre;
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && body.Global.HorizontalDistanceTo(here) < RelayRange)
                 RpcId(peer, MethodName.CamPosed, stadium, cam, state);
@@ -474,7 +474,7 @@ public partial class ConcertService : Node
         long sender = Multiplayer.GetRemoteSenderId();
         if (OperatorOf(stadium) != sender) return;
         var s = StadiumCatalog.All[stadium];
-        var here = GlobalPos.FromLv95(s.E, s.N, 0);
+        var here = s.Centre;
         // only to those near the stadium: a show is half a megabit a second
         foreach (int peer in Multiplayer.GetPeers())
             if (peer != sender && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body

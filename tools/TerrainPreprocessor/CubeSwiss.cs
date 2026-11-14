@@ -13,14 +13,16 @@ namespace UnitSport.Tools.Preprocessor;
 ///
 /// <code>
 /// --cube-swiss --cube-leaves DIR --etopo DIR --cube-out GLOBAL_DIR [--cube-levels 5-13] [--jobs N] [--cube-check] [--tlm GPKG]
+///   [--relief FILE|none]
 /// </code>
 ///
 /// <para>
 /// <b>Each height is a function of its lattice point</b>, as G1 asked (#1455): a level's vertex is the
 /// tent-weighted mean (¼ ½ ¼ each way) of the next finer level's nine lattice points round it, the
 /// same points from either neighbour, so edges stay the same bits. A vertex whose nine are not all
-/// there (past the leaves' edge) takes ETOPO's footprint mean instead, as levels 0-4 do; so does every
-/// vertex of a tile with no leaves under it. Built for every tile over the leaves and its three
+/// there (past the leaves' edge) takes the coarse ground's footprint mean instead: the game's 500 m Swiss relief
+/// where it holds (<c>--relief</c>, #1746: ETOPO's 1.8 km cells drew the far Alps as smooth grey sheets), ETOPO
+/// beyond it, as levels 0-4 do; so does every vertex of a tile with no leaves under it. Built for every tile over the leaves and its three
 /// siblings, so the renderer can always split a parent into all four.
 /// </para>
 /// </summary>
@@ -31,6 +33,8 @@ public static class CubeSwiss
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
         string? leavesDir = null, etopo = null, outDir = null, tlm = null;
+        // past the leaves the game's 500 m Swiss relief, not ETOPO's 1.8 km cells (#1746); "none" for ETOPO alone
+        string? relief = File.Exists(DefaultRelief) ? DefaultRelief : null;
         int minLevel = 5, maxLevel = 13, jobs = Environment.ProcessorCount;
         bool check = false;
         for (int i = 0; i < args.Count; i++)
@@ -49,6 +53,7 @@ public static class CubeSwiss
                 case "--jobs": jobs = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
                 case "--cube-check": check = true; break;
                 case "--tlm": tlm = args[++i]; break;
+                case "--relief": relief = args[++i] is var r2 && r2 == "none" ? null : r2; break;
                 default: Console.Error.WriteLine($"--cube-swiss: unknown option {args[i]}"); return 2;
             }
         }
@@ -81,6 +86,12 @@ public static class CubeSwiss
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"cube-swiss: {finer.Count} leaves at level {leafLevel} read in {sw.Elapsed.TotalSeconds:F0} s, {wet} with water at its surface; lakes at {string.Join(", ", lakes.Select(l => l.ToString("F1", CultureInfo.InvariantCulture)))} m"));
         var grid = EtopoGrid.Load(etopo, jobs);
+        if (relief != null)
+        {
+            grid.Regional = SwissRelief.Load(relief);
+            Console.WriteLine($"cube-swiss: past the leaves the Swiss relief ({relief}, {grid.Regional.Spacing:F0} m), ETOPO beyond it");
+        }
+        else Console.WriteLine("cube-swiss: past the leaves ETOPO alone (no --relief)");
         // swissTLM3D's big lakes past the leaves (#1678): ETOPO smears a steep shore kilometres into them
         SwissLakeMask? lakeMask = null;
         if (tlm != null)
@@ -98,8 +109,11 @@ public static class CubeSwiss
             Console.WriteLine($"cube-swiss: TLM lakes read in {sw.Elapsed.TotalSeconds:F0} s");
         }
 
-        // the tiles of each level: every ancestor of a leaf, and its siblings
+        // the tiles of each level: every ancestor of a leaf, and its siblings; at the level that blends past the leaves,
+        // every tile the blend reaches too (#1778): a coarser level stood the uncorrected relief where its tiles ended, a
+        // wall tens of metres high along a straight tile edge in the fill built on it, and a ledge under the globe
         var leafKeys = finer.Keys.ToList();
+        if (maxLevel + 1 == leafLevel) leafKeys = BlendReach(leafKeys, maxLevel);
         manifest.Tiles.RemoveAll(t => CubeKey.Parse(t.Key).Level is var l && l >= minLevel && l <= maxLevel);
         // each level's colour before the rebuild: it depends on the footprint alone, so it carries over (#1659)
         var colourBefore = manifest.Levels.Where(l => l.Level >= minLevel && l.Level <= maxLevel).ToDictionary(l => l.Level);
@@ -146,7 +160,7 @@ public static class CubeSwiss
             manifest.Levels.Add(rebuilt);
             if (check) foreach (var (k, t) in made) built[k] = t;
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"cube-swiss: level {level}: {made.Count} tiles, {100.0 * fromLeaves / Math.Max(1, fromLeaves + fromEtopo):F1} % of vertices from the finer level (the rest ETOPO), {sw.Elapsed.TotalSeconds:F0} s"));
+                $"cube-swiss: level {level}: {made.Count} tiles, {100.0 * fromLeaves / Math.Max(1, fromLeaves + fromEtopo):F1} % of vertices from the finer level (the rest the coarse ground: the Swiss relief or ETOPO), {sw.Elapsed.TotalSeconds:F0} s"));
             // the next level averages this one
             finer = made;
         }
@@ -157,7 +171,7 @@ public static class CubeSwiss
         manifest.BundleLevel = manifest.Levels[^1].BundleLevel;
         string leafSources = string.Join("; ", leafManifest.Sources);
         manifest.Sources.RemoveAll(s => s.StartsWith("levels ", StringComparison.Ordinal));
-        manifest.Sources.Add($"levels {minLevel}-{maxLevel}: averaged from {leafManifest.Tiles.Count} level-{leafLevel} leaves ({leafSources}), ETOPO past them");
+        manifest.Sources.Add($"levels {minLevel}-{maxLevel}: averaged from {leafManifest.Tiles.Count} level-{leafLevel} leaves ({leafSources}), {(relief != null ? "past them the game's 500 m Swiss relief (swisstopo swissALTIRegio), then ETOPO" : "ETOPO past them")}");
         File.WriteAllText(manifestPath, manifest.ToJson());
         int colourless = manifest.Levels.Count(l => l.Level >= minLevel && l.Level <= maxLevel && l.Albedo == 0);
         if (uncoloured > 0 || colourless > 0)
@@ -193,6 +207,9 @@ public static class CubeSwiss
         var lakes = CubeSurface.LakeLevels(levels, LakeSamples);
         return (tiles, wet, lakes);
     }
+
+    /// <summary>The game's 500 m Swiss relief, from the repository root (#1746).</summary>
+    private const string DefaultRelief = "src/Terrain/swiss_relief.gz";
 
     /// <summary>How far past the leaves' box TLM's lakes are read, metres.</summary>
     private const double LakeMarginM = 15_000;
@@ -398,8 +415,131 @@ public static class CubeSwiss
                 int k = y0 * side + x0;
                 field[j * n + i] = (float)((1 - v) * ((1 - u) * c[k] + u * c[k + 1]) + v * ((1 - u) * c[k + side] + u * c[k + side + 1]));
             }
+
+        // (#1779) at the leaves' edge the blurred field is the miss averaged over ~110 m, not the miss of the vertex beside
+        // it: on a cliff the two stood 77 m apart, a step along every leaf cell's edge. Within RampM of the leaves' own
+        // vertices the correction starts from the nearest one's exact miss (an exact distance transform on the level's own
+        // lattice, so tiles sharing a vertex agree) and hands over to the field.
+        // the margin holds the ramp and twice the widest blur's reach (two passes each way): a blurred cell that far out
+        // finds its nearest own vertex up to the ramp and that reach further on, inside the window from every tile
+        int m = (int)Math.Ceiling(RampM / stepM) + 2 + 4 * RampBlurs[^1], ws = n + 2 * m;
+        var ownV = new bool[ws * ws];
+        var missV = new float[ws * ws];
+        bool anyV = false;
+        Parallel.For(0, ws, y =>
+        {
+            for (int x = 0; x < ws; x++)
+            {
+                long vi = gi0 - m + x, vj = gj0 - m + y;
+                if (TentMean(finer, key.Face, key.Level + 1, finerBits, finerSide, vi << scale, vj << scale) is not { } mean) continue;
+                var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(lv, vi), CubeSphere.Lattice(lv, vj));
+                double lat = Math.Atan2(normal.Z, Math.Sqrt(normal.X * normal.X + normal.Y * normal.Y)) * 180 / Math.PI;
+                double lon = Math.Atan2(normal.Y, normal.X) * 180 / Math.PI;
+                float e = Shaped(grid, lakes, lakeMask, lat, lon, (float)grid.Footprint(lat, lon, half), out _);
+                ownV[y * ws + x] = true;
+                missV[y * ws + x] = mean - e;
+                anyV = true;
+            }
+        });
+        if (!anyV) return field;
+        var distV = new float[ws * ws];
+        var siteV = new int[ws * ws];
+        DistanceTransform.Run(ownV, ws, ws, distV, siteV);
+        // the nearest own vertex's miss everywhere (its own on an own vertex), and blurred at growing radii: the nearest one
+        // changes on the medial axis of a notch, where two edge vertices far apart along the edge meet (a 17 m step beside
+        // a 10 m cliff above Riddes); a vertex d away reads a blur of radius ~d/2, so the seam keeps the exact miss and
+        // the medial axis is smoothed over as far as it lies from the edge
+        var ext = new long[ws * ws];
+        for (int k = 0; k < ext.Length; k++)
+            ext[k] = siteV[k] < 0 ? 0 : (long)Math.Round(missV[ownV[k] ? k : siteV[k]] * FixedPerM);
+        var blurred = new long[RampBlurs.Length][];
+        for (int b = 0; b < RampBlurs.Length; b++)
+        {
+            var f = ext;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                f = BoxSum(f, ws, 1, 0, RampBlurs[b]);
+                f = BoxSum(f, ws, 0, 1, RampBlurs[b]);
+            }
+            blurred[b] = f;
+        }
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int k = (j + m) * ws + i + m;
+                if (siteV[k] < 0) continue;
+                double d = distV[k] * stepM;
+                if (d >= RampM) continue;
+                double r = distV[k] / 2;
+                double start;
+                if (r <= RampBlurs[0]) start = Mix(ext[k], Blurred(blurred, 0, k), r / RampBlurs[0]);
+                else if (r >= RampBlurs[^1]) start = Blurred(blurred, RampBlurs.Length - 1, k);
+                else
+                {
+                    int b = 0;
+                    while (RampBlurs[b + 1] < r) b++;
+                    start = Mix(Blurred(blurred, b, k) * FixedPerM, Blurred(blurred, b + 1, k), (r - RampBlurs[b]) / (RampBlurs[b + 1] - RampBlurs[b]));
+                }
+                double t = d / RampM, s = t * t * (3 - 2 * t);
+                field[j * n + i] = (float)((1 - s) * start + s * field[j * n + i]);
+            }
         return field;
     }
+
+    /// <summary>Fixed-point units a metre for the ramp's blurs: sums of integers are exact in any order, so tiles agree.</summary>
+    private const double FixedPerM = 1024;
+
+    /// <summary>The ramp's blur radii, vertices of the level (2.4 m at level 13), each applied twice each way.</summary>
+    private static readonly int[] RampBlurs = [1, 2, 4, 8, 16];
+
+    /// <summary>Blur <paramref name="b"/> at <paramref name="k"/>, metres.</summary>
+    private static double Blurred(long[][] blurred, int b, int k)
+    {
+        double norm = Math.Pow(2 * RampBlurs[b] + 1, 4);
+        return blurred[b][k] / norm / FixedPerM;
+    }
+
+    /// <summary>a (fixed point, or metres times <see cref="FixedPerM"/>) to b (metres) by t.</summary>
+    private static double Mix(double aFixed, double b, double t) => (1 - t) * (aFixed / FixedPerM) + t * b;
+
+    /// <summary>A box sum of radius <paramref name="r"/> along one axis (edges clamped), exact: integers.</summary>
+    private static long[] BoxSum(long[] f, int side, int dx, int dy, int r)
+    {
+        var o = new long[f.Length];
+        Parallel.For(0, side, line =>
+        {
+            long sum = 0;
+            int At(int p) => dx == 1 ? line * side + Math.Clamp(p, 0, side - 1) : Math.Clamp(p, 0, side - 1) * side + line;
+            for (int p = -r; p <= r; p++) sum += f[At(p)];
+            for (int p = 0; p < side; p++)
+            {
+                o[At(p)] = sum;
+                sum += f[At(p + r + 1)] - f[At(p - r)];
+            }
+        });
+        return o;
+    }
+
+    /// <summary>
+    /// How far from the leaves' own vertices the correction starts from the nearest one's exact miss before it is the
+    /// blurred field, metres (#1779).
+    /// </summary>
+    private const double RampM = 100;
+
+    /// <summary>The tent mean (¼ ½ ¼ each way) of the finer level's nine points round (fi, fj), null unless all nine exist.</summary>
+    private static float? TentMean(ConcurrentDictionary<CubeKey, CubeTile> finer, int face, int level, int bits, long side, long fi, long fj)
+    {
+        double sum = 0;
+        for (int b = -1; b <= 1; b++)
+            for (int a = -1; a <= 1; a++)
+            {
+                if (FinerAt(finer, face, level, bits, side, fi + a, fj + b) is not { } v) return null;
+                sum += TentW[a + 1] * TentW[b + 1] * v;
+            }
+        return (float)sum;
+    }
+
+    private static readonly float[] TentW = [0.25f, 0.5f, 0.25f];
 
     /// <summary>A box blur of radius <see cref="FieldBlur"/> along one axis, each value summed afresh in one order (edges clamped).</summary>
     private static float[] Blur(float[] f, int side, int dx, int dy)
@@ -419,6 +559,27 @@ public static class CubeSwiss
             }
         });
         return o;
+    }
+
+    /// <summary>
+    /// The tiles at <paramref name="level"/> (the one that blends past the leaves) whose correction is not zero: every
+    /// tile within <see cref="BlendM"/>, the blur's reach and <see cref="RampM"/> of a leaf's tile, in tiles a side (each
+    /// a tile's own key; its ancestors and siblings follow as for a leaf). Past them the correction is zero, so a coarser
+    /// level's tent mean of this one and its own relief agree.
+    /// </summary>
+    internal static List<CubeKey> BlendReach(IEnumerable<CubeKey> leaves, int level)
+    {
+        // a tile's side at a face's middle, metres (Switzerland is on face 0's middle)
+        double tileM = 6_371_000 * Math.PI / 2 / (1L << level);
+        double cellM = FieldStep * tileM / (1 << CubeKey.LatticeBits(level));
+        int grow = (int)Math.Ceiling((BlendM + 4 * FieldBlur * cellM + RampM) / tileM);
+        var keys = new HashSet<CubeKey>();
+        int side = 1 << level;
+        foreach (var t in leaves.Select(l => l.AncestorAt(level)).Distinct())
+            for (int y = Math.Max(0, t.Y - grow); y <= Math.Min(side - 1, t.Y + grow); y++)
+                for (int x = Math.Max(0, t.X - grow); x <= Math.Min(side - 1, t.X + grow); x++)
+                    keys.Add(new CubeKey(t.Face, level, x, y));
+        return keys.ToList();
     }
 
     /// <summary>How far past the leaves their heights blend into ETOPO's, metres.</summary>

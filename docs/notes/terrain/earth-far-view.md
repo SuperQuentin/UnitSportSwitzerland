@@ -15,12 +15,67 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   `ClientWorld`). A drawn leaf's globe tile is left out, and every ancestor of a drawn leaf always splits, so the
   globe's coarser ground (every 8th vertex) never shows through a leaf; the leaf's neighbours stay the globe's. Its
   skirts close the seam. While a split's children load, the parent still draws (a frame or two of overlap).
+  **Past the pyramid's levels (#1800)**: outside Switzerland `cube_global` holds levels 0-4 only (a level-4 tile is
+  ~600 km), and a split waits for all four children, so over a fill leaf in Ladakh (face F1) the split never came: the
+  level-4 tile (every 8th vertex) stayed drawn over the leaves, up to 317 m over them on the Himalaya's slopes. A child
+  of a tile holding a drawn leaf that the pyramid (or the fill's domain, at the leaves' level) lacks is now built from
+  its ancestors alone (`Globe.Synthesise`: `FillFromAncestors`, bilinear in the nearest ancestor's lattice, which is
+  what the fill's `PyramidBase` reads, so they agree; its ancestor's colour). Only those: elsewhere the globe stays at
+  the levels it has. `tools/farfillcheck.sh` (`--farfillcheck`, `Globe.SurfaceAt`): the globe's drawn ground and lakes
+  against the near leaves' over a 600 m grid, at the user's spot or any `AT`, and the world's up against the
+  ellipsoid's (the "rolled" view there was the mountainside's 17° slope; the frame's up was exact).
+- **The leaves' sea level is Switzerland's everywhere** (`SwissSeaLevel`: Bessel 1841 + CHGeo2004, extrapolated): 345 m
+  under the ellipsoid in Ladakh where the geoid is ~-30 m, 1.3 km off over the Pacific. The fill's heights do not
+  depend on it (the pyramid is EGM2008-ellipsoidal and the generator's sea level cancels in `P + D(G - L)`), but every
+  LHN95 read-out does far away: the HUD's altitude and the palette's altitude bands (`EarthWorld.Mesh`'s geoid: more
+  snow). G3's EGM2008 replaces it.
 - **Near the ground in the style's terrain material** (below `TerrainBelowM`, 20 km): every tile takes
   `StyleKit.Material(Terrain)` (one shared instance, restyled by the kit), so it is lit, hazed, banded (PS1) and
   lifted by refraction as the flat terrain is. Above 20 km, `globe.gdshader` (the true sun's terminator over the whole
-  Earth); refraction's lift is gone by then, so the two meet. `world_fill_hide` is 0 in this world (it is the flat
+  Earth); refraction's lift is gone by then, so the two meet.
+- **The handover is a band, 15-25 km** (#1802, `shaders/common/globe_light.gdshaderinc`, `Globe.Blend`): it was a hard
+  switch, and at night the moonlit green ground (the style's shade is the moon, held ~25° high) went black at 20 km, the
+  sea green land below and blue photo above. Now from 15 km the terrain body's light eases into the globe's (true sun,
+  `world_globe_band`: its colour moves from ALBEDO to EMISSION as `globe_lit`), and up to 25 km `globe.gdshader` eases from
+  what the terrain drew at 20 km (the vertex palette, `style_lake`, bare rock, Cartoon's grade, facet normals) into the
+  photo and smooth relief (`world_globe_palette`). Both globals are 0 outside the earth world and below 15 km, written
+  on change; the globe's ambient and sun colour are globals too (`world_globe_ambient`/`_sun`, no per-tile writes). The
+  lakes' surfaces show below 15 km only (scene-lit, they would stand out of a true-sun-lit ground). The step between
+  shots 500 m apart at 20 km went from a mean 25 (night) / 22 (day) of 255 to 1 / 3. A LITE (headset) variant and the
+  PS1 unlit path keep the hard switch. Shots at a far spot need `--sun real` (the fixed sun of shots lights the globe
+  by the scene's light, so it is never night there); at LV95 -5011173,8685903 `--time 12` is night, `--time 0` day.
+- **The sea** (#1802): the pyramid's heights are over the ellipsoid and the sea stands at the geoid (ETOPO "below sea
+  level at the geoid", -106 to +85 m: -20 to -50 m off China's coast), so it follows the geoid's swell and is seldom
+  level within 5 cm. Only its level patches drew a water surface, the rest painted ground, meeting at tile edges; and
+  the pyramid's lake list (any copy with the Swiss levels) dried every water vertex that was none of its lakes, so below
+  20 km the sea was green land. Now a vertex under `GlobeGround.SeaReachM` (90 m) whose colour says water plainly
+  (`LakeWeight`) is water: a surface at its height, the ground sunk under it, as a lake.
+- **Away from Switzerland, the photo's colour** (#1802, `GlobeGround.OwnPalette`): the palette's Swiss classes drew
+  deserts as meadows, and bright sand as snow. A weight grid sample now also holds its block's colour (`Stride` 7,
+  `SampleColour`, the photo lifted as `globe.gdshader` lifts it); land takes it outside Switzerland's lat/lon box (a
+  0.5° feather), water stays the palette's. Inside the box nothing changed. Snow also needs a pale, unyellow colour
+  (`Classify`: saturation under 0.16, blue not under red).
+- **Far lakes at their own depth** (#1802): a far leaf knows its lake's bed, and its ground under the surface sinks by that
+  depth (3 to 100 m), as the near leaves draw it; the coarser levels keep 100 m. A shallow harbour past the near leaves
+  was the abyss's blue, a hard line against the near water's shallows. Not yet judged in a window: the near water's
+  mottling (its bed's depth through the toon bands, by its look) and whether the line is gone at the user's view.
+- **The sky down to the limb** (#1802, `Atmosphere.DimSky`): between the horizontal and the Earth's limb (3° under it at
+  10 km, 8° at 60 km) the procedural sky's ground half shows. It was dimmed as `keep³` from 15 km and turned to its dark
+  bottom colour within 2° (`ground_curve` 0.02): a grey band with a hard edge at eye level. Now it dims with the sky
+  and keeps the horizon's haze (`LimbGroundCurve` 0.3). `world_fill_hide` is 0 in this world (it is the flat
   world's fill dissolve: at 1 `flat_hide` discards every terrain fragment) and `globe.gdshader`'s fill push is off by
   its own `fill_push` uniform.
+- **The terminator holds still** (#1798): `world_true_sun` (`Atmosphere.TrueSun`) is the ephemeris' sun as an
+  Earth-fixed direction, read every frame and turned into `Globe.Axes`, the axes the tiles are placed in (the
+  atmosphere runs after the globe, which places its tiles again at each re-anchor). Read twice a second in world
+  axes it lagged twice over: behind each re-anchor while the globe turned under it (20 km a turn in Space) and
+  13 km a read at the game's day speed. Check: `--fly 0,500000,0,30,100000,6 --flyterminator [file.csv]` under
+  `--frame earth --sun real` (the globe's sun taken back to the Earth each frame: steps past the sun's own motion,
+  and the offset off the ephemeris; 53 km before, 0.00 after).
+- **The sun above the air** (#1798): the style's sky (and its sun disc) dims to black as the camera climbs, so
+  `atmosphere.gdshader` draws the sun itself where nothing was drawn and the Earth's ball is not in the way (its true
+  0.27° radius and a glare, faded in with the space factor, dimmed through the air on the way): over the night side
+  it shows above the limb, behind the Earth it is gone. `--skyshot sun,1050000,...` (`world/day-night`).
 - **Colour per vertex, in the palette** (`GlobeGround`): each texel of a tile's colour image is read back through the
   bake's encoding (`Unstore`, the exact inverse of `OurColours.ForCartoonShader`) and classified as cover weights
   (water, forest, rock, snow; the rest open ground). A vertex is painted `CoverPalette.ColorFor` of those classes at

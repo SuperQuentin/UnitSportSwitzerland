@@ -189,8 +189,80 @@ public static class StadiumCheck
                 $"{s.Name}: built by tile {owner} and by no other");
         }
 
+        OnLeaves(Expect);
+
         GD.Print(failures == 0 ? "[stadiumcheck] RESULT: ok" : $"[stadiumcheck] RESULT: FAILED ({failures})");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Under <c>--frame earth</c> (#1723): every stadium built leaf by leaf on level ground (<see cref="StadiumLeaves"/>) is the
+    /// whole bowl, no triangle lost or drawn twice where it crosses a leaf edge and each where the bowl built alone has it;
+    /// and a leaf's data inside a facade goes, outside it stays. Pure, no world: checked on flat runs too.
+    /// </summary>
+    private static void OnLeaves(Action<bool, FormattableString> expect)
+    {
+        var crossing = new List<string>();
+        foreach (var row in Rows)
+        {
+            var s = row.Spec;
+            var whole = StadiumBuilder.BuildLocal(s);
+            var place = StadiumLeaves.Level.Place(s);
+            // the leaves it reaches: from the one under its centre spot, out through neighbours while it may reach them
+            var start = CubeKey.FromEcef(place.Origin, Leaves.LeafFrames.LeafLevel);
+            var seen = new HashSet<CubeKey> { start };
+            var queue = new Queue<CubeKey>([start]);
+            int tris = 0, faces = 0, parts = 0;
+            double sx = 0, sy = 0, sz = 0;
+            while (queue.TryDequeue(out var leaf))
+            {
+                foreach (var next in leaf.Neighbours())
+                    if (StadiumLeaves.Reaches(s, next) && seen.Add(next)) queue.Enqueue(next);
+                if (StadiumLeaves.Level.Build(leaf, mesh: true, collision: true, only: s) is not { } part) continue;
+                parts++;
+                var anchor = leaf.Anchor;
+                if (part.Mesh is { } m)
+                {
+                    tris += m.Indices.Length / 3;
+                    foreach (int i in m.Indices)
+                    {
+                        var v = m.Vertices[i];
+                        var q = place.Local(anchor.ToEcef(v.X, v.Y, v.Z));
+                        sx += q.X; sy += q.Y; sz += q.Z;
+                    }
+                }
+                faces += part.Faces.Length / 3;
+            }
+            double wx = 0, wy = 0, wz = 0;
+            foreach (int i in whole.Mesh!.Indices)
+            {
+                var v = whole.Mesh.Vertices[i];
+                wx += v.X; wy += v.Y; wz += v.Z;
+            }
+            int n = Math.Max(1, whole.Mesh.Indices.Length);
+            double off = Math.Sqrt((sx - wx) * (sx - wx) + (sy - wy) * (sy - wy) + (sz - wz) * (sz - wz)) / n;
+            expect(tris == whole.Mesh.Indices.Length / 3 && faces == whole.Faces.Length / 3 && off < 0.01,
+                $"{s.Name} on leaves: {parts} leaf(s) hold {tris} of {whole.Mesh.Indices.Length / 3} triangles and {faces} of {whole.Faces.Length / 3} faces, {off * 100:F2} cm off where it stands alone");
+            if (parts > 1) crossing.Add($"{s.Name} ({parts})");
+
+            // a leaf's building and tree at the centre spot go, at 400 m out stay
+            if (s.Kind == VenueKind.OpenAir) continue;
+            var key = start;
+            var frame = place.In(key.Anchor);
+            Vector3 c = frame(Vector2.Zero, 0), far = frame(new Vector2(400, 0), 0);
+            float[] Tri(Vector3 p) => [p.X, p.Y + 5, p.Z, p.X + 2, p.Y + 5, p.Z, p.X, p.Y + 5, p.Z + 2];
+            var content = new CubeLeafContent
+            {
+                Key = key,
+                Buildings = new BuildingTile { Id = default, Buildings = [new Building { Kind = BuildingKind.Commercial, MinY = 0, MaxY = 10, Triangles = [.. Tri(c), .. Tri(far)] }] },
+                Trees = [new TreeInstance { X = c.X, Y = c.Y, Z = c.Z }, new TreeInstance { X = far.X, Y = far.Y, Z = far.Z }],
+            };
+            StadiumLeaves.Clip(content);
+            expect(content.Buildings!.Buildings[0].TriangleCount == 1 && content.Trees!.Count == 1,
+                $"{s.Name} on leaves: the data at its centre spot goes, 400 m out stays ({content.Buildings.Buildings[0].TriangleCount} of 2 triangles, {content.Trees.Count} of 2 trees)");
+        }
+        GD.Print($"[stadiumcheck] across leaf edges: {(crossing.Count == 0 ? "none" : string.Join(", ", crossing))}");
+        expect(crossing.Count > 0, $"some stadium crosses a leaf edge, so the split is tried ({crossing.Count})");
     }
 
     private static string Fmt(List<float> hs) => string.Join(", ", hs.OrderBy(h => h).Select(h => h.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)));

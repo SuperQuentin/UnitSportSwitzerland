@@ -14,7 +14,7 @@
 #                            max exclusive). The départements default to the ones under the named area.
 #   plan                     publish, scan the rasters and count the tiles of the full run (builds nothing)
 #   log [N]                  last N lines of the run log (default 40)
-# Env (all optional):
+# Env (all optional; NAS, NAS_ROOT, HEAP_GB, JOBS also as NAS, NAS_ROOT, NAS_HEAP_GB, NAS_JOBS in tools/deploy.env):
 #   NAS=truenas_admin@TRUENAS        ssh target (key login, BatchMode)
 #   NAS_ROOT=/mnt/Data/Documents/UnitSportSwitzerland   = X:\UnitSportSwitzerland on Windows
 #   HEAP_GB=16        GC heap hard limit: the rest of the 31 GB stays for the ZFS ARC and the page cache
@@ -28,6 +28,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+. tools/lib/nas.sh
+nas_config   # NAS, NAS_ROOT, NAS_HEAP_GB, NAS_JOBS from tools/deploy.env; the environment wins
 NAS=${NAS:-truenas_admin@TRUENAS}
 NAS_ROOT=${NAS_ROOT:-/mnt/Data/Documents/UnitSportSwitzerland}
 HEAP_GB=${HEAP_GB:-16}
@@ -40,31 +42,14 @@ TEMP=${OUT}_temp
 LOG=$NAS_ROOT/terrain_chunks_france.log
 PIDFILE=$NAS_ROOT/terrain_chunks_france.pid
 DEM=$NAS_ROOT/data/france/rgealti
-PUBLISH=test_output/build-france/publish
-
-nas() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$NAS" "$@"; }
-
-publish() {
-  echo "== dotnet publish linux-x64 (self-contained)"
-  dotnet publish tools/TerrainPreprocessor/TerrainPreprocessor.csproj -c Release -r linux-x64 --self-contained \
-    -p:DebugType=none -o "$PUBLISH" -v q -nologo
-  local size; size=$(du -sh "$PUBLISH" | cut -f1)
-  echo "== copy $size to $NAS:$BIN_DIR"
-  # tar over ssh: one stream, not thousands of scp round trips; the old files stay, the new ones overwrite
-  nas "mkdir -p '$BIN_DIR'"
-  (cd "$PUBLISH" && tar -cf - *) | nas "tar -C '$BIN_DIR' --no-overwrite-dir --no-same-owner --no-same-permissions -m -xf - && chmod +x '$BIN_DIR/TerrainPreprocessor' 2>/dev/null; test -x '$BIN_DIR/TerrainPreprocessor'"
-  echo "== published"
-}
-
-alive() { nas "test -f '$PIDFILE' && kill -0 \$(cat '$PIDFILE') 2>/dev/null"; }
+# outside the repository: a build under the checkout's folders disturbs the game's own build
+PUBLISH=${PUBLISH:-${TMPDIR:-/tmp}/unitsport-nas/build-france-publish}
 
 # the command line shared by the full run and the tests: the NAS side, run through bash (its login shell is zsh)
 run_args() { # out temp [extra...]
   local out=$1 temp=$2; shift 2
   echo "--dem lambert93,$DEM --height-format wide --dem-min-probes $MIN_PROBES --dem-cache-mb $DEM_CACHE_MB --out $out --temp $temp --no-hash $*"
 }
-
-heap_hex() { printf '0x%x' $((HEAP_GB * 1024 * 1024 * 1024)); }
 
 start() {
   if alive; then echo "already running (pid $(nas cat "$PIDFILE")); use status / stop" >&2; exit 1; fi

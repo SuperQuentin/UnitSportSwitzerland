@@ -11,7 +11,7 @@
   FOV and the airborne launch rule follow), the crawl while downed, a prop-carrying walk, the walk's acceleration
   (times the factor when above 1, so a high factor is reached at once), both swim strokes, the dive and the rise,
   free climbing and creative flight. Not vehicles, the equipment rides (skis, wingsuit, paraglider, parachute) or
-  the spectator camera, which has its own wheel speed (2 .. 3000 m/s).
+  the spectator camera, which has its own wheel speed (2 m/s .. 100 km/s, held to the altitude, #1796: `creative-mode`).
 - **Whose factor**: the local player reads the static `FootPlayer.OwnSpeedFactor` (kept off the body, so a respawn
   keeps it; none in a Battle Royale match, `Permissions.InMatch`); every other body reads its own field: a server-run
   bot's, or the server's record of a peer's. The record is what `StaminaWatch` reads: a body above x1 is not logged

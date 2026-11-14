@@ -1,8 +1,9 @@
 # Linux server deploy: `tools/deploy-linux.sh`
 
 - One Git Bash command builds the Linux x86_64 **dedicated server** and deploys it to a Debian/Ubuntu host over SSH:
-  `tools/deploy-linux.sh` (everything), or pick steps: `--setup`, `--build` (export + upload), `--chunks`, `--restart`;
-  `--check` reports and changes nothing; `--dry-run` prints every change instead of making it; `--no-chunks` skips the tiles.
+  `tools/deploy-linux.sh` (everything), or pick steps: `--setup`, `--build` (export + upload), `--chunks`, `--leaves`, `--restart`;
+  `--check` reports and changes nothing; `--dry-run` prints every change instead of making it; `--no-chunks`/`--no-leaves` skip
+  the tiles or the leaves. The earth flip (D2, protocol 96): the runbook at the end.
 - **One-time setup:** `cp tools/deploy.env.example tools/deploy.env` (gitignored) and set `DEPLOY_HOST=user@host`; env vars override
   the file. Key auth is required: `ssh-keygen` once, then `ssh-copy-id user@host`. The user needs sudo (with a password is fine,
   the setup step asks for it through `ssh -t`, so run it from a real terminal; `--check`/`--dry-run` without a terminal report without root). Linux export templates must be installed (Godot editor > Manage Export Templates).
@@ -83,7 +84,102 @@
   it mounts `nofail`, so losing it costs the French tiles, not the boot; undo = restore `index/before/` and delete the symlinks (`find -type l`).
   These tiles were not aligned to the Swiss heights (dz 0, not -0.28 m; `tools/france-nas-run`).
 - **SMTP check** (#1287, `net/house-layouts`): `tools/deploy-linux.sh --smtp-check you@example.ch` is a step of its own (no build, no other step): over SSH it loads `layouts/layouts.env` and runs `app/LayoutService --smtp-check`, which mails a test message (MailKit: port 465 implicit TLS, 587 or other ports STARTTLS) and prints the exact failure; the password never leaves the host.
+- **The earth world's leaves** (G2 D2, #1792): the `--leaves` step, part of a full deploy and of `--check`. It syncs
+  `LEAVES_SRC` (`.cubl` bundles and `cube_manifest.json`) to `DEPLOY_LEAVES_DIR` the same way as the tiles: what differs
+  is copied, after a free-space check, with `cube_manifest.json` last, and nothing is deleted without `--prune`.
+  - Where: `LEAVES_SRC` defaults to the chunk source's `_cube` sibling. Today it is B4's set,
+    `D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube`: 16 files, 775 MB, 2,412 L14 leaves, Geneva to Riddes. It is
+    the set every earth check and the playtest use (`D:/UnitSportSwitzerland/terrain_chunks_cube` does not exist). The
+    server's own copy is built on the NAS (`tools/cube-nas-run`): `X:/UnitSportSwitzerland/terrain_chunks_cube`.
+    `DEPLOY_LEAVES_DIR` defaults to `DEPLOY_CHUNKS_DIR`'s `_cube` sibling, where the game also looks without a flag.
+  - The server starts with `--leaves <dir>` (`LEAVES=0` drops it), and with `--frame <FRAME>` only when `FRAME` is set.
+  - Caddy needs nothing: leaves stream over ENet (`net/leaf-streaming`), never HTTP.
+  - A flat server never opens the leaves, so the step copies them while it runs. A server whose log since its last start
+    says `[frame] earth` holds their index, so it is stopped first and started again.
+  - `--check` adds a "Server" block. It shows whether `current` is a release (it updates itself, `net/server-update`) or a
+    deploy build (it stays as deployed); the running server's `[frame]` and leaf count; and the `--leaves`/`--frame` in
+    `start-server.sh`.
+- **Not the `cube_global` pyramid.** The fill outside the leaves must stand on the same base on the server and every
+  client (`GameLeaves`: a client and the server make the same fill leaf). A release has only the shipped levels 0-2
+  (`res://assets/globe`), on which `PyramidBase.Open` gives null, so the fill stands on the generator's relief.
+  - Measured with `--fillagree` at B4's south-west edge (20 fill points, 5 real): the shipped globe on both sides agreed
+    to 0.000 m. The full pyramid on one side only was off by 20.5 m on the fill on average, 32.3 m at worst, whichever side had it.
+  - So the server gets no `--globe`. The deploy preset includes `assets/globe/*`, as the CI one does, which is for the
+    server's line of sight only.
+  - The user's own PC finds `D:/UnitSportSwitzerland/cube_global` by itself, so on that PC the fill is ~20 m off from the server's
+    outside the region. `--globe res://assets/globe` matches the server. The fix is #1656 (the server streams the pyramid).
+- **What an earth client gets online** (D2 at `daf0751d3`, Nov 13 2026, one PC over loopback):
+  - The setup: a server with the default frame, `--chunks` the full flat set, `--leaves` B4 and the shipped globe; a
+    release-like client with no tiles, no leaves, an empty cache and the shipped globe, `--earthcheck` at the default
+    spawn (2583250/1113250, Riddes).
+  - The leaf index came first (42 KB, 2,412 leaves), then every leaf over ENet. Ground under the start came at 61.8 s,
+    with 113 MB received. It had 170.6 MB after 3 km, held 457 leaf entries in its cache, and found 888 doors within 600 m.
+  - It still streamed flat files: 112 `.terr`/`.terrc`, 69 `.road`, 45 `.bldg`, 12 `.cover`, `horizon.bin`,
+    `places.json` and `landings.json`. They go through Caddy when `--tiles-url` is set, so **the flat tiles stay deployed
+    until D3**. The earth server also reads its places, landings and airports from the chunk dir.
+  - The same server with **no leaves** (none deployed, no `--leaves`, no `_cube` sibling) did not fail. It logged
+    `0 leaves`, and the client logged "the server holds no leaves": generated fill everywhere, ground at 12.1 s.
+  - Not measured over a real internet link. ENet is capped per client (`--stream-bandwidth`), so a first join at
+    Riddes takes about a minute on the fill before the real leaves replace it in place.
+- **Checked without a host:** the script ran against WSL Ubuntu standing in for the host (a stub `ssh` that runs the
+  command there). The runs: `--check` on an empty host; `--leaves` with the full 775 MB B4 set (byte-identical md5, a second
+  run copies 0); `--prune`; a flat server left running and an earth server stopped and restarted; `--restart --dry-run`
+  with `FRAME`. This machine has no `tools/deploy.env` and no SSH key, so nothing ran against the real host.
+
 - **Gotchas seen on the first real deploy (Debian 13):** the root partition was 19 GB, so the space check refused the tiles until
   `DEPLOY_CHUNKS_DIR` pointed at `/home` (check `df -h` on the host first). `/etc/os-release` defines `VERSION`, so the setup
   script reads it in a subshell or the mDNS TXT would advertise "13 (trixie)". A server started before the tiles arrive exits
   with `no terrain data` - expected; `--chunks --restart` brings it up.
+
+### Runbook: the D2 flip, protocol 95 -> 96 (#1727)
+
+The release has no terrain: CI has no data, so a player's earth ground is the server's leaves (streamed) and
+the generated fill. A 95 client and a 96 server refuse each other, both ways: "This server runs a newer (older) version of the
+game (protocol 96, yours 95)". A refused newer client also reads that the server updates itself, and the refusal makes a
+release server check for the new release at once. The mismatch lasts from D2's release to the server's restart on it.
+The steps below keep it to the `/update` download (1-2 min).
+
+**Before merging (any day; harmless to the 95 server):**
+0. Build the leaves on the NAS (`tools/cube-nas-run`, #1794), from the repo on `main`, with `NAS` and `NAS_ROOT` in
+   `tools/deploy.env` (the example's last block) if they differ from the defaults:
+   `tools/build-swiss-nas.sh cube check` (every source there, or what to fetch), `cube test` (Geneva, ~10-15 min), then
+   `cube start` and `cube status` until `ALL STAGES DONE` (~2 h; the server's region by default: B4's 825 tiles). The
+   output is `X:\UnitSportSwitzerland\terrain_chunks_cube` (`/mnt/Data/Documents/UnitSportSwitzerland/terrain_chunks_cube`).
+1. In `tools/deploy.env`, set `LEAVES_SRC=X:/UnitSportSwitzerland/terrain_chunks_cube` (the NAS share; B4's
+   `D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube` on the user's PC is the same region) and leave `FRAME` empty.
+2. `tools/deploy-linux.sh --check`. It takes minutes, mostly listing the flat tiles. Read:
+   - the leaves' "space OK";
+   - the "Server" block: a release or a deploy build, `[frame] flat`.
+
+   `/home` was full in Nov 2026. If the space check fails, set `DEPLOY_LEAVES_DIR=/srv/unitsport-tiles/leaves`
+   (the SSD; 775 MB plus the 2 GB margin). That disk mounts `nofail`, so a missing SSD means a server on the fill alone.
+3. `tools/deploy-linux.sh --leaves`. 775 MB at your upload speed: about 1 min at 100 Mbit/s, 5 min at 20. The 95 server keeps running.
+4. When nobody plays (the status page): `tools/deploy-linux.sh --restart`, about 1 min. It installs `start-server.sh` with
+   `--leaves <dir>`; the 95 server ignores it.
+5. `tools/deploy-linux.sh --check` again: `start-server.sh: --leaves ...` and `cube_manifest.json present`.
+
+**The switch:**
+
+6. Merge #1727. The release waits until an hour after the latest one, then 3 quiet minutes, then ~5-15 min of build.
+   To pick the moment, cancel the holding run and dispatch it with `-f min_gap_minutes=0 -f quiet_minutes=0`
+   (`release-on-merge`). Watch it with `gh run list -w release.yml --limit 2` and
+   `gh release view --json tagName,publishedAt`.
+7. Once the release is published, an admin types `/update` in game, or `update` in the server console
+   (`ssh -t <host> tmux attach -t unitsport`). It downloads the Linux archive (~185 MB) and kicks everyone with "update your
+   game". The server restarts on D2 with the same `start-server.sh`, so `--leaves` comes along. This takes 1-2 min.
+   - Without `/update`, a release server fetches the new release within 10 min (at once on a refused 96 client), but
+     restarts only once nobody is connected.
+   - A deploy build never updates itself: use `/update`, or `tools/deploy-linux.sh --build --restart` from `main` at the release.
+8. Check:
+   - `tools/deploy-linux.sh --check` shows `running: [frame] earth; [earth] 2412 leaves from <dir>` (B4's count; the NAS
+     build of the same tiles should match: its manifest's `"key"` count);
+   - a fresh client's log says `[stream] leaf index received: 2412 leaves`.
+
+**Rollback:**
+- **The leaves:** nothing to undo; they cost a 95 server nothing. To free the 775 MB, delete `DEPLOY_LEAVES_DIR`.
+- **The server alone cannot go back to flat for players.** D2 clients play earth by default, and the handshake does not
+  compare frames. `FRAME=flat` (then `--restart`) is only for a server whose clients also run `--frame flat`.
+- **D2's own rollback** (G2 D plan §6): a PR setting the default back (protocol stays 96), merged and released, then
+  `/update` on the server. About 20 min with a dispatched release, or up to 1.5 h with the hourly gap.
+- **Back to 95:** `ln -sfn releases/v0.251.0 current` in `DEPLOY_DIR`, plus `--no-auto-update` in `server-args.local`,
+  plus a restart. Every 96 client is then refused, so this is only for when D2's server itself is broken.

@@ -62,6 +62,18 @@ public partial class SiteCranes : Node3D
         /// <summary>A tile-local point in the world.</summary>
         public Vector3 ToWorld(Vector3 local) => Owner.GlobalTransform * local;
 
+        /// <summary>
+        /// A tile-local heading (yaw about +Y, 0 = -Z) in the world (#1799): an earth leaf's node is turned, far from
+        /// Switzerland by a lot. A flat-world tile's node is not, and the heading is returned as it is.
+        /// </summary>
+        public float WorldYaw(float localYaw)
+        {
+            var b = Owner.GlobalBasis;
+            if (b.IsEqualApprox(Basis.Identity)) return localYaw;
+            var f = b * new Vector3(-Mathf.Sin(localYaw), 0, -Mathf.Cos(localYaw));
+            return Mathf.Atan2(-f.X, -f.Z);
+        }
+
         /// <summary>The mast's centre on the ground, in the world.</summary>
         public Vector3 Foot => ToWorld(new Vector3(Data.Job.Base.X, Data.Ground, Data.Job.Base.Y));
 
@@ -73,7 +85,7 @@ public partial class SiteCranes : Node3D
             var at = new Vector3(Data.Job.Base.X, Data.Ground + CranePlans.FootHeight(Data.Spot) + height, Data.Job.Base.Y)
                      + Face * CranePlans.LadderOut(Data.Spot);
             // yaw 0 faces -Z: facing -Face
-            return (ToWorld(at), Mathf.Atan2(Face.X, Face.Z));
+            return (ToWorld(at), WorldYaw(Mathf.Atan2(Face.X, Face.Z)));
         }
 
         /// <summary>The foot of the ladder, a step out from it, on the ground: where a climber lands.</summary>
@@ -92,7 +104,7 @@ public partial class SiteCranes : Node3D
         /// <summary>Where the operator of the remote stands, by its box, and its heading (facing the mast).</summary>
         public (Vector3 At, float Yaw) AtRemote =>
             (ToWorld(new Vector3(Data.Job.Base.X, Data.Ground + 0.05f, Data.Job.Base.Y) + RemoteSide * (CranePlans.MastHalf(Data.Spot) + 0.75f)),
-                Mathf.Atan2(RemoteSide.X, RemoteSide.Z));
+                WorldYaw(Mathf.Atan2(RemoteSide.X, RemoteSide.Z)));
 
         /// <summary>The remote's box itself, in the world.</summary>
         public Vector3 RemoteBox => ToWorld(new Vector3(Data.Job.Base.X, Data.Ground + CranePlans.RemoteHeight, Data.Job.Base.Y)
@@ -114,7 +126,7 @@ public partial class SiteCranes : Node3D
 
         /// <summary>The operator's place in the cab for a pose, in the world, and its heading (along the jib).</summary>
         public (Vector3 At, float Yaw) InCab(CranePose pose) =>
-            (ToWorld(Data.Pivot + new Basis(Vector3.Up, pose.Yaw) * CranePlans.CabSeat), pose.Yaw);
+            (ToWorld(Data.Pivot + new Basis(Vector3.Up, pose.Yaw) * CranePlans.CabSeat), WorldYaw(pose.Yaw));
 
         /// <summary>The hook's origin for a pose, in the world.</summary>
         public Vector3 HookWorld(CranePose pose) => ToWorld(CraneControl.HookAt(Data.Job, pose));

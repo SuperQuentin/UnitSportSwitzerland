@@ -142,6 +142,11 @@ public sealed class JunctionCore
     /// straight kerbs between the mouths pushed out to pave the connectors (<see cref="CorePlanner.Fallback"/>).
     /// </summary>
     public bool IsFallback { get; set; }
+    /// <summary>
+    /// A fallback's mouth ends its outline's clean-up cut away (their arms end inside the paving). On a merged group's
+    /// fallback any is a refusal (<see cref="Refused"/>): the outline swallowed the streets between the members.
+    /// </summary>
+    public int MouthEndsCut { get; set; }
     /// <summary>Today's cap written by the planner (#854): its boundary, its mouths at today's trims; the sidewalk corners as today's.</summary>
     public bool IsCap { get; set; }
     /// <summary>Written as laid though it fails a check (a roundabout's core, #854): its checks no longer hold it back.</summary>

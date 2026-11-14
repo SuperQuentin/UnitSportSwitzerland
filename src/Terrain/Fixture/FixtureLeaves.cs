@@ -132,15 +132,16 @@ public sealed class FixtureLeaves
             double minX = slope.Outline.Min(p => p.X), maxX = slope.Outline.Max(p => p.X);
             double minY = slope.Outline.Min(p => p.Y), maxY = slope.Outline.Max(p => p.Y);
             if (maxX < minA || minX > maxA || maxY < minB || minY > maxB) continue;
-            var path = new float[slope.Outline.Length * 2];
-            for (int k = 0; k < slope.Outline.Length; k++)
+            var points = slope.Path;
+            var path = new float[points.Length * 2];
+            for (int k = 0; k < points.Length; k++)
             {
-                var (x, _, z) = on.Local(slope.Outline[k].X, slope.Outline[k].Y, _course.Ground(slope.Outline[k].X, slope.Outline[k].Y));
+                var (x, _, z) = on.Local(points[k].X, points[k].Y, _course.Ground(points[k].X, points[k].Y));
                 (path[k * 2], path[k * 2 + 1]) = ((float)x, (float)z);
             }
             var (low, high, sun, steep) = FixtureChunkSource.SlopeTerrain(_course, slope);
             records.Add(new PisteRecord(0xF0F0_0000UL + (ulong)_course.Slopes.IndexOf(slope), PisteType.Downhill, slope.Difficulty,
-                PisteGrooming.Classic, true, (float)(maxX - minX), slope.Name, "", path, low, high, sun, steep));
+                PisteGrooming.Classic, slope.Line == null, (float)(maxX - minX), slope.Name, "", path, low, high, sun, steep));
             byte index = (byte)records.Count;
             slot ??= new byte[n * n];
             aux ??= new ushort[n * n];

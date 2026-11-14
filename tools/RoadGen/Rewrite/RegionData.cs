@@ -35,6 +35,8 @@ public sealed class RegionData
         };
         if (TileRewriter.SignalSites.From(nodes) is { } sites) log($"  OSM traffic signals: {sites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
+        log(cantons is null ? "  cantons: none found, every junction keeps the default heads and poles"
+            : $"  cantons (signal heads, plates, poles): {cantons.Source}");
         return data;
     }
 

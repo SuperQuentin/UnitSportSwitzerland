@@ -116,6 +116,9 @@ public partial class SkyBodies : Node3D
         {
             Name = name, Mesh = mesh, MaterialOverride = material, TopLevel = true, Visible = false,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, GIMode = GeometryInstance3D.GIModeEnum.Disabled,
+            // the sky is never occlusion-culled: depth hides it behind a ridge; the buildings' coarse buffer culled the
+            // moon looked at head-on (#1835 follow-up)
+            IgnoreOcclusionCulling = true,
         };
         AddChild(m);
         return m;

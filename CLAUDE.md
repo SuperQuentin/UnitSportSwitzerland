@@ -20,7 +20,7 @@ occasions, adventure, core, ui, xr, styles, farming, general. New knowledge goes
 `build-features` (`UNITSPORT_FEATURES`: an export leaves out the dev tools it does not list, e.g. the trailer studio; `#if TRAILER` at its call sites; the editor has all),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
-`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
+`linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH; the earth leaves, and the D2 protocol 96 runbook),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard; every tier side by side, longest first, admitted by each check's measured peak RAM, `TEST_JOBS`/`TEST_QUICK_JOBS`),
 `regression-net` (before a coordinate or rendering change: `tools/test.sh coords` + `results.csv` + `tools/test-compare.py` against a `main` baseline; reference screenshots on D: with `tools/refshots.sh` and `tools/refshot-diff.py`, noise floor first),

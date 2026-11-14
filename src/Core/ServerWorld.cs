@@ -129,7 +129,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         GD.Print($"[server] {manifest.Tiles.Count} tiles, origin LV95 {origin.E}/{origin.N}"
             + (manifest.Tiles.Count == 0 ? " (generated world)" : "") + (earth ? ", frame earth (ENU, on leaves)" : ""));
         // the frame this world plays in, every run: a net check under --frame earth fails on a silent flat fallback (#1683)
-        GD.Print($"[frame] {(earth ? "earth" : "flat")}");
+        FrameReport.Say(earth);
 
         // The same generated fill as every client's, anchored at the same point, so height
         // queries, interiors and loot work on generated ground and agree with what players see.
@@ -272,6 +272,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // the fill's heights against a client's (#1682, tools/fillagreenetcheck.sh)
         if (_earth != null && Terrain.Earth.FillAgreeProbe.Point is var (fillE, fillN)) AddChild(new Terrain.Earth.FillAgreeProbe(_earth, server: true, fillE, fillN));
+        if (_earth != null && Terrain.Earth.DressCheck.Stop is var (dressE, dressN)) AddChild(new Terrain.Earth.DressCheck(_earth, server: true, dressE, dressN));
         // two bots far apart on one server, each in a frame of its own (#1456, tools/regioncheck.sh)
         if (Bots.RegionCheck.Requested) AddChild(new Bots.RegionCheck());
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -343,7 +344,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // /locate (#1277): every list the server holds, and an index of its buildings built now on workers
         // (from the tiles themselves, not the 32 MB cache the rest shares) or read back from user://cache
         AddChild(new World.Locate.LocateService(local, manifest, () => places, origin,
-            () => _players?.GetChildren().OfType<Player.FootPlayer>().Select(p => p.Global) ?? []));
+            () => _players?.GetChildren().OfType<Player.FootPlayer>().Select(p => p.Global) ?? [])
+        {
+            // under earth a parking entrance is the leaf's own building's (#1772)
+            Leaves = GameSettings.Current.Frame == WorldFrame.Earth ? leaf => _earth?.StandOf(leaf) : null,
+        });
 #if PLAYTEST
         // the playtest recorder (#844): the authoritative positions, for the top view's server-vs-client lines
         if (Playtest.Recording.PlaytestRecorder.Requested)
@@ -374,7 +379,16 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chat.Parties = _parties;
 
         // car races between players: World/Race, like World/Chat, so the RPCs find it
-        var race = World.RaceManager.CreateServer(_chat, _players, source);
+        // the tiles by name (#1737): ski races read the earth leaves through their stand-ins; road races still name LV95 tiles
+        var race = World.RaceManager.CreateServer(_chat, _players, content);
+        // on leaves a race's road is the leaves' (#1742)
+        if (_earth is { } raceEarth)
+            race.LeafRoads = key =>
+            {
+                // the fill reaches the race's start as it reaches a body's (the ground's own reach may come after)
+                raceEarth.Leaves.Reach(key);
+                return raceEarth.Leaves.Get(key)?.Roads;
+            };
         // racers see each other however far apart the field spreads (Net/InterestService)
         // and everyone aboard one vehicle sees everyone else aboard it, wherever it goes
         var passengers = _passengers;
@@ -412,8 +426,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
             AddChild(new World.Fun.FunCrates(_brCrates));
         }
         var br = _br = BattleRoyale.BrManager.CreateServer(_chat, _players, places?.Places ?? new(), manifest.Tiles,
-            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), source, _brCrates);
+            (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N), _earth != null ? content : source, _brCrates);
         br.Origin = origin;
+        // on leaves the match square's roads are the leaves' (#1704): the flat world holds none under earth
+        if (_earth is { } brEarth)
+        {
+            br.TilesOf = BattleRoyale.BrLoot.LeafTiles;
+            br.LeafRoads = key => brEarth.Leaves.Get(key)?.Roads;
+        }
         AddChild(br);
         _chat.BattleRoyale = br;
         // one "in a round" registry (#1268, Core/Rounds): the Battle Royale first, so it keeps its own answers
@@ -541,10 +561,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         }
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
-        _pallets.Source = () => source;
+        _pallets.Source = () => content;
         // cranes players work (#618): who works which, and where one was let go
         _cranes = Terrain.Construction.CraneService.Create(this, server: true);
-        _cranes.Source = () => source;
+        _cranes.Source = () => content;
         // concerts (#885): who hosts which stadium's set, its cues, the operator's DMX relayed
         _concerts = Concert.ConcertService.Create(this, server: true);
         _concerts.Chat = _chat;
@@ -556,7 +576,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             Farming.FarmSales.Create(this, origin, server: true).NameOf = _chat.NameOfPeer;
             _farmStands = Farming.FarmStands.Create(this, origin, server: true);
             _farmStands.NameOf = _chat.NameOfPeer;
-            _farmStands.Source = () => source;
+            _farmStands.Source = () => content;
         }
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))

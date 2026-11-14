@@ -116,6 +116,24 @@ public sealed partial class EarthWorld
             }
         }
 
+        // the stadiums' parts on this leaf (#1723), drawn with the sites' shells as on a flat tile: anchor frame to stand-in
+        if (m.Prop is { } stadiumProp && _collisionSource.Stadiums?.Build(content.Key, mesh: true, collision: false) is { Mesh: { } bowl })
+        {
+            var shift = new Vector3((float)LeafStandIn.Offset, 0, (float)LeafStandIn.Offset);
+            var inTile = bowl with { Vertices = bowl.Vertices.Select(v => v + shift).ToArray() };
+            if (_gone) return null;
+            if (f.Sites == null) f.Sites = ChunkNode.ToPropMesh(inTile, stadiumProp);
+            else ChunkNode.WithPiers(f.Sites, inTile, stadiumProp);
+        }
+
+        // the piers and jetty decks (#1736): the prop material, as a tile draws them in its roads mesh
+        if (m.Prop is { } pierProp && _collisionSource.Piers?.Build(content.Key, grid, mesh: true, collision: false) is { Mesh: { } decks })
+        {
+            if (_gone) return null;
+            if (f.Sites == null) f.Sites = ChunkNode.ToPropMesh(decks, pierProp);
+            else ChunkNode.WithPiers(f.Sites, decks, pierProp);
+        }
+
         if (content.Trees is { Count: > 0 } leafTrees && m.Tree is { } treeMaterial)
         {
             var trees = LeafStandIn.Trees(leafTrees);
@@ -207,11 +225,16 @@ public sealed partial class EarthWorld
     {
         _gone = false;
         Origin.StandIns = StandInFrame;
+        // a stand-in building's seeds from its Earth identity whenever they are asked, its leaf read or not yet (#1704)
+        Core.Fnv.Resolve ??= ResolveAliases;
     }
 
     public override void _ExitTree()
     {
         _gone = true;
         if (Origin.StandIns == StandInFrame) Origin.StandIns = null;
+        if (Core.Fnv.Resolve == ResolveAliases) Core.Fnv.Resolve = null;
     }
+
+    private bool ResolveAliases(string key) => LeafStandIn.RegisterAliases(key, leaf => Leaves.Get(leaf)?.Buildings);
 }

@@ -31,6 +31,10 @@ const int STEPS = 20;
 // sample at a time (that banded near the terminator)
 const float SHADOW_SOFT = 2000.0;
 const int LIGHT_STEPS = 4;
+// the sun's own disc above the air (#1798): its true angular radius, rad, and its light against the scene's 1
+const float SUN_R = 0.00465;
+
+#include "res://shaders/common/sun_look.gdshaderinc"
 
 void vertex() {
 	// the quad's corners (a 2 m QuadMesh, +-1) straight onto the screen's
@@ -61,22 +65,46 @@ vec2 sphere(vec3 o, vec3 d, float r) {
 	return vec2(-b - s, -b + s);
 }
 
+// the sun where the sky is open toward it: nothing drawn there (depth) and the Earth's ball not in the way, so it
+// shows over the night side when it stands above the limb and hides behind the Earth; the procedural sky's disc,
+// faded out as the camera climbs (World/SunDisc), is the one below. The ground's look (#1479): its core, corona and
+// a full starburst; p is the offset from the sun on the screen's axes, radians.
+vec3 sun_disc(vec3 o, vec3 dir, float depth, vec2 p, float aa) {
+	if (depth > 1e-7) return vec3(0.0);
+	float c = dot(dir, sun_dir);
+	if (c <= 0.0) return vec3(0.0);
+	if (sphere(o, dir, planet_r).x > 0.0) return vec3(0.0);
+	return sun_look(p, SUN_R, 0.0, 1.0, aa) * intensity;
+}
+
 void fragment() {
 	float depth = texture(depth_tex, SCREEN_UV).x;
 	vec4 at = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, max(depth, 1e-7), 1.0);
 	at.xyz /= at.w;
-	vec3 dir = normalize((INV_VIEW_MATRIX * vec4(at.xyz, 0.0)).xyz);
+	// the ray from the near plane (reversed Z: 1): at the far plane's depth, 1 : 3 million from near to far high up,
+	// it came out ~0.5° off at 1,050 km and the sun's disc with it (#1479)
+	vec4 ray = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, 1.0, 1.0);
+	vec3 dir = normalize((INV_VIEW_MATRIX * vec4(ray.xyz / ray.w, 0.0)).xyz);
 	// reversed Z: 0 is the far plane, nothing drawn
 	float scene = depth > 1e-7 ? length(at.xyz) : 1e12;
 
 	vec3 o = CAMERA_POSITION_WORLD - planet_centre;
+	// the offset from the sun on the screen's axes, radians (the view's tangent plane: the spikes stand on the screen)
+	vec3 vd = (VIEW_MATRIX * vec4(dir, 0.0)).xyz, vs = (VIEW_MATRIX * vec4(sun_dir, 0.0)).xyz;
+	vec2 p = vd.z < 0.0 && vs.z < 0.0 ? vd.xy / -vd.z - vs.xy / -vs.z : vec2(1.0);
+	vec3 sun = sun_disc(o, dir, depth, p, max(fwidth(length(p)), 1e-5));
 	vec2 air = sphere(o, dir, atmo_r);
-	if (air.y <= 0.0) discard;
 	float t0 = max(air.x, 0.0), t1 = air.y;
 	vec2 ground = sphere(o, dir, planet_r);
 	if (ground.x > 0.0) t1 = min(t1, ground.x);
 	t1 = min(t1, scene);
-	if (t1 <= t0) discard;
+	// no air on the way: the sun alone (added: alpha 0 keeps what lies behind)
+	if (air.y <= 0.0 || t1 <= t0) {
+		if (dot(sun, sun) <= 0.0) discard;
+		// dithered as the air: the glare's faint rim banded at 8 bits
+		ALBEDO = sun + (ign(FRAGCOORD.yx + 17.0) - 0.5) / 255.0;
+		ALPHA = 0.0;
+	} else {
 
 	float mu = dot(dir, sun_dir);
 	float phase_r = 3.0 / (16.0 * PI) * (1.0 + mu * mu);
@@ -110,9 +138,10 @@ void fragment() {
 	}
 	{
 		vec3 through = exp(-(BETA_R * od_r + BETA_M * 1.1 * od_m));
-		// dithered: the dark gradients near the shadow banded at 8 bits
+		// dithered: the dark gradients near the shadow banded at 8 bits; the sun seen through the air reddens with it
 		ALBEDO = intensity * sun_power * (sum_r * BETA_R * phase_r + sum_m * BETA_M * phase_m)
-			+ (ign(FRAGCOORD.yx + 17.0) - 0.5) / 255.0;
+			+ (ign(FRAGCOORD.yx + 17.0) - 0.5) / 255.0 + sun * through;
 		ALPHA = intensity * (1.0 - dot(through, vec3(0.3333)));
+	}
 	}
 }

@@ -72,6 +72,8 @@ public static class HallForklifts
         // a vehicle's yaw: its nose (-Z) is (-sin, -cos) in world x, z
         var back = world.Basis.Z;
         float yaw = Mathf.Atan2(back.X, back.Z);
+        // a record's yaw (the grid's at its place) in an anchor frame, as a woken one reads it (#1799)
+        if (origin.Frame.IsAnchor) yaw = origin.Frame.GridYawOf(world.Origin, yaw);
         return new VehicleSlot(OwnerOf(l.Key), index, at.Lv95.E, at.Lv95.N, at.Alt, DormantSlots.Wrap(yaw),
             (int)RideKind.Forklift, 0, false);
     }

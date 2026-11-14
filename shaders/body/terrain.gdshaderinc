@@ -9,6 +9,7 @@
 #include "res://shaders/portal_clip.gdshaderinc"
 #include "res://shaders/world_origin.gdshaderinc"
 #include "res://shaders/body/piste_snow.gdshaderinc"
+#include "res://shaders/common/globe_light.gdshaderinc"
 
 // PS1-style terrain: clip-space vertex snapping, flat shading from screen derivatives,
 // altitude/slope palette bands, quantized sun, Bayer-dithered posterization, distance fog.
@@ -329,12 +330,20 @@ void fragment() {
     col *= mix(0.9, 1.1, style_paint_noise(paint_xz / 38.0) * 0.6 + style_paint_noise(paint_xz / 9.0) * 0.4);
 #endif
 #endif
+#ifndef LITE_NO_EMISSION
+    vec3 glow = col * door_light(world_pos, n);
+    // the earth world's globe from 15 km (#1802, common/globe_light): the style's light gives way to the
+    // true sun's, so the ground meets globe.gdshader at 20 km as it draws itself; 0 everywhere else
+    // (a LITE variant, a standalone headset's, keeps the style's light: it writes no emission)
+    if (world_globe_band > 0.0) {
+        glow = mix(glow, globe_lit(col, n), world_globe_band);
+        col *= 1.0 - world_globe_band;
+    }
+    EMISSION = glow;
+#endif
     ALBEDO = col;
     NORMAL = style_view_normal(VIEW_MATRIX, n);
     ROUGHNESS = rough;
-#ifndef LITE_NO_EMISSION
-    EMISSION = col * door_light(world_pos, n);
-#endif
 #else
     float ndl = clamp(dot(n, normalize(world_sun_dir)), 0.0, 1.0);
     // cliffs get a harder light ramp so faceting reads as rock rather than soft ground

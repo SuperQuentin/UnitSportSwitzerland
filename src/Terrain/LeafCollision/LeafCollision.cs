@@ -29,14 +29,19 @@ public sealed class LeafCollision
     /// <summary>The cells reaching into a building site's pit: their ground comes as faces, cut (#1653).</summary>
     private readonly HashSet<int>? _pitCells;
     private readonly List<Vector3>[] _faces;
+    /// <summary>
+    /// Per patch, the buildings' faces (shells, footings, garage links, stoops, the sites' shells and offices, #1704): a body
+    /// of their own, as a flat tile's <c>BuildingBody</c>, so an open doorway lets a walker through them and not the ground.
+    /// </summary>
+    private readonly List<Vector3>[] _buildings;
 
     public CubeKey Leaf { get; }
 
     private LeafCollision(CubeKey leaf, int n, float[] vertices, HashSet<int>? holes, HashSet<int>? pitCells, List<Vector3>[] faces,
-        LeafRoadBlend.Bands? bands, LeafStand stand, float[] bare)
+        List<Vector3>[] buildings, LeafRoadBlend.Bands? bands, LeafStand stand, float[] bare)
     {
         Leaf = leaf;
-        (_n, _cells, _vertices, _holes, _pitCells, _faces) = (n, n - 1, vertices, holes, pitCells, faces);
+        (_n, _cells, _vertices, _holes, _pitCells, _faces, _buildings) = (n, n - 1, vertices, holes, pitCells, faces, buildings);
         (Bands, Stand, Bare) = (bands, stand, bare);
     }
 
@@ -59,21 +64,26 @@ public sealed class LeafCollision
     /// A leaf's collision from its content (heights needed; roads, holes and buildings when it has them) and its
     /// neighbours' roads (for the blend at its edges; null: its own only).
     /// </summary>
-    public static LeafCollision Prepare(CubeLeafContent leaf, Func<CubeKey, RoadTile?>? neighbourRoads, LeafFrames? frames = null)
+    public static LeafCollision Prepare(CubeLeafContent leaf, Func<CubeKey, RoadTile?>? neighbourRoads, LeafFrames? frames = null,
+        Stadiums.StadiumLeaves? stadiums = null, LeafPiers? piers = null)
     {
         var heights = leaf.Heights ?? throw new ArgumentException($"leaf {leaf.Key} has no heights");
         int n = (1 << heights.Bits) + 1;
         var bare = CubeGeometry.Vertices(leaf.Key, heights.Bits, heights.Heights);
-        var stand = LeafStand.Make(leaf, bare, n);
-        var vertices = (float[])bare.Clone();
         var bands = LeafRoadBlend.For(leaf.Key, leaf.Roads, neighbourRoads);
-        if (bands != null) LeafRoadBlend.Apply(vertices, bands, 0);
+        // the roads blended, then the sites' pads graded over them (#1731): the ground as walked on, what the stand-in's grid
+        // is made from (#1704); the drawn mesh does the same at its own clearance
+        var stand = LeafStand.Make(leaf, bare, n, v => { if (bands != null) LeafRoadBlend.Apply(v, bands, 0); });
+        var vertices = stand.Walked;
 
         var faces = new List<Vector3>[PerSide * PerSide];
-        for (int p = 0; p < faces.Length; p++) faces[p] = new();
+        var buildingFaces = new List<Vector3>[PerSide * PerSide];
+        for (int p = 0; p < faces.Length; p++) (faces[p], buildingFaces[p]) = (new(), new());
         var all = new List<Vector3>();
         if (leaf.Roads is { } roads)
-            all.AddRange([.. RoadMeshBuilder.BuildBridgeCollisionFaces(roads), .. RoadWallBuilder.BuildCollisionFaces(roads),
+            // the decks both ways round (#1736): the flat world's road cells collide their backs (BackfaceCollision), a patch's
+            // shape is one-sided, and a walker on a Steg fell through Nyon's
+            all.AddRange([.. LeafStand.BothWindings(RoadMeshBuilder.BuildBridgeCollisionFaces(roads)), .. RoadWallBuilder.BuildCollisionFaces(roads),
                 .. RailingBuilder.BuildCollisionFaces(roads), .. IslandBuilder.BuildCollisionFaces(roads),
                 .. RoadSignBuilder.BuildCollisionFaces(roads), .. CatenaryBuilder.BuildCollisionFaces(roads),
                 .. ParkingBuilder.BuildCollisionFaces(roads), .. SignalBuilder.BuildCollisionFaces(roads),
@@ -81,7 +91,22 @@ public sealed class LeafCollision
         // the buildings' shells with their footings on the grid, and what C2 left to the doors: in the stand-in tile, moved back
         var tileFaces = new List<Vector3>(stand.ExtraFaces);
         if (stand.Buildings != null) tileFaces.AddRange(BuildingMeshBuilder.BuildCollisionFaces(stand.Buildings, stand.Grid));
-        foreach (var p in tileFaces) all.Add(LeafStand.ToAnchor(p));
+        var shells = new List<Vector3>(tileFaces.Count);
+        foreach (var p in tileFaces) shells.Add(LeafStand.ToAnchor(p));
+        // the sites' slabs, stairs and walkways stay with the ground: underfoot at a raised door
+        foreach (var p in stand.SiteFaces) all.Add(LeafStand.ToAnchor(p));
+        // the stadiums' parts on this leaf (#1723), in its anchor frame: walked on and under like a site's shell, so with the
+        // ground, both ways round as the flat world's road cells hold them
+        if (stadiums?.Build(leaf.Key, mesh: false, collision: true) is { Faces.Length: > 0 } bowl)
+            all.AddRange(LeafStand.BothWindings(bowl.Faces));
+        // the piers and jetty decks on this leaf (#1736), from its stand-in's grid: walked on and stopping a boat, with the
+        // ground as a tile's road cells hold them, both ways round
+        if (piers?.Build(leaf.Key, stand.Grid, mesh: false, collision: true) is { Faces.Length: > 0 } decks)
+        {
+            var moved = new Vector3[decks.Faces.Length];
+            for (int k = 0; k < moved.Length; k++) moved[k] = LeafStand.ToAnchor(decks.Faces[k]);
+            all.AddRange(LeafStand.BothWindings(moved));
+        }
         // the building sites' pits (#619): the cells reaching into one leave the lattice, their ground outside the pit
         // and the pit's lining come back as faces (#1653), as the drawn mesh is cut
         var holes = leaf.Holes is { Length: > 0 } h ? h.ToHashSet() : null;
@@ -92,22 +117,28 @@ public sealed class LeafCollision
             pitCells = cells;
             all.AddRange(pitFaces);
         }
-        if (all.Count > 0)
+        if (all.Count > 0 || shells.Count > 0)
         {
             var t = (frames ?? LeafFrames.Swiss).TransformOf(leaf.Key);
             int cells = n - 1, per = cells / PerSide;
-            for (int k = 0; k + 2 < all.Count; k += 3)
+            Split(all, faces);
+            Split(shells, buildingFaces);
+
+            void Split(List<Vector3> from, List<Vector3>[] into)
             {
-                var mid = (all[k] + all[k + 1] + all[k + 2]) / 3f;
-                var (i, j, _) = t.LocalToLattice(mid.X, mid.Y, mid.Z);
-                int pi = Math.Clamp((int)Math.Floor(i / per), 0, PerSide - 1), pj = Math.Clamp((int)Math.Floor(j / per), 0, PerSide - 1);
-                var list = faces[pi + pj * PerSide];
-                list.Add(all[k]);
-                list.Add(all[k + 1]);
-                list.Add(all[k + 2]);
+                for (int k = 0; k + 2 < from.Count; k += 3)
+                {
+                    var mid = (from[k] + from[k + 1] + from[k + 2]) / 3f;
+                    var (i, j, _) = t.LocalToLattice(mid.X, mid.Y, mid.Z);
+                    int pi = Math.Clamp((int)Math.Floor(i / per), 0, PerSide - 1), pj = Math.Clamp((int)Math.Floor(j / per), 0, PerSide - 1);
+                    var list = into[pi + pj * PerSide];
+                    list.Add(from[k]);
+                    list.Add(from[k + 1]);
+                    list.Add(from[k + 2]);
+                }
             }
         }
-        return new LeafCollision(leaf.Key, n, vertices, holes, pitCells, faces, bands, stand, bare);
+        return new LeafCollision(leaf.Key, n, vertices, holes, pitCells, faces, buildingFaces, bands, stand, bare);
     }
 
     /// <summary>
@@ -161,15 +192,17 @@ public sealed class LeafCollision
 
     /// <summary>
     /// A patch's triangles (three vertices each, front faces up), in the leaf's anchor frame; the ground's alone without
-    /// <paramref name="features"/> (a ray test against the mesh).
+    /// <paramref name="features"/> (a ray test against the mesh); without <paramref name="buildings"/>, all but the
+    /// buildings' (<see cref="Buildings"/>: their own body).
     /// </summary>
-    public Vector3[] Patch(CubeKey patch, bool features = true)
+    public Vector3[] Patch(CubeKey patch, bool features = true, bool buildings = true)
     {
         var (leaf, pi, pj) = Split(patch);
         if (leaf != Leaf) throw new ArgumentException($"{patch} is not in {Leaf}");
         int per = _cells / PerSide, i0 = pi * per, j0 = pj * per;
         var extra = features ? _faces[pi + pj * PerSide] : [];
-        var faces = new List<Vector3>(per * per * 6 + extra.Count);
+        var shells = features && buildings ? _buildings[pi + pj * PerSide] : [];
+        var faces = new List<Vector3>(per * per * 6 + extra.Count + shells.Count);
         var v = _vertices;
         for (int j = j0; j < j0 + per; j++)
             for (int i = i0; i < i0 + per; i++)
@@ -182,12 +215,24 @@ public sealed class LeafCollision
                 faces.Add(V(a)); faces.Add(V(c)); faces.Add(V(d));
             }
         faces.AddRange(extra);
+        faces.AddRange(shells);
         return faces.ToArray();
 
         Vector3 V(int k) => new(v[k * 3], v[k * 3 + 1], v[k * 3 + 2]);
     }
 
-    /// <summary>How many of a patch's vertices (<see cref="Patch"/>, features on) are its roads' and buildings': the last ones.</summary>
+    /// <summary>A patch's buildings' faces (anchor frame), for a body of their own (#1704).</summary>
+    public Vector3[] Buildings(CubeKey patch)
+    {
+        var (leaf, pi, pj) = Split(patch);
+        if (leaf != Leaf) throw new ArgumentException($"{patch} is not in {Leaf}");
+        return _buildings[pi + pj * PerSide].ToArray();
+    }
+
+    /// <summary>
+    /// How many of a patch's vertices (<see cref="Patch"/>, features on, buildings off) are its roads' and the sites' pits':
+    /// the last ones. The buildings are a body of their own (<see cref="Buildings"/>, #1704).
+    /// </summary>
     public int FeatureVertices(CubeKey patch)
     {
         var (_, pi, pj) = Split(patch);
@@ -207,6 +252,12 @@ public sealed class LeafCollision
 /// </summary>
 public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, LeafFrames? frames = null)
 {
+    /// <summary>The stadiums on these leaves (#1723): their bowls' faces join each leaf's ground; null without any.</summary>
+    public Stadiums.StadiumLeaves? Stadiums { get; init; }
+
+    /// <summary>The piers and jetty decks on the leaves (#1736), built into each leaf's collision; null: none.</summary>
+    public LeafPiers? Piers { get; init; }
+
     public const int KeptLeaves = 32;
 
     private readonly ConcurrentDictionary<CubeKey, Lazy<LeafCollision?>> _prepared = new();
@@ -215,12 +266,15 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
     /// <summary>A patch's faces; null when its leaf has no ground.</summary>
     public Vector3[]? Build(CubeKey patch) => Build(patch, out _);
 
-    /// <summary>A patch's faces and the leaf's preparation they were cut from (null with them).</summary>
+    /// <summary>
+    /// A patch's faces and the leaf's preparation they were cut from (null with them). Its buildings are not in them: they
+    /// are a body of their own (<see cref="LeafCollision.Buildings"/>, #1704).
+    /// </summary>
     public Vector3[]? Build(CubeKey patch, out LeafCollision? from)
     {
         var (leaf, _, _) = LeafCollision.Split(patch);
         from = Prepared(leaf);
-        return from?.Patch(patch);
+        return from?.Patch(patch, buildings: false);
     }
 
     /// <summary>A leaf prepared, kept; a leaf that gave nothing (a streamed one not come yet, #1655) is asked again next time.</summary>
@@ -230,7 +284,7 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
         // the unpinned ones past the kept: dropped together (a pinned leaf is held by its own entry)
         if (_prepared.Count - _pinned.Count > KeptLeaves) Trim();
         var lazy = _prepared.GetOrAdd(leaf, k => new Lazy<LeafCollision?>(() =>
-            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames) : null));
+            leaves(k) is { Heights: not null } content ? LeafCollision.Prepare(content, n => leaves(n)?.Roads, frames, Stadiums, Piers) : null));
         var value = lazy.Value;
         if (value == null) _prepared.TryRemove(new KeyValuePair<CubeKey, Lazy<LeafCollision?>>(leaf, lazy));
         return value;
@@ -260,5 +314,15 @@ public sealed class LeafCollisionSource(Func<CubeKey, CubeLeafContent?> leaves, 
     {
         _pinned.Clear();
         _prepared.Clear();
+    }
+
+    /// <summary>These leaves' preparations dropped, pinned or not: prepared again on the next ask.</summary>
+    public void Forget(IEnumerable<CubeKey> leaves)
+    {
+        foreach (var k in leaves)
+        {
+            _pinned.TryRemove(k, out _);
+            _prepared.TryRemove(k, out _);
+        }
     }
 }

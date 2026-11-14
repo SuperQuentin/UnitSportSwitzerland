@@ -1865,6 +1865,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Process, Bot);
         using var water = World.WaterField.In(RegionTerrain);
         ProcessStep(delta);
+        // the local body's view: one non-finite value would latch and draw nothing ever after (#1811)
+        if (_camera != null) KeepFinite();
     }
 
     private void ProcessStep(double delta)
@@ -3640,6 +3642,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _mantleForward = shift.Direction(_mantleForward);
         _camFwd = shift.Direction(_camFwd);
         Velocity = shift.Direction(Velocity);
+        ShiftCameraState(shift);
         if (shift.Turns)
         {
             // an anchor frame's turn (#1430 H3): the headings kept as angles, and the flight state
@@ -3652,6 +3655,28 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _ride?.OnOriginShifted(shift);
         ShiftDeck(shift);
         ShiftCrash(shift);
+    }
+
+    /// <summary>
+    /// The cameras' eased world-space state (#1763), carried through the shift as the body is: the earth world's
+    /// re-anchor lowers the world ~0.7 m at the camera (3 km out on the old tangent plane) and turns it 0.027°, under
+    /// the snap distances these ease within, so a state left behind made the camera jump up and ease back down. The
+    /// heights kept alone (the pivot's) are moved as the point above where the body was. <c>--reanchorcamcheck</c>.
+    /// </summary>
+    private void ShiftCameraState(Core.OriginShift shift)
+    {
+        // the body has moved already: where it was, in the old frame
+        var was = shift.Inverse.Point(GlobalPosition);
+        if (!float.IsNaN(_pivotY)) _pivotY = shift.Point(was with { Y = _pivotY }).Y;
+        _leftFloorY = shift.Point(was with { Y = _leftFloorY }).Y;
+        _auraCamPos = shift.Point(_auraCamPos);
+        _fightCamPos = shift.Point(_fightCamPos);
+        _fightCamRight = shift.Direction(_fightCamRight);
+        _schwingCamPos = shift.Point(_schwingCamPos);
+        _schwingCamRight = shift.Direction(_schwingCamRight);
+        if (!float.IsNaN(_phoneSeen.Origin.X)) _phoneSeen = shift.Apply(_phoneSeen);
+        _sitStand = shift.Point(_sitStand);
+        if (_workLast is { } work) _workLast = shift.Point(work);
     }
 
     private void RememberSafe(Vector3 at)
@@ -4084,6 +4109,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Bots.BodyProfiler.CountFrame();
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Physics, Bot);
         using var water = World.WaterField.In(RegionTerrain);
+        if (_camera != null) KeepFinite();
         PhysicsStep(delta);
     }
 

@@ -7,14 +7,128 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
+
+In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.
+
+- [ ] Land in the Sahara (`--at 1829400,-515818 --origin 1829400,-515818`) → sand, a few low shrubs, no farms, no green. From 350 m, note how much paler the globe draws past the loaded leaves (sRGB ~243,233,230 against the fill's ~233,220,199 on Nov 13).
+- [ ] Fly to Kazakhstan, Yamal, Greenland and the Amazon (LV95 6653598,2940530; 5034504,4850762; 902899,4677347; -6055442,-697411) → dry grass with scattered shrubs; olive tundra with dwarf shrubs; ice; a broadleaf canopy with clearings.
+- [ ] Fly from Geneva out of the generator's map (west of LV95 2,385,000 or south of 974,000) → the Swiss look fades into the biome over ~20 km, no straight seam; Geneva, Lavaux and the Salève look as before.
+
+## The globe's 20 km handover ([#1803](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1803))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, the spectator (Shift+T) over the coast at LV95 -5011173,8685903.
+
+- [ ] At the spot's night, climb slowly from 14 km to 26 km and back → the ground darkens from moonlit to night over 15-20 km with no jump at 20 km; the coast and sea stay where they are, no green land over the sea below 20 km.
+- [ ] The same by day → no jump in colour or relief at 20 km; the photo's sea and fields fade in over 20-25 km.
+- [ ] While spectating over the ground with the body falling below → no "open WINGSUIT" prompt.
+- [ ] Over Agadir (LV95 909680,-472439) and the Sahara, 2-25 km by day → sand coloured, never green or snow-white; the coast follows the ground, not kilometre steps; one sea colour across tile edges.
+- [ ] Facing the horizon from 10 to 60 km, day and night → no grey band with a hard edge between the sky and the Earth's limb.
+- [ ] Over Geneva's harbour at ~600 m looking up the lake → note whether the near water and the far lake still meet at a hard line (the far leaves now take their own depth).
+
+## Doors, interiors and parked cars far from Switzerland ([#1799](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1799))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at -4679383,7259173` (the generated village where the FARM CO-OP stood turned), or fly the spectator there.
+
+- [ ] Walk up to a house door, open it (E / pad A), look through, walk in and back out, in first and third person → the open leaf, the doorway and the rooms seen through it line up with the facade; you step through the doorway, not the wall beside it.
+- [ ] Open a garage or barn door and drive a car through it → its leaves swing on the facade, the car passes the doorway.
+- [ ] Look at the parked cars along the street and wake one (get in) → they stand along their bays and road, and the one you wake keeps its heading.
+- [ ] At a far building site: climb a tower crane's ladder, sit in the cab, set a pallet down with the hook, and work a self-erecting crane from its remote → you face the mast on the ladder, the jib in the cab, the mast at the remote; the pallet lands along the jib.
+- [ ] Walk up to a site's skip or rebar and look at it, then at another → the prompt and outline go to the one you face, the outline square on it.
+- [ ] Get into a car in a far underground car park (or a hall's forklift) → it wakes facing the way it stood.
+
+## `/time` where you stand ([#1804](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1804))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator far from Switzerland (e.g. `/tp -4679383 7259183`).
+
+- [ ] `/time set day`, `noon`, `sunset`, `night` there → morning daylight, the sun high, the sun on the horizon, dark; `/time` → "It is … UTC-7 (… Swiss time)".
+- [ ] Back in Switzerland, `/time set noon` → 12:00, as before; `/time set 12:00 utc` → 13:00 or 14:00.
+- [ ] Online on a server, as admin far away: `/time set noon` → the broadcast names your zone and "noon where they stand", and a second player at home sees the same clock.
+
+## The debug menu on the earth world ([#1820](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1820), [#1743](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1743))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569 --date 2027-07-15`, F9.
+
+- [ ] Click Leaf edges and Leaf labels, fly round Geneva and out over the fill → every leaf outlined on its ground (green furnished, yellow ground only, grey loading; fill dashed), labels on the near ones, new leaves outlined as they land.
+- [ ] Hover each switch → its tooltip names leaves, the globe and the anchor, not tiles; Earth curvature is greyed with its reason.
+- [ ] Freeze leaf streaming, fly 3 km away and look back → the loaded leaves stand alone; unfreeze → the leaves round you come back.
+- [ ] Wireframe → the leaves come back as lines within a few seconds (slow, as on flat); Normal → as before.
+- [ ] Type `/debug tiles,labels` then `/debug off` in the chat → the tools switch on, then all off.
+
+## A join from the menu reaches the ground ([#1816](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1816), PR [#1819](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1819))
+
+The exported Windows build, joined from the title screen (saved server or address), not `--connect`.
+
+- [ ] Delete `chunk_2583_1113.terr` (and its neighbours `2582-2584_1112-1114`) from `chunk_cache` (keep the `.terrc`), join `unitsport.infrack.ch` from the menu as a returning player → the loading screen ends, on foot at the spawn or where you fell asleep; no `[spawn] no terrain streamed under the spawn point` warning in the log.
+
+## Shift no longer stays held after it is let go ([#1805](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1805))
+
+On Windows, a real keyboard, in a window.
+
+- [ ] In the spectator (Shift+T), hold Shift a second or more and let go, twenty times, some while turning the mouse, some during a load hitch, some after an Alt tap with the cursor free → the camera stops sinking every time; a `[input] Shift repeated after its key-up: released` line in the log is that case caught.
+- [ ] On foot, sprint with Shift+W and let go of Shift first, then W, a dozen times → back to a walk every time.
+
+## The spectator camera's speed and readout ([#1797](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1797))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T (pad: hold D-pad ↓) into the spectator.
+
+- [ ] With a pad: tap RB / LB, then hold each → a notch a tap, a smooth ramp held (2 m/s to 100 km/s in ~4 s); the readout top right; the hints list Faster RB / Slower LB.
+- [ ] In a headset: the right / left trigger while spectating → faster / slower, the readout readable on the VR panel; the triggers do nothing else there.
+- [ ] Climb from Geneva to ~300 km at full speed, fly east to Asia (~1 min, ~10 s boosted), come down → the speed grows with the altitude by itself, nothing freezes or hitches on the way, the generated ground is under you when you land.
+
+## Back into the body after a long spectator flight ([#1814](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1814))
+
+In a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, Shift+T into the spectator.
+
+- [ ] Fly to Asia through Space at full speed, come down, press T above 50 km and keep descending → the body takes over once the ground is in, standing upright on it, the world drawn round it; no `create_frustum_points` in the log. If a `[camera] ... could not be drawn` or `[player] ... a non-finite ... was put back` line shows, the view is still drawn: send that line (it names the cause).
+
+## The earth fill's walls and ledges north of Riddes ([#1788](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1788))
+
+In a window, the earth playtest's launch (`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2578113,1115406 --date 2027-07-15`), the rebuilt pyramid on D: (`cube_global`, Nov 13).
+
+- [ ] Fly from Riddes north over the generated slopes (2578980,1116051) and south over the meadow at 2579661,1108305, low and at 1.5 km → no pale wall along a straight line or a V anywhere in the generated ground.
+- [ ] Climb to ~1.8 km over 2580090,1116823 and look NE while the far ground loads, then fly towards it → no wall or overhang where the finer ground takes over; a step of a few metres at most where the bare far ground meets the forested leaves.
+
+## `/locate + parking entrance` on leaves ([#1772](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1772))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2502137,1117793`.
+
+- [ ] `/locate building + parking entrance`, then `/go` on the first answer → you land at a garage door with its access road (no longer at 2502137,1117793, whose earth building is a shop without one); a car drives down its ramp.
+
+## GPX replay and its video export on leaves ([#1752](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1752))
+
+In a window, `--frame earth` with a real recording on real leaves (e.g. `--leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --gpx <a ride in the region>`), each against the same without `--frame earth`.
+
+- [ ] Watch the replay in Chase, then press C into Absolute Cinema and Absolute Racing → the runner and the course line lie on the ground; Cinema cuts to the climbs and corners ahead (the log says `[cinema] ... N tiles, M events` with tiles > 0).
+- [ ] Turn the road snap on (R) on a ride along roads → the status says on, the runner keeps to the road.
+- [ ] Export the video at 30 fps → every frame has its ground and buildings (no blank or half-loaded frames at the start or along the route); the file plays. Known: no sightline cut through buildings and no tile prefetch on the leaves yet.
+
+## Ski slopes and marina boats on leaves ([#1735](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1735))
+
+Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/row7/cube --chunks D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks --at 2583954,1109157 --date 2027-01-15` (La Tzoumaz); and `--chunks fixture:fun --frame earth`.
+
+- [ ] Ski down a run at La Tzoumaz on skis with a pad and in VR (keyboard validated in the earth playtest, [#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)) → the HUD names the run, the snow under you grips as corduroy or ice as on flat, the poles line both edges and none stands doubled where two leaves meet; the corduroy has no seam at a leaf's edge.
+- [ ] The same in a Quest (the standalone shader path) → the slope is drawn where the ground is, not shifted by 500 m.
+- [ ] On `fixture:fun`, walk to the jetty off the beach and aim at a moored boat → it wakes and you can drive it; it comes back at its berth a while after you leave it.
+- [ ] On skis at La Tzoumaz on earth (row-7 leaves as above), `/race` on skis with a friend online ([#1737](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1737); the ski map was validated in [#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)) → the race goes down the runs.
+
 ## Furnished leaves under `--frame earth` ([#1613](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1613), [#1510](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1510))
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva's centre).
 
-- [ ] Walk the streets, then drive a car through them for a few km → roads, paint, signals, buildings, trees and the lake are drawn as in the flat world; you stand and drive on the roads, never sunk into them, and the ground never shows above a road.
-- [ ] Walk to a house's door and press E (pad and VR too), go in, come out → the door opens, the interior stands behind it, the way out lands on the street.
+- [ ] Walk the streets, then drive a car through them for a few km → roads, paint, signals, buildings, trees and the lake are drawn as in the flat world; you stand and drive on the roads, never sunk into them, and the ground never shows above a road. Failed in the earth playtest ([#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)): [#1768](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1768), [#1769](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1769), [#1770](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1770), [#1771](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1771), [#1772](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1772).
+- [ ] Walk to a house's door and press E (pad and VR too), go in, come out → the door opens, the interior stands behind it, the way out lands on the street. Failed in the earth playtest ([#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)): [#1765](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1765), [#1766](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1766), [#1767](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1767).
 - [ ] A garage door with an access road, a door with a stoop → drive up the access road, climb the steps (both collide).
-- [ ] Fly 3 km and back → the furniture follows the re-anchor without a jump.
+
+## Sites, yards and walking in on leaves, online ([#1707](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1707), [#1704](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1704))
+
+A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --frame earth --generated-world --at 2588796,1118441`; a second client beside it.
+
+- [ ] Walk up to a building site's skip and press E (pad and VR too) → the panel opens; the other player sees what you take go.
+- [ ] Open a site office's door and walk in; in an apartment block ride the lift with the other player in the cabin → you walk through the doorway (no wall), both ride; nobody is sent back up from inside.
+- [ ] Look at the parked cars and the site machines round you → they stand on the ground, turned as the bays and the road; aiming at one wakes it.
+- [ ] Walk round a building site on a hillside leaf ([#1731](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1731)) → its yard is level, its edges blend into the slope without a cliff, and the road beside it is not buried or floating.
+- [ ] Join a Battle Royale squad with a bot, go down and out → the bot takes your dogtag to a Postauto stop and you come back.
 
 ## Building-site pits on leaves ([#1687](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1687), [#1653](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1653))
 
@@ -25,18 +139,16 @@ Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chun
 
 ## The earth ground's look (PR [#1642](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1642), [#1634](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1634), [#1632](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1632), [#1633](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1633), [#1635](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1635))
 
-`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500300,1117900` (Geneva), in a window, against the same without `--frame`/`--leaves`.
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500650,1117640` (Geneva), in a window, against the same without `--frame`/`--leaves`.
 
-- [ ] Walk the Jardin Anglais and the Rhône's banks in Cartoon, PS1, Realistic− and Realistic+ (`/style`) → grass, paving and stone banks look as in the flat world (painted grass, textures in Realistic), never pale mint or white.
-- [ ] Fly 150 m over the lake for 5 km → no straight light lines across the water at the leaves' joins.
+- [ ] Walk the Jardin Anglais and the Rhône's banks in Realistic− and Realistic+ (`/style`; Cartoon validated in [#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)) → grass, paving and stone banks look as in the flat world (painted grass, textures in Realistic), never pale mint or white.
 - [ ] In the headset (PC VR, then the Quest at Very low): the same lawn and lake → the ground in the standalone look, no seam lines.
 
 ## The earth world's ground frame turns ([#1612](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1612), [#1512](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1512))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --at 2500956,1117569` (Geneva), in a window. Each re-anchor (every 3 km) prints `[origin] shift N ... turned: tilt 0.0269°`.
 
-- [ ] Walk, then drive a car, NE for 4 km across a re-anchor → no jump, no hitch in the view or the steering, the body stays on the ground, the horizon stays level.
-- [ ] Fly the spectator 2 km up across two re-anchors, looking at the far ground → the far ground falls away smoothly (round leaves plus refraction's small lift), no step at the re-anchor.
+- [ ] Walk, then drive a car, NE for 4 km across a re-anchor → no jump, no hitch in the view or the steering, the body stays on the ground, the horizon stays level. Failed in the earth playtest ([#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)): [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763), [#1764](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1764).
 - [ ] Patterns ([#1627](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1627)), in Realistic (`--style real-`): drive along a Geneva street across a re-anchor watching the asphalt and the roof tiles, then stand at the lake shore (`--at 2500700,1118300`) with `/seastate gamey` → no texture slides or jumps, the waves keep rolling the same way, a boat on them bobs with the drawn crests.
 - [ ] The same in the headset (PC VR, then the Quest at Very low) → the textures hold in both eyes.
 
@@ -51,7 +163,7 @@ A server and two windowed clients, all with `--frame earth --leaves D:/UnitSport
 
 B4's leaves: `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`.
 
-- [ ] Start at `--at 2578113,1115406` (north of Riddes, the region's edge on a slope), walk and drive across into the real ground and back → no step, ledge or hole where the smooth generated ground meets the real one; a bank of at most a few metres over ~60 m is the hand-over.
+- [ ] Start at `--at 2578113,1115406` (north of Riddes, the region's edge on a slope), walk and drive across into the real ground and back → no step, ledge or hole where the smooth generated ground meets the real one; a bank of at most a few metres over ~60 m is the hand-over. Failed in the earth playtest ([#1775](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1775)): [#1778](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1778), [#1779](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1779), [#1776](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1776).
 - [ ] Fly 10 km out of the region over the fill → the ground keeps streaming under you (generated leaves take ~2 s each with their roads); no real relief stands up through the generated ground; from high up the far mountains are the real ones (the globe's coarser levels, a known gap).
 - [ ] `--chunks fixture:straight --frame earth`, drive east 3 km with a car → the ground is there end to end and the car never drops through it (the road itself is drawn with PR 2), a re-anchor at 3 km moves nothing.
 
@@ -929,3 +1041,61 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] Fly at 300 m along the shore from Cully to Vevey, then from 12 km up over the staircase → one shoreline, no squares, seams or pale lines on the water.
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
+
+## Farm fields, Christmas gifts and the trainer under `--frame earth` (PR [#1730](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1730), [#1729](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1729))
+
+Offline, in a window, each against the same without `--frame earth`.
+
+- [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
+- [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
+- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.
+
+## No camera jump at the earth re-anchor (PR [#1780](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1780), [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763))
+
+Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-3-reanchor-drive`.
+
+- [ ] Walk (third person) across a re-anchor (the `[origin] shift` line, every 3 km) → the camera holds its place over the shoulder: no jump up, no ease back down.
+- [ ] Drive a car across one in chase view, then in cockpit view → no jump. The headless check measured 0.0 cm in the car before the fix too: if a jump remains while driving, note what was driven and from which view.
+
+## The earth re-anchor's stall (PR [#1784](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1784), [#1764](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1764))
+
+Offline, in a window, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks` (Cartoon), the playtest's `earth-4-reanchor-flight`, traffic on.
+
+- [ ] Fly and drive across Geneva's re-anchors (every 3 km, the `[origin] shift` line) → no lag spike you notice; the line reads well under the 117-203 ms of Nov 12 (headless on a loaded machine: 23-48 ms), traffic keeps driving on its roads after each.
+
+## A view opened by E keeps the press (PR [#1815](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1815), [#1813](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1813))
+
+Offline, in a window (any frame).
+
+- [ ] Set a telescope up, walk to it, press E (keyboard), then pad Y, then VR grip → the view through it opens and stays; E again steps back.
+- [ ] E at a pinball machine → you step up, no game starts (and no coin goes) until you press E again.
+- [ ] E at a pool table or dartboard → you step up without sitting down; E again sits.
+- [ ] Empty hand, point at a set-up telescope (Geneva, `--frame earth`), after looking through it with the tube tilted → the yellow "pack it up" halo sits on the tube and the legs as drawn, tilted with the tube; same on a flag, a campfire and a workbench.
+
+## The globe's terminator and the spectator speed readout (PR [#1806](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1806), [#1798](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1798))
+
+In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, spectator camera (Shift+T).
+
+- [ ] Climb above 500 km and fly at 100 km/s, then with boost, along the day/night line → the lit half stays put on the ground: no drift with the camera, no snap twice a second.
+- [ ] Change the speed (wheel, `^` / `'` on a Swiss keyboard, RB / LB) → the speed shows bottom right under the key hints, clear of the F3 overlay at top right, and fades 1.5 s later.
+- [ ] On a Swiss keyboard the hints read "Wheel ↑ / ^" and "Wheel ↓ / '"; on a US keyboard "=" and "-".
+- [ ] On a phone (`--mobile`) the speed shows at top centre, not under the pedals.
+- [ ] At night in Geneva (`--date 2026-11-13`, after sunset) → no dim blue blob in the sky; the crescent moon low in the south-west, its dark part faintly lit, no star through it.
+- [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
+- [ ] With the telescope on the moon → the moon at its true size, as before.
+
+## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
+
+Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
+
+- [ ] Noon (`--time 13`) → a small bright disc with a soft corona and faint spikes, no 20° blob; stars and planets near it hidden.
+- [ ] Sunset (`--time 20.6`, then 21) → an orange disc low over the Jura, a wider warm corona; it sets behind the ridge, cut by it.
+- [ ] Walk so trees or buildings stand in front of the low sun → beams between them; Settings → Graphics → "Sun rays" off → gone, on → back.
+- [ ] Night (`--time 23`) → no blob anywhere; the moon at its own place.
+- [ ] Fly up past 40 km (spectator) → the sun stays where it was, gains strong spikes over black; behind the Earth it is gone.
+- [ ] VR (Link): the sun and the beams in both eyes at the same place.
+
+## Placed things after a restart (PR for [#1835](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1835))
+
+- [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
+- [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.

@@ -133,6 +133,7 @@ public sealed class RoadNetwork : IWalkGraph
     public static Task<RoadNetwork> LoadAsync(IChunkSource source, GpxTrack track, double pad = 200,
         CancellationToken ct = default)
     {
+        if (source is Terrain.Leaves.StandInChunkSource) return LoadStandInsAsync(source, track, pad, ct);
         var (minE, minN, maxE, maxN) = track.Lv95Bounds(pad);
         return LoadAsync(source, track.Plane, minE, minN, maxE, maxN, 0, ct);
     }
@@ -163,6 +164,91 @@ public sealed class RoadNetwork : IWalkGraph
             }
 
         return network;
+    }
+
+    /// <summary>
+    /// The roads of an earth world's leaves (#1704), given as their stand-in tiles: each leaf's own roads (its anchor frame,
+    /// <paramref name="leafRoads"/>) read three at a time, every vertex in LV95 notation, as an LV95 tile's network holds
+    /// them. A road cut at a leaf's edge joins its other half in the next leaf where their ends meet.
+    /// </summary>
+    public static async Task<RoadNetwork> LoadLeavesAsync(IReadOnlyList<TileId> standIns, Func<CubeKey, RoadTile?> leafRoads,
+        CancellationToken ct = default)
+    {
+        var network = new RoadNetwork();
+        using var slots = new SemaphoreSlim(3);
+        var loads = standIns.Select(async id =>
+        {
+            if (!Terrain.Leaves.LeafStandIn.TryLeaf(id, out var key)) return null;
+            await slots.WaitAsync(ct).ConfigureAwait(false);
+            try { return await Task.Run(() => leafRoads(key), ct).ConfigureAwait(false); }
+            catch (Exception) { return null; }   // a leaf that would not come is simply no roads there
+            finally { slots.Release(); }
+        }).ToList();
+        for (int k = 0; k < standIns.Count; k++)
+            if (await loads[k].ConfigureAwait(false) is { } roads) network.AddLeaf(standIns[k], roads);
+        return network;
+    }
+
+    /// <summary>
+    /// The roads round a GPX track on an earth world's leaves (#1752): the stand-ins along the track
+    /// (<see cref="GpxTrack.StandInsAlong"/>), each one's roads in its own frame placed on the Earth and put on the
+    /// track's plane. A road cut at a leaf's edge joins its other half where their ends meet, as across LV95 tiles.
+    /// </summary>
+    private static async Task<RoadNetwork> LoadStandInsAsync(IChunkSource source, GpxTrack track, double pad,
+        CancellationToken ct)
+    {
+        var network = new RoadNetwork { Plane = track.Plane };
+        foreach (var id in track.StandInsAlong(pad))
+        {
+            ct.ThrowIfCancellationRequested();
+            RoadTile? roads;
+            try { roads = await source.LoadRoadsAsync(id, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception) { continue; }   // a leaf that would not come is simply no roads there
+            if (roads != null) network.AddStandIn(id, roads, track.Plane);
+        }
+        return network;
+    }
+
+    /// <summary>A stand-in tile's roads (its own frame, <see cref="Core.GlobalPos.OfTile"/>) on a track's plane.</summary>
+    private void AddStandIn(TileId standIn, RoadTile roads, MapProjection plane)
+    {
+        foreach (var segment in roads.Segments)
+        {
+            if (!IsTravellable(segment.Class)) continue;
+            int count = segment.PointCount;
+            if (count < 2) continue;
+            var x = new double[count];
+            var y = new double[count];
+            var h = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                var p = Core.GlobalPos.OfTile(standIn, segment.Points[i * 3], segment.Points[i * 3 + 1], segment.Points[i * 3 + 2]);
+                (x[i], y[i]) = plane.Forward(p.Ecef);
+                h[i] = p.Alt;
+            }
+            AddEdge(x, y, h, segment.Class, segment.Flags);
+        }
+    }
+
+    private void AddLeaf(TileId standIn, RoadTile roads)
+    {
+        double off = Terrain.Leaves.LeafStandIn.Offset;
+        foreach (var segment in roads.Segments)
+        {
+            if (!IsTravellable(segment.Class)) continue;
+            int count = segment.PointCount;
+            if (count < 2) continue;
+            var e = new double[count];
+            var n = new double[count];
+            var y = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                var p = Core.GlobalPos.OfTile(standIn, segment.Points[i * 3] + off, segment.Points[i * 3 + 1], segment.Points[i * 3 + 2] + off);
+                (e[i], n[i], y[i]) = SwissGeodesy.FromEcef(p.Ecef);
+            }
+            AddEdge(e, n, y, segment.Class, segment.Flags);
+        }
     }
 
     private void AddTile(RoadTile tile)

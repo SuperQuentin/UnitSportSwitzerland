@@ -842,7 +842,7 @@ public static partial class TileRewriter
 
         /// <summary>The same cantons asked on another plane (#1507): each point taken to LV95 first.</summary>
         public Cantons On(Func<double, double, (double E, double N)> toLv95) =>
-            new(_ids, _codes, _tiles) { _toLv95 = toLv95 };
+            new(_ids, _codes, _tiles) { _toLv95 = toLv95, Source = Source };
 
         private Cantons(byte[] ids, List<string> codes, IReadOnlyDictionary<(int E, int N), string>? tiles) { _ids = ids; _codes = codes; _tiles = tiles; }
 
@@ -859,7 +859,14 @@ public static partial class TileRewriter
             return id == 0 || id > _codes.Count ? null : _codes[id - 1];
         }
 
-        /// <summary>The repository's country file, looked for upward from the tool and the working directory; null when missing.</summary>
+        /// <summary>Where these cantons were read: a file's path, the copy built into the tool, or a test world's zones.</summary>
+        public string Source { get; private init; } = "a test world's zones";
+
+        /// <summary>
+        /// The repository's country file, looked for upward from the tool and the working directory, else the copy built into
+        /// the tool (#1794: a published tool on the NAS has no repository around it, and without cantons every junction would
+        /// keep the default heads with no word); null only when neither reads.
+        /// </summary>
         public static Cantons? Find()
         {
             foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
@@ -869,7 +876,14 @@ public static partial class TileRewriter
                     foreach (string project in (ReadOnlySpan<string>)["MapCore", "MapSetup"])
                         if (Path.Combine(dir.FullName, "tools", project, "switzerland.bin") is var path && File.Exists(path)) return Load(path);
                 }
-            return null;
+            return Embedded();
+        }
+
+        /// <summary>The country file built into this assembly (RoadGen.csproj embeds tools/MapCore/switzerland.bin); null when absent.</summary>
+        public static Cantons? Embedded()
+        {
+            using var stream = typeof(Cantons).Assembly.GetManifestResourceStream("switzerland.bin");
+            return stream is null ? null : Load(stream, "the copy built into the tool");
         }
 
         public static Cantons? Load(string path)
@@ -877,6 +891,18 @@ public static partial class TileRewriter
             try
             {
                 using var file = File.OpenRead(path);
+                return Load(file, path);
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+        }
+
+        private static Cantons? Load(Stream file, string source)
+        {
+            try
+            {
                 using var z = new GZipStream(file, CompressionMode.Decompress);
                 using var r = new BinaryReader(z, Encoding.UTF8);
                 if (r.ReadString() != "CHMAP1") return null;
@@ -892,7 +918,7 @@ public static partial class TileRewriter
                     codes.Add(r.ReadString());
                     r.ReadString();
                 }
-                return new Cantons(ids, codes);
+                return new Cantons(ids, codes) { Source = source };
             }
             catch (Exception e) when (e is IOException or InvalidDataException or EndOfStreamException)
             {

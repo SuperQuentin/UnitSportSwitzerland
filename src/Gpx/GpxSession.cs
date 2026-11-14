@@ -12,7 +12,7 @@ namespace UnitSport.Gpx;
 /// </summary>
 public partial class GpxSession : Node
 {
-    private ChunkManager _chunks = null!;
+    private ReplayWorld _world = null!;
     private WorldOrigin _origin = null!;
     private Camera3D _previousCamera = null!;
 
@@ -32,13 +32,38 @@ public partial class GpxSession : Node
     private FileDialog? _exportDialog;
     private VideoExporter _exporter = null!;
 
-    public static GpxSession Create(ChunkManager chunks, WorldOrigin origin, Camera3D previous) => new()
+    public static GpxSession Create(ReplayWorld world, WorldOrigin origin, Camera3D previous) => new()
     {
         Name = "GpxSession",
-        _chunks = chunks,
+        _world = world,
         _origin = origin,
         _previousCamera = previous,
     };
+
+    // what --replaycheck (#1752) looks at: the race, its camera and exporter, the ribbon and the director's survey
+    internal RacePlayback Race => _race;
+    internal PlaybackCamera Camera => _camera;
+    internal VideoExporter Exporter => _exporter;
+    internal TrackRibbon? Ribbon => _ribbon;
+
+    /// <summary>The last route survey Absolute Cinema planned from, and how many events it found; null before one.</summary>
+    internal Cinema.Corridor? LastCorridor { get; private set; }
+    internal int PlannedEvents { get; private set; }
+
+    /// <summary>Starts Absolute Cinema and its survey of the route, as <c>--cinemamode</c> does.</summary>
+    internal void StartCinema()
+    {
+        _camera.Mode = CameraMode.Cinema;
+        EnsureCinemaPlan();
+    }
+
+    /// <summary>Starts an export into <paramref name="folder"/> itself (no per-run subfolder); false when it cannot.</summary>
+    internal bool ExportInto(string folder, int fps)
+    {
+        if (!_exporter.Begin(folder, fps)) return false;
+        _hud.Visible = false;
+        return true;
+    }
 
     /// <summary>Raised when the player asks to leave replay — HUD button or finish banner.</summary>
     public event Action? ExitRequested;
@@ -47,12 +72,12 @@ public partial class GpxSession : Node
 
     public override void _Ready()
     {
-        _race = RacePlayback.Create(_chunks, _origin);
+        _race = RacePlayback.Create(_world, _origin);
         // matching finishes on its own schedule, so the course line has to be told
         _race.SnapChanged += RefreshRibbon;
         AddChild(_race);
 
-        _camera = PlaybackCamera.Create(_race, _chunks);
+        _camera = PlaybackCamera.Create(_race, _world);
         _camera.ModeChanged += EnsureCinemaPlan;
         AddChild(_camera);
 
@@ -60,7 +85,7 @@ public partial class GpxSession : Node
         // the timeline keeps cutting to corners and climbs that belong to the other variant.
         _race.SnapChanged += EnsureCinemaPlan;
 
-        _exporter = VideoExporter.Create(_race, _camera, _chunks);
+        _exporter = VideoExporter.Create(_race, _camera, _world);
         _exporter.Completed += EndExport;
         AddChild(_exporter);
 
@@ -309,7 +334,7 @@ public partial class GpxSession : Node
         if (_camera.Mode is not (CameraMode.Cinema or CameraMode.Racing) || _planning) return;
 
         var focused = _race.Focused;
-        var source = _chunks.Source;
+        var source = _world.Source;
         if (focused == null || source == null) return;
 
         string key = $"{focused.Track.Name}|{focused.UseSnapped}";
@@ -323,16 +348,18 @@ public partial class GpxSession : Node
             var track = focused.Active;
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            var corridor = await Cinema.Corridor.LoadAsync(track, source, _chunks.AvailableTiles)
+            var corridor = await Cinema.Corridor.LoadAsync(track, source, _world.KnownTiles)
                 .ConfigureAwait(true);
             var profile = Cinema.TrackAnalyser.Analyse(track, _origin, corridor);
+            LastCorridor = corridor;
+            PlannedEvents = profile.Events.Count;
 
             // seeded from the track, so the same run always cuts the same way
             // (FNV-1a: string.GetHashCode is randomised per process, so every run cut differently, #924)
             ulong seed = (ulong)(uint)Core.Fnv.Hash(track.Name) ^ (ulong)track.Points.Count;
             _camera.SetCinemaPlan(profile.Events, seed);
 
-            GD.Print($"[cinema] {track.Name}: {profile.Events.Count} events, "
+            GD.Print($"[cinema] {track.Name}: {corridor.TileCount} tiles, {profile.Events.Count} events, "
                 + $"{profile.RevisitShare:P0} revisited ground, ready in {clock.ElapsedMilliseconds} ms");
         }
         catch (Exception e)
@@ -545,7 +572,7 @@ public partial class GpxSession : Node
         if (_ribbon != null && _ribbon.Track == course) return;
 
         _ribbon?.QueueFree();
-        _ribbon = TrackRibbon.Create(course, _chunks, _origin);
+        _ribbon = TrackRibbon.Create(course, _world.Ground, _origin);
         _ribbon.Opacity = _ribbonOpacity;
         AddChild(_ribbon);
     }

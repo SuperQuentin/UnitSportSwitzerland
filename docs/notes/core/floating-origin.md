@@ -27,6 +27,8 @@
   A mesh rebuilt from world points under a container (the traffic's debug lines, `ImmediateMesh`) is
   moved by a shift like any child: put its node back at the identity each time it is redrawn in the
   new frame, or every line lies a shift away (the trails "broke after moving on", `--origincheck`).
+  The same for instances refilled from world points (`NearTrees`, #1776): a turning re-anchor turns the node, and
+  placing them relative to its position alone draws them turned about it (trees floating metres up, `--treeseatcheck`).
 - **Worker threads take `origin.Frame` once** (an immutable `OriginFrame`) and work in it; the
   main thread maps the result with `origin.Since(frame)` (`Traffic`'s lane graphs, `RaceRoute`).
   Reading the live origin twice from a worker can straddle a shift.
@@ -66,6 +68,14 @@
   ripples) goes through `pattern_turn`.
 - **Cost**: ~5 ms per shift with ~1,500 nodes moved (headless), once every few km; 22-47 ms in a
   window at Riddes (~530 nodes, 120 kinematic), so the frame that shifts takes 50-90 ms.
+  **The `[origin]` line says where it goes** (#1764): the node pass (and its kinematic teleports' share), and the
+  slowest three handlers by type, summed (`OriginShifter.SlowestHandlers`). On Geneva's leaves with traffic (the earth
+  playtest's 117-203 ms stall), traffic's lane graphs were most of it: 110,000 edges and 1.1 million points moved on
+  the main thread through a set of every edge, 100-380 ms. Each edge now moves once per pass by a stamp
+  (`LaneEdge.ShiftOnce`) and a graph past 4,096 edges moves in blocks on the pool: 10-16 ms. The whole shift took
+  27-48 ms there (a machine at 100% CPU): the node walk 13-24 ms (teleports under 1.1 ms), traffic 13-16 ms, the rest
+  under 3 ms. A handler that keeps a million of anything in world space moves it in parallel, or keeps it in a frame
+  of its own.
 - **The renderer across a shift** (phase 4, measured in a window at Riddes, RTX 4070, 1600x900,
   a `shift 1000,0` shot-queue line with the camera still):
   - **SDFGI** (Realistic+ with `--sdfgi`, Forward+): its cascades sit on the world grid round the
@@ -90,7 +100,10 @@
   - the shifter turns `RigidBody3D` linear and angular velocities, and `CharacterBody3D.Velocity`
     of a body that is not `IOriginShiftAware` (one that is turns its own);
   - a heading kept as an angle adds `shift.Yaw` (`FootPlayer._viewYaw`, `SpectatorCamera._yaw`,
-    `FlightMotion.Yaw`); a flight's velocity and attitude turn with `Direction` / the basis
+    `FlightMotion.Yaw`); a camera rebuilt from kept angles must also drop the shift's tilt, or it rolls and pitches
+    with the Earth's turn and the next look snaps it back: `SpectatorCamera.OnOriginShifted` reads its pitch and
+    heading off its placement before the shift and keeps them against the new horizon, no roll (#1800; flown from
+    Geneva toward Asia it stood 18° off after 116 re-anchors; `--spectatorturncheck --frame earth --chunks fixture:straight`); a flight's velocity and attitude turn with `Direction` / the basis
     (`FootPlayer`, `VehicleBody` handlers);
   - a ride with world-space state of its own overrides `Rideable.OnOriginShifted` (the boat turns
     its velocity, spin and attitude; its position is read back from the body);
@@ -113,6 +126,13 @@
     #1630's film never reached Space: its `g400000` glide waited for leaves under a fast climb and stayed at 2 km.
     A climb does enter the regime (`[origin] the earth frame re-anchors every 20 km from 60.x km`); `--orbitcheck` and
     `--shuttlecheck` take `--frame earth` on `--world flat` to fly it.
+    **Its drop under the snap distances** (#1763): each re-anchor lowers the world ~0.7 m at the camera (3 km out on
+    the old tangent plane, d²/2R), under the distances past which an eased camera snaps (the on-foot pivot 6 m, the
+    phone 1 m). A camera state kept in world space and eased (a height, a lens position) must be carried through the
+    shift (`FootPlayer.ShiftCameraState`), or the camera jumps up and eases back down at every re-anchor.
+    `--reanchorcamcheck --chunks fixture:straight` (no `--originshift`: the drop grows with the square of the threshold)
+    moves the anchor 2.9 km behind the local player and walks, then drives, across real re-anchors: the camera's
+    offset from the body may not step.
     The shift log line says how a shift turned (`turned: tilt 0.0269°, yaw 0.0000°`). `OriginShift.Turns` is exact
     (a 20 m stress shift turns 3·10⁻⁶ rad, under `IsEqualApprox`); `Apply(Aabb)` bounds the moved corners.
     `--originstress <m> --originyaw <deg>` there turns the tangent anchor by ±deg, one way then back.

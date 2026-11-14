@@ -48,8 +48,10 @@ public class FlatLv95RatchetTests
             // (placed objects, structures, pins, the travel flag), which the RPC edges now read; 4091 after A1's last step
             // (#1502): GlobalPos has no E/N, what is left reads its LV95 notation (`.Lv95.E`) or a record's LV95 fields;
             // 4039 after C5 (#1514): GPX tracks lie on their own plane (X/Y), not LV95; 4037 after C4 (#1513): entity
-            // interest buckets by cube cell
-            Baseline: 4037, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
+            // interest buckets by cube cell; 4018 after #1684's follow-up: a stadium's place is StadiumSpec.Centre;
+            // 4016 after #1735: a dormant slot placed by DormantVehicles.WorldOf; 4012 after #1837: /time's local hours
+            // (#1804) and the earth debug readout (#1820) read a GlobalPos, not LV95 tuples
+            Baseline: 4012, Instead: "GlobalPos.OffsetTo / Moved / BearingTo / Tile, a GlobalPos in the record (G2 A1)"),
         // the flat world's escape hatches out of IWorldGround (#1532, G2 C1): an LV95 tile key read off a
         // GroundTile or made into one, or the streamer behind the ground for its LV95 chunk source; 32 after #1532,
         // 0 since #1684: gameplay asks IWorldGround.ContentName / Content, and the flat world's own Flat / FlatId stay

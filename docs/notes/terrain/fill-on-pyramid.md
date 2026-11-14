@@ -19,6 +19,17 @@ untouched (`FallbackChunkSource` / `ProceduralWorld.Blend` on LV95).
   (weight over 0.05: its ragged rim too) becomes Open; trees and buildings in a lake are dropped, everything else
   (roads too) moves with the ground. Forest, rock and snow stay the generator's: the pyramid's colour past the leaves
   is Blue Marble's 500 m pixel, which reads a dark shore as forest (#1677), and the generator's classes go with its trees.
+- **The sea (#1808)**: `cube_global` holds the sea at its surface, the geoid (`CubeGlobal`: `max(H, 0) + N`, EGM2008), so
+  the fill read flat ground there and laid the generator's grass, trees and buildings over every ocean. `PyramidBase.SeaSurface`
+  (`Egm2008.Undulation`: a 0.25° grid of ETOPO 2022's geoid embedded in `TerrainFormat`, 0.3 m at the 99th percentile,
+  1.2 m at worst) makes pyramid ground within `SeaTolM` (1.5 m) of the geoid sea, at the geoid's level, through the
+  lakes' path: the shelving bed, Water cover, trees and buildings dropped, the shore's detail fade, the globe's far fill
+  water. `SeaOver` reads the geoid at a window's four corners and interpolates (it bends by millimetres over a few km),
+  not once per vertex. A leaf that is all sea has no roads; a coastal one keeps them, the drowned ones on the bed (as in
+  a lake; cutting road records by segment would break their cross-references). `tools/farfillcheck.sh` fails where the
+  pyramid's ground is sea and the leaves are dry: the open-sea spot `AT=426597,-230351` (west of Morocco) failed at all
+  1,681 points before; the coast at Agadir `909680,-472439`, the Pacific `-13287549,7940380`. The globe's own sea
+  (its tiles' water, the coast past the fill) is #1802's. Low coasts within 1.5 m of the sea read as sea.
 - **`LeafBlend` on the pyramid**: no 3 km band; a 400 m convex hand-over `h = (1 - F) g + F T`. `T` is the real ground
   continued from each block's nearest point (slope carried over 60 m) near the seam, then the pyramid plus the real
   ground's difference from it (`Resid`, a lake's bed among it). A lake bed is carried into the fill's lake only: on
@@ -28,10 +39,20 @@ untouched (`FallbackChunkSource` / `ProceduralWorld.Blend` on LV95).
   (`beds:` off, #1669). With the pyramid's lake levels known, ground that is none of them drops the colour image's
   water weight. Under a tile's lake an edge vertex sinks as deep as its neighbours on its side, and the skirts hang from
   the sunk ground: as a shore 3 m under the surface, every leaf edge across a lake drew a pale line.
+- **The pyramid past the leaves is the generator's own macro relief since #1746** (the 500 m Swiss relief, no longer
+  ETOPO's 1.8 km cells; `tools/cube-tiles`), so `P` and the generator's `G` share their broad shapes there. The fill still
+  drops `G`'s relief between ~150 m and 500 m and clamps the rest to 12 m: far mountains past the region read smoother
+  than flat's generated ones (#1748, a change to #1678's rule for the user to decide).
 - **The pyramid had to be fixed first** (`tools/cube-tiles`): past B4's leaves its level 13 blended into ETOPO in 16
   rings, each a step (13-40 m east of Lavaux, the fill drew them as terraces), and ETOPO's 1.8 km cells left 1.5-2 km
   of ground 3-35 m over Léman below Lavaux. `--cube-swiss` now blends with a continuous field and snaps swissTLM3D's
   big lakes (`--tlm`).
+
+- **Walls in the fill are the pyramid's (#1778)**: the fill leaves agree on every edge, so a wall along a straight line
+  (a V where two meet) is the pyramid stepping, where `PyramidBase` falls back to a coarser level that disagrees with
+  the finer one. `tools/fillseamscheck.sh` (BlendCheck `--fill-seams`, `--why` prints every level at the worst step)
+  measures it at the playtest's spots: steps between samples, the leaves' edges, the far ground, and the coarse levels'
+  mean miss along the leaves' edges (the globe's ledge, #1779). The fix is in the pyramid's build (`tools/cube-tiles`).
 
 Checks: `PyramidFillTests` (sampler, distance transform, fill, edges, hand-over); `BlendCheck --leaf-blend --at
 2547200,1147800 --side 5 --pyramid D:/UnitSportSwitzerland/cube_global --out DIR` (the Lavaux staircase: seam p99

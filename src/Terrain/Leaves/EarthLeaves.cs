@@ -43,6 +43,10 @@ public sealed class EarthLeaves : ILeafSource
         Func<CubeKey, bool>? fixtureHas, Func<CubeKey, CubeLeafContent?>? fixture)
     {
         Real = real;
+        // the data inside a stadium's facade goes as a region's leaf is read (#1723), as an LV95 tile's (StadiumClip)
+#if GODOT // the offline tools (BlendCheck) build without Godot and without stadiums
+        real.Dress ??= Stadiums.StadiumLeaves.Clip;
+#endif
         _generated = generated;
         _roads = roads;
         _domain = domain;
@@ -99,6 +103,9 @@ public sealed class EarthLeaves : ILeafSource
 
     /// <summary>The fill's domain now; null without a fill.</summary>
     public LeafFillDomain? Domain => _domain;
+
+    /// <summary>The pyramid the fill stands on, null without one (a probe's read-out, #1808).</summary>
+    public PyramidBase? Pyramid => _generated?.Pyramid;
 
     /// <summary>The fill's domain grown so it holds a place (a camera, a body, a teleport's target).</summary>
     public void Reach(double latDeg, double lonDeg)
@@ -250,7 +257,15 @@ public sealed class EarthLeaves : ILeafSource
             added = true;
             return new Lazy<CubeLeafContent?>(() =>
             {
-                try { return make(k); }
+                try
+                {
+                    // a generated, merged or course leaf loses what stands inside a stadium too (#1723)
+                    if (make(k) is not { } made) return null;
+#if GODOT
+                    Stadiums.StadiumLeaves.Clip(made);
+#endif
+                    return made;
+                }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
                     Log?.Invoke($"[earth] {k}: {e.GetType().Name}: {e.Message}");

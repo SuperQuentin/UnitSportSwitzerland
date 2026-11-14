@@ -55,8 +55,8 @@ The coverage map found far rendering, GPX and the origin under load with no chec
 
 ## The pictures: `tools/refshots.sh` and `tools/refshot-diff.py`
 
-- `tests/refshots/views.txt` is the catalogue: ~24 views on the real terrain of D: (Geneva, Jura,
-  Lausanne, Lavaux, Chablais, Riddes), each with a class: `near` (< 1 km), `mid`, `far` (20 km
+- `tests/refshots/views.txt` is the catalogue: ~27 views on the real terrain of D: (Geneva, Jura,
+  Lausanne, Lavaux, Chablais, Riddes, and La Tzoumaz's high slopes in July and January since #1746), each with a class: `near` (< 1 km), `mid`, `far` (20 km
   and more), `edge` (far peaks at the frame's top edge, the horizon at its bottom: frustum
   culling), `night` (lamps; 1 August for the bonfires).
 - `tools/refshots.sh <tag>` takes every view in `STYLES` (cartoon, ps1, real- by default), one
@@ -97,7 +97,7 @@ The coverage map found far rendering, GPX and the origin under load with no chec
 tools/refshot-parity.sh c6-<commit>
 ```
 
-- One heavy-run slot, ~50 min for three styles. It takes the flat library (`ANCHORS=1`), then the earth one
+- **Cartoon only** by default since #1746 (the user's call, Nov 12 2026: PS1 is defunct, Realistic unfinished; earth is judged against flat in Cartoon): one heavy-run slot, ~18 min; `STYLES="cartoon ps1 real-"` for all three, ~50 min. It takes the flat library (`ANCHORS=1`), then the earth one
   (`tools/refshots.sh --frame earth`, B4's leaves and pyramid from `D:/UnitSportSwitzerland/test_b3/b4/`), then
   the diff: `D:/UnitSportSwitzerland/refshots/<tag>-earth/diff-<tag>-flat/` with `summary.md` (within the floor,
   over it, judged), `report.html` and `sheet-<style>.png` (A flat | B earth | difference, by class). Exit 1 when a

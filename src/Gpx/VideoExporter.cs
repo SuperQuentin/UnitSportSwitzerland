@@ -31,7 +31,7 @@ public partial class VideoExporter : Node
     private enum Phase { Idle, Warmup, Advance, Settle, Capture, Grabbing, Encoding, Finished }
 
     private IExportSource _source = null!;
-    private ChunkManager _chunks = null!;
+    private ReplayWorld _world = null!;
 
     private Phase _phase = Phase.Idle;
     private string _directory = "";
@@ -125,7 +125,7 @@ public partial class VideoExporter : Node
         Core.GameSettings.Current.RenderDistanceRings);
 
     /// <summary>Whether the visible world is complete, and how to say why it is not.</summary>
-    private bool WorldReady => _chunks.SettledNear(_source.CameraPosition, SettleRings);
+    private bool WorldReady => _world.SettledNear(_source.CameraPosition, SettleRings);
 
     public bool Running => _phase is not (Phase.Idle or Phase.Finished);
 
@@ -134,19 +134,28 @@ public partial class VideoExporter : Node
 
     public string Status { get; private set; } = "";
 
+    /// <summary>Whether the last warm-up ended on a settled world rather than on its time budget (#1752).</summary>
+    public bool WarmupSettled { get; private set; }
+
+    /// <summary>Whether the capture has begun: the warm-up is over.</summary>
+    public bool PastWarmup => _phase is not (Phase.Idle or Phase.Warmup);
+
     /// <summary>Raised when the export finishes, fails or is cancelled.</summary>
     public event Action? Completed;
 
-    public static VideoExporter Create(RacePlayback race, PlaybackCamera camera, ChunkManager chunks) =>
-        Create(new RaceExportSource(race, camera), chunks);
+    public static VideoExporter Create(RacePlayback race, PlaybackCamera camera, ReplayWorld world) =>
+        Create(new RaceExportSource(race, camera), world);
 
     /// <summary>An exporter of anything with a steppable clock and a camera (#786): a replay, a movie.</summary>
-    public static VideoExporter Create(IExportSource source, ChunkManager chunks) =>
+    public static VideoExporter Create(IExportSource source, ChunkManager chunks) => Create(source, ReplayWorld.OnFlat(chunks));
+
+    /// <summary>An exporter on either world (#1752): the flat tiles, or the earth world's leaves.</summary>
+    public static VideoExporter Create(IExportSource source, ReplayWorld world) =>
         new()
         {
             Name = "VideoExporter",
             _source = source,
-            _chunks = chunks,
+            _world = world,
         };
 
     public override void _Ready() => SetProcess(false);
@@ -194,12 +203,12 @@ public partial class VideoExporter : Node
 
         // Nobody is watching this render, so the budgets that keep a live frame smooth are pure
         // cost here — see ChunkManager.OfflineMode.
-        _chunks.OfflineMode = true;
+        if (_world.Flat is { } flat) flat.OfflineMode = true;
 
         // The route is known in full before frame one, so no frame should ever be the first to
         // ask for a tile. This reads the whole thing into the cache in route order while the
         // render works through it.
-        _prefetch = _source.Prefetch(_chunks);
+        _prefetch = _world.Flat is { } chunks ? _source.Prefetch(chunks) : null;   // the leaves: no prefetch yet (#1752)
         _prefetch?.Start();
 
         // start from a clean state rather than wherever the player had scrubbed to
@@ -212,6 +221,7 @@ public partial class VideoExporter : Node
         BuildOverlay();
 
         _phase = Phase.Warmup;
+        WarmupSettled = false;
         _waiting = 0;
         _stableFrames = 0;
         _elapsed = 0;
@@ -255,12 +265,13 @@ public partial class VideoExporter : Node
                 {
                     _lastReport = _waiting;
                     GD.Print($"[export] waiting for terrain ({_waiting:F0}s) — "
-                        + _chunks.SettleReport(_source.CameraPosition));
-                    GD.Print($"[export]   worker time: {_chunks.BuildTimeReport()}");
+                        + _world.SettleReport(_source.CameraPosition));
+                    if (_world.Flat is { } c) GD.Print($"[export]   worker time: {c.BuildTimeReport()}");
                 }
 
                 if (_stableFrames >= StableFramesNeeded || _waiting > WarmupSeconds)
                 {
+                    WarmupSettled = _waiting <= WarmupSeconds;
                     if (_waiting > WarmupSeconds)
                         GD.Print("[export] world never settled; recording anyway");
                     else
@@ -596,7 +607,7 @@ public partial class VideoExporter : Node
         if (_phase == Phase.Warmup)
         {
             _readout.Text = $"loading terrain… {_waiting:F0}s of {WarmupSeconds:F0}s "
-                + $"({_chunks.SettleReport(_source.CameraPosition)})";
+                + $"({_world.SettleReport(_source.CameraPosition)})";
             return;
         }
 
@@ -774,7 +785,9 @@ public partial class VideoExporter : Node
     /// </summary>
     private void ReportLoadStats()
     {
-        var (full, coarse, bytes) = _chunks.LoadStats;
+        // the flat streamer's numbers; the leaves keep none of these (#1752)
+        if (_world.Flat is not { } chunks) return;
+        var (full, coarse, bytes) = chunks.LoadStats;
         string line = $"[export] tiles read: {full} full + {coarse} coarse "
             + $"= {bytes / 1048576.0:F0} MB";
 
@@ -785,14 +798,14 @@ public partial class VideoExporter : Node
             line += $" (was {naive / 1048576.0:F0} MB, {(double)naive / Math.Max(1, bytes):F1}x)";
         }
 
-        if (_chunks.Source is CachingChunkSource cache)
+        if (chunks.Source is CachingChunkSource cache)
             line += $"; cache {cache.HitRate:P0} hit over {cache.CachedEntries} entries, "
                 + $"{cache.CachedBytes / 1048576.0:F0} MB";
 
         if (_prefetch != null) line += $"; prefetched {_prefetch.Prefetched}/{_prefetch.Total}";
 
         GD.Print(line);
-        GD.Print($"[export] worker time: {_chunks.BuildTimeReport()}");
+        GD.Print($"[export] worker time: {chunks.BuildTimeReport()}");
     }
 
     /// <summary>Gives the clock, the camera and the window title back.</summary>
@@ -801,7 +814,7 @@ public partial class VideoExporter : Node
         if (_frame > 0 || _phase == Phase.Warmup) ReportLoadStats();
         _phase = Phase.Finished;
         SetProcess(false);
-        _chunks.OfflineMode = false;
+        if (_world.Flat is { } flatWorld) flatWorld.OfflineMode = false;
         _prefetch?.Stop();
         _prefetch = null;
         ClosePipe();

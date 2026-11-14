@@ -136,7 +136,7 @@ public abstract class DroneShot : Shot
     private static bool Wooded(ShotContext ctx, Vector3 p)
     {
         foreach (var o in Around)
-            if (ctx.Chunks.Ground.TryGetCover(p + o, out var c) && CoverFormat.IsWooded(c)) return true;
+            if (ctx.WorldGround.TryGetCover(p + o, out var c) && CoverFormat.IsWooded(c)) return true;
         return false;
     }
 

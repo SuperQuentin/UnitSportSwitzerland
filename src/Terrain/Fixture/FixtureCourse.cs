@@ -106,7 +106,13 @@ public sealed class FixtureCourse
     public List<Parked> Fleet { get; } = new();
 
     /// <summary>A prepared ski slope (#1396): an outline, metres from the start, and how hard it is.</summary>
-    public sealed record Slope(string Name, PisteDifficulty Difficulty, (double X, double Y)[] Outline);
+    /// <param name="Line">A line slope's centreline, top to foot (#1737: what a ski race chains): its record is a line of the
+    /// outline's width along it, the raster still the outline's; null: an area slope.</param>
+    public sealed record Slope(string Name, PisteDifficulty Difficulty, (double X, double Y)[] Outline, (double X, double Y)[]? Line = null)
+    {
+        /// <summary>The points the record keeps: the centreline of a line slope, else the outline.</summary>
+        public (double X, double Y)[] Path => Line ?? Outline;
+    }
 
     /// <summary>The course's ski slopes; none by default.</summary>
     public List<Slope> Slopes { get; } = new();
