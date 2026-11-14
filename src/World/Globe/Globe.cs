@@ -273,6 +273,8 @@ public partial class Globe : Node
     public void RefreshLeaves()
     {
         _leafGeneration++;
+        // the server's real leaves split the ground down to the streamed far band (#1657)
+        _remoteAncestors = null;
         foreach (var key in _patches.Keys)
             if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel) _leafStale.Add(key);
         _nextPlan = 0;
@@ -374,7 +376,8 @@ public partial class Globe : Node
         Levels();
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
-        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}");
+        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}"
+            + (Earth && FarLeafM > 0 ? $"; far leaves to {FarLeafM / 1000:F1} km ({StreamedFarLeafM / 1000:F1} km streamed), their buildings to {FarBuildingsM / 1000:F1} km" : ""));
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         Present = true;
         Current = this;
@@ -613,6 +616,7 @@ public partial class Globe : Node
         var axes = Axes ?? Origin!.EcefAxes;
         var c = cam.GlobalPosition;
         var eye = axes.ToEcef(c.X, c.Y, c.Z);
+        _eye = eye;
         double eyeR = Math.Sqrt(FrameAxes.Dot(eye, eye));
         var eyeDir = new EcefPos(eye.X / eyeR, eye.Y / eyeR, eye.Z / eyeR);
         double horizon = GlobeGround.HorizonAngle(eye);
@@ -662,7 +666,7 @@ public partial class Globe : Node
         double cell = EarthR * Math.PI / 2 / key.Side / ((1 << CubeKey.LatticeBits(key.Level)) / Stride);
         bool holds = _holdsDrawn.ContainsKey(key);
         // the far leaves' band: down to the real leaves, as the flat world's rings draw its real tiles
-        bool far = Earth && FarLeafM > 0 && distance < FarLeafM && key.Level < Terrain.Leaves.LeafFrames.LeafLevel && HoldsReal(key);
+        bool far = FarSplit(key, distance);
         bool split = key.Level < _maxLevel && (holds || far || cell / distance * focal > SplitPixels);
         if (split)
         {
