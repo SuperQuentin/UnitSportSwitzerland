@@ -45,6 +45,7 @@ public partial class SpectatorTargets : CanvasLayer
     private Label _name = null!, _detail = null!;
     private Control _labels = null!;
     private double _heldFor = -1, _textAt;
+    private bool _held, _spectating;
 
     public SpectatorTargets(WorldOrigin origin)
     {
@@ -96,29 +97,46 @@ public partial class SpectatorTargets : CanvasLayer
         GD.Print($"[target] {(Target is { } t ? CelestialBody.Of(t).Name : "none")}");
     }
 
+    /// <summary>
+    /// The press and the release as events (#1920): a tap whose press and release land in one frame (a hitch while the
+    /// world loads, a fast pad) still steps on; polling the action's state missed it.
+    /// </summary>
+    public override void _UnhandledInput(InputEvent e)
+    {
+        if (!_spectating || UiFocus.TextEntryActive || e.IsEcho() || !e.IsAction(PlayerInput.SpectatorTarget)) return;
+        if (e.IsPressed())
+        {
+            if (_held) return;
+            _held = true;
+            _heldFor = 0;
+        }
+        else if (_held)
+        {
+            _held = false;
+            if (_heldFor < HoldSeconds) Cycle();
+            _heldFor = -1;
+        }
+    }
+
     public override void _Process(double delta)
     {
         if (_cam == null || !IsInstanceValid(_cam))
             _cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as SpectatorCamera;
         var cam = _cam;
         bool spectating = cam != null && (GetViewport()?.GetCamera3D() == cam || XR.XrSession.Anchor == cam);
+        _spectating = spectating;
         if (!spectating || UiFocus.TextEntryActive)
         {
+            _held = false;
             _heldFor = -1;
             Aligning = false;
             Hide();
             return;
         }
 
-        // a tap steps, a hold turns: decided on the release, or once the hold is long enough
-        bool down = Input.IsActionPressed(PlayerInput.SpectatorTarget);
-        if (down) _heldFor = _heldFor < 0 ? 0 : _heldFor + delta;
-        else if (_heldFor >= 0)
-        {
-            if (_heldFor < HoldSeconds) Cycle();
-            _heldFor = -1;
-        }
-        Aligning = down && _heldFor >= HoldSeconds && Target != null;
+        // a tap steps (on its release, _UnhandledInput), a hold turns once it is long enough
+        if (_held) _heldFor += delta;
+        Aligning = _held && _heldFor >= HoldSeconds && Target != null;
 
         Toward = Target is { } target && _origin.Frame.Axes is { } axes ? Measure(target, axes, cam!) : null;
         if (Toward is not { } toward)
