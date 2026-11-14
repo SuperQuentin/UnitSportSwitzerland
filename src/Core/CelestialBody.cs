@@ -7,11 +7,11 @@ namespace UnitSport.Core;
 /// <summary>
 /// The bodies of the world (#1847, docs/plans/planets.md section 1). A byte: it travels with a position
 /// (<see cref="GlobalPos.Body"/>). <b>The Earth is 0</b>, so a default position, every key, file, record and wire
-/// value of today means the Earth. Phobos and Deimos come with Mars (H7e).
+/// value of today means the Earth.
 /// </summary>
 public enum BodyId : byte
 {
-    Earth = 0, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan,
+    Earth = 0, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan, Phobos, Deimos,
 }
 
 /// <summary>
@@ -97,8 +97,16 @@ public sealed class CelestialBody
         8.978138e12, DegPerDay(360 / 15.945421), BodyId.Saturn, 1_221_870_000, landable: true, spaceEnterM: 200_000,
         spaceExitM: 180_000, craterDensity: 0.02, air: BodyAir.Titan);
 
+    // Mars' two moons (#1853), from their shape models (Ernst et al. 2023): heights over the spheres of their DEMs (Phobos'
+    // 11.1 km of DLR's HRSC model, Deimos' 6.2 km mean); GM from Jacobson (2010). Each a few km, pulling a few mm/s².
+    public static readonly CelestialBody Phobos = new(BodyId.Phobos, "Phobos", SkyBody.Phobos, Ellipsoid.Sphere(11_100), 7.087e5,
+        DegPerDay(360 / 0.31891023), BodyId.Mars, 9_376_000, landable: true, spaceEnterM: 1_000, spaceExitM: 800, craterDensity: 1);
+
+    public static readonly CelestialBody Deimos = new(BodyId.Deimos, "Deimos", SkyBody.Deimos, Ellipsoid.Sphere(6_200), 9.615e4,
+        DegPerDay(360 / 1.26244), BodyId.Mars, 23_458_000, landable: true, spaceEnterM: 1_000, spaceExitM: 800, craterDensity: 0.3);
+
     private static readonly CelestialBody[] ById =
-        [Earth, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan];
+        [Earth, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan, Phobos, Deimos];
 
     /// <summary>Every body, in <see cref="BodyId"/> order.</summary>
     public static System.ReadOnlySpan<CelestialBody> All => ById;
@@ -140,6 +148,8 @@ public sealed class CelestialBody
         BodyId.Ganymede => CubeShape.Ganymede,
         BodyId.Callisto => CubeShape.Callisto,
         BodyId.Titan => CubeShape.Titan,
+        BodyId.Phobos => CubeShape.Phobos,
+        BodyId.Deimos => CubeShape.Deimos,
         BodyId.Jupiter => CubeShape.Jupiter,
         BodyId.Saturn => CubeShape.Saturn,
         BodyId.Uranus => CubeShape.Uranus,
@@ -190,7 +200,7 @@ public sealed class CelestialBody
     /// <summary>
     /// How cratered its ground is under its data (#1850, the cratered profile of docs/plans/planets.md section 5): a
     /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.5 on
-    /// Ganymede, 0.15 on Mars (wind and dust have filled most of its small craters), 0.03 on young Europa, 0.02 on Titan
+    /// Ganymede, 0.3 on Deimos (its smooth regolith), 0.15 on Mars (wind and dust have filled most of its small craters), 0.03 on young Europa, 0.02 on Titan
     /// (its rain and dunes), 0 where nothing is generated (the Earth's own fill, volcanic Io, Venus, the giants).
     /// </summary>
     public double CraterDensity { get; }
@@ -229,6 +239,7 @@ public sealed class CelestialBody
         BodyId.Earth => 3.986004418e14,
         BodyId.Jupiter => 1.26686534e17,
         BodyId.Saturn => 3.7931187e16,
+        BodyId.Mars => 4.282837e13,
         _ => throw new System.ArgumentOutOfRangeException(nameof(p)),
     };
 

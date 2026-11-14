@@ -91,6 +91,32 @@ hold to the millimetre). Saturn's rings are a slab drawn over the whole screen u
 `shaders/ring_slab.gdshader`), with ice chunks round the camera (`world/saturn-rings`). Finer maps (Cassini's, Juno's) are a later
 swap of the colour alone.
 
+## Phobos and Deimos: shape models (#1853)
+
+Neither is a sphere (Phobos 8 to 14 km from its centre), and only Phobos has a georeferenced DEM (DLR's HRSC, 100 m, 699
+× 349, not 2:1). Both come from Ernst et al. (2023)'s shape models, as Celestia ships them (`CelestiaContent/models/
+{phobos,deimos}.cmod`, 25k vertices, 49k triangles, km, CC-BY-4.0: credit them).
+
+```
+dotnet <tp>/TerrainPreprocessor.dll --shape-dem phobos.cmod --shape-radius 11100 --shape-out phobos_shape_dem.tif
+dotnet <tp>/TerrainPreprocessor.dll --cube-body phobos --dem phobos_shape_dem.tif --credit "Ernst et al. 2023 shape model via Celestia, CC-BY-4.0" --cube-levels 0-3
+python tools/body_colour.py Phobos_ME_SRC_Mosaic_Global_16ppd.tif phobos_colour.jpg --floor 0.55
+python tools/body_colour.py --flat 128,118,108 deimos_colour.jpg
+```
+
+- **`--shape-dem`** (`ShapeModel`, `ShapeModelTests`): each pixel of a 1440 × 720 simple cylindrical grid is the farthest
+  hit of the ray from the centre (triangles binned by 1° round their directions: 0.5 s), less the reference sphere
+  (Phobos 11.1 km, DLR's; Deimos 6.2 km, its mean). An int16 strip TIFF `CylRaster` reads. So the moons are heights
+  over spheres like every body: the pyramid, the globe and the near ground take them unchanged.
+- **Axes**: Celestia's x, y, z are the IAU's −X, Z, Y. Checked on Phobos against the HRSC DEM: 0.21 km rms over a 7.5°
+  grid, three times better than the other five orientations, the prime meridian within 2°; Stickney at 49° W. On Deimos
+  a crater stands at Swift's IAU place and a depression at Voltaire's.
+- **Levels**: Phobos 0-3 (the heights are 48 m pixels, but the colour wants level 3's 4 m), Deimos 0-1; a few seconds.
+- **Colour**: Phobos' HRSC/SRC mosaic (16 px/°, 12 m, greyscale) with `--floor 0.55` lifting its low sun's shadows
+  (median 148, under 81 raised). Deimos has only an airbrushed USGS relief with blank areas: one flat grey-brown, its
+  relief the game's light on its heights.
+- Data: `E:/UnitSportSwitzerland/planets/{phobos,deimos}/` (`src/`, `work/`, `cube/`).
+
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
 | Run | Tiles | Size | Heights | Time | Peak |

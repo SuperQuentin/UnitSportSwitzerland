@@ -21,6 +21,13 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 - **Gravity**: `Core/BodyGravity.Ground` (the walker's `Gravity`), set from `CelestialBody.GroundGravity` on
   `WorldOrigin.BodyChanged` by `BodyViews`, only for a landable body (crossing the Sun's sphere keeps the last); off the
   Earth the physics space's gravity too. Vehicles keep 9.81 (C3a).
+- **Bodies of a few mm/s²** (Phobos 5.8, Deimos 2.5, #1853): their true pull, one value and straight down as everywhere
+  (not the shape's own pull, Mars' tide or the fall-off with height). T drops the walker its 0.85 m in 17-25 s, a jump
+  at 4.2 m/s climbs 1.5 km (Phobos) or 3.5 km (Deimos, under its 5.6 m/s escape speed) and comes down after 24 or 56
+  minutes; a sprint launches the walker from any bump.
+- **A square's colour on a small body** (#1853): the finest tile over the centre that holds the whole square (Phobos'
+  finest, 2.2 km, is smaller than the 4 km square, whose edges read past it); and the globe's exposure follows into
+  the squares once its six faces are in (a square made before kept the shader's 1.6: a bright patch).
 - **One ground a body, the anchor's answers**: every landable body with a pyramid has its `BodyGround`; the one whose
   body the anchor is on claims `BodyGround.Active` and `EarthWorld.OtherBody`. `Covers` is the square's true ground
   (192 m each way), twice the 96 m at which the next is built.
@@ -35,7 +42,9 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 - **Earth-only systems off the Earth**: guard on `Origin.Body` (`Traffic.RebuildIfMoved`, `DormantVehicles`), or a
   Moon place names an Earth tile and fills it.
 - **Check**: `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --bodies
-  E:/UnitSportSwitzerland/planets --mooncheck [mars] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
+  E:/UnitSportSwitzerland/planets --mooncheck [mars|phobos|deimos|...] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
   T, standing, a 120 m sprint over a new square, the body's jump (5.4 m on the Moon, 2.4 m on Mars). `mars` flies Earth →
   Sun → Mars at light speed (~860 game s, ~13 min headless); `--fromorbit` skips the flight (27 s). Windowed: `test_output/moon/{arrival,ground,apex}.png`. 2027-07-24 puts the landing near
-  the terminator (low sun, the craters show).
+  the terminator (low sun, the craters show). A small moon: the flight ends (and `--fromorbit` starts) well inside its
+  sphere (12 km over Phobos, not 100), the settling waits for its slow fall, no sprint, and the jump is judged on its
+  first 5 s (v t − g t²/2); ~40 s headless each.
