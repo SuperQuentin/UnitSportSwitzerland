@@ -34,8 +34,11 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>The square is built while the camera is under this, metres over the body's reference surface.</summary>
     public const double NearM = 25_000;
 
-    /// <summary>How far round the centre the globe's own tiles step aside, metres: inside the square's half side.</summary>
-    public const float HoleM = Cells * CellM / 2 - 8;
+    /// <summary>The last metres before the square's edge, eased into the globe's own surface (no step where they meet).</summary>
+    public const double BlendM = 64;
+
+    /// <summary>How far each way from the centre the globe's own tiles step aside, metres: the square's half side.</summary>
+    public const float HoleM = Cells * CellM / 2 - 0.25f;
 
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex";
 
@@ -103,11 +106,11 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     public bool HasCollisionAt(Vector3 worldPos) => Covers(worldPos);
 
     /// <summary>
-    /// Where the globe's own tiles step aside, in world space: the square's centre, its up and <see cref="HoleM"/>;
-    /// null while there is no square.
+    /// Where the globe's own tiles step aside, in world space: the square's centre, its up, its east and its half side
+    /// (<see cref="HoleM"/>); null while there is no square.
     /// </summary>
-    public (Vector3 Centre, Vector3 Up, float Radius)? Hole =>
-        _static is { } s && _origin.Body == Body.Id ? (s.GlobalPosition, s.GlobalBasis.Y.Normalized(), HoleM) : null;
+    public (Vector3 Centre, Vector3 Up, Vector3 East, float Half)? Hole =>
+        _static is { } s && _origin.Body == Body.Id ? (s.GlobalPosition, s.GlobalBasis.Y.Normalized(), s.GlobalBasis.X.Normalized(), HoleM) : null;
 
     /// <summary>The square is in place on the anchor's body and a world point stands over it (within <see cref="MoveM"/> of its centre).</summary>
     public bool Covers(Vector3 world)
@@ -151,7 +154,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>A square round <paramref name="near"/>: the heights, the mesh and the colour under it; on a worker.</summary>
     private static Square Build(BodyHeights heights, BodyGlobe globe, EcefPos near)
     {
-        var (frame, y) = heights.Grid(near, Cells, CellM);
+        var (frame, y) = heights.Grid(near, Cells, CellM, BlendM, BodyGlobe.Stride);
         int n = Cells + 1;
         var pos = new Vector3[n * n];
         for (int j = 0; j < n; j++)

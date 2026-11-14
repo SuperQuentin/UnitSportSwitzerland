@@ -70,6 +70,56 @@ public class BodyHeightsTests
     }
 
     [Fact]
+    public void The_globe_surface_is_flat_between_its_coarse_points()
+    {
+        // linear in u and v: the coarse triangles hold it exactly; a bump between the coarse points is not on them
+        var linear = new BodyHeights(Cube, Level, Tiles((u, v) => (float)(1000 * u - 500 * v)), craters: null);
+        var rng = new Random(9);
+        for (int k = 0; k < 100; k++)
+        {
+            double u = rng.NextDouble() * 1.8 - 0.9, v = rng.NextDouble() * 1.8 - 0.9;
+            Assert.Equal(1000 * u - 500 * v, linear.Coarse(Cube.Normal(3, u, v), stride: 4), 2);
+        }
+        // a tile whose every 4th height is 0 and the rest 50: the coarse surface is 0 everywhere
+        var bumpy = new BodyHeights(Cube, Level, key =>
+        {
+            int side = (1 << Bits) + 1;
+            var h = new float[side * side];
+            for (int j = 0; j < side; j++)
+                for (int i = 0; i < side; i++)
+                    h[j * side + i] = i % 4 == 0 && j % 4 == 0 ? 0 : 50;
+            return new CubeTile { Key = key, Bits = Bits, Heights = h };
+        }, craters: null);
+        var n = Cube.Normal(3, 0.123, -0.456);
+        Assert.Equal(0, bumpy.Coarse(n, stride: 4), 6);
+        Assert.True(bumpy.Data(n) > 1);
+    }
+
+    [Fact]
+    public void A_square_eases_into_the_globe_at_its_edge()
+    {
+        var craters = new CraterField(seed: 1, R);
+        var heights = new BodyHeights(Cube, Level, Tiles((u, v) => (float)(300 * Math.Sin(40 * u) * Math.Cos(30 * v))), craters);
+        const int cells = 64;
+        const double cell = 8;
+        var near = Cube.ToEcef(0, 0.05, 0.07, 0);
+        var (frame, y) = heights.Grid(near, cells, cell, blendM: 64, stride: 8);
+        var (_, plain) = heights.Grid(near, cells, cell);
+        int side = cells + 1;
+        for (int j = 0; j < side; j++)
+            for (int i = 0; i < side; i++)
+            {
+                double x = (i - cells / 2) * cell, z = (j - cells / 2) * cell;
+                bool edge = i == 0 || j == 0 || i == cells || j == cells;
+                bool inner = Math.Max(Math.Abs(x), Math.Abs(z)) <= cells / 2 * cell - 64;
+                var n = heights.NormalUnder(frame.ToEcef(x, 0, z));
+                // the edge is the globe's own surface; inside the band the ground is untouched
+                if (edge) Assert.Equal(frame.ToLocal(Cube.OnEllipsoid(n, heights.Coarse(n, 8))).Y, y[j * side + i], 2);
+                if (inner) Assert.Equal(plain[j * side + i], y[j * side + i]);
+            }
+    }
+
+    [Fact]
     public void A_square_is_the_same_ground_on_every_peer_and_twice_on_one()
     {
         var a = new BodyHeights(Cube, Level, Tiles((u, v) => (float)(300 * Math.Sin(7 * u) * Math.Cos(5 * v))), new CraterField(seed: 1, R));

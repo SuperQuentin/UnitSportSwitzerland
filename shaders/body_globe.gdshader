@@ -16,11 +16,13 @@ uniform float night_floor = 0.06;
 uniform float sun_strength = 1.6;
 // Cartoon (the default style): the photo's albedo lifted a little toward the world's palette
 uniform bool cartoon = true;
-// the near ground's square (World/Bodies/BodyGround, #1850): the globe's own coarse cells step aside within this
-// radius of its centre, measured across its up (a column, whatever the cells' height); radius 0: no hole
+// the near ground's square (World/Bodies/BodyGround, #1850): the globe's own coarse cells step aside over it, a
+// square column along its up (whatever the cells' height), its half side hole_half; 0: no hole. The square's edge is
+// eased into these cells, so the two meet there without a step
 uniform vec3 hole_centre = vec3(0.0);
 uniform vec3 hole_up = vec3(0.0, 1.0, 0.0);
-uniform float hole_radius = 0.0;
+uniform vec3 hole_east = vec3(1.0, 0.0, 0.0);
+uniform float hole_half = 0.0;
 
 varying vec3 world_normal;
 varying vec3 world_pos;
@@ -31,10 +33,10 @@ void vertex() {
 }
 
 void fragment() {
-	if (hole_radius > 0.0) {
+	if (hole_half > 0.0) {
 		vec3 d = world_pos - hole_centre;
-		vec3 across = d - hole_up * dot(d, hole_up);
-		if (dot(across, across) < hole_radius * hole_radius) discard;
+		vec3 south = cross(hole_east, hole_up);
+		if (abs(dot(d, hole_east)) < hole_half && abs(dot(d, south)) < hole_half) discard;
 	}
 	vec3 photo = texture(albedo_tex, UV).rgb;
 	// the Moon's real albedo is ~0.12: lifted by a gentle power so its maria and highlands both read

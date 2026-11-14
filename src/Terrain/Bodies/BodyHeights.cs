@@ -63,6 +63,27 @@ public sealed class BodyHeights
         return (h00 * (1 - fx) + h10 * fx) * (1 - fy) + (h01 * (1 - fx) + h11 * fx) * fy;
     }
 
+    /// <summary>
+    /// The globe's own surface at a unit normal: the finest tile's every <paramref name="stride"/>th height, flat between
+    /// them in the two triangles a quad of the globe's mesh is cut into (its diagonal from (i+1, j) to (i, j+1)). The
+    /// near ground's edge eases into it, so the two meet without a step.
+    /// </summary>
+    public double Coarse(EcefPos n, int stride)
+    {
+        var (face, u, v) = _cube.FromNormal(n);
+        var key = CubeKey.FromFace(face, u, v, _level);
+        if (Tile(key) is not { } tile) return 0;
+        int bits = tile.Bits, side = 1 << bits, cells = side / stride;
+        double scale = Math.Pow(2, _level + bits);
+        double gx = Math.Clamp(((u + 1) * 0.5 * scale - ((long)key.X << bits)) / stride, 0, cells);
+        double gy = Math.Clamp(((v + 1) * 0.5 * scale - ((long)key.Y << bits)) / stride, 0, cells);
+        int i = Math.Min((int)gx, cells - 1), j = Math.Min((int)gy, cells - 1);
+        double fx = gx - i, fy = gy - j;
+        double a = Finite(tile.HeightAt(i * stride, j * stride)), b = Finite(tile.HeightAt((i + 1) * stride, j * stride));
+        double c = Finite(tile.HeightAt(i * stride, (j + 1) * stride)), d = Finite(tile.HeightAt((i + 1) * stride, (j + 1) * stride));
+        return fx + fy <= 1 ? a + fx * (b - a) + fy * (c - a) : d + (1 - fx) * (c - d) + (1 - fy) * (b - d);
+    }
+
     /// <summary>The body-fixed point of the ground at a unit normal.</summary>
     public EcefPos Ground(EcefPos n) => _cube.OnEllipsoid(n, At(n));
 
@@ -85,8 +106,13 @@ public sealed class BodyHeights
     /// frame stands on the ground under the centre (x east, y up, z south); each vertex is the ground under the grid
     /// point, its height in that frame (the curve of the body included). The ground's own sideways offset from the grid
     /// is dropped: (height difference) · (distance) / radius, a centimetre for 100 m at 256 m on the Moon.
+    /// <para>
+    /// With <paramref name="blendM"/>, the last metres before the edge ease from this ground into the globe's own coarse
+    /// surface (<see cref="Coarse"/> at <paramref name="stride"/>): the edge is the globe's, so the square and the globe
+    /// round it meet without a step.
+    /// </para>
     /// </summary>
-    public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM)
+    public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM = 0, int stride = 1)
     {
         var n0 = NormalUnder(near);
         var g0 = _cube.Shape.ToGeodetic(_cube.OnEllipsoid(n0, 0));
@@ -100,7 +126,15 @@ public sealed class BodyHeights
             {
                 double x = (i - cells / 2.0) * cellM;
                 var n = NormalUnder(frame.ToEcef(x, 0, z));
-                var (_, ly, _) = frame.ToLocal(Ground(n));
+                double h = At(n);
+                double edge = cells / 2.0 * cellM - Math.Max(Math.Abs(x), Math.Abs(z));
+                if (blendM > 0 && edge < blendM)
+                {
+                    double t = 1 - edge / blendM;
+                    t = t * t * (3 - 2 * t);
+                    h += (Coarse(n, stride) - h) * t;
+                }
+                var (_, ly, _) = frame.ToLocal(_cube.OnEllipsoid(n, h));
                 y[j * side + i] = (float)ly;
             }
         });

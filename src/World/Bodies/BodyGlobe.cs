@@ -94,10 +94,10 @@ public partial class BodyGlobe : Node
     }
 
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
-        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleRadius = "hole_radius";
+        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
 
-    /// <summary>The hole every tile has now (radius 0: none), set on a tile only when it changes.</summary>
-    private (Vector3 Centre, Vector3 Up, float Radius) _hole;
+    /// <summary>The hole every tile has now (half side 0: none), set on a tile only when it changes.</summary>
+    private (Vector3 Centre, Vector3 Up, Vector3 East, float Half) _hole;
 
     public BodyGlobe(CelestialBody body, string dir, WorldOrigin origin)
     {
@@ -189,7 +189,8 @@ public partial class BodyGlobe : Node
     {
         m.SetShaderParameter(HoleCentre, _hole.Centre);
         m.SetShaderParameter(HoleUp, _hole.Up);
-        m.SetShaderParameter(HoleRadius, _hole.Radius);
+        m.SetShaderParameter(HoleEast, _hole.East);
+        m.SetShaderParameter(HoleHalf, _hole.Half);
     }
 
     private void Hide()
