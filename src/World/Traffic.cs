@@ -2006,7 +2006,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     internal static float KeepRight(LaneEdge e, bool forward, uint habit)
     {
-        if (e.OneWay != 0) return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0 ? e.RightLane - e.LaneWidth : e.RightLane;
+        // the next lane in only where it lies on the carriageway (#1937): a one-way of two lanes narrower than them has its line
+        // on the centre (RightLaneOffset 0), and a lane in from there stood 3.3 m left, on the twin carriageway beside it
+        if (e.OneWay != 0)
+            return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0
+                && e.RightLane - e.LaneWidth * 1.5f >= -e.Width * 0.5f - 0.05f ? e.RightLane - e.LaneWidth : e.RightLane;
         if ((e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp) return 0f;
         float right = forward ? e.RightLaneFwd : e.RightLaneBwd;
         int lanes = forward ? e.LanesFwd : e.LanesBwd;
