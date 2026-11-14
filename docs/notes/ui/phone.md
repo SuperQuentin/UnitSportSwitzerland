@@ -368,3 +368,11 @@
 - **Check:** `--phonecheck` (`PhoneProbe.Map`: up, 76 %, 60 % fills, arrows, drag, wheel about the cursor, Home, click, search,
   pick, Esc order, right-button look, the 20 % while walking and back, Travel behind the curtain), `--mapcheck` / `--placescheck`
   for M's map. Screenshots `test_output/phone_1826/`.
+- **Round 2 (#1826 review):** while the map is up the phone viewmodel eases (0.28 s, 0.08 s Reduced) to a small open pose wholly right of the map
+  (`FootPlayer.PhoneMapAway`, `ViewMapShare` 0.16: the same node posed, no rebuild); `--phonecheck` projects its screen's corners against the
+  map's rectangle. The canvas sits between the title bar and the keys strip. The relief carries **rivers** from the terrain's own drainage
+  (`Relief.Area` over 120 km², `MapRelief.River`) and the phone's canvas draws it through `map_boost.gdshader` (gamma, contrast, gain) so valley
+  floor, slope and ridge read at 60 %; borders get a dark halo. Limit: the relief is the embedded 500 m lattice, so zoomed in it is soft and the
+  rivers are stair-stepped, about a cell wide. Places (adventure off): towns first, a mark only where its name fits (right, else left, never cut
+  by the edge, never touching another), a disc / triangle / diamond for town / summit / pass (`MapCanvasView.DrawPlaceMarker`) and a legend.
+  The pad has no recentre key: R3 is the camera toggle on foot, so "Where I am" in the drawer stays the pad's way.
