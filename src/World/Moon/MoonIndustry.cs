@@ -58,6 +58,8 @@ public static class MoonIndustry
         yield return ("Flood light", () => One(IndustryKind.FloodLight, 12));
         yield return ("Radio dish", () => One(IndustryKind.Dish, 12));
         yield return ("Mass driver (120 m)", () => One(IndustryKind.DriverTrack, 120));
+        yield return ("Crew lander", () => One(IndustryKind.Lander, 20));
+        yield return ("Runway (300 m)", () => One(IndustryKind.Runway, 300));
         yield return ("Glazed alley (Moon Village)", () => ColonyKit.Instance(ColonyKit.Alleys([(new(-6, 0, 0), new(6, 0, 0))], ColonyTheme.MoonVillage)).Glazed());
     }
 
@@ -214,6 +216,30 @@ public static class MoonIndustry
                     root.AddChild(dish);
                     root.Dishes.Add(dish);
                     Solid(t * new Transform3D(Basis.Identity, Vector3.Up * PedestalH / 2), new Vector3(2.4f, PedestalH, 2.4f));
+                    break;
+                }
+                case IndustryKind.Lander:
+                {
+                    var lander = Inst(Cached($"lander/{theme}", s => LanderMesh(s, pal)));
+                    lander.Transform = t;
+                    root.AddChild(lander);
+                    Solid(t * new Transform3D(Basis.Identity, Vector3.Up * 4.2f), new Vector3(4.2f, 5.4f, 4.2f));
+                    foreach (var (x, z) in new[] { (-1, -1), (-1, 1), (1, -1), (1, 1) })
+                        Solid(t * new Transform3D(Basis.Identity, new Vector3(x * 3.6f, 0.15f, z * 3.6f)), new Vector3(1.0f, 0.3f, 1.0f));
+                    break;
+                }
+                case IndustryKind.Runway:
+                {
+                    // the ground's points every 50 m along the centre line (the strip stamp slopes and the sphere bends)
+                    float len = (float)p.Size;
+                    int n = Math.Max(1, (int)Math.Round(len / 50));
+                    var line = new List<Vector3>();
+                    for (int i = 0; i <= n; i++)
+                    {
+                        double s = len * i / n;
+                        line.Add(ground(p.X + Math.Sin(p.Yaw) * s, -p.Z + Math.Cos(p.Yaw) * s));
+                    }
+                    root.AddChild(Inst(RunwayMesh(line)));
                     break;
                 }
                 case IndustryKind.DriverTrack:
@@ -501,6 +527,105 @@ public static class MoonIndustry
         var d = along.Normalized();
         var side = Vector3.Up.Cross(d).Normalized();
         return new Basis(side, d.Cross(side), d);
+    }
+
+    /// <summary>
+    /// A crew lander standing on a pad (#1943): a descent stage of foil and tanks on four splayed legs with round pads,
+    /// the crew cabin on top (white, in the colony's trim) with its windows, hatch, platform and ladder, thruster pods, a
+    /// dish. About 9 m tall; its front (the ladder) along +Z.
+    /// </summary>
+    private static void LanderMesh(MeshScratch s, ColonyKit.Palette p)
+    {
+        // the descent stage: an octagonal drum of foil, tanks round it, the engine bell under it
+        s.Tube(new(0, 1.6f, 0), new(0, 3.6f, 0), 2.1f, C("c9a54a"), 8);
+        s.Tube(new(0, 3.6f, 0), new(0, 3.75f, 0), 2.2f, Steel, 8);
+        for (int i = 0; i < 4; i++)
+        {
+            float a = Mathf.Tau * (i + 0.5f) / 4;
+            var at = new Vector3(Mathf.Sin(a) * 1.9f, 2.6f, Mathf.Cos(a) * 1.9f);
+            s.Tube(at - Vector3.Up * 0.8f, at + Vector3.Up * 0.8f, 0.55f, Dish, 10);
+        }
+        s.Tube(new(0, 1.6f, 0), new(0, 0.9f, 0), 0.35f, 0.8f, Dark, 12);
+        // four legs splayed out to their pads, a strut from each
+        foreach (var (x, z) in new[] { (-1f, -1f), (-1f, 1f), (1f, -1f), (1f, 1f) })
+        {
+            var hip = new Vector3(x * 1.5f, 3.2f, z * 1.5f);
+            var foot = new Vector3(x * 3.6f, 0.35f, z * 3.6f);
+            s.Tube(hip, foot, 0.12f, Steel, 6);
+            s.Tube(new Vector3(x * 1.8f, 1.8f, z * 1.8f), foot + Vector3.Up * 0.6f, 0.07f, Steel, 5);
+            s.Tube(foot - Vector3.Up * 0.3f, foot, 0.5f, 0.42f, Dark, 10);
+        }
+        // the crew cabin: a squat cylinder, its windows forward, a hatch and a platform with the ladder down at +Z
+        s.Tube(new(0, 3.75f, 0), new(0, 6.9f, 0), 1.6f, p.Shell, 14);
+        s.Tube(new(0, 6.9f, 0), new(0, 7.6f, 0), 1.6f, 0.9f, p.Shell, 14);
+        s.Ring(new(0, 5.2f, 0), Vector3.Up, 1.6f, 1.7f, 0.2f, p.Trim, 14);
+        foreach (float a in new[] { -0.35f, 0.35f })
+            s.Pane([new(Mathf.Sin(a - 0.12f) * 1.61f, 5.9f, Mathf.Cos(a - 0.12f) * 1.61f), new(Mathf.Sin(a + 0.12f) * 1.61f, 5.9f, Mathf.Cos(a + 0.12f) * 1.61f),
+                new(Mathf.Sin(a + 0.12f) * 1.61f, 6.5f, Mathf.Cos(a + 0.12f) * 1.61f), new(Mathf.Sin(a - 0.12f) * 1.61f, 6.5f, Mathf.Cos(a - 0.12f) * 1.61f)], p.Window);
+        s.Box(new(0, 4.6f, 1.62f), new(0.9f, 1.3f, 0.06f), p.Frame);
+        s.Box(new(0, 3.85f, 2.2f), new(1.6f, 0.1f, 1.2f), Steel);
+        for (int k = 0; k < 9; k++) s.Box(new(0, 0.4f + k * 0.38f, 2.75f), new(0.7f, 0.05f, 0.08f), Steel);
+        foreach (float x in new[] { -0.38f, 0.38f }) s.Tube(new(x, 0.3f, 2.8f), new(x, 3.85f, 2.75f), 0.04f, Steel, 4);
+        // thruster pods and a dish
+        for (int i = 0; i < 4; i++)
+        {
+            float a = Mathf.Tau * i / 4;
+            s.Box(new Vector3(Mathf.Sin(a) * 1.7f, 6.6f, Mathf.Cos(a) * 1.7f), new(0.35f, 0.35f, 0.35f), Dark, new Basis(Vector3.Up, a));
+        }
+        s.Tube(new(0.6f, 7.6f, -0.4f), new(0.6f, 8.4f, -0.4f), 0.04f, Steel, 4);
+        s.Tube(new(0.6f, 8.4f, -0.4f), new(0.6f, 8.5f, -0.25f), 0.45f, 0.05f, Dish, 12);
+        s.Box(new(0, 6.95f, 0.6f), new(1.0f, 0.5f, 0.02f), p.Accent);
+    }
+
+    /// <summary>
+    /// The runway along its ground points (pre-turned): sintered strips 60 m wide segment by segment, a dashed centre line,
+    /// threshold bars and aiming marks at both ends, edge lights every 60 m (lit, unshaded) and red ones across each end.
+    /// </summary>
+    private static ArrayMesh RunwayMesh(List<Vector3> line)
+    {
+        var s = new MeshScratch();
+        static Vector3 T(Vector3 v) => new(-v.X, v.Y, -v.Z);
+        const float half = 30;
+        float total = 0;
+        void Light(Vector3 at, Color c)
+        {
+            s.Box(at + Vector3.Up * 0.2f, new Vector3(0.3f, 0.4f, 0.3f), Dark);
+            s.Pane([at + new Vector3(-0.15f, 0.41f, -0.15f), at + new Vector3(0.15f, 0.41f, -0.15f), at + new Vector3(0.15f, 0.41f, 0.15f),
+                at + new Vector3(-0.15f, 0.41f, 0.15f)], c);
+        }
+        for (int i = 0; i + 1 < line.Count; i++)
+        {
+            var a = T(line[i]) + Vector3.Up * 0.04f;
+            var b = T(line[i + 1]) + Vector3.Up * 0.04f;
+            var basis = Facing(b - a);
+            float l = a.DistanceTo(b);
+            var dir = (b - a).Normalized();
+            s.Box((a + b) / 2, new Vector3(2 * half, 0.08f, l + 0.4f), C("5f5c57"), basis);
+            // the centre line's dashes: 30 m painted, 20 m bare
+            for (float d = 0; d + 30 <= l + 0.1f; d += 50)
+                s.Box(a + dir * (d + 15) + Vector3.Up * 0.045f, new Vector3(0.9f, 0.02f, 30), C("e8e6df"), basis);
+            // edge lights every 60 m along the whole runway
+            for (float d = (60 - total % 60) % 60; d < l; d += 60)
+                foreach (float sd in new[] { -half - 1.5f, half + 1.5f })
+                    Light(a + dir * d + basis.X * sd, Lamp);
+            total += l;
+        }
+        // the ends: threshold bars, aiming marks 300 m in, red lights across
+        foreach (bool far in new[] { false, true })
+        {
+            var e = T(far ? line[^1] : line[0]) + Vector3.Up * 0.045f;
+            var inward = (T(far ? line[^2] : line[1]) - T(far ? line[^1] : line[0])).Normalized();
+            var basis = Facing(inward);
+            for (int k = 0; k < 8; k++)
+            {
+                float x = -half + 4 + k * (2 * half - 8) / 7f;
+                if (Mathf.Abs(x) < 3) continue;
+                s.Box(e + inward * 25 + basis.X * x, new Vector3(1.8f, 0.02f, 30), C("e8e6df"), basis);
+            }
+            foreach (float x in new[] { -9f, 9f }) s.Box(e + inward * 300 + basis.X * x, new Vector3(6f, 0.02f, 45), C("e8e6df"), basis);
+            for (int k = 0; k <= 10; k++) Light(e + basis.X * (-half + k * half / 5) - inward * 2, Red);
+        }
+        return s.Build();
     }
 
     /// <summary>The mass driver's bucket: a sled with a payload canister, its front along +Z (turned to −Z by the build).</summary>

@@ -14,6 +14,8 @@ public static class MoonSuit
     public static (bool Helmet, bool Suit)? Wanted(FootPlayer p)
     {
         if (MoonSurface.Active is not { OnMoon: true }) return null;
+        // in the pressurised rover's cabin (#1943) the helmet is off too
+        if (p.Ride == MoonRovers.Cabin.Kind) return (false, true);
         var head = p.GlobalPosition + Godot.Vector3.Up * 1.6f;
         return (!ColonyAirlocks.Pressurised(head), true);
     }

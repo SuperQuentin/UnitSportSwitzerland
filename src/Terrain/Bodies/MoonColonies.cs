@@ -114,6 +114,51 @@ public static class MoonColonies
         return found.GetRange(0, Math.Min(keep, found.Count));
     }
 
+    /// <summary>
+    /// The flattest strips <paramref name="lengthM"/> long and 2 <paramref name="halfWidthM"/> wide whose middle lies between
+    /// <paramref name="fromM"/> and <paramref name="toM"/> of a place, best first (#1943, the runway): for each middle on a
+    /// <paramref name="stepM"/> grid and each heading every 10°, the RMS of the ground round the straight line between the
+    /// data's heights at the two ends (what a <see cref="StampMode.Level"/> strip cuts and fills) and the line's grade.
+    /// </summary>
+    public static List<(double Lat, double Lon, double Heading, double Rms, double GradePct)> FlattestStrip(Func<EcefPos, double> height,
+        double lat, double lon, double fromM, double toM, double lengthM, double halfWidthM, double stepM = 250, int keep = 5)
+    {
+        var found = new List<(double, double, double, double, double)>();
+        var probe = new MoonSite("survey", "survey", MoonSiteKind.Flag, lat, lon, []);
+        int n = (int)(toM / stepM);
+        for (int j = -n; j <= n; j++)
+            for (int i = -n; i <= n; i++)
+            {
+                double ce = i * stepM, cn = j * stepM, r = Math.Sqrt(ce * ce + cn * cn);
+                if (r < fromM || r > toM) continue;
+                for (int hd = 0; hd < 180; hd += 10)
+                {
+                    double a = hd * Math.PI / 180, ax = Math.Sin(a), an = Math.Cos(a);
+                    double h0 = height(MoonSites.Offset(probe, ce - ax * lengthM / 2, cn - an * lengthM / 2));
+                    double h1 = height(MoonSites.Offset(probe, ce + ax * lengthM / 2, cn + an * lengthM / 2));
+                    double ss = 0;
+                    int count = 0;
+                    for (int k = 0; k <= 16; k++)
+                    {
+                        double t = k / 16.0, along = (t - 0.5) * lengthM;
+                        foreach (double side in new[] { -halfWidthM, 0, halfWidthM })
+                        {
+                            double h = height(MoonSites.Offset(probe, ce + ax * along + an * side, cn + an * along - ax * side));
+                            double d = h - (h0 + (h1 - h0) * t);
+                            ss += d * d;
+                            count++;
+                        }
+                    }
+                    var at = MoonSites.Offset(probe, ce, cn);
+                    var g = Ellipsoid.Moon.ToGeodetic(new EcefPos(at.X * Ellipsoid.Moon.A, at.Y * Ellipsoid.Moon.A, at.Z * Ellipsoid.Moon.A));
+                    found.Add((g.LatDeg, g.LonDeg, hd, Math.Sqrt(ss / count), Math.Abs(h1 - h0) / lengthM * 100));
+                }
+            }
+        // what it cuts and fills first; a steep strip is no runway
+        found.Sort((x, y) => (x.Item4 + 20 * x.Item5).CompareTo(y.Item4 + 20 * y.Item5));
+        return found.GetRange(0, Math.Min(keep, found.Count));
+    }
+
     private static (double A, double B, double C) Plane(List<(double E, double N, double H)> pts)
     {
         // centred sums (the grid is symmetric about 0, so the cross terms vanish but are kept for the clipped disc)

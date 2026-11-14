@@ -66,6 +66,10 @@ public enum IndustryKind : byte
     Dish,
     /// <summary>The mass driver's rail on pylons from here along Yaw, Size its length; the bucket runs it on the shared clock.</summary>
     DriverTrack,
+    /// <summary>A runway from here along Yaw, Size its length (#1943): sintered, painted, edge lights.</summary>
+    Runway,
+    /// <summary>A lander standing on a pad (#1943), Size its pad's radius.</summary>
+    Lander,
 }
 
 /// <summary>An industrial piece in its colony's (or outpost's) frame (x east, z south): kind, place, heading (radians from north), size.</summary>
@@ -95,6 +99,9 @@ public sealed class ColonyPlan
 
     /// <summary>The ways in and out: an airlock at the end of every spine but the hangar's.</summary>
     public readonly List<ColonyAirlock> Airlocks = new();
+
+    /// <summary>The hangar as a vehicle airlock (#1943): its module, its vehicle door (Outer) and the door at its inner doorway (Inner); null with no hangar.</summary>
+    public ColonyAirlock? Hangar { get; private set; }
     public readonly List<ColonyDoor> Doors = new();
     public readonly List<ColonyLink> Links = new();
     public readonly List<ColonyPad> Pads = new();
@@ -170,8 +177,11 @@ public sealed class ColonyPlan
                 double len = 26;
                 double mid = at + len / 2;
                 int hangar = plan.Add(ModuleKind.Hangar, dx * mid, dz * mid, yaw, len, 14, 8, 1, RoomKind.Garage);
-                plan.Links.Add(new ColonyLink(last, plan.Door(hangar, len / 2, yaw + Math.PI), alleys));
+                int hangarInner = plan.Door(hangar, len / 2, yaw + Math.PI);
+                plan.Links.Add(new ColonyLink(last, hangarInner, alleys));
                 int vehicle = plan.Door(hangar, len / 2, yaw);
+                // the hangar is a vehicle airlock (#1943): its rolling door out, a door at its inner doorway
+                plan.Hangar = new ColonyAirlock(hangar, vehicle, hangarInner);
                 // the road on out to the pads, 220 m past the hangar, three pads across it
                 var d = plan.Doors[vehicle];
                 plan.Road.Add((d.X, d.Z));
@@ -218,7 +228,8 @@ public sealed class ColonyPlan
     /// <summary>How far an industrial piece reaches from its point, metres.</summary>
     public static double IndustryReach(ColonyIndustry i) => i.Kind switch
     {
-        IndustryKind.SolarArray => 6, IndustryKind.Digger => i.Size + 8, IndustryKind.DriverTrack => i.Size,
+        IndustryKind.SolarArray => 6, IndustryKind.Digger => i.Size + 8, IndustryKind.DriverTrack or IndustryKind.Runway => i.Size,
+        IndustryKind.Lander => 6,
         IndustryKind.Dish => i.Size / 2, IndustryKind.Hut => i.Size / 2 + 1, _ => Math.Max(i.Size, 4),
     };
 
@@ -248,6 +259,8 @@ public sealed class ColonyPlan
         Industry.Add(new ColonyIndustry(IndustryKind.Digger, dx * 250, dz * 250, digYaw, loop));
         var (hx, hz) = Along(digYaw + Math.PI / 2);
         Industry.Add(new ColonyIndustry(IndustryKind.SpoilHeap, dx * 250 + hx * (loop + 22), dz * 250 + hz * (loop + 22), digYaw, 11));
+        // a lander on the first pad (#1943); the others stay free for the shuttle (MoonPads)
+        if (Pads.Count > 0) Industry.Add(new ColonyIndustry(IndustryKind.Lander, Pads[0].X, Pads[0].Z, h0 + rng.NextDouble() * Math.Tau, Pads[0].Radius));
     }
 
     /// <summary>Whether a circle is clear of every module's footprint (a rectangle along its axis, or its circle).</summary>

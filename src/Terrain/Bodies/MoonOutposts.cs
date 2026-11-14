@@ -15,6 +15,8 @@ public enum OutpostKind : byte
     RadioTelescope,
     /// <summary>The mass driver: a 2 km rail on pylons along a levelled strip, a bucket flung east along it.</summary>
     MassDriver,
+    /// <summary>Artemis Base's runway (#1943): 3 km by 60 m on a levelled strip, edge lights, a terminal at its north end.</summary>
+    Runway,
 }
 
 /// <summary>
@@ -36,7 +38,7 @@ public sealed record MoonOutpost(string Id, string Name, OutpostKind Kind, strin
         : null;
 
     /// <summary>The ground it stands on: a level disc, or a level strip (linear between the data's heights at its ends).</summary>
-    public SurfaceStamp Stamp => new(Normal, End, RadiusM, LengthM > 0 ? 40 : 80, StampMode.Level);
+    public SurfaceStamp Stamp => new(Normal, End, RadiusM, Kind == OutpostKind.Runway ? 90 : LengthM > 0 ? 40 : 80, StampMode.Level);
 
     /// <summary>How far the farthest piece is from the outpost's point, metres.</summary>
     public double Extent => Math.Max(RadiusM, LengthM);
@@ -58,6 +60,10 @@ public static class MoonOutposts
         new("radiotelescope", "Far-side radio telescope", OutpostKind.RadioTelescope, "ilrs", -44.9398, 176.5482, 0, 250, 0, 4002),
         // 910 m east of Moon Village, flinging east along the equator (the Moon's turn helps a little): a 2 km strip
         new("massdriver", "Moon Village mass driver", OutpostKind.MassDriver, "moonvillage", 0.7198, 23.5570, 90, 14, 2000, 4003),
+        // the flattest 3 km strip 1.2-4 km from Artemis Base: --moonsurvey -89.3840,-150.0549,1.2,4,3000,30 (4.3 m RMS round
+        // the line between its ends, 0.09 % grade), along the meridian -144.6869 (an Offset due north stays on it); from its
+        // south end, 1.8 km from the base, north
+        new("runway", "Artemis runway", OutpostKind.Runway, "artemis", -89.5159, -144.6869, 0, 30, 3000, 4004),
     ];
 
     public static MoonOutpost? Find(string id)
@@ -107,6 +113,13 @@ public static class MoonOutposts
                         list.Add(new ColonyIndustry(IndustryKind.Dish, x, z, h, 12));
                     }
                 list.Add(new ColonyIndustry(IndustryKind.Hut, -sx * 150, -sz * 150, h, 12));
+                break;
+            case OutpostKind.Runway:
+                list.Add(new ColonyIndustry(IndustryKind.Runway, 0, 0, h, o.LengthM));
+                // the terminal and the apron's lights at the north end, beside the runway
+                list.Add(new ColonyIndustry(IndustryKind.Hut, sx * 70 + ax * (o.LengthM - 120), sz * 70 + az * (o.LengthM - 120), h, 14));
+                list.Add(new ColonyIndustry(IndustryKind.FloodLight, sx * 55 + ax * (o.LengthM - 160), sz * 55 + az * (o.LengthM - 160), h - Math.PI / 2, 12));
+                list.Add(new ColonyIndustry(IndustryKind.FloodLight, sx * 55 + ax * (o.LengthM - 80), sz * 55 + az * (o.LengthM - 80), h - Math.PI / 2, 12));
                 break;
             case OutpostKind.MassDriver:
                 list.Add(new ColonyIndustry(IndustryKind.DriverTrack, 0, 0, h, o.LengthM));

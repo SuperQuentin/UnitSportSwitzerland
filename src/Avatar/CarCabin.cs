@@ -115,7 +115,9 @@ public static partial class CarMeshBuilder
 
     /// <summary>The seat and everything the driver reaches, for this body. Cheap: no meshes.</summary>
     public static DriverSeat SeatFor(CarBody body, float wheelbase) =>
-        body.Shape == BodyShape.Kart ? KartMeshBuilder.SeatFor(wheelbase) : SeatFor(For(body, wheelbase), body.LeftHandDrive);
+        body.Shape == BodyShape.Kart ? KartMeshBuilder.SeatFor(wheelbase)
+        : body.Shape.IsRover() ? MoonRoverMeshBuilder.SeatFor(body, wheelbase)
+        : SeatFor(For(body, wheelbase), body.LeftHandDrive);
 
     internal static DriverSeat SeatFor(Dims d, bool leftHandDrive)
     {

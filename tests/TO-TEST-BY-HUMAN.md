@@ -39,6 +39,16 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Moon rovers, the hangar door, landers and the runway ([#1943](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1943))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites artemis:close`, step in (T), walk to the two open rovers by the road past the hangar, E at one → you drive it; it floats over bumps on the Moon's gravity, tops out near 20 km/h, brakes long. Same with the pad and in VR (the wheel or the hand controller).
+- [ ] Walk into the hangar (through the tube), get into the pressurised rover (E) → the helmet comes off in its cabin; drive at the rolling door → the inner door shuts, a hiss, the rolling door rolls up, and you drive down the ramp onto the plateau without a bump.
+- [ ] On foot outside the hangar's rolling door, E (pad Y, VR grip) → "Open the hangar: out" opens it; inside, E at the inner door → "Cycle the hangar: in" shuts the rolling door and opens the inner one.
+- [ ] `--moonsites runway`: the 3 km runway lies on the ground with no step at its edges (its strip eases out over 90 m); edge lights read at night.
+- [ ] Land the shuttle on a free pad or the runway once the planets session's landing reads `MoonPads`.
+
 ## Moon Village, ILRS and the industry ([#1942](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1942))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.

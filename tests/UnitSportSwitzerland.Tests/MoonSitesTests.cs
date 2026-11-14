@@ -277,6 +277,7 @@ public class MoonIndustryPlanTests
             Assert.Single(plan.Industry, i => i.Kind == IndustryKind.Digger);
             foreach (var i in plan.Industry)
             {
+                if (i.Kind == IndustryKind.Lander) continue;   // on its pad: MoonPadsTests
                 double reach = ColonyPlan.IndustryReach(i);
                 Assert.True(plan.Clear(i.X, i.Z, reach + 2), $"seed {seed}: {i.Kind} at {i.X:F0},{i.Z:F0} on a module");
                 foreach (var p in plan.Pads)
@@ -335,6 +336,59 @@ public class MoonIndustryPlanTests
                 var n = MoonSites.Offset(o.Probe, Math.Sin(k) * o.RadiusM * 0.9, Math.Cos(k) * o.RadiusM * 0.9);
                 Assert.Equal(slope(o.Normal), stamps.Apply(n, slope(n), 2, slope), 6);
             }
+        }
+    }
+}
+
+/// <summary>The pads and the runway the shuttle may land on (#1943).</summary>
+public class MoonPadsTests
+{
+    [Fact]
+    public void Every_staffed_colony_has_three_pads_one_with_a_lander_and_artemis_a_runway()
+    {
+        foreach (var c in MoonColonies.All)
+        {
+            var pads = new List<MoonPad>();
+            foreach (var p in MoonPads.All)
+                if (p.Colony == c.Id && !p.IsRunway) pads.Add(p);
+            Assert.Equal(3, pads.Count);
+            Assert.Single(pads, p => p.Occupied);
+        }
+        var runway = MoonPads.Find("runway")!.Value;
+        Assert.True(runway.IsRunway);
+        double len = Math.Acos(Math.Clamp(runway.Centre.X * runway.End!.Value.X + runway.Centre.Y * runway.End.Value.Y + runway.Centre.Z * runway.End.Value.Z, -1, 1)) * Ellipsoid.Moon.A;
+        Assert.InRange(len, 2990, 3010);
+    }
+
+    [Fact]
+    public void A_pad_and_the_runway_are_level_on_their_stamps()
+    {
+        var stamps = new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), Ellipsoid.Moon.A);
+        Func<EcefPos, double> slope = n => 500 * n.Y + 200 * n.Z;
+        foreach (var p in MoonPads.All)
+        {
+            if (p.IsRunway) continue;
+            var c = MoonColonies.Find(p.Colony)!;
+            // the pad is on its colony's plateau: the plateau's height
+            Assert.Equal(slope(c.Normal), stamps.Apply(p.Centre, slope(p.Centre), 2, slope), 6);
+        }
+        // the runway: straight between its ends' heights (a level strip)
+        var r = MoonPads.Find("runway")!.Value;
+        var mid = new EcefPos((r.Centre.X + r.End!.Value.X) / 2, (r.Centre.Y + r.End.Value.Y) / 2, (r.Centre.Z + r.End.Value.Z) / 2);
+        double l = Math.Sqrt(mid.X * mid.X + mid.Y * mid.Y + mid.Z * mid.Z);
+        mid = new EcefPos(mid.X / l, mid.Y / l, mid.Z / l);
+        double want = (slope(r.Centre) + slope(r.End.Value)) / 2;
+        Assert.Equal(want, stamps.Apply(mid, slope(mid), 2, slope), 2);
+    }
+
+    [Fact]
+    public void The_nearest_free_pad_skips_the_occupied_ones()
+    {
+        foreach (var p in MoonPads.All)
+        {
+            var near = MoonPads.NearestFree(p.Centre)!.Value;
+            if (!p.Occupied) Assert.Equal(p.Id, near.Pad.Id);
+            else Assert.NotEqual(p.Id, near.Pad.Id);
         }
     }
 }
