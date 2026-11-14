@@ -98,6 +98,22 @@ public partial class BodyGlobe : Node
 
     private bool _exposed;
     private readonly Dictionary<int, float> _faceMeans = new();
+
+    /// <summary>
+    /// The six level-0 faces' mean brightness, read on a worker as soon as the globe is made (#1983): its exposure is then
+    /// known before anything is drawn. Waiting for the six to come in with the streamed tiles lit the first seconds at the
+    /// shader's 1.6 and dropped every tile and ground square to the photo's exposure in one frame (the Moon: 1.6 to 0.94, a
+    /// dip filmed at Apollo 11). Null when a face has no colour here (a streamed pyramid): the old way then.
+    /// </summary>
+    private readonly Task<float?> _faceMeanTask;
+
+    /// <summary>How long the first tiles have been held for the exposure, seconds (at most <see cref="ExposureWait"/>).</summary>
+    private double _heldFor;
+
+    private const double ExposureWait = 3;
+
+    /// <summary>Whether the exposure is the one the globe keeps (or the wait for it is over): what the ground squares wait for.</summary>
+    public bool ExposureSettled => _exposed || _heldFor >= ExposureWait || _faceMeanTask.IsCompleted && _faceMeanTask is not { IsCompletedSuccessfully: true, Result: not null };
     private readonly HashSet<CubeKey> _show = new();
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
     private readonly int _month;
@@ -145,6 +161,8 @@ public partial class BodyGlobe : Node
         _pyramid = pyramid;
         _maxLevel = Math.Max(pyramid.MaxLevel, 0);
         _month = Calendar.Month;
+        int month = _month;
+        _faceMeanTask = Task.Run(() => FaceMean(pyramid, month));
         AddChild(_root);
         GD.Print($"[bodies] {body.Name}'s globe: {pyramid.Count} tiles to level {_maxLevel}, from {describe}");
     }
@@ -323,9 +341,49 @@ public partial class BodyGlobe : Node
         });
     }
 
+    /// <summary>The mean brightness of the six level-0 faces' colour, or null when one has none here (on a worker).</summary>
+    private static float? FaceMean(Terrain.Leaves.PyramidSource pyramid, int month)
+    {
+        try
+        {
+            float sum = 0;
+            for (int f = 0; f < CubeSphere.Faces; f++)
+            {
+                var key = new CubeKey(f, 0, 0, 0);
+                if (!pyramid.HasColour(key) || pyramid.Colour(key, month) is not { } webp) return null;
+                var image = new Image();
+                if (image.LoadWebpFromBuffer(webp) != Error.Ok) return null;
+                sum += MeanBrightness(image);
+            }
+            return sum / CubeSphere.Faces;
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[bodies] the faces' mean: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>The exposure from a six-face mean, on every tile there is.</summary>
+    private void Expose(float mean, string how)
+    {
+        _exposed = true;
+        Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
+        foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
+        GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2} ({how})"));
+    }
+
     /// <summary>Main thread: the tiles the workers made, a few a frame.</summary>
     private void Commit()
     {
+        // the exposure first: no tile is drawn at the provisional one (held up to ExposureWait)
+        if (!_exposed && _faceMeanTask.IsCompletedSuccessfully && _faceMeanTask.Result is { } known) Expose(known, "read up front");
+        if (!ExposureSettled)
+        {
+            _heldFor += GetProcessDeltaTime();
+            return;
+        }
         for (int n = 0; n < 8 && _done.TryDequeue(out var r); n++)
         {
             _running--;
@@ -338,15 +396,7 @@ public partial class BodyGlobe : Node
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
             SetHole(material);
             if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
-            if (!_exposed && _faceMeans.Count == CubeSphere.Faces)
-            {
-                _exposed = true;
-                float mean = _faceMeans.Values.Sum() / CubeSphere.Faces;
-                Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
-                foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
-                GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2}"));
-            }
+            if (!_exposed && _faceMeans.Count == CubeSphere.Faces) Expose(_faceMeans.Values.Sum() / CubeSphere.Faces, "as its tiles came");
             material.SetShaderParameter(SunStrength, Exposure);
             material.SetShaderParameter(AirTau, AirTauOf(Body));
             // a giant: a soft terminator through its deep air, and a night side as dark as space's (no ground to play on)
