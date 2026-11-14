@@ -3,7 +3,8 @@ using Godot;
 namespace UnitSport.Net;
 
 /// <summary>
-/// Stands in for <c>Occasions.OccasionManager</c> on a <see cref="Swarm"/> bot's branch: the server
+/// Stands in for <c>Occasions.OccasionManager</c> on a <see cref="Swarm"/> bot's branch, and on a client started without the
+/// occasions system (#1890): the server
 /// sends every joining peer the running occasions, and the real manager is a per-process singleton.
 /// Its RPC list must match the real one (Godot addresses RPCs by index into it).
 /// </summary>

@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The globe streamed from the server, a small base, no pops ([#1846](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1846))
+
+In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator (Shift+T).
+
+- [ ] Offline, `--globe res://assets/globe` (the 1.5 MB base alone), climb from Lavaux to orbit and fly over Asia → the Earth from orbit looks as before; tile edges at 60-250 km as before (no worse).
+- [ ] Join a server that has the pyramid (`--globe <dir>` on the server) from a copy with none and an empty cache, then climb slowly from the ground to 500 km over Switzerland → the globe sharpens as tiles arrive, no tile jumps in height when it splits or merges; note how long it takes to catch up after a fast climb (the check measured it lagging at 7 fps).
+- [ ] With the pyramid on this PC (D:), climb and dive between 2 km and 300 km at full speed, watching the mountains on the horizon → no ground popping between levels (each level eases into the next).
+
 ## To the Moon and onto it (PR [#1893](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1893), [#1891](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1891), [#1850](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1850))
 
 In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`, Cartoon, on the spectator camera (Shift+T).

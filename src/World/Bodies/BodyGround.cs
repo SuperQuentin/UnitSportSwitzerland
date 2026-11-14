@@ -73,9 +73,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         Name = $"{globe.Body.Name}Ground";
         var cube = globe.Body.Cube;
         int level = globe.MaxLevel;
-        var index = globe.HeightIndex;
+        var pyramid = globe.Pyramid;
         Heights = new BodyHeights(cube, level,
-            key => index.TryGetValue(key, out var at) ? CubeTileCodec.Decode(GlobeFiles.ReadBytes(at)) : null,
+            key => pyramid.Heights(key),
             globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null);
     }
 
@@ -173,9 +173,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         {
             var (face, u, v) = cube.FromNormal(n0);
             var k = CubeKey.FromFace(face, u, v, level);
-            if (!globe.AlbedoIndex.TryGetValue(k, out var at)) continue;
+            if (!globe.Pyramid.HasColour(k) || globe.Pyramid.Colour(k, 1) is not { } webp) continue;
             colour = new Image();
-            if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(GlobeFiles.ReadBytes(at)).ForMonth(1)) != Error.Ok) { colour = null; continue; }
+            if (colour.LoadWebpFromBuffer(webp) != Error.Ok) { colour = null; continue; }
             colour.GenerateMipmaps();
             colourKey = k;
         }

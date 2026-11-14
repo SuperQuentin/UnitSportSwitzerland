@@ -194,6 +194,13 @@ public partial class Main : Node
 			return;
 		}
 
+		// the globe's shipped base from a full pyramid (#1656): a tool, no game
+		if (UnitSport.World.GlobeBaseBake.Requested())
+		{
+			AddChild(new UnitSport.World.GlobeBaseBake { Name = "GlobeBaseBake" });
+			return;
+		}
+
 		// the earth fill's photo statistics for its biome guess (#1809): a tool, no game
 		if (UnitSport.World.BiomePhotoBake.Requested())
 		{

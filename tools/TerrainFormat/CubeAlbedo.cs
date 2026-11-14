@@ -21,11 +21,14 @@ public sealed class CubeAlbedo
 
     public CubeAlbedoFormat Format { get; init; } = CubeAlbedoFormat.Webp;
 
-    /// <summary>January first; 12 images, or 1 for a colour that never changes.</summary>
+    /// <summary>
+    /// January first; 12 images, 1 for a colour that never changes, or any count evenly over the year (the shipped base's
+    /// four seasons, #1656: January, April, July, October).
+    /// </summary>
     public required byte[][] Months { get; init; }
 
-    /// <summary>The image for a month 1..12 (the only one when the tile has one).</summary>
-    public byte[] ForMonth(int month) => Months.Length == 1 ? Months[0] : Months[Math.Clamp(month, 1, 12) - 1];
+    /// <summary>The image for a month 1..12: its own, or the season's that holds it.</summary>
+    public byte[] ForMonth(int month) => Months[(Math.Clamp(month, 1, 12) - 1) * Months.Length / 12];
 }
 
 public enum CubeAlbedoFormat : byte
@@ -47,7 +50,7 @@ public static class CubeAlbedoCodec
 
     public static byte[] Encode(CubeAlbedo a)
     {
-        if (a.Months.Length is not (1 or 12)) throw new ArgumentException($"{a.Key}: {a.Months.Length} months (1 or 12)");
+        if (a.Months.Length is not (1 or 2 or 3 or 4 or 6 or 12)) throw new ArgumentException($"{a.Key}: {a.Months.Length} months (a divisor of 12)");
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {
