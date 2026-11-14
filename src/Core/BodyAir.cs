@@ -69,13 +69,14 @@ public sealed record BodyAir(
     /// <summary>
     /// Titan's (#1854): N₂ at 5.4 kg/m³ (1.5 bar at 94 K) with a ~20 km scale height near the ground (NASA's fact sheet)
     /// under an orange organic haze that reaches hundreds of km: a thick orange haze over the ISS mosaic's ground, the
-    /// sky from the ground a dim orange.
+    /// sky from the ground a dim orange. The haze takes green and blue far more than red (vertical depths 0.76, 1.16, 1.72
+    /// with the coarse part): the first values took red about as much as green, and the sun and sky came out olive green.
     /// </summary>
     public static readonly BodyAir Titan = new(5.4, 20_000,
-        (22e-6, 11e-6, 4e-6), 40_000,
-        (6e-6, 4e-6, 2e-6), 60_000, 0.75, 1.5,
+        (10e-6, 7e-6, 4e-6), 40_000,
+        (4e-6, 4e-6, 4e-6), 60_000, 0.75, 1.5,
         600_000, 150_000, 400_000,
-        FineAbsorption: (0, 5e-6, 25e-6), SunPower: 8);
+        FineAbsorption: (0, 13e-6, 30e-6), SunPower: 8);
 
     /// <summary>
     /// The giants' (#1854): air all the way down, heights over their 1-bar radius (negative inside). The fine part is the
@@ -106,6 +107,15 @@ public sealed record BodyAir(
         (2e-6, 5e-6, 14e-6), 19_700,
         (6e-6, 8e-6, 11e-6), 20_000, 0.6, 1.05,
         1_500_000, 300_000, 1_000_000, FineAbsorption: (10e-6, 2e-6, 0), SunPower: 7);
+
+    /// <summary>
+    /// The vertical optical depth of the whole column per channel (#1854): the fine part's scattering and absorption over its
+    /// scale height, the coarse part's extinction over its. What dims and tints the sun on the ground.
+    /// </summary>
+    public (double R, double G, double B) VerticalDepth =>
+        ((Fine.R + FineAbsorption.R) * FineHeightM + Coarse.R * CoarseExtinction * CoarseHeightM,
+         (Fine.G + FineAbsorption.G) * FineHeightM + Coarse.G * CoarseExtinction * CoarseHeightM,
+         (Fine.B + FineAbsorption.B) * FineHeightM + Coarse.B * CoarseExtinction * CoarseHeightM);
 
     /// <summary>The gas's density at a height over the reference, kg/m³ (0 above the shell).</summary>
     public double Density(double h) => h > ThicknessM ? 0 : SurfaceDensity * Math.Exp(-Math.Max(h, -ScaleHeightM * 3) / ScaleHeightM);
