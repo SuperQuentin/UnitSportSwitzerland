@@ -233,7 +233,8 @@ public partial class ShuttleMoonCheck : Node
         {
             if (Engine.TimeScale == 1) Log($"{what} is behind {_origin.Body}: coasting round until it rises");
             Engine.TimeScale = CoastScale;
-            if (_stageT > 1500) Finish($"{what} did not rise in 25 min of coasting");
+            // up to a lunar orbit and more (118 min: the Earth can stay under the limb for an hour)
+            if (_stageT > 9000) Finish($"{what} did not rise in 2.5 h of coasting");
             return false;
         }
         Engine.TimeScale = 1;
