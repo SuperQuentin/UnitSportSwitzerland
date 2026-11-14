@@ -16,15 +16,51 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
   tubes join, out of each by its door and in at the next (0.8 m in from each doorway so the turn is in the room), round the
   hub's map table by its consoles' ring, at 1.1 m/s. The test walks every pair of inside spots of every colony every 0.5 m
   and finds it inside a module or a tube.
-- **Offline: decoration figures** (`World/Moon/ColonyColonists`, a child of each staffed colony): one `SkinnedFigure` a
+- **Bots** (#1976, `World/Moon/ColonyColonists.Bots`, `ColonistBrain`): wherever a bot director runs (offline the game's own,
+  #1974; a server hosting the Moon later) and the camera is within 250 m of the colony's middle (back to figures past
+  450 m), each colonist awake is a bot (`BotDirector.Add`, `BotProfile.For(colony seed, index, Easy)`, never an alien),
+  spawned at their window's spot while nobody sees it (all at once on the first fill). `ColonistBrain` plays the schedule
+  through a player's intents, as legs, and a new window waits for the route under way (a route always ends at a spot):
+  - **inside**: `ColonyCrew.Path` point by point (`WalkControls`, 0.3 m reach), never `MoveTo` (its wall rays meet a
+    tube's side at every door);
+  - **out on an EVA**: the airlock nearest the spot (`LockFor`), `ToLock` to the wait 1.2 m back in the tube, the inner
+    door asked for (`ColonyAirlocks.Request`, what E does; asked again after 12 s), into the chamber, the outer door asked
+    for, down the stairs to the ground past them (`Lock(i).Outside`), then `BotSkills.MoveTo`; back the same way
+    (`FromLock`);
+  - **a rover** for an EVA spot 60 m or more from its airlock's stairs: a free open rover of the depot (`moonrover_<colony>_<slot>`,
+    one colonist each), `BotDriving.GetIn`, `BotDriving.Across` (straight across open ground at 4.5 m/s, no roads on the
+    Moon, 7 m short of the spot), `GetOut`; on the way home driven back to its slot. A parked rover keeps its name
+    (`VehicleManager.Kept`), so the depot does not park a second one;
+  - **asleep**: walks to the bunk, and the colony takes the body away once nobody sees it; it comes back at its next
+    awake window's spot, unseen;
+  - **the suit**: `MoonSuit.Dress(body)` each thought (the player's is `OccasionHats`);
+  - **off the ground**: outside the air with no ground under it (the body ground's 512 m square follows the camera), the
+    body is held still (`RequestReplacement`) until the ground is there again.
+  The bot's spawn data carries its body (`PlayerReplication.BotData` index 10), or a peer reads a Moon place as the Earth's.
+- **What the first colonist bot found** (#1976; the figures walked through all of it):
+  - a moondust dome's entrance and the gap in its walls' collision faced away from its tube (its yaw was the can's way
+    out): turned to face the can (`ColonyPlan`, yaw + π), with a sill box under the doorway;
+  - the can a dome's tube joins had no side doorway: `ColonyPlan.SideDoor(module)` (+1/-1 on the node's X), the shell cut
+    there (`ColonyKit.SideCut`, `SideDoorway`: the shell either side, panels round it, a collar, a landing, the frame;
+    viewer "Can, side door"), its collision cut the same way (`ColonyBuilder.Hollow`), the furniture kept clear
+    (`ColonyInteriors.Furnish(..., sideDoor)`: pieces in front of it left out, counters cut either side); a walk through a
+    side door goes by the can's aisle (`ColonyCrew.Aisle`), never across its bunks;
+  - each of the airlock's outer steps was a 0.22 m wall to a body coming back up: the stairs are solid as one ramp along
+    the treads' noses (drawn as steps still).
+- **Figures** where no bot runs (`World/Moon/ColonyColonists`, a child of each staffed colony): one `SkinnedFigure` a
   colonist in the silver suit (`Outfit.Of(SilverSuit)`), the space helmet outside; standing posed once, walking posed by
   `PoseStride` at 15 Hz within 15 m, 5 Hz beyond; a figure faces its node's −Z. A change that is not a walk (asleep,
   awake, out on an EVA, back) waits while the place left or reached is in view (60 m, in the frustum), as `VenuePatrons`
   does. The window's plan is read once at its start (the path allocated once a window), nothing else allocates per frame.
-- **For server bots** (#837, `bots/bot-capability-map`): a colonist is a schedule (`ColonyCrew.At`: activity, spot, path)
-  a server brain plays through the intents a player uses: `WalkControls` along the path, `ColonyAirlocks.Request` at an
-  airlock on the way out to an EVA, `RideControls` for a rover. Offline the figures stand in; a server hosting the Moon
-  (D2 #1727, C3b #1852) would run the bots and drop the figures.
+- **On a server hosting the Moon** (C3b #1852), the bots run unchanged, but the server needs what offline has from the
+  client: the colonies built there (collision, `ColonyAirlocks` with their state sent to clients), "near" and "seen" from
+  the players rather than a camera, and the body ground solid round bots (`BodyGround` builds round the camera only).
 - **Check**: `--moonsites artemis:close --colonistcheck` (~60 s; windowed `crew_hub.png`, `crew_eva.png` when one is out):
   the crew's clock set 3 s into a window (`ColonyColonists.ClockOffset`, the check's), 25 s of looks: every shown figure
-  inside stands in the colony's air, every EVA one outside it. Artemis: 6 shown, 1.1 walking, 1.0 outside on average.
+  inside stands in the colony's air, every EVA one outside it. Artemis: 6 shown, 1.1 walking, 1.0 outside on average. With bots, only those standing
+  are judged (one on its way may be in a chamber pumped down, or on the stairs).
+- **EVA check**: `--moonsites artemis:close --colonistcheck --colonisteva` (headless ~4 min): the first colonist with an EVA
+  spot is sent there by rover from its work spot; it must cycle an airlock, drive, stand at the spot out of the air with
+  the helmet on; then it is sent home and must stand inside in the air, helmet off, with the rover parked within 12 m of a
+  slot. The camera follows it (the ground's square follows the camera). Windowed: `colonist_airlock.png`,
+  `colonist_rover.png`, `colonist_eva.png`, `colonist_home.png`.

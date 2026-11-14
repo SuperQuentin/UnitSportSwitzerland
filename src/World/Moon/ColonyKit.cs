@@ -61,9 +61,9 @@ public static class ColonyKit
     private static ShaderMaterial? _window, _glass;
 
     /// <summary>A module's mesh, built once per kind, size and theme (any thread).</summary>
-    public static ArrayMesh Module(ModuleKind kind, double length, double width, double height, int storeys, ColonyTheme theme)
+    public static ArrayMesh Module(ModuleKind kind, double length, double width, double height, int storeys, ColonyTheme theme, int sideDoor = 0)
     {
-        string key = FormattableString.Invariant($"{kind}/{length:F1}/{width:F1}/{height:F1}/{storeys}/{theme}");
+        string key = FormattableString.Invariant($"{kind}/{length:F1}/{width:F1}/{height:F1}/{storeys}/{theme}/{sideDoor}");
         lock (Lock)
         {
             if (Cache.TryGetValue(key, out var m)) return m;
@@ -74,7 +74,7 @@ public static class ColonyKit
             {
                 case ModuleKind.Hub: Hub(s, p, w / 2, h, storeys); break;
                 case ModuleKind.Stack: Stack(s, p, w / 2, h, storeys); break;
-                case ModuleKind.Can: Can(s, p, l, w / 2); break;
+                case ModuleKind.Can: Can(s, p, l, w / 2, sideDoor: sideDoor); break;
                 case ModuleKind.Dome: Dome(s, w / 2, theme); break;
                 case ModuleKind.Biodome: Biodome(s, p, w / 2, theme == ColonyTheme.ColdWar); break;
                 case ModuleKind.Hangar: Hangar(s, p, l, w, h); break;
@@ -141,6 +141,8 @@ public static class ColonyKit
             var tt = t;
             yield return ($"Can ({t})", () => Show(Module(ModuleKind.Can, 14, 4.6, 5.5, 1, tt)));
         }
+        // with a side doorway (#1976): where a moondust dome's tube comes in
+        yield return ("Can, side door (Artemis)", () => Show(Module(ModuleKind.Can, 14, 4.6, 5.5, 1, ColonyTheme.Artemis, sideDoor: 1)));
         yield return ("Stack (Moon Village)", () => Show(Module(ModuleKind.Stack, 9, 9, 10.5, 3, ColonyTheme.MoonVillage)));
         yield return ("Moondust dome", () => Show(Module(ModuleKind.Dome, 18, 18, 9, 1, ColonyTheme.Artemis)));
         yield return ("Biodome", () => Glazed(Module(ModuleKind.Biodome, 50, 50, 25, 1, ColonyTheme.MoonVillage)));
@@ -245,11 +247,15 @@ public static class ColonyKit
     /// floor, a floor, lamps along the ceiling, trim rings, portholes, a radiator on top. An airlock is a short one in
     /// hazard colours (its two door leaves are nodes: <see cref="ColonyAirlocks"/>).
     /// </summary>
-    private static void Can(MeshScratch s, Palette p, float l, float r, bool airlock = false)
+    private static void Can(MeshScratch s, Palette p, float l, float r, bool airlock = false, int sideDoor = 0)
     {
         float y = r + 0.9f;
-        s.Skirt(new(0, y, -l / 2), new(0, y, l / 2), r, r, airlock ? p.Band : p.Shell, 18);
         float top = FloorY + DoorH;
+        // the side doorway (#1976: a dome's tube comes in there), on the node's sideDoor side: the drawn side is the other
+        // (the scratch turns the mesh half a turn)
+        float ax = -sideDoor;
+        if (sideDoor == 0) s.Skirt(new(0, y, -l / 2), new(0, y, l / 2), r, r, airlock ? p.Band : p.Shell, 18);
+        else SideDoorway(s, p, l, r, y, ax);
         foreach (float z in new[] { -l / 2, l / 2 })
         {
             // the end wall: a ring to the shell, the doorway's surround filling its hole
@@ -278,6 +284,7 @@ public static class ColonyKit
             float z = -l / 2 + (i + 0.5f) * l / n;
             foreach (float side in new[] { 1f, -1f })
             {
+                if (sideDoor != 0 && side == ax && Mathf.Abs(z) < SideGap + 0.5f) continue;
                 var nrm = new Vector3(side, 0.25f, 0).Normalized();
                 Window(s, new Vector3(0, y, z) + nrm * (r + 0.01f), nrm, Vector3.Forward, 0.55f, 0.55f, p.Window);
             }
@@ -286,6 +293,54 @@ public static class ColonyKit
         }
         s.Box(new(0, y + r + 0.3f, 0), new(1.6f, 0.08f, l * 0.6f), p.Band);
         s.Tube(new(0, y + r, l * 0.3f), new(0, y + r + 0.4f, l * 0.3f), 0.05f, p.Frame, 4);
+    }
+
+    /// <summary>Half the length of a can's shell opened for a side doorway, metres.</summary>
+    public const float SideGap = DoorW / 2 + 0.25f;
+
+    /// <summary>
+    /// Whether a can shell's panel round its axis (angle from the side, + up) is cut for a side doorway: the panels from
+    /// under the floor's edge to over the lintel, on the door's side.
+    /// </summary>
+    public static bool SideCut(float y0, float r, float angle) =>
+        Mathf.Cos(angle) > 0.2f && y0 + r * Mathf.Sin(angle) is var py && py > FloorY - 0.35f && py < FloorY + DoorH + 0.45f;
+
+    /// <summary>
+    /// A can's shell with a doorway in its side at the middle (drawn side <paramref name="ax"/>): the shell whole either side
+    /// of it, round the doorway panels with the cut ones left out, a collar plate across the cut with the door's hole, a
+    /// landing from the floor's edge to the shell, and the door's frame.
+    /// </summary>
+    private static void SideDoorway(MeshScratch s, Palette p, float l, float r, float y, float ax)
+    {
+        const int n = 18;
+        s.Skirt(new(0, y, -l / 2), new(0, y, -SideGap), r, r, p.Shell, n);
+        s.Skirt(new(0, y, SideGap), new(0, y, l / 2), r, r, p.Shell, n);
+        float pw = 2 * r * Mathf.Sin(Mathf.Pi / n) * 1.06f;
+        float lo = float.MaxValue, hi = float.MinValue;
+        for (int i = 0; i < n; i++)
+        {
+            float a = Mathf.Tau * (i + 0.5f) / n;
+            // the angle from the door's side: a panel at (ax cos, sin)
+            if (SideCut(y, r, a))
+            {
+                lo = Mathf.Min(lo, y + r * Mathf.Sin(a - Mathf.Pi / n));
+                hi = Mathf.Max(hi, y + r * Mathf.Sin(a + Mathf.Pi / n));
+                continue;
+            }
+            var c = new Vector3(ax * Mathf.Cos(a) * r, y + Mathf.Sin(a) * r, 0);
+            s.Box(c, new Vector3(0.06f, pw, 2 * SideGap), p.Shell, new Basis(Vector3.Back, ax > 0 ? a : Mathf.Pi - a));
+        }
+        // the collar across the cut, its doorway open
+        float top = FloorY + DoorH, cx = ax * (r - 0.03f);
+        float cheek = SideGap - DoorW / 2;
+        foreach (float sz in new[] { -1f, 1f })
+            s.Box(new(cx, (lo + hi) / 2, sz * (DoorW / 2 + cheek / 2)), new(0.1f, hi - lo, cheek), p.Band);
+        s.Box(new(cx, (top + hi) / 2, 0), new(0.1f, hi - top, DoorW), p.Band);
+        s.Box(new(cx, (lo + FloorY) / 2, 0), new(0.1f, FloorY - lo, DoorW), p.Band);
+        // the landing: the floor out to the shell under the doorway
+        float chord = Mathf.Sqrt(Mathf.Max(0, r * r - (y - FloorY) * (y - FloorY)));
+        s.Box(new(ax * (chord + r) / 2, FloorY - 0.06f, 0), new(r - chord + 0.05f, 0.12f, DoorW + 0.3f), p.Frame);
+        DoorFrame(s, new Vector3(ax * (r - 0.03f), 0, 0), new Basis(Vector3.Up, ax * Mathf.Pi / 2), p);
     }
 
     /// <summary>
