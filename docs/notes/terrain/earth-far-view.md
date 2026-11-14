@@ -105,6 +105,11 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   material with no waves (as flat's far tiles), shown below 20 km; the ground under it sinks 3 m by the shore and 100 m
   inside (the water shaders shade by depth). Only a real leaf's heights are taken for a bed: a generated fill leaf
   under a mountain the generator lacks (the Salève) drew a lake on its slope.
+- **Smooth shores** (#1689): a shore cell whose wet corners stand on one level (`GlobeGround.LakeShore`, within 0.5 m)
+  is drawn whole, as the sea's (#1802), its sheet passing under the dry corners (0.3 m under, lower where a far leaf's
+  shore stands under its lake). The shore is then where the ground crosses the sheet, and each shore vertex sinks so that
+  crossing follows the water smoothed over 5 x 5 cells, crossing one half (`GlobeGround.ShoreSink`, marching squares by
+  depth); the cells' 10-40 m staircase is gone. A river's steps and the tile's edge vertices keep the 3 m sink.
 - **The pyramid's Swiss levels** are built from B4's leaves at their surface, ETOPO's lakes at the leaves' level and a
   1.5 km blend past the region's edge (#1654, `tools/cube-tiles`): the trench east of Lavaux and the lake at two levels
   are gone. A far leaf takes the same surface (`CubeSurface.SurfaceAt`: a bed left dry by the leaf's edge is water).

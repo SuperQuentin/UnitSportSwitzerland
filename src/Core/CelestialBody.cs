@@ -211,6 +211,16 @@ public sealed class CelestialBody
     public static int LeafLevelFor(double a) =>
         System.Math.Clamp((int)System.Math.Round(System.Math.Log2(a * System.Math.PI / 2 / 611.0)), 0, 20);
 
+    /// <summary>
+    /// Whether a craft at <paramref name="altitude"/> over this body is in the Space regime (#1851), with its hysteresis:
+    /// entered above <see cref="SpaceEnterM"/>, left below <see cref="SpaceExitM"/> (the Earth's 60 and 50 km,
+    /// <c>Curvature.SpaceRegime</c>).
+    /// </summary>
+    public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
+
+    /// <summary>Whether it has air a craft feels (#1851): the Earth's 1976 standard atmosphere; Mars' and the others' come with them.</summary>
+    public bool HasAir => Id == BodyId.Earth;
+
     /// <summary>Point-mass gravity at a distance from the centre, m/s²: 8.68 at 400 km above the Earth.</summary>
     public double Gravity(double r) => GM / (r * r);
 

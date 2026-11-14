@@ -221,6 +221,7 @@ public partial class OriginShifter : Node
     /// </summary>
     private void EarthReanchor(Vector3 at, double altitude)
     {
+        if (CrossBodies && CrossSphere(at)) return;
         bool space = Curvature.SpaceRegime(InSpace, altitude);
         if (space != InSpace)
         {
@@ -244,6 +245,36 @@ public partial class OriginShifter : Node
         double step = Math.Max(1, StepM);
         double x = Math.Round(at.X / step) * step, z = Math.Round(at.Z / step) * step;
         ShiftTo(e, n, exact: true, axes: axes with { Origin = axes.ToEcef(x, 0, z) });
+    }
+
+    /// <summary>
+    /// Whether the anchor goes from body to body at a sphere of influence (#1850): off until the globe, the ground and
+    /// the sky follow a body change (#1848's game side), on with <c>--crossbodies</c> for the checks that build it.
+    /// </summary>
+    public static bool CrossBodies { get; set; } = CmdArgs.Has("--crossbodies");
+
+    private double _sphereCheckAt;
+
+    /// <summary>
+    /// The sphere of influence the camera is in (#1850, <see cref="Frames.SphereAt"/>), checked at most four times a
+    /// second in Space: when it is another body's, the anchor is counted from that body (<see cref="WorldOrigin.Rebase"/>),
+    /// nothing moves. Returns whether it changed.
+    /// </summary>
+    private bool CrossSphere(Vector3 at)
+    {
+        if (!InSpace || _origin.Frame.Axes is not { } axes) return false;
+        // a throttle on the work, not on what the world does: real time (docs/notes/core/three-clocks.md)
+        double now = RealClock.Now;
+        if (now < _sphereCheckAt) return false;
+        _sphereCheckAt = now + 0.25;
+        var sky = SkyClock.Now;
+        var p = axes.ToEcef(at.X, at.Y, at.Z);
+        var body = Frames.SphereAt(axes.Body, new DVec3(p.X, p.Y, p.Z), sky);
+        if (body == axes.Body) return false;
+        GD.Print(string.Create(CultureInfo.InvariantCulture,
+            $"[origin] into {body}'s sphere of influence from {axes.Body}'s, {new DVec3(p.X, p.Y, p.Z).Length / 1000:F0} km from {axes.Body}'s centre: the anchor is counted from {body} now, nothing moves"));
+        _origin.Rebase(body, sky);
+        return true;
     }
 
     /// <summary>
