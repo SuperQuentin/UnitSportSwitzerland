@@ -691,8 +691,10 @@ src/Player/              full   tools/decknetcheck.sh
 src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
-# the trailer (#706): a boat, a car on the race autopilot and an airliner staged on the real map (CHUNKS=)
-src/Trailer/             full   tools/trailer.sh stills 2,5,12
+# the trailer (#706): the story film's door, road bike on the race autopilot and works machinery staged on the real
+# map (CHUNKS=); shots 2, 3 and 9 stand on the D: test region's tiles (Lausanne, Pully), so no tile round them is the
+# generated fill (#1861). The song is not needed: stills only pin its hash
+src/Trailer/             full   tools/trailer.sh stills 2,3,9
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
