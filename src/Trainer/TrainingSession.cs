@@ -147,6 +147,23 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         dialog.PopupCentered(new Vector2I(900, 600));
     }
 
+    /// <summary>
+    /// Loads <paramref name="path"/> and starts riding it as soon as it is ready: a group ride's course, joined from the
+    /// Training app (<see cref="GroupRides"/>, #1467), whose riders are off to its start.
+    /// </summary>
+    /// <param name="name">The course's name to show (the group's), else the file's.</param>
+    public async void LoadAndStart(string path, string? name = null)
+    {
+        Load(path);
+        for (int i = 0; i < 600 && State == Phase.Loading; i++) await ToSignal(GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
+        if (State != Phase.Ready || CoursePath != path) return;
+        if (!string.IsNullOrWhiteSpace(name)) CourseName = name;
+        Start();
+    }
+
+    /// <summary>The rider's speed on the bike, m/s (0 off it): what a group ride's standings show.</summary>
+    public float Speed => _player() is { } me && State is Phase.Riding or Phase.Finished ? me.RideSpeed : 0f;
+
     /// <summary>Reads and snaps a GPX off the main thread; <see cref="State"/> is Ready when it is done.</summary>
     public async void Load(string path)
     {
@@ -266,6 +283,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             me.RideControls = null;
             UnGhost(me);
         }
+        GroupRides.Instance?.Leave();   // a group ride ends for whoever stops (#1467)
         GameSettings.Current.RideProfile = _profileWas;
         TrainerLink.Instance?.Flat();
         _pilot = null;
@@ -777,7 +795,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         string text = string.Create(CultureInfo.InvariantCulture,
             $"{CourseName}\n{power}{cadence}{hr}\n{me.RideSpeed * 3.6f:0.0} km/h   {GradeHere * 100:+0.0;-0.0;0.0}%{sim}\n"
             + $"{Along / 1000:0.00} / {c.Profile.Length / 1000:0.00} km   {c.Profile.AscentLeft(Along):0} m up left   {Clock(RideSeconds)}")
-            + WayLines();
+            + WayLines() + (GroupRides.Instance?.HudLines((float)Along) ?? "");
         if (text == _hudShown) return;
         _hudShown = text;
         _hudText.Text = text;

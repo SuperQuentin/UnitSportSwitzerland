@@ -120,6 +120,20 @@
   - **Check**: `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60`: down
     the side road into the T's give-way queue, then east. Without the ghost the bike stood at 0 km/h in the queue;
     with it, never under 20 km/h, 0.3 m from a car, every exception given back.
+- **Group rides** (#1467, the plan's phase 4; `GroupRides` at `World/GroupRides` on the server and every client):
+  - Online, the Training app's **Group rides**: **Host a group ride** on the loaded course (its GPX goes to the
+    server, 512 KB at most), the open ones as **Join: name · km · host · riders**, **Leave the group**.
+  - A join brings the same GPX from the server (saved under `user://training/groups/`), loaded and started
+    (`TrainingSession.LoadAndStart`): off to the course's start, as any ride. A ride under way stops first.
+  - Each rider sends its course metres and speed once a second; the server sends each group's standings to its
+    riders: the HUD's "Group:" lines (the furthest first, each's gap in metres) and the app's.
+  - The riders are ordinary players: each sees the others' bikes replicated and drafts them
+    (`RideGround.WheelDraftBehind`); the server never steers anyone. A rider who stops leaves the group; the last
+    to leave closes it; a host who leaves hands it to another rider.
+  - Bots: `ServerHost` / `ServerJoin` / `ServerProgress` / `ServerLeave` are a bot's calls; riding a course on the
+    server is the gap (`bots/bot-capability-map`).
+  - **Check**: `tools/groupridenetcheck.sh` (net): A hosts the hairpin fixture's first 600 m, B joins from the list,
+    both ride on the simulated rig; each sees both in the standings, the other's metres and the other's bike.
 - **Not yet**: loading roads beyond the course's 1 km margin (off there, the way ends), the elevation profile,
   the FTP test's `PowerMeasured` (#903), ANT+ (no USB stick yet). RideLink's WinRT path has not met a
   real trainer.

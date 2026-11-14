@@ -551,7 +551,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private Vector3 WorldOf(Node3D body) => body is Player.FootPlayer p && Origin != null ? Origin.ToWorld(p.Global) : body.GlobalPosition;
 
     private Node3D? PlayerBody(long peer) =>
-        Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
+        // a server-run bot's body is named npc_1_n, not by its id (#1330: the venues judge where a bot stands as a player's)
+        (Net.PlayerReplication.IsBotId(peer) ? Bots.BotDirector.Instance?.Get(peer)?.Body : null)
+        ?? Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
 
     /// <summary>The door on the facade, world space.</summary>
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
@@ -1143,6 +1145,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         {
             TickDoors(delta);
             TickLifts();
+            TickBotRooms(delta);
         }
         if (!_presenting) return;
         PresentLifts();

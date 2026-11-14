@@ -328,7 +328,7 @@ public partial class TrainingProbe : Node
         var near = new List<PhysicsBody3D>();
         float slowest = float.MaxValue, closest = float.MaxValue;
         int passes = 0, ghostedMost = 0;
-        bool rolling = false;
+        bool rolling = false, shot = false;
         for (int i = 0; i < 1500 && session.State == TrainingSession.Phase.Riding; i++)
         {
             await Wait(0.1);
@@ -343,6 +343,8 @@ public partial class TrainingProbe : Node
                 float d = RaceRoute.Flat(b.GlobalPosition - me.GlobalPosition).Length();
                 closest = Mathf.Min(closest, d);
                 if (d < 2.5f) passes++;
+                // windowed: the bike in the queue, through a car (once, the first time it is that close)
+                if (d < 1.5f && !shot) { shot = true; Shot("training_traffic_through.png"); }
             }
             if (i % 50 == 0) Log(FormattableString.Invariant($"  at {session.Along:0} m, {v * 3.6f:0} km/h, {session.Ghosted} traffic bodies ridden through"));
         }
