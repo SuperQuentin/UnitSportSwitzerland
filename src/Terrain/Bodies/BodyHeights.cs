@@ -26,6 +26,7 @@ public sealed class BodyHeights
     private readonly int _level;
     private readonly Func<CubeKey, CubeTile?> _load;
     private readonly CraterField? _craters;
+    private readonly SurfaceStamps? _stamps;
     private readonly Dictionary<CubeKey, CubeTile?> _tiles = new();
     private readonly object _lock = new();
 
@@ -33,22 +34,31 @@ public sealed class BodyHeights
     /// <param name="level">The pyramid's finest level (the Moon's 5: 167 m cells).</param>
     /// <param name="load">A tile of that level, or null where the pyramid has none (called once a tile, on any thread).</param>
     /// <param name="craters">The profile's craters under the data, or null for the data alone.</param>
-    public BodyHeights(CubeShape cube, int level, Func<CubeKey, CubeTile?> load, CraterField? craters)
+    /// <param name="stamps">Where the ground is made ready for a site (#1939: craters calmed under a lander, a colony's
+    /// level plateau), or null for none.</param>
+    public BodyHeights(CubeShape cube, int level, Func<CubeKey, CubeTile?> load, CraterField? craters, SurfaceStamps? stamps = null)
     {
         _cube = cube;
         _level = level;
         _load = load;
         _craters = craters;
+        _stamps = stamps;
     }
+
+    /// <summary>The sites' stamps on this ground, or null.</summary>
+    public SurfaceStamps? Stamps => _stamps;
 
     public CubeShape Cube => _cube;
 
-    /// <summary>The height over the reference surface at a unit normal (body-fixed), metres: the data and the craters.</summary>
-    public double At(EcefPos n) => Data(n) + (_craters?.At(n.X, n.Y, n.Z) ?? 0);
+    /// <summary>The height over the reference surface at a unit normal (body-fixed), metres: the data, the craters and the stamps.</summary>
+    public double At(EcefPos n) => Stamped(n, Data(n), _craters?.At(n.X, n.Y, n.Z) ?? 0);
 
-    /// <summary>The data and the craters from <paramref name="smallestCrater"/> metres up (a coarser mesh's ground).</summary>
+    /// <summary>The data, the craters from <paramref name="smallestCrater"/> metres up (a coarser mesh's ground) and the stamps.</summary>
     public double At(EcefPos n, double smallestCrater) =>
-        Data(n) + (_craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0);
+        Stamped(n, Data(n), _craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0);
+
+    private double Stamped(EcefPos n, double data, double craters) =>
+        _stamps == null ? data + craters : _stamps.Apply(n, data, craters, Data);
 
     /// <summary>The data's height alone at a unit normal: the finest tile, bilinear; 0 where there is none.</summary>
     public double Data(EcefPos n)

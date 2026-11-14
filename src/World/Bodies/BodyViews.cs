@@ -64,6 +64,8 @@ public partial class BodyViews : Node
                 {
                     g.Ground = new BodyGround(g, _origin);
                     AddChild(g.Ground);
+                    // the Moon's historic and invented sites near the camera (#1939)
+                    if (body.Id == BodyId.Moon) AddChild(new Moon.MoonSurface(g.Ground, _origin));
                 }
             }
         // the ground game's gravity follows the anchor's body: the walker's fall, and the physics space's
@@ -82,6 +84,7 @@ public partial class BodyViews : Node
         if (OrbitOnlyCheck.Requested) AddChild(new OrbitOnlyCheck(_origin));
         if (RingCheck.Requested) AddChild(new RingCheck(_origin));
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
+        if (Moon.MoonSitesCheck.Requested) AddChild(new Moon.MoonSitesCheck(_origin, () => _moon?.Ground, _local));
         if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }
 
