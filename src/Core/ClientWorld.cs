@@ -2554,8 +2554,23 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>My own networked player node, once the server has spawned it.</summary>
     // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
-    private FootPlayer? GetLocalNetPlayer() =>
-        Net.NetLink.Ready(this) ? _players?.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString()) : null;
+    /// <summary>
+    /// This peer's own player among the spawned ones (named by its peer id), kept once found (#1910): asked many times a
+    /// frame through <see cref="LocalPlayer"/>, the lookup by a path made from a string was ~6 % of a client's main thread.
+    /// Dropped when it is freed, moved out of the players, or another id is ours.
+    /// </summary>
+    private FootPlayer? GetLocalNetPlayer()
+    {
+        if (!Net.NetLink.Ready(this) || _players == null) return null;
+        int id = Net.NetLink.UniqueId(this);
+        if (_localNet is { } held && IsInstanceValid(held) && held.GetParent() == _players && _localNetId == id) return held;
+        _localNet = _players.GetNodeOrNull<FootPlayer>(id.ToString());
+        _localNetId = id;
+        return _localNet;
+    }
+
+    private FootPlayer? _localNet;
+    private int _localNetId;
 
     public override void _UnhandledInput(InputEvent @event)
     {
