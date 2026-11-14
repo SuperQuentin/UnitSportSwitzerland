@@ -27,7 +27,12 @@ public partial class Atmosphere : Node3D
     public WorldOrigin? Origin { get; set; }
 
     private static readonly StringName PlanetCentre = "planet_centre", PlanetR = "planet_r", AtmoR = "atmo_r",
-        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", TrueSunParam = "world_true_sun";
+        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", TrueSunParam = "world_true_sun",
+        BetaR = "beta_r", BetaM = "beta_m", HeightR = "h_r", HeightM = "h_m", GM = "g_m", MExt = "m_ext",
+        AbsorbR = "absorb_r", SunPower = "sun_power";
+
+    /// <summary>The body whose air the shell has now (its uniforms written when it changes).</summary>
+    private BodyId _airOf = (BodyId)255;
 
     private MeshInstance3D _shell = null!;
     private ShaderMaterial _material = null!;
@@ -91,10 +96,14 @@ public partial class Atmosphere : Node3D
             _realSun = false;
             if (DayNight.Instance?.Sun is { } light && IsInstanceValid(light)) _fixedSun = light.GlobalBasis.Z.Normalized();
         }
-        // the Earth-fixed direction into the axes' own body (#1848): the anchor may be counted from the Moon
+        // another body's own sun (#1853): from that body to the Sun, in its fixed axes. The Earth's direction turned into
+        // its axes was near enough from the Moon (0.15°) and tens of degrees off from Mars
         var sunDir = _sunEcef;
         if (_realSun && axes.Body != BodyId.Earth)
-            sunDir = Frames.ConvertDirection(BodyId.Earth, new DVec3(_sunEcef.X, _sunEcef.Y, _sunEcef.Z), axes.Body, SkyClock.Now).AsEcef;
+        {
+            var at = SkyClock.Now;
+            sunDir = Frames.Orientation(axes.Body, at).ApplyInverse(Frames.Offset(axes.Body, BodyId.Sun, at.Utc)).Normalized().AsEcef;
+        }
         var sun = _realSun
             ? new Vector3((float)FrameAxes.Dot(sunDir, axes.X), (float)FrameAxes.Dot(sunDir, axes.Y), (float)FrameAxes.Dot(sunDir, axes.Z))
             : _fixedSun;
@@ -108,32 +117,38 @@ public partial class Atmosphere : Node3D
     {
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
         var c = cam.GlobalPosition;
-        // on another body (#1848: the Moon has no air) the camera is in space whatever its height, and the Earth's air
-        // shell is not drawn round that body
-        bool home = Origin.Body == BodyId.Earth;
-        float space = !home ? 1f : Globe.Present ? SpaceAt(Origin.AltitudeOf(c)) : 0;
+        // the anchor body's air (#1853): the Earth's fades in over the style's sky from 15 km; another body with air (Mars)
+        // has its sky from the shell at every height (the style's sky is the Earth's), its stars by day above its own
+        // band; an airless one (the Moon, #1848) is space whatever the height, with no shell
+        var body = CelestialBody.Of(Origin.Body);
+        bool home = body.Id == BodyId.Earth;
+        var air = body.Air;
+        double altitude = Origin.AltitudeOf(c);
+        float space = home ? (Globe.Present ? SpaceAt(altitude) : 0) : air == null ? 1f : (float)air.SpaceAt(altitude);
+        float shell = home ? space : air != null ? 1f : 0f;
         // the globe's sun at every height the globe draws, in the axes it is placed in this frame (the
         // atmosphere runs after the globe, which places its tiles again at a re-anchor)
         var axes = !home && Origin.Frame.Axes is { } there ? there : Globe.Axes ?? Origin.EcefAxes;
         var sun = TrueSun(axes);
         Space = space;
-        DimSky(space);
+        DimSky(home ? space : 1f);
         // the stars by day up here (sky_point.gdshader)
         if (space != _space) RenderingServer.GlobalShaderParameterSet(WorldSpace, space);
-        _shell.Visible = space > 0 && home;
-        if (space <= 0 || !home)
+        _shell.Visible = shell > 0;
+        if (shell <= 0 || air == null)
         {
             _space = space;
             return;
         }
+        if (body.Id != _airOf) WriteAir(body.Id, air);
 
         // the planet's centre and its radius under the camera, in this world
         var (px, py, pz) = axes.FromEcef(new EcefPos(0, 0, 0));
         var centre = new Vector3((float)px, (float)py, (float)pz);
         _shell.GlobalPosition = centre;
         var eye = axes.ToEcef(c.X, c.Y, c.Z);
-        var g = Ellipsoid.Wgs84.ToGeodetic(eye);
-        var nadir = CubeSphere.OnEllipsoid(CubeSphere.NormalAt(g.LatDeg, g.LonDeg), 0);
+        var shape = axes.Shape;
+        var nadir = shape.ToEcef(shape.ToGeodetic(eye) with { H = 0 });
         double r = Math.Sqrt(FrameAxes.Dot(nadir, nadir));
 
         // written on change only (perf-no-per-frame-allocations): the centre moves with a shift, the
@@ -143,11 +158,30 @@ public partial class Atmosphere : Node3D
         if (Mathf.Abs(radius - _radius) > 1f)
         {
             _material.SetShaderParameter(PlanetR, _radius = radius);
-            _material.SetShaderParameter(AtmoR, (float)(r + ThicknessM));
+            _material.SetShaderParameter(AtmoR, (float)(r + air.ThicknessM));
         }
         if (!sun.IsEqualApprox(_sun)) _material.SetShaderParameter(SunDir, _sun = sun);
-        if (space != _space) _material.SetShaderParameter(Intensity, space);
+        if (shell != _intensity) _material.SetShaderParameter(Intensity, _intensity = shell);
         _space = space;
+    }
+
+    /// <summary>The shell's intensity written last (-1: none yet).</summary>
+    private float _intensity = -1;
+
+    /// <summary>The shell takes a body's air (on a change of the anchor's body only).</summary>
+    private void WriteAir(BodyId id, BodyAir air)
+    {
+        _airOf = id;
+        _material.SetShaderParameter(BetaR, new Vector3((float)air.Fine.R, (float)air.Fine.G, (float)air.Fine.B));
+        _material.SetShaderParameter(BetaM, new Vector3((float)air.Coarse.R, (float)air.Coarse.G, (float)air.Coarse.B));
+        _material.SetShaderParameter(HeightR, (float)air.FineHeightM);
+        _material.SetShaderParameter(HeightM, (float)air.CoarseHeightM);
+        _material.SetShaderParameter(GM, (float)air.CoarseG);
+        _material.SetShaderParameter(MExt, (float)air.CoarseExtinction);
+        _material.SetShaderParameter(AbsorbR, new Vector3((float)air.FineAbsorption.R, (float)air.FineAbsorption.G, (float)air.FineAbsorption.B));
+        _material.SetShaderParameter(SunPower, (float)air.SunPower);
+        // the radius is written again with the new air's top
+        _radius = 0;
     }
 
     /// <summary>

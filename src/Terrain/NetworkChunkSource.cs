@@ -331,9 +331,12 @@ public sealed class NetworkChunkSource : IChunkSource
         {
             try
             {
-                return section == 0
-                    ? b.Length == entry.Length && CubeTileCodec.ReadHeader(b).Key == key
-                    : CubeAlbedoCodec.Decode(b).Key == key;
+                return section switch
+                {
+                    0 => b.Length == entry.Length && CubeTileCodec.ReadHeader(b).Key == key,
+                    Leaves.PyramidSource.FeaturesSection => CubeFarFeaturesCodec.Decode(b).Key == key,
+                    _ => CubeAlbedoCodec.Decode(b).Key == key,
+                };
             }
             catch (Exception e) when (e is InvalidDataException or ArgumentException or IndexOutOfRangeException or EndOfStreamException) { return false; }
         }

@@ -20,12 +20,18 @@ uniform float intensity = 1.0;
 uniform float sun_power = 4.0;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 
-const vec3 BETA_R = vec3(5.8e-6, 13.5e-6, 33.1e-6);
-// a clear day's aerosols (21e-6 is a hazy one: it greyed the whole Earth from orbit)
-const float BETA_M = 4e-6;
-const float H_R = 8000.0;
-const float H_M = 1200.0;
-const float G = 0.76;
+// the body's air (#1853, Core/BodyAir, set by World/Globe/Atmosphere.cs); the defaults are the Earth's: Rayleigh's
+// molecules, and a clear day's aerosols (21e-6 is a hazy one: it greyed the whole Earth from orbit). Mars: its dust,
+// red over blue in the fine part (the butterscotch day), blue and forward in the coarse (round the setting sun)
+uniform vec3 beta_r = vec3(5.8e-6, 13.5e-6, 33.1e-6);
+uniform vec3 beta_m = vec3(4e-6, 4e-6, 4e-6);
+uniform float h_r = 8000.0;
+uniform float h_m = 1200.0;
+uniform float g_m = 0.76;
+// the coarse part's extinction over its scattering
+uniform float m_ext = 1.1;
+// what the fine part absorbs besides (Mars' dust takes blue); the Earth's molecules none
+uniform vec3 absorb_r = vec3(0.0, 0.0, 0.0);
 const int STEPS = 20;
 // the Earth's shadow fades over this much height at its edge instead of cutting the light off a
 // sample at a time (that banded near the terminator)
@@ -108,8 +114,8 @@ void fragment() {
 
 	float mu = dot(dir, sun_dir);
 	float phase_r = 3.0 / (16.0 * PI) * (1.0 + mu * mu);
-	float g2 = G * G;
-	float phase_m = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) / ((2.0 + g2) * pow(1.0 + g2 - 2.0 * G * mu, 1.5));
+	float g2 = g_m * g_m;
+	float phase_m = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) / ((2.0 + g2) * pow(1.0 + g2 - 2.0 * g_m * mu, 1.5));
 
 	float ds = (t1 - t0) / float(STEPS);
 	float jitter = ign(FRAGCOORD.xy);
@@ -118,7 +124,7 @@ void fragment() {
 	for (int i = 0; i < STEPS; i++) {
 		vec3 p = o + dir * (t0 + (float(i) + jitter) * ds);
 		float h = length(p) - planet_r;
-		float dr = exp(-h / H_R) * ds, dm = exp(-h / H_M) * ds;
+		float dr = exp(-h / h_r) * ds, dm = exp(-h / h_m) * ds;
 		od_r += dr;
 		od_m += dm;
 		// the light's way in from the sun: none when the ground is in the way
@@ -128,18 +134,18 @@ void fragment() {
 		float ls = out_air.y / float(LIGHT_STEPS), lr = 0.0, lm = 0.0;
 		for (int j = 0; j < LIGHT_STEPS; j++) {
 			float lh = length(p + sun_dir * ((float(j) + 0.5) * ls)) - planet_r;
-			lr += exp(-lh / H_R) * ls;
-			lm += exp(-lh / H_M) * ls;
+			lr += exp(-lh / h_r) * ls;
+			lm += exp(-lh / h_m) * ls;
 		}
-		vec3 tau = BETA_R * (od_r + lr) + BETA_M * 1.1 * (od_m + lm);
+		vec3 tau = (beta_r + absorb_r) * (od_r + lr) + beta_m * m_ext * (od_m + lm);
 		vec3 att = exp(-tau);
 		sum_r += dr * att * lit;
 		sum_m += dm * att * lit;
 	}
 	{
-		vec3 through = exp(-(BETA_R * od_r + BETA_M * 1.1 * od_m));
+		vec3 through = exp(-((beta_r + absorb_r) * od_r + beta_m * m_ext * od_m));
 		// dithered: the dark gradients near the shadow banded at 8 bits; the sun seen through the air reddens with it
-		ALBEDO = intensity * sun_power * (sum_r * BETA_R * phase_r + sum_m * BETA_M * phase_m)
+		ALBEDO = intensity * sun_power * (sum_r * beta_r * phase_r + sum_m * beta_m * phase_m)
 			+ (ign(FRAGCOORD.yx + 17.0) - 0.5) / 255.0 + sun * through;
 		ALPHA = intensity * (1.0 - dot(through, vec3(0.3333)));
 	}

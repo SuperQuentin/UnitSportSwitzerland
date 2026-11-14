@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+
+## The far view's baked features and the far band ([#1657](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1657))
+
+In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, over Geneva.
+
+- [ ] Settings → Graphics → Detail: Very low, then Low, then Medium, at 800 m looking across the town → Very low: the near leaves real, the rest the baked skin (note whether its roofs read too pink); Low: real far leaves out to about half the distance; no leaf flickers in or out while you hover.
+- [ ] On a PC that struggles (or a headset), fly low over Geneva for a minute → if the frame rate drops, the furnished band shrinks (`[globe] far band at ...` in the log) and grows back when it recovers, without visible popping.
+
 ## The globe streamed from the server, a small base, no pops ([#1846](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1846))
 
 In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator (Shift+T).
@@ -22,6 +30,9 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly up and on toward the Moon at the wheel's top (about a minute) → the speed grows with the distance and falls again near the Moon; the picture never jumps at the handover (~66,000 km out), and the Moon's globe takes over from its sky disc in the same place.
 - [ ] Come down to a few hundred metres and press T → you stand on the ground (no fall from the camera's height, no wait). Walk and sprint for a few hundred metres → the ground keeps coming under you, with craters down to a few metres, and no seam or step where the near ground meets the farther one.
 - [ ] Jump → about 5.4 m up and over 5 s in the air (0.9 m on the Earth). Do the same with the pad (its jump and step-in buttons) and in VR → the same.
+- [ ] From the Earth, fly toward Mars at the wheel's top (PR [#1899](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1899): about 15 min at light speed) → the speed reads in c past the Moon; nothing jumps leaving the Earth's sphere (~1 million km) or entering Mars'; Mars' globe takes over from its sky dot. Step in → you stand on Mars and a jump reaches ~2.4 m.
+- [ ] In the spectator, tap ] (pad: D-pad →, VR: right stick down) a few times, then hold it → the ring steps Moon, Mars, the Sun..., an arrow at the edge when the body is off screen, and the hold turns the view onto it; fly toward the ring and it grows into the body. In VR, check the cue is readable on the HUD.
+- [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
 

@@ -398,7 +398,7 @@ public partial class ChunkStreamer : Node
         // the body rides in the section's high bits (AssetStream.CubeSection): this server serves the Earth's (0) alone
         (int body, section) = AssetStream.CubeSection.Unpack(section);
         bool leaf = body == 0 && cubeKind == AssetKind.Leaf && key.IsValid && Leaves is { } l && l.IsLocal(key);
-        bool pyramid = body == 0 && cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= 12 && _pyramid is { } p && p.IsLocal(key);
+        bool pyramid = body == 0 && cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= Terrain.Leaves.PyramidSource.FeaturesSection && _pyramid is { } p && p.IsLocal(key);
         if (!leaf && !pyramid)
         {
             RpcId(peer, MethodName.AssetMissing, requestId, true);
@@ -425,12 +425,17 @@ public partial class ChunkStreamer : Node
         }
     }
 
-    /// <summary>A pyramid tile's heights (section 0) or one month's colour (1-12), as stored: both are compressed already.</summary>
+    /// <summary>A pyramid tile's heights (section 0), one month's colour (1-12) or its far features (13, #1657), as stored: all compressed already.</summary>
     private static Prepared PreparePyramid(long peer, uint requestId, Terrain.Leaves.PyramidSource source, CubeKey key, int section)
     {
         try
         {
-            byte[]? payload = section == 0 ? source.HeightsBytes(key) : source.ColourEntry(key, section);
+            byte[]? payload = section switch
+            {
+                0 => source.HeightsBytes(key),
+                Terrain.Leaves.PyramidSource.FeaturesSection => source.FeaturesEntry(key),
+                _ => source.ColourEntry(key, section),
+            };
             if (payload == null) return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             return new Prepared(peer, requestId, payload, payload.Length, AssetStream.Crc32(payload), false, false);
         }

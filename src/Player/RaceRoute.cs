@@ -157,7 +157,10 @@ public sealed class RaceRoute
             for (int i = 0; i < edge.Points.Length; i++)
             {
                 // a drive kept to one class of road (a motorway): on it, on the carriageway heading toward the destination
-                if (along is { } only && (edge.Class != only || !Heading(edge, i, toward))) continue;
+                if (along is { } only && edge.Class != only) continue;
+                // and on a one-way street (a carriageway) the way it heads toward the destination (#1880): a start on the A1's
+                // other carriageway at Bellevue was only joined to the drive by a hop across the median, which no road makes
+                if (!Heading(edge, i, toward)) continue;
                 // prefer the bigger road when two are close: a farm track beside the pass is not the pass
                 float d = Flat(edge.Points[i] - at).Length() + (int)edge.Class * 4f;
                 if (d < bestD) { bestD = d; best = edge; bestS = edge.Cumulative[i]; }
@@ -593,11 +596,16 @@ public sealed class RaceRoute
         {
             if (c > cost[cur]) continue;
             if (cur.Edge == goal) { hit = cur; break; }
-            var (endP, _) = cur.Edge.Sample(cur.F ? cur.Edge.Length : 0);
+            var (endP, endT) = cur.Edge.Sample(cur.F ? cur.Edge.Length : 0);
+var endDir = Flat(cur.F ? endT : -endT);
             long key = cur.F ? cur.Edge.KeyEnd : cur.Edge.KeyStart;
-            foreach (var next in graph.Leaving(key).Concat(ends.Near(endP, against)))
+            foreach (var next in Onward(graph, ends, cur.Edge, cur.F, key, endP, against))
             {
                 if (next.Item1 == cur.Edge || banned?.Contains(next.Item1) == true) continue;
+                if (TurnsBackAtMouth(cur.Edge, endDir, next.Item1, next.Item2)) continue;
+                // across a gap between two roads only ahead of both (#1880, as LaneGraph.JoinTrimmedEnds): any road end within 18 m let
+                // a way hop 13 m from a street's end back to a ramp's foot, under the ramp it then climbed (Place des Nations)
+                if (!Joins(next, endP, endDir.Normalized(), cur.Edge)) continue;
                 float nc = c + Cost(next.Item1, next.Item1.Length, next.Item2);
                 if (cost.TryGetValue(next, out float old) && old <= nc) continue;
                 cost[next] = nc;
@@ -637,6 +645,60 @@ public sealed class RaceRoute
         pts.AddRange(tail);
         for (int k = 0; k < tail.Count; k++) kinds?.Add((last.Edge.Class, last.Edge.Flags));
         return pts;
+    }
+
+    /// <summary>
+    /// The edges a route may take on from an end: those meeting it, and the road ends within reach (roads trimmed back from an
+    /// old-layout cap). A junction path only from its own mouth (within <see cref="MouthJoin"/>), and at a planned core's
+    /// mouth nothing farther: never a jump across the core into another arm's path (#1903: from the south mouth 17 m to the
+    /// south-east arm's, past the corner).
+    /// </summary>
+    private static IEnumerable<(LaneEdge, bool)> Onward(LaneGraph graph, EndIndex ends, LaneEdge from, bool forward, long key,
+        Vector3 endP, bool against)
+    {
+        // a path ends on its lane, that far right of its road's centreline end
+        float own = from.Path is { } fp ? Mathf.Abs(forward ? fp.ToOffset : fp.FromOffset) : 0f;
+        var near = new List<((LaneEdge, bool) End, float D, float Reach)>();
+        bool mouth = false;
+        foreach (var end in ends.Near(endP, against))
+        {
+            var p = end.Item2 ? end.Item1.Points[0] : end.Item1.Points[^1];
+            float d = Flat(p - endP).Length(), reach = own + MouthJoin;
+            if (end.Item1.Path is { } path)
+            {
+                reach += Mathf.Abs(end.Item2 ? path.FromOffset : path.ToOffset);
+                if (d > reach) continue;
+                mouth = true;
+            }
+            near.Add((end, d, reach));
+        }
+        foreach (var next in graph.Leaving(key))
+        {
+            if (next.Item1.Path is not null) mouth = true;
+            yield return next;
+        }
+        foreach (var (end, d, reach) in near)
+            if (!mouth || d <= reach) yield return end;
+    }
+
+    /// <summary>How far from a road's end, past its lane's offset, a junction path may start or end and still be at that road's mouth (m).</summary>
+    private const float MouthJoin = 2f;
+
+    /// <summary>
+    /// A junction path straight into another one that leaves back the way it came (#1903): every path of an arm meets the
+    /// graph at that arm's road end, so out along one arm's exit path and in again along its entry path is a U-turn on the spot
+    /// at the mouth, never driving the street (Geneva 2501310,1124903: the route turned there and the car climbed the corner's
+    /// kerb). Between connectors alone (junction paths, and the short links <see cref="LaneGraph.JoinTrimmedEnds"/> lays between
+    /// road ends, which can sit between the two paths): a street's own dead-end turn is not judged here. Two paths going on (two
+    /// cores a 0 m street apart) still join.
+    /// </summary>
+    internal static bool TurnsBackAtMouth(LaneEdge cur, Vector3 endDir, LaneEdge next, bool nextForward)
+    {
+        if (!cur.Connector || !next.Connector) return false;
+        var (_, t) = next.Sample(nextForward ? 0f : next.Length);
+        var startDir = Flat(nextForward ? t : -t);
+        if (endDir.LengthSquared() < 1e-6f || startDir.LengthSquared() < 1e-6f) return false;
+        return endDir.Normalized().Dot(startDir.Normalized()) < 0f;
     }
 
     /// <summary>
@@ -701,6 +763,26 @@ public sealed class RaceRoute
     /// the ends, built once per route: the scan over every edge at every junction it replaces was quadratic, minutes on a
     /// city's graph.
     /// </summary>
+    /// <summary>
+    /// Whether the route may go on from a road's end at <paramref name="at"/> (leaving it along <paramref name="exit"/>) to
+    /// <paramref name="next"/>'s end: at the same node always, and a junction path at its mouth by <see cref="Onward"/>'s
+    /// rule; across a gap between two roads (#1880) only with the gap ahead of the way out and the next road leaving along it (the trimmed ends RoadGen's junctions leave, as <see cref="LaneGraph.JoinTrimmedEnds"/>
+    /// faces them), never a turn back.
+    /// </summary>
+    private static bool Joins((LaneEdge Edge, bool Forward) next, Vector3 at, Vector3 exit, LaneEdge from)
+    {
+        // a junction path meets its road's end at its lane's offset, beside it: the mouth's own rule (Onward, #1903)
+        if (from.Path is not null || next.Edge.Path is not null) return true;
+        var p = next.Forward ? next.Edge.Points[0] : next.Edge.Points[^1];
+        var gap = Flat(p - at);
+        float d = gap.Length();
+        if (d < 1f) return true;
+        var dir = gap / d;
+        var (_, t) = next.Edge.Sample(next.Forward ? 0f : next.Edge.Length);
+        var leaves = Flat(next.Forward ? t : -t).Normalized();
+        return exit.Dot(dir) >= 0.3f && leaves.Dot(dir) >= 0.3f;
+    }
+
     private sealed class EndIndex
     {
         private const float Reach = 18f, MaxStep = 3f;   // as LaneGraph.JoinTrimmedEnds

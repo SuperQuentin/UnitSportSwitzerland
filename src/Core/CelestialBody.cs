@@ -36,26 +36,26 @@ public sealed class CelestialBody
     /// <summary>WGS84: GM and the rotation rate of NIMA TR8350.2. The ground game keeps its tuned 9.81 m/s².</summary>
     public static readonly CelestialBody Earth = new(BodyId.Earth, "Earth", null, Ellipsoid.Wgs84, 3.986004418e14,
         7.292115e-5, BodyId.Sun, 1.00000261 * Au, landable: true, spaceEnterM: 60_000, spaceExitM: 50_000, leafLevel: 14,
-        groundGravity: 9.81);
+        groundGravity: 9.81, air: BodyAir.Earth);
 
     public static readonly CelestialBody Sun = new(BodyId.Sun, "Sun", SkyBody.Sun, Ellipsoid.Sphere(695_700_000),
         1.32712440018e20, DegPerDay(14.1844), null, 0, landable: false);
 
     public static readonly CelestialBody Moon = new(BodyId.Moon, "Moon", SkyBody.Moon, Ellipsoid.Moon,
         4.902800066e12, DegPerDay(13.17635815), BodyId.Earth, 384_400_000, landable: true, spaceEnterM: 10_000,
-        spaceExitM: 8_000);
+        spaceExitM: 8_000, craterDensity: 1);
 
     public static readonly CelestialBody Mars = new(BodyId.Mars, "Mars", SkyBody.Mars,
         Ellipsoid.Mars, 4.282837e13, DegPerDay(350.89198226), BodyId.Sun, 1.52371034 * Au,
-        landable: true, spaceEnterM: 40_000, spaceExitM: 30_000);
+        landable: true, spaceEnterM: 40_000, spaceExitM: 30_000, craterDensity: 0.15, air: BodyAir.Mars);
 
     public static readonly CelestialBody Mercury = new(BodyId.Mercury, "Mercury", SkyBody.Mercury,
-        Ellipsoid.FromRadii(2_440_530, 2_438_260), 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
-        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000);
+        Ellipsoid.Mercury, 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
+        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 1);
 
-    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Sphere(6_051_800),
+    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Venus,
         3.24859e14, DegPerDay(-1.4813688), BodyId.Sun, 0.72333566 * Au, landable: true, spaceEnterM: 120_000,
-        spaceExitM: 100_000);
+        spaceExitM: 100_000, air: BodyAir.Venus);
 
     public static readonly CelestialBody Jupiter = new(BodyId.Jupiter, "Jupiter", SkyBody.Jupiter,
         Ellipsoid.FromRadii(71_492_000, 66_854_000), 1.26686534e17, DegPerDay(870.536), BodyId.Sun, 5.20288700 * Au,
@@ -87,7 +87,7 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Callisto = new(BodyId.Callisto, "Callisto", SkyBody.Callisto,
         Ellipsoid.Sphere(2_410_300), 7.179289e12, DegPerDay(360 / 16.6890184), BodyId.Jupiter, 1_882_709_000,
-        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000);
+        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 1);
 
     public static readonly CelestialBody Titan = new(BodyId.Titan, "Titan", SkyBody.Titan, Ellipsoid.Sphere(2_574_730),
         8.978138e12, DegPerDay(360 / 15.945421), BodyId.Saturn, 1_221_870_000, landable: true, spaceEnterM: 200_000,
@@ -129,6 +129,8 @@ public sealed class CelestialBody
         BodyId.Earth => CubeShape.Earth,
         BodyId.Moon => CubeShape.Moon,
         BodyId.Mars => CubeShape.Mars,
+        BodyId.Mercury => CubeShape.Mercury,
+        BodyId.Venus => CubeShape.Venus,
         _ => new CubeShape(Shape),
     };
 
@@ -172,11 +174,21 @@ public sealed class CelestialBody
     /// </summary>
     public double GroundGravity { get; }
 
+    /// <summary>
+    /// How cratered its ground is under its data (#1850, the cratered profile of docs/plans/planets.md section 5): a
+    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.15 on Mars
+    /// (wind and dust have filled most of its small craters), 0 where nothing is generated (the Earth's own fill, the
+    /// icy and volcanic bodies, the giants).
+    /// </summary>
+    public double CraterDensity { get; }
+
     private CelestialBody(BodyId id, string name, SkyBody? sky, Ellipsoid shape, double gm, double spin, BodyId? parent,
         double orbitRadius, bool landable, double spaceEnterM = 0, double spaceExitM = 0, int leafLevel = -1,
-        double groundGravity = -1)
+        double groundGravity = -1, double craterDensity = 0, BodyAir? air = null)
     {
         Id = id;
+        CraterDensity = craterDensity;
+        Air = air;
         Name = name;
         Sky = sky;
         Shape = shape;
@@ -218,8 +230,17 @@ public sealed class CelestialBody
     /// </summary>
     public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
 
-    /// <summary>Whether it has air a craft feels (#1851): the Earth's 1976 standard atmosphere; Mars' and the others' come with them.</summary>
-    public bool HasAir => Id == BodyId.Earth;
+    /// <summary>Its air (#1853): what drags a craft and what its sky scatters; null where there is none (the Moon).</summary>
+    public BodyAir? Air { get; }
+
+    /// <summary>Whether it has air a craft feels (#1851): the Earth's, Mars' (#1853).</summary>
+    public bool HasAir => Air != null;
+
+    /// <summary>
+    /// The air's density at a height over the reference, kg/m³: the Earth's 1976 standard atmosphere
+    /// (<see cref="Atmosphere.Density"/>), another body's exponential (<see cref="BodyAir.Density"/>), 0 without air.
+    /// </summary>
+    public double AirDensity(double altitude) => Id == BodyId.Earth ? Atmosphere.Density(altitude) : Air?.Density(altitude) ?? 0;
 
     /// <summary>Point-mass gravity at a distance from the centre, m/s²: 8.68 at 400 km above the Earth.</summary>
     public double Gravity(double r) => GM / (r * r);

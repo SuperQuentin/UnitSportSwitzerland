@@ -69,8 +69,11 @@ public partial class BodyViews : Node
             AddChild(_earth);
             _globes.Add(_earth);
         }
-        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _moon));
-        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _moon?.Ground));
+        // the spectator's target cue (#1850): any body, with or without its data
+        AddChild(new Player.SpectatorTargets(_origin));
+        if (Player.SpectatorTargetCheck.Requested) AddChild(new Player.SpectatorTargetCheck());
+        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
+        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }
 
     public override void _ExitTree()
@@ -81,6 +84,8 @@ public partial class BodyViews : Node
 
     private void OnBodyChanged(BodyId from, BodyId to)
     {
+        // a body one cannot stand on (the Sun, crossed on the way to Mars) has no ground game: the last one's stays
+        if (!CelestialBody.Of(to).Landable) return;
         BodyGravity.On(to);
         // the space's own gravity (props, wrecks, a ragdoll): the project's on the Earth, untouched there
         if (from == to && to == BodyId.Earth) return;
@@ -102,12 +107,15 @@ public partial class BodyViews : Node
             eye = new DVec3(e.X, e.Y, e.Z);
         }
         var sky = SkyClock.Now;
+        SkyBodies.HiddenByGlobe.Clear();
         foreach (var g in _globes)
         {
             if (g == _earth) { g.Wanted = anchor != BodyId.Earth; continue; }
             bool near = g.Body.Id == anchor
                 || eye is { } p && Frames.Convert(anchor, p, g.Body.Id, sky).Length < NearRadii * g.Body.Shape.A;
             g.Wanted = near;
+            // the sky's disc of a body its globe draws steps aside (the Moon's own disc, a planet's in SkyBodies)
+            if (g.Drawn && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
         }
         MoonDisc.HiddenByGlobe = _moon is { Drawn: true };
     }

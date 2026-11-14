@@ -62,9 +62,112 @@ public partial class Globe
         return _realAncestors.Contains(key);
     }
 
-    /// <summary>Whether <paramref name="key"/> is drawn as a far leaf: a real leaf on this copy's disk (never fetched from the server for the far band), the band on.</summary>
+    /// <summary>
+    /// The far band of a client that streams its leaves (#1657), metres: its real leaves are furnished (trees, the
+    /// buildings within <see cref="FarBuildingsM"/>) this far, each section streamed alone; past it the pyramid's baked
+    /// features draw them (#1898). The local band is <see cref="FarLeafM"/> (15.5 km): streamed that far, a town's leaves
+    /// would cost hundreds of megabytes.
+    /// </summary>
+    public const double StreamedFarLeafM = 4000;
+
+    // every ancestor of a real leaf the server holds and this copy does not (#1657), built again when its index lands
+    private HashSet<CubeKey>? _remoteAncestors;
+
+    private bool HoldsRemoteReal(CubeKey key)
+    {
+        if (_remoteAncestors == null)
+        {
+            _remoteAncestors = new HashSet<CubeKey>();
+            if (RealLeaves is { RemoteCount: > 0 } real)
+                foreach (var leaf in real.Keys)
+                    if (!real.IsLocal(leaf))
+                        for (var k = leaf; k.Level > 0 && _remoteAncestors.Add(k.Parent);) k = k.Parent;
+        }
+        return _remoteAncestors.Contains(key);
+    }
+
+    /// <summary>Whether a streamed far band is on: the earth world, a band at all, and not Low data (its sections cost megabytes).</summary>
+    private bool StreamsFarBand => Earth && FarLeafM > 0 && _farBand.Scale > 0 && !Core.GameSettings.Current.LowDataActive;
+
+    // ---- how far the band reaches (#1657 phase 3) ----------------------------------------------------------
+
+    private readonly FarBandGovernor _farBand = new();
+
+    /// <summary>
+    /// <c>--farband auto|full|off</c>: the frame budget moves the reach (the default), the preset's cap always, none. A test
+    /// run defaults to <c>full</c>: a loaded test PC's frame times would move what its shots and checks see.
+    /// </summary>
+    private static readonly string FarBandMode = Core.CmdArgs.Value("--farband") ?? (Core.GameSettings.TestRun ? "full" : "auto");
+
+    /// <summary>The far leaves' reach now, metres: <see cref="FarLeafM"/> scaled by the preset and the frame budget.</summary>
+    public double FarReachM => FarLeafM * _farBand.Scale;
+
+    /// <summary>The streamed band's reach now (<see cref="StreamedFarLeafM"/>, scaled), metres.</summary>
+    public double StreamedReachM => StreamedFarLeafM * _farBand.Scale;
+
+    /// <summary>
+    /// The far buildings' reach now, metres: <see cref="FarBuildingsM"/> is the preset's already (its building rings), so it
+    /// takes the frame budget's share alone, and none where the preset caps the band to none.
+    /// </summary>
+    public double BuildingsReachM => _farBand.Cap > 0 ? FarBuildingsM * _farBand.Scale / _farBand.Cap : 0;
+
+    /// <summary>The share of the far band the detail preset allows: none on Very low (the baked features alone), half on Low.</summary>
+    public static double FarCap(Core.DetailPreset preset) => preset switch
+    {
+        Core.DetailPreset.VeryLow => 0,
+        Core.DetailPreset.Low => 0.5,
+        _ => 1,
+    };
+
+    /// <summary>
+    /// Each frame in the earth world: the preset's cap, and in <c>auto</c> the frame budget (the engine's frame rate against
+    /// the target: the frame cap, else 60, 72 in a headset); a change re-plans at once and is logged.
+    /// </summary>
+    private void StepFarBand(double delta)
+    {
+        if (FarLeafM <= 0) return;
+        double cap = FarBandMode == "off" ? 0 : FarCap(Core.GameSettings.Current.EffectiveDetail);
+        bool changed = _farBand.SetCap(cap);
+        if (FarBandMode != "auto") _farBand.Pin(cap);
+        else
+        {
+            double fps = Engine.GetFramesPerSecond();
+            double target = Engine.MaxFps > 0 ? Engine.MaxFps : XR.XrSession.Active ? 72 : 60;
+            if (fps > 0) changed |= _farBand.Step(delta, 1000.0 / fps, 1000.0 / target);
+        }
+        if (!changed && _farBandLogged == _farBand.Scale) return;
+        _farBandLogged = _farBand.Scale;
+        _nextPlan = 0;
+        GD.Print($"[globe] far band at {_farBand.Scale:P0} ({FarBandMode}, cap {_farBand.Cap:P0}): leaves to {FarReachM / 1000:F1} km, "
+            + $"streamed to {StreamedReachM / 1000:F1} km, buildings to {BuildingsReachM / 1000:F1} km, the baked features past them");
+    }
+
+    private double _farBandLogged = double.NaN;
+
+    /// <summary>
+    /// Whether the ground under <paramref name="key"/> splits down to its far leaves at <paramref name="distance"/>: a leaf on
+    /// this copy's disk within <see cref="FarLeafM"/>, a streamed one within <see cref="StreamedFarLeafM"/> (#1657).
+    /// </summary>
+    private bool FarSplit(CubeKey key, double distance) =>
+        Earth && FarReachM > 0 && key.Level < LeafFrames.LeafLevel
+        && (distance < FarReachM && HoldsReal(key) || StreamsFarBand && distance < StreamedReachM && HoldsRemoteReal(key));
+
+    /// <summary>
+    /// Whether <paramref name="key"/> is drawn as a far leaf: a real leaf on this copy's disk, or one the server holds within
+    /// <see cref="StreamedFarLeafM"/> of the camera (#1657, its sections streamed), the band on.
+    /// </summary>
     private bool IsFarLeaf(CubeKey key) =>
-        Earth && FarLeafM > 0 && key.Level == LeafFrames.LeafLevel && RealLeaves is { } real && real.IsLocal(key);
+        Earth && FarReachM > 0 && key.Level == LeafFrames.LeafLevel && RealLeaves is { } real
+        && (real.IsLocal(key) || StreamsFarBand && real.IsReal(key) && EyeDistance(key) < StreamedReachM);
+
+    // the camera in Earth axes at the last plan
+    private EcefPos _eye;
+
+    private double EyeDistance(CubeKey key)
+    {
+        var d = _eye - AnchorOf(key).Origin;
+        return Math.Sqrt(Core.FrameAxes.Dot(d, d));
+    }
 
     /// <summary>A far leaf's mesh and trees, on a worker: heights, water, cover and trees read alone.</summary>
     private (Godot.Collections.Array Arrays, ChunkNode.TreeMeshes? Trees, WaterMeshBuilder.MeshData? Water)? BuildFarLeaf(CubeKey key, LeafStore real)
@@ -118,9 +221,10 @@ public partial class Globe
     private void PlanBuildings()
     {
         if (!Earth || FarBuildingsM <= 0 || BuildingMaterial is not { } material || RealLeaves is not { } real) return;
+        double reach = BuildingsReachM;
         List<CubeKey>? drop = null;
         foreach (var (key, node) in _buildings)
-            if (!_want.Contains(key) || _distance.GetValueOrDefault(key, double.MaxValue) > FarBuildingsM + 500)
+            if (!_want.Contains(key) || _distance.GetValueOrDefault(key, double.MaxValue) > reach + 500)
                 (drop ??= new()).Add(key);
         if (drop != null)
             foreach (var key in drop)
@@ -132,7 +236,8 @@ public partial class Globe
         foreach (var key in _want)
         {
             if (key.Level != LeafFrames.LeafLevel || _buildings.ContainsKey(key) || _buildingsLoading.Contains(key)) continue;
-            if (_distance.GetValueOrDefault(key, double.MaxValue) > FarBuildingsM || !real.IsLocal(key)) continue;
+            // a leaf the server holds too (#1657), its buildings streamed as their own section (not under Low data)
+            if (_distance.GetValueOrDefault(key, double.MaxValue) > reach || !real.IsLocal(key) && !(StreamsFarBand && real.IsReal(key))) continue;
             _buildingsLoading.Add(key);
             _ = Spawn(async () =>
             {

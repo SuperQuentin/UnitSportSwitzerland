@@ -48,12 +48,12 @@ public partial class Globe : Node
     /// <summary>How long a split's child takes to grow from its parent's shape into its own (#1656), seconds.</summary>
     public const double GrowS = 0.4;
 
-    // the children growing: when each began, real seconds
+    // the children growing: when each began, real seconds (RealClock: a look on screen, not the game's time)
     private readonly Dictionary<CubeKey, double> _growing = new();
 
     private void Grow(CubeKey key, MeshInstance3D node)
     {
-        _growing[key] = Time.GetTicksMsec() / 1000.0;
+        _growing[key] = Core.RealClock.Now;
         node.SetInstanceShaderParameter(Young, 1f);
     }
 
@@ -61,7 +61,7 @@ public partial class Globe : Node
     private void GrowStep()
     {
         if (_growing.Count == 0) return;
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.RealClock.Now;
         foreach (var (key, began) in _growing)
         {
             float young = (float)Math.Max(0, 1 - (now - began) / GrowS);
@@ -273,6 +273,8 @@ public partial class Globe : Node
     public void RefreshLeaves()
     {
         _leafGeneration++;
+        // the server's real leaves split the ground down to the streamed far band (#1657)
+        _remoteAncestors = null;
         foreach (var key in _patches.Keys)
             if (key.Level == Terrain.Leaves.LeafFrames.LeafLevel) _leafStale.Add(key);
         _nextPlan = 0;
@@ -374,7 +376,8 @@ public partial class Globe : Node
         Levels();
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
-        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}");
+        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}"
+            + (Earth && FarLeafM > 0 ? $"; far leaves to {FarLeafM / 1000:F1} km ({StreamedFarLeafM / 1000:F1} km streamed), their buildings to {FarBuildingsM / 1000:F1} km" : ""));
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         Present = true;
         Current = this;
@@ -510,6 +513,7 @@ public partial class Globe : Node
             CommitBuildings(b.Key, b.Mesh);
 
         GrowStep();
+        if (Earth) StepFarBand(delta);
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
         if (!Earth)
         {
@@ -613,6 +617,7 @@ public partial class Globe : Node
         var axes = Axes ?? Origin!.EcefAxes;
         var c = cam.GlobalPosition;
         var eye = axes.ToEcef(c.X, c.Y, c.Z);
+        _eye = eye;
         double eyeR = Math.Sqrt(FrameAxes.Dot(eye, eye));
         var eyeDir = new EcefPos(eye.X / eyeR, eye.Y / eyeR, eye.Z / eyeR);
         double horizon = GlobeGround.HorizonAngle(eye);
@@ -620,7 +625,7 @@ public partial class Globe : Node
         double focal = viewH / (2 * Math.Tan(Mathf.DegToRad(cam.Fov) / 2)) * Styles.LodScale.Value;
 
         // the geomorph's split rule (#1656): a tile of drawn cell c splits nearer than c * focal / SplitPixels
-        var morph = new Vector2(MorphOff ? 0f : (float)(focal / SplitPixels), Earth ? (float)FarLeafM : 0f);
+        var morph = new Vector2(MorphOff ? 0f : (float)(focal / SplitPixels), Earth ? (float)FarReachM : 0f);
         if (morph != _morph) RenderingServer.GlobalShaderParameterSet(MorphGlobal, _morph = morph);
         _want.Clear();
         _distance.Clear();
@@ -662,7 +667,7 @@ public partial class Globe : Node
         double cell = EarthR * Math.PI / 2 / key.Side / ((1 << CubeKey.LatticeBits(key.Level)) / Stride);
         bool holds = _holdsDrawn.ContainsKey(key);
         // the far leaves' band: down to the real leaves, as the flat world's rings draw its real tiles
-        bool far = Earth && FarLeafM > 0 && distance < FarLeafM && key.Level < Terrain.Leaves.LeafFrames.LeafLevel && HoldsReal(key);
+        bool far = FarSplit(key, distance);
         bool split = key.Level < _maxLevel && (holds || far || cell / distance * focal > SplitPixels);
         if (split)
         {
@@ -745,7 +750,7 @@ public partial class Globe : Node
                         var water = leaves is Terrain.Leaves.EarthLeaves earthLeaves ? earthLeaves.WaterOf(key) ?? CubeWater.Dry(tile.Bits) : null;
                         var lakes = Earth ? new WaterOut() : null;
                         if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves,
-                            lakes: _lakeLevels, parent: ParentOf(key)) is { } arrays)
+                            lakes: _lakeLevels, parent: ParentOf(key), stand: FromParent(key)) is { } arrays)
                             _ready.Enqueue((key, arrays, null, leafMonth, null, lakes?.Mesh));
                         else _leafMissed.Enqueue(key);
                     }
@@ -821,7 +826,9 @@ public partial class Globe : Node
                 // no height at all: the parent's tile stays (the key stays loading, never asked again)
                 var lakes = Earth ? new WaterOut() : null;
                 var parent = ParentOf(key);
-                if (Build(tile, palette, rect, stride: StrideOf(tile.Bits), ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels, parent: parent) is { } arrays)
+                var standing = Pyramid.Features(key);
+                if (Build(tile, palette, rect, stride: StrideOf(tile.Bits), ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels, parent: parent,
+                    stand: standing != null ? (i, j) => standing.At(i, j) : null) is { } arrays)
                     _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
             }
             catch (Exception e)
@@ -902,12 +909,33 @@ public partial class Globe : Node
     private CubeTile? ParentOf(CubeKey key)
     {
         if (key.Level == 0) return null;
-        if (AncestorTile(key.Parent) is { } own) return own;
-        int bits = CubeKey.LatticeBits(key.Level - 1), stride = StrideOf(bits), n = Cells + 1;
+        int n = Cells + 1;
         var hs = new float[n * n];
+        if (AncestorTile(key.Parent) is { } own)
+        {
+            // what stands on the parent raises it as it is drawn (#1657): the morph eases into that
+            if (Pyramid.Features(key.Parent) is not { } f) return own;
+            int ps = StrideOf(own.Bits);
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                    hs[j * n + i] = own.HeightAt(i * ps, j * ps) + f.SkinM(j * n + i);
+            return new CubeTile { Key = key.Parent, Bits = 6, Heights = hs };
+        }
+        int bits = CubeKey.LatticeBits(key.Level - 1), stride = StrideOf(bits);
         Array.Fill(hs, float.NaN);
         GlobeGround.FillFromAncestors(hs, n, key.Parent, bits, stride, AncestorTile);
         return Array.Exists(hs, float.IsNaN) ? null : new CubeTile { Key = key.Parent, Bits = 6, Heights = hs };
+    }
+
+    /// <summary>
+    /// A leaf-level tile's far features (#1657): its parent's, sampled at its vertices (the bake stops at level 13), so the
+    /// skin does not drop where the globe splits down to the leaves. Null where the parent has none.
+    /// </summary>
+    private Func<int, int, (float Forest, float Built, float Paved, float SkinM)>? FromParent(CubeKey key)
+    {
+        if (key.Level == 0 || Pyramid.Features(key.Parent) is not { } f) return null;
+        float ox = (key.X & 1) * Cells / 2f, oy = (key.Y & 1) * Cells / 2f;
+        return (i, j) => f.At(ox + i / 2f, oy + j / 2f);
     }
 
     /// <summary>
@@ -919,7 +947,7 @@ public partial class Globe : Node
     /// </summary>
     public static Godot.Collections.Array? Build(CubeTile tile, byte[]? palette = null, Vector4 rect = default, CubeWater? water = null,
         int stride = Stride, byte[]? cover = null, Func<CubeKey, CubeTile?>? ancestor = null, WaterOut? lakesOut = null, bool beds = true,
-        float[]? lakes = null, CubeTile? parent = null)
+        float[]? lakes = null, CubeTile? parent = null, Func<int, int, (float Forest, float Built, float Paved, float SkinM)>? stand = null)
     {
         var key = tile.Key;
         int bits = tile.Bits, m = (1 << bits) / stride, n = m + 1;
@@ -992,14 +1020,31 @@ public partial class Globe : Node
                 }
         // how much each vertex is the world's own region (GlobeGround.OwnPalette): the palette there, the photo away; and
         // the sea's surface there (EGM2008's geoid: the pyramid's sea stands on it, as the fill's does, #1808)
+        Vector3[]? groundPos = null;
+        // what stands on each drawn vertex (#1657), on the drawn lattice only
+        (float Forest, float Built, float Paved, float SkinM)[]? standAt = null;
+        if (stand != null && m == Cells)
+        {
+            standAt = new (float, float, float, float)[n * n];
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                    standAt[j * n + i] = stand(i, j);
+        }
         var own = palette != null ? new float[n * n] : null;
         var geoid = palette != null && Egm2008.Available ? new float[n * n] : null;
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
-                float h = hs[j * n + i];
+                // what stands there (#1657): the vertex raised by its skin; the water and colour tests keep the ground's height
+                float h = hs[j * n + i] + (standAt != null ? standAt[j * n + i].SkinM : 0);
                 var (x, y, z) = CubeGeometry.Exact(key, bits, i * stride, j * stride, h);
                 pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
+                // the bare ground's point too where something stands (#1657): the normals (and the rock they pick) are its
+                if (standAt != null)
+                {
+                    var (gx, gy, gz) = CubeGeometry.Exact(key, bits, i * stride, j * stride, hs[j * n + i]);
+                    (groundPos ??= new Vector3[n * n])[j * n + i] = new Vector3((float)gx, (float)gy, (float)gz);
+                }
                 var normal = CubeSphere.Normal(key.Face, CubeSphere.Lattice(key.Level + bits, ((long)key.X << bits) + i * stride), CubeSphere.Lattice(key.Level + bits, ((long)key.Y << bits) + j * stride));
                 if (own != null)
                 {
@@ -1028,8 +1073,10 @@ public partial class Globe : Node
             for (int i = 0; i < n; i++)
             {
                 int k = j * n + i;
-                var du = pos[j * n + Math.Min(i + 1, m)] - pos[j * n + Math.Max(i - 1, 0)];
-                var dv = pos[Math.Min(j + 1, m) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
+                // the bare ground's slope: a skin of roofs and canopy is lit by its facets, never painted as a cliff
+                var g = groundPos ?? pos;
+                var du = g[j * n + Math.Min(i + 1, m)] - g[j * n + Math.Max(i - 1, 0)];
+                var dv = g[Math.Min(j + 1, m) * n + i] - g[Math.Max(j - 1, 0) * n + i];
                 var nrm = du.Cross(dv).Normalized();
                 if (nrm.Dot(up[k]) < 0) nrm = -nrm;
                 verts[k] = pos[k];
@@ -1069,6 +1116,8 @@ public partial class Globe : Node
                     // says (Blue Marble's 500 m lake pixels painted a pale band of water 200 m up the Lavaux shore); under
                     // the sea's reach a shore keeps the image's share of water
                     else if (lakes != null && hs[k] > GlobeGround.SeaReachM) weights = GlobeGround.Dry(weights);
+                    // the baked canopy (#1657): forest where the leaves' trees stand, whatever the photo says
+                    if (standAt != null && !isWater) weights.Y = Math.Max(weights.Y, standAt[k].Forest);
                     float hash = Terrain.CoverPalette.Hash(key.X * 64 + i, key.Y * 64 + j);
                     if (cover != null)
                     {
@@ -1082,6 +1131,8 @@ public partial class Globe : Node
                         colours[k] = GlobeGround.Colour(weights, hs[k], hash,
                             GlobeGround.SampleColour(palette!, rect.X + uvs[k].X * rect.Z, rect.Y + uvs[k].Y * rect.W), own[k]);
                     else colours[k] = GlobeGround.Colour(weights, hs[k], hash);
+                    // the baked roofs and paving (#1657): a town reads as one from afar
+                    if (standAt != null && !isWater && cover == null) colours[k] = StandColour(colours[k], standAt[k], hs[k], hash);
                     if (lakeAt != null) lakeAt[k] = isWater;
                 }
             }
@@ -1142,6 +1193,17 @@ public partial class Globe : Node
         if (morph != null) arrays[(int)Mesh.ArrayType.Custom0] = morph;
         arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
         return arrays;
+    }
+
+    // the roofs seen from afar (#1657): the style's terracotta and grey roofs averaged, linear
+    private static readonly Color RoofColour = new Color(0.62f, 0.42f, 0.36f).SrgbToLinear();
+
+    /// <summary>A vertex's colour with the baked roofs and paving over it (#1657), its alpha (the surface pattern) kept.</summary>
+    private static Color StandColour(Color c, (float Forest, float Built, float Paved, float SkinM) s, float h, float hash)
+    {
+        var paved = Terrain.CoverPalette.ColorFor(CoverClass.PavedArea, h, hash).SrgbToLinear();
+        var rgb = new Color(c.R, c.G, c.B).Lerp(paved, Math.Clamp(s.Paved * 0.8f, 0, 1)).Lerp(RoofColour, Math.Clamp(s.Built * 0.9f, 0, 1));
+        return new Color(rgb.R, rgb.G, rgb.B, c.A);
     }
 
     /// <summary>A skirt hangs a drawn cell over this (#1656: a third before the geomorph; now only a crack guard).</summary>

@@ -21,16 +21,26 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   - this branch: the Moon's ground under your feet (`BodyHeights`, `BodyGround`, `IBodyGround`, `BodyGravity`): a
     512 m square from LOLA and the craters round the camera, solid, eased into the globe at its edge; T steps in, the
     walker sprints and jumps 5.4 m at 1.63 m/s².
+- **H7e** (#1853), this branch: Mars' pyramid (MOLA 463 m over the IAU ellipsoid through the areoid, levels 0-4, 320 MB on
+  E:; Viking's 925 m colour), exposure by the photo's mean, the sky's disc hidden under a globe, craters by body.
+- **H7d/H7e**, this branch: `--mooncheck mars`, the spectator from the Earth to Mars through the Sun's sphere (two
+  crossings, 249 million km at light speed in 860 s, no shift on either), landing and walking on Mars at 3.72 m/s².
+- **H7e**, this branch: every body's air as data (`BodyAir`): Mars' butterscotch sky, its blue sunset, its haze from orbit,
+  its drag; the shell's sun from the anchor body's own offset.
+- **H7d**, this branch: a medium ground square (4 km of 16 m cells, the craters from 40 m) to the walker's horizon.
+- **H7d**, this branch: the spectator's target cue (] / D-pad → / VR right stick down: tap the next body, hold to turn to
+  it; a ring or edge arrow, the distance, the trip at full speed).
+- **H7f** (#1854), this branch: Mercury (MESSENGER 665 m, levels 0-4, the grey 250 m mosaic) and Venus (Magellan
+  4.6 km, levels 0-2, the radar colour, a thick amber haze), each on its data's own reference sphere; landing, walking
+  and jumping on both (`--mooncheck mercury|venus --fromorbit`).
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
 
 **Still to come**:
-- a medium ring round the near square (the pyramid's full 167 m lattice out to a few km), so the horizon has its craters;
-- the target cue and the align hold;
 - belly jets;
 - C3b online (after D2, #1727);
-- Mars (H7e), the rest (H7f);
+- Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);
 - the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the

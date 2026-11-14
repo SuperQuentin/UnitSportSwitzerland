@@ -14,6 +14,7 @@ namespace UnitSport.Tools.Preprocessor;
 ///
 /// <code>
 /// --cube-body moon --dem FILE --cube-out DIR [--cube-levels 0-5] [--jobs N] [--cube-check]
+/// --cube-body mars --dem MOLA.tif --areoid mega90n000eb.img --cube-out DIR --cube-levels 0-4
 /// </code>
 ///
 /// <para>
@@ -32,12 +33,14 @@ public static class CubeBody
     {
         "moon" => CubeShape.Moon,
         "mars" => CubeShape.Mars,
+        "mercury" => CubeShape.Mercury,
+        "venus" => CubeShape.Venus,
         _ => null,
     };
 
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
-        string? body = null, dem = null, outDir = null;
+        string? body = null, dem = null, outDir = null, areoid = null;
         int minLevel = 0, maxLevel = 5, jobs = Math.Max(1, Environment.ProcessorCount / 2);
         bool check = false;
         for (int i = 0; i < args.Count; i++)
@@ -46,6 +49,7 @@ public static class CubeBody
             {
                 case "--cube-body": body = args[++i]; break;
                 case "--dem": dem = args[++i]; break;
+                case "--areoid": areoid = args[++i]; break;
                 case "--cube-out": outDir = args[++i]; break;
                 case "--cube-levels":
                     var r = args[++i].Split('-');
@@ -64,6 +68,8 @@ public static class CubeBody
 
         var sw = Stopwatch.StartNew();
         using var raster = CylRaster.Open(dem);
+        // MOLA's heights are over its areoid (#1853): turned into heights over the IAU ellipsoid
+        var datum = areoid != null ? Areoid.Load(areoid) : null;
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"cube-body {body}: {Path.GetFileName(dem)} {raster.Width} x {raster.Height} ({raster.Step * 3600:F1}″, {raster.Step * Math.PI / 180 * cube.Shape.A:F0} m a pixel), scale {raster.Scale}, offset {raster.Offset}"));
 
@@ -74,6 +80,7 @@ public static class CubeBody
             Orientation = "face 0 at 0N 0E, twist 0",
         };
         manifest.Sources.Add($"{Path.GetFileName(dem)}: heights above the body's reference {(cube.Shape.F == 0 ? "sphere" : "ellipsoid")} (NASA/USGS, public domain)");
+        if (areoid != null) manifest.Sources.Add($"{Path.GetFileName(areoid)}: the areoid the DEM is measured from, turned to the ellipsoid (MGS MOLA MEGDR, NASA, public domain)");
         for (int level = minLevel; level <= maxLevel; level++)
             manifest.Levels.Add(new CubeManifestLevel { Level = level, Bits = CubeKey.LatticeBits(level), BundleLevel = CubeKey.PyramidBundleLevel(level) });
 
@@ -99,7 +106,7 @@ public static class CubeBody
                 Parallel.ForEach(bundle, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, key =>
                 {
                     int bits = CubeKey.LatticeBits(key.Level);
-                    var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(key.Level), Heights = CubeBodyHeights.Heights(cube, window, key, bits) };
+                    var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(key.Level), Heights = CubeBodyHeights.Heights(cube, window, key, bits, datum) };
                     var b = CubeTileCodec.Encode(tile);
                     encoded.Add((key, b));
                     if (check) built[key] = CubeTileCodec.Decode(b);

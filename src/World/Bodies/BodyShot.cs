@@ -6,12 +6,13 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.World.Bodies;
 
 /// <summary>
-/// A picture from another body (#1848): <c>--bodyshot moon,LAT,LON,HEIGHT_KM[,PITCH_DEG[,YAW_DEG]][,earth]</c> puts the
-/// anchor on the Moon (the crossing's relabelling, <see cref="WorldOrigin.Rebase"/>, then a shift to the tangent frame
+/// A picture from another body (#1848): <c>--bodyshot BODY,LAT,LON,HEIGHT_KM[,PITCH_DEG[,YAW_DEG]][,earth]</c> puts the
+/// anchor on that body (moon, mars: any whose pyramid is under <c>--bodies</c>; the crossing's relabelling, <see cref="WorldOrigin.Rebase"/>, then a shift to the tangent frame
 /// there), the spectator camera HEIGHT_KM over that place looking PITCH_DEG down toward YAW_DEG (from north), or straight
 /// at the Earth with <c>earth</c>; waits for the globe's tiles to settle and saves
-/// <c>test_output/bodies/moon_LAT_LON_HEIGHTkm[_earth].png</c>, then quits (it waits 8 s for the world first). Windowed (a headless run draws nothing). Pass
-/// <c>--frame earth --bodies DIR --sun real --date ...</c>; the RESULT line says what it drew.
+/// <c>test_output/bodies/BODY_LAT_LON_HEIGHTkm[_earth].png</c>, then quits (it waits 8 s for the world first). Windowed (a headless run draws nothing). Pass
+/// <c>--frame earth --bodies DIR --sun real --date ...</c>; the RESULT line says what it drew. <c>sun,DLON</c> in place of
+/// LAT,LON is the point under the sun then, DLON degrees east of it (the log names that point either way).
 /// </summary>
 public partial class BodyShot : Node
 {
@@ -56,13 +57,21 @@ public partial class BodyShot : Node
     {
         var parts = CmdArgs.Value("--bodyshot")!.Split(',');
         string name = parts[0].Trim().ToLowerInvariant();
-        double lat = double.Parse(parts[1], CultureInfo.InvariantCulture), lon = double.Parse(parts[2], CultureInfo.InvariantCulture);
+        var body = CelestialBody.All.ToArray().First(b => b.Name.ToLowerInvariant() == name);
+        var sky = SkyClock.Now;
+        // where the sun stands overhead now (planetocentric): "sun,DLON" in place of LAT,LON is that point's latitude,
+        // DLON degrees east of it (negative: the morning side, toward the terminator)
+        var toSun = Frames.Convert(BodyId.Sun, DVec3.Zero, body.Id, sky);
+        double sunLat = Math.Atan2(toSun.Z, Math.Sqrt(toSun.X * toSun.X + toSun.Y * toSun.Y)) * 180 / Math.PI;
+        double sunLon = Math.Atan2(toSun.Y, toSun.X) * 180 / Math.PI;
+        GD.Print(string.Create(CultureInfo.InvariantCulture, $"[bodyshot] the sun is overhead {body.Name}'s {sunLat:F1}, {sunLon:F1}"));
+        bool bySun = parts[1].Trim() == "sun";
+        double lat = bySun ? sunLat : double.Parse(parts[1], CultureInfo.InvariantCulture);
+        double lon = bySun ? Math.IEEERemainder(sunLon + double.Parse(parts[2], CultureInfo.InvariantCulture), 360) : double.Parse(parts[2], CultureInfo.InvariantCulture);
         double km = double.Parse(parts[3], CultureInfo.InvariantCulture);
         bool earth = parts.Contains("earth");
         var numbers = parts.Skip(4).Where(p => p != "earth").Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
         double pitch = numbers.Length > 0 ? numbers[0] : 20, yaw = numbers.Length > 1 ? numbers[1] : 0;
-        var body = CelestialBody.All.ToArray().First(b => b.Name.ToLowerInvariant() == name);
-        var sky = SkyClock.Now;
         _origin.Rebase(body.Id, sky);
         var at = body.Shape.ToEcef(new Geodetic(lat, lon, km * 1000));
         OriginShifter.Instance?.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(at, body.Id));

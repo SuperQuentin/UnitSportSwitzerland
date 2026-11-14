@@ -25,6 +25,10 @@ dotnet <tp>/TerrainPreprocessor.dll --cube-body moon --dem <whole-body DEM .tif>
 - **One face at a time**: the DEM is read as a window of rows and longitudes round the face (`CubeBodyHeights.WindowOf`,
   margins for the widest footprint), each row once and in file order, kept as the file's 16-bit samples. LOLA's
   windows: ~1 GB for an equatorial face, ~2.6 GB for a polar one (every longitude).
+- **Mars' heights over its ellipsoid** (#1853): MOLA's topography is measured from its areoid, which stands kilometres
+  off the IAU ellipsoid the cube is on. `--areoid mega90n000eb.img` (MOLA MEGDR, 16 px/°, big-endian int16 over
+  3,396,000 m, east longitudes 0-360; `Areoid`, `AreoidTests`) adds the areoid's radius less the ellipsoid's along the
+  same ray: `--cube-body mars --dem Mars_MGS_MOLA_DEM_mosaic_global_463m.tif --areoid mega90n000eb.img --cube-levels 0-4`.
 - The manifest names the body (`"body": "Moon"`) and its orientation; the Earth's manifests carry no body.
 - Build it out of the worktree (`no-builds-inside-the-project`): `dotnet build tools/TerrainPreprocessor -c Release -o <scratch>`.
 
@@ -39,6 +43,10 @@ python tools/body_colour.py <colour .tif> <colour.jpg>          # Godot's Image 
   LROC WAC's colour, Hapke-normalised, so it carries no shadows of its own (the LROC WAC *morphology* mosaic does: its
   low sun's shadows would be drawn twice under the game's own light). One image a tile (`CubeAlbedo` with one "month"),
   WebP, the Earth's sizes (`GlobeAlbedoBake.SizeFor`).
+- Mars' colour is USGS's `Mars_Viking_ClrMosaic_global_925m.tif` (23,059 × 11,530 RGB, 0.8 GB): the 232 m one (12.7 GB)
+  is cut to 21,600 across anyway. `body_colour.py` takes a mosaic a pixel or two off 2:1.
+- The globe's brightness (`BodyGlobe.Exposure`) comes from the level-0 colour's mean: Moon 0.458 → 1.05, Mars
+  0.316 → 1.52, the Earth's Blue Marble 0.169 → 2.2.
 - The bake refuses a pyramid of another body (the manifest's `body`).
 
 ## Where the data is
@@ -46,6 +54,22 @@ python tools/body_colour.py <colour .tif> <colour.jpg>          # Godot's Image 
 `E:/UnitSportSwitzerland/planets/moon/` (never in git): `source/` (the LOLA DEM), `source-svs/` (the colour TIFF),
 `work/` (the JPEG, pyramids). Licences: LRO LOLA and the CGI Moon Kit are NASA's, public domain; credit "NASA/GSFC/MIT
 LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
+
+`E:/UnitSportSwitzerland/planets/mars/`: `source/` (MOLA 463 m 2.1 GB, Viking colour 925 m 0.8 GB, the areoid 33 MB,
+MD5s checked; from `asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/` and PDS Geosciences' MEGDR), `work/` (the
+JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and "NASA Viking, USGS Astrogeology".
+
+## Mercury and Venus (#1854)
+
+- **Mercury**: USGS's `Mercury_Messenger_USGS_DEM_Global_665m_v2_32bit_clon0.tif`. Despite the name it is int16 in
+  metres, LZW in 256 px tiles; `CylRaster` reads strips only, so GDAL makes an uncompressed strip copy first
+  (`gdal.Translate(..., creationOptions=['TILED=NO','COMPRESS=NONE','BLOCKYSIZE=16'])`). The heights are over a
+  2,439.4 km sphere, which becomes Mercury's reference (`Ellipsoid.Mercury`, `CubeShape.Mercury`). Colour: the greyscale
+  250 m mosaic of 2013 (61,324 px across), averaged to 21,600 by GDAL first. The "EnhancedColor" mosaics are false
+  colour (blue and orange): not used.
+- **Venus**: Magellan's `Venus_Magellan_Topography_Global_4641m_v02.tif` (8,192 × 4,096, int16 metres over 6,051.0 km,
+  `Ellipsoid.Venus`), levels 0-2; colour: the colourised radar mosaic `Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif`.
+- `--globealbedo --body NAME` takes any body of the registry but the Earth.
 
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
@@ -55,7 +79,14 @@ LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
 | levels 0-5 | 8,190 | 1,231 MB (L5: 858 MB, 140 KB a tile) | −9,127 to +10,780 m (LOLA's own) | 21 min | 7.8 GB (a polar face's 2.6 GB window plus the tiles in flight) |
 | colour, levels 0-5 | 8,190 | 49.7 MB WebP | | 62 s | |
 
-`--cube-check` on levels 0-2: 128,904 shared edge points, 0 differ. Shipping levels 0-1 would be ~10 MB of heights, 0-2
+| Mars, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 319.5 MB (L4: 219 MB) | −7,643 to +22,923 m over the ellipsoid (Hellas, Olympus Mons) | 164 s | 5.3 GB |
+| Mars colour, levels 0-4 | 2,046 | 6.4 MB WebP | | 32 s | |
+
+| Mercury, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 222 MB | −5,382 to +4,490 m | 55 s | 4.2 GB |
+| Venus, levels 0-2 `--cube-check` | 126 | 28 MB | −2,886 to +11,589 m (Maxwell Montes) | 4 s | 0.4 GB |
+| Mercury colour / Venus colour | 2,046 / 126 | 46.5 / 2.9 MB WebP | | 45 / 2 s | |
+
+Mars' `--cube-check`: 4,198,392 edge vertices, 0 differ. `--cube-check` on levels 0-2: 128,904 shared edge points, 0 differ. Shipping levels 0-1 would be ~10 MB of heights, 0-2
 ~36 MB (with ~1.3 MB of colour): what ships is #1656's call.
 
 ## The craters below the data
@@ -63,4 +94,5 @@ LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
 `Terrain/Bodies/CraterField` (#1849, the cratered profile): every bowl from 2.5 m to 320 m the 118 m DEM cannot hold,
 seeded in a 3D grid round the sphere (no face seams), counted by the maria's equilibrium N(>D) = 0.154·D⁻² a km² (D in
 km), fresh and worn ones by a seeded age, a parabolic bowl, a rim and ejecta to two radii. A function of (seed, point):
-every peer makes the same ground. `CraterFieldTests`. It is added to a leaf's heights by the Moon's fill (#1848's game side).
+every peer makes the same ground. `CraterFieldTests`. The near ground adds it (`world/body-ground`), at the body's
+`CelestialBody.CraterDensity` (Moon, Mercury, Callisto 1; Mars 0.15; 0 elsewhere).

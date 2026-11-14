@@ -1096,7 +1096,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 var c = World.GlobeClimb.ParseArgs()!;
                 FreeSpectator();
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
-                return new World.GlobeClimb(_spectator!, origin, double.Parse(c[0], inv), double.Parse(c[1], inv), double.Parse(c[2], inv));
+                return new World.GlobeClimb(_spectator!, origin, double.Parse(c[0], inv), double.Parse(c[1], inv), double.Parse(c[2], inv))
+                {
+                    HoldS = c.Length > 3 ? double.Parse(c[3], inv) : World.GlobeClimb.DefaultHoldS,
+                };
             }),
             new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -2788,6 +2791,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the speed (#1796): the readout under these rows says what it is (#1798)
             yield return (PlayerInput.SpectatorFaster, "Faster");
             yield return (PlayerInput.SpectatorSlower, "Slower");
+            // the target cue in the earth world (#1850): a tap the next body, a hold turns to it
+            if (Player.SpectatorTargets.Instance is { } targets) yield return (PlayerInput.SpectatorTarget, targets.Target == null ? "Target" : "Next target");
             yield return (PlayerInput.Teleport, "Map");
         }
         else if (viewer is { } p && IsInstanceValid(p))

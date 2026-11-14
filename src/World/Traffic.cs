@@ -296,6 +296,9 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     private void RebuildIfMoved(Vector3 focus)
     {
         if (_building) return;
+        // in orbit (the Space regime, above 50-60 km) no car is seen: the view crosses a 1 km tile every 0.13 s, and building
+        // the graphs under it, several a second, was work nobody sees (#1869); the old graphs stay, their cars culled by range
+        if (Core.OriginShifter.Instance?.InSpace == true) return;
         // the roads are the Earth's: with the anchor on another body (#1848) there are none round the view
         if (_origin.Body != Core.BodyId.Earth) return;
         // the earth world (#1636): the graphs from the leaves round the view, not LV95 tiles
