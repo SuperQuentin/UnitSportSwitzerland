@@ -1050,6 +1050,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 return new World.SkyShot(_spectator!, origin, s[0],
                     float.Parse(s[1], System.Globalization.CultureInfo.InvariantCulture), s[2]);
             }),
+            new(() => World.TerminatorCheck.Requested, ToolAnchor.Own, _ =>
+            {
+                // the terminator, the sky and north from 400 and 20,000 km against NOAA (#1845)
+                FreeSpectator();
+                return new World.TerminatorCheck(_spectator!, origin, () => _earth == null || EarthIdle);
+            }),
             new(() => FlightProbe.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var fly = FlightProbe.ParseArgs()!;

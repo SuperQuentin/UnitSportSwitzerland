@@ -32,10 +32,11 @@ public partial class DayNight : Node
     /// The real sky in world axes: unit directions to the sun and the moon from the camera's place,
     /// the moon's distance (metres) and its own axes (<see cref="SunPath.MoonFace"/>), the celestial
     /// sphere's axes for the stars (<see cref="SunPath.SkyFrame"/>), and the date, hour and place
-    /// it was read at, for anything else in the sky (#1444).
+    /// it was read at, for anything else in the sky (#1444). <c>At</c> is the camera itself in an anchor frame (its
+    /// height too: the moon's parallax and satellites from orbit, #1845), its LV95 kilometre on the flat ground.
     /// </summary>
     public readonly record struct RealSky(Vector3 Sun, Vector3 Moon, double MoonDistance, Basis MoonFace, Basis Stars,
-        DateOnly Date, double Hour, double E, double N);
+        DateOnly Date, double Hour, GlobalPos At);
 
     public static DayNight? Instance { get; private set; }
 
@@ -58,8 +59,6 @@ public partial class DayNight : Node
     /// until a camera is out in the world; a camera in the interiors' space keeps the last place.
     /// </summary>
     public WorldOrigin? Origin { get; set; }
-
-    private double _placeE = SunPath.BernE, _placeN = SunPath.BernN;
 
     /// <summary>The place the sky is read at: where <c>/time</c>'s named hours and zone are read offline (#1801).</summary>
     public GlobalPos Place { get; private set; } = LocalHours.Bern;
@@ -268,11 +267,12 @@ public partial class DayNight : Node
             TrackPlace();
             SunPath.Frame = Origin?.Frame;
             var date = SunPath.Today();
-            sun = SunPath.Toward(SkyBody.Sun, date, Hour, _placeE, _placeN, out float elevationDeg);
+            var at = Place;
+            sun = SunPath.Toward(SkyBody.Sun, date, Hour, at, out float elevationDeg, out _);
             SunElevationDeg = elevationDeg;
-            var moon = SunPath.Toward(SkyBody.Moon, date, Hour, _placeE, _placeN, out _, out double moonDistance);
-            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, _placeE, _placeN),
-                SunPath.SkyFrame(date, Hour, _placeE, _placeN), date, Hour, _placeE, _placeN);
+            var moon = SunPath.Toward(SkyBody.Moon, date, Hour, at, out _, out double moonDistance);
+            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, at),
+                SunPath.SkyFrame(date, Hour, at), date, Hour, at);
             shade = SunElevationDeg > 3f ? sun : MoonShade(moon);
         }
         else
@@ -337,7 +337,6 @@ public partial class DayNight : Node
         if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
         var place = Origin.ToGlobal(at);
         Place = place;
-        (_placeE, _placeN) = (place.Lv95.E, place.Lv95.N);
     }
 
     /// <summary>The night's shading from the real moon: its bearing, at least ~25° up (sin 25° = 0.42).</summary>
