@@ -7,6 +7,11 @@ Status: **decided by the user** (2026-11-14, in conversation with the coordinato
 decisions into phases. Tracking issue and one issue per phase: section 12. Parent: `docs/plans/planets.md` (H7c, the
 Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
 
+**Built so far**:
+- Phase 1 (#1939, PR #1953): the site table, ground stamps, `MoonSurface`, the models, footpaths and tracks, `--moonsites`.
+- Phase 2 (#1940): the colony kit (`ColonyKit`), `ColonyPlan`, Artemis Base at 89.384° S, 150.055° W on a level
+  plateau (`--moonsurvey` picked it), its hub, cans, moondust domes, hangar, road and three pads.
+
 ## The user's decisions (fixed)
 
 1. **Surface sites, very sparse**, real history at its true selenographic coordinates plus a few invented ones: the

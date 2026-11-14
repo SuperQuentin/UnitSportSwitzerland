@@ -205,6 +205,10 @@
     <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\RingField.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\BodyHeights.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\SurfaceStamps.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\MoonSites.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\MoonColonies.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\ColonyPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Atmosphere.cs" Link="Game\%(Filename)%(Extension)" />

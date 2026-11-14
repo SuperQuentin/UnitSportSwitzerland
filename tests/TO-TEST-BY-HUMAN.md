@@ -38,6 +38,19 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Artemis Base ([#1940](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1940))
+
+- [ ] Go to Artemis Base (89.384° S, 150.055° W; `--moonsites artemis:close` drops the camera among its modules), step in and walk round the hub and along a spine → you bump into the cans, tubes and domes (they are solid, not yet walk-in: that is phase 3); the plateau is flat underfoot and eases into the natural ground past the pads with no step.
+- [ ] Walk the road out of the hangar to the pads → three numbered pads with red edge lights, the road's dashes along its middle.
+- [ ] In VR, stand under a can → its height (4.6 m across on its legs) and the tubes (2.4 m across, their axis 2.6 m up) feel right.
+
+## The Moon's historic sites ([#1939](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1939))
+
+- [ ] `--bodyshot`-style trip to Apollo 11 (0.674° N, 23.473° E; `--moonsites apollo11` puts you there), step in (T) and walk to the descent stage → you bump into its body and footpads, not through them; the knocked-over flag lies a few metres off; the footpaths look like faint trodden bands, not painted lines, and never flicker into the ground as you walk over them.
+- [ ] At Apollo 15, 16 or 17, find the rover parked ~90-150 m east of the lander and follow its tracks out → two thin parallel bands that keep to the ground over crater rims.
+- [ ] Walk up to an S-IVB crater (e.g. `--moonsites sivb14`) → a fresh bowl ~35 m across with a raised rim, bright rays fading out across the ground, twisted pieces on the rim.
+- [ ] In VR, stand next to the Apollo 17 descent stage → the scale feels right (body ~3 m up, footpads ~9 m apart diagonally), nothing floats.
+
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --date 2027-07-15`, Cartoon.
@@ -1088,13 +1101,31 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
 
+## Group rides on the home trainer, and the trainer itself ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+Two PCs (or two windows) on one server, Cartoon, `--date 2027-07-15 --time 12`; the owner's smart trainer on one of them.
+
+- [ ] Pair the real trainer (Training app → Search, then the trainer), load a GPX, ride 2 km → watts and cadence in the HUD, the resistance felt changing on a climb (SIM), ERG holding its target: the first run of RideLink's WinRT path on real FTMS hardware.
+- [ ] On the trainer's PC: Training app → Host a group ride; on the other: Training app → Join → both on the same course, each sees the other's bike on the road and "Group:" in the HUD with both names and the gap in metres.
+- [ ] Ride close behind the other rider on a flat → the speed rises a little at the same watts (the draft).
+- [ ] Join from a pad and in VR (the app's buttons by stick and by poke) → the same as with the mouse.
+- [ ] One rider stops the training → it leaves the group; the other's HUD shows only itself; when it stops too, the group is gone from the list.
+
+ ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+In a window, Cartoon, `--date 2027-07-15 --time 12`, the phone's Training app, a GPX through a town (or `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60` windowed).
+
+- [ ] Ride into a queue at a junction or a red light → the bike rides on through the queued cars at its own speed, no jolt, no stop; judge whether passing through a car looks acceptable from the chase camera and in first person.
+- [ ] A car stopped at the road's edge on a wide road → the bike steps round it rather than through it.
+- [ ] After the finish, ride the bike yourself into a parked traffic car → it is solid again.
+
 ## Farm fields, Christmas gifts and the trainer under `--frame earth` (PR [#1730](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1730), [#1729](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1729))
 
 Offline, in a window, each against the same without `--frame earth`.
 
 - [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
 - [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
-- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.
+- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider rides round a car stopped at the edge where the road has room, and through the traffic otherwise (#1467): it never queues behind a car.
 
 ## No camera jump at the earth re-anchor (PR [#1780](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1780), [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763))
 

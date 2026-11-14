@@ -749,7 +749,14 @@ var endDir = Flat(cur.F ? endT : -endT);
     // metres right of the centreline the drive keeps to: the rightmost lane, as traffic does; a junction path is its own line;
     // a one-way street driven the wrong way, its middle
     private static float LaneRight(LaneEdge e, bool forward) =>
-        !OnLane || e.Path != null || e.Connector || Against(e, forward) ? 0f : Traffic.KeepRight(e, forward, 0);
+        !OnLane || e.Path != null || e.Connector || Against(e, forward) ? 0f : Traffic.KeepRight(e, forward, RightmostHabit);
+
+    /// <summary>
+    /// A traffic habit that keeps the rightmost lane (<see cref="Traffic.KeepRight"/>: a habit of 0 mod 3 takes the next lane in).
+    /// A drive keeps right, as <c>LaneQuery</c> reads it (#1937: habit 0 put the long drive on the inner lane, on Bellevue's divided
+    /// Road the twin carriageway).
+    /// </summary>
+    private const uint RightmostHabit = 1;
 
     /// <summary>A drive keeps to its lane (true) or has the whole street (false, as a race).</summary>
     public static bool OnLane = CmdArgs.Value("--driveline") != "road";
