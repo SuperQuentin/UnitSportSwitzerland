@@ -755,8 +755,6 @@ public partial class RideUi : CanvasLayer
         // The refusal is the interesting case, so name the actual reason rather than "no".
         _status.Text = player.IsSliding
             ? "Not mid-slide."
-            : player.IsSwimming
-                ? "In the water, only a boat."
             : player.IsOnFloor()
                 ? "Too fast — slow down first."
                 : "Not in the air.";

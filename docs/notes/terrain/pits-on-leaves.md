@@ -29,9 +29,14 @@ cuts its own sites' pits, in its drawn mesh and in its collision patches alike.
   not the LV95 tiles' sites. On the `site` course they differ: the block's ramp comes up at the other end of its lane,
   and the shell's box is turned a quarter, a tie in the plan broken by 10⁻⁵ of a turn. Heights go through the site's frame
   (`Dug.Y`), because the world's Y is not the leaf's.
-- **Open** (#1685): a pit that reaches past its leaf's edge is cut on its own leaf only. The neighbour leaf's ground
-  covers that part of the pit. The flat world's `PitSeam` keeps pits off a tile's edge, but a stand-in tile's edge is
-  ~200 m past its leaf's, so that rule never fires at a leaf edge.
-- **Checks**: `PitTests` (a sheared lattice cut exactly round the pit, the walls' tops on the ground, nothing kept far
+- **A pit keeps inside its own leaf** (#1685): each leaf plans and cuts only its own sites, so a pit reaching into the
+  neighbour was covered there by its uncut ground. `SitePlans.Of` gives the planner `ConstructionSites.LeafPitInside` on a
+  stand-in tile: a pit's corners stay `PitSeam` (3 m) inside the leaf's lattice (its corners in the tile's plan, at the
+  ellipsoid), not inside the stand-in tile, whose edge is ~200 m past the leaf's. Every way a site is planned goes through
+  `SitePlans.Of` (the leaf's stand, pallets, offices, sounds, the server's answers), so every peer drops the same pits. A
+  site near a leaf edge stays a site, without a pit, as one near an LV95 tile's edge does: ~15 % of the pits of a 610 m
+  leaf against ~9 % of a 1 km tile's (a 40 m pit). Cutting the neighbours' pits too was not taken: it needs their stands
+  (their heights and their neighbours' roads), so a leaf's ground would depend on which neighbours a peer has loaded.
+- **Checks**: `PitTests` (a pit on a leaf inside its lattice, #1685; a sheared lattice cut exactly round the pit, the walls' tops on the ground, nothing kept far
   from it); `--frame earth --pitcheck --chunks fixture:site --traffic 0` (the check-map row). Shots: `--pitcheck shots`,
   windowed, `test_output/pit/`.

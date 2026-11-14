@@ -19,8 +19,6 @@ namespace UnitSport.Player;
 /// as A says its own are.</item>
 /// <item>A is thrown limp into the lake as from a crash (#380): B sees A's copy go limp, its own
 /// copy of the ragdoll float with its hips as deep as A's, and then A swimming.</item>
-/// <item>A, swimming, is refused a car and takes a jetski from the ride menu's path (#1777): B sees A's copy on the
-/// jetski, afloat as high as A's own.</item>
 /// </list>
 /// Windowed (<c>SHOTS=1</c>), B saves its view of A to <c>test_output/swimnet_B_*.png</c>. Scratch inventory.
 /// </summary>
@@ -115,22 +113,6 @@ public partial class SwimNetProbe : ChatProbe
         await Heard("B", "seen surfaced", 8);
         me.WalkControls = null;
         await Ragdoll(me);
-        await TakeBoat(me);
-    }
-
-    /// <summary>A, swimming: no car, but a jetski, afloat where A was (#1777).</summary>
-    private async Task TakeBoat(FootPlayer me)
-    {
-        Expect(me.IsSwimming, "A swims before asking for a ride");
-        Expect(!me.SetRide((RideKind)CarCatalog.First) && me.Ride == RideKind.OnFoot, "a swimmer gets no car");
-        Expect(me.SetRide((RideKind)BoatCatalog.First), "a swimmer takes a jetski");
-        await Seconds(2.0);
-        WaterField.TryLevelAt(me.GlobalPosition, out float level);
-        float sub = level - me.GlobalPosition.Y;
-        Expect(me.Ride == (RideKind)BoatCatalog.First && !me.IsSwimming && sub < 0.6f && sub > -0.6f,
-            $"A is on the jetski at the surface ({F(sub)} m under it)");
-        Say($"jetski {F(sub)}");
-        await Heard("B", "seen jetski", 8);
     }
 
     /// <summary>A: thrown from 4 m up into B's view, limp; it says how deep its hips float once back up from the plunge.</summary>
@@ -180,32 +162,6 @@ public partial class SwimNetProbe : ChatProbe
         await Watch("surfaced", null, under: false, "surfaced");
         await WatchRagdoll();
         await Watch("rescued", null, under: false, "rescued");
-        await WatchBoat();
-    }
-
-    /// <summary>B: A's copy rides the jetski it took swimming, as high on the water as A's own (#1777).</summary>
-    private async Task WatchBoat()
-    {
-        if (!await Until(() => _heard.Any(l => l.Contains("SW A jetski ")), 40)) { Fail("A never said 'jetski'"); return; }
-        string line = _heard.Last(l => l.Contains("SW A jetski "));
-        float said = Float(line[(line.LastIndexOf(' ') + 1)..]);
-        float depth = float.NaN;
-        bool ok = await Until(() =>
-        {
-            FootPlayer? a = null;
-            foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
-                if (node is FootPlayer p && p != Me && !p.IsMultiplayerAuthority()) a = p;
-            if (a == null || a.Ride != (RideKind)BoatCatalog.First || !WaterField.TryLevelAt(a.GlobalPosition, out float level)) return false;
-            depth = level - a.GlobalPosition.Y;
-            return !a.IsSwimming && Mathf.Abs(depth - said) < 0.35f;
-        }, 6);
-        Expect(ok, $"A's copy is on the jetski, {F(depth)} m under this peer's surface (A says {F(said)})");
-        if (DisplayServer.GetName() != "headless")
-        {
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            GD.Print($"{Log} shot {Shot("B_jetski")}");
-        }
-        Say("seen jetski");
     }
 
     /// <summary>B: A's copy limp, its ragdoll floating as deep as A's own, then (the next Watch) swimming.</summary>

@@ -134,7 +134,7 @@ public partial class ShuttleCheck : Node
         var pilot = _pilot!;
         if (to == ShuttlePilot.Stage.Retro && pilot.OrbitApsides is { } a && a.Apo - a.Peri > 1_000)
         {
-            double r0 = CelestialBody.Earth.Shape.A;
+            double r0 = Planet.Earth.Shape.A;
             Fail(FormattableString.Invariant($"not circular: {(a.Peri - r0) / 1000:F1} x {(a.Apo - r0) / 1000:F1} km"));
         }
         if (from == ShuttlePilot.Stage.Entry && _shuttle!.HeatPeak < 0.5f)

@@ -65,24 +65,6 @@ public readonly record struct CubeKey(int Face, int Level, int X, int Y)
         return FromFace(f, u, v, level);
     }
 
-    /// <summary>The cell's centre on another body's cube (#1848).</summary>
-    public Geodetic CentreOn(CubeShape cube) =>
-        cube.ToGeodetic(Face, CubeSphere.Lattice(Level + 1, 2L * X + 1), CubeSphere.Lattice(Level + 1, 2L * Y + 1));
-
-    /// <summary>The cell's anchor on another body's cube (#1848): the east-north-up frame at its centre there.</summary>
-    public EnuFrame AnchorOn(CubeShape cube) => cube.Enu(CentreOn(cube));
-
-    /// <summary>Lattice vertex (i, j) of the cell cut into 2^<paramref name="bits"/> cells, on another body's cube (#1848), body-fixed.</summary>
-    public EcefPos VertexOn(CubeShape cube, int bits, int i, int j, double h) =>
-        cube.LatticeEcef(Face, Level + bits, ((long)X << bits) + i, ((long)Y << bits) + j, h);
-
-    /// <summary>The cell holding a body-fixed point of another body's cube (#1848), at a level.</summary>
-    public static CubeKey FromEcef(CubeShape cube, EcefPos p, int level)
-    {
-        var (f, u, v, _) = cube.FromEcef(p);
-        return FromFace(f, u, v, level);
-    }
-
     /// <summary>The cell holding a latitude and longitude (degrees), at a level.</summary>
     public static CubeKey FromLatLon(double latDeg, double lonDeg, int level)
     {

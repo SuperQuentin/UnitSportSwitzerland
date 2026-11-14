@@ -403,9 +403,6 @@ public static class ConstructionCheck
     /// The site doors' golden digest (#827): every ground container's and toilet cabin's door of the
     /// sites checked, its spot and its entrance, opening and frames (<see cref="DoorCheck.DoorLine"/>).
     /// Not the plan's hash: the office's plan changes when its upper floor comes, its ground doors do not.
-    /// The sites are planned from the tiles the game serves, so a refresh of those tiles moves them too (#1745: the
-    /// Nov 13 D: tiles moved every office 2-10 m, no site code changed): when only positions differ and every rule
-    /// above still holds, write it again with <c>--door-baseline write</c> and say so in the commit.
     /// </summary>
     private const string SiteBaselinePath = "res://tests/site-door-baseline.txt";
 

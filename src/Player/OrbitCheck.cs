@@ -77,8 +77,8 @@ public partial class OrbitCheck : Node
                 // one step taken on the orbit: that is where one period must bring it back to
                 if (_ufo!.Orbit is not { } first) { Fail("not in orbit after /orbit"); return; }
                 _start = first;
-                var (_, _, a) = Orbit.Apsides(CelestialBody.Earth, first);
-                _period = Orbit.Period(CelestialBody.Earth, a);
+                var (_, _, a) = Orbit.Apsides(Planet.Earth, first);
+                _period = Orbit.Period(Planet.Earth, a);
                 GD.Print(FormattableString.Invariant($"[orbitcheck] start r {first.R.Length:F1} m, v {first.V.Length:F2} m/s, period {_period:F1} s"));
                 Engine.TimeScale = Speed;
                 _t0 = _ufo.OrbitSeconds;
@@ -116,9 +116,9 @@ public partial class OrbitCheck : Node
 
         // the last step went past the period: back to it exactly by a Verlet step of the difference
         // (time-reversible), so the miss is the orbit's and not the step's
-        var end = Orbit.Step(CelestialBody.Earth, s, DVec3.Zero, _period - _t);
+        var end = Orbit.Step(Planet.Earth, s, DVec3.Zero, _period - _t);
         double miss = (end.R - _start.R).Length;
-        double drift = Math.Abs((s.Energy(CelestialBody.Earth) - _start.Energy(CelestialBody.Earth)) / _start.Energy(CelestialBody.Earth));
+        double drift = Math.Abs((s.Energy(Planet.Earth) - _start.Energy(Planet.Earth)) / _start.Energy(Planet.Earth));
         GD.Print(FormattableString.Invariant(
             $"[orbitcheck] one period ({_t:F2} s): {miss:F3} m from the start, energy drift {drift:E2}, contacts {ufo.Contacts}, {OriginShifter.Instance?.ShiftCount} shifts ({_turns} turned), world |xz| at most {_worst:F0} m"));
         if (miss > 10) { Fail(FormattableString.Invariant($"the orbit did not close: {miss:F1} m")); return; }

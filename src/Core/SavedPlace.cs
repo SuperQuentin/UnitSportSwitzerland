@@ -19,7 +19,6 @@ public sealed class GlobalPosJson : JsonConverter<GlobalPos>
     {
         if (r.TokenType != JsonTokenType.StartObject) throw new JsonException("a place is {\"x\", \"y\", \"z\"}");
         double x = double.NaN, y = double.NaN, z = double.NaN;
-        var body = BodyId.Earth;
         while (r.Read() && r.TokenType != JsonTokenType.EndObject)
         {
             if (r.TokenType != JsonTokenType.PropertyName) throw new JsonException("a place is {\"x\", \"y\", \"z\"}");
@@ -30,12 +29,11 @@ public sealed class GlobalPosJson : JsonConverter<GlobalPos>
                 case "x": x = r.GetDouble(); break;
                 case "y": y = r.GetDouble(); break;
                 case "z": z = r.GetDouble(); break;
-                case "b": body = (BodyId)r.GetByte(); break;
                 default: r.Skip(); break;
             }
         }
         if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(z)) throw new JsonException("a place needs x, y and z");
-        return GlobalPos.On(body, new UnitSport.Terrain.Format.EcefPos(x, y, z));
+        return GlobalPos.FromWire(x, y, z);
     }
 
     public override void Write(Utf8JsonWriter w, GlobalPos p, JsonSerializerOptions options)
@@ -45,8 +43,6 @@ public sealed class GlobalPosJson : JsonConverter<GlobalPos>
         w.WriteNumber("x", x);
         w.WriteNumber("y", y);
         w.WriteNumber("z", z);
-        // the body only off the Earth (#1847): every save of today stays byte for byte
-        if (p.Body != BodyId.Earth) w.WriteNumber("b", (byte)p.Body);
         w.WriteEndObject();
     }
 }

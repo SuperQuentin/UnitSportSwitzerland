@@ -65,7 +65,7 @@ public partial class FootPlayer
         if (_ride is not (Ufo or Airliner { Space: not null })) return "Fly a UFO or the space shuttle first (R, Mounts): only they reach orbit.";
         if (Origin is not { } origin) return "No orbit in this world: it has no place on the Earth.";
         if (!(km >= OrbitMinKm && km <= OrbitMaxKm)) return FormattableString.Invariant($"An orbit is {OrbitMinKm:F0} to {OrbitMaxKm:F0} km up.");
-        var earth = CelestialBody.Earth;
+        var earth = Planet.Earth;
         var frame = origin.Frame;
         var g = earth.Shape.ToGeodetic(frame.ToEcef(GlobalPosition));
         var at = earth.Shape.ToEcef(g with { H = km * 1000 });

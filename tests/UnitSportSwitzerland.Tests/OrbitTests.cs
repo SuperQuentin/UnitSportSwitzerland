@@ -75,7 +75,7 @@ public class AtmosphereTests
 /// <summary>The orbit integrator (#1430 H5, src/Core/Orbit.cs): the phase's acceptance.</summary>
 public class OrbitTests
 {
-    private static readonly CelestialBody Earth = CelestialBody.Earth;
+    private static readonly Planet Earth = Planet.Earth;
 
     /// <summary>A 400 km circular orbit, inclined like the ISS's, stepped at the physics rate for one period.</summary>
     private static (OrbitState Start, OrbitState End, double Period) OnePeriod(double dt, int laps = 1)

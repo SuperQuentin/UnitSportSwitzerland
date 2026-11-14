@@ -6,29 +6,9 @@ namespace UnitSport.Core;
 /// <summary>
 /// An anchor frame's place on the Earth (#1430 H3): its origin and its world X, Y, Z axes as
 /// Earth-fixed unit vectors (metres, doubles). A world point w is ECEF <c>Origin + X·w.x + Y·w.y + Z·w.z</c>.
-/// On another body (#1847) the same in that body's fixed frame (<see cref="Body"/>).
 /// </summary>
 public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
 {
-    /// <summary>The body whose fixed frame <see cref="Origin"/> and the axes are in (#1847): the Earth by default.</summary>
-    public BodyId Body { get; init; }
-
-    /// <summary>The reference ellipsoid of <see cref="Body"/>.</summary>
-    public Ellipsoid Shape => Body == BodyId.Earth ? Ellipsoid.Wgs84 : CelestialBody.Of(Body).Shape;
-
-    /// <summary>
-    /// The same frame counted from another body (#1847, docs/plans/planets.md section 3): its origin and axes
-    /// re-expressed in <paramref name="body"/>'s fixed frame at a sky moment. Every world point keeps its place, so
-    /// a sphere-of-influence crossing moves nothing in world space: it is a relabelling, not a shift.
-    /// </summary>
-    public FrameAxes Rebased(BodyId body, SkyMoment m)
-    {
-        if (body == Body) return this;
-        var o = Frames.Convert(Body, Origin, body, m).AsEcef;
-        EcefPos Turn(EcefPos v) => Frames.ConvertDirection(Body, v, body, m).AsEcef;
-        return new FrameAxes(o, Turn(X), Turn(Y), Turn(Z)) { Body = body };
-    }
-
     public static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
 
     /// <summary>A world point (in doubles) as ECEF.</summary>
@@ -64,12 +44,11 @@ public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
     /// What a list of points on the wire is given in (<see cref="OriginFrame.AnchorAt"/>): both peers build it from
     /// the same doubles with the same code, so both get the same axes.
     /// </summary>
-    public static FrameAxes Enu(EcefPos origin, BodyId body = BodyId.Earth)
+    public static FrameAxes Enu(EcefPos origin)
     {
-        var shape = body == BodyId.Earth ? Ellipsoid.Wgs84 : CelestialBody.Of(body).Shape;
-        var enu = new EnuFrame(shape.ToGeodetic(origin), shape);
+        var enu = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(origin));
         var n = enu.North;
-        return new FrameAxes(origin, enu.East, enu.Up, new EcefPos(-n.X, -n.Y, -n.Z)) { Body = body };
+        return new FrameAxes(origin, enu.East, enu.Up, new EcefPos(-n.X, -n.Y, -n.Z));
     }
 
     /// <summary>
@@ -104,7 +83,7 @@ public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
     /// </summary>
     public static FrameAxes Tangent(EcefPos at, double drop, FrameAxes previous)
     {
-        var g = previous.Shape.ToGeodetic(at);
+        var g = Ellipsoid.Wgs84.ToGeodetic(at);
         double lat = g.LatDeg * System.Math.PI / 180, lon = g.LonDeg * System.Math.PI / 180;
         var up = new EcefPos(System.Math.Cos(lat) * System.Math.Cos(lon), System.Math.Cos(lat) * System.Math.Sin(lon), System.Math.Sin(lat));
         var o = new EcefPos(at.X - up.X * drop, at.Y - up.Y * drop, at.Z - up.Z * drop);
@@ -126,7 +105,7 @@ public sealed record FrameAxes(EcefPos Origin, EcefPos X, EcefPos Y, EcefPos Z)
         double len = x.Length;
         x = new EcefPos(x.X / len, x.Y / len, x.Z / len);
         var z = new EcefPos(x.Y * up.Z - x.Z * up.Y, x.Z * up.X - x.X * up.Z, x.X * up.Y - x.Y * up.X);
-        return new FrameAxes(o, x, up, z) { Body = previous.Body };
+        return new FrameAxes(o, x, up, z);
     }
 }
 
@@ -308,8 +287,6 @@ public sealed class OriginFrame
             var (e, n, h) = SwissGeodesy.FromEcef(p.Ecef);
             return new((float)(e - E), (float)(h - Alt0), (float)-(n - N));
         }
-        if (p.Body != Axes.Body)
-            throw new System.InvalidOperationException($"a place on {p.Body} in a frame on {Axes.Body}: convert it at a sky moment first (#1850)");
         var (x, y, z) = Axes.FromEcef(p.Ecef);
         return new((float)x, (float)y, (float)z);
     }
@@ -324,22 +301,19 @@ public sealed class OriginFrame
     /// <summary>A world point as a place: through the LV95 projection in the flat ground frame (~1 µs), the axes in an anchor frame.</summary>
     public GlobalPos ToGlobal(Vector3 world) => Axes == null
         ? GlobalPos.FromLv95(E + world.X, N - world.Z, world.Y + Alt0)
-        : GlobalPos.On(Axes.Body, Axes.ToEcef(world.X, world.Y, world.Z));
+        : GlobalPos.FromEcef(Axes.ToEcef(world.X, world.Y, world.Z));
 
     /// <summary>
     /// The altitude (LV95 heights: above sea level) of a world point (#1430 H3): its Y in the ground
     /// frame, its place's height in an anchor frame, where Y is height over the anchor's tangent plane.
     /// </summary>
-    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y + Alt0
-        : Axes.Body == BodyId.Earth ? SwissGeodesy.Lhn95Height(Axes.ToEcef(world.X, world.Y, world.Z))
-        : Axes.Shape.ToGeodetic(Axes.ToEcef(world.X, world.Y, world.Z)).H;
+    public double AltitudeOf(Vector3 world) => Axes == null ? world.Y + Alt0 : SwissGeodesy.Lhn95Height(Axes.ToEcef(world.X, world.Y, world.Z));
 
     /// <summary>The way up at a world point, in world axes (#1430 H3): +Y in the ground frame, the ellipsoid's up in an anchor frame.</summary>
     public Vector3 UpAt(Vector3 world)
     {
         if (Axes == null) return Vector3.Up;
-        var shape = Axes.Shape;
-        var up = new EnuFrame(shape.ToGeodetic(Axes.ToEcef(world.X, world.Y, world.Z)), shape).Up;
+        var up = new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(Axes.ToEcef(world.X, world.Y, world.Z))).Up;
         return Turn(up, Axes).Normalized();
     }
 
@@ -414,8 +388,7 @@ public sealed class OriginFrame
             return GridAxes(e, n, at.Y + Alt0);
         }
         var p = Axes.ToEcef(at.X, at.Y, at.Z);
-        var shape = Axes.Shape;
-        return new EnuAxes(Axes.InEnu(new EnuFrame(shape.ToGeodetic(p), shape)), 1f);
+        return new EnuAxes(Axes.InEnu(new EnuFrame(Ellipsoid.Wgs84.ToGeodetic(p))), 1f);
     }
 
     /// <summary>This world's axes at a place against the local east-up-south there (<see cref="EnuAt(Vector3)"/>).</summary>
