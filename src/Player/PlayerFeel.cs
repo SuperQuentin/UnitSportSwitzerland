@@ -913,7 +913,7 @@ public partial class PlayerFeel : Node3D
     /// </summary>
     private static void AppendOrbit(System.Text.StringBuilder sb, OrbitState orbit)
     {
-        var earth = Planet.Earth;
+        var earth = CelestialBody.Earth;
         double h = earth.Shape.ToGeodetic(orbit.R.AsEcef).H;
         double ground = orbit.R.Length - h;
         var (peri, apo, _) = Orbit.Apsides(earth, orbit);

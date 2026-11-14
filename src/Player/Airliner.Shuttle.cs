@@ -124,7 +124,7 @@ public sealed partial class Airliner : ISpacecraft
         // the levers set the drive's speed: back to idle, or the rockets would fire off the new orbit
         State.Lever = 0f;
         State.Spool = Mathf.Min(State.Spool, Spec.IdleSpool);
-        var earth = Core.Planet.Earth;
+        var earth = Core.CelestialBody.Earth;
         double angle = Core.Orbit.RotationAngle(earth, place.SimTime);
         var r = Core.Orbit.ToEci(place.Frame.ToEcef(place.At), angle);
         var toward = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, -State.Attitude.Z), angle);

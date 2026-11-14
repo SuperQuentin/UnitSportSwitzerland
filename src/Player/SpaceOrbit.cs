@@ -101,7 +101,7 @@ public sealed class SpaceOrbit
             Orbit = null;
             return null;
         }
-        var earth = Core.Planet.Earth;
+        var earth = Core.CelestialBody.Earth;
         double angle = Core.Orbit.RotationAngle(earth, place.SimTime);
         var here = place.Frame.ToEcef(place.At);
         float off = _expectedIn == null ? float.MaxValue
@@ -131,7 +131,7 @@ public sealed class SpaceOrbit
         }
         s = Core.Orbit.Step(earth, s, thrust, dt);
         Seconds += dt;
-        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.RotationRate * dt);
+        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.Spin * dt);
         Orbit = s;
 
         var target = place.Frame.FromEcef(r.AsEcef);
