@@ -144,13 +144,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void Refresh(IReadOnlyCollection<CubeKey> changed)
     {
         if (changed.Count == 0) return;
-        _generation++;
         Leaves.Refresh(changed);
+        Reread($"{changed.Count} leaves changed ({Store.RemoteCount} from the server)");
+    }
+
+    /// <summary>
+    /// Every loaded leaf read again in place, its collision rebuilt (the old ones stay until the new ones land): the leaves
+    /// changed (<see cref="Refresh"/>), or the base the fill stands on did (#1656, <c>EarthLeaves.UsePyramid</c>). Main thread.
+    /// </summary>
+    public void Reread(string why)
+    {
+        _generation++;
         _collisionSource.Forget();
         foreach (var key in _near.Keys) _stale.Add(key);
         _patches.Rebuild(_ => true);
         _nextPlan = 0;
-        GD.Print($"[earth] {changed.Count} leaves changed ({Store.RemoteCount} from the server): {_near.Count} loaded leaves read again");
+        GD.Print($"[earth] {why}: {_near.Count} loaded leaves read again");
     }
 
     /// <summary>
@@ -1107,9 +1116,16 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         return new((float)wx, (float)wy, (float)wz);
     }
 
+    /// <summary>The anchor body's own ground while the anchor is not on the Earth (#1850); null: none there.</summary>
+    public static IBodyGround? OtherBody { get; set; }
+
+    /// <summary>The anchor is on another body: its ground answers (<see cref="OtherBody"/>), the Earth's leaves never.</summary>
+    private bool OffEarth => Origin.Body != BodyId.Earth;
+
     internal bool HeightAt(Vector3 worldPos, out float height)
     {
         height = 0f;
+        if (OffEarth) return OtherBody?.TryGetHeight(worldPos, out height) == true;
         if (!Locate(worldPos, out var leaf, out var view, out double x, out _, out double z, out double i, out double j)) return false;
         double h = MeshHeight(leaf, x, z, i, j);
         if (double.IsNaN(h)) return false;
@@ -1182,7 +1198,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         return true;
     }
 
-    private bool HasCollisionAt(Vector3 worldPos) =>
+    private bool HasCollisionAt(Vector3 worldPos) => OffEarth ? OtherBody?.HasCollisionAt(worldPos) == true :
         _bodies.ContainsKey(CubeKey.FromEcef(Origin.ToEcef(worldPos), CollisionPatches.PatchLevel));
 
     private GroundTile TileAt(Vector3 worldPos) =>

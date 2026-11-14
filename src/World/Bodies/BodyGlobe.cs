@@ -60,9 +60,18 @@ public partial class BodyGlobe : Node
     /// <summary>Tiles drawn last frame (the shots' log).</summary>
     public int DrawnTiles { get; private set; }
 
+    /// <summary>The pyramid's finest level.</summary>
+    public int MaxLevel => _maxLevel;
+
+    /// <summary>The body's pyramid (#1656's chain; any thread may read it).</summary>
+    public Terrain.Leaves.PyramidSource Pyramid => _pyramid;
+
+    /// <summary>The near ground on this body (#1850): its own tiles step aside under it.</summary>
+    public BodyGround? Ground { get; set; }
+
     private readonly WorldOrigin _origin;
-    private readonly GlobeFiles _files;
-    private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights, _albedo;
+    // the body's pyramid (#1656's chain): its folder, or for the Earth the game's own (local, the server's, the shipped base)
+    private readonly Terrain.Leaves.PyramidSource _pyramid;
     private readonly int _maxLevel;
     private readonly Node3D _root = new() { Name = "Frame" };
     private readonly Dictionary<CubeKey, Tile> _tiles = new();
@@ -81,21 +90,29 @@ public partial class BodyGlobe : Node
         public readonly ShaderMaterial Material = material;
     }
 
-    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex";
+    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
+        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+
+    /// <summary>The hole every tile has now (half side 0: none), set on a tile only when it changes.</summary>
+    private (Vector3 Centre, Vector3 Up, Vector3 East, float Half) _hole;
 
     public BodyGlobe(CelestialBody body, string dir, WorldOrigin origin)
+        : this(body, new Terrain.Leaves.PyramidSource([new GlobeFiles(dir).Layer(dir, local: true)]), dir, origin)
+    {
+    }
+
+    /// <summary>A body's globe on a pyramid chain (#1656: the Earth's is <see cref="GlobeData.Earth"/>).</summary>
+    public BodyGlobe(CelestialBody body, Terrain.Leaves.PyramidSource pyramid, string describe, WorldOrigin origin)
     {
         Body = body;
-        Dir = dir;
+        Dir = describe;
         _origin = origin;
         Name = $"{body.Name}Globe";
-        _files = new GlobeFiles(dir);
-        var manifest = _files.Manifest();
-        (_heights, _albedo) = _files.Index(manifest);
-        _maxLevel = manifest.LevelsOrLeaf.Max(l => l.Level);
+        _pyramid = pyramid;
+        _maxLevel = Math.Max(pyramid.MaxLevel, 0);
         _month = Calendar.Month;
         AddChild(_root);
-        GD.Print($"[bodies] {body.Name}'s globe: {_heights.Count} tiles to level {_maxLevel}, {_albedo.Count} coloured, from {dir}");
+        GD.Print($"[bodies] {body.Name}'s globe: {pyramid.Count} tiles to level {_maxLevel}, from {describe}");
     }
 
     public override void _Process(double delta)
@@ -148,6 +165,11 @@ public partial class BodyGlobe : Node
         _show.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, focal);
 
+        // the near ground's hole (own body only): moved with the square and at each re-anchor, so rarely
+        var hole = own && Ground?.Hole is { } h ? h : default;
+        bool holeMoved = hole != _hole;
+        _hole = hole;
+
         int shown = 0;
         foreach (var (key, tile) in _tiles)
         {
@@ -158,9 +180,18 @@ public partial class BodyGlobe : Node
                 shown++;
                 if (sunMoved) tile.Material.SetShaderParameter(SunDir, sun);
             }
+            if (holeMoved) SetHole(tile.Material);
         }
         DrawnTiles = shown;
         Drawn = shown > 0;
+    }
+
+    private void SetHole(ShaderMaterial m)
+    {
+        m.SetShaderParameter(HoleCentre, _hole.Centre);
+        m.SetShaderParameter(HoleUp, _hole.Up);
+        m.SetShaderParameter(HoleEast, _hole.East);
+        m.SetShaderParameter(HoleHalf, _hole.Half);
     }
 
     private void Hide()
@@ -173,7 +204,7 @@ public partial class BodyGlobe : Node
     /// <summary>The tiles to draw: a tile splits when its drawn cells would be big on screen and its four are loaded.</summary>
     private void Select(CubeKey key, DVec3 eye, double focal)
     {
-        if (!_heights.ContainsKey(key)) return;
+        if (!_pyramid.Has(key)) return;
         var cube = Body.Cube;
         var centre = (DVec3)cube.ToEcef(key.Face, CubeSphere.Lattice(key.Level + 1, 2L * key.X + 1), CubeSphere.Lattice(key.Level + 1, 2L * key.Y + 1), 0);
         double edge = Body.Shape.A * Math.PI / 2 / key.Side;
@@ -188,7 +219,7 @@ public partial class BodyGlobe : Node
         {
             bool all = true;
             foreach (var child in key.Children())
-                if (!_tiles.ContainsKey(child)) { all = false; if (_heights.ContainsKey(child)) Request(child); }
+                if (!_tiles.ContainsKey(child)) { all = false; if (_pyramid.Has(child)) Request(child); }
             if (all)
             {
                 foreach (var child in key.Children()) Select(child, eye, focal);
@@ -202,8 +233,7 @@ public partial class BodyGlobe : Node
     {
         if (_running >= Workers || !_loading.Add(key)) return;
         _running++;
-        var at = _heights[key];
-        (string, long, int)? colourAt = _albedo.TryGetValue(key, out var c) ? c : null;
+        bool coloured = _pyramid.HasColour(key);
         var cube = Body.Cube;
         int month = _month;
         Task.Run(() =>
@@ -212,12 +242,12 @@ public partial class BodyGlobe : Node
             Image? colour = null;
             try
             {
-                var tile = CubeTileCodec.Decode(GlobeFiles.ReadBytes(at));
-                arrays = Build(tile, cube);
-                if (colourAt is { } ca)
+                // a streamed tile not come yet: none this time, asked again
+                if (_pyramid.Heights(key) is { } tile) arrays = Build(tile, cube);
+                if (arrays != null && coloured && _pyramid.Colour(key, month) is { } webp)
                 {
                     colour = new Image();
-                    if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(GlobeFiles.ReadBytes(ca)).ForMonth(month)) != Error.Ok) colour = null;
+                    if (colour.LoadWebpFromBuffer(webp) != Error.Ok) colour = null;
                     else colour.GenerateMipmaps();
                 }
             }
@@ -242,6 +272,7 @@ public partial class BodyGlobe : Node
             var material = new ShaderMaterial { Shader = _shader };
             if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
+            SetHole(material);
             var node = new MeshInstance3D
             {
                 Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,
@@ -290,15 +321,16 @@ public partial class BodyGlobe : Node
     public static Godot.Collections.Array Build(CubeTile tile, CubeShape cube)
     {
         var key = tile.Key;
-        int bits = tile.Bits, m = (1 << bits) / Stride, n = m + 1;
+        // 64 cells whatever the lattice (#1656: the Earth's shipped base holds 65² tiles)
+        int bits = tile.Bits, stride = Globe.StrideOf(bits), m = (1 << bits) / stride, n = m + 1;
         var anchor = key.AnchorOn(cube);
         var pos = new Vector3[n * n];
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
             {
-                float h = tile.HeightAt(i * Stride, j * Stride);
+                float h = tile.HeightAt(i * stride, j * stride);
                 if (!float.IsFinite(h)) h = 0;
-                var p = key.VertexOn(cube, bits, i * Stride, j * Stride, h);
+                var p = key.VertexOn(cube, bits, i * stride, j * stride, h);
                 var (x, y, z) = anchor.ToLocal(p);
                 pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
             }

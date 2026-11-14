@@ -177,11 +177,24 @@ if [ -f "$PEAKS" ] && [ "$(wc -l < "$PEAKS")" -gt 6000 ]; then
   tail -n 3000 "$PEAKS" > "$PEAKS.$$" && mv -f "$PEAKS.$$" "$PEAKS"
 fi
 # one line per run of a check: peak MB (0: none printed), the check, its seconds
-peak_of() { [ -f "$PEAKS" ] && awk -F'\t' -v c="$1" '$2 == c && $1 > 0 { m = $1 } END { print m }' "$PEAKS"; }
-need_mb() { # check default_gb: MB a check needs free to start, its last peak and a quarter more, else the default
-  local p; p=$(peak_of "$1")
-  if [ -n "$p" ] && [ "$p" -gt 0 ] 2>/dev/null; then echo $(( p + p / 4 + 256 )); else echo $(( $2 * 1024 )); fi
+# The median of its last 5 nonzero peaks (#1761): one bloated run (21 GB beside 2-3 GB ones) no longer locks a row out
+peak_of() {
+  [ -f "$PEAKS" ] && awk -F'\t' -v c="$1" '$2 == c && $1 > 0 { p[n++ % 5] = $1 }
+    END { if (!n) exit; k = n < 5 ? n : 5
+      for (i = 0; i < k; i++) for (j = i + 1; j < k; j++) if (p[j] < p[i]) { t = p[i]; p[i] = p[j]; p[j] = t }
+      print (k % 2) ? p[int(k / 2)] : int((p[k / 2 - 1] + p[k / 2]) / 2) }' "$PEAKS"
 }
+# Admission never asks for more than the machine can free (#1761, guard_ram_cap_mb: total less the floor and a
+# reserve). A row whose need reaches the cap runs alone, as soon as this runner's other jobs are done, without
+# waiting for free RAM it would never see; the watchdog's floor still stops it if the machine runs short.
+RAM_CAP=$(guard_ram_cap_mb)
+need_mb() { # check default_gb: MB a check needs free to start, its peak and a quarter more, else the default; at most RAM_CAP
+  local p n; p=$(peak_of "$1")
+  if [ -n "$p" ] && [ "$p" -gt 0 ] 2>/dev/null; then n=$(( p + p / 4 + 256 )); else n=$(( $2 * 1024 )); fi
+  [ "$RAM_CAP" -gt 0 ] && [ "$n" -gt "$RAM_CAP" ] && n=$RAM_CAP
+  echo "$n"
+}
+at_cap() { [ "$RAM_CAP" -gt 0 ] && [ "$1" -ge "$RAM_CAP" ]; }   # need_mb: run alone, no wait for free RAM
 note_peak() { # check file seconds: the file's peaks summed (MB, 0 for none), kept in $PEAKS with the seconds
   local s; s=$(guard_peak_sum "$2"); rm -f "$2"
   printf '%s\t%s\t%s\n' "$s" "$1" "${3:-}" >> "$PEAKS"
@@ -428,7 +441,8 @@ row_name() { # the check's flag, for its RESULT line: the first word ending in "
 # (3, quick) or TEST_HEAVY_RAM_GB (6, net/full), over the watchdog's floor, counting the full need of every job
 # started less than the grow time ago (TEST_QUICK_GROW 15 s, TEST_JOB_STAGGER 40 s): their Godots have not reached
 # their size yet. Older jobs are in the free RAM already. A check that failed or hit the RAM floor beside others
-# runs again alone at the end, as a serial run would; a pass alone says it failed beside others (#1081).
+# runs again alone at the end, as a serial run would; a pass alone says it failed beside others (#1081). A TIMEOUT
+# is not run again unless it also hit the floor, and no need is over RAM_CAP: at the cap a row runs alone (#1761).
 # TEST_RETRY_ALONE=0: again alone only after the RAM floor.
 # Machine-wide: every job started leaves "start grow_s need_mb" in $RESV (named <runner pid>.<n>), and admit also
 # counts the jobs other runners (other worktrees, other sessions) started within their grow time. Without it, two
@@ -531,7 +545,8 @@ run_quick() {
     for (( i = 0; i < n; i++ )); do
       [ -f "$OUT/.qrow.$i" ] || continue
       [ "$(sed -n 4p "$OUT/.qrow.$i")" = 1 ] && { again+=("$i"); continue; }
-      [ "${TEST_RETRY_ALONE:-1}" != 0 ] && [ "$(sed -n 1p "$OUT/.qrow.$i")" != PASS ] && [ -z "$(sed -n 5p "$OUT/.qrow.$i")" ] && again+=("$i")
+      case $(sed -n 1p "$OUT/.qrow.$i") in PASS | TIMEOUT) continue ;; esac   # a timeout: its own budget, not load (#1761)
+      [ "${TEST_RETRY_ALONE:-1}" != 0 ] && [ -z "$(sed -n 5p "$OUT/.qrow.$i")" ] && again+=("$i")
     done
   fi
   for i in ${again[@]+"${again[@]}"}; do
@@ -572,8 +587,9 @@ heavy_job() { # index tier check need_mb: one check in a slot of its own, its ro
   trap guard_unlock EXIT
   log=$(log_of "$check")
   if ! guard_lock; then res="$(row "$check" FAIL 0 "" "(lock)")"
-  elif ! guard_wait_ram $(( (need + 1023) / 1024 )); then res="$(row "$check" FAIL 0 "" "(not enough RAM)")"
+  elif ! at_cap "$need" && ! guard_wait_ram $(( (need + 1023) / 1024 )); then res="$(row "$check" FAIL 0 "" "(not enough RAM)")"
   else
+    at_cap "$need" && echo "[test] $check: needs the ${RAM_CAP} MB this machine can free: alone, without waiting for free RAM"
     export GUARD_LOCK_HELD=1 GUARD_PEAK_FILE="$OUT/.peak.h$i"
     rm -f "$GUARD_PEAK_FILE"
     t0=$SECONDS
@@ -592,7 +608,7 @@ heavy_job() { # index tier check need_mb: one check in a slot of its own, its ro
 }
 
 run_heavy() {
-  local i n=${#HEAVY[@]} pids=() groups=() starts=() needs=() all=() k busy running reserved entry tier check g need t0=$SECONDS again=()
+  local i n=${#HEAVY[@]} pids=() groups=() starts=() needs=() solos=() all=() k busy running reserved entry tier check g need t0=$SECONDS again=()
   echo "[test] ${n} net/full checks, up to $JOBS at once, longest first"
   rm -f "$OUT"/.row.*
   local hchecks=() order
@@ -606,25 +622,31 @@ run_heavy() {
       for k in ${!pids[@]}; do
         if kill -0 "${pids[$k]}" 2>/dev/null; then
           running=$(( running + 1 ))
-          if alone "$check" || [ "${groups[$k]}" = "$g" ] || alone "${groups[$k]}"; then busy=$JOBS; fi
+          if alone "$check" || [ "${groups[$k]}" = "$g" ] || alone "${groups[$k]}" || at_cap "$need" || [ "${solos[$k]}" = 1 ]; then busy=$JOBS; fi
           busy=$(( busy + 1 ))
           [ $(( SECONDS - starts[k] )) -lt "${TEST_JOB_STAGGER:-40}" ] && reserved=$(( reserved + needs[k] ))
-        else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]'; fi
+        else unset 'pids[k]' 'groups[k]' 'starts[k]' 'needs[k]' 'solos[k]'; fi
       done
       [ "$busy" -lt "$JOBS" ] && { if [ "$running" = 0 ]; then admit_first "$need"; else admit "$need" "$reserved"; fi; } && break
       guard_nap 1
     done
     ( export TC_MAX_FPS=${TEST_MAX_FPS:-60}; heavy_job "$i" "$tier" "$check" "$need" ) &
     pids+=($!); all+=($!); groups+=("$(alone "$check" && echo "$check" || echo "$g")"); starts+=($SECONDS); needs+=("$need")
+    solos+=("$(at_cap "$need" && echo 1 || echo 0)")
     reserve "$need" "${TEST_JOB_STAGGER:-40}"
   done
   [ ${#all[@]} -gt 0 ] && wait "${all[@]}" 2>/dev/null
   # stopped at the RAM floor, or failed beside others: again alone at the end, uncapped, as a serial run would (#1081).
-  # A pass alone is reported as one, saying it failed beside others; a fail alone is a fail. TEST_RETRY_ALONE=0: RAM only
-  local why
+  # A pass alone is reported as one, saying it failed beside others; a fail alone is a fail. TEST_RETRY_ALONE=0: RAM only.
+  # A TIMEOUT is not run again (#1761): its own budget ran out, which load does not explain (a 3700 s flight timed
+  # out twice, two hours for one answer); only a timeout that also hit the RAM floor goes again.
+  local why v
   for (( i = 0; i < n; i++ )); do
     [ "$(sed -n 3p "$OUT/.row.$i" 2>/dev/null)" = 1 ] && { again+=("$i"); continue; }
-    [ "${TEST_RETRY_ALONE:-1}" != 0 ] && [ -f "$OUT/.row.$i" ] && [ "$(sed -n 1p "$OUT/.row.$i")" != PASS ] && again+=("$i")
+    [ -f "$OUT/.row.$i" ] || continue
+    v=$(sed -n 1p "$OUT/.row.$i")
+    if [ "$v" = TIMEOUT ]; then echo "[test] not again alone: ${HEAVY[$i]#* } (timed out on its own budget)"
+    elif [ "${TEST_RETRY_ALONE:-1}" != 0 ] && [ "$v" != PASS ]; then again+=("$i"); fi
   done
   for i in ${again[@]+"${again[@]}"}; do
     entry=${HEAVY[$i]}
@@ -690,7 +712,7 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
           # tier 2/3, TEST_JOBS=1: one at a time, in one slot held for the whole run
           need=$(need_mb "$check" "${TEST_HEAVY_RAM_GB:-6}")
           [ $locked = 1 ] || { guard_lock && locked=1 && export GUARD_LOCK_HELD=1; } || { record "$check" FAIL 0 "(lock)"; continue; }
-          guard_wait_ram $(( (need + 1023) / 1024 )) || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
+          at_cap "$need" || guard_wait_ram $(( (need + 1023) / 1024 )) || { record "$check" FAIL 0 "(not enough RAM)"; continue; }
         fi
         t0=$SECONDS
         export GUARD_PEAK_FILE="$OUT/.peak.serial"; rm -f "$GUARD_PEAK_FILE"

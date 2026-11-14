@@ -165,7 +165,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the network rules' own self-checks: vision interest and remote interpolation
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // --frame earth's line of sight on the real cube pyramid (#1513): Mont Blanc from La Dôle, valley floors hidden
-        (() => Has("--earthsightcheck"), () => Verdict("earthsightcheck", EarthSight.RealCheck(World.Globe.DataDir))),
+        (() => Has("--earthsightcheck"), () => Verdict("earthsightcheck", EarthSight.RealCheck(World.Globe.DataSource))),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck() & Audio.Cd.VocalSeparator.SelfCheck())),
         // a real song's vocal separated both ways, written to test_output/vocal (#1153)
@@ -768,6 +768,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // which occasions are running (Halloween, Christmas…): the calendar offline, the server's
         // word online. Before the clock, which reads its sun and sky from it.
+        // Without the system, the server's RPC still finds its node and is dropped there (#1890): RPCs to a missing node
+        // are refused one by one with native errors, and their flood held a lean client's reliable traffic up for minutes
+        if (!Systems.On(Systems.Occasions)) AddChild(new Net.SwarmOccasions { Name = Occasions.OccasionManager.NodeName });
         if (Systems.On(Systems.Occasions))
         {
             Occasions.OccasionManager.Create(this);
@@ -836,17 +839,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.StarField());
             AddChild(new World.SkyBodies());
             // the other bodies' globes, and the Earth's from them (#1848): the earth world only
-            if (_earth != null) AddChild(new World.Bodies.BodyViews(origin));
+            if (_earth != null) AddChild(new World.Bodies.BodyViews(origin, () => LocalPlayer));
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
             // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
-            if (World.Globe.DataDir is { } globe && !WorldChoice.FunActive)
+            // the earth world's globe is its far view, drawn from the server's pyramid too once it comes (#1656), so it is
+            // there even when this copy has none of its own
+            // a world left behind took its server's pyramid with it
+            World.Globe.DataSource?.DropRemote();
+            if (World.Globe.DataSource is { } globe && (globe.Count > 0 || _earth != null) && !WorldChoice.FunActive)
             {
                 var chunksForGlobe = _chunks;
                 var g = _earth != null
                     // the earth world (#1510): the globe at every altitude, down to the region's leaves
-                    ? new World.Globe { Name = "Globe", Dir = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
-                    : new World.Globe { Name = "Globe", Dir = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
+                    ? new World.Globe { Name = "Globe", Pyramid = globe, Origin = origin, Earth = true, Leaves = _earth.Leaves }
+                    : new World.Globe { Name = "Globe", Pyramid = globe, Origin = origin, RealTiles = () => chunksForGlobe?.AvailableTiles, FlatWorld = chunksForGlobe };
                 // the globe steps aside where a leaf is drawn whole, and is the far view at every altitude (#1629): the
                 // region's leaves furnished out to the flat world's rings, in the world's own materials
                 if (_earth != null)
@@ -854,6 +861,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     var globeTerrain = StyleKit.Material(MaterialRole.Terrain);
                     // the globe is the last of the earth world: it never dissolves into anything (as the leaves, #1634)
                     globeTerrain.SetShaderParameter("gives_way", false);
+                    // its tiles morph into their parent level's shape before they merge (#1656)
+                    globeTerrain.SetShaderParameter("globe_morph", true);
                     FogUniforms.Apply(globeTerrain);
                     _worldMaterials = [.. _worldMaterials, globeTerrain];
                     g.TerrainMaterial = globeTerrain;
@@ -1080,6 +1089,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
                     float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv))
                 { Status = () => EarthStatus };
+            }),
+            // the globe's pops on a climb from the ground to orbit (#1656)
+            new(() => World.GlobeClimb.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var c = World.GlobeClimb.ParseArgs()!;
+                FreeSpectator();
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                return new World.GlobeClimb(_spectator!, origin, double.Parse(c[0], inv), double.Parse(c[1], inv), double.Parse(c[2], inv));
             }),
             new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -1654,6 +1671,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // online the birds are the server's (World/BirdNet: same path as there); offline this client runs them
             Birds.BirdNet.Create(this, birds, server: false);
         }
+        // without birds the server's snapshots still land on a BirdNet, one with no life that drops them, as a swarm bot's
+        // (#1890: 8 a second, 32 at x4, each a refused RPC and a native error; they held a net check's reliable traffic up)
+        else AddChild(new Birds.BirdNet { Name = Birds.BirdNet.NodeName });
         // the rising air made visible (#1225): specks in the thermals near the camera, a cumulus over strong ones
         if (_chunks != null && DisplayServer.GetName() != "headless") AddChild(new World.ThermalCues(_chunks, origin));
 
@@ -2330,6 +2350,29 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     GD.Print($"[earth] the server's leaves: {earthWorld.Store.RemoteCount} this copy lacks, {changed.Count} changed");
                     earthWorld.Refresh(changed);
                     if (changed.Count > 0) GetNodeOrNull<World.Globe>("Globe")?.RefreshLeaves();
+                }).CallDeferred();
+        }
+        // and its globe's pyramid (#1656): every level the globe draws, by quadtree request through the tile cache; the fill
+        // stands on the server's own pyramid (or on the generator, as the server's, when it has none), so it waits for it
+        if (_earth is { } pyramidWorld && _chunkSource is { } pyramidCache && !pyramidWorld.Leaves.IsFixture && World.GlobeData.Earth is { } chain)
+        {
+            _terrainSync.WantsPyramid = true;
+            pyramidWorld.Leaves.AwaitPyramid();
+            _terrainSync.PyramidIndexSettled += index =>
+                Callable.From(() =>
+                {
+                    if (!IsInstanceValid(pyramidWorld)) return;
+                    var changed = index != null ? chain.UseRemote(index, pyramidCache.FetchPyramid) : [];
+                    var fill = index != null ? chain.ServerBase() : null;
+                    pyramidWorld.Leaves.UsePyramid(fill);
+                    GD.Print($"[earth] the server's pyramid: {(index != null ? $"{index.Count} tiles, {changed.Count} changed" : "none")}; the fill on "
+                        + (fill != null ? $"it (to level {fill.FinestLevel})" : "the generator's own relief"));
+                    pyramidWorld.Reread("the fill's base settled");
+                    if (GetNodeOrNull<World.Globe>("Globe") is { } globe)
+                    {
+                        if (changed.Count > 0) globe.RefreshPyramid(changed);
+                        globe.RefreshLeaves();
+                    }
                 }).CallDeferred();
         }
         // the sync runs its continuations on the thread pool, and the chat log is UI
@@ -3109,7 +3152,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// The ground under the fly camera is known. A spawn point that gave up (no tile after 15 s, a
     /// slow first join) leaves the camera at its preload altitude: the body waits for the ground then.
     /// </summary>
-    private bool GroundUnderCamera => Ground is { } gr && _spectator != null && gr.TryGetSurface(_spectator.GlobalPosition, out _);
+    /// On another body (#1850) it is that body's near ground (<see cref="World.Bodies.BodyGround"/>) under the camera.
+    private bool GroundUnderCamera => _spectator != null
+        && (Ground is { } gr && gr.TryGetSurface(_spectator.GlobalPosition, out _)
+            || World.Bodies.BodyGround.Active?.Covers(_spectator.GlobalPosition) == true);
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;
