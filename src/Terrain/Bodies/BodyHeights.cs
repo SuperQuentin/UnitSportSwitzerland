@@ -46,6 +46,10 @@ public sealed class BodyHeights
     /// <summary>The height over the reference surface at a unit normal (body-fixed), metres: the data and the craters.</summary>
     public double At(EcefPos n) => Data(n) + (_craters?.At(n.X, n.Y, n.Z) ?? 0);
 
+    /// <summary>The data and the craters from <paramref name="smallestCrater"/> metres up (a coarser mesh's ground).</summary>
+    public double At(EcefPos n, double smallestCrater) =>
+        Data(n) + (_craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0);
+
     /// <summary>The data's height alone at a unit normal: the finest tile, bilinear; 0 where there is none.</summary>
     public double Data(EcefPos n)
     {
@@ -112,7 +116,16 @@ public sealed class BodyHeights
     /// round it meet without a step.
     /// </para>
     /// </summary>
-    public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM = 0, int stride = 1)
+    public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM = 0, int stride = 1) =>
+        Grid(near, cells, cellM, blendM, blendM > 0 ? n => Coarse(n, stride) : null);
+
+    /// <summary>
+    /// <see cref="Grid(EcefPos, int, double, double, int)"/> with the edge eased into any surface (<paramref name="edge"/>,
+    /// a height at a unit normal: the medium ground's, under the near one), and the craters from
+    /// <paramref name="smallestCrater"/> up (a coarser grid's).
+    /// </summary>
+    public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM, Func<EcefPos, double>? edge,
+        double smallestCrater = 0)
     {
         var n0 = NormalUnder(near);
         var g0 = _cube.Shape.ToGeodetic(_cube.OnEllipsoid(n0, 0));
@@ -126,13 +139,13 @@ public sealed class BodyHeights
             {
                 double x = (i - cells / 2.0) * cellM;
                 var n = NormalUnder(frame.ToEcef(x, 0, z));
-                double h = At(n);
-                double edge = cells / 2.0 * cellM - Math.Max(Math.Abs(x), Math.Abs(z));
-                if (blendM > 0 && edge < blendM)
+                double h = At(n, smallestCrater);
+                double toEdge = cells / 2.0 * cellM - Math.Max(Math.Abs(x), Math.Abs(z));
+                if (edge != null && blendM > 0 && toEdge < blendM)
                 {
-                    double t = 1 - edge / blendM;
+                    double t = 1 - toEdge / blendM;
                     t = t * t * (3 - 2 * t);
-                    h += (Coarse(n, stride) - h) * t;
+                    h += (edge(n) - h) * t;
                 }
                 var (_, ly, _) = frame.ToLocal(_cube.OnEllipsoid(n, h));
                 y[j * side + i] = (float)ly;

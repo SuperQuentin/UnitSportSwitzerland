@@ -27,12 +27,12 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   crossings, 249 million km at light speed in 860 s, no shift on either), landing and walking on Mars at 3.72 m/s².
 - **H7e**, this branch: every body's air as data (`BodyAir`): Mars' butterscotch sky, its blue sunset, its haze from orbit,
   its drag; the shell's sun from the anchor body's own offset.
+- **H7d**, this branch: a medium ground square (4 km of 16 m cells, the craters from 40 m) to the walker's horizon.
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
 
 **Still to come**:
-- a medium ring round the near square (the pyramid's full 167 m lattice out to a few km), so the horizon has its craters;
 - the target cue and the align hold;
 - belly jets;
 - C3b online (after D2, #1727);

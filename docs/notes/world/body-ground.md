@@ -6,7 +6,12 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 - **Heights**: `Terrain/Bodies/BodyHeights` (plain C#, `BodyHeightsTests`): the pyramid's finest level (the Moon's L5,
   167 m cells) bilinear, plus `CraterField` (2.5-320 m craters). A missing tile is the reference surface with its craters.
   `Grid` gives a square in the tangent frame at a point; `Coarse` is the globe's own surface (its stride-8 triangles).
-- **The square**: `World/Bodies/BodyGround`, 256² cells of 2 m round the camera, under 25 km over the reference. A worker
+- **Two squares** (#1850 follow-up): the near one below (solid) inside a medium one: 256² cells of 16 m (4 km, a
+  walker's horizon is 2.4 km on the Moon, 3.4 on Mars), the craters from 40 m (`CraterField.At(smallest:)`), drawn only,
+  rebuilt at 512 m. The near square's edge eases into the medium's ground (`BodyHeights.Grid(..., edge)`), the medium's
+  into the globe's `Coarse`; the medium discards under the near square (its own `hole_*`), the globe's tiles under the
+  medium (`BodyGround.Hole` is the outer square).
+- **The near square**: `World/Bodies/BodyGround`, 256² cells of 2 m round the camera, under 25 km over the reference. A worker
   builds a new one when the camera is 96 m from the centre, swapped in whole (height map + mesh). The last 64 m ease into
   `Coarse`, and the globe's own tiles discard a square column over it (`hole_*` in `body_globe.gdshader`), so the two
   meet without a step. Placed from doubles once a re-anchor.
