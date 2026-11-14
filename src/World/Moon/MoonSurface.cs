@@ -40,9 +40,10 @@ public partial class MoonSurface : Node
     public static MoonSurface? Active { get; private set; }
 
     /// <summary>A site in the world: its node, its frame, the epoch it was placed at.</summary>
-    public sealed class Placed(MoonSite site, Node3D node, EnuFrame frame)
+    public sealed class Placed(MoonSite? site, Node3D node, EnuFrame frame)
     {
-        public readonly MoonSite Site = site;
+        /// <summary>The site, or null for a colony.</summary>
+        public readonly MoonSite? Site = site;
         public readonly Node3D Node = node;
         public readonly EnuFrame Frame = frame;
         public int Epoch = -1;
@@ -104,6 +105,30 @@ public partial class MoonSurface : Node
             if (!have && d < ReachM + s.Extent) Build(s, axes);
             else if (have && d > DropM + s.Extent) Drop(s.Id);
         }
+        foreach (var c in MoonColonies.All)
+        {
+            double d = Math.Acos(Math.Clamp(Dot(n, c.Normal), -1, 1)) * r;
+            bool have = _placed.ContainsKey(c.Id);
+            if (!have && d < ColonyReachM) BuildColony(c, axes);
+            else if (have && d > ColonyReachM + 600) Drop(c.Id);
+        }
+    }
+
+    /// <summary>A colony is built while the camera's ground point is this close to its centre, metres (its lights take over past it, phase 8).</summary>
+    public const double ColonyReachM = 8000;
+
+    private void BuildColony(MoonColony c, FrameAxes axes)
+    {
+        var heights = _ground.Heights;
+        var g0 = Ellipsoid.Moon.ToGeodetic(heights.Ground(c.Normal));
+        var frame = new EnuFrame(g0, Ellipsoid.Moon);
+        var root = ColonyBuilder.Build(c, ColonyPlan.For(c));
+        AddChild(root);
+        var placed = new Placed(null, root, frame) { TracesIn = true };
+        _placed[c.Id] = placed;
+        Place(placed, axes);
+        GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[moon] {c.Name}: built ({root.GetChildCount()} nodes, plateau {g0.H:F1} m)"));
     }
 
     private void Build(MoonSite s, FrameAxes axes)
@@ -116,8 +141,9 @@ public partial class MoonSurface : Node
         foreach (var part in s.Parts)
         {
             var (x, y, z) = PartAt(heights, s, frame, part);
-            // +Z of the model along the heading (degrees from north; the frame's z is south)
-            float yaw = Mathf.Pi - Mathf.DegToRad((float)part.Heading);
+            // the model's front along the heading (degrees from north; the frame's z is south): authored facing +Z,
+            // MeshScratch.Build turns it to face -Z, so -Z goes along the heading
+            float yaw = -Mathf.DegToRad((float)part.Heading);
             var t = new Transform3D(new Basis(Vector3.Up, yaw), new Vector3((float)x, (float)y, (float)z));
             var mesh = MoonSiteMeshes.Instance(part.Part, part.Flag);
             mesh.Transform = t;

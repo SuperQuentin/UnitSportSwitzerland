@@ -37,6 +37,12 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Artemis Base ([#1940](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1940))
+
+- [ ] Go to Artemis Base (89.384° S, 150.055° W; `--moonsites artemis:close` drops the camera among its modules), step in and walk round the hub and along a spine → you bump into the cans, tubes and domes (they are solid, not yet walk-in: that is phase 3); the plateau is flat underfoot and eases into the natural ground past the pads with no step.
+- [ ] Walk the road out of the hangar to the pads → three numbered pads with red edge lights, the road's dashes along its middle.
+- [ ] In VR, stand under a can → its height (4.6 m across on its legs) and the tubes (2.4 m across, their axis 2.6 m up) feel right.
+
 ## The Moon's historic sites ([#1939](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1939))
 
 - [ ] `--bodyshot`-style trip to Apollo 11 (0.674° N, 23.473° E; `--moonsites apollo11` puts you there), step in (T) and walk to the descent stage → you bump into its body and footpads, not through them; the knocked-over flag lies a few metres off; the footpaths look like faint trodden bands, not painted lines, and never flicker into the ground as you walk over them.

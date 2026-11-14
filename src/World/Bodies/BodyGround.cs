@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using UnitSport.Core;
@@ -115,8 +116,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         Heights = new BodyHeights(cube, level,
             key => pyramid.Heights(key),
             globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null,
-            // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters
-            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps(), cube.Shape.A) : null);
+            // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
+            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null);
         _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
         _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
     }
