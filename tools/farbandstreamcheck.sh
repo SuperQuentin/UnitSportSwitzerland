@@ -20,7 +20,8 @@ queue() { # dir
   printf '0,g300,0,-8,0,8,%s/a_300m.png\n0,g800,0,-14,90,8,%s/b_800m.png\nquit\n' "$1" "$1" > "$1/queue.txt"
 }
 queue "$SHOTS/A"; queue "$SHOTS/B"
-LOOK=(--at "$AT" --origin "$AT" --nohud --nocapture --date 2027-07-15 --time 12 --style cartoon --systems terrain,generated,physics,sky,ui,network)
+# buildings out to 3 rings (3.5 km, Medium's): the test profile's Low reaches 1.5 km, about where the near leaves end
+LOOK=(--buildingrings 3 --at "$AT" --origin "$AT" --nohud --nocapture --date 2027-07-15 --time 12 --style cartoon --systems terrain,generated,physics,sky,ui,network)
 tc_server 900 180 "$OUT/farband_server.log" --server --port $PORT --no-query "${EARTH[@]}" --leaves "$LEAVES" --globe "$PYRAMID" || exit 1
 tc_client 900 "$OUT/farband_A.log" --windowed --connect 127.0.0.1:$PORT --name Owner "${EARTH[@]}" --leaves "$LEAVES" --globe "$PYRAMID" \
   "${LOOK[@]}" --shot-queue "$SHOTS/A/queue.txt"
@@ -38,5 +39,8 @@ done
 far=$(ls "$CACHE" | grep -cE '^leaf_.*\.s(2|4|6|7)\.culf$')
 echo "[farbandstreamcheck] B's cache: $far far-band sections, $(ls "$CACHE" | grep -c '^leaf_') leaf entries in all, $(du -sm "$CACHE" | cut -f1) MB"
 [ "$far" -gt 0 ] || fail="${fail:+$fail; }B streamed no far-band section"
+buildings=$(ls "$CACHE" | grep -cE '^leaf_.*\.s6\.culf$')
+echo "[farbandstreamcheck] B's far buildings: $buildings leaves, $(ls "$CACHE" | grep -E '^leaf_.*\.s6\.culf$' | (cd "$CACHE" && xargs -r du -cb | tail -1 | cut -f1) | awk '{printf "%.1f", $1 / 1048576}') MB"
+[ "$buildings" -gt 0 ] || fail="${fail:+$fail; }B streamed no far buildings"
 if [ -z "$fail" ]; then echo "[farbandstreamcheck] RESULT: ok"; exit 0; fi
 echo "[farbandstreamcheck] RESULT: FAILED ($fail; see $OUT/farband_*.log)"; exit 1

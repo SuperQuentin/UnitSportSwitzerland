@@ -38,6 +38,9 @@ D (#1500, earth by default, the LV95 runtime deleted) would leave them with no g
 - **A server on leaves alone** starts without flat tiles under `--frame earth` (`ServerWorld`: built leaves are terrain
   enough).
 
+- **The far band (#1657 phase 2)**: within 4 km a streamed real leaf is furnished as a far leaf, its sections asked one
+  by one (`LeafStore.Sections`), not under Low data (`terrain/far-features`).
+
 ## Data controls (`core/data-usage`)
 
 - Cache cap, Clear, trim and the session counter: the tile cache's, unchanged.

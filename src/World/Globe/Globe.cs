@@ -376,7 +376,8 @@ public partial class Globe : Node
         Levels();
         _shader = GD.Load<Shader>("res://shaders/globe.gdshader");
         if (DayNight.Instance is { Sky: { } sky }) _month = sky.Date.Month;
-        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}");
+        GD.Print($"[globe] {Pyramid.Count} tiles to level {_maxLevel}, month {_month}, from {Pyramid.Describe()}"
+            + (Earth && FarLeafM > 0 ? $"; far leaves to {FarLeafM / 1000:F1} km ({StreamedFarLeafM / 1000:F1} km streamed), their buildings to {FarBuildingsM / 1000:F1} km" : ""));
         for (int f = 0; f < CubeSphere.Faces; f++) Request(new CubeKey(f, 0, 0, 0));
         Present = true;
         Current = this;

@@ -99,9 +99,9 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
   flat building rings, 3.5 km) its buildings come as boxes (`BuildingMeshBuilder.BuildProxies`, what flat draws past
   1 km), asked after each plan and dropped 500 m past it. Built in the leaf's anchor frame under the tile's node; the
   materials are the flat streamer's (`FurnishMaterials`), the terrain one is the world's (`FogUniforms`, restyled).
-  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes. Only leaves on
-  this copy's disk (`LeafStore.IsLocal`): a leaf the server streams (#1655) is never fetched for the far band, and its
-  spot keeps the coarser level.
+  Fill leaves (the generator's, past the region) stay bare: producing ~2,400 of them would take minutes. Leaves on
+  this copy's disk out to the band's end; a leaf the server streams (#1655) out to 4 km, section by section, and past it
+  the pyramid's baked features (#1657, `terrain/far-features`).
 - **Water**: a leaf-level tile's heights are the lake's bed (#298, Lavaux's 310 m down). It is lifted to the leaf's own
   water, and to the coarser level's surface sampled under it (`FillFromAncestors`) where that is level or the leaf lies
   more than `BedM` (20 m) under it (shore vertices outside the leaf's water mask drew a wall that deep). Coarser levels
