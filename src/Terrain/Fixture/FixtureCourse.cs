@@ -251,6 +251,11 @@ public sealed class FixtureCourse
         c.Blocks.Add(new Block(420, 16 + 15, 52, 30, 10, Kind: BuildingKind.Industrial, Floors: 1));
         c.Blocks.Add(new Block(510, 16 + 12, 40, 24, 8, Kind: BuildingKind.Industrial, Floors: 1));
         c.Blocks.Add(new Block(600, 16 + 15, 56, 30, 10, Kind: BuildingKind.Industrial, Floors: 1));
+        // three more public buildings across the street (#1787): on earth leaves a plan is a hash of the building's Earth
+        // identity (Fnv.Alias), not of its flat key, and the earth set above drew no PAUSA machine. Added last, so the
+        // buildings above keep their keys and plans on both frames
+        foreach (var x in new[] { 40.0, 80.0, 120.0 })
+            c.Blocks.Add(new Block(x, -(6 + 9), 24, 18, 10, Kind: BuildingKind.Civic, Floors: 3));
         return c;
     }
 
@@ -278,6 +283,12 @@ public sealed class FixtureCourse
         // either side (tools/sitepalletnetcheck.sh); added after the first three so their keys, and so their plans, stay
         // as they were, and topped out so --pitcheck (a Foundations and a Shell site) never picks it
         course.Blocks.Add(new Block(380, 24, 26, 15, 12.0f, Kind: BuildingKind.UnderConstruction, Floors: 4));
+        // two more topped-out blocks past the rest (#1787): an office's gallery and its raised doors
+        // (tools/siteuppernetcheck.sh) depend on how the yard is laid out, a hash of the building's key, and on earth leaves
+        // that key is the building's Earth identity (Fnv.Alias): the four above drew no gallery there. Farthest from the
+        // start, so the checks that take the nearest site keep theirs
+        course.Blocks.Add(new Block(465, 24, 26, 15, 12.0f, Kind: BuildingKind.UnderConstruction, Floors: 4));
+        course.Blocks.Add(new Block(525, -26, 26, 15, 12.0f, Kind: BuildingKind.UnderConstruction, Floors: 4));
         return course;
     }
 
