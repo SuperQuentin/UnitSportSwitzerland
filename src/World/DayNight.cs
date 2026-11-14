@@ -271,8 +271,11 @@ public partial class DayNight : Node
             SunPath.Frame = Origin?.Frame;
             var date = SunPath.Today();
             var at = Place;
-            // the bodies at their own time, the Earth turned by the hour (#1850): the sun's hour angle is today's exactly
-            var m = SkyClock.Moment(WorldClock.BodiesUtc, date, Hour);
+            // the bodies at their own time, the Earth turned by the hour (#1850): the sun's hour angle is today's exactly.
+            // A check that moves the sky to a date of its own (SunPath.Today: the terminator against NOAA) reads it there
+            var m = date == Calendar.Today
+                ? SkyClock.Moment(WorldClock.BodiesUtc, date, Hour)
+                : SkyMoment.Calendar(date, Hour);
             sun = SunPath.Toward(SkyBody.Sun, m, at, out float elevationDeg, out _);
             SunElevationDeg = elevationDeg;
             var moon = SunPath.Toward(SkyBody.Moon, m, at, out _, out double moonDistance);
