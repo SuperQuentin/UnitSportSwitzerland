@@ -407,36 +407,9 @@ public static partial class TileRewriter
             if (OnCarPath(at)) return "car path";
             return null;
         }
-        // a car's way through a core: within its lane's half width of a car path (#1929: a give-way sign just outside the core's
-        // outline at a mouth, beside a narrow ribbon, stood on the path into the Major), the core's own paths indexed by cell
-        Dictionary<(int, int), List<(Vec2 A, Vec2 B, double Half)>>? carPaths = null;
-        bool OnCarPath(Vec2 at)
-        {
-            if (carPaths is null)
-            {
-                carPaths = new();
-                foreach (var p in plans)
-                    foreach (var c in p.Core?.Connectors ?? [])
-                    {
-                        if (c.Kind != Layout.ConnectorKind.Car) continue;
-                        double half = Math.Max(c.Width, c.ToWidth) * 0.5;
-                        for (int i = 1; i < c.Centre.Count; i++)
-                        {
-                            var (a, b) = (c.Centre[i - 1], c.Centre[i]);
-                            for (int cx = CarPathCell(Math.Min(a.X, b.X) - half); cx <= CarPathCell(Math.Max(a.X, b.X) + half); cx++)
-                                for (int cy = CarPathCell(Math.Min(a.Y, b.Y) - half); cy <= CarPathCell(Math.Max(a.Y, b.Y) + half); cy++)
-                                {
-                                    if (!carPaths.TryGetValue((cx, cy), out var list)) carPaths[(cx, cy)] = list = new();
-                                    list.Add((a, b, half));
-                                }
-                        }
-                    }
-            }
-            double r = RoadSigns.PoleDiameter * 0.5;
-            return carPaths.TryGetValue((CarPathCell(at.X), CarPathCell(at.Y)), out var near)
-                && near.Any(s => PriorityPlanner.DistanceToSegment(at, s.A, s.B) < s.Half + r);
-        }
-        static int CarPathCell(double v) => (int)Math.Floor(v / 20.0);
+        // a car's way through a core: within its lane's half width of a written core's car path (#1929)
+        CarPaths? carPaths = null;
+        bool OnCarPath(Vec2 at) => (carPaths ??= new CarPaths(plans.Where(p => written.Contains(p.Node)))).Blocks(at, RoadSigns.PoleDiameter * 0.5);
 
         var net = result.Network;
         // in a fixed order, whichever block writes them (#818: a tile's records alike from every block, its nodes numbered apart)
