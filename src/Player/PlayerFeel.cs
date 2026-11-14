@@ -1058,8 +1058,16 @@ public partial class PlayerFeel : Node3D
             }
             else if (_player.Vehicle is Airliner jetliner)
                 AppendAirliner(sb, jetliner);
-            else if (_player.Vehicle is Ufo { Orbit: { } orbit } saucer)
-                AppendOrbit(sb, orbit, saucer.Space.Body);
+            else if (_player.Vehicle is Ufo { InSpace: true } saucer)
+            {
+                // the cruise drive or the orbit (#1851), the drive's switch, the target cue
+                float alt = _player.Origin is { } o ? (float)o.AltitudeOf(_player.GlobalPosition) : 0f;
+                if (saucer.DriveOn) sb.Append(System.FormattableString.Invariant($"DRIVE {saucer.State.Velocity.Length() / 1000f:0.00} km/s    {alt / 1000f:0.0} km    LEVER {saucer.DriveLever * 100f:0}%"));
+                else if (saucer.Orbit is { } orbit) AppendOrbit(sb, orbit, saucer.Space.Body);
+                sb.Append('\n').Append(saucer.DriveOn ? "DRIVE ON [" : "DRIVE OFF [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]    TARGET ");
+                if (SpectatorTargets.Instance?.Target is { } t) sb.Append(Core.CelestialBody.Of(t).Name).Append(' ');
+                sb.Append('[').Append(Core.InputHints.Label(Core.PlayerInput.SpectatorTarget)).Append(']');
+            }
             else if (_player.IsFlying)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");

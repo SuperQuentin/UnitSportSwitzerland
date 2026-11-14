@@ -3931,6 +3931,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             GetViewport().SetInputAsHandled();
             return;
         }
+        // the saucer has no engine to switch: in Space Z is its cruise drive (#1851), as the shuttle's
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is Ufo { DriveAvailable: true } saucer && SeatIndex == 0)
+        {
+            Announced?.Invoke(saucer.DriveOn ? "Cruise drive off: a circular orbit" : "Cruise drive on: climb and descend set its speed", true);
+            saucer.ToggleDrive();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true } && SeatIndex == 0)
         {
             EngineOn = !EngineOn;

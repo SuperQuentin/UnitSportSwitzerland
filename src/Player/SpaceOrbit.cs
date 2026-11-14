@@ -18,6 +18,17 @@ public interface ISpacecraft
 }
 
 /// <summary>
+/// A craft the target cue can point between bodies (#1851, <see cref="SpectatorTargets"/>): the shuttle and the UFO, in
+/// Space. <see cref="Aim"/> is the hold (a world direction; null: none), <see cref="Nose"/> where it points or drives now.
+/// </summary>
+public interface IAimable
+{
+    bool InSpace { get; }
+    Vector3? Aim { get; set; }
+    Vector3 Nose { get; }
+}
+
+/// <summary>
 /// The orbit seam (#1430 H5, shared by the UFO and the shuttle, #1492): above the Space handover (entered at
 /// 60 km climbing, left below 50 km, the craft's own altitude) the craft's state is an orbit in doubles in the
 /// inertial frame (<see cref="Core.Orbit"/>), stepped under GM/r², the craft's thrust and the 1976 air's drag.

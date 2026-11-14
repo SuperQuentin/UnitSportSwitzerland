@@ -49,7 +49,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   - PR #1883: the drive by the nearest surface;
   - this branch: the target and its hold in the shuttle (the tangent of a 100 km arrival orbit), crossings in the drive,
     `--shuttlemooncheck` from a 400 km Earth orbit to a closed lunar one;
-  - this branch: the belly jets (landing and take-off on an airless body), the Moon round trip in `--shuttlemooncheck`.
+  - PR #1960: the belly jets (landing and take-off on an airless body), the Moon round trip in `--shuttlemooncheck`;
+  - this branch: the UFO's cruise drive and target hold (`--ufomooncheck`).
 
 **Still to come**:
 - C3b online (after D2, #1727);
