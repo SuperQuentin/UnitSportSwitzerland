@@ -62,7 +62,7 @@ public partial class SitePalletNetProbe : ChatProbe
     private const float MachineHalfWidth = 1.3f;
 
     /// <summary>The most the floor may rise or fall along the way in, m.</summary>
-    private const float MaxStep = 0.05f;
+    private const float MaxStep = 0.12f;
 
     /// <summary>The keys of the topped-out sites on these tiles (off the main thread: it plans them).</summary>
     private static HashSet<string> ToppedOutSites(IEnumerable<Terrain.Format.TileId> tiles)
@@ -110,11 +110,11 @@ public partial class SitePalletNetProbe : ChatProbe
                 var from = pallet.GlobalPosition + Vector3.Up * 1.2f + dir * 0.9f;
                 // the machine's width, not a line (#1718: a ray down the middle passed a way the telehandler stuck in):
                 // its centre and either side, high and low (the materials' rebar bundle is 0.35 m high, #619 turns it
-                // to the building), and at the forks' height
+                // to the building)
                 var aside = new Vector3(-dir.Z, 0, dir.X) * MachineHalfWidth;
                 var hit = new Godot.Collections.Dictionary();
                 foreach (var off in new[] { Vector3.Zero, aside, -aside })
-                    foreach (var up in new[] { 0f, -0.95f, -1.14f })
+                    foreach (var up in new[] { 0f, -0.95f })
                     {
                         if (hit.Count > 0) break;
                         var at = from + off + Vector3.Up * up;
