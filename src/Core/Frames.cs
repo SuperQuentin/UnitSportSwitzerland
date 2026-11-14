@@ -154,6 +154,29 @@ public static class Frames
         return body;
     }
 
+    /// <summary>
+    /// The nearest surface to a point given in <paramref name="body"/>'s fixed frame (#1850): among the body, its
+    /// children, its parent and its parent's other children, the one whose surface is closest, and how far it is
+    /// (metres; the height over the ellipsoid for <paramref name="body"/> itself, the distance to the centre less the
+    /// equatorial radius for the others; never below 0). What the spectator's speed and the cruise drive's
+    /// v = lever · d / τ measure (section 8); a giant's "surface" is its 1-bar level, the Sun's its photosphere.
+    /// </summary>
+    public static (BodyId Body, double Distance) NearestSurface(BodyId body, DVec3 p, SkyMoment m)
+    {
+        var self = CelestialBody.Of(body);
+        var best = (body, Math.Max(0, self.Shape.ToGeodetic(p.AsEcef).H));
+        void Try(BodyId other)
+        {
+            if (other == body) return;
+            double d = Math.Max(0, Convert(body, p, other, m).Length - CelestialBody.Of(other).Shape.A);
+            if (d < best.Item2) best = (other, d);
+        }
+        foreach (var b in CelestialBody.All)
+            if (b.Parent == body || (self.Parent is { } parent && (b.Id == parent || b.Parent == parent)))
+                Try(b.Id);
+        return best;
+    }
+
     /// <summary>The body, its parent, its parent's parent, up to the Sun.</summary>
     private static List<BodyId> Ancestry(BodyId body)
     {

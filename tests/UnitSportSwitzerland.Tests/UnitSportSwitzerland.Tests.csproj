@@ -195,6 +195,7 @@
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CelestialBody.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Atmosphere.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Orbit.cs" Link="Game\%(Filename)%(Extension)" />
