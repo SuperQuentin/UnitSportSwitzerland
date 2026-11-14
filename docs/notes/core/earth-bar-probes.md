@@ -36,6 +36,10 @@ judge re-anchors through one helper.
   (no `--to`: one road, flat out, the quick row on `hairpin`). Stuck 15 s: the place is logged (`blocked:`, with the
   route's heights and roads, a picture when windowed) and the drive planned again round it (up to 8; `--avoid E,N;..`
   gives places up front). Fails on a stall (60 s), a fall, out of the car, no way, the route ending short, a jump.
+  A start over a bridge sets the car on the deck, not on the ground under it (#1759 was the car set down 7 m under the
+  A1's deck at Bellevue, wedged by the abutment). A dead stop (over 4 m/s lost in a quarter second) logs `jolt:` each
+  tick, with the car's height over the ground and every contact (body, offset, normal): a roof contact with a normal
+  pointing down is a deck overhead.
 - **`tools/longdrivecheck.sh` is parity** (#1744, the user's call): the D: drive meets game and data bugs on flat and
   earth alike (#1757 Place des Nations, #1758 Chambésy's signal pole, #1759 the A1 bridge at Bellevue, #1760 the Genthod
   one-way cut), so it drives Bellevue → Nyon on flat, then on earth, on the same route (`--routeroads lv95`,

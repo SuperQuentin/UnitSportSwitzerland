@@ -7,6 +7,13 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --date 2027-07-15`, Cartoon.
+
+- [ ] Walk south across Pont des Bergues through the branch to Île Rousseau (`--at 2500310,1117990`) → you stay on the deck all the way, no fall into the Rhône at N 1117986-1117972.
+- [ ] Drive west on the Major across Place des Nations (`--at 2500300,1119935`) → the car crosses the bridge over the railway without dropping or stopping.
+
 ## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
 
 In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.
