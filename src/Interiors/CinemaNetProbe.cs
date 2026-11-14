@@ -240,7 +240,9 @@ public partial class CinemaNetProbe : ChatProbe
         int heard = 0, listened = 0;
         _lastLook = Core.RealClock.Now;
         _firstShown = double.NaN;
-        while (Net.ClockSync.ServerNow < until && stream is not { Failed: true } && stream is not { Ended: true })
+        // only while the hall still shows this link: once A moves it on (its live share), what plays is not this (#1706)
+        while (Net.ClockSync.ServerNow < until && stream is not { Failed: true } && stream is not { Ended: true }
+            && booths.VideoOf(plan, 0).Link == link)
         {
             double pos = CinemaVideo.PositionAt(Net.ClockSync.ServerNow, t0);
             // the booth's own feed, pumped by it every frame as in a hall
