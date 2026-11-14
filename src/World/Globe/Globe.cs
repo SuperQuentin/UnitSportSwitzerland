@@ -48,12 +48,12 @@ public partial class Globe : Node
     /// <summary>How long a split's child takes to grow from its parent's shape into its own (#1656), seconds.</summary>
     public const double GrowS = 0.4;
 
-    // the children growing: when each began, real seconds
+    // the children growing: when each began, real seconds (RealClock: a look on screen, not the game's time)
     private readonly Dictionary<CubeKey, double> _growing = new();
 
     private void Grow(CubeKey key, MeshInstance3D node)
     {
-        _growing[key] = Time.GetTicksMsec() / 1000.0;
+        _growing[key] = Core.RealClock.Now;
         node.SetInstanceShaderParameter(Young, 1f);
     }
 
@@ -61,7 +61,7 @@ public partial class Globe : Node
     private void GrowStep()
     {
         if (_growing.Count == 0) return;
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.RealClock.Now;
         foreach (var (key, began) in _growing)
         {
             float young = (float)Math.Max(0, 1 - (now - began) / GrowS);
