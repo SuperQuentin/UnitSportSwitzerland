@@ -29,6 +29,7 @@ public partial class OrbitNetProbe : ChatProbe
     protected override void Fail(string why) => Expect(false, why);
 
     private float _down;
+    private float _lastApart;
     private double _logAt;
 
     public override async void _Ready()
@@ -116,12 +117,20 @@ public partial class OrbitNetProbe : ChatProbe
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             float d = Apart(me);
+            if (float.IsInfinity(d) != float.IsInfinity(_lastApart))
+            {
+                var gone = Other();
+                GD.Print(FormattableString.Invariant($"{Log} t {GameClock.Now - t0:F1} s: the other's copy {(float.IsInfinity(d) ? "lost" : "back")}: {(gone == null ? "no copy" : !IsInstanceValid(gone) ? "freed" : $"ride {gone.Ride}, {gone.InterpState}")}"));
+            }
+            _lastApart = d;
             near = Mathf.Min(near, d);
             far = Mathf.Max(far, d);
             if (GameClock.Now - t0 >= _logAt)
             {
                 _logAt += 10;
-                GD.Print(FormattableString.Invariant($"{Log} t {GameClock.Now - t0:F0} s: the other {d:F0} m away"));
+                var seen = Other();
+                string why = seen == null ? "no copy" : !IsInstanceValid(seen) ? "freed" : $"ride {seen.Ride}, visible {seen.Visible}, {seen.InterpState}";
+                GD.Print(FormattableString.Invariant($"{Log} t {GameClock.Now - t0:F0} s: the other {d:F0} m away ({why}; own frame {me.GetProcessDeltaTime() * 1000:F0} ms)"));
             }
             if (Other() is not { } o || !IsInstanceValid(o) || me.Origin is not { } origin) { lastAt = null; continue; }
             var at = origin.Frame.ToEcef(o.GlobalPosition);
