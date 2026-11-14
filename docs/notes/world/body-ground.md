@@ -28,6 +28,11 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 - **A square's colour on a small body** (#1853): the finest tile over the centre that holds the whole square (Phobos'
   finest, 2.2 km, is smaller than the 4 km square, whose edges read past it); and the globe's exposure follows into
   the squares once its six faces are in (a square made before kept the shader's 1.6: a bright patch).
+- **The exposure is read up front** (#1983): `BodyGlobe` reads its six level-0 faces' colour on a worker as it is made
+  (`FaceMean`, all sixteen bodies in a few hundred ms at boot) and holds its first tiles until the exposure is set (at most
+  3 s); `BodyGround` puts no square in before (`ExposureSettled`). Waiting for the six to stream in lit the first seconds at
+  the shader's 1.6 and then dropped every tile and square to the photo's exposure in one frame (the Moon: 1.6 to 0.94, mean
+  luma 86 to 71 at Apollo 11, filmed). A streamed pyramid with no level-0 colour here still sets it as its tiles come.
 - **One ground a body, the anchor's answers**: every landable body with a pyramid has its `BodyGround`; the one whose
   body the anchor is on claims `BodyGround.Active` and `EarthWorld.OtherBody`. `Covers` is the square's true ground
   (192 m each way), twice the 96 m at which the next is built.

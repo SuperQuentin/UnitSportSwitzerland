@@ -271,6 +271,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     private void Finish(Layer l)
     {
         if (l.Task is not { IsCompleted: true } done) return;
+        // a square waits for the globe's exposure: put in at the provisional one, it dimmed with the globe a moment later (#1983)
+        if (!_globe.ExposureSettled) return;
         l.Task = null;
         if (done.IsCompletedSuccessfully) Commit(l, done.Result);
         else GD.PrintErr($"[bodies] {Body.Name}'s {l.Name.ToLowerInvariant()} ground: {done.Exception?.GetBaseException().Message}");
