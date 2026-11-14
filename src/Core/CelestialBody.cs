@@ -36,7 +36,7 @@ public sealed class CelestialBody
     /// <summary>WGS84: GM and the rotation rate of NIMA TR8350.2. The ground game keeps its tuned 9.81 m/s².</summary>
     public static readonly CelestialBody Earth = new(BodyId.Earth, "Earth", null, Ellipsoid.Wgs84, 3.986004418e14,
         7.292115e-5, BodyId.Sun, 1.00000261 * Au, landable: true, spaceEnterM: 60_000, spaceExitM: 50_000, leafLevel: 14,
-        groundGravity: 9.81);
+        groundGravity: 9.81, air: BodyAir.Earth);
 
     public static readonly CelestialBody Sun = new(BodyId.Sun, "Sun", SkyBody.Sun, Ellipsoid.Sphere(695_700_000),
         1.32712440018e20, DegPerDay(14.1844), null, 0, landable: false);
@@ -47,7 +47,7 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Mars = new(BodyId.Mars, "Mars", SkyBody.Mars,
         Ellipsoid.Mars, 4.282837e13, DegPerDay(350.89198226), BodyId.Sun, 1.52371034 * Au,
-        landable: true, spaceEnterM: 40_000, spaceExitM: 30_000, craterDensity: 0.15);
+        landable: true, spaceEnterM: 40_000, spaceExitM: 30_000, craterDensity: 0.15, air: BodyAir.Mars);
 
     public static readonly CelestialBody Mercury = new(BodyId.Mercury, "Mercury", SkyBody.Mercury,
         Ellipsoid.FromRadii(2_440_530, 2_438_260), 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
@@ -182,10 +182,11 @@ public sealed class CelestialBody
 
     private CelestialBody(BodyId id, string name, SkyBody? sky, Ellipsoid shape, double gm, double spin, BodyId? parent,
         double orbitRadius, bool landable, double spaceEnterM = 0, double spaceExitM = 0, int leafLevel = -1,
-        double groundGravity = -1, double craterDensity = 0)
+        double groundGravity = -1, double craterDensity = 0, BodyAir? air = null)
     {
         Id = id;
         CraterDensity = craterDensity;
+        Air = air;
         Name = name;
         Sky = sky;
         Shape = shape;
@@ -227,8 +228,17 @@ public sealed class CelestialBody
     /// </summary>
     public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
 
-    /// <summary>Whether it has air a craft feels (#1851): the Earth's 1976 standard atmosphere; Mars' and the others' come with them.</summary>
-    public bool HasAir => Id == BodyId.Earth;
+    /// <summary>Its air (#1853): what drags a craft and what its sky scatters; null where there is none (the Moon).</summary>
+    public BodyAir? Air { get; }
+
+    /// <summary>Whether it has air a craft feels (#1851): the Earth's, Mars' (#1853).</summary>
+    public bool HasAir => Air != null;
+
+    /// <summary>
+    /// The air's density at a height over the reference, kg/m³: the Earth's 1976 standard atmosphere
+    /// (<see cref="Atmosphere.Density"/>), another body's exponential (<see cref="BodyAir.Density"/>), 0 without air.
+    /// </summary>
+    public double AirDensity(double altitude) => Id == BodyId.Earth ? Atmosphere.Density(altitude) : Air?.Density(altitude) ?? 0;
 
     /// <summary>Point-mass gravity at a distance from the centre, m/s²: 8.68 at 400 km above the Earth.</summary>
     public double Gravity(double r) => GM / (r * r);
