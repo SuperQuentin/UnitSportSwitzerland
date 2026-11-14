@@ -100,7 +100,9 @@ public static class OutlineSurvey
         var rows = new SortedDictionary<string, Row>();
         var total = new Row();
         int tiles = 0;
-        foreach (var town in Towns)
+        // --town Geneva: that town alone, for a quicker look at one building (--key)
+        string? onlyTown = CmdArgs.Value("--town");
+        foreach (var town in Towns.Where(t => onlyTown == null || t.Name.Equals(onlyTown, StringComparison.OrdinalIgnoreCase)))
         {
             var c = TileId.FromLv95(town.E, town.N);
             int townTiles = 0;
@@ -113,20 +115,24 @@ public static class OutlineSurvey
                     if (++townTiles > MaxTiles) continue;
                     tiles++;
                     var roads = src.LoadRoadsAsync(id).GetAwaiter().GetResult();
-                    var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+                    // --grid: on the terrain, as the game computes its doors and plans (the hillside and stilts rules)
+                    var terrain = CmdArgs.Has("--grid") ? src.LoadChunkAsync(id).GetAwaiter().GetResult() : null;
+                    var doors = BuildingFootprint.ComputeDoors(tile, roads, terrain);
                     var tileWatch = Stopwatch.StartNew();
                     int tilePlans = 0;
                     (double Ms, int Index, BuildingKind Kind) slowest = default;
                     foreach (int index in doors.Where(d => d.Width > 0).Select(d => d.Index).Distinct())
                     {
                         var b = tile.Buildings[index];
-                        if (BuildingFootprint.Compute(tile, index, roads, null) is not { } fp) continue;
+                        if (BuildingFootprint.Compute(tile, index, roads, terrain) is not { } fp) continue;
+                        // --key alone with --only: that building, not the town
+                        if (CmdArgs.Has("--only") && CmdArgs.Value("--key") != fp.Key.ToString()) continue;
                         var row = rows.TryGetValue(b.Kind.ToString(), out var r) ? r : rows[b.Kind.ToString()] = new Row();
                         InteriorGenerator.OutlineFailure = null;
                         InteriorGenerator.WingFailure = "one wing";
                         var watch = Stopwatch.StartNew();
                         InteriorLayout? l;
-                        try { l = InteriorGenerator.Generate(tile, index, roads, null); }
+                        try { l = InteriorGenerator.Generate(tile, index, roads, terrain); }
                         catch (Exception ex) { GD.PrintErr($"[outlinesurvey] {id} #{index}: {ex.Message}"); continue; }
                         double ms = watch.Elapsed.TotalMilliseconds;
                         tilePlans++;
@@ -165,7 +171,7 @@ public static class OutlineSurvey
                         {
                             svgKeys.Add(fp.Key.ToString());
                             InteriorGenerator.PlanWings = false;
-                            var old = InteriorGenerator.Generate(tile, index, roads, null);
+                            var old = InteriorGenerator.Generate(tile, index, roads, terrain);
                             InteriorGenerator.PlanWings = true;
                             if (old != null)
                             {
@@ -198,6 +204,11 @@ public static class OutlineSurvey
                         if (CmdArgs.Value("--key") == fp.Key.ToString())
                         {
                             GD.Print($"[outlinesurvey] {fp.Key} {b.Kind} {l.Type} {l.Width:F1}x{l.Depth:F1} m, entry x {l.EntryX:F1}, wings: {InteriorGenerator.WingFailure ?? "planned"}");
+                            // the doors the tile draws (ComputeDoors) against the plan's own footprint: one list, or a slot names two doors
+                            foreach (var d in doors.Where(d => d.Index == index))
+                                GD.Print($"[outlinesurvey]   drawn slot {d.Slot} at ({d.Position.X:F1}, {d.Position.Z:F1}), the plan's: "
+                                    + (fp.Doors.FirstOrDefault(x => x.Slot == d.Slot) is { Width: > 0 } q ? $"({q.Position.X:F1}, {q.Position.Z:F1})" : "none"));
+                            GD.Print($"[outlinesurvey]   the plan's doorways: {string.Join(", ", l.AllEntrances().Select(e => e.Door))}");
                             // the roof on a 2 m grid, the back at the top: # roof, . open, D a street door
                             if (PlanOutline.Grid(b, fp.Center, fp.AxisU, fp.Width, fp.Depth, 2f) is { } map)
                                 for (int j = map.GetLength(1) - 1; j >= 0; j--)

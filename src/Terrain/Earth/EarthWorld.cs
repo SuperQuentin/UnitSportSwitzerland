@@ -170,6 +170,18 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     }
 
     /// <summary>
+    /// The loaded leaves whose buildings stand on a stand-in tile, furnished again (<see cref="RefreshFurniture"/>): its doors
+    /// changed (<see cref="Interiors.DoorWarden"/> found some with no doorway inside, #1766). Main thread.
+    /// </summary>
+    public void RefreshDoors(TileId tile)
+    {
+        var leaves = new List<CubeKey>();
+        foreach (var key in _near.Keys)
+            if (StandOf(key)?.Id == tile) leaves.Add(key);
+        RefreshFurniture(leaves);
+    }
+
+    /// <summary>
     /// The group of the leaves' collision patches (their ground with its roads and buildings): what a climb reads the cover
     /// of, as a flat chunk's own body (#1649).
     /// </summary>

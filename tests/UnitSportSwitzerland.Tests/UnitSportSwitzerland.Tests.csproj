@@ -226,6 +226,7 @@
     <Compile Include="..\..\src\Interiors\RampProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\GarageLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorLocks.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\LiftRide.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\ActorTrack.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\ReplayRing.cs" Link="Game\%(Filename)%(Extension)" />
