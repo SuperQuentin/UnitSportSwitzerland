@@ -70,7 +70,7 @@ public partial class BodyViews : Node
             _globes.Add(_earth);
         }
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
-        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _moon?.Ground));
+        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }
 
     public override void _ExitTree()
