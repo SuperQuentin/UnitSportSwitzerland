@@ -40,7 +40,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How far each way from the centre the globe's own tiles step aside, metres: the square's half side.</summary>
     public const float HoleM = Cells * CellM / 2 - 0.25f;
 
-    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex";
+    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength";
 
     public CelestialBody Body => _globe.Body;
 
@@ -256,6 +256,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var material = new ShaderMaterial { Shader = _shader };
         if (sq.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(sq.Colour));
         material.SetShaderParameter(SunDir, _globe.Sun == Vector3.Zero ? Vector3.Up : _globe.Sun);
+        material.SetShaderParameter(SunStrength, _globe.Exposure);
         int side = Cells + 1;
         var body = new StaticBody3D { Name = "Square" };
         body.AddChild(new CollisionShape3D

@@ -79,7 +79,21 @@ public partial class BodyGlobe : Node
     private readonly Node3D _root = new() { Name = "Frame" };
     private readonly Dictionary<CubeKey, Tile> _tiles = new();
     private readonly HashSet<CubeKey> _loading = new();
-    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array? Arrays, Image? Colour)> _done = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array? Arrays, Image? Colour, float Mean)> _done = new();
+
+    /// <summary>
+    /// What a lit square of ground's mean colour comes out at (#1853): every body's photo is exposed to it, whatever its
+    /// source's own scale (the Moon's Hapke-normalised LROC is dark, ~0.3; Mars' Viking mosaic a bright display image).
+    /// </summary>
+    public const float LitMean = 0.48f;
+
+    /// <summary>
+    /// The sun's strength on this body's photo (<c>sun_strength</c>), from its level-0 colour's mean brightness
+    /// (<see cref="LitMean"/> over it, 0.7 to 2.2); the shader's 1.6 until a level-0 tile has said.
+    /// </summary>
+    public float Exposure { get; private set; } = 1.6f;
+
+    private bool _exposed;
     private readonly HashSet<CubeKey> _show = new();
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
     private readonly int _month;
@@ -94,7 +108,7 @@ public partial class BodyGlobe : Node
     }
 
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
-        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+        SunStrength = "sun_strength", HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
 
     /// <summary>The hole every tile has now (half side 0: none), set on a tile only when it changes.</summary>
     private (Vector3 Centre, Vector3 Up, Vector3 East, float Half) _hole;
@@ -185,6 +199,20 @@ public partial class BodyGlobe : Node
         Drawn = shown > 0;
     }
 
+    /// <summary>A colour image's mean brightness (Rec. 709 luma of a 32 × 32 sample), 0 to 1.</summary>
+    private static float MeanBrightness(Image image)
+    {
+        int w = image.GetWidth(), h = image.GetHeight();
+        double sum = 0;
+        for (int j = 0; j < 32; j++)
+            for (int i = 0; i < 32; i++)
+            {
+                var c = image.GetPixel((int)((i + 0.5) * w / 32), (int)((j + 0.5) * h / 32));
+                sum += 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+            }
+        return (float)(sum / 1024);
+    }
+
     private void SetHole(ShaderMaterial m)
     {
         m.SetShaderParameter(HoleCentre, _hole.Centre);
@@ -240,6 +268,7 @@ public partial class BodyGlobe : Node
         {
             Godot.Collections.Array? arrays = null;
             Image? colour = null;
+            float mean = float.NaN;
             try
             {
                 var tile = CubeTileCodec.Decode(GlobeFiles.ReadBytes(at));
@@ -248,14 +277,18 @@ public partial class BodyGlobe : Node
                 {
                     colour = new Image();
                     if (colour.LoadWebpFromBuffer(CubeAlbedoCodec.Decode(GlobeFiles.ReadBytes(ca)).ForMonth(month)) != Error.Ok) colour = null;
-                    else colour.GenerateMipmaps();
+                    else
+                    {
+                        if (key.Level == 0) mean = MeanBrightness(colour);
+                        colour.GenerateMipmaps();
+                    }
                 }
             }
             catch (Exception ex)
             {
                 GD.PrintErr($"[bodies] {key}: {ex.Message}");
             }
-            _done.Enqueue((key, arrays, colour));
+            _done.Enqueue((key, arrays, colour, mean));
         });
     }
 
@@ -273,6 +306,15 @@ public partial class BodyGlobe : Node
             if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
             SetHole(material);
+            if (!_exposed && float.IsFinite(r.Mean) && r.Mean > 0.01f)
+            {
+                _exposed = true;
+                Exposure = Mathf.Clamp(LitMean / r.Mean, 0.7f, 2.2f);
+                foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
+                GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"[bodies] {Body.Name}'s photo: mean {r.Mean:F3}, exposed at {Exposure:F2}"));
+            }
+            material.SetShaderParameter(SunStrength, Exposure);
             var node = new MeshInstance3D
             {
                 Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,

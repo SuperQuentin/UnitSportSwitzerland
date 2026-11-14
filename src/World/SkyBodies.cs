@@ -169,6 +169,12 @@ public partial class SkyBodies : Node3D
         return best;
     }
 
+    /// <summary>
+    /// The bodies drawn as globes now (#1850, <c>World/Bodies/BodyViews</c>): their sky disc and point step aside, as the
+    /// Moon's disc does (<see cref="MoonDisc.HiddenByGlobe"/>). Mars from 20,000 km is its globe, not a second disc.
+    /// </summary>
+    public static readonly HashSet<SkyBody> HiddenByGlobe = new();
+
     private void Place()
     {
         if (DayNight.Instance is not { Sky: { } sky } day || GetViewport()?.GetCamera3D() is not { } cam)
@@ -196,6 +202,7 @@ public partial class SkyBodies : Node3D
         foreach (var id in Bodies)
         {
             var e = _entries[id];
+            if (HiddenByGlobe.Contains(id)) { Hide(e); continue; }
             var parent = _entries.GetValueOrDefault(Ephemeris.ParentOf(id), e);
             bool zoomed = e.DiscPixels > 0.5f || parent.DiscPixels > 0.5f;
             if (now - e.ComputedAt > (zoomed ? 0.0 : 0.5))
