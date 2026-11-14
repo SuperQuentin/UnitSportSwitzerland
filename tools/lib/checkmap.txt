@@ -1392,6 +1392,20 @@ src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --sy
 src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
 tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
 src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh
+# #1718: each net script moved off the generated world retests itself when it changes
+tools/baycheck               net    tools/baycheck.sh
+tools/cinemanetcheck         net    tools/cinemanetcheck.sh
+tools/cranenetcheck          net    tools/cranenetcheck.sh
+tools/debugcheck             net    tools/debugcheck.sh
+tools/liftsynccheck          net    tools/liftsynccheck.sh
+tools/palletnetcheck         net    tools/palletnetcheck.sh
+tools/pigeonnetcheck         net    tools/pigeonnetcheck.sh
+tools/rampalongnetcheck      net    tools/rampalongnetcheck.sh
+tools/shopcheck              net    tools/shopcheck.sh
+tools/sitemachinenetcheck    net    tools/sitemachinenetcheck.sh
+tools/siteofficenetcheck     net    tools/siteofficenetcheck.sh
+tools/sitepalletnetcheck     net    tools/sitepalletnetcheck.sh
+tools/siteuppernetcheck      net    tools/siteuppernetcheck.sh
 # #1735: the fun course's ski slope (its snow layer, poles, the skier's lookup) and its jetty's moored boats, on both frames
 src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
 src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15

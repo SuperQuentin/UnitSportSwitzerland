@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # A forklift moves a pallet, over loopback (#583 phase 2, src/Items/PalletNetProbe). A headless
-# dedicated server on the GENERATED world, which puts a works at the edge of every village (#531), so
-# this needs no terrain download. Both clients pick the nearest industrial bay whose hall has a loose
+# dedicated server on the town fixture (fixture:town's industrial halls, #1718; the generated world's
+# village works cost three times the RAM). Both clients pick the nearest industrial bay whose hall has a loose
 # floor pallet a forklift can drive square at. A (admin: a forklift out of nothing is an admin's)
 # drives in through the bay, forks the pallet, drives back out with it and sets it down in the yard.
 # B stands beside the bay and passes only on what reached it over the wire (the root CLAUDE.md's
@@ -11,9 +11,9 @@
 . "$(dirname "$0")/lib/twoclient.sh" palletnet
 PORT=${PORT:-7879}
 PW=pw583
-# the test profile is detail Low (#1411): buildings, so doors, one ring out; the nearest warehouse with a pallet, 2586_1115, is three rings out
-WORLD="--generated-world --traffic 0 --detail medium"
-tc_server 420 120 "$OUT/palletnet_server.log" --server --port $PORT --generated-world --admin-password $PW
+# the test profile is detail Low (#1411): buildings, so doors, one ring out; the town's halls reach 630 m east
+WORLD="--world fixture --chunks fixture:town --traffic 0 --detail medium"
+tc_server 420 120 "$OUT/palletnet_server.log" --server --port $PORT --world fixture --chunks fixture:town --admin-password $PW
 # B first, so it is beside the bay when A arrives at it
 tc_client 300 "$OUT/palletnet_B.log" --connect 127.0.0.1:$PORT --name PalletB $WORLD --palletnetcheck watch & B=$!
 tc_client 300 "$OUT/palletnet_A.log" --connect 127.0.0.1:$PORT --name PalletA $WORLD --palletnetcheck drive $PW & A=$!

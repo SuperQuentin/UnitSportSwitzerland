@@ -46,7 +46,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
         me.RequestReplacement();
         DoorIndex.Entry? found = null;
         if (!await Until(() => me.IsOnFloor() && !me.KnockedOut
-                && (found = DoorIndex.NearestOfKind(me.GlobalPosition, 200f, BuildingKind.UnderConstruction, also: d => d.Key.Slot == 0)) != null, 90))
+                && YardsKnown(me) && (found = DoorIndex.NearestOfKind(me.GlobalPosition, 600f, BuildingKind.UnderConstruction, also: d => d.Key.Slot == 0 && !Galleried(d) && !YardBeside(me, d))) != null, 90))
         { Fail("no site office door near the spot"); return; }
         await Seconds(1.0);
         var door = found!.Value;
@@ -65,16 +65,20 @@ public partial class SiteOfficeNetProbe : ChatProbe
 
         if (_role == "A")
         {
-            Doorstep(1.2f);
+            Doorstep(DoorstepOut);
             me.Velocity = Vector3.Zero;
             await Seconds(1.5);   // the server checks the doorstep against its relayed copy
             await Until(() => me.IsOnFloor(), 10);
             // B is waiting to see it open: it starts shut
             Expect(!interiors.IsOpen(doorKey), $"{doorKey} starts shut");
             if (!await Heard("B", "watching", 300)) { Fail("B never came to watch"); return; }   // on earth B stands on its own fill leaves first (#1704)
-            me.TryInteract();
+            bool took = me.TryInteract();
             if (!await Until(() => interiors.Links.TryGetValue(doorKey, out var l) && l.Passable && l.Swing >= 1f, 15))
-            { Fail($"the door {doorKey} never opened"); return; }
+            {
+                var at = (DoorIndex.Find(door.Key) ?? door).World;
+                Fail(FormattableString.Invariant($"the door {doorKey} never opened (E took something: {took}; the loot panel {loot.IsOpen}, a machine {Vehicles.VehicleReach.Find(me)?.Vehicle.Name}, a crane '{me.CranePrompt()}'; {me.GlobalPosition.DistanceTo(at):F2} m from the door, linked {interiors.Links.ContainsKey(doorKey)})"));
+                return;
+            }
             Say("opened");
             if (!await WalkIn(me, interiors, doorKey)) return;
 
@@ -141,7 +145,7 @@ public partial class SiteOfficeNetProbe : ChatProbe
             var parts = took[(took.IndexOf("took", StringComparison.Ordinal) + 5)..].Split(' ');
             int index = int.Parse(parts[0]), gone = int.Parse(parts[1]);
 
-            Doorstep(1.2f);
+            Doorstep(DoorstepOut);
             me.Velocity = Vector3.Zero;
             await Seconds(1.0);
             if (!await WalkIn(me, interiors, doorKey)) return;
@@ -284,5 +288,67 @@ public partial class SiteOfficeNetProbe : ChatProbe
         Expect(loot.TrySearch(me) && loot.IsOpen, $"opened the {f.Type}");
         if (!await Until(() => !loot.Waiting, 10)) { Fail("its contents never arrived"); return false; }
         return true;
+    }
+
+    /// <summary>Office doors seen to have a yard container by their doorstep, by key (planned once each).</summary>
+    private readonly Dictionary<DoorKey, bool> _yardBeside = new();
+    private readonly Dictionary<Terrain.Format.TileId, Task<Terrain.Construction.YardStock[]>> _yards = new();
+
+    /// <summary>Where A stands to work the door, m out from it (<c>Doorstep</c>).</summary>
+    private const float DoorstepOut = 1.2f;
+
+    /// <summary>
+    /// Whether a site's skip or materials stand within E's reach of the office's doorstep (#1718): E outdoors searches a
+    /// yard container within <see cref="Terrain.Construction.SiteLoot.SearchReach"/> of its edge before it works a door,
+    /// so the check takes an office with nothing of the yard by its door (to <see cref="Terrain.Construction.SiteLoot.CloseReach"/>,
+    /// a margin). Every peer asks the same of the same plans, so A, B and C still pick the same door. The generated
+    /// world's office at 2586561,1115543 had none; the site fixture's nearest two have.
+    /// </summary>
+    /// <summary>
+    /// Whether the office has a gallery (raised doors, #827): its stair's foot is by the ground door, and E there takes
+    /// the stair. The check wants E to work the door alone (#1787: the flat site fixture's office took something else).
+    /// </summary>
+    /// <summary>
+    /// Every office door within reach has its yard planned (<see cref="YardBeside"/> starts the plans): only then is the
+    /// door chosen, so A, B and C, whose plans finish at their own pace, pick the same one.
+    /// </summary>
+    private bool YardsKnown(FootPlayer me)
+    {
+        bool known = true;
+        foreach (var d in DoorIndex.All())
+            if (d.Kind == BuildingKind.UnderConstruction && d.Key.Slot == 0 && d.World.DistanceTo(me.GlobalPosition) < 600f)
+            {
+                YardBeside(me, d);
+                if (!_yards.TryGetValue(d.Key.Tile, out var t) || !t.IsCompleted) known = false;
+            }
+        return known;
+    }
+
+    private static bool Galleried(DoorIndex.Entry door) =>
+        DoorIndex.All().Any(d => d.Level == 1 && d.Key.TileE == door.Key.TileE && d.Key.TileN == door.Key.TileN && d.Key.Index == door.Key.Index);
+
+    private bool YardBeside(FootPlayer me, DoorIndex.Entry door)
+    {
+        if (_yardBeside.TryGetValue(door.Key, out bool beside)) return beside;
+        if (LootService.Instance?.Source?.Invoke() is not { } source || me.Origin is not { } origin) return false;
+        // the tile's yard is planned on a worker, as SitePlans asks: on the main thread its wait for the tile's files
+        // deadlocked an earth client, whose leaf source loads through the main thread (#1787). Until it is known, the door
+        // counts as having the yard beside it, and the next look asks again
+        if (!_yards.TryGetValue(door.Key.Tile, out var planning))
+            _yards[door.Key.Tile] = planning = Task.Run(() => Terrain.Construction.SitePlans.YardOfTile(source, door.Key.Tile));
+        if (!planning.IsCompleted) return true;
+        var stock = planning.IsCompletedSuccessfully ? planning.Result : [];
+        var step = door.World + door.Outward * DoorstepOut;
+        beside = false;
+        foreach (var c in stock)
+        {
+            // the tile frame is the world's: x east, z south
+            var middle = origin.ToWorld(c.E, c.N, c.Bottom);
+            var rel = new Vector2(step.X - middle.X, step.Z - middle.Z);
+            float du = Math.Max(0, Math.Abs(rel.Dot(c.AxisU)) - c.HalfU), dv = Math.Max(0, Math.Abs(rel.Dot(c.AxisV)) - c.HalfV);
+            if (MathF.Sqrt(du * du + dv * dv) < Terrain.Construction.SiteLoot.CloseReach) { beside = true; break; }
+        }
+        _yardBeside[door.Key] = beside;
+        return beside;
     }
 }
