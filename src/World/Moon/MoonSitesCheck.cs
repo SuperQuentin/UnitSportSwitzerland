@@ -236,10 +236,13 @@ public partial class MoonSitesCheck : Node
                     _walkerAt = me.GlobalPosition;
                     _film = new Camera3D { Name = "DanceFilm", Fov = 60 };
                     AddChild(_film);
-                    _film.MakeCurrent();
-                    var why = ClipRecorder.Film(GetTree(), "moon-twerk");
-                    GD.Print($"[moonsites] the walker twerks at {_walkerAt}{(why == null ? ", filming" : $"; no film: {why}")}");
-                    _dance = 4;
+                    // the dive starts with the whole Moon in view: the spectator camera (its far plane and the globe
+                    // drawn round it are set up for space), straight over the walker
+                    _zoomCam = (Camera3D)GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false)!;
+                    _zoomCam.MakeCurrent();
+                    ZoomPose(0);
+                    GD.Print($"[moonsites] the walker twerks at {_walkerAt}; the globe loads round the far view");
+                    _dance = 7;
                     _danceT = 0;
                 }
                 else if (_danceT > 20) Finish("the walker did not stand within 20 s of T");
@@ -249,11 +252,11 @@ public partial class MoonSitesCheck : Node
                 // a slow arc behind the walker, the lander over its shoulder
                 var back = (_walkerAt - _lookAt) with { Y = 0 };
                 back = back.Normalized();
-                float a = Mathf.DegToRad(-45 + 90 * (float)Math.Clamp(_danceT / 9, 0, 1));
+                float a = Mathf.DegToRad(-45 + 90 * (float)Math.Clamp(_danceT / 8, 0, 1));
                 var dir = back.Rotated(Vector3.Up, a);
                 _film!.GlobalPosition = _walkerAt + dir * 3.4f + Vector3.Up * 1.1f;
                 _film.LookAt(_walkerAt + Vector3.Up * 1.0f + ((_lookAt - _walkerAt) with { Y = 0 }).Normalized() * 2.5f, Vector3.Up);
-                if (_danceT > 9)
+                if (_danceT > 8)
                 {
                     ClipRecorder.Cut();
                     _dance = 5;
@@ -264,7 +267,79 @@ public partial class MoonSitesCheck : Node
             case 5:
                 if (!ClipRecorder.Busy || _danceT > 60) Finish(null);
                 break;
+            case 7:
+                // a pre-roll on the far view: the globe's tiles there load before the film starts
+                ZoomPose(0);
+                if (_danceT < 3) break;
+                {
+                    var why = ClipRecorder.Film(GetTree(), "moon-twerk");
+                    GD.Print(why == null ? "[moonsites] filming from orbit" : $"[moonsites] no film: {why}");
+                }
+                _dance = 6;
+                _danceT = 0;
+                break;
+            case 6:
+                // the dive: from 4,500 km to the walker's shoulder in ZoomSeconds, then the arc behind it
+                if (_danceT < ZoomSeconds)
+                {
+                    ZoomPose(_danceT / ZoomSeconds);
+                    break;
+                }
+                _film!.Far = _zoomCam!.Far;
+                _film.MakeCurrent();
+                _dance = 4;
+                _danceT = 0;
+                break;
         }
+    }
+
+    /// <summary>The dive from orbit, seconds.</summary>
+    private const double ZoomSeconds = 5.0;
+
+    /// <summary>Where the dive starts, metres over the walker: the whole Moon in a 75° view.</summary>
+    private const double ZoomFromM = 4_500_000;
+
+    private Camera3D? _zoomCam;
+
+    /// <summary>The arc's first pose (where the dive lands): behind the walker, 45° round, at its shoulder.</summary>
+    private (Vector3 Eye, Vector3 Look) ArcStart()
+    {
+        var back = ((_walkerAt - _lookAt) with { Y = 0 }).Normalized();
+        var dir = back.Rotated(Vector3.Up, Mathf.DegToRad(-45));
+        return (_walkerAt + dir * 3.4f + Vector3.Up * 1.1f,
+            _walkerAt + Vector3.Up * 1.0f + ((_lookAt - _walkerAt) with { Y = 0 }).Normalized() * 2.5f);
+    }
+
+    /// <summary>
+    /// The dive at <paramref name="s"/> (0..1): the distance falls geometrically (the same zoom every instant, eased in and
+    /// out), straight down from orbit; the last kilometres swing round to the arc's first pose behind the walker.
+    /// </summary>
+    private void ZoomPose(double s)
+    {
+        if (_zoomCam == null || _local() is not { } me) return;
+        _walkerAt = me.GlobalPosition;
+        var (eye, look) = ArcStart();
+        var head = _walkerAt + Vector3.Up * 1.0f;
+        var toEnd = eye - head;
+        double end = toEnd.Length();
+        double e = s * s * (3 - 2 * s);
+        double d = ZoomFromM * Math.Pow(end / ZoomFromM, e);
+        // the swing round: none over 3 km, all of it at the end, by the log of the distance
+        float w = (float)Math.Clamp((Math.Log(3000) - Math.Log(d)) / (Math.Log(3000) - Math.Log(end)), 0, 1);
+        w = w * w * (3 - 2 * w);
+        var dir = Vector3.Up.Lerp(toEnd / (float)end, w).Normalized();
+        _zoomCam.GlobalPosition = head + dir * (float)d;
+        // framed on the Moon's centre at first, on the walker after the first quarter
+        var target = head.Lerp(look, w);
+        if (_origin.Frame.Axes is { } axes)
+        {
+            var (cx, cy, cz) = axes.FromEcef(new Terrain.Format.EcefPos(0, 0, 0));
+            float c = (float)Math.Clamp(1 - e / 0.25, 0, 1);
+            c = c * c * (3 - 2 * c);
+            target = target.Lerp(new Vector3((float)cx, (float)cy, (float)cz), c);
+        }
+        var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.99f ? -((_lookAt - _walkerAt) with { Y = 0 }).Normalized() : Vector3.Up;
+        _zoomCam.LookAt(target, up);
     }
 
     /// <summary>
