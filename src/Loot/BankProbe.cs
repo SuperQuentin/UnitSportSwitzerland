@@ -121,7 +121,11 @@ public partial class BankProbe : ChatProbe
             await Seconds(0.5);
         }
 
+        // one after the other, as locksync (#1401, #1622): B, there first while A is at the counter, stood where A was
+        // then set down, and the easing pushed one of them off the spot
+        if (_role == "B" && !await Heard("A", "stood", 120)) { Fail("A never stood at the vault safe"); return; }
         if (!await StandAt(me, layout, node, safe, f => LootService.NearestContainer(me, layout, node) == f)) return;
+        if (_role == "A") Say("stood");
         bool both = false;
         for (int tries = 0; tries < 120 && !both; tries++) { Say("vault"); both = await Heard(other, "vault", 2); }
         if (!both) { Fail($"{other} never came to the vault"); return; }
@@ -302,10 +306,13 @@ public partial class BankProbe : ChatProbe
         var front = turn * new Vector3(0, 0, f.D / 2 + 0.55f);
         var face = node.GlobalTransform.Basis * -front;
         float sign = _role == "A" ? -1f : 1f;
-        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f })
+        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f, 0.6f })
         {
             var side = turn * new Vector3(sign * offset, 0, 0);
-            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side), Mathf.Atan2(-face.X, -face.Z));
+            var spot = node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side);
+            // never onto the other player: bodies closer than this touch, and set down inside each other they are eased apart (#1401)
+            if (PlayerSnapshot.Of(GetTree()).Any(s => s.Player != me && s.Pos.DistanceTo(spot) < 0.7f)) continue;
+            me.EnterInterior(layout.Key, spot, Mathf.Atan2(-face.X, -face.Z));
             me.Velocity = Vector3.Zero;
             await Seconds(0.8);
             if (InteriorManager.Instance?.Current?.Key == layout.Key && facing(index)) return true;
