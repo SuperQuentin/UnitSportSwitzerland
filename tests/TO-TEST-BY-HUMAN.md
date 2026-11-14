@@ -1234,6 +1234,15 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
 - [ ] With the telescope on the moon → the moon at its true size, as before.
 
+## The sky on an airless body ([#1989](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1989))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon), `--date 2026-11-15`.
+
+- [ ] `/goto Moon 17 59`, T, look east and up → a blinding white sun: a bright core, long spikes, a soft bloom fading into black with no ring at its edge; no light shafts.
+- [ ] Turn away from the sun there → a black sky with a few dozen bright stars (and planets); none drawn over the ground or the far horizon.
+- [ ] `/goto Moon 26.13 3.63` (Hadley, lunar night) → the full star field (the Milky Way's stars, the Pleiades), the Earth hanging in it.
+- [ ] Fly a long way on the Earth (10,000 km, spectator), come back down at night → the stars are still there.
+
 ## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
 
 Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
