@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+
+## The far view's baked features and the far band ([#1657](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1657))
+
+In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, over Geneva.
+
+- [ ] Settings → Graphics → Detail: Very low, then Low, then Medium, at 800 m looking across the town → Very low: the near leaves real, the rest the baked skin (note whether its roofs read too pink); Low: real far leaves out to about half the distance; no leaf flickers in or out while you hover.
+- [ ] On a PC that struggles (or a headset), fly low over Geneva for a minute → if the frame rate drops, the furnished band shrinks (`[globe] far band at ...` in the log) and grows back when it recovers, without visible popping.
+
 ## The globe streamed from the server, a small base, no pops ([#1846](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1846))
 
 In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator (Shift+T).

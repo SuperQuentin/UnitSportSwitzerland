@@ -513,6 +513,7 @@ public partial class Globe : Node
             CommitBuildings(b.Key, b.Mesh);
 
         GrowStep();
+        if (Earth) StepFarBand(delta);
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
         if (!Earth)
         {
@@ -624,7 +625,7 @@ public partial class Globe : Node
         double focal = viewH / (2 * Math.Tan(Mathf.DegToRad(cam.Fov) / 2)) * Styles.LodScale.Value;
 
         // the geomorph's split rule (#1656): a tile of drawn cell c splits nearer than c * focal / SplitPixels
-        var morph = new Vector2(MorphOff ? 0f : (float)(focal / SplitPixels), Earth ? (float)FarLeafM : 0f);
+        var morph = new Vector2(MorphOff ? 0f : (float)(focal / SplitPixels), Earth ? (float)FarReachM : 0f);
         if (morph != _morph) RenderingServer.GlobalShaderParameterSet(MorphGlobal, _morph = morph);
         _want.Clear();
         _distance.Clear();

@@ -34,5 +34,15 @@ Under `--frame earth` the globe past the leaves drew bare ground: a streaming cl
   `tools/farbandstreamcheck.sh`: a client with the leaves and one streaming them, the same shots over Geneva; at Geneva
   (Nov 14, `--buildingrings 3`) the cover, water and trees cost under 2 MB for ~75 leaves, the heights 22 MB (the globe's
   leaf level already fetched most of them).
-- Phase still to come (#1657): a detail-distance setting that cuts the furnished leaves on weak devices, the baked levels
-  taking over.
+- **Phase 3: how far the band reaches** (`World/Globe/FarBandGovernor`, `Globe.StepFarBand`). A scale on the far
+  leaves' reach (`FarReachM`, `StreamedReachM`, `BuildingsReachM`), the baked features past it:
+  - the detail preset caps it (`Globe.FarCap`: Very low 0, the baked features alone past the near leaves; Low half);
+    the buildings' reach is the preset's own (`BuildingMaxDist`), so it takes the budget's share alone;
+  - in `auto` (the default) the frame budget moves it under the cap: the engine's frame rate against the target (the
+    frame cap, else 60, 72 in a headset); over 115 % of the budget for 2 s takes 20 % off, under 75 % for 6 s gives
+    10 % back;
+  - `--farband auto|full|off`; a test run (`GameSettings.TestRun`) defaults to `full`, so a loaded PC's frame times do
+    not move what its shots see;
+  - each change re-plans at once and logs `[globe] far band at N% ...`; the morph's near band follows the reach.
+  `FarBandGovernorTests`. Nov 14 2026 at Geneva from 800 m: Low `far band at 50%: leaves to 7.8 km, streamed to 2.0 km`,
+  Very low `0%`.
