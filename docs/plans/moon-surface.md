@@ -11,6 +11,8 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
 - Phase 1 (#1939, PR #1953): the site table, ground stamps, `MoonSurface`, the models, footpaths and tracks, `--moonsites`.
 - Phase 2 (#1940): the colony kit (`ColonyKit`), `ColonyPlan`, Artemis Base at 89.384° S, 150.055° W on a level
   plateau (`--moonsurvey` picked it), its hub, cans, moondust domes, hangar, road and three pads.
+- Phase 3 (#1941): the modules hollow and walk-in, rooms furnished, airlocks at the spine ends that cycle (E / pad Y /
+  VR grip), the air inside, the suit always on the Moon and its helmet off inside (`Headwear.SpaceHelmet`), `--airlockcheck`.
 
 ## The user's decisions (fixed)
 

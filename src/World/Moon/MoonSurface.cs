@@ -53,6 +53,9 @@ public partial class MoonSurface : Node
 
     public IReadOnlyDictionary<string, Placed> Sites => _placed;
 
+    /// <summary>Whether the anchor is on the Moon (the suit's question).</summary>
+    public bool OnMoon => _origin.Body == BodyId.Moon;
+
     public MoonSurface(BodyGround ground, WorldOrigin origin)
     {
         _ground = ground;

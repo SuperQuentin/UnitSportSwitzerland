@@ -175,6 +175,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | dig_mode as the roller's vibration (#614) | C / B | ok: the **red button on the console right of the wheel** (`XrCabControls` "roller", `Kind.Poke`) | keep |
 | dig_mode (#611, excavator) | C / B | ok: B, or the **button on the left console** (`XrCabControls` "excavator", `Kind.Poke`) | keep |
 | crane: climb the mast / take the remote / let go (#618) | E / Y at the ladder's foot or the remote's box | ok: Y, or grip there (as E) | **grip the rungs** hand over hand |
+| Moon airlock: cycle it in or out (#1941) | E / Y at a shut airlock door (2.2 m) | ok: Y, or reach out and grip (as E) | **grip the door's wheel** or press its panel with a finger |
+| Moon suit and helmet (#1941) | none: worn automatically on the Moon, the helmet off inside a colony's air | ok: nothing to do | the helmet's rim at the edge of the view outside |
 | crane: slew, trolley (#618, hold; `arm_slew_*`, `arm_stick_*`) | A D, W S / left stick | new: cab: the **left joystick** as two `Kind.Hold` levers (`XrCabControls` "crane"); remote: the left stick, not turned by the head | one two-axis grip per joystick |
 | crane: hoist (#618, hold; `arm_boom_*`) | ↑ ↓ / right stick Y | new: cab: the **right joystick** (aft raises); remote: the right stick's Y as the axis (`XrPad`, while `CraneWorking`) | keep |
 | crane: hook on / set down (#618, `couple`) | H / D-pad ← | new: cab: a **poke on the left console**; remote: right stick ← | keep |

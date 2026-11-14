@@ -231,3 +231,29 @@ public class ColonyPlanTests
         return Math.Abs(v) < m.Length / 2 + gap && Math.Abs(u) < m.Width / 2 + gap;
     }
 }
+
+/// <summary>The colonies' rooms and airlocks (#1941).</summary>
+public class ColonyAirlockPlanTests
+{
+    [Fact]
+    public void Every_spine_but_the_hangars_ends_in_an_airlock_and_every_module_has_a_room()
+    {
+        for (int seed = 1; seed < 30; seed++)
+        {
+            var plan = ColonyPlan.For(new MoonColony("t", "t", ColonyTheme.Artemis, 0, 0, seed, 420, seed * 13 % 360, true));
+            Assert.Equal(3, plan.Airlocks.Count);
+            Assert.Equal(plan.Modules.Count, plan.Rooms.Count);
+            foreach (var a in plan.Airlocks)
+            {
+                Assert.Equal(ModuleKind.Airlock, plan.Modules[a.Module].Kind);
+                Assert.Equal(RoomKind.Airlock, plan.Rooms[a.Module]);
+                // the outer door faces away from the hub
+                var o = plan.Doors[a.Outer];
+                var i = plan.Doors[a.Inner];
+                Assert.True(o.X * o.X + o.Z * o.Z > i.X * i.X + i.Z * i.Z);
+            }
+            Assert.Contains(RoomKind.Control, plan.Rooms);
+            Assert.Contains(RoomKind.Garage, plan.Rooms);
+        }
+    }
+}
