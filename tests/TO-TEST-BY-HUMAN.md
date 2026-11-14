@@ -36,6 +36,13 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## The Moon's historic sites ([#1939](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1939))
+
+- [ ] `--bodyshot`-style trip to Apollo 11 (0.674° N, 23.473° E; `--moonsites apollo11` puts you there), step in (T) and walk to the descent stage → you bump into its body and footpads, not through them; the knocked-over flag lies a few metres off; the footpaths look like faint trodden bands, not painted lines, and never flicker into the ground as you walk over them.
+- [ ] At Apollo 15, 16 or 17, find the rover parked ~90-150 m east of the lander and follow its tracks out → two thin parallel bands that keep to the ground over crater rims.
+- [ ] Walk up to an S-IVB crater (e.g. `--moonsites sivb14`) → a fresh bowl ~35 m across with a raised rim, bright rays fading out across the ground, twisted pieces on the rim.
+- [ ] In VR, stand next to the Apollo 17 descent stage → the scale feels right (body ~3 m up, footpads ~9 m apart diagonally), nothing floats.
+
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --date 2027-07-15`, Cartoon.
