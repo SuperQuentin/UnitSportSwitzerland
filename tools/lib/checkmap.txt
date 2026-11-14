@@ -679,6 +679,8 @@ src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
 src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
+src/Loot/Bank            full   tools/bankcheck.sh
+src/Items/Bank           full   tools/bankcheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
 src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh
