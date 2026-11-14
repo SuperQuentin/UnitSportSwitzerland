@@ -255,7 +255,7 @@ public partial class MoonSurface : Node
                     double d = s.CraterM * 1.1 + (len - s.CraterM * 1.1) * k / (pts.Length - 1);
                     pts[k] = (Math.Sin(a) * d, Math.Cos(a) * d);
                 }
-                Ribbon(bright, pts, 0, s.CraterM * (0.1 + 0.15 * rng.NextDouble()), taper: true);
+                Ribbon(bright, pts, 0, s.CraterM * (0.08 + 0.1 * rng.NextDouble()), taper: true);
             }
         }
         if (dark.Count == 0 && bright.Count == 0) return null;
@@ -314,7 +314,7 @@ public partial class MoonSurface : Node
     private static ShaderMaterial Brighten()
     {
         if (_brighten != null) return _brighten;
-        _brighten = Trace(new Color(1f, 1f, 0.98f, 0.16f));
+        _brighten = Trace(new Color(1f, 1f, 0.98f, 0.09f));
         _brighten.SetShaderParameter("fade_along", 1.0f);
         return _brighten;
     }

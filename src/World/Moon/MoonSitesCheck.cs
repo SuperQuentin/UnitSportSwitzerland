@@ -128,7 +128,7 @@ public partial class MoonSitesCheck : Node
         // the view: from the sun's side and 40° round, far enough to hold the site's main part, looking at it
         var sun = SunLocal(s, sky);
         double sunAz = Math.Atan2(sun.East, sun.North);
-        double az = s.Kind == MoonSiteKind.Impact ? Math.Atan2(s.Parts[0].East, s.Parts[0].North) + 0.5 : sunAz + 0.7;
+        double az = sunAz + 0.7;
         // an impact: the crater's own point, the debris on its rim in view
         var main = s.Kind == MoonSiteKind.Impact ? new SitePart(MoonPart.SivbDebris, 0, 0, 0) : s.Parts[0];
         double dist = main.Part switch
