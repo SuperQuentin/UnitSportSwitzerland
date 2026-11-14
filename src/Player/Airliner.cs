@@ -377,6 +377,8 @@ public sealed partial class Airliner : Flyer
         Clearance = env.Clearance;
         // the shuttle above the Space handover flies its orbit or its drive (#1492, Airliner.Shuttle.cs)
         if (Space is { } space && SpaceStep(space, input, c.GearToggle, dt, ref m)) return FlightEvent.None;
+        // below the Space exit of a body with no air (#1851): the belly jets, not wings
+        if (Space is { } low && LanderStep(low, input, c.GearToggle, env, dt, ref m)) return FlightEvent.None;
         var ev = AirlinerFlight.Step(Spec, ref State, c, new AirlinerFlight.Env(env.OnFloor, env.Altitude), dt);
         AirHeat(env.Altitude);
         ToMotion(ref m);

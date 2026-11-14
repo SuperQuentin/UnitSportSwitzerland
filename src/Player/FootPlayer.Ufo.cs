@@ -73,10 +73,10 @@ public partial class FootPlayer
         double angle = Orbit.RotationAngle(earth, Net.ClockSync.SimNow);
         var heading = frame.EcefDirection(GlobalPosition, UfoFlight.Heading(_flight.Yaw));
         var state = Orbit.Circular(earth, Orbit.ToEci(at, angle), Orbit.ToEci(heading, angle));
-        if (_ride is Ufo ufo) ufo.SetOrbit(state);
+        if (_ride is Ufo ufo) ufo.SetOrbit(state, earth);
         else if (_ride is Airliner shuttle)
         {
-            shuttle.SetOrbit(state);
+            shuttle.SetOrbit(state, earth);
             // level along its track, gear up: flying, not standing (#1492)
             shuttle.Aloft(new Vector3(0f, _flight.Yaw, 0f), Vector3.Zero);
         }

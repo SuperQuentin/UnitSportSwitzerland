@@ -136,11 +136,14 @@ public sealed class SpaceOrbit
         Core.CelestialBody.Of(place?.Frame.Axes?.Body ?? Core.BodyId.Earth);
 
     /// <summary>Puts the craft on <paramref name="state"/> (an inertial orbit) from its next step: <c>/orbit</c>, a probe, a bot, the drive switched off.</summary>
-    public void Set(Core.OrbitState state)
+    /// <param name="round">The body the orbit is given round (#1851): <c>/orbit</c> round the Moon right after the world was
+    /// moved there, the drive off by it. Null: the body of the craft's last place (the Earth before any).</param>
+    public void Set(Core.OrbitState state, Core.CelestialBody? round = null)
     {
         Orbit = state;
-        // given round the body it is counted from now (the drive off by the Moon): no crossing to make on the next step
-        if (Place != null) Body = BodyOf(Place);
+        // no crossing to make on the next step: the state is round this body already (taken from the last place, an orbit
+        // set right after a move to the Moon went round the Moon but was "crossed" from the Earth)
+        Body = round ?? BodyOf(Place);
         _jump = true;
     }
 

@@ -79,7 +79,9 @@ public sealed partial class Airliner : ISpacecraft
         // carried level as it goes round, but not through a crossing (#1851): between the Earth and the Moon one's up is
         // nearly the other's down, and turning the attitude through that flipped the craft
         var body = space.BodyHere;
-        if (_up != Vector3.Zero && _upBody == body.Id) State.Attitude = ShuttleFlight.Relevel(State.Attitude, _up, up);
+        // nor while the target hold flies the nose: driving at thousands of km/s near the Earth the up turns faster than the
+        // hold may (2 rad/s at 20,000 km/s 10,000 km out), and the craft came home 100 km high
+        if (_up != Vector3.Zero && _upBody == body.Id && Aim == null) State.Attitude = ShuttleFlight.Relevel(State.Attitude, _up, up);
         _up = up;
         _upBody = body.Id;
 
@@ -126,9 +128,67 @@ public sealed partial class Airliner : ISpacecraft
             Air(place.Altitude, step.Track.Length());
         }
         InSpace = true;
+        Lander = false;
         State.OnGround = false;
         if (gearToggle) State.GearDown = !State.GearDown;
         State.Gear = Mathf.MoveToward(State.Gear, State.GearDown ? 1f : 0f, dt / Spec.GearTransit);
+        ToMotion(ref m);
+        return true;
+    }
+
+    /// <summary>The belly jets fly it (#1851): below the Space exit of a body with no air.</summary>
+    public bool Lander { get; private set; }
+
+    /// <summary>The way down at the last touchdown on the belly jets, m/s (NaN before one), and its vertical speed now.</summary>
+    public float TouchSink { get; private set; } = float.NaN;
+    public float VerticalSpeed { get; private set; }
+
+    /// <summary>
+    /// The belly jets (#1851, the plan's section 8): below the Space exit of an airless body the levers lift it along its
+    /// up, the jets keep it level, the stick slides it, and it comes down on its gear anywhere (<see cref="ShuttleFlight.Lander"/>).
+    /// Take-off is the same backwards: up to the Space handover, where the orbit and the drive take over. A touchdown
+    /// faster than 3 m/s, or on its belly, costs the airframe. False on the Earth, on Mars (air: it glides) and in Space.
+    /// </summary>
+    private bool LanderStep(SpaceOrbit space, in FlightInput input, bool gearToggle, in FlightEnv env, float dt, ref FlightMotion m)
+    {
+        if (space.Place is not { } place || space.BodyHere is not { Landable: true, Air: null } body || body.Id == Core.BodyId.Earth)
+        {
+            Lander = false;
+            return false;
+        }
+        if (!Lander) GD.Print(FormattableString.Invariant($"[shuttle] on the belly jets over {body.Name} at {place.Altitude / 1000:F1} km"));
+        Lander = true;
+        DriveOn = false;
+        Heat = 0f;
+        var up = place.Frame.UpAt(place.At);
+        double r = body.Shape.A + place.Altitude;
+        float g = (float)(body.GM / (r * r));
+        // the levers move as in Space (half travel a second); the spool is the jets' read-out
+        ShuttleFlight.Levers(Spec, ref State, input.LeverUp, input.LeverDown, !input.Piloted, running: true, dt);
+        float lever = input.Piloted ? State.Lever : 0f;
+        if (gearToggle) State.GearDown = !State.GearDown;
+        State.Gear = Mathf.MoveToward(State.Gear, State.GearDown ? 1f : 0f, dt / Spec.GearTransit);
+        float sinkBefore = -State.Velocity.Dot(up);
+        bool grounded = State.OnGround && env.OnFloor;
+        var (v, att) = ShuttleFlight.Lander(State.Attitude, State.Velocity, up, g, lever, input.Piloted ? input.Stick : Vector2.Zero, grounded, dt);
+        // down on it: the gear takes it, or the belly does
+        if (env.OnFloor && !State.OnGround && sinkBefore > -0.5f)
+        {
+            State.OnGround = true;
+            TouchSink = Mathf.Max(sinkBefore, 0f);
+            bool soft = TouchSink <= 3f && State.Gear >= 1f;
+            if (!soft) State.Damage += State.Gear >= 1f ? (TouchSink - 3f) * 15f : 30f;
+            GD.Print(FormattableString.Invariant($"[shuttle] touchdown on {body.Name} at {TouchSink:F2} m/s{(State.Gear >= 1f ? "" : ", on its belly")}"));
+            v = up * Mathf.Max(v.Dot(up), 0f);
+        }
+        else if (State.OnGround && v.Dot(up) > 0.2f) State.OnGround = false;
+        State.Velocity = v;
+        State.Attitude = att;
+        ShuttleFlight.Heading(ref State);
+        VerticalSpeed = v.Dot(up);
+        State.Tas = v.Length();
+        State.Ias = 0f;
+        State.Alpha = 0f;
         ToMotion(ref m);
         return true;
     }
@@ -157,7 +217,7 @@ public sealed partial class Airliner : ISpacecraft
         var r = Core.Orbit.ToEci(place.Frame.ToEcef(place.At), angle);
         var toward = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, -State.Attitude.Z), angle);
         var orbit = Core.Orbit.Circular(earth, r, toward);
-        space.Set(orbit);
+        space.Set(orbit, earth);
         GD.Print(FormattableString.Invariant($"[shuttle] cruise drive off at {place.Altitude / 1000:F1} km: a circular orbit, {orbit.V.Length:F0} m/s"));
     }
 
@@ -182,10 +242,10 @@ public sealed partial class Airliner : ISpacecraft
     /// <summary>
     /// <c>/orbit &lt;km&gt;</c> for the shuttle (#1492): on a circular orbit there, the drive off.
     /// </summary>
-    public void SetOrbit(Core.OrbitState state)
+    public void SetOrbit(Core.OrbitState state, Core.CelestialBody? round = null)
     {
         DriveOn = false;
-        Space?.Set(state);
+        Space?.Set(state, round);
         State.OnGround = false;
         State.GearDown = false;
         State.Gear = 0f;

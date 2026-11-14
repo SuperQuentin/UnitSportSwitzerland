@@ -168,4 +168,28 @@ public class ShuttleTests
         Assert.Equal(100_000, ShuttleFlight.ArrivalM(UnitSport.Core.CelestialBody.Moon));
         Assert.Equal(10_000, ShuttleFlight.ArrivalM(UnitSport.Core.CelestialBody.Phobos), 0);
     }
+
+    [Fact]
+    public void The_belly_jets_hover_at_the_moons_weight_level_it_and_stop_its_slide()
+    {
+        const float g = 1.62f;
+        float hover = g / ShuttleFlight.BellyAccel;
+        Assert.InRange(hover, 0.27f, 0.29f);
+        // tilted 20°, sliding at 10 m/s, at the hover lever: levelled within a few seconds, the slide stopped by the hold
+        var att = new Basis(Vector3.Right, 0.35f);
+        var v = new Vector3(10, 0, 0);
+        for (int i = 0; i < 60 * 30; i++) (v, att) = ShuttleFlight.Lander(att, v, Vector3.Up, g, hover / Mathf.Cos(att.Y.AngleTo(Vector3.Up)), Vector2.Zero, false, Dt);
+        Assert.True(att.Y.AngleTo(Vector3.Up) < 0.01f);
+        Assert.True(new Vector2(v.X, v.Z).Length() < 0.05f);
+        Assert.InRange(v.Y, -0.5f, 0.5f);
+        // the stick slides it: pushed, ahead (−Z)
+        var (pushed, _) = ShuttleFlight.Lander(Basis.Identity, Vector3.Zero, Vector3.Up, g, hover, new Vector2(0, -1), false, 1f);
+        Assert.Equal(-ShuttleFlight.TranslateAccel, pushed.Z, 3);
+        // on its gear with the jets off: it rests, no sinking, no slide
+        var (rest, _) = ShuttleFlight.Lander(Basis.Identity, new Vector3(1, -2, 0), Vector3.Up, g, 0f, Vector2.Zero, true, Dt);
+        Assert.Equal(Vector3.Zero, rest);
+        // full jets lift it off the ground
+        var (lift, _) = ShuttleFlight.Lander(Basis.Identity, Vector3.Zero, Vector3.Up, g, 1f, Vector2.Zero, true, 1f);
+        Assert.Equal(ShuttleFlight.BellyAccel - g, lift.Y, 3);
+    }
 }

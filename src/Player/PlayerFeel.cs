@@ -936,9 +936,15 @@ public partial class PlayerFeel : Node3D
             else if (a.Space?.Orbit is { } orbit)
                 AppendOrbit(sb, orbit, a.Space.Body);
         }
+        else if (a.Lander)
+        {
+            // the belly jets over an airless body (#1851): the radar height, the way down and the slide, the jets' lever
+            float across = Mathf.Sqrt(Mathf.Max(0f, s.Velocity.LengthSquared() - a.VerticalSpeed * a.VerticalSpeed));
+            sb.Append(System.FormattableString.Invariant($"BELLY JETS    RADAR {a.Clearance:0} m    V/S {a.VerticalSpeed:+0.0;-0.0;0.0} m/s    SLIDE {across:0.0} m/s    LEVER {s.Lever * 100f:0}%"));
+        }
         else
             sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
-        if (!a.DriveOn) sb.Append(a.Spec.Rocket ? "    THRUST " : "    N1 ").Append((int)(s.Spool * 100f + 0.5f)).Append('%');
+        if (!a.DriveOn && !a.Lander) sb.Append(a.Spec.Rocket ? "    THRUST " : "    N1 ").Append((int)(s.Spool * 100f + 0.5f)).Append('%');
         if (s.Reverse > 0.05f) sb.Append(" REV");
         // the configuration on a line of its own: one line ran under the corner's key hints (#420)
         sb.Append('\n');
