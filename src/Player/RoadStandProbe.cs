@@ -135,10 +135,11 @@ public partial class RoadStandProbe : Node
         float floor = FloorAt(road);
         float body = _player.GlobalPosition.Y;
         // no floor at all under the point is a carved hole (an underpass beneath it), not a
-        // road the player stands on - reported, but not held against the result
-        if (!float.IsNaN(floor) && kind == Kind.Body)
+        // road the player stands on - reported, but not held against the result; a deck has nothing under it but its own
+        // collision, so there a missing floor is the hole (#1768)
+        if ((!float.IsNaN(floor) || Bridges) && kind == Kind.Body)
         {
-            _floorGap.Add(floor - road.Y);
+            if (!float.IsNaN(floor)) _floorGap.Add(floor - road.Y);
             _bodyGap.Add(body - road.Y);
         }
         if (kind == Kind.Floor && !float.IsNaN(floor) && Math.Abs(floor - road.Y) > Tolerance) _floorFails++;
@@ -150,7 +151,7 @@ public partial class RoadStandProbe : Node
 
         if (_bodyGap.Count == 0) { GetTree().Quit(2); SetPhysicsProcess(false); return; }
         float worst = _bodyGap.Min();
-        GD.Print($"[roadcheck] floor-ribbon mean {_floorGap.Average():+0.000;-0.000} min {_floorGap.Min():+0.000;-0.000}; "
+        GD.Print($"[roadcheck] floor-ribbon mean {_floorGap.DefaultIfEmpty(float.NaN).Average():+0.000;-0.000} min {_floorGap.DefaultIfEmpty(float.NaN).Min():+0.000;-0.000}; "
             + $"body-ribbon mean {_bodyGap.Average():+0.000;-0.000} min {worst:+0.000;-0.000} "
             + $"max {_bodyGap.Max():+0.000;-0.000} over {_bodyGap.Count}");
         if (Embankments || Sidewalks)
@@ -216,7 +217,21 @@ public partial class RoadStandProbe : Node
                 if (!_chunks.Ground.HasCollisionAt(p)) continue;
                 result.Add((p, $"{s.Class}/{s.Surface}", Kind.Body));
             }
-        if (Bridges) return result;
+        if (Bridges)
+        {
+            // the junction caps on a deck (#1768): a body on each cap's widest triangle, at its centroid; the deck's
+            // segments stop at the cap's edge, so a cap without collision is a hole in the bridge
+            foreach (var j in tile.Junctions.Where(j => j.Layer > 0 && j.TriangleCount > 0).Take(8))
+            {
+                Vector3 V(int i) => new(j.Vertices[i * 3], j.Vertices[i * 3 + 1], j.Vertices[i * 3 + 2]);
+                var widest = Enumerable.Range(0, j.TriangleCount)
+                    .Select(t => (V(j.Indices[t * 3]), V(j.Indices[t * 3 + 1]), V(j.Indices[t * 3 + 2])))
+                    .MaxBy(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length());
+                var p = basePos + (widest.Item1 + widest.Item2 + widest.Item3) / 3f + Vector3.Up * BridgeLift;
+                if (_chunks.Ground.HasCollisionAt(p)) result.Add((p, $"deck junction {j.Class}", Kind.Body));
+            }
+            return result;
+        }
         // turn lane widenings (#123): a body on the strip's widest triangle, at its centroid
         foreach (var strip in tile.AreaProps.Where(a => a.Type == AreaPropType.Pavement).Take(4))
         {
