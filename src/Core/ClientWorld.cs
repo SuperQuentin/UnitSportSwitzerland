@@ -836,7 +836,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.StarField());
             AddChild(new World.SkyBodies());
             // the other bodies' globes, and the Earth's from them (#1848): the earth world only
-            if (_earth != null) AddChild(new World.Bodies.BodyViews(origin));
+            if (_earth != null) AddChild(new World.Bodies.BodyViews(origin, () => LocalPlayer));
             AddChild(new World.Satellites());
             // the Earth from far out (#1430 H4): the coarse cube levels, when a region is there
             // (not in the fun world, a world of its own: its synthwave floor and mountains are its horizon at any height, #1648)
@@ -3109,7 +3109,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// The ground under the fly camera is known. A spawn point that gave up (no tile after 15 s, a
     /// slow first join) leaves the camera at its preload altitude: the body waits for the ground then.
     /// </summary>
-    private bool GroundUnderCamera => Ground is { } gr && _spectator != null && gr.TryGetSurface(_spectator.GlobalPosition, out _);
+    /// On another body (#1850) it is that body's near ground (<see cref="World.Bodies.BodyGround"/>) under the camera.
+    private bool GroundUnderCamera => _spectator != null
+        && (Ground is { } gr && gr.TryGetSurface(_spectator.GlobalPosition, out _)
+            || World.Bodies.BodyGround.Active?.Covers(_spectator.GlobalPosition) == true);
 
     /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
     private bool _awaitingServerSpawn;

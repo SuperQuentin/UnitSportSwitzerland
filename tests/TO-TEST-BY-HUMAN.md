@@ -7,6 +7,14 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## To the Moon and onto it (PR [#1893](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1893), [#1891](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1891), [#1850](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1850))
+
+In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`, Cartoon, on the spectator camera (Shift+T).
+
+- [ ] Fly up and on toward the Moon at the wheel's top (about a minute) → the speed grows with the distance and falls again near the Moon; the picture never jumps at the handover (~66,000 km out), and the Moon's globe takes over from its sky disc in the same place.
+- [ ] Come down to a few hundred metres and press T → you stand on the ground (no fall from the camera's height, no wait). Walk and sprint for a few hundred metres → the ground keeps coming under you, with craters down to a few metres, and no seam or step where the near ground meets the farther one.
+- [ ] Jump → about 5.4 m up and over 5 s in the air (0.9 m on the Earth). Do the same with the pad (its jump and step-in buttons) and in VR → the same.
+
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
 
 `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --date 2027-07-15`, Cartoon.

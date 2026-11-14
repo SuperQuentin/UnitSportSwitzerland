@@ -60,6 +60,18 @@ public partial class BodyGlobe : Node
     /// <summary>Tiles drawn last frame (the shots' log).</summary>
     public int DrawnTiles { get; private set; }
 
+    /// <summary>The pyramid's finest level.</summary>
+    public int MaxLevel => _maxLevel;
+
+    /// <summary>Where each height tile is (any thread may read it: built once, never changed).</summary>
+    public IReadOnlyDictionary<CubeKey, (string Path, long Offset, int Length)> HeightIndex => _heights;
+
+    /// <summary>Where each colour tile is.</summary>
+    public IReadOnlyDictionary<CubeKey, (string Path, long Offset, int Length)> AlbedoIndex => _albedo;
+
+    /// <summary>The near ground on this body (#1850): its own tiles step aside under it.</summary>
+    public BodyGround? Ground { get; set; }
+
     private readonly WorldOrigin _origin;
     private readonly GlobeFiles _files;
     private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _heights, _albedo;
@@ -81,7 +93,11 @@ public partial class BodyGlobe : Node
         public readonly ShaderMaterial Material = material;
     }
 
-    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex";
+    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
+        HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+
+    /// <summary>The hole every tile has now (half side 0: none), set on a tile only when it changes.</summary>
+    private (Vector3 Centre, Vector3 Up, Vector3 East, float Half) _hole;
 
     public BodyGlobe(CelestialBody body, string dir, WorldOrigin origin)
     {
@@ -148,6 +164,11 @@ public partial class BodyGlobe : Node
         _show.Clear();
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, focal);
 
+        // the near ground's hole (own body only): moved with the square and at each re-anchor, so rarely
+        var hole = own && Ground?.Hole is { } h ? h : default;
+        bool holeMoved = hole != _hole;
+        _hole = hole;
+
         int shown = 0;
         foreach (var (key, tile) in _tiles)
         {
@@ -158,9 +179,18 @@ public partial class BodyGlobe : Node
                 shown++;
                 if (sunMoved) tile.Material.SetShaderParameter(SunDir, sun);
             }
+            if (holeMoved) SetHole(tile.Material);
         }
         DrawnTiles = shown;
         Drawn = shown > 0;
+    }
+
+    private void SetHole(ShaderMaterial m)
+    {
+        m.SetShaderParameter(HoleCentre, _hole.Centre);
+        m.SetShaderParameter(HoleUp, _hole.Up);
+        m.SetShaderParameter(HoleEast, _hole.East);
+        m.SetShaderParameter(HoleHalf, _hole.Half);
     }
 
     private void Hide()
@@ -242,6 +272,7 @@ public partial class BodyGlobe : Node
             var material = new ShaderMaterial { Shader = _shader };
             if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
+            SetHole(material);
             var node = new MeshInstance3D
             {
                 Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,

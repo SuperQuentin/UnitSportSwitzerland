@@ -26,15 +26,17 @@ public partial class BodyViews : Node
     public const double NearRadii = 10;
 
     private readonly WorldOrigin _origin;
+    private readonly Func<Player.FootPlayer?> _local;
     private readonly List<BodyGlobe> _globes = new();
     private BodyGlobe? _earth, _moon;
 
     /// <summary>The root of the bodies' data (<c>--bodies</c>), or null.</summary>
     public static string? DataRoot => CmdArgs.Value("--bodies");
 
-    public BodyViews(WorldOrigin origin)
+    public BodyViews(WorldOrigin origin, Func<Player.FootPlayer?> local)
     {
         _origin = origin;
+        _local = local;
         Name = "BodyViews";
     }
 
@@ -50,7 +52,16 @@ public partial class BodyViews : Node
                 AddChild(g);
                 _globes.Add(g);
                 if (body.Id == BodyId.Moon) _moon = g;
+                // the ground under your feet where one can stand (#1850)
+                if (body.Landable)
+                {
+                    g.Ground = new BodyGround(g, _origin);
+                    AddChild(g.Ground);
+                }
             }
+        // the ground game's gravity follows the anchor's body: the walker's fall, and the physics space's
+        _origin.BodyChanged += OnBodyChanged;
+        OnBodyChanged(BodyId.Earth, _origin.Body);
         // the Earth seen from another body: its pyramid as the Earth's globe has it
         if (Globe.DataDir is { } earthDir)
         {
@@ -59,7 +70,25 @@ public partial class BodyViews : Node
             _globes.Add(_earth);
         }
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _moon));
-        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin));
+        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _moon?.Ground));
+    }
+
+    public override void _ExitTree()
+    {
+        _origin.BodyChanged -= OnBodyChanged;
+        BodyGravity.On(BodyId.Earth);
+    }
+
+    private void OnBodyChanged(BodyId from, BodyId to)
+    {
+        BodyGravity.On(to);
+        // the space's own gravity (props, wrecks, a ragdoll): the project's on the Earth, untouched there
+        if (from == to && to == BodyId.Earth) return;
+        float space = to == BodyId.Earth ? (float)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8f) : BodyGravity.Ground;
+        if (GetViewport()?.World3D is { } world)
+            PhysicsServer3D.AreaSetParam(world.Space, PhysicsServer3D.AreaParameter.Gravity, space);
+        if (from != to) GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[bodies] on {to}: the ground's gravity {BodyGravity.Ground:F2} m/s²"));
     }
 
     public override void _Process(double delta)
