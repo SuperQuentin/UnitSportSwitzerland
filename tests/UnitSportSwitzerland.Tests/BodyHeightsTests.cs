@@ -120,6 +120,43 @@ public class BodyHeightsTests
     }
 
     [Fact]
+    public void A_coarser_ground_keeps_only_the_craters_it_can_hold()
+    {
+        var craters = new CraterField(seed: 1, R);
+        var heights = new BodyHeights(Cube, Level, _ => null, craters);
+        var rng = new Random(11);
+        double small = 0;
+        for (int k = 0; k < 400; k++)
+        {
+            var n = Cube.Normal(2, rng.NextDouble() * 0.2, rng.NextDouble() * 0.2);
+            // the medium ground's: the bins from 40 m up, the near ground's: all of them
+            Assert.Equal(craters.At(n.X, n.Y, n.Z, smallest: 40), heights.At(n, 40), 9);
+            small = Math.Max(small, Math.Abs(heights.At(n) - heights.At(n, 40)));
+        }
+        Assert.True(small > 0.01, "the small craters are on the near ground only");
+    }
+
+    [Fact]
+    public void A_square_eases_into_whatever_surface_lies_round_it()
+    {
+        var heights = new BodyHeights(Cube, Level, Tiles((_, _) => 0), craters: null);
+        const int cells = 32;
+        const double cell = 4;
+        var near = Cube.ToEcef(1, 0.2, 0.1, 0);
+        // round it, ground 50 m higher: the edge is at 50, the middle untouched
+        var (frame, y) = heights.Grid(near, cells, cell, blendM: 32, edge: _ => 50);
+        int side = cells + 1;
+        double curve(int i, int j)
+        {
+            double x = (i - cells / 2) * cell, z = (j - cells / 2) * cell;
+            return -(x * x + z * z) / (2 * R);
+        }
+        Assert.Equal(50 + curve(0, 0), y[0], 2);
+        Assert.Equal(50 + curve(cells, cells / 2), y[cells / 2 * side + cells], 2);
+        Assert.Equal(0, y[cells / 2 * side + cells / 2], 3);
+    }
+
+    [Fact]
     public void A_square_is_the_same_ground_on_every_peer_and_twice_on_one()
     {
         var a = new BodyHeights(Cube, Level, Tiles((u, v) => (float)(300 * Math.Sin(7 * u) * Math.Cos(5 * v))), new CraterField(seed: 1, R));

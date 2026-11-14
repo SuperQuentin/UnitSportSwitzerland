@@ -75,9 +75,10 @@ public sealed class CraterField
     /// <summary>
     /// The relief the craters make at a point (body-fixed, metres; only its direction counts), added to the data's
     /// ground: a bowl's floor negative, a rim positive, 0 far from any. <paramref name="largest"/> leaves out bins over it
-    /// (a coarse level that has them in its data already).
+    /// (a coarse level that has them in its data already); <paramref name="smallest"/> leaves out the bins under it (a
+    /// coarse mesh that cannot hold them: the medium ground's 16 m cells keep the bowls from 40 m).
     /// </summary>
-    public double At(double x, double y, double z, double largest = MaxDiameterM)
+    public double At(double x, double y, double z, double largest = MaxDiameterM, double smallest = 0)
     {
         double len = Math.Sqrt(x * x + y * y + z * z);
         double px = x / len * _radius, py = y / len * _radius, pz = z / len * _radius;
@@ -86,6 +87,7 @@ public sealed class CraterField
         {
             var bin = _bins[b];
             if (bin.DMin > largest) break;
+            if (bin.DMin < smallest) continue;
             long cx = (long)Math.Floor(px / bin.Cell), cy = (long)Math.Floor(py / bin.Cell), cz = (long)Math.Floor(pz / bin.Cell);
             for (long i = cx - 1; i <= cx + 1; i++)
                 for (long j = cy - 1; j <= cy + 1; j++)
