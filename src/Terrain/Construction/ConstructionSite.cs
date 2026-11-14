@@ -48,6 +48,16 @@ public readonly record struct SiteRect(Vector2 Center, Vector2 AxisU, float Widt
         return new[] { Center - u - v, Center + u - v, Center + u + v, Center - u + v };
     }
 
+    /// <summary>Points over the rectangle about <paramref name="step"/> m apart, edges and corners included (#1926).</summary>
+    public IEnumerable<Vector2> Grid(float step = 1f)
+    {
+        int nu = Math.Max(1, (int)MathF.Ceiling(Width / step)), nv = Math.Max(1, (int)MathF.Ceiling(Depth / step));
+        var c0 = Center - AxisU * (Width / 2) - AxisV * (Depth / 2);
+        for (int i = 0; i <= nu; i++)
+            for (int j = 0; j <= nv; j++)
+                yield return c0 + AxisU * (Width * i / nu) + AxisV * (Depth * j / nv);
+    }
+
     public bool Contains(Vector2 p, float margin = 0f)
     {
         var d = p - Center;
@@ -253,6 +263,13 @@ public static class ConstructionSites
     /// <summary>On a site with a pit, the way kept across the materials where there is room, m: a telehandler coming at a pallet.</summary>
     public const float MaterialsApproach = 8f;
 
+    /// <summary>
+    /// How far the way in reaches past either end of the materials, m (#1926): a pallet at the row's end lies 0.8 m from
+    /// it, and a telehandler (2.6 m wide) centred on it overhung a way only as wide as the materials into what stood
+    /// beside, which pushed the machine 0.5 m aside, its tines off the pallet.
+    /// </summary>
+    public const float MaterialsWayPast = 0.7f;
+
     public static bool IsSmall(PlanBox box, int targetStoreys) => box.Area < SmallArea && targetStoreys <= SmallStoreys;
 
     /// <summary>
@@ -356,20 +373,22 @@ public static class ConstructionSites
     /// <summary>
     /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
     /// deep on the side the pallets face (away from the building), inside the hoarding, out of the building's
-    /// scaffolding or its pit and clear of every other zone and machine. Where the yard has no room for one,
-    /// the pallets cannot be reached.
+    /// scaffolding or its pit and clear of every other zone and machine, and (given the site's <paramref name="blocked"/>, #1926)
+    /// of every road. Where the yard has no room for one, the pallets cannot be reached.
     /// </summary>
-    public static bool MaterialsWayIn(ConstructionSite s)
+    public static bool MaterialsWayIn(ConstructionSite s, Func<Vector2, bool>? blocked = null)
     {
         if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
         var r = m.Rect;
         var keep = s.Pit is { } p ? InPlan(s.Box, p.Area) : new SiteRect(s.Box.Center, s.Box.AxisU, s.Box.Width + 2 * Scaffold, s.Box.Depth + 2 * Scaffold);
         // the side the pallets face: away from the building (the dressing turns them to)
         int sign = (r.Center - s.Box.Center).Dot(r.AxisV) >= 0 ? 1 : -1;
-        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
+        var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width + 2 * MaterialsWayPast, MaterialsApproach - 0.1f);
         return way.Corners().All(c => s.Area.Contains(c)) && !way.Overlaps(keep)
             && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
-            && !s.Machines.Any(x => way.Contains(x.At));
+            && !s.Machines.Any(x => way.Contains(x.At))
+            // nor over a road (#1926): a site's yard can reach across its street, and a way over the carriageway is the street
+            && (blocked == null || !way.Grid().Any(blocked));
     }
 
     /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
@@ -474,7 +493,7 @@ public static class ConstructionSites
             if (kind == SiteZoneKind.Materials)
                 foreach (float scale in new[] { 1f, 0.7f })
                     foreach (var axis in new[] { front, along })
-                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center) is { } r)
+                        if (placer.PlaceWithWay(w * scale, d * scale, MaterialsApproach, axis, score, box.Center, MaterialsWayPast) is { } r)
                         {
                             zones.Add(new SiteZone(kind, r));
                             return;
@@ -780,7 +799,8 @@ public static class ConstructionSites
         /// apron) but not over the first clear rectangle (the building or its pit), nothing placed, the
         /// hoarding's line, a road or a building; it is kept as taken.
         /// </summary>
-        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building)
+        /// <param name="past">How far the way reaches past either end of the rectangle (#1926).</param>
+        public SiteRect? PlaceWithWay(float width, float depth, float way, Vector2 axis, Func<Vector2, float> score, Vector2 building, float past = 0f)
         {
             var u = new Vector2(axis.Y, -axis.X);
             var order = new int[_grid.Count];
@@ -796,7 +816,7 @@ public static class ConstructionSites
                 var r = new SiteRect(_grid[k], u, width, depth);
                 if (!Fits(r)) continue;
                 int sign = (r.Center - building).Dot(axis) >= 0 ? 1 : -1;
-                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width, way);
+                var w = new SiteRect(r.Center + axis * (sign * (depth + way) / 2), u, width + 2 * past, way);
                 if (!WayFits(w)) continue;
                 _taken.Add(r);
                 _taken.Add(w);
@@ -813,9 +833,11 @@ public static class ConstructionSites
             var corners = w.Corners();
             foreach (var p in corners)
                 if (!area.Contains(p, -Gap)) return false;
-            foreach (var p in corners)
+            // all over it, not only at its corners (#1926: a yard reaching across its street kept a way whose corners stood
+            // either side of the carriageway, so the materials' pallets faced the road)
+            foreach (var p in w.Grid())
                 if (blocked(p)) return false;
-            return !blocked(w.Center);
+            return true;
         }
 
         /// <summary>

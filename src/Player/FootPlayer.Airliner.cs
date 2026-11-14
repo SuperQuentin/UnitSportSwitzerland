@@ -15,6 +15,8 @@ public partial class FootPlayer
         if (e.IsActionPressed(PlayerInput.FlapsUp)) { airliner.Command(AirlinerCommand.FlapsUp); return true; }
         if (e.IsActionPressed(PlayerInput.Speedbrake)) { airliner.Command(AirlinerCommand.Speedbrake); return true; }
         if (e.IsActionPressed(PlayerInput.ParkingBrake)) { airliner.Command(AirlinerCommand.ParkingBrake); return true; }
+        // in Space the D-pad's right is the target cue's (#1851, SpectatorTargets): no lights to see out there
+        if (airliner.InSpace && e.IsAction(PlayerInput.SpectatorTarget)) return false;
         if (e.IsActionPressed(PlayerInput.LightsToggle)) { airliner.Command(AirlinerCommand.Lights); return true; }
         if (e.IsActionPressed(PlayerInput.Autopilot))
         {

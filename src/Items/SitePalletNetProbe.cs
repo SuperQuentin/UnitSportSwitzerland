@@ -64,14 +64,21 @@ public partial class SitePalletNetProbe : ChatProbe
     /// <summary>The most the floor may rise or fall along the way in, m.</summary>
     private const float MaxStep = 0.12f;
 
-    /// <summary>The keys of the topped-out sites on these tiles (off the main thread: it plans them).</summary>
-    private static HashSet<string> ToppedOutSites(IEnumerable<Terrain.Format.TileId> tiles)
+    /// <summary>
+    /// The sites whose materials the planner kept a way in to (#1926): a topped-out site was assumed to have one, and on
+    /// <c>fixture:site</c> under flat none did (a yard 14.5 m deep between the scaffolding and the street).
+    /// </summary>
+    private static HashSet<string> ReachableSites(IEnumerable<Terrain.Format.TileId> tiles)
     {
         var keys = new HashSet<string>();
         if (Loot.LootService.Instance?.Source?.Invoke() is not { } source) return keys;
         foreach (var tile in tiles)
-            foreach (var site in Terrain.Construction.SitePlans.OfTile(source, tile).Sites)
-                if (site.Phase == Terrain.Construction.SitePhase.ToppedOut) keys.Add(site.Key);
+        {
+            var t = Terrain.Construction.SitePlans.OfTile(source, tile);
+            if (t.Tile is not { } bt) continue;
+            foreach (var site in t.Sites)
+                if (Terrain.Construction.SitePlans.MaterialsReachable(bt, t.Roads, site)) keys.Add(site.Key);
+        }
         return keys;
     }
 
@@ -144,18 +151,18 @@ public partial class SitePalletNetProbe : ChatProbe
 
         // the nearest site pallet a machine can come at: one beside a pit or hemmed in by a slab is passed over (#1718:
         // on the fixture the nearest stands by the foundations' pit)
-        // a topped-out site's first, as on the generated world: its materials lie on level ground with a way in, where a
-        // shell's or a foundations' may lie by the pit or the slab's edge
+        // a site's whose materials have a way in first (#1926: the planner keeps one where the yard has room; a topped-out
+        // site was taken for one, and on fixture:site under flat none of them had room)
         var palletTiles = new HashSet<Terrain.Format.TileId>();
         foreach (var n in PalletNode.All.Values)
             if (Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site && Interiors.BuildingKey.TryParse(r.Building, out var b))
                 palletTiles.Add(b.Tile);
-        var topped = await Task.Run(() => ToppedOutSites(palletTiles));
+        var reachable = await Task.Run(() => ReachableSites(palletTiles));
         PalletNode? pallet = null;
         Vector3? clear = null;
         foreach (var candidate in PalletNode.All.Values
                      .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Site)
-                     .OrderBy(n => Pallets.TryParse(n.Id, out var r) && topped.Contains(r.Building) ? 0 : 1)
+                     .OrderBy(n => Pallets.TryParse(n.Id, out var r) && reachable.Contains(r.Building) ? 0 : 1)
                      .ThenBy(n => n.GlobalPosition.DistanceSquaredTo(me.GlobalPosition)).Take(40).ToList())
         {
             GD.Print($"[sitepalletnet A]   trying {candidate.Id}");
@@ -170,6 +177,10 @@ public partial class SitePalletNetProbe : ChatProbe
         if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;
         me.PlaceAt(at, Yaw(-outward));
         await Seconds(2);
+        {
+            var placed = (me.GlobalTransform * th.TinesFrame).AffineInverse() * pallet.GlobalPosition;
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   set down: the pallet {placed.X:F2} aside, {-placed.Z:F2} ahead of the tines (asked {at.X:F2},{at.Z:F2}, at {me.GlobalPosition.X:F2},{me.GlobalPosition.Z:F2}, tines x {tines.X:F2})"));
+        }
 
         XrPad.Press(PlayerInput.DigMode, true);
         await Seconds(0.1);
@@ -180,6 +191,16 @@ public partial class SitePalletNetProbe : ChatProbe
         await Until(() => Ahead() < Pallets.LoadAhead + 0.05f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
         await BrakeToStop(me);
         GD.Print(FormattableString.Invariant($"[sitepalletnet A]   telehandler stopped: {Ahead():F2} m ahead of the heel"));
+        {
+            // the fork rule's terms (Pallets.OnTines, #1926): what the server reads when the boom goes up
+            var tinesAt = me.GlobalTransform * th.TinesFrame;
+            var local = tinesAt.AffineInverse() * pallet.GlobalPosition;
+            var aheadDir = new Vector2(-tinesAt.Basis.Z.X, -tinesAt.Basis.Z.Z).Normalized();
+            var runners = pallet.GlobalTransform.Basis.X;
+            float along = Mathf.Abs(aheadDir.Dot(new Vector2(runners.X, runners.Z).Normalized()));
+            bool on = Pallets.OnTines(local.X, -local.Z, along, th.ForkHeight, me.GroundSpeed, th.TineLength, th.TineHalfSpan);
+            GD.Print(FormattableString.Invariant($"[sitepalletnet A]   on the tines: {on} (aside {local.X:F2} of {th.TineHalfSpan:F2}, ahead {-local.Z:F2} of {th.TineLength:F2}, fork height {th.ForkHeight:F2} under {ForkliftLayout.ForkEntry:F2}, along {along:F2}, speed {me.GroundSpeed:F2})"));
+        }
         if (Ahead() > Pallets.LoadAhead + 0.5f)
         {
             // what stops it: rays ahead of the machine at a few heights (#1704)

@@ -18,6 +18,13 @@ namespace UnitSport.Player;
 /// (<c>XrPad</c> sends it as D-pad right while spectating). Nothing on screen without a target (<c>ui/style-guide</c>);
 /// the text is set twice a second, the ring drawn each frame without an allocation.
 /// </para>
+///
+/// <para>
+/// <b>In the shuttle</b> (#1851, C3a), at the commander's seat above its body's Space handover: the same action, the same
+/// cue; the hold turns the nose (<see cref="Airliner.Aim"/>) onto the tangent of the target's arrival orbit
+/// (<see cref="ShuttleFlight.TangentAim"/>), so the cruise drive brings it in level at that height, and the time shown is the
+/// drive's at full lever.
+/// </para>
 /// </summary>
 public partial class SpectatorTargets : CanvasLayer
 {
@@ -40,16 +47,21 @@ public partial class SpectatorTargets : CanvasLayer
     public (Vector3 Direction, double Distance)? Toward { get; private set; }
 
     private readonly WorldOrigin _origin;
+    private readonly System.Func<FootPlayer?> _local;
     private SpectatorCamera? _cam;
+
+    /// <summary>The shuttle whose nose the hold turns, while it does (its aim is let go when the hold is).</summary>
+    private Airliner? _aimed;
     private Cue _cue = null!;
     private Label _name = null!, _detail = null!;
     private Control _labels = null!;
     private double _heldFor = -1, _textAt;
-    private bool _held, _spectating;
+    private bool _held, _active;
 
-    public SpectatorTargets(WorldOrigin origin)
+    public SpectatorTargets(WorldOrigin origin, System.Func<FootPlayer?> local)
     {
         _origin = origin;
+        _local = local;
         Name = "SpectatorTargets";
         Layer = 8;
     }
@@ -103,7 +115,7 @@ public partial class SpectatorTargets : CanvasLayer
     /// </summary>
     public override void _UnhandledInput(InputEvent e)
     {
-        if (!_spectating || UiFocus.TextEntryActive || e.IsEcho() || !e.IsAction(PlayerInput.SpectatorTarget)) return;
+        if (!_active || UiFocus.TextEntryActive || e.IsEcho() || !e.IsAction(PlayerInput.SpectatorTarget)) return;
         if (e.IsPressed())
         {
             if (_held) return;
@@ -122,14 +134,18 @@ public partial class SpectatorTargets : CanvasLayer
     {
         if (_cam == null || !IsInstanceValid(_cam))
             _cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as SpectatorCamera;
-        var cam = _cam;
-        bool spectating = cam != null && (GetViewport()?.GetCamera3D() == cam || XR.XrSession.Anchor == cam);
-        _spectating = spectating;
-        if (!spectating || UiFocus.TextEntryActive)
+        var spectator = _cam;
+        bool spectating = spectator != null && (GetViewport()?.GetCamera3D() == spectator || XR.XrSession.Anchor == spectator);
+        // or flying the shuttle in Space (#1851): its commander's seat, its own view
+        var shuttle = !spectating && _local() is { SeatIndex: 0, Vehicle: Airliner { InSpace: true } jet } ? jet : null;
+        Camera3D? cam = spectating ? spectator : shuttle != null ? GetViewport()?.GetCamera3D() : null;
+        _active = cam != null;
+        if (cam == null || UiFocus.TextEntryActive)
         {
             _held = false;
             _heldFor = -1;
             Aligning = false;
+            LetGo();
             Hide();
             return;
         }
@@ -138,14 +154,32 @@ public partial class SpectatorTargets : CanvasLayer
         if (_held) _heldFor += delta;
         Aligning = _held && _heldFor >= HoldSeconds && Target != null;
 
-        Toward = Target is { } target && _origin.Frame.Axes is { } axes ? Measure(target, axes, cam!) : null;
+        Toward = Target is { } target && _origin.Frame.Axes is { } axes ? Measure(target, axes, cam) : null;
         if (Toward is not { } toward)
         {
+            LetGo();
             Hide();
             return;
         }
-        if (Aligning) cam!.TurnToward(toward.Direction, TurnRate * (float)delta);
-        Show(cam!, toward, delta);
+        if (Aligning && spectating) spectator!.TurnToward(toward.Direction, TurnRate * (float)delta);
+        if (shuttle != null && Aligning)
+        {
+            // the nose onto the arrival orbit's tangent, on the side it leans to
+            var body = CelestialBody.Of(Target!.Value);
+            double arrival = body.Shape.A + ShuttleFlight.ArrivalM(body);
+            shuttle.Aim = ShuttleFlight.TangentAim(toward.Direction, toward.Distance + body.Shape.A, arrival, -shuttle.State.Attitude.Z);
+            _aimed = shuttle;
+        }
+        else LetGo();
+        Show(cam, toward, delta, shuttle);
+    }
+
+    /// <summary>The hold let go: the shuttle's nose is the stick's again.</summary>
+    private void LetGo()
+    {
+        if (_aimed == null) return;
+        _aimed.Aim = null;
+        _aimed = null;
     }
 
     /// <summary>The target's direction from the camera (world axes) and the distance to its surface, in doubles.</summary>
@@ -162,7 +196,7 @@ public partial class SpectatorTargets : CanvasLayer
         return (world.Normalized(), Math.Max(0, length - CelestialBody.Of(target).Shape.A));
     }
 
-    private void Show(SpectatorCamera cam, (Vector3 Direction, double Distance) toward, double delta)
+    private void Show(Camera3D cam, (Vector3 Direction, double Distance) toward, double delta, Airliner? shuttle)
     {
         var rect = GetViewport().GetVisibleRect().Size;
         var ahead = cam.GlobalPosition + toward.Direction * 100f;
@@ -191,9 +225,19 @@ public partial class SpectatorTargets : CanvasLayer
         {
             _textAt = 0.5;
             _name.Text = CelestialBody.Of(target).Name;
-            // the trip at full speed by the spectator's own rule, from the height over the body left
-            double up = Math.Max(0, _origin.AltitudeOf(cam.GlobalPosition));
-            _detail.Text = TargetList.Distance(toward.Distance) + " · ~" + TargetList.Duration(TargetList.TripSeconds(toward.Distance + up, up)) + " at full speed";
+            if (shuttle != null)
+            {
+                // the drive at full lever toward its arrival orbit: the distance shrinks by e every τ
+                double arrival = ShuttleFlight.ArrivalM(CelestialBody.Of(target));
+                double seconds = ShuttleFlight.DriveTau * Math.Log(Math.Max(1, toward.Distance / arrival));
+                _detail.Text = TargetList.Distance(toward.Distance) + " · ~" + TargetList.Duration(seconds) + " at full drive";
+            }
+            else
+            {
+                // the trip at full speed by the spectator's own rule, from the height over the body left
+                double up = Math.Max(0, _origin.AltitudeOf(cam.GlobalPosition));
+                _detail.Text = TargetList.Distance(toward.Distance) + " · ~" + TargetList.Duration(TargetList.TripSeconds(toward.Distance + up, up)) + " at full speed";
+            }
         }
         _labels.Visible = true;
         var size = _labels.GetCombinedMinimumSize();
