@@ -81,6 +81,16 @@ for Titan, a few seconds); the colour carries the body from orbit, and the near 
 `Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif`, `Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif`,
 `Titan_ISS_P19658_Mosaic_Global_4km.tif`; their colour bakes take 1-21 s.
 
+## The giants (#1854)
+
+Jupiter, Saturn, Uranus and Neptune are globes too: `--cube-body NAME --dem flat --cube-levels 0-1` on their IAU 1-bar
+ellipsoids (`CubeShape.Jupiter`...), coloured from the sky's own 2k maps (`--colour res://assets/space/NAME_2k.jpg`, ~220
+km a pixel on Jupiter). A giant's globe always hangs from its centre under `BodyGlobe`'s root, shrunk past the far plane
+(its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane; no ground to
+hold to the millimetre). Saturn's rings are a ring mesh under the same root (`BodyGlobe.AddRings`,
+`shaders/body_rings.gdshader`: the sky's ring shader without the sky's depth). Finer maps (Cassini's, Juno's) are a later
+swap of the colour alone.
+
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
 | Run | Tiles | Size | Heights | Time | Peak |

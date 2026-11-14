@@ -220,5 +220,20 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
             if (!Core.OriginShifter.CrossBodies && altitude > Core.Curvature.SpectatorCeilingM)
                 Position -= Vector3.Up * (float)(altitude - Core.Curvature.SpectatorCeilingM);
         }
+        KeepOverFloor();
+    }
+
+    /// <summary>
+    /// Over a body one cannot stand on (#1854: a giant, the Sun) the camera stays above its floor
+    /// (<see cref="Core.CelestialBody.FloorM"/>), pushed back out along the vertical: no flying into Jupiter's gas or the
+    /// Sun. Near a giant the anchor is the giant (its sphere of influence is millions of km), so its altitude is the one.
+    /// </summary>
+    private void KeepOverFloor()
+    {
+        if (Core.OriginShifter.Instance?.Origin is not { } origin) return;
+        var body = Core.CelestialBody.Of(origin.Body);
+        if (body.Landable) return;
+        double altitude = origin.AltitudeOf(Position);
+        if (altitude < body.FloorM) Position += origin.UpAt(Position) * (float)(body.FloorM - altitude);
     }
 }

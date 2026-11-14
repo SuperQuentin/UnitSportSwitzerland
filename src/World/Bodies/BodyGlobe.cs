@@ -143,7 +143,7 @@ public partial class BodyGlobe : Node
             return;
         }
         var sky = SkyClock.Now;
-        bool own = axes.Body == Body.Id;
+        bool own = OwnPlacing(axes);
         if (axes.Body != _placedIn || (own && _origin.Epoch != _epoch)) Replace(axes, own);
 
         // the body's frame in world space (doubles): a point p of the body is W (R p + c - O) in world
@@ -202,6 +202,7 @@ public partial class BodyGlobe : Node
         }
         DrawnTiles = shown;
         Drawn = shown > 0;
+        KeepRings(Drawn);
     }
 
     /// <summary>A colour image's mean brightness (Rec. 709 luma of a 32 × 32 sample), 0 to 1.</summary>
@@ -228,6 +229,7 @@ public partial class BodyGlobe : Node
 
     private void Hide()
     {
+        KeepRings(false);
         foreach (var t in _tiles.Values) t.Node.Visible = false;
         Drawn = false;
         DrawnTiles = 0;
@@ -333,6 +335,54 @@ public partial class BodyGlobe : Node
         }
     }
 
+    /// <summary>
+    /// Tiles placed one by one from the anchor in doubles (the ground holds to the millimetre): on the anchor's own body
+    /// when it has ground. A giant (#1854) always hangs from its centre under the root, shrunk with it past the far plane:
+    /// its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane, and it has
+    /// no ground to hold (4 m in a float at Jupiter's cloud tops, 0.005° from the camera's floor 50 km over them).
+    /// </summary>
+    private bool OwnPlacing(FrameAxes axes) => axes.Body == Body.Id && Body.Landable;
+
+    private MeshInstance3D? _rings;
+    private ShaderMaterial? _ringMaterial;
+    private (Vector3 Sun, Vector3 Pole, Vector4 Occluder) _ringsWritten;
+    private static readonly StringName RingSun = "sun_dir", RingPole = "pole", RingOccluder = "occluder";
+
+    /// <summary>
+    /// Rings in the body's equator (Saturn's, #1854): an annulus from <paramref name="inner"/> to <paramref name="outer"/>
+    /// metres from the centre under the root (turned and shrunk with the globe), its radial strip from <paramref name="map"/>.
+    /// The sky's rings step aside with its disc while the globe draws.
+    /// </summary>
+    public void AddRings(double inner, double outer, Texture2D map)
+    {
+        _ringMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/body_rings.gdshader") };
+        _ringMaterial.SetShaderParameter("rings", map);
+        _ringMaterial.SetShaderParameter("inner", (float)(inner / outer));
+        _rings = new MeshInstance3D
+        {
+            Name = "Rings", Mesh = new QuadMesh { Size = new Vector2(2f, 2f) }, MaterialOverride = _ringMaterial,
+            // the quad's plane is the body's XY: its equator (Z is the pole)
+            Scale = Vector3.One * (float)outer, Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        _root.AddChild(_rings);
+    }
+
+    /// <summary>The rings with the globe: lit by its sun, hidden behind it, shown while it draws.</summary>
+    private void KeepRings(bool drawn)
+    {
+        if (_rings == null || _ringMaterial == null) return;
+        if (_rings.Visible != drawn) _rings.Visible = drawn;
+        if (!drawn) return;
+        float scale = _root.Transform.Basis.X.Length();
+        var written = (_sun, _root.GlobalBasis.Z.Normalized(), new Vector4(_root.GlobalPosition.X, _root.GlobalPosition.Y, _root.GlobalPosition.Z, (float)Body.Shape.A * scale));
+        if (written == _ringsWritten) return;
+        _ringsWritten = written;
+        _ringMaterial.SetShaderParameter(RingSun, written.Item1);
+        _ringMaterial.SetShaderParameter(RingPole, written.Item2);
+        _ringMaterial.SetShaderParameter(RingOccluder, written.Item3);
+    }
+
     /// <summary>Every tile moved to the anchor's way of placing them (its own body, or another's under the root).</summary>
     private void Replace(FrameAxes axes, bool own)
     {
@@ -347,7 +397,7 @@ public partial class BodyGlobe : Node
     {
         var a = key.AnchorOn(Body.Cube);
         if (node.GetParent() == null) _root.AddChild(node);
-        if (_origin.Frame.Axes is { } axes && axes.Body == Body.Id)
+        if (_origin.Frame.Axes is { } axes && OwnPlacing(axes))
         {
             Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
             var (ox, oy, oz) = axes.FromEcef(a.Origin);
