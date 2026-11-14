@@ -259,8 +259,12 @@ public partial class LongDriveCheck : Node
         Chase(p);
 
         if (p.Ride == RideKind.OnFoot) { Fault($"out of the car at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
-        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design
-        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f)
+        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design. The height
+        // is the raw terrain's, and the road blend cuts streets metres under it (#1930: a Lane in a 1.1 m cutting behind a
+        // retaining wall south of Place des Nations read as a fall): under it with a floor just beneath is driving, as the
+        // game's own safety nets judge it (IWorldGround.FloorBelow)
+        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f
+            && !_ground.FloorBelow(p, p.GlobalPosition, p.GetRid(), 2f))
         {
             if ((_belowS += dt) > 0.5) { Fault($"fell under the ground ({g - p.GlobalPosition.Y:F1} m) at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
         }
