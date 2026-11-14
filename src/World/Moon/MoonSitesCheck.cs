@@ -19,7 +19,7 @@ namespace UnitSport.World.Moon;
 /// </summary>
 public partial class MoonSitesCheck : Node
 {
-    public static bool Requested => CmdArgs.Has("--moonsites");
+    public static bool Requested => CmdArgs.Has("--moonsites") || CmdArgs.Has("--moonsurvey");
 
     /// <summary>The steepest ground a lander or a rover may stand on, degrees.</summary>
     public const double MaxSlopeDeg = 12;
@@ -44,8 +44,19 @@ public partial class MoonSitesCheck : Node
         var only = CmdArgs.Value("--moonsites");
         // the named ones in the order given (the film dances at the last), or every site
         var ids = string.IsNullOrEmpty(only) || only.StartsWith("--") ? null : only.Split(',').Select(s => s.Trim()).ToList();
-        _sites = ids == null ? MoonSites.All.ToList() : ids.Select(MoonSites.Find).OfType<MoonSite>().ToList();
+        _sites = ids == null ? MoonSites.All.ToList() : ids.Select(Named).OfType<MoonSite>().ToList();
     }
+
+    /// <summary>A site by id, or a colony (<c>artemis</c> from above, <c>artemis:close</c> among its modules) as a stand-in site for the visit.</summary>
+    private static MoonSite? Named(string id)
+    {
+        if (MoonSites.Find(id) is { } s) return s;
+        var baseId = id.Split(':')[0];
+        if (MoonColonies.Find(baseId) is not { } c) return null;
+        return new MoonSite(id, c.Name, MoonSiteKind.Colony, c.Lat, c.Lon, [new SitePart(MoonPart.Flag, 0, 0, 0)]);
+    }
+
+    private static string PlacedId(MoonSite s) => s.Id.Split(':')[0];
 
     public override void _Ready()
     {
@@ -68,12 +79,13 @@ public partial class MoonSitesCheck : Node
         {
             if (_t < 8) return;
             if (_ground() == null) { Finish("no Moon ground (--frame earth --bodies DIR)"); return; }
+            if (CmdArgs.Value("--moonsurvey") is { } survey) { Survey(survey); return; }
             Next();
             return;
         }
         var site = _sites[_index];
         var ground = _ground()!;
-        bool placed = MoonSurface.Active?.Sites.TryGetValue(site.Id, out var p) == true && p!.TracesIn;
+        bool placed = MoonSurface.Active?.Sites.TryGetValue(PlacedId(site), out var p) == true && p!.TracesIn;
         if (ground.Built > _builtAt && placed && ground.MediumBuilt > 0) _frames++;
         // a second of frames on the built ground, then the picture and the next site
         if (_frames > 60 && _t > 3)
@@ -129,6 +141,9 @@ public partial class MoonSitesCheck : Node
         var sun = SunLocal(s, sky);
         double sunAz = Math.Atan2(sun.East, sun.North);
         double az = sunAz + 0.7;
+        // a colony from the side away from its pads (they stand behind it), a little round toward the sun
+        if (s.Kind == MoonSiteKind.Colony && MoonColonies.Find(PlacedId(s)) is { } col)
+            az = col.Heading * Math.PI / 180 + Math.PI + (s.Id.EndsWith(":close") ? 0.5 : 0.45);
         // an impact: the crater's own point, the debris on its rim in view
         var main = s.Kind == MoonSiteKind.Impact ? new SitePart(MoonPart.SivbDebris, 0, 0, 0) : s.Parts[0];
         double dist = main.Part switch
@@ -136,9 +151,11 @@ public partial class MoonSitesCheck : Node
             MoonPart.DescentStage => 20, MoonPart.RocketWreck => 48, MoonPart.SivbDebris => 55, MoonPart.ChangeLander or MoonPart.LunaStage
                 or MoonPart.LunaRampStage => 11, MoonPart.Flag => 5.5, _ => 7,
         };
-        double up = Math.Max(1.8, dist * 0.32);
+        bool close = s.Id.EndsWith(":close");
+        if (s.Kind == MoonSiteKind.Colony) dist = close ? 34 : 170;
+        double up = s.Kind == MoonSiteKind.Colony ? (close ? 2.2 : 70) : Math.Max(1.8, dist * 0.32);
         var eye = new Vector3((float)(main.East + Math.Sin(az) * dist), (float)up, (float)-(main.North + Math.Cos(az) * dist));
-        var look = new Vector3((float)main.East, (float)(dist * 0.06), (float)-main.North);
+        var look = new Vector3((float)main.East, (float)(s.Kind == MoonSiteKind.Colony ? (close ? 4 : 0) : dist * 0.06), (float)-main.North);
         // the frame is the site's tangent at its ground point: lift the eye over the ground under it
         var eyeN = MoonSites.Offset(s, eye.X, -eye.Z);
         var axes = _origin.Frame.Axes!;
@@ -242,6 +259,20 @@ public partial class MoonSitesCheck : Node
         }
     }
 
+    /// <summary>
+    /// <c>--moonsurvey LAT,LON,SEARCH_KM,RADIUS_M</c>: the flattest discs on LOLA's heights near a place (a colony's
+    /// plateau), best first, then quits.
+    /// </summary>
+    private void Survey(string arg)
+    {
+        var p = arg.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+        var h = _ground()!.Heights;
+        foreach (var (lat, lon, rms, tilt, height) in MoonColonies.Flattest(h.Data, p[0], p[1], p[2] * 1000, p[3]))
+            GD.Print(string.Create(CultureInfo.InvariantCulture,
+                $"[moonsites] survey: {lat:F4}, {lon:F4}: rms {rms:F2} m round a plane tilted {tilt:F2}°, {height:F0} m"));
+        Finish(null);
+    }
+
     /// <summary>The unit direction to the sun at a site, in its east, north, up.</summary>
     private static (double East, double North, double Up) SunLocal(MoonSite s, SkyMoment sky)
     {
@@ -277,8 +308,22 @@ public partial class MoonSitesCheck : Node
     private void Judge(MoonSite s, BodyGround ground)
     {
         var h = ground.Heights;
+        if (s.Kind == MoonSiteKind.Colony)
+        {
+            // the plateau: level to a centimetre (the sphere's own drop aside) wherever the colony stands
+            var c = MoonColonies.Find(PlacedId(s))!;
+            double h0 = h.At(c.Normal), worst = 0;
+            for (int k = 0; k < 16; k++)
+            {
+                double a = k * Math.PI / 8, rr = c.PlateauM * (k % 2 == 0 ? 0.95 : 0.5);
+                worst = Math.Max(worst, Math.Abs(h.At(MoonSites.Offset(s, Math.Sin(a) * rr, Math.Cos(a) * rr)) - h0));
+            }
+            GD.Print(string.Create(CultureInfo.InvariantCulture, $"[moonsites]   plateau: within {worst * 100:F1} cm of its centre's height"));
+            if (worst > 0.02) _fails.Add($"{s.Id}: the plateau is {worst:F2} m off level");
+        }
         foreach (var part in s.Parts)
         {
+            if (s.Kind == MoonSiteKind.Colony) break;
             if (part.Part is MoonPart.SivbDebris or MoonPart.WreckDebris or MoonPart.RocketWreck or MoonPart.Alsep) continue;
             double worst = 0;
             double c = h.At(MoonSites.Offset(s, part.East, part.North));
@@ -291,7 +336,7 @@ public partial class MoonSitesCheck : Node
             GD.Print(string.Create(CultureInfo.InvariantCulture, $"[moonsites]   {part.Part}: ground slope {worst:F1}°"));
             if (worst > MaxSlopeDeg) _fails.Add($"{s.Id}: {part.Part} on a {worst:F1}° slope");
         }
-        if (MoonSurface.Active?.Sites.TryGetValue(s.Id, out var placed) == true
+        if (MoonSurface.Active?.Sites.TryGetValue(PlacedId(s), out var placed) == true
             && GetViewport().GetCamera3D() is { } cam)
             GD.Print(string.Create(CultureInfo.InvariantCulture,
                 $"[moonsites]   the site at {placed.Node.GlobalPosition}, the camera at {cam.GlobalPosition}, {cam.GlobalPosition.DistanceTo(placed.Node.GlobalPosition):F1} m"));
@@ -299,7 +344,7 @@ public partial class MoonSitesCheck : Node
         // the picture without the HUD
         foreach (var node in GetTree().Root.FindChildren("*", "CanvasLayer", true, false))
             ((CanvasLayer)node).Visible = false;
-        var path = ProjectSettings.GlobalizePath($"res://test_output/moon/site_{s.Id}.png");
+        var path = ProjectSettings.GlobalizePath($"res://test_output/moon/site_{s.Id.Replace(':', '_')}.png");
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
         GetViewport().GetTexture().GetImage().SavePng(path);
         GD.Print($"[moonsites]   saved {path}");
