@@ -14,12 +14,16 @@ walk the ground floor and come back out. Bowling's partners on real bodies are p
   wants it in gets its own body (#1456: its frame and physics space), placed with `PlacementFor(layout, region.Origin)`
   and moved when that placement changes (a re-anchor). Freed `BotRoomKeepSeconds` (20 s) after no bot is inside or
   asked for it (`TickBotRooms`). A house is 1,100-1,900 triangles.
-- **Where a body can walk** (`BotPath`): the same faces baked into a `NavigationMesh` on the worker (a body 0.3 m round,
-  1.7 m tall, steps 0.3 m, slopes 50°; cells 0.1 x 0.05 m, which the region's navigation map is set to), as a navigation
+- **Where a body can walk** (`BotPath`): the same faces baked into a `NavigationMesh` on the worker (an agent 0.35 m
+  round, over the body's 0.32 m, 1.7 m tall, steps 0.3 m, slopes 50°; cells 0.05 x 0.05 m, which the region's
+  navigation map is set to), as a navigation
   region on that server region's map (`World3D.NavigationMap`), placed with the body. `NavigationServer3D.MapGetPath`
   then goes round furniture, over stairs and past holes, on every floor the stairs join. The first navigation use in the
   project: only the server's bots read those maps. A map knows a region a sync or two after it was placed, so a path
   asked at once comes back empty and is asked again.
+  - The agent's radius: at 0.3 m a path pulled tight round a doorway's jamb let the 0.32 m body catch on it (pressed
+    against the wall 7 cm past the jamb, `no headway` logged forever: the same way asked again from the same spot); at
+    0.1 m cells 0.35 m rounds up to 0.4 m, which shuts a 0.8 m door, hence 0.05 m cells.
   - Why not the room graph alone: the first version routed on `InteriorNav` with straight legs, and a bot walked
     over a stairwell's hole into the cellar (y −3003.9) and was lost; another one jumped onto a cupboard (MoveTo's
     mantle) and stayed on it.
@@ -47,7 +51,11 @@ walk the ground floor and come back out. Bowling's partners on real bodies are p
   gives up: the door is not tried again, and a bot inside goes back out. The give-up line prints the plan point, the
   room, the leg and what a knee-high ray meets.
 - **`WanderBrain`**: one goal in six, after a pause, is a visit in play; every goal with `--botsindoors`; never in a
-  test run otherwise, so `botcheck` and the others keep a stroller.
+  test run otherwise, so `botcheck` and the others keep a stroller. After a visit it strolls 20 s before the next one,
+  and a door visited (or given up on) is not taken again: the first version walked straight back in after 2 s, which
+  read as a body caught in the door (and failed the check's "it stands on the street").
+- **Venues find a bot's body by its id** (`InteriorManager.PlayerBody`: `BotDirector.Get`): a bot's node is `npc_1_n`,
+  so `LocalOf`, `NearDoor` and the venues' `Near` checks judged no body for a bot before.
 
 ## Check
 

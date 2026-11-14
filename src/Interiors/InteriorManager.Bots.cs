@@ -133,8 +133,17 @@ public partial class InteriorManager
         if (p.NavRegion.IsValid) NavigationServer3D.FreeRid(p.NavRegion);
     }
 
-    /// <summary>The baked surfaces' cell size: a map merges a region's edges only on its own cells.</summary>
-    private const float NavCell = 0.1f, NavCellHeight = 0.05f;
+    /// <summary>
+    /// The baked surfaces' cell size: a map merges a region's edges only on its own cells. Fine enough that the agent's
+    /// radius (<see cref="NavRadius"/>) stays what it says: at 0.1 m it rounded up to 0.4 m and shut every 0.8 m inner door.
+    /// </summary>
+    private const float NavCell = 0.05f, NavCellHeight = 0.05f;
+
+    /// <summary>
+    /// The agent's radius, over the body's (0.32 m): a path is pulled tight round a corner at this distance, and at 0.3 m a
+    /// bot walking it straight caught on a doorway's jamb and asked the same way again for ever (#1330).
+    /// </summary>
+    private const float NavRadius = 0.35f;
 
     private readonly HashSet<Rid> _fitMaps = new();
 
@@ -147,7 +156,7 @@ public partial class InteriorManager
     }
 
     /// <summary>
-    /// Bakes where a body can walk from an interior's collision faces (on a worker): a body 0.3 m round and 1.7 m tall,
+    /// Bakes where a body can walk from an interior's collision faces (on a worker): a body <see cref="NavRadius"/> round and 1.7 m tall,
     /// steps of 0.3 m (a stair's), slopes to 50°. Up to ~2 s for a block; a house is a few hundred milliseconds.
     /// </summary>
     private static NavigationMesh Bake(Vector3[] faces)
@@ -157,7 +166,7 @@ public partial class InteriorManager
         var mesh = new NavigationMesh
         {
             CellSize = NavCell, CellHeight = NavCellHeight,
-            AgentRadius = 0.3f, AgentHeight = 1.7f, AgentMaxClimb = 0.3f, AgentMaxSlope = 50f,
+            AgentRadius = NavRadius, AgentHeight = 1.7f, AgentMaxClimb = 0.3f, AgentMaxSlope = 50f,
             GeometryParsedGeometryType = NavigationMesh.ParsedGeometryType.StaticColliders,
         };
         NavigationServer3D.BakeFromSourceGeometryData(mesh, source);

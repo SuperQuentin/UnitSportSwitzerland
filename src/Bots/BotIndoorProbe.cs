@@ -74,8 +74,9 @@ public partial class BotIndoorProbe : ChatProbe
         Expect(outside, "its body is back outside");
         if (outside)
         {
-            await Seconds(2.0);
-            bool grounded = Me?.Terrain?.TryGetSurface(bot.GlobalPosition, out float g) == true && Mathf.Abs(bot.GlobalPosition.Y - g) < 2f;
+            // standing on the street at some moment of its first seconds out (it strolls on from there)
+            bool grounded = await Until(() => GodotObject.IsInstanceValid(bot) && Me?.Terrain?.TryGetSurface(bot.GlobalPosition, out float g) == true
+                && Mathf.Abs(bot.GlobalPosition.Y - g) < 2f, 4);
             Expect(grounded, $"it stands on the street ({bot.GlobalPosition.Y:F1} m)");
         }
     }

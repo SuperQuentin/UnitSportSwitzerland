@@ -30,6 +30,7 @@ public sealed class WanderBrain : IBotBrain
     /// <summary>Otherwise one goal in this many, after a pause, is a visit (#1330); never in a test run, whose checks count on a stroll.</summary>
     private const int VisitOneIn = 6;
     private BotVisit? _visit;
+    private double _strollUntil;
     private readonly System.Collections.Generic.HashSet<string> _triedDoors = new();
 
     public double Think(Bot bot, double now)
@@ -50,7 +51,9 @@ public sealed class WanderBrain : IBotBrain
             _visit = null;
             _goal = null;
             _home = body.GlobalPosition;
-            _restUntil = now + 2;
+            // a stroll before anything else: straight back in (seen) reads as a body caught in the door
+            _restUntil = now + 4;
+            _strollUntil = now + 20;
             return 0.5;
         }
         if (now < _restUntil) return 0.5;
@@ -70,7 +73,7 @@ public sealed class WanderBrain : IBotBrain
                 _restUntil = now + 2 + _rng.NextDouble() * 4;   // a pause, looking round
                 return 0.5;
             }
-            if (Interiors.InteriorManager.Instance != null && (AlwaysVisit || !Core.GameSettings.TestRun && _rng.Next(VisitOneIn) == 0))
+            if (Interiors.InteriorManager.Instance != null && now >= _strollUntil && (AlwaysVisit || !Core.GameSettings.TestRun && _rng.Next(VisitOneIn) == 0))
             {
                 _visit = new BotVisit(_rng, _triedDoors);
                 _goal = null;

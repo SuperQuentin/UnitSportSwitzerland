@@ -219,9 +219,10 @@ public sealed class BotVisit
                 return false;
             case Phase.Out:
             {
-                if (!body.Indoors) { Go(Phase.Done, now); return true; }
+                // a building visited is not visited again at once: the next visit is another door
+                if (!body.Indoors) { _tried.Add(_door!); Go(Phase.Done, now); return true; }
                 im.BotWantIn(body, _door!);   // the door open, the interior kept, until it is out
-                if (im.BotCross(body, bot.Id, _door!)) { Go(Phase.Done, now); return true; }
+                if (im.BotCross(body, bot.Id, _door!)) { _tried.Add(_door!); Go(Phase.Done, now); return true; }
                 if (im.BotDoor(body, _door!) is { } link) Straight(bot, link.Inside * new Vector3(0, 0, 0.3f));
                 return false;
             }

@@ -16,7 +16,7 @@ client A "$AT" & A=$!
 client B "$AT_B"
 wait $A
 tc_stop
-grep -h "\[botindoor\]" "$OUT/botindoor_A.log" "$OUT/botindoor_B.log"
+grep -ha "\[botindoor [AB]\]" "$OUT/botindoor_A.log" "$OUT/botindoor_B.log"
 grep -h "\[interior\] bots:\|visit" "$OUT/botindoor_server.log" | head -20
 if tc_ok 2 "$OUT"/botindoor_A.log "$OUT"/botindoor_B.log; then
     echo "[botindoorcheck] RESULT: ok"; exit 0
