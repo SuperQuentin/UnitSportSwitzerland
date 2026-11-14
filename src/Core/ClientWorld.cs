@@ -150,6 +150,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
         (() => Interiors.OutlineSurvey.Requested, Interiors.OutlineSurvey.Run),
         (() => Interiors.ShopSurvey.Requested, Interiors.ShopSurvey.Run),
+        (() => World.LaneQuery.Requested, World.LaneQuery.Run),
         (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Terrain.Construction.PitSurvey.Requested, Terrain.Construction.PitSurvey.Run),
         (() => Terrain.GroundCheck.Requested, Terrain.GroundCheck.Run),
