@@ -131,8 +131,14 @@ public partial class MoonSitesCheck
         if (brain.Driving) _evaDrove = true;
         if (brain.Status.StartsWith("Cycle")) _evaCycled = true;
         var eva = crew.Crew.Spots[who.Eva];
-        // the camera follows the colonist (the body's ground square follows the camera): 9 m behind, 4 m up
-        if (_crewStage >= 11 && _pending == null)
+        // the camera follows the colonist (the body's ground square follows the camera): 9 m behind, 4 m up; for the
+        // showcase film, eased close behind it, and its parts filmed
+        if (_crewStage >= 11 && _pending == null && Showcase && !_headless)
+        {
+            Chase(body, brain, GetProcessDeltaTime());
+            EvaFilm(brain, GetProcessDeltaTime());
+        }
+        else if (_crewStage >= 11 && _pending == null)
         {
             _airCam ??= new Camera3D { Name = "AirlockShot", Fov = 70 };
             if (_airCam.GetParent() == null) AddChild(_airCam);
@@ -160,14 +166,14 @@ public partial class MoonSitesCheck
             }
             case 11:
                 // windowed: a picture in the airlock, at the wheel, at the spot
-                if (!_headless && !_shotLock && brain.Status.StartsWith("Cycle") && !brain.Outside)
+                if (!_headless && !Showcase && !_shotLock && brain.Status.StartsWith("Cycle") && !brain.Outside)
                 {
                     _shotLock = true;
                     var head = body.GlobalPosition + Vector3.Up * 1.4f;
                     Shot("colonist_airlock", head + body.GlobalBasis.Z * 2.2f + Vector3.Up * 0.5f, head);
                     break;
                 }
-                if (!_headless && !_shotRover && brain.Driving && body.RideSpeed > 2)
+                if (!_headless && !Showcase && !_shotRover && brain.Driving && body.RideSpeed > 2)
                 {
                     _shotRover = true;
                     var at = body.GlobalPosition;
@@ -186,7 +192,7 @@ public partial class MoonSitesCheck
                         if (v is Vehicles.VehicleBody vb && vb.Name.ToString().StartsWith(MoonRoverDepot.Prefix + colony.Id)
                             && vb.GlobalPosition.DistanceTo(body.GlobalPosition) < 20)
                             _evaRover = vb.Name;
-                    if (!_headless && !_shotEva)
+                    if (!_headless && !Showcase && !_shotEva)
                     {
                         _shotEva = true;
                         var at = body.GlobalPosition;

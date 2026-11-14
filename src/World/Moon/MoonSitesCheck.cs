@@ -65,7 +65,7 @@ public partial class MoonSitesCheck : Node
         _headless = DisplayServer.GetName() == "headless";
         _baseSky = SkyClock.Live;
         // the pictures at 1280x720 (the test profile's window is 640x360)
-        if (!_headless) DisplayServer.WindowSetSize(new Vector2I(1280, 720));
+        if (!_headless && !Showcase) DisplayServer.WindowSetSize(new Vector2I(1280, 720));
         GD.Print($"[moonsites] {_sites.Count} site(s) to visit{(_headless ? " (headless: no pictures)" : "")}");
     }
 
@@ -121,6 +121,8 @@ public partial class MoonSitesCheck : Node
         // a second of frames on the built ground, then the picture and the next site
         if (_frames > 60 && _t > 3)
         {
+            // the showcase film (dev): a glide filmed at the site, then on
+            if (Showcase && !_headless) { if (ShowStep(site, delta)) Next(); return; }
             Judge(site, ground);
             Next();
         }
@@ -240,6 +242,7 @@ public partial class MoonSitesCheck : Node
         look.Y += (float)ly;
         cam.GlobalPosition = eye;
         cam.LookAt(look, Vector3.Up);
+        ShowFrom(cam, eye, look);
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[moonsites] {s.Id} ({s.Name}) at {s.Lat:F4}, {s.Lon:F4}: the bodies' clock +{_days:F2} d, the sun {Math.Asin(sun.Up) * 180 / Math.PI:F0}° up"));
     }
@@ -361,6 +364,10 @@ public partial class MoonSitesCheck : Node
                     break;
                 }
                 _film!.Far = _zoomCam!.Far;
+                // placed at the arc's first pose before it is the view (a frame from where it was made showed the ground under the lander)
+                var (arcEye, arcLook) = ArcStart();
+                _film.GlobalPosition = arcEye;
+                _film.LookAt(arcLook, Up());
                 _film.MakeCurrent();
                 _dance = 4;
                 _danceT = 0;
