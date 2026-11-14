@@ -48,6 +48,16 @@ public readonly record struct SiteRect(Vector2 Center, Vector2 AxisU, float Widt
         return new[] { Center - u - v, Center + u - v, Center + u + v, Center - u + v };
     }
 
+    /// <summary>Points over the rectangle about <paramref name="step"/> m apart, edges and corners included (#1926).</summary>
+    public IEnumerable<Vector2> Grid(float step = 1f)
+    {
+        int nu = Math.Max(1, (int)MathF.Ceiling(Width / step)), nv = Math.Max(1, (int)MathF.Ceiling(Depth / step));
+        var c0 = Center - AxisU * (Width / 2) - AxisV * (Depth / 2);
+        for (int i = 0; i <= nu; i++)
+            for (int j = 0; j <= nv; j++)
+                yield return c0 + AxisU * (Width * i / nu) + AxisV * (Depth * j / nv);
+    }
+
     public bool Contains(Vector2 p, float margin = 0f)
     {
         var d = p - Center;
@@ -356,10 +366,10 @@ public static class ConstructionSites
     /// <summary>
     /// Whether a site's materials have a way in for a machine (#619): a strip <see cref="MaterialsApproach"/>
     /// deep on the side the pallets face (away from the building), inside the hoarding, out of the building's
-    /// scaffolding or its pit and clear of every other zone and machine. Where the yard has no room for one,
-    /// the pallets cannot be reached.
+    /// scaffolding or its pit and clear of every other zone and machine, and (given the site's <paramref name="blocked"/>, #1926)
+    /// of every road. Where the yard has no room for one, the pallets cannot be reached.
     /// </summary>
-    public static bool MaterialsWayIn(ConstructionSite s)
+    public static bool MaterialsWayIn(ConstructionSite s, Func<Vector2, bool>? blocked = null)
     {
         if (s.Zones.FirstOrDefault(z => z.Kind == SiteZoneKind.Materials) is not { } m) return false;
         var r = m.Rect;
@@ -369,7 +379,9 @@ public static class ConstructionSites
         var way = new SiteRect(r.Center + r.AxisV * (sign * (r.Depth + MaterialsApproach) / 2), r.AxisU, r.Width, MaterialsApproach - 0.1f);
         return way.Corners().All(c => s.Area.Contains(c)) && !way.Overlaps(keep)
             && !s.Zones.Any(z => z.Kind != SiteZoneKind.Materials && way.Overlaps(z.Rect))
-            && !s.Machines.Any(x => way.Contains(x.At));
+            && !s.Machines.Any(x => way.Contains(x.At))
+            // nor over a road (#1926): a site's yard can reach across its street, and a way over the carriageway is the street
+            && (blocked == null || !way.Grid().Any(blocked));
     }
 
     /// <summary>The ground kept clear past a pit's ramp top, in the site frame.</summary>
@@ -813,9 +825,11 @@ public static class ConstructionSites
             var corners = w.Corners();
             foreach (var p in corners)
                 if (!area.Contains(p, -Gap)) return false;
-            foreach (var p in corners)
+            // all over it, not only at its corners (#1926: a yard reaching across its street kept a way whose corners stood
+            // either side of the carriageway, so the materials' pallets faced the road)
+            foreach (var p in w.Grid())
                 if (blocked(p)) return false;
-            return !blocked(w.Center);
+            return true;
         }
 
         /// <summary>

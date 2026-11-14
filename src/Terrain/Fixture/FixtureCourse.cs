@@ -281,8 +281,10 @@ public sealed class FixtureCourse
         course.Blocks.Add(new Block(255, 22, 14, 11, 1.0f, 25f, BuildingKind.UnderConstruction, 2));
         // past the pits (#1718): a block topped out at four storeys, no pit, whose pallets a machine can come at from
         // either side (tools/sitepalletnetcheck.sh); added after the first three so their keys, and so their plans, stay
-        // as they were, and topped out so --pitcheck (a Foundations and a Shell site) never picks it
-        course.Blocks.Add(new Block(380, 24, 26, 15, 12.0f, Kind: BuildingKind.UnderConstruction, Floors: 4));
+        // as they were, and topped out so --pitcheck (a Foundations and a Shell site) never picks it. 40 m back from the street
+        // (#1926): at 24 m its yard was 14.5 m deep from the scaffolding to the road, too shallow for the materials and their
+        // 8 m way in, so under flat its pallets had none
+        course.Blocks.Add(new Block(380, 40, 26, 15, 12.0f, Kind: BuildingKind.UnderConstruction, Floors: 4));
         // two more topped-out blocks past the rest (#1787): an office's gallery and its raised doors
         // (tools/siteuppernetcheck.sh) depend on how the yard is laid out, a hash of the building's key, and on earth leaves
         // that key is the building's Earth identity (Fnv.Alias): the four above drew no gallery there. Farthest from the
