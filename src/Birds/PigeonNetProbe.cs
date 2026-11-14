@@ -96,7 +96,15 @@ public partial class PigeonNetProbe : ChatProbe
 
         // #519: into the ground beside B, too fast: a splat here and on B, A on foot and unhurt
         int crashes = life.CrashSplats;
-        me.DebugLaunch(b.GlobalPosition + new Vector3(4f, 1.5f, 0f), new Vector3(0f, -30f, 0f));
+        // held at the start a moment, as over B: the server relays a splat only near where it has A's body (8 m), and
+        // the start is 7 m from the hover, so a crash the next frame was refused now and then (#1249)
+        var crashFrom = b.GlobalPosition + new Vector3(4f, 1.5f, 0f);
+        for (int i = 0; i < 40; i++)
+        {
+            me.DebugLaunch(crashFrom, Vector3.Zero);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        }
+        me.DebugLaunch(crashFrom, new Vector3(0f, -30f, 0f));
         Expect(await Until(() => me.Ride == RideKind.OnFoot, 5) && life.CrashSplats == crashes + 1 && me.Health >= FootPlayer.MaxHealth,
             $"A crashed in a splat ({me.Ride}, {life.CrashSplats - crashes} splats, health {me.Health:F0})");
         Say("crashed");
@@ -111,6 +119,11 @@ public partial class PigeonNetProbe : ChatProbe
 
     private async Task RunB(FootPlayer me, BirdLife life)
     {
+        // both join at the one --at, B on A's head (#1249): A then hovered "over B" inside B's body, the physics threw
+        // B 100 m up, and A's drop and crash, aimed at B's copy, went wrong. B stands 6 m east, on the ground, first.
+        me.PlaceAt(me.GlobalPosition + new Vector3(6f, 0.5f, 0f), 0f);
+        me.Velocity = Vector3.Zero;
+        if (!await Until(() => me.IsOnFloor(), 10)) Fail("B never stood 6 m east");
         for (int i = 0; i < 60 && !await Heard("A", "go", 1); i++) Say("ready");
         if (!await Heard("A", "pigeon", 60)) { Fail("A never turned into a pigeon"); return; }
         var a = Other()!;
