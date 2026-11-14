@@ -82,18 +82,22 @@ public partial class BodyGlobe : Node
     private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array? Arrays, Image? Colour, float Mean)> _done = new();
 
     /// <summary>
-    /// What a lit square of ground's mean colour comes out at (#1853): every body's photo is exposed to it, whatever its
-    /// source's own scale (the Moon's Hapke-normalised LROC is dark, ~0.3; Mars' Viking mosaic a bright display image).
+    /// What ground square to the sun comes out at on average (#1853), after the shader's Cartoon lift (the photo to the
+    /// power 0.8): every body's photo is exposed to it, whatever its source's own scale. Six-face means of the level-0
+    /// colour: the Moon's CGI Moon Kit 0.567 (exposed 0.94), Mars' Viking mosaic 0.332 (1.45), the Earth's Blue Marble
+    /// 0.172 (2.2, mostly ocean, at the cap).
     /// </summary>
-    public const float LitMean = 0.48f;
+    public const float LitMean = 0.6f;
 
     /// <summary>
-    /// The sun's strength on this body's photo (<c>sun_strength</c>), from its level-0 colour's mean brightness
-    /// (<see cref="LitMean"/> over it, 0.7 to 2.2); the shader's 1.6 until a level-0 tile has said.
+    /// The sun's strength on this body's photo (<c>sun_strength</c>), from its level-0 colour's mean brightness over all
+    /// six faces (<see cref="LitMean"/> over that mean lifted as the shader lifts it, 0.7 to 2.2); the shader's 1.6 until
+    /// the six have come.
     /// </summary>
     public float Exposure { get; private set; } = 1.6f;
 
     private bool _exposed;
+    private readonly Dictionary<int, float> _faceMeans = new();
     private readonly HashSet<CubeKey> _show = new();
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
     private readonly int _month;
@@ -306,13 +310,15 @@ public partial class BodyGlobe : Node
             if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
             SetHole(material);
-            if (!_exposed && float.IsFinite(r.Mean) && r.Mean > 0.01f)
+            if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
+            if (!_exposed && _faceMeans.Count == CubeSphere.Faces)
             {
                 _exposed = true;
-                Exposure = Mathf.Clamp(LitMean / r.Mean, 0.7f, 2.2f);
+                float mean = _faceMeans.Values.Sum() / CubeSphere.Faces;
+                Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
                 foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
                 GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"[bodies] {Body.Name}'s photo: mean {r.Mean:F3}, exposed at {Exposure:F2}"));
+                    $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2}"));
             }
             material.SetShaderParameter(SunStrength, Exposure);
             var node = new MeshInstance3D

@@ -53,7 +53,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How many squares were built; a check waits for a new one.</summary>
     public int Built { get; private set; }
 
-    /// <summary>The live one, for the checks.</summary>
+    /// <summary>The anchor body's own (one a landable body with a pyramid; the anchor's claims it), for the checks and the step-in.</summary>
     public static BodyGround? Active { get; private set; }
 
     private readonly BodyGlobe _globe;
@@ -79,8 +79,10 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null);
     }
 
-    public override void _EnterTree()
+    /// <summary>This body's ground is the one everything asks while the anchor is on it.</summary>
+    private void Claim()
     {
+        if (Active == this) return;
         Active = this;
         Terrain.Earth.EarthWorld.OtherBody = this;
     }
@@ -133,6 +135,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             Drop();
             return;
         }
+        Claim();
         if (_static != null && _origin.Epoch != _epoch) Place(axes);
         if (_static != null && _material != null && _globe.Sun != Vector3.Zero) _material.SetShaderParameter(SunDir, _globe.Sun);
 
