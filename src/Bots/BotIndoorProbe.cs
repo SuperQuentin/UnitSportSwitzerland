@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
@@ -47,7 +48,9 @@ public partial class BotIndoorProbe : ChatProbe
         GD.Print($"{Log} bot {bot.Name} \"{bot.BotName}\" (id {id})");
 
         // in: the server says so, as it does for a player through a door
+        if (ShotDir != null) _ = Follow(bot, id);
         if (!await Until(() => im.SpaceOf(id).Length > 0, 300)) { Fail($"the bot never went into a building (space \"{im.SpaceOf(id)}\")"); return; }
+        if (ShotDir != null) SaveFrames();
         string plan = im.SpaceOf(id);
         GD.Print($"{Log} the bot is in {plan}");
         Expect(true, $"the bot's space is a building's: {plan}");
@@ -82,4 +85,56 @@ public partial class BotIndoorProbe : ChatProbe
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    /// <summary>
+    /// <c>--botindoorshot DIR</c> (client A, windowed): pictures of the bot walking in. The client's own body stays 5 m
+    /// behind the bot and a little to the side, looking at it; the last frames are kept, and the ones before its space
+    /// turned to the building's (the step through the door) are saved as PNG.
+    /// </summary>
+    private string? ShotDir => _role == "A" && DisplayServer.GetName() != "headless" ? CmdArgs.Value("--botindoorshot") : null;
+
+    private readonly System.Collections.Generic.Queue<Image> _frames = new();
+    private bool _followed;
+
+    private async Task Follow(FootPlayer bot, long id)
+    {
+        var im = InteriorManager.Instance!;
+        var last = bot.GlobalPosition;
+        var heading = Vector3.Forward;
+        while (GodotObject.IsInstanceValid(bot) && im.SpaceOf(id).Length == 0 && Me is { } me)
+        {
+            var pos = bot.GlobalPosition;
+            var moved = (pos - last) with { Y = 0 };
+            if (moved.Length() > 0.3f) heading = moved.Normalized();
+            last = pos;
+            // behind it and to its right, on the ground, looking at its chest
+            var side = heading.Cross(Vector3.Up);
+            var at = pos - heading * 5f + side * 2f;
+            if (me.Terrain?.TryGetSurface(at, out float g) == true) at.Y = g + 0.1f;
+            var look = (pos + Vector3.Up * 1.1f - (at + Vector3.Up * 1.6f)).Normalized();
+            float yaw = Mathf.Atan2(-look.X, -look.Z);
+            me.LeaveInterior(at, yaw);
+            me.LookYaw = yaw;
+            me.LookPitch = Mathf.Asin(Mathf.Clamp(look.Y, -1f, 1f));
+            me.Velocity = Vector3.Zero;
+            await Seconds(0.25);
+            _frames.Enqueue(GetViewport().GetTexture().GetImage());
+            while (_frames.Count > 24) _frames.Dequeue();
+            _followed = true;
+        }
+    }
+
+    private void SaveFrames()
+    {
+        if (!_followed) return;
+        System.IO.Directory.CreateDirectory(ShotDir!);
+        var frames = _frames.ToArray();
+        // the last moments before the crossing: every second frame of the last three seconds
+        for (int i = Math.Max(0, frames.Length - 12), n = 0; i < frames.Length; i += 2, n++)
+        {
+            string path = System.IO.Path.Combine(ShotDir!, $"bot_in_{n:00}.png");
+            frames[i].SavePng(path);
+            GD.Print($"{Log} wrote {path}");
+        }
+    }
 }

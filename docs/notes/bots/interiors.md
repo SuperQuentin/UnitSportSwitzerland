@@ -61,7 +61,9 @@ walk the ground floor and come back out. Bowling's partners on real bodies are p
 
 `tools/botindoorcheck.sh` (net): a dedicated server (`--generated-world`) with one bot and `--botsindoors` at a
 generated village (2586561,1115543); two clients each see the bot's space become a house's, its body in the interiors'
-space standing (not falling), walking at least 2 m inside, then the street again and standing on the ground.
+space standing (not falling), walking at least 2 m inside, then the street again and standing on the ground. `SHOTS=<dir>`:
+client A in a window keeps 5 m behind the bot and saves its last frames before it steps through the door
+(`bot_in_NN.png`, `--botindoorshot`), everyone on 15 July at noon without occasions.
 
 ## Not yet
 
