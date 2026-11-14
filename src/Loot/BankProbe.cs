@@ -34,7 +34,6 @@ public partial class BankProbe : ChatProbe
     public override async void _Ready()
     {
         _role = Role ?? "A";
-        string other = _role == "A" ? "B" : "A";
 
         if (!await Joined(180, () => GetParent() is ClientWorld { Stage: LoadStage.Ready })) return;
         var me = Me!;
@@ -93,8 +92,8 @@ public partial class BankProbe : ChatProbe
         }
 
         // one at a time through the door: two clients toggling it at once shut it on each other
-        // ("vault" too: A says it over and over once inside, and B may have joined after "inside")
-        if (_role == "B" && !await Until(() => _heard.Any(l => l.Contains("BK A inside") || l.Contains("BK A vault")), 240)) { Fail("A never got inside"); return; }
+        // (B listens for "inside" from the start: it may have joined after A said it)
+        if (_role == "B" && !await Until(() => _heard.Any(l => l.Contains("BK A inside")), 240)) { Fail("A never got inside"); return; }
         if (!await WalkIn(me, interiors, door)) return;
         if (_role == "A") Say("inside");
         var layout = interiors.Current!;
@@ -121,16 +120,18 @@ public partial class BankProbe : ChatProbe
             await Seconds(0.5);
         }
 
-        // one after the other, as locksync (#1401, #1622): B, there first while A is at the counter, stood where A was
-        // then set down, and the easing pushed one of them off the spot
-        if (_role == "B" && !await Heard("A", "stood", 120)) { Fail("A never stood at the vault safe"); return; }
-        if (!await StandAt(me, layout, node, safe, f => LootService.NearestContainer(me, layout, node) == f)) return;
-        if (_role == "A") Say("stood");
-        bool both = false;
-        for (int tries = 0; tries < 120 && !both; tries++) { Say("vault"); both = await Heard(other, "vault", 2); }
-        if (!both) { Fail($"{other} never came to the vault"); return; }
-        Say("vault");
-        await Seconds(1.0);
+        // the safe in turn (#1622): the vault is too small for two in front of it, and two bodies set down inside each
+        // other are eased apart, off the spot (#1401). Each waits where it is now (A at the counter, B by the door)
+        // while the other works the safe.
+        var park = me.GlobalPosition;
+        float parkYaw = me.GlobalRotation.Y;
+        Func<Task> stepAside = async () =>
+        {
+            me.EnterInterior(layout.Key, park, parkYaw);
+            me.Velocity = Vector3.Zero;
+            await Seconds(0.8);
+        };
+        Func<Task<bool>> atSafe = () => StandAt(me, layout, node, safe, f => LootService.NearestContainer(me, layout, node) == f);
 
         long epoch = LootTables.Epoch(layout.Key, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         var combo = LootTables.Combination(layout.Key, safe, epoch, FurnitureType.VaultSafe);
@@ -141,6 +142,7 @@ public partial class BankProbe : ChatProbe
 
         if (_role == "B")
         {
+            if (!await atSafe()) return;
             Expect(me.TryInteract() && dial.IsOpen, "E on the vault safe opens the dial");
             loot.SubmitCombination(combo);
             Expect(simon.IsOpen && !dial.IsOpen && simon.Length == seq.Length,
@@ -150,10 +152,12 @@ public partial class BankProbe : ChatProbe
             await Seconds(2.0);
             Expect(!loot.IsUnlocked(layout.Key, safe) && !node.IsLockOpen(safe) && !simon.IsOpen,
                 "the server refuses a wrong Simon sequence: still locked");
+            await stepAside();
             Say("refused");
 
             if (!await Heard("A", "cracked", 240)) { Fail("A never cracked it"); return; }
             Expect(await Until(() => node.IsLockOpen(safe) && loot.IsUnlocked(layout.Key, safe), 5), "B saw the vault safe swing open");
+            if (!await atSafe()) return;
             await Seconds(1.2);
             Shot("vault_open");
             bool searched = me.TryInteract();
@@ -165,11 +169,13 @@ public partial class BankProbe : ChatProbe
             theirs = lb >= 0 && rb > lb ? theirs[(lb + 1)..rb] : "?";
             Expect(seen == theirs, $"B sees what A saw: {seen} / {theirs}");
             loot.Close();
+            await stepAside();
             Say("done");
         }
         else
         {
-            if (!await Heard("B", "refused", 90)) { Fail("B never tried a wrong sequence"); return; }
+            if (!await Heard("B", "refused", 240)) { Fail("B never tried a wrong sequence"); return; }
+            if (!await atSafe()) return;
             Expect(me.TryInteract() && dial.IsOpen, "A opens the dial");
             for (int stage = 0; stage < combo.Length; stage++)
             {
@@ -204,10 +210,15 @@ public partial class BankProbe : ChatProbe
             Expect(opened && !simon.IsOpen, "the server opened it, and the panel opened on its contents");
             var contents = loot.OpenContents().ToList();
             GD.Print($"[bank A] it holds {string.Join(", ", contents.Select(c => $"{c.Stack.Id} x{c.Stack.Count}"))} (worth {LootTables.Value(contents.Select(c => c.Stack))} CHF)");
-            Say($"cracked [{string.Join(",", contents.Select(c => $"{c.Stack.Id}x{c.Stack.Count}"))}]");
             await Seconds(1.0);
             Shot("vault_open");
-            if (!await Heard("B", "done", 90)) { Fail("B never finished"); return; }
+            loot.Close();
+            await stepAside();
+            Say($"cracked [{string.Join(",", contents.Select(c => $"{c.Stack.Id}x{c.Stack.Count}"))}]");
+            if (!await Heard("B", "done", 240)) { Fail("B never finished"); return; }
+            // back at the open safe for its cash
+            if (!await atSafe()) return;
+            Expect(me.TryInteract() && await Until(() => loot.IsOpen && !loot.Waiting, 10), "A opens the cracked safe again");
             loot.TakeAll();
             await Until(() => !loot.Waiting && !loot.OpenContents().Any(), 10);
             Expect(_items.Inventory.Cash > 120 || contents.All(c => c.Stack.Id != ItemId.Francs), $"the vault's cash is in the pocket ({_items.Inventory.Cash})");
