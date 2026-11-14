@@ -501,4 +501,32 @@ public class PitTests
         var d = new Vector2(p.X, p.Z) - pit.TopInner;
         return MathF.Abs(d.Dot(new Vector2(-pit.Down.Y, pit.Down.X))) < 0.01f && d.Dot(pit.Down) > 0.01f;
     }
+
+    [Fact]
+    public void On_a_leaf_a_pit_keeps_inside_its_lattice()
+    {
+        // #1685: each leaf cuts only its own sites' pits, and its stand-in tile's edge lies ~200 m past the leaf's
+        var leaf = CubeKey.FromLatLon(46.15, 7.23, UnitSport.Terrain.Leaves.LeafFrames.LeafLevel);   // Riddes
+        var inside = ConstructionSites.LeafPitInside(leaf);
+        var corners = new Vector2[4];
+        int c = 0;
+        foreach (var (i, j) in new[] { (0, 0), (1, 0), (1, 1), (0, 1) })
+        {
+            var (x, _, z) = CubeGeometry.Exact(leaf, 0, i, j, 0);
+            corners[c++] = new Vector2((float)(x + UnitSport.Terrain.Leaves.LeafStandIn.Offset), (float)(z + UnitSport.Terrain.Leaves.LeafStandIn.Offset));
+        }
+        var centre = (corners[0] + corners[1] + corners[2] + corners[3]) / 4;
+        Assert.True(inside(centre));
+        for (int e = 0; e < 4; e++)
+        {
+            // the middle of each edge, stepped in toward the centre: within the seam no, past it yes
+            var mid = (corners[e] + corners[(e + 1) % 4]) / 2;
+            var toward = (centre - mid).Normalized();
+            Assert.False(inside(mid + toward * 2f));
+            Assert.True(inside(mid + toward * 4f));
+            Assert.False(inside(mid - toward * 10f));
+        }
+        // the stand-in tile's own margin no longer decides: its corner is far outside the leaf
+        Assert.False(inside(new Vector2(ConstructionSites.PitSeam + 1, ConstructionSites.PitSeam + 1)));
+    }
 }

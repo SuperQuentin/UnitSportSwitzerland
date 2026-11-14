@@ -68,7 +68,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public WorldOrigin? Origin { get => _origin ?? Terrain?.Origin; set => _origin = value; }
     private WorldOrigin? _origin;
 
-    private const float Gravity = 9.81f;
+    /// <summary>The ground's gravity where the anchor is (#1850): 9.81 m/s² on the Earth, the Moon's 1.63 there.</summary>
+    private static float Gravity => BodyGravity.Ground;
     private const float EyeHeight = 1.68f;   // average adult eye level
     public const float BaseFov = 68f;
     private const float RunFov = 76f;
@@ -2871,7 +2872,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Mounts, dismounts, or swaps. Returns false when it cannot be done right now.
     ///
     /// <para>
-    /// Refused in mid-air and while sliding, and refused above <see cref="Rideable.DismountSpeed"/>:
+    /// Refused in mid-air (a swimmer may take a boat, never a land vehicle, #1777) and while sliding, and refused above <see cref="Rideable.DismountSpeed"/>:
     /// stepping off skis at 70 km/h is not a dismount, and allowing it makes the descent
     /// consequence-free. Getting <i>on</i> is refused at speed for the same reason — a bike
     /// materialising under a sprinting player is how you clip through a wall.
@@ -2880,7 +2881,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool SetRide(RideKind kind)
     {
         if (kind == (RideKind)RideKindId) return true;
-        if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
+        // a swimmer may take a boat (#1777): it starts afloat at the surface where they are
+        // (BeginBoat); anything else needs the floor under it. The same rule for a bot's server body.
+        bool afloat = _swimming && Boat.IsBoat(kind);
+        if ((!IsOnFloor() && !afloat) || _sliding || Indoors || Ragdolled) return false;
         // no car, motorbike or truck conjured in water deeper than it could wade (#299; boats are #302)
         if (World.WaterField.Submersion(GlobalPosition) > 0.45f && Rideable.Create(kind) is Car or Motorbike or Truck) return false;
 

@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Core;
 using UnitSport.Interiors;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.Terrain.Construction;
 
@@ -205,8 +206,41 @@ public static class ConstructionSites
     public const float PitMargin = Scaffold;
     /// <summary>The ramp's lane along the front wall, m wide: a 20 t excavator's tracks, or the mini machines'.</summary>
     public const float PitLane = 4.6f, PitLaneSmall = 3.4f;
-    /// <summary>A pit stays this far inside its tile: the next tile does not plan this one's sites, so it could not cut its share.</summary>
+    /// <summary>
+    /// A pit stays this far inside its tile, or on a leaf inside its leaf's lattice (#1685, <see cref="LeafPitInside"/>):
+    /// the next tile or leaf does not plan this one's sites, so it could not cut its share.
+    /// </summary>
     public const float PitSeam = 3f;
+    /// <summary>
+    /// Where a pit may reach on a leaf's stand-in tile (#1685): inside the leaf's lattice, <see cref="PitSeam"/>
+    /// from its edge. Each leaf plans and cuts its own sites' pits only (<c>LeafStand</c>, <c>SitePlans.Of</c>), so a pit reaching into the
+    /// neighbour was covered there by its uncut ground; and the stand-in tile's own edge lies ~200 m past the leaf's.
+    /// The lattice's corners in the tile's plan (x east, z south; the anchor frame shifted by <see cref="LeafStandIn.Offset"/>)
+    /// at the ellipsoid: at 4 km up they move ~0.2 m in plan, inside the seam.
+    /// </summary>
+    public static Func<Vector2, bool> LeafPitInside(CubeKey leaf)
+    {
+        var corners = new Vector2[4];
+        int c = 0;
+        foreach (var (i, j) in new[] { (0, 0), (1, 0), (1, 1), (0, 1) })
+        {
+            var (x, _, z) = CubeGeometry.Exact(leaf, 0, i, j, 0);
+            corners[c++] = new Vector2((float)(x + LeafStandIn.Offset), (float)(z + LeafStandIn.Offset));
+        }
+        // the corners' turn, so each edge's inside is on the same hand
+        float turn = Math.Sign((corners[1] - corners[0]).Cross(corners[2] - corners[1]));
+        return p =>
+        {
+            for (int e = 0; e < 4; e++)
+            {
+                var a = corners[e];
+                var edge = corners[(e + 1) % 4] - a;
+                if (turn * edge.Cross(p - a) / edge.Length() < PitSeam) return false;
+            }
+            return true;
+        };
+    }
+
     /// <summary>A shell keeps its pit open up to this many storeys; past that the trench round the basement is backfilled.</summary>
     public const int PitOpenUpTo = 2;
     /// <summary>Ground kept clear past the ramp's top, m: where a machine lines up to go down.</summary>
@@ -242,7 +276,7 @@ public static class ConstructionSites
     /// (<see cref="PitSeam"/>), or one whose ground has a road or another building on it.
     /// </summary>
     private static SitePit? Pit(string key, PlanBox box, SitePhase phase, int built, int target, bool small,
-        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked)
+        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked, Func<Vector2, bool>? inside)
     {
         if (phase != SitePhase.Foundations && !(phase == SitePhase.Shell && built <= PitOpenUpTo)) return null;
         // the lane along the street side; where a road or a neighbour has that ground, along a side
@@ -255,7 +289,7 @@ public static class ConstructionSites
         SitePit? longest = null;
         foreach (var side in new[] { front, along * toGate, -along * toGate, -front })
         {
-            if (PitOn(key, box, built, target, small, side, front, along, gateAlong, blocked) is not { } pit) continue;
+            if (PitOn(key, box, built, target, small, side, front, along, gateAlong, blocked, inside) is not { } pit) continue;
             if (pit.LaneLength >= drop / PitPlans.MaxGrade + PitPlans.FootRoom) return pit;
             if (longest == null || pit.LaneLength > longest.LaneLength) longest = pit;
         }
@@ -264,7 +298,7 @@ public static class ConstructionSites
 
     /// <summary>The pit with its ramp's lane along the wall facing <paramref name="side"/>, or null where it cannot be dug.</summary>
     private static SitePit? PitOn(string key, PlanBox box, int built, int target, bool small, Vector2 side,
-        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked)
+        Vector2 front, Vector2 along, float gateAlong, Func<Vector2, bool> blocked, Func<Vector2, bool>? inside)
     {
         float hw = box.Width / 2, hd = box.Depth / 2, m = PitMargin, lw = small ? PitLaneSmall : PitLane;
         var area = new Rect2D(-hw - m, -hd - m, hw + m, hd + m);
@@ -293,10 +327,10 @@ public static class ConstructionSites
         // along a side: it comes up at its street end, into the yard
         else top = Math.Sign(front.Dot(laneAxis));
 
-        // inside the tile, with the seam margin
+        // inside the tile, with the seam margin; on a leaf inside its lattice (a convex area: its corners tell)
         float max = (float)ChunkFormat.TileSizeM - PitSeam;
         foreach (var c in InPlan(box, area).Corners())
-            if (c.X < PitSeam || c.Y < PitSeam || c.X > max || c.Y > max) return null;
+            if (inside != null ? !inside(c) : c.X < PitSeam || c.Y < PitSeam || c.X > max || c.Y > max) return null;
         // nothing dug under a road or a neighbour: the ring round the building, a metre apart
         // (both edges sampled: a metre or less apart, from one to the other)
         int nx = Math.Max(1, (int)MathF.Ceiling(area.Width)), nz = Math.Max(1, (int)MathF.Ceiling(area.Depth));
@@ -359,8 +393,12 @@ public static class ConstructionSites
     /// Whether a plan point may not be dug for the pit (#619): <see cref="SiteObstacles.Undiggable"/>,
     /// which keeps it off a road's sidewalks too. Null: <paramref name="blocked"/>.
     /// </param>
+    /// <param name="pitInside">
+    /// Whether a plan point may hold a pit's corner: on a leaf's stand-in tile its lattice less <see cref="PitSeam"/>
+    /// (<see cref="LeafPitInside"/>, #1685). Null: the tile less <see cref="PitSeam"/>.
+    /// </param>
     public static ConstructionSite? Plan(string key, Building b, PlanBox box, Vector2? street, Func<Vector2, bool> blocked,
-        Func<Vector2, bool>? undiggable = null)
+        Func<Vector2, bool>? undiggable = null, Func<Vector2, bool>? pitInside = null)
     {
         if (b.Kind != BuildingKind.UnderConstruction || box.Width < 1f || box.Depth < 1f) return null;
         double R(string q) => Fnv.Unit(key + "|site|" + q);
@@ -382,7 +420,7 @@ public static class ConstructionSites
 
         // ---- the pit (#619): the ground dug out under the building, the ramp along the front --
         var pit = Pit(key, box, phase, built, target, small, front, along,
-            street is { } sp ? (sp - box.Center).Dot(along) : 0f, undiggable ?? blocked);
+            street is { } sp ? (sp - box.Center).Dot(along) : 0f, undiggable ?? blocked, pitInside);
 
         // ---- the site: deep at the front for the yard, narrow round the rest -------------------
         float size = Math.Clamp((box.Area - 150f) / 1500f, 0f, 1f);

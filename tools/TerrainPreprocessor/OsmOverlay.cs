@@ -236,13 +236,20 @@ public static class OsmOverlay
             var way = new int[count];
             var same = new bool[count];
             var tram = new bool[count];
+            // a split approach (#1760): the other branch, a one-way the other way on the line's other side; -1 if none
+            var pair = new int[count];
+            var pairSame = new bool[count];
             for (int k = 0; k < count; k++)
             {
                 double s = Math.Min(length, (k + 0.5) * StepM);
                 var (pe, pn, te, tn) = At(line.E, line.N, cum, s);
                 (way[k], same[k]) = roadGrid.Nearest(pe, pn, te, tn, radius, cosMax);
                 tram[k] = tramGrid.Nearest(pe, pn, te, tn, radius, cosMax).Index >= 0;
+                pair[k] = line.Divided ? -1 : SplitBranch(osm, roadGrid, pe, pn, te, tn, radius, cosMax, way[k], same[k], out pairSame[k]);
             }
+            // a split pair counts as one way for the runs, whichever branch is the nearer at each station
+            var key = new long[count];
+            for (int k = 0; k < count; k++) key[k] = pair[k] < 0 ? way[k] : -2 - Math.Min(way[k], pair[k]);
 
             // runs of one way in one direction; short ones at junctions are noise
             var rows = new List<Row>();
@@ -252,13 +259,22 @@ public static class OsmOverlay
             for (int a = 0; a < count;)
             {
                 int b = a;
-                while (b + 1 < count && way[b + 1] == way[a] && same[b + 1] == same[a]) b++;
+                while (b + 1 < count && key[b + 1] == key[a] && (pair[a] >= 0 || same[b + 1] == same[a])) b++;
                 double from = a * StepM, to = Math.Min(length, (b + 1) * StepM);
                 if (way[a] >= 0 && (to - from >= MinRunM || to - from >= MinOverlapFraction * length))
                 {
                     var row = MakeRow(line, osm[way[a]], same[a], from, to, tram.AsSpan(a, b - a + 1));
                     var (me, mn, _, _) = At(line.E, line.N, cum, (from + to) / 2);
-                    if (expected != 0 && row.OneWay is "1" or "-1" && int.Parse(row.OneWay) != expected)
+                    if (pair[a] >= 0)
+                    {
+                        // one TLM line where OSM draws the two directions apart (a splitter island before a roundabout, a
+                        // flared approach): the line carries both, each direction's attributes from the branch that carries it
+                        var other = MakeRow(line, osm[pair[a]], pairSame[a], from, to, tram.AsSpan(a, b - a + 1));
+                        row = row.OneWay == "1" ? MergeSplit(row, other) : MergeSplit(other, row);
+                        conflicts.Add(new Conflict(line.Uuid, line.Part, from, to, row.Way, me, mn,
+                            "OSM splits the two directions either side of one TLM line (opposite one-way branches); merged two-way"));
+                    }
+                    else if (expected != 0 && row.OneWay is "1" or "-1" && int.Parse(row.OneWay) != expected)
                     {
                         conflicts.Add(new Conflict(line.Uuid, line.Part, from, to, row.Way, me, mn,
                             "OSM one-way points against the divided-carriageway direction (partner side, right-hand traffic); oneway dropped"));
@@ -314,6 +330,66 @@ public static class OsmOverlay
         return cross > 0 ? 1 : -1;
     }
 
+    /// <summary>
+    /// The OSM way's one-way in its own direction: +1, -1, 0 (two-way), null (reversible or unknown); a roundabout and a
+    /// motorway are one-way unless tagged otherwise.
+    /// </summary>
+    private static int? OsmDirection(Dictionary<string, string> t)
+    {
+        bool roundabout = t.GetValueOrDefault("junction") is "roundabout" or "circular";
+        return t.GetValueOrDefault("oneway") switch
+        {
+            "yes" or "true" or "1" => 1,
+            "-1" or "reverse" => -1,
+            "no" or "false" or "0" => 0,
+            null => roundabout || t.GetValueOrDefault("highway") == "motorway" ? 1 : 0,
+            _ => null,
+        };
+    }
+
+    /// <summary>Least distance each branch of a split approach lies off the TLM line, to the side (metres).</summary>
+    private const double SplitSideM = 0.5;
+
+    /// <summary>
+    /// #1760: where OSM draws a street's two directions as two one-way ways (the in and out branches round a splitter
+    /// island before a roundabout, a flared approach) and TLM one line between them, the station's nearest way is only one
+    /// branch: its one-way would make the line one-way and cut the other direction off (Versoix's roundabout: no exit
+    /// toward Nyon). The other branch: a one-way way parallel within the corridor whose traffic runs against the nearest
+    /// way's, the two on opposite sides of the line; -1 when there is none (or the nearest way is not one-way).
+    /// </summary>
+    private static int SplitBranch(IReadOnlyList<OsmWay> osm, SegmentGrid grid, double pe, double pn, double te, double tn,
+        double radius, double cosMax, int nearest, bool nearSame, out bool otherSame)
+    {
+        otherSame = false;
+        if (nearest < 0 || osm[nearest].IsTram || OsmDirection(osm[nearest].Tags) is not { } nd || nd == 0) return -1;
+        var (_, _, qa) = grid.Search(pe, pn, te, tn, radius, cosMax, -1);
+        var (other, same, qb) = grid.Search(pe, pn, te, tn, radius, cosMax, nearest);
+        if (other < 0 || OsmDirection(osm[other].Tags) is not { } od || od == 0) return -1;
+        if (nd * (nearSame ? 1 : -1) != -od * (same ? 1 : -1)) return -1;   // their traffic runs the same way
+        double sa = te * (qa.Item2 - pn) - tn * (qa.Item1 - pe), sb = te * (qb.Item2 - pn) - tn * (qb.Item1 - pe);
+        if (Math.Abs(sa) < SplitSideM || Math.Abs(sb) < SplitSideM || Math.Sign(sa) == Math.Sign(sb)) return -1;
+        otherSame = same;
+        return other;
+    }
+
+    /// <summary>
+    /// One two-way row from a split approach's branches (#1760): <paramref name="fwd"/> carries the traffic in TLM's drawing
+    /// order (its row says one-way 1), <paramref name="bwd"/> against it. Each direction's lanes, turns, speed, bike lanes
+    /// and destinations from its own branch, each side's sidewalk and cycleway from the branch on that side (right-hand
+    /// traffic: the forward branch on the right); no width (each branch is one carriageway, TLM's width is the road's).
+    /// </summary>
+    private static Row MergeSplit(Row fwd, Row bwd) => fwd with
+    {
+        OneWay = "0",
+        Lanes = "",
+        LanesFwd = fwd.LanesFwd != "" ? fwd.LanesFwd : fwd.Lanes,
+        LanesBwd = bwd.LanesBwd != "" ? bwd.LanesBwd : bwd.Lanes,
+        Width = "",
+        SidewalkLeft = bwd.SidewalkLeft, CyclewayLeft = bwd.CyclewayLeft,
+        TurnBwd = bwd.TurnBwd, MaxSpeedBwd = bwd.MaxSpeedBwd, BikeBwd = bwd.BikeBwd, DestBwd = bwd.DestBwd, DestLanesBwd = bwd.DestLanesBwd,
+        Roundabout = fwd.Roundabout && bwd.Roundabout,
+    };
+
     private static Row MakeRow(TlmLine line, OsmWay w, bool same, double from, double to, ReadOnlySpan<bool> tram)
     {
         var t = w.Tags;
@@ -321,14 +397,7 @@ public static class OsmOverlay
         bool roundabout = t.GetValueOrDefault("junction") is "roundabout" or "circular";
 
         // oneway in the OSM way's own direction: +1, -1, 0 (two-way), "" (reversible/unknown)
-        int? osmDir = t.GetValueOrDefault("oneway") switch
-        {
-            "yes" or "true" or "1" => 1,
-            "-1" or "reverse" => -1,
-            "no" or "false" or "0" => 0,
-            null => roundabout || hw == "motorway" ? 1 : 0,
-            _ => null,
-        };
+        int? osmDir = OsmDirection(t);
         string oneway = osmDir is { } d ? (same ? d : -d).ToString(CultureInfo.InvariantCulture) : "";
 
         string Side(string key, string side)
@@ -626,6 +695,15 @@ public static class OsmOverlay
             // the southern carriageway mapped against its traffic: a conflict, oneway dropped
             new(8, [200, 0], [100, 100], new() { ["highway"] = "motorway" }),
         };
+        // #1760: a 4 m street drawn south -> north into a roundabout, OSM's two branches either side of it round a
+        // splitter island: the in branch (north-bound) 2.5 m east, the out branch (south-bound) 2.5 m west
+        tlm.Add(new("flare", 0, "4m Strasse", false, [500, 500], [0, 40], 3));
+        osm.Add(new(20, [502.5, 502.5], [0, 40], new() { ["highway"] = "secondary", ["oneway"] = "yes", ["lanes"] = "1", ["turn:lanes"] = "right" }));
+        osm.Add(new(21, [497.5, 497.5], [40, 0], new() { ["highway"] = "secondary", ["oneway"] = "yes", ["lanes"] = "2", ["sidewalk"] = "right" }));
+        // a plain one-way street beside a parallel one-way the other way, both on the same side: stays one-way
+        tlm.Add(new("couplet", 0, "4m Strasse", false, [700, 700], [0, 40], 3));
+        osm.Add(new(30, [700.3, 700.3], [0, 40], new() { ["highway"] = "residential", ["oneway"] = "yes" }));
+        osm.Add(new(31, [706, 706], [40, 0], new() { ["highway"] = "residential", ["oneway"] = "yes" }));
         var r = Conflate(tlm, osm);
         var fails = new List<string>();
         void Check(bool ok, string what) { if (!ok) fails.Add(what); }
@@ -649,6 +727,18 @@ public static class OsmOverlay
         Check(south.Count == 1 && south[0].OneWay == "", "south: OSM direction conflicts with the partner rule, so oneway is dropped");
         Check(r.Conflicts.Count(c => c.Uuid == "south") == 1, "south: one conflict logged");
         Check(!r.Rows.Any(x => x.Uuid == "north"), "north: nothing within its corridor");
+        var flare = r.Rows.Where(x => x.Uuid == "flare").ToList();
+        Check(flare.Count == 1 && flare[0].OneWay == "0", $"flare: the split approach is two-way, got {string.Join(",", flare.Select(x => $"'{x.OneWay}' {x.From}-{x.To}"))}");
+        if (flare.Count == 1)
+        {
+            var f = flare[0];
+            Check(f.LanesFwd == "1" && f.LanesBwd == "2", $"flare: each direction's lanes from its branch, got {f.LanesFwd}/{f.LanesBwd}");
+            Check(f.TurnFwd == "right" && f.TurnBwd == "", $"flare: the in branch's turn lanes forward, got {f.TurnFwd}/{f.TurnBwd}");
+            Check(f.SidewalkLeft == "yes", $"flare: the west (left) branch's sidewalk on the left, got '{f.SidewalkLeft}'");
+        }
+        Check(r.Conflicts.Count(c => c.Uuid == "flare") == 1, "flare: one conflict logged");
+        var couplet = r.Rows.Where(x => x.Uuid == "couplet").ToList();
+        Check(couplet.Count == 1 && couplet[0].OneWay == "1", $"couplet: a one-way street with a parallel one on the same side stays one-way, got {string.Join(",", couplet.Select(x => $"'{x.OneWay}'"))}");
         Check(r.PerClass["6m Strasse"] == (1, 1, 100, 100), "per-class stats for the street");
 
         // same input, same bytes

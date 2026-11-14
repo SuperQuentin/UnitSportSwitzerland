@@ -780,8 +780,23 @@ public static partial class TileRewriter
                     }
                     return StreetSideAt(linkId, end, right);
                 }
+                // ... d metres out from that end along the street (#1879: the junction planner keeps room for its sidewalk all along
+                // a transition, not only at the mouth)
+                RoadSide StreetSideAlong(int linkId, LinkEnd end, bool right, double d)
+                {
+                    if (!layoutSegmentOf.TryGetValue(linkId, out var so)) return default;
+                    var ends = streetPieces.TryGetValue(so.Item1, out var cut) && cut.Count > 0 ? cut : [so.Item1];
+                    double gone = 0;
+                    for (int p = 0; p < ends.Count; p++)
+                    {
+                        var piece = end == LinkEnd.Start ? ends[p] : ends[^(p + 1)];
+                        gone += RoadPaintGeometry.Length(piece.Points);
+                        if (gone > d || p == ends.Count - 1) return right ? piece.Attributes.Right : piece.Attributes.Left;
+                    }
+                    return default;
+                }
                 var layouts = options.NewJunctions
-                    ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, rings, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge)
+                    ? PlanAndMerge(priority, result, layoutSegmentOf, layoutOutput, block, wanted, nearJunctions, rings, grids, buildings, StreetSideOf, overlay, restrictions, crossingNodes, netStats.Merge, StreetSideAlong)
                     : null;
                 if (layouts is not null && options.KeepPlans) netStats.Layouts.AddRange(layouts.Where(p => !p.Beyond));
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only

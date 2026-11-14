@@ -202,13 +202,15 @@ public partial class ChunkStreamer : Node
     /// Asks the server for a cube tile's asset by its key (#1655): a leaf's entry (<see cref="AssetKind.Leaf"/>), whole
     /// (<paramref name="section"/> 0) or holding one <see cref="LeafKind"/> section. The pyramid's tiles (#1656) take the
     /// same request with their own kind. Metered, answered and failed as <see cref="FetchAsync"/>; ENet only (the HTTP
-    /// mirror holds files, not entries). Any thread.
+    /// mirror holds files, not entries). <paramref name="body"/> (#1656, for H7): the Earth 0, the only one served today.
+    /// Any thread.
     /// </summary>
-    public Task<AssetResult> FetchCubeAsync(AssetKind kind, CubeKey key, int section, CancellationToken ct = default)
+    public Task<AssetResult> FetchCubeAsync(AssetKind kind, CubeKey key, int section, CancellationToken ct = default, int body = 0)
     {
         if (IsServing) return Task.FromResult(new AssetResult(null, true));
-        return SendAsync(kind, default, section == 0 ? key.ToString() : $"{key} section {section}",
-            requestId => RpcId(1, MethodName.RequestCubeAsset, requestId, (int)kind, key.Face, key.Level, key.X, key.Y, section), ct);
+        int packed = AssetStream.CubeSection.Pack(body, section);
+        return SendAsync(kind, default, (body != 0 ? $"body {body} " : "") + (section == 0 ? key.ToString() : $"{key} section {section}"),
+            requestId => RpcId(1, MethodName.RequestCubeAsset, requestId, (int)kind, key.Face, key.Level, key.X, key.Y, packed), ct);
     }
 
     private Task<AssetResult> SendAsync(AssetKind kind, TileId id, string label, Action<uint> send, CancellationToken ct)
@@ -323,14 +325,19 @@ public partial class ChunkStreamer : Node
         {
             AssetKind.Landings => LandingsOverride,
             AssetKind.HttpBase => TilesUrl is { } url ? System.Text.Encoding.UTF8.GetBytes(url) : null,
-            AssetKind.LeafIndex => LeafIndexBytes,
+            // the Earth's leaves (a body other than 0 named by the tile's E, AssetStream.CubeSection: none served yet)
+            AssetKind.LeafIndex => tile.E == 0 ? LeafIndexBytes : null,
             _ => ManifestOverride,
         };
+        // the pyramid's index (#1656) is built off the main thread once (every heights entry read for its stamp): the
+        // worker that prepares the answer waits for it
+        var pyramidIndex = assetKind == AssetKind.PyramidIndex
+            ? tile.E == 0 ? PyramidIndexTask : System.Threading.Tasks.Task.FromResult<byte[]?>(null) : null;
         var digestManifest = ManifestOverride;
         var digestLandings = LandingsOverride;
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
             ? PrepareDigest(peer, requestId, directory, digestManifest, digestLandings)
-            : Prepare(peer, requestId, assetKind, path, manifestOverride)));
+            : Prepare(peer, requestId, assetKind, path, pyramidIndex != null ? pyramidIndex.GetAwaiter().GetResult() : manifestOverride)));
     }
 
     /// <summary>
@@ -340,6 +347,33 @@ public partial class ChunkStreamer : Node
     public Terrain.Leaves.LeafStore? Leaves { get; set; }
 
     private byte[]? _leafIndexBytes;
+
+    /// <summary>
+    /// Server, under <c>--frame earth</c> (#1656): the globe's pyramid it serves (<see cref="AssetKind.Pyramid"/>,
+    /// <see cref="AssetKind.PyramidIndex"/>), the tiles on its own disk only (every client has the shipped base). Null: none.
+    /// Its index starts building as it is set.
+    /// </summary>
+    public Terrain.Leaves.PyramidSource? Pyramid
+    {
+        get => _pyramid;
+        set
+        {
+            _pyramid = value;
+            _pyramidIndex = value == null ? null : System.Threading.Tasks.Task.Run(() =>
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                var index = Terrain.Leaves.PyramidIndex.Of(value);
+                if (index.Count == 0) return null;
+                var bytes = index.ToBytes();
+                GD.Print($"[stream] pyramid index: {index.Count} tiles, {bytes.Length / 1024} KB, built in {clock.ElapsedMilliseconds} ms");
+                return bytes;
+            });
+        }
+    }
+
+    private Terrain.Leaves.PyramidSource? _pyramid;
+    private System.Threading.Tasks.Task<byte[]?>? _pyramidIndex;
+    private System.Threading.Tasks.Task<byte[]?> PyramidIndexTask => _pyramidIndex ?? System.Threading.Tasks.Task.FromResult<byte[]?>(null);
 
     /// <summary>The served leaves' index, built on the first ask; null with no leaves.</summary>
     private byte[]? LeafIndexBytes => Leaves is { Count: > 0 } leaves
@@ -360,7 +394,12 @@ public partial class ChunkStreamer : Node
 
         long peer = Multiplayer.GetRemoteSenderId();
         var key = new CubeKey(face, level, x, y);
-        if ((AssetKind)kind != AssetKind.Leaf || !key.IsValid || Leaves is not { } leaves || !leaves.IsLocal(key))
+        var cubeKind = (AssetKind)kind;
+        // the body rides in the section's high bits (AssetStream.CubeSection): this server serves the Earth's (0) alone
+        (int body, section) = AssetStream.CubeSection.Unpack(section);
+        bool leaf = body == 0 && cubeKind == AssetKind.Leaf && key.IsValid && Leaves is { } l && l.IsLocal(key);
+        bool pyramid = body == 0 && cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= 12 && _pyramid is { } p && p.IsLocal(key);
+        if (!leaf && !pyramid)
         {
             RpcId(peer, MethodName.AssetMissing, requestId, true);
             return;
@@ -374,7 +413,32 @@ public partial class ChunkStreamer : Node
         }
 
         queue.Preparing++;
-        System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PrepareLeaf(peer, requestId, leaves, key, section)));
+        if (pyramid)
+        {
+            var source = _pyramid!;
+            System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PreparePyramid(peer, requestId, source, key, section)));
+        }
+        else
+        {
+            var leaves = Leaves!;
+            System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PrepareLeaf(peer, requestId, leaves, key, section)));
+        }
+    }
+
+    /// <summary>A pyramid tile's heights (section 0) or one month's colour (1-12), as stored: both are compressed already.</summary>
+    private static Prepared PreparePyramid(long peer, uint requestId, Terrain.Leaves.PyramidSource source, CubeKey key, int section)
+    {
+        try
+        {
+            byte[]? payload = section == 0 ? source.HeightsBytes(key) : source.ColourEntry(key, section);
+            if (payload == null) return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
+            return new Prepared(peer, requestId, payload, payload.Length, AssetStream.Crc32(payload), false, false);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] cannot read pyramid tile {key}: {e.Message}");
+            return new Prepared(peer, requestId, null, 0, 0, false, Missing: false);
+        }
     }
 
     /// <summary>A leaf's entry read off the bundle, cut to one section when asked, deflated as the files are.</summary>
@@ -427,9 +491,10 @@ public partial class ChunkStreamer : Node
         try
         {
             byte[] payload;
-            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase or AssetKind.LeafIndex && manifestOverride is { } manifest)
+            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.PyramidIndex
+                && manifestOverride is { } manifest)
                 payload = manifest;
-            else if (kind is AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.Leaf)
+            else if (kind is AssetKind.HttpBase or AssetKind.LeafIndex or AssetKind.Leaf or AssetKind.PyramidIndex or AssetKind.Pyramid)
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             else if (!System.IO.File.Exists(path))
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);

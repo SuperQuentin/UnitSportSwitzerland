@@ -1,5 +1,8 @@
 # The earth fill stands on the globe's pyramid (#1678)
 
+Since #1656 the pyramid is a chain (`net/pyramid-streaming`): the fill stands on this copy's own full-lattice tiles
+(`PyramidSource.Base`), and online on the server's (`ServerBase`, after its index; none: the generator's, as the server).
+
 Under `--frame earth` the generated fill (the leaves within 40 km of the start that the region does not hold) is built
 on the best ground the game has, the `cube_global` pyramid, as the user decided on #1678. The flat world's fill is
 untouched (`FallbackChunkSource` / `ProceduralWorld.Blend` on LV95).

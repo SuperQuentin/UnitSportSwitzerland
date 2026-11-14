@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.Terrain.Construction;
 
@@ -47,9 +48,11 @@ public static class SitePlans
         var key = new BuildingKey(tile.Id.E, tile.Id.N, index).ToString();
         var street = BuildingFootprint.StreetNear(roads, box.Center);
         var obstacles = new SiteObstacles(map.Boxes, index, roads, Clearance);
-        // a pit (#619) keeps off a road's sidewalks too, the yard off its carriageway
-        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable);
+        // a pit (#619) keeps off a road's sidewalks too, the yard off its carriageway; on a leaf inside the leaf (#1685)
+        var inside = LeafStandIn.TryLeaf(tile.Id, out var leaf) ? ConstructionSites.LeafPitInside(leaf) : null;
+        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable, inside);
     }
+
 
     /// <summary>
     /// A site's pallets of bricks and cement (#615), as its dressing lays them out
