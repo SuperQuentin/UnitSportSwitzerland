@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain.Format;
@@ -32,16 +33,26 @@ public partial class Globe
         return float.NaN;
     }
 
+    // a probe's copies of the meshes' arrays (SurfaceGetArrays copies them out of the renderer: per call, per frame, it
+    // held the climb at 7 fps and its own streaming with it); dropped with the mesh
+    private readonly ConditionalWeakTable<Mesh, MeshCopy> _meshCopies = new();
+
+    private sealed record MeshCopy(Vector3[] V, int[] Idx, float[]? Custom);
+
     // TopOf with each vertex morphed as the shader does (geomorph.gdshaderinc); the skirts (vertical) passed over
-    private static float? MorphedTop(MeshInstance3D node, Vector3 world, Vector3 camera, Vector2 morph, float young)
+    private float? MorphedTop(MeshInstance3D node, Vector3 world, Vector3 camera, Vector2 morph, float young)
     {
         if (node.Mesh is not ArrayMesh mesh || mesh.GetSurfaceCount() == 0) return null;
         var xf = node.GlobalTransform;
         var q = xf.AffineInverse() * world;
-        var arrays = mesh.SurfaceGetArrays(0);
-        var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-        var idx = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-        var custom = arrays[(int)Mesh.ArrayType.Custom0].VariantType == Variant.Type.Nil ? null : arrays[(int)Mesh.ArrayType.Custom0].AsFloat32Array();
+        if (!_meshCopies.TryGetValue(mesh, out var copy))
+        {
+            var arrays = mesh.SurfaceGetArrays(0);
+            copy = new MeshCopy(arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array(), arrays[(int)Mesh.ArrayType.Index].AsInt32Array(),
+                arrays[(int)Mesh.ArrayType.Custom0].VariantType == Variant.Type.Nil ? null : arrays[(int)Mesh.ArrayType.Custom0].AsFloat32Array());
+            _meshCopies.Add(mesh, copy);
+        }
+        var (v, idx, custom) = (copy.V, copy.Idx, copy.Custom);
         Vector3 At(int i)
         {
             if (custom == null || custom[i * 4 + 3] <= 0 || morph.X <= 0 && young <= 0) return v[i];
@@ -82,8 +93,9 @@ public partial class GlobeClimb : Node
     /// <summary>Seconds hovering at the top before the last read-out.</summary>
     public const double HoldS = 10;
 
-    // the grid's point 2.5 altitudes ahead, straight on
-    private const int FarMiddle = 6 * 7 + 3;
+    // the grid's point 0.8 altitudes ahead, straight on: past the near leaves round the body, and short of the horizon
+    // from orbit (2.5 altitudes ahead at 2,000 km is past it)
+    private const int FarMiddle = 2 * 7 + 3;
 
     public static string[]? ParseArgs() => CmdArgs.Value("--globeclimb")?.Split(',') is { Length: 3 } p ? p : null;
 
@@ -147,7 +159,7 @@ public partial class GlobeClimb : Node
             var g = GlobalPos.FromEcef(_points[k]);
             var world = _origin.ToWorld(g);
             float wy = globe.DrawnSurfaceAt(world, _points[k], cam, out int level);
-            // the far middle of the view (2.5 altitudes ahead): under the nadir the near leaves round the body draw
+            // the middle of the view 0.8 altitudes ahead: under the nadir the near leaves round the body draw
             if (k == FarMiddle) deepest = globe.DrawnLevelAt(_points[k]);
             // its height over the ellipsoid: the same whatever the frame (a re-anchor turns world y)
             float y = float.IsNaN(wy) ? float.NaN : (float)_origin.ToGlobal(world with { Y = wy }).Geodetic.H;

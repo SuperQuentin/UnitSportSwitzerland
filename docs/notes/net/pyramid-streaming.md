@@ -61,7 +61,7 @@ tile and a 513² one draw the same vertices. Needs a pyramid built with `--cube-
 - `PyramidStreamTests`: the index, the chain (finest wins, ties local, the same index changes nothing, `DropRemote`),
   the server's base (local where the stamp agrees).
 - `tools/pyramidstreamcheck.sh`: a server with leaves and the pyramid, client A with both, client B with neither; both
-  climb 2 km to 2,000 km in 60 s and hover 10 s (`--globeclimb`): B streams and caches tiles, draws A's level 2.5
+  climb 2 km to 2,000 km in 60 s and hover 10 s (`--globeclimb`): B streams and caches tiles, draws A's level 0.8
   altitudes ahead at the top, and pops no more. The levels on the way show the stream's lag.
 - `tools/fillagreenetcheck.sh` run `pyramid`: the client with no pyramid builds the server's fill to the centimetre.
 - `--globeclimb FROM,TO,SECONDS` (`World/GlobeClimb`): pops on a climb, `--nomorph` for the before (`globe-geomorph`).

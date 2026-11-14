@@ -24,7 +24,7 @@ hid the cracks between levels.
   where tiles split for drawn leaves (#1800).
 - The CPU replica for the probe: `Globe.DrawnSurfaceAt` (the deepest visible tile, morphed, its lake's surface over it).
 - `--globeclimb FROM,TO,SECONDS` (`World/GlobeClimb`): an exponential climb over the start looking down 60°, 7 x 7
-  points across the view (laid again every 30 % of climb; the deepest level read 2.5 altitudes ahead, since the player's body keeps the near
+  points across the view (laid again every 30 % of climb; the deepest level read 0.8 altitudes ahead, since the player's body keeps the near
   leaves under the nadir), each frame's change in height over the ellipsoid where a
   point's level changed, in screen pixels; `--nomorph` turns the morph and the grow-in off. Changes within one tile (the
   morph's own motion, the lakes' surfaces hidden at 15 km) are not pops.

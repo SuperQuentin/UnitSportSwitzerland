@@ -278,6 +278,9 @@ public partial class Globe : Node
         _nextPlan = 0;
     }
     private readonly SemaphoreSlim _workers = new(3);
+
+    /// <summary>Streamed tiles fetched ahead of their build at once (#1656).</summary>
+    private readonly SemaphoreSlim _fetchers = new(4);
     /// <summary>
     /// The plan each tile was last asked by (#1762): a tile that waited for a worker past the next plan without being
     /// asked again is dropped unbuilt, so a camera that moves fast (an airliner at the time warp) does not leave a
@@ -771,6 +774,30 @@ public partial class Globe : Node
         int month = _month;
         _ = Spawn(async () =>
         {
+            // a streamed tile (#1656): its heights and its month's colour fetched together, into the tile cache, before a
+            // build worker is taken; one after the other inside a worker, three workers streamed ~3 entries a second
+            // (four tiles at a time: each fetch blocks a pool thread, and hundreds at once starved the pool)
+            if (Pyramid.IsStreamed(key) && !Unwanted(key))
+            {
+                await _fetchers.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (!Unwanted(key))
+                    {
+                        var heights = Task.Run(() => Pyramid.HeightsBytes(key));
+                        var colour = coloured ? Task.Run(() => Pyramid.ColourEntry(key, month)) : Task.FromResult<byte[]?>(null);
+                        await Task.WhenAll(heights, colour).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception e)
+                {
+                    GD.PushWarning($"[globe] {key} not fetched: {e.Message}");
+                }
+                finally
+                {
+                    _fetchers.Release();
+                }
+            }
             await _workers.WaitAsync().ConfigureAwait(false);
             try
             {
