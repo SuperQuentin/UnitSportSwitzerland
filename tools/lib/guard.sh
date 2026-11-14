@@ -1,5 +1,9 @@
 # Resource guard for heavy test runs (docs/notes/general/testing.md). Source it, then:
-#   guard_wait_ram <GB> [max_wait_s]   wait until that much RAM is free (fails after max_wait_s)
+#   guard_wait_ram <GB> [max_wait_s]   wait until that much RAM is free (fails after max_wait_s); a need
+#                                      over guard_ram_cap_mb waits for the cap instead (#1761)
+#   guard_ram_cap_mb                   the most RAM this machine can ever free for a run: total less the
+#                                      floor and GUARD_RAM_RESERVE_MB (the OS, the desktop and the editors, total/4,
+#                                      at least 3 GB; 32 GB: about 22 GB)
 #   guard_lock [max_wait_s] [max_hold_s]  take a slot of the machine-wide heavy-run lock (GUARD_SLOTS of them,
 #                                      #1008), queueing when all are held; sets GUARD_SLOT (0..);
 #                                      max_hold_s (default 3600) is how long you may keep it
@@ -43,6 +47,10 @@ _guard_total_gb() {
   if [ -r /proc/meminfo ]; then awk '/^MemTotal:/ { print int($2 / 1048576) }' /proc/meminfo
   elif [ "$(uname)" = Darwin ]; then echo $(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
   else echo 8; fi
+}
+_guard_total_mb() {
+  if [ -r /proc/meminfo ]; then awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo
+  else echo $(( $(_guard_total_gb) * 1024 )); fi
 }
 if [ -z "${GUARD_SLOTS:-}" ]; then
   GUARD_SLOTS=$(( $(_guard_total_gb) / 14 ))
@@ -137,16 +145,29 @@ guard_free_mb() {
   fi
 }
 
+# the most RAM a run can ever have free here (#1761): the OS, the desktop and the watchdog's floor never are.
+# A 32 GB machine never had the 27 GB one bloated peak asked for, and its check waited 1800 s twice for nothing.
+guard_ram_cap_mb() {
+  local total r; total=$(_guard_total_mb)
+  r=${GUARD_RAM_RESERVE_MB:-$(( total / 4 ))}; [ -z "${GUARD_RAM_RESERVE_MB:-}" ] && [ "$r" -lt 3072 ] && r=3072
+  echo $(( total - GUARD_MIN_FREE_MB - r ))
+}
+
 guard_wait_ram() {
-  local need_mb=$(( $1 * 1024 )) max=${2:-1800} waited=0 free
+  local need_mb=$(( $1 * 1024 )) max=${2:-1800} waited=0 free cap
+  cap=$(guard_ram_cap_mb)
+  if [ "$need_mb" -gt "$cap" ] && [ "$cap" -gt 0 ]; then
+    echo "[guard] need $1 GB, over the ${cap} MB this machine can free: waiting for ${cap} MB" >&2
+    need_mb=$cap
+  fi
   while :; do
     _guard_free_into; free=$GUARD_FREE
     [ "$free" -ge "$need_mb" ] && return 0
     if [ "$waited" -ge "$max" ]; then
-      echo "[guard] only ${free} MB free after ${waited}s, need $1 GB: giving up" >&2
+      echo "[guard] only ${free} MB free after ${waited}s, need ${need_mb} MB: giving up" >&2
       return 1
     fi
-    [ "$waited" -eq 0 ] && echo "[guard] ${free} MB free, waiting for $1 GB" >&2
+    [ "$waited" -eq 0 ] && echo "[guard] ${free} MB free, waiting for ${need_mb} MB" >&2
     sleep "$GUARD_POLL"; waited=$(( waited + GUARD_POLL ))
   done
 }
