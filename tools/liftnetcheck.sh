@@ -11,7 +11,7 @@ PORT=${PORT:-7891}
 if [ -n "${CHUNKS:-}" ]; then
   WORLD=(${CH[@]+"${CH[@]}"}); AT=(--at "${LIFT_AT:-2584726,1105180}")
 else
-  WORLD=(--world fixture --chunks fixture:fun --traffic 0); AT=()
+  WORLD=(--world fixture --chunks fixture:fun --systems lifts,physics,network --traffic 0); AT=()
 fi
 tc_server 400 120 "$OUT/liftnet_server.log" --server --port $PORT "${WORLD[@]}"
 tc_client 340 "$OUT/liftnet_A.log" "${WORLD[@]}" --connect 127.0.0.1:$PORT --name LiftA ${AT[@]+"${AT[@]}"} --liftnet A & A=$!
