@@ -303,11 +303,15 @@ public partial class BankProbe : ChatProbe
     {
         var f = layout.Furniture[index];
         var turn = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2);
-        var front = turn * new Vector3(0, 0, f.D / 2 + 0.55f);
-        var face = node.GlobalTransform.Basis * -front;
         float sign = _role == "A" ? -1f : 1f;
+        var tried = new List<string>();
+        // beside the safe first, then further back (the reach is 1.3 m): in a small vault the spots beside the other
+        // player can be nearer a neighbouring piece than the safe (#1622)
+        foreach (float depth in new[] { 0.55f, 0.95f, 1.2f })
         foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f, 0.6f })
         {
+            var front = turn * new Vector3(0, 0, f.D / 2 + depth);
+            var face = node.GlobalTransform.Basis * -front;
             var side = turn * new Vector3(sign * offset, 0, 0);
             var spot = node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side);
             // never onto the other player: bodies closer than this touch, and set down inside each other they are eased apart (#1401)
@@ -316,7 +320,9 @@ public partial class BankProbe : ChatProbe
             me.Velocity = Vector3.Zero;
             await Seconds(0.8);
             if (InteriorManager.Instance?.Current?.Key == layout.Key && facing(index)) return true;
+            tried.Add(FormattableString.Invariant($"{offset:F2}/{depth:F2}: nearest #{LootService.NearestContainer(me, layout, node)}"));
         }
+        GD.Print($"{Log} at #{index}: tried {string.Join(", ", tried)}");
         Fail($"could not stand in front of #{index} ({f.Type})");
         return false;
     }
