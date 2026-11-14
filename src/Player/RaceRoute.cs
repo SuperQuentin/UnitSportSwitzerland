@@ -605,7 +605,7 @@ var endDir = Flat(cur.F ? endT : -endT);
                 if (TurnsBackAtMouth(cur.Edge, endDir, next.Item1, next.Item2)) continue;
                 // across a gap between two roads only ahead of both (#1880, as LaneGraph.JoinTrimmedEnds): any road end within 18 m let
                 // a way hop 13 m from a street's end back to a ramp's foot, under the ramp it then climbed (Place des Nations)
-                if (!Joins(next, endP, endDir.Normalized(), cur.Edge)) continue;
+                if (!Joins(next, endP, endDir.Normalized(), cur.Edge, cur.F)) continue;
                 float nc = c + Cost(next.Item1, next.Item1.Length, next.Item2);
                 if (cost.TryGetValue(next, out float old) && old <= nc) continue;
                 cost[next] = nc;
@@ -765,18 +765,23 @@ var endDir = Flat(cur.F ? endT : -endT);
     /// </summary>
     /// <summary>
     /// Whether the route may go on from a road's end at <paramref name="at"/> (leaving it along <paramref name="exit"/>) to
-    /// <paramref name="next"/>'s end: at the same node always, and a junction path at its mouth by <see cref="Onward"/>'s
-    /// rule; across a gap between two roads (#1880) only with the gap ahead of the way out and the next road leaving along it (the trimmed ends RoadGen's junctions leave, as <see cref="LaneGraph.JoinTrimmedEnds"/>
+    /// <paramref name="next"/>'s end: at the same node always, and a junction path within its mouth's reach (its lane's offset
+    /// + <see cref="MouthJoin"/>); across any longer gap (#1880, #1918) only with the gap ahead of the way out and the next
+    /// road leaving along it (the trimmed ends RoadGen's junctions leave, as <see cref="LaneGraph.JoinTrimmedEnds"/>
     /// faces them), never a turn back.
     /// </summary>
-    private static bool Joins((LaneEdge Edge, bool Forward) next, Vector3 at, Vector3 exit, LaneEdge from)
+    private static bool Joins((LaneEdge Edge, bool Forward) next, Vector3 at, Vector3 exit, LaneEdge from, bool fromForward)
     {
-        // a junction path meets its road's end at its lane's offset, beside it: the mouth's own rule (Onward, #1903)
-        if (from.Path is not null || next.Edge.Path is not null) return true;
         var p = next.Forward ? next.Edge.Points[0] : next.Edge.Points[^1];
         var gap = Flat(p - at);
         float d = gap.Length();
-        if (d < 1f) return true;
+        // a junction path meets its road's end at its lane's offset, beside it: within that and the mouth's reach (Onward,
+        // #1903) it joins whichever way; past it (#1918: a path's end 11.7 m back to the foot of a ramp's lane, a turn of
+        // 150° no car makes in a junction) only ahead, as two roads
+        float mouth = 1f;
+        if (from.Path is { } fp) mouth += Mathf.Abs(fromForward ? fp.ToOffset : fp.FromOffset) + MouthJoin;
+        if (next.Edge.Path is { } np) mouth += Mathf.Abs(next.Forward ? np.FromOffset : np.ToOffset) + MouthJoin;
+        if (d < mouth) return true;
         var dir = gap / d;
         var (_, t) = next.Edge.Sample(next.Forward ? 0f : next.Edge.Length);
         var leaves = Flat(next.Forward ? t : -t).Normalized();
