@@ -47,6 +47,20 @@ python tools/body_colour.py <colour .tif> <colour.jpg>          # Godot's Image 
 `work/` (the JPEG, pyramids). Licences: LRO LOLA and the CGI Moon Kit are NASA's, public domain; credit "NASA/GSFC/MIT
 LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
 
-## Numbers
+## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
-Filled in by the first full build (below).
+| Run | Tiles | Size | Heights | Time | Peak |
+|---|---|---|---|---|---|
+| levels 0-2 `--cube-check` | 126 | 35.9 MB | −9,072 to +10,747 m | 6.5 min (read-bound) | 7.6 GB before the window was freed |
+| levels 0-5 | 8,190 | 1,231 MB (L5: 858 MB, 140 KB a tile) | −9,127 to +10,780 m (LOLA's own) | 21 min | 7.8 GB (a polar face's 2.6 GB window plus the tiles in flight) |
+| colour, levels 0-5 | 8,190 | 49.7 MB WebP | | 62 s | |
+
+`--cube-check` on levels 0-2: 128,904 shared edge points, 0 differ. Shipping levels 0-1 would be ~10 MB of heights, 0-2
+~36 MB (with ~1.3 MB of colour): what ships is #1656's call.
+
+## The craters below the data
+
+`Terrain/Bodies/CraterField` (#1849, the cratered profile): every bowl from 2.5 m to 320 m the 118 m DEM cannot hold,
+seeded in a 3D grid round the sphere (no face seams), counted by the maria's equilibrium N(>D) = 0.154·D⁻² a km² (D in
+km), fresh and worn ones by a seeded age, a parabolic bowl, a rim and ejecta to two radii. A function of (seed, point):
+every peer makes the same ground. `CraterFieldTests`. It is added to a leaf's heights by the Moon's fill (#1848's game side).
