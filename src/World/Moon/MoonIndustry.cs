@@ -15,7 +15,7 @@ namespace UnitSport.World.Moon;
 /// bins, flood lights that light the permanently dark crater, radio dishes that slew to a new source every few minutes,
 /// and the mass driver's rail with its bucket flung along it. Meshes are shared (built once a kind, size and theme);
 /// what moves is a node turned or moved (<see cref="IndustryMotion"/>), never a rebuilt mesh. Everything moving runs on
-/// the shared clock (<see cref="ClockSync.ServerNow"/>), so every peer sees the digger at the same place. All in the
+/// the simulation clock on the server's time (<see cref="SimClock.SimAt"/>), so every peer sees the digger at the same place. All in the
 /// model viewer under "Moon industry".
 /// </summary>
 public static class MoonIndustry
@@ -570,7 +570,7 @@ public partial class IndustryMotion : Node3D
 
     private void Step(double delta, bool snap)
     {
-        double now = ClockSync.ServerNow;
+        double now = SimClock.SimAt(ClockSync.ServerNow);
         _sunAge += delta;
         if (_sunAge > 2 && Trackers.Count > 0)
         {
