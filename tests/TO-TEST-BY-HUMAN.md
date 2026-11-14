@@ -134,7 +134,7 @@ A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --f
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, at a real site at its foundations (`--constructioncheck` lists them), in a window.
 
-- [ ] Walk to the pit's edge, look in, climb down the ramp, walk round the floor → the ground ends on a straight line at the sheet piles, brown walls down to a gravel floor, no ground over the pit and no gap round it (on a fixture course the real ground can show in it: #1686).
+- [ ] Walk to the pit's edge, look in, climb down the ramp, walk round the floor → the ground ends on a straight line at the sheet piles, brown walls down to a gravel floor, no ground over the pit and no gap round it.
 - [ ] Mount the excavator, drive down the ramp and back up → it drives on the ramp and the floor, never falls through.
 
 ## The earth ground's look (PR [#1642](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1642), [#1634](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1634), [#1632](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1632), [#1633](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1633), [#1635](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1635))
