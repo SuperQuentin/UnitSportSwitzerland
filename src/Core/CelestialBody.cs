@@ -41,12 +41,12 @@ public sealed class CelestialBody
     public static readonly CelestialBody Sun = new(BodyId.Sun, "Sun", SkyBody.Sun, Ellipsoid.Sphere(695_700_000),
         1.32712440018e20, DegPerDay(14.1844), null, 0, landable: false);
 
-    public static readonly CelestialBody Moon = new(BodyId.Moon, "Moon", SkyBody.Moon, Ellipsoid.Sphere(1_737_400),
+    public static readonly CelestialBody Moon = new(BodyId.Moon, "Moon", SkyBody.Moon, Ellipsoid.Moon,
         4.902800066e12, DegPerDay(13.17635815), BodyId.Earth, 384_400_000, landable: true, spaceEnterM: 10_000,
         spaceExitM: 8_000);
 
     public static readonly CelestialBody Mars = new(BodyId.Mars, "Mars", SkyBody.Mars,
-        Ellipsoid.FromRadii(3_396_190, 3_376_200), 4.282837e13, DegPerDay(350.89198226), BodyId.Sun, 1.52371034 * Au,
+        Ellipsoid.Mars, 4.282837e13, DegPerDay(350.89198226), BodyId.Sun, 1.52371034 * Au,
         landable: true, spaceEnterM: 40_000, spaceExitM: 30_000);
 
     public static readonly CelestialBody Mercury = new(BodyId.Mercury, "Mercury", SkyBody.Mercury,
@@ -119,6 +119,14 @@ public sealed class CelestialBody
 
     /// <summary>Its reference ellipsoid (a sphere for the Moon): latitudes, longitudes and heights are on it.</summary>
     public Ellipsoid Shape { get; }
+
+    /// <summary>
+    /// Its cube tiling (#1848): the Earth's (face 0 on Bern, twisted) or, for any other body, face 0 on its
+    /// 0° N 0° E with its poles at the centres of faces 4 and 5.
+    /// </summary>
+    public CubeShape Cube => _cube ??= Id == BodyId.Earth ? CubeShape.Earth : new CubeShape(Shape);
+
+    private CubeShape? _cube;
 
     /// <summary>The gravitational parameter, m³/s².</summary>
     public double GM { get; }
