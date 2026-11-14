@@ -508,7 +508,7 @@ public static partial class TileRewriter
             // mouths' corners kept, where the ribbons meet it), a point again at least every CapMaxEdge along a long straight kerb
             // so the triangles reach across between both sides, not fan out of one vertex (#1771), triangulated again
             var (ring, ringHeights) = KeptEvery(SimplifiedRing(core.Outline, core.Heights, core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToList()),
-                core.Outline, core.Heights, CapMaxEdge);
+                core.Outline, core.Heights, Junctions.EarClip.CapMaxEdge);
             var triangles = Junctions.EarClip.TriangulateDelaunay(ring);
             if (triangles.Count < 3) (ring, ringHeights, triangles) = (core.Outline, core.Heights, core.Triangles);
             var vertices = new float[ring.Count * 3];
@@ -1296,9 +1296,6 @@ public static partial class TileRewriter
     private const double PathJoin = 6;
 
     private const double CapPlanTolerance = 0.015, CapHeightTolerance = 0.01;
-
-    /// <summary>A cap's outline keeps a point at least this often along its ring (#1771: the triangles' reach, see <see cref="KeptEvery"/>).</summary>
-    private const double CapMaxEdge = 2.0;
 
     /// <summary>
     /// The ring of <paramref name="keep"/> (indices into <paramref name="ring"/>, in order) and its heights, with a point added

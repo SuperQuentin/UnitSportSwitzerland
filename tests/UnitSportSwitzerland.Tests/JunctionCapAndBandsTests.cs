@@ -128,6 +128,19 @@ public class JunctionCapAndBandsTests
     }
 
     [Fact]
+    public void Densified_OldLayoutRing_PointsOnItsEdges()
+    {
+        // an old layout's ring (JunctionBuilder's fallback when the fan from its node fails): the same outline, a point every 2 m
+        var ring = ArcCap();
+        var dense = EarClip.Densified(ring, EarClip.CapMaxEdge);
+        Assert.Equal(ring.Count + 2 * 7 + 2 * 3, dense.Count);
+        Assert.Equal(EarClip.SignedArea(ring), EarClip.SignedArea(dense), 9);
+        var tris = EarClip.TriangulateDelaunay(dense);
+        Assert.Equal(3 * (dense.Count - 2), tris.Count);
+        Assert.True(tris.GroupBy(i => i).Max(g => g.Count()) <= 10);
+    }
+
+    [Fact]
     public void KeptEvery_ShortEdgesUnchanged()
     {
         var ring = new List<Vec2> { new(0, 0), new(1, 0), new(1, 1), new(0, 1) };

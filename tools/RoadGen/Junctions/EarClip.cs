@@ -124,6 +124,24 @@ public static class EarClip
         return tris;
     }
 
+    /// <summary>A cap's ring keeps a point at least this often (m) along it, so its triangles reach across it (#1771).</summary>
+    public const double CapMaxEdge = 2.0;
+
+    /// <summary>The ring with points added on its edges so none is longer than <paramref name="most"/>; its own points kept.</summary>
+    public static List<Vec2> Densified(IReadOnlyList<Vec2> ring, double most)
+    {
+        var result = new List<Vec2>(ring.Count * 2);
+        for (int i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            result.Add(a);
+            int pieces = (int)Math.Ceiling(a.DistanceTo(b) / most - 1e-9);
+            for (int k = 1; k < pieces; k++) result.Add(a + (b - a) * ((double)k / pieces));
+        }
+        return result;
+    }
+
     /// <summary>Whether <paramref name="d"/> lies strictly inside the circle through the counter-clockwise <paramref name="a"/>, <paramref name="b"/>, <paramref name="c"/>.</summary>
     private static bool InCircle(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
     {

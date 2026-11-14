@@ -204,7 +204,9 @@ off, `--junctions new` plans and reports without writing.
   the outline's own line and heights) and triangulated by ear clipping plus Delaunay flips (`EarClip.TriangulateDelaunay`).
   Plain ear clipping took the first ear: a dense kerb arc facing a straight kerb of two points fanned 20+ slivers out of each
   (#1771 at 2501282,1117720: faceted shading). The ring stays an outline (`CapCheck`, `CornerPlanner` read it as one), so no
-  point inside it; cap vertices +32 % (two Geneva tiles 10,994 -> 14,516).
+  point inside it; cap vertices +32 % (two Geneva tiles 10,994 -> 14,516). An old layout's cap (`JunctionBuilder`, a merged
+  fallback's) still fans from its node where the ring is star-shaped about it; where it is not, its ring is split every 2 m
+  (`EarClip.Densified`) and triangulated the same way. Corner bands keep their own sliver fans (#1877).
   The old passes get the priority plans without those junctions (`WithoutWritten`): no pocket strips, stop lines, crosswalks,
   poles, signals, corners or signs there until phase 4. Bike-lane, track paint, `CutBack` and `Lower` skip transition pieces.
 - **Game** (the user's generalization): every street is built from `SegmentSections`, a cross-section per point: ribbon edges,
