@@ -231,6 +231,8 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   the leaves (the relief, then ETOPO), what the shipped base's Switzerland is cut from. Nov 14 2026 on a copy on E:
   (`--cube-country 45.8,5.9,47.85,10.55,8`, `--jobs 6`): 304 s, peak 13.6 GB, 4,210 tiles, 0 of 4.5 M edge vertices differ;
   the new levels 5-8 tiles over the country have no colour yet (`--globealbedo`).
+- **Far features (#1657)**: `--cube-features` bakes canopy, roofs, paving and a height skin per tile of levels 9-13 into
+  `.cubf` bundles beside the heights (`terrain/far-features`).
 - **What ships since #1656**: `--globebase` (`net/pyramid-streaming`), 1.5 MB. Before it:
 - **What shipped** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
   together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
