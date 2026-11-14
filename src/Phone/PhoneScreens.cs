@@ -556,6 +556,9 @@ public partial class PhoneScreens : Node
     /// <summary>Puts the keys in the Map's search box ("/").</summary>
     public void FocusSearch() => _query.GrabFocus();
 
+    /// <summary>What the Map's search box holds, for the checks.</summary>
+    internal string SearchText => _query.Text;
+
     /// <summary>Where the player stands (LV95), for "Near you"; set by the controller.</summary>
     public Func<GlobalPos?>? Here;
 

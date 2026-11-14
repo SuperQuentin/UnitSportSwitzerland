@@ -49,6 +49,7 @@ public partial class PromptBar : CanvasLayer
 
     public override void _Process(double delta)
     {
+        _lines.Visible = !Phone.PhoneController.HidesHud;
         _timer -= delta;
         if (_timer > 0) return;
         _timer = 0.2;

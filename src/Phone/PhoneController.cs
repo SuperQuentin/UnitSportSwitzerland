@@ -19,11 +19,11 @@ namespace UnitSport.Phone;
 /// "Travelling…" until the ground there has streamed in, and folds away at the new place.
 /// Docs: <c>docs/notes/ui/phone.md</c>.
 /// <list type="bullet">
-/// <item>Keyboard: Up takes it out. Folded: W or Up opens it, A D or Left Right pick a quick action,
-/// Enter / Space / E runs it, S or Down or Esc puts it away. Open: WASD and the arrows move on the
-/// screen, Enter / Space / E presses, Esc goes back, then folds.</item>
-/// <item>Mouse: the cursor shows; click presses, a drag swipes (up and down scroll a list, a swipe to
-/// the right goes back; on the cover, left and right pick).</item>
+/// <item>Keyboard (#1825): Y is a toggle: takes it out folded, again opens it on the last app, again puts it away
+/// (not while a text box has the keys). Folded: Up opens it, Left Right pick, Enter or a digit runs a tile, Down or Esc puts it
+/// away. Open: the arrows move on the screen, Enter presses, Esc / Backspace / mouse 4 go back, then fold. WASD walk throughout.</item>
+/// <item>Mouse: folded, it looks as with no phone; open, the cursor shows; click presses, a drag swipes (up and down scroll a
+/// list, a swipe to the right goes back), holding the right button captures it and turns the view.</item>
 /// <item>Pad: hold Back → Phone in the quick menu; D-pad and A / B inside, D-pad up opens it.</item>
 /// <item>Camera app: the phone is raised and level before the face; the mouse aims, click / Enter / RT
 /// shoots, the wheel / LB RB zoom, Esc goes back.</item>
@@ -38,7 +38,7 @@ public partial class PhoneController : Node
     private enum Stage { Pocket, Drawing, Folded, Opening, Open, Closing, Stowing }
 
     /// <summary>Seconds for the camera to come over the shoulder, onto the map, behind the raised phone.</summary>
-    private const float LookSeconds = 0.5f, CoverSeconds = 0.55f, CameraAppSeconds = 0.5f;
+    private const float LookSeconds = 0.12f, CoverSeconds = 0.2f, CameraAppSeconds = 0.5f;
     /// <summary>After landing at a travel's end: this long on "Travelling…" so the place is built before it is seen.</summary>
     private const double SettleSeconds = 0.9;
     private const double TravelTimeout = 20.0;
@@ -52,6 +52,9 @@ public partial class PhoneController : Node
     private const double VrRaiseSeconds = 1.5;
 
     public static PhoneController? Instance { get; private set; }
+
+    /// <summary>The open phone's viewmodel sits where the corner key list and the hand chip are: they hide meanwhile (#1825).</summary>
+    public static bool HidesHud { get; private set; }
 
     private readonly Func<FootPlayer?> _player;
     private readonly Func<bool> _blocked;
@@ -78,6 +81,11 @@ public partial class PhoneController : Node
     private bool _stowWhenFolded;
     private bool _shooting;
     private string _hintShown = "";
+    /// <summary>The app last open this session (Home until one is): the second press opens on it (#1825).</summary>
+    private PhoneScreens.Page _lastApp = PhoneScreens.Page.Home;
+    /// <summary>The right button is held: the mouse is captured and turns the view; where the cursor was is <see cref="_lookFrom"/> (#1825).</summary>
+    private bool _lookHeld, _wasSprint;
+    private Vector2 _lookFrom;
     private InviteService? _invites;
 
     // the finger: where the cursor points on the screen in view, or (led by the keys) over what is selected
@@ -107,6 +115,8 @@ public partial class PhoneController : Node
     internal PhoneScreens Screens => _screens;
 
     public bool IsOut => _stage != Stage.Pocket;
+    /// <summary>Out and folded, settled (for the checks).</summary>
+    internal bool IsFolded => _stage == Stage.Folded;
     /// <summary>Open and settled (on whatever page: square on the map with the world black behind it, or in the hands).</summary>
     public bool IsCovering => _stage == Stage.Open;
     public bool CameraApp => _stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera;
@@ -143,7 +153,7 @@ public partial class PhoneController : Node
 
     public override void _ExitTree()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this) { Instance = null; HidesHud = false; }
         if (Teleporter.Curtain == Curtain) Teleporter.Curtain = null;
         Teleporter.Arrived -= OnArrived;
         if (_invites != null) _invites.Arrived -= OnCall;
@@ -173,6 +183,7 @@ public partial class PhoneController : Node
         _screens.PageShown += page =>
         {
             if (page != PhoneScreens.Page.Camera && _selfie) SetSelfie(false);
+            if (page is not (PhoneScreens.Page.Home or PhoneScreens.Page.Travel)) _lastApp = page == PhoneScreens.Page.Photo ? PhoneScreens.Page.Photos : page;
             Grip();
         };
         _walls = PhoneWallpaper.Load();
@@ -216,6 +227,12 @@ public partial class PhoneController : Node
         Grip();
         Play(PhoneSounds.Hinge);
     }
+
+    /// <summary>The second press: opens on the app last used this session, Home the first time (#1825).</summary>
+    public void OpenLast() => Open(_lastApp);
+
+    /// <summary>The app the second press opens on, for the checks.</summary>
+    internal PhoneScreens.Page LastApp => _lastApp;
 
     /// <summary>Back from an app to home; from home, folds the phone.</summary>
     private void Back()
@@ -278,6 +295,7 @@ public partial class PhoneController : Node
         if (_stage is not (Stage.Open or Stage.Opening)) return;
         GD.Print("[phone] fold");
         _stage = Stage.Closing;
+        _lookHeld = false;
         if (_screens.Shown == PhoneScreens.Page.Camera) _screens.ShowPage(PhoneScreens.Page.Home);
         Grip();
         Play(PhoneSounds.Hinge);
@@ -308,7 +326,8 @@ public partial class PhoneController : Node
         _travelSince = -1;
         _stowWhenFolded = false;
         _cursorUv = null;
-        _pressed = _dragging = false;
+        HidesHud = false;
+        _pressed = _dragging = _lookHeld = false;
         if (_selfie) SetSelfie(false);
         _screens.SetActive(false);
         _hint.Visible = false;
@@ -316,9 +335,11 @@ public partial class PhoneController : Node
     }
 
     /// <summary>
-    /// Who has the keys and the mouse: with the phone out, the phone (the body stands, the cursor
-    /// shows); in the camera app, the mouse looks (the phone films where the view points), and once
-    /// the phone is open in it the body walks too (#1149): WASD, the stick, Space (opening, it stands).
+    /// Who has the keys and the mouse (#1825): the phone never stops the body. It holds <see cref="UiFocus"/> only
+    /// while a text box in it has the keys (letters type, the body stands), and on a touch device (its on-screen
+    /// controls stay out of the enlarged screen's way). The cursor shows while the phone is out and works the
+    /// screen; HOLDING the right button captures the mouse and turns the view (<see cref="StartLook"/>); the camera
+    /// app has the mouse captured always (#1149).
     /// </summary>
     private void Grip()
     {
@@ -328,11 +349,40 @@ public partial class PhoneController : Node
             UiFocus.Set(this, false);
             return;
         }
-        bool phone = _stage != Stage.Pocket && !(_stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera);
-        UiFocus.Set(this, _stage != Stage.Pocket && !(_stage == Stage.Open && _screens.Shown == PhoneScreens.Page.Camera));
+        bool cameraApp = _stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera;
+        UiFocus.Set(this, HoldsFocus);
         if (_blocked()) return;
-        if (phone) MouseCapture.Mode = Input.MouseModeEnum.Visible;
+        // the cursor shows only while the phone is open (#1825); folded, in the pocket and coming back, the mouse looks as ever.
+        // Touch keeps the pointer free whenever the phone is out (its finger plays the mouse).
+        bool visible = Platform.IsTouch ? _stage != Stage.Pocket && !cameraApp
+            : _stage is Stage.Open or Stage.Opening && !cameraApp && !_lookHeld;
+        if (visible) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else MouseCapture.Capture();
+    }
+
+    private bool HoldsFocus => !XR.XrSession.Active && _stage != Stage.Pocket
+        && (Typing || Platform.IsTouch && !(_stage == Stage.Open && _screens.Shown == PhoneScreens.Page.Camera));
+
+    /// <summary>A text box on the phone's screen has the keys (Map search).</summary>
+    private bool Typing => _stage != Stage.Pocket && _screens.Inner.GuiGetFocusOwner() is LineEdit;
+
+    /// <summary>The right button went down: the mouse is captured and turns the view until it is let go (the cursor hidden meanwhile).</summary>
+    private void StartLook()
+    {
+        if (_lookHeld || Platform.IsTouch) return;
+        _lookHeld = true;
+        _lookFrom = GetViewport().GetMousePosition();
+        _pressed = _dragging = false;
+        Grip();
+    }
+
+    /// <summary>The right button went up: the cursor is back where it was.</summary>
+    private void EndLook()
+    {
+        if (!_lookHeld) return;
+        _lookHeld = false;
+        Grip();
+        if (!MouseCapture.TestWindow && !MouseCapture.Disabled) Input.WarpMouse(_lookFrom);
     }
 
     private bool CanUse(out string? why)
@@ -348,8 +398,8 @@ public partial class PhoneController : Node
         return true;
     }
 
-    /// <summary>The map and the travelling page are seen square on, close, the world black behind; the rest in the hands.</summary>
-    private bool FullView => _screens.Shown is PhoneScreens.Page.Map or PhoneScreens.Page.Travel || TouchSquare;
+    /// <summary>Only the travelling curtain is seen square on, close, the world black behind (#1825); every app is in the hands, the world visible.</summary>
+    private bool FullView => _screens.Shown == PhoneScreens.Page.Travel || TouchSquare;
 
     /// <summary>Touch (#1253): every app but the camera is seen square on, enlarged to fill the phone, so a finger can hit 7 mm targets.</summary>
     private bool TouchSquare => Platform.IsTouch && !XR.XrSession.Active && _screens.Shown != PhoneScreens.Page.Camera;
@@ -374,10 +424,19 @@ public partial class PhoneController : Node
         }
         if (_stage == Stage.Pocket || p == null) return;
 
+        // the body walks on (#1825): the phone holds the keys only while a text box in it does
+        UiFocus.Set(this, HoldsFocus);
+        // folded, the mouse is the view's, so the finger follows the selected tile (keys lead it)
+        if (!Platform.IsTouch && _stage is Stage.Folded or Stage.Drawing) _keysLead = true;
+        // a NEW sprint start puts the phone away, as it holsters an item; not on the travel curtain, not in VR (its own buttons)
+        bool sprint = p.SprintIntent;
+        if (sprint && !_wasSprint && !XR.XrSession.Active && _travelSince < 0 && _stage is Stage.Folded or Stage.Open or Stage.Opening) PutAway();
+        _wasSprint = sprint;
+
         // the camera moves only once the phone is in the hands
         bool inHands = p.PhoneModel is { Visible: true };
         bool open = _stage is Stage.Opening or Stage.Open;
-        float lookTo = _stage == Stage.Stowing ? 0f : inHands ? 1f : _look;
+        float lookTo = _stage == Stage.Stowing ? 0f : 1f;
         _look = Mathf.MoveToward(_look, lookTo, dt / LookSeconds);
         // in VR the free hand may hold the front half (VrHinge): the hinge is where the hand has it
         _fold = _vrHinge ?? Mathf.MoveToward(_fold, open ? 1f : 0f, dt / PhoneModel.UnfoldSeconds);
@@ -388,7 +447,7 @@ public partial class PhoneController : Node
 
         switch (_stage)
         {
-            case Stage.Drawing when _look >= 1f:
+            case Stage.Drawing when _look >= 1f && inHands:
                 _stage = Stage.Folded;
                 break;
             case Stage.Opening when _fold >= 1f && _cover == coverWant:
@@ -427,6 +486,9 @@ public partial class PhoneController : Node
         _screens.SetTouch(Platform.IsTouch && !XR.XrSession.Active, view.Y / Mathf.Max(_pxPerMm, 0.01f));
         _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
+        if (p.PhoneViewmodel is { HasLiveScreens: false } vm) vm.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
+        // the viewmodel fills the lower right while open: the corner's key list and hand chip step aside
+        HidesHud = p.PhoneViewShown && _stage == Stage.Open;
         if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
         _screens.Tick(ClockText(), DateText(), dt);
         RefreshQuick();
@@ -449,8 +511,8 @@ public partial class PhoneController : Node
         string text = _stage is Stage.Folded or Stage.Drawing
             ? XR.XrSession.Active ? "X  open     swipe  choose     tap, or point and trigger  select     B  put away"
             : Platform.IsTouch ? "tap  open     swipe  choose     swipe down, or tap outside  put away"
-            : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away"
-                : "W  open     A D  choose     Enter  select     S  put away     ·     mouse: click, swipe"
+            : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away     ·     L stick  walk     R stick  look"
+                : "Y  open     ← →  choose     Enter  select     1-6  run     Y  or  ↓  put away     ·     WASD  walk     mouse  look"
             : "";
         _hint.Visible = text.Length > 0 && !_blocked();
         if (text != _hintShown) _hint.Text = _hintShown = text;
@@ -472,7 +534,7 @@ public partial class PhoneController : Node
             p.PhonePointTip = p.PhonePointDir = null;
             return;
         }
-        bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f;
+        bool hands = _stage is Stage.Folded or Stage.Open && _cover <= 0f && _camApp <= 0f && !p.PhoneViewShown;
         Vector2? uv = null;
         bool cover = _cursorOnCover;
         if (_keysLead)
@@ -611,7 +673,7 @@ public partial class PhoneController : Node
         if (InviteService.Client?.Newest is { } call) { _callId = call.Id; _callText = $"{call.PeerName}: {call.Title}"; }
         else { _callId = -1; _callText = null; }
         // a fixed order, so the same key or place is always the same app
-        Add(new("Open"), () => Open());
+        Add(new("Open"), OpenLast);
         Add(new("Map"), () => Open(PhoneScreens.Page.Map));
         Add(new("Camera"), () => Open(PhoneScreens.Page.Camera));
         Add(new("Contacts"), () => Open(PhoneScreens.Page.Contacts));
@@ -753,26 +815,60 @@ public partial class PhoneController : Node
 
     // ------------------------------------------------------------------ input
 
-    /// <summary>A key's direction on the phone: WASD and the arrows, or the pad's D-pad (as ui_*).</summary>
+    /// <summary>
+    /// A key's direction on the phone: the arrow keys or the pad's D-pad (or a <c>ui_*</c> action). Never WASD or a
+    /// stick: those walk (#1825).
+    /// </summary>
     private static Vector2? Direction(InputEvent e)
     {
         if (e is InputEventKey k)
             return k.PhysicalKeycode switch
             {
-                Key.W or Key.Up => Vector2.Up, Key.S or Key.Down => Vector2.Down,
-                Key.A or Key.Left => Vector2.Left, Key.D or Key.Right => Vector2.Right, _ => null,
+                Key.Up => Vector2.Up, Key.Down => Vector2.Down, Key.Left => Vector2.Left, Key.Right => Vector2.Right, _ => null,
             };
-        if (e is InputEventMouse) return null;
-        if (e.IsActionPressed("ui_up")) return Vector2.Up;
-        if (e.IsActionPressed("ui_down")) return Vector2.Down;
-        if (e.IsActionPressed("ui_left")) return Vector2.Left;
-        if (e.IsActionPressed("ui_right")) return Vector2.Right;
+        if (e is InputEventJoypadButton j)
+            return j.ButtonIndex switch
+            {
+                JoyButton.DpadUp => Vector2.Up, JoyButton.DpadDown => Vector2.Down,
+                JoyButton.DpadLeft => Vector2.Left, JoyButton.DpadRight => Vector2.Right, _ => null,
+            };
+        if (e is InputEventAction)
+        {
+            if (e.IsActionPressed("ui_up")) return Vector2.Up;
+            if (e.IsActionPressed("ui_down")) return Vector2.Down;
+            if (e.IsActionPressed("ui_left")) return Vector2.Left;
+            if (e.IsActionPressed("ui_right")) return Vector2.Right;
+        }
         return null;
     }
 
+    /// <summary>Enter, or the pad's A (Space and E stay the body's: jump, use).</summary>
     private static bool IsSelect(InputEvent e) =>
-        e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter or Key.Space or Key.E }
-        || e is not InputEventKey and not InputEventMouse && e.IsActionPressed("ui_accept");
+        e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter }
+        || e is InputEventJoypadButton { ButtonIndex: JoyButton.A }
+        || e is InputEventAction && e.IsActionPressed("ui_accept");
+
+    /// <summary>Esc, B, the menu key; Backspace and the mouse's fourth button when not typing: one step back.</summary>
+    private static bool IsBack(InputEvent e, bool typing) =>
+        e is InputEventKey { PhysicalKeycode: Key.Escape } || e is InputEventJoypadButton { ButtonIndex: JoyButton.B }
+        || e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)
+        || !typing && (e is InputEventKey { PhysicalKeycode: Key.Backspace } || e is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1 });
+
+    private static bool IsDigit(InputEvent e) => e is InputEventKey { PhysicalKeycode: >= Key.Key1 and <= Key.Key9 };
+
+    /// <summary>
+    /// The events the phone takes for itself (#1825); everything else, WASD, Shift, Space, the sticks and the
+    /// mouse's look, goes on to the body.
+    /// </summary>
+    private bool Wanted(InputEvent e, bool typing)
+    {
+        if (e.IsActionPressed(PlayerInput.Phone)) return !typing;
+        if (Direction(e) != null || IsSelect(e) || IsBack(e, typing)) return true;
+        if (_stage != Stage.Open) return IsDigit(e);
+        if (e is InputEventKey { PhysicalKeycode: Key.Slash }) return !typing;
+        return e is InputEventJoypadButton { ButtonIndex: JoyButton.LeftShoulder or JoyButton.RightShoulder }
+               && _screens.Shown is PhoneScreens.Page.Photos or PhoneScreens.Page.Photo;
+    }
 
     public override void _Input(InputEvent e)
     {
@@ -798,38 +894,69 @@ public partial class PhoneController : Node
             CameraInput(e);
             return;
         }
+        // folded, the mouse is the body's and looks as with no phone; only its fourth button puts the phone away (#1825)
+        if (e is InputEventMouse && !Platform.IsTouch && _stage is Stage.Folded or Stage.Drawing or Stage.Closing or Stage.Stowing)
+        {
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1, Pressed: true } && _stage is Stage.Folded or Stage.Drawing)
+            {
+                PutAway();
+                GetViewport().SetInputAsHandled();
+            }
+            return;
+        }
         if (e is InputEventMouse mouse)
         {
+            // the right button held: the mouse is captured and its motion is the body's look, not the phone's
+            if (_lookHeld && mouse is InputEventMouseMotion) return;
             Mouse(mouse);
             GetViewport().SetInputAsHandled();
             return;
         }
-        // nothing reaches the body while the phone is out: it stands, every key is the phone's
+        // touch keeps the body still: every key is the phone's (its on-screen controls are hidden)
+        if (Platform.IsTouch)
+        {
+            GetViewport().SetInputAsHandled();
+            if (_stage is Stage.Opening or Stage.Closing or Stage.Stowing or Stage.Drawing && !e.IsActionPressed(PlayerInput.Phone)) return;
+            if (_stage is Stage.Open) OpenKey(e); else FoldedKey(e);
+            return;
+        }
+        bool typing = Typing;
+        if (typing && e is InputEventKey && !IsBack(e, typing))
+        {
+            // a text box has the keys: letters type, the body stands (UiFocus), nothing reaches the world
+            UiFocus.Set(this, true);
+            GetViewport().SetInputAsHandled();
+            _screens.Inner.PushInput(e, true);
+            return;
+        }
+        if (!Wanted(e, typing)) return;
         GetViewport().SetInputAsHandled();
+        // the phone key is a toggle from anywhere: the third press, open or opening, puts it away
+        if (e.IsActionPressed(PlayerInput.Phone) && !e.IsEcho() && _travelSince < 0 && _stage is Stage.Open or Stage.Opening) { PutAway(); return; }
         if (_stage is Stage.Opening or Stage.Closing or Stage.Stowing or Stage.Drawing && !e.IsActionPressed(PlayerInput.Phone)) return;
         if (_stage is Stage.Open) OpenKey(e);
         else FoldedKey(e);
     }
 
-    /// <summary>Folded (or coming out): W opens, S puts away, A D pick, Enter runs; the finger swipes along.</summary>
+    /// <summary>Folded (or coming out): Up opens it on the last app, Down puts away, Left Right pick, Enter runs; the finger swipes along.</summary>
     private void FoldedKey(InputEvent e)
     {
         if (!e.IsPressed() || e.IsEcho()) return;
-        if (e.IsActionPressed(PlayerInput.Phone)) { Open(); return; }
+        if (e.IsActionPressed(PlayerInput.Phone)) { OpenLast(); return; }
         // a ringing call has Enter / A and Esc / B; the tiles keep their places
-        if (_callId >= 0 && (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu))) { Answer(_callId, false); return; }
+        if (_callId >= 0 && IsBack(e, false)) { Answer(_callId, false); return; }
         if (_callId >= 0 && IsSelect(e)) { Answer(_callId, true); return; }
-        if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)) { PutAway(); return; }
-        if (e is InputEventKey { PhysicalKeycode: >= Key.Key1 and <= Key.Key9 } digit && digit.PhysicalKeycode - Key.Key1 < _quicks.Count)
+        if (IsBack(e, false)) { PutAway(); return; }
+        if (IsDigit(e) && ((InputEventKey)e).PhysicalKeycode - Key.Key1 < _quicks.Count)
         {
             _keysLead = true;
-            _quick = (int)(digit.PhysicalKeycode - Key.Key1);
+            _quick = (int)(((InputEventKey)e).PhysicalKeycode - Key.Key1);
             RunQuick();
             return;
         }
         if (Direction(e) is { } dir)
         {
-            if (dir == Vector2.Up) Open();
+            if (dir == Vector2.Up) OpenLast();
             else if (dir == Vector2.Down) PutAway();
             else
             {
@@ -845,11 +972,11 @@ public partial class PhoneController : Node
         }
     }
 
-    /// <summary>Open: WASD and the arrows move on the screen (typing letters while a text box has the keys), Enter presses, Esc goes back.</summary>
+    /// <summary>Open: the arrows and the D-pad move on the screen, Enter / A presses, Esc / Backspace / B / the mouse's fourth button go back; WASD walk.</summary>
     private void OpenKey(InputEvent e)
     {
-        bool typing = _screens.Inner.GuiGetFocusOwner() is LineEdit;
-        if (e.IsPressed() && !e.IsEcho() && (e.IsActionPressed("ui_cancel") || e is InputEventKey { PhysicalKeycode: Key.Escape or Key.Backspace } && !typing))
+        bool typing = Typing;
+        if (e.IsPressed() && !e.IsEcho() && IsBack(e, typing))
         {
             Back();
             return;
@@ -868,13 +995,13 @@ public partial class PhoneController : Node
             else StepPhoto(way);
             return;
         }
-        // Left and Right are previous and next photo in the viewer; Up and Down reach its buttons
+        // Left and Right are previous and next photo in the viewer; Up and Down reach its two buttons
         if (!typing && _screens.Shown == PhoneScreens.Page.Photo && e.IsPressed() && Direction(e) is { } side && side.Y == 0f)
         {
             if (!e.IsEcho()) StepPhoto(side.X < 0f ? -1 : 1);
             return;
         }
-        if (!typing && Direction(e) is { } dir && e is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion or InputEventAction)
+        if (!typing && Direction(e) is { } dir)
         {
             if (!e.IsPressed()) return;
             _keysLead = true;
@@ -1045,6 +1172,14 @@ public partial class PhoneController : Node
     {
         var p = _player();
         if (p == null) return;
+        // the right button held turns the view (#1825): the mouse is captured, the cursor comes back where it was on release
+        if (m is InputEventMouseButton { ButtonIndex: MouseButton.Right } rmb)
+        {
+            if (rmb.Pressed) StartLook();
+            else EndLook();
+            return;
+        }
+        if (_lookHeld) return;   // captured: the pointer is not on the glass
         _cursorUv = p.PhoneScreenPoint(m.Position, out _cursorOnCover);
         _keysLead = false;
         bool inner = _stage == Stage.Open && !_cursorOnCover;
@@ -1055,8 +1190,8 @@ public partial class PhoneController : Node
         float slop = finger ? TouchLayout.TapSlopMm * _pxPerMm : height * 0.02f;
         float swipe = finger ? TouchLayout.BackSwipeMm * _pxPerMm : height * 0.057f;
 
-        // right click is Back, whatever the cursor is over (the camera app keeps it for the selfie)
-        if (m is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+        // the mouse's fourth button is Back
+        if (m is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1, Pressed: true })
         {
             if (_stage == Stage.Open) Back();
             else if (_stage == Stage.Folded) PutAway();
@@ -1169,7 +1304,8 @@ public partial class PhoneController : Node
         }
         if (!e.IsPressed() || e.IsEcho()) return;
         if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu) || e is InputEventKey { PhysicalKeycode: Key.Escape }) Back();
-        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Right } || e is InputEventKey { PhysicalKeycode: Key.F or Key.Tab }
+        else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1 }) Back();
+        else if (e is InputEventKey { PhysicalKeycode: Key.F or Key.Tab }
                  || e is InputEventJoypadButton { ButtonIndex: JoyButton.Y }) SetSelfie(!_selfie);
         // WASD, Space and the pad's A walk and jump the body (#1149, read held by it): not the phone's
         else if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } || e is InputEventKey { PhysicalKeycode: Key.Enter or Key.KpEnter }

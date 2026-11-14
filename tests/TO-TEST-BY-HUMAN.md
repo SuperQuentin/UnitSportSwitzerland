@@ -1191,3 +1191,17 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 - [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
 - [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.
+
+## The phone: folded first, walking everywhere ([#1825](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1825))
+
+In a window on a real map, Cartoon, first and third person.
+
+- [ ] Walk with the cursor on a real mouse: open the phone on the Map, WASD to walk, move the cursor over a row, click it; hold the right button and turn the view → the cursor hides while held and comes back at the same place on release; does the hold-to-look feel right (no jump of the view on press or release)?
+- [ ] On a real gamepad with the phone out (folded, then open): left stick walks, right stick looks, D-pad picks, A presses → A never jumps; hold B puts the phone away; the emote wheel does not open from D-pad ↑.
+- [ ] Press Y three times → folded (about 0.15 s), open on the app you used last, put away; a digit on the cover opens its app; Y typed in the Map search types. Does it feel quick, not abrupt? In a car, Y is still the cruise control.
+- [ ] Folded, the mouse looks freely with no cursor and the wheel zooms the camera; open, a cursor appears; Esc back to the cover and the mouse looks again.
+- [ ] Open on any app and sprint from standstill (Shift) → the phone goes away; nothing stops the walk.
+- [ ] Look at the phone folded and open while walking, in both views, at 1920x1080 → the screen is in the lower right, about 43 % of the width open, readable and clickable, the world and horizon visible, the body and the pointing hand not in front of it.
+- [ ] A Map pick still hides the jump behind a black curtain, however you walk meanwhile.
+- [ ] In a headset: the phone still opens by the free hand, the fingertip works the glass, the body walks (nothing changed).
+- [ ] On a phone or tablet (touch): the PHONE pill takes it out folded, a tap opens it, the apps are square on and the stick does not walk meanwhile (unchanged).

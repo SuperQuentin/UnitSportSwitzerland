@@ -232,8 +232,9 @@ public partial class PlayerInput : Node
     /// <summary>Shift+F2 (#840): declines the newest invite. A pad declines from the quick menu's Invites or the Start menu.</summary>
     public const string InviteDecline = "invite_decline";
     /// <summary>
-    /// The phone (#889): on foot, takes it out, and again opens it (<see cref="UnitSport.Phone.PhoneController"/>).
-    /// Up arrow, free on foot (only the excavator's boom in a cab); a pad reaches it from the quick menu.
+    /// The phone (#889, #1825): on foot, takes it out folded, again opens it on the last app, again puts it away
+    /// (<see cref="UnitSport.Phone.PhoneController"/>). Y: the autopilot and the cruise control use it, in vehicles only, where the
+    /// phone is unavailable; a pad reaches it from the quick menu.
     /// </summary>
     public const string Phone = "phone";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
@@ -817,9 +818,10 @@ public partial class PlayerInput : Node
         Bind(PinballNudge, Keys(Key.W, Key.Up), Button(JoyButton.X));
         Bind(PinballNudgeLeft, Keys(Key.Q));
         Bind(PinballNudgeRight, Keys(Key.R));
-        // the phone (#889): Up, as in the games players know it from; no pad button is free on foot
-        // (D-pad up is the emote wheel), so the pad takes it out from the quick menu
-        Bind(Phone, Keys(Key.Up));
+        // the phone (#889, #1825): Y, free on foot (the autopilot and the cruise control read it in a vehicle, where the phone
+        // does not come out); the arrows stay the highlight's. No pad button is free on foot (D-pad up is the emote wheel),
+        // so the pad takes it out from the quick menu
+        Bind(Phone, Keys(Key.Y));
         // F2 is free everywhere (F1 help, F3 F4 the perf tools); a pad has no free button, so the
         // quick menu is a hold of Back, whose tap stays the inventory (Ui/QuickMenu tells them apart)
         Bind(QuickMenu, Keys(Key.F2), Button(JoyButton.Back));

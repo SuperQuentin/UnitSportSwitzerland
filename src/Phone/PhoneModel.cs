@@ -33,7 +33,7 @@ public partial class PhoneModel : Node3D
     /// <summary>The whole open phone, rim to rim: what the camera keeps in view.</summary>
     public static readonly Vector2 OpenSize = new(2f * HalfWidth, Height);
     /// <summary>How long the hinge takes to open or close all the way.</summary>
-    public const float UnfoldSeconds = 0.42f;
+    public const float UnfoldSeconds = 0.2f;
     private const float ScreenLift = 0.0003f;
 
     private const float IslandX = HalfWidth * 0.5f - 0.005f - 0.029f, IslandY = Height * 0.5f - 0.006f - 0.011f;
@@ -86,6 +86,27 @@ public partial class PhoneModel : Node3D
     }
     private bool _coverWhenOpen;
 
+    /// <summary>
+    /// The owner's viewmodel (#1825): drawn only by the player's camera on <see cref="Items.HeldItemVisual.ViewmodelLayer"/>, its depth
+    /// squeezed to the nearest 1 % of the range so it never goes behind a wall or the body (as every held-item viewmodel). Set before
+    /// the model enters the tree. Built once, moved as a node.
+    /// </summary>
+    public bool Viewmodel { get; set; }
+
+    private ShaderMaterial? _coverView, _innerView;
+
+    private void MakeViewmodel()
+    {
+        foreach (var node in GetChildren().Concat(_hinge.GetChildren()))
+        {
+            if (node is not MeshInstance3D mi) continue;
+            mi.Layers = Items.HeldItemVisual.ViewmodelLayer;
+            if (mi.MaterialOverride == _coverMat) mi.MaterialOverride = _coverView = (ShaderMaterial)Items.HeldItemVisual.ForView(_coverMat);
+            else if (mi.MaterialOverride == _innerMat) mi.MaterialOverride = _innerView = (ShaderMaterial)Items.HeldItemVisual.ForView(_innerMat);
+            else if (mi.MaterialOverride != null) mi.MaterialOverride = Items.HeldItemVisual.ForView(mi.MaterialOverride);
+        }
+    }
+
     /// <summary>True once live screens are set (the owner's); a remote copy shows the wallpaper.</summary>
     public bool HasLiveScreens { get; private set; }
 
@@ -117,6 +138,7 @@ public partial class PhoneModel : Node3D
         HasLiveScreens = false;
         if (_fold < 0f) _fold = 0f;
         Turn();
+        if (Viewmodel) MakeViewmodel();
     }
 
     /// <summary>Shows <paramref name="cover"/> and <paramref name="inner"/> on the screens.</summary>
@@ -124,6 +146,8 @@ public partial class PhoneModel : Node3D
     {
         _coverMat.AlbedoTexture = cover;
         _innerMat.AlbedoTexture = inner;
+        _coverView?.SetShaderParameter("albedo_tex", cover);
+        _innerView?.SetShaderParameter("albedo_tex", inner);
         HasLiveScreens = true;
     }
 

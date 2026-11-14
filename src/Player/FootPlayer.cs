@@ -2235,7 +2235,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
-        _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / 0.18f);
+        // the phone comes and goes quickly (#1825): a pocket to the hands in a tenth of a second
+        _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / (IsPhonePose(want) || IsPhonePose(_itemArmCur) ? 0.1f : 0.18f));
         if (_itemArmBlend <= 0f && want == Avatar.ItemArmPose.None) _itemArmCur = Avatar.ItemArmPose.None;
     }
 
@@ -2644,8 +2645,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        // the phone (#889) lends third person too: its camera is laid over this one (PhoneCamera); not in VR (#920)
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneLook > 0f && !XR.XrSession.Active ? 1f : 0f);
+        // the phone (#889) lends third person too when its camera moves (the camera app, the travel curtain, touch: PhoneCamera); not in VR (#920).
+        // Folded or open on desktop and pad (#1825) the gameplay camera is left exactly as it is: the phone is a viewmodel
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneMovesLens ? 1f : 0f);
         // a prop (#1268) is seen from behind, from the ordinary third-person camera, on a desktop; VR stays first person (comfort)
         bool prop = !XR.XrSession.Active && PropWalk?.Invoke(this) != null;
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
@@ -4264,6 +4266,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // second, and a held key starts the next one — so holding Ctrl became a permanent
         // 7 m/s crouch-run. A slide is one move; you re-press to take another.
         bool spaceDown = (keys ? PlayerInput.Held(PlayerInput.Jump) : acts.Jump) && propWalk == null;
+        // the pad's A is the phone's while it is out (#1825): no jump (the keyboard's Space still jumps)
+        if (keys && PhoneState is PhoneFoldedState or PhoneOpenState && PlayerInput.LastDevice == InputDevice.Gamepad) spaceDown = false;
         bool jumpPressed = spaceDown && !_jumpHeld;
         _jumpHeld = spaceDown;
         // downed (#475): a crawl, nothing more
