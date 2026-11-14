@@ -39,6 +39,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   tops, 0.2 solar radii), T refused there; the giants as globes from their 2k maps, Saturn's rings round its globe.
 - **H7f** (#1854), this branch: flying into the giants: their air as data (`BodyAir.Jupiter`...), the deck stepping
   aside inside, the spectator down to 500 km under the 1-bar level.
+- **H7f** (#1854), this branch: Saturn's rings with a thickness (a 400 m slab: an edge-on band, a haze inside) and ice
+  chunks round the camera, the same on every client from one seed, solid near it (`--ringcheck`).
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
