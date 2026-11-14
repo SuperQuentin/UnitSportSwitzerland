@@ -74,15 +74,12 @@ public sealed class SpaceOrbit
     /// <summary>How long the lag is watched before a drift is owed, s: several frames, so the within-frame swing is out of it.</summary>
     private const double DriftWindow = 0.25;
 
-    /// <summary>
-    /// A drift past this is a jump of the clock (a resync, a pause), s: taken into <see cref="_lagBase"/>, neither flown
-    /// nor set (setting it would turn the body under the craft by that much at once).
-    /// </summary>
+    /// <summary>A drift past this is a jump of the clock (a resync, a pause), s: the orbit's clock is set to it, not flown to it.</summary>
     private const double MaxCatchUp = 2.0;
 
     /// <summary>
-    /// How far behind the shared sim clock the orbit's clock is meant to be, s: 0, but for a jump past
-    /// <see cref="MaxCatchUp"/> or a stretch on a local time scale (see <see cref="FollowsSharedClock"/>), whose gap stays.
+    /// How far behind the shared sim clock the orbit's clock is meant to be, s: 0, but for a stretch on a local time scale
+    /// (see <see cref="FollowsSharedClock"/>), whose gap stays.
     /// </summary>
     private double _lagBase;
 
@@ -176,8 +173,8 @@ public sealed class SpaceOrbit
         // steps of one frame: turning the body by it put a frame's turn into one step's velocity and none into the next
         // (60-170 m/s of noise at 7.7 km/s), while stepping the orbit by dt alone let a client that drops physics time fall
         // behind on its track. The clock follows the shared sim clock: the drift (the lowest lag over a window, out of the
-        // within-frame swing) is caught up at most a tick per step; a jump past MaxCatchUp, or a stretch on a local time
-        // scale, becomes the new base.
+        // within-frame swing) is caught up at most a tick per step, a jump past MaxCatchUp (a resync) is taken at once, and
+        // the gap a stretch on a local time scale leaves becomes the new base.
         if (_jump || Orbit == null || double.IsNaN(_clock)) ResetClock(place.SimTime);
         else if (!FollowsSharedClock)
         {
@@ -186,12 +183,13 @@ public sealed class SpaceOrbit
         }
         else if (place.SimTime - _windowFrom >= DriftWindow)
         {
-            if (_rebase || Math.Abs(_lagMin) > MaxCatchUp)
+            if (_rebase)
             {
                 _lagBase += _lagMin;
                 _owed = 0;
                 _rebase = false;
             }
+            else if (Math.Abs(_lagMin) > MaxCatchUp) ResetClock(place.SimTime);
             else if (Math.Abs(_lagMin) > 2.0 * dt) _owed = _lagMin;
             _lagMin = double.MaxValue;
             _windowFrom = place.SimTime;
