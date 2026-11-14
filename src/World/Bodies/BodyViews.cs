@@ -59,6 +59,7 @@ public partial class BodyViews : Node
             _globes.Add(_earth);
         }
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _moon));
+        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin));
     }
 
     public override void _Process(double delta)

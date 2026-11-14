@@ -222,7 +222,8 @@ public partial class OriginShifter : Node
     private void EarthReanchor(Vector3 at, double altitude)
     {
         if (CrossBodies && CrossSphere(at)) return;
-        bool space = Curvature.SpaceRegime(InSpace, altitude);
+        // the anchor body's own Space band (#1850): the Earth's 60/50 km, the Moon's 10/8 km
+        bool space = CelestialBody.Of(_origin.Body).SpaceRegime(InSpace, altitude);
         if (space != InSpace)
         {
             InSpace = space;
@@ -232,13 +233,22 @@ public partial class OriginShifter : Node
         var mode = InSpace ? SpaceMode : GroundMode;
         Turned = mode.Rotates;
         double threshold = _thresholdGiven ? ThresholdM : mode.ThresholdM;
-        if (new Vector2(at.X, at.Z).Length() <= threshold) return;
+        // deep space (#1850): past DeepM over the anchor's body the origin rises with the camera and follows it in all
+        // three directions, or a flight out to the Moon leaves the camera 380,000 km up a float (a metre a step). It
+        // stands half a threshold under the camera, so world Y stays between 0 and the threshold, never in the
+        // interiors' band under -2 km (InteriorManager reads raw Y). Back under DeepM, the first move brings the origin
+        // down to the ground's level again (world Y the altitude), at once
+        bool deep = InSpace && mode.Rotates && altitude > DeepM;
+        bool lower = !deep && _risen;
+        bool move = deep ? at.Length() > threshold || at.Y < 0 : new Vector2(at.X, at.Z).Length() > threshold;
+        if (!move && !lower) return;
         if (_origin.Frame.Axes is not { } axes) return;
 
         var (e, n) = _origin.ToLv95(at);
         if (mode.Rotates)
         {
-            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, 0));
+            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, deep ? altitude - threshold / 2 : 0));
+            _risen = deep;
             return;
         }
         // C1's frame: the anchor moves to the camera's plane point, to the step, its axes kept
@@ -247,11 +257,26 @@ public partial class OriginShifter : Node
         ShiftTo(e, n, exact: true, axes: axes with { Origin = axes.ToEcef(x, 0, z) });
     }
 
+    /// <summary>Past this altitude over the anchor's body the origin follows the camera up as well (#1850), metres.</summary>
+    public const double DeepM = 1_000_000;
+
+    /// <summary>The origin stands raised to the camera (a deep-space shift): the next move under <see cref="DeepM"/> lowers it.</summary>
+    private bool _risen;
+
     /// <summary>
-    /// Whether the anchor goes from body to body at a sphere of influence (#1850): off until the globe, the ground and
-    /// the sky follow a body change (#1848's game side), on with <c>--crossbodies</c> for the checks that build it.
+    /// Whether the anchor goes from body to body at a sphere of influence (#1850): on in the earth world (the globe, the
+    /// sky and the spectator follow a body change since #1887 and #1889), off in the flat one, which has no other body;
+    /// <c>--crossbodies</c> forces it on, <c>--crossbodies off</c> off.
     /// </summary>
-    public static bool CrossBodies { get; set; } = CmdArgs.Has("--crossbodies");
+    public static bool CrossBodies
+    {
+        get => _crossBodies ??= CmdArgs.Value("--crossbodies") is { } v
+            ? v != "off"
+            : CmdArgs.Has("--crossbodies") || GameSettings.Current.Frame == WorldFrame.Earth;
+        set => _crossBodies = value;
+    }
+
+    private static bool? _crossBodies;
 
     private double _sphereCheckAt;
 
