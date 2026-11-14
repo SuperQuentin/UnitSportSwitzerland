@@ -22,14 +22,18 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
   spawned at their window's spot while nobody sees it (all at once on the first fill). `ColonistBrain` plays the schedule
   through a player's intents, as legs, and a new window waits for the route under way (a route always ends at a spot):
   - **inside**: `ColonyCrew.Path` point by point (`WalkControls`, 0.3 m reach), never `MoveTo` (its wall rays meet a
-    tube's side at every door);
+    tube's side at every door); bent round other bodies within 1.4 m ahead (`Avoid`: bots collide where figures
+    overlapped); its own spot taken or blocked within a metre, it stands there; stalled twice on a point, on to the next.
+    A can's standing spots are 0.3 m off the aisle toward the fittings they face (`ColonyCrew.StandIn`): on the middle
+    of a lab's 1.5 m aisle a standing colonist shut it;
   - **out on an EVA**: the airlock nearest the spot (`LockFor`), `ToLock` to the wait 1.2 m back in the tube, the inner
     door asked for (`ColonyAirlocks.Request`, what E does; asked again after 12 s), into the chamber, the outer door asked
     for, down the stairs to the ground past them (`Lock(i).Outside`), then `BotSkills.MoveTo`; back the same way
     (`FromLock`);
   - **a rover** for an EVA spot 60 m or more from its airlock's stairs: a free open rover of the depot (`moonrover_<colony>_<slot>`,
     one colonist each), `BotDriving.GetIn`, `BotDriving.Across` (straight across open ground at 4.5 m/s, no roads on the
-    Moon, 7 m short of the spot), `GetOut`; on the way home driven back to its slot. A parked rover keeps its name
+    Moon, 7 m short of the spot; round the colony on a ring 14 m past its modules when the straight line crosses it,
+    `ColonistBrain.Ring`: straight across, the rover met the modules), `GetOut`; on the way home driven back to its slot. A parked rover keeps its name
     (`VehicleManager.Kept`), so the depot does not park a second one;
   - **asleep**: walks to the bunk, and the colony takes the body away once nobody sees it; it comes back at its next
     awake window's spot, unseen;
@@ -59,8 +63,8 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
   the crew's clock set 3 s into a window (`ColonyColonists.ClockOffset`, the check's), 25 s of looks: every shown figure
   inside stands in the colony's air, every EVA one outside it. Artemis: 6 shown, 1.1 walking, 1.0 outside on average. With bots, only those standing
   are judged (one on its way may be in a chamber pumped down, or on the stairs).
-- **EVA check**: `--moonsites artemis:close --colonistcheck --colonisteva` (headless ~4 min): the first colonist with an EVA
+- **EVA check**: `--moonsites artemis:close --colonistcheck --colonisteva` (headless ~9 min: 175 s out, 290 s back): the first colonist with an EVA
   spot is sent there by rover from its work spot; it must cycle an airlock, drive, stand at the spot out of the air with
   the helmet on; then it is sent home and must stand inside in the air, helmet off, with the rover parked within 12 m of a
-  slot. The camera follows it (the ground's square follows the camera). Windowed: `colonist_airlock.png`,
+  slot when it steps out (Artemis' colonist 6 shares the EVA spot and takes the rover out again). The camera follows it (the ground's square follows the camera). Windowed: `colonist_airlock.png`,
   `colonist_rover.png`, `colonist_eva.png`, `colonist_home.png`.

@@ -76,6 +76,9 @@ public sealed class ColonyCrew
         }
     }
 
+    /// <summary>How far off a can's aisle a colonist stands, toward the fittings it faces, metres.</summary>
+    public const double StandIn = 0.3;
+
     /// <summary>A point in a module's node frame (x across, z along its axis toward its back: the node's +Z) in the colony's frame.</summary>
     public static (double X, double Z) Local(ColonyModule m, double lx, double lz)
     {
@@ -118,9 +121,10 @@ public sealed class ColonyCrew
                     RoomKind.Galley => CrewActivity.Eat, RoomKind.Gym => CrewActivity.Exercise, RoomKind.Quarters => CrewActivity.Asleep,
                     RoomKind.Storage => CrewActivity.Visit, _ => CrewActivity.Work,
                 };
-                // two places on the aisle, a quarter in from each end, turned to the fittings either side
-                Add(m, 0, -l / 4, 1, 0, a);
-                Add(m, 0, l / 4, -1, 0, a);
+                // two places a quarter in from each end, turned to the fittings either side and a step toward them, so a
+                // colonist standing there leaves the aisle to pass (#1976: bots collide, and a lab's aisle is 1.5 m)
+                Add(m, StandIn, -l / 4, 1, 0, a);
+                Add(m, -StandIn, l / 4, -1, 0, a);
                 break;
             }
             case ModuleKind.Stack:

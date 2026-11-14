@@ -60,6 +60,7 @@ public sealed class ColonistBrain : IBotBrain
         public float Arrive = 0.6f;
         public double Since = -1;
         public double AskedAt = -1;
+        public int Stalls;
         public string What = "";
     }
 
@@ -214,7 +215,8 @@ public sealed class ColonistBrain : IBotBrain
                 var s = crew.Spots[target];
                 var short_ = Short(way.Outside, (s.X, s.Y, s.Z), ParkShort);
                 Add(new Leg { Kind = LegKind.ToRover, What = rover });
-                Add(new Leg { Kind = LegKind.Drive, Goal = short_, What = "to the EVA" });
+                var from = RoverSlot(rover) ?? way.Outside;
+                Add(new Leg { Kind = LegKind.Drive, Points = Ring(from, short_), What = "to the EVA" });
                 Add(new Leg { Kind = LegKind.LeaveRover });
             }
             Add(new Leg { Kind = LegKind.Outdoors, Goal = (to.X, to.Y, to.Z), Arrive = 0.8f, What = "to the EVA spot" });
@@ -230,7 +232,7 @@ public sealed class ColonistBrain : IBotBrain
             if (_rover != null)
             {
                 Add(new Leg { Kind = LegKind.ToRover, What = _rover });
-                Add(new Leg { Kind = LegKind.Drive, Goal = RoverSlot(_rover) ?? way.Outside, What = "back to its slot" });
+                Add(new Leg { Kind = LegKind.Drive, Points = Ring((from.X, from.Y, from.Z), RoverSlot(_rover) ?? way.Outside), What = "back to its slot" });
                 Add(new Leg { Kind = LegKind.LeaveRover });
                 _rover = null;
             }
@@ -296,11 +298,58 @@ public sealed class ColonistBrain : IBotBrain
             to.Y = 0;
             // the next point nearer than this one (a corner cut inside the room it turns in): go on to it
             if (to.Length() < PointReach) { leg.At++; continue; }
-            bot.Intent.Wish = to.Normalized() * Pace;
-            NoHeadway(bot, now, leg);
+            // its own spot taken by another body (two at one bench): it stands beside them
+            if (leg.At == leg.Points.Length - 1 && to.Length() < 1.2f && Taken(bot, pos + to)) { leg.At++; continue; }
+            bot.Intent.Wish = Avoid(bot, to.Normalized()) * Pace;
+            if (NoHeadway(bot, now, leg))
+            {
+                // blocked within a metre of where it was going to stand (a bench's corner, another body): it stands there;
+                // blocked twice on a point on the way: on to the next one, rather than stuck for good
+                if (leg.At == leg.Points.Length - 1 && to.Length() < 1.0f) { leg.At++; continue; }
+                if (++leg.Stalls >= 2) { leg.At++; leg.Stalls = 0; }
+            }
             return false;
         }
         return true;
+    }
+
+    /// <summary>Within this of another body ahead, a walker steps aside round it (bots collide where figures overlapped), metres.</summary>
+    private const float Personal = 1.4f;
+
+    /// <summary>
+    /// A walk's direction bent round the bodies just ahead (a colonist standing on the aisle, one coming the other way in a
+    /// tube): away from each across the way, the more the nearer; one dead ahead is passed on the right.
+    /// </summary>
+    private static Vector3 Avoid(Bot bot, Vector3 dir)
+    {
+        var pos = bot.Body.GlobalPosition;
+        var push = Vector3.Zero;
+        foreach (var other in bot.World.Bodies())
+        {
+            if (other == bot.Body || !GodotObject.IsInstanceValid(other)) continue;
+            var d = other.GlobalPosition - pos;
+            d.Y = 0;
+            float dist = d.Length();
+            float ahead = d.Dot(dir);
+            if (dist > Personal || dist < 0.01f || ahead < 0) continue;
+            var across = d - dir * ahead;
+            var away = across.Length() < 0.1f ? dir.Cross(Vector3.Up) : -across.Normalized();
+            push += away * (1 - dist / Personal) * 1.6f;
+        }
+        return push == Vector3.Zero ? dir : (dir + push).Normalized();
+    }
+
+    /// <summary>Whether another body stands within 0.7 m of a point.</summary>
+    private static bool Taken(Bot bot, Vector3 at)
+    {
+        foreach (var other in bot.World.Bodies())
+        {
+            if (other == bot.Body || !GodotObject.IsInstanceValid(other)) continue;
+            var d = other.GlobalPosition - at;
+            d.Y = 0;
+            if (d.Length() < 0.7f) return true;
+        }
+        return false;
     }
 
     /// <summary>Asks the airlock for the door it wants open (E at that door), and waits for it, facing it.</summary>
@@ -339,10 +388,43 @@ public sealed class ColonistBrain : IBotBrain
     private bool Drive(Bot bot, Leg leg, double now)
     {
         if (!BotDriving.Mounted(bot)) return true;
-        var p = BotDriving.Across(bot, World(bot, leg.Goal), DriveSpeed, now);
+        var p = BotDriving.Across(bot, World(bot, leg.Points[leg.At]), DriveSpeed, now);
         if (p == BotDriving.Progress.Driving) return false;
-        Log(bot, $"drove {leg.What}: {p} ({bot.Drive.Why})");
+        if (p == BotDriving.Progress.Arrived && leg.At + 1 < leg.Points.Length)
+        {
+            leg.At++;
+            return false;
+        }
+        Log(bot, $"drove {leg.What}: {p} ({bot.Drive.Why}), point {leg.At + 1}/{leg.Points.Length}");
         return true;
+    }
+
+    /// <summary>
+    /// A drive's way round the colony (#1976: straight across, a rover met its modules): when the line from
+    /// <paramref name="from"/> to <paramref name="to"/> passes within the modules' reach (plus a margin) of the middle, out to
+    /// that ring and round it on the shorter side, a point every 30°, then on to the goal.
+    /// </summary>
+    private (double X, double Y, double Z)[] Ring((double X, double Y, double Z) from, (double X, double Y, double Z) to)
+    {
+        double ring = 0;
+        foreach (var m in _host.Plan.Modules) ring = Math.Max(ring, Math.Sqrt(m.X * m.X + m.Z * m.Z) + Math.Max(m.Length, m.Width) / 2);
+        ring += 14;
+        // the line's nearest point to the middle
+        double dx = to.X - from.X, dz = to.Z - from.Z, len2 = dx * dx + dz * dz;
+        double t = len2 < 1e-6 ? 0 : Math.Clamp(-(from.X * dx + from.Z * dz) / len2, 0, 1);
+        double nx = from.X + dx * t, nz = from.Z + dz * t;
+        if (nx * nx + nz * nz >= ring * ring) return [to];
+        double a0 = Math.Atan2(from.X, from.Z), a1 = Math.Atan2(to.X, to.Z);
+        double turn = Math.IEEERemainder(a1 - a0, Math.Tau);
+        int steps = Math.Max(1, (int)Math.Ceiling(Math.Abs(turn) / (Math.PI / 6)));
+        var pts = new List<(double X, double Y, double Z)>();
+        for (int k = 0; k <= steps; k++)
+        {
+            double a = a0 + turn * k / steps;
+            pts.Add((Math.Sin(a) * ring, 0, Math.Cos(a) * ring));
+        }
+        pts.Add(to);
+        return pts.ToArray();
     }
 
     private bool LeaveRover(Bot bot)
@@ -374,12 +456,13 @@ public sealed class ColonistBrain : IBotBrain
         bot.Intent.Pitch = 0;
     }
 
-    /// <summary>No headway on an inside walk for 4 s: logged once (a body caught on a jamb), for the check to see.</summary>
-    private void NoHeadway(Bot bot, double now, Leg leg)
+    /// <summary>No headway on an inside walk for 4 s: logged (a body caught on a jamb), for the check to see; true then.</summary>
+    private bool NoHeadway(Bot bot, double now, Leg leg)
     {
-        if (now - _headwayAt < 4) return;
+        if (now - _headwayAt < 4) return false;
         var pos = bot.Body.GlobalPosition;
-        if ((pos - _headwayFrom).Length() < 0.3f)
+        bool stuck = (pos - _headwayFrom).Length() < 0.3f;
+        if (stuck)
         {
             var here = _host.ToLocal(bot.Body.FromFrame(_host.Origin, pos) is var w ? w : pos);
             var p = leg.At < leg.Points.Length ? leg.Points[leg.At] : default;
@@ -388,6 +471,7 @@ public sealed class ColonistBrain : IBotBrain
         }
         _headwayFrom = pos;
         _headwayAt = now;
+        return stuck;
     }
 
     /// <summary>What the body is pressed against (not the floor), for the no-headway line.</summary>

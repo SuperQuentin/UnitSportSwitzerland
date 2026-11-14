@@ -110,6 +110,7 @@ public partial class MoonSitesCheck
     private int _evaMember = -1;
     private bool _evaDrove, _evaCycled, _shotRover, _shotLock, _shotEva;
     private string? _evaRover;
+    private float _evaParked = -1;
 
     private void EvaStep(ColonyColonists crew, Node3D colonyNode, MoonColony colony)
     {
@@ -199,13 +200,17 @@ public partial class MoonSitesCheck
                 if (_crewT > 300) Finish($"the EVA colonist did not reach its spot in 300 s ({brain.Status})");
                 break;
             case 12:
+                // the rover where it left it, as soon as it is on foot again (another colonist may take it out next)
+                if (_evaParked < 0 && brain.Status.StartsWith("Outdoors back") && _evaRover != null
+                    && Vehicles.VehicleManager.Instance!.GetNodeOrNull(_evaRover) is Vehicles.VehicleBody rv)
+                {
+                    _evaParked = float.MaxValue;
+                    foreach (var sl in MoonRoverDepot.Slots(colony, ColonyPlan.For(colony)))
+                        _evaParked = Mathf.Min(_evaParked, rv.GlobalPosition.DistanceTo(colonyNode.GlobalTransform * sl.At));
+                }
                 if (!brain.Moving && !brain.Outside && brain.Spot == who.Work)
                 {
-                    var slots = MoonRoverDepot.Slots(colony, ColonyPlan.For(colony));
-                    float parked = float.MaxValue;
-                    if (_evaRover != null && Vehicles.VehicleManager.Instance!.GetNodeOrNull(_evaRover) is Vehicles.VehicleBody rv)
-                        foreach (var sl in slots)
-                            parked = Mathf.Min(parked, rv.GlobalPosition.DistanceTo(colonyNode.GlobalTransform * sl.At));
+                    float parked = _evaParked < 0 ? float.MaxValue : _evaParked;
                     CrewLog(string.Create(CultureInfo.InvariantCulture,
                         $"back inside after {_crewT:F0} s: air at the head {air}, helmet {helmet}, rover {_evaRover ?? "?"} {parked:F1} m from its slot"));
                     if (!air) { Finish("the colonist is back but not in the air"); return; }
@@ -213,8 +218,10 @@ public partial class MoonSitesCheck
                     if (_evaRover == null || parked > 12) { Finish($"the rover was not parked back by its slot ({parked:F1} m)"); return; }
                     if (!_headless)
                     {
+                        // over the shoulder: behind it and up, looking at what it works at
                         var head = body.GlobalPosition + Vector3.Up * 1.5f;
-                        Shot("colonist_home", head + crew.Direction(crew.Crew.Spots[who.Work].Facing) * 2.6f + Vector3.Up * 0.3f, head);
+                        var facing = crew.Direction(crew.Crew.Spots[who.Work].Facing);
+                        Shot("colonist_home", head - facing * 2.2f + Vector3.Up * 0.7f, head + facing * 1.2f - Vector3.Up * 0.4f);
                     }
                     _crewStage = 4;
                     break;
