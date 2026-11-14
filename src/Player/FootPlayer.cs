@@ -68,8 +68,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public WorldOrigin? Origin { get => _origin ?? Terrain?.Origin; set => _origin = value; }
     private WorldOrigin? _origin;
 
-    /// <summary>The ground's gravity where the anchor is (#1850): 9.81 m/s² on the Earth, the Moon's 1.63 there.</summary>
-    private static float Gravity => BodyGravity.Ground;
     private const float EyeHeight = 1.68f;   // average adult eye level
     public const float BaseFov = 68f;
     private const float RunFov = 76f;
@@ -316,6 +314,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     // the local east-up-south at the body and the heading from true north there (#1503, protocol 93):
     // each reader turns them into its own world with its frame at the body's place.
 
+    /// <summary>
+    /// The body whose fixed frame the three doubles are in (#1852, protocol 97: a <see cref="BodyId"/>, the Earth 0), sent
+    /// before them so the position is read whole with it.
+    /// </summary>
+    [Export] public int NetBody { get; set; }
     [Export] public double NetX { get; set; }
     [Export] public double NetY { get; set; }
 
@@ -324,7 +327,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public double NetZ
     {
         get => _netZ;
-        set { _netZ = value; _netGlobal = GlobalPos.FromWire(NetX, NetY, value); }
+        set { _netZ = value; _netGlobal = GlobalPos.FromWire(NetX, NetY, value, (BodyId)NetBody); }
     }
     private double _netZ;
     private GlobalPos _netGlobal;
@@ -339,7 +342,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public GlobalPos NetGlobal
     {
         get => _netGlobal;
-        set { _netGlobal = value; (NetX, NetY, _netZ) = value.ToWire(); }
+        set { _netGlobal = value; NetBody = value.WireBody; (NetX, NetY, _netZ) = value.ToWire(); }
     }
 
     /// <summary>
@@ -1456,7 +1459,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
-        // ECEF: Z last of the three, its setter reads the position whole
+        // ECEF: Z last of the three, its setter reads the position whole; the body first (#1852)
+        replication.AddProperty(".:NetBody");
         replication.AddProperty(".:NetX");
         replication.AddProperty(".:NetY");
         replication.AddProperty(".:NetZ");

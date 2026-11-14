@@ -102,6 +102,9 @@ public sealed class RemoteInterpolator
     /// <summary>Records a state the owner sent, stamped with the owner's clock: its velocity in the local east-up-south there and its yaw from true north (the wire's).</summary>
     public void Push(double senderTime, double localTime, GlobalPos position, Vector3 velocity, float yaw)
     {
+        // another body's frame (#1852): nothing to ease from, the body is snapped there once (it happens far from anyone)
+        if (_count > 0 && _buf[_head].P.Body != position.Body) { Clear(); _pending = false; _rebase = false; }
+        else if (_hasOut && _lastOut.Body != position.Body) { _hasOut = false; _pending = false; _rebase = false; }
         if (_count > 0)
         {
             ref var newest = ref _buf[_head];

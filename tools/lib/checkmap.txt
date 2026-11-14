@@ -1442,3 +1442,11 @@ src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traf
 # #1811: back into the body after a long spectator flight: upright, its camera sane, a poisoned view put right
 src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
 src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
+src/World/Bodies/MoonNetProbe   net    tools/moonnetcheck.sh
+src/World/Bodies/ServerBod      net    tools/moonnetcheck.sh
+src/Net/FarMarkers              net    tools/moonnetcheck.sh
+src/Net/BodySight               net    tools/moonnetcheck.sh
+src/Net/InterestService         net    tools/moonnetcheck.sh
+src/Net/Regions/                net    tools/moonnetcheck.sh
+src/Net/NetPlace                net    tools/moonnetcheck.sh
+src/Items/TelescopeView         net    tools/moonnetcheck.sh
