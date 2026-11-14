@@ -45,6 +45,32 @@ public readonly record struct ColonyDoor(int Module, double X, double Z, double 
 /// <summary>A pressurised tube (or an open alley where the theme prefers it) between two doors.</summary>
 public readonly record struct ColonyLink(int DoorA, int DoorB, bool Alley);
 
+/// <summary>What an industrial piece is (#1942, docs/plans/moon-surface.md section 4).</summary>
+public enum IndustryKind : byte
+{
+    /// <summary>A solar array on a mast, its wing turned to the sun (a node).</summary>
+    SolarArray,
+    /// <summary>A bucket-wheel regolith digger driving a loop round its pit on the shared clock; Size is the loop's radius.</summary>
+    Digger,
+    /// <summary>A heap of dug regolith; Size is its radius.</summary>
+    SpoilHeap,
+    /// <summary>The ice mine's headframe over its shaft: a lattice tower, its sheave wheel turning.</summary>
+    Headframe,
+    /// <summary>A small pressurised can on legs (an outpost's control room), Size its length.</summary>
+    Hut,
+    /// <summary>A row of ore bins.</summary>
+    OreBins,
+    /// <summary>A flood light mast lighting the dark (a real light), Size its height.</summary>
+    FloodLight,
+    /// <summary>A radio dish on its pedestal, Size its diameter.</summary>
+    Dish,
+    /// <summary>The mass driver's rail on pylons from here along Yaw, Size its length; the bucket runs it on the shared clock.</summary>
+    DriverTrack,
+}
+
+/// <summary>An industrial piece in its colony's (or outpost's) frame (x east, z south): kind, place, heading (radians from north), size.</summary>
+public readonly record struct ColonyIndustry(IndustryKind Kind, double X, double Z, double Yaw, double Size);
+
 /// <summary>A landing pad: centre, radius, its painted number.</summary>
 public readonly record struct ColonyPad(double X, double Z, double Radius, int Number);
 
@@ -73,6 +99,9 @@ public sealed class ColonyPlan
     public readonly List<ColonyLink> Links = new();
     public readonly List<ColonyPad> Pads = new();
 
+    /// <summary>The colony's own industry (#1942): solar arrays, the regolith digger and its spoil heap.</summary>
+    public readonly List<ColonyIndustry> Industry = new();
+
     /// <summary>The road from the hangar's door to the pads, as points (x, z).</summary>
     public readonly List<(double X, double Z)> Road = new();
 
@@ -84,6 +113,7 @@ public sealed class ColonyPlan
             double m = 0;
             foreach (var mod in Modules) m = Math.Max(m, Math.Sqrt(mod.X * mod.X + mod.Z * mod.Z) + Math.Max(mod.Length, mod.Width) / 2);
             foreach (var p in Pads) m = Math.Max(m, Math.Sqrt(p.X * p.X + p.Z * p.Z) + p.Radius);
+            foreach (var i in Industry) m = Math.Max(m, Math.Sqrt(i.X * i.X + i.Z * i.Z) + IndustryReach(i));
             return m;
         }
     }
@@ -181,7 +211,43 @@ public sealed class ColonyPlan
                 break;
             }
         }
+        plan.AddIndustry(c, h0, rng);
         return plan;
+    }
+
+    /// <summary>How far an industrial piece reaches from its point, metres.</summary>
+    public static double IndustryReach(ColonyIndustry i) => i.Kind switch
+    {
+        IndustryKind.SolarArray => 6, IndustryKind.Digger => i.Size + 8, IndustryKind.DriverTrack => i.Size,
+        IndustryKind.Dish => i.Size / 2, IndustryKind.Hut => i.Size / 2 + 1, _ => Math.Max(i.Size, 4),
+    };
+
+    /// <summary>
+    /// The staffed colonies' industry (#1942), on the back of the colony away from the pads: a field of solar arrays on
+    /// the diagonal between the second and third spines (rows across it, 16 m apart, each clear of every module), and the
+    /// regolith digger's pit with its spoil heap on the other back diagonal.
+    /// </summary>
+    private void AddIndustry(MoonColony c, double h0, Random rng)
+    {
+        if (c.Theme is not (ColonyTheme.Artemis or ColonyTheme.MoonVillage or ColonyTheme.Ilrs)) return;
+        double fieldYaw = h0 + 3 * Math.PI / 4;
+        var (fx, fz) = Along(fieldYaw);
+        var (sx, sz) = Along(fieldYaw + Math.PI / 2);
+        int rows = 3, cols = c.Theme == ColonyTheme.Artemis ? 5 : 4;
+        for (int r = 0; r < rows; r++)
+            for (int k = 0; k < cols; k++)
+            {
+                double along = 150 + r * 16, across = (k - (cols - 1) / 2.0) * 16;
+                double x = fx * along + sx * across, z = fz * along + sz * across;
+                if (!Clear(x, z, 8)) continue;
+                Industry.Add(new ColonyIndustry(IndustryKind.SolarArray, x, z, fieldYaw, 10));
+            }
+        double digYaw = h0 + 5 * Math.PI / 4 + (rng.NextDouble() - 0.5) * 0.3;
+        var (dx, dz) = Along(digYaw);
+        double loop = 20 + rng.Next(6);
+        Industry.Add(new ColonyIndustry(IndustryKind.Digger, dx * 250, dz * 250, digYaw, loop));
+        var (hx, hz) = Along(digYaw + Math.PI / 2);
+        Industry.Add(new ColonyIndustry(IndustryKind.SpoilHeap, dx * 250 + hx * (loop + 22), dz * 250 + hz * (loop + 22), digYaw, 11));
     }
 
     /// <summary>Whether a circle is clear of every module's footprint (a rectangle along its axis, or its circle).</summary>

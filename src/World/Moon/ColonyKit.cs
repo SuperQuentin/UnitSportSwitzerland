@@ -136,7 +136,7 @@ public static class ColonyKit
         yield return ("Biodome", () => Glazed(Module(ModuleKind.Biodome, 50, 50, 25, 1, ColonyTheme.MoonVillage)));
         yield return ("Biodome (Cold War, overgrown)", () => Glazed(Module(ModuleKind.Biodome, 64, 64, 32, 1, ColonyTheme.ColdWar)));
         yield return ("Hangar (Artemis)", () => Show(Module(ModuleKind.Hangar, 26, 14, 8, 1, ColonyTheme.Artemis)));
-        yield return ("Tube and alley", () => Show(Links([(new(-6, 0, 0), new(6, 0, 0), false), (new(-6, 0, 6), new(6, 0, 6), true)], ColonyTheme.Artemis)));
+        yield return ("Tube", () => Show(Links([(new(-6, 0, 0), new(6, 0, 0), false)], ColonyTheme.Artemis)));
         yield return ("Landing pad", () => Show(PadMesh(20, 1)));
     }
 
@@ -445,7 +445,7 @@ public static class ColonyKit
 
     /// <summary>
     /// The tubes and alleys of a colony, one mesh in its frame (x east, z south): a tube 2.4 m across on short legs with
-    /// rings every 3 m, or an open alley (a deck, low walls, a roof on posts). Points are pre-turned so MeshScratch's half
+    /// rings every 3 m; the alleys are drawn glazed by <see cref="Alleys"/>. Points are pre-turned so MeshScratch's half
     /// turn lands them where the plan puts them.
     /// </summary>
     public static ArrayMesh Links(IEnumerable<(Vector3 A, Vector3 B, bool Alley)> links, ColonyTheme theme)
@@ -463,7 +463,7 @@ public static class ColonyKit
             var dir = d / len;
             var side = Vector3.Up.Cross(dir).Normalized();
             float yaw = Mathf.Atan2(dir.X, dir.Z);
-            if (!alley)
+            if (alley) continue;   // glazed: Alleys
             {
                 // a walk-in tube: a double-sided shell 2.8 m across, ribs, a floor at the doors' sill, legs, lamps
                 const float y = TubeY;
@@ -481,18 +481,71 @@ public static class ColonyKit
                 float chord = 2 * Mathf.Sqrt(TubeR * TubeR - (y - FloorY) * (y - FloorY));
                 s.Box((a + b) / 2 + Vector3.Up * (FloorY - 0.05f), new(chord, 0.1f, len), p.Frame, Yaw(yaw));
             }
-            else
+        }
+        return s.Build();
+    }
+
+    /// <summary>
+    /// The Moon Village's glazed alleys (#1942), one mesh in the colony's frame (pre-turned), painted with
+    /// <see cref="GlassMaterial"/> on its glass surface: a pressurised corridor you walk through between two doors, its deck
+    /// at the doors' sill on legs, a frame of posts every 3 m, glass walls and a pitched glass roof between them, kick plates,
+    /// lamps along the ridge beam. Its solid and its air are a tube's (<see cref="ColonyBuilder"/>, <see cref="ColonyAirlocks"/>).
+    /// </summary>
+    public static ArrayMesh Alleys(IEnumerable<(Vector3 A, Vector3 B)> links, ColonyTheme theme)
+    {
+        var s = new MeshScratch();
+        var p = Of(theme);
+        static Vector3 T(Vector3 v) => new(-v.X, v.Y, -v.Z);
+        const float half = 1.3f, wallTop = FloorY + 2.55f, ridge = FloorY + 3.15f;
+        foreach (var (a0, b0) in links)
+        {
+            var a = T(a0);
+            var b = T(b0);
+            var d = b - a;
+            float len = d.Length();
+            if (len < 0.5f) continue;
+            var dir = d / len;
+            var side = Vector3.Up.Cross(dir).Normalized();
+            var yaw = Yaw(Mathf.Atan2(dir.X, dir.Z));
+            var mid = (a + b) / 2;
+            s.Box(mid + Vector3.Up * (FloorY - 0.1f), new(2 * half + 0.3f, 0.2f, len), p.Frame, yaw);
+            s.Box(mid + Vector3.Up * (FloorY + 0.005f), new(1.2f, 0.01f, len), p.Band, yaw);
+            int n = Math.Max(1, (int)Mathf.Round(len / 3));
+            for (int i = 0; i <= n; i++)
             {
-                var mid = (a + b) / 2;
-                s.Box(mid + Vector3.Up * 0.15f, new(2.6f, 0.3f, len), p.Frame, Yaw(yaw));
-                foreach (float sd in new[] { -1.3f, 1.3f })
+                var c = a.Lerp(b, i / (float)n);
+                foreach (float sd in new[] { -half, half })
                 {
-                    s.Box(mid + side * sd + Vector3.Up * 0.8f, new(0.12f, 1.1f, len), p.Band, Yaw(yaw));
-                    int n = Math.Max(1, (int)(len / 4));
-                    for (int i = 0; i <= n; i++)
-                        s.Tube(a.Lerp(b, i / (float)n) + side * sd, a.Lerp(b, i / (float)n) + side * sd + Vector3.Up * 2.8f, 0.07f, p.Frame, 4);
+                    s.Box(c + side * sd + Vector3.Up * ((FloorY + wallTop) / 2), new(0.14f, wallTop - FloorY, 0.14f), p.Trim, yaw);
+                    if (i % 2 == 0) s.Tube(c + side * sd * 0.8f, c + side * sd * 0.8f + Vector3.Up * (FloorY - 0.2f), 0.09f, p.Frame, 5);
                 }
-                s.Box(mid + Vector3.Up * 2.85f, new(3.0f, 0.12f, len), p.Shell, Yaw(yaw));
+                // the rafters to the ridge
+                foreach (float sd in new[] { -1f, 1f })
+                {
+                    var lo = c + side * sd * half + Vector3.Up * wallTop;
+                    var hi = c + Vector3.Up * ridge;
+                    s.Tube(lo, hi, 0.06f, p.Trim, 4);
+                }
+            }
+            s.Box(mid + Vector3.Up * ridge, new(0.18f, 0.16f, len), p.Trim, yaw);
+            foreach (float sd in new[] { -half, half })
+            {
+                s.Box(mid + side * sd + Vector3.Up * (FloorY + 0.15f), new(0.1f, 0.3f, len), p.Band, yaw);
+                s.Box(mid + side * sd + Vector3.Up * wallTop, new(0.16f, 0.12f, len), p.Trim, yaw);
+            }
+            // the glass: walls and the two roof slopes, one pane a bay
+            for (int i = 0; i < n; i++)
+            {
+                var c0 = a.Lerp(b, i / (float)n);
+                var c1 = a.Lerp(b, (i + 1) / (float)n);
+                foreach (float sd in new[] { -half, half })
+                {
+                    var o = side * sd;
+                    s.Pane([c0 + o + Vector3.Up * (FloorY + 0.3f), c1 + o + Vector3.Up * (FloorY + 0.3f), c1 + o + Vector3.Up * wallTop, c0 + o + Vector3.Up * wallTop], Glass);
+                    s.Pane([c0 + o + Vector3.Up * wallTop, c1 + o + Vector3.Up * wallTop, c1 + Vector3.Up * ridge, c0 + Vector3.Up * ridge], Glass);
+                }
+                // a lamp under the ridge: a lit box (the panes are glass here)
+                s.Box(a.Lerp(b, (i + 0.5f) / n) + Vector3.Up * (ridge - 0.14f), new(0.2f, 0.06f, 0.9f), Lamp, yaw);
             }
         }
         return s.Build();

@@ -24,6 +24,14 @@ uniform vec3 hole_up = vec3(0.0, 1.0, 0.0);
 uniform vec3 hole_east = vec3(1.0, 0.0, 0.0);
 uniform float hole_half = 0.0;
 
+// lamps on the ground (#1942, World/Bodies/GroundLamps.cs): a flood light, a colony's lamps; this shader is unshaded,
+// so a Light3D never reaches it. pos: world xyz and range; dir: a spot's direction and the cosine of its half cone
+// (w 0: all round); col: colour times energy
+uniform int lamp_count = 0;
+uniform vec4 lamp_pos[16];
+uniform vec4 lamp_dir[16];
+uniform vec4 lamp_col[16];
+
 varying vec3 world_normal;
 varying vec3 world_pos;
 
@@ -44,5 +52,14 @@ void fragment() {
 	// plain Lambert: the relief reads by its slopes, and a wall turned from the sun falls to the floor (the Moon's
 	// shadows are black, there is no sky to fill them)
 	float lambert = max(dot(normalize(world_normal), normalize(sun_dir)), 0.0);
-	ALBEDO = col * (night_floor + sun_strength * lambert);
+	vec3 lamps = vec3(0.0);
+	for (int i = 0; i < lamp_count; i++) {
+		vec3 to = world_pos - lamp_pos[i].xyz;
+		float d = length(to);
+		float fall = clamp(1.0 - d / lamp_pos[i].w, 0.0, 1.0);
+		vec3 l = to / max(d, 0.001);
+		float cone = lamp_dir[i].w > 0.0 ? smoothstep(lamp_dir[i].w, mix(lamp_dir[i].w, 1.0, 0.25), dot(l, lamp_dir[i].xyz)) : 1.0;
+		lamps += lamp_col[i].rgb * fall * fall * cone * max(dot(normalize(world_normal), -l), 0.0) * 0.1;
+	}
+	ALBEDO = col * (night_floor + sun_strength * lambert + lamps);
 }

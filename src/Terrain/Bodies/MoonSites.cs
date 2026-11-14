@@ -7,7 +7,7 @@ namespace UnitSport.Terrain.Bodies;
 // Plain C# (linked into the unit tests).
 
 /// <summary>What a site is, for the log and the check.</summary>
-public enum MoonSiteKind : byte { Apollo, Lander, Rover, Impact, Wreck, Flag, Colony }
+public enum MoonSiteKind : byte { Apollo, Lander, Rover, Impact, Wreck, Flag, Colony, Industry }
 
 /// <summary>A model a site places (each one in the model viewer, <c>World/Moon/MoonSiteMeshes</c>).</summary>
 public enum MoonPart : byte
