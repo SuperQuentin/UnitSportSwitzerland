@@ -21,7 +21,8 @@ namespace UnitSport.World.Bodies;
 ///
 /// <para>
 /// It fails on: no crossing, or more than one; a shift on the crossing's frame (a crossing moves nothing); the camera's
-/// place, counted from the anchor's body, jumping more than its own motion and a metre between two frames (past 1,000 km
+/// place, counted from the anchor's body, jumping more than its own motion (and a millionth of it, the float step's
+/// rounding) and a metre between two frames (past 1,000 km
 /// up the origin follows the camera in 3D, <see cref="OriginShifter.DeepM"/>, or the float alone is a metre off); arriving
 /// counted from any body but the Moon; taking more than <see cref="MaxSeconds"/> of game time to arrive; on the ground,
 /// the walker not standing within a metre and a half of the ground's height, sinking a metre under it, not walking
@@ -33,8 +34,33 @@ public partial class MoonCheck : Node
 {
     public static bool Requested => CmdArgs.Has("--mooncheck");
 
-    /// <summary>The trip must take less than this, game seconds (the plan: about a minute).</summary>
-    public const double MaxSeconds = 120;
+    /// <summary>
+    /// The body flown to: <c>--mooncheck</c> the Moon, <c>--mooncheck mars</c> (#1853) any landable body by name. To Mars the
+    /// anchor goes from the Earth to the Sun and on to Mars (two crossings), the camera at the speed of light most of the
+    /// way.
+    /// </summary>
+    public static CelestialBody Target { get; } = CmdArgs.Value("--mooncheck", notFlag: true) is { } name
+        ? CelestialBody.All.ToArray().First(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+        : CelestialBody.Moon;
+
+    /// <summary>The trip must take less than this, game seconds (the Moon: about a minute; Mars: light's time, ~15 min).</summary>
+    public static double MaxSeconds => Target.Parent == BodyId.Earth ? 120 : 1800;
+
+    /// <summary>The spheres crossed from the Earth to the target: up to their common parent, then down.</summary>
+    public static int Crossings
+    {
+        get
+        {
+            int up = 0;
+            for (BodyId? a = BodyId.Earth; a is { } x; a = CelestialBody.Of(x).Parent, up++)
+            {
+                int down = 0;
+                for (BodyId? b = Target.Id; b is { } y; b = CelestialBody.Of(y).Parent, down++)
+                    if (x == y) return up + down;
+            }
+            return -1;
+        }
+    }
 
     /// <summary>How far the walker sprints, metres: past <see cref="BodyGround.MoveM"/>, so a new square comes under it.</summary>
     public const double WalkM = 120;
@@ -46,7 +72,7 @@ public partial class MoonCheck : Node
     private readonly System.Func<BodyGround?> _ground;
     private Camera3D? _cam;
     private Stage _stage;
-    private int _crossings, _crossedShifts = -1, _shiftsAtCross, _builtAtWalk;
+    private int _crossings, _crossedShifts, _shiftsAtCross = -1, _builtAtWalk;
     private double _t, _flying, _worstJump, _stageT, _lowest = double.MaxValue, _apex, _jumpFrom;
     private (BodyId Body, DVec3 P, SkyMoment Sky, double Step)? _last;
     private DVec3 _target, _walkFrom;
@@ -116,20 +142,43 @@ public partial class MoonCheck : Node
         }
     }
 
+    /// <summary>
+    /// <c>--fromorbit</c>: no flight, the camera starts 100 km over the target where the sun is 45° up (the anchor relabelled
+    /// there, as <c>--bodyshot</c> does) and goes straight to the landing, the walk and the jump: the ground's check in a
+    /// minute, whatever the body's distance.
+    /// </summary>
+    public static bool FromOrbit => CmdArgs.Has("--fromorbit");
+
     private void Start()
     {
         _cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as Camera3D;
         if (_cam == null || OriginShifter.Instance is not { } shifter) { Finish("no spectator camera or shifter"); return; }
-        // 400 km over the point right under the Moon now: the way out is straight up, never through the Earth
-        var moon = Frames.Convert(BodyId.Moon, DVec3.Zero, BodyId.Earth, SkyClock.Now);
-        var under = Ellipsoid.Wgs84.ToGeodetic(moon.AsEcef);
+        if (FromOrbit)
+        {
+            var sky = SkyClock.Now;
+            var toSun = Frames.Convert(BodyId.Sun, DVec3.Zero, Target.Id, sky);
+            double sunLat = Math.Atan2(toSun.Z, Math.Sqrt(toSun.X * toSun.X + toSun.Y * toSun.Y)) * 180 / Math.PI;
+            double sunLon = Math.Atan2(toSun.Y, toSun.X) * 180 / Math.PI;
+            var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - 45, 360), 100_000);
+            _origin.Rebase(Target.Id, sky);
+            shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(Target.Shape.ToEcef(place), Target.Id));
+            _cam.MakeCurrent();
+            _cam.GlobalPosition = Vector3.Zero;
+            _crossings = Crossings;
+            Log($"from orbit: 100 km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun 45° up");
+            Arrive(Target.Id, Target.Id, 100_000);
+            return;
+        }
+        // 400 km over the point right under the target now: the way out is straight up, never through the Earth
+        var target = Frames.Convert(Target.Id, DVec3.Zero, BodyId.Earth, SkyClock.Now);
+        var under = Ellipsoid.Wgs84.ToGeodetic(target.AsEcef);
         var at = Ellipsoid.Wgs84.ToEcef(under with { H = 400_000 });
-        Log($"the Moon is over {under.LatDeg:F1}, {under.LonDeg:F1}");
+        Log($"{Target.Name} is over {under.LatDeg:F1}, {under.LonDeg:F1}, {target.Length / 1e9:F2} million km away; {Crossings} crossing(s) to make");
         shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(at));
         _cam.MakeCurrent();
         _cam.GlobalPosition = Vector3.Zero;
         Next(Stage.Fly);
-        Log("off from 400 km up, the Moon overhead");
+        Log($"off from 400 km up, {Target.Name} overhead");
     }
 
     /// <summary>The camera's place, body-fixed in the anchor's body.</summary>
@@ -150,15 +199,17 @@ public partial class MoonCheck : Node
         var sky = SkyClock.Now;
         var p = Here(axes, _cam.GlobalPosition);
 
-        if (_crossings > 0 && _crossedShifts < 0)
+        // a crossing moves nothing: no shift in the frame it came in (each crossing's own)
+        if (_shiftsAtCross >= 0)
         {
-            _crossedShifts = (OriginShifter.Instance?.ShiftCount ?? 0) - _shiftsAtCross;
+            _crossedShifts += (OriginShifter.Instance?.ShiftCount ?? 0) - _shiftsAtCross;
+            _shiftsAtCross = -1;
         }
 
-        // where it heads: 100 km over the Moon on the line from its centre to the camera
-        var moonHere = Frames.Convert(BodyId.Moon, DVec3.Zero, axes.Body, sky);
-        var away = (p - moonHere).Normalized();
-        var target = moonHere + away * (CelestialBody.Moon.Shape.A + 100_000);
+        // where it heads: 100 km over the target on the line from its centre to the camera
+        var targetHere = Frames.Convert(Target.Id, DVec3.Zero, axes.Body, sky);
+        var away = (p - targetHere).Normalized();
+        var target = targetHere + away * (Target.Shape.A + 100_000);
         var toTarget = target - p;
         double left = toTarget.Length;
         var (nearest, distance) = Frames.NearestSurface(axes.Body, p, sky);
@@ -171,13 +222,14 @@ public partial class MoonCheck : Node
         {
             var before = Frames.Convert(last.Body, last.P, axes.Body, last.Sky);
             double moved = (p - before).Length;
-            double allowed = last.Step + 1;
+            // the camera's own step is applied in floats: 5,000 km a frame at light speed rounds to half a metre
+            double allowed = last.Step * (1 + 1e-6) + 1;
             _worstJump = Math.Max(_worstJump, moved - allowed);
             if (moved > allowed) _fail ??= string.Create(CultureInfo.InvariantCulture,
                 $"the camera's place jumped {moved:F1} m in a frame ({allowed:F1} m its own step) at {_flying:F1} s, counted from {axes.Body}");
         }
         _last = (axes.Body, p, sky, step);
-        if ((int)(_flying / 5) != (int)((_flying - delta) / 5))
+        if ((int)(_flying / (MaxSeconds / 24)) != (int)((_flying - delta) / (MaxSeconds / 24)))
             Log($"{_flying:F0} s: {left / 1000:F0} km to go, {distance / 1000:F0} km over {nearest}, {speed / 1000:F0} km/s, step {step / 1000:F1} km, camera at {_cam.GlobalPosition}, counted from {axes.Body}");
 
         if (left < 1000)
@@ -187,15 +239,15 @@ public partial class MoonCheck : Node
         }
         _cam.GlobalPosition += World(axes, toTarget / left) * (float)step;
         if (_flying > MaxSeconds) Finish(string.Create(CultureInfo.InvariantCulture,
-            $"still {left / 1000:F0} km from lunar orbit after {_flying:F0} s"));
+            $"still {left / 1000:F0} km from {Target.Name}'s orbit after {_flying:F0} s"));
     }
 
     private void Arrive(BodyId body, BodyId nearest, double distance)
     {
         Log($"arrived after {_flying:F1} s: counted from {body}, {distance / 1000:F0} km over {nearest}, {_crossings} crossing(s), {_crossedShifts} shift(s) on the crossing's frame, the worst frame {Math.Max(0, _worstJump):F1} m past its own motion");
         if (_fail != null) { Finish(_fail); return; }
-        if (_crossings != 1) { Finish($"{_crossings} crossings (one wanted)"); return; }
-        if (body != BodyId.Moon) { Finish($"counted from {body} at the Moon"); return; }
+        if (_crossings != Crossings) { Finish($"{_crossings} crossings ({Crossings} wanted)"); return; }
+        if (body != Target.Id) { Finish($"counted from {body} at {Target.Name}"); return; }
         if (_crossedShifts > 0) { Finish($"{_crossedShifts} shift(s) came with the crossing"); return; }
         Shot("arrival");
         if (_ground() is not { } ground || _cam == null || _origin.Frame.Axes is not { } axes)
@@ -208,7 +260,7 @@ public partial class MoonCheck : Node
         var n = ground.Heights.NormalUnder(Here(axes, _cam.GlobalPosition).AsEcef);
         var g = ground.Heights.Ground(n);
         _target = new DVec3(g.X + n.X * 150, g.Y + n.Y * 150, g.Z + n.Z * 150);
-        var geo = CelestialBody.Moon.Shape.ToGeodetic(g);
+        var geo = Target.Shape.ToGeodetic(g);
         Log($"down to 150 m over the ground at {geo.LatDeg:F2}, {geo.LonDeg:F2} ({geo.H:F0} m)");
         Next(Stage.Descend);
     }
@@ -252,7 +304,7 @@ public partial class MoonCheck : Node
         var ground = _ground()!;
         var p = Here(_origin.Frame.Axes!, me.GlobalPosition).AsEcef;
         var n = ground.Heights.NormalUnder(p);
-        return CelestialBody.Moon.Shape.ToGeodetic(p).H - ground.Heights.At(n);
+        return Target.Shape.ToGeodetic(p).H - ground.Heights.At(n);
     }
 
     private void Stand()
@@ -263,7 +315,7 @@ public partial class MoonCheck : Node
         if (me != null && me.Camera.Current && me.IsOnFloor() && _stageT > 1)
         {
             double over = Over(me);
-            Log($"standing on the Moon after {_stageT:F1} s, {over:F2} m over the ground's height, gravity {BodyGravity.Ground:F2} m/s²");
+            Log($"standing on {Target.Name} after {_stageT:F1} s, {over:F2} m over the ground's height, gravity {BodyGravity.Ground:F2} m/s²");
             if (Math.Abs(over) > 1.5) { Finish(string.Create(CultureInfo.InvariantCulture, $"standing {over:F2} m off the ground's height")); return; }
             Shot("ground");
             _walkFrom = Here(_origin.Frame.Axes!, me.GlobalPosition);
@@ -307,7 +359,7 @@ public partial class MoonCheck : Node
         {
             double rise = _apex - _jumpFrom;
             double want = me.JumpVelocity * me.JumpVelocity / (2 * BodyGravity.Ground);
-            Log($"jumped {rise:F2} m (the Moon's {want:F2} m, the Earth's {me.JumpVelocity * me.JumpVelocity / (2 * CelestialBody.Earth.GroundGravity):F2} m), down after {_stageT:F1} s");
+            Log($"jumped {rise:F2} m ({Target.Name}'s {want:F2} m, the Earth's {me.JumpVelocity * me.JumpVelocity / (2 * CelestialBody.Earth.GroundGravity):F2} m), down after {_stageT:F1} s");
             Finish(Math.Abs(rise - want) <= 0.25 * want ? null : string.Create(CultureInfo.InvariantCulture, $"the jump rose {rise:F2} m, not {want:F2} m"));
             return;
         }
