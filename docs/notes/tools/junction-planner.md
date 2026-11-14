@@ -27,7 +27,10 @@ off, `--junctions new` plans and reports without writing.
   5 sidewalk to 1.5 m, 7 the pocket feeding this exit, 7 left pocket, 8 painted bike lane. Size choice (step 6) comes
   first in effect (the user). Room is checked per station against what the transition still holds there (`Stretch`):
   houses 68 m out limit only a long storage. Where the street already reaches past its room (sidewalks to the facades),
-  as far as the street does.
+  as far as the street does. **The street's sidewalk is kept along the transition** (#1879): where the normal section has
+  no sidewalk on a side (it came from a bare end beside a tram) but the street lays one further out, each station's room
+  holds `SidewalkMin` of it (`ArmRoom.FreeLeft/FreeRight`, `StreetSideAlong`); the stage line "fitted along their length"
+  counts the transitions narrowed for it, and `--debug-junction` prints the room per station.
 - **Through riders before turning ones** (the user, Oct 13): where the arriving side has neither a painted bike lane nor a
   path and the straight-on exit carries one on (a departing bike lane or path), the mouth adds a through bike lane (id 115),
   lit or not; never one leading into nothing. At the lights always: every bike lane ends at its advanced line or bike box.
