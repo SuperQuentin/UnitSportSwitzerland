@@ -1,22 +1,23 @@
 # Phone: a foldable in the hands, its screen as the curtain for travel (#889)
 
-- **What**: every player carries a book-fold phone (`src/Phone/`). Out folded, its narrow cover screen
-  has quick actions; opened, the camera dollies onto the square inner screen until it covers the view,
-  and that screen's apps take the input: Map (search, travel), Contacts (online players: go to, bring
+- **What**: every player carries a book-fold phone (`src/Phone/`). The first press takes it out folded, its narrow
+  cover screen has quick actions; the second opens it on the last app used (Home the first time), and the body
+  walks the whole time (#1825: "Folded first, walking everywhere" at the end of this note says how, and replaces
+  the stand-still, dolly-square-on and right-click-is-Back statements below). The inner screen's apps take the input: Map (search, travel), Contacts (online players: go to, bring
   here, party, fight; incoming calls = invites), Activities (opens the existing screen over the phone).
 - **Controls**:
 
   | | Keyboard | Pad | VR |
   |---|---|---|---|
   | take out | `phone` = Up arrow (free on foot; the excavator's boom in a cab) | quick menu (hold Back) › Phone | grip at the left front pocket; wrist menu › Phone |
-  | folded: pick / run | ← → or the wheel / Enter, Space, click | D-pad, stick / A | swipe the fingertip across the cover / tap it, or point the right hand's ray and pull its trigger |
-  | open | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
-  | back / put away | Esc (open: back, then fold), ↓ folded | B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
+  | folded: pick / run | ← → or the wheel / Enter, a digit 1-6, click | D-pad ← →, / A | swipe the fingertip across the cover / tap it, or point the right hand's ray and pull its trigger |
+  | open (on the last app) | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
+  | back / put away | Esc, Backspace, mouse button 4 (open: back, then fold; ↓ folded), hold Esc, a sprint start | B, hold B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
   | camera app: shoot / selfie / zoom | click, Enter / F / wheel | RT / Y / LB RB | the holding hand's trigger / turn the phone's back to your face / the zoom chips on the glass (1×, 2×, 5×) |
   | travel / answer a call | automatic / cover › Answer | same | raise the phone to your eyes (a blink after 3 s) / to your ear |
 
   No pad button is free on foot (D-pad ↑ is the emote wheel), so the pad takes it out from the quick
-  menu. While out it holds `UiFocus`: the body does not walk, items do not fire (`ItemController.UsablePlayer`
+  menu. While out the body walks (#1825) but items do not fire (`ItemController.UsablePlayer`
   is null, `HeldItemId` reads 0). VR (#920, `XR/XrPhone`, plan `docs/plans/phone-vr.md`): held in the real
   left hand (right when left-handed; the aim nodes are already swapped, so the holding controller is
   always `_left`, the grip poses are the real hands), the other index tip is the pointer (ring within
@@ -39,7 +40,8 @@
   half's centre, +Z out of the screens, hinge on the holder's left; the front half turns about it by
   `-π·smoothstep(fold)`. Placed in `FootPlayer.PhoneInHands` from `HandLocal`, turned to the eyes,
   7.5 cm toward them (in front of the fingers).
-- **Camera** (`FootPlayer.Phone.cs`, owner only, after the normal camera): `PhoneLook` eases from the
+- **Camera** (superseded for the folded and open views by #1825, below; the travel curtain, the touch screen and
+  the camera app still use these) (`FootPlayer.Phone.cs`, owner only, after the normal camera): `PhoneLook` eases from the
   normal lens to one high over the right shoulder (0.6 m up, 0.42 out, 0.2 back of the phone, by the
   *body's* facing, not the phone's), its up the phone's long side, FOV 32°; `PhoneCover` eases on to
   square in front of the inner screen at the distance where the screen's width (wide window) or height
@@ -47,7 +49,7 @@
   (set each frame from them, not eased from the last, which the game's FOV easing would fight).
   From first person it borrows third person as a throw does (`StepThrowView`). Past `cover > 0.12`
   the body is seen from the eye (shadow only): the lens passes the face.
-- **Full-screen hand-over**: the inner `SubViewport` is square, as wide as the window; its content is a
+- **Full-screen hand-over** (now only the Travel curtain and touch, #1825): the inner `SubViewport` is square, as wide as the window; its content is a
   centred band of the window's shape (`PhoneScreens.Fit`). At full cover the 3D screen shows exactly
   that band, so the overlay (`TextureRect`, keep aspect covered, layer 30) is the same picture; it fades
   in over 0.15 s to hide the tonemap's colour step. Input goes to the viewport with `PushInput`, mouse
@@ -81,8 +83,7 @@
   the screen through a ray onto the 3D screen (`FootPlayer.PhoneScreenPoint`).
 - **Sway**: the lens follows a smoothed copy of the phone (`_phoneSeen`), so steps and turns show as the
   phone moving; the owner's phone breathes a little and leans up to ~3° toward the cursor.
-- **Walking**: folded, the body walks and looks (no `UiFocus`); the quick actions are on the arrows,
-  Enter and the mouse buttons. Open on an app, `UiFocus` and a visible cursor.
+- **Walking**: see "Folded first, walking everywhere (#1825)": the body walks in every state.
 - **Camera app** (`Page.Camera`, `PhoneState` 3): the arms lift the open phone before the face
   (`ItemArmPose.PhoneRaised`, blend 1..2 over the open pose, `HumanMeshBuilder.ApplyArms`), the backdrop
   goes, the mouse looks (the phone tips with the pitch), the screen shows the back lens (`PhoneScreens.Lens`
@@ -95,9 +96,10 @@
 
 ## Hands on the phone (the second playtest pass)
 
-- **The body stands while the phone is out**: `UiFocus` from taking it out to putting it away, the
-  cursor shows. Every key is the phone's: folded, W / Up open, A D / Left Right pick, Enter / Space / E
-  run, S / Down / Esc put away; open, WASD and the arrows are `ui_*` into the screen (typed as letters
+- **The body stood while the phone was out** (until #1825, which replaced all of this with "the phone never
+  stops the body"): `UiFocus` from taking it out to putting it away, the
+  cursor shows. Every key was the phone's: folded, W / Up open, A D / Left Right pick, Enter / Space / E
+  run, S / Down / Esc put away; open, WASD and the arrows were `ui_*` into the screen (typed as letters
   while a `LineEdit` has the keys), Enter / Space / E press, Esc goes back. The camera app turns the
   view itself from the mouse (`LookYaw` / `LookPitch`, the game's 0.0022 rate over the zoom): the body's
   own look is off under `UiFocus`.
@@ -112,8 +114,8 @@
   shoulder, which is behind the screen) and the hand bends there (`Rig.PointDirR`); `Hand(point)` draws
   the index straight down the hand's middle to exactly that tip, the others curled. WASD plays a 0.24 s
   swipe of the finger across the screen. Keyed to 4 mm in `FootPoseKey.Point`.
-- **Views**: folded, high over the shoulder; open on an app, the same a third closer onto the open
-  phone, the hand working it in view; **only the map** (and Travelling) goes square on: the lens closes
+- **Views** (until #1825: now no app goes square on, see the end of this note): folded, high over the shoulder; open on an app, the same a third closer onto the open
+  phone, the hand working it in view; **only the map** (and Travelling) went square on: the lens closes
   in first (`PhoneCover`), then the world fades to black behind it over 0.4 s (`PhoneBackdrop` set only
   once the cover is 1); a held teleport waits for the black. The **camera app** puts the lens behind the
   raised phone at the eyes (`PhoneCameraApp`, FOV 52°), the phone held upright, level with the horizon
@@ -141,7 +143,7 @@
   still there, else the print's picture without its border (an `AtlasTexture` on `PhotoStore.ImageRect`).
   A light shade lies over a photo wallpaper so the clock reads.
 - **Zoom glides**: the lens's FOV eases to the step picked (`Damp(7)`), the shot taken at the FOV shown.
-- **Selfie, the foldable's way**: in the camera app F / right click / pad Y / the Selfie button turns the
+- **Selfie, the foldable's way**: in the camera app F / pad Y / the Selfie button (not the right click since #1825) turns the
   open phone half round about its middle (`PhoneState` 4, `_phoneTurn` eased on every peer, held 10 cm
   further out): the camera island and the cover screen, which faces the same way once open, face the
   player. The cover stays lit open (`PhoneModel.CoverWhenOpen`) and shows the main camera's view (the
@@ -164,8 +166,7 @@
 - **Back is generic**: `PhoneController.Back` sends any page but Home and Travel up one level (Photo to Photos,
   the rest to Home); only Home folds. A new app can never fold the phone by accident.
 - **Back is visible and has more ways in**: every app page has a `‹` chevron (`PhoneScreens.BackChevron`,
-  pointer-only, `BackPressed`); Backspace and a right click also go back (the camera app keeps the right click
-  for the selfie).
+  pointer-only, `BackPressed`); Backspace also goes back (and since #1825 the mouse's fourth button; the right click no longer does).
 - **Put away from any page**: hold Esc / the pad's B for `StowHoldSeconds` (0.4 s); a tap is still one step back.
   The page hints say so. Not while a text box has the keys, in VR (its own buttons) or on Travel.
 - **Travel can be cancelled** until the jump has run: Esc / B / the Cancel button on the curtain
@@ -206,8 +207,8 @@
 
 - **Camera app buttons**: zoom chips 1x 2x 5x with the current lens lit (`PhoneScreens.SetZoom`, gold chip), a focusable
   shutter and Selfie button. In VR the zoom is the chips only: a right trigger pulled off the phone no longer steps it
-  (`VrZoom` is gone). The selfie key (F, Tab, right click, pad Y) lives in `CameraInput`, so it means nothing on any other
-  page (right click is Back there).
+  (`VrZoom` is gone). The selfie key (F, Tab, pad Y) lives in `CameraInput`, so it means nothing on any other
+  page.
 - **Photos**: Left / Right and LB / RB are previous / next in the viewer (Down / Up reach its two wallpaper buttons;
   `PhoneScreens.StepPhoto`, `‹ ›` buttons and a "n / m" caption); LB / RB page the grid by a screenful of rows
   (`PageGrid`). A sideways swipe in the viewer is previous / next (mouse, finger, VR fingertip), never Back (`Swiped`).
@@ -243,3 +244,57 @@
 
 - **The page hint follows the focus** (`PhoneScreens.FollowFocusHint`, `AcceptVerb`): Enter / A / a tap is named for the control that has the keys ("travel to Leytron", "open Map", "search", a button's own label); the back half of the line is unchanged.
 - **Map recents are saved** in `user://phone_recents.json` (LV95 coordinates of the last three, matched back to the index on load).
+
+## Folded first, walking everywhere (#1825)
+
+- **The rule now: the phone never stops the body.** `PhoneController.Grip` holds `UiFocus` only while a text box in
+  the phone has the keys (the Map's search: letters type, WASD must not walk, the body stands) and on touch (the
+  on-screen controls stay out of the enlarged screen's way, as before). Everything else, WASD, Shift, Space, the
+  sticks, the mouse's look, is the body's: the phone's `_Input` (`Wanted`) consumes only the events it needs and
+  lets the rest go on to `FootPlayer`. It is the camera app's mechanism (#1149) made general.
+- **Two presses**: the first takes it out folded (about 0.17 s: arms 0.1 s, `LookSeconds` 0.12), the second opens it
+  on the last app used this session (`PhoneController.OpenLast`, `_lastApp`; Home the first time; the cover's Open
+  tile does the same) in about 0.22 s (`PhoneModel.UnfoldSeconds` 0.2, `CoverSeconds` 0.2). A digit 1-6 on the
+  cover still runs its tile straight into that app. The arm blend into and out of the phone pose is 0.1 s (was
+  0.18 s), the same on every peer.
+- **Keys** (keyboard and mouse / pad):
+
+  | | folded | open |
+  |---|---|---|
+  | walk, sprint, look | WASD, Shift, left stick; right stick | the same |
+  | the cursor | visible, works the cover | visible, works the screen (click, swipe, wheel) |
+  | look with the mouse | hold the right button | hold the right button |
+  | pick / move on the screen | ← → / D-pad ← → | arrows / D-pad |
+  | press | Enter / A; digits 1-6 run a tile | Enter / A |
+  | open | Up (the `phone` key) / D-pad ↑ | |
+  | back | | Esc, Backspace, the chevron, mouse button 4 / B |
+  | put away | Down, Esc, button 4 / D-pad ↓, B; Esc or B held 0.4 s from any page; a sprint start | hold Esc / B 0.4 s; a sprint start |
+
+  W no longer opens it and S no longer puts it away (they walk); Up and Down do. Space and E are the body's now
+  (jump, use): Enter presses. **What right click lost**: it is no longer Back in the phone and no longer the selfie
+  toggle in the camera app (F, Tab, pad Y and the Selfie button stay); held, it captures the mouse and turns the
+  view (`StartLook` / `EndLook`: the pointer is `MouseCapture.Captured` while held, hidden, and `Input.WarpMouse`
+  puts it back where it was on release).
+- **A text box has the keys**: typing in the search stands the body (`UiFocus`) and nothing reaches the world;
+  Esc or Back leaves it.
+- **Sprint puts it away**: a NEW sprint start (`FootPlayer.SprintIntent`, the rule that holsters an item,
+  `items/inventory`) puts the phone away, from any page of any state. Not on the travel curtain, not in VR.
+- **Pad**: left stick walks, right stick looks, D-pad picks, A presses, B backs, hold B puts away. **A is the phone's
+  while it is out**: no jump with the pad while the phone is folded or open (`FootPlayer`: the jump is dropped when
+  `PhoneState` is 1 or 2 and the last device is a pad; the keyboard's Space still jumps, and in the camera app A
+  still jumps). The D-pad's ↑ is consumed by the phone, so the emote wheel stays closed while it is out.
+- **Views**: no app dollies square onto the screen any more. The game's own third-person lens (`PhoneLook` still
+  lends it to a first-person player) is eased (0.3 s, `PhoneLensSeconds`) to `PhoneFramingView`: just over the
+  shoulder on the holding side, 0.3 m above and a little behind the phone, FOV 65, turned part of the way toward
+  it and tipped by the player's own pitch, so the phone sits in the lower part of the picture with the horizon
+  above it, folded or open; looking up takes it out of the frame. The lens stays on the phone's place while the
+  body walks (no smoothing lag: it was a third of a metre at a walk). The camera app's raised view and the selfie
+  are as before.
+- **The black backdrop stays for the Travel curtain** (and the touch screen, which keeps its enlarged square-on
+  view): a Map pick still holds `Teleporter.Curtain`'s jump until `PhoneBackdropShown` is 1 (`--phonecheck` asserts
+  it runs only then). The body is not locked meanwhile.
+- **Remote peers**: `PhoneState` is unchanged; they see the figure's gait with the folded or open arm pose
+  (`--phonenet`: the copy holds the phone the whole walk, its position advances, no frame jumps it).
+- **Checks**: `--phonecheck` (timings, last app, digit, walk folded / open / on the Map, held right button and its
+  cursor, button 4, typing stands the body, sprint puts it away, the curtain still holds the jump; screenshots
+  `test_output/phone_1825/`), `--phonevrcheck`, `tools/phonenetcheck.sh`.
