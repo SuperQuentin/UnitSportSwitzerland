@@ -222,7 +222,8 @@ public partial class OriginShifter : Node
     private void EarthReanchor(Vector3 at, double altitude)
     {
         if (CrossBodies && CrossSphere(at)) return;
-        bool space = Curvature.SpaceRegime(InSpace, altitude);
+        // the anchor body's own Space band (#1850): the Earth's 60/50 km, the Moon's 10/8 km
+        bool space = CelestialBody.Of(_origin.Body).SpaceRegime(InSpace, altitude);
         if (space != InSpace)
         {
             InSpace = space;
@@ -233,18 +234,20 @@ public partial class OriginShifter : Node
         Turned = mode.Rotates;
         double threshold = _thresholdGiven ? ThresholdM : mode.ThresholdM;
         // deep space (#1850): past DeepM over the anchor's body the origin rises with the camera and follows it in all
-        // three directions, or a flight out to the Moon leaves the camera 380,000 km up a float (a metre a step). Back
-        // under it, the first move brings the origin down to the ground's level again (world Y the altitude), at once
+        // three directions, or a flight out to the Moon leaves the camera 380,000 km up a float (a metre a step). It
+        // stands half a threshold under the camera, so world Y stays between 0 and the threshold, never in the
+        // interiors' band under -2 km (InteriorManager reads raw Y). Back under DeepM, the first move brings the origin
+        // down to the ground's level again (world Y the altitude), at once
         bool deep = InSpace && mode.Rotates && altitude > DeepM;
         bool lower = !deep && _risen;
-        double reach = deep ? at.Length() : new Vector2(at.X, at.Z).Length();
-        if (reach <= threshold && !lower) return;
+        bool move = deep ? at.Length() > threshold || at.Y < 0 : new Vector2(at.X, at.Z).Length() > threshold;
+        if (!move && !lower) return;
         if (_origin.Frame.Axes is not { } axes) return;
 
         var (e, n) = _origin.ToLv95(at);
         if (mode.Rotates)
         {
-            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, deep ? altitude : 0));
+            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, deep ? altitude - threshold / 2 : 0));
             _risen = deep;
             return;
         }
