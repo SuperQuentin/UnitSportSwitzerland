@@ -424,7 +424,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>A focus of the streaming, unless it is in Space (<see cref="CameraCeilingM"/>): then <paramref name="lifted"/>.</summary>
     private void AddFocus(Vector3 at, ref bool lifted)
     {
-        if (Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
+        // off the Earth (#1848: the anchor on the Moon) no Earth leaf is wanted
+        if (Origin.Body != Core.BodyId.Earth || Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
         else _foci.Add(Origin.ToEcef(at));
     }
 

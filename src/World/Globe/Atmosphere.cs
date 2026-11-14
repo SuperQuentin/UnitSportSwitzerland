@@ -91,8 +91,12 @@ public partial class Atmosphere : Node3D
             _realSun = false;
             if (DayNight.Instance?.Sun is { } light && IsInstanceValid(light)) _fixedSun = light.GlobalBasis.Z.Normalized();
         }
+        // the Earth-fixed direction into the axes' own body (#1848): the anchor may be counted from the Moon
+        var sunDir = _sunEcef;
+        if (_realSun && axes.Body != BodyId.Earth)
+            sunDir = Frames.ConvertDirection(BodyId.Earth, new DVec3(_sunEcef.X, _sunEcef.Y, _sunEcef.Z), axes.Body, SkyClock.Now).AsEcef;
         var sun = _realSun
-            ? new Vector3((float)FrameAxes.Dot(_sunEcef, axes.X), (float)FrameAxes.Dot(_sunEcef, axes.Y), (float)FrameAxes.Dot(_sunEcef, axes.Z))
+            ? new Vector3((float)FrameAxes.Dot(sunDir, axes.X), (float)FrameAxes.Dot(sunDir, axes.Y), (float)FrameAxes.Dot(sunDir, axes.Z))
             : _fixedSun;
         if (_sunWritten && sun == _trueSun) return _trueSun;
         _sunWritten = true;
@@ -104,17 +108,20 @@ public partial class Atmosphere : Node3D
     {
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
         var c = cam.GlobalPosition;
-        float space = Globe.Present ? SpaceAt(Origin.AltitudeOf(c)) : 0;
+        // on another body (#1848: the Moon has no air) the camera is in space whatever its height, and the Earth's air
+        // shell is not drawn round that body
+        bool home = Origin.Body == BodyId.Earth;
+        float space = !home ? 1f : Globe.Present ? SpaceAt(Origin.AltitudeOf(c)) : 0;
         // the globe's sun at every height the globe draws, in the axes it is placed in this frame (the
         // atmosphere runs after the globe, which places its tiles again at a re-anchor)
-        var axes = Globe.Axes ?? Origin.EcefAxes;
+        var axes = !home && Origin.Frame.Axes is { } there ? there : Globe.Axes ?? Origin.EcefAxes;
         var sun = TrueSun(axes);
         Space = space;
         DimSky(space);
         // the stars by day up here (sky_point.gdshader)
         if (space != _space) RenderingServer.GlobalShaderParameterSet(WorldSpace, space);
-        _shell.Visible = space > 0;
-        if (space <= 0)
+        _shell.Visible = space > 0 && home;
+        if (space <= 0 || !home)
         {
             _space = space;
             return;
