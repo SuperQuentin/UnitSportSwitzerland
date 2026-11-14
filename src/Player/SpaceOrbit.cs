@@ -62,15 +62,6 @@ public sealed class SpaceOrbit
     /// <summary>Seconds the orbit has been stepped, summed in doubles (the orbit check times its period by it).</summary>
     public double Seconds { get; private set; }
 
-    /// <summary>The shared sim time (<see cref="SpacePlace.SimTime"/>) the orbit was last stepped to; NaN below the regime.</summary>
-    private double _steppedTo = double.NaN;
-
-    /// <summary>The most sim time one step catches up, s: past it the clock jumped (a resync, a pause), and the orbit takes only that.</summary>
-    private const double MaxCatchUp = 5.0;
-
-    /// <summary>The longest single integration step, s.</summary>
-    private const double MaxSubstep = 1.0 / 30.0;
-
     /// <summary>The next step goes straight to the orbit's place, however far: a set orbit, not a contact.</summary>
     private bool _jump;
 
@@ -118,7 +109,6 @@ public sealed class SpaceOrbit
             _expectedIn = null;
             if (Orbit != null) GD.Print(FormattableString.Invariant($"[{_tag}] out of orbit at {place.Altitude / 1000:F1} km"));
             Orbit = null;
-            _steppedTo = double.NaN;
             return null;
         }
         // the anchor crossed into another body's sphere of influence (#1851): the orbit goes with it
@@ -150,12 +140,6 @@ public sealed class SpaceOrbit
             // into Space, or a contact moved the body: its place and velocity are the truth
             s = Core.Orbit.FromEcef(earth, here, place.Frame.EcefDirection(place.At, bodyVelocity), angle);
         }
-        // the orbit's own time: the shared sim clock since the last step, the one the Earth turns by (place.SimTime), not
-        // this body's physics step. A loaded client drops physics time (a frame longer than the engine's catch-up), and an
-        // orbit stepped by dt fell behind on its track, 7.7 km for each second lost: two saucers put on one orbit together
-        // flew kilometres apart, each on its own client's clock (#1869). A set orbit, or one just entered, starts on dt.
-        double elapsed = _jump || double.IsNaN(_steppedTo) ? dt : Math.Clamp(place.SimTime - _steppedTo, 0, MaxCatchUp);
-        _steppedTo = place.SimTime;
         _jump = false;
 
         var thrust = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, thrustWorld), angle);
@@ -166,11 +150,9 @@ public sealed class SpaceOrbit
             var (_, air) = Core.Orbit.ToEcef(earth, s, angle);
             thrust += Core.Orbit.ToEci(air * (-0.5 * rho * air.Length / ballisticCoefficient), angle);
         }
-        // in steps no longer than a physics tick at 30 Hz: a catch-up after a hitch stays as precise as the steps around it
-        int steps = (int)Math.Ceiling(elapsed / MaxSubstep);
-        for (int i = 0; i < steps; i++) s = Core.Orbit.Step(earth, s, thrust, elapsed / steps);
-        Seconds += elapsed;
-        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.Spin * elapsed);
+        s = Core.Orbit.Step(earth, s, thrust, dt);
+        Seconds += dt;
+        var (r, v) = Core.Orbit.ToEcef(earth, s, angle + earth.Spin * dt);
         Orbit = s;
 
         var target = place.Frame.FromEcef(r.AsEcef);
