@@ -38,3 +38,7 @@
 - Checks: model viewer `Terrain / Roof` (hipped, terraced row with a taller middle house, an equal pair, lean-to) and `Terrain / Building`
   in `--style cartoon` and `ps1`; `--zfightcheck` (none of them fights); PS1 town shots are
   pixel-identical before and after (birds aside).
+- **Solids end on their walls** (#1832): the overhang is the slab's job, never the solid's. The
+  generated world's gable roofs (`ProceduralWorld.Solid`) used to carry their own one-sided 0.5 m
+  lip; the slab went on past it and the sky showed through the lip from below. A new building
+  source keeps its roof edges on the wall line too. PS1 (Low) then has no overhang on them.
