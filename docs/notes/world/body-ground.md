@@ -41,6 +41,13 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   (Mars' ground is kilometres under its reference).
 - **Earth-only systems off the Earth**: guard on `Origin.Body` (`Traffic.RebuildIfMoved`, `DormantVehicles`), or a
   Moon place names an Earth tile and fills it.
+- **The bodies' relief families under their data** (#1853, #1854, `Terrain/Bodies/SurfaceProfile`, added by
+  `BodyHeights` with the craters): Mars' transverse dunes (120 m apart, 5 m, in sand fields over a third of the ground),
+  Titan's equatorial sand seas (2 km apart, 90 m, within 30° of the equator), Europa's double ridges (two families of
+  lineaments, 150 and 60 m) and cracks, Ganymede's grooved lanes (2.5 km, 120 m), Io's and Venus' lava-flow lobes (12 and
+  8 m steps). Waves of one direction per cell blended over eight cells (their phase from the body's centre in a constant
+  direction: no stretch). In the near and medium squares only: the far globe stays the data's, the squares' blend band
+  easing the relief in (km-scale features from orbit would be baked into the pyramid: a follow-up).
 - **Boulders round fresh craters** (#1849, `Terrain/Bodies/BoulderField`, `World/Bodies/BodyBoulders`): the craters of the
   `CraterField` 10 m and up and fresh (depth over diameter: `CraterField.Freshness` ≥ 0.55, ~7 % of them) throw
   0.3 m to D/15 boulders from the rim to two radii (0.3 a metre of diameter when fully fresh, most small), a function of
