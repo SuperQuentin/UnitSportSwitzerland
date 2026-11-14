@@ -36,6 +36,9 @@ judge re-anchors through one helper.
   (no `--to`: one road, flat out, the quick row on `hairpin`). Stuck 15 s: the place is logged (`blocked:`, with the
   route's heights and roads, a picture when windowed) and the drive planned again round it (up to 8; `--avoid E,N;..`
   gives places up front). Fails on a stall (60 s), a fall, out of the car, no way, the route ending short, a jump.
+  A fall is under the ground's height by 1 m **with no floor 2 m beneath** (`FloorBelow`, #1930): `TryGetHeight` is the raw
+  terrain's, and the road blend cuts streets metres under it (a Lane in a 1.1 m cutting south of Place des Nations read
+  as a fall), as the game's own safety nets judge it.
   A start over a bridge sets the car on the deck, not on the ground under it (#1759 was the car set down 7 m under the
   A1's deck at Bellevue, wedged by the abutment). A dead stop (over 4 m/s lost in a quarter second) logs `jolt:` each
   tick, with the car's height over the ground and every contact (body, offset, normal): a roof contact with a normal
