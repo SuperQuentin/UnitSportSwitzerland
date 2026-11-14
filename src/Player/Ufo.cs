@@ -159,7 +159,7 @@ public sealed class Ufo : Flyer, ISpacecraft
     public double OrbitSeconds => Space.Seconds;
 
     /// <summary>Puts the craft on <paramref name="state"/> (an inertial orbit) from its next step: <c>/orbit</c>, a probe, a bot.</summary>
-    public void SetOrbit(Core.OrbitState state) => Space.Set(state);
+    public void SetOrbit(Core.OrbitState state, Core.CelestialBody? round = null) => Space.Set(state, round);
 
     /// <summary>
     /// One step in the Space regime (<see cref="SpaceOrbit.Step"/>): the orbit under GM/r², the pilot's thrust
