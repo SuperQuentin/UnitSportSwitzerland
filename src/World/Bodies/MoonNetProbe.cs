@@ -32,12 +32,24 @@ public partial class MoonNetProbe : ChatProbe
     /// <summary>Where on the Moon: the Apollo 15 site (lit on 2027-07-15).</summary>
     private const string Site = "moon 26.13 3.63 4";
 
-    public MoonNetProbe(ItemController items) : base(items, "moonnet", "MN") { }
+    public MoonNetProbe(ItemController items) : base(items, "moonnet", "MN", "moonnet_") { }
+
+    /// <summary>In a window (<c>WINDOWED=1</c>): the view saved as <c>test_output/moonnet_&lt;role&gt;_&lt;name&gt;.png</c>, facing <paramref name="face"/> first.</summary>
+    private async Task Picture(string name, Node3D? face = null)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        if (face != null && Me is { } me && IsInstanceValid(face))
+        {
+            var d = face.GlobalPosition - me.GlobalPosition;
+            me.LookYaw = Mathf.Atan2(-d.X, -d.Z);
+            me.LookPitch = -0.15f;
+        }
+        await Seconds(1.0);
+        GD.Print($"{Log} picture {Shot(_role + "_" + name)}");
+    }
     public MoonNetProbe() : this(null!) { }
 
     protected override void Fail(string why) => Expect(false, why);
-
-    private bool _jump;
 
     public override async void _Ready()
     {
@@ -57,7 +69,7 @@ public partial class MoonNetProbe : ChatProbe
         finally
         {
             TelescopeView.Current?.Close();
-            if (Me is { } me) me.FootActions = null;
+            Input.ActionRelease(PlayerInput.Jump);
             await Finish(3);
         }
     }
@@ -132,11 +144,18 @@ public partial class MoonNetProbe : ChatProbe
         foreach (var old in placed.All.Values.Where(o => o.Kind == PlacedKind.Telescope).ToList()) placed.RequestRemove(old.Id);
         await Until(() => placed.All.Values.All(o => o.Kind != PlacedKind.Telescope), 5);
         var before = placed.All.Keys.ToHashSet();
+        // both join on one spot: 8 m west of A first, so A never stands where the tripod goes
+        var start = me.GlobalPosition;
+        await WalkUntil(me, new Vector3(-1, 0, 0), () => me.GlobalPosition.DistanceTo(start) > 8, 10);
         _items.Inventory.Add(ItemId.Telescope, 1);
         int slot = SlotOf(ItemId.Telescope);
-        me.LookYaw = 0f;
+        me.LookYaw = Mathf.Pi / 2;   // west, away from A
         me.LookPitch = -0.6f;
-        await Until(() => FlagGhost.Aim(me, Placeables.ForItem(ItemId.Telescope)) is { Kind: FlagAimKind.Plant, Valid: true }, 2);
+        if (!await Until(() => FlagGhost.Aim(me, Placeables.ForItem(ItemId.Telescope)) is { Kind: FlagAimKind.Plant, Valid: true }, 6))
+        {
+            Fail($"no place for the telescope in front of me ({FlagGhost.Aim(me, Placeables.ForItem(ItemId.Telescope))})");
+            return false;
+        }
         _items.UseSlot(me, slot);
         if (!await Until(() => placed.All.Values.Any(o => o.Kind == PlacedKind.Telescope && !before.Contains(o.Id)), 6))
         {
@@ -180,6 +199,7 @@ public partial class MoonNetProbe : ChatProbe
         GD.Print(FormattableString.Invariant($"{Log} label \"{labelled.Text}\" {fromMiddle:F1} px from the eyepiece's middle"));
         Expect(fromMiddle < 4, FormattableString.Invariant($"the lock holds A in the middle ({fromMiddle:F1} px)"));
         Expect(labelled.Text.Contains("Moon"), "the label names the Moon");
+        await Picture("telescope");
         if (DayNight.Instance?.Sky?.Moon is { } moonDir)
         {
             double deg = Mathf.RadToDeg(labelled.Direction.AngleTo(moonDir.Normalized()));
@@ -211,8 +231,9 @@ public partial class MoonNetProbe : ChatProbe
         if (!await Until(() => ground.Covers(cam.GlobalPosition), 30)) { Fail("no near ground under the camera after 30 s"); return false; }
         world.ToggleMode();
         if (!await Until(() => Me is { } m && m.Origin?.Body == BodyId.Moon && m.IsOnFloor(), 30)) { Fail("never stood on the Moon"); return false; }
+        bool published = await Until(() => Me!.NetGlobal.Body == BodyId.Moon, 3);
         GD.Print($"{Log} on the Moon: anchor body {Origin!.Body}, published {Me!.NetGlobal.Body}");
-        Expect(Me!.NetGlobal.Body == BodyId.Moon, "my published place is on the Moon");
+        Expect(published, "my published place is on the Moon");
         return true;
     }
 
@@ -231,6 +252,7 @@ public partial class MoonNetProbe : ChatProbe
         float drawn = other.GlobalPosition.DistanceTo(Origin!.ToWorld(other.NetGlobal));
         GD.Print(FormattableString.Invariant($"{Log} {Other} drawn {drawn:F2} m from its published place, {other.GlobalPosition.DistanceTo(me.GlobalPosition):F1} m from me"));
         Expect(drawn < 1, FormattableString.Invariant($"{Other}'s copy within 1 m of its place ({drawn:F2} m)"));
+        await Picture("other", other);
 
         // A moves first, then B (each watches the other)
         if (_role == "A") await Move(me);
@@ -246,12 +268,12 @@ public partial class MoonNetProbe : ChatProbe
         await WalkUntil(me, new Vector3(0, 0, -1), () => me.GlobalPosition.DistanceTo(start) > 15, 20);
         await Seconds(0.5);
         Say("jumping");
-        me.FootActions = () => (_jump, false, false);
-        _jump = true;
-        await Until(() => !me.IsOnFloor(), 2);
-        _jump = false;
+        // the own player reads its keys (FootActions is a bot's seam): the jump action pressed, then let go
+        Input.ActionPress(PlayerInput.Jump);
+        bool left = await Until(() => !me.IsOnFloor(), 2);
+        Input.ActionRelease(PlayerInput.Jump);
+        Expect(left, "my jump left the ground");
         await Until(() => me.IsOnFloor(), 15);
-        me.FootActions = null;
         Say("moved");
     }
 
@@ -296,6 +318,7 @@ public partial class MoonNetProbe : ChatProbe
         foreach (var b in BotCopies().Where(b => b.NetGlobal.Body == BodyId.Moon))
             GD.Print(FormattableString.Invariant($"{Log} bot {b.Name} {Over(ground, b):F2} m over the Moon's ground, {b.GlobalPosition.DistanceTo(me.GlobalPosition):F0} m from me"));
         Expect(stood, "the bots stand on the Moon's ground");
+        if (stood) await Picture("bots", BotCopies().Where(b => b.NetGlobal.Body == BodyId.Moon).OrderBy(b => b.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault());
     }
 
     /// <summary>A body's feet over the ground's heights under it, metres.</summary>

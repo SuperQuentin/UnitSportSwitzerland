@@ -260,7 +260,8 @@ public readonly record struct GlobalPos
     /// <summary>The square of <see cref="HorizontalDistanceTo"/>, for comparisons that skip the root.</summary>
     public double HorizontalDistanceSquaredTo(GlobalPos other)
     {
-        Same(other);
+        // two bodies (#1852): never near; a distance across them is no arithmetic, the frame tree's (In)
+        if (other._body != _body) return double.PositiveInfinity;
         double dx = other._x - _x, dy = other._y - _y, dz = other._z - _z;
         var (ux, uy, uz) = Normal(_x, _y, _z, _body);
         var (vx, vy, vz) = Normal(other._x, other._y, other._z, _body);
@@ -288,10 +289,14 @@ public readonly record struct GlobalPos
         return (gx / l, gy / l, gz / l);
     }
 
-    /// <summary>The straight-line distance to <paramref name="other"/> (the chord through the Earth, metres).</summary>
+    /// <summary>
+    /// The straight-line distance to <paramref name="other"/> (the chord through the Earth, metres); infinite to a place on
+    /// another body (#1852: "is it near" asked by a server with players on the Earth and the Moon is "no").
+    /// </summary>
     public double DistanceTo(GlobalPos other)
     {
-        Same(other);
+        // two bodies (#1852): never near, as for a level distance
+        if (other._body != _body) return double.PositiveInfinity;
         double dx = other._x - _x, dy = other._y - _y, dz = other._z - _z;
         return System.Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }

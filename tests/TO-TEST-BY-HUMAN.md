@@ -52,6 +52,15 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Online between bodies ([#1852](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1852))
+
+A server and two clients, all with `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`, the server with `--admin-password`.
+
+- [ ] Player A flies the spectator to the Moon (or `/goto moon 26.13 3.63 4` as admin), down to the ground, T → standing on the Moon; player B on the Earth sets a telescope up, looks through it and steps through the target menu (] / D-pad →) past the planets → "A (Moon)" is listed, the lock swings to the Moon and A's label sits on its disc with the name, "Moon" and ~400,000 km. Same with the pad.
+- [ ] B flies there too and steps in beside A → each sees the other walk, run and jump (six times as high) with no stutter; name tags over the heads.
+- [ ] As admin on the Moon, `/bot add 3` → the bots stand and wander on the Moon's ground, never sinking or floating; they jump high.
+- [ ] In VR, through the telescope: no labels yet (known); the target menu still lists A.
+
 ## The colonies' lights from afar ([#1946](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1946))
 
 - [ ] In the shuttle in a 100 km lunar orbit (`/orbit 100` on the Moon), over the night side → the staffed colonies show as small clusters of warm light (Artemis Base with its runway's line), none on the day side; they fade out as you come down within ~10 km and the colony itself takes over, with no jump.

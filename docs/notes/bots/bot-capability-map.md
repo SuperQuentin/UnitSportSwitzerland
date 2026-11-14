@@ -21,6 +21,7 @@ Phases are those of #837: 2 = `BrBrain` on foot, 3 = vehicles, 4 = squads.
 | Capability | Seam | Server path | Sense | Skill | Status |
 |---|---|---|---|---|---|
 | walk, run | `WalkControls` (wish, run) | the body's physics on the server's collision | its own position | `MoveTo` (phase 2) | ok |
+| walk on another body (#1852) | `WalkControls`, `FootActions` (the jump) | the body's physics in the server's region on that body: `ServerBodyGround` (the clients' near square from the same heights), the body's gravity (`FootPlayer.Gravity` follows the region) | its own position (`Global` on that body) | — | ok: `/bot add` by a player on the Moon spawns there (`tools/moonnetcheck.sh`); the brain's other senses are the Earth's (gap) |
 | jump, crouch, slide | `FootActions` (jump, crouch) | the body | — | `MoveTo` (jumps low walls; no slide yet) | ok |
 | creative mode: invincible, flying (#1002) | `WalkControls` steers the flight; the take-off reads the jump key | — (a client toggle on the owner's body) | — | — | n/a: a player's own mode, never a bot's |
 | mantle a ledge | jump at a wall (`FootActions`) | the body | knee and head rays | `MoveTo` | ok |

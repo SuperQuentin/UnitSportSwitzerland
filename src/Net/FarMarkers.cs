@@ -53,7 +53,16 @@ public partial class FarMarkers : Node
         Received = 0;
         var m = new FarMarkers { Name = NodeName };
         world.AddChild(m);
+        Client = m;
         return m;
+    }
+
+    /// <summary>The client's own (names a marker).</summary>
+    public static FarMarkers? Client { get; private set; }
+
+    public override void _ExitTree()
+    {
+        if (Client == this) Client = null;
     }
 
     public override void _Ready()

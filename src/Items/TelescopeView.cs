@@ -262,7 +262,7 @@ public partial class TelescopeView : CanvasLayer
     private string TargetName => !FollowsBody ? "the sky" : TargetPeer is { } peer ? PlayerName(peer)
         : Target == SkyBody.Moon ? "the moon" : Target.ToString();
 
-    private string PlayerName(long peer) => GetTree()?.Root.GetNodeOrNull<Net.FarMarkers>("World/" + Net.FarMarkers.NodeName)?.NameOf(peer) ?? $"player {peer}";
+    private static string PlayerName(long peer) => Net.FarMarkers.Client?.NameOf(peer) ?? $"player {peer}";
 
     /// <summary>
     /// Where a far place is seen from the eyepiece (#1852): the world direction and the distance, in doubles through the
