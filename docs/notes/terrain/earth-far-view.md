@@ -14,7 +14,7 @@ altitude, from the street to orbit, in one quadtree and one size-on-screen rule 
 - **Stepping aside for the leaves**: `EarthWorld.TileEntered`/`TileUnloaded` reach `Globe.SetLeafDrawn` (wired in
   `ClientWorld`). A drawn leaf's globe tile is left out, and every ancestor of a drawn leaf always splits, so the
   globe's coarser ground (every 8th vertex) never shows through a leaf; the leaf's neighbours stay the globe's. Its
-  skirts close the seam. While a split's children load, the parent still draws (a frame or two of overlap).
+  skirts close the seam (a tenth of a cell since #1656's geomorph, `terrain/globe-geomorph`). While a split's children load, the parent still draws (a frame or two of overlap).
   **Past the pyramid's levels (#1800)**: outside Switzerland `cube_global` holds levels 0-4 only (a level-4 tile is
   ~600 km), and a split waits for all four children, so over a fill leaf in Ladakh (face F1) the split never came: the
   level-4 tile (every 8th vertex) stayed drawn over the leaves, up to 317 m over them on the Himalaya's slopes. A child

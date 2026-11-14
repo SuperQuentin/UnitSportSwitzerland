@@ -63,9 +63,9 @@ public partial class BodyViews : Node
         _origin.BodyChanged += OnBodyChanged;
         OnBodyChanged(BodyId.Earth, _origin.Body);
         // the Earth seen from another body: its pyramid as the Earth's globe has it
-        if (Globe.DataDir is { } earthDir)
+        if (Globe.DataSource is { Count: > 0 } earthPyramid)
         {
-            _earth = new BodyGlobe(CelestialBody.Earth, earthDir, _origin);
+            _earth = new BodyGlobe(CelestialBody.Earth, earthPyramid, earthPyramid.Describe(), _origin);
             AddChild(_earth);
             _globes.Add(_earth);
         }
