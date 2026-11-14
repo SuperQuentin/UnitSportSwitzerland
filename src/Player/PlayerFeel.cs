@@ -940,7 +940,7 @@ public partial class PlayerFeel : Node3D
         {
             // the belly jets over an airless body (#1851): the radar height, the way down and the slide, the jets' lever
             float across = Mathf.Sqrt(Mathf.Max(0f, s.Velocity.LengthSquared() - a.VerticalSpeed * a.VerticalSpeed));
-            sb.Append(System.FormattableString.Invariant($"BELLY JETS    RADAR {a.Clearance:0} m    V/S {a.VerticalSpeed:+0.0;-0.0;0.0} m/s    SLIDE {across:0.0} m/s    LEVER {s.Lever * 100f:0}%"));
+            sb.Append(System.FormattableString.Invariant($"JETS {s.Lever * 100f:0}%    RADAR {a.Clearance:0} m    V/S {a.VerticalSpeed:+0.0;-0.0;0.0}    SLIDE {across:0.0}"));
         }
         else
             sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");

@@ -122,7 +122,9 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   (`Lander` is cleared there) and the drive may be thrown.
 - **The way down from orbit**: the drive with the nose under the horizon and a slow lever (the check: 40°, 15 %:
   100 km to 8 km in ~4 min, 120 m/s at the drop-out), then the jets.
-- **HUD**: `BELLY JETS  RADAR m  V/S m/s  SLIDE m/s  LEVER %`. No slope warning yet.
+- **HUD**: `JETS %  RADAR m  V/S  SLIDE` (m/s). No slope warning yet.
+- **Looks**: four plumes down from under the belly by the jets' lever (`AirlinerLook.Belly`, the main plume's mesh again,
+  turned; the main engines stay dark). Others do not see them yet: the pose has no room (C3b, with the online wire).
 - **Getting back in**: the hatch on the left side (`EntryPoint`); stepping out puts the walker past the wingtip.
 
 ## To the Moon (`--shuttlemooncheck`, #1851)

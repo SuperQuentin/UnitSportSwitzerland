@@ -164,7 +164,8 @@ public sealed partial class Airliner : ISpacecraft
         double r = body.Shape.A + place.Altitude;
         float g = (float)(body.GM / (r * r));
         // the levers move as in Space (half travel a second); the spool is the jets' read-out
-        ShuttleFlight.Levers(Spec, ref State, input.LeverUp, input.LeverDown, !input.Piloted, running: true, dt);
+        // (the main engines quiet: their plumes stay dark, the belly's light)
+        ShuttleFlight.Levers(Spec, ref State, input.LeverUp, input.LeverDown, !input.Piloted, running: false, dt);
         float lever = input.Piloted ? State.Lever : 0f;
         if (gearToggle) State.GearDown = !State.GearDown;
         State.Gear = Mathf.MoveToward(State.Gear, State.GearDown ? 1f : 0f, dt / Spec.GearTransit);

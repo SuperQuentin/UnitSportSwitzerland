@@ -440,6 +440,7 @@ public sealed partial class Airliner : Flyer
         Fuel = Spec.FuelCapacity > 0f ? s.Fuel / Spec.FuelCapacity : 0f,
         Heat = Heat,
         Drive = DriveOn,
+        Belly = Lander ? State.Lever : 0f,
     };
 
     /// <summary>Height over the ground last step, m: the gear warning's "low" (#421).</summary>
