@@ -131,6 +131,9 @@ public partial class ChatManager : Node
     /// <summary>Client-side: <c>/orbit &lt;km&gt;</c> for the own player's saucer (#1430 H5); the line to show.</summary>
     public Func<double, string>? PutInOrbit { get; set; }
 
+    /// <summary><c>/goto &lt;body&gt; &lt;lat&gt; &lt;lon&gt; [km]</c> (#1850; online an admin's, #1852): the fly camera there; the line to show.</summary>
+    public Func<string, string>? GoTo { get; set; }
+
     /// <summary>Client-side: where this player is, for the nearest venue offline (<c>/stadium</c>).</summary>
     public Func<GlobalPos?>? Here { get; set; }
 
@@ -707,6 +710,11 @@ public partial class ChatManager : Node
                 Show(OrbitLine(rest), ChatKind.Admin);
                 return;
 
+            // the fly camera to a place on any body (#1850)
+            case "goto":
+                Show(GoTo?.Invoke(rest) ?? "No camera to move here.", ChatKind.Admin);
+                return;
+
             case "spawn":
                 if (Items.ItemLookup.TryParse(rest, out var def, out int count, out string error)) Show(Give(def, count), ChatKind.Admin);
                 else Show(error, ChatKind.Error);
@@ -1088,6 +1096,11 @@ public partial class ChatManager : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void NotifyKicked(string reason) => Kicked?.Invoke(reason);
+
+    /// <summary>Client side: an admin's <c>/goto</c> (#1852), checked by the server; named to sort after <c>NotifyKicked</c>.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SentToBody(string args) => LineReceived?.Invoke(GoTo?.Invoke(args) ?? "No camera to move here.", ChatKind.Admin);
 
     /// <summary>
     /// Server: a line for a player who joined through the server console (<see cref="PlayerInfo.Bodiless"/>,
@@ -1499,6 +1512,12 @@ public partial class ChatManager : Node
                 if (!double.TryParse(rest, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double orbitKm))
                     ReplyTo(sender, "Usage: /orbit <km>, e.g. /orbit 400", ChatKind.Error);
                 else RpcId(sender, MethodName.OrbitForced, orbitKm);
+                return;
+            // the admin's fly camera to any body (#1852, C3b): the client moves its camera; stepping in there publishes the body
+            case "goto":
+                if (!RequiresAvatar(sender, verb)) return;
+                if (!BodyGoto.TryParse(rest, out _, out _, out _, out _, out string gotoError)) ReplyTo(sender, gotoError, ChatKind.Error);
+                else RpcId(sender, MethodName.SentToBody, rest);
                 return;
             case "kick": CommandKick(sender, parts); return;
             case "mute": CommandMute(sender, parts); return;

@@ -21,6 +21,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `protocol-handshake` — Connecting starts with Hello/Welcome (Handshake.Protocol); its RPCs never change; bump the protocol on any wire change
 - `load-testing` — Load testing: --swarm bots, --serverstats, --netsmooth, tools/loadtest.sh; before/after numbers at 32 players and a 30-min soak
 - `server-regions` — the dedicated server's frames (#1456): a region (frame, own World3D, ChunkManager, trunks) per cluster of bodies, main = today's world within 20 km; bodies keep their paths, RID moved (`FootPlayer.Space`, never `GetWorld3D()`); handovers, shadows, mirrors of main-frame collision; measure across with `Global`/`WhereIs`/`FromFrame`; ENU frames at the Earth mean under `--frame earth`, turning handovers (`OriginFrame.Carry`, #1513); the server on `EarthWorld` leaves under `--frame earth` (`MakeGround`); `tools/regioncheck.sh` (`EARTH=1`)
+- `online-bodies` — online between bodies (#1852, protocol 97): `NetBody` before the doubles, `GlobalPos.Write`'s `_b`, distances infinite across bodies, interest per body (`BodySight`), server regions on the Moon with `ServerBodyGround` and the body's gravity, `/goto` online, the far-marker list and the telescope's labels, `tools/moonnetcheck.sh`
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
 - `server-query` — UDP status query on port + 1 (`USQ1`/`USR1` + JSON): LAN broadcast list, saved servers' players and ping, `--server-name`, `--query-bind`
@@ -39,6 +40,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-no-main-thread-periodic-jobs` — No per-player `GD.Print` on a server timer (blocks ms on Windows), file writes on a worker, `/proc` reads Linux-only
 - `perf-mcp-logger-gated` — godot_ai `game_helper` adds its Logger only when `EngineDebugger.is_active()`; keep the gate on addon updates (it leaked every log line)
 - `perf-player-snapshot-size` — `BodyPose`/`TrainPose` go as one `float[] NetPose` (quat + offset + squash, train angles only on a train); no Transform3D on the wire
+- `perf-netlink-once-a-frame` — `NetLink` reads the link once a frame from the tree's API (never `node.Multiplayer` per call: the engine builds the node's path), keyed on `NetLink.Tick`, `Invalidate()` on every peer swap and on the API's signals; `LocalPlayer` once a frame (#1910)
 - `perf-relay-delta-interval` — `RelayNear`/`RelayFar` check their OnChange properties at 10 Hz (`DeltaInterval = 0.1f`); per-packet state stays `Always`
 - `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
 - `arrival` — The server decides where a joining player starts (`--spawn E,N`) and whether players may teleport (`--no-teleport`): `World/Arrival.Rules` on accept, the client's loading screen waits for it; `--at` still wins; `tools/arrivalcheck.sh` (#799)

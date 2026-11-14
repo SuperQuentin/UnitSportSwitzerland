@@ -255,7 +255,7 @@ public static class DriftCheck
             && !float.IsNaN(m.Speed);
         // a rental kart is a grip machine on a locked axle: it does not hold a drift (and a handbrake slide
         // at speed trips it, --kartcheck); here it must only go straight and reach its governed top speed
-        if (spec.Body.Shape == Avatar.BodyShape.Kart)
+        if (Avatar.BodyShapes.OwnBuilder(spec.Body.Shape))
             ok = straightSlip < 0.02f && !float.IsNaN(m.Speed) && Mathf.Abs(tm.Speed * 3.6f / spec.RefTopKmh - 1f) < 0.1f;
         GD.Print($"[drift] {profile,-4} {spec.Label,-10} 0-100 {to100,4:F1}s  top {tm.Speed * 3.6f,4:F0} km/h  "
             + $"entry {entrySpeed * 3.6f,4:F0} km/h  max angle {Mathf.RadToDeg(maxSlip),3:F0}°  "

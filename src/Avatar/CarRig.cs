@@ -24,6 +24,18 @@ public enum BodyShape
     TallHatch,
     /// <summary>A five-door liftback in one arc: raked windscreen, the roof's peak over the B-pillar, a long rear glass down to a high Kamm tail split by a spoiler (XW20 Prius, #760).</summary>
     Liftback,
+    /// <summary>An open Moon rover (#1943): a bare chassis, two seats, wire-mesh wheels, built by <see cref="MoonRoverMeshBuilder"/>.</summary>
+    RoverOpen,
+    /// <summary>A pressurised Moon rover (#1943): a cabin on a chassis, a suitport at the back, built by <see cref="MoonRoverMeshBuilder"/>.</summary>
+    RoverCabin,
+}
+
+public static class BodyShapes
+{
+    /// <summary>A body with its own builder and seat, not <see cref="CarMeshBuilder"/>'s shell: the kart and the Moon rovers.</summary>
+    public static bool OwnBuilder(this BodyShape s) => s is BodyShape.Kart or BodyShape.RoverOpen or BodyShape.RoverCabin;
+
+    public static bool IsRover(this BodyShape s) => s is BodyShape.RoverOpen or BodyShape.RoverCabin;
 }
 
 /// <summary>A rear wing, from none to a GT wing on tall stands.</summary>

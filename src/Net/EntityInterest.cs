@@ -210,7 +210,8 @@ public partial class EntityInterest : Node
             if (child is not FootPlayer p || FootPlayer.NetId(p.Name) is not long viewer || viewer <= 0) continue;
             var at = p.Global;
             var ahead = at;
-            if (_lastSeen.TryGetValue(viewer, out var prev))
+            // no look-ahead across a move to another body (#1852): the two places are in two bodies' frames
+            if (_lastSeen.TryGetValue(viewer, out var prev) && prev.Pos.Body == at.Body)
             {
                 // the look-ahead in metres east and north of the viewer, true ones (#1502)
                 var (pe, pn, _) = at.OffsetTo(prev.Pos);

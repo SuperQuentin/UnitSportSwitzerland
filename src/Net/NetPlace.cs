@@ -26,7 +26,7 @@ public partial class NetPlace : Node
     public const string NodeName = "Place";
 
     /// <summary>The synchronizer's property paths for the position, relative to the body, in the order they must be set.</summary>
-    public static readonly string[] Properties = { NodeName + ":NetX", NodeName + ":NetY", NodeName + ":NetZ" };
+    public static readonly string[] Properties = { NodeName + ":NetBody", NodeName + ":NetX", NodeName + ":NetY", NodeName + ":NetZ" };
 
     /// <summary>The rotation's path (after <see cref="Properties"/>: it is applied at the body's new place).</summary>
     public const string Turn = NodeName + ":NetTurn";
@@ -34,6 +34,8 @@ public partial class NetPlace : Node
     /// <summary>The velocity's path, for a <c>CharacterBody3D</c> (a vehicle), after <see cref="Turn"/>.</summary>
     public const string Velocity = NodeName + ":NetVel";
 
+    /// <summary>The body whose fixed frame the three doubles are in (#1852: a <see cref="BodyId"/>, the Earth 0), set before them.</summary>
+    [Export] public int NetBody { get; set; }
     [Export] public double NetX { get; set; }
     [Export] public double NetY { get; set; }
 
@@ -44,7 +46,7 @@ public partial class NetPlace : Node
         set
         {
             _z = value;
-            _global = GlobalPos.FromWire(NetX, NetY, value);
+            _global = GlobalPos.FromWire(NetX, NetY, value, (BodyId)NetBody);
             // the authority is the body's: this child was added after the body's was set
             if (GetParent() is Node3D body && !body.IsMultiplayerAuthority()) body.Position = _origin.ToWorld(_global);
         }
@@ -112,6 +114,7 @@ public partial class NetPlace : Node
     private void SetGlobal(GlobalPos at)
     {
         _global = at;
+        NetBody = at.WireBody;
         (NetX, NetY, _z) = at.ToWire();
     }
 

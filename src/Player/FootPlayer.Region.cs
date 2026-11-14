@@ -17,6 +17,12 @@ public partial class FootPlayer
     public ServerRegion? Region { get; internal set; }
 
     /// <summary>
+    /// The ground game's gravity for this body (#1852): its server region's body's on the server, where bodies on the Earth
+    /// and the Moon step side by side; the anchor's (<see cref="BodyGravity"/>) on a client, where there is one world.
+    /// </summary>
+    private float Gravity => Region is { } r && r.Body != BodyId.Earth ? (float)CelestialBody.Of(r.Body).GroundGravity : BodyGravity.Ground;
+
+    /// <summary>
     /// The physics this body acts in, for its rays and shape queries: its region's on the server, the
     /// world's anywhere else. Never <c>GetWorld3D().DirectSpaceState</c> in body code: on the server
     /// that is the main region's whatever region the body is in.
@@ -65,7 +71,13 @@ public partial class FootPlayer
         Origin = target.Origin;
         Terrain = target.Ground;
         ApplyRegionSpace();
-        if (from != null)
+        if (from != null && from.Body != target.Origin.Body)
+        {
+            // onto another body (#1852): nothing it kept in the old world means anything there; it arrives at rest, upright
+            Velocity = Vector3.Zero;
+            Rotation = new Vector3(0, 0, 0);
+        }
+        else if (from != null)
         {
             // what the body keeps in world space moves as at an origin shift; between frames that turn against each other
             // (ENU regions, #1513) it turns too, keeping its bearings against true north (velocity, headings, as at a

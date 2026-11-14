@@ -49,7 +49,7 @@ public class TetherTests
         for (float z = 0; z >= -3f; z -= 0.1f) trail.Push(new Vector3(0, 0, z));
         var leader = new Vector3(0, 0, -3f);
         var target = trail.Target(leader)!.Value;
-        Assert.Equal(-1.9f, target.Z, 1);
+        Assert.Equal(-3f + TetherTrail.Behind, target.Z, 1);
         var s = State(new Vector3(0, 0, 0), leader);
         s.Led = true;
         s.TrailTarget = target;

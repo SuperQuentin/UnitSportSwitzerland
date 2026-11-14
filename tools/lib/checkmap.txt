@@ -32,6 +32,10 @@ src/Ui/AccountPage        quick  --welcomecheck
 src/Core/GameShell        quick  --welcomecheck
 src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
 src/Player/SpectatorTargets quick --frame earth --chunks fixture:straight --targetcheck
+src/Core/BodyGoto         quick  --frame earth --chunks fixture:straight --gotocheck
+src/World/Bodies/GotoCheck quick --frame earth --chunks fixture:straight --gotocheck
+src/Player/SpectatorCamera quick --frame earth --chunks fixture:straight --orbitonlycheck
+src/World/Bodies/OrbitOnlyCheck quick --frame earth --chunks fixture:straight --orbitonlycheck
 src/Player/TargetList     quick  --frame earth --chunks fixture:straight --targetcheck
 src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
@@ -103,6 +107,9 @@ src/Phone/               quick  --trainingcheck --trainer-sim --world fixture --
 tools/RideLink/          quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
 src/Trainer/             quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
 src/Gpx/RoadNetwork      quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
+src/Trainer/             quick  --trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60
+src/Trainer/GroupRides    net    tools/groupridenetcheck.sh
+src/Trainer/GroupRideNetProbe net    tools/groupridenetcheck.sh
 src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -1059,6 +1066,11 @@ src/Terrain/CollisionReach net  tools/botcheck.sh
 src/Net/Regions/         net    tools/regioncheck.sh
 src/Player/FootPlayer.Region net tools/regioncheck.sh
 src/Bots/RegionCheck     net    tools/regioncheck.sh
+# bots inside buildings (#1330): a bot visits a generated village's house on a dedicated server, seen from two clients
+src/Bots/BotVisit        net    tools/botindoorcheck.sh
+src/Bots/WanderBrain     net    tools/botindoorcheck.sh
+src/Interiors/InteriorManager.Bots net tools/botindoorcheck.sh
+src/Interiors/InteriorNav net   tools/botindoorcheck.sh
 src/Bots/Bot.cs          net    tools/regioncheck.sh
 src/Core/OriginShifter   net    tools/regioncheck.sh
 tools/regioncheck        net    tools/regioncheck.sh
@@ -1392,6 +1404,20 @@ src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --sy
 src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
 tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
 src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh
+# #1718: each net script moved off the generated world retests itself when it changes
+tools/baycheck               net    tools/baycheck.sh
+tools/cinemanetcheck         net    tools/cinemanetcheck.sh
+tools/cranenetcheck          net    tools/cranenetcheck.sh
+tools/debugcheck             net    tools/debugcheck.sh
+tools/liftsynccheck          net    tools/liftsynccheck.sh
+tools/palletnetcheck         net    tools/palletnetcheck.sh
+tools/pigeonnetcheck         net    tools/pigeonnetcheck.sh
+tools/rampalongnetcheck      net    tools/rampalongnetcheck.sh
+tools/shopcheck              net    tools/shopcheck.sh
+tools/sitemachinenetcheck    net    tools/sitemachinenetcheck.sh
+tools/siteofficenetcheck     net    tools/siteofficenetcheck.sh
+tools/sitepalletnetcheck     net    tools/sitepalletnetcheck.sh
+tools/siteuppernetcheck      net    tools/siteuppernetcheck.sh
 # #1735: the fun course's ski slope (its snow layer, poles, the skier's lookup) and its jetty's moored boats, on both frames
 src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
 src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
@@ -1416,3 +1442,11 @@ src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traf
 # #1811: back into the body after a long spectator flight: upright, its camera sane, a poisoned view put right
 src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
 src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
+src/World/Bodies/MoonNetProbe   net    tools/moonnetcheck.sh
+src/World/Bodies/ServerBod      net    tools/moonnetcheck.sh
+src/Net/FarMarkers              net    tools/moonnetcheck.sh
+src/Net/BodySight               net    tools/moonnetcheck.sh
+src/Net/InterestService         net    tools/moonnetcheck.sh
+src/Net/Regions/                net    tools/moonnetcheck.sh
+src/Net/NetPlace                net    tools/moonnetcheck.sh
+src/Items/TelescopeView         net    tools/moonnetcheck.sh

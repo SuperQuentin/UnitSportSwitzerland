@@ -58,3 +58,4 @@
   lunar elevation and finer moon levels, the POI viewpoint telescopes (`Adventure/Places`) opening
   this view.
 - **Steady at the longest end** (#1835): while something aims it (a body, the drive), the camera is turned straight from the aim vector (`Basis.LookingAt`) and set directly, never through yaw and pitch as floats (they stepped 2.4e-7 rad, ~3 px at 500,000 mm: the followed moon shook 1 px a frame). Following: 0.00 px. The drive holds a point of the stars' float frame while the moon is placed from its own float vector: ~1 px at a 10″ view, the 32-bit floor (the stars stay on it). Measured windowed by `--telescopecheck` (the moon as drawn, every frame for 2 s).
+- **Players far away** (#1852, `net/online-bodies`): the far-marker list's players are labelled in the eyepiece (name, body, distance), listed in the target menu after the bodies, and the lock follows one (`SelectPlayer`). Desktop only.

@@ -74,6 +74,17 @@ public static class SitePlans
         }
     }
 
+    /// <summary>
+    /// Whether a site's materials have a way in a machine can drive (#1926): <see cref="ConstructionSites.MaterialsWayIn"/>
+    /// against the site's own obstacles, so a way kept across the street (a yard reaching over its road) is none.
+    /// </summary>
+    public static bool MaterialsReachable(BuildingTile tile, RoadTile? roads, ConstructionSite site)
+    {
+        if (!BuildingKey.TryParse(site.Key, out var key) || key.Index < 0 || key.Index >= tile.Buildings.Count) return false;
+        var obstacles = new SiteObstacles(BuildingTypes.For(tile).Boxes, key.Index, roads, Clearance);
+        return ConstructionSites.MaterialsWayIn(site, obstacles.Blocked);
+    }
+
     /// <summary>A tile's buildings, its roads (null when it has no site: never read) and its building sites.</summary>
     public readonly record struct TileSites(BuildingTile? Tile, RoadTile? Roads, List<ConstructionSite> Sites);
 

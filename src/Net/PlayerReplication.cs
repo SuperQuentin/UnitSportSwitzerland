@@ -71,18 +71,19 @@ public static class PlayerReplication
     /// <summary>Driver kinds at index 8 of the NPC spawn data: a race NPC (the default) or a bot.</summary>
     private const int DriverRace = 0, DriverBot = 1;
 
-    /// <summary>A bot's spawn data: the NPC layout, then the driver kind and its display name.</summary>
+    /// <summary>A bot's spawn data: the NPC layout, then the driver kind, its display name and its body (#1852).</summary>
     public static Godot.Collections.Array BotData(int n, GlobalPos at, float yaw, string name)
     {
         var (x, y, z) = at.ToWire();
-        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, Lv95Grid.TrueYaw(at, yaw), 0, DriverBot, name };
+        // the body last (#1852): a bot on the Moon (its heading from the Moon's own north, no LV95 grid there)
+        return new() { BotOwner, n, (int)RideKind.OnFoot, x, y, z, at.Body == BodyId.Earth ? Lv95Grid.TrueYaw(at, yaw) : yaw, 0, DriverBot, name, at.WireBody };
     }
 
     public static FootPlayer CreateNpc(Godot.Collections.Array d, WorldOrigin origin)
     {
         long owner = d[0].AsInt64();
         int n = d[1].AsInt32();
-        var at = GlobalPos.FromWire(d[3].AsDouble(), d[4].AsDouble(), d[5].AsDouble());
+        var at = GlobalPos.FromWire(d[3].AsDouble(), d[4].AsDouble(), d[5].AsDouble(), d.Count > 10 ? (BodyId)d[10].AsInt32() : BodyId.Earth);
         // on the dedicated server it starts in the frame of the region it spawns in (#1456): a bot far
         // from the server's origin never passes through the main frame's coarse floats
         var region = Regions.ServerRegions.Instance?.For(at);

@@ -7,6 +7,7 @@
 #      the real leaves (some points real, some fill).
 #   3. pyramid (#1656, with LEAVES and PYRAMID): the server has the globe's pyramid on its disk, the client none (the
 #      shipped base alone): the client's fill must stand on the server's pyramid, streamed, and agree as in 2.
+# Stays on the generated world (#1718): the generated fill is what it checks.
 #   GODOT=<exe> [RUNS="generated edge pyramid"] [AT=E,N] [LEAVES=<dir>] [PYRAMID=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh
 #   logs: test_output/fillagree_*.log
 . "$(dirname "$0")/lib/twoclient.sh" fillagree

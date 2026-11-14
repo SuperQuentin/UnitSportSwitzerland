@@ -86,3 +86,4 @@ G2a of global tiling (#1443); design and audit in `docs/plans/server-regions.md`
   it gets out at once ("no terrain") until roads stand on leaves (C1 PR 2): `EARTH=1 tools/botcheck.sh` fails only
   its "drove off" step. Interiors on the server (`bots/server-collision`).
 - An earth server's line of sight: `net/vision-interest` ("Under `--frame earth`").
+- **Regions on another body** (#1852, `net/online-bodies`): the planner never links two bodies; a region on the Moon is an ENU frame there on `ServerBodyGround` (`MakeBodyGround`), with the body's gravity; no shadows or mirrors off the Earth.

@@ -15,6 +15,10 @@ namespace UnitSport.Tools.Preprocessor;
 /// <code>
 /// --cube-body moon --dem FILE --cube-out DIR [--cube-levels 0-5] [--jobs N] [--cube-check]
 /// --cube-body mars --dem MOLA.tif --areoid mega90n000eb.img --cube-out DIR --cube-levels 0-4
+/// --cube-body phobos --dem phobos_shape_dem.tif --credit "Ernst et al. 2023, CC-BY-4.0" --cube-levels 0-1   (a shape
+///     model's heights over its sphere, from --shape-dem: <see cref="ShapeModel"/>, #1853)
+/// --cube-body callisto --dem flat --cube-out DIR --cube-levels 0-3   (no global heights: the reference sphere, the
+///     body's profile generates the relief; the colour carries the body, #1854)
 /// </code>
 ///
 /// <para>
@@ -33,12 +37,25 @@ public static class CubeBody
     {
         "moon" => CubeShape.Moon,
         "mars" => CubeShape.Mars,
+        "mercury" => CubeShape.Mercury,
+        "venus" => CubeShape.Venus,
+        "io" => CubeShape.Io,
+        "europa" => CubeShape.Europa,
+        "ganymede" => CubeShape.Ganymede,
+        "callisto" => CubeShape.Callisto,
+        "titan" => CubeShape.Titan,
+        "phobos" => CubeShape.Phobos,
+        "deimos" => CubeShape.Deimos,
+        "jupiter" => CubeShape.Jupiter,
+        "saturn" => CubeShape.Saturn,
+        "uranus" => CubeShape.Uranus,
+        "neptune" => CubeShape.Neptune,
         _ => null,
     };
 
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
-        string? body = null, dem = null, outDir = null, areoid = null;
+        string? body = null, dem = null, outDir = null, areoid = null, credit = null;
         int minLevel = 0, maxLevel = 5, jobs = Math.Max(1, Environment.ProcessorCount / 2);
         bool check = false;
         for (int i = 0; i < args.Count; i++)
@@ -48,6 +65,8 @@ public static class CubeBody
                 case "--cube-body": body = args[++i]; break;
                 case "--dem": dem = args[++i]; break;
                 case "--areoid": areoid = args[++i]; break;
+                // whose heights and under what licence, when not NASA/USGS's public domain (#1853: a shape model's)
+                case "--credit": credit = args[++i]; break;
                 case "--cube-out": outDir = args[++i]; break;
                 case "--cube-levels":
                     var r = args[++i].Split('-');
@@ -61,14 +80,16 @@ public static class CubeBody
         }
         if (body == null || dem == null || outDir == null) { Console.Error.WriteLine("--cube-body needs a body, --dem FILE and --cube-out DIR"); return 2; }
         var cube = CubeOf(body);
-        if (cube == null) { Console.Error.WriteLine($"--cube-body: no body called {body} (moon, mars)"); return 2; }
+        if (cube == null) { Console.Error.WriteLine($"--cube-body: no body called {body} (moon, mars, mercury, venus, io, europa, ganymede, callisto, titan, phobos, deimos)"); return 2; }
         Directory.CreateDirectory(outDir);
 
         var sw = Stopwatch.StartNew();
-        using var raster = CylRaster.Open(dem);
+        // --dem flat (#1854): a body with no global heights (the Galilean moons, Titan) is its reference sphere here
+        bool flat = dem == "flat";
+        using var raster = flat ? null : CylRaster.Open(dem);
         // MOLA's heights are over its areoid (#1853): turned into heights over the IAU ellipsoid
         var datum = areoid != null ? Areoid.Load(areoid) : null;
-        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+        Console.WriteLine(raster == null ? $"cube-body {body}: no heights, the reference sphere" : string.Create(CultureInfo.InvariantCulture,
             $"cube-body {body}: {Path.GetFileName(dem)} {raster.Width} x {raster.Height} ({raster.Step * 3600:F1}″, {raster.Step * Math.PI / 180 * cube.Shape.A:F0} m a pixel), scale {raster.Scale}, offset {raster.Offset}"));
 
         var manifest = new CubeManifest
@@ -77,7 +98,8 @@ public static class CubeBody
             Body = char.ToUpperInvariant(body[0]) + body[1..].ToLowerInvariant(),
             Orientation = "face 0 at 0N 0E, twist 0",
         };
-        manifest.Sources.Add($"{Path.GetFileName(dem)}: heights above the body's reference {(cube.Shape.F == 0 ? "sphere" : "ellipsoid")} (NASA/USGS, public domain)");
+        manifest.Sources.Add(flat ? "no global heights: the reference sphere, the body's profile generates the relief"
+            : $"{Path.GetFileName(dem)}: heights above the body's reference {(cube.Shape.F == 0 ? "sphere" : "ellipsoid")} ({credit ?? "NASA/USGS, public domain"})");
         if (areoid != null) manifest.Sources.Add($"{Path.GetFileName(areoid)}: the areoid the DEM is measured from, turned to the ellipsoid (MGS MOLA MEGDR, NASA, public domain)");
         for (int level = minLevel; level <= maxLevel; level++)
             manifest.Levels.Add(new CubeManifestLevel { Level = level, Bits = CubeKey.LatticeBits(level), BundleLevel = CubeKey.PyramidBundleLevel(level) });
@@ -87,10 +109,14 @@ public static class CubeBody
         for (int face = 0; face < CubeSphere.Faces; face++)
         {
             ct.ThrowIfCancellationRequested();
-            var (y0, y1, x0, w) = CubeBodyHeights.WindowOf(cube, face, raster, minLevel);
-            var window = raster.Read(y0, y1, x0, w);
-            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"  face {face}: rows {Math.Max(0, y0)}-{Math.Min(raster.Height - 1, y1)}, {window.Columns} columns, {window.Bytes / 1e9:F2} GB read in {sw.Elapsed.TotalSeconds:F0} s"));
+            CylRaster.Window? window = null;
+            if (raster != null)
+            {
+                var (y0, y1, x0, w) = CubeBodyHeights.WindowOf(cube, face, raster, minLevel);
+                window = raster.Read(y0, y1, x0, w);
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"  face {face}: rows {Math.Max(0, y0)}-{Math.Min(raster.Height - 1, y1)}, {window.Columns} columns, {window.Bytes / 1e9:F2} GB read in {sw.Elapsed.TotalSeconds:F0} s"));
+            }
 
             var keys = new List<CubeKey>();
             for (int level = minLevel; level <= maxLevel; level++)
@@ -104,7 +130,7 @@ public static class CubeBody
                 Parallel.ForEach(bundle, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, key =>
                 {
                     int bits = CubeKey.LatticeBits(key.Level);
-                    var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(key.Level), Heights = CubeBodyHeights.Heights(cube, window, key, bits, datum) };
+                    var tile = new CubeTile { Key = key, Bits = bits, Quantum = CubeKey.QuantumFor(key.Level), Heights = window == null ? new float[((1 << bits) + 1) * ((1 << bits) + 1)] : CubeBodyHeights.Heights(cube, window, key, bits, datum) };
                     var b = CubeTileCodec.Encode(tile);
                     encoded.Add((key, b));
                     if (check) built[key] = CubeTileCodec.Decode(b);
@@ -119,7 +145,7 @@ public static class CubeBody
                 }
             }
             // the window goes before the next is read (a polar one is 2.6 GB): never two in memory
-            window = null!;
+            window = null;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
             Console.WriteLine($"  face {face}: done, {bytes / 1e6:F0} MB so far, {sw.Elapsed.TotalSeconds:F0} s, peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
         }

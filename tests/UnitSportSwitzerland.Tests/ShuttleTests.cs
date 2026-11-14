@@ -132,4 +132,64 @@ public class ShuttleTests
         _out.WriteLine($"pitch {Mathf.RadToDeg(PitchOf(s.Attitude)):F1}° after 10 s, path {Mathf.RadToDeg(Mathf.Asin(s.Velocity.Y / s.Velocity.Length())):F1}°");
         Assert.Equal(0.35f, PitchOf(s.Attitude), 2);
     }
+
+    [Fact]
+    public void The_target_hold_aims_at_the_arrival_orbits_tangent_on_the_noses_side()
+    {
+        // the target 1,000 km straight ahead (−Z), its arrival sphere 100 km round: 5.7° off, toward where the nose leans (+X)
+        var aim = ShuttleFlight.TangentAim(new Vector3(0, 0, -1), 1_000_000, 100_000, new Vector3(0.1f, 0, -1).Normalized());
+        Assert.NotNull(aim);
+        float off = Mathf.RadToDeg(aim!.Value.AngleTo(new Vector3(0, 0, -1)));
+        Assert.Equal(5.74f, off, 1);
+        Assert.True(aim.Value.X > 0);
+        // a craft flown along it passes the sphere at its radius, level with it
+        var closest = (new Vector3(0, 0, -1) * 1_000_000f).Dot(aim.Value);
+        float pass = ((new Vector3(0, 0, -1) * 1_000_000f) - aim.Value * closest).Length();
+        Assert.InRange(pass, 99_950f, 100_050f);
+        // from inside the sphere: nothing to aim at
+        Assert.Null(ShuttleFlight.TangentAim(new Vector3(0, 0, -1), 90_000, 100_000, Vector3.Forward));
+        // straight at the centre: still a tangent
+        Assert.NotNull(ShuttleFlight.TangentAim(new Vector3(0, 0, -1), 1_000_000, 100_000, new Vector3(0, 0, -1)));
+    }
+
+    [Fact]
+    public void The_hold_turns_nose_and_wings_at_its_rate_onto_the_aim_wings_level()
+    {
+        var att = new Basis(Vector3.Back, 0.3f);   // banked 0.3 rad, nose −Z
+        var aim = new Vector3(1, 0.2f, 0).Normalized();   // to the right and a little up
+        var once = ShuttleFlight.TurnToward(att, aim, Vector3.Up, 0.1f);
+        Assert.Equal(0.1f, once.GetRotationQuaternion().AngleTo(att.GetRotationQuaternion()), 3);
+        var b = att;
+        for (int i = 0; i < 60; i++) b = ShuttleFlight.TurnToward(b, aim, Vector3.Up, 0.1f);
+        Assert.True((-b.Z).AngleTo(aim) < 1e-3f);
+        // wings level: the right wing along the horizon
+        Assert.Equal(0f, b.X.Dot(Vector3.Up), 3);
+        // the arrival orbits: the Moon's 100 km, Phobos' inside its little sphere
+        Assert.Equal(100_000, ShuttleFlight.ArrivalM(UnitSport.Core.CelestialBody.Moon));
+        Assert.Equal(10_000, ShuttleFlight.ArrivalM(UnitSport.Core.CelestialBody.Phobos), 0);
+    }
+
+    [Fact]
+    public void The_belly_jets_hover_at_the_moons_weight_level_it_and_stop_its_slide()
+    {
+        const float g = 1.62f;
+        float hover = g / ShuttleFlight.BellyAccel;
+        Assert.InRange(hover, 0.27f, 0.29f);
+        // tilted 20°, sliding at 10 m/s, at the hover lever: levelled within a few seconds, the slide stopped by the hold
+        var att = new Basis(Vector3.Right, 0.35f);
+        var v = new Vector3(10, 0, 0);
+        for (int i = 0; i < 60 * 30; i++) (v, att) = ShuttleFlight.Lander(att, v, Vector3.Up, g, hover / Mathf.Cos(att.Y.AngleTo(Vector3.Up)), Vector2.Zero, false, Dt);
+        Assert.True(att.Y.AngleTo(Vector3.Up) < 0.01f);
+        Assert.True(new Vector2(v.X, v.Z).Length() < 0.05f);
+        Assert.InRange(v.Y, -0.5f, 0.5f);
+        // the stick slides it: pushed, ahead (−Z)
+        var (pushed, _) = ShuttleFlight.Lander(Basis.Identity, Vector3.Zero, Vector3.Up, g, hover, new Vector2(0, -1), false, 1f);
+        Assert.Equal(-ShuttleFlight.TranslateAccel, pushed.Z, 3);
+        // on its gear with the jets off: it rests, no sinking, no slide
+        var (rest, _) = ShuttleFlight.Lander(Basis.Identity, new Vector3(1, -2, 0), Vector3.Up, g, 0f, Vector2.Zero, true, Dt);
+        Assert.Equal(Vector3.Zero, rest);
+        // full jets lift it off the ground
+        var (lift, _) = ShuttleFlight.Lander(Basis.Identity, Vector3.Zero, Vector3.Up, g, 1f, Vector2.Zero, true, 1f);
+        Assert.Equal(ShuttleFlight.BellyAccel - g, lift.Y, 3);
+    }
 }

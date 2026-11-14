@@ -296,7 +296,13 @@ public partial class DayNight : Node
         if (SunElevationDeg > 0f && SunElevationDeg <= 3f)
             shade = shade with { Y = Mathf.Max(shade.Y, 0.05f) };
 
-        var (tint, sky) = Palette(SunElevationDeg);
+        // with no air (the Moon, Mercury, the airless moons; #1854) sunlight keeps its colour however low the sun: the
+        // Earth's sunrise palette tinted the figures pink with the sun 1° up at the lunar south pole. Up, it is the
+        // day's white; below, the night's
+        float tintElevation = SunElevationDeg;
+        if (Origin is { } origin && origin.Body != BodyId.Earth && CelestialBody.Of(origin.Body).Air == null && SunElevationDeg > 0f)
+            tintElevation = Mathf.Max(SunElevationDeg, 45f);
+        var (tint, sky) = Palette(tintElevation);
         if (occasion is { Owner: var owner }) (tint, sky) = owner.Grade(SunElevationDeg, tint, sky);
         if (WorldGrade is { } grade) (tint, sky) = grade(SunElevationDeg, tint, sky);
         Night = Mathf.SmoothStep(4f, -7f, SunElevationDeg);

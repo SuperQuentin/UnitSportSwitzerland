@@ -44,7 +44,8 @@ public class CelestialBodyTests
     [Theory]
     [InlineData(BodyId.Moon, 12, 1.63)]
     [InlineData(BodyId.Mars, 13, 3.72)]
-    [InlineData(BodyId.Mercury, 13, 3.70)]
+    // Mercury on MESSENGER's 2,439.4 km sphere (#1854): GM/r² 3.702, the tuned scale makes it 3.71
+    [InlineData(BodyId.Mercury, 13, 3.71)]
     public void Leaves_stay_about_six_hundred_metres_and_gravity_scales(BodyId body, int leafLevel, double g)
     {
         var b = CelestialBody.Of(body);
@@ -252,7 +253,9 @@ public class BodyPlaceTests
         var earth = GlobalPos.FromLv95(2_600_000, 1_200_000, 550);
         var moon = OnMoon(0, 0, 0);
         Assert.NotEqual(earth, GlobalPos.On(BodyId.Moon, earth.Ecef));
-        Assert.Throws<InvalidOperationException>(() => earth.DistanceTo(moon));
+        // "is it near" across two bodies is "no" (#1852: a server with players on both asks it everywhere); arithmetic throws
+        Assert.Equal(double.PositiveInfinity, earth.DistanceTo(moon));
+        Assert.Equal(double.PositiveInfinity, earth.HorizontalDistanceTo(moon));
         Assert.Throws<InvalidOperationException>(() => earth - moon);
         Assert.Throws<InvalidOperationException>(() => earth.OffsetTo(moon));
         // through a sky moment they are: the moon's near side is ~384,000 km away less its radius

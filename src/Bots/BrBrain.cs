@@ -567,20 +567,31 @@ public sealed class BrBrain : IBotBrain
         bot.Intent.Pitch = Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f));
     }
 
+    /// <summary>A crate this bot is done with; why, when it gives one up with something still in it.</summary>
+    private void GiveUp(Bot bot, Crate c, string? why)
+    {
+        _emptied.Add(c.Id);
+        if (why != null) GD.Print($"[bots] {bot.Body.Name} \"{bot.Profile.Name}\" gives up crate {c.Id} ({c.Style}): {why}");
+    }
+
     private void Loot(Bot bot, Crate c, PhysicsDirectSpaceState3D space, double now)
     {
-        if (BrCrates.WorldOf(c, bot.Body.GlobalPosition.Y, bot.Body.Origin) is not { } at) { _emptied.Add(c.Id); return; }
+        if (BrCrates.WorldOf(c, bot.Body.GlobalPosition.Y, bot.Body.Origin) is not { } at) { GiveUp(bot, c, "not placed here"); return; }
         if (!_crates.Reachable(c, bot.Body.Global))
         {
             bool there = GoTo(bot, at, run: true, 1.2f, space, now);
             // a crate it cannot get to (on a roof, behind a fence) is given up after a while; and one it stands
             // under or over and still cannot reach (another floor) at once: seen, a bot squad mate stood 1 m from
             // such a crate for the rest of a match, never stuck since it had arrived
-            if (there || bot.Nav.Stuck >= 4) { _emptied.Add(c.Id); bot.Nav.Stuck = 0; }
+            if (there || bot.Nav.Stuck >= 4)
+            {
+                GiveUp(bot, c, there ? FormattableString.Invariant($"there but out of reach ({Flat(at - bot.Body.GlobalPosition):F1} m flat, {at.Y - bot.Body.GlobalPosition.Y:F1} m up)") : $"stuck {bot.Nav.Stuck}");
+                bot.Nav.Stuck = 0;
+            }
             return;
         }
         bot.Intent.Wish = Vector3.Zero;
-        if (!BotSkills.TakeOne(bot, _crates, c)) _emptied.Add(c.Id);
+        if (!BotSkills.TakeOne(bot, _crates, c)) GiveUp(bot, c, null);
     }
 
     // ---- vehicles (#837 phase 3) ---------------------------------------------------------------------

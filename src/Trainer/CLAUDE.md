@@ -4,5 +4,5 @@ Trainings on a smart trainer through RideLink (`tools/RideLink`), started from t
 
 Index only: read a note only when the task touches its topic.
 
-- `player/home-trainer-training` — the Training app, `TrainerLink`, `TrainingSession` and its way, junctions (`JunctionChoice`), Rejoin, U-turn, ERG, the grade feed, the Windows TFM, `--trainingcheck [junctions] --trainer-sim`
+- `player/home-trainer-training` — the Training app, `TrainerLink`, `TrainingSession` and its way, junctions (`JunctionChoice`), Rejoin, U-turn, ERG, the grade feed, the Windows TFM, `--trainingcheck [junctions|traffic] --trainer-sim`, ghosting through the traffic, group rides (`GroupRides`, `tools/groupridenetcheck.sh`)
 - Plan: `docs/plans/home-trainer-rides.md` (phases, junctions, ERG, group rides)

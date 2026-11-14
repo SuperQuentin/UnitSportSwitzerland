@@ -14,6 +14,13 @@ uniform vec3 sun_dir = vec3(0.0, 1.0, 0.0);
 uniform float night_floor = 0.06;
 // the sun's strength on ground square to it
 uniform float sun_strength = 1.6;
+// the air's vertical optical depth per channel (#1854: Mars, Venus, Titan; zero without air): the sunlight that reaches
+// the ground takes the air's hue, exp(-(tau - its least channel) / cos zenith): the least-dimmed channel keeps its full
+// strength (the game's ground stays playable under Titan's haze), the others fall away, more with a low sun (redder)
+uniform vec3 air_tau = vec3(0.0);
+// a giant's terminator (#1854): its deep air carries the light past the line (a wrap of the sun's term), so the edge of
+// its day is a band, not the hard line a clipped lit side over the night floor drew (Jupiter from Io); 0 for solid ground
+uniform float terminator_wrap = 0.0;
 // Cartoon (the default style): the photo's albedo lifted a little toward the world's palette
 uniform bool cartoon = true;
 // the near ground's square (World/Bodies/BodyGround, #1850): the globe's own coarse cells step aside over it, a
@@ -23,6 +30,14 @@ uniform vec3 hole_centre = vec3(0.0);
 uniform vec3 hole_up = vec3(0.0, 1.0, 0.0);
 uniform vec3 hole_east = vec3(1.0, 0.0, 0.0);
 uniform float hole_half = 0.0;
+
+// lamps on the ground (#1942, World/Bodies/GroundLamps.cs): a flood light, a colony's lamps; this shader is unshaded,
+// so a Light3D never reaches it. pos: world xyz and range; dir: a spot's direction and the cosine of its half cone
+// (w 0: all round); col: colour times energy
+uniform int lamp_count = 0;
+uniform vec4 lamp_pos[16];
+uniform vec4 lamp_dir[16];
+uniform vec4 lamp_col[16];
 
 varying vec3 world_normal;
 varying vec3 world_pos;
@@ -43,6 +58,17 @@ void fragment() {
 	vec3 col = cartoon ? pow(max(photo, vec3(0.0)), vec3(0.8)) : photo;
 	// plain Lambert: the relief reads by its slopes, and a wall turned from the sun falls to the floor (the Moon's
 	// shadows are black, there is no sky to fill them)
-	float lambert = max(dot(normalize(world_normal), normalize(sun_dir)), 0.0);
-	ALBEDO = col * (night_floor + sun_strength * lambert);
+	float lambert = max((dot(normalize(world_normal), normalize(sun_dir)) + terminator_wrap) / (1.0 + terminator_wrap), 0.0);
+	lambert *= lambert * terminator_wrap + (1.0 - terminator_wrap) * sign(lambert);
+	vec3 lamps = vec3(0.0);
+	for (int i = 0; i < lamp_count; i++) {
+		vec3 to = world_pos - lamp_pos[i].xyz;
+		float d = length(to);
+		float fall = clamp(1.0 - d / lamp_pos[i].w, 0.0, 1.0);
+		vec3 l = to / max(d, 0.001);
+		float cone = lamp_dir[i].w > 0.0 ? smoothstep(lamp_dir[i].w, mix(lamp_dir[i].w, 1.0, 0.25), dot(l, lamp_dir[i].xyz)) : 1.0;
+		lamps += lamp_col[i].rgb * fall * fall * cone * max(dot(normalize(world_normal), -l), 0.0) * 0.1;
+	}
+	vec3 through = exp(-(air_tau - vec3(min(min(air_tau.r, air_tau.g), air_tau.b))) / max(lambert, 0.05));
+	ALBEDO = col * (night_floor + sun_strength * lambert * through + lamps);
 }
