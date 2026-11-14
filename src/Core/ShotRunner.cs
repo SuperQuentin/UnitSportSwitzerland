@@ -667,7 +667,12 @@ public partial class ShotRunner : Node
     /// </summary>
     private bool Save(string outPath)
     {
-        var image = GetViewport().GetTexture().GetImage();
+        // no frame to read (a --headless run draws none): the shot fails once, it is not retried every frame
+        if (GetViewport().GetTexture()?.GetImage() is not { } image)
+        {
+            GD.PrintErr($"[shot] FAILED {outPath}: no drawn frame (a --headless run takes no pictures)");
+            return false;
+        }
         string path = ProjectSettings.GlobalizePath(outPath);
         string part = path + ".part";
         var err = image.SavePng(part);
