@@ -2791,6 +2791,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the speed (#1796): the readout under these rows says what it is (#1798)
             yield return (PlayerInput.SpectatorFaster, "Faster");
             yield return (PlayerInput.SpectatorSlower, "Slower");
+            // the target cue in the earth world (#1850): a tap the next body, a hold turns to it
+            if (Player.SpectatorTargets.Instance is { } targets) yield return (PlayerInput.SpectatorTarget, targets.Target == null ? "Target" : "Next target");
             yield return (PlayerInput.Teleport, "Map");
         }
         else if (viewer is { } p && IsInstanceValid(p))

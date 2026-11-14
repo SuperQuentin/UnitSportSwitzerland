@@ -69,6 +69,9 @@ public partial class BodyViews : Node
             AddChild(_earth);
             _globes.Add(_earth);
         }
+        // the spectator's target cue (#1850): any body, with or without its data
+        AddChild(new Player.SpectatorTargets(_origin));
+        if (Player.SpectatorTargetCheck.Requested) AddChild(new Player.SpectatorTargetCheck());
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }
