@@ -543,10 +543,14 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         }
 
         _anchorTilesNow.Clear();
-        foreach (var anchor in _ground.Anchors)
-            // the ground's names for the tiles (#1704): an earth leaf's stand-in, whose neighbours are the next leaves', so the
-            // fleets, yards and site pallets are the leaves' own, as drawn and as the server reads them
-            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_ground.ContentName(_ground.TileAt(anchor.GlobalPosition)));
+        // off the Earth (#1850) the Earth's tiles are nowhere near: an anchor on the Moon would name the Earth tile its
+        // Moon place falls on, and park that tile's fleet round it
+        bool home = _ground.Origin?.Body is null or Core.BodyId.Earth;
+        if (home)
+            foreach (var anchor in _ground.Anchors)
+                // the ground's names for the tiles (#1704): an earth leaf's stand-in, whose neighbours are the next leaves', so the
+                // fleets, yards and site pallets are the leaves' own, as drawn and as the server reads them
+                if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_ground.ContentName(_ground.TileAt(anchor.GlobalPosition)));
         if (SameTiles(_anchorTilesNow, _anchorTiles))
         {
             if (_pending.Count > 0) _ = Fill();

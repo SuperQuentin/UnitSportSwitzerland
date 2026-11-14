@@ -68,7 +68,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public WorldOrigin? Origin { get => _origin ?? Terrain?.Origin; set => _origin = value; }
     private WorldOrigin? _origin;
 
-    private const float Gravity = 9.81f;
+    /// <summary>The ground's gravity where the anchor is (#1850): 9.81 m/s² on the Earth, the Moon's 1.63 there.</summary>
+    private static float Gravity => BodyGravity.Ground;
     private const float EyeHeight = 1.68f;   // average adult eye level
     public const float BaseFov = 68f;
     private const float RunFov = 76f;

@@ -15,14 +15,18 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 - **H7d** (#1850):
   - PR #1873: `SkyClock`, `WorldOrigin.Rebase`, the sphere check behind `--crossbodies`;
   - PR #1881: the spectator's speed by the nearest surface;
-  - this branch: the sky read at `SkyMoment`.
+  - PR #1889: the sky read at `SkyMoment`;
+  - PR #1891: `--crossbodies` on in the earth world, the origin following the camera in 3D past 1,000 km, `--mooncheck`
+    (Earth orbit to lunar orbit in 27 s, one crossing, no jump);
+  - this branch: the Moon's ground under your feet (`BodyHeights`, `BodyGround`, `IBodyGround`, `BodyGravity`): a
+    512 m square from LOLA and the craters round the camera, solid, eased into the globe at its edge; T steps in, the
+    walker sprints and jumps 5.4 m at 1.63 m/s².
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
 
 **Still to come**:
-- the Moon's ground under your feet: leaves from the pyramid and `CraterField`, collision, walking at 1.62 m/s²;
-- `--mooncheck`, and `--crossbodies` on by default;
+- a medium ring round the near square (the pyramid's full 167 m lattice out to a few km), so the horizon has its craters;
 - the target cue and the align hold;
 - belly jets;
 - C3b online (after D2, #1727);
