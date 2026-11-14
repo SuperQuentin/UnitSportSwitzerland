@@ -363,6 +363,30 @@ public class MoonPadsTests
     }
 
     [Fact]
+    public void The_pads_are_60_m_across_their_berms_apart_and_past_the_road()
+    {
+        foreach (var c in MoonColonies.All)
+        {
+            var plan = ColonyPlan.For(c);
+            if (plan.Pads.Count == 0) continue;
+            var (ex, ez) = plan.Road[^1];
+            for (int i = 0; i < plan.Pads.Count; i++)
+            {
+                var a = plan.Pads[i];
+                Assert.True(a.Radius * 2 >= 60, $"{c.Id}: pad {a.Number} is {a.Radius * 2} m across");
+                Assert.True(Math.Sqrt((a.X - ex) * (a.X - ex) + (a.Z - ez) * (a.Z - ez)) > a.Radius, $"{c.Id}: the road runs onto pad {a.Number}");
+                // on the plateau with its berm, inside the level stamp
+                Assert.True(Math.Sqrt(a.X * a.X + a.Z * a.Z) + a.Radius + 5 < c.PlateauM, $"{c.Id}: pad {a.Number} off the plateau");
+                for (int j = i + 1; j < plan.Pads.Count; j++)
+                {
+                    var b = plan.Pads[j];
+                    Assert.True(Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Z - b.Z) * (a.Z - b.Z)) > a.Radius + b.Radius + 10, $"{c.Id}: pads {a.Number} and {b.Number} touch");
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void A_pad_and_the_runway_are_level_on_their_stamps()
     {
         var stamps = new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), Ellipsoid.Moon.A);

@@ -16,7 +16,7 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938), section 4. The sites of pha
   y = 0 in the colony's ENU frame. `--moonsites artemis` checks it level to 2 cm.
 - **The plan** (`Terrain/Bodies/ColonyPlan`, `ColonyPlanTests`): a hub (10 m drum, two storeys) at the centre, four
   spines at right angles, one to three cans end to end on each (Moon Village: a stack at the end), the hangar at the
-  head of the first spine, the road 220 m on to three pads across it. Moondust domes in a second pass, each only
+  head of the first spine, the road 220 m on to three pads across it (60 m across, 85 m apart: `ColonyPlan.PadR`, `PadSpacing`, for the shuttle). Moondust domes in a second pass, each only
   where a circle 4 m wider than it clears every module (`Clear`): placed during the spines they overlapped a
   neighbouring spine's dome (the test found it). Doors carry the way out; a link joins two doors (an alley in the
   Moon Village's theme, glazed and walk-in since #1942: `moon-industry`; a tube otherwise). Pure from the record: every peer plans the same colony.
