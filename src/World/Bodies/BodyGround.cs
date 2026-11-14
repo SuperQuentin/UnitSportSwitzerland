@@ -93,6 +93,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public readonly bool Solid = solid;
         public StaticBody3D? Node;
         public ShaderMaterial? Material;
+        public float ExposureWritten;
         public EnuFrame? Frame;
         public Task<Square>? Task;
         public int Epoch = -1, Built;
@@ -223,6 +224,10 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     {
         if (l.Node != null && _origin.Epoch != l.Epoch) Place(l, axes);
         if (l.Material != null && _globe.Sun != Vector3.Zero) l.Material.SetShaderParameter(SunDir, _globe.Sun);
+        // the globe's exposure comes once its six faces' colour is in: a square made before kept the shader's default
+        // (Phobos' near square at 1.6 in a globe at 0.9, a bright patch, #1853)
+        if (l.Material != null && l.ExposureWritten != _globe.Exposure)
+            l.Material.SetShaderParameter(SunStrength, l.ExposureWritten = _globe.Exposure);
     }
 
     /// <summary>A layer needs a new square round <paramref name="p"/>: none yet, or the camera past its move distance.</summary>
@@ -254,15 +259,33 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             for (int i = 0; i < n; i++)
                 pos[j * n + i] = new Vector3((i - cells / 2) * cellM, y[j * n + i], (j - cells / 2) * cellM);
 
-        // the colour: the finest coloured tile over the centre, its UVs from each vertex's place on that tile
+        // the colour: the finest coloured tile over the centre that holds the whole square (on a moon of a few km, #1853,
+        // the finest tile is smaller than the 4 km square, whose edges read past it), its UVs from each vertex's place on
+        // that tile; where none holds it (across a face's edge), the finest over the centre
         var cube = heights.Cube;
         Image? colour = null;
         CubeKey? colourKey = null;
         var n0 = heights.NormalUnder(frame.Origin);
+        double half = cells / 2 * cellM;
+        var corners = new EcefPos[4];
+        for (int c = 0; c < 4; c++) corners[c] = heights.NormalUnder(frame.ToEcef((c & 1) == 0 ? -half : half, 0, (c & 2) == 0 ? -half : half));
+        bool Holds(CubeKey k)
+        {
+            double side = 1 << k.Level;
+            foreach (var pc in corners)
+            {
+                var (fu, fv) = cube.OnFace(k.Face, pc);
+                double tu = (fu + 1) * 0.5 * side - k.X, tv = (fv + 1) * 0.5 * side - k.Y;
+                if (!(tu >= 0 && tu <= 1 && tv >= 0 && tv <= 1)) return false;
+            }
+            return true;
+        }
+        for (int pass = 0; pass < 2 && colourKey == null; pass++)
         for (int level = globe.MaxLevel; level >= 0 && colourKey == null; level--)
         {
             var (face, u, v) = cube.FromNormal(n0);
             var k = CubeKey.FromFace(face, u, v, level);
+            if (pass == 0 && !Holds(k)) continue;
             if (!globe.Pyramid.HasColour(k) || globe.Pyramid.Colour(k, 1) is not { } webp) continue;
             colour = new Image();
             if (colour.LoadWebpFromBuffer(webp) != Error.Ok) { colour = null; continue; }

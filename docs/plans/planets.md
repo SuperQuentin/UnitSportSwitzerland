@@ -30,6 +30,9 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 - **H7d**, this branch: a medium ground square (4 km of 16 m cells, the craters from 40 m) to the walker's horizon.
 - **H7d**, this branch: the spectator's target cue (] / D-pad → / VR right stick down: tap the next body, hold to turn to
   it; a ring or edge arrow, the distance, the trip at full speed).
+- **H7e** (#1853), this branch: Phobos and Deimos from Ernst et al. (2023)'s shape models as heights over spheres
+  (`--shape-dem`), on circles round Mars fitted to Horizons, landing, standing and jumping under their mm/s²
+  (`--mooncheck phobos|deimos --fromorbit`).
 - **H7f** (#1854), this branch: Mercury (MESSENGER 665 m, levels 0-4, the grey 250 m mosaic) and Venus (Magellan
   4.6 km, levels 0-2, the radar colour, a thick amber haze), each on its data's own reference sphere; landing, walking
   and jumping on both (`--mooncheck mercury|venus --fromorbit`).

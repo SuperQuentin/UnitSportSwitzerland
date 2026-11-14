@@ -15,6 +15,8 @@ namespace UnitSport.Tools.Preprocessor;
 /// <code>
 /// --cube-body moon --dem FILE --cube-out DIR [--cube-levels 0-5] [--jobs N] [--cube-check]
 /// --cube-body mars --dem MOLA.tif --areoid mega90n000eb.img --cube-out DIR --cube-levels 0-4
+/// --cube-body phobos --dem phobos_shape_dem.tif --credit "Ernst et al. 2023, CC-BY-4.0" --cube-levels 0-1   (a shape
+///     model's heights over its sphere, from --shape-dem: <see cref="ShapeModel"/>, #1853)
 /// --cube-body callisto --dem flat --cube-out DIR --cube-levels 0-3   (no global heights: the reference sphere, the
 ///     body's profile generates the relief; the colour carries the body, #1854)
 /// </code>
@@ -42,6 +44,8 @@ public static class CubeBody
         "ganymede" => CubeShape.Ganymede,
         "callisto" => CubeShape.Callisto,
         "titan" => CubeShape.Titan,
+        "phobos" => CubeShape.Phobos,
+        "deimos" => CubeShape.Deimos,
         "jupiter" => CubeShape.Jupiter,
         "saturn" => CubeShape.Saturn,
         "uranus" => CubeShape.Uranus,
@@ -51,7 +55,7 @@ public static class CubeBody
 
     public static int Run(IReadOnlyList<string> args, CancellationToken ct)
     {
-        string? body = null, dem = null, outDir = null, areoid = null;
+        string? body = null, dem = null, outDir = null, areoid = null, credit = null;
         int minLevel = 0, maxLevel = 5, jobs = Math.Max(1, Environment.ProcessorCount / 2);
         bool check = false;
         for (int i = 0; i < args.Count; i++)
@@ -61,6 +65,8 @@ public static class CubeBody
                 case "--cube-body": body = args[++i]; break;
                 case "--dem": dem = args[++i]; break;
                 case "--areoid": areoid = args[++i]; break;
+                // whose heights and under what licence, when not NASA/USGS's public domain (#1853: a shape model's)
+                case "--credit": credit = args[++i]; break;
                 case "--cube-out": outDir = args[++i]; break;
                 case "--cube-levels":
                     var r = args[++i].Split('-');
@@ -74,7 +80,7 @@ public static class CubeBody
         }
         if (body == null || dem == null || outDir == null) { Console.Error.WriteLine("--cube-body needs a body, --dem FILE and --cube-out DIR"); return 2; }
         var cube = CubeOf(body);
-        if (cube == null) { Console.Error.WriteLine($"--cube-body: no body called {body} (moon, mars, mercury, venus, io, europa, ganymede, callisto, titan)"); return 2; }
+        if (cube == null) { Console.Error.WriteLine($"--cube-body: no body called {body} (moon, mars, mercury, venus, io, europa, ganymede, callisto, titan, phobos, deimos)"); return 2; }
         Directory.CreateDirectory(outDir);
 
         var sw = Stopwatch.StartNew();
@@ -93,7 +99,7 @@ public static class CubeBody
             Orientation = "face 0 at 0N 0E, twist 0",
         };
         manifest.Sources.Add(flat ? "no global heights: the reference sphere, the body's profile generates the relief"
-            : $"{Path.GetFileName(dem)}: heights above the body's reference {(cube.Shape.F == 0 ? "sphere" : "ellipsoid")} (NASA/USGS, public domain)");
+            : $"{Path.GetFileName(dem)}: heights above the body's reference {(cube.Shape.F == 0 ? "sphere" : "ellipsoid")} ({credit ?? "NASA/USGS, public domain"})");
         if (areoid != null) manifest.Sources.Add($"{Path.GetFileName(areoid)}: the areoid the DEM is measured from, turned to the ellipsoid (MGS MOLA MEGDR, NASA, public domain)");
         for (int level = minLevel; level <= maxLevel; level++)
             manifest.Levels.Add(new CubeManifestLevel { Level = level, Bits = CubeKey.LatticeBits(level), BundleLevel = CubeKey.PyramidBundleLevel(level) });
