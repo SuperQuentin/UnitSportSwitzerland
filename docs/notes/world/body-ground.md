@@ -41,6 +41,13 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   (Mars' ground is kilometres under its reference).
 - **Earth-only systems off the Earth**: guard on `Origin.Body` (`Traffic.RebuildIfMoved`, `DormantVehicles`), or a
   Moon place names an Earth tile and fills it.
+- **Boulders round fresh craters** (#1849, `Terrain/Bodies/BoulderField`, `World/Bodies/BodyBoulders`): the craters of the
+  `CraterField` 10 m and up and fresh (depth over diameter: `CraterField.Freshness` ≥ 0.55, ~7 % of them) throw
+  0.3 m to D/15 boulders from the rim to two radii (0.3 a metre of diameter when fully fresh, most small), a function of
+  the crater (every peer the same). Within 400 m of the camera while it is under 3 km over the ground, rebuilt after
+  100 m, laid on the ground's height a third sunk and flattened, `RingRocks`' shapes in the body's grey (Mars' rust),
+  solid spheres within 150 m. ~200 round a walker on the Moon or Mercury, a few dozen on Mars. `--mooncheck` checks
+  them on well-cratered bodies (a ray down onto the nearest).
 - **`/goto <body> <lat> <lon> [km]`** (#1850, `Core/BodyGoto`, `ClientWorld.GoToBody`): the fly camera to a place on any
   body (the chat line, offline; online it waits for C3b): the fly camera taken if on foot, the anchor relabelled to the body
   (nothing moves), the world shifted to the place's tangent frame, the camera over it (30 km over a body with ground by

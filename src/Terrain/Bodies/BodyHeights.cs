@@ -26,6 +26,9 @@ public sealed class BodyHeights
     private readonly int _level;
     private readonly Func<CubeKey, CubeTile?> _load;
     private readonly CraterField? _craters;
+
+    /// <summary>The generated craters (null where the body has none): the boulders read their fresh ones.</summary>
+    public CraterField? Craters => _craters;
     private readonly SurfaceStamps? _stamps;
     private readonly Dictionary<CubeKey, CubeTile?> _tiles = new();
     private readonly object _lock = new();

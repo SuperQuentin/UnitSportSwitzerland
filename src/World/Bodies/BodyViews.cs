@@ -64,6 +64,8 @@ public partial class BodyViews : Node
                 {
                     g.Ground = new BodyGround(g, _origin);
                     AddChild(g.Ground);
+                    // boulders round its fresh craters, where it has generated craters (#1849)
+                    if (body.CraterDensity > 0) AddChild(new BodyBoulders(g, _origin));
                     // the Moon's historic and invented sites near the camera (#1939)
                     if (body.Id == BodyId.Moon) AddChild(new Moon.MoonSurface(g.Ground, _origin));
                 }
