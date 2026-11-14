@@ -23,12 +23,15 @@ public partial class MoonDisc : MeshInstance3D
     public const string MapPath = "res://assets/space/moon_lroc_4k.jpg";
 
     /// <summary>
-    /// The least angular radius drawn, as a share of the view's vertical field (the sun's too). 0: always the true
-    /// size (#1842), its brightness shown by its halo as a star's is, never by a bigger disc. It was 0.011 (#1798,
-    /// 24 px across at 1080p and 70°): a boost zooming took back, so the moon shrank against the land as one zoomed.
-    /// <c>--sky-disc-share</c> sets it for comparison shots.
+    /// The least angular radius drawn, as a share of the view's vertical field (the sun's too): 12 px across at 1080p
+    /// and 70°, 1.5 times the true 8 px; from a 47° view down the true size. Its brightness is its halo, as a star's.
+    /// It was 0.011 (#1798, 24 px), a boost zooming took back, so the moon shrank against the land as one zoomed in;
+    /// the user chose this halfway one over the true size (#1842, side by side in the game).
+    /// <c>--sky-disc-share</c> sets it for comparison shots (0: the true size).
     /// </summary>
-    public static float ScreenShare = Core.CmdArgs.Float("--sky-disc-share") ?? 0f;
+    public const float DefaultShare = 0.0055f;
+
+    public static float ScreenShare = Core.CmdArgs.Float("--sky-disc-share") ?? DefaultShare;
 
     /// <summary>The halo's inner falloff, as a share of the view's vertical field (its outer one is four times it).</summary>
     public const float HaloShare = 0.004f;
@@ -96,7 +99,7 @@ public partial class MoonDisc : MeshInstance3D
             _halo.Visible = false;
             return;
         }
-        // just inside the far plane at its true angular radius (#1842; at least ScreenShare of the view's height when set)
+        // just inside the far plane at its true angular radius, at least ScreenShare of the view's height (#1842)
         float distance = cam.Far * 0.9f;
         float fov = Mathf.DegToRad(Core.CameraLens.FovOf(cam));
         float angular = Mathf.Max((float)(RadiusMetres / sky.MoonDistance), fov * ScreenShare);
