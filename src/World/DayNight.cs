@@ -34,9 +34,12 @@ public partial class DayNight : Node
     /// sphere's axes for the stars (<see cref="SunPath.SkyFrame"/>), and the date, hour and place
     /// it was read at, for anything else in the sky (#1444). <c>At</c> is the camera itself in an anchor frame (its
     /// height too: the moon's parallax and satellites from orbit, #1845), its LV95 kilometre on the flat ground.
+    /// <c>Moment</c> is the sky's moment it was read at (#1850, <see cref="SkyClock"/>): the bodies at their own time, the
+    /// Earth turned by the hour; whatever else draws a body reads it at that moment, so the Moon in the sky is the Moon the
+    /// frame tree places (the Moon's globe takes over from it without a jump).
     /// </summary>
     public readonly record struct RealSky(Vector3 Sun, Vector3 Moon, double MoonDistance, Basis MoonFace, Basis Stars,
-        DateOnly Date, double Hour, GlobalPos At);
+        DateOnly Date, double Hour, GlobalPos At, SkyMoment Moment);
 
     public static DayNight? Instance { get; private set; }
 
@@ -268,11 +271,13 @@ public partial class DayNight : Node
             SunPath.Frame = Origin?.Frame;
             var date = SunPath.Today();
             var at = Place;
-            sun = SunPath.Toward(SkyBody.Sun, date, Hour, at, out float elevationDeg, out _);
+            // the bodies at their own time, the Earth turned by the hour (#1850): the sun's hour angle is today's exactly
+            var m = SkyClock.Moment(WorldClock.BodiesUtc, date, Hour);
+            sun = SunPath.Toward(SkyBody.Sun, m, at, out float elevationDeg, out _);
             SunElevationDeg = elevationDeg;
-            var moon = SunPath.Toward(SkyBody.Moon, date, Hour, at, out _, out double moonDistance);
-            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(date, Hour, at),
-                SunPath.SkyFrame(date, Hour, at), date, Hour, at);
+            var moon = SunPath.Toward(SkyBody.Moon, m, at, out _, out double moonDistance);
+            Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(m, at),
+                SunPath.SkyFrame(m, at), date, Hour, at, m);
             shade = SunElevationDeg > 3f ? sun : MoonShade(moon);
         }
         else

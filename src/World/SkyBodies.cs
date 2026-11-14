@@ -183,11 +183,12 @@ public partial class SkyBodies : Node3D
         var stars = sky.Stars;
         var toSky = stars.Transposed();
         var camPos = cam.GlobalPosition;
-        var utc = SwissTime.ToUtc(sky.Date, sky.Hour);
+        // the sky's moment (#1850): the planets where they are at the bodies' time, the Earth turned by the hour
+        var utc = sky.Moment.Utc;
         float night = day.Night;
         if (now - _sunAt > 0.5)
         {
-            _sunSky = toSky * SunPath.Toward(SkyBody.Sun, sky.Date, sky.Hour, sky.At, out _, out _sunDistance);
+            _sunSky = toSky * SunPath.Toward(SkyBody.Sun, sky.Moment, sky.At, out _, out _sunDistance);
             _sunAt = now;
         }
         var sunWorld = (stars * _sunSky).Normalized();
@@ -199,9 +200,9 @@ public partial class SkyBodies : Node3D
             bool zoomed = e.DiscPixels > 0.5f || parent.DiscPixels > 0.5f;
             if (now - e.ComputedAt > (zoomed ? 0.0 : 0.5))
             {
-                var dir = SunPath.Toward(id, sky.Date, sky.Hour, sky.At, out _, out double distance);
+                var dir = SunPath.Toward(id, sky.Moment, sky.At, out _, out double distance);
                 e.Direction = toSky * dir;
-                e.Face = toSky * SunPath.Face(id, sky.Date, sky.Hour, sky.At);
+                e.Face = toSky * SunPath.Face(id, sky.Moment, sky.At);
                 e.Distance = distance;
                 e.Magnitude = (float)Ephemeris.Magnitude(id, utc);
                 e.ComputedAt = now;

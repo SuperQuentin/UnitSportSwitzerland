@@ -130,11 +130,21 @@ public static class SunPath
     /// ground frame, as from <c>at</c>'s LV95 place (<see cref="Toward(SkyBody, DateOnly, double, double, double, out float, out double)"/>).
     /// </summary>
     public static Vector3 Toward(SkyBody body, DateOnly date, double hour, GlobalPos at, out float elevationDeg, out double distance) =>
-        Toward(body, date, hour, PlaceOf(at), out elevationDeg, out distance);
+        Toward(body, SkyMoment.Calendar(date, hour), PlaceOf(at), out elevationDeg, out distance);
 
-    private static Vector3 Toward(SkyBody body, DateOnly date, double hour, Place place, out float elevationDeg, out double distance)
+    /// <summary>
+    /// <see cref="Toward(SkyBody, DateOnly, double, GlobalPos, out float, out double)"/> at a sky moment (#1850): the body where
+    /// it is at the moment's time, the Earth turned by its angle, so the Moon in the sky is the Moon the frame tree places.
+    /// </summary>
+    public static Vector3 Toward(SkyBody body, SkyMoment m, GlobalPos at, out float elevationDeg, out double distance) =>
+        Toward(body, m, PlaceOf(at), out elevationDeg, out distance);
+
+    private static Vector3 Toward(SkyBody body, DateOnly date, double hour, Place place, out float elevationDeg, out double distance) =>
+        Toward(body, SkyMoment.Calendar(date, hour), place, out elevationDeg, out distance);
+
+    private static Vector3 Toward(SkyBody body, SkyMoment m, Place place, out float elevationDeg, out double distance)
     {
-        var h = Ephemeris.Topocentric(body, SwissTime.ToUtc(date, hour), place.Geo);
+        var h = Ephemeris.Topocentric(body, m, place.Geo);
         elevationDeg = (float)h.ElevationDeg;
         // over another body's horizon (#1848): the direction against that body's own up
         if (place.BodyUp is { } bodyUp)
@@ -154,17 +164,23 @@ public static class SunPath
     public static Basis MoonFace(DateOnly date, double hour, double e, double n) => Face(SkyBody.Moon, date, hour, e, n);
 
     /// <summary><see cref="MoonFace(DateOnly, double, double, double)"/> from <paramref name="at"/> (see <see cref="Toward(SkyBody, DateOnly, double, GlobalPos, out float, out double)"/>).</summary>
-    public static Basis MoonFace(DateOnly date, double hour, GlobalPos at) => Face(SkyBody.Moon, date, hour, PlaceOf(at));
+    public static Basis MoonFace(DateOnly date, double hour, GlobalPos at) => Face(SkyBody.Moon, SkyMoment.Calendar(date, hour), PlaceOf(at));
+
+    /// <summary><see cref="MoonFace(DateOnly, double, GlobalPos)"/> at a sky moment (#1850).</summary>
+    public static Basis MoonFace(SkyMoment m, GlobalPos at) => Face(SkyBody.Moon, m, PlaceOf(at));
 
     /// <summary>Any body's own axes in world axes, as <see cref="MoonFace"/> (#1444): a planet's map and its rings' plane.</summary>
-    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n) => Face(body, date, hour, PlaceAt(e, n));
+    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n) => Face(body, SkyMoment.Calendar(date, hour), PlaceAt(e, n));
 
     /// <summary><see cref="Face(SkyBody, DateOnly, double, double, double)"/> from <paramref name="at"/>.</summary>
-    public static Basis Face(SkyBody body, DateOnly date, double hour, GlobalPos at) => Face(body, date, hour, PlaceOf(at));
+    public static Basis Face(SkyBody body, DateOnly date, double hour, GlobalPos at) => Face(body, SkyMoment.Calendar(date, hour), PlaceOf(at));
 
-    private static Basis Face(SkyBody body, DateOnly date, double hour, Place place)
+    /// <summary><see cref="Face(SkyBody, DateOnly, double, GlobalPos)"/> at a sky moment (#1850).</summary>
+    public static Basis Face(SkyBody body, SkyMoment m, GlobalPos at) => Face(body, m, PlaceOf(at));
+
+    private static Basis Face(SkyBody body, SkyMoment m, Place place)
     {
-        var (pole, prime, east) = Ephemeris.Axes(body, SwissTime.ToUtc(date, hour));
+        var (pole, prime, east) = Ephemeris.Axes(body, m);
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(prime), Axis(east), Axis(pole));
     }
@@ -174,14 +190,17 @@ public static class SunPath
     /// (the north celestial pole) as seen from LV95 <paramref name="e"/> / <paramref name="n"/>. A
     /// star's catalogue direction times it is where it shines.
     /// </summary>
-    public static Basis SkyFrame(DateOnly date, double hour, double e, double n) => SkyFrame(date, hour, PlaceAt(e, n));
+    public static Basis SkyFrame(DateOnly date, double hour, double e, double n) => SkyFrame(SkyMoment.Calendar(date, hour), PlaceAt(e, n));
 
     /// <summary><see cref="SkyFrame(DateOnly, double, double, double)"/> from <paramref name="at"/>.</summary>
-    public static Basis SkyFrame(DateOnly date, double hour, GlobalPos at) => SkyFrame(date, hour, PlaceOf(at));
+    public static Basis SkyFrame(DateOnly date, double hour, GlobalPos at) => SkyFrame(SkyMoment.Calendar(date, hour), PlaceOf(at));
 
-    private static Basis SkyFrame(DateOnly date, double hour, Place place)
+    /// <summary><see cref="SkyFrame(DateOnly, double, GlobalPos)"/> at a sky moment (#1850).</summary>
+    public static Basis SkyFrame(SkyMoment m, GlobalPos at) => SkyFrame(m, PlaceOf(at));
+
+    private static Basis SkyFrame(SkyMoment m, Place place)
     {
-        var (x, y, z) = Ephemeris.Celestial(SwissTime.ToUtc(date, hour));
+        var (x, y, z) = Ephemeris.Celestial(m);
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(x), Axis(y), Axis(z));
     }

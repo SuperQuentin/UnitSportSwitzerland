@@ -56,7 +56,7 @@ public partial class SkyProbe : Node
         foreach (var body in SkyBodies.Bodies)
         {
             var drawn = SkyBodies.Instance!.DirectionOf(body);
-            var truth = SunPath.Toward(body, sky.Date, sky.Hour, sky.At, out _, out _);
+            var truth = SunPath.Toward(body, sky.Moment, sky.At, out _, out _);
             float off = drawn is { } d ? Mathf.RadToDeg(d.AngleTo(truth)) : 99f;
             Expect(off < 0.01f, $"{body} drawn where the ephemeris has it ({off:0.0000}°)");
         }
