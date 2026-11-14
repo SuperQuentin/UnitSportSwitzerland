@@ -91,13 +91,17 @@ public partial class GlobeClimb : Node
     public const float PopPx = 2f;
 
     /// <summary>Seconds hovering at the top before the last read-out.</summary>
-    public const double HoldS = 10;
+    public const double DefaultHoldS = 10;
+
+    /// <summary>The hover at the top (the fourth argument, <see cref="DefaultHoldS"/> without it): a long one at a low top
+    /// gives a streaming client time to bring its deep levels (#1657's far features check).</summary>
+    public double HoldS { get; init; } = DefaultHoldS;
 
     // the grid's point 0.8 altitudes ahead, straight on: past the near leaves round the body, and short of the horizon
     // from orbit (2.5 altitudes ahead at 2,000 km is past it)
     private const int FarMiddle = 2 * 7 + 3;
 
-    public static string[]? ParseArgs() => CmdArgs.Value("--globeclimb")?.Split(',') is { Length: 3 } p ? p : null;
+    public static string[]? ParseArgs() => CmdArgs.Value("--globeclimb")?.Split(',') is { Length: 3 or 4 } p ? p : null;
 
     private readonly Camera3D _camera;
     private readonly WorldOrigin _origin;
