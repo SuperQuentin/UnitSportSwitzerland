@@ -34,8 +34,17 @@ public sealed partial class Airliner : ISpacecraft
     /// <summary>Altitude above sea level last step, m (from <see cref="SpaceOrbit.Place"/>; NaN with none).</summary>
     public double Altitude { get; private set; } = double.NaN;
 
-    /// <summary>The drive may be switched on now: above <see cref="ShuttleFlight.DriveFloorM"/>, or it is on (to switch it off).</summary>
-    public bool DriveAvailable => Spec.Spacecraft && (DriveOn || Altitude > ShuttleFlight.DriveFloorM);
+    /// <summary>
+    /// The drive may be switched on now: above the Space handover of the body it is near (<see cref="ShuttleFlight.DriveFloorM"/>
+    /// over the Earth, the Moon's 10 km over the Moon, #1851), or it is on (to switch it off).
+    /// </summary>
+    public bool DriveAvailable => Spec.Spacecraft && (DriveOn || Altitude > DriveFloor);
+
+    /// <summary>The drive's floor over the body the craft is near (#1851): its Space handover.</summary>
+    private double DriveFloor => Space is { } space ? space.Body.SpaceEnterM : ShuttleFlight.DriveFloorM;
+
+    /// <summary>The distance the drive measures last step (#1851): to the nearest surface of any body.</summary>
+    public double DriveDistance { get; private set; } = double.NaN;
 
     /// <summary>The way up last step, world axes: the attitude is carried with it as the craft moves round.</summary>
     private Vector3 _up = Vector3.Zero;
@@ -55,18 +64,20 @@ public sealed partial class Airliner : ISpacecraft
             return false;
         }
         Altitude = place.Altitude;
+        // what the drive measures: the nearest surface of any body, the Moon's as it comes up (#1851)
+        DriveDistance = SurfaceReach.Of(place.Frame, place.At, place.Altitude);
         var up = place.Frame.UpAt(place.At);
         if (_up != Vector3.Zero) State.Attitude = ShuttleFlight.Relevel(State.Attitude, _up, up);
         _up = up;
 
         // nobody at the controls in the drive (a pilot gone, a client dropped): it leaves the drive on an orbit
         if (DriveOn && (toggle || !input.Piloted)) DriveOff(space, place);
-        else if (toggle && !DriveOn && place.Altitude > ShuttleFlight.DriveFloorM)
+        else if (toggle && !DriveOn && place.Altitude > space.Body.SpaceEnterM)
         {
             DriveOn = true;
             space.Drop();
             // it takes over at the speed the craft has (the lever set to match), not from a standstill
-            State.Lever = ShuttleFlight.DriveLever(State.Tas, place.Altitude);
+            State.Lever = ShuttleFlight.DriveLever(State.Tas, DriveDistance);
             GD.Print(FormattableString.Invariant($"[shuttle] cruise drive on at {place.Altitude / 1000:F1} km"));
         }
         // taken down out of Space the drive drops out: an aircraft again, at the speed it had
@@ -83,7 +94,7 @@ public sealed partial class Airliner : ISpacecraft
         {
             ShuttleFlight.Jets(ref State, input.Piloted ? input.Stick : Vector2.Zero, drive: true, dt);
             var nose = -State.Attitude.Z;
-            State.Velocity = nose * ShuttleFlight.DriveSpeed(State.Lever, place.Altitude);
+            State.Velocity = nose * ShuttleFlight.DriveSpeed(State.Lever, DriveDistance);
             Air(place.Altitude, State.Velocity.Length());
         }
         else
