@@ -29,6 +29,10 @@ public sealed class CubeShape
     /// <summary>Venus': Magellan's 6,051.0 km sphere, face 0 on 0° N 0° E (#1854).</summary>
     public static readonly CubeShape Venus = new(Ellipsoid.Venus);
 
+    /// <summary>Jupiter's big moons and Titan (#1854): their IAU mean spheres, face 0 on 0° N 0° E; no global heights.</summary>
+    public static readonly CubeShape Io = new(Ellipsoid.Sphere(1_821_600)), Europa = new(Ellipsoid.Sphere(1_560_800)),
+        Ganymede = new(Ellipsoid.Sphere(2_634_100)), Callisto = new(Ellipsoid.Sphere(2_410_300)), Titan = new(Ellipsoid.Sphere(2_574_730));
+
     /// <summary>The ellipsoid it is laid on: latitudes, longitudes and heights are on it.</summary>
     public Ellipsoid Shape { get; }
 

@@ -71,6 +71,16 @@ JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and
   `Ellipsoid.Venus`), levels 0-2; colour: the colourised radar mosaic `Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif`.
 - `--globealbedo --body NAME` takes any body of the registry but the Earth.
 
+## Bodies with no global heights: `--dem flat` (#1854)
+
+Io, Europa, Ganymede, Callisto and Titan have global mosaics (Voyager/Galileo SSI 0.5-1.4 km; Titan's Cassini ISS
+4 km) but no global DEM. `--cube-body NAME --dem flat` writes the pyramid's tiles at the reference sphere (levels 0-3, 0-2
+for Titan, a few seconds); the colour carries the body from orbit, and the near ground's relief is its profile's
+(`CelestialBody.CraterDensity`: Callisto 1, Ganymede 0.5, Europa 0.03, Titan 0.02, Io none). Sources, all -180..180 and
+2:1 within a pixel: `Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif`, `Europa_Voyager_GalileoSSI_global_mosaic_500m.tif`,
+`Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif`, `Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif`,
+`Titan_ISS_P19658_Mosaic_Global_4km.tif`; their colour bakes take 1-21 s.
+
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
 | Run | Tiles | Size | Heights | Time | Peak |

@@ -17,6 +17,8 @@ Every body's air is data: `Core/BodyAir` on `CelestialBody.Air` (null for the ai
 - **Venus'** (#1854): CO2 at 65 kg/m3 and 15.9 km scale height; the opaque deck cannot be drawn by single scattering,
   so a thick bright yellow haze that still lets the radar-mapped ground read from orbit: a dim amber sky from the
   ground, as Venera's pictures. Sun power 9.
+- **Titan's** (#1854): N2 at 5.4 kg/m3, ~20 km scale height near the ground, an orange organic haze to hundreds of km
+  (shell top 600 km): dim and orange from the ground and from orbit.
 - **`World/Globe/Atmosphere`**: the shell round the anchor's body when it has air.
   - The Earth's fades in over the style's sky from 15 km, as before.
   - Another body's paints its whole sky from the ground up (the style's sky is the Earth's: dimmed to black there).

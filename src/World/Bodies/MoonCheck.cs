@@ -164,9 +164,11 @@ public partial class MoonCheck : Node
             double off = CmdArgs.Double("--fromorbit") ?? 45;
             var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - off, 360), 100_000);
             _origin.Rebase(Target.Id, sky);
-            shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(Target.Shape.ToEcef(place), Target.Id));
+            // the origin on the reference surface, the camera 100 km over it: a start under the body's Space band (Titan's
+            // is 200 km up) never crosses it on the way down, so an origin left up there stayed 100 km over the walker
+            shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(Target.Shape.ToEcef(place with { H = 0 }), Target.Id));
             _cam.MakeCurrent();
-            _cam.GlobalPosition = Vector3.Zero;
+            _cam.GlobalPosition = new Vector3(0, (float)place.H, 0);
             _crossings = Crossings;
             Log($"from orbit: 100 km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun {90 - off:F0}° up");
             Arrive(Target.Id, Target.Id, 100_000);
@@ -363,7 +365,7 @@ public partial class MoonCheck : Node
             double rise = _apex - _jumpFrom;
             double want = me.JumpVelocity * me.JumpVelocity / (2 * BodyGravity.Ground);
             Log($"jumped {rise:F2} m ({Target.Name}'s {want:F2} m, the Earth's {me.JumpVelocity * me.JumpVelocity / (2 * CelestialBody.Earth.GroundGravity):F2} m), down after {_stageT:F1} s");
-            Finish(Math.Abs(rise - want) <= 0.25 * want ? null : string.Create(CultureInfo.InvariantCulture, $"the jump rose {rise:F2} m, not {want:F2} m"));
+            Finish(Math.Abs(rise - want) <= 0.25 * want ? null : string.Create(CultureInfo.InvariantCulture, $"the jump rose {rise:F2} m, not {want:F2} m (the walker: {me.WalkState}, velocity {me.Velocity})"));
             return;
         }
         if (_stageT > 15) Finish("still in the air 15 s after the jump");
