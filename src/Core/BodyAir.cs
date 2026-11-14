@@ -77,6 +77,36 @@ public sealed record BodyAir(
         600_000, 150_000, 400_000,
         FineAbsorption: (0, 5e-6, 25e-6), SunPower: 8);
 
+    /// <summary>
+    /// The giants' (#1854): air all the way down, heights over their 1-bar radius (negative inside). The fine part is the
+    /// hydrogen's Rayleigh blue (Uranus' and Neptune's methane takes the red: cyan, blue); the coarse part the cloud decks
+    /// (Jupiter's beige ammonia, Saturn's paler, the ice giants' white methane), thickening fast below the 1-bar level, so
+    /// a dive goes through haze into cloud and on into the dark. Densities at 1 bar and scale heights from NASA's fact
+    /// sheets; the colours tuned by eye against Juno's, Cassini's and Voyager 2's pictures.
+    /// </summary>
+    public static readonly BodyAir Jupiter = new(0.16, 27_000,
+        (3e-6, 6e-6, 13e-6), 27_000,
+        (12e-6, 10.5e-6, 8e-6), 20_000, 0.6, 1.05,
+        1_500_000, 300_000, 1_000_000, SunPower: 6);
+
+    /// <inheritdoc cref="Jupiter"/>
+    public static readonly BodyAir Saturn = new(0.19, 59_500,
+        (3e-6, 5e-6, 10e-6), 59_500,
+        (11e-6, 10.5e-6, 8.5e-6), 40_000, 0.6, 1.05,
+        2_500_000, 500_000, 1_800_000, SunPower: 6);
+
+    /// <inheritdoc cref="Jupiter"/>
+    public static readonly BodyAir Uranus = new(0.42, 27_700,
+        (2e-6, 6e-6, 10e-6), 27_700,
+        (8e-6, 10e-6, 11e-6), 20_000, 0.6, 1.05,
+        1_500_000, 300_000, 1_000_000, FineAbsorption: (8e-6, 1e-6, 0), SunPower: 7);
+
+    /// <inheritdoc cref="Jupiter"/>
+    public static readonly BodyAir Neptune = new(0.45, 19_700,
+        (2e-6, 5e-6, 14e-6), 19_700,
+        (6e-6, 8e-6, 11e-6), 20_000, 0.6, 1.05,
+        1_500_000, 300_000, 1_000_000, FineAbsorption: (10e-6, 2e-6, 0), SunPower: 7);
+
     /// <summary>The gas's density at a height over the reference, kg/m³ (0 above the shell).</summary>
     public double Density(double h) => h > ThicknessM ? 0 : SurfaceDensity * Math.Exp(-Math.Max(h, -ScaleHeightM * 3) / ScaleHeightM);
 

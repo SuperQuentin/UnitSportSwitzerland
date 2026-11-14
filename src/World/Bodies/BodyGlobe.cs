@@ -60,6 +60,9 @@ public partial class BodyGlobe : Node
     /// <summary>Tiles drawn last frame (the shots' log).</summary>
     public int DrawnTiles { get; private set; }
 
+    /// <summary>How far under a giant's 1-bar level its globe (the cloud deck) still draws, metres (#1854): inside the clouds.</summary>
+    public const double CloudDeckM = 2_000;
+
     /// <summary>The pyramid's finest level.</summary>
     public int MaxLevel => _maxLevel;
 
@@ -178,6 +181,13 @@ public partial class BodyGlobe : Node
             eyeAnchor = new DVec3(e.X, e.Y, e.Z);
         }
         var eye = own ? eyeAnchor : Frames.Convert(axes.Body, eyeAnchor, Body.Id, sky);
+        // inside a giant (#1854): its globe is the cloud deck at 1 bar, a picture to see from above; once the camera is
+        // under it the air is the view (the shell's clouds and the dark below), so the deck steps aside
+        if (!Body.Landable && Body.Shape.ToGeodetic(eye.AsEcef).H < -CloudDeckM)
+        {
+            if (Drawn) Hide();
+            return;
+        }
         float fov = Mathf.DegToRad(CameraLens.FovOf(cam));
         double focal = GetViewport().GetVisibleRect().Size.Y / (2 * Math.Tan(fov / 2));
         _show.Clear();

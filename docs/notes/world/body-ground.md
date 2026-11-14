@@ -26,8 +26,8 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   (192 m each way), twice the 96 m at which the next is built.
 - **The Earth's leaves answer nothing off the Earth** (`EarthWorld.Locate`, #1854): another body's place read as an
   Earth one found a leaf and its sea, cover, tunnels or pits there.
-- **Bodies one cannot stand on** (#1854): `CelestialBody.FloorM` (a giant's cloud tops, 50 km over its 1-bar radius;
-  the Sun's 0.2 radii); the spectator is pushed back out along the vertical below it (`SpectatorCamera.KeepOverFloor`),
+- **Bodies one cannot stand on** (#1854): `CelestialBody.FloorM` (a giant with air is flown into, down to
+  `GasFloorM`, 500 km under its 1-bar level; the Sun stops the camera at 0.2 radii); the spectator is pushed back out along the vertical below it (`SpectatorCamera.KeepOverFloor`),
   and T over one is refused with a toast ("Jupiter is gas all the way down"; between the planets, the Sun's space:
   "No ground out here"). `--orbitonlycheck`.
 - **The void**: `FootPlayer.RescueFromVoid`'s "under −500 m with no height known" is Switzerland's floor, Earth only
