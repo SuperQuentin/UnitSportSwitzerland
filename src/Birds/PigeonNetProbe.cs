@@ -43,6 +43,14 @@ public partial class PigeonNetProbe : ChatProbe
         await Finish(2);
     }
 
+    /// <summary>Waits for <paramref name="role"/>'s <paramref name="what"/>, then answers <paramref name="answer"/>.</summary>
+    private async Task<bool> HeardThenSay(string role, string what, string answer, double seconds)
+    {
+        if (!await Heard(role, what, seconds)) return false;
+        Say(answer);
+        return true;
+    }
+
     /// <summary>The other client's player, as drawn here.</summary>
     private FootPlayer? Other()
     {
@@ -53,6 +61,9 @@ public partial class PigeonNetProbe : ChatProbe
 
     private async Task RunA(FootPlayer me, BirdLife life)
     {
+        // B listens only once it draws A: on a light world (the fixture, #1718) A got here first and its "pigeon" went
+        // unheard, so B says it is listening, again until A answers
+        if (!await HeardThenSay("B", "ready", "go", 60)) { Fail("B never said it was listening"); return; }
         _items.Inventory.Add(ItemId.Shells, 7);
         int pack = PackTotal();
         await Until(() => _items.UsablePlayer == me && _items.Ui.ItemsActive, 3);
@@ -100,6 +111,7 @@ public partial class PigeonNetProbe : ChatProbe
 
     private async Task RunB(FootPlayer me, BirdLife life)
     {
+        for (int i = 0; i < 60 && !await Heard("A", "go", 1); i++) Say("ready");
         if (!await Heard("A", "pigeon", 60)) { Fail("A never turned into a pigeon"); return; }
         var a = Other()!;
         // the visual is named Body, but the one it replaces may still be in the tree for a frame

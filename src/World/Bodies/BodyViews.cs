@@ -52,6 +52,13 @@ public partial class BodyViews : Node
                 AddChild(g);
                 _globes.Add(g);
                 if (body.Id == BodyId.Moon) _moon = g;
+                // Saturn's rings round its globe (#1854): the sky's ring map, its radii (SkyBodies')
+                if (body.Id == BodyId.Saturn)
+                {
+                    g.AddRings(SaturnRings.Inner, SaturnRings.Outer, SaturnRings.HalfThickness, GD.Load<Texture2D>(SaturnRings.MapPath));
+                    // and their ice chunks round the camera, solid (#1854)
+                    AddChild(new RingChunks(g, _origin));
+                }
                 // the ground under your feet where one can stand (#1850)
                 if (body.Landable)
                 {
@@ -69,6 +76,11 @@ public partial class BodyViews : Node
             AddChild(_earth);
             _globes.Add(_earth);
         }
+        // the spectator's target cue (#1850): any body, with or without its data
+        AddChild(new Player.SpectatorTargets(_origin));
+        if (Player.SpectatorTargetCheck.Requested) AddChild(new Player.SpectatorTargetCheck());
+        if (OrbitOnlyCheck.Requested) AddChild(new OrbitOnlyCheck(_origin));
+        if (RingCheck.Requested) AddChild(new RingCheck(_origin));
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }
@@ -112,7 +124,8 @@ public partial class BodyViews : Node
                 || eye is { } p && Frames.Convert(anchor, p, g.Body.Id, sky).Length < NearRadii * g.Body.Shape.A;
             g.Wanted = near;
             // the sky's disc of a body its globe draws steps aside (the Moon's own disc, a planet's in SkyBodies)
-            if (g.Drawn && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
+            // and the anchor's own body is never a disc in its own sky (inside a giant its globe steps aside, #1854)
+            if ((g.Drawn || g.Body.Id == anchor) && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
         }
         MoonDisc.HiddenByGlobe = _moon is { Drawn: true };
     }

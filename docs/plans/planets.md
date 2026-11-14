@@ -27,13 +27,28 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   crossings, 249 million km at light speed in 860 s, no shift on either), landing and walking on Mars at 3.72 m/s².
 - **H7e**, this branch: every body's air as data (`BodyAir`): Mars' butterscotch sky, its blue sunset, its haze from orbit,
   its drag; the shell's sun from the anchor body's own offset.
+- **H7d**, this branch: a medium ground square (4 km of 16 m cells, the craters from 40 m) to the walker's horizon.
+- **H7d**, this branch: the spectator's target cue (] / D-pad → / VR right stick down: tap the next body, hold to turn to
+  it; a ring or edge arrow, the distance, the trip at full speed).
+- **H7e** (#1853), this branch: Phobos and Deimos from Ernst et al. (2023)'s shape models as heights over spheres
+  (`--shape-dem`), on circles round Mars fitted to Horizons, landing, standing and jumping under their mm/s²
+  (`--mooncheck phobos|deimos --fromorbit`).
+- **H7f** (#1854), this branch: Mercury (MESSENGER 665 m, levels 0-4, the grey 250 m mosaic) and Venus (Magellan
+  4.6 km, levels 0-2, the radar colour, a thick amber haze), each on its data's own reference sphere; landing, walking
+  and jumping on both (`--mooncheck mercury|venus --fromorbit`).
+- **H7f** (#1854), this branch: Io, Europa, Ganymede, Callisto and Titan from their mosaics (`--dem flat`: no global
+  heights, the profile's craters by body), Titan's orange haze; landing and walking on Callisto and Titan.
+- **H7f** (#1854), this branch: the giants and the Sun as bodies to orbit, not land on: a floor for the spectator (cloud
+  tops, 0.2 solar radii), T refused there; the giants as globes from their 2k maps, Saturn's rings round its globe.
+- **H7f** (#1854), this branch: flying into the giants: their air as data (`BodyAir.Jupiter`...), the deck stepping
+  aside inside, the spectator down to 500 km under the 1-bar level.
+- **H7f** (#1854), this branch: Saturn's rings with a thickness (a 400 m slab: an edge-on band, a haze inside) and ice
+  chunks round the camera, the same on every client from one seed, solid near it (`--ringcheck`).
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
 
 **Still to come**:
-- a medium ring round the near square (the pyramid's full 167 m lattice out to a few km), so the horizon has its craters;
-- the target cue and the align hold;
 - belly jets;
 - C3b online (after D2, #1727);
 - Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);

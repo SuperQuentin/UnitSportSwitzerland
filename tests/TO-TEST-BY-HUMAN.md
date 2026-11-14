@@ -31,6 +31,10 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Come down to a few hundred metres and press T → you stand on the ground (no fall from the camera's height, no wait). Walk and sprint for a few hundred metres → the ground keeps coming under you, with craters down to a few metres, and no seam or step where the near ground meets the farther one.
 - [ ] Jump → about 5.4 m up and over 5 s in the air (0.9 m on the Earth). Do the same with the pad (its jump and step-in buttons) and in VR → the same.
 - [ ] From the Earth, fly toward Mars at the wheel's top (PR [#1899](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1899): about 15 min at light speed) → the speed reads in c past the Moon; nothing jumps leaving the Earth's sphere (~1 million km) or entering Mars'; Mars' globe takes over from its sky dot. Step in → you stand on Mars and a jump reaches ~2.4 m.
+- [ ] In the spectator, tap ] (pad: D-pad →, VR: right stick down) a few times, then hold it → the ring steps Moon, Mars, the Sun..., an arrow at the edge when the body is off screen, and the hold turns the view onto it; fly toward the ring and it grows into the body. In VR, check the cue is readable on the HUD.
+- [ ] Fly to Saturn and into its B ring, slowly (Wheel down) → over it a flat ring surface, then a haze with ice chunks round you (most small, a few house-sized), denser in the B ring than in the Cassini division; past the outer edge, level with the ring, a thin band. In a craft or on foot with gravity off, bump a chunk → it is solid. In VR, check the haze is not nauseating.
+- [ ] Fly to Phobos (target cue: after Mars) and land with T → a potato-shaped moon with Stickney's big crater at one end; the walker drifts down for ~17 s; a jump climbs for minutes; walking bounces off every bump. Same on Deimos (smoother, 25 s to settle). In VR, check the slow float is not nauseating.
+- [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
 ## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
@@ -1083,13 +1087,21 @@ A server `--server --frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/ter
 - [ ] The same in PS1 and Realistic (`/style`) → as in Cartoon (only Cartoon was shot).
 - [ ] Look for the fill's generated roads near the shore → none runs under the lake's water.
 
+## A trainer's ride goes through the traffic ([#1467](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1467))
+
+In a window, Cartoon, `--date 2027-07-15 --time 12`, the phone's Training app, a GPX through a town (or `--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60` windowed).
+
+- [ ] Ride into a queue at a junction or a red light → the bike rides on through the queued cars at its own speed, no jolt, no stop; judge whether passing through a car looks acceptable from the chase camera and in first person.
+- [ ] A car stopped at the road's edge on a wide road → the bike steps round it rather than through it.
+- [ ] After the finish, ride the bike yourself into a parked traffic car → it is solid again.
+
 ## Farm fields, Christmas gifts and the trainer under `--frame earth` (PR [#1730](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1730), [#1729](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1729))
 
 Offline, in a window, each against the same without `--frame earth`.
 
 - [ ] `--frame earth --farmmonth 7` on the default fixture course, walk to the wheat field and round it → the crops lie on the ground (never floating or sunk), their edges follow the field, as on the flat world.
 - [ ] `--frame earth --date 2026-12-15` on the generated world, walk to a village's square → the Christmas tree with five gifts under it stands on the ground in the open; gather (G) a gift → it goes.
-- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider queues behind a slow car and rides round one stopped at the edge, never into it.
+- [ ] `--frame earth --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin` → the rider rides round a car stopped at the edge where the road has room, and through the traffic otherwise (#1467): it never queues behind a car.
 
 ## No camera jump at the earth re-anchor (PR [#1780](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1780), [#1763](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1763))
 

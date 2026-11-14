@@ -2792,6 +2792,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // the speed (#1796): the readout under these rows says what it is (#1798)
             yield return (PlayerInput.SpectatorFaster, "Faster");
             yield return (PlayerInput.SpectatorSlower, "Slower");
+            // the target cue in the earth world (#1850): a tap the next body, a hold turns to it
+            if (Player.SpectatorTargets.Instance is { } targets) yield return (PlayerInput.SpectatorTarget, targets.Target == null ? "Target" : "Next target");
             yield return (PlayerInput.Teleport, "Map");
         }
         else if (viewer is { } p && IsInstanceValid(p))
@@ -3094,6 +3096,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         if (!_onFoot)
         {
+            // a body one cannot stand on (#1854): a giant, or the Sun's space between the planets; the camera stays
+            if (_worldOrigin is { } origin && !CelestialBody.Of(origin.Body).Landable)
+            {
+                Toast(origin.Body == BodyId.Sun ? "No ground out here: fly to a planet or a moon to step out."
+                    : $"{CelestialBody.Of(origin.Body).Name} is gas all the way down: no ground to stand on. Its moons have.");
+                return;
+            }
             FootPlayer? player = LocalPlayer;
             // a server without teleporting (#799): the fly camera looks around, it does not carry you
             if (player != null && _networked && !Permissions.CanTeleport)

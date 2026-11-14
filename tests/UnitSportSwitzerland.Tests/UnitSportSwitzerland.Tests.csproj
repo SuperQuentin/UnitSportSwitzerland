@@ -31,6 +31,7 @@
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\LocalHours.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SpectatorSpeed.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\TargetList.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1851: an orbit carried across a sphere of influence -->
     <Compile Include="..\..\src\Player\SpaceOrbit.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SurfaceReach.cs" Link="Game\%(Filename)%(Extension)" />
@@ -202,6 +203,7 @@
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1849: the Moon's generated craters -->
     <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\RingField.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\BodyHeights.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />
@@ -289,6 +291,7 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\CylRaster.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\tools\TerrainPreprocessor\CubeBodyHeights.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\tools\TerrainPreprocessor\Areoid.cs" Link="Tools\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\ShapeModel.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
     <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />

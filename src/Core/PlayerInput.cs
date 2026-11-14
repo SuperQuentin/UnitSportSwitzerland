@@ -169,6 +169,12 @@ public partial class PlayerInput : Node
     /// </summary>
     public const string SpectatorFaster = "spectator_faster";
     public const string SpectatorSlower = "spectator_slower";
+    /// <summary>
+    /// The spectator's target (#1850, docs/plans/planets.md section 11): a tap is the next body (the list wraps through
+    /// none), a hold turns the view to it. ] on a keyboard; a pad's D-pad right, free while spectating (no body, no item);
+    /// VR's right stick down, which <c>XrPad</c> sends as D-pad right there (the shoulders' layout, as on foot).
+    /// </summary>
+    public const string SpectatorTarget = "spectator_target";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
     public const string Ping = "ping";
@@ -759,6 +765,9 @@ public partial class PlayerInput : Node
         // (the wheel first: the hints name it first)
         Bind(SpectatorFaster, Mouse(MouseButton.WheelUp), Keys(Key.Equal), Button(JoyButton.RightShoulder));
         Bind(SpectatorSlower, Mouse(MouseButton.WheelDown), Keys(Key.Minus), Button(JoyButton.LeftShoulder));
+        // the spectator's target (#1850): ] (the riders' power key, a ride-only one), the D-pad's right (the next item's on
+        // foot), so VR's right stick down while spectating
+        Bind(SpectatorTarget, Keys(Key.Bracketright), Button(JoyButton.DpadRight));
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));

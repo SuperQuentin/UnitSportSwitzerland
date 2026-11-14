@@ -259,8 +259,12 @@ public partial class LongDriveCheck : Node
         Chase(p);
 
         if (p.Ride == RideKind.OnFoot) { Fault($"out of the car at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
-        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design
-        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f)
+        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design. The height
+        // is the raw terrain's, and the road blend cuts streets metres under it (#1930: a Lane in a 1.1 m cutting behind a
+        // retaining wall south of Place des Nations read as a fall): under it with a floor just beneath is driving, as the
+        // game's own safety nets judge it (IWorldGround.FloorBelow)
+        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f
+            && !_ground.FloorBelow(p, p.GlobalPosition, p.GetRid(), 2f))
         {
             if ((_belowS += dt) > 0.5) { Fault($"fell under the ground ({g - p.GlobalPosition.Y:F1} m) at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
         }
@@ -337,7 +341,8 @@ public partial class LongDriveCheck : Node
             var c = r.Centre[r.NearestCentreIndexAt(s)];
             string ground = _ground.TryGetHeight(c, out float g) ? Inv($"{c.Y - g:+0.0;-0.0}") : "?";
             var kind = r.Kinds is { Count: > 0 } k ? k[Mathf.Min(r.NearestCentreIndexAt(s), k.Count - 1)] : default;
-            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
+            var (ce, cn) = _origin.ToLv95(c);
+            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground at {ce:F1}/{cn:F1} y {c.Y:F2}, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
         }
         return "the route here: " + string.Join("; ", parts);
     }
