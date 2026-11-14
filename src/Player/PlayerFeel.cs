@@ -911,13 +911,15 @@ public partial class PlayerFeel : Node3D
     /// A saucer in Space (#1430 H5): its speed in space, its height, and the orbit's lowest and highest
     /// points over the ground under it (the periapsis under the ground: it is falling back).
     /// </summary>
-    private static void AppendOrbit(System.Text.StringBuilder sb, OrbitState orbit)
+    private static void AppendOrbit(System.Text.StringBuilder sb, OrbitState orbit, CelestialBody? body = null)
     {
-        var earth = CelestialBody.Earth;
+        var earth = body ?? CelestialBody.Earth;
         double h = earth.Shape.ToGeodetic(orbit.R.AsEcef).H;
         double ground = orbit.R.Length - h;
         var (peri, apo, _) = Orbit.Apsides(earth, orbit);
-        sb.Append(System.FormattableString.Invariant($"ORBIT {orbit.V.Length / 1000:0.00} km/s    {h / 1000:0.0} km    Pe {(peri - ground) / 1000:0} km"));
+        // another body's name in front of the line (#1851): ORBIT Moon 1.63 km/s ...
+        string name = earth.Id == BodyId.Earth ? "" : earth.Name + " ";
+        sb.Append(System.FormattableString.Invariant($"ORBIT {name}{orbit.V.Length / 1000:0.00} km/s    {h / 1000:0.0} km    Pe {(peri - ground) / 1000:0} km"));
         sb.Append(double.IsFinite(apo) ? System.FormattableString.Invariant($"    Ap {(apo - ground) / 1000:0} km") : "    ESCAPE");
     }
 
@@ -932,7 +934,7 @@ public partial class PlayerFeel : Node3D
             if (a.DriveOn)
                 sb.Append(System.FormattableString.Invariant($"DRIVE {s.Velocity.Length() / 1000f:0.00} km/s    {altitude / 1000f:0.0} km    LEVER {s.Lever * 100f:0}%"));
             else if (a.Space?.Orbit is { } orbit)
-                AppendOrbit(sb, orbit);
+                AppendOrbit(sb, orbit, a.Space.Body);
         }
         else
             sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
@@ -1043,8 +1045,8 @@ public partial class PlayerFeel : Node3D
             }
             else if (_player.Vehicle is Airliner jetliner)
                 AppendAirliner(sb, jetliner);
-            else if (_player.Vehicle is Ufo { Orbit: { } orbit })
-                AppendOrbit(sb, orbit);
+            else if (_player.Vehicle is Ufo { Orbit: { } orbit } saucer)
+                AppendOrbit(sb, orbit, saucer.Space.Body);
             else if (_player.IsFlying)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");

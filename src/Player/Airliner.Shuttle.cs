@@ -70,7 +70,7 @@ public sealed partial class Airliner : ISpacecraft
             GD.Print(FormattableString.Invariant($"[shuttle] cruise drive on at {place.Altitude / 1000:F1} km"));
         }
         // taken down out of Space the drive drops out: an aircraft again, at the speed it had
-        if (DriveOn && !Core.Curvature.SpaceRegime(true, place.Altitude))
+        if (DriveOn && !space.Body.SpaceRegime(true, place.Altitude))
         {
             DriveOn = false;
             GD.Print(FormattableString.Invariant($"[shuttle] out of the drive at {place.Altitude / 1000:F1} km, {m.Velocity.Length():F0} m/s"));
@@ -124,7 +124,8 @@ public sealed partial class Airliner : ISpacecraft
         // the levers set the drive's speed: back to idle, or the rockets would fire off the new orbit
         State.Lever = 0f;
         State.Spool = Mathf.Min(State.Spool, Spec.IdleSpool);
-        var earth = Core.CelestialBody.Earth;
+        // round the body it is near (#1851): the Earth's or the Moon's
+        var earth = space.Body;
         double angle = Core.Orbit.RotationAngle(earth, place.SimTime);
         var r = Core.Orbit.ToEci(place.Frame.ToEcef(place.At), angle);
         var toward = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, -State.Attitude.Z), angle);
