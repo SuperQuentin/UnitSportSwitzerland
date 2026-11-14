@@ -1068,6 +1068,10 @@ src/Player/FootPlayer.Region net tools/regioncheck.sh
 src/Bots/RegionCheck     net    tools/regioncheck.sh
 # bots inside buildings (#1330): a bot visits a generated village's house on a dedicated server, seen from two clients
 src/Bots/BotVisit        net    tools/botindoorcheck.sh
+# bots offline (single-player): the same visit with no server
+src/Bots/BotDirector     net    tools/botindoorsolo.sh
+src/Bots/BotIndoorSolo   net    tools/botindoorsolo.sh
+src/Bots/Bot.cs          net    tools/botindoorsolo.sh
 src/Bots/WanderBrain     net    tools/botindoorcheck.sh
 src/Interiors/InteriorManager.Bots net tools/botindoorcheck.sh
 src/Interiors/InteriorNav net   tools/botindoorcheck.sh

@@ -761,6 +761,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 vehicles.Visible = shown;
             };
         }
+        // bots offline as on a server: after the interiors, which see their bodies (#1330 phase B's (a))
+        if (!Launch.Networked) SetUpOfflineBots(origin);
         // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the server is given the same
         Farming.FarmMarket.StandInFromArgs(source, origin);
 
@@ -1344,6 +1346,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
         if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
         if (Bots.BotIndoorProbe.Role != null) AddChild(new Bots.BotIndoorProbe(items));
+        if (Bots.BotIndoorSolo.Requested) AddChild(new Bots.BotIndoorSolo(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
@@ -2290,10 +2293,44 @@ public partial class ClientWorld : Node3D, IOriginContainer
         else Ground?.AddAnchor(anchor);
     }
 
+    /// <summary>
+    /// Offline, the server's bot system (bots run offline too): a <c>Players</c> container for the bots' bodies (the
+    /// player stays outside it, as offline always), this world's <see cref="PlayerReplication"/> spawner and a
+    /// <see cref="Bots.BotDirector"/>. Every bot mode then runs here as on a dedicated server, on the client's own
+    /// ground and collision (a body is a collision anchor) and the interiors' bot collision. Torn down if a network game
+    /// starts in this world (<see cref="TearDownOfflineBots"/>): the server runs its own.
+    /// </summary>
+    private void SetUpOfflineBots(WorldOrigin origin)
+    {
+        if (_players != null) return;
+        _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
+        AddChild(_players);
+        _offlineSpawner = PlayerReplication.CreateSpawner(origin);
+        AddChild(_offlineSpawner);
+        AddChild(Bots.BotDirector.CreateOffline(_offlineSpawner, _players, () => _onFoot ? LocalPlayer : null));
+        if (Interiors.InteriorManager.Instance is { } interiors) interiors.Players = _players;
+    }
+
+    private MultiplayerSpawner? _offlineSpawner;
+
+    /// <summary>The offline bots go before a network game starts in this world: its server runs the bots.</summary>
+    private void TearDownOfflineBots()
+    {
+        if (_offlineSpawner == null) return;
+        if (GetNodeOrNull(Bots.BotDirector.NodeName) is { } director) { RemoveChild(director); director.QueueFree(); }
+        RemoveChild(_offlineSpawner);
+        _offlineSpawner.QueueFree();
+        _offlineSpawner = null;
+        if (_players != null) { RemoveChild(_players); _players.QueueFree(); _players = null; }
+        if (Interiors.InteriorManager.Instance is { } interiors) interiors.Players = null;
+    }
+
     private void StartNetworking(string host)
     {
         if (_networked) return;
         if (!Systems.On(Systems.Network)) { Fail("The network is off for this run (--systems)."); return; }
+        TearDownOfflineBots();
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.

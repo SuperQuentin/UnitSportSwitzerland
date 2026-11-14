@@ -628,6 +628,11 @@ public partial class ChatManager : Node
 
         switch (verb)
         {
+            // bots offline (single-player has the server's bot system): you are the admin
+            case "bot" or "bots":
+                if (Bots.BotDirector.Instance is not { } offlineBots) Show("Bots are not available here.", ChatKind.Error);
+                else Show(offlineBots.Command(OfflineSelf, rest, admin: true, _ => offlineBots.Local?.Invoke()), ChatKind.Private);
+                return;
             case "help":
                 if (rest.Length > 0)
                 {

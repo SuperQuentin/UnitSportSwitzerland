@@ -47,6 +47,25 @@ public partial class BotDirector : Node
     public static BotDirector CreateServer(MultiplayerSpawner spawner, Node3D players) =>
         new() { Name = NodeName, _spawner = spawner, _players = players };
 
+    /// <summary>
+    /// Offline (single-player), the same director the server has: bodies spawned through this world's own spawner into
+    /// its <c>Players</c> container, run here, as on a dedicated server; the offline player (<paramref name="local"/>,
+    /// outside that container) is the human the bots watch and see.
+    /// </summary>
+    public static BotDirector CreateOffline(MultiplayerSpawner spawner, Node3D players, Func<FootPlayer?> local) =>
+        new() { Name = NodeName, _spawner = spawner, _players = players, Local = local };
+
+    /// <summary>Offline: the one player, who is not in the <c>Players</c> container (null on a server).</summary>
+    public Func<FootPlayer?>? Local { get; private init; }
+
+    /// <summary>The humans' bodies here: the players' proxies, and offline the player.</summary>
+    public IEnumerable<FootPlayer> Humans()
+    {
+        foreach (var node in _players.GetChildren())
+            if (node is FootPlayer { Npc: false } human) yield return human;
+        if (Local?.Invoke() is { } me && GodotObject.IsInstanceValid(me)) yield return me;
+    }
+
     public override void _EnterTree()
     {
         Instance = this;
@@ -152,7 +171,7 @@ public partial class BotDirector : Node
             body.AppearanceBits = alien.Looks.Pack();
             body.OutfitBits = alien.Outfit.Bits;
         }
-        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = new BotWorld(_players, body) };
+        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = new BotWorld(_players, body, Local) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch, bot.Intent.Climb);
@@ -243,9 +262,8 @@ public partial class BotDirector : Node
     private void UpdateWatched()
     {
         foreach (var bot in _bots.Values) bot.Watched = false;
-        foreach (var node in _players.GetChildren())
+        foreach (var human in Humans())
         {
-            if (node is not FootPlayer human || human.Npc) continue;
             // in Earth positions: a human and a bot can be in two server regions' frames (#1456)
             var at = human.Global;
             foreach (var bot in _bots.Values)
