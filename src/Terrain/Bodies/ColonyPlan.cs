@@ -20,7 +20,18 @@ public enum ModuleKind : byte
     Biodome,
     /// <summary>A long half-cylinder with a wide vehicle door at its outer end.</summary>
     Hangar,
+    /// <summary>A short can with a door at each end that never both open: the way out at a spine's end (#1941).</summary>
+    Airlock,
 }
+
+/// <summary>What a module's room is for, inside (#1941, docs/plans/moon-surface.md section 5).</summary>
+public enum RoomKind : byte
+{
+    Hall, Quarters, Galley, Lab, Greenhouse, Control, Medbay, Gym, Workshop, Storage, Garage, Airlock,
+}
+
+/// <summary>An airlock: its module, its outer door (to the outside) and its inner door (to the colony).</summary>
+public readonly record struct ColonyAirlock(int Module, int Outer, int Inner);
 
 /// <summary>
 /// A module in its colony's frame (x east, z south, metres from the centre, on the plateau): its long axis along
@@ -52,6 +63,12 @@ public readonly record struct ColonyPad(double X, double Z, double Radius, int N
 public sealed class ColonyPlan
 {
     public readonly List<ColonyModule> Modules = new();
+
+    /// <summary>Each module's room, by its id.</summary>
+    public readonly List<RoomKind> Rooms = new();
+
+    /// <summary>The ways in and out: an airlock at the end of every spine but the hangar's.</summary>
+    public readonly List<ColonyAirlock> Airlocks = new();
     public readonly List<ColonyDoor> Doors = new();
     public readonly List<ColonyLink> Links = new();
     public readonly List<ColonyPad> Pads = new();
@@ -82,7 +99,16 @@ public sealed class ColonyPlan
         bool alleys = c.Theme == ColonyTheme.MoonVillage;
 
         // the hub: a two-storey drum, 10 m across
-        int hub = plan.Add(ModuleKind.Hub, 0, 0, h0, 10, 10, 7.5, 2);
+        int hub = plan.Add(ModuleKind.Hub, 0, 0, h0, 10, 10, 7.5, 2, RoomKind.Control);
+        // the cans' rooms: a colony's worth, shuffled by its seed
+        var rooms = new List<RoomKind> { RoomKind.Quarters, RoomKind.Galley, RoomKind.Lab, RoomKind.Quarters, RoomKind.Medbay,
+            RoomKind.Gym, RoomKind.Workshop, RoomKind.Storage, RoomKind.Quarters, RoomKind.Lab, RoomKind.Galley, RoomKind.Storage };
+        for (int i = rooms.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (rooms[i], rooms[j]) = (rooms[j], rooms[i]);
+        }
+        int nextRoom = 0;
 
         var cansForDomes = new List<int>();
 
@@ -100,8 +126,8 @@ public sealed class ColonyPlan
                 double len = stack ? 9 : 10 + 2 * rng.Next(4);
                 double mid = at + len / 2;
                 int m = stack
-                    ? plan.Add(ModuleKind.Stack, dx * mid, dz * mid, yaw, 9, 9, 10.5, 3)
-                    : plan.Add(ModuleKind.Can, dx * mid, dz * mid, yaw, len, 4.6, 4.6 + 0.9, 1);
+                    ? plan.Add(ModuleKind.Stack, dx * mid, dz * mid, yaw, 9, 9, 10.5, 3, RoomKind.Quarters)
+                    : plan.Add(ModuleKind.Can, dx * mid, dz * mid, yaw, len, 4.6, 4.6 + 0.9, 1, rooms[nextRoom++ % rooms.Count]);
                 int inner = plan.Door(m, len / 2, yaw + Math.PI);
                 plan.Links.Add(new ColonyLink(last, inner, alleys));
                 if (!stack) cansForDomes.Add(m);
@@ -113,7 +139,7 @@ public sealed class ColonyPlan
                 // the hangar at the head of the first spine: 26 m long, 14 m wide, its vehicle door at the far end
                 double len = 26;
                 double mid = at + len / 2;
-                int hangar = plan.Add(ModuleKind.Hangar, dx * mid, dz * mid, yaw, len, 14, 8, 1);
+                int hangar = plan.Add(ModuleKind.Hangar, dx * mid, dz * mid, yaw, len, 14, 8, 1, RoomKind.Garage);
                 plan.Links.Add(new ColonyLink(last, plan.Door(hangar, len / 2, yaw + Math.PI), alleys));
                 int vehicle = plan.Door(hangar, len / 2, yaw);
                 // the road on out to the pads, 220 m past the hangar, three pads across it
@@ -124,6 +150,15 @@ public sealed class ColonyPlan
                 var (cx, cz) = Along(yaw + Math.PI / 2);
                 for (int p = -1; p <= 1; p++)
                     plan.Pads.Add(new ColonyPad(dx * (padAt + 30) + cx * p * 75, dz * (padAt + 30) + cz * p * 75, 20, p + 2));
+            }
+            else
+            {
+                // the way out at the spine's end: a 4 m airlock 5 m on from the last door, its outer door to the ground
+                double mid = at - 9 + 5 + 2;
+                int al = plan.Add(ModuleKind.Airlock, dx * mid, dz * mid, yaw, 4, 4.6, 5.5, 1, RoomKind.Airlock);
+                int inner = plan.Door(al, 2, yaw + Math.PI);
+                plan.Links.Add(new ColonyLink(last, inner, alleys));
+                plan.Airlocks.Add(new ColonyAirlock(al, plan.Door(al, 2, yaw), inner));
             }
         }
         // moondust domes off the cans' sides, now and then, where one fits clear of everything else
@@ -141,7 +176,7 @@ public sealed class ColonyPlan
                 double cx = can.X + sx * (reach + 8 + r), cz = can.Z + sz * (reach + 8 + r);
                 if (!plan.Clear(cx, cz, r + 4)) continue;
                 int sideDoor = plan.Door(m, reach, sy);
-                int dome = plan.Add(ModuleKind.Dome, cx, cz, sy, 2 * r, 2 * r, r, 1);
+                int dome = plan.Add(ModuleKind.Dome, cx, cz, sy, 2 * r, 2 * r, r, 1, rng.Next(2) == 0 ? RoomKind.Greenhouse : RoomKind.Storage);
                 plan.Links.Add(new ColonyLink(sideDoor, plan.Door(dome, r, sy + Math.PI), alleys));
                 break;
             }
@@ -169,10 +204,11 @@ public sealed class ColonyPlan
         return true;
     }
 
-    private int Add(ModuleKind kind, double x, double z, double yaw, double length, double width, double height, int storeys)
+    private int Add(ModuleKind kind, double x, double z, double yaw, double length, double width, double height, int storeys, RoomKind room)
     {
         int id = Modules.Count;
         Modules.Add(new ColonyModule(id, kind, x, z, yaw, length, width, height, storeys));
+        Rooms.Add(room);
         return id;
     }
 

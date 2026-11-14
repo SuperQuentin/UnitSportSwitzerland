@@ -5,18 +5,25 @@ using UnitSport.Terrain.Bodies;
 namespace UnitSport.World.Moon;
 
 /// <summary>
-/// A colony's node from its plan (#1940): every module from the kit (shared meshes) turned along its axis on the
-/// plateau, its solid shapes, the colony's tubes and alleys as one mesh, the pads and the road. In the colony's frame
-/// (x east, y up, z south, the plateau at y = 0); <see cref="MoonSurface"/> places it from doubles. Built once when the
-/// camera comes within reach, never per frame.
+/// A colony's node from its plan (#1940, #1941): every module from the kit (shared meshes) turned along its axis on the
+/// plateau with its furniture inside, a hollow solid you walk into (floors at the doors' sill, walls round, doorways
+/// open), the colony's tubes as one mesh with their own hollow solid, the steps down from each airlock's outer door,
+/// the airlocks' doors and the air (<see cref="ColonyAirlocks"/>), the pads and the road. In the colony's frame (x east,
+/// y up, z south, the plateau at y = 0); <see cref="MoonSurface"/> places it from doubles. Built once when the camera
+/// comes within reach, never per frame.
 /// </summary>
 public static class ColonyBuilder
 {
+    private const float F = ColonyKit.FloorY, Wall = 0.2f;
+
     public static Node3D Build(MoonColony c, ColonyPlan plan)
     {
         var root = new Node3D { Name = c.Id };
         var body = new StaticBody3D { Name = "Solid" };
         root.AddChild(body);
+        void Solid(Transform3D at, Vector3 size) =>
+            body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size }, Transform = at });
+
         foreach (var m in plan.Modules)
         {
             var mesh = ColonyKit.Module(m.Kind, m.Length, m.Width, m.Height, m.Storeys, c.Theme);
@@ -26,28 +33,47 @@ public static class ColonyBuilder
             mi.Transform = t;
             mi.Name = $"{m.Kind}{m.Id}";
             root.AddChild(mi);
-            foreach (var (centre, shape) in Shapes(m))
-                body.AddChild(new CollisionShape3D { Shape = shape, Transform = t * centre });
+            var (inside, solids) = ColonyInteriors.Furnish(m.Kind, plan.Rooms[m.Id], m.Length, m.Width, c.Theme);
+            root.AddChild(new MeshInstance3D { Name = $"Inside{m.Id}", Mesh = inside, Transform = t, MaterialOverride = null }.Painted());
+            foreach (var (centre, size) in solids) Solid(t * new Transform3D(Basis.Identity, centre), size);
+            foreach (var (at, size) in Hollow(m)) Solid(t * at, size);
         }
         var links = new List<(Vector3, Vector3, bool)>();
         foreach (var l in plan.Links)
         {
             var a = plan.Doors[l.DoorA];
             var b = plan.Doors[l.DoorB];
-            links.Add((new Vector3((float)a.X, 0, (float)a.Z), new Vector3((float)b.X, 0, (float)b.Z), l.Alley));
-            // a tube's solid: a box along it
             var pa = new Vector3((float)a.X, 0, (float)a.Z);
             var pb = new Vector3((float)b.X, 0, (float)b.Z);
+            links.Add((pa, pb, l.Alley));
             var d = pb - pa;
             if (d.Length() < 0.5f) continue;
-            var basis = new Basis(Vector3.Up, Mathf.Atan2(d.X, d.Z));
-            body.AddChild(new CollisionShape3D
-            {
-                Shape = new BoxShape3D { Size = new Vector3(2.6f, 2.6f, d.Length()) },
-                Transform = new Transform3D(basis, (pa + pb) / 2 + Vector3.Up * ColonyKit.TubeY),
-            });
+            // a tube's hollow: its floor at the sill, walls either side, a roof
+            var at = new Transform3D(new Basis(Vector3.Up, Mathf.Atan2(d.X, d.Z)), (pa + pb) / 2);
+            float len = d.Length() + 0.2f, half = ColonyKit.TubeR - 0.25f;
+            Solid(at * new Transform3D(Basis.Identity, new Vector3(0, F - 0.1f, 0)), new Vector3(2 * half + 0.4f, 0.2f, len));
+            Solid(at * new Transform3D(Basis.Identity, new Vector3(-half - Wall / 2, F + 1.3f, 0)), new Vector3(Wall, 2.6f, len));
+            Solid(at * new Transform3D(Basis.Identity, new Vector3(half + Wall / 2, F + 1.3f, 0)), new Vector3(Wall, 2.6f, len));
+            Solid(at * new Transform3D(Basis.Identity, new Vector3(0, F + 2.5f, 0)), new Vector3(2 * half + 0.4f, 0.2f, len));
         }
         if (links.Count > 0) root.AddChild(ColonyKit.Instance(ColonyKit.Links(links, c.Theme)));
+        // the steps down from each airlock's outer door to the plateau
+        var stairs = new List<(Vector3, float)>();
+        foreach (var a in plan.Airlocks)
+        {
+            var d = plan.Doors[a.Outer];
+            stairs.Add((new Vector3((float)d.X, 0, (float)d.Z), (float)d.Out));
+            var dir = new Vector3(Mathf.Sin((float)d.Out), 0, -Mathf.Cos((float)d.Out));
+            var basis = new Basis(Vector3.Up, Mathf.Atan2(dir.X, dir.Z));
+            for (int k = 0; k < ColonyKit.Steps; k++)
+            {
+                float top = F - k * F / ColonyKit.Steps;
+                var centre = new Vector3((float)d.X, top / 2, (float)d.Z) + dir * (k * ColonyKit.Tread + ColonyKit.Tread / 2);
+                Solid(new Transform3D(basis, centre), new Vector3(1.6f, top, ColonyKit.Tread));
+            }
+        }
+        if (stairs.Count > 0) root.AddChild(ColonyKit.Instance(ColonyKit.Stairs(stairs, c.Theme)));
+        root.AddChild(new ColonyAirlocks(c, plan));
         foreach (var p in plan.Pads)
         {
             var pad = ColonyKit.Instance(ColonyKit.PadMesh((float)p.Radius, p.Number));
@@ -64,6 +90,12 @@ public static class ColonyBuilder
         return root;
     }
 
+    private static MeshInstance3D Painted(this MeshInstance3D mi)
+    {
+        Avatar.MeshScratch.Paint(mi, Avatar.HumanMeshBuilder.Material(), ColonyKit.WindowMaterial());
+        return mi;
+    }
+
     private static MeshInstance3D Glazed(ArrayMesh m)
     {
         var mi = new MeshInstance3D { Mesh = m };
@@ -71,30 +103,107 @@ public static class ColonyBuilder
         return mi;
     }
 
-    /// <summary>A module's solid shapes in its own frame (the long axis along z).</summary>
-    private static IEnumerable<(Transform3D At, Shape3D Shape)> Shapes(ColonyModule m)
+    private static Transform3D At(float x, float y, float z, float yaw = 0) => new(new Basis(Vector3.Up, yaw), new Vector3(x, y, z));
+
+    /// <summary>
+    /// A module's hollow solid in its node's frame (the long axis along z; symmetric, so the scratch's half turn does
+    /// not matter, except the hangar's landing, flipped here): a floor at the sill, walls of boxes round, end walls with
+    /// the doorway open, a ceiling.
+    /// </summary>
+    private static IEnumerable<(Transform3D At, Vector3 Size)> Hollow(ColonyModule m)
     {
-        float l = (float)m.Length, w = (float)m.Width, h = (float)m.Height;
+        float l = (float)m.Length, w = (float)m.Width, h = (float)m.Height, r = w / 2;
+        float dw = ColonyKit.DoorW, top = F + ColonyKit.DoorH;
         switch (m.Kind)
         {
+            case ModuleKind.Can:
+            case ModuleKind.Airlock:
+            {
+                float y = r + 0.9f;
+                // the floor: the shell's chord at the sill, no wider (no ledge outside)
+                float chord = 2 * Mathf.Sqrt(Mathf.Max(0, r * r - (y - F) * (y - F)));
+                yield return (At(0, F - 0.1f, 0), new Vector3(chord, 0.2f, l));
+                // the shell: boxes round the axis (the floor's chord up to the crown)
+                const int n = 12;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = Mathf.Tau * (i + 0.5f) / n;
+                    var c = new Vector3(Mathf.Cos(a) * (r + Wall / 2), y + Mathf.Sin(a) * (r + Wall / 2), 0);
+                    if (c.Y < F) continue;
+                    yield return (new Transform3D(new Basis(Vector3.Back, a), c), new Vector3(Wall, 2 * r * Mathf.Sin(Mathf.Pi / n) * 1.15f, l));
+                }
+                foreach (float z in new[] { -l / 2, l / 2 })
+                {
+                    float side = (r - dw / 2);
+                    yield return (At(-(dw / 2 + side / 2), y, z), new Vector3(side, 2 * r, Wall));
+                    yield return (At(dw / 2 + side / 2, y, z), new Vector3(side, 2 * r, Wall));
+                    yield return (At(0, (top + y + r) / 2, z), new Vector3(dw, y + r - top, Wall));
+                }
+                break;
+            }
             case ModuleKind.Hub:
             case ModuleKind.Stack:
-                yield return (new Transform3D(Basis.Identity, new Vector3(0, h / 2, 0)), new CylinderShape3D { Radius = w / 2, Height = h });
+            {
+                yield return (At(0, F / 2, 0), new Vector3(w * 0.72f, F, w * 0.72f));
+                yield return (At(0, F / 2, 0), new Vector3(w * 0.5f, F, w * 0.9f));
+                yield return (At(0, F / 2, 0), new Vector3(w * 0.9f, F, w * 0.5f));
+                yield return (At(0, h, 0), new Vector3(w, 0.2f, w));
+                const int n = 20;
+                float pw = 2 * r * Mathf.Sin(Mathf.Pi / n) * 1.08f;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = Mathf.Tau * i / n;
+                    var dir = new Vector3(Mathf.Sin(a), 0, Mathf.Cos(a));
+                    if (i % (n / 4) == 0)
+                    {
+                        yield return (new Transform3D(new Basis(Vector3.Up, a), dir * r + Vector3.Up * ((top + h) / 2)), new Vector3(pw, h - top, Wall));
+                        continue;
+                    }
+                    yield return (new Transform3D(new Basis(Vector3.Up, a), dir * r + Vector3.Up * (h / 2)), new Vector3(pw, h, Wall));
+                }
                 break;
-            case ModuleKind.Can:
-                yield return (new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2), new Vector3(0, w / 2 + 0.9f, 0)),
-                    new CylinderShape3D { Radius = w / 2, Height = l });
-                yield return (new Transform3D(Basis.Identity, new Vector3(0, 0.45f, 0)), new BoxShape3D { Size = new Vector3(w * 0.8f, 0.9f, l * 0.7f) });
-                break;
+            }
             case ModuleKind.Dome:
-                yield return (new Transform3D(Basis.Identity, new Vector3(0, h * 0.4f, 0)), new CylinderShape3D { Radius = w / 2 * 0.9f, Height = h * 0.8f });
+            {
+                yield return (At(0, F / 2, 0), new Vector3(w * 0.68f, F, w * 0.68f));
+                yield return (At(0, F / 2, 0), new Vector3(w * 0.4f, F, w * 0.92f));
+                yield return (At(0, F / 2, 0), new Vector3(w * 0.92f, F, w * 0.4f));
+                const int n = 16;
+                float rr = r * 0.9f, pw = 2 * rr * Mathf.Sin(Mathf.Pi / n) * 1.1f;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = Mathf.Tau * (i + 0.5f) / n;
+                    var dir = new Vector3(Mathf.Sin(a), 0, Mathf.Cos(a));
+                    // the entrance (authored at +Z: the node's -Z after the scratch's half turn) stays open
+                    if (Mathf.Abs(Mathf.Wrap(a - Mathf.Pi, -Mathf.Pi, Mathf.Pi)) < 0.3f) continue;
+                    yield return (new Transform3D(new Basis(Vector3.Up, a), dir * rr + Vector3.Up * (F + 1.6f)), new Vector3(pw, 3.2f, Wall));
+                }
+                yield return (At(0, F + r * 0.75f, 0), new Vector3(w * 0.8f, 0.2f, w * 0.8f));
                 break;
-            case ModuleKind.Biodome:
-                // the ring wall only for now (phase 3 walks in)
-                yield return (new Transform3D(Basis.Identity, new Vector3(0, 0.6f, 0)), new CylinderShape3D { Radius = w / 2 + 0.3f, Height = 1.4f });
-                break;
+            }
             case ModuleKind.Hangar:
-                yield return (new Transform3D(Basis.Identity, new Vector3(0, h / 2 + 0.3f, 0)), new BoxShape3D { Size = new Vector3(w, h, l) });
+            {
+                float floor = 0.6f;
+                yield return (At(0, floor / 2, 0), new Vector3(w, floor, l));
+                yield return (At(-r - Wall / 2, floor + h * 0.4f, 0), new Vector3(Wall, h * 0.8f, l));
+                yield return (At(r + Wall / 2, floor + h * 0.4f, 0), new Vector3(Wall, h * 0.8f, l));
+                yield return (At(0, floor + h, 0), new Vector3(w, 0.3f, l));
+                // the vehicle door shut (authored +Z: the node's -Z), the doorway's wall at the other end
+                yield return (At(0, floor + h / 2, -l / 2), new Vector3(w, h, Wall));
+                float side = r - dw / 2;
+                yield return (At(-(dw / 2 + side / 2), floor + h / 2, l / 2), new Vector3(side, h, Wall));
+                yield return (At(dw / 2 + side / 2, floor + h / 2, l / 2), new Vector3(side, h, Wall));
+                yield return (At(0, (top + floor + h) / 2, l / 2), new Vector3(dw, floor + h - top, Wall));
+                // the landing at the sill and its steps (authored at -Z: the node's +Z)
+                yield return (At(0, (F + floor) / 2, l / 2 - 1.0f), new Vector3(2.4f, F - floor, 2.0f));
+                const int steps = 5;
+                float rise = (F - floor) / steps;
+                for (int k = 1; k < steps; k++)
+                    yield return (At(0, floor + (F - floor - k * rise) / 2, l / 2 - 2.0f - (k - 0.5f) * 0.3f), new Vector3(2.4f, F - floor - k * rise, 0.3f));
+                break;
+            }
+            case ModuleKind.Biodome:
+                yield return (At(0, 0.6f, 0), new Vector3(w * 0.7f, 1.4f, w * 0.7f));
                 break;
         }
     }

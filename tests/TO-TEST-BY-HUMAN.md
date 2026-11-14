@@ -38,6 +38,13 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Into Artemis Base through an airlock ([#1941](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1941))
+
+- [ ] At Artemis Base (`--moonsites artemis:close`), step in (T) outside: you wear the silver suit and the gold-visored helmet. Walk to the end of a spine, up the steps to the airlock's outer door, press E → the inner door (if open) slides shut, the lamp goes amber, a hiss, then the outer door slides open. Walk in, E again → the reverse; the helmet comes off once the outer door is shut.
+- [ ] With the pad: the same with Y; the prompt reads "Cycle the airlock: in/out".
+- [ ] In VR: reach out at a shut airlock door and grip → it cycles. Check the helmet does not block your view (first person draws no head).
+- [ ] Walk the whole colony inside: the tubes (no bumping your head), the hub's control room, the cans' rooms (bunks, galley, lab...), a moondust dome's greenhouse, the hangar down its steps. Nothing to fall through, no invisible wall in a doorway.
+
 ## Artemis Base ([#1940](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1940))
 
 - [ ] Go to Artemis Base (89.384° S, 150.055° W; `--moonsites artemis:close` drops the camera among its modules), step in and walk round the hub and along a spine → you bump into the cans, tubes and domes (they are solid, not yet walk-in: that is phase 3); the plateau is flat underfoot and eases into the natural ground past the pads with no step.

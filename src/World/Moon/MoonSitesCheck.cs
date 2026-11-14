@@ -70,6 +70,13 @@ public partial class MoonSitesCheck : Node
     public override void _Process(double delta)
     {
         _t += delta;
+        if (_air > 0)
+        {
+            SavePending();
+            // a picture's frames run on even after the last stage: the walk-through waits for it
+            if (_pending == null) AirStep(delta);
+            return;
+        }
         if (_dance > 0)
         {
             DanceStep(delta);
@@ -108,6 +115,7 @@ public partial class MoonSitesCheck : Node
         if (_index >= _sites.Count)
         {
             if (Dance && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _dance = 1; return; }
+            if (AirlockCheck && _fails.Count == 0 && _sites.Count > 0) { _index = _sites.Count - 1; _air = 1; return; }
             Finish(_fails.Count == 0 ? null : string.Join("; ", _fails));
             return;
         }

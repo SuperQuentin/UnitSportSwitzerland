@@ -3012,6 +3012,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (TryClimbAboard()) return true;
         // a building site crane's ladder or its remote's box (#618)
         if (TryCrane()) return true;
+        // a Moon colony's airlock door: cycle it (#1941)
+        if (World.Moon.ColonyAirlocks.TryUse(this)) return true;
 
         // a slice of a birthday cake at hand (#1423)
         if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
