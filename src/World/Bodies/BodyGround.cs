@@ -40,7 +40,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How far each way from the centre the globe's own tiles step aside, metres: the square's half side.</summary>
     public const float HoleM = Cells * CellM / 2 - 0.25f;
 
-    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex";
+    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength";
 
     public CelestialBody Body => _globe.Body;
 
@@ -53,7 +53,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How many squares were built; a check waits for a new one.</summary>
     public int Built { get; private set; }
 
-    /// <summary>The live one, for the checks.</summary>
+    /// <summary>The anchor body's own (one a landable body with a pyramid; the anchor's claims it), for the checks and the step-in.</summary>
     public static BodyGround? Active { get; private set; }
 
     private readonly BodyGlobe _globe;
@@ -76,11 +76,13 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var pyramid = globe.Pyramid;
         Heights = new BodyHeights(cube, level,
             key => pyramid.Heights(key),
-            new CraterField((ulong)globe.Body.Id, cube.Shape.A));
+            globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null);
     }
 
-    public override void _EnterTree()
+    /// <summary>This body's ground is the one everything asks while the anchor is on it.</summary>
+    private void Claim()
     {
+        if (Active == this) return;
         Active = this;
         Terrain.Earth.EarthWorld.OtherBody = this;
     }
@@ -133,6 +135,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             Drop();
             return;
         }
+        Claim();
         if (_static != null && _origin.Epoch != _epoch) Place(axes);
         if (_static != null && _material != null && _globe.Sun != Vector3.Zero) _material.SetShaderParameter(SunDir, _globe.Sun);
 
@@ -256,6 +259,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var material = new ShaderMaterial { Shader = _shader };
         if (sq.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(sq.Colour));
         material.SetShaderParameter(SunDir, _globe.Sun == Vector3.Zero ? Vector3.Up : _globe.Sun);
+        material.SetShaderParameter(SunStrength, _globe.Exposure);
         int side = Cells + 1;
         var body = new StaticBody3D { Name = "Square" };
         body.AddChild(new CollisionShape3D

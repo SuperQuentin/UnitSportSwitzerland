@@ -21,6 +21,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   - this branch: the Moon's ground under your feet (`BodyHeights`, `BodyGround`, `IBodyGround`, `BodyGravity`): a
     512 m square from LOLA and the craters round the camera, solid, eased into the globe at its edge; T steps in, the
     walker sprints and jumps 5.4 m at 1.63 m/s².
+- **H7e** (#1853), this branch: Mars' pyramid (MOLA 463 m over the IAU ellipsoid through the areoid, levels 0-4, 320 MB on
+  E:; Viking's 925 m colour), exposure by the photo's mean, the sky's disc hidden under a globe, craters by body.
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
@@ -30,7 +32,7 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 - the target cue and the align hold;
 - belly jets;
 - C3b online (after D2, #1727);
-- Mars (H7e), the rest (H7f);
+- Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);
 - the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
