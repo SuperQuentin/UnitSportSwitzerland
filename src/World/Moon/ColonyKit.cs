@@ -147,7 +147,7 @@ public static class ColonyKit
         yield return ("Biodome (Cold War, overgrown)", () => Glazed(Module(ModuleKind.Biodome, 64, 64, 32, 1, ColonyTheme.ColdWar)));
         yield return ("Hangar (Artemis)", () => Show(Module(ModuleKind.Hangar, 26, 14, 8, 1, ColonyTheme.Artemis)));
         yield return ("Tube", () => Show(Links([(new(-6, 0, 0), new(6, 0, 0), false)], ColonyTheme.Artemis)));
-        yield return ("Landing pad", () => Show(PadMesh(20, 1)));
+        yield return ("Landing pad", () => Show(PadMesh((float)ColonyPlan.PadR, 1)));
     }
 
     private static Node3D Show(ArrayMesh m) => Instance(m);

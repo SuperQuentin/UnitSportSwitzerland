@@ -167,7 +167,7 @@ colony.
 - **Tube**: a pressurised corridor 2.4 m across between two doors, in straight runs and elbows; **alley**: an open,
   covered walkway (a roof and side panels) where the theme prefers it.
 - **Airlock**: a short can with two doors and a chamber, glued to any module's door.
-- **Pad**: a 40 m sintered disc with a blast berm, edge lights and a number; **runway**: 3 km by 60 m, edge and
+- **Pad**: a 60 m sintered disc (the shuttle: 37 m long, 24 m span; #1943 follow-up) with a blast berm, edge lights and a number; **runway**: 3 km by 60 m, edge and
   threshold lights, a small terminal; **industry**: solar array rows (tracking the sun: a node turned), a regolith
   digger (a bucket-wheel vehicle, parked or on a shared-clock loop), the ice mine's headframe and the dark crater's
   lights, the far-side radio telescope (a dish array in a crater), the mass driver (a straight rail on pylons with a

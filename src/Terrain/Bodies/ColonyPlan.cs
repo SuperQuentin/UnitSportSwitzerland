@@ -132,6 +132,12 @@ public sealed partial class ColonyPlan
     /// <summary>The unit vector along a heading in the frame (x east, z south).</summary>
     public static (double X, double Z) Along(double yaw) => (Math.Sin(yaw), -Math.Cos(yaw));
 
+    /// <summary>A landing pad's radius, metres: 60 m across for the shuttle (#1943); its blast berm reaches 5 m further.</summary>
+    public const double PadR = 30;
+
+    /// <summary>Between two pads' centres, metres: their berms 15 m apart.</summary>
+    public const double PadSpacing = 2 * (PadR + 5) + 15;
+
     /// <summary>The Cold War base's biodome's radius, metres (#1944): the largest, 64 m across.</summary>
     public const double BiodomeR = 32;
 
@@ -191,14 +197,15 @@ public sealed partial class ColonyPlan
                 int vehicle = plan.Door(hangar, len / 2, yaw);
                 // the hangar is a vehicle airlock (#1943): its rolling door out, a door at its inner doorway
                 plan.Hangar = new ColonyAirlock(hangar, vehicle, hangarInner);
-                // the road on out to the pads, 220 m past the hangar, three pads across it
+                // the road on out to the pads, 220 m past the hangar, three pads across it: 60 m across for the shuttle
+                // (37 m long, 24 m span, sliding hands-off at 0.5 m/s²), their berms 15 m apart, the road ending 10 m short
                 var d = plan.Doors[vehicle];
                 plan.Road.Add((d.X, d.Z));
                 double padAt = at + len + 220;
                 plan.Road.Add((dx * padAt, dz * padAt));
                 var (cx, cz) = Along(yaw + Math.PI / 2);
                 for (int p = -1; p <= 1; p++)
-                    plan.Pads.Add(new ColonyPad(dx * (padAt + 30) + cx * p * 75, dz * (padAt + 30) + cz * p * 75, 20, p + 2));
+                    plan.Pads.Add(new ColonyPad(dx * (padAt + PadR + 10) + cx * p * PadSpacing, dz * (padAt + PadR + 10) + cz * p * PadSpacing, PadR, p + 2));
             }
             else if (c.Theme == ColonyTheme.ColdWar && k == 2)
             {
