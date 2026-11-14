@@ -65,12 +65,16 @@ public partial class ColonyAirlocks : Node3D
     }
 
     private readonly List<Lock> _locks = new();
+
+    /// <summary>The abandoned colony (#1944): no power, no air; its airlock's doors stand open and do not cycle.</summary>
+    private readonly bool _dead;
     private readonly List<(Transform3D At, Vector3 Half, bool Round)> _volumes = new();
     private static readonly StringName Albedo = "albedo_color";
 
     public ColonyAirlocks(MoonColony colony, ColonyPlan plan)
     {
         Name = "Airlocks";
+        _dead = colony.Theme == ColonyTheme.Abandoned;
         var pal = ColonyKit.Of(colony.Theme);
         foreach (var a in plan.Airlocks)
         {
@@ -78,8 +82,9 @@ public partial class ColonyAirlocks : Node3D
             var l = new Lock { Plan = a };
             l.Outer = MakeDoor(plan.Doors[a.Outer], pal);
             l.Inner = MakeDoor(plan.Doors[a.Inner], pal);
-            // the start: the inner door open, the outer shut, the chamber full
+            // the start: the inner door open, the outer shut, the chamber full; in the dead colony both stuck open (#1944)
             l.Inner.Open = l.Inner.Target = 1;
+            if (_dead) l.Outer.Open = l.Outer.Target = 1;
             Pose(l.Inner);
             Pose(l.Outer);
             l.Lamp = new MeshInstance3D
@@ -118,9 +123,10 @@ public partial class ColonyAirlocks : Node3D
             l.ChamberHalf = new Vector3(w / 2 - 0.1f, (float)m.Height + 1, (float)m.Length / 2 + 0.05f);
             _locks.Add(l);
         }
-        // the pressurised insides, in the colony's frame
+        // the pressurised insides, in the colony's frame (none in the dead colony: no air left anywhere, #1944)
         foreach (var m in plan.Modules)
         {
+            if (_dead) break;
             if (m.Kind == ModuleKind.Airlock || plan.Hangar is { } hh && hh.Module == m.Id) continue;
             var at = new Transform3D(new Basis(Vector3.Up, -(float)m.Yaw), new Vector3((float)m.X, 0, (float)m.Z));
             bool round = m.Kind is ModuleKind.Hub or ModuleKind.Stack or ModuleKind.Dome or ModuleKind.Biodome;
@@ -128,6 +134,7 @@ public partial class ColonyAirlocks : Node3D
         }
         foreach (var link in plan.Links)
         {
+            if (_dead) break;
             var a = plan.Doors[link.DoorA];
             var b = plan.Doors[link.DoorB];
             var pa = new Vector3((float)a.X, 0, (float)a.Z);
@@ -174,7 +181,7 @@ public partial class ColonyAirlocks : Node3D
     }
 
     /// <summary>A hangar's rolling door: ribbed slats, a window band, hazard stripes at its foot (one per size, shared).</summary>
-    private static ArrayMesh RollMesh(float w, float h)
+    internal static ArrayMesh RollMesh(float w, float h)
     {
         string key = FormattableString.Invariant($"{w:F1}/{h:F1}");
         if (Rolls.TryGetValue(key, out var m)) return m;
@@ -263,7 +270,7 @@ public partial class ColonyAirlocks : Node3D
     public bool Request(int index, bool outward)
     {
         var l = _locks[index];
-        if (l.Pump >= 0) return false;
+        if (_dead || l.Pump >= 0) return false;
         var opening = outward ? l.Outer : l.Inner;
         var shutting = outward ? l.Inner : l.Outer;
         if (opening.Target > 0) return false;

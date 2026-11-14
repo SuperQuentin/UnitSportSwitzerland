@@ -175,7 +175,13 @@ public partial class MoonSurface : Node
         var heights = _ground.Heights;
         var g0 = Ellipsoid.Moon.ToGeodetic(heights.Ground(c.Normal));
         var frame = new EnuFrame(g0, Ellipsoid.Moon);
-        var root = ColonyBuilder.Build(c, ColonyPlan.For(c));
+        // the ground's height in the colony's frame (a pit's rim, #1944)
+        float GroundY(double e, double n)
+        {
+            var (_, y, _) = frame.ToLocal(heights.Ground(MoonSites.Offset(new MoonSite(c.Id, c.Name, MoonSiteKind.Colony, c.Lat, c.Lon, []), e, n)));
+            return (float)y;
+        }
+        var root = ColonyBuilder.Build(c, ColonyPlan.For(c), GroundY);
         AddChild(root);
         var placed = new Placed(null, root, frame) { TracesIn = true };
         _placed[c.Id] = placed;

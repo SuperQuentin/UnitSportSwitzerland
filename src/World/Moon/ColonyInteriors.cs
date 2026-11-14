@@ -96,6 +96,8 @@ public static class ColonyInteriors
             if (right.LengthSquared() < 1e-6f) right = Vector3.Right * (w / 2);
             var up = normal.Cross(right).Normalized() * (h / 2);
             var o = c + normal * 0.005f;
+            // the abandoned colony's screens and lamps are dead (#1944): its palette's dark lamp colour
+            if (_p.DeadLamps is { } dead) col = dead;
             S.Pane([o - right - up, o + right - up, o + right + up, o - right + up], col);
         }
 

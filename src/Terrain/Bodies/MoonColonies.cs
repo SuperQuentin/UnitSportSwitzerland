@@ -26,8 +26,10 @@ public enum ColonyTheme : byte
 /// its plan grows from, the plateau it stands on (a <see cref="StampMode.Level"/> disc) and its heading (the main spine's
 /// direction, degrees from north).
 /// </summary>
+/// <param name="FalloffM">How far the plateau eases back to the natural ground, metres (a pit's wall is steep).</param>
+/// <param name="DepthM">How far the plateau is sunk under the data's height at its centre: a pit's floor (#1944).</param>
 public sealed record MoonColony(string Id, string Name, ColonyTheme Theme, double Lat, double Lon, int Seed,
-    double PlateauM, double Heading, bool Staffed)
+    double PlateauM, double Heading, bool Staffed, double FalloffM = 150, double DepthM = 0)
 {
     public EcefPos Normal => CubeSphere.NormalAt(Lat, Lon);
 }
@@ -51,6 +53,13 @@ public static class MoonColonies
         // Von Karman's mare floor on the far side, 18 km north-west of Chang'e 4: --moonsurvey -45.0,176.6,8,420
         // (0.22 m RMS, 0.02°, -5,914 m); radio-quiet, the telescope 4.7 km south-west
         new("ilrs", "ILRS", ColonyTheme.Ilrs, -44.8549, 176.7306, 3003, 420, 300, Staffed: true),
+        // the Marius Hills pit (LROC's 14.091° N, 303.223° E; ~65 m across, ~34 m deep), a skylight into a lava tube: the
+        // data does not hold it at its 60 m cells, so it is a sunk Level stamp: a floor 34 m across a side of its centre
+        // 34 m down, its wall eased up over 8 m; the colony on its floor, abandoned (#1944)
+        new("lavatube", "Marius Hills station", ColonyTheme.Abandoned, 14.091, -56.777, 5005, 34, 30, Staffed: false, FalloffM: 8, DepthM: 34),
+        // Plaskett crater's floor near the north pole on the far side: --moonsurvey 82.1,174.3,8,300 (0.44 m RMS, 0.03°,
+        // -2,840 m); the 1970s base, empty, its power still on in places (#1944)
+        new("coldwar", "Plaskett station", ColonyTheme.ColdWar, 81.9417, 172.9564, 6006, 420, 200, Staffed: false),
     ];
 
     /// <summary>Artemis Base's centre and main spine (from <c>--moonsurvey</c>).</summary>
@@ -59,7 +68,7 @@ public static class MoonColonies
     /// <summary>The ground's stamps: each colony's level plateau, eased back to the natural ground over 150 m.</summary>
     public static IEnumerable<SurfaceStamp> Stamps()
     {
-        foreach (var c in All) yield return new SurfaceStamp(c.Normal, null, c.PlateauM, 150, StampMode.Level);
+        foreach (var c in All) yield return new SurfaceStamp(c.Normal, null, c.PlateauM, c.FalloffM, StampMode.Level, -c.DepthM);
         foreach (var o in MoonOutposts.All) yield return o.Stamp;
     }
 

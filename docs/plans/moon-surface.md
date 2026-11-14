@@ -21,6 +21,10 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
   `BodyGravity`), parked at each staffed colony (`MoonRoverDepot`), the hangar a vehicle airlock (its rolling door opens
   for a rover heading at it, a ramp to the plateau), a lander on each colony's first pad, Artemis' 3 km runway on a
   levelled strip, `MoonPads` for the shuttle, `--moonrovercheck`.
+- Phase 6 (#1944): Marius Hills station in its pit (a sunk plateau stamp, a compact plan, the sealed lock at the lava
+  tube's mouth, no air, dead lamps, red emergency lights, drifts and rubble, the stair tower to the rim, five terminals
+  with logs) and Plaskett station, the Cold War base on Plaskett's floor near the north pole (olive modules, the walk-in
+  overgrown biodome with its grow lamps, the turning radar, lattice masts, the quarry, two terminals), `--ruinscheck`.
 
 ## The user's decisions (fixed)
 
@@ -289,3 +293,9 @@ Tracking: #1938. Phases: 1 #1939, 2 #1940, 3 #1941, 4 #1942, 5 #1943, 6 #1944, 7
   terminal hut and no road or tube to the base. The hangar is the vehicle airlock (the colony's tube side keeps its air);
   its rolling door opens for anyone driving at it, no new key. A driven-away rover's slot fills again the next time the
   colony is built.
+- Phase 6: the pit is the colony's own plateau stamp sunk 34 m (the data does not hold it); the lava tube is suggested,
+  not modelled (a dark mouth and a sealed airlock in the wall: a heightfield has no caves). The abandoned colony has no air
+  at all (the helmet stays on) and its airlock's doors stand open. The way down is a stair tower, not a lift. The logs are
+  shown on the terminals' screens (no menu). The Cold War base is "Plaskett station", named after its crater, and empty;
+  its biodome is the largest (64 m), its door back toward the hub. The names, layout and art take only the mood of the
+  user's reference.

@@ -209,6 +209,7 @@
     <Compile Include="..\..\src\Terrain\Bodies\MoonSites.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\MoonColonies.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\ColonyPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\ColonyPlan.Pit.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\MoonOutposts.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\MoonPads.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />

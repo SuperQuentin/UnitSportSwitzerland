@@ -59,6 +59,9 @@ public static class MoonIndustry
         yield return ("Radio dish", () => One(IndustryKind.Dish, 12));
         yield return ("Mass driver (120 m)", () => One(IndustryKind.DriverTrack, 120));
         yield return ("Crew lander", () => One(IndustryKind.Lander, 20));
+        yield return ("Radar (Cold War)", () => Build([new ColonyIndustry(IndustryKind.Radar, 0, 0, 0, 18)], ColonyTheme.ColdWar, 0, 0,
+            (x, z) => new Vector3((float)x, 0, (float)-z), null));
+        yield return ("Lattice mast", () => One(IndustryKind.Mast, 30));
         yield return ("Runway (300 m)", () => One(IndustryKind.Runway, 300));
         yield return ("Glazed alley (Moon Village)", () => ColonyKit.Instance(ColonyKit.Alleys([(new(-6, 0, 0), new(6, 0, 0))], ColonyTheme.MoonVillage)).Glazed());
     }
@@ -226,6 +229,29 @@ public static class MoonIndustry
                     Solid(t * new Transform3D(Basis.Identity, Vector3.Up * 4.2f), new Vector3(4.2f, 5.4f, 4.2f));
                     foreach (var (x, z) in new[] { (-1, -1), (-1, 1), (1, -1), (1, 1) })
                         Solid(t * new Transform3D(Basis.Identity, new Vector3(x * 3.6f, 0.15f, z * 3.6f)), new Vector3(1.0f, 0.3f, 1.0f));
+                    break;
+                }
+                case IndustryKind.Radar:
+                {
+                    float w = (float)p.Size;
+                    var ped = Inst(Cached($"radarbase/{theme}", s => RadarBase(s, pal)));
+                    ped.Transform = t;
+                    root.AddChild(ped);
+                    var head = new Node3D { Name = "RadarHead", Position = at + Vector3.Up * RadarH, Rotation = new Vector3(0, -(float)p.Yaw, 0) };
+                    head.AddChild(Inst(Cached($"radar/{w:F0}/{theme}", s => RadarHead(s, w, pal))));
+                    root.AddChild(head);
+                    // a full turn every 20 s, still sweeping for the station that left it on
+                    root.Wheels.Add((head, Vector3.Up, Mathf.Tau / 20));
+                    Solid(t * new Transform3D(Basis.Identity, Vector3.Up * RadarH / 2), new Vector3(4, RadarH, 4));
+                    break;
+                }
+                case IndustryKind.Mast:
+                {
+                    float h = (float)p.Size;
+                    var mast = Inst(Cached($"mast/{h:F0}", s => LatticeMast(s, h)));
+                    mast.Transform = t;
+                    root.AddChild(mast);
+                    Solid(t * new Transform3D(Basis.Identity, Vector3.Up * h / 2), new Vector3(1.2f, h, 1.2f));
                     break;
                 }
                 case IndustryKind.Runway:
@@ -527,6 +553,71 @@ public static class MoonIndustry
         var d = along.Normalized();
         var side = Vector3.Up.Cross(d).Normalized();
         return new Basis(side, d.Cross(side), d);
+    }
+
+    /// <summary>The radar's pivot over the ground, metres.</summary>
+    public const float RadarH = 7f;
+
+    /// <summary>The Cold War radar's base: a riveted drum on a plinth, a stair up its side, a cabin door.</summary>
+    private static void RadarBase(MeshScratch s, ColonyKit.Palette p)
+    {
+        s.Box(new(0, 0.4f, 0), new(5.5f, 0.8f, 5.5f), p.Frame);
+        s.Tube(new(0, 0.8f, 0), new(0, RadarH - 0.6f, 0), 2.0f, 1.6f, p.Shell, 12);
+        for (int k = 1; k < 4; k++) s.Ring(new(0, 0.8f + k * (RadarH - 1.4f) / 4, 0), Vector3.Up, 1.7f + 0.1f * (4 - k), 1.85f + 0.1f * (4 - k), 0.15f, p.Band, 12);
+        s.Box(new(0, 2.0f, 1.95f), new(1.0f, 2.0f, 0.1f), p.Trim);
+        s.Tube(new(0, RadarH - 0.6f, 0), new(0, RadarH, 0), 1.2f, Dark, 10);
+    }
+
+    /// <summary>The radar's head, turning about its pedestal: a yoke and a wide lattice reflector, its feed horn on a boom.</summary>
+    private static void RadarHead(MeshScratch s, float w, ColonyKit.Palette p)
+    {
+        s.Box(new(0, 0.5f, 0), new(1.8f, 1.0f, 1.8f), p.Frame);
+        foreach (float x in new[] { -1.2f, 1.2f }) s.Box(new(x, 2.0f, 0), new(0.3f, 3.0f, 0.6f), p.Frame);
+        // the reflector: a curved lattice, rows of slats bowed back, tilted up 15°
+        var tilt = new Basis(Vector3.Right, -0.26f);
+        const int rows = 7, cols = 9;
+        float hh = w * 0.4f;
+        for (int j = 0; j <= rows; j++)
+        {
+            float y = -hh / 2 + j * hh / rows;
+            for (int i = 0; i < cols; i++)
+            {
+                float x0 = -w / 2 + i * w / cols, x1 = x0 + w / cols, xm = (x0 + x1) / 2;
+                float z = 0.035f * xm * xm / (w / 10);
+                s.Box(tilt * new Vector3(xm, y + 3.2f, z + 1.4f) , new(w / cols * 1.02f, 0.08f, 0.1f), Steel, tilt * new Basis(Vector3.Up, -Mathf.Atan(0.07f * xm / (w / 10))));
+            }
+        }
+        for (int i = 0; i <= cols; i++)
+        {
+            float x = -w / 2 + i * w / cols, z = 0.035f * x * x / (w / 10);
+            s.Box(tilt * new Vector3(x, 3.2f, z + 1.4f), new(0.08f, hh, 0.1f), p.Frame, tilt);
+        }
+        s.Tube(new(0, 3.0f, 1.2f), tilt * new Vector3(0, 3.2f, 1.4f - w * 0.45f), 0.08f, Steel, 4);
+        s.Box(tilt * new Vector3(0, 3.2f, 1.4f - w * 0.45f), new(0.5f, 0.5f, 0.7f), Dark, tilt);
+    }
+
+    /// <summary>A lattice radio mast <paramref name="h"/> high: three legs, zigzag bracing, guy wires, a red light on top.</summary>
+    private static void LatticeMast(MeshScratch s, float h)
+    {
+        const float r = 0.55f;
+        Vector3 Leg(int i, float y) => new(Mathf.Sin(i * Mathf.Tau / 3) * r, y, Mathf.Cos(i * Mathf.Tau / 3) * r);
+        s.Box(new(0, 0.2f, 0), new(1.8f, 0.4f, 1.8f), Dark);
+        for (int i = 0; i < 3; i++) s.Tube(Leg(i, 0.4f), Leg(i, h), 0.05f, Red with { R = 0.85f, G = 0.85f, B = 0.85f }, 4);
+        int bays = (int)(h / 1.6f);
+        for (int k = 0; k < bays; k++)
+            for (int i = 0; i < 3; i++)
+            {
+                float y0 = 0.4f + k * (h - 0.4f) / bays, y1 = y0 + (h - 0.4f) / bays;
+                s.Tube(Leg(i, y0), Leg((i + 1) % 3, y1), 0.025f, k % 4 < 2 ? Red : Steel, 3);
+            }
+        for (int i = 0; i < 3; i++)
+        {
+            var anchor = new Vector3(Mathf.Sin(i * Mathf.Tau / 3 + 0.5f), 0, Mathf.Cos(i * Mathf.Tau / 3 + 0.5f)) * h * 0.45f;
+            foreach (float f in new[] { 0.5f, 0.9f }) s.Tube(anchor, new Vector3(0, h * f, 0), 0.015f, Steel, 3);
+            s.Box(anchor + Vector3.Up * 0.15f, new(0.6f, 0.3f, 0.6f), Dark);
+        }
+        s.Pane([new(-0.15f, h + 0.3f, 0.15f), new(0.15f, h + 0.3f, 0.15f), new(0.15f, h + 0.3f, -0.15f), new(-0.15f, h + 0.3f, -0.15f)], Red);
+        s.Box(new(0, h + 0.15f, 0), new(0.3f, 0.3f, 0.3f), Red);
     }
 
     /// <summary>

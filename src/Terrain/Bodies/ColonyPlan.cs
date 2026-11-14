@@ -70,6 +70,10 @@ public enum IndustryKind : byte
     Runway,
     /// <summary>A lander standing on a pad (#1943), Size its pad's radius.</summary>
     Lander,
+    /// <summary>The Cold War base's radar (#1944): a big lattice dish on a pedestal, turning; Size its width.</summary>
+    Radar,
+    /// <summary>A lattice radio mast with its guys and a red light on top (#1944), Size its height.</summary>
+    Mast,
 }
 
 /// <summary>An industrial piece in its colony's (or outpost's) frame (x east, z south): kind, place, heading (radians from north), size.</summary>
@@ -90,7 +94,7 @@ public readonly record struct ColonyPad(double X, double Z, double Radius, int N
 /// and every module clear of the others by 4 m.
 /// </para>
 /// </summary>
-public sealed class ColonyPlan
+public sealed partial class ColonyPlan
 {
     public readonly List<ColonyModule> Modules = new();
 
@@ -128,8 +132,13 @@ public sealed class ColonyPlan
     /// <summary>The unit vector along a heading in the frame (x east, z south).</summary>
     public static (double X, double Z) Along(double yaw) => (Math.Sin(yaw), -Math.Cos(yaw));
 
+    /// <summary>The Cold War base's biodome's radius, metres (#1944): the largest, 64 m across.</summary>
+    public const double BiodomeR = 32;
+
     public static ColonyPlan For(MoonColony c)
     {
+        // the abandoned colony on its pit's floor (#1944): a compact plan of its own
+        if (c.Theme == ColonyTheme.Abandoned) return Pit(c);
         var plan = new ColonyPlan();
         var rng = new Random(c.Seed);
         double h0 = c.Heading * Math.PI / 180;
@@ -191,6 +200,15 @@ public sealed class ColonyPlan
                 for (int p = -1; p <= 1; p++)
                     plan.Pads.Add(new ColonyPad(dx * (padAt + 30) + cx * p * 75, dz * (padAt + 30) + cz * p * 75, 20, p + 2));
             }
+            else if (c.Theme == ColonyTheme.ColdWar && k == 2)
+            {
+                // the Cold War base's big glass biodome at the end of its third spine (#1944), its door back toward the hub:
+                // the mesh's door is at its node's -Z, along the module's yaw, so the yaw looks back down the spine
+                const double r = BiodomeR;
+                double centre = at - 9 + 6 + r;
+                int bio = plan.Add(ModuleKind.Biodome, dx * centre, dz * centre, yaw + Math.PI, 2 * r, 2 * r, r, 1, RoomKind.Greenhouse);
+                plan.Links.Add(new ColonyLink(last, plan.Door(bio, r + 0.3, yaw + Math.PI), alleys));
+            }
             else
             {
                 // the way out at the spine's end: a 4 m airlock 5 m on from the last door, its outer door to the ground
@@ -229,7 +247,7 @@ public sealed class ColonyPlan
     public static double IndustryReach(ColonyIndustry i) => i.Kind switch
     {
         IndustryKind.SolarArray => 6, IndustryKind.Digger => i.Size + 8, IndustryKind.DriverTrack or IndustryKind.Runway => i.Size,
-        IndustryKind.Lander => 6,
+        IndustryKind.Lander => 6, IndustryKind.Radar => i.Size / 2 + 2, IndustryKind.Mast => i.Size * 0.4,
         IndustryKind.Dish => i.Size / 2, IndustryKind.Hut => i.Size / 2 + 1, _ => Math.Max(i.Size, 4),
     };
 
@@ -240,6 +258,11 @@ public sealed class ColonyPlan
     /// </summary>
     private void AddIndustry(MoonColony c, double h0, Random rng)
     {
+        if (c.Theme == ColonyTheme.ColdWar)
+        {
+            ColdWarIndustry(h0, rng);
+            return;
+        }
         if (c.Theme is not (ColonyTheme.Artemis or ColonyTheme.MoonVillage or ColonyTheme.Ilrs)) return;
         double fieldYaw = h0 + 3 * Math.PI / 4;
         var (fx, fz) = Along(fieldYaw);
