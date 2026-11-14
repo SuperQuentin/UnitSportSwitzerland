@@ -195,6 +195,7 @@ src/Interiors/           quick  --flatcheck
 src/Interiors/           quick  --stairwalkcheck
 src/Interiors/           quick  --houselayoutcheck
 tools/TerrainFormat/HouseLayout quick --houselayoutcheck
+tools/TerrainFormat/BuildingOutline quick --houselayoutcheck
 # #598: the generated world's shaped buildings: outline, doors, interiors that follow it
 src/Interiors/           quick  --shapedcheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck
