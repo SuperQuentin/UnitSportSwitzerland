@@ -233,7 +233,18 @@ public partial class OrbitNetProbe : ChatProbe
         if (_role == "A")
         {
             _down = 1f;
-            Expect(await Until(() => ufo.Orbit == null, 600), "thrusting down takes A out of orbit");
+            // the way down logged every 20 s: a timeout shows where it was
+            double logDown = GameClock.Now;
+            bool Down()
+            {
+                if (GameClock.Now - logDown >= 20)
+                {
+                    logDown = GameClock.Now;
+                    GD.Print(FormattableString.Invariant($"{Log} coming down: {me.Origin!.AltitudeOf(me.GlobalPosition) / 1000:F1} km, {me.Velocity.Length():F0} m/s"));
+                }
+                return ufo.Orbit == null;
+            }
+            Expect(await Until(Down, 600), "thrusting down takes A out of orbit");
             _down = 0f;
             Expect(await Until(() => Mathf.Abs(me.Velocity.Y) < 0.5f, 60), $"A hovers below the Space regime ({me.Velocity.Y:F1} m/s)");
             Say("down");
