@@ -3,7 +3,8 @@
 
 # Bots: server-run players, built to be reused by every mode (#837)
 
-- **What a bot is**: a `FootPlayer` the **dedicated server runs itself** (authority 1). The spawn data is
+- **What a bot is**: a `FootPlayer` the **dedicated server runs itself** (authority 1); offline the game is its own
+  server and runs them the same way (`offline`). The spawn data is
   `PlayerReplication.BotData(n, at, yaw, name)`: the race-NPC layout plus index 8 = driver kind (1 = bot)
   and index 9 = its name. The node is `npc_1_<n>` and the id is `-(1000 + n)` (`BotId`, `IsBotId`).
   `FootPlayer.Bot` and `BotName` are set on every peer from the spawn data. `Npc` is true too, so the
