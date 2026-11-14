@@ -279,7 +279,7 @@ public partial class AdventureMap : Screen, IMapHost
         private Vector2? _press, _rightPress;
         private bool _dragging;
         private int _fogVersion = -1;
-        private bool _reliefDrawn;
+        private bool _reliefDrawn, _linesDrawn;
         private readonly List<(Poi Poi, Vector2 At)> _drawn = new();
         private readonly List<(Vector2 At, float Width)> _labels = new();
         private readonly List<(Place Place, Vector2 At)> _drawnPlaces = new();
@@ -410,12 +410,14 @@ public partial class AdventureMap : Screen, IMapHost
 
         private void DrawTop(CanvasItem on)
         {
-            if (Driven)
+            // rivers and borders as smooth lines, not cells (#1826); the straight tile borders until the lines are built
+            if (MapLines.TryGet())
             {
-                // over the world's blur the borders must read: a dark halo under a bright line (#1826)
-                View.DrawBorders(on, _country, new Color(0, 0, 0, 0.55f), 4f);
-                View.DrawBorders(on, _country, new Color(1, 0.97f, 0.85f, 0.95f), 1.8f);
+                MapLines.DrawRivers(View, on);
+                if (Driven) MapLines.DrawBorders(View, on, new Color(1, 0.97f, 0.85f, 0.95f), 1.6f, halo: true);
+                else MapLines.DrawBorders(View, on, new Color(1, 1, 1, 0.35f), 1.2f, halo: false);
             }
+            else if (Driven) View.DrawBorders(on, _country, new Color(1, 0.97f, 0.85f, 0.9f), 1.8f);
             else View.DrawBorders(on, _country, new Color(1, 1, 1, 0.22f));
             DrawPlaces(on);
             DrawMe(on);
@@ -743,6 +745,7 @@ public partial class AdventureMap : Screen, IMapHost
         public override void _Process(double delta)
         {
             if (!_reliefDrawn && MapRelief.TryGet() != null) { _reliefDrawn = true; Redraw(); }
+            if (!_linesDrawn && MapLines.Ready) { _linesDrawn = true; _top.QueueRedraw(); }
             if (FogTexture.Version != _fogVersion) { _fogVersion = FogTexture.Version; _fog.QueueRedraw(); _top.QueueRedraw(); }
             if (Driven || !HasFocus()) return;
             var pan = Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");
