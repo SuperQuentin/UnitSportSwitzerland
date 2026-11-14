@@ -36,6 +36,9 @@
   its rider within ~20 s. It is funny, so it stays for now; revisit it (raise `ThrowLanding` /
   `ThrowTilt`, or scale with sea state) if players find it frustrating.
   **Boarding from the water**: E swimming beside the hull claims it like any vehicle (`--boatcheck`).
+  **A boat from the ride menu while swimming** (#1777): `SetRide` lets a swimmer take any boat (never a land
+  vehicle: the floor rule stays for those); `BeginBoat` starts it afloat at the surface where the swimmer was.
+  `tools/swimnetcheck.sh` checks it on the remote peer.
 - **At the helm** (`FootPlayer.Boat.cs`, one dispatch line in `_PhysicsProcess`): the model steps
   from where the body is, the body follows its path through `MoveAndSlide`, what the world took off
   is an impact (> 4 m/s dents it, > 13 m/s wrecks it); the capsule on the ground drags the hull

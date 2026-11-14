@@ -15,6 +15,21 @@ In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator
 - [ ] Join a server that has the pyramid (`--globe <dir>` on the server) from a copy with none and an empty cache, then climb slowly from the ground to 500 km over Switzerland → the globe sharpens as tiles arrive, no tile jumps in height when it splits or merges; note how long it takes to catch up after a fast climb (the check measured it lagging at 7 fps).
 - [ ] With the pyramid on this PC (D:), climb and dive between 2 km and 300 km at full speed, watching the mountains on the horizon → no ground popping between levels (each level eases into the next).
 
+## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --date 2027-07-15`, Cartoon.
+
+- [ ] Walk south across Pont des Bergues through the branch to Île Rousseau (`--at 2500310,1117990`) → you stay on the deck all the way, no fall into the Rhône at N 1117986-1117972.
+- [ ] Drive west on the Major across Place des Nations (`--at 2500300,1119935`) → the car crosses the bridge over the railway without dropping or stopping.
+
+## A facade door is drawn only where it opens ([#1766](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1766), [#1767](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1767))
+
+In a window, `--chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, on foot in Geneva's old town (`--at 2501414,1117284`), flat and `--frame earth`, with a fresh user:// (or `user://door_locks` deleted).
+
+- [ ] Walk the streets for a few minutes and press E at every door you pass → every door opens; none says "This door is locked". A side door that had no way in vanishes about 2 s after you first come within ~160 m, far enough off not to catch the eye; note any that goes close by.
+- [ ] Go in by a door, look at the facade walls from inside → every door seen from the street has its doorway inside.
+- [ ] Quit and start again at the same spot → the doors that vanished are absent from the start.
+
 ## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
 
 In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.
@@ -142,7 +157,7 @@ A server `--frame earth --generated-world` and a client `--connect 127.0.0.1 --f
 
 Offline, `--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks`, at a real site at its foundations (`--constructioncheck` lists them), in a window.
 
-- [ ] Walk to the pit's edge, look in, climb down the ramp, walk round the floor → the ground ends on a straight line at the sheet piles, brown walls down to a gravel floor, no ground over the pit and no gap round it (on a fixture course the real ground can show in it: #1686).
+- [ ] Walk to the pit's edge, look in, climb down the ramp, walk round the floor → the ground ends on a straight line at the sheet piles, brown walls down to a gravel floor, no ground over the pit and no gap round it.
 - [ ] Mount the excavator, drive down the ramp and back up → it drives on the ramp and the floor, never falls through.
 
 ## The earth ground's look (PR [#1642](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1642), [#1634](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1634), [#1632](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1632), [#1633](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1633), [#1635](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1635))
@@ -1079,6 +1094,14 @@ Offline, in a window (any frame).
 - [ ] E at a pinball machine → you step up, no game starts (and no coin goes) until you press E again.
 - [ ] E at a pool table or dartboard → you step up without sitting down; E again sits.
 - [ ] Empty hand, point at a set-up telescope (Geneva, `--frame earth`), after looking through it with the tube tilted → the yellow "pack it up" halo sits on the tube and the legs as drawn, tilted with the tube; same on a flag, a campfire and a workbench.
+
+## The sky from space (PR [#1855](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1855), [#1845](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1845))
+
+In a window, `--frame earth --sun real --date 2027-12-22`, Cartoon, the spectator, `/orbit 400` or the speed up to 20,000 km.
+
+- [ ] Over the night side at `--time 5`, look at the moon (a waning crescent) → a glow with its lit side bright, never a black disc in a ring; the same from the ground at night.
+- [ ] From 20,000 km with dawn or dusk under the camera → the Earth's day side as bright as with noon under it; the twilight band where the sun sets, about as wide on both sides of the line.
+- [ ] From 400 km over the night side before dawn → satellites as moving points above and below the horizontal, gone behind the Earth's limb.
 
 ## The globe's terminator and the spectator speed readout (PR [#1806](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1806), [#1798](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1798))
 

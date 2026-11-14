@@ -232,11 +232,18 @@ public sealed class RaceRoute
             // else joins, at AgainstCost times its time, rather than no drive
             log?.Invoke(Undirected(graph, best, to));
             var againstKinds = new List<(RoadClass, RoadFlags)>();
-            if (Towards(graph, ends, best, bestS, to, keepRight: true, againstKinds, against: true, banned, avoid, along) is { Count: > 1 } wrongWay
+            var wrong = new List<LaneEdge>();
+            if (Towards(graph, ends, best, bestS, to, keepRight: true, againstKinds, against: true, banned, avoid, along, wrong) is { Count: > 1 } wrongWay
                 && (path is not { Count: > 1 } || Flat(wrongWay[^1].P - to).Length() < Flat(path[^1].P - to).Length()))
             {
                 (path, kinds) = (wrongWay, againstKinds);
-                log?.Invoke("one-way streets taken the wrong way where they cut it: " + Said(path));
+                // where: each one-way edge driven against its direction (its class, its middle), for the issue it is
+                log?.Invoke("one-way streets taken the wrong way where they cut it: " + Said(path) + ", against "
+                    + string.Join("; ", wrong.Select(e =>
+                    {
+                        var (we, wn) = frame.ToLv95(e.Sample(e.Length * 0.5f).Pos);
+                        return System.FormattableString.Invariant($"a {e.Class}{(e.Path != null ? " junction path" : "")} {e.Length:F0} m at LV95 {we:F0}/{wn:F0}");
+                    })));
             }
         }
         if (path is not { Count: > 1 }) return null;
@@ -562,7 +569,7 @@ public sealed class RaceRoute
     /// </summary>
     private static List<(Vector3 P, float W)>? Towards(LaneGraph graph, EndIndex ends, LaneEdge start, float s, Vector3 to,
         bool keepRight, List<(RoadClass, RoadFlags)>? kinds, bool against = false, HashSet<LaneEdge>? banned = null,
-        IReadOnlyList<Vector3>? blocks = null, RoadClass? along = null)
+        IReadOnlyList<Vector3>? blocks = null, RoadClass? along = null, List<LaneEdge>? wrong = null)
     {
         float Cost(LaneEdge e, float metres, bool f) => !keepRight ? metres
             : metres / DriveSpeed(e.Class) * (Against(e, f) ? AgainstCost : 1f);
@@ -609,6 +616,7 @@ public sealed class RaceRoute
         for (int k = 0; k < chain.Count - 1; k++)
         {
             var (e, f) = chain[k];
+            if (wrong != null && Against(e, f)) wrong.Add(e);
             float right = keepRight ? LaneRight(e, f) : 0f;
             float width = keepRight ? LaneWidth(e) : e.Width;
             for (float d = k == 0 ? (f ? s : e.Length - s) : 0f; d <= e.Length; d += 2f)

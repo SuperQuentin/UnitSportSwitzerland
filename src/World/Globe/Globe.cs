@@ -516,7 +516,8 @@ public partial class Globe : Node
             Hide(altitude, cam.GlobalPosition);
             Edge(altitude, cam.GlobalPosition);
         }
-        bool show = !DebugHidden && (Earth || altitude > ShowAboveM);
+        // the Earth's globe on the Earth's anchor only: from another body it is a BodyGlobe (World/Bodies, #1848)
+        bool show = !DebugHidden && Origin.Body == Core.BodyId.Earth && (Earth || altitude > ShowAboveM);
         if (show != _shown)
         {
             _shown = show;
@@ -591,17 +592,15 @@ public partial class Globe : Node
     }
 
     /// <summary>
-    /// The tiles lit as the style lights the world: its ambient (colour by energy) and its sun's colour by
-    /// energy, written to the globals every globe tile and the handover's terrain read (common/globe_light) when
-    /// they change (the night's moonlight never: the sun stays the real one).
+    /// The tiles lit as the style lights the world at a clear midday (<see cref="Styles.StyleKit.Daylight"/>): its
+    /// ambient (colour by energy) and its sun's colour by energy, written to the globals every globe tile and the
+    /// handover's terrain read (common/globe_light) when they change. Never the hour under the camera (#1845): the
+    /// globe's day side is the sun's wherever one looks from, and the terminator (<c>world_true_sun</c>) says where night is.
     /// </summary>
     private void Relight()
     {
         if (GetViewport()?.FindWorld3D()?.Environment is not { } env) return;
-        var a = env.AmbientLightColor * env.AmbientLightEnergy;
-        var ambient = new Vector3(a.R, a.G, a.B);
-        var sun = DayNight.Instance?.Sun is { } light && IsInstanceValid(light) && (DayNight.Instance?.Night ?? 0) < 0.5f
-            ? new Vector3(light.LightColor.R, light.LightColor.G, light.LightColor.B) * light.LightEnergy : _sunColor;
+        var (ambient, sun) = Styles.StyleKit.Daylight(env);
         if (ambient.IsEqualApprox(_ambient) && sun.IsEqualApprox(_sunColor)) return;
         (_ambient, _sunColor) = (ambient, sun);
         RenderingServer.GlobalShaderParameterSet(Ambient, ambient);
@@ -1211,7 +1210,8 @@ public partial class Globe : Node
     public const float LakeDeepM = 100f;
 
     /// <summary>
-    /// A tile's lakes as the world's water (#1669): a quad wherever the four corners of a drawn cell are water, the
+    /// A tile's lakes as the world's water (#1669): a quad wherever the four corners of a drawn cell are water, a shore cell
+    /// whole with its dry corners under the land (<see cref="GlobeGround.LakeShore"/>, #1689), else the
     /// triangle over three (a diagonal shore, as <see cref="Terrain.WaterMeshBuilder"/>), at the surface the ground was drawn
     /// at; that ground sinks <see cref="LakeSinkM"/> under it. No waves this far (wave scale 0, as flat's far tiles).
     /// </summary>
@@ -1239,6 +1239,9 @@ public partial class Globe : Node
             else { idx.Add(V(a)); idx.Add(V(b)); idx.Add(V(c)); }
         }
         int m = n - 1;
+        // the vertices of a shore cell drawn in part (the old triangle, or none): their ground keeps the shore's fixed sink,
+        // since a deeper one would show dry of the water (GlobeGround.ShoreSink)
+        var partial = new bool[n * n];
         for (int j = 0; j < m; j++)
             for (int i = 0; i < m; i++)
             {
@@ -1250,16 +1253,18 @@ public partial class Globe : Node
                     Tri(k00, k10, k11);
                     Tri(k00, k11, k01);
                 }
-                else if (wet > 0 && hs != null && seaAt != null && (!w00 || seaAt[k00]) && (!w10 || seaAt[k10])
-                    && (!w01 || seaAt[k01]) && (!w11 || seaAt[k11]))
+                else if (wet > 0 && hs != null && (seaAt != null && (!w00 || seaAt[k00]) && (!w10 || seaAt[k10])
+                    && (!w01 || seaAt[k01]) && (!w11 || seaAt[k11]) || GlobeGround.LakeShore(hs, k00, k10, k01, k11, w00, w10, w01, w11)))
                 {
-                    // the sea's shore (#1802): the whole cell, its dry corners lowered to the water's level under the
-                    // land, so the coast is where the ground meets the water, not the cells' steps a kilometre wide
+                    // a shore cell (the sea's, #1802; a lake's, #1689): the whole cell, its dry corners lowered to the
+                    // water's level under the land (and under the ground where that is lower: a far leaf's shore stands a
+                    // metre or two under its lake), so the shore is where the ground meets the water, not the cells'
+                    // steps (10-40 m at a lake, a kilometre at sea)
                     float level = ((w00 ? hs[k00] : 0) + (w10 ? hs[k10] : 0) + (w01 ? hs[k01] : 0) + (w11 ? hs[k11] : 0)) / wet;
                     int Q(int k, bool w)
                     {
                         if (w) return V(k);
-                        vs.Add(pos[k] + up[k] * (level - hs[k]));
+                        vs.Add(pos[k] + up[k] * (Math.Min(level, hs[k] - GlobeGround.ShoreUnderM) - hs[k]));
                         uvs.Add(new Vector2(0, cellM));
                         return vs.Count - 1;
                     }
@@ -1269,11 +1274,13 @@ public partial class Globe : Node
                 }
                 else if (wet == 3)
                 {
+                    partial[k00] = partial[k10] = partial[k01] = partial[k11] = true;
                     if (!w00) Tri(k10, k11, k01);
                     else if (!w10) Tri(k00, k11, k01);
                     else if (!w11) Tri(k00, k10, k01);
                     else Tri(k00, k10, k11);
                 }
+                else if (wet > 0) partial[k00] = partial[k10] = partial[k01] = partial[k11] = true;
             }
         if (idx.Count == 0) return null;
         // the ground under the water sinks, so the two never fight for a pixel; inside the lake (every neighbour water,
@@ -1290,7 +1297,10 @@ public partial class Globe : Node
                     for (int a = -1; a <= 1; a++)
                         if (!lakeAt[Math.Clamp(j + b, 0, m) * n + Math.Clamp(i + a, 0, m)]) { inside = false; break; }
                 // inside, a leaf's own depth where it knows it (#1802), at least the shore's sink and at most the deep one
-                float depth = !inside ? LakeSinkM
+                // by the shore, sunk so the ground meets the water on a smooth line (#1689): every shore cell round it drawn
+                // whole, and inside the tile (its neighbour shapes the edge's vertices from its own cells)
+                bool shaped = !inside && hs != null && !partial[k] && i > 0 && j > 0 && i < m && j < m;
+                float depth = !inside ? (shaped ? GlobeGround.ShoreSink(lakeAt, hs!, n, i, j, LakeSinkM, LakeDeepM) : LakeSinkM)
                     : bedOf != null && !float.IsNaN(bedOf[k]) ? Math.Clamp(bedOf[k], LakeSinkM, LakeDeepM) : LakeDeepM;
                 verts[k] = pos[k] - up[k] * depth;
             }

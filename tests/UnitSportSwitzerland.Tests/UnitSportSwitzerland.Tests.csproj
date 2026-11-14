@@ -31,6 +31,9 @@
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\LocalHours.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SpectatorSpeed.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1851: an orbit carried across a sphere of influence -->
+    <Compile Include="..\..\src\Player\SpaceOrbit.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\SurfaceReach.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\ConflictPoints.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\MoverKind.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\NarrowPass.cs" Link="Game\%(Filename)%(Extension)" />
@@ -193,7 +196,12 @@
     <Compile Include="..\..\src\Bots\BotProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
-    <Compile Include="..\..\src\Core\Planet.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\CelestialBody.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- #1849: the Moon's generated craters -->
+    <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Atmosphere.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Orbit.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.cs" Link="Game\%(Filename)%(Extension)" />
@@ -218,6 +226,7 @@
     <Compile Include="..\..\src\Interiors\RampProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\GarageLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorLocks.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\LiftRide.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\ActorTrack.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\ReplayRing.cs" Link="Game\%(Filename)%(Extension)" />
@@ -273,6 +282,9 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\CubeCompareCore.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- and the LV95 build's rigorous way in for latitudes and longitudes -->
     <Compile Include="..\..\tools\TerrainPreprocessor\GeoInput.cs" Link="Tools\%(Filename)%(Extension)" />
+    <!-- #1849: another body's pyramid from a whole-body DEM -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\CylRaster.cs" Link="Tools\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\CubeBodyHeights.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
     <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />

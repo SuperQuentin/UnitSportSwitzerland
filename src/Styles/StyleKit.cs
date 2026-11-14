@@ -718,6 +718,27 @@ public static class StyleKit
     }
 
     /// <summary>
+    /// The style's light at a clear midday, whatever the hour where the camera is (#1845): the ambient (colour by
+    /// energy) and the sun's colour by energy that <see cref="DriveEnvironment"/> gives with the sun 60° up. The globe
+    /// lights the whole Earth's day side by it: from space it is the sun's, not the camera's evening's (its night
+    /// ambient dimmed the day side, and a night under the camera left the sun's colour at its first value).
+    /// </summary>
+    public static (Vector3 Ambient, Vector3 Sun) Daylight(Godot.Environment env)
+    {
+        var (tint, sky) = World.DayNight.Midday;
+        Color ambient;
+        float energy;
+        if (StyleFinish == Finish.Cartoon && env.Sky?.SkyMaterial is ProceduralSkyMaterial)
+            (ambient, energy) = (new Color(0.50f, 0.60f, 0.92f).Lerp(sky, 0.2f), 0.8f);
+        else if (StyleFinish == Finish.Realistic && env.Sky?.SkyMaterial is ProceduralSkyMaterial)
+            (ambient, energy) = (env.AmbientLightColor, 1.0f);
+        else
+            (ambient, energy) = (sky.Lerp(new Color(tint.R, tint.G, tint.B), 0.5f), 1.0f);
+        float sun = StyleFinish == Finish.Realistic ? 1.6f : 1.0f;
+        return (new Vector3(ambient.R, ambient.G, ambient.B) * energy, new Vector3(tint.R, tint.G, tint.B) * sun);
+    }
+
+    /// <summary>
     /// How far a style's own clear day sky has slid into the palette's: 0 with the sun above 20°,
     /// 1 below 2°. Flat most of the day, so <c>DayNight</c> keys its environment writes on it.
     /// </summary>

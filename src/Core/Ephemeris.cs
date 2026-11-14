@@ -67,17 +67,26 @@ public static partial class Ephemeris
     }
 
     /// <summary>The body in the Earth-fixed frame (the true equator of date, Greenwich), metres.</summary>
-    public static EcefPos Ecef(SkyBody body, DateTime utc)
+    public static EcefPos Ecef(SkyBody body, DateTime utc) => Ecef(body, SkyMoment.At(utc));
+
+    /// <summary>
+    /// The body in the Earth-fixed frame at a sky moment (#1850): where it is at the moment's <see cref="SkyMoment.Utc"/>,
+    /// the Earth turned by its <see cref="SkyMoment.EarthAngle"/> (the game's day).
+    /// </summary>
+    public static EcefPos Ecef(SkyBody body, SkyMoment m)
     {
-        var (ra, dec, dist) = Equatorial(body, utc);
-        double h = ra - SiderealTime(utc);
+        var (ra, dec, dist) = Equatorial(body, m.Utc);
+        double h = ra - m.EarthAngle;
         double cd = Math.Cos(dec);
         return new EcefPos(dist * cd * Math.Cos(h), dist * cd * Math.Sin(h), dist * Math.Sin(dec));
     }
 
     /// <summary>The body as seen from <paramref name="at"/> (WGS84 latitude, longitude, ellipsoidal height).</summary>
-    public static Horizontal Topocentric(SkyBody body, DateTime utc, Geodetic at) =>
-        Local(Ecef(body, utc) - Ellipsoid.Wgs84.ToEcef(at), at);
+    public static Horizontal Topocentric(SkyBody body, DateTime utc, Geodetic at) => Topocentric(body, SkyMoment.At(utc), at);
+
+    /// <summary>The body as seen from <paramref name="at"/> at a sky moment (#1850).</summary>
+    public static Horizontal Topocentric(SkyBody body, SkyMoment m, Geodetic at) =>
+        Local(Ecef(body, m) - Ellipsoid.Wgs84.ToEcef(at), at);
 
     /// <summary>An Earth-fixed offset turned into the east / north / up of a place, normalised, with its length.</summary>
     public static Horizontal Local(EcefPos d, Geodetic at)
@@ -98,9 +107,19 @@ public static partial class Ephemeris
     /// terms, in the ICRF), precessed to the equator of date (Meeus 21.3) and turned by sidereal
     /// time. Libration falls out of it: the sub-Earth point wanders ±7° round 0° / 0°.
     /// </summary>
-    public static (EcefPos Pole, EcefPos Prime, EcefPos East) MoonAxes(DateTime utc)
+    public static (EcefPos Pole, EcefPos Prime, EcefPos East) MoonAxes(DateTime utc) => MoonAxes(SkyMoment.At(utc));
+
+    /// <summary>The moon's axes in the Earth-fixed frame at a sky moment (#1850).</summary>
+    public static (EcefPos Pole, EcefPos Prime, EcefPos East) MoonAxes(SkyMoment m)
     {
-        double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0, t = d / 36525.0;
+        double d = JulianDay(m.Utc) + DeltaT / 86400.0 - 2451545.0, t = d / 36525.0;
+        var (a0, d0, w) = MoonRotation(d, t);
+        return Frame(a0, d0, w, m.EarthAngle, t);
+    }
+
+    /// <summary>The moon's IAU pole (ICRF right ascension, declination) and prime meridian angle, degrees, at <paramref name="d"/> days and <paramref name="t"/> centuries from J2000.</summary>
+    private static (double A0, double D0, double W) MoonRotation(double d, double t)
+    {
         double E(double a, double b) => (a + b * d) * Deg;
         double e1 = E(125.045, -0.0529921), e2 = E(250.089, -0.1059842), e3 = E(260.008, 13.0120009),
             e4 = E(176.625, 13.3407154), e5 = E(357.529, 0.9856003), e6 = E(311.589, 26.4057084),
@@ -116,7 +135,7 @@ public static partial class Ephemeris
             - 0.0642 * Math.Sin(e3) + 0.0158 * Math.Sin(e4) + 0.0252 * Math.Sin(e5) - 0.0066 * Math.Sin(e6)
             - 0.0047 * Math.Sin(e7) - 0.0046 * Math.Sin(e8) + 0.0028 * Math.Sin(e9) + 0.0052 * Math.Sin(e10)
             + 0.0040 * Math.Sin(e11) + 0.0019 * Math.Sin(e12) - 0.0044 * Math.Sin(e13);
-        return Frame(a0, d0, w, utc, t);
+        return (a0, d0, w);
     }
 
     /// <summary>
@@ -124,7 +143,17 @@ public static partial class Ephemeris
     /// ICRF, degrees) and prime meridian angle <paramref name="w"/> (degrees), precessed to the date
     /// (<paramref name="t"/>, Julian centuries) and turned by sidereal time at <paramref name="utc"/>.
     /// </summary>
-    private static (EcefPos Pole, EcefPos Prime, EcefPos East) Frame(double a0, double d0, double w, DateTime utc, double t)
+    private static (EcefPos Pole, EcefPos Prime, EcefPos East) Frame(double a0, double d0, double w, double gast, double t)
+    {
+        var (pole, prime) = IcrfPolePrime(a0, d0, w);
+        EcefPos ToEarth(EcefPos v) => Spin(Precess(v, t), -gast);
+        var p = ToEarth(pole);
+        var m = ToEarth(prime);
+        return (p, m, Cross(p, m));
+    }
+
+    /// <summary>A body's pole and prime meridian (0° N 0° E) as ICRF unit vectors, from its IAU pole and W (degrees).</summary>
+    private static (EcefPos Pole, EcefPos Prime) IcrfPolePrime(double a0, double d0, double w)
     {
         a0 *= Deg; d0 *= Deg; w *= Deg;
 
@@ -133,12 +162,7 @@ public static partial class Ephemeris
         var node = new EcefPos(-Math.Sin(a0), Math.Cos(a0), 0);
         var across = Cross(pole, node);
         var prime = Scale(node, Math.Cos(w)) + Scale(across, Math.Sin(w));
-
-        double gast = SiderealTime(utc);
-        EcefPos ToEarth(EcefPos v) => Spin(Precess(v, t), -gast);
-        var p = ToEarth(pole);
-        var m = ToEarth(prime);
-        return (p, m, Cross(p, m));
+        return (pole, prime);
     }
 
     /// <summary>A J2000 (ICRF) direction to the mean equator and equinox of date (Meeus 21.3).</summary>

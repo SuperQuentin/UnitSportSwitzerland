@@ -43,6 +43,19 @@ public sealed class Ellipsoid
     /// <summary>Bessel 1841, the ellipsoid of CH1903+ and so of LV95.</summary>
     public static readonly Ellipsoid Bessel1841 = new(6_377_397.155, 299.1528128);
 
+    /// <summary>The Moon's reference sphere (#1848): 1,737.4 km, LOLA's datum (the IAU's mean radius).</summary>
+    public static readonly Ellipsoid Moon = new(1_737_400.0, double.PositiveInfinity);
+
+    /// <summary>Mars' reference ellipsoid (#1848, IAU 2015): 3,396.19 km at the equator, 3,376.20 at the poles.</summary>
+    public static readonly Ellipsoid Mars = new(3_396_190.0, 3_396_190.0 / (3_396_190.0 - 3_376_200.0));
+
+    /// <summary>A sphere of radius <paramref name="r"/> (the Moon's reference body, #1847): no flattening.</summary>
+    public static Ellipsoid Sphere(double r) => new(r, double.PositiveInfinity);
+
+    /// <summary>The ellipsoid with these equatorial and polar radii (another body's, #1847); a sphere when they are equal.</summary>
+    public static Ellipsoid FromRadii(double equator, double pole) =>
+        new(equator, equator == pole ? double.PositiveInfinity : equator / (equator - pole));
+
     /// <summary>Equatorial radius, metres.</summary>
     public double A { get; }
 

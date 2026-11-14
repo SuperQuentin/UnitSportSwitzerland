@@ -24,7 +24,9 @@ public static partial class TileRewriter
             OverheadArms, OverheadRefugeArms, OverheadPortals, OverheadSpans, OverheadsRejected,
             GantriesSitg, GantriesRule, GantrySigns, GantrySignsOsm, GantriesRejected,
             TramCores, TramPaths, TramLitPaths, TramLanes, TramStopLines, TramGroups, TramWaysLeftOut, TramStops, TramLeads, TramLeadsLong, TramNoLead, TramLeadsDropped, TramTimedShort, TramUntimed, TramPolesOwn, CyclesSqueezed, StagesLit, StagesUnlit, StageRefuges, ExitCrossingPoles, TrackCrossingsPaved, TramStopLinesUnpaved,
-            MainHeadsLeft, MainHeadsNear, MainHeadsNone;
+            MainHeadsLeft, MainHeadsNear, MainHeadsNone, BandsKept, BandsNarrowed;
+        public readonly Dictionary<StripKind, int> BandsKeptOf = new();
+        public readonly List<Vec2> BandsKeptAt = new();
         /// <summary>Main poles with no clear spot (#1709): by what kept their tries off, every blocker once, joined by '+'.</summary>
         public readonly SortedDictionary<string, int> MainPolesBlocked = new(StringComparer.Ordinal);
         /// <summary>Plans over 120 s with every green at its minimum (#1161): where, cycle, phases.</summary>
@@ -46,7 +48,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    junction planner written (#818 phase 3): {Junctions:N0} junctions as cores ({Aprons:N0} flush aprons of service roads; {Fallbacks:N0} plain cores where the planned one failed its checks, {RingsAsLaid:N0} rings written as laid, {Caps:N0} today's caps), {Skipped:N0} left to the old layout ({string.Join(", ", Why.Select(kv => $"{kv.Key} {kv.Value}"))}); ")
-            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces, {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid, {SignalsRetimed:N0} timed from conflict times, {SignalsNotRetimed:N0} not, {RiderGroups:N0} with riders given a group of their own, {TwoStage:N0} crosswalks in two stages (#1030; {TwoStageDropped:N0} more crossing in one go, their island wait not kept within 3 s more cycle), {RiderBoxes:N0} riders' left-turn groups waiting in a bike box (never ending before the cars behind them), {RiderBoxAll:N0} riders' groups off a lone bike lane into a box, every move (#1184), {RiderRights:N0} riders' right-turn lanes with a group and head of their own (#1165), {RidersRightOnRed:N0} approaches where riders turn right on red (#711, signal 5.18), {ConflictLines:N0} movements and {ConflictPairs:N0} pairs for the debug trails and movers (each green start's and end's tightest)), {Poles:N0} poles ({PolesRejected:N0} with no clear spot{(MainPolesBlocked.Count > 0 ? $"; {MainHeadsLeft:N0} main heads on the approach's left for want of a spot on its right, {MainHeadsNear:N0} on the clear spot nearest it, {MainHeadsNone:N0} with none (#1709); main poles by what blocked them: " + string.Join(", ", MainPolesBlocked.Select(kv => $"{kv.Key} x{kv.Value}")) : "")}, {SignsOnPoles:N0} priority signs on them), overhead heads (#1037) on {OverheadArms:N0} mast arms, {OverheadRefugeArms:N0} from refuges, {OverheadPortals:N0} portals, {OverheadSpans:N0} span wires ({OverheadsRejected:N0} with nothing to stand on), gantries of lane signs with heads in them (#1110) {GantriesSitg:N0} from SITG and {GantriesRule:N0} by the rule ({GantrySigns:N0} signs, {GantrySignsOsm:N0} of them named by OSM's destinations; {GantriesRejected:N0} wanted with no clear ground for a post), {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them ({BikeRightTurns:N0} right-turn bike lanes round the corner, #1165), {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
+            + string.Create(CultureInfo.InvariantCulture, $"{Transitions:N0} transitions over {Pieces:N0} pieces ({BandsKept:N0} side bands kept from the street where the transition had none{(BandsKeptOf.Count > 0 ? " (" + string.Join(", ", BandsKeptOf.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value}")) + ")" : "")}, {BandsNarrowed:N0} of them narrowed off a building{(BandsKeptAt.Count > 0 ? "; at " + string.Join(" ", BandsKeptAt.OrderBy(v => v.X).ThenBy(v => v.Y).Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "")}, #1770), {Lines:N0} lines and {Marks:N0} marks; arms trimmed to their mouth {Trimmed:N0}, run on to it {Extended:N0}; pieces lost by a later cut {Orphaned:N0}{(OrphanedAt.Count > 0 ? " (at " + string.Join("; ", OrphanedAt.Take(6).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}; cap vertices {CapVertices:N0} of the cores' {CoreVertices:N0}; exterior: {Bars:N0} bars, {Refuges:N0} refuges, {Signs:N0} signs, {Ramps:N0} crosswalks with lowered kerbs; lights {Signals:N0} ({SignalsInvalid:N0} plans invalid, {SignalsRetimed:N0} timed from conflict times, {SignalsNotRetimed:N0} not, {RiderGroups:N0} with riders given a group of their own, {TwoStage:N0} crosswalks in two stages (#1030; {TwoStageDropped:N0} more crossing in one go, their island wait not kept within 3 s more cycle), {RiderBoxes:N0} riders' left-turn groups waiting in a bike box (never ending before the cars behind them), {RiderBoxAll:N0} riders' groups off a lone bike lane into a box, every move (#1184), {RiderRights:N0} riders' right-turn lanes with a group and head of their own (#1165), {RidersRightOnRed:N0} approaches where riders turn right on red (#711, signal 5.18), {ConflictLines:N0} movements and {ConflictPairs:N0} pairs for the debug trails and movers (each green start's and end's tightest)), {Poles:N0} poles ({PolesRejected:N0} with no clear spot{(MainPolesBlocked.Count > 0 ? $"; {MainHeadsLeft:N0} main heads on the approach's left for want of a spot on its right, {MainHeadsNear:N0} on the clear spot nearest it, {MainHeadsNone:N0} with none (#1709); main poles by what blocked them: " + string.Join(", ", MainPolesBlocked.Select(kv => $"{kv.Key} x{kv.Value}")) : "")}, {SignsOnPoles:N0} priority signs on them), overhead heads (#1037) on {OverheadArms:N0} mast arms, {OverheadRefugeArms:N0} from refuges, {OverheadPortals:N0} portals, {OverheadSpans:N0} span wires ({OverheadsRejected:N0} with nothing to stand on), gantries of lane signs with heads in them (#1110) {GantriesSitg:N0} from SITG and {GantriesRule:N0} by the rule ({GantrySigns:N0} signs, {GantrySignsOsm:N0} of them named by OSM's destinations; {GantriesRejected:N0} wanted with no clear ground for a post), {CoreLines:N0} lines through the cores, {BikeCrossings:N0} bike lanes through them ({BikeRightTurns:N0} right-turn bike lanes round the corner, #1165), {PathCrossings:N0} path crossings ({PathsCarried:N0} ends carried to the kerb, {PathsCrossingInCorner:N0} of them crossing another in a corner: left to it), {PathsThrough:N0} paths carried along a kerb, {CornersLanded:N0} corners a path crossing ends on; paths for traffic (JPTH) {Paths:N0} ({PathRides:N0} riders' ways from path to path), left out {PathsLeftOut:N0}; merged cores written {MergedAt.Count:N0} (of {MergedAt.Sum(m => m.Nodes):N0} nodes{(MergedAt.Count > 0 ? "; at " + string.Join(" ", MergedAt.GroupBy(m => m.Nodes).OrderBy(g => g.Key).SelectMany(g => g.OrderBy(m => m.At.X).Take(4)).Select(m => string.Create(CultureInfo.InvariantCulture, $"{m.At.X:F0},{m.At.Y:F0}x{m.Nodes}"))) : "")}), streets under them {InnerEmptied:N0}; roundabouts written whole {RingsAt.Count:N0}{(RingsAt.Count > 0 ? " (at " + string.Join(" ", RingsAt.OrderBy(v => v.X).Take(8).Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")} (#854)")
             + string.Create(CultureInfo.InvariantCulture, $"\n      trams (#1057): {TramPaths:N0} tram paths through {TramCores:N0} cores ({TramLitPaths:N0} at lights, {TramGroups:N0} tram groups, {TramLanes:N0} tram lanes on approaches ({TramStopLines:N0} with their stop line across the track, #1155), {TramPolesOwn:N0} tram heads on a pole of their own right of the track), {TramWaysLeftOut:N0} tracks through a core not from one arm to another; {TramStops:N0} tram stop signs; tram groups leading the cars starting after them: {TramLeads:N0} by 1-3 s, {TramLeadsLong:N0} by 3 s or more, {TramNoLead:N0} not at all ({TramLeadsDropped:N0} junctions not timed with their tram leads: of those {TramTimedShort:N0} timed for a 26 m tram, {TramUntimed:N0} with their trams out of the conflict times{(TramUntimedAt.Count > 0 ? " at " + string.Join(" ", TramUntimedAt.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) : "")}){(TramNoLeadAt.Count > 0 ? " (at " + string.Join(" ", TramNoLeadAt.Select(v => string.Create(CultureInfo.InvariantCulture, $"{v.X:F0},{v.Y:F0}"))) + ")" : "")}")
             + string.Create(CultureInfo.InvariantCulture, $"\n      crossings over a tram reservation in three stages (#1176): {StagesLit:N0} with the tracks' stage lit, {StagesUnlit:N0} unlit (walkers give way to the trams), {StageRefuges:N0} paved refuges on the reservation (#1179); {ExitCrossingPoles:N0} walkers' poles for a leaving carriageway's crossing; {TrackCrossingsPaved:N0} tram beds paved under a crossing, {TramStopLinesUnpaved:N0} tram stop lines left out on a ballast bed")
             + string.Create(CultureInfo.InvariantCulture, $"\n      cycles (#1161): {CyclesSqueezed:N0} squeezed to 120 s, {CyclesOver.Count:N0} over it with every green at its minimum (kept, until #1120){(CyclesOver.Count > 0 ? ": " + string.Join("; ", CyclesOver.Take(20)) : "")}")
@@ -503,16 +505,17 @@ public static partial class TileRewriter
                 Get(caps, home).Add(old.Cap);
             }
             // the outline as the cap keeps it: its kerbs sampled every half metre simplified to the tolerance of the sides (the
-            // mouths' corners kept, where the ribbons meet it), triangulated again
-            var keep = SimplifiedRing(core.Outline, core.Heights, core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToList());
-            var ring = keep.Select(i => core.Outline[i]).ToList();
-            var triangles = keep.Count == core.Outline.Count ? core.Triangles : Junctions.EarClip.Triangulate(ring);
-            if (triangles.Count < 3) (keep, ring, triangles) = (Enumerable.Range(0, core.Outline.Count).ToList(), core.Outline, core.Triangles);
+            // mouths' corners kept, where the ribbons meet it), a point again at least every CapMaxEdge along a long straight kerb
+            // so the triangles reach across between both sides, not fan out of one vertex (#1771), triangulated again
+            var (ring, ringHeights) = KeptEvery(SimplifiedRing(core.Outline, core.Heights, core.Mouths.SelectMany(m => new[] { m.Left, m.Right }).ToList()),
+                core.Outline, core.Heights, Junctions.EarClip.CapMaxEdge);
+            var triangles = Junctions.EarClip.TriangulateDelaunay(ring);
+            if (triangles.Count < 3) (ring, ringHeights, triangles) = (core.Outline, core.Heights, core.Triangles);
             var vertices = new float[ring.Count * 3];
             for (int i = 0; i < ring.Count; i++)
             {
                 vertices[i * 3] = (float)(ring[i].X - Plane.West(home));
-                vertices[i * 3 + 1] = (float)core.Heights[keep[i]];
+                vertices[i * 3 + 1] = (float)ringHeights[i];
                 vertices[i * 3 + 2] = (float)(Plane.North(home) - ring[i].Y);
             }
             stats.CoreVertices += core.Outline.Count;
@@ -746,7 +749,7 @@ public static partial class TileRewriter
                 var pieces = PiecesOf(sp.Whole).ToList();
                 pieces[pieces.FindIndex(x => ReferenceEquals(x, sp.Piece))] = flagged;
                 Replace(sp.Whole, sp.Tile, pieces);
-                var rt = PieceTransition(t, flagged, from, to, sp.TowardJunction);
+                var rt = PieceTransition(t, flagged, from, to, sp.TowardJunction, out int leftAdded, sp.Tile, buildings is null ? null : buildings.Contains, stats);
                 Get(transitionsOf, sp.Tile).Add(rt);
                 stats.Pieces++;
                 var into = Get(paint, sp.Tile);
@@ -757,7 +760,7 @@ public static partial class TileRewriter
                         if (e - f < 0.05) continue;
                         var (pf, pe) = sp.TowardJunction ? (to - e, to - f) : (f - from, e - from);
                         int n = t.Strips.Count;
-                        into.Add(RoadPaint.AlongTransition(rt, sp.TowardJunction ? l.Boundary : n - l.Boundary, l.Type, l.Rgba, l.Width, l.Dash, l.Gap,
+                        into.Add(RoadPaint.AlongTransition(rt, (sp.TowardJunction ? l.Boundary : n - l.Boundary) + leftAdded, l.Type, l.Rgba, l.Width, l.Dash, l.Gap,
                             sp.TowardJunction ? l.Offset : -l.Offset, pf, pe));
                         stats.Lines++;
                     }
@@ -993,7 +996,8 @@ public static partial class TileRewriter
     /// mouth): its stations there along the piece's drawing, its strips seen along the drawing (mirrored where the piece is drawn
     /// away from the junction), every number rounded as the file keeps it.
     /// </summary>
-    private static RoadTransition PieceTransition(Transition t, RoadSegment piece, double from, double to, bool towardJunction)
+    private static RoadTransition PieceTransition(Transition t, RoadSegment piece, double from, double to, bool towardJunction, out int leftAdded,
+        TileId tile = default, Func<Vec2, bool>? wall = null, LayoutWriteStats? stats = null)
     {
         float pieceLength = SegmentSections.Stations(piece)[^1];
         var knots = t.Stations.Where(s => s > from + 0.01 && s < to - 0.01).Prepend(from).Append(to).ToList();
@@ -1028,11 +1032,145 @@ public static partial class TileRewriter
                 Widths = order.Select(o => RoadTransition.Cm(own is { } w ? Math.Max(0, w + t.WidthAt(k, o.At) - normal) : t.WidthAt(k, o.At))).ToArray(),
             });
         }
-        return new RoadTransition
+        // a band the piece has and the transition does not (its arm's normal section came from the street's last piece, bare
+        // beside a tram: #1770) is the piece's own all along
+        var added = new List<RoadTransitionStrip>();
+        leftAdded = AddOwnBands(strips, piece.Attributes.Left, piece.Attributes.Right, stations.Length, added);
+        var rt = new RoadTransition
         {
-            Segment = piece, Stations = stations, Strips = strips, Anchor = towardJunction ? t.Anchor : n - t.Anchor,
+            Segment = piece, Stations = stations, Strips = strips, Anchor = (towardJunction ? t.Anchor : n - t.Anchor) + leftAdded,
             Centre = order.Select(o => RoadTransition.Cm(towardJunction ? t.CentreAt(o.At) : -t.CentreAt(o.At))).ToArray(),
         };
+        if (stats is not null && added.Count > 0)
+        {
+            stats.BandsKept += added.Count;
+            foreach (var x in added) stats.BandsKeptOf[x.Kind] = stats.BandsKeptOf.GetValueOrDefault(x.Kind) + 1;
+            if (stats.BandsKeptAt.Count < 400 && piece.PointCount > 0)
+                stats.BandsKeptAt.Add(new Vec2(Plane.West(tile) + piece.Points[0], Plane.North(tile) - piece.Points[2]));
+        }
+        if (wall is not null && added.Count > 0)
+        {
+            int narrowed = KeepOffWalls(rt, added, tile, wall);
+            if (stats is not null) stats.BandsNarrowed += narrowed;
+        }
+        return rt;
+    }
+
+    /// <summary>
+    /// An added band (<see cref="AddOwnBands"/>) the street planner measured from the piece's own kerb, not from the transition's
+    /// widened one: where it would reach a building pushed out, it keeps its outer edge where the street laid it and narrows as
+    /// the carriageway widens (to nothing where the widening takes it all). A band clear of walls stays as wide as the street's.
+    /// </summary>
+    private static int KeepOffWalls(RoadTransition rt, List<RoadTransitionStrip> added, TileId tile, Func<Vec2, bool> wall)
+    {
+        int count = 0;
+        var seg = rt.Segment;
+        var p = seg.Points;
+        int np = seg.PointCount;
+        var along = SegmentSections.Stations(seg);
+        // the point at plan metre s along the piece and its right-hand normal, in the network's plane (E, N)
+        (Vec2 At, Vec2 Right) Frame(double s)
+        {
+            int i = 1;
+            while (i < np - 1 && along[i] < s) i++;
+            double len = Math.Max(1e-6, along[i] - along[i - 1]);
+            double f = Math.Clamp((s - along[i - 1]) / len, 0, 1);
+            double e0 = p[i * 3 - 3], n0 = -p[i * 3 - 1], e1 = p[i * 3], n1 = -p[i * 3 + 2];
+            double de = (e1 - e0) / len, dn = (n1 - n0) / len;
+            return (new Vec2(Plane.West(tile) + e0 + (e1 - e0) * f, Plane.North(tile) + n0 + (n1 - n0) * f), new Vec2(dn, -de));
+        }
+        float half = seg.Width * 0.5f;
+        foreach (var strip in added)
+        {
+            int k = rt.Strips.IndexOf(strip);
+            var (first, last) = rt.Carriageway;
+            bool onRight = k > last;
+            // its outer edge in the street's own section: the kerb and the bands from it out to this one at their own widths
+            var side = onRight ? seg.Attributes.Right : seg.Attributes.Left;
+            double ownOuter = half;
+            foreach (var kind in BandOrder)
+            {
+                double w = BandWidth(side, kind);
+                if (kind != StripKind.Sidewalk && side.KerbCm <= 0) w = 0;
+                ownOuter += w;
+                if (kind == strip.Kind) break;
+            }
+            bool Hits(double s)
+            {
+                var (from, to) = rt.SpanAt(k, s);
+                var (at, right) = Frame(s);
+                foreach (double f in (ReadOnlySpan<double>)[0.5, 0.95])
+                {
+                    double off = from + (to - from) * f;
+                    if (wall(at + right * off)) return true;
+                }
+                return false;
+            }
+            var st = rt.Stations;
+            var narrowed = new bool[st.Length];
+            for (int j = 0; j < st.Length; j++)
+            {
+                narrowed[j] |= Hits(st[j]);
+                if (j + 1 < st.Length && Hits((st[j] + st[j + 1]) * 0.5)) narrowed[j] = narrowed[j + 1] = true;
+            }
+            bool any = false;
+            for (int j = 0; j < st.Length; j++)
+            {
+                if (!narrowed[j]) continue;
+                var (from, to) = rt.SpanAt(k, st[j]);
+                double inner = onRight ? from : -to;
+                float w = RoadTransition.Cm(Math.Clamp(ownOuter - inner, 0, strip.Widths[j]));
+                any |= w < strip.Widths[j];
+                strip.Widths[j] = w;
+            }
+            if (any) count++;
+        }
+        return count;
+    }
+
+    /// <summary>A side's bands outward from the kerb, in the street planner's order (<c>Section.Bands</c>).</summary>
+    private static readonly StripKind[] BandOrder = [StripKind.Verge, StripKind.Path, StripKind.Buffer, StripKind.Sidewalk];
+
+    /// <summary>
+    /// Adds to a piece's transition strips (<paramref name="strips"/>, along the piece's drawing, left to right) every band its
+    /// street sides have and the strips lack on that side, at the side's own width at every one of <paramref name="stations"/>,
+    /// in its place outward from the kerb (#1770: a transition changes widths, the street decides which bands there are; a
+    /// transition planned from a normal section without a side's sidewalk took that sidewalk off every piece it covered).
+    /// Returns how many went in on the left (before the carriageway), so the anchor and paint boundaries move by as many.
+    /// </summary>
+    public static int AddOwnBands(List<RoadTransitionStrip> strips, RoadSide left, RoadSide right, int stations, List<RoadTransitionStrip>? added = null)
+    {
+        int first = strips.FindIndex(x => x.InCarriageway), last = strips.FindLastIndex(x => x.InCarriageway);
+        if (first < 0) return 0;
+        int nextId = strips.Count == 0 ? 1 : strips.Max(x => x.Id) + 1;
+        int onLeft = 0;
+        foreach (bool onRight in (ReadOnlySpan<bool>)[false, true])
+        {
+            var side = onRight ? right : left;
+            foreach (var kind in BandOrder)
+            {
+                double width = BandWidth(side, kind);
+                if (kind != StripKind.Sidewalk && side.KerbCm <= 0) width = 0;   // a path's bands only beside a kerb (Section.Bands)
+                if (width < 0.05) continue;
+                // the side's bands, outward from the kerb, as indices into the strips
+                first = strips.FindIndex(x => x.InCarriageway);
+                last = strips.FindLastIndex(x => x.InCarriageway);
+                var outward = onRight ? Enumerable.Range(last + 1, strips.Count - last - 1).ToList() : Enumerable.Range(0, first).Reverse().ToList();
+                if (outward.Any(k => strips[k].Kind == kind)) continue;
+                int rank = Array.IndexOf(BandOrder, kind);
+                // before the first band further out than it, else outermost
+                int before = outward.FindIndex(k => Array.IndexOf(BandOrder, strips[k].Kind) > rank);
+                int at = onRight
+                    ? (before >= 0 ? outward[before] : strips.Count)
+                    : (before >= 0 ? outward[before] + 1 : 0);
+                float cm = RoadTransition.Cm(width);
+                var band = new RoadTransitionStrip { Kind = kind, Id = nextId++, Travel = 0, Widths = Enumerable.Repeat(cm, stations).ToArray() };
+                strips.Insert(at, band);
+                added?.Add(band);
+                if (!onRight) onLeft++;
+            }
+        }
+        return onLeft;
     }
 
     /// <summary>A cap's outline may leave its kerb by this much in plan and in height (as the sides' vertices, <c>RoadStreetBuilder</c>).</summary>
@@ -1158,6 +1296,54 @@ public static partial class TileRewriter
     private const double PathJoin = 6;
 
     private const double CapPlanTolerance = 0.015, CapHeightTolerance = 0.01;
+
+    /// <summary>
+    /// The ring of <paramref name="keep"/> (indices into <paramref name="ring"/>, in order) and its heights, with a point added
+    /// wherever two kept ones lie more than <paramref name="most"/> apart along the ring: on the ring's own line between its own
+    /// points, its height between theirs, so the outline and its heights are the same lines; only the triangles change. A long
+    /// straight kerb facing a dense corner arc otherwise had two points, and every triangle of the cap fanned out of them (#1771).
+    /// </summary>
+    public static (List<Vec2> Ring, List<double> Heights) KeptEvery(List<int> keep, IReadOnlyList<Vec2> ring, IReadOnlyList<double> heights, double most)
+    {
+        int n = ring.Count;
+        var points = new List<Vec2>(keep.Count * 2);
+        var ups = new List<double>(keep.Count * 2);
+        for (int k = 0; k < keep.Count; k++)
+        {
+            int a = keep[k], b = keep[(k + 1) % keep.Count];
+            points.Add(ring[a]);
+            ups.Add(heights[a]);
+            if (keep.Count < 2) break;
+            // the ring's line from a to b, and its length
+            int len = (b - a + n) % n;
+            if (len == 0) len = n;
+            double total = 0;
+            for (int s = 0; s < len; s++) total += ring[(a + s + 1) % n].DistanceTo(ring[(a + s) % n]);
+            int pieces = (int)Math.Ceiling(total / most - 1e-9);
+            if (pieces < 2) continue;
+            // points every total/pieces along the line, each between the ring's two points it falls between
+            double step = total / pieces, at = 0;
+            int seg = 0;
+            double segStart = 0;
+            for (int q = 1; q < pieces; q++)
+            {
+                at = q * step;
+                while (seg < len - 1)
+                {
+                    double l = ring[(a + seg + 1) % n].DistanceTo(ring[(a + seg) % n]);
+                    if (segStart + l >= at) break;
+                    segStart += l;
+                    seg++;
+                }
+                int i0 = (a + seg) % n, i1 = (a + seg + 1) % n;
+                double sl = ring[i1].DistanceTo(ring[i0]);
+                double f = sl < 1e-9 ? 0 : Math.Clamp((at - segStart) / sl, 0, 1);
+                points.Add(ring[i0] + (ring[i1] - ring[i0]) * f);
+                ups.Add(heights[i0] + (heights[i1] - heights[i0]) * f);
+            }
+        }
+        return (points, ups);
+    }
 
     /// <summary>
     /// The indices of a ring's points worth keeping (Douglas-Peucker in plan and height on each run between two points that stay):

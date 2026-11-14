@@ -39,6 +39,11 @@ public partial class LongDriveCheck : Node
     // signal poles or old-town corners, the frame's re-anchors at speed)
     private readonly RoadClass? _along = Enum.TryParse<RoadClass>(CmdArgs.Value("--along"), true, out var cls) ? cls : null;
     private readonly int _car = CmdArgs.Int("--car") ?? 4;
+    // a loss of more than this within a quarter second is a hit, not braking (3 m/s² is 0.75 m/s)
+    private const float JoltMs = 4f;
+    private readonly float[] _speeds = new float[15];
+    private int _tick;
+    private int _jolts;
     private GlobalPos? _to;
     private FootPlayer? _player;
     private ILongDriveDriver? _pilot;
@@ -163,6 +168,9 @@ public partial class LongDriveCheck : Node
         var p = line.PointAt(10f);
         var fwd = RaceRoute.Flat(line.PointAt(12f) - line.PointAt(8f)).Normalized();
         float g = _ground.TryGetHeight(p, out float gh) ? gh : p.Y;
+        // a start on a bridge (#1759): on its deck, not on the ground under it (the A1 at Bellevue is 7 m up: the car was set
+        // down under the deck and drove along the ground until the abutment's slope wedged it under the deck)
+        if (p.Y > g + 1f) g = p.Y;
         _player = new FootPlayer { Name = "Driver", Terrain = _ground };
         AddChild(_player);
         _player.GlobalPosition = p with { Y = g + 1.2f };
@@ -229,6 +237,24 @@ public partial class LongDriveCheck : Node
         if (_last is { } last) _driven += here.DistanceTo(last);
         _last = here;
         float speed = p.Motion.Speed;
+        // a dead stop (#1759, #1757): more than JoltMs lost within a quarter second, logged every tick while it lasts, with
+        // what the body was touching, for the issue
+        _speeds[_tick++ % _speeds.Length] = speed;
+        float before = _speeds[_tick % _speeds.Length];
+        if (before - speed > JoltMs && _jolts < 40)
+        {
+            _jolts++;
+            var contacts = new System.Text.StringBuilder();
+            for (int i = 0; i < p.GetSlideCollisionCount(); i++)
+            {
+                var c = p.GetSlideCollision(i);
+                var at = c.GetPosition() - p.GlobalPosition;
+                contacts.Append(Inv($"; {(c.GetCollider() as Node)?.GetPath()} at {at.X:+0.00;-0.00},{at.Y:+0.00;-0.00},{at.Z:+0.00;-0.00} normal {c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2}"));
+            }
+            float over = _ground.TryGetHeight(p.GlobalPosition, out float gh) ? p.GlobalPosition.Y - gh : float.NaN;
+            Log(Inv($"jolt: {before * 3.6f:F0} -> {speed * 3.6f:F0} km/h in 0.25 s at {LvAt(p)}, y {p.GlobalPosition.Y:F2}, {over:F2} m over the ground, ")
+                + Inv($"heading {Mathf.RadToDeg(p.GlobalRotation.Y):F0}°{contacts}"));
+        }
         _top = Mathf.Max(_top, speed);
         Chase(p);
 

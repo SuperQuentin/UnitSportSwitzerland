@@ -319,4 +319,75 @@ public static class GlobeGround
         }
         return true;
     }
+
+    /// <summary>How far a lake shore cell's wet corners may differ to be drawn whole (#1689), metres: a river's steps are more.</summary>
+    public const float LakeShoreTolM = 0.5f;
+
+    /// <summary>How far under a shore cell's dry corner its water sheet passes at least, metres (#1689).</summary>
+    public const float ShoreUnderM = 0.3f;
+
+    /// <summary>The half-width of the window <see cref="ShoreSink"/> smooths the water over, in drawn cells.</summary>
+    public const int ShoreSmooth = 2;
+
+    /// <summary>
+    /// Whether a lake's shore cell (some corners wet, some dry) can be drawn whole at its water's level (#1689), as the
+    /// sea's: its wet corners on one level within <see cref="LakeShoreTolM"/> (two lakes, or a river's steps, keep the
+    /// triangle rule). The sheet passes under each dry corner (by <see cref="ShoreUnderM"/>, lower where that ground is under
+    /// the water's level), so the ground cuts the shore where it meets the water.
+    /// </summary>
+    public static bool LakeShore(float[] hs, int k00, int k10, int k01, int k11, bool w00, bool w10, bool w01, bool w11)
+    {
+        float lo = float.MaxValue, hi = float.MinValue;
+        void At(int k, bool w)
+        {
+            if (!w) return;
+            lo = Math.Min(lo, hs[k]);
+            hi = Math.Max(hi, hs[k]);
+        }
+        At(k00, w00); At(k10, w10); At(k01, w01); At(k11, w11);
+        return hi >= lo && hi - lo <= LakeShoreTolM;
+    }
+
+    /// <summary>
+    /// How far a shore vertex's ground sinks under its water (#1689), metres, so the ground meets the water on a smooth line
+    /// rather than the wet vertices' staircase. A shore cell's water is drawn whole, so the shore is where its ground crosses
+    /// the sheet: along the edge to a dry neighbour standing <c>g</c> m over the sheet there, a sink of <c>d</c> puts it at
+    /// <c>d / (d + g)</c> of the way. Where it should be is where the water's share over the
+    /// (2 <see cref="ShoreSmooth"/> + 1)² window round each end crosses one half (marching squares on the smoothed water).
+    /// The sink is the mean over the vertex's dry 4-neighbours, within [<see cref="ShoreUnderM"/>, <paramref name="deepest"/>];
+    /// with none, <paramref name="otherwise"/>.
+    /// </summary>
+    public static float ShoreSink(bool[] lakeAt, float[] hs, int n, int i, int j, float otherwise, float deepest)
+    {
+        int m = n - 1;
+        float Share(int ci, int cj)
+        {
+            int wet = 0, all = 0;
+            for (int b = -ShoreSmooth; b <= ShoreSmooth; b++)
+                for (int a = -ShoreSmooth; a <= ShoreSmooth; a++)
+                {
+                    all++;
+                    if (lakeAt[Math.Clamp(cj + b, 0, m) * n + Math.Clamp(ci + a, 0, m)]) wet++;
+                }
+            return wet / (float)all - 0.5f;
+        }
+        int k = j * n + i;
+        float fw = Share(i, j), sum = 0;
+        int count = 0;
+        for (int e = 0; e < 4; e++)
+        {
+            int ni = i + (e == 0 ? 1 : e == 1 ? -1 : 0), nj = j + (e == 2 ? 1 : e == 3 ? -1 : 0);
+            if (ni < 0 || nj < 0 || ni > m || nj > m) continue;
+            int kd = nj * n + ni;
+            if (lakeAt[kd]) continue;
+            // the sheet passes under the dry corner (Globe.Lakes): the ground there stands this far over it
+            float g = Math.Max(hs[kd] - hs[k], ShoreUnderM);
+            float fd = Share(ni, nj);
+            float t = fw <= 0 ? 0.1f : fd >= 0 ? 0.9f : fw / (fw - fd);
+            t = Math.Clamp(t, 0.1f, 0.9f);
+            sum += g * t / (1 - t);
+            count++;
+        }
+        return count == 0 ? otherwise : Math.Clamp(sum / count, ShoreUnderM, deepest);
+    }
 }
