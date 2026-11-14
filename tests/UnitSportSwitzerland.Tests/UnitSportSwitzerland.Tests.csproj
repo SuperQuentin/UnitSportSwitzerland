@@ -139,6 +139,7 @@
     <Compile Include="..\..\src\Terrain\Earth\LeafPattern.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
     <!-- #1629 G2 C6: the globe as the earth world's far view: its horizon, holes and ground in the palette (Godot maths only) -->
     <Compile Include="..\..\src\World\Globe\GlobeGround.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\World\Globe\FarBandGovernor.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\CoverPalette.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1632 G2 C6: a leaf's lake cut at its edges (Godot maths only) -->
     <Compile Include="..\..\src\Terrain\Earth\LeafWaterClip.cs" Link="Game\Leaves\%(Filename)%(Extension)" />
@@ -199,6 +200,7 @@
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CelestialBody.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\BodyAir.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1849: the Moon's generated craters -->
     <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />

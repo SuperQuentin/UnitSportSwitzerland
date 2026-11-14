@@ -187,8 +187,9 @@ public sealed class SpaceOrbit
         _jump = false;
 
         var thrust = Core.Orbit.ToEci(place.Frame.EcefDirection(place.At, thrustWorld), angle);
-        // the air turns with the Earth: drag against the ground-relative velocity (none round an airless body)
-        double rho = earth.HasAir ? Core.Atmosphere.Density(place.Altitude) : 0;
+        // the air turns with its body: drag against the ground-relative velocity (none round an airless body; Mars'
+        // thin CO2 by its own scale height, #1853)
+        double rho = earth.AirDensity(place.Altitude);
         if (rho > 0)
         {
             var (_, air) = Core.Orbit.ToEcef(earth, s, angle);
