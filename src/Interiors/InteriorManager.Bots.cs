@@ -293,7 +293,7 @@ public partial class InteriorManager
         for (int de = -1; de <= 1; de++)
             for (int dn = -1; dn <= 1; dn++)
             {
-                var id = new TileId(centre.E + de, centre.N + dn);
+                var id = centre.Neighbour(de, dn);
                 if (!_botTileDoors.TryGetValue(id, out var task)) _botTileDoors[id] = task = DoorsOf(Source, id);
                 if (!task.IsCompletedSuccessfully) continue;
                 var xf = origin.TileTransform(id);
