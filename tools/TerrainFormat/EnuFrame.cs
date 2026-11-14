@@ -1,7 +1,7 @@
 namespace UnitSport.Terrain.Format;
 
 /// <summary>
-/// The east-north-up frame at a point of the WGS84 ellipsoid (#1443): its origin in ECEF and its
+/// The east-north-up frame at a point of the WGS84 ellipsoid (#1443), or of another body's (#1847): its origin in ECEF and its
 /// three unit axes, all doubles. A cube tile's anchor (<see cref="CubeKey.Anchor"/>) is one, and so is
 /// the game's anchor frame later (G2). Local coordinates come in the game's axes: x east, y up,
 /// z south (−north), as <see cref="TileId.Local"/> already has them.
@@ -18,11 +18,16 @@ public readonly struct EnuFrame
     public EcefPos Up { get; }
 
     /// <summary>The frame at a latitude and longitude (degrees) and an ellipsoidal height.</summary>
-    public EnuFrame(Geodetic at)
+    public EnuFrame(Geodetic at) : this(at, Ellipsoid.Wgs84)
+    {
+    }
+
+    /// <summary>The frame at a place on another body's <paramref name="shape"/> (#1847), its own body-fixed axes.</summary>
+    public EnuFrame(Geodetic at, Ellipsoid shape)
     {
         double lat = at.LatDeg * Math.PI / 180.0, lon = at.LonDeg * Math.PI / 180.0;
         double sl = Math.Sin(lat), cl = Math.Cos(lat), so = Math.Sin(lon), co = Math.Cos(lon);
-        Origin = Ellipsoid.Wgs84.ToEcef(lat, lon, at.H);
+        Origin = shape.ToEcef(lat, lon, at.H);
         East = new(-so, co, 0);
         North = new(-sl * co, -sl * so, cl);
         Up = new(cl * co, cl * so, sl);

@@ -101,6 +101,13 @@ public static partial class Ephemeris
     public static (EcefPos Pole, EcefPos Prime, EcefPos East) MoonAxes(DateTime utc)
     {
         double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0, t = d / 36525.0;
+        var (a0, d0, w) = MoonRotation(d, t);
+        return Frame(a0, d0, w, utc, t);
+    }
+
+    /// <summary>The moon's IAU pole (ICRF right ascension, declination) and prime meridian angle, degrees, at <paramref name="d"/> days and <paramref name="t"/> centuries from J2000.</summary>
+    private static (double A0, double D0, double W) MoonRotation(double d, double t)
+    {
         double E(double a, double b) => (a + b * d) * Deg;
         double e1 = E(125.045, -0.0529921), e2 = E(250.089, -0.1059842), e3 = E(260.008, 13.0120009),
             e4 = E(176.625, 13.3407154), e5 = E(357.529, 0.9856003), e6 = E(311.589, 26.4057084),
@@ -116,7 +123,7 @@ public static partial class Ephemeris
             - 0.0642 * Math.Sin(e3) + 0.0158 * Math.Sin(e4) + 0.0252 * Math.Sin(e5) - 0.0066 * Math.Sin(e6)
             - 0.0047 * Math.Sin(e7) - 0.0046 * Math.Sin(e8) + 0.0028 * Math.Sin(e9) + 0.0052 * Math.Sin(e10)
             + 0.0040 * Math.Sin(e11) + 0.0019 * Math.Sin(e12) - 0.0044 * Math.Sin(e13);
-        return Frame(a0, d0, w, utc, t);
+        return (a0, d0, w);
     }
 
     /// <summary>
@@ -126,6 +133,17 @@ public static partial class Ephemeris
     /// </summary>
     private static (EcefPos Pole, EcefPos Prime, EcefPos East) Frame(double a0, double d0, double w, DateTime utc, double t)
     {
+        var (pole, prime) = IcrfPolePrime(a0, d0, w);
+        double gast = SiderealTime(utc);
+        EcefPos ToEarth(EcefPos v) => Spin(Precess(v, t), -gast);
+        var p = ToEarth(pole);
+        var m = ToEarth(prime);
+        return (p, m, Cross(p, m));
+    }
+
+    /// <summary>A body's pole and prime meridian (0° N 0° E) as ICRF unit vectors, from its IAU pole and W (degrees).</summary>
+    private static (EcefPos Pole, EcefPos Prime) IcrfPolePrime(double a0, double d0, double w)
+    {
         a0 *= Deg; d0 *= Deg; w *= Deg;
 
         // ICRF: the pole, the node of the body's equator on the ICRF equator, the prime meridian W past it
@@ -133,12 +151,7 @@ public static partial class Ephemeris
         var node = new EcefPos(-Math.Sin(a0), Math.Cos(a0), 0);
         var across = Cross(pole, node);
         var prime = Scale(node, Math.Cos(w)) + Scale(across, Math.Sin(w));
-
-        double gast = SiderealTime(utc);
-        EcefPos ToEarth(EcefPos v) => Spin(Precess(v, t), -gast);
-        var p = ToEarth(pole);
-        var m = ToEarth(prime);
-        return (p, m, Cross(p, m));
+        return (pole, prime);
     }
 
     /// <summary>A J2000 (ICRF) direction to the mean equator and equinox of date (Meeus 21.3).</summary>

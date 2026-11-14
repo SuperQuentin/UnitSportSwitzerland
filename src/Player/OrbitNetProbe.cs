@@ -94,7 +94,7 @@ public partial class OrbitNetProbe : ChatProbe
         Chat!.Send("/orbit 400");
         Expect(await Until(() => ufo.Orbit != null, 10), "the server's /orbit put this saucer in orbit");
         if (ufo.Orbit is not { } start) return;
-        Expect(Math.Abs(start.V.Length - Planet.Earth.CircularSpeed(start.R.Length)) < 1, $"circular: {start.V.Length:F0} m/s");
+        Expect(Math.Abs(start.V.Length - CelestialBody.Earth.CircularSpeed(start.R.Length)) < 1, $"circular: {start.V.Length:F0} m/s");
         Say("orbit");
         if (!await Heard(other, "orbit", 30)) { Fail($"{other} never got to orbit"); return; }
 

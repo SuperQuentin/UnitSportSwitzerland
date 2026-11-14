@@ -43,6 +43,13 @@ public sealed class Ellipsoid
     /// <summary>Bessel 1841, the ellipsoid of CH1903+ and so of LV95.</summary>
     public static readonly Ellipsoid Bessel1841 = new(6_377_397.155, 299.1528128);
 
+    /// <summary>A sphere of radius <paramref name="r"/> (the Moon's reference body, #1847): no flattening.</summary>
+    public static Ellipsoid Sphere(double r) => new(r, double.PositiveInfinity);
+
+    /// <summary>The ellipsoid with these equatorial and polar radii (another body's, #1847); a sphere when they are equal.</summary>
+    public static Ellipsoid FromRadii(double equator, double pole) =>
+        new(equator, equator == pole ? double.PositiveInfinity : equator / (equator - pole));
+
     /// <summary>Equatorial radius, metres.</summary>
     public double A { get; }
 
