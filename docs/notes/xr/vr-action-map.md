@@ -219,6 +219,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 | shuttle cruise drive on / off, above 60 km (#1492) | Z / D-pad ↑ (`engine_toggle`; below 60 km the engines' switch) | ok: R stick ↑, or grip the guarded switch on the centre console and throw it forward (`XrCabControls` "shuttle") | keep |
 | shuttle's target in Space: next body (tap), its hold turns the nose onto the arrival orbit (#1851) | ] / D-pad → (the lights' D-pad → up there) | ok: the right stick → (`XrPad`'s D-pad → when mounted) | new: a target knob on the centre console to grip and turn |
+| shuttle's belly jets below the Space exit of an airless body: lift, slide, gear (#1851) | the levers (the rockets' keys) lift it, the stick slides it, G the gear | ok: the levers by hand, the stick, as the airliner's | keep |
 | shuttle rockets, pitch / roll, gear, brakes, speedbrake (#1492) | the airliner's (levers = rockets) | ok: as the airliner's, its levers by hand | keep |
 | UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
 | UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |

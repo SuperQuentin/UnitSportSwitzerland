@@ -84,7 +84,7 @@ public partial class BodyViews : Node
         if (OrbitOnlyCheck.Requested) AddChild(new OrbitOnlyCheck(_origin));
         if (RingCheck.Requested) AddChild(new RingCheck(_origin));
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
-        if (ShuttleMoonCheck.Requested) AddChild(new ShuttleMoonCheck(_origin, _local));
+        if (ShuttleMoonCheck.Requested) AddChild(new ShuttleMoonCheck(_origin, _local, () => _moon?.Ground));
         if (Moon.MoonSitesCheck.Requested) AddChild(new Moon.MoonSitesCheck(_origin, () => _moon?.Ground, _local));
         if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
     }

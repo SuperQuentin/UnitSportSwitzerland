@@ -108,6 +108,25 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   slowing as they close. Pitching alone missed it off that plane and looped the craft until it passed close.
 - The taxi: square to the centreline, round onto it from 40 m out, on a whisper of rocket (6 %) and the brakes.
 
+## Belly jets: landing and taking off where there is no air (#1851)
+
+- **Below the Space exit of a landable body with no air** (the Moon's 8 km, Mercury's, the big moons', Phobos' 800 m;
+  not the Earth, Mars or Venus, whose air flies it as a plane) the levers are the **belly jets**
+  (`Airliner.LanderStep`, `ShuttleFlight.Lander`): thrust along the craft's up, up to 0.6 of the Earth's g (it hovers
+  on the Moon at a lever of 0.28), the jets bringing it level with its heading kept (0.3 rad/s), the stick sliding it
+  (push ahead, right right, 2 m/s²) and stopping its slide hands-off (0.5 m/s²). No new key. Gravity is the body's
+  GM/r² at its height.
+- **Down on its gear** anywhere (`G` lowers it as in the air): a touchdown over 3 m/s, or on the belly, costs the
+  airframe (`TouchSink`). On the ground it rests: no sinking, no sliding, until the jets lift it.
+- **Take-off is the same backwards**: up past the Space handover (the Moon's 10 km), where the orbit seam takes it
+  (`Lander` is cleared there) and the drive may be thrown.
+- **The way down from orbit**: the drive with the nose under the horizon and a slow lever (the check: 40°, 15 %:
+  100 km to 8 km in ~4 min, 120 m/s at the drop-out), then the jets.
+- **HUD**: `JETS %  RADAR m  V/S  SLIDE` (m/s). No slope warning yet.
+- **Looks**: four plumes down from under the belly by the jets' lever (`AirlinerLook.Belly`, the main plume's mesh again,
+  turned; the main engines stay dark). Others do not see them yet: the pose has no room (C3b, with the online wire).
+- **Getting back in**: the hatch on the left side (`EntryPoint`); stepping out puts the walker past the wingtip.
+
 ## To the Moon (`--shuttlemooncheck`, #1851)
 
 `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --shuttlemooncheck`
@@ -116,6 +135,13 @@ into a walker, the shuttle, `/orbit 400`, a real ] tap targets the Moon, the ] h
 drive at full lever (~17,500 km/s at mid-way), across the Moon's sphere with the craft's place continuous within its
 own step, off where it passes 100 km over the Moon: a circular lunar orbit (80-120 km), closed within 10 m after one
 turn at 8x. Windowed: `test_output/shuttlemoon/{drive,lunar_orbit}.png`.
+
+With the Moon's ground (`--bodies E:/UnitSportSwitzerland/planets`) it goes on: the drive down at 40° and 15 %, the belly
+jets to a touchdown (under 2 m/s, within 5° of upright; seen: 1.20 m/s, 0.0°), out, 50 m on foot, a jump (the Moon's
+5.4 m), back to the hatch and in, the belly jets up to 10 km, the nose up and the drive to 100 km, level and off into a
+lunar orbit, the Earth targeted (coasting at 32x until it rises), the drive home, off at 100 km over the Earth.
+`--fromorbit` starts in the 100 km lunar orbit (the shuttle boarded on the Earth, the world moved to the Moon, `/orbit
+100` round it): the landing and the way home alone, ~10 min headless.
 
 ## The film (`--shuttlefilm`, `tools/shuttlefilm.sh`, #1497)
 
