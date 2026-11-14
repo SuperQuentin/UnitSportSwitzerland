@@ -69,6 +69,6 @@ Geneva (B4's 2,412 leaves, the densest of the D: region), `tools/leafstreamcheck
 
 ## Not done
 
-- The pyramid (`cube_global`) still ships as files: #1656 streams it by quadtree request through the same RPC.
+- The pyramid streams beside the leaves through the same RPC since #1656 (`net/pyramid-streaming`).
 - One index for the whole region (about 2 MB raw for Switzerland's ~110 000 leaves); a planet's would go per bundle.
 - No HTTP mirror for leaves (entries, not files).

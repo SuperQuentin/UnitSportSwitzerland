@@ -1067,6 +1067,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv))
                 { Status = () => EarthStatus };
             }),
+            // the globe's pops on a climb from the ground to orbit (#1656)
+            new(() => World.GlobeClimb.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var c = World.GlobeClimb.ParseArgs()!;
+                FreeSpectator();
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                return new World.GlobeClimb(_spectator!, origin, double.Parse(c[0], inv), double.Parse(c[1], inv), double.Parse(c[2], inv));
+            }),
             new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var (speed, seconds) = StreetFlight.ParseArgs()!.Value;

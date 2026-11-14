@@ -43,7 +43,37 @@ public partial class Globe : Node
 
     public const float SplitPixels = 6;
 
-    private static readonly StringName MorphGlobal = "world_globe_morph";
+    private static readonly StringName MorphGlobal = "world_globe_morph", Young = "globe_young";
+
+    /// <summary>How long a split's child takes to grow from its parent's shape into its own (#1656), seconds.</summary>
+    public const double GrowS = 0.4;
+
+    // the children growing: when each began, real seconds
+    private readonly Dictionary<CubeKey, double> _growing = new();
+
+    private void Grow(CubeKey key, MeshInstance3D node)
+    {
+        _growing[key] = Time.GetTicksMsec() / 1000.0;
+        node.SetInstanceShaderParameter(Young, 1f);
+    }
+
+    /// <summary>Each frame: the growing children's <c>globe_young</c>, 1 down to 0 over <see cref="GrowS"/>.</summary>
+    private void GrowStep()
+    {
+        if (_growing.Count == 0) return;
+        double now = Time.GetTicksMsec() / 1000.0;
+        foreach (var (key, began) in _growing)
+        {
+            float young = (float)Math.Max(0, 1 - (now - began) / GrowS);
+            if (_patches.TryGetValue(key, out var node)) node.SetInstanceShaderParameter(Young, young);
+            if (young <= 0) _grown.Add(key);
+        }
+        foreach (var key in _grown) _growing.Remove(key);
+        _grown.Clear();
+    }
+
+    private readonly List<CubeKey> _grown = new();
+    private readonly HashSet<CubeKey> _wasShown = new();
     private Vector2 _morph = new(float.NaN, 0);
 
     private static readonly StringName Cartoon = "cartoon", Ambient = "world_globe_ambient", SunColor = "world_globe_sun",
@@ -476,6 +506,7 @@ public partial class Globe : Node
         for (int k = 0; (clock != null ? clock.Elapsed.TotalMilliseconds < CommitBudgetMs : k < 4) && _buildingsReady.TryDequeue(out var b); k++)
             CommitBuildings(b.Key, b.Mesh);
 
+        GrowStep();
         double altitude = Origin.AltitudeOf(cam.GlobalPosition);
         if (!Earth)
         {
@@ -587,14 +618,23 @@ public partial class Globe : Node
         double focal = viewH / (2 * Math.Tan(Mathf.DegToRad(cam.Fov) / 2)) * Styles.LodScale.Value;
 
         // the geomorph's split rule (#1656): a tile of drawn cell c splits nearer than c * focal / SplitPixels
-        var morph = new Vector2((float)(focal / SplitPixels), Earth ? (float)FarLeafM : 0f);
+        var morph = new Vector2(MorphOff ? 0f : (float)(focal / SplitPixels), Earth ? (float)FarLeafM : 0f);
         if (morph != _morph) RenderingServer.GlobalShaderParameterSet(MorphGlobal, _morph = morph);
         _want.Clear();
         _distance.Clear();
         _asked = 0;
         _planNo++;
         for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, eyeDir, horizon, focal);
-        foreach (var (key, node) in _patches) node.Visible = _want.Contains(key);
+        _wasShown.Clear();
+        foreach (var (key, node) in _patches)
+            if (node.Visible) _wasShown.Add(key);
+        foreach (var (key, node) in _patches)
+        {
+            bool shown = _want.Contains(key);
+            // a split's children replacing their parent (#1656): they start in its shape and grow into their own
+            if (shown && !node.Visible && key.Level > 0 && _wasShown.Contains(key.Parent) && !MorphOff) Grow(key, node);
+            node.Visible = shown;
+        }
         // leaf patches read again after the server's leaves came (#1655), those in view first: the old one stays drawn meanwhile
         foreach (var key in _leafStale) if (_want.Contains(key)) Request(key);
         PlanBuildings();

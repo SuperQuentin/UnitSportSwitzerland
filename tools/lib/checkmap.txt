@@ -379,6 +379,12 @@ src/Terrain/Leaves/LeafBlend net   tools/fillagreenetcheck.sh
 src/Terrain/Leaves/PyramidFill net tools/fillagreenetcheck.sh
 src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
 src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
+# the globe's pyramid streamed to a client with none, the climb's pops, the fill on the server's pyramid (#1656; D: data)
+src/Terrain/Leaves/PyramidSource full tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidIndex full tools/pyramidstreamcheck.sh
+src/World/Globe          full   tools/pyramidstreamcheck.sh
+shaders/common/geomorph  full   tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidSource net tools/fillagreenetcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
