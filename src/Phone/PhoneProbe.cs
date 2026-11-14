@@ -50,6 +50,8 @@ public partial class PhoneProbe : Node
         }
         var phone = PhoneController.Instance;
         if (me == null || phone == null) { Log("RESULT: FAIL no local player or no phone"); GetTree().Quit(1); return; }
+        // windowed, a 16:9 view of 1280 x 720 (not the test profile's 640 x 360), so the screenshots can be read
+        if (Rendered && !Platform.IsTouch) GetWindow().Size = new Vector2I(1280, 720);
         await Wait(1.0);
         Shot("phone_0_before.png");
 
@@ -77,7 +79,7 @@ public partial class PhoneProbe : Node
         // out of the pocket, folded: in both hands, the camera over the shoulder
         double pressed = GameClock.Now;
         await Press(PlayerInput.Phone, 0);
-        Check(phone.IsOut, "Up takes the phone out");
+        Check(phone.IsOut, "the phone key takes the phone out");
         for (int i = 0; i < 100 && !phone.IsFolded; i++) await Wait(0.01);
         double drawn = GameClock.Now - pressed;
         Check(phone.IsFolded && drawn < 0.35, $"the first press ends folded in {drawn:F2} s (#1825)");
@@ -279,6 +281,8 @@ public partial class PhoneProbe : Node
         Check(Math.Abs(stay.OffsetTo(stayed).East) < 2 && phone.IsOut && phone.Screens.Shown == PhoneScreens.Page.Home, "Esc on the curtain cancels the travel and stays on the phone (#1253)");
 
         await FoldedFirstChecks(me, phone);
+        await FramingChecks(me, phone);
+        await PhoneKeyChecks(me, phone);
         await WalkingChecks(me, phone);
         await FingerChecks(me, phone);
 
@@ -370,6 +374,150 @@ public partial class PhoneProbe : Node
         await Key(Godot.Key.Key2, 0.8);
         Check(phone.IsCovering && phone.Screens.Shown == PhoneScreens.Page.Map, $"a digit on the cover opens its app straight away ({phone.Screens.Shown})");
         Check(phone.LastApp == PhoneScreens.Page.Map, "and it becomes the last app");
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.3);
+    }
+
+    /// <summary>
+    /// The phone key is a letter and a toggle (#1825): pocket, folded, open on the last app, away; from any page; typed in the search it
+    /// types; Up no longer takes it out. Folded the mouse looks with no button and no cursor, open the cursor shows, folding captures again.
+    /// </summary>
+    private async Task PhoneKeyChecks(FootPlayer me, PhoneController phone)
+    {
+        if (Platform.IsTouch) { Log("skip (touch has its pill)"); return; }
+        if (phone.IsOut) { phone.PutAway(); for (int i = 0; i < 60 && phone.IsOut; i++) await Wait(0.1); }
+        await Wait(0.3);
+        Check(!phone.IsOut && MouseCapture.Mode == Input.MouseModeEnum.Captured, "in the pocket the mouse is captured");
+        await Key(Godot.Key.Up, 0.5);
+        Check(!phone.IsOut, "Up no longer takes the phone out of the pocket");
+        await Key(Godot.Key.Y, 0.6);
+        Check(phone.IsFolded, "Y takes it out folded");
+        // folded: the mouse stays captured and turns the view with no button held
+        Check(MouseCapture.Mode == Input.MouseModeEnum.Captured, "folded the mouse stays captured (no cursor)");
+        float yaw = me.LookYaw;
+        Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(120, 0) });
+        await Wait(0.2);
+        Check(Mathf.Abs(Mathf.AngleDifference(yaw, me.LookYaw)) > 0.1f, "and a mouse motion turns the view with no button held");
+        await Key(Godot.Key.Y, 0.7);
+        Check(phone.IsCovering, "Y again opens it");
+        Check(MouseCapture.Mode == Input.MouseModeEnum.Visible, "open the cursor shows");
+        phone.Open(PhoneScreens.Page.Contacts);
+        await Wait(0.4);
+        await Key(Godot.Key.Y, 0.2);
+        for (int i = 0; i < 60 && phone.IsOut; i++) await Wait(0.1);
+        Check(!phone.IsOut, "Y a third time, from a page other than Home, puts it away");
+        Check(MouseCapture.Mode == Input.MouseModeEnum.Captured, "and the mouse is captured again");
+        // folding captures again
+        await Key(Godot.Key.Y, 0.6);
+        await Key(Godot.Key.Y, 0.7);
+        Check(phone.IsCovering && MouseCapture.Mode == Input.MouseModeEnum.Visible, "out and open again, the cursor shows");
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Key(Godot.Key.Escape, 0.8);
+        Check(phone.IsFolded && MouseCapture.Mode == Input.MouseModeEnum.Captured, "folded again, the mouse is captured");
+        // the letter typed in the Map's search types, and does not put the phone away
+        await Key(Godot.Key.Up, 0.7);
+        phone.Open(PhoneScreens.Page.Map);
+        await Wait(0.6);
+        phone.Screens.FocusSearch();
+        await Wait(0.3);
+        Input.ParseInputEvent(new InputEventKey { Keycode = Godot.Key.Y, PhysicalKeycode = Godot.Key.Y, Unicode = 'y', Pressed = true });
+        Input.ParseInputEvent(new InputEventKey { Keycode = Godot.Key.Y, PhysicalKeycode = Godot.Key.Y, Unicode = 'y', Pressed = false });
+        await Wait(0.4);
+        Check(phone.IsCovering && phone.Screens.SearchText.EndsWith('y'), $"Y typed in the search types and keeps the phone open ({phone.Screens.SearchText})");
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.3);
+    }
+
+    /// <summary>The screen's four corners through the lens: size as shares of the view, and whether all are inside it.</summary>
+    private (float W, float H, float Bottom, bool Inside) ProjectScreen(FootPlayer me, bool cover)
+    {
+        var size = GetViewport().GetVisibleRect().Size;
+        var cam = me.CameraOrNull;
+        if (cam == null) return (0, 0, 0, false);
+        bool inside = true;
+        var pts = new List<Vector2>();
+        foreach (var uv in new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) })
+        {
+            var world = me.PhoneScreenToWorld(uv, cover, 0f) ?? Vector3.Zero;
+            var at = cam.UnprojectPosition(world);
+            inside &= !cam.IsPositionBehind(world) && at.X >= 0 && at.Y >= 0 && at.X <= size.X && at.Y <= size.Y;
+            pts.Add(at);
+        }
+        return ((pts[1] - pts[0]).Length() / size.X, (pts[2] - pts[0]).Length() / size.Y, Mathf.Max(pts[2].Y, pts[3].Y) / size.Y, inside);
+    }
+
+    /// <summary>The mouse ray lands on what is under the cursor: aim at a point of the screen in window pixels, read where the phone says it is.</summary>
+    private async Task RayCheck(FootPlayer me, PhoneController phone, bool cover, string what)
+    {
+        var uv = new Vector2(0.3f, 0.4f);
+        var at = WindowAt(me, uv, cover);
+        Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+        await Wait(0.2);
+        var got = phone.CursorUv ?? new Vector2(-9, -9);
+        Check(got.DistanceTo(uv) < 0.02f, $"{what}: the cursor's ray lands on the screen point aimed at ({got} for {uv})");
+    }
+
+    /// <summary>
+    /// The framing (#1825): the phone is read and worked while walking, so its screen is wholly in view, in the lower right,
+    /// above the hint bar, at the size the design asks (open 40-45 % of the width, the cover 14-16 % wide and 40-50 % high).
+    /// </summary>
+    private async Task FramingChecks(FootPlayer me, PhoneController phone)
+    {
+        if (Platform.IsTouch) { Log("skip (touch is seen square on)"); return; }
+        // the shares are for a 16:9 view (a headless window is nearly square)
+        var window = GetWindow();
+        var oldSize = window.Size;
+        window.Size = new Vector2I(1280, 720);
+        await Wait(0.5);
+        var view = GetViewport().GetVisibleRect().Size;
+        Log($"view {view}, window {window.Size}");
+        await FramingBody(me, phone);
+        window.Size = oldSize;
+        await Wait(0.3);
+    }
+
+    private async Task FramingBody(FootPlayer me, PhoneController phone)
+    {
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        if (!phone.IsCovering) { phone.Open(PhoneScreens.Page.Home); }
+        await Wait(1.5);
+        var home = ProjectScreen(me, cover: false);
+        Log($"open Home: width {home.W:P0}, height {home.H:P0}, bottom {home.Bottom:P0}");
+        Check(home.Inside && home.W is > 0.38f and < 0.47f && home.Bottom < 0.90f, $"open on Home the screen is wholly in view at {home.W:P0} of the width, its bottom at {home.Bottom:P0}");
+        await RayCheck(me, phone, false, "open");
+        Shot("phone_1825/framing_open_home.png");
+        phone.Open(PhoneScreens.Page.Map);
+        await Wait(0.8);
+        var map = ProjectScreen(me, cover: false);
+        Log($"open Map: width {map.W:P0}, height {map.H:P0}, bottom {map.Bottom:P0}");
+        Check(map.Inside && map.W is > 0.38f and < 0.47f && map.Bottom < 0.90f, $"open on the Map the screen is wholly in view at {map.W:P0} of the width");
+        phone.Screens.ShowPage(PhoneScreens.Page.Home);
+        await Wait(0.3);
+        // a click through real window coordinates on the focused tile opens its app
+        if (phone.Screens.FocusUv() is { } tile)
+        {
+            var at = WindowAt(me, tile, false);
+            Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+            await Wait(0.15);
+            foreach (bool down in new[] { true, false })
+                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down, Position = at, GlobalPosition = at });
+            await Wait(0.4);
+            Check(phone.Screens.Shown != PhoneScreens.Page.Home, $"a mouse click on a Home tile through real window coordinates opens it ({phone.Screens.Shown})");
+            phone.Screens.ShowPage(PhoneScreens.Page.Home);
+            await Wait(0.3);
+        }
+        // folded
+        await Key(Godot.Key.Escape, 1.5);
+        Check(phone.IsFolded, "folded again for the framing");
+        var cov = ProjectScreen(me, cover: true);
+        Log($"folded: width {cov.W:P0}, height {cov.H:P0}, bottom {cov.Bottom:P0}");
+        Check(cov.Inside && cov.W is > 0.13f and < 0.17f && cov.H is > 0.38f and < 0.52f && cov.Bottom < 0.90f,
+            $"folded the cover is wholly in view, {cov.W:P0} wide and {cov.H:P0} high, its bottom at {cov.Bottom:P0}");
+        // folded the mouse is the view's, so the ray is read straight off the lens: a window point lands on the cover point aimed at
+        var aim = new Vector2(0.3f, 0.4f);
+        var hit = me.PhoneScreenPoint(GetViewport().GetScreenTransform().AffineInverse() * WindowAt(me, aim, true), out bool onCover);
+        Check(onCover && hit is { } h && h.DistanceTo(aim) < 0.02f, $"folded: a window point lands on the cover point aimed at ({hit} for {aim})");
+        Shot("phone_1825/framing_folded.png");
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
     }

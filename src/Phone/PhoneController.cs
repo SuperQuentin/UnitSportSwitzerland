@@ -19,11 +19,11 @@ namespace UnitSport.Phone;
 /// "Travelling…" until the ground there has streamed in, and folds away at the new place.
 /// Docs: <c>docs/notes/ui/phone.md</c>.
 /// <list type="bullet">
-/// <item>Keyboard: Up takes it out. Folded: W or Up opens it, A D or Left Right pick a quick action,
-/// Enter / Space / E runs it, S or Down or Esc puts it away. Open: WASD and the arrows move on the
-/// screen, Enter / Space / E presses, Esc goes back, then folds.</item>
-/// <item>Mouse: the cursor shows; click presses, a drag swipes (up and down scroll a list, a swipe to
-/// the right goes back; on the cover, left and right pick).</item>
+/// <item>Keyboard (#1825): Y is a toggle: takes it out folded, again opens it on the last app, again puts it away
+/// (not while a text box has the keys). Folded: Up opens it, Left Right pick, Enter or a digit runs a tile, Down or Esc puts it
+/// away. Open: the arrows move on the screen, Enter presses, Esc / Backspace / mouse 4 go back, then fold. WASD walk throughout.</item>
+/// <item>Mouse: folded, it looks as with no phone; open, the cursor shows; click presses, a drag swipes (up and down scroll a
+/// list, a swipe to the right goes back), holding the right button captures it and turns the view.</item>
 /// <item>Pad: hold Back → Phone in the quick menu; D-pad and A / B inside, D-pad up opens it.</item>
 /// <item>Camera app: the phone is raised and level before the face; the mouse aims, click / Enter / RT
 /// shoots, the wheel / LB RB zoom, Esc goes back.</item>
@@ -292,6 +292,7 @@ public partial class PhoneController : Node
         if (_stage is not (Stage.Open or Stage.Opening)) return;
         GD.Print("[phone] fold");
         _stage = Stage.Closing;
+        _lookHeld = false;
         if (_screens.Shown == PhoneScreens.Page.Camera) _screens.ShowPage(PhoneScreens.Page.Home);
         Grip();
         Play(PhoneSounds.Hinge);
@@ -347,8 +348,12 @@ public partial class PhoneController : Node
         bool cameraApp = _stage is Stage.Open or Stage.Opening && _screens.Shown == PhoneScreens.Page.Camera;
         UiFocus.Set(this, HoldsFocus);
         if (_blocked()) return;
-        if (_stage == Stage.Pocket || cameraApp || _lookHeld && !Platform.IsTouch) MouseCapture.Capture();
-        else MouseCapture.Mode = Input.MouseModeEnum.Visible;
+        // the cursor shows only while the phone is open (#1825); folded, in the pocket and coming back, the mouse looks as ever.
+        // Touch keeps the pointer free whenever the phone is out (its finger plays the mouse).
+        bool visible = Platform.IsTouch ? _stage != Stage.Pocket && !cameraApp
+            : _stage is Stage.Open or Stage.Opening && !cameraApp && !_lookHeld;
+        if (visible) MouseCapture.Mode = Input.MouseModeEnum.Visible;
+        else MouseCapture.Capture();
     }
 
     private bool HoldsFocus => !XR.XrSession.Active && _stage != Stage.Pocket
@@ -417,6 +422,8 @@ public partial class PhoneController : Node
 
         // the body walks on (#1825): the phone holds the keys only while a text box in it does
         UiFocus.Set(this, HoldsFocus);
+        // folded, the mouse is the view's, so the finger follows the selected tile (keys lead it)
+        if (!Platform.IsTouch && _stage is Stage.Folded or Stage.Drawing) _keysLead = true;
         // a NEW sprint start puts the phone away, as it holsters an item; not on the travel curtain, not in VR (its own buttons)
         bool sprint = p.SprintIntent;
         if (sprint && !_wasSprint && !XR.XrSession.Active && _travelSince < 0 && _stage is Stage.Folded or Stage.Open or Stage.Opening) PutAway();
@@ -498,7 +505,7 @@ public partial class PhoneController : Node
             ? XR.XrSession.Active ? "X  open     swipe  choose     tap, or point and trigger  select     B  put away"
             : Platform.IsTouch ? "tap  open     swipe  choose     swipe down, or tap outside  put away"
             : InputHints.Pad ? "D-pad ↑ open     ← →  choose     A  select     B  put away     ·     L stick  walk     R stick  look"
-                : "↑  open     ← →  choose     Enter  select     ↓  put away     ·     WASD  walk     hold right button  look"
+                : "Y  open     ← →  choose     Enter  select     1-6  run     Y  or  ↓  put away     ·     WASD  walk     mouse  look"
             : "";
         _hint.Visible = text.Length > 0 && !_blocked();
         if (text != _hintShown) _hint.Text = _hintShown = text;
@@ -848,7 +855,7 @@ public partial class PhoneController : Node
     /// </summary>
     private bool Wanted(InputEvent e, bool typing)
     {
-        if (e.IsActionPressed(PlayerInput.Phone)) return true;
+        if (e.IsActionPressed(PlayerInput.Phone)) return !typing;
         if (Direction(e) != null || IsSelect(e) || IsBack(e, typing)) return true;
         if (_stage != Stage.Open) return IsDigit(e);
         if (e is InputEventKey { PhysicalKeycode: Key.Slash }) return !typing;
@@ -880,6 +887,16 @@ public partial class PhoneController : Node
             CameraInput(e);
             return;
         }
+        // folded, the mouse is the body's and looks as with no phone; only its fourth button puts the phone away (#1825)
+        if (e is InputEventMouse && !Platform.IsTouch && _stage is Stage.Folded or Stage.Drawing or Stage.Closing or Stage.Stowing)
+        {
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Xbutton1, Pressed: true } && _stage is Stage.Folded or Stage.Drawing)
+            {
+                PutAway();
+                GetViewport().SetInputAsHandled();
+            }
+            return;
+        }
         if (e is InputEventMouse mouse)
         {
             // the right button held: the mouse is captured and its motion is the body's look, not the phone's
@@ -907,6 +924,8 @@ public partial class PhoneController : Node
         }
         if (!Wanted(e, typing)) return;
         GetViewport().SetInputAsHandled();
+        // the phone key is a toggle from anywhere: the third press, open or opening, puts it away
+        if (e.IsActionPressed(PlayerInput.Phone) && !e.IsEcho() && _travelSince < 0 && _stage is Stage.Open or Stage.Opening) { PutAway(); return; }
         if (_stage is Stage.Opening or Stage.Closing or Stage.Stowing or Stage.Drawing && !e.IsActionPressed(PlayerInput.Phone)) return;
         if (_stage is Stage.Open) OpenKey(e);
         else FoldedKey(e);

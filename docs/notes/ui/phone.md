@@ -9,7 +9,7 @@
 
   | | Keyboard | Pad | VR |
   |---|---|---|---|
-  | take out | `phone` = Up arrow (free on foot; the excavator's boom in a cab) | quick menu (hold Back) › Phone | grip at the left front pocket; wrist menu › Phone |
+  | take out (again: open, again: put away) | `phone` = Y, a toggle (#1825; was Up, the excavator's boom in a cab) | quick menu (hold Back) › Phone | grip at the left front pocket; wrist menu › Phone |
   | folded: pick / run | ← → or the wheel / Enter, a digit 1-6, click | D-pad ← →, / A | swipe the fingertip across the cover / tap it, or point the right hand's ray and pull its trigger |
   | open (on the last app) | Up | D-pad ↑ | the free hand swings the front half open by its loose edge; X (fold again: X) |
   | back / put away | Esc, Backspace, mouse button 4 (open: back, then fold; ↓ folded), hold Esc, a sprint start | B, hold B | B, or a swipe right; let go at the pocket (anywhere else it flies home) |
@@ -173,8 +173,7 @@
   (`PhoneController.CancelTravel`) drops the pending jump and shows Home; once the jump ran, the button goes.
 - **Touch**: a PHONE pill in the on-foot top bar (`TouchLayout`, 9 mm, sends the `phone` action); it was only in More.
 - **Not done, and why**: a hold on D-pad Up cannot take the phone out, the hold is already the emote wheel
-  (`EmoteWheel`), so the pad keeps quick menu › Phone. The Phone key stays Up (P is the radio and the character
-  menu); the toggle is Esc/B held, Down folded. The persistent hint bar built from the focused control moves
+  (`EmoteWheel`), so the pad keeps quick menu › Phone. The Phone key was Up then (since #1825 it is Y, a toggle); the way away was Esc/B held, Down folded. The persistent hint bar built from the focused control moves
   to a later stage with the Home/cover rework.
 - **Check**: `--phonecheck` asserts Esc and Backspace go back, Training does not fold the phone, a held Esc puts it away, and Esc on the travel curtain cancels the jump.
 
@@ -262,13 +261,14 @@
   | | folded | open |
   |---|---|---|
   | walk, sprint, look | WASD, Shift, left stick; right stick | the same |
-  | the cursor | visible, works the cover | visible, works the screen (click, swipe, wheel) |
-  | look with the mouse | hold the right button | hold the right button |
+  | the cursor | none: the mouse looks as ever, the wheel zooms the camera | visible, works the screen (click, swipe, wheel) |
+  | look with the mouse | always | hold the right button |
   | pick / move on the screen | ← → / D-pad ← → | arrows / D-pad |
   | press | Enter / A; digits 1-6 run a tile | Enter / A |
-  | open | Up (the `phone` key) / D-pad ↑ | |
+  | take out, open, put away | `phone` = **Y**, a toggle from anywhere (pocket, folded, open on any page, away; a Y typed in the Map search types) | the same |
+  | open | Up or Enter on the cover / D-pad ↑ | |
   | back | | Esc, Backspace, the chevron, mouse button 4 / B |
-  | put away | Down, Esc, button 4 / D-pad ↓, B; Esc or B held 0.4 s from any page; a sprint start | hold Esc / B 0.4 s; a sprint start |
+  | put away | Y, Down, Esc, button 4 / D-pad ↓, B; Esc or B held 0.4 s from any page; a sprint start | Y, hold Esc / B 0.4 s; a sprint start |
 
   W no longer opens it and S no longer puts it away (they walk); Up and Down do. Space and E are the body's now
   (jump, use): Enter presses. **What right click lost**: it is no longer Back in the phone and no longer the selfie
@@ -298,3 +298,26 @@
 - **Checks**: `--phonecheck` (timings, last app, digit, walk folded / open / on the Map, held right button and its
   cursor, button 4, typing stands the body, sprint puts it away, the curtain still holds the jump; screenshots
   `test_output/phone_1825/`), `--phonevrcheck`, `tools/phonenetcheck.sh`.
+
+### The phone key is Y, a toggle; folded the mouse looks (#1825 owner's decisions)
+
+- **Y, not Up.** `PlayerInput.Phone` (id `phone`, unchanged so rebinds carry over) is Y. Checked: Y is bound only to `Autopilot`
+  (`FootPlayer.Airliner`, an airliner's seat 0) and `Cruise` (`FootPlayer.Cruise`, gated by `HasCruise`: a car, truck, farm machine or
+  motorbike driver); no on-foot, fight, sword, build, creative, spectator or movie-studio code reads Key.Y (searched the bindings and the
+  users of both action names; the only other `Key.Y` is the release table). O (roof toggle) and U (radio next) were the fallbacks. In a
+  vehicle the key keeps its vehicle meaning (the phone's `_Input` does not handle it there: `_player()` is null off foot, so the
+  event goes on). The old clash of Up with the excavator's boom (`ArmBoomUp`) is gone with it; Up is now only the arrow: it opens a
+  folded phone, moves the highlight open.
+- **A full toggle**: pocket, folded, open on the last app, away. The third press works from any page, also while it opens, but not on the
+  Travel curtain and not while a text box has the keys (the letter types). Hold Esc 0.4 s, a sprint start, and Down / Esc / mouse 4 on the cover
+  still put it away.
+- **Folded, the mouse is the view's**: no cursor, the mouse stays captured and turns the view with no button held, the wheel is the camera's
+  zoom, a click does nothing on the cover. The tiles are run with a digit 1-6 or the arrows and Enter (pad: D-pad and A); the finger follows
+  the selected tile. The cursor and hold-right-button-to-look apply only once it is open (`Grip`: visible while Opening or Open; folding
+  or putting away captures again). Touch is unchanged (its finger plays the mouse).
+- **Framing** (the lens now on the screen's normal, moved aside): `PhoneFramingView` places the open inner screen at 43 % of the view's width
+  (the cover 15 %) in the lower right, wholly in view, above the hint bar and left of the prompt list, square to the picture; the pointing
+  hand comes in from below and the left (`PhoneFingerWay`), so it does not stand between the lens and the screen. First person borrows
+  the same lens as third (`PhoneLook` lends third person), so the two views are the same picture; `--view third` is honoured.
+  `--phonecheck` projects the screen's corners (open: 38-47 % wide and inside, bottom under 90 %; cover 13-17 % wide, 38-52 % high) and aims
+  the mouse through real window coordinates at a known point.
