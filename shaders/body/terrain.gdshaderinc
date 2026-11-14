@@ -63,6 +63,9 @@ uniform int flat_edge = 0;
 // globe sets world_fill_hide to 1 there, and the real-tile mask is the flat world's)
 uniform bool gives_way = true;
 const float FLAT_EDGE_FADE = 4000.0;
+// on for the earth world's globe tiles below 20 km (#1656): their vertices morph into the parent level's shape
+uniform bool globe_morph = false;
+#include "res://shaders/common/geomorph.gdshaderinc"
 
 // how far a world XZ point has given way, 0..1
 float flat_hide(vec2 xz) {
@@ -129,6 +132,7 @@ varying vec3 v_col;
 #endif
 
 void vertex() {
+    if (globe_morph) VERTEX = globe_geomorph(VERTEX, CUSTOM0, MODELVIEW_MATRIX);
     PATTERN_VERTEX
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 #ifdef NO_DISCARD

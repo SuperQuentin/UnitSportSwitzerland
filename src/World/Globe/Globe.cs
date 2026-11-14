@@ -43,6 +43,9 @@ public partial class Globe : Node
 
     public const float SplitPixels = 6;
 
+    private static readonly StringName MorphGlobal = "world_globe_morph";
+    private Vector2 _morph = new(float.NaN, 0);
+
     private static readonly StringName Cartoon = "cartoon", Ambient = "world_globe_ambient", SunColor = "world_globe_sun",
         Band = "world_globe_band", PaletteBlend = "world_globe_palette";
 
@@ -375,6 +378,7 @@ public partial class Globe : Node
         RenderingServer.GlobalShaderParameterSet(FlatEdgeOn, 0f);
         RenderingServer.GlobalShaderParameterSet(Band, 0f);
         RenderingServer.GlobalShaderParameterSet(PaletteBlend, 0f);
+        RenderingServer.GlobalShaderParameterSet(MorphGlobal, Vector2.Zero);
         if (FlatWorld != null && IsInstanceValid(FlatWorld)) FlatWorld.Visible = true;
     }
 
@@ -582,6 +586,9 @@ public partial class Globe : Node
         float viewH = GetViewport().GetVisibleRect().Size.Y;
         double focal = viewH / (2 * Math.Tan(Mathf.DegToRad(cam.Fov) / 2)) * Styles.LodScale.Value;
 
+        // the geomorph's split rule (#1656): a tile of drawn cell c splits nearer than c * focal / SplitPixels
+        var morph = new Vector2((float)(focal / SplitPixels), Earth ? (float)FarLeafM : 0f);
+        if (morph != _morph) RenderingServer.GlobalShaderParameterSet(MorphGlobal, _morph = morph);
         _want.Clear();
         _distance.Clear();
         _asked = 0;
@@ -696,7 +703,7 @@ public partial class Globe : Node
                         var water = leaves is Terrain.Leaves.EarthLeaves earthLeaves ? earthLeaves.WaterOf(key) ?? CubeWater.Dry(tile.Bits) : null;
                         var lakes = Earth ? new WaterOut() : null;
                         if (Build(tile, palette, rect, water, ancestor: AncestorTile, lakesOut: lakes, beds: isReal || leaves is not Terrain.Leaves.EarthLeaves,
-                            lakes: _lakeLevels) is { } arrays)
+                            lakes: _lakeLevels, parent: AncestorTile(key.Parent)) is { } arrays)
                             _ready.Enqueue((key, arrays, null, leafMonth, null, lakes?.Mesh));
                         else _leafMissed.Enqueue(key);
                     }
@@ -747,7 +754,8 @@ public partial class Globe : Node
                 colour?.GenerateMipmaps();
                 // no height at all: the parent's tile stays (the key stays loading, never asked again)
                 var lakes = Earth ? new WaterOut() : null;
-                if (Build(tile, palette, rect, stride: StrideOf(tile.Bits), ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels) is { } arrays)
+                var parent = key.Level > 0 ? AncestorTile(key.Parent) : null;
+                if (Build(tile, palette, rect, stride: StrideOf(tile.Bits), ancestor: AncestorTile, lakesOut: lakes, lakes: _lakeLevels, parent: parent) is { } arrays)
                     _ready.Enqueue((key, arrays, colour, month, null, lakes?.Mesh));
             }
             catch (Exception e)
@@ -823,12 +831,14 @@ public partial class Globe : Node
 
     /// <summary>
     /// A tile's mesh around its anchor: every <see cref="Stride"/>-th lattice vertex, rigorous, with
-    /// normals from its neighbours, the colour's UVs (row 0 the south edge, as the image), and a skirt
-    /// along each edge hanging a third of a drawn cell, so a neighbour drawn a level coarser leaves no crack.
+    /// normals from its neighbours, the colour's UVs (row 0 the south edge, as the image), and a short skirt
+    /// along each edge (a tenth of a drawn cell: a crack guard where two levels meet outside the morph's range).
+    /// With <paramref name="parent"/> (#1656), each vertex carries where the parent level draws it (CUSTOM0,
+    /// <c>shaders/common/geomorph.gdshaderinc</c>): the tile eases into its parent's shape before it merges.
     /// </summary>
     public static Godot.Collections.Array? Build(CubeTile tile, byte[]? palette = null, Vector4 rect = default, CubeWater? water = null,
         int stride = Stride, byte[]? cover = null, Func<CubeKey, CubeTile?>? ancestor = null, WaterOut? lakesOut = null, bool beds = true,
-        float[]? lakes = null)
+        float[]? lakes = null, CubeTile? parent = null)
     {
         var key = tile.Key;
         int bits = tile.Bits, m = (1 << bits) / stride, n = m + 1;
@@ -922,7 +932,9 @@ public partial class Globe : Node
             }
 
         double cellM = EarthR * Math.PI / 2 / key.Side / m;
-        float skirt = (float)(cellM / 3);
+        float skirt = (float)(cellM / SkirtCells);
+        // where the parent level draws each vertex, before the lakes sink any ground (the offset rides on the sunk one)
+        var morph = parent != null && m == Cells && key.Level > 0 ? Morph(key, bits, stride, n, pos, parent, (float)cellM) : null;
         int edge = 4 * m, total = n * n + edge;
         var verts = new Vector3[total];
         var norms = new Vector3[total];
@@ -1014,6 +1026,7 @@ public partial class Globe : Node
             norms[n * n + e] = norms[k];
             uvs[n * n + e] = uvs[k];
             if (colours != null) colours[n * n + e] = colours[k];
+            if (morph != null) Array.Copy(morph, k * 4, morph, (n * n + e) * 4, 4);
         }
 
         var idx = new List<int>(m * m * 6 + edge * 12);
@@ -1045,8 +1058,59 @@ public partial class Globe : Node
         arrays[(int)Mesh.ArrayType.Normal] = norms;
         arrays[(int)Mesh.ArrayType.TexUV] = uvs;
         if (colours != null) arrays[(int)Mesh.ArrayType.Color] = colours;
+        if (morph != null) arrays[(int)Mesh.ArrayType.Custom0] = morph;
         arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
         return arrays;
+    }
+
+    /// <summary>A skirt hangs a drawn cell over this (#1656: a third before the geomorph; now only a crack guard).</summary>
+    public const float SkirtCells = 10f;
+
+    /// <summary>
+    /// The geomorph's CUSTOM0 per vertex (#1656): the offset, in the tile's anchor frame, from where this tile draws a
+    /// lattice point to where its parent draws it, and the drawn cell (metres, <see cref="Select"/>'s split rule reads it).
+    /// The parent draws <see cref="Cells"/> cells over twice the side, so its vertices are this tile's even ones (at the
+    /// parent's own height there), an odd one lies on the parent's edge between two of them, an odd-odd one on the
+    /// parent's quad diagonal (i, j)-(i+1, j+1). A parent height missing (past its data) leaves the vertex unmorphed.
+    /// Two tiles sharing an edge read the same parent points there (a coarse lattice point is a shared one), so the
+    /// morph never opens their seam.
+    /// </summary>
+    private static float[] Morph(CubeKey key, int bits, int stride, int n, Vector3[] pos, CubeTile parent, float cellM)
+    {
+        int m = n - 1, half = Cells / 2, pStride = StrideOf(parent.Bits);
+        int ox = (key.X & 1) * half, oy = (key.Y & 1) * half;
+        // the parent's points, at this tile's even vertices
+        int pn = half + 1;
+        var p = new Vector3[pn * pn];
+        for (int b = 0; b < pn; b++)
+            for (int a = 0; a < pn; a++)
+            {
+                int i = a * 2, j = b * 2;
+                float h = parent.HeightAt((ox + a) * pStride, (oy + b) * pStride);
+                if (float.IsNaN(h)) { p[b * pn + a] = pos[j * n + i]; continue; }
+                var (x, y, z) = CubeGeometry.Exact(key, bits, i * stride, j * stride, h);
+                p[b * pn + a] = new Vector3((float)x, (float)y, (float)z);
+            }
+        var morph = new float[(n * n + 4 * m) * 4];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int a = i / 2, b = j / 2;
+                Vector3 target = (i & 1, j & 1) switch
+                {
+                    (0, 0) => p[b * pn + a],
+                    (1, 0) => (p[b * pn + a] + p[b * pn + a + 1]) * 0.5f,
+                    (0, 1) => (p[b * pn + a] + p[(b + 1) * pn + a]) * 0.5f,
+                    _ => (p[b * pn + a] + p[(b + 1) * pn + a + 1]) * 0.5f,
+                };
+                int k = j * n + i;
+                var off = target - pos[k];
+                morph[k * 4] = off.X;
+                morph[k * 4 + 1] = off.Y;
+                morph[k * 4 + 2] = off.Z;
+                morph[k * 4 + 3] = cellM;
+            }
+        return morph;
     }
 
     /// <summary>A tile's lakes, built on the worker with its ground (<see cref="Build"/>).</summary>
@@ -1233,7 +1297,10 @@ public partial class Globe : Node
     private static MeshInstance3D Patch(CubeKey key, Godot.Collections.Array arrays, Image? colour, Shader shader)
     {
         var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        // the geomorph's offsets (#1656) as four floats a vertex
+        var flags = arrays[(int)Mesh.ArrayType.Custom0].VariantType != Variant.Type.Nil
+            ? (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift) : 0;
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter(Cartoon, Styles.StyleKit.Style == Styles.VisualStyle.Cartoon);
         if (colour != null) material.SetShaderParameter("albedo_tex", ImageTexture.CreateFromImage(colour));

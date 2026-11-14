@@ -846,6 +846,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     var globeTerrain = StyleKit.Material(MaterialRole.Terrain);
                     // the globe is the last of the earth world: it never dissolves into anything (as the leaves, #1634)
                     globeTerrain.SetShaderParameter("gives_way", false);
+                    // its tiles morph into their parent level's shape before they merge (#1656)
+                    globeTerrain.SetShaderParameter("globe_morph", true);
                     FogUniforms.Apply(globeTerrain);
                     _worldMaterials = [.. _worldMaterials, globeTerrain];
                     g.TerrainMaterial = globeTerrain;
