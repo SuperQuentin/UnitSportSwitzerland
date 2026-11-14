@@ -2497,6 +2497,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         GD.PushError("[world] connection failed");
         // a dead ENet peer makes every IsServer() on it an error, every frame: go offline instead
         Multiplayer.MultiplayerPeer = new OfflineMultiplayerPeer();
+        Net.NetLink.Invalidate();
         Fail($"Could not connect to {Launch.Endpoint}. Is the server running, and its port open?");
     }
 
@@ -2561,7 +2562,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private FootPlayer? GetLocalNetPlayer()
     {
-        if (!Net.NetLink.Ready(this) || _players == null) return null;
+        // asked many times a frame: answered once a frame (a player freed meanwhile is gone at the frame's end)
+        long tick = Net.NetLink.Tick;
+        if (tick >= 0 && tick == _localNetTick) return _localNet is { } same && IsInstanceValid(same) ? same : null;
+        _localNetTick = tick;
+        if (!Net.NetLink.Ready(this) || _players == null) return _localNet = null;
         int id = Net.NetLink.UniqueId(this);
         if (_localNet is { } held && IsInstanceValid(held) && held.GetParent() == _players && _localNetId == id) return held;
         _localNet = _players.GetNodeOrNull<FootPlayer>(id.ToString());
@@ -2571,6 +2576,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private FootPlayer? _localNet;
     private int _localNetId;
+    private long _localNetTick = -1;
 
     public override void _UnhandledInput(InputEvent @event)
     {

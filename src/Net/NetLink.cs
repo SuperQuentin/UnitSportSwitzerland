@@ -12,8 +12,9 @@ namespace UnitSport.Net;
 /// The link's state is read once a frame on the main thread (#1910), from the tree's own API: <c>node.Multiplayer</c>
 /// makes the engine build the node's path to look for a subtree's own API (none is ever set here, every node shares the
 /// tree's), and the per-frame callers (<c>FootPlayer</c> above all) asked it hundreds of times a frame: ~8 % of an earth
-/// client's main thread in the cinema check. A peer swapped within the frame (joining, leaving) is read afresh; off the
-/// main thread, and for a node outside the tree, each call reads the link itself as before.
+/// client's main thread in the cinema check. The game's peer swapped (joining, leaving) calls <see cref="Invalidate"/> and
+/// is read afresh; a status change within a frame (a link that drops) shows the next frame. Off the main thread, and for
+/// a node outside the tree before the frame's read, each call reads the link itself as before.
 /// </para>
 /// </summary>
 public static class NetLink
@@ -42,20 +43,42 @@ public static class NetLink
     private readonly record struct Link(bool HasPeer, bool Offline, MultiplayerPeer.ConnectionStatus Status, bool IsServer, int UniqueId);
 
     private static Link _link;
-    private static MultiplayerPeer? _peer;
-    private static ulong _frame = ulong.MaxValue;
+    private static long _tick, _readAt = -1;
+    private static bool _hooked;
     private static int _mainThread = -1;
+
+    /// <summary>
+    /// The frame count as this class sees it (the tree's <c>process_frame</c>, managed: no engine call to read it); -1 until
+    /// the first main-thread call hooks it. What a caller may key its own once-a-frame answers on.
+    /// </summary>
+    public static long Tick => _hooked ? _tick : -1;
+
+    /// <summary>The game's peer was set or replaced (connecting, leaving, offline): the next call reads the link afresh.</summary>
+    public static void Invalidate() => _readAt = -1;
 
     private static Link State(Node node)
     {
-        if (!node.IsInsideTree() || !OnMainThread()) return Read(node.Multiplayer, node.Multiplayer.MultiplayerPeer);
+        if (!OnMainThread()) return Read(node.Multiplayer, node.Multiplayer.MultiplayerPeer);
+        if (!_hooked && Engine.GetMainLoop() is SceneTree tree)
+        {
+            tree.ProcessFrame += () => _tick++;
+            // the link changes in the engine's poll, before process_frame: its handlers (a client's Hello on connecting)
+            // must not read the frame before's state
+            var tracked = tree.GetMultiplayer();
+            tracked.ConnectedToServer += Invalidate;
+            tracked.ConnectionFailed += Invalidate;
+            tracked.ServerDisconnected += Invalidate;
+            tracked.PeerConnected += _ => Invalidate();
+            tracked.PeerDisconnected += _ => Invalidate();
+            _hooked = true;
+        }
+        // once a frame, and nothing asked of the engine in between (each call costs: #1910)
+        if (_hooked && _readAt == _tick) return _link;
+        if (!node.IsInsideTree()) return Read(node.Multiplayer, node.Multiplayer.MultiplayerPeer);
         // the tree's own API: the one every node here answers with, without the path
         var api = node.GetTree().GetMultiplayer();
-        var peer = api.MultiplayerPeer;
-        ulong frame = Engine.GetProcessFrames();
-        if (frame == _frame && ReferenceEquals(peer, _peer)) return _link;
-        _link = Read(api, peer);
-        (_frame, _peer) = (frame, peer);
+        _link = Read(api, api.MultiplayerPeer);
+        _readAt = _hooked ? _tick : -1;
         return _link;
     }
 
