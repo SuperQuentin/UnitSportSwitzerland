@@ -23,6 +23,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
     walker sprints and jumps 5.4 m at 1.63 m/s².
 - **H7e** (#1853), this branch: Mars' pyramid (MOLA 463 m over the IAU ellipsoid through the areoid, levels 0-4, 320 MB on
   E:; Viking's 925 m colour), exposure by the photo's mean, the sky's disc hidden under a globe, craters by body.
+- **H7d/H7e**, this branch: `--mooncheck mars`, the spectator from the Earth to Mars through the Sun's sphere (two
+  crossings, 249 million km at light speed in 860 s, no shift on either), landing and walking on Mars at 3.72 m/s².
 - **C3a** (#1851):
   - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
   - PR #1883: the drive by the nearest surface.
