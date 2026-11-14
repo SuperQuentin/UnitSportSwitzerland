@@ -23,7 +23,7 @@ public static partial class TileRewriter
         HashSet<TileId> block, HashSet<TileId> wanted, HashSet<int> near, IReadOnlyList<RoundaboutShaper.Ring> rings,
         IGround? grids, Footprints buildings,
         Func<int, LinkEnd, bool, RoadSide> streetSide, OsmOverlayReader? overlay, Restrictions? restrictions, CrossingNodes? crossings,
-        MergeStats stats)
+        MergeStats stats, Func<int, LinkEnd, bool, double, RoadSide>? streetSideAlong = null)
     {
         // a tight roundabout is one junction, its ring's nodes its members (#854, the user, Oct 18): laid whole by RoundaboutCore
         bool Planned(Junction j) => block.Contains(Home(j)) && wanted.Contains(Home(j)) || near.Contains(j.NodeId);
@@ -33,7 +33,7 @@ public static partial class TileRewriter
             near = new HashSet<int>(near);
             foreach (var (j, _) in priority.Plans) if (j.Ring is not null && j.Members!.Any(near.Contains)) near.Add(j.NodeId);
         }
-        var plans = PlanLayouts(priority, result, segmentOf, output, block, wanted, near, grids, buildings, streetSide, overlay, restrictions, null, crossings);
+        var plans = PlanLayouts(priority, result, segmentOf, output, block, wanted, near, grids, buildings, streetSide, overlay, restrictions, null, crossings, streetSideAlong: streetSideAlong);
         // overlapping cores are first laid apart, each mouth held at half the street between (turns tighter than their vehicle):
         // only a group where that fails a check merges (the user, Oct 17: two junctions across a grass strip at Sion
         // 2505653,1137735 are two, not one paved triangle)
@@ -137,7 +137,7 @@ public static partial class TileRewriter
             // (a merged junction homed beyond the block, near it, is planned as its members were)
             var nearMerged = new HashSet<int>(near);
             foreach (var (j, _) in merged.Plans.Where(p => p.Junction.Members is { } ms && ms.Any(near.Contains))) nearMerged.Add(j.NodeId);
-            return PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings, byNode);
+            return PlanLayouts(merged, result, segmentOf, output, block, wanted, nearMerged, grids, buildings, streetSide, overlay, restrictions, null, crossings, byNode, streetSideAlong);
         }
     }
 

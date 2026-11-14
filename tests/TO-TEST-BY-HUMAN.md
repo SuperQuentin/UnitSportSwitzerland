@@ -7,6 +7,37 @@ Something to retest over and over belongs in the playtest suite instead (`tools/
 
 Format: `- [ ] what to do → what should happen` under the feature's heading, with its PR.
 
+## The globe streamed from the server, a small base, no pops ([#1846](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1846))
+
+In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator (Shift+T).
+
+- [ ] Offline, `--globe res://assets/globe` (the 1.5 MB base alone), climb from Lavaux to orbit and fly over Asia → the Earth from orbit looks as before; tile edges at 60-250 km as before (no worse).
+- [ ] Join a server that has the pyramid (`--globe <dir>` on the server) from a copy with none and an empty cache, then climb slowly from the ground to 500 km over Switzerland → the globe sharpens as tiles arrive, no tile jumps in height when it splits or merges; note how long it takes to catch up after a fast climb (the check measured it lagging at 7 fps).
+- [ ] With the pyramid on this PC (D:), climb and dive between 2 km and 300 km at full speed, watching the mountains on the horizon → no ground popping between levels (each level eases into the next).
+
+## To the Moon and onto it (PR [#1893](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1893), [#1891](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1891), [#1850](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1850))
+
+In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`, Cartoon, on the spectator camera (Shift+T).
+
+- [ ] Fly up and on toward the Moon at the wheel's top (about a minute) → the speed grows with the distance and falls again near the Moon; the picture never jumps at the handover (~66,000 km out), and the Moon's globe takes over from its sky disc in the same place.
+- [ ] Come down to a few hundred metres and press T → you stand on the ground (no fall from the camera's height, no wait). Walk and sprint for a few hundred metres → the ground keeps coming under you, with craters down to a few metres, and no seam or step where the near ground meets the farther one.
+- [ ] Jump → about 5.4 m up and over 5 s in the air (0.9 m on the Earth). Do the same with the pad (its jump and step-in buttons) and in VR → the same.
+
+## Deck junction caps collide ([#1865](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1865))
+
+`--frame earth --leaves D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube --chunks D:/UnitSportSwitzerland/terrain_chunks --date 2027-07-15`, Cartoon.
+
+- [ ] Walk south across Pont des Bergues through the branch to Île Rousseau (`--at 2500310,1117990`) → you stay on the deck all the way, no fall into the Rhône at N 1117986-1117972.
+- [ ] Drive west on the Major across Place des Nations (`--at 2500300,1119935`) → the car crosses the bridge over the railway without dropping or stopping.
+
+## A facade door is drawn only where it opens ([#1766](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1766), [#1767](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1767))
+
+In a window, `--chunks D:/UnitSportSwitzerland/terrain_chunks`, Cartoon, on foot in Geneva's old town (`--at 2501414,1117284`), flat and `--frame earth`, with a fresh user:// (or `user://door_locks` deleted).
+
+- [ ] Walk the streets for a few minutes and press E at every door you pass → every door opens; none says "This door is locked". A side door that had no way in vanishes about 2 s after you first come within ~160 m, far enough off not to catch the eye; note any that goes close by.
+- [ ] Go in by a door, look at the facade walls from inside → every door seen from the street has its doorway inside.
+- [ ] Quit and start again at the same spot → the doors that vanished are absent from the start.
+
 ## The earth fill's biomes outside Switzerland ([#1809](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1809))
 
 In a window, `--frame earth --date 2027-07-15 --time 12:00` (local time), the spectator at full speed, the globe on.

@@ -124,7 +124,13 @@ public sealed class CelestialBody
     /// Its cube tiling (#1848): the Earth's (face 0 on Bern, twisted) or, for any other body, face 0 on its
     /// 0° N 0° E with its poles at the centres of faces 4 and 5.
     /// </summary>
-    public CubeShape Cube => _cube ??= Id == BodyId.Earth ? CubeShape.Earth : new CubeShape(Shape);
+    public CubeShape Cube => _cube ??= Id switch
+    {
+        BodyId.Earth => CubeShape.Earth,
+        BodyId.Moon => CubeShape.Moon,
+        BodyId.Mars => CubeShape.Mars,
+        _ => new CubeShape(Shape),
+    };
 
     private CubeShape? _cube;
 

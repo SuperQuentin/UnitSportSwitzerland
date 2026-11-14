@@ -5,11 +5,16 @@
 #   1. the generated world (--generated-world, NOTERRAIN): every point on the fill;
 #   2. with LEAVES (B4's built leaves on D:, skipped without them): the fill past the region's edge, where it blends into
 #      the real leaves (some points real, some fill).
-#   GODOT=<exe> [RUNS="generated edge"] [AT=E,N] [LEAVES=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh      logs: test_output/fillagree_*.log
+#   3. pyramid (#1656, with LEAVES and PYRAMID): the server has the globe's pyramid on its disk, the client none (the
+#      shipped base alone): the client's fill must stand on the server's pyramid, streamed, and agree as in 2.
+#   GODOT=<exe> [RUNS="generated edge pyramid"] [AT=E,N] [LEAVES=<dir>] [PYRAMID=<dir>] [EDGE=E,N] [PORT=] tools/fillagreenetcheck.sh
+#   logs: test_output/fillagree_*.log
 . "$(dirname "$0")/lib/twoclient.sh" fillagree
 AT=${AT:-2600500,1199500}
 LEAVES=${LEAVES:-D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube}
 EDGE=${EDGE:-2499550,1112700}   # across the south-west edge of B4's Geneva leaves: 20 points fill, 5 real
+PYRAMID=${PYRAMID:-D:/UnitSportSwitzerland/cube_global}
+SERVER_EXTRA=(); CLIENT_EXTRA=()
 PORT=${PORT:-7893}
 fail=
 
@@ -31,8 +36,8 @@ compare() { # name: the server's and the client's points, line by line
 run() { # name at args...
   local name=$1 at=$2; shift 2
   tc_server 600 180 "$OUT/fillagree_${name}_server.log" --server --port $PORT --no-query --frame earth --player-status \
-    --fillagree "$at" "$@" || { fail="${fail:+$fail; }$name: the server did not start"; return; }
-  tc_client 600 "$OUT/fillagree_${name}_client.log" --connect 127.0.0.1:$PORT --name Agree --frame earth --at "$at" --fillagree "$at" "$@" &
+    --fillagree "$at" "$@" ${SERVER_EXTRA[@]+"${SERVER_EXTRA[@]}"} || { fail="${fail:+$fail; }$name: the server did not start"; return; }
+  tc_client 600 "$OUT/fillagree_${name}_client.log" --connect 127.0.0.1:$PORT --name Agree --frame earth --at "$at" --fillagree "$at" "$@"     ${CLIENT_EXTRA[@]+"${CLIENT_EXTRA[@]}"} &
   local client=$! i
   # both print once their leaves round the client's body are in (the server's only while that body is there): the
   # client stays until both have
@@ -46,11 +51,21 @@ run() { # name at args...
   compare "$name"
 }
 
-RUNS=${RUNS:-generated edge}   # RUNS=edge: the region's edge alone
+RUNS=${RUNS:-generated edge pyramid}   # RUNS=edge: the region's edge alone
 [[ " $RUNS " == *" generated "* ]] && run generated "$AT" --generated-world "${NOTERRAIN[@]}"
 if [[ " $RUNS " == *" edge "* ]]; then
   if [ -d "$LEAVES" ]; then run edge "$EDGE" "${NOTERRAIN[@]}" --leaves "$LEAVES"
   else echo "[fillagreenetcheck] no LEAVES: the region's edge skipped"; fi
+fi
+if [[ " $RUNS " == *" pyramid "* ]]; then
+  if [ -d "$LEAVES" ] && [ -f "$PYRAMID/cube_manifest.json" ]; then
+    SERVER_EXTRA=(--globe "$PYRAMID"); CLIENT_EXTRA=(--globe res://assets/globe --cache "$OUT/fillagree_pyramid_cache")
+    rm -rf "$OUT/fillagree_pyramid_cache"; mkdir -p "$OUT/fillagree_pyramid_cache"
+    run pyramid "$EDGE" "${NOTERRAIN[@]}" --leaves "$LEAVES"
+    SERVER_EXTRA=(); CLIENT_EXTRA=()
+    grep -h "\[earth\] the fill on\|\[earth\] the server's pyramid" "$OUT/fillagree_pyramid_server.log" "$OUT/fillagree_pyramid_client.log" | sed 's/^/pyramid: /'
+    grep -q "\[earth\] the server's pyramid: [1-9][0-9]* tiles.*the fill on it" "$OUT/fillagree_pyramid_client.log"       || fail="${fail:+$fail; }pyramid: the client's fill is not on the server's pyramid"
+  else echo "[fillagreenetcheck] no LEAVES or PYRAMID: the streamed pyramid skipped"; fi
 fi
 
 if [ -z "$fail" ]; then echo "[fillagreenetcheck] RESULT: ok"; exit 0; fi

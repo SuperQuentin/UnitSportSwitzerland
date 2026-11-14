@@ -379,6 +379,12 @@ src/Terrain/Leaves/LeafBlend net   tools/fillagreenetcheck.sh
 src/Terrain/Leaves/PyramidFill net tools/fillagreenetcheck.sh
 src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
 src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
+# the globe's pyramid streamed to a client with none, the climb's pops, the fill on the server's pyramid (#1656; D: data)
+src/Terrain/Leaves/PyramidSource full tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidIndex full tools/pyramidstreamcheck.sh
+src/World/Globe          full   tools/pyramidstreamcheck.sh
+shaders/common/geomorph  full   tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidSource net tools/fillagreenetcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
@@ -634,9 +640,11 @@ src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
+# a lift rider on another peer's screen (#915), on the fun course's chairlift: no terrain data (#1609)
+src/World/Ropeways       net    tools/liftnetcheck.sh
+src/Player/FootPlayer.Lift net   tools/liftnetcheck.sh
+src/Terrain/Fixture/FunCourse net tools/liftnetcheck.sh
 # the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
-src/World/Ropeways       full   tools/liftnetcheck.sh
-src/Player/FootPlayer.Lift full  tools/liftnetcheck.sh
 src/World/DayNight       net    tools/clocknetcheck.sh
 src/World/WorldClock     net    tools/clocknetcheck.sh
 src/World/TimeCommand    net    tools/clocknetcheck.sh

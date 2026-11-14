@@ -3,8 +3,35 @@
 
 # Planets: every body, the Earth included, on one world system (H7 and C3 of #1430)
 
-Status: **approved by the user** (2026-11-14), the clock rule included (section 2). **H7a (#1847) built in PR #1864.** Issue: #1430 (H7, C3), sub-issues #1847-#1854,
+Status: **approved by the user** (2026-11-14), the clock rule included (section 2). Issue: #1430 (H7, C3), sub-issues #1847-#1854,
 one per phase (section 12). Planned from `main` at `0ab431fd6`.
+
+**Built so far (2026-11-14)**, each merged:
+- **H7a** (#1847, PR #1864): `CelestialBody`, `Frames` (the tree, spheres of influence), `GlobalPos.Body`, `FrameAxes.Rebased`.
+- **H7b**:
+  - (#1848, PR #1867): `CubeShape`, a cube per body;
+  - (PR #1887): `BodyGlobe`/`BodyViews`, other bodies' globes through the frame tree, the sky from another body, `--bodies`, `--bodyshot`.
+- **H7c** (#1849, PR #1872): the Moon's pyramid (`--cube-body`, LOLA 118 m to level 5, 1.23 GB on E:; the CGI Moon Kit's colour), `CraterField`.
+- **H7d** (#1850):
+  - PR #1873: `SkyClock`, `WorldOrigin.Rebase`, the sphere check behind `--crossbodies`;
+  - PR #1881: the spectator's speed by the nearest surface;
+  - PR #1889: the sky read at `SkyMoment`;
+  - PR #1891: `--crossbodies` on in the earth world, the origin following the camera in 3D past 1,000 km, `--mooncheck`
+    (Earth orbit to lunar orbit in 27 s, one crossing, no jump);
+  - this branch: the Moon's ground under your feet (`BodyHeights`, `BodyGround`, `IBodyGround`, `BodyGravity`): a
+    512 m square from LOLA and the craters round the camera, solid, eased into the globe at its edge; T steps in, the
+    walker sprints and jumps 5.4 m at 1.63 m/s².
+- **C3a** (#1851):
+  - PR #1878: orbits round any body, `SpaceOrbit.Cross`;
+  - PR #1883: the drive by the nearest surface.
+
+**Still to come**:
+- a medium ring round the near square (the pyramid's full 167 m lattice out to a few km), so the horizon has its craters;
+- the target cue and the align hold;
+- belly jets;
+- C3b online (after D2, #1727);
+- Mars (H7e), the rest (H7f);
+- the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
 flat LV95 world, which D3 deletes.

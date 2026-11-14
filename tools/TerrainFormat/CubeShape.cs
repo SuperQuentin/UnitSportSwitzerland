@@ -17,6 +17,12 @@ public sealed class CubeShape
     /// <summary>The Earth's: WGS84, face 0 on Bern twisted 28.5° (<see cref="CubeSphere"/>).</summary>
     public static readonly CubeShape Earth = new(Ellipsoid.Wgs84, CubeSphere.CentreLatDeg, CubeSphere.CentreLonDeg, CubeSphere.TwistDeg);
 
+    /// <summary>The Moon's: LOLA's 1,737.4 km sphere, face 0 on the near side's centre, the poles faces 4 and 5.</summary>
+    public static readonly CubeShape Moon = new(Ellipsoid.Moon);
+
+    /// <summary>Mars': its IAU ellipsoid, face 0 on 0° N 0° E.</summary>
+    public static readonly CubeShape Mars = new(Ellipsoid.Mars);
+
     /// <summary>The ellipsoid it is laid on: latitudes, longitudes and heights are on it.</summary>
     public Ellipsoid Shape { get; }
 

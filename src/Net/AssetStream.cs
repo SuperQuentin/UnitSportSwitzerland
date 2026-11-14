@@ -129,6 +129,20 @@ public enum AssetKind
     /// the whole entry, or an entry holding only the section asked for. Cached as <see cref="AssetStream.LeafCacheName"/>.
     /// </summary>
     Leaf = 21,
+
+    /// <summary>
+    /// The server's <see cref="Terrain.Leaves.PyramidIndex"/> under <c>--frame earth</c> (#1656): every tile of the globe's
+    /// pyramid on its disk, its bits, size and stamp, and the pyramid's lakes. Asked once per join; a server with no pyramid
+    /// of its own (or an older one) answers "missing" (no protocol bump), and the client keeps its own and the shipped base.
+    /// </summary>
+    PyramidIndex = 22,
+
+    /// <summary>
+    /// One tile of the pyramid (#1656), by its <c>CubeKey</c> through <c>RequestCubeAsset</c>: section 0 its heights (a
+    /// <c>CUBT</c> entry), section 1-12 that month's colour (a one-image <c>CUBC</c> entry). Cached as
+    /// <see cref="AssetStream.PyramidCacheName"/>; sent as stored (both are compressed already).
+    /// </summary>
+    Pyramid = 23,
 }
 
 /// <summary>
@@ -187,6 +201,8 @@ public static class AssetStream
         AssetKind.Digest => "",
         AssetKind.LeafIndex => Terrain.Leaves.LeafIndex.FileName,
         AssetKind.Leaf => "",   // by CubeKey: LeafCacheName
+        AssetKind.PyramidIndex => Terrain.Leaves.PyramidIndex.FileName,
+        AssetKind.Pyramid => "",   // by CubeKey: PyramidCacheName
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -197,7 +213,7 @@ public static class AssetStream
     /// </summary>
     public static bool ServedOverHttp(AssetKind kind) =>
         kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase or AssetKind.Digest
-            or AssetKind.LeafIndex or AssetKind.Leaf);
+            or AssetKind.LeafIndex or AssetKind.Leaf or AssetKind.PyramidIndex or AssetKind.Pyramid);
 
     /// <summary>
     /// True for kinds whose format already compresses its own payload, so deflating again
@@ -212,6 +228,27 @@ public static class AssetStream
     /// </summary>
     public static string LeafCacheName(CubeKey key, uint stamp, LeafKind? section) =>
         $"leaf_{key.FileStem}_{stamp:x8}{(section is { } s ? $".s{(int)s}" : "")}.culf";
+
+    /// <summary>
+    /// The client's cache file for a streamed pyramid tile (#1656), beside the leaves in the tile cache: its key, its stamp
+    /// (a rebuilt tile misses and is fetched again), and the section (0 heights, 1-12 a month's colour).
+    /// </summary>
+    public static string PyramidCacheName(CubeKey key, uint stamp, int section) =>
+        $"pyr_{key.FileStem}_{stamp:x8}.s{section}.cubt";
+
+    /// <summary>
+    /// The body a cube request is for (#1656, room for H7's planets): <c>RequestCubeAsset</c>'s section argument carries it in
+    /// its high bits, the section (a <c>LeafKind</c>, a pyramid month) in the low byte. The Earth is body 0, so its requests are
+    /// the same bytes as before (protocol 95's RPC unchanged); a server answers "missing" for a body it does not serve. The
+    /// index asks (<see cref="AssetKind.LeafIndex"/>, <see cref="AssetKind.PyramidIndex"/>) name a body by their tile's E
+    /// the same way, 0 the Earth. <c>CubeKey</c> stays body-free.
+    /// </summary>
+    public static class CubeSection
+    {
+        public static int Pack(int body, int section) => (body & 0xFF) << 8 | (section & 0xFF);
+
+        public static (int Body, int Section) Unpack(int packed) => ((packed >> 8) & 0xFF, packed & 0xFF);
+    }
 
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)

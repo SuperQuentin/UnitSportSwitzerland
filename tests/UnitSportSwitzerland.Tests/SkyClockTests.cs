@@ -61,6 +61,25 @@ public class SkyClockTests
     }
 
     [Fact]
+    public void The_moon_in_the_sky_is_the_moon_the_frames_place_at_any_moment()
+    {
+        // the bodies three days ahead of the ground's hour (a server that has run): the sky's moon (apparent: nutation,
+        // the true obliquity) and the frame tree's (geometric) agree within 20″, the same distance
+        var bodies = SwissTime.ToUtc(Day, 3.0).AddDays(3.2);
+        var m = SkyClock.Moment(bodies, Day, 21.5);
+        DVec3 sky = Ephemeris.Ecef(SkyBody.Moon, m);
+        var frames = UnitSport.Core.Frames.Convert(BodyId.Moon, DVec3.Zero, BodyId.Earth, m);
+        double deg = Math.Acos(Math.Clamp(sky.Dot(frames) / (sky.Length * frames.Length), -1, 1)) * 180 / Math.PI;
+        Assert.True(deg < 0.01, $"{deg:F5}°");
+        Assert.Equal(sky.Length, frames.Length, 1);
+        // and the moment's versions are the old ones at a real instant, bit for bit
+        var utc = SwissTime.ToUtc(Day, 10);
+        Assert.Equal(Ephemeris.Ecef(SkyBody.Moon, utc), Ephemeris.Ecef(SkyBody.Moon, SkyMoment.At(utc)));
+        Assert.Equal(Ephemeris.Axes(SkyBody.Mars, utc), Ephemeris.Axes(SkyBody.Mars, SkyMoment.At(utc)));
+        Assert.Equal(Ephemeris.Celestial(utc), Ephemeris.Celestial(SkyMoment.At(utc)));
+    }
+
+    [Fact]
     public void A_pinned_date_runs_from_its_start_hour_on_sim_time_and_play_on_the_servers_clock()
     {
         Assert.Equal(SwissTime.ToUtc(Day, 10).AddSeconds(3600), SkyClock.BodiesUtc(Day, 10, 3600, 0));

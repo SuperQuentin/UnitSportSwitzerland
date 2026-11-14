@@ -22,8 +22,30 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     /// <summary>The camera's altitude above the ellipsoid, through the frame (in the Space regime Y is not the altitude, #1430 H3).</summary>
     private double Altitude => Core.OriginShifter.Instance?.Origin.AltitudeOf(Position) ?? Position.Y;
 
-    /// <summary>The speed flown now, without boost: <see cref="Speed"/> held to <see cref="SpectatorSpeed.AltitudeCap"/>.</summary>
-    public float FlownSpeed => Mathf.Min(Speed, SpectatorSpeed.AltitudeCap(Altitude));
+    /// <summary>The speed flown now, without boost: <see cref="Speed"/> held to <see cref="Cap"/>.</summary>
+    public float FlownSpeed => Mathf.Min(Speed, Cap);
+
+    /// <summary>
+    /// The fastest the wheel's speed is flown here: <see cref="SpectatorSpeed.AltitudeCap"/> by the altitude; between
+    /// bodies (#1850, <see cref="Core.OriginShifter.CrossBodies"/>) <see cref="SpectatorSpeed.SurfaceCap"/> by the
+    /// nearest surface of any body. Worked out once a frame (the frame tree's few microseconds).
+    /// </summary>
+    public float Cap => _capFrame == Engine.GetProcessFrames() ? _cap : UpdateCap();
+
+    private float _cap;
+    private ulong _capFrame = ulong.MaxValue;
+
+    private float UpdateCap()
+    {
+        _capFrame = Engine.GetProcessFrames();
+        _cap = Core.OriginShifter.CrossBodies ? SpectatorSpeed.SurfaceCap(SurfaceDistance()) : SpectatorSpeed.AltitudeCap(Altitude);
+        return _cap;
+    }
+
+    /// <summary>How far the nearest surface of any body is (#1850, <see cref="SurfaceReach"/>).</summary>
+    private double SurfaceDistance() => Core.OriginShifter.Instance?.Origin.Frame is { } frame
+        ? SurfaceReach.Of(frame, Position, Altitude)
+        : Altitude;
 
     private SpectatorSpeedHud? _hud;
     private bool _boosted;
@@ -100,7 +122,9 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     /// <summary>A notch faster (+1) or slower (-1), and the speed shown.</summary>
     private void Step(int way)
     {
-        Speed = way > 0 ? SpectatorSpeed.Faster(Speed) : SpectatorSpeed.Slower(Speed, SpectatorSpeed.AltitudeCap(Altitude));
+        Speed = way > 0
+            ? Core.OriginShifter.CrossBodies ? SpectatorSpeed.Faster(Speed, Cap) : SpectatorSpeed.Faster(Speed)
+            : SpectatorSpeed.Slower(Speed, Cap);
         ShowSpeed();
     }
 
@@ -108,7 +132,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     private void ShowSpeed()
     {
         if (_hud == null) AddChild(_hud = new SpectatorSpeedHud());
-        float cap = SpectatorSpeed.AltitudeCap(Altitude);
+        float cap = Cap;
         _hud.Show(Mathf.Min(Speed, cap) * (_boosted ? BoostMultiplier : 1f), _boosted, limited: Speed > cap);
     }
 
@@ -176,9 +200,10 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
             float speed = FlownSpeed * amount
                 * (UnitSport.Core.PlayerInput.Held(UnitSport.Core.PlayerInput.FlyBoost) ? BoostMultiplier : 1f);
             Position += dir.Normalized() * speed * dt;
-            // no higher than the ceiling
+            // no higher than the ceiling, unless there are other bodies to fly to (#1850)
             double altitude = Altitude;
-            if (altitude > Core.Curvature.SpectatorCeilingM) Position -= Vector3.Up * (float)(altitude - Core.Curvature.SpectatorCeilingM);
+            if (!Core.OriginShifter.CrossBodies && altitude > Core.Curvature.SpectatorCeilingM)
+                Position -= Vector3.Up * (float)(altitude - Core.Curvature.SpectatorCeilingM);
         }
     }
 }
