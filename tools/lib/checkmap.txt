@@ -421,6 +421,13 @@ src/Core/TestWorld       quick  --frame earth --synccheck --world flat
 # #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
 src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
 src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+# #1845: the sky from space against NOAA (the subsolar point, the sky's sun, the ground's light, the moon from the camera,
+# the stars, true north, /time speed real) from 400 and 20,000 km at the solstices and equinoxes; windowed it also
+# measures the drawn twilight and the moon over the night side (not here: needs a window)
+src/World/TerminatorCheck quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/SunPath         quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/DayNight        quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/Globe/Globe.cs  quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
 # G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
 # the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
 src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0

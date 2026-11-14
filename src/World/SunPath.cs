@@ -120,9 +120,20 @@ public static class SunPath
         Toward(body, date, hour, e, n, out elevationDeg, out _);
 
     /// <summary><see cref="Toward(SkyBody, DateOnly, double, double, double, out float)"/>, and how far the body is, metres.</summary>
-    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg, out double distance)
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, double e, double n, out float elevationDeg, out double distance) =>
+        Toward(body, date, hour, PlaceAt(e, n), out elevationDeg, out distance);
+
+    /// <summary>
+    /// The real direction to <paramref name="body"/> from <paramref name="at"/>, in world axes (#1845). In an anchor
+    /// frame (the earth world, Space) it is read from that very point, its height included and no LV95 in it: from
+    /// orbit the moon's parallax is the camera's (up to ~3° at 20,000 km), not the ground's under it. In the flat
+    /// ground frame, as from <c>at</c>'s LV95 place (<see cref="Toward(SkyBody, DateOnly, double, double, double, out float, out double)"/>).
+    /// </summary>
+    public static Vector3 Toward(SkyBody body, DateOnly date, double hour, GlobalPos at, out float elevationDeg, out double distance) =>
+        Toward(body, date, hour, PlaceOf(at), out elevationDeg, out distance);
+
+    private static Vector3 Toward(SkyBody body, DateOnly date, double hour, Place place, out float elevationDeg, out double distance)
     {
-        var place = PlaceAt(e, n);
         var h = Ephemeris.Topocentric(body, SwissTime.ToUtc(date, hour), place.Geo);
         elevationDeg = (float)h.ElevationDeg;
         distance = h.Distance;
@@ -136,10 +147,17 @@ public static class SunPath
     /// </summary>
     public static Basis MoonFace(DateOnly date, double hour, double e, double n) => Face(SkyBody.Moon, date, hour, e, n);
 
+    /// <summary><see cref="MoonFace(DateOnly, double, double, double)"/> from <paramref name="at"/> (see <see cref="Toward(SkyBody, DateOnly, double, GlobalPos, out float, out double)"/>).</summary>
+    public static Basis MoonFace(DateOnly date, double hour, GlobalPos at) => Face(SkyBody.Moon, date, hour, PlaceOf(at));
+
     /// <summary>Any body's own axes in world axes, as <see cref="MoonFace"/> (#1444): a planet's map and its rings' plane.</summary>
-    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n)
+    public static Basis Face(SkyBody body, DateOnly date, double hour, double e, double n) => Face(body, date, hour, PlaceAt(e, n));
+
+    /// <summary><see cref="Face(SkyBody, DateOnly, double, double, double)"/> from <paramref name="at"/>.</summary>
+    public static Basis Face(SkyBody body, DateOnly date, double hour, GlobalPos at) => Face(body, date, hour, PlaceOf(at));
+
+    private static Basis Face(SkyBody body, DateOnly date, double hour, Place place)
     {
-        var place = PlaceAt(e, n);
         var (pole, prime, east) = Ephemeris.Axes(body, SwissTime.ToUtc(date, hour));
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(prime), Axis(east), Axis(pole));
@@ -150,9 +168,13 @@ public static class SunPath
     /// (the north celestial pole) as seen from LV95 <paramref name="e"/> / <paramref name="n"/>. A
     /// star's catalogue direction times it is where it shines.
     /// </summary>
-    public static Basis SkyFrame(DateOnly date, double hour, double e, double n)
+    public static Basis SkyFrame(DateOnly date, double hour, double e, double n) => SkyFrame(date, hour, PlaceAt(e, n));
+
+    /// <summary><see cref="SkyFrame(DateOnly, double, double, double)"/> from <paramref name="at"/>.</summary>
+    public static Basis SkyFrame(DateOnly date, double hour, GlobalPos at) => SkyFrame(date, hour, PlaceOf(at));
+
+    private static Basis SkyFrame(DateOnly date, double hour, Place place)
     {
-        var place = PlaceAt(e, n);
         var (x, y, z) = Ephemeris.Celestial(SwissTime.ToUtc(date, hour));
         Vector3 Axis(EcefPos v) => ToWorld(Ephemeris.Local(v, place.Geo), place);
         return new Basis(Axis(x), Axis(y), Axis(z));
@@ -163,9 +185,16 @@ public static class SunPath
     /// Earth-fixed offset (metres) into world axes, and the place itself on the ellipsoid. A satellite's
     /// direction is <c>Basis * (its ECEF - Observer)</c>.
     /// </summary>
-    public static (Basis ToWorld, EcefPos Observer) EarthFrame(double e, double n)
+    public static (Basis ToWorld, EcefPos Observer) EarthFrame(double e, double n) => EarthFrame(PlaceAt(e, n));
+
+    /// <summary>
+    /// <see cref="EarthFrame(double, double)"/> from <paramref name="at"/>: in an anchor frame the observer is that
+    /// point itself, its height included (a satellite seen from orbit, #1845).
+    /// </summary>
+    public static (Basis ToWorld, EcefPos Observer) EarthFrame(GlobalPos at) => EarthFrame(PlaceOf(at));
+
+    private static (Basis ToWorld, EcefPos Observer) EarthFrame(Place place)
     {
-        var place = PlaceAt(e, n);
         Vector3 Axis(double x, double y, double z)
         {
             var h = Ephemeris.Local(new EcefPos(x, y, z), place.Geo);
@@ -262,6 +291,30 @@ public static class SunPath
 
     /// <summary>The last place asked for, per kilometre: swapped whole, so threads never see half of one.</summary>
     private static Place? _place;
+
+    /// <summary>The last point asked for in an anchor frame, and its place: swapped whole, as <see cref="_place"/>.</summary>
+    private sealed record PointPlace(GlobalPos At, bool Anchor, Place Place);
+
+    private static PointPlace? _point;
+
+    /// <summary>
+    /// A point's place (#1845): in an anchor frame the point itself (its geodetic latitude, longitude and height; the
+    /// grid's north is never used there), in the flat ground frame its LV95 kilometre cell as <see cref="PlaceAt"/>.
+    /// </summary>
+    private static Place PlaceOf(GlobalPos at)
+    {
+        bool anchor = Frame is { IsAnchor: true };
+        if (_point is { } p && p.Anchor == anchor && p.At == at) return p.Place;
+        Place place;
+        if (anchor) place = new Place(long.MinValue, long.MinValue, at.Geodetic, 0, 1);
+        else
+        {
+            var lv95 = at.Lv95;
+            place = PlaceAt(lv95.E, lv95.N);
+        }
+        _point = new PointPlace(at, anchor, place);
+        return place;
+    }
 
     private static Place PlaceAt(double e, double n)
     {

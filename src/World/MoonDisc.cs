@@ -127,8 +127,13 @@ public partial class MoonDisc : MeshInstance3D
         if (Mathf.Abs(up.Dot(toMoon)) > 0.99f) up = cam.GlobalBasis.X;
         var right = up.Cross(toMoon).Normalized();
         up = toMoon.Cross(right).Normalized();
-        float half = distance * Mathf.Tan(reach);
-        _halo.GlobalTransform = new Transform3D(new Basis(right * half, up * half, -toMoon), cam.GlobalPosition + toMoon * distance);
+        // in front of the disc's nearest point (its centre's distance less two radii), so the glow is drawn over the disc
+        // and not under it (#1845): pushed 1 % in clip z it was ~0.1 % of the distance nearer, near the far plane, and the
+        // sphere bulges by its angular radius (0.7 % at the least size): the disc's unlit part hid the glow, a black moon
+        // in a bright ring, from space over the night side above all (the halo at full strength there)
+        float at = distance * (1f - 2f * angular);
+        float half = at * Mathf.Tan(reach);
+        _halo.GlobalTransform = new Transform3D(new Basis(right * half, up * half, -toMoon), cam.GlobalPosition + toMoon * at);
         // the glow comes from the lit part: off the disc's centre toward the sun as the phase thins (a crescent's dark
         // disc ringed by a centred glow read as an eclipse)
         var toSun = sky.Sun.Normalized();
