@@ -425,7 +425,8 @@ public static class CrossSectionPlanner
     /// votes the wrong way, and a junction got no exit for one direction. Pieces of divided roads (not ramps) that carry
     /// straight on into each other at a node (each the other's most nearly opposite outward heading, within 20 deg) form
     /// one carriageway; it runs the way its pieces' directions say, weighted by length (a direction from the source or a
-    /// ring counts ten times), and a piece the partner rule or connectivity set the other way is turned (<see cref="Origin.Chain"/>).
+    /// ring counts ten times), and a piece the partner rule or connectivity set the other way is turned (<see cref="Origin.Chain"/>),
+    /// unless its own OSM one-way confirms it (Geneva corridor: the one turn OSM contradicted was in a chain of small Lane pieces).
     /// </summary>
     private static void AlignCarriageways(List<Line> divided, Dictionary<(long, long), List<(Line Line, bool AtStart)>> ends, Stats stats)
     {
@@ -482,7 +483,9 @@ public static class CrossSectionPlanner
             int way = Math.Sign(vote);
             foreach (var (line, sense) in chain)
                 if (line.OneWay != 0 && line.OneWay * sense != way
-                    && line.Why is Origin.Partner or Origin.PartnerFallback or Origin.Connectivity)
+                    && line.Why is Origin.Partner or Origin.PartnerFallback or Origin.Connectivity
+                    // OSM's own one-way on the piece confirming its direction: kept (a chain of small one-way pieces can be wrong)
+                    && !OsmConfirms(line))
                 {
                     Set(line, (sbyte)(way * sense), Origin.Chain);
                     var mid = line.Plan[line.Plan.Length / 2];
@@ -491,6 +494,10 @@ public static class CrossSectionPlanner
                 }
         }
     }
+
+    /// <summary>The piece's own OSM one-way (left after the overlay's conflict rule) says the direction it has now.</summary>
+    private static bool OsmConfirms(Line line) =>
+        line.Osm is { OneWay: "1" or "-1" } row && (row.OneWay == "1") == (line.OneWay > 0);
 
     /// <summary>The point ~10 m in from the line's end (where <see cref="Outward"/> aims).</summary>
     private static Vec2 Ahead(Line line, bool atStart) =>
