@@ -27,6 +27,7 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   crossings, 249 million km at light speed in 860 s, no shift on either), landing and walking on Mars at 3.72 m/s².
 - **H7e**, this branch: every body's air as data (`BodyAir`): Mars' butterscotch sky, its blue sunset, its haze from orbit,
   its drag; the shell's sun from the anchor body's own offset.
+- **H7c/H7d** (#1849, #1850), this branch: `/goto <body> <lat> <lon> [km]`, the fly camera to any body (offline).
 - **H7d**, this branch: a medium ground square (4 km of 16 m cells, the craters from 40 m) to the walker's horizon.
 - **H7d**, this branch: the spectator's target cue (] / D-pad → / VR right stick down: tap the next body, hold to turn to
   it; a ring or edge arrow, the distance, the trip at full speed).

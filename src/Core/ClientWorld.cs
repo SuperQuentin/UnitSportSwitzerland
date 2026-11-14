@@ -1406,6 +1406,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         _chat.PutInOrbit = km => LocalPlayer?.PutInOrbit(km) ?? "No player to put in orbit.";
+        _chat.GoTo = GoToBody;
         _chat.Inventory = inventory;
         _chat.GiveOrDrop = items.Give;
         _chat.PlaceSearch = _places;
@@ -3093,6 +3094,30 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         foreach (var node in FindChildren("*", "Camera3D", recursive: true, owned: false))
             if (node is Camera3D cam) cam.Far = far;
+    }
+
+    /// <summary>
+    /// <c>/goto &lt;body&gt; &lt;lat&gt; &lt;lon&gt; [km]</c> (#1850, <see cref="BodyGoto"/>): the fly camera there, under
+    /// <c>--frame earth</c>. On foot it takes the fly camera first; the anchor is relabelled to the body (nothing moves), then
+    /// the world shifted to the place's tangent frame and the camera put over it, looking along the horizon. T steps in where
+    /// the body has ground. The line to show.
+    /// </summary>
+    public string GoToBody(string args)
+    {
+        if (!BodyGoto.TryParse(args, out var body, out double lat, out double lon, out double height, out string error)) return error;
+        if (GameSettings.Current.Frame != WorldFrame.Earth || _worldOrigin is not { } origin || OriginShifter.Instance is not { } shifter)
+            return "/goto needs the earth world (--frame earth).";
+        if (_spectator == null) return "No camera to move here.";
+        if (_onFoot) ToggleMode();
+        if (_onFoot) return "Take the fly camera first (Shift+T).";
+        var sky = SkyClock.Now;
+        origin.Rebase(body.Id, sky);
+        shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(body.Shape.ToEcef(new Terrain.Format.Geodetic(lat, lon, 0)), body.Id));
+        _spectator.GlobalPosition = new Vector3(0, (float)height, 0);
+        _spectator.Rotation = new Vector3(0, _spectator.Rotation.Y, 0);
+        GD.Print(System.FormattableString.Invariant($"[goto] {body.Name} at {lat:F2}, {lon:F2}, {height / 1000:F1} km over its reference"));
+        return System.FormattableString.Invariant($"Off to {body.Name}: {lat:F2}°, {lon:F2}°, {height / 1000:F0} km up.")
+            + (body.Landable ? " Fly down, T steps in." : "");
     }
 
     /// <summary>Switches between the free spectator camera and the on-foot player (T key).</summary>
