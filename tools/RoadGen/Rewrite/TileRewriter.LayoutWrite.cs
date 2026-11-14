@@ -150,7 +150,7 @@ public static partial class TileRewriter
             else if (jp.Arms.Any(a => a.Axis is null || !core.Mouths.Any(m => m.Arm == a.Arm))) no = "an arm without a mouth";
             // a road joining an arm short of its mouth: a plain core, its mouths held in short of it (#854, the user, Oct 20)
             else if (jp.Merged?.Ring is null && !core.IsFallback && jp.Arms.Any(a => RoadJoinsShortOfMouth(result, a, core.Mouths.First(m => m.Arm == a.Arm).Station))
-                && CorePlanner.Fallback(jp, core, a => JoinLimit(result, a)) is { Simple: true } held
+                && CorePlanner.Fallback(jp, core, a => JoinLimit(result, a)) is { Simple: true, Refused: null } held
                 && !jp.Arms.Any(a => RoadJoinsShortOfMouth(result, a, held.Mouths.First(m => m.Arm == a.Arm).Station)))
             {
                 jp.Core = held;

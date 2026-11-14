@@ -98,7 +98,8 @@ public partial class PalletService : Node
         foreach (var p in pallets)
         {
             var node = PalletNode.Create(p.Id, p.Load, material);
-            node.Transform = new Transform3D(new Basis(Vector3.Up, p.Yaw), _origin.ToWorld(p.E, p.N, p.Height));
+            // its yaw is its tile's: turned with an earth leaf's stand-in (#1799)
+            node.Transform = new Transform3D(new Basis(Vector3.Up, _origin.WorldYawInTile(p.Tile, p.Yaw)), _origin.ToWorld(p.E, p.N, p.Height));
             AddChild(node);
             nodes.Add(node);
         }

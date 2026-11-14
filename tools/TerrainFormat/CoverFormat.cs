@@ -75,6 +75,16 @@ public enum CoverClass : byte
     ParkingPaved = 40,
     /// <summary>A border drawn on the ground in a test world (#1038): the signal test region's canton zones, a band along each edge.</summary>
     Border = 41,
+
+    // --- the earth fill's biomes outside Switzerland (#1809, Biomes/BiomePass), never from TLM ---
+    /// <summary>Sand and bare desert ground.</summary>
+    Sand = 42,
+    /// <summary>Dry grass: steppe and savanna.</summary>
+    DryGrass = 43,
+    /// <summary>Moss, lichen and dwarf shrubs past the tree line, polar or alpine.</summary>
+    Tundra = 44,
+    /// <summary>The wet tropics' open ground, lush and dark.</summary>
+    LushGround = 45,
 }
 
 /// <summary>

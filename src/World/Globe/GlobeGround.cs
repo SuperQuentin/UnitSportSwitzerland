@@ -10,14 +10,17 @@ namespace UnitSport.World;
 /// painted from them by <see cref="CoverPalette.ColorFor"/> at its own altitude, as the flat world's horizon blocks
 /// are (open ground in altitude bands, the snow line). The photo's own colours (Blue Marble: olive, yellower than the
 /// palette; over the region the palette averaged with roofs and roads) drew a pale beige plain where flat draws green.
+/// Away from the world's region (<see cref="OwnPalette"/>, #1802) the palette's Swiss classes drew deserts as meadows and
+/// snow: there land takes the photo's colour (lifted as <c>globe.gdshader</c> lifts it), only water stays the palette's,
+/// so the ground meets the globe's own look at the 20 km handover.
 /// </summary>
 public static class GlobeGround
 {
     /// <summary>The side of a tile's weight grid, samples.</summary>
     public const int Side = 128;
 
-    /// <summary>Bytes a sample: water, forest, rock, snow.</summary>
-    public const int Stride = 4;
+    /// <summary>Bytes a sample: water, forest, rock, snow, then the block's colour (<see cref="Unstore"/>d, sRGB r, g, b).</summary>
+    public const int Stride = 7;
 
     /// <summary>
     /// A colour image (<paramref name="w"/> x <paramref name="h"/> sRGB texels, row 0 the south edge) as cover
@@ -38,9 +41,14 @@ public static class GlobeGround
                         var c = texel(px, py).SrgbToLinear();
                         sum += new Vector3(c.R, c.G, c.B);
                     }
-                var weights = Classify(Unstore(sum / ((x1 - x0) * (y1 - y0))));
+                var colour = Unstore(sum / ((x1 - x0) * (y1 - y0)));
+                var weights = Classify(colour);
                 int o = (y * Side + x) * Stride;
-                for (int c = 0; c < Stride; c++) grid[o + c] = (byte)Math.Clamp(weights[c] * 255f + 0.5f, 0, 255);
+                for (int c = 0; c < 4; c++) grid[o + c] = (byte)Math.Clamp(weights[c] * 255f + 0.5f, 0, 255);
+                var srgb = new Color(Math.Clamp(colour.X, 0, 1), Math.Clamp(colour.Y, 0, 1), Math.Clamp(colour.Z, 0, 1)).LinearToSrgb();
+                grid[o + 4] = (byte)(srgb.R * 255f + 0.5f);
+                grid[o + 5] = (byte)(srgb.G * 255f + 0.5f);
+                grid[o + 6] = (byte)(srgb.B * 255f + 0.5f);
             }
         return grid;
     }
@@ -72,7 +80,8 @@ public static class GlobeGround
         float sat = Math.Max(s.X, Math.Max(s.Y, s.Z)) - Math.Min(s.X, Math.Min(s.Y, s.Z));
         // bluer than green, or near black (Blue Marble draws inland lakes black)
         float water = Math.Max(Smooth(0.02f, 0.07f, s.Z - s.Y) * Smooth(0.7f, 0.55f, luma), Smooth(0.12f, 0.06f, luma));
-        float snow = Smooth(0.62f, 0.78f, luma) * (1 - water);
+        // snow is white, sand is bright too but yellow (#1802: a desert read as a snowfield): only a pale, unyellow colour
+        float snow = Smooth(0.62f, 0.78f, luma) * Smooth(0.16f, 0.08f, sat) * Smooth(-0.10f, -0.03f, s.Z - s.X) * (1 - water);
         float forest = Smooth(0.30f, 0.24f, luma) * Smooth(0.0f, 0.04f, s.Y - s.Z) * (1 - water - snow);
         float rock = Smooth(0.12f, 0.07f, sat) * Smooth(0.30f, 0.40f, luma) * (1 - water - snow - forest);
         return [water, Math.Max(forest, 0), Math.Max(rock, 0), snow];
@@ -87,6 +96,14 @@ public static class GlobeGround
 
     /// <summary>The colour's water weight a level surface needs to be drawn as water (<see cref="Level"/>).</summary>
     public const float WaterHint = 0.2f;
+
+    /// <summary>
+    /// Ground this low, metres, may be the sea's (#1802). The pyramid's heights are over the ellipsoid and the sea is
+    /// drawn at the geoid (ETOPO's "below sea level at the geoid"), -106 to +85 m: it follows the geoid's swell, so it is
+    /// seldom level within <see cref="LevelM"/>, and it is none of the pyramid's lakes. Under it the colour image's
+    /// water is the sea's surface (Lavaux's shore, which the lake list dries, stands 420 m up).
+    /// </summary>
+    public const float SeaReachM = 90f;
 
     /// <summary>The water weight above which a coarser level's level vertex is drawn as a lake's surface too (#1669).</summary>
     public const float LakeWeight = 0.5f;
@@ -130,6 +147,41 @@ public static class GlobeGround
         return rest > 1e-3f ? new Vector4(0, w.Y, w.Z, w.W) / rest : Vector4.Zero;
     }
 
+    /// <summary>A weight grid's colour (linear) at (u, v), bilinear in sRGB.</summary>
+    public static Vector3 SampleColour(byte[] grid, float u, float v)
+    {
+        float fx = Math.Clamp(u * Side - 0.5f, 0, Side - 1), fy = Math.Clamp(v * Side - 0.5f, 0, Side - 1);
+        int x0 = (int)fx, y0 = (int)fy, x1 = Math.Min(x0 + 1, Side - 1), y1 = Math.Min(y0 + 1, Side - 1);
+        float tx = fx - x0, ty = fy - y0;
+        Vector3 At(int x, int y)
+        {
+            int o = (y * Side + x) * Stride;
+            return new Vector3(grid[o + 4], grid[o + 5], grid[o + 6]) / 255f;
+        }
+        var c = At(x0, y0).Lerp(At(x1, y0), tx).Lerp(At(x0, y1).Lerp(At(x1, y1), tx), ty);
+        var lin = new Color(c.X, c.Y, c.Z).SrgbToLinear();
+        return new Vector3(lin.R, lin.G, lin.B);
+    }
+
+    /// <summary>
+    /// How much a place is the world's own region, 0..1 (#1802), from its geodetic latitude and longitude, degrees:
+    /// 1 over Switzerland's box (the pyramid's Swiss levels are the palette's colour there, <see cref="OurColours"/>),
+    /// falling to 0 over <see cref="OwnFeatherDeg"/> past it. The palette by cover class paints it; past it, the photo.
+    /// </summary>
+    public static float OwnPalette(double latDeg, double lonDeg)
+    {
+        double outLat = Math.Max(Math.Max(OwnSouthDeg - latDeg, latDeg - OwnNorthDeg), 0);
+        double outLon = Math.Max(Math.Max(OwnWestDeg - lonDeg, lonDeg - OwnEastDeg), 0) * Math.Cos(Mathf.DegToRad(latDeg));
+        double outside = Math.Sqrt(outLat * outLat + outLon * outLon);
+        return 1f - (float)Mathf.SmoothStep(0, OwnFeatherDeg, outside);
+    }
+
+    /// <summary>Switzerland's box, degrees, with a little room round the country.</summary>
+    public const double OwnSouthDeg = 45.6, OwnNorthDeg = 48.0, OwnWestDeg = 5.8, OwnEastDeg = 10.6;
+
+    /// <summary>The box's feather, degrees (about 55 km).</summary>
+    public const double OwnFeatherDeg = 0.5;
+
     /// <summary>A weight grid sampled at (u, v), bilinear.</summary>
     public static Vector4 Sample(byte[] grid, float u, float v)
     {
@@ -148,7 +200,24 @@ public static class GlobeGround
     /// A vertex's colour (linear, no surface pattern) from its cover weights (water, forest, rock, snow) at
     /// <paramref name="altitude"/> metres: the palette's colours mixed by weight, open ground for the rest.
     /// </summary>
-    public static Color Colour(Vector4 w, float altitude, float hash)
+    public static Color Colour(Vector4 w, float altitude, float hash) => Colour(w, altitude, hash, Vector3.Zero, 1f);
+
+    /// <summary>
+    /// A vertex's colour (linear) as <see cref="Colour(Vector4, float, float)"/>, eased by <paramref name="own"/>
+    /// (<see cref="OwnPalette"/>) from the photo's <paramref name="photo"/> (linear) on land and the palette's water.
+    /// </summary>
+    public static Color Colour(Vector4 w, float altitude, float hash, Vector3 photo, float own)
+    {
+        var palette = PaletteColour(w, altitude, hash);
+        if (own >= 1f) return palette;
+        var water = CoverPalette.ColorFor(CoverClass.Water, altitude, hash).SrgbToLinear();
+        float wet = Math.Clamp(w.X, 0, 1);
+        var away = new Vector3(water.R, water.G, water.B) * wet + photo * (1 - wet);
+        var c = away.Lerp(new Vector3(palette.R, palette.G, palette.B), own);
+        return new Color(c.X, c.Y, c.Z, 0);
+    }
+
+    private static Color PaletteColour(Vector4 w, float altitude, float hash)
     {
         float open = Math.Max(0, 1 - w.X - w.Y - w.Z - w.W);
         var c = Lin(CoverClass.Open) * open + Lin(CoverClass.Water) * w.X + Lin(CoverClass.Forest) * w.Y

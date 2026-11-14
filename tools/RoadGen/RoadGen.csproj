@@ -18,4 +18,9 @@
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- the cantons of the signal heads (TileRewriter.Cantons) where no repository is around the tool, as on the NAS (#1794) -->
+    <EmbeddedResource Include="..\MapCore\switzerland.bin" LogicalName="switzerland.bin" WithCulture="false" Link="switzerland.bin" />
+  </ItemGroup>
+
 </Project>

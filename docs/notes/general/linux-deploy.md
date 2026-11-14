@@ -89,7 +89,8 @@
   is copied, after a free-space check, with `cube_manifest.json` last, and nothing is deleted without `--prune`.
   - Where: `LEAVES_SRC` defaults to the chunk source's `_cube` sibling. Today it is B4's set,
     `D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube`: 16 files, 775 MB, 2,412 L14 leaves, Geneva to Riddes. It is
-    the set every earth check and the playtest use (`D:/UnitSportSwitzerland/terrain_chunks_cube` does not exist).
+    the set every earth check and the playtest use (`D:/UnitSportSwitzerland/terrain_chunks_cube` does not exist). The
+    server's own copy is built on the NAS (`tools/cube-nas-run`): `X:/UnitSportSwitzerland/terrain_chunks_cube`.
     `DEPLOY_LEAVES_DIR` defaults to `DEPLOY_CHUNKS_DIR`'s `_cube` sibling, where the game also looks without a flag.
   - The server starts with `--leaves <dir>` (`LEAVES=0` drops it), and with `--frame <FRAME>` only when `FRAME` is set.
   - Caddy needs nothing: leaves stream over ENet (`net/leaf-streaming`), never HTTP.
@@ -139,7 +140,13 @@ release server check for the new release at once. The mismatch lasts from D2's r
 The steps below keep it to the `/update` download (1-2 min).
 
 **Before merging (any day; harmless to the 95 server):**
-1. In `tools/deploy.env`, set `LEAVES_SRC=D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube` and leave `FRAME` empty.
+0. Build the leaves on the NAS (`tools/cube-nas-run`, #1794), from the repo on `main`, with `NAS` and `NAS_ROOT` in
+   `tools/deploy.env` (the example's last block) if they differ from the defaults:
+   `tools/build-swiss-nas.sh cube check` (every source there, or what to fetch), `cube test` (Geneva, ~10-15 min), then
+   `cube start` and `cube status` until `ALL STAGES DONE` (~2 h; the server's region by default: B4's 825 tiles). The
+   output is `X:\UnitSportSwitzerland\terrain_chunks_cube` (`/mnt/Data/Documents/UnitSportSwitzerland/terrain_chunks_cube`).
+1. In `tools/deploy.env`, set `LEAVES_SRC=X:/UnitSportSwitzerland/terrain_chunks_cube` (the NAS share; B4's
+   `D:/UnitSportSwitzerland/test_b3/b4/terrain_chunks_cube` on the user's PC is the same region) and leave `FRAME` empty.
 2. `tools/deploy-linux.sh --check`. It takes minutes, mostly listing the flat tiles. Read:
    - the leaves' "space OK";
    - the "Server" block: a release or a deploy build, `[frame] flat`.
@@ -164,7 +171,8 @@ The steps below keep it to the `/update` download (1-2 min).
      restarts only once nobody is connected.
    - A deploy build never updates itself: use `/update`, or `tools/deploy-linux.sh --build --restart` from `main` at the release.
 8. Check:
-   - `tools/deploy-linux.sh --check` shows `running: [frame] earth; [earth] 2412 leaves from <dir>`;
+   - `tools/deploy-linux.sh --check` shows `running: [frame] earth; [earth] 2412 leaves from <dir>` (B4's count; the NAS
+     build of the same tiles should match: its manifest's `"key"` count);
    - a fresh client's log says `[stream] leaf index received: 2412 leaves`.
 
 **Rollback:**

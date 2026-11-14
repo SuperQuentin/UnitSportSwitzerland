@@ -29,6 +29,7 @@ public partial class StarField : MeshInstance3D
         TopLevel = true;
         Visible = false;
         CastShadow = ShadowCastingSetting.Off;
+        IgnoreOcclusionCulling = true;   // the sky: depth hides it, never the occlusion buffer (SkyBodies)
         GIMode = GIModeEnum.Disabled;
         // placed by the shader at the far plane: never culled by where the node is
         CustomAabb = new Aabb(-Vector3.One * 1e7f, Vector3.One * 2e7f);

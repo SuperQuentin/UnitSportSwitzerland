@@ -1,0 +1,219 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>M07 Juice: interacting with things</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--amber:#FAB81A;--amber-d:rgba(250,184,26,.16);--glass:rgba(255,255,255,.06);--line:rgba(255,255,255,.11);--dim:#8e96a8;--ink:#05070b;--txt:#e8eaf0;--spring:cubic-bezier(.34,1.56,.64,1);--red:#ff6b6b;--ok:#5fd38a;--ic:#cfd5e3}
+html,body{width:1280px;height:720px;overflow:hidden;background:#07090d;color:var(--txt);font-family:"Segoe UI",system-ui,Arial,sans-serif}
+.canvas{width:1280px;height:720px;display:flex;flex-direction:column;padding:10px 12px 8px}
+header{height:30px;display:flex;align-items:baseline;gap:12px;flex:none}
+header .id{color:var(--amber);font-weight:700;font-size:15px;letter-spacing:.06em}
+header h1{font-size:18px;font-weight:600;white-space:nowrap}
+header .sub{color:var(--dim);font-size:11.5px;margin-left:auto;max-width:700px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid{flex:1;display:grid;gap:6px 10px;min-height:0;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr)}
+.cell{display:flex;flex-direction:column;min-height:0;min-width:0}
+.lab{font-weight:600;font-size:12px;display:flex;gap:6px;align-items:center;margin-bottom:3px;white-space:nowrap;overflow:hidden}
+.lab b{color:var(--ink);background:var(--amber);border-radius:9px;padding:0 6px;font-size:10.5px;flex:none}
+.note{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.3}
+.vis{height:264px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(160deg,#151c2a,#0a0e16);position:relative;overflow:hidden}
+.st{position:absolute;left:50%;top:0;width:0;height:264px}
+.st>*{position:absolute}
+.ic{width:32px;height:32px;color:var(--ic);display:block}
+.sl{width:52px;height:52px;border:1px solid var(--line);border-radius:9px;background:var(--glass);display:grid;place-items:center}
+.sg{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(2,52px);gap:6px}
+.it{width:36px;height:36px;color:var(--ic)}
+.it svg{width:36px;height:36px;display:block}
+.cap{font-size:10.5px;color:var(--dim);text-align:center;white-space:nowrap}
+.cap b{color:var(--amber);font-weight:600}
+.ghosted{opacity:.22}
+.curs{width:16px;height:20px}
+/* 1 pick up */
+@keyframes liftA{0%,12%{transform:translate(0,0) scale(1) rotate(0);filter:drop-shadow(0 0 0 rgba(0,0,0,0));animation-timing-function:var(--spring)}16%,28%{transform:translate(0,0) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:ease-out}38%,60%{transform:translate(46px,32px) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:ease-in-out}68%,80%{transform:translate(24px,50px) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:ease-in-out}88%{transform:translate(0,0) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:var(--spring)}92%,100%{transform:translate(0,0) scale(1) rotate(0);filter:drop-shadow(0 0 0 rgba(0,0,0,0))}}
+@keyframes curA{0%,12%{transform:translate(0,0)}28%{transform:translate(0,0);animation-timing-function:ease-out}38%,60%{transform:translate(46px,32px);animation-timing-function:ease-in-out}68%,80%{transform:translate(24px,50px);animation-timing-function:ease-in-out}88%,100%{transform:translate(0,0)}}
+.lift{animation:liftA 3s infinite}
+.cur{animation:curA 3s infinite}
+/* 2 drop */
+@keyframes dropA{0%,12%{transform:translate(-116px,58px) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:ease-out}22%{transform:translate(0,0) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:ease-in}25%{transform:translate(0,0) scale(.9) rotate(0);filter:drop-shadow(0 0 0 rgba(0,0,0,0));animation-timing-function:var(--spring)}31%{transform:translate(0,0) scale(1.04) rotate(0);filter:drop-shadow(0 0 0 rgba(0,0,0,0))}35%,80%{transform:translate(0,0) scale(1) rotate(0);filter:drop-shadow(0 0 0 rgba(0,0,0,0));animation-timing-function:var(--spring)}84%{transform:translate(0,0) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6));animation-timing-function:ease-in-out}94%,100%{transform:translate(-116px,58px) scale(1.15) rotate(6deg);filter:drop-shadow(0 8px 6px rgba(0,0,0,.6))}}
+@keyframes ringA{0%,24.9%{transform:scale(.6);opacity:0}25%{transform:scale(.6);opacity:.95;animation-timing-function:ease-out}33%,100%{transform:scale(1.9);opacity:0}}
+@keyframes tgtA{0%,24.9%{border-color:rgba(255,255,255,.11);background:rgba(255,255,255,.06)}25%{border-color:#FAB81A;background:rgba(250,184,26,.16)}45%{border-color:#FAB81A;background:rgba(250,184,26,.16)}60%,100%{border-color:rgba(255,255,255,.11);background:rgba(255,255,255,.06)}}
+@keyframes nudL{0%,25%{transform:translateX(0)}28%{transform:translateX(-1px);animation-timing-function:var(--spring)}34%,100%{transform:translateX(0)}}
+@keyframes nudD{0%,25%{transform:translateY(0)}28%{transform:translateY(1px);animation-timing-function:var(--spring)}34%,100%{transform:translateY(0)}}
+.drop{animation:dropA 3s infinite}
+.ring{width:52px;height:52px;border-radius:12px;border:2px solid var(--amber);opacity:0;animation:ringA 3s infinite}
+.tgt{animation:tgtA 3s infinite}.nl{animation:nudL 3s infinite}.nd{animation:nudD 3s infinite}
+/* 3 equip */
+@keyframes fxA{0%,17.9%{transform:translateX(0);opacity:0;animation-timing-function:ease-in-out}18%{transform:translateX(0);opacity:1;animation-timing-function:ease-in-out}26%,88%{transform:translateX(92px);opacity:1}92%{transform:translateX(92px);opacity:0}100%{transform:translateX(0);opacity:0}}
+@keyframes fyA{0%,17.9%{transform:translateY(0) rotate(0) scale(1.1);animation-timing-function:ease-out}18%{transform:translateY(0) rotate(0) scale(1.1);animation-timing-function:ease-out}22%{transform:translateY(-34px) rotate(-10deg) scale(1.1);animation-timing-function:ease-in}26%{transform:translateY(0) rotate(0) scale(1.18,.82);animation-timing-function:var(--spring)}30%{transform:translateY(0) rotate(0) scale(.95,1.06)}34%,100%{transform:translateY(0) rotate(0) scale(1)}}
+@keyframes pjA{0%,17.9%{opacity:1;transform:scale(1)}18%{opacity:0;transform:scale(1)}92%{opacity:0;transform:scale(.6);animation-timing-function:var(--spring)}98%{opacity:1;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+@keyframes pslA{0%,9%{transform:scale(1);animation-timing-function:var(--spring)}10%{transform:scale(.94);animation-timing-function:var(--spring)}12%{transform:scale(1)}13%{transform:scale(.94);animation-timing-function:var(--spring)}15%,100%{transform:scale(1)}}
+@keyframes ck1A{0%,9%{transform:scale(.3);opacity:0}9.1%{opacity:.9;animation-timing-function:ease-out}14%,100%{transform:scale(1.3);opacity:0}}
+@keyframes ck2A{0%,13%{transform:scale(.3);opacity:0}13.1%{opacity:.9;animation-timing-function:ease-out}18%,100%{transform:scale(1.3);opacity:0}}
+@keyframes topA{0%,25.9%{border-color:rgba(255,255,255,.11);background:rgba(255,255,255,.06)}26%{border-color:#FAB81A;background:rgba(250,184,26,.55)}40%{border-color:#FAB81A;background:rgba(250,184,26,.16)}88%{border-color:#FAB81A;background:rgba(250,184,26,.16)}94%,100%{border-color:rgba(255,255,255,.11);background:rgba(255,255,255,.06)}}
+@keyframes hopA{0%,26%{transform:translateY(0) scale(1);animation-timing-function:ease-out}30%{transform:translateY(-9px) scale(.96,1.05);animation-timing-function:ease-in}34%{transform:translateY(0) scale(1.07,.92);animation-timing-function:var(--spring)}38%,100%{transform:translateY(0) scale(1)}}
+@keyframes bodyA{0%,28%{background:#2a3248}32%,88%{background:rgba(250,184,26,.4)}94%,100%{background:#2a3248}}
+.fx{animation:fxA 3s infinite}.fy{animation:fyA 3s infinite}.pj{animation:pjA 3s infinite}.psl{animation:pslA 3s infinite}
+.ck{width:44px;height:44px;border-radius:50%;border:2px solid var(--amber);opacity:0}
+.ck1{animation:ck1A 3s infinite}.ck2{animation:ck2A 3s infinite}
+.top{animation:topA 3s infinite}.hop{transform-origin:50% 100%;animation:hopA 3s infinite}.body{animation:bodyA 3s infinite}
+/* 4 counts */
+.big{width:84px;height:84px;border-radius:12px;animation:bumpA 3s infinite}
+@keyframes bumpA{0%,33%{transform:scale(1)}36%{transform:scale(1.08);animation-timing-function:var(--spring)}42%,66%{transform:scale(1)}69%{transform:scale(1.08);animation-timing-function:var(--spring)}75%,100%{transform:scale(1)}}
+.cnt{position:absolute;right:7px;bottom:3px;width:30px;height:26px}
+.cnt span{position:absolute;right:0;bottom:0;font-size:21px;font-weight:700;line-height:26px;transform-origin:100% 100%;text-shadow:0 1px 2px #000}
+@keyframes n3{0%,33%{opacity:1;transform:scale(1)}33.1%{opacity:0}96%{opacity:0}100%{opacity:1}}
+@keyframes n4{0%,33%{opacity:0;transform:scale(1.4)}33.1%{opacity:1;transform:scale(1.4);animation-timing-function:var(--spring)}41%,66%{opacity:1;transform:scale(1)}66.1%,100%{opacity:0;transform:scale(1)}}
+@keyframes n5{0%,66%{opacity:0;transform:scale(1.4)}66.1%{opacity:1;transform:scale(1.4);animation-timing-function:var(--spring)}74%,90%{opacity:1;transform:scale(1)}96%,100%{opacity:0;transform:scale(1)}}
+@keyframes p1{0%,33%{opacity:0;transform:translateY(0)}33.1%{opacity:1;transform:translateY(0);animation-timing-function:ease-out}41%,100%{opacity:0;transform:translateY(-22px)}}
+@keyframes p2{0%,66%{opacity:0;transform:translateY(0)}66.1%{opacity:1;transform:translateY(0);animation-timing-function:ease-out}74%,100%{opacity:0;transform:translateY(-22px)}}
+.n3{animation:n3 3s infinite}.n4{animation:n4 3s infinite}.n5{animation:n5 3s infinite}
+.pl{font-size:16px;font-weight:700;color:var(--amber);opacity:0}
+.pl1{animation:p1 3s infinite}.pl2{animation:p2 3s infinite}
+/* 5 craft */
+.rc{display:flex;align-items:center;gap:7px;padding:10px;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.sm{width:40px;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--glass);display:grid;place-items:center;flex:none;position:relative}
+.sm svg{width:26px;height:26px;color:var(--ic)}
+.arr{color:var(--dim);font-size:13px;flex:none}
+.mk{width:54px;height:30px;border-radius:9px;background:var(--amber);color:var(--ink);font-weight:700;font-size:12.5px;display:grid;place-items:center;flex:none;animation:mkA 3s infinite}
+@keyframes mkA{0%,6%{transform:scale(1);animation-timing-function:ease-out}9%{transform:scale(.92);animation-timing-function:var(--spring)}13%,100%{transform:scale(1)}}
+.trk5{height:8px;border-radius:4px;background:#2a3144;overflow:hidden}
+.fil{height:8px;background:var(--amber);border-radius:4px;transform-origin:left center;animation:filA 3s infinite}
+@keyframes filA{0%,11%{transform:scaleX(0);opacity:1;animation-timing-function:linear}45%,55%{transform:scaleX(1);opacity:1}60%{transform:scaleX(1);opacity:0}60.1%,99.9%{transform:scaleX(0);opacity:0}100%{transform:scaleX(0);opacity:1}}
+.oi{animation:oiA 3s infinite}
+@keyframes oiA{0%,44.9%{transform:scale(0);opacity:0}45%{transform:scale(.2);opacity:1;animation-timing-function:var(--spring)}49%{transform:scale(1.25)}53%,90%{transform:scale(1);opacity:1}96%,100%{transform:scale(1);opacity:0}}
+@keyframes oslA{0%,44.9%{border-color:rgba(255,255,255,.11)}45%,52%{border-color:#FAB81A}62%,100%{border-color:rgba(255,255,255,.11)}}
+.osl{animation:oslA 3s infinite}
+.spk{position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3px 0 0 -3px;background:var(--amber);opacity:0;animation:spkA 3s infinite}
+@keyframes spkA{0%,44.9%{opacity:0;transform:translate(0,0) rotate(45deg) scale(.4)}45%{opacity:1;transform:translate(0,0) rotate(45deg) scale(.6);animation-timing-function:ease-out}53%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(45deg) scale(1.1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(45deg) scale(1.1)}}
+/* 6 pin */
+.hud{background:rgba(10,14,22,.85);border:1px solid var(--line);border-radius:10px;padding:5px 8px;width:136px;box-shadow:0 6px 18px rgba(0,0,0,.5);animation:hudA 3s infinite}
+@keyframes hudA{0%,19.5%{opacity:0;transform:scale(.88) translateY(6px);animation-timing-function:var(--spring)}27%{opacity:1;transform:scale(1.04) translateY(0)}31%,90%{opacity:1;transform:scale(1) translateY(0);animation-timing-function:ease-in}96%{opacity:0;transform:scale(.96) translateY(0)}100%{opacity:0;transform:scale(.88) translateY(6px)}}
+.hud h6{font-size:10.5px;font-weight:600;color:var(--amber);display:flex;align-items:center;gap:5px;padding:1px 0 3px}
+.hr{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;height:23px;padding:0 4px;border-radius:6px;position:relative}
+.hr .v{position:relative;width:42px;height:18px;text-align:right}
+.hr .v span{position:absolute;right:0;top:0;line-height:18px;font-weight:700;transform-origin:100% 50%}
+.red{color:var(--red);animation:redA 3s infinite}
+.grn{color:var(--ok);animation:grnA 3s infinite}
+.okk{color:var(--ok);font-weight:700}
+@keyframes redA{0%,49.9%{opacity:1}50%,95%{opacity:0}100%{opacity:1}}
+@keyframes grnA{0%,49.9%{opacity:0;transform:scale(1.5)}50%{opacity:1;transform:scale(1.5);animation-timing-function:var(--spring)}58%,90%{opacity:1;transform:scale(1)}96%,100%{opacity:0;transform:scale(1)}}
+@keyframes rowfA{0%,49.9%{background:transparent}50%{background:rgba(250,184,26,.16)}62%,100%{background:transparent}}
+.rwf{animation:rowfA 3s infinite}
+.rcard{display:flex;align-items:center;justify-content:space-between;width:150px;height:44px;padding:0 8px 0 12px;background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:10px;font-size:12px}
+.rcard small{display:block;font-size:10.5px;color:var(--dim)}
+.pb{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;color:var(--dim);animation:pbA 3s infinite}
+.pb svg{width:16px;height:16px}
+@keyframes pbA{0%,6%{transform:scale(1);color:#8e96a8;border-color:rgba(255,255,255,.11);background:transparent;animation-timing-function:ease-out}9%{transform:scale(.88);color:#8e96a8;animation-timing-function:var(--spring)}13%,96%{transform:scale(1);color:#FAB81A;border-color:#FAB81A;background:rgba(250,184,26,.16)}100%{transform:scale(1);color:#8e96a8;border-color:rgba(255,255,255,.11);background:transparent}}
+@keyframes pfx{0%,11.9%{transform:translateX(0);opacity:0;animation-timing-function:ease-in}12%{transform:translateX(0);opacity:1;animation-timing-function:ease-in}20%{transform:translateX(40px);opacity:1}20.5%,99.9%{transform:translateX(40px);opacity:0}100%{transform:translateX(0);opacity:0}}
+@keyframes pfy{0%,12%{transform:translateY(0) scale(1.1);animation-timing-function:ease-out}20%,100%{transform:translateY(-124px) scale(.8)}}
+.pfx{animation:pfx 3s infinite}.pfy{animation:pfy 3s infinite}
+/* 7 phone */
+.ph{left:0;top:66px;width:62px;height:132px;transform:translateX(-50%);border:2px solid #4a5470;border-radius:15px;background:#0b0f18;overflow:hidden;animation:phW 3s infinite}
+@keyframes phW{0%,10%{width:62px;animation-timing-function:var(--spring)}18%{width:250px}90%{width:250px;animation-timing-function:ease-in-out}96%,100%{width:62px}}
+.ph .inner{position:absolute;left:50%;margin-left:-125px;top:0;width:250px;height:128px}
+.tile{position:absolute;width:44px;height:44px;border-radius:10px;background:#1c2436;border:1px solid var(--line);animation:tlA 3s infinite;animation-delay:calc(var(--i)*20ms)}
+.tile i{position:absolute;left:11px;top:11px;width:20px;height:20px;border-radius:5px;background:#3a4560}
+.tile.m i{background:var(--amber)}
+@keyframes tlA{0%,16%{opacity:0;transform:scale(.8);animation-timing-function:var(--spring)}22%{opacity:1;transform:scale(1)}90%{opacity:1;transform:scale(1)}95%,100%{opacity:0;transform:scale(.8)}}
+.ov{position:absolute;left:129px;top:14px;width:44px;height:44px;border-radius:10px;background:#141b2b;border:1.5px solid var(--amber);overflow:hidden;opacity:0;animation:ovA 3s infinite}
+@keyframes ovA{0%,38%{opacity:0;left:129px;top:14px;width:44px;height:44px;border-radius:10px;animation-timing-function:ease-out}40%{opacity:1;left:129px;top:14px;width:44px;height:44px;border-radius:10px;animation-timing-function:var(--spring)}48%,76%{opacity:1;left:0;top:0;width:250px;height:128px;border-radius:13px;animation-timing-function:ease-in}82%{opacity:1;left:129px;top:14px;width:44px;height:44px;border-radius:10px}84%,100%{opacity:0;left:129px;top:14px;width:44px;height:44px;border-radius:10px}}
+.ovc{position:absolute;left:0;top:0;width:250px;height:128px;opacity:0;animation:ovcA 3s infinite}
+@keyframes ovcA{0%,44%{opacity:0}50%,74%{opacity:1}78%,100%{opacity:0}}
+.ovc b{position:absolute;left:14px;top:10px;font-size:12px;color:var(--amber);letter-spacing:.08em}
+.ovc svg{position:absolute;left:0;top:0}
+.cv{position:absolute;inset:0;background:#10172a;display:grid;place-items:center;z-index:2;animation:cvA 3s infinite;font-size:13px;color:var(--dim);font-weight:600}
+@keyframes cvA{0%,10%{opacity:1}14%,92%{opacity:0}96%,100%{opacity:1}}
+.hg{position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:#4a5470;z-index:3;opacity:0;animation:hgA 3s infinite}
+@keyframes hgA{0%,12%{opacity:0}18%,90%{opacity:.6}94%,100%{opacity:0}}
+/* 8 map and hologram */
+.pin{width:20px;height:28px;transform-origin:50% 100%;opacity:0;animation:dropP 3s infinite}
+@keyframes dropP{0%,9.9%{opacity:0;transform:translateY(-62px) scale(1,1);animation-timing-function:ease-in}10%{opacity:1;transform:translateY(-62px) scale(1,1);animation-timing-function:ease-in}17%{opacity:1;transform:translateY(0) scale(1.12,.8);animation-timing-function:ease-out}20%{transform:translateY(-9px) scale(.95,1.06);animation-timing-function:ease-in}23%{transform:translateY(0) scale(1.05,.95);animation-timing-function:ease-out}26%,90%{opacity:1;transform:translateY(0) scale(1,1)}95%{opacity:0;transform:translateY(0) scale(1,1)}100%{opacity:0;transform:translateY(-62px) scale(1,1)}}
+.rpl{width:40px;height:14px;border-radius:50%;border:2px solid var(--amber);opacity:0;animation:rplA 3s infinite}
+@keyframes rplA{0%,16.9%{transform:scale(.2);opacity:0}17%{transform:scale(.2);opacity:.9;animation-timing-function:ease-out}26%,100%{transform:scale(1.6);opacity:0}}
+.holo{overflow:hidden;animation:holoA 3s infinite}
+@keyframes holoA{0%,28%{clip-path:inset(100% 0 0 0);opacity:1;transform:translateY(8px);animation-timing-function:linear}70%,90%{clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0)}96%{clip-path:inset(0 0 0 0);opacity:0;transform:translateY(0)}100%{clip-path:inset(100% 0 0 0);opacity:0;transform:translateY(8px)}}
+.scan{width:104px;height:2px;border-radius:1px;background:var(--amber);box-shadow:0 0 8px 2px rgba(250,184,26,.7);opacity:0;animation:scanA 3s infinite}
+@keyframes scanA{0%,28%{opacity:0;transform:translateY(0);animation-timing-function:linear}28.1%{opacity:1;transform:translateY(0)}70%{opacity:1;transform:translateY(-68px)}71%,100%{opacity:0;transform:translateY(0)}}
+.mini{width:32px;height:52px;border:2px solid #4a5470;border-radius:7px;background:#0b0f18}
+.beam{width:100px;height:76px;background:linear-gradient(to top,rgba(250,184,26,.18),rgba(250,184,26,0));clip-path:polygon(34% 100%,66% 100%,100% 8%,0 8%)}
+.mid{width:0;height:200px;border-left:1px dashed var(--line);top:40px}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="jk" viewBox="0 0 36 36"><path d="M12 5 7 8 2 16l5 3 2-2v14h18V17l2 2 5-3-5-8-5-3c-2 3-10 3-12 0z" fill="currentColor"/><path d="M18 8v23" stroke="#0b0f18" stroke-width="1.6"/></symbol>
+<symbol id="bt" viewBox="0 0 36 36"><path d="M14 3h8v5l3 4v19a2 2 0 0 1-2 2H13a2 2 0 0 1-2-2V12l3-4z" fill="currentColor"/><rect x="13" y="17" width="10" height="9" rx="1.5" fill="#0b0f18" opacity=".55"/></symbol>
+<symbol id="bl" viewBox="0 0 36 36"><path d="M21 2 7 21h9l-3 13 16-21h-9z" fill="currentColor"/></symbol>
+<symbol id="bx" viewBox="0 0 36 36"><rect x="4" y="8" width="28" height="23" rx="3" fill="currentColor"/><path d="M4 15h28M15 8v7h6V8" stroke="#0b0f18" stroke-width="1.6" fill="none" opacity=".6"/></symbol>
+<symbol id="rp" viewBox="0 0 36 36"><path d="M6 24c4-14 20-14 24 0M6 28c4-14 20-14 24 0" stroke="currentColor" stroke-width="3.2" fill="none" stroke-linecap="round"/></symbol>
+<symbol id="pn" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5.5" fill="currentColor"/><path d="M12 12v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</defs></svg>
+<div class="canvas">
+<header><span class="id">M07</span><h1>Juice: interacting with things</h1><span class="sub">Every interaction answers back. All under 0.25 s except progress; Reduce motion turns them to fades.</span></header>
+<div class="grid">
+
+<div class="cell"><div class="lab"><b>01</b>Pick up</div><div class="vis"><div class="st">
+<div class="sg" style="left:-84px;top:62px"><div class="sl"><svg class="ic ghosted"><use href="#jk"/></svg></div><div class="sl"><svg class="ic"><use href="#bl"/></svg></div><div class="sl"></div><div class="sl"></div><div class="sl"><svg class="ic"><use href="#bt"/></svg></div><div class="sl"><svg class="ic"><use href="#bx"/></svg></div></div>
+<div class="it lift" style="left:-76px;top:70px"><svg><use href="#jk"/></svg></div>
+<svg class="curs cur" style="left:-62px;top:82px" viewBox="0 0 16 20"><path d="M1 1v15l4-4 3 7 3-1.5-3-6.5h6z" fill="#fff" stroke="#05070b" stroke-width="1.2" stroke-linejoin="round"/></svg>
+<div class="cap" style="left:-100px;width:200px;top:196px">Lift <b>0.12 s</b>, tilt 6 degrees, shadow</div>
+</div></div><div class="note">The item is in your hand: it lifts to 1.15, tilts, casts a shadow and trails the cursor. Lift 0.12 s.</div></div>
+
+<div class="cell"><div class="lab"><b>02</b>Drop into a slot</div><div class="vis"><div class="st">
+<div class="sg" style="left:-84px;top:62px"><div class="sl"><svg class="ic"><use href="#bt"/></svg></div><div class="sl nl"><svg class="ic"><use href="#bx"/></svg></div><div class="sl tgt"></div><div class="sl"></div><div class="sl"><svg class="ic"><use href="#bl"/></svg></div><div class="sl nd"><svg class="ic"><use href="#bx"/></svg></div></div>
+<div class="ring" style="left:32px;top:62px"></div>
+<div class="it drop" style="left:40px;top:70px"><svg><use href="#jk"/></svg></div>
+<div class="cap" style="left:-100px;width:200px;top:196px">Squash 1.15, .9, 1 in <b>0.2 s</b></div>
+</div></div><div class="note">It landed: a squash, one amber ring from the slot, neighbours nudge 1 px. Landing 0.2 s.</div></div>
+
+<div class="cell"><div class="lab"><b>03</b>Double-click: equip</div><div class="vis"><div class="st">
+<div class="sl psl" style="left:-122px;top:94px"></div>
+<div class="ck ck1" style="left:-118px;top:98px"></div><div class="ck ck2" style="left:-118px;top:98px"></div>
+<div class="it pj" style="left:-114px;top:102px"><svg><use href="#jk"/></svg></div>
+<div class="cap" style="left:-122px;width:52px;top:152px">Pack</div>
+<div class="sl top" style="left:-30px;top:94px"></div>
+<div class="cap" style="left:-30px;width:52px;top:152px">Top</div>
+<div class="hop" style="left:48px;top:70px;width:40px;height:76px"><div style="position:absolute;left:9px;top:0;width:22px;height:22px;border-radius:50%;background:#3a4560"></div><div class="body" style="position:absolute;left:2px;top:25px;width:36px;height:51px;border-radius:11px 11px 6px 6px"></div></div>
+<div class="fx" style="left:-114px;top:102px;width:36px;height:36px"><div class="it fy" style="position:relative"><svg><use href="#jk"/></svg></div></div>
+<div class="cap" style="left:-100px;width:200px;top:196px">Arc <b>0.24 s</b>, flash, hop</div>
+</div></div><div class="note">It is worn: the jacket arcs to the Top slot, the slot flashes amber, the figure hops. Flight 0.24 s.</div></div>
+
+<div class="cell"><div class="lab"><b>04</b>Counts and stacks</div><div class="vis"><div class="st">
+<div class="sl big" style="left:-42px;top:70px"><svg class="ic" style="width:48px;height:48px"><use href="#bt"/></svg><div class="cnt"><span class="n3">3</span><span class="n4">4</span><span class="n5">5</span></div></div>
+<div class="pl pl1" style="left:50px;top:78px">+1</div><div class="pl pl2" style="left:50px;top:78px">+1</div>
+<div class="cap" style="left:-100px;width:200px;top:172px">Water bottle</div>
+<div class="cap" style="left:-100px;width:200px;top:196px">Pop 1.4 to 1 in <b>0.24 s</b></div>
+</div></div><div class="note">The stack grew: the number pops from 1.4 to 1 and a small +1 floats off. Each pop 0.24 s.</div></div>
+
+<div class="cell"><div class="lab"><b>05</b>Craft</div><div class="vis"><div class="st">
+<div class="rc" style="left:-140px;top:66px;width:280px"><div class="sm"><svg><use href="#rp"/></svg></div><div class="sm"><svg><use href="#bl"/></svg></div><span class="arr">&#8594;</span><div class="mk">Make</div><span class="arr">&#8594;</span><div class="sm osl" style="width:44px;height:44px"><svg class="oi"><use href="#jk"/></svg>
+<i class="spk" style="--dx:0px;--dy:-32px"></i><i class="spk" style="--dx:22px;--dy:-22px"></i><i class="spk" style="--dx:32px;--dy:0px"></i><i class="spk" style="--dx:22px;--dy:22px"></i><i class="spk" style="--dx:0px;--dy:32px"></i><i class="spk" style="--dx:-22px;--dy:22px"></i><i class="spk" style="--dx:-32px;--dy:0px"></i><i class="spk" style="--dx:-22px;--dy:-22px"></i></div></div>
+<div class="trk5" style="left:-125px;top:146px;width:250px"><div class="fil"></div></div>
+<div class="cap" style="left:-125px;width:250px;top:160px;text-align:left">Progress fills in about <b>1 s</b></div>
+<div class="cap" style="left:-100px;width:200px;top:196px">Burst of 8 sparkles in <b>0.24 s</b></div>
+</div></div><div class="note">Making takes time: the bar fills in about 1 s, then a burst says it is done and the item pops in.</div></div>
+
+<div class="cell"><div class="lab"><b>06</b>Pin to the HUD</div><div class="vis"><div class="st">
+<div class="hud" style="left:8px;top:14px"><h6><svg width="13" height="13"><use href="#pn"/></svg>Pinned: Axe</h6><div class="hr"><span>Rope</span><span class="v"><span class="okk">2/2 &#10003;</span></span></div><div class="hr rwf"><span>Wood</span><span class="v"><span class="red">3/5</span><span class="grn">5/5 &#10003;</span></span></div></div>
+<div class="rcard" style="left:-146px;top:130px"><div>Axe<small>2 Rope, 5 Wood</small></div><div class="pb"><svg><use href="#pn"/></svg></div></div>
+<div class="pfx" style="left:-30px;top:138px;width:24px;height:24px"><div class="pfy" style="width:24px;height:24px;color:var(--amber)"><svg width="24" height="24"><use href="#pn"/></svg></div></div>
+<div class="cap" style="left:-100px;width:200px;top:196px">Fly <b>0.24 s</b>, tick pop <b>0.24 s</b></div>
+</div></div><div class="note">It is tracked: the pin flies to the HUD card; a missing 3/5 turns into a green tick with a pop. 0.24 s.</div></div>
+
+<div class="cell"><div class="lab"><b>07</b>Phone: unfold, open an app</div><div class="vis"><div class="st">
+<div class="ph"><div class="inner">
+<div class="tile" style="--i:0;left:25px;top:14px"><i></i></div><div class="tile" style="--i:1;left:77px;top:14px"><i></i></div><div class="tile m" style="--i:2;left:129px;top:14px"><i></i></div><div class="tile" style="--i:3;left:181px;top:14px"><i></i></div>
+<div class="tile" style="--i:4;left:25px;top:68px"><i></i></div><div class="tile" style="--i:5;left:77px;top:68px"><i></i></div><div class="tile" style="--i:6;left:129px;top:68px"><i></i></div><div class="tile" style="--i:7;left:181px;top:68px"><i></i></div>
+<div class="ov"><div class="ovc"><b>MAP</b><svg width="250" height="128" viewBox="0 0 250 128"><path d="M0 70c40-30 70 20 110-10s80 10 140-20" stroke="#3a4560" stroke-width="3" fill="none"/><path d="M60 128 100 40 140 128M170 128l30-60 50 60" stroke="#2c3652" stroke-width="2" fill="none"/><circle cx="150" cy="64" r="6" fill="#FAB81A"/></svg></div></div>
+</div><div class="cv">9:41</div><i class="hg"></i></div>
+<div class="cap" style="left:-100px;width:200px;top:216px">Unfold <b>0.24 s</b>, zoom from tile <b>0.24 s</b></div>
+</div></div><div class="note">It opens like a real device: the hinge springs wide, then the app grows out of its tile. 0.24 s each.</div></div>
+
+<div class="cell"><div class="lab"><b>08</b>Map pin and hologram</div><div class="vis"><div class="st">
+<div class="mid"></div>
+<svg style="left:-140px;top:90px;width:124px;height:90px" viewBox="0 0 124 90"><rect width="124" height="90" rx="8" fill="#141b2b" stroke="rgba(255,255,255,.11)"/><path d="M0 24h124M0 58h124M30 0v90M80 0v90" stroke="#232c42" stroke-width="1"/><path d="M0 70c25-20 45 10 70-12s40-10 54-24" stroke="#3a4560" stroke-width="3" fill="none"/></svg>
+<div class="rpl" style="left:-104px;top:133px"></div>
+<svg class="pin" style="left:-94px;top:112px" viewBox="0 0 20 28"><path d="M10 27C4 18 1 14 1 9a9 9 0 0 1 18 0c0 5-3 9-9 18z" fill="#FAB81A"/><circle cx="10" cy="9" r="3.4" fill="#05070b"/></svg>
+<div class="cap" style="left:-140px;width:124px;top:216px">Pin <b>0.2 s</b> bounce</div>
+<div class="holo" style="left:28px;top:74px;width:100px;height:76px"><div class="beam" style="position:absolute;left:0;top:0"></div>
+<svg style="position:absolute;left:0;top:0" width="100" height="76" viewBox="0 0 100 76"><polygon points="4,68 26,40 40,52 62,14 80,44 90,34 98,68" fill="rgba(250,184,26,.07)" stroke="#FAB81A" stroke-width="1.1"/><path d="M26 40 32 68M40 52 48 68M62 14 58 68M62 14 76 68M80 44 84 68M90 34 92 68M62 14 40 52M62 14 80 44M12 60 30 50 42 58 62 40 82 56 92 60" stroke="#FAB81A" stroke-width=".9" fill="none" opacity=".75"/></svg></div>
+<div class="scan" style="left:26px;top:144px"></div>
+<div class="mini" style="left:62px;top:150px"></div>
+<div class="cap" style="left:16px;width:124px;top:216px">Scan <b>1 s</b>, rise 8 px</div>
+</div></div><div class="note">It is placed: the pin drops and rings the map; the relief is built bottom to top by a scan line. 0.2 s, scan 1 s.</div></div>
+
+</div></div></body></html>

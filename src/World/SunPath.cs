@@ -211,13 +211,36 @@ public static class SunPath
         Model == SunModel.Fixed ? (rise ? Sunrise : Sunset) : RiseOrSet(Today(), rise);
 
     /// <summary>The real sunrise or sunset at Bern on <paramref name="date"/>, hours of Swiss civil time.</summary>
-    public static double RiseOrSet(DateOnly date, bool rise)
-    {
-        double El(double hour)
+    public static double RiseOrSet(DateOnly date, bool rise) =>
+        RiseOrSet(date, rise, BernE, BernN) ?? (rise ? Sunrise : Sunset);
+
+    /// <summary>Bern's sunrise or sunset, read through the sky's own (LV95-cell) place: the fixed day's hours.</summary>
+    private static double? RiseOrSet(DateOnly date, bool rise, double e, double n) =>
+        Crossing(rise, hour =>
         {
-            Toward(SkyBody.Sun, date, hour, BernE, BernN, out float el);
-            return el + 0.833;
-        }
+            Toward(SkyBody.Sun, date, hour, e, n, out float el);
+            return el;
+        });
+
+    /// <summary>
+    /// The real sunrise or sunset at <paramref name="at"/> on <paramref name="date"/>, hours of Swiss
+    /// civil time (#1801: far away it may fall at any hour of the Swiss day). Null when the sun does not
+    /// cross the horizon that way there: polar night or midnight sun.
+    /// </summary>
+    public static double? RiseOrSet(DateOnly date, bool rise, GlobalPos at)
+    {
+        var geo = at.Geodetic;
+        return Crossing(rise, hour => (float)Ephemeris.Topocentric(SkyBody.Sun, SwissTime.ToUtc(date, hour), geo).ElevationDeg);
+    }
+
+    /// <summary>The sun's elevation at <paramref name="at"/>, degrees, at <paramref name="hour"/> (Swiss civil time) on <paramref name="date"/>.</summary>
+    public static float ElevationAt(DateOnly date, double hour, GlobalPos at) =>
+        (float)Ephemeris.Topocentric(SkyBody.Sun, SwissTime.ToUtc(date, hour), at.Geodetic).ElevationDeg;
+
+    /// <summary>The hour the sun's upper limb crosses the horizon (refraction -0.833°), rising or setting; null when it never does.</summary>
+    private static double? Crossing(bool rise, Func<double, float> elevation)
+    {
+        double El(double hour) => elevation(hour) + 0.833;
         // morning: the first climb through the horizon; evening: the last fall
         const double step = 0.25;
         for (double a = 0; a < 24; a += step)
@@ -231,7 +254,7 @@ public static class SunPath
             }
             return (a + b) / 2;
         }
-        return rise ? Sunrise : Sunset;
+        return null;
     }
 
     /// <summary>A place on the Earth, and true north as a unit vector in LV95 grid east / north.</summary>

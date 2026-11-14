@@ -111,6 +111,7 @@ The fix: the network and cover stages read buildings from the leaves' building s
   - The `Layers` flags are re-meant as cube flags, and the cube layer stops being opt-in (#1650).
 - **Scripts**:
   - `tools/rebuild-map.sh` (223) and `tools/build-france.sh` (171) are deleted or redone on `--cube*`.
+  - `tools/build-swiss-nas.sh`: the flat v3 commands (`start`/`status`/`test`, `tools/lib/swiss-nas-chain.sh`) are deleted; its `cube` commands (`tools/lib/cube-nas-chain.sh`, #1794) are the NAS build from then on (`tools/swiss-nas-run`).
   - `tools/deploy-linux.sh` (lines 271-330) and `tools/deploy/gzip-tiles.sh` ship `.cubl` (#1650).
   - About 20 `*netcheck.sh` scripts and `refshots.sh`, `trailer.sh`, `run-worktree.sh` and `wt.ps1` take `CHUNKS=` pointing at `terrain_chunks`. They move to the leaf dir (`TerrainPaths.FindLeafDir`: `<chunks>_cube`).
 - **Tests** (`tests/UnitSportSwitzerland.Tests`):

@@ -117,6 +117,9 @@ public sealed class GameSettings
     /// <summary>Distance fog in the world shaders. Off by default: the horizon is the point.</summary>
     public bool Fog { get; set; }
 
+    /// <summary>Light shafts from the sun past ridges, trees and buildings (#1479, World/SunDisc): a screen pass, off by default on phones and standalone headsets.</summary>
+    public bool SunRays { get; set; } = !Platform.IsMobile;
+
     /// <summary>
     /// The menus' look (#1135, <see cref="Ui.Skins.MenuSkin"/>): "auto" (the day skin by day, the night skin by night)
     /// or a skin's id (a file in <c>assets/skins/</c> or <c>user://skins/</c>).

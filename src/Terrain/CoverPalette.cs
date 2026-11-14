@@ -66,11 +66,17 @@ public static class CoverPalette
             CoverClass.TownPaving => new Color(0.50f, 0.50f, 0.48f),   // stone and concrete slabs
             CoverClass.TunnelRoof => new Color(0.60f, 0.60f, 0.57f),   // poured concrete
             CoverClass.Border => new Color(0.56f, 0.25f, 0.69f),       // a test world's canton border (#1038), the stripes' purple
+
+            // the earth fill's biomes (#1809): their own snow line is the biome's (FillBiome.SnowLineM), not the Alps'
+            CoverClass.Sand => new Color(0.78f, 0.66f, 0.46f),
+            CoverClass.DryGrass => new Color(0.62f, 0.57f, 0.36f),
+            CoverClass.Tundra => new Color(0.47f, 0.45f, 0.33f),
+            CoverClass.LushGround => new Color(0.24f, 0.44f, 0.18f),
             _ => OpenGround(altitude),
         };
 
         // snow caps everything above the permanent line except open water
-        if (altitude > SnowLine && cover != CoverClass.Water)
+        if (altitude > SnowLine && cover != CoverClass.Water && !IsBiomeGround(cover))
         {
             float t = Mathf.Clamp((altitude - SnowLine) / 250f, 0f, 1f);
             c = c.Lerp(new Color(0.92f, 0.94f, 0.96f), t);
@@ -87,6 +93,9 @@ public static class CoverPalette
             Mathf.Clamp(c.B + v, 0f, 1f),
             pattern);
     }
+
+    /// <summary>The earth fill's biome grounds (#1809): drawn by their biome, which already put ice over its own snow line.</summary>
+    public static bool IsBiomeGround(CoverClass cover) => cover is CoverClass.Sand or CoverClass.DryGrass or CoverClass.Tundra or CoverClass.LushGround;
 
     /// <summary>Unmapped ground: pasture low down, alpine turf then bare ground higher up.</summary>
     private static Color OpenGround(float altitude)

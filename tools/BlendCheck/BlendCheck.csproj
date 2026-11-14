@@ -18,6 +18,8 @@
     <Compile Include="..\..\src\Terrain\ProceduralWorld*.cs" Link="Generator\%(Filename)%(Extension)" />
     <!-- #1509 G2 B5: the generated world as cube leaves -->
     <!-- LeafStandIn is the game's (its stand-in tiles' water layers and building ids since #1634, #1658): none of the checks reads it -->
+    <!-- the earth fill's biomes (#1809), applied by GeneratedLeaves -->
+    <Compile Include="..\..\src\Terrain\Biomes\*.cs" Link="Biomes\%(Filename)%(Extension)" />
     <!-- LeafTileName names store files from a GlobalPos (Godot, #1726 D2): none of the checks reads it -->
     <Compile Include="..\..\src\Terrain\Leaves\*.cs" Exclude="..\..\src\Terrain\Leaves\LeafStandIn.cs;..\..\src\Terrain\Leaves\SitePads.cs;..\..\src\Terrain\Leaves\LeafTileName.cs" Link="Leaves\%(Filename)%(Extension)" />
     <!-- the source chain the game runs it through: generation, blend loads, cache invalidation -->
@@ -33,6 +35,8 @@
     <!-- the coarse heightmap the generated terrain is shaped on (tools/swiss_relief.py); LogicalName
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="..\..\src\Terrain\swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
+    <!-- the earth fill's biomes (#1809): their photo statistics -->
+    <EmbeddedResource Include="..\..\src\Terrain\Biomes\photo_stats.bin.gz" LogicalName="photo_stats.bin.gz" WithCulture="false" />
   </ItemGroup>
 
 </Project>

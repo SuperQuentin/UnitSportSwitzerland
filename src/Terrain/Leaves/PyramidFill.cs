@@ -12,7 +12,8 @@ namespace UnitSport.Terrain.Leaves;
 /// soft clamp to <see cref="DetailClampM"/>. Its broad shapes are left out: its valleys, pressed flat along its own
 /// rivers, are not the pyramid's, and <c>G</c> less its 500 m macro relief dug a trench 50-70 m deep along the Lavaux
 /// shore (the additive correction of <c>terrain/blend-convex-not-additive</c>);</item>
-/// <item>the pyramid's lakes (<see cref="CubeManifest.Lakes"/>) are water at their level, over a bed shelving from the
+/// <item>the pyramid's lakes (<see cref="CubeManifest.Lakes"/>) and its sea (ground at the geoid, <see cref="PyramidBase.SeaSurface"/>,
+/// #1808) are water at their level, over a bed shelving from the
 /// pyramid's shore (<see cref="WaterBed.OpenDepth"/>); the generator's own lakes are not: none of its lake or its land
 /// where the pyramid says what is there, and its detail fades out over its lakes and near the pyramid's shores;</item>
 /// <item>the cover is the generator's but at the pyramid's lakes (water there, open ground where the generator's lake was);
@@ -104,8 +105,10 @@ public static class PyramidFill
             low = Box(low, ls, 0, 1);
         }
 
-        // the shores round the leaf: the pyramid's lakes on a window, and the distance to the other side from each sample
-        var shores = Shores(pyramid, face, gi0, gj0, cells, latticeLevel, cellM);
+        // the sea over the leaf and the shores' window round it (#1808)
+        var sea = pyramid.SeaOver(face, gi0 - MarginVertices, gj0 - MarginVertices, cells + 2 * MarginVertices, latticeLevel);
+        // the shores round the leaf: the pyramid's lakes and sea on a window, and the distance to the other side from each sample
+        var shores = Shores(pyramid, sea, face, gi0, gj0, cells, latticeLevel, cellM);
 
         var heights = new float[n * n];
         var lake = new float[n * n];
@@ -133,7 +136,7 @@ public static class PyramidFill
                     lake[k] = float.NaN;
                     continue;
                 }
-                float level = pyramid.LakeAt(ph);
+                float level = WaterAt(pyramid, sea, gi0 + i, gj0 + j, ph);
                 lake[k] = level;
                 double h;
                 if (!float.IsNaN(level))
@@ -225,7 +228,11 @@ public static class PyramidFill
             }
             content.Buildings = new BuildingTile { Id = bt.Id, Buildings = kept };
         }
-        if (content.Roads is { } roads) LeafRecords.Map(roads, lift);
+        // a leaf all water (the open sea, #1808) has no roads; one with a shore keeps them, the drowned ones on the bed
+        bool allWet = true;
+        for (int k = 0; k < ground.Lake.Length && allWet; k++) allWet = Wet(k);
+        if (allWet) content.Roads = null;
+        else if (content.Roads is { } roads) LeafRecords.Map(roads, lift);
     }
 
     /// <summary>A leaf's lattice spacing across its middle, metres (~1.19 at level 14).</summary>
@@ -287,9 +294,17 @@ public static class PyramidFill
         public double ToDry(int i, int j) => At(toDry, i, j);
     }
 
-    private static ShoreField? Shores(PyramidBase pyramid, int face, long gi0, long gj0, int cells, int latticeLevel, double cellM)
+    /// <summary>The water the pyramid's ground of height <paramref name="h"/> at a lattice point stands in: a lake's level, the sea's (#1808), or NaN.</summary>
+    private static float WaterAt(PyramidBase pyramid, PyramidBase.SeaPatch? sea, long gi, long gj, double h)
     {
-        if (pyramid.Lakes.Length == 0) return null;
+        float lake = pyramid.LakeAt(h);
+        if (!float.IsNaN(lake) || sea == null) return lake;
+        return sea.LevelAt(gi, gj, h);
+    }
+
+    private static ShoreField? Shores(PyramidBase pyramid, PyramidBase.SeaPatch? sea, int face, long gi0, long gj0, int cells, int latticeLevel, double cellM)
+    {
+        if (pyramid.Lakes.Length == 0 && sea == null) return null;
         int side = (cells + 2 * MarginVertices) / WindowStep + 1;
         var wet = new bool[side * side];
         int wetCount = 0;
@@ -298,8 +313,9 @@ public static class PyramidFill
             int count = 0;
             for (int a = 0; a < side; a++)
             {
-                double h = pyramid.HeightAt(face, gi0 - MarginVertices + (long)a * WindowStep, gj0 - MarginVertices + (long)b * WindowStep, latticeLevel);
-                if (double.IsNaN(h) || float.IsNaN(pyramid.LakeAt(h))) continue;
+                long gi = gi0 - MarginVertices + (long)a * WindowStep, gj = gj0 - MarginVertices + (long)b * WindowStep;
+                double h = pyramid.HeightAt(face, gi, gj, latticeLevel);
+                if (double.IsNaN(h) || float.IsNaN(WaterAt(pyramid, sea, gi, gj, h))) continue;
                 wet[b * side + a] = true;
                 count++;
             }
