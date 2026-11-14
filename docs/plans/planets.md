@@ -3,7 +3,7 @@
 
 # Planets: every body, the Earth included, on one world system (H7 and C3 of #1430)
 
-Status: **approved by the user** (2026-11-14), the clock rule included (section 2). Issue: #1430 (H7, C3), sub-issues #1847-#1854,
+Status: **approved by the user** (2026-11-14), the clock rule included (section 2). **H7a (#1847) built in PR #1864.** Issue: #1430 (H7, C3), sub-issues #1847-#1854,
 one per phase (section 12). Planned from `main` at `0ab431fd6`.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
@@ -133,6 +133,14 @@ needs a rule for where the other bodies are.
   the Moon's, the Earth hangs still on the near side and spins once a game day.
 - **Checks** pin it: planet checks run `--sun real --date 2027-07-15 --time <h>` (the frame tree needs a real date;
   `--sun fixed` keeps its fixed light for everything else and puts the bodies at the fixed date's noon).
+- **Found building H7a (#1847, 2026-11-14): the sky's date does not advance with game days.** The sky's moment is
+  today's calendar date plus the game hour (`SunPath.Today`, `DayNight`), so at game midnight the bodies jump back a
+  day (the Moon by ~13° of its orbit, ~87,000 km). Nobody sees it on the ground; a frame tree on it would. `SkyMoment`
+  keeps the two parts apart (when the bodies are, how the Earth is turned), so whichever rule the user picks feeds it:
+  (a) the bodies at the sim clock's pace from the calendar date (continuous; from the ground the sky stays as today,
+  the Moon's phase following the real calendar; a lunar day lasts its real 29.5 days); (b) the bodies at the game's
+  pace (the date advancing each game day: a lunar day of ~12 real hours, but the Sun's season drifts away from the
+  calendar 60 times as fast); (c) today's, with the jump. Wired in #1850.
 
 ### A worked example: from Geneva to the Moon and back
 
