@@ -1150,3 +1150,12 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 - [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
 - [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.
+
+## The shared motion helper, on the pause menu ([#1831](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1831))
+
+In a window (`--menu`, or Esc in a world), Cartoon.
+
+- [ ] Open and close the pause menu with Esc, a few times fast → it springs in (a slight overshoot, about 0.18 s) and shrinks out quicker (0.10 s); keys and the pointer work at once, Esc twice in a row never leaves it half-faded.
+- [ ] Click Resume, Settings, Controls → each button squashes a little and springs back; the page it opens is not delayed.
+- [ ] Settings › Gameplay › Reduce motion on, then open and close the pause menu → a plain fade, no scale and no squash.
+- [ ] In a headset, open the pause menu → a plain fade, no scale.
