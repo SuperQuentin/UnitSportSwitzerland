@@ -87,6 +87,21 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     }
 
     /// <summary>A mouse look by <paramref name="relative"/> pixels (also a check's, <c>--spectatorturncheck</c>).</summary>
+    /// <summary>
+    /// Turns the view toward a world direction by at most <paramref name="maxStep"/> radians (the target's align hold,
+    /// #1850): yaw and pitch eased as a mouse look would move them, never a roll.
+    /// </summary>
+    public void TurnToward(Vector3 direction, float maxStep)
+    {
+        if (direction.LengthSquared() < 1e-12f) return;
+        var d = direction.Normalized();
+        float yaw = Mathf.Atan2(-d.X, -d.Z), pitch = Mathf.Asin(Mathf.Clamp(d.Y, -1f, 1f));
+        float dy = Mathf.Wrap(yaw - _yaw, -Mathf.Pi, Mathf.Pi), dp = pitch - _pitch;
+        _yaw += Mathf.Clamp(dy, -maxStep, maxStep);
+        _pitch = Mathf.Clamp(_pitch + Mathf.Clamp(dp, -maxStep, maxStep), -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+        Rotation = new Vector3(_pitch, _yaw, 0);
+    }
+
     public void Look(Vector2 relative)
     {
         SyncLook();
