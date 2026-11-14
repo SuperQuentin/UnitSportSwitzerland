@@ -149,6 +149,12 @@ public partial class MoonCheck : Node
     /// </summary>
     public static bool FromOrbit => CmdArgs.Has("--fromorbit");
 
+    /// <summary>
+    /// How high over the target the flight ends and <c>--fromorbit</c> starts: 100 km, or well inside a small moon's
+    /// sphere of influence (Phobos': 31 km from its centre, #1853), so the camera is counted from the target there.
+    /// </summary>
+    private static double OrbitM => Math.Min(100_000, 0.6 * (Target.SphereOfInfluence - Target.Shape.A));
+
     private void Start()
     {
         _cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as Camera3D;
@@ -162,7 +168,7 @@ public partial class MoonCheck : Node
             // DEG degrees west of the point under the sun (--fromorbit DEG, 45 by default): the sun that far from the zenith,
             // in the morning (80: just after sunrise)
             double off = CmdArgs.Double("--fromorbit") ?? 45;
-            var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - off, 360), 100_000);
+            var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - off, 360), OrbitM);
             _origin.Rebase(Target.Id, sky);
             // the origin on the reference surface, the camera 100 km over it: a start under the body's Space band (Titan's
             // is 200 km up) never crosses it on the way down, so an origin left up there stayed 100 km over the walker
@@ -170,8 +176,8 @@ public partial class MoonCheck : Node
             _cam.MakeCurrent();
             _cam.GlobalPosition = new Vector3(0, (float)place.H, 0);
             _crossings = Crossings;
-            Log($"from orbit: 100 km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun {90 - off:F0}° up");
-            Arrive(Target.Id, Target.Id, 100_000);
+            Log($"from orbit: {OrbitM / 1000:F0} km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun {90 - off:F0}° up");
+            Arrive(Target.Id, Target.Id, OrbitM);
             return;
         }
         // 400 km over the point right under the target now: the way out is straight up, never through the Earth
@@ -214,7 +220,7 @@ public partial class MoonCheck : Node
         // where it heads: 100 km over the target on the line from its centre to the camera
         var targetHere = Frames.Convert(Target.Id, DVec3.Zero, axes.Body, sky);
         var away = (p - targetHere).Normalized();
-        var target = targetHere + away * (Target.Shape.A + 100_000);
+        var target = targetHere + away * (Target.Shape.A + OrbitM);
         var toTarget = target - p;
         double left = toTarget.Length;
         var (nearest, distance) = Frames.NearestSurface(axes.Body, p, sky);
@@ -312,6 +318,18 @@ public partial class MoonCheck : Node
         return Target.Shape.ToGeodetic(p).H - ground.Heights.At(n);
     }
 
+    /// <summary>
+    /// A body whose pull is a few mm/s² (Phobos, Deimos: #1853): any step launches the walker for minutes, so no sprint,
+    /// and the jump is judged on its first seconds.
+    /// </summary>
+    private static bool Tiny => BodyGravity.Ground < 0.1;
+
+    /// <summary>The seconds a drop of a metre takes there, and the settling's margin.</summary>
+    private static double SettleS => 15 + 2 * Math.Sqrt(2 / Math.Max(BodyGravity.Ground, 1e-6));
+
+    /// <summary>How long a tiny body's jump is watched before it is judged, seconds.</summary>
+    private const double TinyJumpS = 5;
+
     private void Stand()
     {
         var me = _local();
@@ -320,9 +338,15 @@ public partial class MoonCheck : Node
         if (me != null && me.Camera.Current && me.IsOnFloor() && _stageT > 1)
         {
             double over = Over(me);
-            Log($"standing on {Target.Name} after {_stageT:F1} s, {over:F2} m over the ground's height, gravity {BodyGravity.Ground:F2} m/s²");
+            Log($"standing on {Target.Name} after {_stageT:F1} s, {over:F2} m over the ground's height, gravity {BodyGravity.Ground:0.####} m/s²");
             if (Math.Abs(over) > 1.5) { Finish(string.Create(CultureInfo.InvariantCulture, $"standing {over:F2} m off the ground's height")); return; }
             Shot("ground");
+            if (Tiny)
+            {
+                Log("a body of a few mm/s²: no sprint (a step launches the walker for minutes), the jump");
+                Next(Stage.Settle);
+                return;
+            }
             _walkFrom = Here(_origin.Frame.Axes!, me.GlobalPosition);
             _builtAtWalk = _ground()!.Built;
             Input.ActionPress(PlayerInput.Sprint);
@@ -330,7 +354,7 @@ public partial class MoonCheck : Node
             Next(Stage.Walk);
             return;
         }
-        if (_stageT > 15) Finish($"not standing 15 s after T (body {(me == null ? "none" : $"current {me.Camera.Current}, on floor {me.IsOnFloor()}")})");
+        if (_stageT > SettleS) Finish($"not standing {SettleS:F0} s after T (body {(me == null ? "none" : $"current {me.Camera.Current}, on floor {me.IsOnFloor()}")})");
     }
 
     private void Walk()
@@ -360,6 +384,15 @@ public partial class MoonCheck : Node
         _apex = Math.Max(_apex, over);
         if (!_left && _apex - _jumpFrom > 2) { _left = true; }
         if (_left && over - _jumpFrom > _apex - _jumpFrom - 0.05 && _apex - _jumpFrom > 4) Shot("apex");
+        if (Tiny && _stageT >= TinyJumpS)
+        {
+            // still climbing: v t − g t² / 2 by now
+            double rise = over - _jumpFrom, v = me.JumpVelocity, g = BodyGravity.Ground;
+            double want = v * _stageT - g * _stageT * _stageT / 2;
+            Log($"{_stageT:F1} s into the jump: up {rise:F2} m ({want:F2} m at {v:F2} m/s under {g * 1000:F1} mm/s²; it comes down after {2 * v / g / 60:F0} min, {v * v / (2 * g):F0} m up)");
+            Finish(Math.Abs(rise - want) <= 0.25 * want ? null : string.Create(CultureInfo.InvariantCulture, $"the jump rose {rise:F2} m in {_stageT:F1} s, not {want:F2} m (the walker: {me.WalkState}, velocity {me.Velocity})"));
+            return;
+        }
         if (_stageT > 0.5 && me.IsOnFloor())
         {
             double rise = _apex - _jumpFrom;

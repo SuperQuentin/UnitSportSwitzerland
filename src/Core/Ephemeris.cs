@@ -6,7 +6,7 @@ namespace UnitSport.Core;
 // Plain C# (linked into the unit tests).
 
 /// <summary>The bodies <see cref="Ephemeris"/> places.</summary>
-public enum SkyBody { Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan }
+public enum SkyBody { Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan, Phobos, Deimos }
 
 /// <summary>
 /// A body as seen from a place: a unit vector in the local east / north / up of the ellipsoid

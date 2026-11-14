@@ -33,6 +33,9 @@ public sealed class CubeShape
     public static readonly CubeShape Io = new(Ellipsoid.Sphere(1_821_600)), Europa = new(Ellipsoid.Sphere(1_560_800)),
         Ganymede = new(Ellipsoid.Sphere(2_634_100)), Callisto = new(Ellipsoid.Sphere(2_410_300)), Titan = new(Ellipsoid.Sphere(2_574_730));
 
+    /// <summary>Mars' moons (#1853): the spheres their shape models' heights are over (Phobos' DLR 11.1 km, Deimos' 6.2 km mean).</summary>
+    public static readonly CubeShape Phobos = new(Ellipsoid.Sphere(11_100)), Deimos = new(Ellipsoid.Sphere(6_200));
+
     /// <summary>The giants (#1854): their IAU 1-bar ellipsoids, face 0 on 0° N 0° E; no ground, a globe from their maps.</summary>
     public static readonly CubeShape Jupiter = new(Ellipsoid.FromRadii(71_492_000, 66_854_000)),
         Saturn = new(Ellipsoid.FromRadii(60_268_000, 54_364_000)), Uranus = new(Ellipsoid.FromRadii(25_559_000, 24_973_000)),
