@@ -43,6 +43,12 @@ public static class ColonyKit
     /// <summary>A doorway's width and height, metres.</summary>
     public const float DoorW = 1.3f, DoorH = 2.1f;
 
+    /// <summary>The hangar's slab (its floor over the plateau), its vehicle door's height and the ramp's length, metres (#1943).</summary>
+    public const float HangarSlab = 0.6f, HangarDoorH = 4.9f, RampLen = 5f;
+
+    /// <summary>Half the hangar's vehicle door opening for a hangar <paramref name="w"/> wide: its middle four of six end panels.</summary>
+    public static float HangarDoorHalf(float w) => w / 3;
+
     /// <summary>A walk-in tube's radius, metres: its floor at the sill is 1.9 m wide, 2.45 m under its crown.</summary>
     public const float TubeR = 1.4f;
 
@@ -413,6 +419,13 @@ public static class ColonyKit
                 float x0 = -r + i * w / 6, x1 = x0 + w / 6, x = (x0 + x1) / 2;
                 float hh = 0.6f + Mathf.Sqrt(Mathf.Max(0, r * r - x * x)) * sy;
                 float z = side * l / 2;
+                // at +Z the vehicle door's opening (#1943): the middle four panels only over its lintel
+                if (side > 0 && i >= 1 && i <= 4)
+                {
+                    float lintel = HangarSlab + HangarDoorH;
+                    if (hh > lintel) s.Box(new(x, (lintel + hh) / 2, z), new(w / 6, hh - lintel, 0.3f), p.Band);
+                    continue;
+                }
                 if (side < 0 && (i == 2 || i == 3))
                 {
                     float inner = i == 2 ? -DoorW / 2 : DoorW / 2;
@@ -432,10 +445,18 @@ public static class ColonyKit
         float rise = (FloorY - 0.6f) / steps;
         for (int k = 1; k < steps; k++)
             s.Box(new(0, 0.6f + (FloorY - 0.6f - k * rise) / 2, -l / 2 + 2.0f + (k - 0.5f) * 0.3f), new(2.4f, FloorY - 0.6f - k * rise, 0.3f), p.Frame);
-        // the vehicle door, shut, its frame and lamps
-        s.Box(new(0, 0.6f + 2.4f, l / 2 + 0.2f), new(8f, 4.8f, 0.2f), p.Frame);
-        s.Box(new(0, 0.6f + 4.95f, l / 2 + 0.25f), new(8.4f, 0.3f, 0.2f), p.Accent);
-        for (int i = 0; i < 4; i++) Window(s, new(-3f + i * 2f, 0.6f + 5.4f, l / 2 + 0.3f), Vector3.Back, Vector3.Up, 0.5f, 0.25f, p.Window);
+        // the vehicle door's frame and lamps (the door itself rolls up: ColonyAirlocks), the ramp down to the plateau
+        float dh = HangarDoorHalf(w);
+        foreach (float sd in new[] { -1f, 1f })
+            s.Box(new(sd * (dh + 0.15f), HangarSlab + HangarDoorH / 2, l / 2 + 0.2f), new(0.3f, HangarDoorH, 0.35f), p.Accent);
+        s.Box(new(0, HangarSlab + HangarDoorH + 0.15f, l / 2 + 0.25f), new(2 * dh + 0.6f, 0.3f, 0.3f), p.Accent);
+        for (int i = 0; i < 4; i++) Window(s, new(-3f + i * 2f, HangarSlab + HangarDoorH + 0.55f, l / 2 + 0.3f), Vector3.Back, Vector3.Up, 0.5f, 0.25f, p.Window);
+        float ramp = Mathf.Atan2(HangarSlab, RampLen);
+        s.Box(new(0, HangarSlab / 2 - 0.12f, l / 2 + 0.3f + RampLen / 2), new(2 * dh, 0.3f, RampLen / Mathf.Cos(ramp)), p.Frame,
+            new Basis(Vector3.Right, ramp));
+        for (int i = 0; i < 6; i++)
+            s.Box(new(-dh + 0.4f + i * (2 * dh - 0.8f) / 5, HangarSlab / 2 + 0.04f, l / 2 + 0.3f + RampLen / 2), new(0.3f, 0.02f, RampLen * 0.9f), p.Accent,
+                new Basis(Vector3.Right, ramp));
         for (int k = 0; k < 4; k++)
             Window(s, new(0, 0.6f + h - 0.4f, -l / 2 + (k + 0.5f) * l / 4), Vector3.Down, Vector3.Forward, 1.2f, 0.4f, Lamp);
         s.Box(new(0, 0.6f + h + 0.15f, 0), new(3.5f, 0.05f, 6f), p.Trim);

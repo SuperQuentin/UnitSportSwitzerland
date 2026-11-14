@@ -17,6 +17,10 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
   alleys glazed and walk-in, solar arrays turned to the sun, regolith diggers round their pits, the Shackleton ice mine
   under flood lights, the far-side radio telescope, the mass driver on a levelled strip (`MoonOutposts`), lamps that
   light the Moon's ground (`GroundLamps`).
+- Phase 5 (#1943): the open and the pressurised rover (car kinds 38-39) on the Moon's gravity (`Rideable.Gravity` follows
+  `BodyGravity`), parked at each staffed colony (`MoonRoverDepot`), the hangar a vehicle airlock (its rolling door opens
+  for a rover heading at it, a ramp to the plateau), a lander on each colony's first pad, Artemis' 3 km runway on a
+  levelled strip, `MoonPads` for the shuttle, `--moonrovercheck`.
 
 ## The user's decisions (fixed)
 
@@ -279,3 +283,9 @@ Tracking: #1938. Phases: 1 #1939, 2 #1940, 3 #1941, 4 #1942, 5 #1943, 6 #1944, 7
   like a colony, not `MoonSites` entries; a colony's own industry (arrays, digger) is in its plan. The ice mine is 20 km
   from Artemis Base with no haul road. The mass driver is at the Moon Village (equatorial, flinging east). `GroundLamps`
   added to light the unshaded body ground (the floods lit nothing on it).
+- Phase 5: `Rideable.Gravity` follows `BodyGravity` for every ride (cars, rovers, the flyers' terms), not only rovers
+  (proposed to the planets session; bikes and heavies keep their own constants). The pressurised rover has four big
+  wheels, not six (the car model's four). The runway is 1.8 km from Artemis Base on the flattest strip near it, with a
+  terminal hut and no road or tube to the base. The hangar is the vehicle airlock (the colony's tube side keeps its air);
+  its rolling door opens for anyone driving at it, no new key. A driven-away rover's slot fills again the next time the
+  colony is built.

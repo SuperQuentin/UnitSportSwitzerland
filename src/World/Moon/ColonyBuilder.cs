@@ -193,8 +193,15 @@ public static class ColonyBuilder
                 yield return (At(-r - Wall / 2, floor + h * 0.4f, 0), new Vector3(Wall, h * 0.8f, l));
                 yield return (At(r + Wall / 2, floor + h * 0.4f, 0), new Vector3(Wall, h * 0.8f, l));
                 yield return (At(0, floor + h, 0), new Vector3(w, 0.3f, l));
-                // the vehicle door shut (authored +Z: the node's -Z), the doorway's wall at the other end
-                yield return (At(0, floor + h / 2, -l / 2), new Vector3(w, h, Wall));
+                // the vehicle door's end (authored +Z: the node's -Z): the wall either side of its opening and over it (the
+                // door's own box is ColonyAirlocks'), the ramp down to the plateau (#1943)
+                float dh = ColonyKit.HangarDoorHalf(w), lintel = floor + ColonyKit.HangarDoorH;
+                foreach (float sx in new[] { -1f, 1f })
+                    yield return (At(sx * (dh + (r - dh) / 2), floor + h / 2, -l / 2), new Vector3(r - dh, h, Wall));
+                yield return (At(0, (lintel + floor + h) / 2, -l / 2), new Vector3(2 * dh, floor + h - lintel, Wall));
+                float rampA = Mathf.Atan2(floor, ColonyKit.RampLen);
+                yield return (new Transform3D(new Basis(Vector3.Right, -rampA), new Vector3(0, floor / 2 - 0.15f, -l / 2 - 0.3f - ColonyKit.RampLen / 2)),
+                    new Vector3(2 * dh, 0.3f, ColonyKit.RampLen / Mathf.Cos(rampA) + 0.3f));
                 float side = r - dw / 2;
                 yield return (At(-(dw / 2 + side / 2), floor + h / 2, l / 2), new Vector3(side, h, Wall));
                 yield return (At(dw / 2 + side / 2, floor + h / 2, l / 2), new Vector3(side, h, Wall));

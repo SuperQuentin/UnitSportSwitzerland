@@ -21,6 +21,7 @@ public partial class MoonSitesCheck
     private int _rover;
     private double _roverT, _roverTop, _roverAir;
     private Vector3 _roverFrom;
+    private bool _roverDoorSeen, _roverPast;
     private Camera3D? _roverCam;
 
     private RideKind RoverKind()
@@ -47,6 +48,14 @@ public partial class MoonSitesCheck
         var (ex, ez) = plan.Road[^1];
         var along = (frame.Basis * new Vector3((float)(ex - rx), 0, (float)(ez - rz))).Normalized();
         var start = frame * new Vector3((float)rx, 0, (float)rz) + along * 14;
+        // the pressurised rover starts in the hangar's free lane, facing its shut rolling door: it must open by itself
+        bool hangar = RoverKind() == MoonRovers.Cabin.Kind && plan.Hangar is { } hg;
+        if (hangar)
+        {
+            var hm = plan.Modules[plan.Hangar!.Value.Module];
+            var side = Vector3.Up.Cross(along).Normalized();
+            start = frame * new Vector3((float)hm.X, ColonyKit.HangarSlab, (float)hm.Z) - along * 8 - side * MoonRoverDepot.HangarLane;
+        }
         switch (_rover)
         {
             case 1:
@@ -92,16 +101,32 @@ public partial class MoonSitesCheck
                 var n = ground.NormalUnder(axes.ToEcef(p.X, p.Y, p.Z));
                 var (_, gy, _) = axes.FromEcef(ground.Ground(n));
                 double over = p.Y - gy;
-                if (over > 0.6) _roverAir += delta;
+                if (!me.IsOnFloor()) _roverAir += delta;
                 if (over < -0.4) { Finish(string.Create(CultureInfo.InvariantCulture, $"the rover sank {-over:F2} m under the ground")); return; }
                 // the camera behind and over it
                 var back = me.GlobalBasis.Z with { Y = 0 };
                 _roverCam!.GlobalPosition = p + back.Normalized() * 7 + Vector3.Up * 3;
                 _roverCam.LookAt(p + Vector3.Up * 0.8f, Vector3.Up);
-                if (_rover == 5 && _roverT > 8)
+                if (hangar && _rover == 5 && ColonyAirlocks.Sets.Count > 0)
+                {
+                    var set = ColonyAirlocks.Sets[0];
+                    int hl = set.Count - 1;
+                    float open = set.Opening(hl, true);
+                    if (open > 0.99f && !_roverDoorSeen)
+                    {
+                        _roverDoorSeen = true;
+                        RoverLog(string.Create(CultureInfo.InvariantCulture, $"the rolling door open after {_roverT:F1} s, the rover {p.DistanceTo(set.DoorAt(hl, true)):F1} m from it"));
+                    }
+                    // through the doorway's plane while the door is not up: it ran into it
+                    var outDir = set.DoorOut(hl, true);
+                    if ((p - set.DoorAt(hl, true)).Dot(outDir) > -1.5f && open < 0.9f && !_roverPast)
+                    { Finish(string.Create(CultureInfo.InvariantCulture, $"the rover reached the rolling door shut ({open:F2} open)")); return; }
+                    if ((p - set.DoorAt(hl, true)).Dot(outDir) > ColonyKit.RampLen + 3) _roverPast = true;
+                }
+                if (_rover == 5 && _roverT > (hangar ? 14 : 8))
                 {
                     RoverLog(string.Create(CultureInfo.InvariantCulture,
-                        $"8 s at full throttle: {me.RideSpeed * 3.6f:F1} km/h, {p.DistanceTo(_roverFrom):F0} m along the road, {_roverAir:F1} s off the ground"));
+                        $"{_roverT:F0} s at full throttle: {me.RideSpeed * 3.6f:F1} km/h, {p.DistanceTo(_roverFrom):F0} m along the road, {_roverAir:F1} s off the ground"));
                     if (!_headless) { _pending = "rover_drive"; _pendingFrames = 3; }
                     RoverNext(6);
                 }
@@ -127,6 +152,12 @@ public partial class MoonSitesCheck
                 if (parked == null) { Finish("no rover parked by the walker after getting out"); return; }
                 RoverLog(string.Create(CultureInfo.InvariantCulture, $"out; the rover parked {parked.GlobalPosition.DistanceTo(me!.GlobalPosition):F1} m away"));
                 if (_roverAir > 2.5) { Finish(string.Create(CultureInfo.InvariantCulture, $"the rover was {_roverAir:F1} s off the ground on a level road")); return; }
+                if (hangar && !_roverPast) { Finish("the rover never got out of the hangar and down its ramp"); return; }
+                int depot = 0;
+                foreach (var c2 in VehicleManager.Instance!.GetChildren())
+                    if (c2 is Node n2 && n2.Name.ToString().StartsWith("moonrover_" + colony.Id)) depot++;
+                RoverLog($"{depot} rover(s) parked at the colony by its depot");
+                if (depot < MoonRoverDepot.Slots(colony, plan).Count) { Finish($"only {depot} of the colony's rovers parked"); return; }
                 Finish(null);
                 break;
             }

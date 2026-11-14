@@ -45,6 +45,9 @@ public partial class ColonyAirlocks : Node3D
         public Node3D Left = null!, Right = null!;
         public CollisionShape3D Shut = null!;
         public float Open, Target;
+        /// <summary>A hangar's vehicle door (#1943): one leaf that rolls up, not two that slide apart.</summary>
+        public bool RollUp;
+        public float Width = ColonyKit.DoorW, Height = ColonyKit.DoorH, Reach = ColonyAirlocks.Reach;
     }
 
     private sealed class Lock
@@ -56,6 +59,9 @@ public partial class ColonyAirlocks : Node3D
         public bool WantOuter;
         public Aabb Chamber;
         public Transform3D ChamberAt;
+        /// <summary>The chamber's half size in its frame (a 4 m airlock's, or a whole hangar's).</summary>
+        public Vector3 ChamberHalf = new(2.2f, 6, 2.05f);
+        public bool Hangar;
     }
 
     private readonly List<Lock> _locks = new();
@@ -86,10 +92,36 @@ public partial class ColonyAirlocks : Node3D
             l.ChamberAt = new Transform3D(new Basis(Vector3.Up, -(float)m.Yaw), new Vector3((float)m.X, 0, (float)m.Z));
             _locks.Add(l);
         }
+        // the hangar (#1943): a vehicle airlock, its rolling door out and a sliding door at its inner doorway; it holds air
+        // only while the rolling door is shut, like a chamber
+        if (plan.Hangar is { } h)
+        {
+            var m = plan.Modules[h.Module];
+            var l = new Lock { Plan = h, Hangar = true };
+            float w = (float)m.Width;
+            l.Outer = MakeDoor(plan.Doors[h.Outer], pal, 2 * ColonyKit.HangarDoorHalf(w) + 0.2f, ColonyKit.HangarDoorH + 0.1f, ColonyKit.HangarSlab, rollUp: true);
+            l.Outer.Reach = ColonyKit.HangarDoorHalf(w) + 1.5f;
+            l.Inner = MakeDoor(plan.Doors[h.Inner], pal);
+            l.Inner.Open = l.Inner.Target = 1;
+            Pose(l.Inner);
+            Pose(l.Outer);
+            var d = plan.Doors[h.Outer];
+            l.Lamp = new MeshInstance3D
+            {
+                Name = "HangarLamp", Mesh = new BoxMesh { Size = new Vector3(0.5f, 0.15f, 0.5f) },
+                MaterialOverride = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, AlbedoColor = Green },
+                Position = new Vector3((float)d.X, ColonyKit.HangarSlab + ColonyKit.HangarDoorH + 1.0f, (float)d.Z)
+                    + new Vector3(Mathf.Sin((float)d.Out), 0, -Mathf.Cos((float)d.Out)) * 0.5f,
+            };
+            AddChild(l.Lamp);
+            l.ChamberAt = new Transform3D(new Basis(Vector3.Up, -(float)m.Yaw), new Vector3((float)m.X, 0, (float)m.Z));
+            l.ChamberHalf = new Vector3(w / 2 - 0.1f, (float)m.Height + 1, (float)m.Length / 2 + 0.05f);
+            _locks.Add(l);
+        }
         // the pressurised insides, in the colony's frame
         foreach (var m in plan.Modules)
         {
-            if (m.Kind == ModuleKind.Airlock) continue;
+            if (m.Kind == ModuleKind.Airlock || plan.Hangar is { } hh && hh.Module == m.Id) continue;
             var at = new Transform3D(new Basis(Vector3.Up, -(float)m.Yaw), new Vector3((float)m.X, 0, (float)m.Z));
             bool round = m.Kind is ModuleKind.Hub or ModuleKind.Stack or ModuleKind.Dome or ModuleKind.Biodome;
             _volumes.Add((at, new Vector3((float)m.Width / 2 - 0.1f, (float)m.Height + 1, round ? (float)m.Width / 2 - 0.1f : (float)m.Length / 2 + 0.05f), round));
@@ -114,26 +146,52 @@ public partial class ColonyAirlocks : Node3D
     public override void _ExitTree() => All.Remove(this);
 
     /// <summary>A door at a plan door: a frame-flush node facing out, two leaves that slide apart, a box that blocks the way while shut.</summary>
-    private Door MakeDoor(ColonyDoor d, ColonyKit.Palette pal)
+    private Door MakeDoor(ColonyDoor d, ColonyKit.Palette pal) => MakeDoor(d, pal, ColonyKit.DoorW, ColonyKit.DoorH, ColonyKit.FloorY, rollUp: false);
+
+    /// <summary>
+    /// A door <paramref name="w"/> x <paramref name="h"/> with its sill at <paramref name="sill"/>: two leaves that slide
+    /// apart, or (<paramref name="rollUp"/>, a hangar's vehicle door) one that rolls up.
+    /// </summary>
+    private Door MakeDoor(ColonyDoor d, ColonyKit.Palette pal, float w, float h, float sill, bool rollUp)
     {
         var node = new Node3D
         {
-            Name = "Door",
+            Name = rollUp ? "VehicleDoor" : "Door",
             Transform = new Transform3D(new Basis(Vector3.Up, Mathf.Atan2((float)Math.Sin(d.Out), (float)-Math.Cos(d.Out)) ),
-                new Vector3((float)d.X, ColonyKit.FloorY, (float)d.Z)),
+                new Vector3((float)d.X, sill, (float)d.Z)),
         };
-        var mesh = LeafMesh(pal);
+        var mesh = rollUp ? RollMesh(w, h) : LeafMesh(pal);
         var left = new MeshInstance3D { Name = "Left", Mesh = mesh, MaterialOverride = HumanMeshBuilder.Material() };
-        var right = new MeshInstance3D { Name = "Right", Mesh = mesh, MaterialOverride = HumanMeshBuilder.Material() };
+        var right = new MeshInstance3D { Name = "Right", Mesh = mesh, MaterialOverride = HumanMeshBuilder.Material(), Visible = !rollUp };
         node.AddChild(left);
         node.AddChild(right);
         var body = new StaticBody3D { Name = "Shut" };
-        var shut = new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(ColonyKit.DoorW, ColonyKit.DoorH, 0.12f) }, Position = new Vector3(0, ColonyKit.DoorH / 2, 0) };
+        var shut = new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(w, h, rollUp ? 0.3f : 0.12f) }, Position = new Vector3(0, h / 2, 0) };
         body.AddChild(shut);
         node.AddChild(body);
         AddChild(node);
-        return new Door { Node = node, Left = left, Right = right, Shut = shut };
+        return new Door { Node = node, Left = left, Right = right, Shut = shut, RollUp = rollUp, Width = w, Height = h };
     }
+
+    /// <summary>A hangar's rolling door: ribbed slats, a window band, hazard stripes at its foot (one per size, shared).</summary>
+    private static ArrayMesh RollMesh(float w, float h)
+    {
+        string key = FormattableString.Invariant($"{w:F1}/{h:F1}");
+        if (Rolls.TryGetValue(key, out var m)) return m;
+        var s = new MeshScratch();
+        int slats = (int)(h / 0.45f);
+        for (int k = 0; k < slats; k++)
+            s.Box(new(0, (k + 0.5f) * h / slats, 0.2f), new(w, h / slats * 0.94f, 0.1f), new Color(k % 2 == 0 ? "b8bec4" : "a9b0b6") with { A = 0 });
+        for (int i = 0; i < 6; i++)
+            s.Box(new(-w / 2 + (i + 0.5f) * w / 6, h * 0.7f, 0.26f), new(w / 9, 0.35f, 0.04f), new Color("2a3a4a") with { A = 0 });
+        for (int i = 0; i < 10; i++)
+            s.Box(new(-w / 2 + (i + 0.5f) * w / 10, 0.18f, 0.26f), new(w / 20, 0.3f, 0.04f), new Color("f2c21b") with { A = 0 });
+        m = s.Build();
+        Rolls[key] = m;
+        return m;
+    }
+
+    private static readonly Dictionary<string, ArrayMesh> Rolls = new();
 
     private static ArrayMesh? _leaf;
 
@@ -153,6 +211,13 @@ public partial class ColonyAirlocks : Node3D
     private static void Pose(Door d)
     {
         float s = d.Open * d.Open * (3 - 2 * d.Open);
+        if (d.RollUp)
+        {
+            // up into the lintel, the box gone once the way is clear for a rover
+            d.Left.Position = new Vector3(0, s * (d.Height - 0.25f), 0);
+            d.Shut.Disabled = d.Open > 0.9f;
+            return;
+        }
         float w = ColonyKit.DoorW / 2;
         d.Left.Position = new Vector3(-w / 2 - s * w * 0.95f, 0, 0);
         d.Right.Position = new Vector3(w / 2 + s * w * 0.95f, 0, 0);
@@ -161,6 +226,12 @@ public partial class ColonyAirlocks : Node3D
 
     public override void _Process(double delta)
     {
+        _vehicleScan -= delta;
+        if (_vehicleScan <= 0)
+        {
+            _vehicleScan = 0.25;
+            OpenForVehicles();
+        }
         float step = (float)delta / SlideSeconds;
         foreach (var l in _locks)
         {
@@ -207,6 +278,36 @@ public partial class ColonyAirlocks : Node3D
         return true;
     }
 
+    private double _vehicleScan;
+
+    /// <summary>
+    /// A hangar's rolling door opens by itself for a rover heading at it (#1943), as the Earth's garage doors do for a car:
+    /// anyone driving a car or a rover (a player, a bot) within 30 m of the door, closing on it at over 1 m/s from either
+    /// side, the door shut and no cycle running. It cycles outward (the inner door shuts, the hangar empties, the rolling
+    /// door opens). No key.
+    /// </summary>
+    private void OpenForVehicles()
+    {
+        bool any = false;
+        foreach (var l in _locks) any |= l.Hangar && l.Pump < 0 && l.Outer.Target == 0;
+        if (!any) return;
+        foreach (var node in GetTree().GetNodesInGroup(Player.FootPlayer.Group))
+        {
+            if (node is not Player.FootPlayer p || Player.CarCatalog.For(p.Ride) == null) continue;
+            for (int i = 0; i < _locks.Count; i++)
+            {
+                var l = _locks[i];
+                if (!l.Hangar || l.Pump >= 0 || l.Outer.Target > 0) continue;
+                var to = l.Outer.Node.GlobalPosition - p.GlobalPosition;
+                to.Y = 0;
+                float dist = to.Length();
+                if (dist > 30 || dist < 0.5f) continue;
+                var v = p.Velocity with { Y = 0 };
+                if (v.Dot(to / dist) > 1f) Request(i, outward: true);
+            }
+        }
+    }
+
     private static void Light(Lock l, Color c) => ((StandardMaterial3D)l.Lamp.MaterialOverride).AlbedoColor = c;
 
     private static readonly Random SoundRng = new(1941);
@@ -235,7 +336,7 @@ public partial class ColonyAirlocks : Node3D
     private static (ColonyAirlocks Set, int Index, bool Outer, Door Door)? Nearest(Vector3 at)
     {
         (ColonyAirlocks, int, bool, Door)? best = null;
-        float bestD = Reach;
+        float bestD = float.MaxValue;
         foreach (var set in All)
             for (int i = 0; i < set._locks.Count; i++)
             {
@@ -245,7 +346,7 @@ public partial class ColonyAirlocks : Node3D
                     if (d.Target > 0) continue;   // an open door is no target: the shut one is
                     var p = d.Node.GlobalPosition;
                     float dist = new Vector2(p.X - at.X, p.Z - at.Z).Length();
-                    if (dist < bestD && Mathf.Abs(p.Y + 1 - at.Y) < 2.5f)
+                    if (dist < d.Reach && dist < bestD && Mathf.Abs(p.Y + 1 - at.Y) < 2.5f)
                     {
                         bestD = dist;
                         best = (set, i, outer, d);
@@ -267,7 +368,7 @@ public partial class ColonyAirlocks : Node3D
     {
         if (Nearest(p.GlobalPosition) is not { } n || n.Door.Target > 0) return null;
         bool busy = n.Set._locks[n.Index].Pump >= 0;
-        return new Interaction(busy ? "Cycling…" : InputHints.Prompt(PlayerInput.InteractMount, n.Outer ? "Cycle the airlock: out" : "Cycle the airlock: in"),
+        return new Interaction(busy ? "Cycling…" : InputHints.Prompt(PlayerInput.InteractMount, n.Set._locks[n.Index].Hangar ? (n.Outer ? "Open the hangar: out" : "Cycle the hangar: in") : n.Outer ? "Cycle the airlock: out" : "Cycle the airlock: in"),
             Outline.Of(n.Door.Node), InBar: busy);
     }
 
@@ -314,7 +415,7 @@ public partial class ColonyAirlocks : Node3D
             {
                 if (l.Outer.Open > 0.02f) continue;
                 var q = l.ChamberAt.AffineInverse() * local;
-                if (Mathf.Abs(q.X) < 2.2f && Mathf.Abs(q.Z) < 2.05f && q.Y > 0 && q.Y < 6) return true;
+                if (Mathf.Abs(q.X) < l.ChamberHalf.X && Mathf.Abs(q.Z) < l.ChamberHalf.Z && q.Y > 0 && q.Y < l.ChamberHalf.Y) return true;
             }
         }
         return false;

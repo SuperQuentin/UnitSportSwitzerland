@@ -33,6 +33,7 @@ public partial class MoonSurface : Node
     private readonly BodyGround _ground;
     private readonly WorldOrigin _origin;
     private readonly Dictionary<string, Placed> _placed = new();
+    private readonly HashSet<string> _parked = new();
     private double _scan;
     private static ShaderMaterial? _darken, _brighten;
 
@@ -113,7 +114,17 @@ public partial class MoonSurface : Node
             double d = Math.Acos(Math.Clamp(Dot(n, c.Normal), -1, 1)) * r;
             bool have = _placed.ContainsKey(c.Id);
             if (!have && d < ColonyReachM) BuildColony(c, axes);
-            else if (have && d > ColonyReachM + 600) Drop(c.Id);
+            else if (have && d > ColonyReachM + 600)
+            {
+                Drop(c.Id);
+                _parked.Remove(c.Id);
+            }
+            // its rovers once the camera is near enough for the ground's collision to be under their slots (#1943)
+            if (_placed.TryGetValue(c.Id, out var colony) && d < MoonRoverDepot.NearM && _parked.Add(c.Id))
+            {
+                int n2 = MoonRoverDepot.Park(c, ColonyPlan.For(c), colony.Node.GlobalTransform, _origin);
+                if (n2 > 0) GD.Print($"[moon] {c.Name}: {n2} rover(s) parked");
+            }
         }
         foreach (var o in MoonOutposts.All)
         {

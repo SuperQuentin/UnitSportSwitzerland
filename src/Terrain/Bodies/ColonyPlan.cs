@@ -99,6 +99,9 @@ public sealed class ColonyPlan
 
     /// <summary>The ways in and out: an airlock at the end of every spine but the hangar's.</summary>
     public readonly List<ColonyAirlock> Airlocks = new();
+
+    /// <summary>The hangar as a vehicle airlock (#1943): its module, its vehicle door (Outer) and the door at its inner doorway (Inner); null with no hangar.</summary>
+    public ColonyAirlock? Hangar { get; private set; }
     public readonly List<ColonyDoor> Doors = new();
     public readonly List<ColonyLink> Links = new();
     public readonly List<ColonyPad> Pads = new();
@@ -174,8 +177,11 @@ public sealed class ColonyPlan
                 double len = 26;
                 double mid = at + len / 2;
                 int hangar = plan.Add(ModuleKind.Hangar, dx * mid, dz * mid, yaw, len, 14, 8, 1, RoomKind.Garage);
-                plan.Links.Add(new ColonyLink(last, plan.Door(hangar, len / 2, yaw + Math.PI), alleys));
+                int hangarInner = plan.Door(hangar, len / 2, yaw + Math.PI);
+                plan.Links.Add(new ColonyLink(last, hangarInner, alleys));
                 int vehicle = plan.Door(hangar, len / 2, yaw);
+                // the hangar is a vehicle airlock (#1943): its rolling door out, a door at its inner doorway
+                plan.Hangar = new ColonyAirlock(hangar, vehicle, hangarInner);
                 // the road on out to the pads, 220 m past the hangar, three pads across it
                 var d = plan.Doors[vehicle];
                 plan.Road.Add((d.X, d.Z));
