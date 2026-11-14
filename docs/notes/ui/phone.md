@@ -283,13 +283,21 @@
   while it is out**: no jump with the pad while the phone is folded or open (`FootPlayer`: the jump is dropped when
   `PhoneState` is 1 or 2 and the last device is a pad; the keyboard's Space still jumps, and in the camera app A
   still jumps). The D-pad's ↑ is consumed by the phone, so the emote wheel stays closed while it is out.
-- **Views**: no app dollies square onto the screen any more. The game's own third-person lens (`PhoneLook` still
-  lends it to a first-person player) is eased (0.3 s, `PhoneLensSeconds`) to `PhoneFramingView`: just over the
-  shoulder on the holding side, 0.3 m above and a little behind the phone, FOV 65, turned part of the way toward
-  it and tipped by the player's own pitch, so the phone sits in the lower part of the picture with the horizon
-  above it, folded or open; looking up takes it out of the frame. The lens stays on the phone's place while the
-  body walks (no smoothing lag: it was a third of a metre at a walk). The camera app's raised view and the selfie
-  are as before.
+- **Views** (a viewmodel, not a camera move; rewritten after review): on desktop and pad the gameplay camera is not touched at all by a
+  folded or open phone: same transform, same FOV, same third-person follow (`--phonecheck` asserts the camera equal with the phone open).
+  The phone the owner reads is a second `PhoneModel` (`Viewmodel = true`, built once, moved as a node) parented to the camera on
+  `HeldItemVisual.ViewmodelLayer` with `HeldItemVisual.ForView` materials (depth squeezed to the nearest 1 %, so it never clips into a wall
+  or the body), `FootPlayer.StepPhoneViewmodel`: open, the inner screen 40 % of the view's width (the projected box measures 42 %),
+  right edge about 2 % in, bottom about 3 % up, left edge past 55 %, so the centre and the left half stay clear; folded, the cover 15 % wide
+  (39-45 % high) at 69-86 % of the width, above the hint line and left of the corner key list. Square to the picture with a 4 degree turn,
+  a light sway and a walk bob; it rises from below as it comes out. The share is by width, clamped by height (`0.58` of the view open,
+  `0.46` folded) so it stays in view at 4:3 and 21:9. No arm and no pointing finger on it: the cursor is the pointer open, the selection
+  card folded. The in-world phone and arm poses are as before for everyone else (and the owner's third person); in first person the
+  in-world copy is moved to the layer the eye never draws, so it does not show twice. `PhoneScreenPoint` / `PhoneScreenToWorld` use the
+  viewmodel when it is drawn (its scaled transform), so the mouse ray hits exactly the control under the cursor. While open
+  (`PhoneController.HidesHud`) the corner key list (`PromptBar`) and the hand chip hide. The lens moves only for the camera app and
+  selfie, the travel curtain (square on, world black, the jump held until black as asserted) and touch; `FootPlayer.PhoneMovesLens`
+  gates the third-person borrow likewise.
 - **The black backdrop stays for the Travel curtain** (and the touch screen, which keeps its enlarged square-on
   view): a Map pick still holds `Teleporter.Curtain`'s jump until `PhoneBackdropShown` is 1 (`--phonecheck` asserts
   it runs only then). The body is not locked meanwhile.
@@ -315,9 +323,8 @@
   zoom, a click does nothing on the cover. The tiles are run with a digit 1-6 or the arrows and Enter (pad: D-pad and A); the finger follows
   the selected tile. The cursor and hold-right-button-to-look apply only once it is open (`Grip`: visible while Opening or Open; folding
   or putting away captures again). Touch is unchanged (its finger plays the mouse).
-- **Framing** (the lens now on the screen's normal, moved aside): `PhoneFramingView` places the open inner screen at 43 % of the view's width
-  (the cover 15 %) in the lower right, wholly in view, above the hint bar and left of the prompt list, square to the picture; the pointing
-  hand comes in from below and the left (`PhoneFingerWay`), so it does not stand between the lens and the screen. First person borrows
-  the same lens as third (`PhoneLook` lends third person), so the two views are the same picture; `--view third` is honoured.
-  `--phonecheck` projects the screen's corners (open: 38-47 % wide and inside, bottom under 90 %; cover 13-17 % wide, 38-52 % high) and aims
-  the mouse through real window coordinates at a known point.
+- **Framing**: see "Views" above. First and third person are different pictures now (first person has no body in view and no in-world phone;
+  `--view first` is needed, the check's default is third person). `--phonecheck` projects the screen's corners at 1280x720, 4:3 and 21:9
+  (16:9 strict: open 38-47 % wide and left of 50 % excluded, the centre point outside the rect, cover 13-17 % wide and 38-52 % high,
+  the cover clear of the key list and hand chip rects, the key list hidden open), asserts the gameplay camera equal with the phone open, and
+  clicks a Home tile through real window coordinates.
