@@ -57,7 +57,8 @@ public class FixtureCourseTests
             Assert.Equal(grid.HeightAt(500, 300), coarse.HeightAt(500, 300));
             Assert.NotNull(await source.LoadBuildingsAsync(id));
             Assert.NotNull(await source.LoadTreesAsync(id));
-            foreach (var seg in (await source.LoadRoadsAsync(id))!.Segments)
+            // a lift is a cable over the ground (RoadFormat.IsAerial: the fun course's T-bar and chairlift, #1609), not a road on it
+            foreach (var seg in (await source.LoadRoadsAsync(id))!.Segments.Where(s => !RoadFormat.IsAerial(s.Class)))
                 for (int i = 0; i < seg.PointCount; i++)
                 {
                     float x = seg.Points[i * 3], y = seg.Points[i * 3 + 1], z = seg.Points[i * 3 + 2];
@@ -113,8 +114,9 @@ public class FixtureCourseTests
             Assert.DoesNotContain(leaf.Heights!.Heights, float.IsNaN);
 
             var t = LeafFrames.Swiss.TransformOf(key);
-            // a ski lift is a cable: cut at a leaf edge, its straight line stands over the hill (the fun course's)
-            foreach (var seg in leaf.Roads.Segments.Where(s => s.Class != RoadClass.SkiLift))
+            // a lift is a cable over the ground (RoadFormat.IsAerial: the fun course's T-bar, whose straight line cut at a leaf
+            // edge stands over the hill, and its chairlift, 3-9 m up, #1609), not a road on it
+            foreach (var seg in leaf.Roads.Segments.Where(s => !RoadFormat.IsAerial(s.Class)))
                 for (int i = 0; i < seg.PointCount; i++)
                 {
                     var (li, lj, hEll) = t.LocalToLattice(seg.Points[i * 3], seg.Points[i * 3 + 1], seg.Points[i * 3 + 2]);
