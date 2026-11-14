@@ -143,7 +143,7 @@ public partial class MoonCheck : Node
     }
 
     /// <summary>
-    /// <c>--fromorbit</c>: no flight, the camera starts 100 km over the target where the sun is 45° up (the anchor relabelled
+    /// <c>--fromorbit [DEG]</c>: no flight, the camera starts 100 km over the target where the sun is 90 − DEG up (45 by default) (the anchor relabelled
     /// there, as <c>--bodyshot</c> does) and goes straight to the landing, the walk and the jump: the ground's check in a
     /// minute, whatever the body's distance.
     /// </summary>
@@ -159,13 +159,16 @@ public partial class MoonCheck : Node
             var toSun = Frames.Convert(BodyId.Sun, DVec3.Zero, Target.Id, sky);
             double sunLat = Math.Atan2(toSun.Z, Math.Sqrt(toSun.X * toSun.X + toSun.Y * toSun.Y)) * 180 / Math.PI;
             double sunLon = Math.Atan2(toSun.Y, toSun.X) * 180 / Math.PI;
-            var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - 45, 360), 100_000);
+            // DEG degrees west of the point under the sun (--fromorbit DEG, 45 by default): the sun that far from the zenith,
+            // in the morning (80: just after sunrise)
+            double off = CmdArgs.Double("--fromorbit") ?? 45;
+            var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - off, 360), 100_000);
             _origin.Rebase(Target.Id, sky);
             shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(Target.Shape.ToEcef(place), Target.Id));
             _cam.MakeCurrent();
             _cam.GlobalPosition = Vector3.Zero;
             _crossings = Crossings;
-            Log($"from orbit: 100 km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun 45° up");
+            Log($"from orbit: 100 km over {Target.Name} at {place.LatDeg:F1}, {place.LonDeg:F1}, the sun {90 - off:F0}° up");
             Arrive(Target.Id, Target.Id, 100_000);
             return;
         }

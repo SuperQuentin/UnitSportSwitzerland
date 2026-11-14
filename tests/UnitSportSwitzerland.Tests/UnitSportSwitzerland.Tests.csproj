@@ -197,6 +197,7 @@
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CelestialBody.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\BodyAir.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1849: the Moon's generated craters -->
     <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />
