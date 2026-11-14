@@ -135,14 +135,21 @@ public static partial class TileRewriter
                     && SignalPlan.Turn(armsHere, a.Arm, k) == turn, -1);
                 return jp.Arms.FirstOrDefault(x => x.Arm == k);
             }
+            // an exit leaving within 30 degrees of the approach's own way out: its twin carriageway, back the way it came
+            static bool UTurn(double approachOut, double exitOut) => Math.Abs(Math.IEEERemainder(exitOut - approachOut, 2 * Math.PI)) < Math.PI / 6;
             foreach (var a in jp.Arms)
             {
                 foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
                 {
-                    if (Toward(a, move) is { } to) a.Toward[move] = to.Arm;
+                    var to = Toward(a, move);
+                    if (to is not null) a.Toward[move] = to.Arm;
                     // every exit making the move (#1903: the first alone left a second right with no path into it)
+                    // (#1929: not a U-turn into the twin carriageway leaving back beside the approach, which a car cannot take;
+                    // the first exit of the move stays the move's, as before)
                     var all = jp.Arms.Where(x => x.Arm != a.Arm && x.Arm < armsHere.Count && armsHere[x.Arm].Out
-                        && SignalPlan.Turn(armsHere, a.Arm, x.Arm) == move).Select(x => x.Arm).ToList();
+                        && SignalPlan.Turn(armsHere, a.Arm, x.Arm) == move
+                        && (to is not null && x.Arm == to.Arm || !UTurn(armsHere[a.Arm].Heading, armsHere[x.Arm].Heading)))
+                        .Select(x => x.Arm).ToList();
                     if (all.Count > 0) a.TowardAll[move] = all;
                 }
                 var straight = Toward(a, SignalMoves.Through);
