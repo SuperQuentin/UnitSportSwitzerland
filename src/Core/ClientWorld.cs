@@ -685,6 +685,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
+        // group rides on the home trainer (#1467): the open ones, the one joined, its standings
+        Trainer.GroupRides.Create(this).Said += Toast;
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
         {
