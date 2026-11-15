@@ -87,6 +87,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         DayNight.SceneLight.Sun => (exposure, Vector3.One),
         DayNight.SceneLight.Planet => (exposure * Mathf.Lerp(PlanetshineMin, PlanetshineMax, planetLit), PlanetshineTint),
         DayNight.SceneLight.Stars => (exposure * Starlight, StarlightTint),
+        // the Earth's own night (a ground square under /goto Earth): the moonlight's shading, as dim as the far side's stars
+        DayNight.SceneLight.Moon => (exposure * Starlight, StarlightTint),
         _ => (0f, Vector3.One),
     };
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength",
