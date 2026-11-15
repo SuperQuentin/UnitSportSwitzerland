@@ -261,8 +261,8 @@ public partial class FootPlayer
             GlobalPosition = carried;
             Rotation = new Vector3(0, Rotation.Y + turn, 0);
             _viewYaw += turn;
-            // the velocity is the vehicle's frame's: it turns with it
-            Velocity = new Basis(Vector3.Up, turn) * Velocity;
+            // the velocity is the vehicle's frame's: it turns with it (all of its turn for a body floating in it, #1493)
+            Velocity = Floating ? delta.Basis.Orthonormalized() * Velocity : new Basis(Vector3.Up, turn) * Velocity;
         }
         _carriedFrom = now;
         _deckCarried = true;
@@ -586,6 +586,9 @@ public partial class FootPlayer
         _handoverSpot = null;
         _deckFrameValid = false;
         Velocity -= VelocityOfHost(set.Host);
+        // a spacecraft's deck (#1493): at rest in it. Its motion is past what a deck measures (7.7 km/s in orbit, the drive's
+        // thousands), and what was left over flung the walker through the cabin
+        if (set.Ride is Airliner { Spec.Spacecraft: true }) Velocity = Vector3.Zero;
         CollisionMask = DeckLayer;
         _capsule.Radius = AboardRadius;
     }
@@ -597,6 +600,7 @@ public partial class FootPlayer
         DeckOn = "";
         _deckCarried = false;
         _deckFrameValid = false;
+        if (Floating) StopFloating();
         CollisionMask = _walkMask;
         _capsule.Radius = BodyRadius;
     }
@@ -840,6 +844,7 @@ public partial class FootPlayer
         get
         {
             if (!Aboard || HostNamed(DeckOn) is not { } host || RideOfHost(host) is not { } ride) return null;
+            if (HatchHint is { } hatch) return hatch;
             int seat = SeatNear(host, ride, GlobalPosition, 1.3f);
             if (seat < 0) return null;
             if (seat > 0) return "Sit down";

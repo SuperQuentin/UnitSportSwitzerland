@@ -1286,3 +1286,14 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 - [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
 - [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.
+
+## Walking and floating aboard the shuttle ([#1493](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1493))
+
+Offline, in a window (Cartoon), `--frame earth` at Geneva or `--world fixture`, `--date 2027-07-15`; the shuttle from the ride menu.
+
+- [ ] Parked: E stands you up behind the commander's seat; walk to the opening on the right, down the ladder, up again → it feels like a steep ladder, not a wall or a slide; the rail does not snag.
+- [ ] By the hatch on the mid deck, the prompt reads "Out by the hatch"; E → you stand on the ground on the left of the hull, and E there gets you back in at the controls.
+- [ ] `/orbit 400`, E: you float. The stick pushes you toward where you look, Space / Ctrl (pad A / B) up and down; let go near a wall and you stop; push off hard into the mid deck and drift → feels right, not twitchy or sluggish.
+- [ ] Floating, third person: the figure treads (as in water) and strokes when pushing; it looks like floating, not swimming in air badly.
+- [ ] VR (Link): floating with the left stick and A / B works; note how gripping and pulling should feel (the planned VR way).
+- [ ] Two players online (a pilot, a walker): the walker floats in orbit and stands again in the glide and on the runway, seen right from the pilot's seat.

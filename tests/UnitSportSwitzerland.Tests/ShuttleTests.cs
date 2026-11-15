@@ -192,4 +192,41 @@ public class ShuttleTests
         var (lift, _) = ShuttleFlight.Lander(Basis.Identity, Vector3.Zero, Vector3.Up, g, 1f, Vector2.Zero, true, 1f);
         Assert.Equal(ShuttleFlight.BellyAccel - g, lift.Y, 3);
     }
+
+    // ---- what is felt aboard and floating (#1493) ----
+
+    [Fact]
+    public void FeltInOrbitIsTheThrustAftAndTheDragForward()
+    {
+        var nose = Vector3.Forward;
+        var v = new Vector3(0, 0, -7700f);
+        // coasting in vacuum: nothing
+        Assert.True(ShuttleFlight.FeltInOrbit(nose, 0f, v, 0f).Length() < 1e-4f);
+        // the rockets at 2.1 g: felt aft
+        var burn = ShuttleFlight.FeltInOrbit(nose, 20.6f, v, 0f);
+        Assert.True(burn.Dot(-nose) > 20.5f, $"felt aft under thrust: {burn}");
+        // re-entry's air at 70 km (8.3e-5 kg/m³) at 7.5 km/s: half a g, forward along the velocity
+        var air = ShuttleFlight.FeltInOrbit(nose, 0f, new Vector3(0, 0, -7500f), 8.3e-5f);
+        _out.WriteLine($"felt in re-entry's air at 70 km: {air.Length():F2} m/s²");
+        Assert.InRange(air.Dot(v.Normalized()), 3f, 7f);
+    }
+
+    [Fact]
+    public void FloatsInFreeFallAndUnderThrustAlongTheCabinStandsOnTheFloor()
+    {
+        var up = Vector3.Up;
+        Assert.True(ShuttleFlight.Floats(Vector3.Zero, up, false), "free fall floats");
+        Assert.True(ShuttleFlight.Floats(new Vector3(0, -0.5f, 0), up, false), "a whisper of gravity still floats");
+        Assert.False(ShuttleFlight.Floats(new Vector3(0, -9.8f, 0), up, false), "the runway's g stands one up");
+        Assert.False(ShuttleFlight.Floats(new Vector3(0, -1.62f, 0), up, true), "the Moon's ground stands one up");
+        // the rockets in orbit push along the cabin: one floats aft, onto the floor that makes, not onto the cabin's floor
+        Assert.True(ShuttleFlight.Floats(new Vector3(0, 0, 20f), up, false), "pressed aft under thrust");
+        // the launch's climb: 2.9 g aft and 0.6 g down in the cabin's axes: still aft
+        Assert.True(ShuttleFlight.Floats(new Vector3(0, -6f, 28f), up, false), "lying on the aft bulkhead in the climb");
+        // a re-entry's lift through the floor with its drag forward: on one's feet
+        Assert.False(ShuttleFlight.Floats(new Vector3(0, -9f, -4f), up, true), "standing in the glide");
+        // hysteresis: 1 m/s² down stands nobody up who floats, and floats nobody who stands
+        Assert.True(ShuttleFlight.Floats(new Vector3(0, -1f, 0), up, true));
+        Assert.False(ShuttleFlight.Floats(new Vector3(0, -1f, 0), up, false));
+    }
 }
