@@ -207,8 +207,14 @@ public class ClockDisciplineTests
     /// one: wait for threaded work on the wall clock, because threads do not speed up under
     /// <c>--fixed-fps</c> (docs/notes/general/fast-checks.md). They are exempt by name.
     /// </summary>
-    private static bool IsHarness(string relative) =>
-        relative.EndsWith("Probe.cs", StringComparison.Ordinal) || relative.EndsWith("Check.cs", StringComparison.Ordinal);
+    // a check or a probe, or one of its partial files (MoonSitesCheck.Trailer.cs is MoonSitesCheck's, #1920): by the class's name
+    private static bool IsHarness(string relative)
+    {
+        string name = Path.GetFileName(relative);
+        int dot = name.IndexOf('.');
+        string type = dot > 0 ? name[..dot] : name;
+        return type.EndsWith("Probe", StringComparison.Ordinal) || type.EndsWith("Check", StringComparison.Ordinal);
+    }
 
     [Fact]
     public void Every_wall_clock_read_in_gameplay_code_has_a_stated_reason()
