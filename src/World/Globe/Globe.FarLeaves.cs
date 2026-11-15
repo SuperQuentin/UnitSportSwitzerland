@@ -133,7 +133,10 @@ public partial class Globe
         {
             double fps = Engine.GetFramesPerSecond();
             double target = Engine.MaxFps > 0 ? Engine.MaxFps : XR.XrSession.Active ? 72 : 60;
-            if (fps > 0)
+            // only a settled globe's frames count (#2022): building and committing the band's own tiles (a join, a jump, a
+            // re-plan) cost frames that are not its steady cost, and took the band to 0 % for good within seconds of a load
+            if (!Idle) changed |= _farBand.Step(delta, 1000.0 / target, 1000.0 / target);
+            else if (fps > 0)
             {
                 // the frame's work, not its vsync-paced wall time (#1987: at 60 Hz the band could never grow back)
                 var (gpu, renderCpu) = Core.PerfRecorder.RenderTimes(GetViewport());

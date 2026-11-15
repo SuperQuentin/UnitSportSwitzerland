@@ -48,7 +48,10 @@ public partial class BodyViews : Node
         if (!TerrainPaths.GlobeOff)
             foreach (var body in CelestialBody.All)
             {
-                if (BodySurface.Of(body.Id).Pyramid is not { Count: > 0 } chain) continue;
+                // never the Earth's here: its ground is its leaves and Globe, its far view from another body is _earth below. A
+                // second Earth globe (and a near square, the Earth being landable) drawn under the leaves fought them: a dark
+                // and white checkerboard over Valais (#2022, from #2013's switch to BodySurface, whose Earth chain is not null)
+                if (!BodyData.HasGlobe(body) || BodySurface.Of(body.Id).Pyramid is not { Count: > 0 } chain) continue;
                 var g = new BodyGlobe(body, chain, chain.Describe(), _origin);
                 AddChild(g);
                 _globes.Add(g);
