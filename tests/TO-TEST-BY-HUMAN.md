@@ -1332,3 +1332,10 @@ Offline, in a window (Cartoon), `--date 2027-07-15`, on foot at Geneva's or Zuri
 - [ ] Watch the take-off and, an hour or so later in game time (`/speed`), the landing on the same runway; the bot parks and climbs out by the hatch.
 - [ ] `--frame earth`, free camera on the bot (`/bot shuttle moon orbit`, then follow it): the trip, the drop onto a colony's pad (inside its 60 m), the lift-off, home; the descent and touchdown look like a lander, not a crash.
 - [ ] Online (server + client): `/bot shuttle 300` at Geneva → the bot flies round the Earth and lands home, seen from the ground.
+
+## A planet followed at the longest end on any body (PR [#2029](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2029), [#2028](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2028))
+
+`--frame earth`, on the Moon (`/goto moon 17 59`), a telescope set up, normal speed.
+
+- [ ] Pick Jupiter in the target menu and zoom all the way in (wheel), then wait a minute → Jupiter's globe stays in the middle; the same with `/time speed real`.
+- [ ] The same with a pad (D-pad up to zoom, X / LB to pick the target) and in VR (the eyepiece picture before the eyes) → it stays centred.
