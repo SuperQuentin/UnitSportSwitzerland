@@ -138,16 +138,6 @@ public sealed class CelestialBody
     /// </summary>
     public double MeanRadius => Id == BodyId.Earth ? EarthMeanRadius : (2 * Shape.A + Shape.B) / 3;
 
-    /// <summary>
-    /// Its rings as a slab one can reach (#2030): Saturn's (the D ring's inner edge to the A ring's outer one, 400 m thick
-    /// in its equator plane, what <c>World/Bodies/SaturnRings</c> draws); null for the others (Jupiter's, Uranus' and
-    /// Neptune's faint rings are not drawn).
-    /// </summary>
-    public RingSlab? Rings => Id == BodyId.Saturn ? SaturnRingSlab : null;
-
-    /// <summary>Saturn's ring slab.</summary>
-    public static readonly RingSlab SaturnRingSlab = new(74_500_000, 140_220_000, 200);
-
     /// <summary>The Earth's mean radius (IUGG), metres.</summary>
     public const double EarthMeanRadius = 6_371_008.8;
 
@@ -309,20 +299,4 @@ public sealed class CelestialBody
     public double CircularSpeed(double r) => System.Math.Sqrt(GM / r);
 
     public override string ToString() => Name;
-}
-
-/// <summary>
-/// A body's rings as a solid slab for distances (#2030): an annulus from <see cref="Inner"/> to <see cref="Outer"/> metres
-/// from its centre in its equator plane (its fixed frame's XY), <see cref="HalfThickness"/> each side of it.
-/// </summary>
-public readonly record struct RingSlab(double Inner, double Outer, double HalfThickness)
-{
-    /// <summary>The distance from a point in the body's fixed frame to the slab, metres (0 inside it).</summary>
-    public double Distance(DVec3 p)
-    {
-        double r = System.Math.Sqrt(p.X * p.X + p.Y * p.Y);
-        double over = System.Math.Max(0, System.Math.Abs(p.Z) - HalfThickness);
-        double beside = r < Inner ? Inner - r : r > Outer ? r - Outer : 0;
-        return System.Math.Sqrt(over * over + beside * beside);
-    }
 }

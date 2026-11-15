@@ -58,7 +58,6 @@ public partial class ChunkManager
         public void RemoveAnchor(Node3D anchor) => m.RemoveAnchor(anchor);
 
         public bool HasAnchor(Node3D anchor) => m.HasAnchor(anchor);
-        public int Version => m.GroundVersion;
         public IReadOnlyList<Node3D> Anchors => m.Anchors;
 
         public event Action<GroundTile>? TileEntered

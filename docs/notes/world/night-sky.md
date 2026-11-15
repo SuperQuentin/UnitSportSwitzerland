@@ -35,6 +35,15 @@ through it (#1798).
   `Ephemeris.Celestial`, precession and sidereal time). A fixed size in pixels by magnitude
   (`StarField.Look`, 1.2-4.6 px), tinted by B-V, fading in with `world_night` and out near the horizon.
   Proper motion and nutation are left out.
+  **At any speed** (#2035; "when moving toward a planet, all stars disappear ... all re-appears when stopping"): the
+  points stand at infinity (`sky_point.gdshader`: the direction projected with w 0, depth pinned just inside the far
+  plane by `sky_depth`), no longer at 95 % of a far plane read before the camera's planes move (approaching a planet it
+  shrank more than 5 % a frame and the stars fell past it); and `StarField`'s cull box follows the camera (moved when 1e6
+  m off, `StarField.FollowM`), `Satellites`' box re-centred on it: at the top speed the camera is 2-6e7 m from the origin
+  between re-anchors (in Space the origin does not follow it vertically). Check: `--starwatch` (the stars counted every
+  10th frame, low frames saved, RESULT) beside `--bodyshot saturn,-14,-167,2000000,-10,194,fly:1e9` (6 s toward the body
+  at V m/s, `_fly.png`, then `_stopped.png`). Seen there and not the stars': a black frame (the sun gone too) at a hitch of
+  3-4e7 m, the planets session's (body globes, Saturn's air shell).
   **The node stays at the origin** (#1989): `StarField` and `Satellites` reset to identity on `OnOriginShifted`. They
   are top-level with a 1e7 m cull box; every shift moved them, and the shift to the Moon's tangent frame left the field
   ~4e8 m away: every star culled (as after ~10,000 km of flight on the Earth). **Off the Earth** (`Atmosphere`):
