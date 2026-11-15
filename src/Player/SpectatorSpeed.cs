@@ -51,7 +51,17 @@ public static class SpectatorSpeed
     /// everywhere and a trip's time grows with the logarithm of its length: from a 400 km orbit to the Moon in well under
     /// a minute at full speed, to Neptune in about one (#2026), slowing by itself as the target's ground comes up.
     /// </summary>
-    public static float SurfaceCap(double distance) => (float)Math.Clamp(distance * CapPerMetre, GroundCap, DeepCap);
+    public static float SurfaceCap(double distance) => SurfaceCap(distance, GroundCap);
+
+    /// <summary>The same with its own floor (<see cref="RingFloor"/> at a ring, #2030).</summary>
+    public static float SurfaceCap(double distance, float floor) => (float)Math.Clamp(distance * CapPerMetre, floor, DeepCap);
+
+    /// <summary>
+    /// The cap's floor at a ring's slab, m/s (#2030): a drift among the ice chunks (the slab's 400 m in 20 s; the wheel goes
+    /// down to walking pace), where a planet's ground keeps the old 3 km/s. The cap is half the distance a second above it, so
+    /// the camera slows into the rings as into a planet's sky.
+    /// </summary>
+    public const float RingFloor = 20f;
 
     /// <summary>One notch faster between bodies: up to <see cref="MaxSpeed"/>, the wheel's top, which flies the cap (<see cref="Flown"/>).</summary>
     public static float Faster(float speed, float cap) => Math.Min(speed * Notch, MaxSpeed);
