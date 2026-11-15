@@ -257,9 +257,9 @@ public static class MoonSites
     }
 
     /// <summary>Points every ~1.5 m from one place to another, the line wandering sideways by <paramref name="wobble"/> of its length.</summary>
-    private static (double East, double North)[] Wander(Random rng, (double E, double N) a, (double E, double N) b, double wobble)
+    private static (double East, double North)[] Wander(Random rng, (double East, double North) a, (double East, double North) b, double wobble)
     {
-        double dx = b.E - a.E, dy = b.N - a.N, len = Math.Sqrt(dx * dx + dy * dy);
+        double dx = b.East - a.East, dy = b.North - a.North, len = Math.Sqrt(dx * dx + dy * dy);
         int n = Math.Max(2, (int)(len / 1.5) + 1);
         double sx = -dy / Math.Max(len, 1e-6), sy = dx / Math.Max(len, 1e-6);
         // two sine waves of random phase: smooth, ends pinned
@@ -269,7 +269,7 @@ public static class MoonSites
         {
             double t = i / (double)(n - 1);
             double off = Math.Sin(t * Math.PI) * len * wobble * (a1 * Math.Sin(t * 3 + p1) + a2 * Math.Sin(t * 7 + p2));
-            pts[i] = (a.E + dx * t + sx * off, a.N + dy * t + sy * off);
+            pts[i] = (a.East + dx * t + sx * off, a.North + dy * t + sy * off);
         }
         return pts;
     }
