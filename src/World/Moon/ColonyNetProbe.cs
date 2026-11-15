@@ -167,9 +167,11 @@ public partial class ColonyNetProbe : ChatProbe
 
     private async Task WatchEva(FootPlayer me)
     {
-        bool crew = await Until(() => BotCopies().Count >= 4, 60);
-        Expect(crew, "the server's crew here");
-        if (!crew || Colony() is not { } colony) return;
+        // the crew's copies come as the server's interest reaches this client: up to two minutes
+        bool crew = await Until(() => BotCopies().Count >= 3, 120);
+        Expect(crew, $"the server's crew here ({BotCopies().Count} colonists' copies)");
+        // the EVA is watched whatever the count (A takes a rover only once this says the EVA is done)
+        if (Colony() is not { } colony) return;
         // by name: a copy is freed when the server takes its bot away (asleep, out of reach)
         var wasIn = new HashSet<string>();
         string? eva = null;
