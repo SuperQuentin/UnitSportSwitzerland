@@ -1334,5 +1334,5 @@ In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date
 
 A server with `--bodies`, a client in a window, Cartoon, `--date 2027-07-15 --time 10 --occasion none`, `/goto moon -89.384 -150.055 0.3` (admin).
 
-- [ ] Walk to an airlock's top step and press E, go through the chamber and press E again → both doors move as offline (shut, pump, open), and a second client watching sees the same doors move at the same time.
+- [ ] In a window, walk to an airlock's top step and press E, go through the chamber and press E again → the doors move as offline, and a second client sees them move at the same time (the headless check presses E; a look by eye is left).
 - [ ] Watch the colonists in the hub and the cans → they walk the rooms without passing through furniture or walls, and come through the airlocks on their EVAs.
