@@ -17,6 +17,28 @@ uniform float brightness = 1.0;
 // the night side, faintly lit by the Earth: a crescent's dark disc shows beside it (0.012 vanished into the night sky, #1798)
 uniform float earthshine = 0.04;
 
+// the colonies' lights (#1946, src/World/Moon/ColonyLights.cs): their directions in the moon's own axes (as face's
+// columns), their strength; a spark a pixel or two across on the dark part, whatever the zoom (the colony's own ~1 km when
+// the telescope shows more than that)
+uniform vec4 colonies[8];
+uniform int colony_count = 0;
+
+
+// seen from space (#1998, World/Bodies/BodyLook.cs): the body's globe's own look, so the hand-over between this sphere and
+// its globe never shows: the photo lifted for Cartoon, plain Lambert (a giant's wrapped terminator), the night floor, the
+// globe's exposure. 0: the sky's own look (through the air, the telescope by day)
+uniform float globe_look = 0.0;
+uniform float sun_strength = 1.6;
+uniform float night_floor = 0.06;
+uniform float terminator_wrap = 0.0;
+
+vec3 globe_lit(vec3 photo, vec3 n, vec3 sun) {
+	vec3 col = pow(max(photo, vec3(0.0)), vec3(0.8));
+	float lambert = max((dot(n, normalize(sun)) + terminator_wrap) / (1.0 + terminator_wrap), 0.0);
+	lambert *= lambert * terminator_wrap + (1.0 - terminator_wrap) * sign(lambert);
+	return col * (night_floor + sun_strength * lambert);
+}
+
 varying vec3 world_normal;
 
 #include "res://shaders/common/sky_depth.gdshaderinc"
@@ -34,5 +56,13 @@ void fragment() {
 	vec3 surface = texture(albedo, uv).rgb;
 	// the full moon is a flat disc, not a shaded ball: lit or not, with a soft terminator
 	float lit = smoothstep(-0.02, 0.06, dot(n, sun_dir));
-	ALBEDO = surface * (lit + earthshine) * brightness;
+	ALBEDO = mix(surface * (lit + earthshine) * brightness, globe_lit(surface, n, sun_dir), globe_look);
+	float pixel = max(length(fwidth(b)), 1e-7);
+	for (int i = 0; i < colony_count; i++) {
+		vec3 l = colonies[i].xyz;
+		float px = length(b - l) / pixel;
+		float size = max(1.3, 0.0006 / pixel);
+		float spark = (1.0 - smoothstep(size * 0.35, size, px)) * colonies[i].w * (1.0 - lit);
+		ALBEDO += vec3(1.0, 0.82, 0.5) * spark * 1.8;
+	}
 }

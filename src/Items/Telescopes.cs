@@ -166,7 +166,9 @@ public partial class Telescopes : Node
     {
         if (!Online) return true;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
-        return body.Global.DistanceTo(GlobalPos.FromLv95(o.E, o.N, o.Altitude)) <= Reach + ServerSlack;
+        // as places: on another body never near (#1995)
+        var me = body.Global;
+        return me.Body == o.At.Body && me.DistanceTo(o.At) <= Reach + ServerSlack;
     }
 
     private void Free(long id)

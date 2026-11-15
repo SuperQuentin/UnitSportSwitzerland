@@ -513,6 +513,9 @@ public partial class PhoneController : Node
             : _screens.Shown == PhoneScreens.Page.Camera ? _selfie ? FootPlayer.PhoneSelfieState : FootPlayer.PhoneCameraState
             : FootPlayer.PhoneOpenState;
         p.PhoneLook = _look;
+        // open on an app, third person: the camera comes over the shoulder onto the phone in the hands (#1825); folded it never does
+        // (not with the big map up: the camera eases back to the gameplay one under it, and the phone goes to its small corner pose, #1826)
+        p.PhoneShoulderWant = open && !FullView && !_mapShown && _screens.Shown is not PhoneScreens.Page.Camera and not PhoneScreens.Page.Travel;
         p.PhoneCover = _cover;
         p.PhoneFold = _fold;
         p.PhoneCameraApp = _camApp;
@@ -570,6 +573,7 @@ public partial class PhoneController : Node
     {
         p.PhoneState = FootPlayer.PhonePocketState;
         p.PhoneLook = p.PhoneCover = p.PhoneFold = p.PhoneBackdrop = p.PhoneCameraApp = 0f;
+        p.PhoneShoulderWant = false;
         p.PhoneTilt = Vector2.Zero;
         p.PhonePointTip = null;
         p.PhonePointDir = null;

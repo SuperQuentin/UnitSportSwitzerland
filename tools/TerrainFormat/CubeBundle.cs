@@ -191,6 +191,9 @@ public sealed class CubeManifest
         FormattableString.Invariant($"face 0 at {CubeSphere.CentreLatDeg}N {CubeSphere.CentreLonDeg}E, twist {CubeSphere.TwistDeg}");
     [JsonPropertyName("sources")] public List<string> Sources { get; set; } = new();
 
+    /// <summary>The body the pyramid tiles (#1849): "Moon", "Mars"; null (not written) for the Earth.</summary>
+    [JsonPropertyName("body"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Body { get; set; }
+
     /// <summary>A leaf region's (<c>.cubl</c>, #1507): every kind some leaf holds; null (not written) for a pyramid.</summary>
     [JsonPropertyName("kinds"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? Kinds { get; set; }
     /// <summary>
@@ -217,6 +220,11 @@ public sealed class CubeManifestLevel
     /// <summary>The colour's side in pixels (<c>.cuba</c> bundles at <see cref="AlbedoBundleLevel"/>), 0 when the level has none.</summary>
     [JsonPropertyName("albedo")] public int Albedo { get; set; }
     [JsonPropertyName("albedoBundleLevel")] public int AlbedoBundleLevel { get; set; }
+    /// <summary>
+    /// What stands on the level's tiles, baked for the far view (#1657, <see cref="CubeFarFeatures"/>): its grid's cells a side in
+    /// <c>.cubf</c> bundles at <see cref="BundleLevel"/>, 0 when the level has none.
+    /// </summary>
+    [JsonPropertyName("features"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int Features { get; set; }
 }
 
 public sealed class CubeManifestTile

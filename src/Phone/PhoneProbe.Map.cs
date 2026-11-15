@@ -34,6 +34,8 @@ public partial class PhoneProbe
         Log("-- the Map app, a large see-through map (#1826)");
         if (phone.IsOut) { phone.PutAway(); for (int i = 0; i < 60 && phone.IsOut; i++) await Wait(0.1); }
         await Wait(0.3);
+        var gameCam = me.CameraOrNull!;
+        float gameFov = gameCam.Fov;
         await Press(PlayerInput.Phone, 0.6);
         await Press(PlayerInput.Phone, 0.8);
         phone.Open(PhoneScreens.Page.Map);
@@ -88,6 +90,19 @@ public partial class PhoneProbe
         map.Canvas.Redraw();
         await Wait(0.5);
         Shot("phone_1826/map_standing.png");
+        Shot("phone_shoulder/map_up.png");
+        // the camera eases back to the gameplay one under the map, and comes back over the shoulder when the Map app is left (third person)
+        if (me.ZoomsView)
+        {
+            Check(me.PhoneShoulder == 0f && Mathf.Abs(gameCam.Fov - gameFov) < 0.5f, $"third person: with the big map up the camera is the gameplay one ({me.PhoneShoulder:F2}, fov {gameCam.Fov:F0})");
+            await Key(Godot.Key.Escape, 1.0);
+            Check(phone.Screens.Shown == PhoneScreens.Page.Home && me.PhoneShoulder >= 0.99f && !me.PhoneViewShown, $"leaving the Map for Home brings the camera back over the shoulder ({me.PhoneShoulder:F2})");
+            Shot("phone_shoulder/back_on_home.png");
+            phone.Open(PhoneScreens.Page.Map);
+            await Wait(1.0);
+            Check(phone.MapUp && me.PhoneShoulder == 0f, "and the Map again sends it back under the map");
+        }
+        else Check(me.PhoneShoulder == 0f && me.PhoneViewShown, "first person: the corner phone, no shoulder view, the map up as before");
 
         // pan: an arrow key, then a drag; the body does not walk on the arrows
         var (lat0, lon0) = map.Canvas.View.Centre;

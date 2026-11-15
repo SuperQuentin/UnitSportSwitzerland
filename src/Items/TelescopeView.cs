@@ -49,6 +49,9 @@ public partial class TelescopeView : CanvasLayer
     private MeshInstance3D? _panel;
     private Label _readout = null!, _hint = null!, _menu = null!, _info = null!;
     private bool _infoOn;
+
+    /// <summary>The info HUD shown (Up / pad Y; a check sets it).</summary>
+    public bool InfoOn { get => _infoOn; set => _infoOn = value; }
     private double _infoAt;
     private string _menuShown = "", _infoShown = "";
     private Control _mask = null!;
@@ -197,7 +200,7 @@ public partial class TelescopeView : CanvasLayer
         if (TargetDirection() is not { } d)
         {
             Locked = false;
-            ItemController.Instance?.Toast($"{TelescopeTargets.Name(body)} is not in the sky here.");
+            ItemController.Instance?.Toast($"{NameOf(body)} is not in the sky here.");
             return false;
         }
         Aim(d);
@@ -210,11 +213,34 @@ public partial class TelescopeView : CanvasLayer
 
     /// <summary>Where the tube is held this frame: the tracked spot of the sky, or <see cref="Target"/>, if the sky shows it.</summary>
     private Vector3? TargetDirection() => !FollowsBody ? (World.DayNight.Instance?.Sky is { } sky ? (sky.Stars * _skyDir).Normalized() : null)
-        : Target == SkyBody.Moon ? World.DayNight.Instance?.Sky?.Moon
+        : Target == SkyBody.Moon ? (EarthForMoon ? EarthDirection() : World.DayNight.Instance?.Sky?.Moon)
         : World.SkyBodies.Instance?.DirectionOf(Target);
 
     /// <summary>The target's name for the readout.</summary>
-    private string TargetName => !FollowsBody ? "the sky" : Target == SkyBody.Moon ? "the moon" : Target.ToString();
+    private string TargetName => !FollowsBody ? "the sky" : Target == SkyBody.Moon ? (EarthForMoon ? "the Earth" : "the moon") : Target.ToString();
+
+    /// <summary>
+    /// Standing on the Moon (#1995): the menu's first entry is the Earth, not the Moon (the ground there; its direction from
+    /// the sky's Moon pointed into it).
+    /// </summary>
+    public bool EarthForMoon => _player?.Origin is { Body: BodyId.Moon };
+
+    /// <summary>A menu entry's name here: the Moon's is the Earth's on the Moon.</summary>
+    private string NameOf(SkyBody body) => body == SkyBody.Moon && EarthForMoon ? "Earth" : TelescopeTargets.Name(body);
+
+    /// <summary>
+    /// The Earth's direction from the eyepiece in world axes, from another body (#1995): its centre through the frame tree
+    /// (the local day keeps it still in the Moon's sky), into the anchor's axes. Null on the Earth.
+    /// </summary>
+    public Vector3? EarthDirection()
+    {
+        if (_player?.Origin is not { } origin || origin.Body == BodyId.Earth || origin.Frame.Axes is not { } axes) return null;
+        var e = Frames.Convert(BodyId.Earth, DVec3.Zero, origin.Body, SkyClock.Now);
+        var (x, y, z) = axes.FromEcef(e.AsEcef);
+        var eye = _cam?.GlobalPosition ?? _scope.GlobalPosition;
+        // from the world's origin in doubles, then the eye taken off: the Earth is 3.8e8 m away
+        return new Vector3((float)(x - eye.X), (float)(y - eye.Y), (float)(z - eye.Z)).Normalized();
+    }
 
     /// <summary>The tube's direction in world axes.</summary>
     public Vector3 Direction => new Basis(Vector3.Up, Yaw) * new Basis(Vector3.Right, Pitch) * Vector3.Forward;
@@ -262,7 +288,7 @@ public partial class TelescopeView : CanvasLayer
         if (use) ToggleLock();
         if (Input.IsActionJustPressed(ActNext)) StepTarget(1);
         else if (Input.IsActionJustPressed(ActPrev)) StepTarget(-1);
-        if (Input.IsActionJustPressed(ActInfo)) _infoOn = !_infoOn;
+        if (Input.IsActionJustPressed(ActInfo)) InfoOn = !InfoOn;
         if (!_vr)
         {
             // the right stick, as PlayerInput.LookRate shapes it (that one is blocked while the view has the focus)
@@ -407,19 +433,21 @@ public partial class TelescopeView : CanvasLayer
     /// <summary>The target list, the locked one marked: text set only when it changes.</summary>
     private void UpdateMenu()
     {
-        string text = MenuText(Locked && FollowsBody ? Target : null);
+        string text = MenuText(Locked && FollowsBody ? Target : null, EarthForMoon);
         if (text != _menuShown) _menu.Text = _menuShown = text;
     }
 
-    private static readonly string?[] MenuTexts = new string?[TelescopeTargets.Menu.Length + 1];
+    /// <summary>The menu's text by the entry marked, on the Earth and (the Earth first, #1995) on the Moon.</summary>
+    private static readonly string?[] MenuTexts = new string?[2 * (TelescopeTargets.Menu.Length + 1)];
 
-    private static string MenuText(SkyBody? marked)
+    /// <summary>The menu, <paramref name="marked"/> marked; <paramref name="earth"/>: the Moon's entry is the Earth (on the Moon).</summary>
+    public static string MenuText(SkyBody? marked, bool earth = false)
     {
-        int slot = marked == null ? 0 : 1 + System.Array.IndexOf(TelescopeTargets.Menu, marked.Value);
+        int slot = (marked == null ? 0 : 1 + System.Array.IndexOf(TelescopeTargets.Menu, marked.Value)) + (earth ? TelescopeTargets.Menu.Length + 1 : 0);
         if (MenuTexts[slot] is { } cached) return cached;
         var sb = new System.Text.StringBuilder();
         foreach (var b in TelescopeTargets.Menu)
-            sb.Append(b == marked ? "▶ " : "   ").Append(TelescopeTargets.Name(b)).Append('\n');
+            sb.Append(b == marked ? "▶ " : "   ").Append(b == SkyBody.Moon && earth ? "Earth" : TelescopeTargets.Name(b)).Append('\n');
         return MenuTexts[slot] = sb.ToString().TrimEnd();
     }
 
@@ -438,8 +466,22 @@ public partial class TelescopeView : CanvasLayer
             horizon = ((h.Azimuth - Mathf.RadToDeg(_north.World(origin.Frame, _scope.GlobalPosition)) + 360) % 360, h.Altitude);
         // tracking the sky: where the tube points, no body's readings
         if (!(Locked && FollowsBody)) text = "Tracking the sky" + nl + TelescopeTargets.Where(horizon);
-        else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, SwissTime.ToUtc(sky.Date, sky.Hour)), horizon);
+        else if (body == SkyBody.Moon && EarthForMoon && EarthInfo() is { } earth) text = TelescopeTargets.Format(body, earth, horizon, "Earth");
+        else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, sky.Moment.Utc), horizon);
         if (text != _infoShown) _info.Text = _infoShown = text;
+    }
+
+    /// <summary>The Earth's readings from the eyepiece on another body (#1995), all in that body's fixed axes.</summary>
+    private TelescopeTargets.Info? EarthInfo()
+    {
+        if (_player?.Origin is not { } origin || origin.Body == BodyId.Earth) return null;
+        var sky = SkyClock.Now;
+        var eye = origin.ToGlobal(_cam?.GlobalPosition ?? _scope.GlobalPosition);
+        if (eye.Body != origin.Body) return null;
+        DVec3 me = eye.Ecef;
+        var earth = Frames.Convert(BodyId.Earth, DVec3.Zero, origin.Body, sky);
+        var sun = Frames.Convert(BodyId.Sun, DVec3.Zero, origin.Body, sky);
+        return TelescopeTargets.ReadEarth(earth - me, sun - earth);
     }
 
     /// <summary>The keys while looking through it: zoom, lock, step back, the target menu, the info.</summary>

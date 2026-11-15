@@ -13,7 +13,7 @@ public struct TetherState
     public float Length;
     /// <summary>A hand-holding follower: with no input, the leader's trail walks it.</summary>
     public bool Led;
-    /// <summary>Where the trail says to be (1.1 m behind the leader), when there is one.</summary>
+    /// <summary>Where the trail says to be (0.8 m behind the leader), when there is one.</summary>
     public Vector3? TrailTarget;
     /// <summary>The partner's speed, m/s: a follower runs when its leader does.</summary>
     public float PartnerSpeed;
@@ -74,7 +74,12 @@ public sealed class TetherTrail
 {
     public const int Size = 32;
     public const float Spacing = 0.4f;
-    public const float Behind = 1.1f;
+    /// <summary>
+    /// How far behind the leader the follower walks, m. With <see cref="Tether.CatchUp"/> it must leave room under
+    /// <see cref="LinkBook.HandLength"/> for the replication lag the server sees between them (#1706): at 1.1 m a
+    /// steady walk kept 5 cm, and holding hands paid out to a rope at a walk.
+    /// </summary>
+    public const float Behind = 0.8f;
     /// <summary>A jump this long (an origin shift, a teleport) starts the trail again.</summary>
     public const float Jump = 6f;
 

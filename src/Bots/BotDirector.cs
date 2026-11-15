@@ -47,6 +47,25 @@ public partial class BotDirector : Node
     public static BotDirector CreateServer(MultiplayerSpawner spawner, Node3D players) =>
         new() { Name = NodeName, _spawner = spawner, _players = players };
 
+    /// <summary>
+    /// Offline (single-player), the same director the server has: bodies spawned through this world's own spawner into
+    /// its <c>Players</c> container, run here, as on a dedicated server; the offline player (<paramref name="local"/>,
+    /// outside that container) is the human the bots watch and see.
+    /// </summary>
+    public static BotDirector CreateOffline(MultiplayerSpawner spawner, Node3D players, Func<FootPlayer?> local) =>
+        new() { Name = NodeName, _spawner = spawner, _players = players, Local = local };
+
+    /// <summary>Offline: the one player, who is not in the <c>Players</c> container (null on a server).</summary>
+    public Func<FootPlayer?>? Local { get; private init; }
+
+    /// <summary>The humans' bodies here: the players' proxies, and offline the player.</summary>
+    public IEnumerable<FootPlayer> Humans()
+    {
+        foreach (var node in _players.GetChildren())
+            if (node is FootPlayer { Npc: false } human) yield return human;
+        if (Local?.Invoke() is { } me && GodotObject.IsInstanceValid(me)) yield return me;
+    }
+
     public override void _EnterTree()
     {
         Instance = this;
@@ -152,7 +171,7 @@ public partial class BotDirector : Node
             body.AppearanceBits = alien.Looks.Pack();
             body.OutfitBits = alien.Outfit.Bits;
         }
-        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = new BotWorld(_players, body) };
+        var bot = new Bot(id, n, body, profile) { NextThink = Now, World = new BotWorld(_players, body, Local) };
         // the body reads no keys: its walk, jump, crouch come from the brain's intent
         body.WalkControls = () => (bot.Intent.Wish, bot.Intent.Run);
         body.FootActions = () => (bot.Intent.Jump, bot.Intent.Crouch, bot.Intent.Climb);
@@ -243,9 +262,8 @@ public partial class BotDirector : Node
     private void UpdateWatched()
     {
         foreach (var bot in _bots.Values) bot.Watched = false;
-        foreach (var node in _players.GetChildren())
+        foreach (var human in Humans())
         {
-            if (node is not FootPlayer human || human.Npc) continue;
             // in Earth positions: a human and a bot can be in two server regions' frames (#1456)
             var at = human.Global;
             foreach (var bot in _bots.Values)
@@ -362,8 +380,40 @@ public partial class BotDirector : Node
                 foreach (var bot in _bots.Values) bot.Brain = new DriveBrain(InFrameOf(bot, driver, goal));
                 return $"{_bots.Count} bot(s) off to a point {metres:F0} m ahead of you.";
             }
+            case "shuttle":
+            {
+                // /bot shuttle [moon] [orbit] [km] [turns] [pad=<id>] (#1498): the nearest bot (a new one beside the sender
+                // if none is within 300 m) walks to the nearest parked shuttle and flies its mission
+                if (bodyOf(sender) is not { } asker || asker.Origin is not { } at) return "'/bot shuttle' needs your body in the world.";
+                bool moon = false, fromOrbit = false;
+                double km = 400;
+                int turns = 1;
+                string? pad = null;
+                var numbers = new List<double>();
+                foreach (string a in args.Skip(1))
+                {
+                    string w = a.ToLowerInvariant();
+                    if (w == "moon") moon = true;
+                    else if (w == "orbit") fromOrbit = true;
+                    else if (w.StartsWith("pad=")) pad = a[4..];
+                    else if (double.TryParse(a, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v)) numbers.Add(v);
+                    else return "Usage: /bot shuttle [moon] [orbit] [km] [turns] [pad=<id>]";
+                }
+                if (numbers.Count > 0) km = Math.Clamp(numbers[0], 150, 2_000);
+                if (numbers.Count > 1) turns = (int)Math.Clamp(numbers[1], 1, 10);
+                var pilot = _bots.Values.Where(b => b.Alive && b.Brain is not ShuttleBrain { Done: false } && b.Body.Region == asker.Region)
+                    .OrderBy(b => b.Body.GlobalPosition.DistanceTo(asker.GlobalPosition)).FirstOrDefault();
+                if (pilot == null || pilot.Body.GlobalPosition.DistanceTo(asker.GlobalPosition) > 300f)
+                {
+                    var names = _bots.Values.Select(b => b.Profile.Name).ToHashSet();
+                    pilot = Add(at.ToGlobal(asker.GlobalPosition + new Vector3(4f, 1.5f, 4f)), 0f, BotProfile.For(_seed++, 0, BotDifficulty.Normal, names));
+                    if (pilot == null) return $"No room for another bot (at most {MaxBots}).";
+                }
+                pilot.Brain = new ShuttleBrain(new ShuttleBrain.Ask(moon, km, turns, fromOrbit, pad));
+                return $"{pilot.Profile.Name} flies the shuttle: {(moon ? "to the Moon and back" : $"{turns} turn(s) round the Earth")} at {km:F0} km{(fromOrbit ? ", from orbit" : "")}.";
+            }
             default:
-                return "Usage: /bot add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | drive [metres] | clear | list";
+                return "Usage: /bot add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | drive [metres] | shuttle [moon] [orbit] [km] [turns] | clear | list";
         }
     }
 }

@@ -43,7 +43,18 @@ public abstract partial class ChatProbe : Node
 
     protected ChatManager? Chat => GetParent().GetNodeOrNull<ChatManager>(ChatManager.NodeName);
     /// <summary>Our player: by default the one the camera rides.</summary>
-    protected virtual FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
+    /// <summary>
+    /// This peer's own body: the camera's, or, while the camera is elsewhere (a seeker's blind count, a spectator view, #1787),
+    /// the player this peer has authority over.
+    /// </summary>
+    protected virtual FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer ?? OwnBody();
+
+    private FootPlayer? OwnBody()
+    {
+        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
+            if (node is FootPlayer { Npc: false } p && p.IsMultiplayerAuthority() && FootPlayer.NetId(p.Name) is > 0) return p;
+        return null;
+    }
 
     /// <summary>The least a joining player is waited for on an earth world: the spawn's own wait for leaves and more.</summary>
     public const double EarthJoinSeconds = 300;
@@ -53,13 +64,30 @@ public abstract partial class ChatProbe : Node
     {
         // on an earth world a client stands on its own fill leaves first, and the spawn waits up to 180 s for them (#1704)
         if (GameSettings.Current.Frame == WorldFrame.Earth) seconds = Math.Max(seconds, EarthJoinSeconds);
-        if (!await Until(() => Chat != null && Permissions.Online && Me != null && Me.IsOnFloor() && (also?.Invoke() ?? true), seconds))
+        // listening from the first frame the chat exists, not once standing: a peer that stood first and spoke while this one
+        // still waited for its ground was never heard (#1787: "B is on" failed on A while B had said it)
+        if (!await Until(() => Listen() && Permissions.Online && Me != null && Me.IsOnFloor() && (also?.Invoke() ?? true), seconds))
         {
             Fail("no player on the ground");
             return false;
         }
-        Chat!.LineReceived += (line, _) => _heard.Add(line);
         return true;
+    }
+
+    private bool _listening;
+
+    /// <summary>Hooks the chat once it exists; true from then on.</summary>
+    private bool Listen()
+    {
+        if (_listening) return true;
+        if (Chat is not { } chat) return false;
+        chat.LineReceived += (line, kind) =>
+        {
+            _heard.Add(line);
+            // the server refusing a line (its flood gate, a bad command) is why a word never arrives: in the log (#1787)
+            if (kind == ChatKind.Error) GD.Print($"{Log} chat error: {line}");
+        };
+        return _listening = true;
     }
 
     /// <summary>

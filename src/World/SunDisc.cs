@@ -32,18 +32,24 @@ public partial class SunDisc : MeshInstance3D
     /// <summary>The quad's angular half-size, rad: the corona fades to nothing inside it.</summary>
     public const float Reach = 0.14f;
 
+    /// <summary>The quad's half-size in vacuum (#1989), rad: room for the glare's wide bloom (20°).</summary>
+    public const float VacuumReach = 0.35f;
+
     private static readonly StringName CoreR = "core_r", ReachP = "reach", Warm = "warm", Brightness = "brightness",
-        SunDir = "sun_dir", ShaftColour = "shaft_colour", Spikes = "spikes";
+        SunDir = "sun_dir", ShaftColour = "shaft_colour", Spikes = "spikes", Glare = "glare";
 
     /// <summary>The starburst's strength on the ground (in space the atmosphere's sun has it full).</summary>
     private const float GroundSpikes = 0.15f;
+
+    /// <summary>The starburst in vacuum (#1989): full, as the atmosphere's sun in space (a camera's glare against black).</summary>
+    private const float VacuumSpikes = 1f;
 
     /// <summary>The shafts' strength high in the sky and on the horizon.</summary>
     private const float ShaftsHigh = 0.035f, ShaftsLow = 0.3f;
 
     private readonly ShaderMaterial _material, _shaftMaterial;
     private readonly MeshInstance3D _shafts;
-    private (float Core, float Warm, float Bright, float Spikes) _shown = (-1, -1, -1, -1);
+    private (float Core, float Warm, float Bright, float Spikes, float Glare, float Reach) _shown = (-1, -1, -1, -1, -1, -1);
     private (Vector3 Colour, float Warm) _shaftsShown = (-Vector3.One, -1);
 
     public SunDisc()
@@ -93,17 +99,19 @@ public partial class SunDisc : MeshInstance3D
             return;
         }
         var toSun = sky.Sun.Normalized();
-        // above the air the atmosphere's own sun takes over; well under the horizon nothing shows
-        float bright = (1f - Atmosphere.Space) * Mathf.SmoothStep(-0.06f, -0.01f, toSun.Y);
+        // above the air the atmosphere's own sun takes over; well under the horizon nothing shows. With no air at all
+        // (#1989: the Moon) there is no shell to draw it: this one, the vacuum's sun, white, its full starburst
+        bool vacuum = Atmosphere.Airless;
+        float bright = (vacuum ? 1f : 1f - Atmosphere.Space) * Mathf.SmoothStep(-0.06f, -0.01f, toSun.Y);
         if (bright <= 0.001f)
         {
             Visible = false;
             return;
         }
         float fov = Mathf.DegToRad(CameraLens.FovOf(cam));
-        float core = Mathf.Max(TrueRadius, fov * MoonDisc.MinScreenShare);
-        // through more air low down: warmer and wider (0 high, 1 on the horizon)
-        float warm = 1f - Mathf.SmoothStep(0.02f, 0.35f, toSun.Y);
+        float core = Mathf.Max(TrueRadius, fov * MoonDisc.ScreenShare);
+        // through more air low down: warmer and wider (0 high, 1 on the horizon); in vacuum white down to the horizon
+        float warm = vacuum ? 0f : 1f - Mathf.SmoothStep(0.02f, 0.35f, toSun.Y);
 
         // a quad square to the sun's direction, its up from the camera's (so it never turns edge-on)
         float distance = cam.Far * 0.9f;
@@ -111,21 +119,27 @@ public partial class SunDisc : MeshInstance3D
         if (Mathf.Abs(up.Dot(toSun)) > 0.99f) up = cam.GlobalBasis.X;
         var right = up.Cross(toSun).Normalized();
         up = toSun.Cross(right).Normalized();
-        float half = distance * Mathf.Tan(Reach);
+        float reach = vacuum ? VacuumReach : Reach;
+        float half = distance * Mathf.Tan(reach);
         GlobalTransform = new Transform3D(new Basis(right * half, up * half, -toSun), cam.GlobalPosition + toSun * distance);
         Visible = true;
 
-        PlaceShafts(toSun, warm, bright);
+        // light shafts are the air's: none in vacuum
+        PlaceShafts(toSun, warm, vacuum ? 0f : bright);
 
         // a lens's starburst round a small bright point: gone once the disc is big on screen (a telescope's view)
-        float spikes = GroundSpikes * (1f - Mathf.SmoothStep(0.02f, 0.06f, core / fov));
-        var shown = (core, warm, bright, spikes);
+        float spikes = (vacuum ? VacuumSpikes : GroundSpikes) * (1f - Mathf.SmoothStep(0.02f, 0.06f, core / fov));
+        // the vacuum's wide glare, gone with the starburst once the disc is big on screen
+        float glare = vacuum ? 1f - Mathf.SmoothStep(0.02f, 0.06f, core / fov) : 0f;
+        var shown = (core, warm, bright, spikes, glare, reach);
         if (shown == _shown) return;
         _shown = shown;
         _material.SetShaderParameter(CoreR, core);
         _material.SetShaderParameter(Warm, warm);
         _material.SetShaderParameter(Brightness, bright);
         _material.SetShaderParameter(Spikes, spikes);
+        _material.SetShaderParameter(Glare, glare);
+        _material.SetShaderParameter(ReachP, reach);
     }
 
     private void PlaceShafts(Vector3 toSun, float warm, float bright)

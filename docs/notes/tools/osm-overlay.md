@@ -36,6 +36,18 @@
   the left, the way LaneGraph does it). An OSM one-way the other way round, or an OSM two-way
   way on a divided line, is logged and its `oneway` emptied. Most are short runs in
   interchanges; the long ones are a TLM carriageway matched to the OSM way of the other one.
+- **Split approaches** (#1760): where OSM draws a street's two directions as two one-way ways (the in and out
+  branches round a splitter island before a roundabout, a flared approach) and TLM one undivided line between them,
+  a station's nearest way is only one branch. Taking its one-way made the line one-way and cut the other direction
+  off (the Versoix roundabout had no exit toward Nyon, so Geneva had no legal way north). `SplitBranch` looks for a
+  second parallel one-way whose traffic runs the other way, on the line's other side (each at least 0.5 m off it).
+  Such a run is one two-way row (`MergeSplit`): each direction's lanes, turns, speed, bike lanes, destinations and
+  side attributes come from the branch that carries it, with no width. Each merge is listed as a conflict ("merged
+  two-way"). D: region (825 tiles, 2026-10 extract): 1,304 merges, 37.6 km
+  (984 of 30 m or less, 32 over 120 m). The long ones are TLM single lines under an OSM dual carriageway: Geneva's
+  `{9F9DC7C0-...}` (6m Strasse, not `richtungsgetrennt`) had -1/+1/-1 along its 295 m as the nearer branch flipped.
+  A one-way street beside a parallel one on the same side stays one-way (`--osm-check`'s couplet case). Verifying a
+  change like this: `world/lane-query` (a scratch rebuild before/after, then the long drive's route on both).
 - **Key for #115**: `uuid` (TLM `tlm_strassen_strasse.uuid`, braces included, unique per row)
   + `part` (index of the LineString inside the MultiLineString, 0 almost always) + `[from_m, to_m]`
   = 2D distance along that part **from its first vertex in TLM drawing order**, 0.1 m. RoadExtractor

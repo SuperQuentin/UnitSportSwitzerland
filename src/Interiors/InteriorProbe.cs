@@ -353,6 +353,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     if (image.SavePng(_shot) == Error.Ok) GD.Print($"[interior] wrote {_shot}");
                 }
                 StairRay(interiors);
+                if (CmdArgs.Has("--doorstand")) { _step = 101; _t = 0; break; }
                 if (CmdArgs.Has("--doorcam")) { _step = 100; _t = 0; break; }
                 Input.ActionPress(PlayerInput.MoveForward);
                 Next();
@@ -360,6 +361,11 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
 
             case 100:
                 if (DoorCam(interiors, delta) is not { } camDone) return;
+                Finish();
+                break;
+
+            case 101:
+                if (DoorStand(interiors, delta) is not { } standDone) return;
                 Finish();
                 break;
 
@@ -713,7 +719,10 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     if (_t > 12) { Check(false, "both church doors open"); Finish(); }
                     return;
                 }
-                _demo = new Camera3D { Name = "DemoCamera", Fov = 75 };
+                // 90° across whatever the window's shape: SpotSeeing keeps the two doors within 70° of
+                // each other, and a vertical 75° on a square headless window (1152 x 1152) is only 75°
+                // across, which left the nearer door just out of view (#1728)
+                _demo = new Camera3D { Name = "DemoCamera", Fov = 90, KeepAspect = Camera3D.KeepAspectEnum.Width };
                 AddChild(_demo);
                 if (SpotSeeing(interiors, a, b) is { } spot)
                 {
@@ -732,7 +741,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 {
                     var a = interiors.Links[_churchOut.Key.ToString()];
                     var b = interiors.Links[_churchIn.Key.ToString()];
-                    Check(interiors.Portals!.IsShown(a) && interiors.Portals.IsShown(b), "from inside, both open church doors show the street at once");
+                    bool both = interiors.Portals!.IsShown(a) && interiors.Portals.IsShown(b);
+                    if (!both) GD.Print($"[interior]   {interiors.Portals.Why(a)}\n[interior]   {interiors.Portals.Why(b)}");
+                    Check(both, "from inside, both open church doors show the street at once");
                     Save("_both_doors");
                 }
                 FindStreetPairs();

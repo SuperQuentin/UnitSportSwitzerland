@@ -8,7 +8,7 @@ default and deletes the flat LV95 runtime. The end state, agreed with the user o
 format**. No LV95 tile, key, record or position in the game, the wire, saves or the build's intermediate files. LV95
 survives only as notation: how swisstopo sources are read, and how a person types or reads a Swiss coordinate.
 
-Status: **D2 ready, waiting on the server side** (2026-11-13): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7). Only SuperQuentin has the server: he builds the leaves (MapSetup's `cube-only` layer), runs the runbook's steps 1-5 (`general/linux-deploy`), then the merge and `/update` (handover: PR #1727's comment of Nov 13).
+Status: **D2 ready, the server leaves building** (2026-11-14): D0, D1, G1-G3 done; D2's bar recorded in PR #1727 (section 7), main merged in again and green on Nov 14. SuperQuentin is building the leaves on his NAS (`tools/build-swiss-nas.sh cube`, #1795); then he runs the runbook's steps 1-5 (`general/linux-deploy`), then the merge and `/update` (handover: PR #1727's comment of Nov 13).
 Planned 2026-11-10 from a survey of `main` at `862ddb3e`.
 
 ## In short

@@ -13,6 +13,11 @@ global uniform float world_night;
 // 0 in the air, 1 above it (#1430 H4, World/Globe/Atmosphere): no sky to hide the stars by day, and
 // the horizon far below the horizontal (the Earth hides what is behind it, by depth)
 global uniform float world_space;
+// off the Earth (#1989, World/Globe/Atmosphere): the body's disc seen from the camera, toward world_sky_down (the
+// direction to its centre) out to its angular radius, radians (-1: none, on the Earth). Its ground past the far plane
+// hides nothing by depth, so what is inside the disc is the ground
+global uniform float world_sky_floor;
+global uniform vec3 world_sky_down;
 // toward the real sun, world axes (World/Globe/Atmosphere keeps it current): its glare hides what is near it (#1479)
 global uniform vec3 world_true_sun;
 
@@ -28,6 +33,9 @@ uniform bool single = false;
 uniform bool instanced = false;
 uniform vec4 point_color : source_color = vec4(1.0);
 uniform float point_size = 2.0;
+// the stars on an airless body by day (#1989, World/StarField.DazzleOf): the eye dazzled by the sunlit ground sees
+// only the brightest (alpha 1: magnitude 2.5 and brighter), dimmed a little; 0 at night and wherever there is air
+uniform float dazzle = 0.0;
 // every point this many times its size: a debugging aid (--shuttlefilm drive,bigstars: what crops the stars?)
 uniform float size_scale = 1.0;
 
@@ -41,9 +49,11 @@ void vertex() {
 	float px = (instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x) * size_scale;
 	clip.xy += corner * px * 2.0 / VIEWPORT_SIZE * clip.w;
 	POSITION = sky_depth(clip);
-	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), 1.0, world_space);
+	float behind = smoothstep(world_sky_floor - 0.002, world_sky_floor + 0.002, acos(clamp(dot(dir, world_sky_down), -1.0, 1.0)));
+	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), behind, world_space);
 	float dark = max(max(smoothstep(0.35, 0.95, world_night), daylight), world_space);
 	vec4 c = single ? point_color : COLOR;
+	if (!single && !instanced) c.a *= mix(1.0, 0.8 * smoothstep(0.75, 1.0, c.a), dazzle);
 	// a satellite shows only while it is sunlit over a dark sky: the node hides the rest
 	if (instanced) dark = 1.0;
 	// the sun's glare (#1479): nothing within about a twentieth of the view's height of it, back by a quarter, on screen

@@ -1,0 +1,270 @@
+{
+  "version": 2,
+  "leafLevel": 1,
+  "bits": 6,
+  "bundleLevel": 0,
+  "levels": [
+    {
+      "level": 0,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    },
+    {
+      "level": 1,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    }
+  ],
+  "orientation": "face 0 at 0N 0E, twist 0",
+  "sources": [
+    "deimos_shape_dem.tif: heights above the body\u0027s reference sphere (Ernst et al. 2023 shape model via Celestia, CC-BY-4.0)",
+    "colour: deimos_colour.jpg (NASA, public domain)",
+    "the shipped base (#1656): 6-bit lattices, colour 128\u00B2 for months 1 on levels 0-2"
+  ],
+  "tiles": [
+    {
+      "key": "F0/L0/0_0",
+      "min": -638,
+      "max": 1242,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1278
+    },
+    {
+      "key": "F1/L0/0_0",
+      "min": -2280,
+      "max": 469,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1170
+    },
+    {
+      "key": "F2/L0/0_0",
+      "min": -1863,
+      "max": 2628,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1287
+    },
+    {
+      "key": "F3/L0/0_0",
+      "min": -337,
+      "max": 1210,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1202
+    },
+    {
+      "key": "F4/L0/0_0",
+      "min": -740,
+      "max": 616,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1112
+    },
+    {
+      "key": "F5/L0/0_0",
+      "min": -2460,
+      "max": 689,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1145
+    },
+    {
+      "key": "F0/L1/0_0",
+      "min": -153,
+      "max": 1129,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1065
+    },
+    {
+      "key": "F0/L1/1_0",
+      "min": -448,
+      "max": 920,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 975
+    },
+    {
+      "key": "F0/L1/0_1",
+      "min": -38,
+      "max": 1243,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1014
+    },
+    {
+      "key": "F0/L1/1_1",
+      "min": -638,
+      "max": 1036,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1005
+    },
+    {
+      "key": "F1/L1/0_0",
+      "min": -1917,
+      "max": -47,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 993
+    },
+    {
+      "key": "F1/L1/1_0",
+      "min": -2280,
+      "max": 230,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1061
+    },
+    {
+      "key": "F1/L1/0_1",
+      "min": -1090,
+      "max": -400,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 961
+    },
+    {
+      "key": "F1/L1/1_1",
+      "min": -1058,
+      "max": 469,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 968
+    },
+    {
+      "key": "F2/L1/0_0",
+      "min": -1863,
+      "max": 2630,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1096
+    },
+    {
+      "key": "F2/L1/1_0",
+      "min": -1199,
+      "max": 2605,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1116
+    },
+    {
+      "key": "F2/L1/0_1",
+      "min": 21,
+      "max": 2297,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1004
+    },
+    {
+      "key": "F2/L1/1_1",
+      "min": 234,
+      "max": 2307,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1033
+    },
+    {
+      "key": "F3/L1/0_0",
+      "min": -296,
+      "max": 1035,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1003
+    },
+    {
+      "key": "F3/L1/1_0",
+      "min": -337,
+      "max": 911,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1007
+    },
+    {
+      "key": "F3/L1/0_1",
+      "min": -128,
+      "max": 1210,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1032
+    },
+    {
+      "key": "F3/L1/1_1",
+      "min": -242,
+      "max": 910,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1008
+    },
+    {
+      "key": "F4/L1/0_0",
+      "min": -463,
+      "max": 562,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 907
+    },
+    {
+      "key": "F4/L1/1_0",
+      "min": -740,
+      "max": 602,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1015
+    },
+    {
+      "key": "F4/L1/0_1",
+      "min": -478,
+      "max": 616,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 960
+    },
+    {
+      "key": "F4/L1/1_1",
+      "min": -727,
+      "max": 234,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 935
+    },
+    {
+      "key": "F5/L1/0_0",
+      "min": -2271,
+      "max": 64,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 977
+    },
+    {
+      "key": "F5/L1/1_0",
+      "min": -2460,
+      "max": -1199,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 998
+    },
+    {
+      "key": "F5/L1/0_1",
+      "min": -1973,
+      "max": 572,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 963
+    },
+    {
+      "key": "F5/L1/1_1",
+      "min": -2159,
+      "max": 689,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1036
+    }
+  ]
+}

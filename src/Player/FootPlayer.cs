@@ -68,7 +68,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public WorldOrigin? Origin { get => _origin ?? Terrain?.Origin; set => _origin = value; }
     private WorldOrigin? _origin;
 
-    private const float Gravity = 9.81f;
+    /// <summary>The ground's gravity where the anchor is (#1850): 9.81 m/s² on the Earth, the Moon's 1.63 there.</summary>
+    private static float Gravity => BodyGravity.Ground;
     private const float EyeHeight = 1.68f;   // average adult eye level
     public const float BaseFov = 68f;
     private const float RunFov = 76f;
@@ -452,6 +453,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool Puppet { get; init; }
 
     private readonly Net.RemoteInterpolator _interp = new();
+
+    /// <summary>A copy's stream as a probe logs it (#1869).</summary>
+    public string InterpState => _interp.Describe(Time.GetTicksUsec() / 1e6);
     private MultiplayerSynchronizer? _sync, _relayNear, _relayFar, _vis;
 
     /// <summary>A server-owned copy of <paramref name="source"/>'s properties, sent at <paramref name="interval"/>.</summary>
@@ -1890,7 +1894,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 NetYaw = enu.TrueYaw(Rotation.Y);
             }
             else { NetVel = Velocity; NetYaw = Rotation.Y; }
-            NetTime = Time.GetTicksUsec() / 1e6;
+            // stamped when the body was there: its last physics step, which is up to a tick before this frame (the rest
+            // of the tick is the interpolation fraction). The frame's own clock put up to 128 m of jitter on an orbit's
+            // states at 7.7 km/s (#1869), 0.7 m on a car at 150 km/h
+            NetTime = Time.GetTicksUsec() / 1e6
+                - Engine.GetPhysicsInterpolationFraction() / Engine.PhysicsTicksPerSecond / Math.Max(Engine.TimeScale, 1e-3);
             float dt = (float)delta;
             UpdateLiftSeat();
             // an NPC or a bot reads no keys (#837): a server has no look actions at all
@@ -2245,6 +2253,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (Floating) { PublishFloatPose(dt); return; }   // #1493
         if (_climbing) { PublishClimbPose(dt); return; }   // #1225
         if (CreativeFlying) { PublishFlyPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
@@ -2639,7 +2648,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // the phone (#889) lends third person too when its camera moves (the camera app, the travel curtain, touch: PhoneCamera); not in VR (#920).
         // Folded or open on desktop and pad (#1825) the gameplay camera is left exactly as it is: the phone is a viewmodel
-        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneMovesLens ? 1f : 0f);
+        StepPhoneShoulder(dt);
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Max(Mathf.Clamp(ThrowAim, 0f, 1f), PhoneMovesLens || PhoneWantsShoulder ? 1f : 0f);
         // a prop (#1268) is seen from behind, from the ordinary third-person camera, on a desktop; VR stays first person (comfort)
         bool prop = !XR.XrSession.Active && PropWalk?.Invoke(this) != null;
         float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
@@ -2763,12 +2773,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
+        float ps = PhoneShoulder;   // the phone read over the shoulder (#1825): close, beside the head, a little toward the phone
         // the player's zoom (#1149): closer than the usual arm, the pivot climbs to the eyes and the
         // shoulder offset goes, so the last metres close in on the face
         _zoom = Mathf.Lerp(_zoom, _zoomWant, MathX.Damp(10f, dt));
         float face = _borrowedThird ? 0f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp((ArmLength - _zoom) / (ArmLength - ZoomFace), 0f, 1f));
         float height = Mathf.Lerp(_borrowedThird ? EyeHeight : (Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend))
             + (EyeHeight - ShoulderHeight) * face, ThrowCamHeight, tb);
+        height = Mathf.Lerp(height, Tune.Height, ps);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2789,9 +2801,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float speed = MathX.FlatLength(Velocity);
         float distance = Mathf.Lerp(_borrowedThird ? 0f : _zoom + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f * (1f - face),
             GunAim ? GunCamDistance : ThrowCamDistance, tb);
+        distance = Mathf.Lerp(distance, Tune.Distance, ps);
 
         // over the right shoulder, or the left once swapped (#460): the swap slides across in an eighth of a second
         float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset * (1f - face), GunAim ? GunCamOffset : ThrowCamOffset, tb);
+        offset = Mathf.Lerp(offset, Tune.Offset, ps);
         var shoulder = pivot + view.X * (offset * _shoulderSide);
         var wanted = shoulder + view.Z * distance;
 
@@ -2807,7 +2821,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         DebugArm = (want, _armBlend, through);
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
-        var lens = new Transform3D(view, position);
+        // the lens turns a little toward the phone held in front of the body (the view, the aim and the walking stay the player's)
+        var lensView = ps > 0f ? PhoneLensView(view, position, ps) : view;
+        var lens = new Transform3D(lensView, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
 
@@ -2873,7 +2889,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Mounts, dismounts, or swaps. Returns false when it cannot be done right now.
     ///
     /// <para>
-    /// Refused in mid-air and while sliding, and refused above <see cref="Rideable.DismountSpeed"/>:
+    /// Refused in mid-air (a swimmer may take a boat, never a land vehicle, #1777) and while sliding, and refused above <see cref="Rideable.DismountSpeed"/>:
     /// stepping off skis at 70 km/h is not a dismount, and allowing it makes the descent
     /// consequence-free. Getting <i>on</i> is refused at speed for the same reason — a bike
     /// materialising under a sprinting player is how you clip through a wall.
@@ -2882,7 +2898,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool SetRide(RideKind kind)
     {
         if (kind == (RideKind)RideKindId) return true;
-        if (!IsOnFloor() || _sliding || Indoors || Ragdolled) return false;
+        // a swimmer may take a boat (#1777): it starts afloat at the surface where they are
+        // (BeginBoat); anything else needs the floor under it. The same rule for a bot's server body.
+        bool afloat = _swimming && Boat.IsBoat(kind);
+        if ((!IsOnFloor() && !afloat) || _sliding || Indoors || Ragdolled) return false;
         // no car, motorbike or truck conjured in water deeper than it could wade (#299; boats are #302)
         if (World.WaterField.Submersion(GlobalPosition) > 0.45f && Rideable.Create(kind) is Car or Motorbike or Truck) return false;
 
@@ -2986,7 +3005,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a bus door's button within reach, inside or out (#162), before anything else here
         if (TryDoorButton()) return true;
         // walking about in a vehicle: a seat, or the wheel (#162)
-        if (Aboard) return TryDeckSeat();
+        if (Aboard) return TryShuttleHatch() || TryDeckSeat();
 
         // the radio pointed at (#725): a tap switches it on or off, a hold opens its panel (play a
         // CD, burn one, pick it up); a VR hand gripping it opens the panel straight away
@@ -3003,6 +3022,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (TryClimbAboard()) return true;
         // a building site crane's ladder or its remote's box (#618)
         if (TryCrane()) return true;
+        // a Moon colony's airlock door: cycle it (#1941)
+        if (World.Moon.ColonyAirlocks.TryUse(this)) return true;
+        // an empty colony's terminal: its log's next page (#1944)
+        if (World.Moon.ColonyTerminals.TryUse(this)) return true;
 
         // a slice of a birthday cake at hand (#1423)
         if (Occasions.Birthdays.BirthdayService.TryInteract(this)) return true;
@@ -3920,6 +3943,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             GetViewport().SetInputAsHandled();
             return;
         }
+        // the saucer has no engine to switch: in Space Z is its cruise drive (#1851), as the shuttle's
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is Ufo { DriveAvailable: true } saucer && SeatIndex == 0)
+        {
+            Announced?.Invoke(saucer.DriveOn ? "Cruise drive off: a circular orbit" : "Cruise drive on: climb and descend set its speed", true);
+            saucer.ToggleDrive();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true } && SeatIndex == 0)
         {
             EngineOn = !EngineOn;
@@ -4194,6 +4225,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             StepMantle(dt);
             return;
         }
+
+        // floating aboard the shuttle in free fall (#1493, FootPlayer.ZeroG.cs)
+        if (Aboard && ZeroGPhysics(dt)) return;
 
         // on a face (#1225, FootPlayer.Climb.cs)
         if (ClimbPhysics(dt, onFloor)) return;
@@ -4523,6 +4557,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var n = GetFloorNormal();
         downhill = new Vector3(n.X, 0, n.Z);
         if (n.Y >= SteepNormalY) return false;
+        // a deck's slopes are its stairs and ladders, built to be climbed (the shuttle's is 59°, #1493): only the floor's limit
+        if (Aboard) return false;
         var p = GlobalPosition;
         float r = SteepReachM;
         if (Terrain != null && Terrain.TryGetHeight(p, out float g) && Mathf.Abs(p.Y - g) < 0.6f
@@ -4751,7 +4787,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else
         {
-            if (GlobalPosition.Y > VoidY) return false;
+            // the void's depth is Switzerland's (#1850): another body's ground goes kilometres under its reference (Mars'
+            // Hellas 7.6 km), and its own ground (IBodyGround) catches a fall through it in the branch above
+            if (GlobalPosition.Y > VoidY || Origin is { Body: not BodyId.Earth }) return false;
+            // nor in Space (#1982): no ground near, and world Y is only the anchor's there. In the deep-space frame the origin
+            // stands half a threshold under the camera and is moved once a frame, so a craft driven down at thousands of
+            // km/s starts a frame's second physics tick (30 fps) far under it, and was "rescued" to its last safe spot: the
+            // Moon it took off from, 69,000 km away, on the way home
+            if (Origin is { } frame && CelestialBody.Earth.SpaceRegime(true, frame.AltitudeOf(GlobalPosition))) return false;
             to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
         }
 
@@ -4903,7 +4946,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 // what a bot's craft met (#837: bots crashing in the air during a big drop)
                 if (Bot)
                 {
-                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()}, under {n.GetParent()?.Name})" : "nothing";
                     GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
                 }
             }

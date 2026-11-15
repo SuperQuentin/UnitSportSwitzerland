@@ -14,7 +14,7 @@ namespace UnitSport.Terrain.Fixture;
 /// <item>west: the race track (an oval of <see cref="TrackWidth"/> m, pit cars on its north side) with a kart loop in its infield;</item>
 /// <item>all round: the grand circuit (<see cref="CircuitCorners"/>), about 9 km of chicanes, esses, a sweeper, crests and a dip, its grid on the south straight;</item>
 /// <item>north: a runway with small planes and a helicopter on its apron; the air rings (<see cref="Rings"/>) start over it;</item>
-/// <item>north-west: the snow hill, a groomed slope and a T-bar;</item>
+/// <item>north-west: the snow hill, a groomed slope, a T-bar and a chairlift;</item>
 /// <item>north-east: the neon arena (<see cref="Arena"/>), its stage always playing;</item>
 /// <item>east: the PvP block (<see cref="PvpBox"/>), the only place weapons hurt;</item>
 /// <item>south-east: the stunt park (kickers, a gap jump, a half-pipe, a bowl);</item>
@@ -41,6 +41,8 @@ public static class FunCourse
     // ---- the snow hill: rising north from SlopeY0 to SlopeY1, a plateau, then down its back ----
     public const double HillX0 = -880, HillX1 = -520, SlopeY0 = 250, SlopeY1 = 650, PlateauY1 = 710, BackY1 = 880, HillH = 110;
     public const double LiftX = -545;
+    /// <summary>The chairlift up the hill's west edge (#1609: <c>tools/liftnetcheck.sh</c> rides it): its bottom station, course metres.</summary>
+    public const double ChairX = HillX0 + 15, ChairY0 = SlopeY0 - 15, ChairY1 = SlopeY1 + 25;
 
     // ---- the lake ----
     public const double LakeX = -690, LakeY = -720, LakeR = 220, BeachM = 45;
@@ -125,9 +127,26 @@ public static class FunCourse
             [(runX, SlopeY1 + 25), (runX, (SlopeY0 + SlopeY1) / 2 + 100), (runX, (SlopeY0 + SlopeY1) / 2), (runX, (SlopeY0 + SlopeY1) / 2 - 100), (runX, SlopeY0 + 15)]));
         // the T-bar up the slope's east edge, valley station at the foot, mountain station on the plateau
         c.Road(RoadClass.SkiLift, [(LiftX, SlopeY0 - 15, Ground(LiftX, SlopeY0 - 15)), (LiftX, SlopeY1 + 25, Ground(LiftX, SlopeY1 + 25))]);
+        c.Road(RoadClass.Chairlift, Chairlift());
         // a jetty off the beach for the boats
         c.Jetties.Add([(LakeX + LakeR + 20, LakeY + 60, Level + 0.4), (LakeX + LakeR - 70, LakeY + 60, Level + 0.4)]);
         return c;
+    }
+
+    /// <summary>
+    /// The chairlift's cable up the west edge, clear of the run (#1609): 3 m over the ground at the stations (a chair's
+    /// seat at the boarding spot), 9 m between them, a point every 40 m so it follows the hill.
+    /// </summary>
+    private static List<(double X, double Y, double Z)> Chairlift()
+    {
+        var pts = new List<(double X, double Y, double Z)>();
+        const int Steps = 11;
+        for (int i = 0; i <= Steps; i++)
+        {
+            double y = ChairY0 + (ChairY1 - ChairY0) * i / Steps;
+            pts.Add((ChairX, y, Ground(ChairX, y) + (i == 0 || i == Steps ? 3 : 9)));
+        }
+        return pts;
     }
 
     private static void Roads(FixtureCourse c)

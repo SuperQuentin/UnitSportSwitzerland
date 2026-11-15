@@ -125,6 +125,13 @@
   Every run plays in a fresh `user://` with the render settings and the film's own date, every
   shot's chance seeded from (film, shot): `render-pins`. `VERSION=2 tools/trailer.sh cut`
   re-cuts an older one. Stills stay scratch, in the checkout's `test_output/trailer/<film>/stills`.
+- **The full-tier row** (`tools/lib/checkmap.txt`, #1861): `tools/trailer.sh stills 2,3,9`, the story film's door,
+  road bike on the race autopilot and works machinery, the three shots whose every tile round the cameras is on the D:
+  test region (Lausanne, Pully). Before, `2,5,12` (the showcase film's numbers, read in the story film since it became
+  the default) needed 205 tiles round Bern and the Lauterbrunnen valley. No boat or airliner shot is clean on that
+  region (story 4, Lavaux: 55 tiles east; 8 and 21, Geneva airport: 20-32 west; 22: 2 east of Lausanne). Stills need no
+  song (the director pins its hash, `missing` is fine); `preview`, `render` and `cut` download it from incompetech.com
+  into the main checkout's `test_output/trailer/`.
 - **Measuring a shot's drift** (#924): `TRACKS=DIR tools/trailer.sh stills 5` dumps every actor
   and staged object each frame from the go (`--trailer-tracks`), `tools/trailer-drift.py A B`
   compares two dumps (`render-pins`).

@@ -436,10 +436,18 @@ public static class CornerPlanner
             // only a compact corner: both sidewalks start near it (else the corner is a long sliver along an arm)
             if (PolylineLength(chainA.Kerb) > GapReach || PolylineLength(chainB.Kerb) > GapReach) return null;
             // in triangles first: clipping a convex piece never leaves a degenerate one
-            var wholeTris = EarClip.Triangulate(whole.Select(p => p.P).ToList());
-            if (wholeTris.Count != 3 * (whole.Count - 2)) return null;
+            // its outline split every CornerEdge and triangulated Delaunay (#1877: ear clipping fanned slivers from one point across a
+            // long kerb arc, each crossing every band edge, so the refinement below went fine over the whole corner)
+            var dense = Densified(whole, CornerEdge);
+            var wholeTris = EarClip.TriangulateDelaunay(dense.Select(p => p.P).ToList());
+            if (wholeTris.Count != 3 * (dense.Count - 2))
+            {
+                dense = whole;
+                wholeTris = EarClip.Triangulate(whole.Select(p => p.P).ToList());
+            }
+            if (wholeTris.Count != 3 * (dense.Count - 2)) return null;
             var wholePieces = Enumerable.Range(0, wholeTris.Count / 3)
-                .Select(t => new List<(Vec2 P, float Y)> { whole[wholeTris[t * 3]], whole[wholeTris[t * 3 + 1]], whole[wholeTris[t * 3 + 2]] }).ToList();
+                .Select(t => new List<(Vec2 P, float Y)> { dense[wholeTris[t * 3]], dense[wholeTris[t * 3 + 1]], dense[wholeTris[t * 3 + 2]] }).ToList();
             var pieces = wholePieces;
             // only the band triangles over the corner's box: the tile's whole band mesh, each cut against every piece, took hours
             // on a dense city tile (Geneva 2500,1117); a triangle off the box leaves every piece whole anyway
@@ -589,6 +597,26 @@ public static class CornerPlanner
                 return (a.P + (b.P - a.P) * t, a.Y + (b.Y - a.Y) * (float)t, a.D + (b.D - a.D) * t, a.F + (b.F - a.F) * t);
             }
             var tris = new List<(Vec2 P, float Y, double D, double F)[]>();
+            // whether a triangle lies at a band edge: one runs between its corners, or within its size of one (#1877)
+            bool AtBandEdge((Vec2 P, float Y, double D, double F)[] t, double size)
+            {
+                for (int s = 1; s <= count; s++)
+                {
+                    if (s == count && !bandOnly) break;
+                    double lo = double.MaxValue, hi = double.MinValue;
+                    foreach (var v in t)
+                    {
+                        double g = v.D - (s < count ? Start(s, v.F) : Start(s - 1, v.F) + Width(s - 1, v.F));
+                        lo = Math.Min(lo, g);
+                        hi = Math.Max(hi, g);
+                    }
+                    if (lo <= size && hi >= -size) return true;
+                }
+                return false;
+            }
+            // bisected on its longest side down to CornerCell only where it matters (#1877): longer than CornerCoarse anywhere, else
+            // where the ground's height bends off the plane of its corners, or at a band edge where the kerb's distance bends (the
+            // band edges follow the kerb); before, every triangle went to CornerCell (thousands round a long kerb arc)
             void Refine((Vec2 P, float Y, double D, double F)[] t, int depth)
             {
                 int longest = 0;
@@ -602,6 +630,10 @@ public static class CornerPlanner
                 var (a, b, c) = (t[longest], t[(longest + 1) % 3], t[(longest + 2) % 3]);
                 var m = Mid(a, b, 0.5);
                 var fm = Field(m.P);
+                bool split = lmax > CornerCoarse
+                    || Math.Abs(fm.Y - m.Y) > CornerBend
+                    || Math.Abs(fm.D - m.D) > CornerBend && AtBandEdge(t, lmax);
+                if (!split) { tris.Add(t); return; }
                 m = (m.P, fm.Y, fm.D, fm.F);
                 Refine([a, m, c], depth + 1);
                 Refine([m, b, c], depth + 1);
@@ -609,7 +641,12 @@ public static class CornerPlanner
             foreach (var pc in laid)
             {
                 var pts = pc.Select(q => { var (d, f, y) = Field(q.P); return (q.P, y, d, f); }).ToList();
-                for (int t = 1; t + 1 < pts.Count; t++) Refine([pts[0], pts[t], pts[t + 1]], 0);
+                // a piece left by the carried bands' triangles may be concave: ear clipped, not fanned
+                var ears = pts.Count > 3 ? EarClip.TriangulateDelaunay(pts.Select(q => q.P).ToList()) : [0, 1, 2];
+                if (ears.Count == 3 * (pts.Count - 2))
+                    for (int t = 0; t < ears.Count; t += 3) Refine([pts[ears[t]], pts[ears[t + 1]], pts[ears[t + 2]]], 0);
+                else
+                    for (int t = 1; t + 1 < pts.Count; t++) Refine([pts[0], pts[t], pts[t + 1]], 0);
             }
             // each triangle cut to each band: where the distance lies between the band's start and end (both moving with f)
             List<(Vec2 P, float Y, double D, double F)> ClipBy(List<(Vec2 P, float Y, double D, double F)> poly, Func<(Vec2 P, float Y, double D, double F), double> g)
@@ -643,7 +680,7 @@ public static class CornerPlanner
             stats.Gaps++;
             stats.Built++;
             stats.Area += area;
-            if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {Plane.West(id) + chainA.Out.X:F0},{Plane.North(id) + chainA.Out.Y:F0} {area:F1} m2");
+            if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {Plane.West(id) + chainA.Out.X:F0},{Plane.North(id) + chainA.Out.Y:F0} {area:F1} m2, {tris.Count} triangles before the bands");
             foreach (var ((type, height, isKerb), mesh) in full.Concat(bands.Select(b => (b.Key, b.Value))))
             {
                 var band = new RoadAreaProp
@@ -1167,6 +1204,33 @@ public static class CornerPlanner
 
     /// <summary>A corner laid in bands is cut into triangles no longer than this (m) on a side, so its band edges follow the kerb (#711).</summary>
     private const double CornerCell = 0.35;
+
+    /// <summary>
+    /// ... but only where it matters (#1877): a triangle is cut further where it is longer than <see cref="CornerCoarse"/> (m), or
+    /// where the height (anywhere) or the kerb's distance (at a band edge) at its longest side's middle is more than
+    /// <see cref="CornerBend"/> (m) off its ends' mean; its outline is split every <see cref="CornerEdge"/> (m) before it is
+    /// triangulated. Geneva's corner at 2501563,1117322 (a kerb arc of r 78 m): 1,819 triangles before the bands with a 1.5 m
+    /// cap, 401 with this one; the bend tests themselves add few.
+    /// </summary>
+    private const double CornerCoarse = 6.0, CornerBend = 0.01, CornerEdge = 1.0;
+
+    /// <summary>The outline with a point added every <paramref name="step"/> (m) along each side, heights in between (#1877).</summary>
+    private static List<(Vec2 P, float Y)> Densified(List<(Vec2 P, float Y)> ring, double step)
+    {
+        var r = new List<(Vec2 P, float Y)>(ring.Count * 2);
+        for (int i = 0; i < ring.Count; i++)
+        {
+            var (a, b) = (ring[i], ring[(i + 1) % ring.Count]);
+            r.Add(a);
+            int n = (int)Math.Floor(a.P.DistanceTo(b.P) / step);
+            for (int k = 1; k < n; k++)
+            {
+                double t = (double)k / n;
+                r.Add((a.P + (b.P - a.P) * t, a.Y + (b.Y - a.Y) * (float)t));
+            }
+        }
+        return r;
+    }
 
     /// <summary>A wedge before carried bands is laid only where both sidewalks start within this (m, along the kerb) of the corner (#711).</summary>
     private const double GapReach = 8.0;

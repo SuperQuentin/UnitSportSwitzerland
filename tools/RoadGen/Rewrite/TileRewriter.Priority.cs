@@ -62,7 +62,7 @@ public static partial class TileRewriter
     private static void EmitPriority(PriorityResult priority, RoadGenResult result, HashSet<TileId> block,
         HashSet<TileId> wanted, IGround? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadPointProp>> props,
-        PriorityPlanner.Stats stats)
+        PriorityPlanner.Stats stats, CarPaths? carPaths = null)
     {
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
@@ -144,6 +144,8 @@ public static partial class TileRewriter
                 string? why = null;
                 if ((source.Segment.Flags & (RoadFlags.Bridge | RoadFlags.Tunnel)) != 0) why = "structure";
                 else if (!clearance.IsClear(sign.At, RoadSigns.Side(sign.Type, sign.Variant) * 0.5)) why = "carriageway";
+                // a written core's car path, which the old caps and the ribbons do not cover (#1929)
+                else if (carPaths?.Blocks(sign.At, RoadSigns.PoleDiameter * 0.5) == true) why = "car path";
                 else if (buildings.Contains(sign.At)) why = "building";
                 else if (grids is not null && SampleGround(grids, sign.At.X, sign.At.Y) is var ground
                          && !double.IsNaN(ground) && Math.Abs(ground - road) > SignMaxGroundStep) why = "no verge";

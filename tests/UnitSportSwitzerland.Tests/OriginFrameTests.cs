@@ -167,6 +167,34 @@ public class OriginFrameTests
     }
 
     [Fact]
+    public void From_orbit_the_moon_is_where_the_camera_itself_sees_it()
+    {
+        // #1845: in an anchor frame the sky is read at the point itself, its height included; the ground under a camera
+        // 20,000 km up sees the moon ~3° elsewhere (its parallax)
+        var date = new DateOnly(2027, 12, 22);
+        var utc = SwissTime.ToUtc(date, 5);
+        var cam = GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(new Geodetic(46.95, 7.44, 20_000_000)));
+        try
+        {
+            var frame = OriginFrame.AnchorAt(Ellipsoid.Wgs84.ToEcef(new Geodetic(46.95, 7.44, 0)));
+            World.SunPath.Frame = frame;
+            var moon = World.SunPath.Toward(SkyBody.Moon, date, 5, cam, out _, out double distance);
+            var truth = Ephemeris.Ecef(SkyBody.Moon, utc) - cam.Ecef;
+            var want = frame.DirectionOf(new EcefPos(truth.X / truth.Length, truth.Y / truth.Length, truth.Z / truth.Length));
+            Assert.True(Mathf.RadToDeg(moon.AngleTo(want)) < 0.001f, $"{moon} / {want}");
+            Assert.Equal(truth.Length, distance, 1);
+            // the ground under it, as before: degrees off
+            var ground = World.SunPath.Toward(SkyBody.Moon, date, 5, cam.WithAlt(0), out _, out _);
+            Assert.InRange(Mathf.RadToDeg(ground.AngleTo(want)), 1f, 5f);
+            // the stars' sphere is the Earth's, whatever the height
+            var stars = World.SunPath.SkyFrame(date, 5, cam);
+            var (_, _, pole) = Ephemeris.Celestial(utc);
+            Assert.True(Mathf.RadToDeg(stars.Column2.AngleTo(frame.DirectionOf(pole))) < 0.001f);
+        }
+        finally { World.SunPath.Frame = null; }
+    }
+
+    [Fact]
     public void A_ground_frame_with_a_vertical_origin_for_the_Space_regime()
     {
         var low = GroundAt(BernE, BernN);

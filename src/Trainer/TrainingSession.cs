@@ -147,6 +147,23 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         dialog.PopupCentered(new Vector2I(900, 600));
     }
 
+    /// <summary>
+    /// Loads <paramref name="path"/> and starts riding it as soon as it is ready: a group ride's course, joined from the
+    /// Training app (<see cref="GroupRides"/>, #1467), whose riders are off to its start.
+    /// </summary>
+    /// <param name="name">The course's name to show (the group's), else the file's.</param>
+    public async void LoadAndStart(string path, string? name = null)
+    {
+        Load(path);
+        for (int i = 0; i < 600 && State == Phase.Loading; i++) await ToSignal(GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
+        if (State != Phase.Ready || CoursePath != path) return;
+        if (!string.IsNullOrWhiteSpace(name)) CourseName = name;
+        Start();
+    }
+
+    /// <summary>The rider's speed on the bike, m/s (0 off it): what a group ride's standings show.</summary>
+    public float Speed => _player() is { } me && State is Phase.Riding or Phase.Finished ? me.RideSpeed : 0f;
+
     /// <summary>Reads and snaps a GPX off the main thread; <see cref="State"/> is Ready when it is done.</summary>
     public async void Load(string path)
     {
@@ -261,7 +278,12 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
     public void Stop(string why = "stopped")
     {
         if (State is not (Phase.Travelling or Phase.Mounting or Phase.Riding)) return;
-        if (_player() is { } me) me.RideControls = null;
+        if (_player() is { } me)
+        {
+            me.RideControls = null;
+            UnGhost(me);
+        }
+        GroupRides.Instance?.Leave();   // a group ride ends for whoever stops (#1467)
         GameSettings.Current.RideProfile = _profileWas;
         TrainerLink.Instance?.Flat();
         _pilot = null;
@@ -339,6 +361,50 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         return steer with { Throttle = throttle, Brake = brake, Effort = !power && PlayerInput.Held(PlayerInput.TuckBoost) };
     }
 
+    // ---- through the traffic (#1467) ----
+    // A trainer's rider does not steer: a car queued at a junction stopped the bike dead. As in Zwift the ride goes
+    // through the traffic: the pilot slows for none (AutoPilot.Ghost) and the rider's body ignores the traffic's
+    // bodies near it, excepted as they come within GhostRange and given back once past it, or at the end.
+
+    /// <summary>How far round the rider the traffic's bodies are excepted, m: more than a second at any bike speed.</summary>
+    private const float GhostRange = 60f;
+
+    private readonly List<PhysicsBody3D> _nearTraffic = new();
+    private readonly HashSet<PhysicsBody3D> _ghosted = new();
+
+    /// <summary>The traffic's bodies the rider rides through now (excepted from its collisions): a probe's read.</summary>
+    public int Ghosted => _ghosted.Count;
+    private readonly List<PhysicsBody3D> _unghost = new();
+    private float _ghostClock;
+
+    /// <summary>A few times a second: the traffic near the rider excepted from its collisions, the traffic gone past given back.</summary>
+    private void Ghost(FootPlayer me, float dt)
+    {
+        _ghostClock -= dt;
+        if (_ghostClock > 0f) return;
+        _ghostClock = 0.25f;
+        if (World.Traffic.Current is not { } traffic) return;
+        traffic.MovingBodiesNear(me.GlobalPosition, GhostRange, _nearTraffic);
+        foreach (var body in _nearTraffic)
+            if (_ghosted.Add(body)) me.AddCollisionExceptionWith(body);
+        _unghost.Clear();
+        foreach (var body in _ghosted)
+            if (!IsInstanceValid(body) || !_nearTraffic.Contains(body)) _unghost.Add(body);
+        foreach (var body in _unghost)
+        {
+            _ghosted.Remove(body);
+            if (IsInstanceValid(body)) me.RemoveCollisionExceptionWith(body);
+        }
+    }
+
+    /// <summary>The ride is over: every body excepted is solid to the rider again.</summary>
+    private void UnGhost(FootPlayer me)
+    {
+        foreach (var body in _ghosted)
+            if (IsInstanceValid(body)) me.RemoveCollisionExceptionWith(body);
+        _ghosted.Clear();
+    }
+
     private void Ride(FootPlayer me, float dt)
     {
         if (_course is not { } c || _route == null) return;
@@ -350,6 +416,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             _joules += link.Watts * dt;
         }
         RideSeconds += dt;
+        Ghost(me, dt);
 
         _near = Nearest(_route.Centre, me.GlobalPosition, _near);
         var here = _way[_near];
@@ -379,7 +446,12 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
             ShowHud(false);
             _arrows?.Show(null, null, _origin);
             // the pilot rides on, past the line, and stops; then the bike is the rider's
-            GetTree().CreateTimer(6.0).Timeout += () => { if (State == Phase.Finished && _player() is { } p) p.RideControls = null; };
+            GetTree().CreateTimer(6.0).Timeout += () =>
+            {
+                if (State != Phase.Finished || _player() is not { } p) return;
+                p.RideControls = null;
+                UnGhost(p);   // pulled over and stopped: the traffic is solid again
+            };
             return;
         }
         UpdateHud(me);
@@ -434,6 +506,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         if (_route == null) return false;
         _pilot = AutoPilot.For(_route, me);
         if (_pilot == null) return false;
+        _pilot.Ghost = true;   // through the traffic (#1467)
         var pilot = _pilot;
         me.RideControls = () => Controls(me, pilot);
         return true;
@@ -722,7 +795,7 @@ public sealed partial class TrainingSession : Node, IOriginShiftAware
         string text = string.Create(CultureInfo.InvariantCulture,
             $"{CourseName}\n{power}{cadence}{hr}\n{me.RideSpeed * 3.6f:0.0} km/h   {GradeHere * 100:+0.0;-0.0;0.0}%{sim}\n"
             + $"{Along / 1000:0.00} / {c.Profile.Length / 1000:0.00} km   {c.Profile.AscentLeft(Along):0} m up left   {Clock(RideSeconds)}")
-            + WayLines();
+            + WayLines() + (GroupRides.Instance?.HudLines((float)Along) ?? "");
         if (text == _hudShown) return;
         _hudShown = text;
         _hudText.Text = text;

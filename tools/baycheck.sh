@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Driving a lorry through an industrial site's LOADING BAY, over loopback (#531, #496 phase 2).
 #
-# A headless dedicated server on the GENERATED world — which since #531 puts a works at the edge
-# of every village, so this needs no terrain download and runs on a fresh clone. Client A finds
+# A headless dedicated server on the town fixture (fixture:town: an industrial estate's halls down the
+# street from the start, #1718; it ran on the generated world's village works before, at three times the RAM). Client A finds
 # the nearest Industrial door a vehicle fits through (a bay, never the office door beside it),
 # drives in through its portal, parks, gets out, gets back in and reverses out. Client B watches
 # the same door from the street, so the bay's leaf and the car crossing it are checked on the
@@ -16,14 +16,14 @@
 PORT=${BAY_PORT:-7866}
 PW=pw531
 
-tc_server 1800 120 $OUT/bay_server.log --server --port $PORT --generated-world --admin-password $PW
+tc_server 1800 120 $OUT/bay_server.log --server --port $PORT --world fixture --chunks fixture:town --admin-password $PW
 
 # B first, so it is already watching the door when A arrives at it
 tc_client 240 $OUT/bay_B.log --connect 127.0.0.1:$PORT \
-  --generated-world --traffic 0 --name BayB --garagecheck watch --doorkind Industrial &
+  --world fixture --chunks fixture:town --traffic 0 --name BayB --garagecheck watch --doorkind Industrial &
 B=$!
 tc_client 240 $OUT/bay_A.log --connect 127.0.0.1:$PORT \
-  --generated-world --traffic 0 --name BayA --garagecheck drive $PW --doorkind Industrial
+  --world fixture --chunks fixture:town --traffic 0 --name BayA --garagecheck drive $PW --doorkind Industrial
 A=$?
 wait $B
 code=0

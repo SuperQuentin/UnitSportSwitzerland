@@ -221,7 +221,9 @@ public partial class OriginShifter : Node
     /// </summary>
     private void EarthReanchor(Vector3 at, double altitude)
     {
-        bool space = Curvature.SpaceRegime(InSpace, altitude);
+        if (CrossBodies && CrossSphere(at)) return;
+        // the anchor body's own Space band (#1850): the Earth's 60/50 km, the Moon's 10/8 km
+        bool space = CelestialBody.Of(_origin.Body).SpaceRegime(InSpace, altitude);
         if (space != InSpace)
         {
             InSpace = space;
@@ -231,19 +233,73 @@ public partial class OriginShifter : Node
         var mode = InSpace ? SpaceMode : GroundMode;
         Turned = mode.Rotates;
         double threshold = _thresholdGiven ? ThresholdM : mode.ThresholdM;
-        if (new Vector2(at.X, at.Z).Length() <= threshold) return;
+        // deep space (#1850): past DeepM over the anchor's body the origin rises with the camera and follows it in all
+        // three directions, or a flight out to the Moon leaves the camera 380,000 km up a float (a metre a step). It
+        // stands half a threshold under the camera, so world Y stays between 0 and the threshold, never in the
+        // interiors' band under -2 km (InteriorManager reads raw Y). Back under DeepM, the first move brings the origin
+        // down to the ground's level again (world Y the altitude), at once
+        bool deep = InSpace && mode.Rotates && altitude > DeepM;
+        bool lower = !deep && _risen;
+        bool move = deep ? at.Length() > threshold || at.Y < 0 : new Vector2(at.X, at.Z).Length() > threshold;
+        if (!move && !lower) return;
         if (_origin.Frame.Axes is not { } axes) return;
 
         var (e, n) = _origin.ToLv95(at);
         if (mode.Rotates)
         {
-            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, 0));
+            ShiftTo(e, n, exact: true, axes: TurnedAnchor(at, deep ? altitude - threshold / 2 : 0));
+            _risen = deep;
             return;
         }
         // C1's frame: the anchor moves to the camera's plane point, to the step, its axes kept
         double step = Math.Max(1, StepM);
         double x = Math.Round(at.X / step) * step, z = Math.Round(at.Z / step) * step;
         ShiftTo(e, n, exact: true, axes: axes with { Origin = axes.ToEcef(x, 0, z) });
+    }
+
+    /// <summary>Past this altitude over the anchor's body the origin follows the camera up as well (#1850), metres.</summary>
+    public const double DeepM = 1_000_000;
+
+    /// <summary>The origin stands raised to the camera (a deep-space shift): the next move under <see cref="DeepM"/> lowers it.</summary>
+    private bool _risen;
+
+    /// <summary>
+    /// Whether the anchor goes from body to body at a sphere of influence (#1850): on in the earth world (the globe, the
+    /// sky and the spectator follow a body change since #1887 and #1889), off in the flat one, which has no other body;
+    /// <c>--crossbodies</c> forces it on, <c>--crossbodies off</c> off.
+    /// </summary>
+    public static bool CrossBodies
+    {
+        get => _crossBodies ??= CmdArgs.Value("--crossbodies") is { } v
+            ? v != "off"
+            : CmdArgs.Has("--crossbodies") || GameSettings.Current.Frame == WorldFrame.Earth;
+        set => _crossBodies = value;
+    }
+
+    private static bool? _crossBodies;
+
+    private double _sphereCheckAt;
+
+    /// <summary>
+    /// The sphere of influence the camera is in (#1850, <see cref="Frames.SphereAt"/>), checked at most four times a
+    /// second in Space: when it is another body's, the anchor is counted from that body (<see cref="WorldOrigin.Rebase"/>),
+    /// nothing moves. Returns whether it changed.
+    /// </summary>
+    private bool CrossSphere(Vector3 at)
+    {
+        if (!InSpace || _origin.Frame.Axes is not { } axes) return false;
+        // a throttle on the work, not on what the world does: real time (docs/notes/core/three-clocks.md)
+        double now = RealClock.Now;
+        if (now < _sphereCheckAt) return false;
+        _sphereCheckAt = now + 0.25;
+        var sky = SkyClock.Now;
+        var p = axes.ToEcef(at.X, at.Y, at.Z);
+        var body = Frames.SphereAt(axes.Body, new DVec3(p.X, p.Y, p.Z), sky);
+        if (body == axes.Body) return false;
+        GD.Print(string.Create(CultureInfo.InvariantCulture,
+            $"[origin] into {body}'s sphere of influence from {axes.Body}'s, {new DVec3(p.X, p.Y, p.Z).Length / 1000:F0} km from {axes.Body}'s centre: the anchor is counted from {body} now, nothing moves"));
+        _origin.Rebase(body, sky);
+        return true;
     }
 
     /// <summary>

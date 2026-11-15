@@ -27,7 +27,10 @@ off, `--junctions new` plans and reports without writing.
   5 sidewalk to 1.5 m, 7 the pocket feeding this exit, 7 left pocket, 8 painted bike lane. Size choice (step 6) comes
   first in effect (the user). Room is checked per station against what the transition still holds there (`Stretch`):
   houses 68 m out limit only a long storage. Where the street already reaches past its room (sidewalks to the facades),
-  as far as the street does.
+  as far as the street does. **The street's sidewalk is kept along the transition** (#1879): where the normal section has
+  no sidewalk on a side (it came from a bare end beside a tram) but the street lays one further out, each station's room
+  holds `SidewalkMin` of it (`ArmRoom.FreeLeft/FreeRight`, `StreetSideAlong`); the stage line "fitted along their length"
+  counts the transitions narrowed for it, and `--debug-junction` prints the room per station.
 - **Through riders before turning ones** (the user, Oct 13): where the arriving side has neither a painted bike lane nor a
   path and the straight-on exit carries one on (a departing bike lane or path), the mouth adds a through bike lane (id 115),
   lit or not; never one leading into nothing. At the lights always: every bike lane ends at its advanced line or bike box.
@@ -194,6 +197,19 @@ off, `--junctions new` plans and reports without writing.
   drawing, mirrored where it is drawn away from the junction) and its lines (`RoadPaint.AlongTransition`); stripes, arrows and
   symbols as geometry; the street's own paint laid again on what is left of it. **A band is its own piece's width plus the
   transition's change** (the street planner's gaps for a driveway stay: a transition changes widths, the street decides the rest).
+  **A band the piece has and the transition lacks is added** (`AddOwnBands`, #1770): the arm's normal section is the street
+  side 5 m out (`StreetSideOf`), so a last piece bare beside a tram took a 3 m sidewalk off the whole 63 m pocket transition
+  (Geneva 2501441,1117379; two tiles: 181 sidewalks, 134 paths, 58 verges, 19 buffers back). It keeps its own width; where
+  the widened kerb would push it into a building (`Footprints`, sampled at its middle and outer edge) it keeps the street's
+  outer edge instead and narrows, to nothing where the widening takes it all (`KeepOffWalls`). The anchor and the lines'
+  boundaries move by the bands put in on the left. The report counts them (`side bands kept from the street`).
+- **The cap** is the core's outline simplified (`SimplifiedRing`), then a point at least every 2 m along it (`KeptEvery`, on
+  the outline's own line and heights) and triangulated by ear clipping plus Delaunay flips (`EarClip.TriangulateDelaunay`).
+  Plain ear clipping took the first ear: a dense kerb arc facing a straight kerb of two points fanned 20+ slivers out of each
+  (#1771 at 2501282,1117720: faceted shading). The ring stays an outline (`CapCheck`, `CornerPlanner` read it as one), so no
+  point inside it; cap vertices +32 % (two Geneva tiles 10,994 -> 14,516). An old layout's cap (`JunctionBuilder`, a merged
+  fallback's) still fans from its node where the ring is star-shaped about it; where it is not, its ring is split every 2 m
+  (`EarClip.Densified`) and triangulated the same way. Corner bands keep their own sliver fans (#1877).
   The old passes get the priority plans without those junctions (`WithoutWritten`): no pocket strips, stop lines, crosswalks,
   poles, signals, corners or signs there until phase 4. Bike-lane, track paint, `CutBack` and `Lower` skip transition pieces.
 - **Game** (the user's generalization): every street is built from `SegmentSections`, a cross-section per point: ribbon edges,

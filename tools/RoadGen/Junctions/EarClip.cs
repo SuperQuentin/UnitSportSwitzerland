@@ -55,6 +55,102 @@ public static class EarClip
         return indices;
     }
 
+    /// <summary>
+    /// <see cref="Triangulate"/>, then every inner diagonal flipped while the vertex across it lies inside a triangle's
+    /// circumcircle (Lawson's flips: the constrained Delaunay triangulation of the ring, no point added). Ear clipping takes the
+    /// first ear it meets, so a ring with a dense kerb arc facing a long straight kerb came out as fans of slivers from one
+    /// vertex across the whole cap, which shade in facets (#1771); the flips spread the triangles between the two sides.
+    /// </summary>
+    public static List<int> TriangulateDelaunay(IReadOnlyList<Vec2> polygon)
+    {
+        var tris = Triangulate(polygon);
+        int count = tris.Count / 3;
+        if (count < 2) return tris;
+        // every triangle counter-clockwise, so the circumcircle test has one sign
+        for (int t = 0; t < count; t++)
+            if ((polygon[tris[t * 3 + 1]] - polygon[tris[t * 3]]).Cross(polygon[tris[t * 3 + 2]] - polygon[tris[t * 3]]) < 0)
+                (tris[t * 3 + 1], tris[t * 3 + 2]) = (tris[t * 3 + 2], tris[t * 3 + 1]);
+        // the ring's own edges never flip
+        int n = polygon.Count;
+        static (int, int) Key(int a, int b) => a < b ? (a, b) : (b, a);
+        var boundary = new HashSet<(int, int)>();
+        for (int i = 0; i < n; i++) boundary.Add(Key(i, (i + 1) % n));
+        var edgeTris = new Dictionary<(int, int), List<int>>();
+        void Index(int t)
+        {
+            for (int e = 0; e < 3; e++)
+            {
+                var k = Key(tris[t * 3 + e], tris[t * 3 + (e + 1) % 3]);
+                if (!edgeTris.TryGetValue(k, out var l)) edgeTris[k] = l = new List<int>(2);
+                l.Add(t);
+            }
+        }
+        void Unindex(int t)
+        {
+            for (int e = 0; e < 3; e++)
+                if (edgeTris.TryGetValue(Key(tris[t * 3 + e], tris[t * 3 + (e + 1) % 3]), out var l)) l.Remove(t);
+        }
+        for (int t = 0; t < count; t++) Index(t);
+        int Opposite(int t, int a, int b)
+        {
+            for (int e = 0; e < 3; e++)
+                if (tris[t * 3 + e] != a && tris[t * 3 + e] != b) return tris[t * 3 + e];
+            return -1;
+        }
+        var queue = new Queue<(int, int)>(edgeTris.Keys.Where(k => !boundary.Contains(k)));
+        int guard = 0, limit = 50 * count * count + 100;
+        while (queue.Count > 0 && guard++ < limit)
+        {
+            var (a, b) = queue.Dequeue();
+            if (!edgeTris.TryGetValue((a, b), out var pair) || pair.Count != 2) continue;
+            int t0 = pair[0], t1 = pair[1];
+            int c = Opposite(t0, a, b), d = Opposite(t1, a, b);
+            if (c < 0 || d < 0 || c == d) continue;
+            // t0 as (a, b, c) counter-clockwise: d inside its circumcircle and the quad a-d-b-c convex, then flip a-b to c-d
+            var (pa, pb, pc, pd) = (polygon[a], polygon[b], polygon[c], polygon[d]);
+            if ((pb - pa).Cross(pc - pa) < 0) (pa, pb, a, b) = (pb, pa, b, a);
+            if (!InCircle(pa, pb, pc, pd)) continue;
+            // convex: c and d on either side of a-b, a and b on either side of c-d
+            if ((pd - pc).Cross(pa - pc) * (pd - pc).Cross(pb - pc) >= 0) continue;
+            Unindex(t0);
+            Unindex(t1);
+            (tris[t0 * 3], tris[t0 * 3 + 1], tris[t0 * 3 + 2]) = (a, d, c);   // a, d, c counter-clockwise: d is right of a->b
+            (tris[t1 * 3], tris[t1 * 3 + 1], tris[t1 * 3 + 2]) = (d, b, c);
+            Index(t0);
+            Index(t1);
+            foreach (var k in new[] { Key(a, c), Key(c, b), Key(b, d), Key(d, a) })
+                if (!boundary.Contains(k)) queue.Enqueue(k);
+        }
+        return tris;
+    }
+
+    /// <summary>A cap's ring keeps a point at least this often (m) along it, so its triangles reach across it (#1771).</summary>
+    public const double CapMaxEdge = 2.0;
+
+    /// <summary>The ring with points added on its edges so none is longer than <paramref name="most"/>; its own points kept.</summary>
+    public static List<Vec2> Densified(IReadOnlyList<Vec2> ring, double most)
+    {
+        var result = new List<Vec2>(ring.Count * 2);
+        for (int i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            result.Add(a);
+            int pieces = (int)Math.Ceiling(a.DistanceTo(b) / most - 1e-9);
+            for (int k = 1; k < pieces; k++) result.Add(a + (b - a) * ((double)k / pieces));
+        }
+        return result;
+    }
+
+    /// <summary>Whether <paramref name="d"/> lies strictly inside the circle through the counter-clockwise <paramref name="a"/>, <paramref name="b"/>, <paramref name="c"/>.</summary>
+    private static bool InCircle(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
+    {
+        double ax = a.X - d.X, ay = a.Y - d.Y, bx = b.X - d.X, by = b.Y - d.Y, cx = c.X - d.X, cy = c.Y - d.Y;
+        double det = (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay) + (cx * cx + cy * cy) * (ax * by - bx * ay);
+        double scale = (ax * ax + ay * ay + bx * bx + by * by + cx * cx + cy * cy);
+        return det > 1e-9 * scale * scale;
+    }
+
     private static bool IsEar(IReadOnlyList<Vec2> polygon, List<int> remaining, int prev, int current, int next)
     {
         var a = polygon[prev];

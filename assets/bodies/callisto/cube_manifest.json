@@ -1,0 +1,1045 @@
+{
+  "version": 2,
+  "leafLevel": 2,
+  "bits": 6,
+  "bundleLevel": 0,
+  "levels": [
+    {
+      "level": 0,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    },
+    {
+      "level": 1,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    },
+    {
+      "level": 2,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    }
+  ],
+  "orientation": "face 0 at 0N 0E, twist 0",
+  "sources": [
+    "no global heights: the reference sphere, the body\u0027s profile generates the relief",
+    "colour: callisto_colour.jpg (NASA, public domain)",
+    "the shipped base (#1656): 6-bit lattices, colour 128\u00B2 for months 1 on levels 0-2"
+  ],
+  "tiles": [
+    {
+      "key": "F0/L0/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L0/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L0/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L0/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L0/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L0/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L1/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L1/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L1/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L1/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L1/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L1/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L1/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L1/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L1/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L1/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L1/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L1/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L1/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L1/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L1/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L1/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L1/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L1/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L1/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L1/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L1/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L1/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L1/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L1/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/2_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/3_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/2_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/3_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/0_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/1_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/2_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/3_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/0_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/1_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/2_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F0/L2/3_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/2_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/3_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/2_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/3_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/0_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/1_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/2_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/3_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/0_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/1_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/2_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F1/L2/3_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/2_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/3_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/2_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/3_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/0_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/1_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/2_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/3_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/0_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/1_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/2_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F2/L2/3_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/2_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/3_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/2_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/3_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/0_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/1_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/2_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/3_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/0_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/1_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/2_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F3/L2/3_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/2_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/3_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/2_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/3_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/0_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/1_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/2_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/3_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/0_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/1_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/2_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F4/L2/3_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/0_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/1_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/2_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/3_0",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/0_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/1_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/2_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/3_1",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/0_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/1_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/2_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/3_2",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/0_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/1_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/2_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    },
+    {
+      "key": "F5/L2/3_3",
+      "min": 0,
+      "max": 0,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 65
+    }
+  ]
+}

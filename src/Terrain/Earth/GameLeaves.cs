@@ -7,7 +7,7 @@ namespace UnitSport.Terrain.Earth;
 /// <summary>
 /// The region's leaves and the generated fill round them as the game builds them, the same on a client and on the
 /// server (#1682): the region's built leaves (<see cref="TerrainPaths.FindLeafDir"/>), the generator anchored where every
-/// copy anchors it, the fill on the globe's pyramid (#1678, <see cref="World.Globe.DataDir"/>) and its domain round
+/// copy anchors it, the fill on the globe's pyramid (#1678, <see cref="World.GlobeData.Earth"/>) and its domain round
 /// <paramref name="startE"/>/<paramref name="startN"/> (it grows round every focus, <see cref="EarthWorld"/>). A leaf's
 /// content depends on the generator, the pyramid and the real leaves alone, never on the start: a client and the server
 /// make the same fill leaf.
@@ -26,7 +26,7 @@ public static class GameLeaves
             var (lat, lon) = Format.Lv95Source.Instance.ToLatLon(startE, startN);
             // the fill on the globe's pyramid where the game has the full one (#1678); the shipped levels are coarser
             // than the generator's own relief, which it keeps then
-            var pyramid = PyramidBase.Open(World.Globe.DataDir);
+            var pyramid = World.GlobeData.Earth?.Base();
             GD.Print($"[earth] the fill on {(pyramid != null ? $"the pyramid (to level {pyramid.FinestLevel}, {pyramid.Lakes.Length} lake(s))" : "the generator's own relief")}");
             leaves = EarthLeaves.WithFill(real, generated, lat, lon, fillOn, roads ?? !CmdArgs.Has("--no-fill-roads"), pyramid);
         }

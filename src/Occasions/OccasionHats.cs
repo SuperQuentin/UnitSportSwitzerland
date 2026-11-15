@@ -65,11 +65,19 @@ public partial class OccasionHats : Node
             hat = Headwear.PartyHat;
         else if (_inventory.Worn == ItemId.None && OccasionManager.Instance?.Top(OccasionFacets.Hats) is { } top)
             hat = top.Content.Hat;
+        // on the Moon (#1941): the space suit always, its helmet outside a colony's air, taken off inside
+        var suit = World.Moon.MoonSuit.Wanted(p);
+        if (suit is { Helmet: true }) hat = Headwear.SpaceHelmet;
         if (p.HeadwearId != (int)hat) p.HeadwearId = (int)hat;
         var worn = _inventory.Outfit;
         // signed in at a bowling centre's counter: the hire shoes, whatever was on the feet (#1323)
         if (Interiors.BowlingLanes.Instance?.WearsShoesHere() == true && Avatar.Garments.Get(ItemId.BowlingShoes) is { } shoes)
             worn = worn.With(shoes.Slot, shoes.Code);
+        if (suit is { } moon)
+        {
+            if (Avatar.Garments.Get(ItemId.SilverSuit) is { } silver) worn = worn.With(silver.Slot, silver.Code);
+            if (moon.Helmet) worn = worn.With(WearSlot.Head, 0);
+        }
         long outfit = worn.Bits;
         if (p.OutfitBits != outfit) p.OutfitBits = outfit;
     }

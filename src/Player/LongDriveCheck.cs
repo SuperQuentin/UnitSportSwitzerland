@@ -39,6 +39,11 @@ public partial class LongDriveCheck : Node
     // signal poles or old-town corners, the frame's re-anchors at speed)
     private readonly RoadClass? _along = Enum.TryParse<RoadClass>(CmdArgs.Value("--along"), true, out var cls) ? cls : null;
     private readonly int _car = CmdArgs.Int("--car") ?? 4;
+    // a loss of more than this within a quarter second is a hit, not braking (3 m/s² is 0.75 m/s)
+    private const float JoltMs = 4f;
+    private readonly float[] _speeds = new float[15];
+    private int _tick;
+    private int _jolts;
     private GlobalPos? _to;
     private FootPlayer? _player;
     private ILongDriveDriver? _pilot;
@@ -163,6 +168,9 @@ public partial class LongDriveCheck : Node
         var p = line.PointAt(10f);
         var fwd = RaceRoute.Flat(line.PointAt(12f) - line.PointAt(8f)).Normalized();
         float g = _ground.TryGetHeight(p, out float gh) ? gh : p.Y;
+        // a start on a bridge (#1759): on its deck, not on the ground under it (the A1 at Bellevue is 7 m up: the car was set
+        // down under the deck and drove along the ground until the abutment's slope wedged it under the deck)
+        if (p.Y > g + 1f) g = p.Y;
         _player = new FootPlayer { Name = "Driver", Terrain = _ground };
         AddChild(_player);
         _player.GlobalPosition = p with { Y = g + 1.2f };
@@ -229,12 +237,34 @@ public partial class LongDriveCheck : Node
         if (_last is { } last) _driven += here.DistanceTo(last);
         _last = here;
         float speed = p.Motion.Speed;
+        // a dead stop (#1759, #1757): more than JoltMs lost within a quarter second, logged every tick while it lasts, with
+        // what the body was touching, for the issue
+        _speeds[_tick++ % _speeds.Length] = speed;
+        float before = _speeds[_tick % _speeds.Length];
+        if (before - speed > JoltMs && _jolts < 40)
+        {
+            _jolts++;
+            var contacts = new System.Text.StringBuilder();
+            for (int i = 0; i < p.GetSlideCollisionCount(); i++)
+            {
+                var c = p.GetSlideCollision(i);
+                var at = c.GetPosition() - p.GlobalPosition;
+                contacts.Append(Inv($"; {(c.GetCollider() as Node)?.GetPath()} at {at.X:+0.00;-0.00},{at.Y:+0.00;-0.00},{at.Z:+0.00;-0.00} normal {c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2}"));
+            }
+            float over = _ground.TryGetHeight(p.GlobalPosition, out float gh) ? p.GlobalPosition.Y - gh : float.NaN;
+            Log(Inv($"jolt: {before * 3.6f:F0} -> {speed * 3.6f:F0} km/h in 0.25 s at {LvAt(p)}, y {p.GlobalPosition.Y:F2}, {over:F2} m over the ground, ")
+                + Inv($"heading {Mathf.RadToDeg(p.GlobalRotation.Y):F0}°{contacts}"));
+        }
         _top = Mathf.Max(_top, speed);
         Chase(p);
 
         if (p.Ride == RideKind.OnFoot) { Fault($"out of the car at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
-        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design
-        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f)
+        // a fall: under the ground's height (through a patch, off the data's edge); a tunnel is under it by design. The height
+        // is the raw terrain's, and the road blend cuts streets metres under it (#1930: a Lane in a 1.1 m cutting behind a
+        // retaining wall south of Place des Nations read as a fall): under it with a floor just beneath is driving, as the
+        // game's own safety nets judge it (IWorldGround.FloorBelow)
+        if (!pilot.Route.TunnelAt(pilot.Arc) && _ground.TryGetHeight(p.GlobalPosition, out float g) && p.GlobalPosition.Y < g - 1f
+            && !_ground.FloorBelow(p, p.GlobalPosition, p.GetRid(), 2f))
         {
             if ((_belowS += dt) > 0.5) { Fault($"fell under the ground ({g - p.GlobalPosition.Y:F1} m) at {_driven / 1000:F2} km ({LvAt(p)})"); Finish(); return; }
         }
@@ -311,7 +341,8 @@ public partial class LongDriveCheck : Node
             var c = r.Centre[r.NearestCentreIndexAt(s)];
             string ground = _ground.TryGetHeight(c, out float g) ? Inv($"{c.Y - g:+0.0;-0.0}") : "?";
             var kind = r.Kinds is { Count: > 0 } k ? k[Mathf.Min(r.NearestCentreIndexAt(s), k.Count - 1)] : default;
-            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
+            var (ce, cn) = _origin.ToLv95(c);
+            parts.Add(Inv($"{d:+0;-0}m: road {ground} m over the ground at {ce:F1}/{cn:F1} y {c.Y:F2}, {kind.Class}{(kind.Flags != 0 ? " " + kind.Flags : "")}"));
         }
         return "the route here: " + string.Join("; ", parts);
     }

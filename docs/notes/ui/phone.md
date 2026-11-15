@@ -283,7 +283,7 @@
   while it is out**: no jump with the pad while the phone is folded or open (`FootPlayer`: the jump is dropped when
   `PhoneState` is 1 or 2 and the last device is a pad; the keyboard's Space still jumps, and in the camera app A
   still jumps). The D-pad's ↑ is consumed by the phone, so the emote wheel stays closed while it is out.
-- **Views** (a viewmodel, not a camera move; rewritten after review): on desktop and pad the gameplay camera is not touched at all by a
+- **Views** (a viewmodel, not a camera move; rewritten after review; **open in third person is the over-the-shoulder camera of the last section, not this**): on desktop and pad the gameplay camera is not touched at all by a
   folded or open phone: same transform, same FOV, same third-person follow (`--phonecheck` asserts the camera equal with the phone open).
   The phone the owner reads is a second `PhoneModel` (`Viewmodel = true`, built once, moved as a node) parented to the camera on
   `HeldItemVisual.ViewmodelLayer` with `HeldItemVisual.ForView` materials (depth squeezed to the nearest 1 %, so it never clips into a wall
@@ -376,3 +376,43 @@
   rivers are stair-stepped, about a cell wide. Places (adventure off): towns first, a mark only where its name fits (right, else left, never cut
   by the edge, never touching another), a disc / triangle / diamond for town / summit / pass (`MapCanvasView.DrawPlaceMarker`) and a legend.
   The pad has no recentre key: R3 is the camera toggle on foot, so "Where I am" in the drawer stays the pad's way.
+
+### Over the shoulder again, open only (#1825, the owner's decision: "keep the over shoulder effect to look to the phone")
+
+- **When**: only while the phone is **open** (an app other than the camera app and the travel curtain), on desktop and pad, in **third person**.
+  Folded keeps the gameplay camera, the free mouse look and the corner viewmodel exactly as above. **First person keeps the corner
+  viewmodel** when open (there is no shoulder). VR and touch are unchanged.
+- **The camera is the gameplay one pulled in**, not a second camera: `FootPlayer.PhoneShoulder` (0..1, eased 0.26 s, 0.1 s with Reduce motion,
+  set from `PhoneShoulderWant`) blends `UpdateThirdPersonCamera`'s height, shoulder offset and distance to `Tune` (`Height` 1.60 m, `Offset`
+  0.25 m, `Distance` -0.05 m: beside the head, level with the shoulder tops, a hair ahead of the pivot). So it follows the walking body, orbits
+  with the mouse look, and keeps the gameplay camera's collision (`ArmReach`: a wall behind the player pulls it in; the phone is held in front,
+  so there is none to clip). The body squares to the view as for the camera app (`_throwBlend`).
+- **The lens is turned to a steady anchor, not the hand**: `PhoneLensView` turns the lens (not the view, the aim or the walking) so a fixed point
+  in the body's frame (`PhoneAnchor`, where the phone is held) lands at 29 % across, 52 % down the picture at any window shape. The anchor is body-fixed, so
+  the hand's walk bob does not move the picture: the phone's centre moves 0.5 px rms frame to frame while walking (asserted under 3).
+  The field of view is 84° (`Tune.Fov`): wide enough that the horizon (and the path ahead) stay in the upper part while the phone sits in the lower left.
+- **The phone is read at a glance**: the in-world phone (the viewmodel is hidden in third person) is drawn **2.4 times its size for its owner**
+  (`Tune.Scale`, a node scale, never sent: other players see the true phone; a little less in a narrower or wider window, `ShoulderFit`)
+  and turned 50° toward the lens, so the screen is seen nearly face-on instead of edge-on and the tile labels read (about 30 % of the
+  view's width, over 400 px at 1280x720). The hand and the pointing finger are the existing in-world ones (`StepFinger`).
+- **Input**: unchanged. The cursor is projected onto the in-world phone (`PhoneScreenPoint` uses it when no viewmodel is drawn); holding the
+  right button captures the mouse and the shoulder camera **looks with it** (the view yaw and pitch move the camera as in any third person);
+  it stays where you looked on release (no snap back). Y toggles, Back as before, typing stands the body, sprint puts the phone away.
+- **Not changed for others**: `PhoneState` and the arm poses; other peers see the same small phone in the same walking body.
+- **Gameplay code**: the lens is turned up to about 40° off the player's view while open, so anything that aims from `_camera` sees that turn;
+  the interaction and item code read the view (`_viewYaw`, `_pitch`), and items do not fire with the phone out.
+- **Tuning**: `--shoulder height,offset,distance,screenX,screenY,fov,scale,turnDeg` overrides `FootPlayer.Tune` for a run; `--phonecheck
+  --shouldershots` writes the frames to `test_output/phone_shoulder/` and `--shoulderchecks` runs the framing and shoulder checks alone.
+- **Checks**: `--phonecheck` (`PhoneProbe.Shoulder`): folded the gameplay camera and the corner phone; open in third person the camera eases
+  over the shoulder (a frame in between), no corner phone, the screen whole in the view and 300 px wide at 16:9, 4:3 and 21:9, the
+  centre of the view clear, the horizon and the path ahead in view, the ray lands on the screen, the picture steady while walking, and back to the gameplay
+  camera when folded; first person: no shoulder, the corner phone as before.
+
+### The Map app and the shoulder camera (#1826 with #1825's over-the-shoulder view)
+
+- With the big map up the over-the-shoulder camera is **off**: `PhoneController` leaves `PhoneShoulderWant` false while `_mapShown`, so the
+  camera eases back (0.26 s) to the gameplay one under the see-through map, and once it is home the corner phone comes back in its small
+  away pose (`PhoneMapAway`, right of the map). Leaving the Map app (Esc to Home, another app) eases the camera back over the shoulder and
+  hides the corner phone again. First person never had the shoulder: the corner phone, as before. `--phonecheck` (`PhoneProbe.Map`) asserts
+  both ways in third person (the gameplay field of view under the map, the shoulder at 1.00 on Home, then under the map again) and the
+  corner phone in first person.

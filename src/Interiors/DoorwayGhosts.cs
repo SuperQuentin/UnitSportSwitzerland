@@ -65,8 +65,7 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
                     var local = frame.AffineInverse() * at;
                     // a cheap test first; then the thing's own size decides
                     if (local.Length() > Near8) continue;
-                    _meshes.Clear();
-                    Collect(thing, _meshes);
+                    MeshesOf(thing);
                     if (_meshes.Count == 0 || !Near(frame, link, _meshes)) continue;
                     Draw(thing, inside ? link.ToOutside : link.ToInside);
                     _seen.Add(thing);
@@ -83,9 +82,34 @@ public partial class DoorwayGhosts : Node3D, Core.IOriginContainer
         }
     }
 
+    // each candidate's meshes, walked once a scan (#1910): walking a body's whole subtree every frame while a door stood
+    // open was a tenth of a client's main thread with three players by a cinema's door; the lists are pooled
+    private readonly Dictionary<Node3D, List<MeshInstance3D>> _meshesOf = new();
+    private readonly Stack<List<MeshInstance3D>> _meshPool = new();
+
+    /// <summary>A thing's meshes into <see cref="_meshes"/>: walked at its first use since the scan, the still-drawn ones after.</summary>
+    private void MeshesOf(Node3D thing)
+    {
+        if (!_meshesOf.TryGetValue(thing, out var held))
+        {
+            held = _meshPool.Count > 0 ? _meshPool.Pop() : new List<MeshInstance3D>();
+            Collect(thing, held);
+            _meshesOf[thing] = held;
+        }
+        _meshes.Clear();
+        foreach (var m in held)
+            if (IsInstanceValid(m) && m.Visible && m.Mesh != null) _meshes.Add(m);
+    }
+
     private void Scan()
     {
         _scanIn = ScanPeriod;
+        foreach (var list in _meshesOf.Values)
+        {
+            list.Clear();
+            _meshPool.Push(list);
+        }
+        _meshesOf.Clear();
         _openCount = _open.Count;
         _candidates.Clear();
         if (_open.Count == 0) return;

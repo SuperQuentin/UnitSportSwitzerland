@@ -12,10 +12,28 @@ uniform vec4 tint : source_color = vec4(1.0);
 // world axes, toward the sun
 uniform vec3 sun_dir = vec3(0.0, 1.0, 0.0);
 uniform float brightness = 1.0;
+// the disc's share of the point-to-disc fade (in brightness too); the globe look takes it alone
+uniform float fade = 1.0;
 // limb darkening, for the gas giants' cloud tops
 uniform float limb = 0.0;
 // a body this one hides behind (a big moon behind its planet; the rings behind Saturn): world centre and radius, 0 = none
 uniform vec4 occluder = vec4(0.0);
+
+
+// seen from space (#1998, World/Bodies/BodyLook.cs): the body's globe's own look, so the hand-over between this sphere and
+// its globe never shows: the photo lifted for Cartoon, plain Lambert (a giant's wrapped terminator), the night floor, the
+// globe's exposure. 0: the sky's own look (through the air, the telescope by day)
+uniform float globe_look = 0.0;
+uniform float sun_strength = 1.6;
+uniform float night_floor = 0.06;
+uniform float terminator_wrap = 0.0;
+
+vec3 globe_lit(vec3 photo, vec3 n, vec3 sun) {
+	vec3 col = pow(max(photo, vec3(0.0)), vec3(0.8));
+	float lambert = max((dot(n, normalize(sun)) + terminator_wrap) / (1.0 + terminator_wrap), 0.0);
+	lambert *= lambert * terminator_wrap + (1.0 - terminator_wrap) * sign(lambert);
+	return col * (night_floor + sun_strength * lambert);
+}
 
 varying vec3 local_dir;
 varying vec3 world_normal;
@@ -52,5 +70,5 @@ void fragment() {
 	float lit = smoothstep(-0.02, 0.1, dot(n, sun_dir));
 	float mu = clamp(dot(n, -normalize(view_dir)), 0.0, 1.0);
 	float dark = mix(1.0, 0.35 + 0.65 * mu, limb);
-	ALBEDO = surface * tint.rgb * lit * dark * brightness;
+	ALBEDO = mix(surface * tint.rgb * lit * dark * brightness, globe_lit(surface * tint.rgb, n, sun_dir) * fade, globe_look);
 }

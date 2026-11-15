@@ -104,7 +104,7 @@ public partial class LongFlightCheck : Node
         Log(Inv($"start LV95 {e:F0}/{n:F0} at {StartAltM:F0} m, to {lat:F4},{lon:F4}: {_startKm:F0} km, cruise {_cruise:F0} m, warp {_warp:F1}x, origin {(_origin.Frame.IsAnchor ? "an anchor frame" : "FLAT")}"));
         if (!_origin.Frame.IsAnchor) Fault("the world is not an anchor frame: run with --frame earth");
         Log($"{_real.LocalKeys.Count} real leaves in {Core.TerrainPaths.FindLeafDir()}; the destination's leaf {(_real.IsLocal(LeafUnder(_to)) ? "among them" : "NOT among them")}");
-        if (World.Globe.DataDir is { } dir) _pyramid = new PyramidGround(dir);
+        if (World.Globe.DataSource is { Count: > 0 } source) _pyramid = new PyramidGround(source);
         else Fault("no globe pyramid (cube_global, --globe)");
     }
 
