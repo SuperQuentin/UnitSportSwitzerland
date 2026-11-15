@@ -178,6 +178,10 @@ world_sky_floor={
 "type": "float",
 "value": -1.0
 }
+world_sky_down={
+"type": "vec3",
+"value": Vector3(0, -1, 0)
+}
 world_fill_hide={
 "type": "float",
 "value": 0.0
