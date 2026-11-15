@@ -23,6 +23,22 @@ uniform float earthshine = 0.04;
 uniform vec4 colonies[8];
 uniform int colony_count = 0;
 
+
+// seen from space (#1998, World/Bodies/BodyLook.cs): the body's globe's own look, so the hand-over between this sphere and
+// its globe never shows: the photo lifted for Cartoon, plain Lambert (a giant's wrapped terminator), the night floor, the
+// globe's exposure. 0: the sky's own look (through the air, the telescope by day)
+uniform float globe_look = 0.0;
+uniform float sun_strength = 1.6;
+uniform float night_floor = 0.06;
+uniform float terminator_wrap = 0.0;
+
+vec3 globe_lit(vec3 photo, vec3 n, vec3 sun) {
+	vec3 col = pow(max(photo, vec3(0.0)), vec3(0.8));
+	float lambert = max((dot(n, normalize(sun)) + terminator_wrap) / (1.0 + terminator_wrap), 0.0);
+	lambert *= lambert * terminator_wrap + (1.0 - terminator_wrap) * sign(lambert);
+	return col * (night_floor + sun_strength * lambert);
+}
+
 varying vec3 world_normal;
 
 #include "res://shaders/common/sky_depth.gdshaderinc"
@@ -40,7 +56,7 @@ void fragment() {
 	vec3 surface = texture(albedo, uv).rgb;
 	// the full moon is a flat disc, not a shaded ball: lit or not, with a soft terminator
 	float lit = smoothstep(-0.02, 0.06, dot(n, sun_dir));
-	ALBEDO = surface * (lit + earthshine) * brightness;
+	ALBEDO = mix(surface * (lit + earthshine) * brightness, globe_lit(surface, n, sun_dir), globe_look);
 	float pixel = max(length(fwidth(b)), 1e-7);
 	for (int i = 0; i < colony_count; i++) {
 		vec3 l = colonies[i].xyz;

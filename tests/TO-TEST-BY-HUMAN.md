@@ -43,6 +43,13 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## One look per body from space ([#1998](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1998))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] Fly the spectator from the Moon to the Earth and back, looking at the Moon now and then → it stays the same grey Moon at every distance, through the handover and where it gets small; no glow taking its place, no white flash at its edge.
+- [ ] Fly out to Mars (or `/goto mars`) and away → Mars looks the same as it shrinks into a dot.
+
 ## The spectator between the Moon and the Earth ([#1988](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1988))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
@@ -1268,8 +1275,9 @@ Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (
 - [ ] Zoomed on the Earth → its phase matches the "lit %" line (a gibbous Earth when the Moon is a crescent from the Earth).
 - [ ] Right / Left through the planets → each centred; Use → the drive holds the stars while the Moon's short day turns the sky.
 - [ ] Quit and restart, `/goto Moon 17 59` again → the telescope is still there and works; pack it up with an empty hand.
-- [ ] Online: A sets one up on the Moon, B (also on the Moon) sees it and is refused while A looks; a player on the Earth never sees it in Switzerland.
-- [ ] On the Moon try a zipline or a campfire → "That cannot be set up here."; a flag → planted.
+- [ ] Online on the Moon: setting up → "works offline only for now" (until C3b, #1852); nothing appears on the Earth.
+- [ ] On the Moon offline: a Swiss flag, a campfire, a photo card, a trampoline → each set down and still there after a restart; a zipline, a farm stand or a travel flag → its own refusal.
+- [ ] Back on the Earth after placing on the Moon → nothing of the Moon's shows in Switzerland; the Earth's own flags are where they were.
 
 ## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
 
@@ -1297,3 +1305,10 @@ Offline, in a window (Cartoon), `--frame earth` at Geneva or `--world fixture`, 
 - [ ] Floating, third person: the figure treads (as in water) and strokes when pushing; it looks like floating, not swimming in air badly.
 - [ ] VR (Link): floating with the left stick and A / B works; note how gripping and pulling should feel (the planned VR way).
 - [ ] Two players online (a pilot, a walker): the walker floats in orbit and stands again in the glide and on the runway, seen right from the pilot's seat.
+
+## Moon colonies' rooms on the interiors system ([#2005](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2005))
+
+In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --moonsites artemis:close`, on foot.
+
+- [ ] Walk in through an airlock and through every module and tube of Artemis Base (hub, each can, a moondust dome by a can's side door, the hangar down its steps) → no gap or hole in the walls, floors or doorways, no step at a doorway's sill, nothing to walk through; the rooms lit evenly, not washed out, screens and lamps glowing.
+- [ ] The same at Moon Village (`--moonsites moonvillage:close`, its glazed alleys and stacks) and the Cold War biodome (`--moonsites coldwar:close`) → the alleys' walls and the biodome's ring wall solid, the garden walkable, the trees' trunks solid.
