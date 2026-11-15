@@ -177,13 +177,21 @@ public partial class ColonyNetProbe : ChatProbe
         string? eva = null;
         float evaOver = 0;
         bool doorSeen = false, rode = false;
+        // where each colonist got into a rover: it must drive 40 m from there (a mount alone is not a drive)
+        var mounted = new Dictionary<string, Vector3>();
+        float drove = 0;
         bool outside = await Until(() =>
         {
             doorSeen |= ColonyAirlocks.Of(Base.Id)?.AnyOuterOpen == true;
             foreach (var b in BotCopies())
             {
                 // the EVA colonist drives the depot's open rover out (the server parks them, #2000)
-                if (b.Ride == MoonRovers.Open.Kind) rode = true;
+                if (b.Ride == MoonRovers.Open.Kind)
+                {
+                    if (!mounted.TryGetValue(b.Name, out var from)) mounted[b.Name] = from = b.GlobalPosition;
+                    drove = Mathf.Max(drove, ((b.GlobalPosition - from) with { Y = 0 }).Length());
+                    rode |= drove >= 40;
+                }
                 bool air = ColonyAirlocks.Pressurised(b.GlobalPosition + colony.GlobalBasis.Y * 1.6f);
                 string name = b.Name;
                 if (air) wasIn.Add(name);
@@ -199,7 +207,8 @@ public partial class ColonyNetProbe : ChatProbe
         }, 420);
         GD.Print(FormattableString.Invariant($"{Log} EVA: {(eva != null ? eva + " outside, " + evaOver.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " m over the plateau" : "nobody out")}, an outer door seen open {doorSeen}, cycles heard {ColonyDoors.CyclesHeard}"));
         Expect(eva != null, "a colonist goes out through an airlock and stands on the plateau");
-        Expect(rode, "the EVA colonist drives a depot rover (parked by the server)");
+        GD.Print(FormattableString.Invariant($"{Log} a colonist drove a rover {drove:F0} m"));
+        Expect(rode, FormattableString.Invariant($"the EVA colonist drives a depot rover 40 m (parked by the server; {drove:F0} m)"));
         Expect(doorSeen, "this client saw the airlock's outer door open (the server's cycle)");
         // the inner door shut and the outer one open: at least the cycle out (the one in may come before this client is near)
         Expect(ColonyDoors.CyclesHeard >= 1, "the server's cycles reached this client");
