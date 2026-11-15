@@ -100,6 +100,7 @@ public partial class BodyViews : Node
         if (RingCheck.Requested) AddChild(new RingCheck(_origin));
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (GotoCheck.Requested) AddChild(new GotoCheck(_origin));
+        if (BodyTravelCheck.Requested) AddChild(new BodyTravelCheck(_origin));
         if (SpectatorCrossCheck.Requested) AddChild(new SpectatorCrossCheck(_origin));
         if (BodyViewCheck.Requested) AddChild(new BodyViewCheck(_origin));
         if (BodyPlaceCheck.Requested) AddChild(new BodyPlaceCheck(_origin));

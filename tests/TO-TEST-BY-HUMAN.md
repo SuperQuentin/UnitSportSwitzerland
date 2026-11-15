@@ -1339,3 +1339,12 @@ Offline, in a window (Cartoon), `--date 2027-07-15`, on foot at Geneva's or Zuri
 
 - [ ] Pick Jupiter in the target menu and zoom all the way in (wheel), then wait a minute → Jupiter's globe stays in the middle; the same with `/time speed real`.
 - [ ] The same with a pad (D-pad up to zoom, X / LB to pick the target) and in VR (the eyepiece picture before the eyes) → it stays centred.
+
+## Travel between bodies and the place search by body (PR [#2040](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2040), [#2039](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2039))
+
+Offline, in a window, `--frame earth --bodies <planets>`, real terrain (`--chunks D:/...`), `--date 2027-07-15`.
+
+- [ ] On the Moon (`/goto moon 0.67 23.47`, then T), M → the search opens on the Moon with its map; type `bern` after Page Up to the Earth, Enter → you land in Bern on your feet, the Earth round you.
+- [ ] From Bern, M, Page Down to Mars, click Olympus Mons on the map → the fly camera arrives 220 m over the volcano (on foot: you stand on it).
+- [ ] With a pad: LB / RB step the bodies, the D-pad and A pick a place; in VR the ‹ › buttons with the ray do the same.
+- [ ] Online (a server): the stepper still browses, but another body's place says it waits for online play and nothing moves.

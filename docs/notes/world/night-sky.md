@@ -39,7 +39,9 @@ through it (#1798).
   points stand at infinity (`sky_point.gdshader`: the direction projected with w 0, depth pinned just inside the far
   plane by `sky_depth`), no longer at 95 % of a far plane read before the camera's planes move (approaching a planet it
   shrank more than 5 % a frame and the stars fell past it); and `StarField`'s cull box follows the camera (moved when 1e6
-  m off, `StarField.FollowM`), `Satellites`' box re-centred on it: at the top speed the camera is 2-6e7 m from the origin
+  m off, `StarField.FollowM`) and is sized past the far plane (`StarField.BoxFor`: 5 AU out the near plane is 7.5e7 m,
+  and a 1e7 m box round the camera lay wholly in front of it, out of the frustum: "far enough, all stars disappear"),
+  `Satellites`' box re-centred and sized the same: at the top speed the camera is 2-6e7 m from the origin
   between re-anchors (in Space the origin does not follow it vertically). Check: `--starwatch` (the stars counted every
   10th frame, low frames saved, RESULT) beside `--bodyshot saturn,-14,-167,2000000,-10,194,fly:1e9` (6 s toward the body
   at V m/s, `_fly.png`, then `_stopped.png`). Seen there and not the stars': a black frame (the sun gone too) at a hitch of
