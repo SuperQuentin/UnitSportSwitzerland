@@ -145,7 +145,25 @@ public partial class BodyGlobe : Node
         public Vector3 Sun;
     }
 
-    private static readonly StringName AirTau = "air_tau", TerminatorWrap = "terminator_wrap", NightFloor = "night_floor";
+    private static readonly StringName AirTau = "air_tau", TerminatorWrap = "terminator_wrap", NightFloor = "night_floor",
+        HorizonShade = "horizon_shade", BodyCentre = "body_centre", Lunar = "lunar";
+
+    /// <summary>
+    /// How much of an airless body's ground light follows Lommel-Seeliger (#2024: the regolith's law, bright to a grazing sun
+    /// seen obliquely), the rest Lambert; a lunar-Lambert model. On its ground only: from orbit its tiles stay as its sky
+    /// sphere is lit.
+    /// </summary>
+    public const float LunarShare = 0.6f;
+
+    /// <summary>The body's lunar share at a share of the exposure: <see cref="LunarShare"/> on its ground, 0 from orbit; 0 with air.</summary>
+    public float LunarAt(float share) => Body.Air != null ? 0f
+        : LunarShare * (1f - Mathf.Clamp((share - GroundGrey) / (1f - GroundGrey), 0f, 1f));
+
+    /// <summary>The night floor of a solid body's tiles (the shader's default) and on its ground (#2024: the squares' own).</summary>
+    public const float NightFloorSpace = 0.06f, NightFloorGround = 0.012f;
+
+    /// <summary>The body's centre written to its tiles last (#2024: the horizon's shade, while the anchor is on it).</summary>
+    private Vector3? _centreWritten;
 
     /// <summary>
     /// The air's vertical depth the ground's sunlight goes through (#1854): a landable body with air (Mars, Venus, Titan); none
@@ -202,6 +220,7 @@ public partial class BodyGlobe : Node
         var o = new DVec3(axes.Origin.X, axes.Origin.Y, axes.Origin.Z);
         var camWorld = cam.GlobalPosition;
         var centreWorld = w.ApplyInverse(c - o);
+        WriteCentre(own ? ToVector(centreWorld) : null);
         if (!own)
         {
             // basis W R, origin W (c - O); shrunk about the camera past the far plane
@@ -402,6 +421,55 @@ public partial class BodyGlobe : Node
         }
     }
 
+    /// <summary>
+    /// The share of <see cref="Exposure"/> its tiles take now (#2024): <see cref="GroundGrey"/> with the camera on or near its
+    /// ground (the regolith grey, not blown out: the photo's exposure is for the whole disc from space), 1 from orbit.
+    /// Set by its ground (<see cref="BodyGround"/>) while the anchor is on it.
+    /// </summary>
+    public float GroundShare { get; private set; } = 1f;
+
+    /// <summary>The exposure on its ground (#2024): the photo's mean comes out at <see cref="LitMean"/> times this.</summary>
+    public const float GroundGrey = 0.5f;
+
+    /// <summary>The share of the exposure at a camera <paramref name="altitude"/> over the body (#2024): grey from 10 km down, full from 200 km.</summary>
+    public static float GroundShareAt(double altitude) =>
+        Mathf.Lerp(GroundGrey, 1f, Mathf.SmoothStep(10_000f, 200_000f, (float)altitude));
+
+    /// <summary>Its tiles take <paramref name="share"/> of the exposure (written when it moves by half a percent).</summary>
+    public void SetGroundShare(float share)
+    {
+        if (Mathf.Abs(share - GroundShare) < 0.005f && (share == 1f) == (GroundShare == 1f)) return;
+        GroundShare = share;
+        foreach (var t in _tiles.Values)
+        {
+            t.Material.SetShaderParameter(SunStrength, Exposure * GroundShare);
+            if (Body.Landable) t.Material.SetShaderParameter(NightFloor, NightFloorOf(GroundShare));
+            if (Body.Landable) t.Material.SetShaderParameter(Lunar, LunarAt(GroundShare));
+        }
+    }
+
+    /// <summary>A solid body's night floor at a share of the exposure (#2024): the squares' dark night on the ground, space's from orbit.</summary>
+    private static float NightFloorOf(float share) =>
+        Mathf.Lerp(NightFloorGround, NightFloorSpace, Mathf.Clamp((share - GroundGrey) / (1f - GroundGrey), 0f, 1f));
+
+    /// <summary>
+    /// The body's centre to its tiles while the anchor is on it (#2024: a slope past the terminator stays dark), written when
+    /// it moves by a metre (an origin shift); off when the anchor leaves.
+    /// </summary>
+    private void WriteCentre(Vector3? centre)
+    {
+        if (centre is { } c && _centreWritten is { } w && c.DistanceSquaredTo(w) < 1f) return;
+        if (centre == null && _centreWritten == null) return;
+        _centreWritten = centre;
+        foreach (var t in _tiles.Values) WriteCentre(t.Material, centre);
+    }
+
+    private static void WriteCentre(ShaderMaterial m, Vector3? centre)
+    {
+        m.SetShaderParameter(HorizonShade, centre != null);
+        if (centre is { } c) m.SetShaderParameter(BodyCentre, c);
+    }
+
     /// <summary>The exposure from a six-face mean, on every tile there is.</summary>
     private void Expose(float mean, string how)
     {
@@ -409,7 +477,7 @@ public partial class BodyGlobe : Node
         Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
         // its sphere in the sky takes the same (#1998): the hand-over between the two never shows
         BodyLook.SetExposure(Body.Id, Exposure);
-        foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
+        foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure * GroundShare);
         GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2} ({how})"));
     }
@@ -439,8 +507,11 @@ public partial class BodyGlobe : Node
             SetHole(material);
             if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
             if (!_exposed && _faceMeans.Count == CubeSphere.Faces) Expose(_faceMeans.Values.Sum() / CubeSphere.Faces, "as its tiles came");
-            material.SetShaderParameter(SunStrength, Exposure);
+            material.SetShaderParameter(SunStrength, Exposure * GroundShare);
             material.SetShaderParameter(AirTau, AirTauOf(Body));
+            if (Body.Landable) material.SetShaderParameter(NightFloor, NightFloorOf(GroundShare));
+            if (Body.Landable) material.SetShaderParameter(Lunar, LunarAt(GroundShare));
+            if (_centreWritten != null) WriteCentre(material, _centreWritten);
             // a giant: a soft terminator through its deep air, and a night side as dark as space's (no ground to play on)
             if (!Body.Landable && Body.Air != null)
             {
