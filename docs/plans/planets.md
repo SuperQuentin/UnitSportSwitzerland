@@ -168,7 +168,24 @@ needs a rule for where the other bodies are.
   today), and **when the bodies are** (each one's place on its orbit, the Moon's and the planets' spins) follows the
   shared sim clock from the calendar date. The Moon in the sky, the Moon in the telescope and the Moon you land on are
   the same Moon: C3's test (B sees A's marker) depends on it. Seen from the Earth, the Moon rises about every 25 minutes
-  and its phase follows the real calendar, exactly as today; on the Moon, a lunar day lasts its real 29.5 days.
+  and its phase follows the real calendar, exactly as today. On the Moon the day is short too: see **the local day**
+  below (the real 29.5-day lunar day until #1992).
+- **The local day** (decided with the user 2026-11-15, #1992): **every body gets its own short day**, as the Earth
+  has. The body under this peer (the anchor's, near it) takes the Earth's extra turn, how far the game's Earth is
+  turned past the true one at the bodies' time (`SkyClock.ExtraTurn`), about its own pole in its own spin's sense
+  (`SkyMoment.Local`, `LocalTurn`; `Frames.Orientation`). Its sun, stars and planets cross its sky about once a game day
+  (the Moon's 24.4 minutes, Mars' 24.0, Jupiter's 23.4 at the 24-minute day). **A moon's orbit about its parent turns
+  with it** (`Frames.FromParent(body, SkyMoment)`), so the parent hangs still in its sky (the user: "the earth shouldn't
+  move, but everything else should"); the Earth's own spin seen from the Moon is then slow (about a turn a real day).
+  - **It is this peer's view, never a place**: places on a body are body-fixed, the same numbers whatever the turn, so
+    two players on the Moon agree and a player on the Earth sees the Moon where the true tree has it. Only the sky of the
+    body you are on is turned. The server takes none (no camera: `SkyClock.Local` null).
+  - **It fades out toward the sphere of influence's edge** (`SkyClock.LocalWeight`: full within 15 % of it, none from
+    60 % out: the Moon's 9,900 and 39,500 km), so the crossing re-expresses positions in the true tree with nothing
+    moving. Climbing out, the distant sky swings back to its true place over that band (the Earth stays put).
+  - **`/time speed real`**: the extra turn stops growing, so every body turns at its true rate (the Moon's 29.5-day day),
+    offset by the angle the game hour is off the real one, the Earth's own offset. The physics clock is untouched:
+    orbits integrate on sim time with the body's real spin, handovers subtract true velocities.
 - **Physics inside a sphere of influence: sim time, the body's real spin.** Every body gets H5's integration frame:
   its body-fixed axes at sim time 0, turned by `Spin`·t. A lunar orbit, a landing, a walk on the Moon run in the Moon's
   frame exactly as an Earth orbit runs in the Earth's today. `Orbit.RotationAngle` takes the body; nothing else in H5
@@ -187,7 +204,7 @@ needs a rule for where the other bodies are.
   9.81 m/s².
 - **The anchor** stays body-fixed (today's rotating ECEF anchor, generalised). Bodies other than the anchor's are
   placed every frame from the frame tree at the sky moment. In the Earth's anchor the Moon moves at the sky's pace; in
-  the Moon's, the Earth hangs still on the near side and spins once a game day.
+  the Moon's, the Earth hangs still on the near side (the local day keeps it there, #1992).
 - **Checks** pin it: planet checks run `--sun real --date 2027-07-15 --time <h>` (the frame tree needs a real date;
   `--sun fixed` keeps its fixed light for everything else and puts the bodies at the fixed date's noon).
 - **Found building H7a (#1847, 2026-11-14): the sky's date does not advance with game days.** The sky's moment is
@@ -212,8 +229,8 @@ needs a rule for where the other bodies are.
   coordinates. Same place, same view, nothing moves on screen. From now on the Moon stands still under you, and the
   Earth hangs in its sky, turning once a game day.
 - **Landing and walking**: physics in the Moon's frame, real time, gravity 1.62 m/s². The Moon's own spin is slow (one
-  turn in 27.3 days), so the ground under a walker effectively does not turn. The sun crosses the lunar sky in two
-  real weeks, then two weeks of night (with an ambient floor): a landing site is in daylight or not for days.
+  turn in 27.3 days), so the ground under a walker effectively does not turn. The sun crosses the lunar sky in about
+  12 real minutes, then 12 of night (the local day, #1992; two real weeks each at `/time speed real`).
 - **A craft coasting across the boundary** (C3a, later): it loses the Moon's true ~1 km/s, not the sky clock's
   ~1,650 km/s swing, so it arrives as a real transfer would. The spectator and the cruise drive never meet it: their
   speed is always relative to the body they are near.
@@ -569,8 +586,12 @@ ground at its end) → C3b online (waits for D2) → C3a craft → H7e Mars → 
 - **SOI by Laplace's formula**, left at 1.05 r; Phobos and Deimos get a 20 km floor.
 - **Ground gravity scaled from the Earth's tuned 9.81** by the true ratio.
 - **The bodies run on the sim clock from the calendar date** (section 2, option (a)): the sky's date jumped back a
-  day at every game midnight; this keeps the ground's sky as it is and the seasons the calendar's. The lunar day is its
-  real 29.5 days.
+  day at every game midnight; this keeps the ground's sky as it is and the seasons the calendar's. The lunar day was its
+  real 29.5 days, until the local day (#1992, with the user): ~24 minutes at the normal day.
+- **The local day's rate is the Earth's extra turn** (#1992), not each body's day squeezed to exactly 24 minutes: one
+  number from the clocks every peer shares, the Earth's own rule for every body, and at `/time speed real` it stops, so
+  the true rates come back with no switch. A body's day comes out 23-25 minutes. Its fade toward the sphere of
+  influence's edge (15 % to 60 %) keeps crossings exact; the distant sky swings back over that band while climbing out.
 - **The lunar night gets an ambient floor** so a two-week night stays playable.
 - **Space regime thresholds per body** (Moon 10/8 km, Mars 40/30 km).
 - **The Moon's pyramid stops at level 5** (167 m cells, from LOLA's 118 m); the rest is generated.

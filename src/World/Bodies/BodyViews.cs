@@ -99,6 +99,7 @@ public partial class BodyViews : Node
     {
         _origin.BodyChanged -= OnBodyChanged;
         BodyGravity.On(BodyId.Earth);
+        SkyClock.Local = null;
     }
 
     private void OnBodyChanged(BodyId from, BodyId to)
@@ -125,6 +126,12 @@ public partial class BodyViews : Node
             var e = axes.ToEcef(cam.GlobalPosition.X, cam.GlobalPosition.Y, cam.GlobalPosition.Z);
             eye = new DVec3(e.X, e.Y, e.Z);
         }
+        // the local day (#1992): the body under the camera takes the game's short day, fading out toward its sphere's edge
+        double weight = eye is { } at ? SkyClock.LocalWeight(anchor, at.Length) : 0;
+        // (a new record only when it moves by a thousandth: none a frame on the ground or far out)
+        if (SkyClock.Local is not { } was || was.Body != anchor || Math.Abs(was.Weight - weight) > 1e-3
+            || (weight is 0 or 1 && was.Weight != weight))
+            SkyClock.Local = new SkyClock.LocalDay(anchor, weight);
         var sky = SkyClock.Now;
         SkyBodies.HiddenByGlobe.Clear();
         foreach (var g in _globes)
