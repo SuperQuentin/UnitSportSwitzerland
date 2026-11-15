@@ -30,6 +30,13 @@ uniform vec3 hole_centre = vec3(0.0);
 uniform vec3 hole_up = vec3(0.0, 1.0, 0.0);
 uniform vec3 hole_east = vec3(1.0, 0.0, 0.0);
 uniform float hole_half = 0.0;
+// the body under the camera (#2024): its centre in world space, so a slope past the terminator (the sun under its own
+// horizon) stays in the night: unshaded, a far ridge facing a sun 10° down was lit as by day over the dark plain
+uniform bool horizon_shade = false;
+// the regolith's own law on the ground (#2024, as body_ground.gdshader's lunar); 0 from space, where the sky's sphere of the
+// body (globe_look) is lit as these tiles are
+uniform float lunar = 0.0;
+uniform vec3 body_centre = vec3(0.0);
 
 // lamps on the ground (#1942, World/Bodies/GroundLamps.cs): a flood light, a colony's lamps; this shader is unshaded,
 // so a Light3D never reaches it. pos: world xyz and range; dir: a spot's direction and the cosine of its half cone
@@ -60,6 +67,11 @@ void fragment() {
 	// shadows are black, there is no sky to fill them)
 	float lambert = max((dot(normalize(world_normal), normalize(sun_dir)) + terminator_wrap) / (1.0 + terminator_wrap), 0.0);
 	lambert *= lambert * terminator_wrap + (1.0 - terminator_wrap) * sign(lambert);
+	if (horizon_shade) lambert *= smoothstep(-0.03, 0.02, dot(normalize(world_pos - body_centre), normalize(sun_dir)));
+	if (lunar > 0.0) {
+		float e = max(dot(normalize(world_normal), normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz)), 0.05);
+		lambert = mix(lambert, 2.0 * lambert / (lambert + e), lunar);
+	}
 	vec3 lamps = vec3(0.0);
 	for (int i = 0; i < lamp_count; i++) {
 		vec3 to = world_pos - lamp_pos[i].xyz;

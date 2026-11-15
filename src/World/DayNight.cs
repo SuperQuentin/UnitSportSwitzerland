@@ -282,10 +282,38 @@ public partial class DayNight : Node
             Sky = new RealSky(sun, moon, moonDistance, SunPath.MoonFace(m, at),
                 SunPath.SkyFrame(m, at), date, Hour, at, m);
             shade = SunElevationDeg > 3f ? sun : MoonShade(moon);
+            Light = SunElevationDeg > 3f ? SceneLight.Sun : SceneLight.Moon;
+            // another body (#2024): the sun down to the horizon (no twilight to hand over to: its long shadows), then the
+            // planet it turns round, if it is up (the Moon's earthshine), lighting the night from where it hangs
+            if (Origin is { } o && o.Body != BodyId.Earth)
+            {
+                Light = SceneLight.None;
+                if (SunElevationDeg > 0f)
+                {
+                    shade = sun;
+                    Light = SceneLight.Sun;
+                }
+                else if (Planetshine(o, at, m) is { } shine)
+                {
+                    shade = shine.Direction;
+                    PlanetLit = shine.Lit;
+                    Light = SceneLight.Planet;
+                }
+                else if (at.Body == o.Body)
+                {
+                    // no planet up (the Moon's far side): the stars' faint light, from high in the north, so the relief
+                    // still reads by its slopes and shadows, never a flat fill
+                    var enu = at.Enu;
+                    var d = new DVec3(enu.Up.X, enu.Up.Y, enu.Up.Z) * StarlightUp + new DVec3(enu.North.X, enu.North.Y, enu.North.Z) * StarlightNorth;
+                    shade = o.Frame.DirectionOf(d.Normalized().AsEcef).Normalized();
+                    Light = SceneLight.Stars;
+                }
+            }
         }
         else
         {
             Sky = null;
+            Light = SceneLight.Sun;
             float rise = atmo?.Sunrise ?? 6f, set = atmo?.Sunset ?? 18f, noon = atmo?.NoonElevation ?? NoonElevation;
             sun = SunPath.Direction((float)Hour, out float elevationDeg, rise, set, noon);
             SunElevationDeg = elevationDeg;
@@ -321,11 +349,17 @@ public partial class DayNight : Node
         // the visual style's sky, ambient and haze follow the palette, which is flat through most
         // of the day and night: only write them when it moved (#221). Whatever swaps an environment
         // in must reset _applied, or the new one waits for a change. The sun moves every frame.
-        var applied = (sky, tint, Night, Styles.StyleKit.Dusk(SunElevationDeg));
+        bool airless = Origin is { } body && body.Body != BodyId.Earth && CelestialBody.Of(body.Body).Air == null;
+        var applied = (sky, tint, Night, Styles.StyleKit.Dusk(SunElevationDeg), airless);
         bool moved = applied != _applied;
         _applied = applied;
         if (_environment != null)
+        {
             Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
+            // no air, no sky light (#2024): the shadows of a figure, a rover, a colony are near black; what fills them is
+            // the lit ground round them, a little
+            if (moved && airless) _environment.AmbientLightEnergy *= AirlessAmbient;
+        }
         // the sky draws the light's disc only while the light is the sun (#1798): at night it is the moon's shading,
         // lifted to 25° and night-tinted, and the procedural sky drew it as a dim blue blob where no body is (the moon
         // itself is MoonDisc, the sun above the air is the atmosphere's). Under the real sun never (#1479): SunDisc is
@@ -351,6 +385,40 @@ public partial class DayNight : Node
         if (at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f) return;
         var place = Origin.ToGlobal(at);
         Place = place;
+    }
+
+    /// <summary>What the scene's directional light is now (#2024): the sun, the moon's night shading, another body's planet, nothing.</summary>
+    public enum SceneLight { Sun, Moon, Planet, Stars, None }
+
+    /// <summary>The starlight's direction at night with no planet up (#2024): 50° up, from the north.</summary>
+    private const double StarlightUp = 0.766, StarlightNorth = 0.643;
+
+    /// <summary>What the scene's light stands for now (#2024; the body ground's shader reads it, World/Bodies/BodyGround).</summary>
+    public SceneLight Light { get; private set; } = SceneLight.Sun;
+
+    /// <summary>While <see cref="Light"/> is <see cref="SceneLight.Planet"/>: how much of the planet's face is lit as seen from here, 0..1.</summary>
+    public float PlanetLit { get; private set; }
+
+    /// <summary>
+    /// The planet the anchor's body turns round, as a light (#2024: the Moon's earthshine): its direction in world axes from
+    /// <paramref name="at"/> and the share of its face lit as seen from there, or null when the body turns round the Sun or
+    /// the planet is under the horizon (the far side).
+    /// </summary>
+    private static (Vector3 Direction, float Lit)? Planetshine(WorldOrigin origin, GlobalPos at, SkyMoment m)
+    {
+        if (at.Body != origin.Body || CelestialBody.Of(origin.Body).Parent is not { } parent || parent == BodyId.Sun) return null;
+        var planet = Frames.Convert(parent, DVec3.Zero, origin.Body, m);
+        var sunFromPlanet = Frames.Convert(BodyId.Sun, DVec3.Zero, origin.Body, m) - planet;
+        var me = at.Ecef;
+        var toPlanet = planet - new DVec3(me.X, me.Y, me.Z);
+        double l = toPlanet.Length;
+        if (l <= 0) return null;
+        var dir = toPlanet / l;
+        var up = at.Enu.Up;
+        if (dir.X * up.X + dir.Y * up.Y + dir.Z * up.Z < 0.02) return null;
+        double cos = (-dir).Dot(sunFromPlanet.Normalized());
+        var world = origin.Frame.DirectionOf(dir.AsEcef);
+        return (world.Normalized(), (float)((1 + Math.Clamp(cos, -1, 1)) / 2));
     }
 
     /// <summary>The night's shading from the real moon: its bearing, at least ~25° up (sin 25° = 0.42).</summary>
@@ -384,7 +452,10 @@ public partial class DayNight : Node
     private static readonly StringName GLights = "world_lights", GLamps = "world_lamps", GMistColor = "world_mist_color",
         GMistDensity = "world_mist_density", GMistTop = "world_mist_top", GNight = "world_night", GSky = "world_sky",
         GSnow = "world_snow", GSunDir = "world_sun_dir", GTint = "world_tint";
-    private (Color, Color, float, float)? _applied;
+    private (Color, Color, float, float, bool)? _applied;
+
+    /// <summary>The style's ambient light kept on an airless body (#2024): the ground's own scattered light, no sky's.</summary>
+    public const float AirlessAmbient = 0.3f;
 
     // ---- occasion globals (shaders/world_occasion.gdshaderinc) ------------------------------------
 
