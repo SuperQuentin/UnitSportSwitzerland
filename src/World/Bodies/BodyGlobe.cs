@@ -198,7 +198,7 @@ public partial class BodyGlobe : Node
         }
 
         // the sun from the body, into world axes
-        var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky.Utc);
+        var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky);
         var sunAnchor = Frames.Orientation(axes.Body, sky).ApplyInverse(sunIcrf);
         var sun = ToVector(w.ApplyInverse(sunAnchor).Normalized());
         _sun = sun;

@@ -115,7 +115,7 @@ public partial class Atmosphere : Node3D
         if (_realSun && axes.Body != BodyId.Earth)
         {
             var at = SkyClock.Now;
-            sunDir = Frames.Orientation(axes.Body, at).ApplyInverse(Frames.Offset(axes.Body, BodyId.Sun, at.Utc)).Normalized().AsEcef;
+            sunDir = Frames.Orientation(axes.Body, at).ApplyInverse(Frames.Offset(axes.Body, BodyId.Sun, at)).Normalized().AsEcef;
         }
         var sun = _realSun
             ? new Vector3((float)FrameAxes.Dot(sunDir, axes.X), (float)FrameAxes.Dot(sunDir, axes.Y), (float)FrameAxes.Dot(sunDir, axes.Z))

@@ -330,8 +330,12 @@ public static class SunPath
     /// <summary>The last place asked for, per kilometre: swapped whole, so threads never see half of one.</summary>
     private static Place? _place;
 
-    /// <summary>The last point asked for in an anchor frame, and its place: swapped whole, as <see cref="_place"/>.</summary>
-    private sealed record PointPlace(GlobalPos At, bool Anchor, Place Place);
+    /// <summary>
+    /// The last point asked for in an anchor frame, and its place: swapped whole, as <see cref="_place"/>. A point on
+    /// another body is kept for one sky moment only (#1992): its place counted from the Earth moves with the frame tree
+    /// (the Moon ~1 km/s, and with the local day's turn round the Earth once a game day), and its up with it.
+    /// </summary>
+    private sealed record PointPlace(GlobalPos At, bool Anchor, Place Place, SkyMoment? Sky = null);
 
     private static PointPlace? _point;
 
@@ -342,12 +346,14 @@ public static class SunPath
     private static Place PlaceOf(GlobalPos at)
     {
         bool anchor = Frame is { IsAnchor: true };
-        if (_point is { } p && p.Anchor == anchor && p.At == at) return p.Place;
+        bool other = anchor && at.Body != BodyId.Earth;
+        var now = other ? SkyClock.Now : default;
+        if (_point is { } p && p.Anchor == anchor && p.At == at && (!other || p.Sky == now)) return p.Place;
         Place place;
-        if (anchor && at.Body != BodyId.Earth)
+        if (other)
         {
             // another body (#1848): the point counted from the Earth, its own up turned into the Earth's axes
-            var sky = SkyClock.Now;
+            var sky = now;
             var up = at.Enu.Up;
             var earthUp = Frames.ConvertDirection(at.Body, new DVec3(up.X, up.Y, up.Z), BodyId.Earth, sky);
             place = new Place(long.MinValue, long.MinValue, at.In(BodyId.Earth, sky).Geodetic, 0, 1, earthUp.AsEcef);
@@ -358,7 +364,7 @@ public static class SunPath
             var lv95 = at.Lv95;
             place = PlaceAt(lv95.E, lv95.N);
         }
-        _point = new PointPlace(at, anchor, place);
+        _point = new PointPlace(at, anchor, place, other ? now : null);
         return place;
     }
 

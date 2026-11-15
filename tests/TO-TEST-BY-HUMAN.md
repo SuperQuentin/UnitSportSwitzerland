@@ -1234,6 +1234,16 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
 - [ ] With the telescope on the moon → the moon at its true size, as before.
 
+## A short day on every body ([#1992](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1992))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon), no `--date` (today's sky).
+
+- [ ] `/goto Moon 17 59`, T, `/time speed normal`, watch a minute → the sun climbs or sinks visibly (about 15° a real minute), the stars and planets wheel with it; the Earth stays at the same place in the sky, its phase changing slowly.
+- [ ] Wait or `/time add 6` → the sun sets, the night comes with the full star field; `/time add 12` → day again.
+- [ ] `/time speed real` → the Moon's sky stands still to the eye (its real 29.5-day day); `/time speed normal` → moving again.
+- [ ] Fly up from the Moon to 60,000 km (spectator) → the sun and stars swing back over the climb, the Earth does not move; no jump when the crossing into the Earth's sphere happens.
+- [ ] `/goto Mars 0 0`, T → Mars' sun moves at the same pace; Phobos rises and sets.
+
 ## The sky on an airless body ([#1989](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1989))
 
 Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon), `--date 2026-11-15`.
