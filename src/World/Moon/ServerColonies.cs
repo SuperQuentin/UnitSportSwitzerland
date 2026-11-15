@@ -89,11 +89,17 @@ public partial class ServerColonies : Node
         var root = _built[c.Id];
         var plan = ColonyPlan.For(c);
         var slots = MoonRoverDepot.Slots(c, plan);
-        if (slots.Count == 0) { _parked.Add(c.Id); return; }
+        if (slots.Count == 0)
+        {
+            _parked.Add(c.Id);
+            foreach (var crew in ColonyColonists.In(root)) crew.CrewReady = true;
+            return;
+        }
         foreach (var s in slots)
             if (!_ground.HasCollisionAt(root.GlobalTransform * s.At)) return;
         int n = MoonRoverDepot.Park(c, plan, root.GlobalTransform, _origin);
         _parked.Add(c.Id);
+        foreach (var crew in ColonyColonists.In(root)) crew.CrewReady = true;
         GD.Print($"[colonies] the server's {c.Name}: {n} rover(s) parked");
     }
 
@@ -109,6 +115,8 @@ public partial class ServerColonies : Node
             return (float)y;
         }
         var root = ColonyBuilder.Build(c, ColonyPlan.For(c), GroundY, (_origin, Eyes));
+        // its crew wait for its rovers (Park), so the first EVA finds one
+        foreach (var crew in ColonyColonists.In(root)) crew.CrewReady = false;
         AddChild(root);
         // from the colony's frame into the region's, in doubles (as the ground's squares: the region's frame never moves)
         Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
