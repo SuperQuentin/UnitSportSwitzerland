@@ -4773,6 +4773,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the void's depth is Switzerland's (#1850): another body's ground goes kilometres under its reference (Mars'
             // Hellas 7.6 km), and its own ground (IBodyGround) catches a fall through it in the branch above
             if (GlobalPosition.Y > VoidY || Origin is { Body: not BodyId.Earth }) return false;
+            // nor in Space (#1982): no ground near, and world Y is only the anchor's there. In the deep-space frame the origin
+            // stands half a threshold under the camera and is moved once a frame, so a craft driven down at thousands of
+            // km/s starts a frame's second physics tick (30 fps) far under it, and was "rescued" to its last safe spot: the
+            // Moon it took off from, 69,000 km away, on the way home
+            if (Origin is { } frame && CelestialBody.Earth.SpaceRegime(true, frame.AltitudeOf(GlobalPosition))) return false;
             to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
         }
 
