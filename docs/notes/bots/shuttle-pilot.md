@@ -79,6 +79,10 @@ The shuttle itself: `player/shuttle`. The scripted pilot under it: `ShuttlePilot
 - `--shuttlebotcheck moon --frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none`:
   `/bot shuttle moon orbit`. The trip, down on a pad (within its radius), back to an Earth orbit near 100 km.
 - `shots` (windowed): `test_output/shuttlebot/{earth,moon}-<stage>.png`.
-- `tools/shuttlebotnetcheck.sh` (full tier; a server and one client on the fixture airport, `SPEED=4`): the client asks
-  `/bot shuttle 200` and sees the server's bot take the shuttle, take off, climb into Space and switch the drive on;
-  today's main stops there online.
+- `tools/shuttlebotnetcheck.sh` (full tier; a server and one client on the fixture airport, `SPEED=8`): the client asks
+  `/bot shuttle 200`. It sees the server's bot take the shuttle, take off and climb out of its sight (the client's
+  interest range drops the copy). The server's log must show `Climb -> DriveUp` (in Space, the drive on). Today's main
+  stops there online.
+- **Seen online (Nov 15), round the Earth on a server:** the drive carried the body to LV95 E ≈ 19,500 km in the main
+  region's flat frame. There, 200 km up read as under the ground, the region planner made regions round it, and the void
+  rescue put the bot back at the spawn on foot. This is the issue's "after G2" (#1443): the body needs ECEF frames.
