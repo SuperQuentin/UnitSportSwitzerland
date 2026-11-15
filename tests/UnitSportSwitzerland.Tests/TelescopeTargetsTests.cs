@@ -135,7 +135,6 @@ public class TelescopeTargetsTests
         var dark = TelescopeTargets.ReadEarth(toEarth, new DVec3(Ephemeris.AuMetres, 0, 0));
         Assert.Equal(0, dark.Lit, 3);
         Assert.True(dark.Magnitude > full.Magnitude + 2);
-        Assert.StartsWith("Earth
-", TelescopeTargets.Format(SkyBody.Moon, full, (90, 30), "Earth"));
+        Assert.StartsWith("Earth\nmagnitude", TelescopeTargets.Format(SkyBody.Moon, full, (90, 30), "Earth"));
     }
 }
