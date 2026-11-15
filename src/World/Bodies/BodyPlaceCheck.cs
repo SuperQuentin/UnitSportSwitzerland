@@ -90,18 +90,27 @@ public partial class BodyPlaceCheck : Node
         _air = Find<Atmosphere>(GetTree().Root);
         _moonDisc = Find<MoonDisc>(GetTree().Root);
         string which = CmdArgs.Value("--bodyplacecheck") is { Length: > 0 } v && !v.StartsWith("--", StringComparison.Ordinal) ? v : "all";
-        // the AIR readout (#2036): a landing's popup on foot, then the fly camera parks the walker; its screen must go
-        var feel = Find<Player.PlayerFeel>(GetTree().Root);
-        feel?.Popup("AIR  0.9 s", true);
-        await Frame();
-        bool shownOnFoot = feel?.ScreenShown == true;
+        // the AIR readout (#2036): the walker's layer up with a landing's popup, then parked as the fly camera parks it
+        // (ProcessMode disabled, ClientWorld.SetBodyParked): the layer must go. In one frame, the walker put back after
+        // (a run's fly camera has it parked from the start, and --nohud hides the layers each frame)
+        bool shownOnFoot = false, goneParked = false;
+        if (Find<Player.PlayerFeel>(GetTree().Root) is { } feel && feel.GetParent() is Node walker)
+        {
+            var mode = walker.ProcessMode;
+            walker.ProcessMode = ProcessModeEnum.Inherit;
+            feel.ShowForCheck();
+            feel.Popup("AIR  0.9 s", true);
+            shownOnFoot = feel.ScreenShown;
+            walker.ProcessMode = ProcessModeEnum.Disabled;
+            goneParked = !feel.ScreenShown;
+            walker.ProcessMode = mode;
+        }
         RenderingServer.FramePreDraw += Measure;
         try
         {
             foreach (var leg in Legs)
                 if (which == "all" || which == leg.Name) await Fly(chat, leg);
-            Expect(feel != null && shownOnFoot && !feel.ScreenShown,
-                $"the walker's AIR popup on foot ({shownOnFoot}), gone in the fly camera ({feel?.ScreenShown != true})");
+            Expect(shownOnFoot && goneParked, $"the walker's AIR popup up ({shownOnFoot}), gone once the walker is parked ({goneParked})");
         }
         finally
         {
