@@ -51,6 +51,10 @@ public static class ShuttleLayout
     /// </summary>
     public static readonly Vector3 DriveSwitch = new(0.1f, PedestalTop, 23.5f);
 
+    // ---- the interdeck opening (#1493): a hole in the flight deck's floor on the right, a steep ladder up it ----
+    /// <summary>The opening's sides (authored x, the right side), and the ladder's foot (on the mid deck, aft) and top (the flight deck's floor, forward).</summary>
+    public const float LadderInX = -1.05f, LadderOutX = -1.75f, LadderFootZ = 20.0f, LadderTopZ = 21.3f;
+
     // ---- the side hatch: round, on the left of the mid deck; the one door ----
     public const float HatchZ = 21.0f, HatchY = 3.95f, HatchRadius = 0.5f;
     public const int DoorCount = 1;

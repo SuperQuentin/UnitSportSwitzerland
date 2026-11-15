@@ -8,7 +8,7 @@ using UnitSport.Terrain.Leaves;
 namespace UnitSport.World;
 
 /// <summary>
-/// The globe's base the game ships (#1656, <c>assets/globe</c>): a coarse Earth and a coarse Switzerland, the offline
+/// The globe's base the game ships (#1656, <c>assets/bodies/earth</c>): a coarse Earth and a coarse Switzerland, the offline
 /// fallback under every server's and local pyramid, about <c>horizon.bin</c>'s size. A Godot tool mode, because Godot's
 /// <see cref="Image"/> decodes and resizes the colour (the tools have no image library).
 /// <code>

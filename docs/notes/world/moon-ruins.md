@@ -13,7 +13,7 @@ Plan: `docs/plans/moon-surface.md` sections 4 and 5. The kit: `moon-colonies`, `
   quarters and the airlock the crew used, with the stair tower (`ColonyPlan.Tower`) up the wall and a 13 m bridge to the
   rim; a galley open at its far end; a dome off the hub. No pads, no industry.
 - **Dead**: no air anywhere (`ColonyAirlocks._dead`: no volumes, both airlock doors stuck open, `Request` refused), so the
-  helmet stays on; the lamps and screens dark (`Palette.DeadLamps`, used by `ColonyKit` and `ColonyInteriors.Lit`); a red
+  helmet stays on; the lamps and screens dark (`Palette.DeadLamps`, used by `ColonyKit` and `InteriorMeshBuilder.Colony`); a red
   emergency light under each module's ceiling stuttering (`ColonyRuins.Flicker`: energy only), its reach cut to the shell
   (no shadows: a longer one lit the cans from outside); regolith drifted against the modules, dust on the floors, rubble
   round the floor's edge (`ColonyRuins.Dress`).

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Godot;
 
+using UnitSport.Core;
+
 namespace UnitSport.World;
 
 /// <summary>
@@ -11,14 +13,29 @@ namespace UnitSport.World;
 /// whiter; the colour follows B-V. They come out with the night and sink into the horizon's haze.
 /// Only under the real sun.
 /// </summary>
-public partial class StarField : MeshInstance3D
+public partial class StarField : MeshInstance3D, IOriginShiftAware
 {
     public const string CatalogPath = "res://assets/space/stars_bsc5.json";
 
-    private static readonly StringName Sky = "sky", Distance = "distance";
+    private static readonly StringName Sky = "sky", Distance = "distance", Dazzle = "dazzle";
 
     private readonly ShaderMaterial _material;
-    private float _distance = -1f;
+    private float _distance = -1f, _dazzle = -1f;
+
+    /// <summary>
+    /// The node stays at the origin (#1989): the shader places every star from the camera, but the cull box is the
+    /// node's, 1e7 m round it. An origin shift moves every top-level node; the shift to the Moon's tangent frame left the
+    /// field ~4e8 m away, and every star was culled (as after ~10,000 km of flight on the Earth).
+    /// </summary>
+    public void OnOriginShifted(OriginShift shift) => GlobalTransform = Transform3D.Identity;
+
+    /// <summary>
+    /// How dazzled the eye is (#1989): 0 at night or with air (the sky's own light hides the stars there), 1 with the sun
+    /// up over an airless ground. Then only the brightest stars show (<c>sky_point.gdshader</c>'s <c>dazzle</c>): the
+    /// eye on the sunlit ground of the Moon does not see the faint ones, as a camera's short exposure does not.
+    /// </summary>
+    public static float DazzleOf(bool airless, float sunElevationDeg) =>
+        airless ? Mathf.SmoothStep(-2f, 4f, sunElevationDeg) : 0f;
 
     /// <summary>How many stars the catalogue gave (0 when it could not be read).</summary>
     public int Count { get; private set; }
@@ -123,6 +140,8 @@ public partial class StarField : MeshInstance3D
         }
         Visible = true;
         _material.SetShaderParameter(Sky, sky.Stars);
+        float dazzle = DazzleOf(Atmosphere.Airless, DayNight.Instance.SunElevationDeg);
+        if (dazzle != _dazzle) _material.SetShaderParameter(Dazzle, _dazzle = dazzle);
         float distance = cam.Far * 0.95f * DistanceScale;
         if (distance != _distance)
         {

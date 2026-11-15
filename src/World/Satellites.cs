@@ -20,7 +20,7 @@ namespace UnitSport.World;
 /// are one <see cref="MultiMesh"/> (<c>sky_point.gdshader</c>); only its instances move.
 /// </para>
 /// </summary>
-public partial class Satellites : MultiMeshInstance3D
+public partial class Satellites : MultiMeshInstance3D, IOriginShiftAware
 {
     public const string SnapshotPath = "res://assets/space/tle_snapshot.json";
     public const string CacheDir = "user://tle";
@@ -67,6 +67,9 @@ public partial class Satellites : MultiMeshInstance3D
     }
 
     public override void _EnterTree() => Instance = this;
+
+    /// <summary>The instances stand at their directions from the origin: an origin shift must not move the node (#1989, as <see cref="StarField"/>).</summary>
+    public void OnOriginShifted(OriginShift shift) => GlobalTransform = Transform3D.Identity;
 
     public override void _ExitTree()
     {

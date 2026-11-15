@@ -41,7 +41,7 @@
   rule a body in view is drawn, one behind the Earth is not, and the light's own direction shows no disc unless it
   is the sun (stars hidden for the measure). Before #1798 it failed the space sun and both blobs.
 - **`--terminatorcheck`** (#1845, `World/TerminatorCheck`, quick: `--frame earth --sun real --chunks fixture:straight
-  --globe res://assets/globe --occasion none`): at the 2027 solstices and equinoxes, 04:00 and 15:30 UTC, the camera
+  --globe res://assets/bodies/earth --occasion none`): at the 2027 solstices and equinoxes, 04:00 and 15:30 UTC, the camera
   400 km and 20,000 km over Bern and over the evening terminator: the globe's subsolar point (`world_true_sun` through
   `Globe.Axes`) against NOAA's solar position algorithm written apart (`TerminatorCheck.Noaa`: 0.001-0.007°, under
   0.75 km), the sky's sun against it (0.0025° at 400 km, 0.010° at 20,000 km: the sun's true parallax from the

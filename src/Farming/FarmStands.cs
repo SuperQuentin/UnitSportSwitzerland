@@ -489,7 +489,9 @@ public partial class FarmStands : Node
     {
         if (!Online) return true;
         if (GetParent().GetNodeOrNull<FootPlayer>($"Players/{peer}") is not { } body) return false;
-        return body.Global.HorizontalDistanceTo(GlobalPos.FromLv95(o.E, o.N, o.Altitude)) <= Reach + 1.5f + ServerSlack;
+        // on another body never near (#1995: places on two bodies are no arithmetic)
+        var me = body.Global;
+        return me.Body == o.At.Body && me.HorizontalDistanceTo(o.At) <= Reach + 1.5f + ServerSlack;
     }
 
     // ---- replication: every peer sees every stand's crates ------------------------------------------

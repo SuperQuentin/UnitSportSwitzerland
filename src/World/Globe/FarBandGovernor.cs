@@ -3,7 +3,8 @@ namespace UnitSport.World;
 /// <summary>
 /// How much of the earth world's far band is furnished (#1657 phase 3): a scale 0..1 on the far leaves' reach (their
 /// cover, trees and buildings), past which the pyramid's baked features draw the ground's look. The detail preset caps it
-/// (<c>Globe.FarCap</c>: Very low none, Low half), and in <c>auto</c> the frame budget moves it under the cap: frames over
+/// (<c>Globe.FarCap</c>: Very low none, Low half), and in <c>auto</c> the frame budget moves it under the cap (the frame's
+/// work, <see cref="WorkMs"/>, against the target frame time): frames over
 /// budget for <see cref="ShrinkAfterS"/> take <see cref="ShrinkStep"/> off, frames well under it for
 /// <see cref="GrowAfterS"/> give <see cref="GrowStep"/> back. Slow to grow, quick to shrink, so it does not hunt.
 /// Godot-free (the tests drive it with made-up frame times).
@@ -41,6 +42,15 @@ public sealed class FarBandGovernor
         Scale = Math.Clamp(scale, 0, Cap);
         _over = _under = 0;
     }
+
+    /// <summary>
+    /// The frame's own work, ms (#1987): the longer of the GPU's render and the CPU's (process, physics, render); the
+    /// frame's wall time where neither is measured. Never the wall time with vsync on: a 60 Hz display holds every frame
+    /// at 16.7 ms however little it does, never under <see cref="UnderRatio"/> of a 60 fps budget, so the band could only
+    /// shrink (a loading spell took it to 0 %) and never came back.
+    /// </summary>
+    public static double WorkMs(double wallMs, double processMs, double physicsMs, double renderCpuMs, double gpuMs) =>
+        gpuMs > 0 || renderCpuMs > 0 ? Math.Max(gpuMs, processMs + physicsMs + renderCpuMs) : wallMs;
 
     /// <summary>
     /// A frame went by (<paramref name="dt"/> seconds) at <paramref name="frameMs"/> against <paramref name="budgetMs"/>;

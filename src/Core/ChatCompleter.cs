@@ -136,7 +136,7 @@ public sealed class ChatCompleter
         ("mute", true, false, "<player> [minutes]", "Admin", "stop a player's chat and whispers for a while"),
         ("unmute", true, false, "<player>", "Admin", "let a muted player speak again"),
         ("pvp", true, false, "on | off", "Admin", "player-on-player damage"),
-        ("bot", true, false, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list", "Admin", "server-run bots"),
+        ("bot", true, true, "add [n] [easy|normal|hard] | arm <weapon> [rounds] | fire | clear | list", "Admin", "server-run bots (offline: run here)"),
         ("despawn", true, true, "<vehicles | items | all> [radius m | everywhere]", "Admin", "remove parked vehicles or dropped items around you"),
         ("debug", true, true, "", "Admin", "the debug menu"),
         ("update", true, false, "", "Admin", "update and restart the server"),

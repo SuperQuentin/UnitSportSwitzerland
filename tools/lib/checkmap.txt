@@ -392,6 +392,8 @@ src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
 src/Terrain/Leaves/PyramidSource full tools/pyramidstreamcheck.sh
 src/Terrain/Leaves/PyramidIndex full tools/pyramidstreamcheck.sh
 src/World/Globe          full   tools/pyramidstreamcheck.sh
+src/World/Bodies/BodyData full   tools/bodystreamcheck.sh
+src/Net/ChunkStreamer      full   tools/bodystreamcheck.sh
 shaders/common/geomorph  full   tools/pyramidstreamcheck.sh
 src/Terrain/Leaves/PyramidSource net tools/fillagreenetcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
@@ -434,15 +436,15 @@ src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site -
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
 # #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
-src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
-src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --fly 0,500000,0,30,100000,6 --flyterminator
+src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --fly 0,500000,0,30,100000,6 --flyterminator
 # #1845: the sky from space against NOAA (the subsolar point, the sky's sun, the ground's light, the moon from the camera,
 # the stars, true north, /time speed real) from 400 and 20,000 km at the solstices and equinoxes; windowed it also
 # measures the drawn twilight and the moon over the night side (not here: needs a window)
-src/World/TerminatorCheck quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
-src/World/SunPath         quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
-src/World/DayNight        quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
-src/World/Globe/Globe.cs  quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --occasion none --terminatorcheck
+src/World/TerminatorCheck quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
+src/World/SunPath         quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
+src/World/DayNight        quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
+src/World/Globe/Globe.cs  quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
 # G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
 # the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
 src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
@@ -724,6 +726,10 @@ src/Avatar/AirlinerRig   quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --cabincheck --world fixture --traffic 0
 src/Player/CabinCheck    quick  --cabincheck --world fixture --traffic 0
+src/Player/ShuttleAboardCheck quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.ZeroG quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Avatar/ShuttleDeck   quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --shuttleaboardcheck --world fixture --traffic 0
 src/Player/Airliner      quick  --cabincheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
 src/Avatar/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
@@ -1068,6 +1074,10 @@ src/Player/FootPlayer.Region net tools/regioncheck.sh
 src/Bots/RegionCheck     net    tools/regioncheck.sh
 # bots inside buildings (#1330): a bot visits a generated village's house on a dedicated server, seen from two clients
 src/Bots/BotVisit        net    tools/botindoorcheck.sh
+# bots offline (single-player): the same visit with no server
+src/Bots/BotDirector     net    tools/botindoorsolo.sh
+src/Bots/BotIndoorSolo   net    tools/botindoorsolo.sh
+src/Bots/Bot.cs          net    tools/botindoorsolo.sh
 src/Bots/WanderBrain     net    tools/botindoorcheck.sh
 src/Interiors/InteriorManager.Bots net tools/botindoorcheck.sh
 src/Interiors/InteriorNav net   tools/botindoorcheck.sh
@@ -1450,3 +1460,6 @@ src/Net/InterestService         net    tools/moonnetcheck.sh
 src/Net/Regions/                net    tools/moonnetcheck.sh
 src/Net/NetPlace                net    tools/moonnetcheck.sh
 src/Items/TelescopeView         net    tools/moonnetcheck.sh
+src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets

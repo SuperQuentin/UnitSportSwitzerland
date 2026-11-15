@@ -43,6 +43,32 @@ public enum RoomType
     // #1285: public toilets: an anteroom with the basins (a gendered room's, or the shared one), the women's and the
     // men's washroom behind it, a stall off either, the accessible WC
     ToiletLobby, WomensToilet, MensToilet, ToiletStall, AccessibleToilet,
+    // #2000: a Moon colony's modules (InteriorGenerator.Colony): the hub's control room, a can's room by its use, a
+    // dome's greenhouse or store, the hangar, an airlock's chamber, a tube or an alley between two modules
+    ColonyControl, CrewQuarters, Galley, ColonyLab, Medbay, Gym, Greenhouse, ColonyStore, ColonyWorkshop, AirlockChamber,
+    Hangar, Tube,
+}
+
+/// <summary>
+/// A room whose walls and ceiling are one curved shell (#2000, a Moon colony's modules), drawn and given collision by
+/// <see cref="InteriorMeshBuilder"/> in place of the rectangle's four walls.
+/// </summary>
+public enum ShellKind : byte
+{
+    /// <summary>Plain walls: the rectangle's or the shape's.</summary>
+    None,
+    /// <summary>A barrel vault along Z: a cylinder's inside (<see cref="RoomPlan.ShellR"/>, <see cref="RoomPlan.ShellRy"/>
+    /// over its axis at <see cref="RoomPlan.ShellY"/>), flat end walls at Z0 and Z1. A can, an airlock, a tube, the hangar.</summary>
+    Barrel,
+    /// <summary>A drum: an upright cylinder of <see cref="RoomPlan.ShellR"/> round the room's middle, a flat ceiling. The hub, a stack.</summary>
+    Drum,
+    /// <summary>A dome: an ellipsoid's inside (<see cref="RoomPlan.ShellR"/> across, <see cref="RoomPlan.ShellRy"/> up) round a centre
+    /// <see cref="RoomPlan.ShellY"/> over the floor (below it when negative).</summary>
+    Dome,
+    /// <summary>Glazed: the building draws its own glass and floor (a biodome, an alley); only collision here, the walls
+    /// along the shape or the rectangle up to <see cref="RoomPlan.ShellY"/>, the floor, and a roof at
+    /// <see cref="RoomPlan.ShellRy"/> when it is over 0.</summary>
+    Glass,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -79,6 +105,13 @@ public sealed class OpeningPlan
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public int? Edge { get; set; }
+    /// <summary>
+    /// On a drum's or a dome's shell (#2000): the way out through the opening, radians from +Z toward +X
+    /// (<c>atan2(x, z)</c>), and <see cref="Center"/> is unused. On a barrel's sides (<see cref="Side.Left"/>,
+    /// <see cref="Side.Right"/>) <see cref="Center"/> is the Z of its middle as on a wall. Null, and left out of the JSON, elsewhere.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public float? Angle { get; set; }
 }
 
 public sealed class RoomPlan
@@ -116,6 +149,20 @@ public sealed class RoomPlan
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public float[]? Shape { get; set; }
+
+    /// <summary>Its walls and ceiling as one curved shell (#2000), <see cref="ShellKind.None"/> for plain walls. Left out of the JSON then.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public ShellKind Shell { get; set; }
+    /// <summary>The shell's radius across (a barrel's half width at its axis, a drum's or a dome's), metres.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public float ShellR { get; set; }
+    /// <summary>The shell's radius up (a barrel's or a dome's; the hangar's half cylinder is flattened), metres; 0 = <see cref="ShellR"/>.
+    /// A glazed room's roof height.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public float ShellRy { get; set; }
+    /// <summary>A barrel's axis or a dome's centre over the room's floor, metres; a glazed room's wall height.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public float ShellY { get; set; }
 
     public float Width => X1 - X0;
     public float Depth => Z1 - Z0;
@@ -336,6 +383,11 @@ public enum FurnitureType
     SinkRow, HandDryer, UrinalScreen, GrabRail, WcSignWomen, WcSignMen, WcSignAll, WcSignAccessible,
     /// <summary>The steps from a hall's top walkway up to its service doorway into the booth (#1279).</summary>
     ServiceSteps,
+    // #2000: a Moon colony's fittings (InteriorGenerator.ColonyFurniture, drawn by InteriorMeshBuilder.Colony), and a
+    // box only walked against (something the building draws itself)
+    ColonyBunk, ColonyLocker, GalleyCounter, MessTable, LabBench, MedBed, MedCabinet, GymMat, GymMachine, GymFrame,
+    ColonyWorkbench, ColonyCrates, SuitRack, StoreRack, ColonyConsole, MapTable, HydroRack, CrateStack, BayPaint, HangarBench,
+    ColonyLamp, ColonyScreen, Solid,
 }
 
 public sealed class FurniturePlan
@@ -346,6 +398,12 @@ public sealed class FurniturePlan
     public float Z { get; set; }
     /// <summary>Quarter turns; 0 means the piece's back faces −Z.</summary>
     public int Turns { get; set; }
+    /// <summary>
+    /// A turn in radians on top of <see cref="Turns"/> (#2000: the hub's consoles stand 30° off its diagonals). Left out of
+    /// the JSON when 0.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public float Angle { get; set; }
     public float W { get; set; }
     public float D { get; set; }
     public float H { get; set; }
@@ -586,6 +644,17 @@ public sealed class InteriorLayout
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? House { get; set; }
 
+    /// <summary>
+    /// Built where its building stands, walked into in place (#2000: a Moon colony's module), not 3 km under it behind a
+    /// door portal: no street doors, so <see cref="AllEntrances"/> is only <see cref="Entrances"/> (none).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool InPlace { get; set; }
+
+    /// <summary>A Moon colony's theme (<c>ColonyTheme</c>) for its fittings' colours (#2000); null on the Earth.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? Colony { get; set; }
+
     public bool Matches(Building b, string group) =>
         Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group
         && Math.Abs(MinY - b.MinY) < 0.01f && Math.Abs(MaxY - b.MaxY) < 0.01f
@@ -623,7 +692,7 @@ public sealed class InteriorLayout
     public BuildingKind DressedKind() => Type == BuildingType.Church ? BuildingKind.Sacral : Kind;
 
     /// <summary>The ways in; a single-door plan's one entrance is built from its front-door fields.</summary>
-    public IReadOnlyList<EntrancePlan> AllEntrances() => Entrances.Count > 0 ? Entrances : new[]
+    public IReadOnlyList<EntrancePlan> AllEntrances() => Entrances.Count > 0 || InPlace ? Entrances : new[]
     {
         new EntrancePlan
         {

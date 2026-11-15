@@ -55,7 +55,7 @@ public static class CollisionTargets
         foreach (var kind in Enum.GetValues<PlacedKind>())
         {
             if (kind == PlacedKind.None) continue;
-            var placed = new PlacedObject(0, kind, "", 0, 0, 0, Quaternion.Identity, kind switch
+            var placed = new PlacedObject(0, kind, "", GlobalPos.FromLv95(0, 0, 0), Quaternion.Identity, kind switch
             {
                 PlacedKind.RopeLadder => "4",
                 _ => "",

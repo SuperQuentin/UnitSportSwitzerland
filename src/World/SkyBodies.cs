@@ -33,11 +33,24 @@ public partial class SkyBodies : Node3D
 
     private static readonly StringName PSky = "sky", PDistance = "distance", PDaylight = "daylight", PSingle = "single",
         PColor = "point_color", PSize = "point_size", PSun = "sun_dir", PBright = "brightness", POccluder = "occluder",
-        PPole = "pole";
+        PPole = "pole", PFade = "fade";
+
+    /// <summary>The body a sky body is (null for none).</summary>
+    private static CelestialBody? BodyOf(SkyBody id)
+    {
+        foreach (var b in CelestialBody.All)
+            if (b.Sky == id) return b;
+        return null;
+    }
 
     private sealed class Entry
     {
         public SkyBody Id;
+        // the body it is (#1998): its globe's look from space (Bodies.BodyLook), written on change
+        public CelestialBody? Body;
+        public (float, float, float, float) LookShown = (-1f, -1f, -1f, -1f);
+        // in space, from the frame tree (#1998): the Sun's direction at the body, world axes; null from the ground
+        public Vector3? TreeSun;
         public MeshInstance3D Disc = null!, Point = null!;
         public ShaderMaterial DiscMaterial = null!, PointMaterial = null!;
         public MeshInstance3D? Rings;
@@ -88,7 +101,7 @@ public partial class SkyBodies : Node3D
         var pointShader = GD.Load<Shader>("res://shaders/sky_point.gdshader");
         foreach (var id in Bodies)
         {
-            var e = new Entry { Id = id, Tint = TintOf(id) };
+            var e = new Entry { Id = id, Tint = TintOf(id), Body = BodyOf(id) };
             e.DiscMaterial = new ShaderMaterial { Shader = discShader };
             if (MapOf(id) is { } map)
                 e.DiscMaterial.SetShaderParameter("albedo", GD.Load<Texture2D>(map));
@@ -125,7 +138,7 @@ public partial class SkyBodies : Node3D
     }
 
     /// <summary>The map of a body (Solar System Scope, CC BY 4.0), or null for a plain tinted ball.</summary>
-    private static string? MapOf(SkyBody id) => id switch
+    internal static string? MapOf(SkyBody id) => id switch
     {
         SkyBody.Mercury => "res://assets/space/mercury_2k.jpg",
         SkyBody.Venus => "res://assets/space/venus_2k.jpg",
@@ -138,7 +151,7 @@ public partial class SkyBodies : Node3D
     };
 
     /// <summary>A body's colour as a point, and a moon's whole colour.</summary>
-    private static Color TintOf(SkyBody id) => id switch
+    internal static Color TintOf(SkyBody id) => id switch
     {
         SkyBody.Mars => new Color(1f, 0.72f, 0.55f),
         SkyBody.Jupiter or SkyBody.Saturn => new Color(1f, 0.95f, 0.85f),
@@ -206,7 +219,23 @@ public partial class SkyBodies : Node3D
             if (HiddenByGlobe.Contains(id)) { Hide(e); continue; }
             var parent = _entries.GetValueOrDefault(Ephemeris.ParentOf(id), e);
             bool zoomed = e.DiscPixels > 0.5f || parent.DiscPixels > 0.5f;
-            if (now - e.ComputedAt > (zoomed ? 0.0 : 0.5))
+            // in space every frame from the frame tree, as the body's globe has it (#1998): the sky's reading counts its
+            // observer from the Earth, far off from the Moon's side of the system or out by Mars
+            e.TreeSun = null;
+            if (e.Body != null && World.Bodies.BodyLook.Seen(e.Body.Id, camPos, out var seenDir, out double seenDistance, out var seenFace, out var seenSun))
+            {
+                var fromWorld = stars.Inverse();
+                e.Direction = fromWorld * seenDir;
+                e.Face = fromWorld * seenFace;
+                e.Distance = seenDistance;
+                e.TreeSun = seenSun;
+                if (now - e.ComputedAt > 0.5)
+                {
+                    e.Magnitude = (float)Ephemeris.Magnitude(id, utc);
+                    e.ComputedAt = now;
+                }
+            }
+            else if (now - e.ComputedAt > (zoomed ? 0.0 : 0.5))
             {
                 var dir = SunPath.Toward(id, sky.Moment, sky.At, out _, out double distance);
                 e.Direction = toSky * dir;
@@ -232,8 +261,11 @@ public partial class SkyBodies : Node3D
             {
                 e.Disc.GlobalTransform = new Transform3D(
                     new Basis(face.Column0 * e.Radius, face.Column1 * e.Radius, face.Column2 * (float)(rp * scale)), e.WorldPosition);
-                e.DiscMaterial.SetShaderParameter(PSun, SunFrom(sunWorld, worldDir, e.Distance));
+                e.DiscMaterial.SetShaderParameter(PSun, e.TreeSun ?? SunFrom(sunWorld, worldDir, e.Distance));
                 e.DiscMaterial.SetShaderParameter(PBright, discFade * Mathf.Lerp(0.5f, 1.4f, night));
+                // from space the body's globe's own look (#1998): the globe takes it over past a size with no change
+                e.DiscMaterial.SetShaderParameter(PFade, discFade);
+                if (e.Body != null) World.Bodies.BodyLook.Write(e.DiscMaterial, e.Body, World.Bodies.BodyLook.InSpace, ref e.LookShown);
                 e.DiscMaterial.SetShaderParameter(POccluder, parent == e ? Vector4.Zero
                     : new Vector4(parent.WorldPosition.X, parent.WorldPosition.Y, parent.WorldPosition.Z, parent.Radius));
             }
@@ -244,7 +276,7 @@ public partial class SkyBodies : Node3D
                 {
                     float outer = (float)(RingOuter * scale);
                     rings.GlobalTransform = new Transform3D(new Basis(face.Column0 * outer, face.Column1 * outer, face.Column2 * outer), e.WorldPosition);
-                    ringMaterial.SetShaderParameter(PSun, SunFrom(sunWorld, worldDir, e.Distance));
+                    ringMaterial.SetShaderParameter(PSun, e.TreeSun ?? SunFrom(sunWorld, worldDir, e.Distance));
                     ringMaterial.SetShaderParameter(PPole, face.Column2.Normalized());
                     ringMaterial.SetShaderParameter(PBright, discFade * Mathf.Lerp(0.5f, 1.4f, night));
                     ringMaterial.SetShaderParameter(POccluder, new Vector4(e.WorldPosition.X, e.WorldPosition.Y, e.WorldPosition.Z, e.Radius));

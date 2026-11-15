@@ -35,6 +35,14 @@ through it (#1798).
   `Ephemeris.Celestial`, precession and sidereal time). A fixed size in pixels by magnitude
   (`StarField.Look`, 1.2-4.6 px), tinted by B-V, fading in with `world_night` and out near the horizon.
   Proper motion and nutation are left out.
+  **The node stays at the origin** (#1989): `StarField` and `Satellites` reset to identity on `OnOriginShifted`. They
+  are top-level with a 1e7 m cull box; every shift moved them, and the shift to the Moon's tangent frame left the field
+  ~4e8 m away: every star culled (as after ~10,000 km of flight on the Earth). **Off the Earth** (`Atmosphere`):
+  `world_sky_floor` is the sine of the body's horizon dip from the camera (-1 on the Earth), and points under it are
+  hidden: the body's ground past the far plane hides nothing by depth. **On an airless ground by day** the eye is
+  dazzled (`StarField.DazzleOf`, the `dazzle` uniform, by the sun's elevation from -2° to 4°): only the stars of
+  magnitude 2.5 and brighter, at 80 %; at night all of them (decided for #1989: the sky black by day with the brightest
+  stars, as the eye sees it shielded from the sun, not a camera's starless exposure; nothing changes where there is air).
 - **Planets** (`Ephemeris.Planets.cs`): JPL's approximate Keplerian elements (table 1, 1800-2050), the
   Earth as the barycentre less the moon's share, light time, annual aberration, precession to the date.
   Against Horizons from Bern: Mercury 0.006°, Venus and Mars 0.010°, Jupiter 0.028°, **Saturn 0.080°**

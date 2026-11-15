@@ -30,7 +30,7 @@ public partial class Atmosphere : Node3D
     private const float ShellBoxM = 1e9f;
 
     private static readonly StringName PlanetCentre = "planet_centre", PlanetR = "planet_r", AtmoR = "atmo_r",
-        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", TrueSunParam = "world_true_sun",
+        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", SkyFloor = "world_sky_floor", TrueSunParam = "world_true_sun",
         BetaR = "beta_r", BetaM = "beta_m", HeightR = "h_r", HeightM = "h_m", GM = "g_m", MExt = "m_ext",
         AbsorbR = "absorb_r", SunPower = "sun_power", MaxMarch = "max_march";
 
@@ -74,6 +74,12 @@ public partial class Atmosphere : Node3D
     /// <summary>How far into space the camera is this frame (<see cref="SpaceAt"/>; 0 without a globe): the moon reads it.</summary>
     public static float Space { get; private set; }
 
+    /// <summary>
+    /// The anchor's body has no air (#1989: the Moon, Mercury, the airless moons): no shell, so nothing but
+    /// <see cref="SunDisc"/> draws the sun, and the sky is black by day.
+    /// </summary>
+    public static bool Airless { get; private set; }
+
     /// <summary>The last <c>world_true_sun</c> written, in world axes (zero before the first): <c>--fly --flyterminator</c> reads it.</summary>
     public static Vector3 TrueSunWritten { get; private set; }
 
@@ -109,7 +115,7 @@ public partial class Atmosphere : Node3D
         if (_realSun && axes.Body != BodyId.Earth)
         {
             var at = SkyClock.Now;
-            sunDir = Frames.Orientation(axes.Body, at).ApplyInverse(Frames.Offset(axes.Body, BodyId.Sun, at.Utc)).Normalized().AsEcef;
+            sunDir = Frames.Orientation(axes.Body, at).ApplyInverse(Frames.Offset(axes.Body, BodyId.Sun, at)).Normalized().AsEcef;
         }
         var sun = _realSun
             ? new Vector3((float)FrameAxes.Dot(sunDir, axes.X), (float)FrameAxes.Dot(sunDir, axes.Y), (float)FrameAxes.Dot(sunDir, axes.Z))
@@ -138,6 +144,8 @@ public partial class Atmosphere : Node3D
         var axes = !home && Origin.Frame.Axes is { } there ? there : Globe.Axes ?? Origin.EcefAxes;
         var sun = TrueSun(axes);
         Space = space;
+        Airless = !home && air == null;
+        WriteSkyFloor(home ? -1f : HorizonDipSine(body.Shape.A, altitude));
         DimSky(home ? space : 1f);
         // the stars by day up here (sky_point.gdshader)
         if (space != _space) RenderingServer.GlobalShaderParameterSet(WorldSpace, space);
@@ -174,6 +182,27 @@ public partial class Atmosphere : Node3D
         float march = !body.Landable && altitude < 0 ? (float)(15 * air.CoarseHeightM) : 0f;
         if (march != _maxMarch) _material.SetShaderParameter(MaxMarch, _maxMarch = march);
         _space = space;
+    }
+
+    private float _skyFloor = float.NaN;
+
+    /// <summary>
+    /// The sine of how far the horizon dips under the horizontal at <paramref name="altitude"/> over a body of radius
+    /// <paramref name="radius"/> (#1989): acos(R / (R + h)); 3.4° at 3 km over the Moon. What is lower is the body's ground.
+    /// </summary>
+    public static float HorizonDipSine(double radius, double altitude)
+    {
+        double h = Math.Max(altitude, 0);
+        double c = radius / (radius + h);
+        return -(float)Math.Sqrt(Math.Max(0, 1 - c * c));
+    }
+
+    /// <summary><c>world_sky_floor</c> (<c>sky_point.gdshader</c>), written when it moves by more than a hundredth of a degree.</summary>
+    private void WriteSkyFloor(float floor)
+    {
+        if (Mathf.Abs(floor - _skyFloor) < 2e-4f) return;
+        _skyFloor = floor;
+        RenderingServer.GlobalShaderParameterSet(SkyFloor, floor);
     }
 
     /// <summary>The shell's intensity written last (-1: none yet).</summary>

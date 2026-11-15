@@ -1,7 +1,8 @@
 # The ground on another body (#1850)
 
-Under `--frame earth` with a body's pyramid (`--bodies DIR`, `DIR/<body>/cube`), the anchor's body has a near ground
-you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
+Under `--frame earth` every body but the Sun has a pyramid (`World/Bodies/BodyData`, #1849: the local install, the
+server's, the shipped base `assets/bodies/<body>`, else generated; `net/pyramid-streaming` "Other bodies"), and the
+anchor's body has a near ground you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 
 - **Heights**: `Terrain/Bodies/BodyHeights` (plain C#, `BodyHeightsTests`): the pyramid's finest level (the Moon's L5,
   167 m cells) bilinear, plus `CraterField` (2.5-320 m craters). A missing tile is the reference surface with its craters.
@@ -28,6 +29,18 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 - **A square's colour on a small body** (#1853): the finest tile over the centre that holds the whole square (Phobos'
   finest, 2.2 km, is smaller than the 4 km square, whose edges read past it); and the globe's exposure follows into
   the squares once its six faces are in (a square made before kept the shader's 1.6: a bright patch).
+- **The exposure is read up front** (#1983): `BodyGlobe` reads its six level-0 faces' colour on a worker as it is made
+  (`FaceMean`, all sixteen bodies in a few hundred ms at boot) and holds its first tiles until the exposure is set (at most
+  3 s); `BodyGround` puts no square in before (`ExposureSettled`). Waiting for the six to stream in lit the first seconds at
+  the shader's 1.6 and then dropped every tile and square to the photo's exposure in one frame (the Moon: 1.6 to 0.94, mean
+  luma 86 to 71 at Apollo 11, filmed). A streamed pyramid with no level-0 colour here still sets it as its tiles come.
+- **The globe's horizon test starts under the eye** (#1985): a tile is dropped as turned away when its up looks away
+  from the eye, judged from its centre lowered to 25 km under the eye's radius (`BodyGlobe.ReliefM`), never at the
+  reference height. From the reference height, the tiles round an eye down in a basin (Mare Crisium, 3.5 km under it)
+  seemed to face away and were dropped: a black band past the medium square, the far globe floating above it. From
+  orbit nothing changes (the centre is the lower of the two).
+- **The spectator's place line off the Earth** (#1985, `PerfOverlay.Where`): the body, its latitude and longitude and the
+  height over its reference (`Moon 17.000°N 59.000°E  h -3046 m`), never LV95.
 - **One ground a body, the anchor's answers**: every landable body with a pyramid has its `BodyGround`; the one whose
   body the anchor is on claims `BodyGround.Active` and `EarthWorld.OtherBody`. `Covers` is the square's true ground
   (192 m each way), twice the 96 m at which the next is built.
@@ -60,8 +73,8 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   (nothing moves), the world shifted to the place's tangent frame, the camera over it (30 km over a body with ground by
   default, never under a body's floor), T steps in after flying down. Planetocentric latitude, east longitude (−180..360).
   `--gotocheck` (quick, no body data): the Apollo 15 site, Gale crater, back over Bern, an unknown body refused.
-- **Check**: `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --bodies
-  E:/UnitSportSwitzerland/planets --mooncheck [mars|phobos|deimos|...] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
+- **Check**: `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none [--bodies
+  E:/UnitSportSwitzerland/planets] --mooncheck [mars|phobos|deimos|...] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
   T, standing, a 120 m sprint over a new square, the body's jump (5.4 m on the Moon, 2.4 m on Mars). `mars` flies Earth →
   Sun → Mars at light speed (~860 game s, ~13 min headless); `--fromorbit` skips the flight (27 s). Windowed: `test_output/moon/{arrival,ground,apex}.png`. 2027-07-24 puts the landing near
   the terminator (low sun, the craters show). A small moon: the flight ends (and `--fromorbit` starts) well inside its

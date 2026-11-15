@@ -70,8 +70,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
 
     public CelestialBody Body => _globe.Body;
 
-    /// <summary>The ground's heights (the checks read them too).</summary>
-    public BodyHeights Heights { get; }
+    /// <summary>The ground's heights (the checks read them too); made again when the pyramid deepens (<see cref="Refresh"/>).</summary>
+    public BodyHeights Heights { get; private set; }
+
+    /// <summary>The level <see cref="Heights"/> reads (the chain's finest when they were made).</summary>
+    public int HeightsLevel { get; private set; }
+
+    // bumped as the heights are made again: a square of older heights is rebuilt where it stands
+    private int _heightsVersion;
 
     /// <summary>The near square in place, with its frame (x east, y up, z south, its origin on the ground under its centre).</summary>
     public EnuFrame? Frame => _near.Frame;
@@ -105,7 +111,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public double LampsAge;
         public EnuFrame? Frame;
         public Task<Square>? Task;
-        public int Epoch = -1, Built;
+        public int Epoch = -1, Built, HeightsVersion;
         public (Vector3 Centre, Vector3 Up, Vector3 East, float Half) HoleWritten;
 
         public float Half => Cells * CellM / 2;
@@ -118,21 +124,55 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         _globe = globe;
         _origin = origin;
         Name = $"{globe.Body.Name}Ground";
-        Heights = HeightsOf(globe.Body, globe.Pyramid, globe.MaxLevel);
+        Heights = MakeHeights(globe);
         _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
         _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
     }
 
     /// <summary>
-    /// A body's heights, the same on every peer and on the server (#1852, <see cref="ServerBodyGround"/>): its pyramid's
-    /// finest level (null where it has none: the generated relief alone, on its datum), its craters, the Moon's sites and
-    /// colonies, its relief family.
+    /// The chain deepened (the server's pyramid for this body came, #1849): the heights are made again at its new finest
+    /// level, and each square rebuilt where it stands (the old one stays under the walker until the new one is in).
+    /// </summary>
+    public void Refresh()
+    {
+        if (_globe.MaxLevel == HeightsLevel) return;
+        Heights = MakeHeights(_globe);
+        _heightsVersion++;
+        GD.Print($"[bodies] {Body.Name}'s ground now reads level {HeightsLevel}");
+    }
+
+    /// <summary>
+    /// The heights at the chain's finest level. A tile missing there (a streamed one that did not come, past the data) is its
+    /// deepest ancestor's, resampled (<see cref="GlobeGround.FillFromAncestors"/>): never the reference surface's 0, a step
+    /// of kilometres where the data stands high or low (the shipped base alone reaches level 2).
+    /// </summary>
+    private BodyHeights MakeHeights(BodyGlobe globe)
+    {
+        HeightsLevel = globe.MaxLevel;
+        return HeightsOf(globe.Body, globe.Pyramid, globe.MaxLevel);
+    }
+
+    /// <summary>A tile the chain lacks, from its deepest ancestor (65², bilinear); null where it has none at all.</summary>
+    private static CubeTile? FromAncestor(Terrain.Leaves.PyramidSource pyramid, CubeKey key)
+    {
+        const int bits = 6;
+        int n = (1 << bits) + 1;
+        var hs = new float[n * n];
+        System.Array.Fill(hs, float.NaN);
+        GlobeGround.FillFromAncestors(hs, n, key, bits, 1, pyramid.Heights);
+        return System.Array.TrueForAll(hs, float.IsNaN) ? null : new CubeTile { Key = key, Bits = bits, Heights = hs };
+    }
+
+    /// <summary>
+    /// A body's heights at a point, the same wherever they are asked (#1848, #1852: the clients' ground and the server's,
+    /// <see cref="ServerBodyGround"/>): the chain's <paramref name="level"/> (a missing tile from its ancestor; none at all: the
+    /// generated relief alone, on its datum), its craters, the Moon's sites and colonies, its relief family.
     /// </summary>
     public static BodyHeights HeightsOf(CelestialBody body, Terrain.Leaves.PyramidSource? pyramid, int level)
     {
         var cube = body.Cube;
         return new BodyHeights(cube, level,
-            key => pyramid?.Heights(key),
+            key => pyramid == null ? null : pyramid.Heights(key) ?? FromAncestor(pyramid, key),
             body.CraterDensity > 0 ? new CraterField((ulong)body.Id, cube.Shape.A, body.CraterDensity) : null,
             // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
             body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
@@ -233,12 +273,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         if (Wants(_near, p))
         {
             var near = _near;
+            near.HeightsVersion = _heightsVersion;
             near.Task = Task.Run(() => Build(heights, globe, p, near, null));
         }
         else if (_near.Node != null && Wants(_medium, p))
         {
             var mediumLayer = _medium;
-            mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride)));
+            mediumLayer.HeightsVersion = _heightsVersion;
+            mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride, ofFullLattice: true)));
         }
     }
 
@@ -272,10 +314,10 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     }
 
     /// <summary>A layer needs a new square round <paramref name="p"/>: none yet, or the camera past its move distance.</summary>
-    private static bool Wants(Layer l, EcefPos p)
+    private bool Wants(Layer l, EcefPos p)
     {
         if (l.Task != null) return false;
-        if (l.Frame is not { } f) return true;
+        if (l.Frame is not { } f || l.HeightsVersion != _heightsVersion) return true;
         var (x, _, z) = f.ToLocal(p);
         return x * x + z * z >= l.MoveM * l.MoveM;
     }
@@ -283,6 +325,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     private void Finish(Layer l)
     {
         if (l.Task is not { IsCompleted: true } done) return;
+        // a square waits for the globe's exposure: put in at the provisional one, it dimmed with the globe a moment later (#1983)
+        if (!_globe.ExposureSettled) return;
         l.Task = null;
         if (done.IsCompletedSuccessfully) Commit(l, done.Result);
         else GD.PrintErr($"[bodies] {Body.Name}'s {l.Name.ToLowerInvariant()} ground: {done.Exception?.GetBaseException().Message}");

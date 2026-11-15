@@ -2256,6 +2256,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (Floating) { PublishFloatPose(dt); return; }   // #1493
         if (_climbing) { PublishClimbPose(dt); return; }   // #1225
         if (CreativeFlying) { PublishFlyPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
@@ -2999,7 +3000,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a bus door's button within reach, inside or out (#162), before anything else here
         if (TryDoorButton()) return true;
         // walking about in a vehicle: a seat, or the wheel (#162)
-        if (Aboard) return TryDeckSeat();
+        if (Aboard) return TryShuttleHatch() || TryDeckSeat();
 
         // the radio pointed at (#725): a tap switches it on or off, a hold opens its panel (play a
         // CD, burn one, pick it up); a VR hand gripping it opens the panel straight away
@@ -4220,6 +4221,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // floating aboard the shuttle in free fall (#1493, FootPlayer.ZeroG.cs)
+        if (Aboard && ZeroGPhysics(dt)) return;
+
         // on a face (#1225, FootPlayer.Climb.cs)
         if (ClimbPhysics(dt, onFloor)) return;
         // in the water (#301, FootPlayer.Swim.cs)
@@ -4546,6 +4550,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var n = GetFloorNormal();
         downhill = new Vector3(n.X, 0, n.Z);
         if (n.Y >= SteepNormalY) return false;
+        // a deck's slopes are its stairs and ladders, built to be climbed (the shuttle's is 59°, #1493): only the floor's limit
+        if (Aboard) return false;
         var p = GlobalPosition;
         float r = SteepReachM;
         if (Terrain != null && Terrain.TryGetHeight(p, out float g) && Mathf.Abs(p.Y - g) < 0.6f
@@ -4777,6 +4783,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // the void's depth is Switzerland's (#1850): another body's ground goes kilometres under its reference (Mars'
             // Hellas 7.6 km), and its own ground (IBodyGround) catches a fall through it in the branch above
             if (GlobalPosition.Y > VoidY || Origin is { Body: not BodyId.Earth }) return false;
+            // nor in Space (#1982): no ground near, and world Y is only the anchor's there. In the deep-space frame the origin
+            // stands half a threshold under the camera and is moved once a frame, so a craft driven down at thousands of
+            // km/s starts a frame's second physics tick (30 fps) far under it, and was "rescued" to its last safe spot: the
+            // Moon it took off from, 69,000 km away, on the way home
+            if (Origin is { } frame && CelestialBody.Earth.SpaceRegime(true, frame.AltitudeOf(GlobalPosition))) return false;
             to = HasSafeHere ? _lastSafe + Vector3.Up * 0.5f : GlobalPosition with { Y = 0f };
         }
 

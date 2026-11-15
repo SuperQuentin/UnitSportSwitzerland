@@ -28,7 +28,7 @@ In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, over Geneva.
 
 In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator (Shift+T).
 
-- [ ] Offline, `--globe res://assets/globe` (the 1.5 MB base alone), climb from Lavaux to orbit and fly over Asia → the Earth from orbit looks as before; tile edges at 60-250 km as before (no worse).
+- [ ] Offline, `--globe res://assets/bodies/earth` (the 1.5 MB base alone), climb from Lavaux to orbit and fly over Asia → the Earth from orbit looks as before; tile edges at 60-250 km as before (no worse).
 - [ ] Join a server that has the pyramid (`--globe <dir>` on the server) from a copy with none and an empty cache, then climb slowly from the ground to 500 km over Switzerland → the globe sharpens as tiles arrive, no tile jumps in height when it splits or merges; note how long it takes to catch up after a fast climb (the check measured it lagging at 7 fps).
 - [ ] With the pyramid on this PC (D:), climb and dive between 2 km and 300 km at full speed, watching the mountains on the horizon → no ground popping between levels (each level eases into the next).
 
@@ -60,11 +60,34 @@ A server and two clients, all with `--frame earth --sun real --date 2027-07-15 -
 - [ ] B flies there too and steps in beside A → each sees the other walk, run and jump (six times as high) with no stutter; name tags over the heads.
 - [ ] As admin on the Moon, `/bot add 3` → the bots stand and wander on the Moon's ground, never sinking or floating; they jump high.
 - [ ] In VR, through the telescope: no labels yet (known); the target menu still lists A.
+## One look per body from space ([#1998](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1998))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] Fly the spectator from the Moon to the Earth and back, looking at the Moon now and then → it stays the same grey Moon at every distance, through the handover and where it gets small; no glow taking its place, no white flash at its edge.
+- [ ] Fly out to Mars (or `/goto mars`) and away → Mars looks the same as it shrinks into a dot.
+
+## The spectator between the Moon and the Earth ([#1988](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1988))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `/goto moon 26.13 3.63 5`, look at the Moon below at an angle, fly up and away at full wheel toward the Earth → at the handover (~66,000 km out) nothing jumps: the Moon stays where it was on screen, the horizon swings round slowly about the middle. Same from the Earth to the Moon, and looking ahead instead of back. Mouse, pad and VR (the headset's own turn stays yours).
+- [ ] A long flat flight over the Earth (hundreds of km) with the look untouched → the view stays level with the horizon, no slow roll or pitch.
 
 ## The colonies' lights from afar ([#1946](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1946))
 
 - [ ] In the shuttle in a 100 km lunar orbit (`/orbit 100` on the Moon), over the night side → the staffed colonies show as small clusters of warm light (Artemis Base with its runway's line), none on the day side; they fade out as you come down within ~10 km and the colony itself takes over, with no jump.
 - [ ] From the Earth at night with the telescope (`--date 2027-08-06 --time 21.5`, the waxing crescent low in the west), zoom on the earthshine side → a small spark at Moon Village (Mare Tranquillitatis, near the terminator); judge whether it reads too bright or too big at the longest end.
+
+## Moon colonists as real bots ([#1976](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1976))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] `--moonsites artemis:close`, step in and follow one colonist (the name tag over them) for a few windows of five minutes → they walk the tubes on the aisle's middle, never into a bunk or a counter, turn in the rooms (not in the doorways), and stand at a console or a bench facing it.
+- [ ] Follow one out on an EVA (or `--colonisteva`, which sends the first EVA colonist out at once) → it walks to an airlock, the lamp turns amber and the inner door shuts behind it, the outer opens, its helmet goes on as the chamber empties, it walks down the stairs; a far EVA spot is reached in the open rover, which it drives back to its slot later.
+- [ ] Walk into a moondust dome off a can's side (a greenhouse) → the can has a doorway in its side, the tube joins it, and the dome's entrance faces the tube; nothing blocks the way in. Walk back out up the outer stairs of an airlock → no step holds you.
+- [ ] Walk 450 m away from the colony and back → the colonists turn into figures and back into bots without a jump anyone near would notice; none falls through the ground while you are far.
+- [ ] Note the frame time with the whole crew as bots in view (8 bodies).
 
 ## Moon colonists ([#1945](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1945))
 
@@ -370,7 +393,7 @@ With the `--cube-global` region on D: (`D:/UnitSportSwitzerland/cube_global`, or
 
 - [ ] Desktop, live: the spectator from a Lausanne street (`--origin 2538300,1151200`) straight up to ~12,000 km and back, boost held → the globe fades in above 15 km with no pop; the sky darkens to black by 40 km; the generated fill dissolves at 50-80 km and every flat tile at 150-250 km without a hole; nothing jumps at 60 or 50 km; the whole Earth sits under you with the stars; coming down, the flat world comes back in the same order.
 - [ ] VR, live (PC VR, then the Quest standalone with the shipped levels 0-2 only): the same climb as far as the headset's flight allows → no flicker or swimming of the globe in either eye; on the Quest the flat world sinks out of sight at its half-way heights instead of dissolving; frame rate holds.
-- [ ] A clean clone with Git LFS, no D: data: the globe still draws from `assets/globe` (levels 0-2), softer below ~1,000 km.
+- [ ] A clean clone with Git LFS, no D: data: the globe still draws from `assets/bodies/earth` (levels 0-2), softer below ~1,000 km.
 - [ ] At 120 km by day, then at dusk and at night → stars by day up there; the limb is a blue band over black; the terminator lies where the real sun puts it (not where the moon is at night).
 - [ ] Frame time at 120 km looking at the horizon, and while climbing fast (tiles streaming) → no hitch over ~30 ms.
 - [ ] The same on a phone or the Quest (Mobile renderer, maybe a 24-bit depth buffer) → no flicker between globe tiles or against the flat tiles far out.
@@ -1242,6 +1265,37 @@ In a window, `--frame earth --chunks D:/UnitSportSwitzerland/terrain_chunks`, sp
 - [ ] Fly up over the night side as the sun sets below (1,000 km) → the sun shines above the Earth's limb; turn so the Earth hides it → it is gone. From the ground at night it never shows.
 - [ ] With the telescope on the moon → the moon at its true size, as before.
 
+## A short day on every body ([#1992](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1992))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon), no `--date` (today's sky).
+
+- [ ] `/goto Moon 17 59`, T, `/time speed normal`, watch a minute → the sun climbs or sinks visibly (about 15° a real minute), the stars and planets wheel with it; the Earth stays at the same place in the sky, its phase changing slowly.
+- [ ] Wait or `/time add 6` → the sun sets, the night comes with the full star field; `/time add 12` → day again.
+- [ ] `/time speed real` → the Moon's sky stands still to the eye (its real 29.5-day day); `/time speed normal` → moving again.
+- [ ] Fly up from the Moon to 60,000 km (spectator) → the sun and stars swing back over the climb, the Earth does not move; no jump when the crossing into the Earth's sphere happens.
+- [ ] `/goto Mars 0 0`, T → Mars' sun moves at the same pace; Phobos rises and sets.
+
+## The sky on an airless body ([#1989](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1989))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon), `--date 2026-11-15`.
+
+- [ ] `/goto Moon 17 59`, T, look east and up → a blinding white sun: a bright core, long spikes, a soft bloom fading into black with no ring at its edge; no light shafts.
+- [ ] Turn away from the sun there → a black sky with a few dozen bright stars (and planets); none drawn over the ground or the far horizon.
+- [ ] `/goto Moon 26.13 3.63` (Hadley, lunar night) → the full star field (the Milky Way's stars, the Pleiades), the Earth hanging in it.
+- [ ] Fly a long way on the Earth (10,000 km, spectator), come back down at night → the stars are still there.
+
+## The telescope on the Moon ([#1995](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1995))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon); then online, two clients on the Moon.
+
+- [ ] `/goto Moon 17 59`, T, set up a telescope (from the catalogue), E at it → the view opens; the menu's first entry reads "Earth"; it centres the Earth; Up shows its readings (about −16 to −17, ~400,000 km, its lit share).
+- [ ] Zoomed on the Earth → its phase matches the "lit %" line (a gibbous Earth when the Moon is a crescent from the Earth).
+- [ ] Right / Left through the planets → each centred; Use → the drive holds the stars while the Moon's short day turns the sky.
+- [ ] Quit and restart, `/goto Moon 17 59` again → the telescope is still there and works; pack it up with an empty hand.
+- [ ] Online on the Moon: setting up → "works offline only for now" (until C3b, #1852); nothing appears on the Earth.
+- [ ] On the Moon offline: a Swiss flag, a campfire, a photo card, a trampoline → each set down and still there after a restart; a zipline, a farm stand or a travel flag → its own refusal.
+- [ ] Back on the Earth after placing on the Moon → nothing of the Moon's shows in Switzerland; the Earth's own flags are where they were.
+
 ## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
 
 Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
@@ -1257,3 +1311,21 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 - [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
 - [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.
+
+## Walking and floating aboard the shuttle ([#1493](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1493))
+
+Offline, in a window (Cartoon), `--frame earth` at Geneva or `--world fixture`, `--date 2027-07-15`; the shuttle from the ride menu.
+
+- [ ] Parked: E stands you up behind the commander's seat; walk to the opening on the right, down the ladder, up again → it feels like a steep ladder, not a wall or a slide; the rail does not snag.
+- [ ] By the hatch on the mid deck, the prompt reads "Out by the hatch"; E → you stand on the ground on the left of the hull, and E there gets you back in at the controls.
+- [ ] `/orbit 400`, E: you float. The stick pushes you toward where you look, Space / Ctrl (pad A / B) up and down; let go near a wall and you stop; push off hard into the mid deck and drift → feels right, not twitchy or sluggish.
+- [ ] Floating, third person: the figure treads (as in water) and strokes when pushing; it looks like floating, not swimming in air badly.
+- [ ] VR (Link): floating with the left stick and A / B works; note how gripping and pulling should feel (the planned VR way).
+- [ ] Two players online (a pilot, a walker): the walker floats in orbit and stands again in the glide and on the runway, seen right from the pilot's seat.
+
+## Moon colonies' rooms on the interiors system ([#2005](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2005))
+
+In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --moonsites artemis:close`, on foot.
+
+- [ ] Walk in through an airlock and through every module and tube of Artemis Base (hub, each can, a moondust dome by a can's side door, the hangar down its steps) → no gap or hole in the walls, floors or doorways, no step at a doorway's sill, nothing to walk through; the rooms lit evenly, not washed out, screens and lamps glowing.
+- [ ] The same at Moon Village (`--moonsites moonvillage:close`, its glazed alleys and stacks) and the Cold War biodome (`--moonsites coldwar:close`) → the alleys' walls and the biodome's ring wall solid, the garden walkable, the trees' trunks solid.

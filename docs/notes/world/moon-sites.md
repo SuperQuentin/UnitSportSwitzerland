@@ -38,4 +38,23 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938). Phase 1 of 8.
   relabelling world positions; the lander kept as a world `Vector3` went stale and the picture rolled 33° and 135° in
   the first film. The lander and the vertical are now held on the Moon (ECEF) and read into the world each frame, and
   the run fails if the camera turns over 8° in a frame on the Moon's own axes (the smooth dive peaks at 3.1°)
+  The arc's camera is placed at its first pose before it becomes the view (#1978: one frame rendered from where it was
+  made, under the lander).
+- **Showcase film** (#1978, dev, `MoonSitesCheck.Showcase`): `--moonsites a,b,... --moonshowcase` films, once each site is
+  in, one glide eased at both ends (36° round the site's own view, closing in a little, `--showseconds`, 6.5 s) as its own
+  clip (`test_output/clips/show_NN_<id>`); with `--colonistcheck --colonisteva` it films the EVA colonist's parts (the
+  airlock out, the drive, the way back) with a chase camera eased after it, and the check's own pictures are skipped (they
+  moved the camera for a frame). Run the console exe with `--resolution 1920x1080 --fixed-fps 30` before `--`, `--clip-hq`
+  after, and a user:// of its own (no test profile: it renders at half scale). The chase camera is pulled in short of the first wall
+  between the colonist and its spot (a ray, as a player's chase camera; the eased spot too), so the helmet is seen going
+  on in the chamber and off in the tube. Seen before that: a chase camera 2.6 m back crossed the
+  airlock's walls and rings while the colonist waited in the chamber, and the ground darkens in one frame when a square
+  finishes building (Apollo 11, ~1.4 s in): cut round both.
+- **Trailer moves** (dev, `MoonSitesCheck.Trailer`): `--moonsites a,b,... --moontrailer <file>`, one line a site in order:
+  `name|sun°|eye e,n,u>e,n,u|look e,n,u>e,n,u|seconds|fov|flags`: metres east and north of the site's main part and up
+  over the ground there, the sun at that height and setting (`SunDays`), flags `drift` (a handheld sway), `lin`/`in`,
+  `at=<module kind>` (from that module), `terminal=<title start>:<page>` (out from that terminal's screen, to its right and
+  up; the screen turned to that page, `ColonyTerminals.ShowPage`). Each move its own clip, `trailer_<name>`. The Moon teaser
+  "LOWER LOCK" was cut from these (Nov 2026). Seen: the Marius Hills lower lock's terminal stands behind a rack and its lit
+  inner door from every reachable angle; Okafor's and the galley's read from the front.
   (`test_output/clips/moon-twerk`; with `--fixed-fps 30` before `--` and `--clip-hq`, every frame is kept).

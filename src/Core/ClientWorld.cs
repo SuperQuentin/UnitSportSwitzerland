@@ -761,6 +761,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 vehicles.Visible = shown;
             };
         }
+        // bots offline as on a server: after the interiors, which see their bodies (#1330 phase B's (a))
+        if (!Launch.Networked) SetUpOfflineBots(origin);
         // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the server is given the same
         Farming.FarmMarket.StandInFromArgs(source, origin);
 
@@ -1239,6 +1241,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ClimbCheck.Requested) AddChild(new Player.ClimbCheck(() => LocalPlayer));   // #1225
         if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
+        if (Player.ShuttleAboardCheck.Requested) AddChild(new Player.ShuttleAboardCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
         if (Player.An124Check.Requested) AddChild(new Player.An124Check(() => LocalPlayer));
         if (Player.HoldCheck.Requested) AddChild(new Player.HoldCheck(() => LocalPlayer));
@@ -1345,6 +1348,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
         if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
         if (Bots.BotIndoorProbe.Role != null) AddChild(new Bots.BotIndoorProbe(items));
+        if (Bots.BotIndoorSolo.Requested) AddChild(new Bots.BotIndoorSolo(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
@@ -2293,10 +2297,44 @@ public partial class ClientWorld : Node3D, IOriginContainer
         else Ground?.AddAnchor(anchor);
     }
 
+    /// <summary>
+    /// Offline, the server's bot system (bots run offline too): a <c>Players</c> container for the bots' bodies (the
+    /// player stays outside it, as offline always), this world's <see cref="PlayerReplication"/> spawner and a
+    /// <see cref="Bots.BotDirector"/>. Every bot mode then runs here as on a dedicated server, on the client's own
+    /// ground and collision (a body is a collision anchor) and the interiors' bot collision. Torn down if a network game
+    /// starts in this world (<see cref="TearDownOfflineBots"/>): the server runs its own.
+    /// </summary>
+    private void SetUpOfflineBots(WorldOrigin origin)
+    {
+        if (_players != null) return;
+        _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
+        AddChild(_players);
+        _offlineSpawner = PlayerReplication.CreateSpawner(origin);
+        AddChild(_offlineSpawner);
+        AddChild(Bots.BotDirector.CreateOffline(_offlineSpawner, _players, () => _onFoot ? LocalPlayer : null));
+        if (Interiors.InteriorManager.Instance is { } interiors) interiors.Players = _players;
+    }
+
+    private MultiplayerSpawner? _offlineSpawner;
+
+    /// <summary>The offline bots go before a network game starts in this world: its server runs the bots.</summary>
+    private void TearDownOfflineBots()
+    {
+        if (_offlineSpawner == null) return;
+        if (GetNodeOrNull(Bots.BotDirector.NodeName) is { } director) { RemoveChild(director); director.QueueFree(); }
+        RemoveChild(_offlineSpawner);
+        _offlineSpawner.QueueFree();
+        _offlineSpawner = null;
+        if (_players != null) { RemoveChild(_players); _players.QueueFree(); _players = null; }
+        if (Interiors.InteriorManager.Instance is { } interiors) interiors.Players = null;
+    }
+
     private void StartNetworking(string host)
     {
         if (_networked) return;
         if (!Systems.On(Systems.Network)) { Fail("The network is off for this run (--systems)."); return; }
+        TearDownOfflineBots();
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
@@ -2386,6 +2424,32 @@ public partial class ClientWorld : Node3D, IOriginContainer
                         globe.RefreshLeaves();
                     }
                 }).CallDeferred();
+        }
+        // and the other bodies' pyramids (#1849): each body's index, then its tiles by key through the tile cache, the body's
+        // number in the request; its globe and the ground on it read again what changed
+        if (_earth != null && _chunkSource is { } bodyCache)
+        {
+            var wanted = new List<int>();
+            foreach (var body in CelestialBody.All)
+                if (World.Bodies.BodyData.HasGlobe(body)) wanted.Add((int)body.Id);
+            _terrainSync.WantsBodies = wanted;
+            _terrainSync.BodyPyramidIndexSettled += (body, index) =>
+            {
+                if (index == null) return;
+                Callable.From(() =>
+                {
+                    var celestial = CelestialBody.Of((BodyId)body);
+                    if (World.Bodies.BodyData.For(celestial) is not { } chain) return;
+                    var changed = chain.UseRemote(index, (k, e, s) => bodyCache.FetchPyramid(k, e, s, body));
+                    GD.Print($"[bodies] the server's pyramid for {celestial.Name}: {index.Count} tiles, {changed.Count} changed");
+                    if (GetNodeOrNull<World.Bodies.BodyViews>("BodyViews")?.GlobeOf(celestial.Id) is { } globe)
+                    {
+                        globe.RefreshPyramid(changed);
+                        globe.Ground?.Refresh();
+                    }
+                    if (World.Bodies.BodyFetchProbe.Wants(celestial)) AddChild(new World.Bodies.BodyFetchProbe(celestial, chain));
+                }).CallDeferred();
+            };
         }
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
@@ -2854,6 +2918,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (p.Aboard)
             {
                 if (p.DeckHint is { } deckHint) yield return (PlayerInput.InteractMount, deckHint);
+                // floating aboard the shuttle (#1493): the stick pushes off toward the look, Jump / Crouch up and down
+                foreach (var floatHint in p.FloatHints()) yield return floatHint;
                 yield return (PlayerInput.CameraToggle, "Camera");
                 yield return (PlayerInput.Inventory, "Inventory");
             }

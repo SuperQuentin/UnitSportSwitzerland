@@ -63,8 +63,23 @@ public partial class BodyGlobe : Node
     /// <summary>How far under a giant's 1-bar level its globe (the cloud deck) still draws, metres (#1854): inside the clouds.</summary>
     public const double CloudDeckM = 2_000;
 
-    /// <summary>The pyramid's finest level.</summary>
+    /// <summary>The pyramid's finest level (deeper once the server's comes, <see cref="RefreshPyramid"/>).</summary>
     public int MaxLevel => _maxLevel;
+
+    /// <summary>
+    /// The chain changed (the server's pyramid for this body came, #1849): the finest level follows it, and every drawn tile
+    /// whose best copy changed is read again, the old one drawn until its new one is in.
+    /// </summary>
+    public void RefreshPyramid(IReadOnlyCollection<CubeKey> changed)
+    {
+        _maxLevel = Math.Max(_pyramid.MaxLevel, 0);
+        foreach (var key in changed)
+            if (_tiles.ContainsKey(key)) _stale.Add(key);
+        GD.Print($"[bodies] {Body.Name}'s pyramid now: {_pyramid.Describe()}, to level {_maxLevel}; {_stale.Count} drawn tiles read again");
+    }
+
+    // drawn tiles whose best copy changed: asked again, drawn as they were until the new one commits
+    private readonly HashSet<CubeKey> _stale = new();
 
     /// <summary>The body's pyramid (#1656's chain; any thread may read it).</summary>
     public Terrain.Leaves.PyramidSource Pyramid => _pyramid;
@@ -75,7 +90,7 @@ public partial class BodyGlobe : Node
     private readonly WorldOrigin _origin;
     // the body's pyramid (#1656's chain): its folder, or for the Earth the game's own (local, the server's, the shipped base)
     private readonly Terrain.Leaves.PyramidSource _pyramid;
-    private readonly int _maxLevel;
+    private int _maxLevel;
     private readonly Node3D _root = new() { Name = "Frame" };
     private readonly Dictionary<CubeKey, Tile> _tiles = new();
     private readonly HashSet<CubeKey> _loading = new();
@@ -98,6 +113,22 @@ public partial class BodyGlobe : Node
 
     private bool _exposed;
     private readonly Dictionary<int, float> _faceMeans = new();
+
+    /// <summary>
+    /// The six level-0 faces' mean brightness, read on a worker as soon as the globe is made (#1983): its exposure is then
+    /// known before anything is drawn. Waiting for the six to come in with the streamed tiles lit the first seconds at the
+    /// shader's 1.6 and dropped every tile and ground square to the photo's exposure in one frame (the Moon: 1.6 to 0.94, a
+    /// dip filmed at Apollo 11). Null when a face has no colour here (a streamed pyramid): the old way then.
+    /// </summary>
+    private readonly Task<float?> _faceMeanTask;
+
+    /// <summary>How long the first tiles have been held for the exposure, seconds (at most <see cref="ExposureWait"/>).</summary>
+    private double _heldFor;
+
+    private const double ExposureWait = 3;
+
+    /// <summary>Whether the exposure is the one the globe keeps (or the wait for it is over): what the ground squares wait for.</summary>
+    public bool ExposureSettled => _exposed || _heldFor >= ExposureWait || _faceMeanTask.IsCompleted && _faceMeanTask is not { IsCompletedSuccessfully: true, Result: not null };
     private readonly HashSet<CubeKey> _show = new();
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
     private readonly int _month;
@@ -145,6 +176,8 @@ public partial class BodyGlobe : Node
         _pyramid = pyramid;
         _maxLevel = Math.Max(pyramid.MaxLevel, 0);
         _month = Calendar.Month;
+        int month = _month;
+        _faceMeanTask = Task.Run(() => FaceMean(pyramid, month));
         AddChild(_root);
         GD.Print($"[bodies] {body.Name}'s globe: {pyramid.Count} tiles to level {_maxLevel}, from {describe}");
     }
@@ -180,7 +213,7 @@ public partial class BodyGlobe : Node
         }
 
         // the sun from the body, into world axes
-        var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky.Utc);
+        var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky);
         var sunAnchor = Frames.Orientation(axes.Body, sky).ApplyInverse(sunIcrf);
         var sun = ToVector(w.ApplyInverse(sunAnchor).Normalized());
         _sun = sun;
@@ -260,6 +293,12 @@ public partial class BodyGlobe : Node
         DrawnTiles = 0;
     }
 
+    /// <summary>
+    /// How far under the eye a tile's horizon test starts, metres: deeper than any basin and higher than any peak is over
+    /// the eye (Hellas 8 km under Mars' reference, Olympus 22 km over it), so a tile near the eye never seems turned away.
+    /// </summary>
+    private const double ReliefM = 25_000;
+
     /// <summary>The tiles to draw: a tile splits when its drawn cells would be big on screen and its four are loaded.</summary>
     private void Select(CubeKey key, DVec3 eye, double focal)
     {
@@ -269,9 +308,14 @@ public partial class BodyGlobe : Node
         double edge = Body.Shape.A * Math.PI / 2 / key.Side;
         var toEye = eye - centre;
         double distance = Math.Max(toEye.Length - edge, 1);
-        // turned away past the body's horizon: a tile whose up looks away from the eye by more than its own size
-        if (key.Level > 0 && centre.Normalized().Dot(toEye.Normalized()) < -0.15 - edge / Body.Shape.A) return;
+        // turned away past the body's horizon: a tile whose up looks away from the eye by more than its own size. Judged from
+        // the tile's centre lowered under the eye (#1985): at the reference height, a tile round an eye down in a basin
+        // (Mare Crisium, 3.5 km under it) seemed to look away from it and was dropped, a black band past the ground squares
+        var up = centre.Normalized();
+        var judged = eye - up * Math.Min(centre.Length, eye.Length - ReliefM);
+        if (key.Level > 0 && up.Dot(judged.Normalized()) < -0.15 - edge / Body.Shape.A) return;
         if (!_tiles.ContainsKey(key)) { Request(key); if (key.Level > 0) return; }
+        else if (_stale.Contains(key)) Request(key);
         double cell = edge / (512.0 / Stride);
         bool split = key.Level < _maxLevel && cell / distance * focal > SplitPixels;
         if (split)
@@ -286,6 +330,18 @@ public partial class BodyGlobe : Node
             }
         }
         if (_tiles.ContainsKey(key)) _show.Add(key);
+    }
+
+    private ImageTexture? _meanTexture;
+
+    /// <summary>One pixel of the body's photo's mean grey (its faces' means; 0.3 before they are known).</summary>
+    private ImageTexture MeanTexture()
+    {
+        if (_meanTexture != null) return _meanTexture;
+        float grey = _faceMeans.Count > 0 ? _faceMeans.Values.Average() : 0.3f;
+        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
+        image.SetPixel(0, 0, new Color(grey, grey, grey));
+        return _meanTexture = ImageTexture.CreateFromImage(image);
     }
 
     private void Request(CubeKey key)
@@ -323,9 +379,51 @@ public partial class BodyGlobe : Node
         });
     }
 
+    /// <summary>The mean brightness of the six level-0 faces' colour, or null when one has none here (on a worker).</summary>
+    private static float? FaceMean(Terrain.Leaves.PyramidSource pyramid, int month)
+    {
+        try
+        {
+            float sum = 0;
+            for (int f = 0; f < CubeSphere.Faces; f++)
+            {
+                var key = new CubeKey(f, 0, 0, 0);
+                if (!pyramid.HasColour(key) || pyramid.Colour(key, month) is not { } webp) return null;
+                var image = new Image();
+                if (image.LoadWebpFromBuffer(webp) != Error.Ok) return null;
+                sum += MeanBrightness(image);
+            }
+            return sum / CubeSphere.Faces;
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[bodies] the faces' mean: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>The exposure from a six-face mean, on every tile there is.</summary>
+    private void Expose(float mean, string how)
+    {
+        _exposed = true;
+        Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
+        // its sphere in the sky takes the same (#1998): the hand-over between the two never shows
+        BodyLook.SetExposure(Body.Id, Exposure);
+        foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
+        GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2} ({how})"));
+    }
+
     /// <summary>Main thread: the tiles the workers made, a few a frame.</summary>
     private void Commit()
     {
+        // the exposure first: no tile is drawn at the provisional one (held up to ExposureWait)
+        if (!_exposed && _faceMeanTask.IsCompletedSuccessfully && _faceMeanTask.Result is { } known) Expose(known, "read up front");
+        if (!ExposureSettled)
+        {
+            _heldFor += GetProcessDeltaTime();
+            return;
+        }
         for (int n = 0; n < 8 && _done.TryDequeue(out var r); n++)
         {
             _running--;
@@ -334,19 +432,13 @@ public partial class BodyGlobe : Node
             var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, r.Arrays);
             var material = new ShaderMaterial { Shader = _shader };
-            if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
+            // a tile with no colour of its own (a coarse level the data left out) takes the body's mean, not the shader's
+            // white at full sun: the Moon from 140,000 km glared as a white blob (#1998)
+            material.SetShaderParameter(AlbedoTex, r.Colour != null ? ImageTexture.CreateFromImage(r.Colour) : MeanTexture());
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
             SetHole(material);
             if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
-            if (!_exposed && _faceMeans.Count == CubeSphere.Faces)
-            {
-                _exposed = true;
-                float mean = _faceMeans.Values.Sum() / CubeSphere.Faces;
-                Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
-                foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
-                GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2}"));
-            }
+            if (!_exposed && _faceMeans.Count == CubeSphere.Faces) Expose(_faceMeans.Values.Sum() / CubeSphere.Faces, "as its tiles came");
             material.SetShaderParameter(SunStrength, Exposure);
             material.SetShaderParameter(AirTau, AirTauOf(Body));
             // a giant: a soft terminator through its deep air, and a night side as dark as space's (no ground to play on)
@@ -362,6 +454,9 @@ public partial class BodyGlobe : Node
                 // a tile's own box is near its centre; the scaled root and the frame tree's turn carry it far: never culled by Godot's guess
                 ExtraCullMargin = 16384,
             };
+            // a finer copy of a drawn tile (the server's): it takes the old one's place
+            if (_tiles.Remove(r.Key, out var old)) { node.Visible = old.Node.Visible; old.Node.QueueFree(); }
+            _stale.Remove(r.Key);
             _tiles[r.Key] = new Tile(node, material);
             Place(r.Key, node);
         }

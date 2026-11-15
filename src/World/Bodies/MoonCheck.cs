@@ -150,6 +150,15 @@ public partial class MoonCheck : Node
     /// </summary>
     public static bool FromOrbit => CmdArgs.Has("--fromorbit");
 
+    /// <summary>Gale crater (Curiosity's), planetocentric: where <c>--mooncheck mars --fromorbit</c> lands (H7e's bar, #1853).</summary>
+    public static readonly (double Lat, double Lon) Gale = (-4.59, 137.44);
+
+    /// <summary><c>--at LAT,LON</c>, else Gale on Mars; null: the place by the sun.</summary>
+    private static (double Lat, double Lon)? AtPlace =>
+        CmdArgs.Value("--at") is { } at && at.Split(',') is [var a, var b]
+            ? (double.Parse(a, System.Globalization.CultureInfo.InvariantCulture), double.Parse(b, System.Globalization.CultureInfo.InvariantCulture))
+            : Target.Id == BodyId.Mars ? Gale : null;
+
     /// <summary>
     /// How high over the target the flight ends and <c>--fromorbit</c> starts: 100 km, or well inside a small moon's
     /// sphere of influence (Phobos': 31 km from its centre, #1853), so the camera is counted from the target there.
@@ -170,6 +179,15 @@ public partial class MoonCheck : Node
             // in the morning (80: just after sunrise)
             double off = CmdArgs.Double("--fromorbit") ?? 45;
             var place = new Geodetic(sunLat, Math.IEEERemainder(sunLon - off, 360), OrbitM);
+            // a named place instead (--at LAT,LON, planetocentric, east): Mars' by default is Gale crater, H7e's bar (#1853)
+            if (AtPlace is var (atLat, atLon))
+            {
+                place = new Geodetic(atLat, atLon, OrbitM);
+                var n = place with { H = 0 };
+                var up = Target.Shape.ToEcef(n);
+                double cos = (up.X * toSun.X + up.Y * toSun.Y + up.Z * toSun.Z) / (Math.Sqrt(up.X * up.X + up.Y * up.Y + up.Z * up.Z) * toSun.Length);
+                off = 90 - Math.Asin(Math.Clamp(cos, -1, 1)) * 180 / Math.PI;
+            }
             _origin.Rebase(Target.Id, sky);
             // the origin on the reference surface, the camera 100 km over it: a start under the body's Space band (Titan's
             // is 200 km up) never crosses it on the way down, so an origin left up there stayed 100 km over the walker
@@ -358,6 +376,15 @@ public partial class MoonCheck : Node
         {
             double over = Over(me);
             Log($"standing on {Target.Name} after {_stageT:F1} s, {over:F2} m over the ground's height, gravity {BodyGravity.Ground:0.####} m/s²");
+            {
+                // where it stands, and the ground there over the reference (Gale's floor is ~4.5 km under Mars' datum)
+                var e = Here(_origin.Frame.Axes!, me.GlobalPosition).AsEcef;
+                double len = Math.Sqrt(e.X * e.X + e.Y * e.Y + e.Z * e.Z);
+                double lat = Math.Asin(e.Z / len) * 180 / Math.PI, lon = Math.Atan2(e.Y, e.X) * 180 / Math.PI;
+                var g = _ground()!;
+                Log(string.Create(CultureInfo.InvariantCulture,
+                    $"standing at {lat:F2}, {lon:F2} (planetocentric), the ground {g.Heights.At(g.Heights.NormalUnder(e)):F0} m over {Target.Name}'s reference, read at level {g.HeightsLevel}"));
+            }
             if (Math.Abs(over) > 1.5) { Finish(string.Create(CultureInfo.InvariantCulture, $"standing {over:F2} m off the ground's height")); return; }
             Shot("ground");
             if (Tiny)

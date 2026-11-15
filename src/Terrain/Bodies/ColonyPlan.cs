@@ -241,7 +241,9 @@ public sealed partial class ColonyPlan
                 double cx = can.X + sx * (reach + 8 + r), cz = can.Z + sz * (reach + 8 + r);
                 if (!plan.Clear(cx, cz, r + 4)) continue;
                 int sideDoor = plan.Door(m, reach, sy);
-                int dome = plan.Add(ModuleKind.Dome, cx, cz, sy, 2 * r, 2 * r, r, 1, rng.Next(2) == 0 ? RoomKind.Greenhouse : RoomKind.Storage);
+                // turned to face the can (#1976): the dome's entrance is at its node's -Z, along its yaw, where its tube comes in
+                // (with the can's way out as its yaw, the entrance and its gap in the walls faced away from the tube)
+                int dome = plan.Add(ModuleKind.Dome, cx, cz, sy + Math.PI, 2 * r, 2 * r, r, 1, rng.Next(2) == 0 ? RoomKind.Greenhouse : RoomKind.Storage);
                 plan.Links.Add(new ColonyLink(sideDoor, plan.Door(dome, r, sy + Math.PI), alleys));
                 break;
             }
@@ -319,6 +321,25 @@ public sealed partial class ColonyPlan
         Modules.Add(new ColonyModule(id, kind, x, z, yaw, length, width, height, storeys));
         Rooms.Add(room);
         return id;
+    }
+
+    /// <summary>
+    /// A can's side door (#1976: a moondust dome's tube joins a can at its side, half way along): +1 on its node's +X (the
+    /// colony's <c>Along(yaw + π/2)</c>), -1 on its -X, 0 with none. Its end doors are not side doors.
+    /// </summary>
+    public int SideDoor(int module)
+    {
+        var m = Modules[module];
+        if (m.Kind != ModuleKind.Can) return 0;
+        double c = Math.Cos(m.Yaw), s = Math.Sin(m.Yaw);
+        foreach (var d in Doors)
+        {
+            if (d.Module != module) continue;
+            double dx = d.X - m.X, dz = d.Z - m.Z;
+            double across = dx * c + dz * s, along = -dx * s + dz * c;
+            if (Math.Abs(along) < m.Length / 2 - 0.5) return across > 0 ? 1 : -1;
+        }
+        return 0;
     }
 
     /// <summary>A door on a module <paramref name="reach"/> metres from its centre toward <paramref name="out"/>.</summary>

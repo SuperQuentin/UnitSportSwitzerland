@@ -16,6 +16,8 @@ uniform float warm = 0.0;
 uniform float brightness = 1.0;
 // the starburst: faint on the ground, gone once the disc is big on screen (a telescope's view)
 uniform float spikes = 0.15;
+// the vacuum's glare (#1989, the Moon): a wide bloom a camera shows round the bare sun against a black sky; 0 in air
+uniform float glare = 0.0;
 
 #include "res://shaders/common/sky_depth.gdshaderinc"
 #include "res://shaders/common/sun_look.gdshaderinc"
@@ -29,7 +31,10 @@ void fragment() {
 	vec2 t = vec2(UV.x * 2.0 - 1.0, 1.0 - UV.y * 2.0) * tan(reach);
 	float a = length(t);
 	vec3 c = sun_look(t, core_r, warm, spikes, max(fwidth(a), 1e-6));
+	float out_r = max(a - core_r, 0.0);
+	c += vec3(1.0, 0.96, 0.88) * glare * (0.9 * exp(-out_r / 0.02) + 0.14 * exp(-out_r / 0.055)) * smoothstep(core_r * 0.9, core_r * 1.3, a);
 	// faded to nothing at the quad's edge
-	c *= 1.0 - smoothstep(reach * 0.6, reach * 0.95, a);
+	// (in vacuum from much nearer: against black the faintest glow shows, and the quad's edge with it)
+	c *= 1.0 - smoothstep(reach * mix(0.6, 0.1, glare), reach * 0.95, a);
 	ALBEDO = c * brightness;
 }

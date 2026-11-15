@@ -399,6 +399,9 @@ public partial class ColonyAirlocks : Node3D
         return FormattableString.Invariant($"pump {l.Pump:F1} s, outward {l.WantOuter}, targets {l.Outer.Target}/{l.Inner.Target}, processing {CanProcess()}");
     }
 
+    /// <summary>Whether a door is meant open (opening or open): a colonist bot walks through once it is, and fully open (#1976).</summary>
+    public bool Wanted(int index, bool outer) => (outer ? _locks[index].Outer : _locks[index].Inner).Target > 0;
+
     /// <summary>How open a door is, 0..1.</summary>
     public float Opening(int index, bool outer) => (outer ? _locks[index].Outer : _locks[index].Inner).Open;
 
