@@ -268,7 +268,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         {
             var mediumLayer = _medium;
             mediumLayer.HeightsVersion = _heightsVersion;
-            mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride)));
+            mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride, ofFullLattice: true)));
         }
     }
 
