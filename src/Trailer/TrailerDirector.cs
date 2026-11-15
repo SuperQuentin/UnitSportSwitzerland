@@ -509,7 +509,7 @@ public partial class TrailerDirector : Node
             // a placed object's look only (a burning fire, a workbench, a camo net): never placed, so nothing is saved
             float ground = FloorAt(at, terrain: prop.InSet == null) ?? at.Y;
             var payload = prop.Placed == Items.PlacedKind.Campfire ? Crafting.CampfireClock.Lit(World.WorldClock.EnvNow) : "";
-            if (Items.PlacedObjects.VisualOf(new Items.PlacedObject(0, prop.Placed, "", 0, 0, 0, Quaternion.Identity, payload)) is not { } look)
+            if (Items.PlacedObjects.VisualOf(new Items.PlacedObject(0, prop.Placed, "", Core.GlobalPos.FromLv95(0, 0, 0), Quaternion.Identity, payload)) is not { } look)
             {
                 GD.PrintErr($"[trailer] no look for placed {prop.Placed}");
                 return;
