@@ -426,6 +426,10 @@ public partial class FootPlayer
                 if (box.Part != DeckPart.Solid) doorParts.Add((shape, box));
             }
             AddChild(body);
+            // never in the way of the vehicle it is the deck of: simulated on this peer too (a bot's shuttle offline,
+            // #1498), its hull met the deck put inside it every frame and was shoved out at 147 m/s, a crash
+            if (host is PhysicsBody3D carrier) body.AddCollisionExceptionWith(carrier);
+            foreach (var part in host.GetChildren().OfType<PhysicsBody3D>()) body.AddCollisionExceptionWith(part);
             set.Sections.Add((deck, body, doorParts));
         }
         // the vehicle's own hull is not in the way of a player walking up to it or inside it: its deck is
