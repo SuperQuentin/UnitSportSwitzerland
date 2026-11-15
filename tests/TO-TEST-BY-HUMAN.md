@@ -1253,6 +1253,17 @@ Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (
 - [ ] `/goto Moon 26.13 3.63` (Hadley, lunar night) → the full star field (the Milky Way's stars, the Pleiades), the Earth hanging in it.
 - [ ] Fly a long way on the Earth (10,000 km, spectator), come back down at night → the stars are still there.
 
+## The telescope on the Moon ([#1995](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1995))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon); then online, two clients on the Moon.
+
+- [ ] `/goto Moon 17 59`, T, set up a telescope (from the catalogue), E at it → the view opens; the menu's first entry reads "Earth"; it centres the Earth; Up shows its readings (about −16 to −17, ~400,000 km, its lit share).
+- [ ] Zoomed on the Earth → its phase matches the "lit %" line (a gibbous Earth when the Moon is a crescent from the Earth).
+- [ ] Right / Left through the planets → each centred; Use → the drive holds the stars while the Moon's short day turns the sky.
+- [ ] Quit and restart, `/goto Moon 17 59` again → the telescope is still there and works; pack it up with an empty hand.
+- [ ] Online: A sets one up on the Moon, B (also on the Moon) sees it and is refused while A looks; a player on the Earth never sees it in Switzerland.
+- [ ] On the Moon try a zipline or a campfire → "That cannot be set up here."; a flag → planted.
+
 ## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
 
 Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
