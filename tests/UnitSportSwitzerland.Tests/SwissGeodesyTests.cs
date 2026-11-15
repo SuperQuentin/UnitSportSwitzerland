@@ -240,16 +240,16 @@ public class SwissGeodesyTests
     }
 }
 
-/// <summary>The Earth as a body (#1430, src/Core/Planet.cs).</summary>
+/// <summary>The Earth as a body (#1430, src/Core/CelestialBody.cs).</summary>
 public class PlanetTests
 {
     [Fact]
     public void Earth_pulls_and_orbits_as_published()
     {
-        var earth = UnitSport.Core.Planet.Earth;
+        var earth = UnitSport.Core.CelestialBody.Earth;
         Assert.Equal(9.798, earth.Gravity(earth.Shape.A), 3);              // at the equator, no spin
         Assert.Equal(8.69, earth.Gravity(6_371_000 + 400_000), 2);         // a 400 km orbit
         Assert.Equal(7_673, earth.CircularSpeed(6_371_000 + 400_000), 0);
-        Assert.Equal(86_164.1, 2 * Math.PI / earth.RotationRate, 1);       // a sidereal day
+        Assert.Equal(86_164.1, 2 * Math.PI / earth.Spin, 1);       // a sidereal day
     }
 }

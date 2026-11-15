@@ -81,7 +81,23 @@ public sealed class RemoteInterpolator
     /// <summary>How far behind the newest state it renders: enough to always have one ahead.</summary>
     public double Delay => Math.Clamp(1.6 * _interval + 0.02, 0.06, 0.4);
 
+    /// <summary>
+    /// How far behind the sender's present it renders now: <see cref="Delay"/>, but none for a body faster than
+    /// <see cref="FastSpeed"/> (#1869). An orbit is a coast, carried on its last velocity 4 m off its curve after a second,
+    /// so it is drawn where its sender is, not 60-400 ms behind: that was 0.5-3.8 km at 7.7 km/s, two saucers flying
+    /// 16 m apart each saw the other kilometres back. A slower body keeps the delay: one state always ahead is what
+    /// draws a car's curve, and 70 ms behind at 150 km/h is 3 m.
+    /// </summary>
+    private double Behind => _count > 0 && _buf[_head].V.LengthSquared() > FastSpeed * FastSpeed ? 0 : Delay;
+
     public bool HasData => _count > 0;
+
+    /// <summary>Clears since start, for a probe's log (#1869).</summary>
+    public int Clears { get; private set; }
+
+    /// <summary>A probe's one-line view of the stream (#1869): states held, send interval, delay, newest speed, clears.</summary>
+    public string Describe(double localTime) => _count == 0 ? "no states" : System.FormattableString.Invariant(
+        $"{_count} states, interval {_interval * 1000:F0} ms, behind {Behind * 1000:F0} ms, newest {(localTime - _offset - _buf[_head].T) * 1000:F0} ms old, v {_buf[_head].V.Length():F0} m/s, {Clears} clears");
 
     /// <summary>Records a state the owner sent, stamped with the owner's clock: its velocity in the local east-up-south there and its yaw from true north (the wire's).</summary>
     public void Push(double senderTime, double localTime, GlobalPos position, Vector3 velocity, float yaw)
@@ -106,6 +122,7 @@ public sealed class RemoteInterpolator
 
     public void Clear()
     {
+        Clears++;
         _count = 0;
         _hasOut = false;
         _lag = double.NaN;
@@ -193,7 +210,7 @@ public sealed class RemoteInterpolator
     /// </summary>
     private double RenderTime(double localTime, float dt)
     {
-        double want = _offset + Delay;
+        double want = _offset + Behind;
         if (double.IsNaN(_lag) || Math.Abs(want - _lag) > 0.5) _lag = want;
         else _lag += Math.Clamp(want - _lag, -0.05 * dt, 0.05 * dt);
         return localTime - _lag;

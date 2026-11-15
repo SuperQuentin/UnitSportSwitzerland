@@ -57,3 +57,13 @@
   quickest way on traffic's car graph, each street's rightmost lane, a curve across a trimmed junction; ends found in a
   grid on the same level (`EndIndex`, also every `BuildAsync`: the old scan was quadratic). Driven by `LaneFollower`, not
   this pilot (`core/earth-bar-probes`).
+- Planned cores (#1903, `RaceRoute.Onward`): a junction path joins only at its own mouth (its lane's offset + 2 m from the
+  road end: path and road keys differ by a rounding step, so by distance), and a mouth offers nothing farther: no jump
+  across the core. Two connectors turning back > 90° are not chained (`TurnsBackAtMouth`): no U-turn at a mouth. A start
+  snapped onto a path into a dead end now has no way out (it took that U-turn before): give `--at` on a street.
+- **Gaps are crossed only ahead of both roads** (#1880, `RaceRoute.Towards`, `Joins`): the destination search joins another
+  road's end at the same node, or (between two roads; junction paths keep #1903's mouth rule) across a trimmed gap (up to 18 m) only when the gap lies ahead of the way out and the
+  next road leaves along it (dot >= 0.3 both, as `LaneGraph.JoinTrimmedEnds`). Any end within 18 m let a way hop 13 m back
+  to a ramp's foot under the ramp it then climbed (Place des Nations). A start on a one-way road must head toward the
+  destination (`StartEdge`, with or without `--along`): Bellevue's start on the A1's southbound carriageway was joined only
+  by a hop across the median. `Walk` (no destination) keeps its least-turn joins.

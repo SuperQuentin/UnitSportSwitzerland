@@ -11,6 +11,8 @@
 # At /speed 4 (A's --checkspeed, #931), unlike a faster --brpace: the falls, the zone and the probe's waits all
 # scale together, so the zone still never takes part; x1 for the knife duels, x4 again for the results (#1007). SPEED=1
 # runs it at normal speed.
+# Stays on the generated world (#1718): a match needs a 5-7 km square of ground with towns and roads, and a fixture
+# course is about a kilometre with nothing round it.
 #   GODOT=<exe> tools/brbotcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" brbots
 AT=2583250,1113250

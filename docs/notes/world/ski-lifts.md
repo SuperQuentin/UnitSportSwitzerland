@@ -76,6 +76,8 @@
 - **Checks**: `--ride skis,150 --at 2583512,1105282 --lift` (a 314 m T-bar near Verbier): boarded at
   once, up 51 m in 104 s, set down on skis, RESULT ok. On the chairlift
   (`--at 2584724,1105182`, 1390 m, about 5 min) the ride and camera are shown by `--midshot`.
-  - `CHUNKS=... tools/liftnetcheck.sh` (full tier: real terrain): server plus A and B at that
-    chairlift. A boards (`--liftnet A`). B checks that A's copy stands where its chair puts it by
-    the clock (within 0.5 m) and is drawn sitting.
+  - `tools/liftnetcheck.sh` (net tier, no terrain data, #1609): server plus A and B on the fun fixture
+    course's chairlift (`FunCourse.ChairX`, up the snow hill's west edge; the probe places them by course
+    metres, so flat and earth alike). A boards (`--liftnet A`). B checks that A's copy stands where its
+    chair puts it by the clock (within 0.5 m) and is drawn sitting. `CHUNKS=<real tiles>` runs it at the
+    Verbier chairlift instead (`LIFT_AT`, default 2584726,1105180; the D: region lacks those tiles).

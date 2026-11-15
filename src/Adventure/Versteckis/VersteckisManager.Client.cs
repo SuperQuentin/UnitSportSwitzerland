@@ -124,6 +124,8 @@ public partial class VersteckisManager
         long me = Me;
         foreach (var g in _all)
             if (g.Find(me) is { Left: false } e) { Mine = g; MyEntry = e; break; }
+        if (Mine?.Phase != before?.Phase || Mine?.Round != before?.Round)
+            GD.Print($"[vs] here: {(Mine == null ? "in no game" : $"game {Mine.Id} {Mine.Phase}, round {Mine.Round}")} ({_all.Count} game(s) told)");
         if (Mine != null && before != null && before.Id == Mine.Id && before.Phase != Mine.Phase) PhaseChanged(before.Phase, Mine);
         // the caught first, then the hiders: who an out player may follow
         if (Mine != null)

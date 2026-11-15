@@ -767,6 +767,7 @@ public partial class GameShell : Node
             var peer = Multiplayer.MultiplayerPeer;
             if (peer != null && peer is not OfflineMultiplayerPeer) peer.Close();
             Multiplayer.MultiplayerPeer = new OfflineMultiplayerPeer();
+            Net.NetLink.Invalidate();
             _hosted?.Stop();
             _hosted = null;
 

@@ -114,9 +114,9 @@ public static class EarthSight
     /// floors of the Chamonix valley under it and of the Rhône at Riddes are not. Skipped (true) without a pyramid that
     /// reaches level 10.
     /// </summary>
-    public static bool RealCheck(string? dir)
+    public static bool RealCheck(Terrain.Leaves.PyramidSource? source)
     {
-        if (dir == null || new PyramidGround(dir) is not { } ground || ground.Count == 0)
+        if (source is not { FinestRealLevel: >= PyramidGround.DefaultLevel } || new PyramidGround(source) is not { } ground)
         {
             Godot.GD.Print("[interest] earth on the real pyramid: no pyramid, skipped");
             return true;
@@ -171,19 +171,20 @@ public sealed class PyramidGround
     public const int Kept = 48;
 
     public int Level { get; }
-    public int Count => _index.Count;
-    public string Dir { get; }
+    public int Count => _source.Count;
 
-    private readonly Dictionary<CubeKey, (string Path, long Offset, int Length)> _index;
+    /// <summary>Where the pyramid comes from, for the log line.</summary>
+    public string Dir => _source.Describe();
+
+    private readonly Terrain.Leaves.PyramidSource _source;
     private readonly Dictionary<CubeKey, CubeTile?> _tiles = new();
     private readonly Queue<CubeKey> _order = new();
 
-    public PyramidGround(string dir, int level = DefaultLevel)
+    /// <param name="source">The pyramid's chain (#1656); a tile the server streams is passed over for its ancestor: the
+    /// sight lines and the probes ask on the main thread, which never waits on the network.</param>
+    public PyramidGround(Terrain.Leaves.PyramidSource source, int level = DefaultLevel)
     {
-        Dir = dir;
-        var files = new GlobeFiles(dir);
-        var manifest = files.Manifest();
-        _index = files.Index(manifest).Heights;
+        _source = source;
         Level = level;
     }
 
@@ -201,8 +202,8 @@ public sealed class PyramidGround
     private CubeTile? Tile(CubeKey key)
     {
         if (_tiles.TryGetValue(key, out var tile)) return tile;
-        if (!_index.TryGetValue(key, out var at)) return null;
-        tile = CubeTileCodec.Decode(GlobeFiles.ReadBytes(at));
+        if (!_source.Has(key) || _source.IsStreamed(key)) return null;
+        tile = _source.Heights(key);
         _tiles[key] = tile;
         _order.Enqueue(key);
         if (_order.Count > Kept) _tiles.Remove(_order.Dequeue());

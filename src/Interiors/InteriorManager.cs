@@ -495,7 +495,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var layout = DoorKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
             // a facade door the plan could fit no doorway for (#498) has no entrance: it is locked
             var way = layout?.EntranceOf(door);
-            if (layout == null || way == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
+            if (layout == null || way == null || Origin == null)
+            {
+                // why, in the log: no plan, or a plan whose doorways are for other doors (#1766)
+                GD.Print($"[interior] door {door} locked: " + (layout == null ? "no plan" : way == null
+                    ? $"plan {layout.Key} has doorways for {string.Join(", ", layout.AllEntrances().Select(e => e.Door))}" : "no origin"));
+                Refuse(sender, "This door is locked.");
+                return;
+            }
             // measured to the door's centre, so a wide door, and its open leaves, reach further; a
             // garage or a barn opens for a vehicle driving up to it (OpenForVehicle), further off still
             float reach = ServerDoorReach + way.Width;
@@ -544,7 +551,9 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private Vector3 WorldOf(Node3D body) => body is Player.FootPlayer p && Origin != null ? Origin.ToWorld(p.Global) : body.GlobalPosition;
 
     private Node3D? PlayerBody(long peer) =>
-        Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
+        // a server-run bot's body is named npc_1_n, not by its id (#1330: the venues judge where a bot stands as a player's)
+        (Net.PlayerReplication.IsBotId(peer) ? Bots.BotDirector.Instance?.Get(peer)?.Body : null)
+        ?? Players?.GetNodeOrNull<Node3D>(peer.ToString()) ?? (peer == MyId && !Online ? LocalPlayer?.Invoke() : null);
 
     /// <summary>The door on the facade, world space.</summary>
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
@@ -1136,6 +1145,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         {
             TickDoors(delta);
             TickLifts();
+            TickBotRooms(delta);
         }
         if (!_presenting) return;
         PresentLifts();
@@ -1485,11 +1495,13 @@ public partial class InteriorNode : Node3D
     public static ArrayMesh BuildMesh(InteriorMeshBuilder.MeshData data, Material material)
     {
         Core.ShowcaseTrace.Mark();
+        var mesh = new ArrayMesh();
+        // a room that is collision only (#2000: a glazed alley, the building draws its glass) has nothing to draw
+        if (data.Vertices.Length == 0) return mesh;
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
-        var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         mesh.SurfaceSetMaterial(0, material);
         return mesh;

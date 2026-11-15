@@ -12,6 +12,13 @@ namespace UnitSport.Items;
 /// the sky turns, is refused packing it up while looking, steps back, and packs it up with an empty
 /// hand (the telescope back in the pack). Windowed it saves <c>test_output/telescope_moon.png</c>.
 /// Everything it placed is gone at the end.
+///
+/// <para>
+/// <c>--telescopecheck moon</c> (#1995; <c>--frame earth --bodies DIR</c>, a date with Mare Crisium in daylight): the same
+/// on the Moon, after <c>/goto Moon 17 59</c> and T: set up, the prompt at the tripod, looked through, the menu's first
+/// entry the Earth and held in the middle, Jupiter, the stars' drive, packed up; windowed
+/// <c>test_output/telescope_earth_from_moon.png</c>.
+/// </para>
 /// </summary>
 public partial class TelescopeProbe : Node
 {
@@ -30,6 +37,12 @@ public partial class TelescopeProbe : Node
         // offline starts as the spectator high up: wait for the world, then walk (T)
         await Until(() => GetViewport().GetCamera3D() != null, 60);
         await Seconds(2.0);
+        string arg = CmdArgs.Value("--telescopecheck") ?? "";
+        bool moon = arg.StartsWith("moon");
+        // abroad (#1995): the Earth outside Switzerland, LV95 only notation there: started there with --at (Ferney-Voltaire,
+        // France, by Geneva airport: --at 2497404,1123579, with leaves there); /goto's body ground would stand in for the leaves
+        bool abroad = arg.StartsWith("abroad");
+        if (moon && !await GoTo("Moon 17 59 1")) return;
         if (Me == null) GetParent<ClientWorld>().ToggleMode();
         if (!await Until(() => Me is { } m && m.IsOnFloor() && PlacedObjects.Instance != null && Telescopes.Instance != null, 120))
         {
@@ -38,12 +51,15 @@ public partial class TelescopeProbe : Node
         }
         await Seconds(1.0);
         // across a restart: "place" sets one up and quits leaving it saved, "reload" looks through it in the next run
-        string? restart = CmdArgs.Value("--telescopecheck") is "place" or "reload" ? CmdArgs.Value("--telescopecheck") : null;
+        // (moonplace / moonreload: the same on the Moon, a Swiss flag beside it, #1995)
+        string? restart = arg is "place" or "moonplace" or "abroadplace" ? "place" : arg is "reload" or "moonreload" or "abroadreload" ? "reload" : null;
         if (restart == null) await ClearLeftovers(Me!, PlacedObjects.Instance!);
         try
         {
             if (restart == "place") await PlaceForRestart(Me!, PlacedObjects.Instance!);
             else if (restart == "reload") await LookAfterRestart(Me!, PlacedObjects.Instance!);
+            else if (moon) await RunOnTheMoon(Me!, PlacedObjects.Instance!);
+            else if (abroad) await RunAbroad(Me!, PlacedObjects.Instance!);
             else await Run(Me!, PlacedObjects.Instance!);
         }
         catch (Exception e) { Expect(false, $"threw: {e.Message}"); }
@@ -73,12 +89,11 @@ public partial class TelescopeProbe : Node
         }
     }
 
-    private async Task Run(FootPlayer me, PlacedObjects placed)
+    /// <summary>Steps 1 and 2: a telescope set up through the item's real path, the prompt at it, looked through with a real E press.</summary>
+    private async Task<(PlacedObject Scope, Vector3 At, Node3D? Node, TelescopeView View, Camera3D? Cam)?> SetUpAndLook(FootPlayer me, PlacedObjects placed)
     {
         var inv = _items.Inventory;
         var before = placed.All.Keys.ToHashSet();
-        Expect(World.DayNight.Instance?.Sky is { } sky0 && sky0.Moon.Y > 0.2f, "the real sky, the moon well up");
-
         // 1. set it up through the item's real path
         inv.Add(ItemId.Telescope, 1);
         int slot = Hold(ItemId.Telescope);
@@ -90,7 +105,7 @@ public partial class TelescopeProbe : Node
         _items.UseSlot(me, slot);
         Expect(await Until(() => New(placed, before) != null, 4), "the telescope is set up");
         Expect(inv.CountPlain(ItemId.Telescope) == 0, "it left the pack");
-        if (New(placed, before) is not { } scope) return;
+        if (New(placed, before) is not { } scope) return null;
         _placedHere.Add(scope.Id);
         var node = Telescopes.Instance!.NodeOf(scope.Id);
         Expect(node?.GetNodeOrNull<Node3D>(TelescopeVisual.TubeName) != null, "drawn, with its tube to turn");
@@ -117,9 +132,19 @@ public partial class TelescopeProbe : Node
         Expect(TelescopeView.Current != null, $"the view is still open 1 s after E (opened {opened.Count}×)");
         if (TelescopeView.Current == null) Telescopes.TryInteract(me);   // failed: open it directly to check the rest
         Expect(await Until(() => TelescopeView.Current != null, 3), "the view through it opens");
-        if (TelescopeView.Current is not { } view) return;
+        if (TelescopeView.Current is not { } view) return null;
         var cam = GetViewport().GetCamera3D();
         Expect(cam?.Name == "TelescopeCamera", $"its camera is the one drawing ({cam?.Name})");
+        return (scope, at, node, view, cam);
+    }
+
+    private async Task Run(FootPlayer me, PlacedObjects placed)
+    {
+        var inv = _items.Inventory;
+        Expect(World.DayNight.Instance?.Sky is { } sky0 && sky0.Moon.Y > 0.2f, "the real sky, the moon well up");
+        if (await SetUpAndLook(me, placed) is not { } set) return;
+        var (scope, at, node, view, cam) = set;
+        FlagAim aim = default;
 
         // 3. the moon: aimed, zoomed until it fills the view (a frustum: Godot's Fov stops at 1°), locked
         if (World.DayNight.Instance?.Sky is { } sky) view.Aim(sky.Moon);
@@ -242,6 +267,121 @@ public partial class TelescopeProbe : Node
         Expect(inv.CountPlain(ItemId.Telescope) == 1, "and back in the pack");
     }
 
+    /// <summary>
+    /// <c>moon</c> / <c>abroad</c>: the fly camera there with <c>/goto</c>'s own path (<paramref name="where"/>: its arguments),
+    /// then 3 m over the ground once it is in (the Moon's near square; the Earth's ground through the sky's height probe).
+    /// </summary>
+    private async Task<bool> GoTo(string where)
+    {
+        string said = GetParent<ClientWorld>().GoToBody(where);
+        GD.Print($"[telescopecheck] {said}");
+        float height = 0;
+        bool Ground()
+        {
+            if (World.Bodies.BodyGround.Active is { Built: > 0 } g && g.TryGetHeight(Vector3.Zero, out height)) return true;
+            if (PlacedObjects.Instance?.Origin.Body != BodyId.Earth || World.DayNight.Instance?.GroundHeight?.Invoke(Vector3.Zero) is not { } h) return false;
+            height = h;
+            return true;
+        }
+        if (!await Until(Ground, 120))
+        {
+            Fail($"no ground under the camera at {where}");
+            return false;
+        }
+        if (GetViewport().GetCamera3D() is { } cam) cam.GlobalPosition = new Vector3(0, height + 3, 0);
+        await Seconds(1.0);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>moon</c> (#1995): a telescope set up on the Moon is there, in reach and looked through (it was kept as an LV95
+    /// place, read as an Earth point inside the Earth); its first target is the Earth, held in the middle; Jupiter; packed up.
+    /// </summary>
+    private async Task RunOnTheMoon(FootPlayer me, PlacedObjects placed)
+    {
+        Expect(placed.Origin.Body == BodyId.Moon, $"standing on the Moon ({placed.Origin.Body})");
+        if (await SetUpAndLook(me, placed) is not { } set) return;
+        var (scope, at, _, view, cam) = set;
+        Expect(scope.At.Body == BodyId.Moon, $"kept as a place on the Moon ({scope.At.Body})");
+        float off = scope.WorldTransform(placed.Origin).Origin.DistanceTo(me.GlobalPosition);
+        Expect(off < 3f, $"drawn where it was set up ({off:0.0} m from the player)");
+
+        // the Earth: the menu's first entry here, centred, and the menu says so
+        Expect(view.EarthForMoon, "the view knows it stands on the Moon");
+        view.Close();
+        Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back to plant a flag");
+        await PlantFlag(me, placed);
+        Expect(Telescopes.TryInteract(me) && await Until(() => TelescopeView.Current != null, 3), "looked through again");
+        if (TelescopeView.Current is not { } again) return;
+        view = again;
+        cam = GetViewport().GetCamera3D();
+        Expect(TelescopeView.MenuText(null, earth: true).Contains("Earth") && !TelescopeView.MenuText(null, earth: true).Contains("Moon"),
+            "the menu lists the Earth, not the Moon");
+        Expect(view.SelectTarget(SkyBody.Moon) && view.FollowsBody, "the first target follows the Earth");
+        await Seconds(1.0);
+        float earthOff = view.EarthDirection() is { } e ? Mathf.RadToDeg(view.Direction.AngleTo(e)) : 99f;
+        Expect(earthOff < 0.02f, $"the Earth in the middle ({earthOff:0.0000}° off)");
+        // independently: the Earth's centre in the Moon's axes, through the anchor's frame
+        if (placed.Origin.Frame.Axes is { } axes && cam != null)
+        {
+            var c = Core.Frames.Convert(BodyId.Earth, Core.DVec3.Zero, BodyId.Moon, SkyClock.Now);
+            var (x, y, z) = axes.FromEcef(c.AsEcef);
+            var want = new Vector3((float)(x - cam.GlobalPosition.X), (float)(y - cam.GlobalPosition.Y), (float)(z - cam.GlobalPosition.Z)).Normalized();
+            float camOff = Mathf.RadToDeg((-cam.GlobalBasis.Z).AngleTo(want));
+            Expect(camOff < 0.05f && want.Y > 0, $"the eyepiece's camera on the Earth, above the horizon ({camOff:0.0000}° off, {Mathf.RadToDeg(Mathf.Asin(want.Y)):0.0}° up)");
+        }
+        // the whole Earth (1.9° from the Moon) in the eyepiece, its readings beside it
+        while (view.Focal < 450f) view.Zoom(1);
+        view.InfoOn = true;
+        if (DisplayServer.GetName() != "headless")
+        {
+            await Seconds(1.5);
+            DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("res://test_output"));
+            GetViewport().GetTexture().GetImage().SavePng("res://test_output/telescope_earth_from_moon.png");
+            GD.Print("[telescopecheck] wrote test_output/telescope_earth_from_moon.png");
+        }
+        // a planet and the stars' drive work there as on the Earth
+        Expect(view.SelectTarget(SkyBody.Jupiter) && view.Target == SkyBody.Jupiter, "the menu slews to Jupiter");
+        await Seconds(1.0);
+        float jupiterOff = World.SkyBodies.Instance?.DirectionOf(SkyBody.Jupiter) is { } jd ? Mathf.RadToDeg(view.Direction.AngleTo(jd)) : 99f;
+        Expect(jupiterOff < 0.02f, $"Jupiter stays in the middle ({jupiterOff:0.0000}° off)");
+        view.ToggleLock();
+        Expect(view.ToggleLock() && view.Locked && !view.FollowsBody, "Use: the drive tracks the Moon's sky");
+        var held = view.Direction;
+        await Seconds(2.0);
+        float drift = World.DayNight.Instance?.Sky is { } sky ? Mathf.RadToDeg(view.Direction.AngleTo(held)) : 0;
+        GD.Print($"[telescopecheck] the drive turned the tube {drift:0.000}° in 2 s on the Moon");
+
+        // step back and pack it up
+        view.Close();
+        Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
+        PlacedResult? taken = null;
+        placed.RequestRemove(scope.Id, r => taken = r);
+        Expect(await Until(() => taken != null, 3) && taken!.Value.Ok, $"packed up ({taken?.Refused})");
+    }
+
+    /// <summary>
+    /// <c>abroad</c> (#1995): on the Earth outside Switzerland (Ferney-Voltaire) a telescope and a Swiss flag are set up, kept as Earth places
+    /// (no LV95 in the record), looked through and packed up.
+    /// </summary>
+    private async Task RunAbroad(FootPlayer me, PlacedObjects placed)
+    {
+        if (await SetUpAndLook(me, placed) is not { } set) return;
+        var (scope, _, _, view, _) = set;
+        var g = scope.At.Geodetic;
+        // Ferney-Voltaire, in France: within a kilometre or so of where --at put it
+        bool there = Math.Abs(g.LatDeg - 46.2558) < 0.01 && Math.Abs(g.LonDeg - 6.1081) < 0.015;
+        Expect(scope.At.Body == BodyId.Earth && there,
+            System.FormattableString.Invariant($"kept as an Earth place in Ferney-Voltaire (France) ({g.LatDeg:F3}, {g.LonDeg:F3})"));
+        Expect(view.SelectTarget(SkyBody.Jupiter) || view.SelectTarget(SkyBody.Moon), "a target followed");
+        view.Close();
+        Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
+        await PlantFlag(me, placed);
+        PlacedResult? taken = null;
+        placed.RequestRemove(scope.Id, r => taken = r);
+        Expect(await Until(() => taken != null, 3) && taken!.Value.Ok, $"packed up ({taken?.Refused})");
+    }
+
     private static PlacedObject? New(PlacedObjects placed, HashSet<long> before) =>
         placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Telescope && !before.Contains(o.Id));
 
@@ -308,7 +448,39 @@ public partial class TelescopeProbe : Node
         await Seconds(0.3);
         _items.UseSlot(me, slot);
         Expect(await Until(() => New(placed, before) != null, 4), "the telescope is set up, left for the next run");
+        if (placed.Origin.Body != BodyId.Earth)
+        {
+            var flag = await PlantFlag(me, placed, leave: true);
+            if (New(placed, before) is { } scope && flag != null)
+                GD.Print($"[telescopecheck] left on the {placed.Origin.Body}: telescope #{scope.Id}, flag #{flag.Id}");
+        }
         await Seconds(1.5);   // the save is written in the background
+    }
+
+    /// <summary>
+    /// A Swiss flag planted through its item's path (#1995: "can't place swiss flags either", on the Moon): the ghost valid on
+    /// the ground, planted, kept on the anchor's body and drawn. <paramref name="leave"/>: left for the next run.
+    /// </summary>
+    private async Task<PlacedObject?> PlantFlag(FootPlayer me, PlacedObjects placed, bool leave = false)
+    {
+        var before = placed.All.Keys.ToHashSet();
+        _items.Inventory.Add(ItemId.SwissFlag, 1);
+        int slot = Hold(ItemId.SwissFlag);
+        me.LookYaw = Mathf.Pi / 2;   // away from the telescope
+        me.LookPitch = -0.6f;
+        await Seconds(0.4);
+        var aim = FlagGhost.Aim(me, Placeables.ForItem(ItemId.SwissFlag));
+        Expect(aim is { Kind: FlagAimKind.Plant, Valid: true }, $"the flag's ghost on the {placed.Origin.Body}'s ground ({aim.Kind}, {aim.Reason})");
+        _items.UseSlot(me, slot);
+        PlacedObject? flag = null;
+        Expect(await Until(() => (flag = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Flag && !before.Contains(o.Id))) != null, 5),
+            "a Swiss flag planted");
+        if (flag == null) return null;
+        if (!leave) _placedHere.Add(flag.Id);
+        float off = flag.WorldTransform(placed.Origin).Origin.DistanceTo(me.GlobalPosition);
+        Expect(flag.At.Body == placed.Origin.Body && placed.GetNodeOrNull<Node3D>($"P{flag.Id}") != null && off < 6f,
+            $"the flag kept on the {flag.At.Body} and drawn {off:0.0} m from the player");
+        return flag;
     }
 
     /// <summary>
@@ -338,6 +510,18 @@ public partial class TelescopeProbe : Node
         Expect(TelescopeView.Current != null, $"looked through it after a restart ({Telescopes.Instance!.LastRefused})");
         TelescopeView.Current?.Close();
         await Seconds(0.3);
+        if (placed.Origin.Body == BodyId.Earth) return;
+        // on another body (#1995): both kept there across the restart, and drawn on its ground once the anchor is there
+        Expect(scope.At.Body == placed.Origin.Body, $"the telescope loaded on the {scope.At.Body}");
+        var flag = placed.All.Values.Where(o => o.Kind == PlacedKind.Flag && o.At.Body == placed.Origin.Body)
+            .OrderBy(o => o.WorldTransform(placed.Origin).Origin.DistanceTo(at)).FirstOrDefault();
+        Expect(flag != null, $"the Swiss flag loaded on the {placed.Origin.Body}");
+        if (flag == null) return;
+        _placedHere.Add(flag.Id);
+        float apart = flag.WorldTransform(placed.Origin).Origin.DistanceTo(at);
+        var node = placed.GetNodeOrNull<Node3D>($"P{flag.Id}");
+        Expect(node != null && apart < 8f && node.GlobalPosition.DistanceTo(flag.WorldTransform(placed.Origin).Origin) < 0.05f,
+            $"the flag drawn beside it ({apart:0.0} m from the telescope, node {(node == null ? "missing" : "on its record")})");
     }
 
     /// <summary>The worst jump of the drawn moon on screen from one frame to the next less the mean (px), and the mean (px), over 2 s.</summary>

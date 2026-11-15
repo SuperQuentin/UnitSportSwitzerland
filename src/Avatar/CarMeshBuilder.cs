@@ -203,6 +203,8 @@ public static partial class CarMeshBuilder
     {
         // a kart is a tube frame with plastic round it, not a shell with a cabin: its own builder (#715)
         if (body.Shape == BodyShape.Kart) return KartMeshBuilder.Build(body, wheelbase);
+        // a Moon rover (#1943): a chassis and wire wheels, or a cabin on one
+        if (body.Shape.IsRover()) return MoonRoverMeshBuilder.Build(body, wheelbase);
         bool round = (smooth ?? HumanMeshBuilder.SmoothFigures) && RoundedShape(body.Shape);
         var d = For(body, wheelbase);
         var paint = body.Paint;

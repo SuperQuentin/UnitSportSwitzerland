@@ -27,3 +27,6 @@
 - Sidewalks and tunnels (#119, `sidewalks-tunnels-runtime`): `--roadcheck --sidewalks [--at E,N]
   --traffic 0`, `--roadcheck --floorat E,N --at E,N`, `--roadperf DIR[,label]` (headless cost per
   tile).
+- Bridge decks: `--roadcheck --bridges --at E,N` drops a body on the tile's deck spans and on its deck-level junction caps
+  (#1768); under a deck a missing floor is a fall. `--roadcheck --at E,N --raygrid half,step`: every collision surface a
+  ray straight down meets over the square, top first, with its body (#1759: what stands over a deck or a ribbon).

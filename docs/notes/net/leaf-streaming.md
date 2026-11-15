@@ -38,6 +38,9 @@ D (#1500, earth by default, the LV95 runtime deleted) would leave them with no g
 - **A server on leaves alone** starts without flat tiles under `--frame earth` (`ServerWorld`: built leaves are terrain
   enough).
 
+- **The far band (#1657 phase 2)**: within 4 km a streamed real leaf is furnished as a far leaf, its sections asked one
+  by one (`LeafStore.Sections`), not under Low data (`terrain/far-features`).
+
 ## Data controls (`core/data-usage`)
 
 - Cache cap, Clear, trim and the session counter: the tile cache's, unchanged.
@@ -69,6 +72,6 @@ Geneva (B4's 2,412 leaves, the densest of the D: region), `tools/leafstreamcheck
 
 ## Not done
 
-- The pyramid (`cube_global`) still ships as files: #1656 streams it by quadtree request through the same RPC.
+- The pyramid streams beside the leaves through the same RPC since #1656 (`net/pyramid-streaming`).
 - One index for the whole region (about 2 MB raw for Switzerland's ~110 000 leaves); a planet's would go per bundle.
 - No HTTP mirror for leaves (entries, not files).

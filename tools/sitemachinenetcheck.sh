@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # A building site's machine woken over loopback (#616, src/Vehicles/ParkingNetProbe --parkingkind site):
-# a headless dedicated server on the GENERATED world, which puts a building site in every village
-# (#607), so this needs no terrain download. Client A spawns at a site digging its foundations, wakes
+# a headless dedicated server on the site fixture (fixture:site, #1718),
+# so this needs no terrain download. Client A spawns at a site digging its foundations, wakes
 # its first machine by name (the excavator or the wheel loader) and waits for the real one; client B
 # joins after and must see the same machine, of the same kind, at its place, with its own dormant copy
 # gone.
-#   GODOT=<exe> [PORT=] [AT=E,N] tools/sitemachinenetcheck.sh      output in test_output/sitemachinenet_*.log
+#   GODOT=<exe> [PORT=] tools/sitemachinenetcheck.sh      output in test_output/sitemachinenet_*.log
 . "$(dirname "$0")/lib/twoclient.sh" sitemachinenet
 PORT=${PORT:-7886}
-# the generated Foundations site nearest the default spawn (--constructioncheck lists them)
-AT=${AT:-2585292,1114432}
-# the generated world wherever it runs: no real tiles, even where terrain_location.json has some (#943)
-WORLD="--generated-world ${NOTERRAIN[*]} --traffic 0 --at $AT --parkingkind site"
-tc_server 420 120 "$OUT/sitemachinenet_server.log" --server --port $PORT --generated-world "${NOTERRAIN[@]}"
+# fixture:site (#1718): its sites stand within 400 m east of the start. Never --at on a fixture: a client lays the
+# course at its --at, the server at the default spawn
+WORLD="--world fixture --chunks fixture:site --traffic 0 --parkingkind site"
+tc_server 420 120 "$OUT/sitemachinenet_server.log" --server --port $PORT --world fixture --chunks fixture:site
 tc_client 240 "$OUT/sitemachinenet_A.log" --connect 127.0.0.1:$PORT --name SiteA $WORLD --parkingnet A & A=$!
 # B joins only once A has woken one: what it sees must come from the server, not from its own guess
 for _ in $(seq 1 400); do grep -q "is a real" "$OUT/sitemachinenet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; guard_nap 0.5; done

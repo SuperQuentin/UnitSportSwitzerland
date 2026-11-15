@@ -53,15 +53,19 @@ public static partial class Ephemeris
     /// models (2015; the gas giants' prime meridians are their System III), taken at the moment the
     /// light we see left the planet (Jupiter turns 26° in its 43 light-minutes).
     /// </summary>
-    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc)
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc) =>
+        Axes(body, SkyMoment.At(utc));
+
+    /// <summary>A body's axes in the Earth-fixed frame at a sky moment (#1850), as <see cref="Axes(SkyBody, DateTime)"/>.</summary>
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, SkyMoment m)
     {
-        if (body == SkyBody.Moon) return MoonAxes(utc);
+        if (body == SkyBody.Moon) return MoonAxes(m);
         body = ParentOf(body);   // a big moon: its planet's frame (it keeps a face to it)
-        double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0;
-        if (body != SkyBody.Sun) d -= Equatorial(body, utc).Distance / AuMetres / LightAuPerDay;
+        double d = JulianDay(m.Utc) + DeltaT / 86400.0 - 2451545.0;
+        if (body != SkyBody.Sun) d -= Equatorial(body, m.Utc).Distance / AuMetres / LightAuPerDay;
         double t = d / 36525.0;
         var (a0, d0, w) = Rotation(body, d, t);
-        return Frame(a0, d0, w, utc, t);
+        return Frame(a0, d0, w, m.EarthAngle, t);
     }
 
     /// <summary>The IAU pole (ICRF right ascension, declination) and prime meridian angle, degrees, at <paramref name="d"/> days and <paramref name="t"/> centuries from J2000.</summary>
@@ -85,7 +89,8 @@ public static partial class Ephemeris
     /// The big moons (#1444) as circles in their planet's equator: the semi-major axis (m), their
     /// longitude from the node of that equator on the ICRF's (degrees, fitted to JPL Horizons on
     /// 2026-01-01 0h TDB), their mean motion (degrees a day) and their radius (m). Good to a few
-    /// percent of their orbit: their eccentricities (Titan's 0.03) and resonances are left out.
+    /// percent of their orbit: their eccentricities (Titan's 0.03) and resonances are left out. Mars' two (#1853): fitted
+    /// the same way, Phobos within 2° (its 0.015 eccentricity), Deimos within 0.05°; their 1° inclinations left out.
     /// </summary>
     private static readonly (SkyBody Parent, double A, double Lambda0, double Rate, double Radius)[] Satellites =
     [
@@ -94,6 +99,8 @@ public static partial class Ephemeris
         (SkyBody.Jupiter, 1_070_412_000, 343.003, 360 / 7.15455296, 2_634_100),
         (SkyBody.Jupiter, 1_882_709_000, 91.443, 360 / 16.6890184, 2_410_300),
         (SkyBody.Saturn, 1_221_870_000, 209.374, 360 / 15.945421, 2_574_730),
+        (SkyBody.Mars, 9_376_000, 210.4, 360 / 0.31891023, 11_080),
+        (SkyBody.Mars, 23_458_000, 18.56, 360 / 1.26244, 6_200),
     ];
 
     private const double SatelliteEpoch = 2461041.5;
@@ -129,6 +136,9 @@ public static partial class Ephemeris
     /// The ICRF (J2000 equator and equinox) axes in the Earth-fixed frame at <paramref name="utc"/>:
     /// precessed to the date and turned by sidereal time. The stars' catalogue places go through it.
     /// </summary>
+    public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(SkyMoment m) =>
+        CelestialAt(m.Utc, m.EarthAngle);
+
     public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(DateTime utc)
     {
         double t = (JulianDay(utc) + DeltaT / 86400.0 - 2451545.0) / 36525.0;
@@ -162,6 +172,7 @@ public static partial class Ephemeris
             SkyBody.Uranus => -7.110 + 0.00009 * a,
             SkyBody.Neptune => -7.00,
             SkyBody.Io => -1.68, SkyBody.Europa => -1.41, SkyBody.Ganymede => -2.09, SkyBody.Callisto => -1.05,
+            SkyBody.Phobos => 11.8, SkyBody.Deimos => 12.89,
             _ => -1.28,   // Titan
         };
         return h + 5 * Math.Log10(r * delta);

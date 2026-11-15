@@ -144,13 +144,22 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void Refresh(IReadOnlyCollection<CubeKey> changed)
     {
         if (changed.Count == 0) return;
-        _generation++;
         Leaves.Refresh(changed);
+        Reread($"{changed.Count} leaves changed ({Store.RemoteCount} from the server)");
+    }
+
+    /// <summary>
+    /// Every loaded leaf read again in place, its collision rebuilt (the old ones stay until the new ones land): the leaves
+    /// changed (<see cref="Refresh"/>), or the base the fill stands on did (#1656, <c>EarthLeaves.UsePyramid</c>). Main thread.
+    /// </summary>
+    public void Reread(string why)
+    {
+        _generation++;
         _collisionSource.Forget();
         foreach (var key in _near.Keys) _stale.Add(key);
         _patches.Rebuild(_ => true);
         _nextPlan = 0;
-        GD.Print($"[earth] {changed.Count} leaves changed ({Store.RemoteCount} from the server): {_near.Count} loaded leaves read again");
+        GD.Print($"[earth] {why}: {_near.Count} loaded leaves read again");
     }
 
     /// <summary>
@@ -167,6 +176,18 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
             if (set.Contains(key)) _stale.Add(key);
         _patches.Rebuild(p => set.Contains(LeafCollision.Split(p).Leaf));
         _nextPlan = 0;
+    }
+
+    /// <summary>
+    /// The loaded leaves whose buildings stand on a stand-in tile, furnished again (<see cref="RefreshFurniture"/>): its doors
+    /// changed (<see cref="Interiors.DoorWarden"/> found some with no doorway inside, #1766). Main thread.
+    /// </summary>
+    public void RefreshDoors(TileId tile)
+    {
+        var leaves = new List<CubeKey>();
+        foreach (var key in _near.Keys)
+            if (StandOf(key)?.Id == tile) leaves.Add(key);
+        RefreshFurniture(leaves);
     }
 
     /// <summary>
@@ -424,7 +445,8 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     /// <summary>A focus of the streaming, unless it is in Space (<see cref="CameraCeilingM"/>): then <paramref name="lifted"/>.</summary>
     private void AddFocus(Vector3 at, ref bool lifted)
     {
-        if (Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
+        // off the Earth (#1848: the anchor on the Moon) no Earth leaf is wanted
+        if (Origin.Body != Core.BodyId.Earth || Origin.AltitudeOf(at) >= CameraCeilingM) lifted = true;
         else _foci.Add(Origin.ToEcef(at));
     }
 
@@ -789,6 +811,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private const string BuildingBodyName = "Buildings";
 
+    // its path, made once (#1910): asked every frame for the walkers by an open doorway, a path from a string each time
+    private static readonly NodePath BuildingBodyPath = BuildingBodyName;
+
     /// <summary>
     /// The buildings' collision bodies of the patches within <paramref name="radius"/> m of a world point (#1704): what an
     /// open doorway lets a walker through (<c>InteriorManager.BuildingBodies</c>), as a flat tile's <c>BuildingBody</c>.
@@ -796,7 +821,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void BuildingBodiesNear(Vector3 world, List<StaticBody3D> into, double radius = 30)
     {
         foreach (var key in CollisionPatches.Near(Origin.ToEcef(world), radius).Keys)
-            if (_bodies.TryGetValue(key, out var body) && body.GetNodeOrNull<StaticBody3D>(BuildingBodyName) is { } shells) into.Add(shells);
+            if (_bodies.TryGetValue(key, out var body) && body.GetNodeOrNull<StaticBody3D>(BuildingBodyPath) is { } shells) into.Add(shells);
     }
 
     /// <summary>A leaf's anchor frame in the world: one rigid transform, composed in doubles.</summary>
@@ -1013,6 +1038,15 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private bool Locate(Vector3 worldPos, out Near leaf, out LeafView? view, out double x, out double y, out double z, out double i, out double j)
     {
         var axes = Origin.Frame.Axes;
+        // off the Earth (#1854) no leaf of the Earth's is under any point: another body's place read as an Earth one found
+        // a leaf, and its sea (Titan's ground at 0 m was the Earth's sea level: the walker waded and could not jump)
+        if (OffEarth)
+        {
+            leaf = default!;
+            view = null;
+            x = y = z = i = j = double.NaN;
+            return false;
+        }
         var recent = t_recent ??= new Near?[RecentLeaves];
         if (axes != null)
         {
@@ -1094,9 +1128,16 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         return new((float)wx, (float)wy, (float)wz);
     }
 
+    /// <summary>The anchor body's own ground while the anchor is not on the Earth (#1850); null: none there.</summary>
+    public static IBodyGround? OtherBody { get; set; }
+
+    /// <summary>The anchor is on another body: its ground answers (<see cref="OtherBody"/>), the Earth's leaves never.</summary>
+    private bool OffEarth => Origin.Body != BodyId.Earth;
+
     internal bool HeightAt(Vector3 worldPos, out float height)
     {
         height = 0f;
+        if (OffEarth) return OtherBody?.TryGetHeight(worldPos, out height) == true;
         if (!Locate(worldPos, out var leaf, out var view, out double x, out _, out double z, out double i, out double j)) return false;
         double h = MeshHeight(leaf, x, z, i, j);
         if (double.IsNaN(h)) return false;
@@ -1169,7 +1210,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         return true;
     }
 
-    private bool HasCollisionAt(Vector3 worldPos) =>
+    private bool HasCollisionAt(Vector3 worldPos) => OffEarth ? OtherBody?.HasCollisionAt(worldPos) == true :
         _bodies.ContainsKey(CubeKey.FromEcef(Origin.ToEcef(worldPos), CollisionPatches.PatchLevel));
 
     private GroundTile TileAt(Vector3 worldPos) =>

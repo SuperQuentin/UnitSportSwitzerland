@@ -123,6 +123,9 @@ public static class DoorIndex
     /// <summary>Every door currently drawn (for probes).</summary>
     public static IEnumerable<Entry> All() => Tiles.Values.SelectMany(t => t);
 
+    /// <summary>The drawn doors tile by tile, without a per-call enumeration of each (<see cref="DoorWarden"/>'s scan). Main thread.</summary>
+    public static Dictionary<TileId, Entry[]>.ValueCollection ByTile => Tiles.Values;
+
     /// <summary>
     /// The nearest door within <paramref name="reach"/> of a point, measured to the doorway rather
     /// than its centre line, and only from the outside: a player standing behind a wall must not

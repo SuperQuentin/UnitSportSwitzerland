@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
@@ -188,5 +190,52 @@ public class GlobeGroundTests
         Assert.Equal(want.X, c.X, 0.01);
         Assert.Equal(want.Y, c.Y, 0.01);
         Assert.Equal(want.Z, c.Z, 0.01);
+    }
+
+    [Fact]
+    public void A_lake_shore_cell_is_drawn_whole_only_on_one_level()
+    {
+        // two wet corners at the lake's level, two dry ones (one under it: a far leaf's shore)
+        float[] hs = [372f, 372.2f, 371f, 380f];
+        Assert.True(GlobeGround.LakeShore(hs, 0, 1, 2, 3, true, true, false, false));
+        // a river's step between its wet corners keeps the old rule
+        float[] river = [372f, 373f, 380f, 380f];
+        Assert.False(GlobeGround.LakeShore(river, 0, 1, 2, 3, true, true, false, false));
+    }
+
+    [Fact]
+    public void A_shallow_shore_meets_the_ground_on_a_smoother_line_than_its_cells()
+    {
+        // #1689: water south of a shore rising 0.3 cells a cell; the land 10 m over the lake. The shore drawn is where the
+        // ground crosses the water's level on each column's edge from its last wet vertex to the dry one over it
+        const int n = 33;
+        var wet = new bool[n * n];
+        var hs = new float[n * n];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                wet[j * n + i] = j < 0.3 * i + 5;
+                hs[j * n + i] = wet[j * n + i] ? 0f : 10f;
+            }
+        double Rms(Func<int, int, float> sink)
+        {
+            // the crossings' spread round their own straight line (least squares)
+            var xs = new List<double>();
+            var ys = new List<double>();
+            for (int i = 4; i < n - 4; i++)
+            {
+                int j = 0;
+                while (wet[(j + 1) * n + i]) j++;
+                float d = sink(i, j);
+                xs.Add(i);
+                ys.Add(j + d / (d + hs[(j + 1) * n + i]));
+            }
+            double mx = xs.Average(), my = ys.Average();
+            double b = xs.Zip(ys, (x, y) => (x - mx) * (y - my)).Sum() / xs.Sum(x => (x - mx) * (x - mx));
+            return Math.Sqrt(xs.Zip(ys, (x, y) => Math.Pow(y - my - b * (x - mx), 2)).Average());
+        }
+        double stairs = Rms((_, _) => 3f);
+        double smooth = Rms((i, j) => GlobeGround.ShoreSink(wet, hs, n, i, j, 3f, 100f));
+        Assert.True(smooth < stairs * 0.5, $"smoothed {smooth:F3} cells, the cells' own {stairs:F3}");
     }
 }

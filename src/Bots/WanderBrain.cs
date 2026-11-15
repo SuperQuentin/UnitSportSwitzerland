@@ -25,6 +25,14 @@ public sealed class WanderBrain : IBotBrain
     private Vector3 _progressFrom;
     private double _progressAt;
 
+    /// <summary><c>--botsindoors</c> (checks): every new goal is a visit to the nearest building with a way in.</summary>
+    public static readonly bool AlwaysVisit = Core.CmdArgs.Has("--botsindoors");
+    /// <summary>Otherwise one goal in this many, after a pause, is a visit (#1330); never in a test run, whose checks count on a stroll.</summary>
+    private const int VisitOneIn = 6;
+    private BotVisit? _visit;
+    private double _strollUntil;
+    private readonly System.Collections.Generic.HashSet<string> _triedDoors = new();
+
     public double Think(Bot bot, double now)
     {
         var body = bot.Body;
@@ -36,6 +44,18 @@ public sealed class WanderBrain : IBotBrain
         if (BotUfo.React(bot, now)) return 0.25;
         // a player's birthday near (#1423): walk up and wish them a happy birthday
         if (BotBirthday.React(bot, now)) return 0.25;
+        // a building's inside (#1330): through a door, to a room, back out; strolling on from where it comes out
+        if (_visit != null)
+        {
+            if (!_visit.Think(bot, now, body.Space)) return 0.2;
+            _visit = null;
+            _goal = null;
+            _home = body.GlobalPosition;
+            // a stroll before anything else: straight back in (seen) reads as a body caught in the door
+            _restUntil = now + 4;
+            _strollUntil = now + 20;
+            return 0.5;
+        }
         if (now < _restUntil) return 0.5;
 
         // pressed against a wall or a house: a new goal, from where it stands
@@ -52,6 +72,12 @@ public sealed class WanderBrain : IBotBrain
                 _goal = null;
                 _restUntil = now + 2 + _rng.NextDouble() * 4;   // a pause, looking round
                 return 0.5;
+            }
+            if (Interiors.InteriorManager.Instance != null && now >= _strollUntil && (AlwaysVisit || !Core.GameSettings.TestRun && _rng.Next(VisitOneIn) == 0))
+            {
+                _visit = new BotVisit(_rng, _triedDoors);
+                _goal = null;
+                return 0.2;
             }
             double a = _rng.NextDouble() * Math.Tau, r = Range * Math.Sqrt(_rng.NextDouble());
             _goal = goal = _home.Value + new Vector3((float)(Math.Cos(a) * r), 0, (float)(Math.Sin(a) * r));

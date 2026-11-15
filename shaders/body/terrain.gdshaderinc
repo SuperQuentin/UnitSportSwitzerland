@@ -63,6 +63,9 @@ uniform int flat_edge = 0;
 // globe sets world_fill_hide to 1 there, and the real-tile mask is the flat world's)
 uniform bool gives_way = true;
 const float FLAT_EDGE_FADE = 4000.0;
+// on for the earth world's globe tiles below 20 km (#1656): their vertices morph into the parent level's shape
+uniform bool globe_morph = false;
+#include "res://shaders/common/geomorph.gdshaderinc"
 
 // how far a world XZ point has given way, 0..1
 float flat_hide(vec2 xz) {
@@ -120,15 +123,28 @@ varying vec3 world_pos;
 varying vec3 local_vertex;
 // the mesh's normal, smoothed over a few metres (TerrainMeshBuilder.SmoothNormal), world space
 varying vec3 smooth_n;
+// The mesh's cell, metres (#1987): a flat tile's vertex spacing (ChunkNode.SetMesh, its stride), a globe patch's drawn
+// cell (Globe.DrawnCellM), an earth leaf's lattice (~1.2 m, the default).
+instance uniform float facet_m = 1.0;
+// The vertex colour (cover, pattern code) and the smoothed normal, constant over a triangle (#1987). Under MSAA a pixel
+// whose centre lies outside a triangle that covers one of its samples still shades that triangle at its centre, the
+// varyings extrapolated past the triangle's corners: across a triangle smaller than a pixel by as many times as the
+// centre lies away, so the vertices' few percent of colour jitter came out white, black or blue, and the pattern code a
+// random pattern (vines, bays). That was the speckled band along the horizon at 2x MSAA, the same in every frame the
+// eye stood still and shimmering as it moved. Where a triangle is smaller than a pixel these are what the pixel shows.
+varying flat vec4 flat_colour;
+varying flat vec3 flat_smooth_n;
 #if defined(STANDALONE) && defined(STYLE_CARTOON)
 #define VERTEX_FINISH
 // a standalone headset (#1112): the ground's colour finished per vertex (rock, grade, paint), not per
 // pixel; the paint's patches are 38 m wide and the vertices 4 m apart, and a Quest 2 has a few
 // million pixels a frame to shade against a hundred thousand vertices
 varying vec3 v_col;
+varying flat vec3 v_col_flat;
 #endif
 
 void vertex() {
+    if (globe_morph) VERTEX = globe_geomorph(VERTEX, CUSTOM0, MODELVIEW_MATRIX);
     PATTERN_VERTEX
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 #ifdef NO_DISCARD
@@ -153,6 +169,8 @@ void vertex() {
 #endif
     local_vertex = VERTEX;
     smooth_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+    flat_colour = COLOR;
+    flat_smooth_n = smooth_n;
 #ifdef STYLE_REAL
     // a tile's mesh runs from its NW corner, x east and z south, 1000 m each: the photo's frame
     tile_uv = clamp(VERTEX.xz / 1000.0, vec2(0.0), vec2(1.0));
@@ -165,6 +183,7 @@ void vertex() {
         c = style_grade(c);
         c *= mix(0.9, 1.1, style_paint_noise(pattern_xz(world_pos) / 38.0) * 0.6 + 0.2);
         v_col = c;
+        v_col_flat = c;
     }
 #endif
     POSITION = retro_snap(CURVED_CLIP(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0), world_pos));
@@ -186,6 +205,12 @@ void fragment() {
         discard;
     }
 #endif
+    // how many cells a pixel spans along its longer footprint (#1987)
+    float cells = max(length(dFdx(world_pos)), length(dFdy(world_pos))) / max(facet_m, 0.5);
+    // past a quarter of a facet a pixel, the varyings that MSAA would extrapolate are read flat
+    float sub_pixel = smoothstep(0.25, 0.5, cells);
+    vec4 colour = mix(COLOR, flat_colour, sub_pixel);
+    vec3 smooth_normal = mix(smooth_n, flat_smooth_n, sub_pixel);
     vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     if (n.y < 0.0) {
         n = -n;
@@ -194,16 +219,16 @@ void fragment() {
     // height data's noise, and lit one by one they read as vertical stripes, not as a wall.
     // Gentle ground keeps its facets.
 #ifndef STANDALONE
-    vec3 sn = normalize(smooth_n);
+    vec3 sn = normalize(smooth_normal);
     n = normalize(mix(n, sn, smoothstep(0.8, 0.55, sn.y)));
 #endif
 
 #ifdef VERTEX_FINISH
-    vec3 col = v_col;
+    vec3 col = mix(v_col, v_col_flat, sub_pixel);
 #elif defined(STYLE_CARTOON)
-    vec3 col = style_lake(COLOR.rgb, length(VERTEX));
+    vec3 col = style_lake(colour.rgb, length(VERTEX));
 #else
-    vec3 col = COLOR.rgb;
+    vec3 col = colour.rgb;
 #endif
 
     // Surface patterns. COLOR.a carries a pattern code in quarter steps (CoverPalette /
@@ -211,7 +236,7 @@ void fragment() {
     // orientation, which TLM does not record — and which cannot be recovered from the
     // screen-space normal without turning to confetti. Each fades out before it aliases,
     // the same way the road markings do.
-    int pattern = int(COLOR.a * 4.0 + 0.5);
+    int pattern = int(colour.a * 4.0 + 0.5);
 #ifdef STANDALONE
     // a standalone headset (#1112): no surface patterns, a few pixels at its resolution
     pattern = 0;

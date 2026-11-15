@@ -34,6 +34,8 @@ public struct AirlinerLook
     public float Heat;
     /// <summary>The cruise drive on: its glow instead of the rockets' plumes.</summary>
     public bool Drive;
+    /// <summary>The belly jets' thrust, 0..1 (#1851): their plumes down from under the belly. Not in the pose yet (C3b).</summary>
+    public float Belly;
 }
 
 [System.Flags]
@@ -76,6 +78,16 @@ public partial class AirlinerRig : Node3D
     private Node3D? _brakeL, _brakeR, _bodyFlap, _driveGlow, _driveToggle;
     private readonly List<(Node3D Node, float Angle)> _gearDoors = new();
     private MeshInstance3D?[] _plumes = System.Array.Empty<MeshInstance3D?>();
+    /// <summary>The belly jets' plumes (#1851): the main plume's mesh again, four under the belly, pointing down.</summary>
+    private readonly System.Collections.Generic.List<MeshInstance3D> _bellyPlumes = new();
+    private float _bellyShown = -1f;
+
+    /// <summary>Where the belly jets fire, model space before the flip: either side of the keel, fore and aft of the bay's middle.</summary>
+    private static readonly Vector3[] BellyJets =
+    {
+        new(1.3f, ShuttleLayout.BellyY - 0.05f, 15f), new(-1.3f, ShuttleLayout.BellyY - 0.05f, 15f),
+        new(1.3f, ShuttleLayout.BellyY - 0.05f, 3f), new(-1.3f, ShuttleLayout.BellyY - 0.05f, 3f),
+    };
     private MeshInstance3D? _plasma;
     private ShaderMaterial? _plumeMat, _plasmaMat;
     /// <summary>What the effects show now: changed (and their shader parameter set) only when the look moves past a step.</summary>
@@ -208,6 +220,19 @@ public partial class AirlinerRig : Node3D
         rig._plumes = new MeshInstance3D?[ShuttleLayout.Engines.Length];
         for (int i = 0; i < rig._plumes.Length; i++) rig._plumes[i] = model.GetNodeOrNull<MeshInstance3D>($"Plume{i}");
         rig._plumeMat = rig._plumes[0]?.MaterialOverride as ShaderMaterial;
+        if (rig._plumes[0] is { } main)
+            foreach (var at in BellyJets)
+            {
+                // the same mesh and material, turned so its length (+Z) points down
+                var jet = new MeshInstance3D
+                {
+                    Name = "BellyJet", Mesh = main.Mesh, MaterialOverride = main.MaterialOverride, Visible = false,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Position = AircraftMeshBuilder.Flip(at),
+                    Rotation = new Vector3(Mathf.Pi / 2, 0f, 0f),
+                };
+                model.AddChild(jet);
+                rig._bellyPlumes.Add(jet);
+            }
         rig._plasma = model.GetNodeOrNull<MeshInstance3D>("Plasma");
         rig._plasmaMat = rig._plasma?.MaterialOverride as ShaderMaterial;
         rig.SetEye(ShuttleLayout.CommanderHip);
@@ -252,6 +277,20 @@ public partial class AirlinerRig : Node3D
                     plume.Scale = scale;
                 }
             _plumeMat?.SetShaderParameter(PowerParam, 0.35f + 0.65f * spool);
+        }
+        // the belly jets: shorter, narrower plumes down, by their lever
+        float belly = Mathf.Clamp(look.Belly, 0f, 1f);
+        if (Mathf.Abs(belly - _bellyShown) > 0.004f || belly == 0f != (_bellyShown == 0f))
+        {
+            _bellyShown = belly;
+            bool on = belly > 0.02f;
+            var scale = new Vector3(ShuttleMeshBuilder.PlumeWidth(belly) * 0.55f, ShuttleMeshBuilder.PlumeWidth(belly) * 0.55f, ShuttleMeshBuilder.PlumeLength(belly) * 0.3f);
+            foreach (var jet in _bellyPlumes)
+            {
+                jet.Visible = on;
+                jet.Scale = scale;
+            }
+            if (on && _plumeShown <= 0f) _plumeMat?.SetShaderParameter(PowerParam, 0.35f + 0.65f * belly);
         }
         int drive = look.Drive ? 1 : 0;
         if (drive != _driveShown)

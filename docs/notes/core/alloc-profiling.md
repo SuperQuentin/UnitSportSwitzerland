@@ -28,6 +28,14 @@ only tells commits, GC counts and GPU apart.
   `new TraceLog(TraceLog.CreateFromEventPipeDataFile(path))`, then for each `GCAllocationTickTraceData` walk
   `ev.CallStack()` → `.Caller`, keep the `UnitSport.*` frames, sum inclusive per method and per (type, top frames).
 
+- **CPU, the main thread** (#1910): `dotnet-trace collect -p <pid> --profile dotnet-sampled-thread-time --duration
+  00:00:00:25` (this version's names: `list-profiles`; `cpu-sampling` is Linux-only). The pid must be the **game's**
+  `Godot_v4.7.2-stable_mono_win64.exe`, never the `_console.exe` launcher in front of it (no .NET: the attach hangs). Sum the
+  `Thread/Sample` events' stacks per thread: the main thread is the one whose stacks hold `_Process` most; group each
+  sample by the first `UnitSport.*` frame under the engine's call (the node that paid). Each interop call shows (1-4 %
+  for `IsInsideTree`, `GetTree`, `get_GlobalPosition`): per-frame code should ask the engine as little as it can. The
+  analyzer (~80 lines, TraceEvent by `HintPath`) was at `E:\UnitSportSwitzerland\scratch\trace1910\analyzer`.
+
 ## What it found (earth, 20 s of the flight, 11.6 GB sampled)
 
 | inclusive | where |

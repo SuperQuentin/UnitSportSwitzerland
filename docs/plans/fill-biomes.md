@@ -1,7 +1,7 @@
 # Fill biomes: the earth fill outside Switzerland (#1809)
 
-Status: **phase 1 built** on `feat/1809-fill-biomes` (the seam, the photo guess, the forest canopy; `terrain/fill-biomes`).
-Phases 2-4 to come.
+Status: **phase 1 merged** (PR #1818: the seam, the photo guess, the forest canopy; `terrain/fill-biomes`). **Phase 2
+checked, nothing to change** (Nov 14 2026, below). Phases 3-4 to come.
 
 ## The problem
 
@@ -197,6 +197,14 @@ The rest of the determinism rules:
    steppe and tundra within a few units. So phase 2 shrinks to a check after #1803 merges: the handover seen from
    20-25 km at the six spots, and only if it shows, the fill's ground classes tinted by `PhotoStats`' colour (same
    bytes on every peer) rather than the globe painted by biome.
+   **Checked** (Nov 14 2026, `main` at 63286fb09 with #1803 and #1818): `--frame earth --globe D:/UnitSportSwitzerland/cube_global`,
+   `--sun real`, local daytime, Cartoon, the camera at 19, 21 and 25 km over each spot looking 30° down. The lower half's
+   mean colour across the 20 km handover (19 to 21 km, sRGB): desert (252,239,226) to (252,239,226); steppe (211,206,183)
+   to (211,206,185); tundra (160,166,135) to (159,166,137); ice (246,250,254) to (245,250,255); jungle (146,165,98) to
+   (146,165,103). No step at any land spot, so the fill's classes are not tinted. The sea darkens a little across it
+   ((36,91,171) to (47,97,173)) and its waves show from 25 km: that is the sea's surface, not a ground class (the
+   asia-globe-over-fill session's). Not checked here: where the loaded fill leaves meet the globe low down; phase 1 found
+   the globe paler and bluer than the desert's fill at 350 m.
 3. **Land cover in the pyramid**: the preprocessor stage, the shipped levels 0-2, chain step 1 live, the Licenses
    rows. The guess stays for NoData and for builds without the section.
 4. **Biome looks, one PR each**:

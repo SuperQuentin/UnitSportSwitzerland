@@ -31,6 +31,12 @@ src/Ui/CharacterPage      quick  --welcomecheck
 src/Ui/AccountPage        quick  --welcomecheck
 src/Core/GameShell        quick  --welcomecheck
 src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
+src/Player/SpectatorTargets quick --frame earth --chunks fixture:straight --targetcheck
+src/Core/BodyGoto         quick  --frame earth --chunks fixture:straight --gotocheck
+src/World/Bodies/GotoCheck quick --frame earth --chunks fixture:straight --gotocheck
+src/Player/SpectatorCamera quick --frame earth --chunks fixture:straight --orbitonlycheck
+src/World/Bodies/OrbitOnlyCheck quick --frame earth --chunks fixture:straight --orbitonlycheck
+src/Player/TargetList     quick  --frame earth --chunks fixture:straight --targetcheck
 src/Core/PlayerInput      quick  --spectatorcheck --world fixture
 src/Core/PlayerInput      quick  --creativecheck --world flat
 src/Core/SpectatorSwitchCheck quick --spectatorcheck --world fixture
@@ -101,6 +107,9 @@ src/Phone/               quick  --trainingcheck --trainer-sim --world fixture --
 tools/RideLink/          quick  --trainingcheck --trainer-sim --world fixture --chunks fixture:hairpin
 src/Trainer/             quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
 src/Gpx/RoadNetwork      quick  --trainingcheck junctions --trainer-sim --world fixture --chunks fixture:junction --traffic 0
+src/Trainer/             quick  --trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60
+src/Trainer/GroupRides    net    tools/groupridenetcheck.sh
+src/Trainer/GroupRideNetProbe net    tools/groupridenetcheck.sh
 src/XR/XrPhone           quick  --phonevrcheck --xrsim --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -160,6 +169,7 @@ src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real -
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+shaders/moon_halo        quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -378,6 +388,14 @@ src/Terrain/Leaves/LeafBlend net   tools/fillagreenetcheck.sh
 src/Terrain/Leaves/PyramidFill net tools/fillagreenetcheck.sh
 src/Terrain/Leaves/LeafStore full tools/leafstreamcheck.sh
 src/Terrain/Leaves/LeafIndex full tools/leafstreamcheck.sh
+# the globe's pyramid streamed to a client with none, the climb's pops, the fill on the server's pyramid (#1656; D: data)
+src/Terrain/Leaves/PyramidSource full tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidIndex full tools/pyramidstreamcheck.sh
+src/World/Globe          full   tools/pyramidstreamcheck.sh
+src/World/Bodies/BodyData full   tools/bodystreamcheck.sh
+src/Net/ChunkStreamer      full   tools/bodystreamcheck.sh
+shaders/common/geomorph  full   tools/pyramidstreamcheck.sh
+src/Terrain/Leaves/PyramidSource net tools/fillagreenetcheck.sh
 src/Core/OriginShifter   full   tools/earthcheck.sh
 src/Terrain/Earth        quick  --worldgroundcheck --chunks fixture:lake
 src/Core/ClientWorld     quick  --worldgroundcheck --chunks fixture:lake
@@ -418,8 +436,15 @@ src/Terrain/Construction/ quick --frame earth --pitcheck --chunks fixture:site -
 src/Core/TestWorld       quick  --frame earth --ride car,15 --world flat
 src/Core/TestWorld       quick  --frame earth --synccheck --world flat
 # #1798: the globe's terminator holds still through a 100 km/s flight's re-anchors (the real sun, the shipped globe levels)
-src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
-src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/globe --fly 0,500000,0,30,100000,6 --flyterminator
+src/World/Globe/Atmosphere quick --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --fly 0,500000,0,30,100000,6 --flyterminator
+src/Core/FlightProbe      quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --fly 0,500000,0,30,100000,6 --flyterminator
+# #1845: the sky from space against NOAA (the subsolar point, the sky's sun, the ground's light, the moon from the camera,
+# the stars, true north, /time speed real) from 400 and 20,000 km at the solstices and equinoxes; windowed it also
+# measures the drawn twilight and the moon over the night side (not here: needs a window)
+src/World/TerminatorCheck quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
+src/World/SunPath         quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
+src/World/DayNight        quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
+src/World/Globe/Globe.cs  quick  --frame earth --sun real --chunks fixture:straight --globe res://assets/bodies/earth --occasion none --terminatorcheck
 # G2 D's bar (#1710, D0): no pop at a re-anchor, the long drive, the long flight. Quick on fixture courses (real time:
 # the leaves stream on threads), full on the D: data (skipped without it); @timeout=: longer than TEST_TIMEOUT
 src/Core/ReanchorCheck    quick  @realtime --frame earth --reanchorcheck --chunks fixture:straight --originshift 400 --reanchortravel 4000 --traffic 0
@@ -626,9 +651,11 @@ src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
+# a lift rider on another peer's screen (#915), on the fun course's chairlift: no terrain data (#1609)
+src/World/Ropeways       net    tools/liftnetcheck.sh
+src/Player/FootPlayer.Lift net   tools/liftnetcheck.sh
+src/Terrain/Fixture/FunCourse net tools/liftnetcheck.sh
 # the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
-src/World/Ropeways       full   tools/liftnetcheck.sh
-src/Player/FootPlayer.Lift full  tools/liftnetcheck.sh
 src/World/DayNight       net    tools/clocknetcheck.sh
 src/World/WorldClock     net    tools/clocknetcheck.sh
 src/World/TimeCommand    net    tools/clocknetcheck.sh
@@ -663,6 +690,8 @@ src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
 src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
+src/Loot/Bank            full   tools/bankcheck.sh
+src/Items/Bank           full   tools/bankcheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
 src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh
@@ -673,8 +702,10 @@ src/Player/              full   tools/decknetcheck.sh
 src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
-# the trailer (#706): a boat, a car on the race autopilot and an airliner staged on the real map (CHUNKS=)
-src/Trailer/             full   tools/trailer.sh stills 2,5,12
+# the trailer (#706): the story film's door, road bike on the race autopilot and works machinery staged on the real
+# map (CHUNKS=); shots 2, 3 and 9 stand on the D: test region's tiles (Lausanne, Pully), so no tile round them is the
+# generated fill (#1861). The song is not needed: stills only pin its hash
+src/Trailer/             full   tools/trailer.sh stills 2,3,9
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
@@ -695,6 +726,10 @@ src/Avatar/AirlinerRig   quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --cabincheck --world fixture --traffic 0
 src/Player/CabinCheck    quick  --cabincheck --world fixture --traffic 0
+src/Player/ShuttleAboardCheck quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.ZeroG quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Avatar/ShuttleDeck   quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --shuttleaboardcheck --world fixture --traffic 0
 src/Player/Airliner      quick  --cabincheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
 src/Avatar/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
@@ -1037,6 +1072,15 @@ src/Terrain/CollisionReach net  tools/botcheck.sh
 src/Net/Regions/         net    tools/regioncheck.sh
 src/Player/FootPlayer.Region net tools/regioncheck.sh
 src/Bots/RegionCheck     net    tools/regioncheck.sh
+# bots inside buildings (#1330): a bot visits a generated village's house on a dedicated server, seen from two clients
+src/Bots/BotVisit        net    tools/botindoorcheck.sh
+# bots offline (single-player): the same visit with no server
+src/Bots/BotDirector     net    tools/botindoorsolo.sh
+src/Bots/BotIndoorSolo   net    tools/botindoorsolo.sh
+src/Bots/Bot.cs          net    tools/botindoorsolo.sh
+src/Bots/WanderBrain     net    tools/botindoorcheck.sh
+src/Interiors/InteriorManager.Bots net tools/botindoorcheck.sh
+src/Interiors/InteriorNav net   tools/botindoorcheck.sh
 src/Bots/Bot.cs          net    tools/regioncheck.sh
 src/Core/OriginShifter   net    tools/regioncheck.sh
 tools/regioncheck        net    tools/regioncheck.sh
@@ -1351,6 +1395,10 @@ src/Player/ShuttleCheck        quick  --shuttlecheck --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck europe --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck glide --world flat
+src/Bots/ShuttleBrain     quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
+src/Bots/ShuttleBotCheck  quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
+src/Bots/ShuttleBotNetPro full   tools/shuttlebotnetcheck.sh
+src/Player/ShuttlePilot   quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
 src/Player/Airliner            quick  --shuttlecheck --world flat
 src/Player/AirlinerFlight      quick  --shuttlecheck --world flat
 src/Avatar/Shuttle             quick  --cockpitcheck
@@ -1370,6 +1418,20 @@ src/Terrain/ChunkManager       quick  --spacebandcheck --at 2563500,1112500 --sy
 src/Terrain/HorizonLayer       quick  --spacebandcheck --at 2563500,1112500 --systems terrain,generated --horizon 60
 tools/TerrainFormat/SwissGeodesy quick --orbitcheck --world flat
 src/Net/Regions/ServerRegions  net    tools/orbitnetcheck.sh
+# #1718: each net script moved off the generated world retests itself when it changes
+tools/baycheck               net    tools/baycheck.sh
+tools/cinemanetcheck         net    tools/cinemanetcheck.sh
+tools/cranenetcheck          net    tools/cranenetcheck.sh
+tools/debugcheck             net    tools/debugcheck.sh
+tools/liftsynccheck          net    tools/liftsynccheck.sh
+tools/palletnetcheck         net    tools/palletnetcheck.sh
+tools/pigeonnetcheck         net    tools/pigeonnetcheck.sh
+tools/rampalongnetcheck      net    tools/rampalongnetcheck.sh
+tools/shopcheck              net    tools/shopcheck.sh
+tools/sitemachinenetcheck    net    tools/sitemachinenetcheck.sh
+tools/siteofficenetcheck     net    tools/siteofficenetcheck.sh
+tools/sitepalletnetcheck     net    tools/sitepalletnetcheck.sh
+tools/siteuppernetcheck      net    tools/siteuppernetcheck.sh
 # #1735: the fun course's ski slope (its snow layer, poles, the skier's lookup) and its jetty's moored boats, on both frames
 src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame flat --date 2027-01-15
 src/World/Snow/              quick  --pistecheck --chunks fixture:fun --traffic 0 --frame earth --date 2027-01-15
@@ -1394,3 +1456,27 @@ src/Terrain/Fixture/FixtureLeaves quick --pistecheck --chunks fixture:fun --traf
 # #1811: back into the body after a long spectator flight: upright, its camera sane, a poisoned view put right
 src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
 src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
+src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+# the planets' bars (#1430 close-out, docs/plans/planets.md section 12), on the shipped bodies' base, no --bodies
+src/World/Bodies/MoonCheck     quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyGround    quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyGround    quick  --mooncheck mars --frame earth --chunks fixture:straight
+src/World/Bodies/BodyData      quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodySurface   quick  --mooncheck --frame earth --chunks fixture:straight
+src/Terrain/Bodies/            quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/BodyAir               quick  --mooncheck mars --frame earth --chunks fixture:straight
+src/Core/Frames                quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/BodyGravity           quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/Orbit                 quick  --orbitcheck --frame earth --world flat
+src/Player/SpaceOrbit          quick  --orbitcheck --frame earth --world flat
+src/Player/ShuttleFlight       quick  --shuttlecheck --frame earth --world flat
+src/Player/Airliner.Shuttle    quick  --shuttlecheck --frame earth --world flat
+src/World/Bodies/ShuttleMoon   full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/Player/Airliner.Shuttle    full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/Player/ShuttleFlight       full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/World/Bodies/UfoMoonCheck  full   --ufomooncheck --frame earth --chunks fixture:straight
+src/Player/Ufo                 full   --ufomooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/Ring          full   --ringcheck --frame earth --chunks fixture:straight
+src/World/Bodies/SaturnRings   full   --ringcheck --frame earth --chunks fixture:straight

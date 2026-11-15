@@ -163,6 +163,38 @@ public class ConstructionSiteTests
     }
 
     [Fact]
+    public void A_junction_cap_and_its_corner_sidewalk_are_road_too()
+    {
+        // #1918: RoadGen trims the roads back to their junction cap, so the cap is carriageway no segment covers (a hoarding
+        // panel stood in one at Place des Nations and stopped a car turning there). A road ends 10 m in front of the site, at a
+        // 10 x 10 m cap; a corner sidewalk beside the cap; a bridge's cap over the site is not the ground's
+        var b = Box(400, 400, 40, 24, 6, 6);
+        static float[] Square(float x0, float z0, float x1, float z1, float y = 0) => [x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1];
+        ushort[] two = [0, 1, 2, 0, 2, 3];
+        var roads = new RoadTile
+        {
+            Segments = [new RoadSegment { Class = RoadClass.Minor, Width = 6, Points = [380, 0, 427, 400, 0, 427] }],
+            Junctions =
+            [
+                new RoadJunction { Class = RoadClass.Minor, Layer = 0, Vertices = Square(400, 422, 410, 432), Indices = two },
+                new RoadJunction { Class = RoadClass.Minor, Layer = 1, Vertices = Square(370, 380, 380, 390, 8), Indices = two },
+            ],
+            AreaProps = [new RoadAreaProp { Type = AreaPropType.Sidewalk, Height = 0.12f, Vertices = Square(410, 419, 413, 422), Indices = two }],
+        };
+        var obstacles = new SiteObstacles(new PlanBox?[] { PlanBox.Of(b) }, 0, roads);
+        Assert.True(obstacles.Blocked(new Vector2(405, 427)), "the cap's middle is road");
+        Assert.True(obstacles.Blocked(new Vector2(405, 421.8f)), "within the clearance of the cap's edge");
+        Assert.False(obstacles.Blocked(new Vector2(405, 420)), "beside the cap is not");
+        Assert.False(obstacles.Blocked(new Vector2(375, 385)), "a deck's cap is not the ground's");
+        Assert.False(obstacles.Blocked(new Vector2(411.5f, 420.5f)), "a hoarding may stand on a corner sidewalk");
+        Assert.True(obstacles.Undiggable(new Vector2(411.5f, 420.5f)), "but no pit is dug under it");
+        // and the planner keeps every piece of the site off the cap
+        for (int i = 0; i < 30; i++)
+            foreach (var p in Footprints(Plan($"2500_1119_{i}", b, new Vector2(400, 427), obstacles.Blocked)))
+                Assert.False(obstacles.Blocked(p), $"site {i}: {p} is on the road");
+    }
+
+    [Fact]
     public void Nothing_stands_in_the_building_its_scaffolding_or_the_way_in()
     {
         var b = Box(500, 500, 48, 30, 0.8f, 7, turn: -0.3f);

@@ -106,7 +106,9 @@ public partial class RoadStandProbe : Node
         {
             if (_roads is not { IsCompleted: true } || !_chunks.Ground.HasCollisionAt(at) || _wait < 8) return;
             if ((Embankments || Sidewalks || FloorAtArg() != null) && _grid is not { IsCompleted: true }) return;
-            _points = Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
+            if (CmdArgs.Value("--raygrid") is { } rg) { RayGrid(rg, at); return; }
+            if (CmdArgs.Value("--facesnear") is { } fr && _roads.Result is { } roadTile) { FacesNear(fr, at, tile, roadTile); return; }
+            _points =Sidewalks || FloorAtArg() != null ? new() : PickPoints(_roads.Result, tile);
             if (FloorAtArg() is { } fa && _roads.Result is { } ft && _grid?.Result is { } fg)
             {
                 // --floorat E,N: the blend's height at the four lattice vertices around a point
@@ -135,10 +137,11 @@ public partial class RoadStandProbe : Node
         float floor = FloorAt(road);
         float body = _player.GlobalPosition.Y;
         // no floor at all under the point is a carved hole (an underpass beneath it), not a
-        // road the player stands on - reported, but not held against the result
-        if (!float.IsNaN(floor) && kind == Kind.Body)
+        // road the player stands on - reported, but not held against the result; a deck has nothing under it but its own
+        // collision, so there a missing floor is the hole (#1768)
+        if ((!float.IsNaN(floor) || Bridges) && kind == Kind.Body)
         {
-            _floorGap.Add(floor - road.Y);
+            if (!float.IsNaN(floor)) _floorGap.Add(floor - road.Y);
             _bodyGap.Add(body - road.Y);
         }
         if (kind == Kind.Floor && !float.IsNaN(floor) && Math.Abs(floor - road.Y) > Tolerance) _floorFails++;
@@ -150,7 +153,7 @@ public partial class RoadStandProbe : Node
 
         if (_bodyGap.Count == 0) { GetTree().Quit(2); SetPhysicsProcess(false); return; }
         float worst = _bodyGap.Min();
-        GD.Print($"[roadcheck] floor-ribbon mean {_floorGap.Average():+0.000;-0.000} min {_floorGap.Min():+0.000;-0.000}; "
+        GD.Print($"[roadcheck] floor-ribbon mean {_floorGap.DefaultIfEmpty(float.NaN).Average():+0.000;-0.000} min {_floorGap.DefaultIfEmpty(float.NaN).Min():+0.000;-0.000}; "
             + $"body-ribbon mean {_bodyGap.Average():+0.000;-0.000} min {worst:+0.000;-0.000} "
             + $"max {_bodyGap.Max():+0.000;-0.000} over {_bodyGap.Count}");
         if (Embankments || Sidewalks)
@@ -168,6 +171,102 @@ public partial class RoadStandProbe : Node
     {
         var (e, n) = _origin.ToLv95(p);
         return $"{e:F1},{n:F1}";
+    }
+
+    /// <summary>
+    /// <c>--facesnear R</c> (with <c>--at E,N</c>, #1929): which part of the road collision builds the faces within R m of the
+    /// point, builder by builder (the same list ChunkManager commits): triangles, how many stand upright (a wall a car runs
+    /// into), their height over the ground, and the upright ones' LV95 spans. Finds a face no downward ray sees.
+    /// </summary>
+    private void FacesNear(string arg, Vector3 at, TileId tile, RoadTile road)
+    {
+        float r = float.Parse(arg, System.Globalization.CultureInfo.InvariantCulture);
+        var xf = _origin.TileTransform(tile);
+        var inv = xf.AffineInverse();
+        var local = inv * at;
+        (string Name, Func<Vector3[]> Faces)[] parts =
+        [
+            ("bridge decks", () => RoadMeshBuilder.BuildBridgeCollisionFaces(road)),
+            ("walls", () => RoadWallBuilder.BuildCollisionFaces(road)),
+            ("railings", () => RailingBuilder.BuildCollisionFaces(road)),
+            ("islands", () => IslandBuilder.BuildCollisionFaces(road)),
+            ("sign poles", () => RoadSignBuilder.BuildCollisionFaces(road)),
+            ("catenary masts", () => CatenaryBuilder.BuildCollisionFaces(road)),
+            ("car park props", () => ParkingBuilder.BuildCollisionFaces(road)),
+            ("signal poles", () => SignalBuilder.BuildCollisionFaces(road)),
+            ("sidewalks and kerbs", () => RoadStreetBuilder.BuildCollisionFaces(road)),
+        ];
+        // the point props there (signs, poles, posts): what a pole's face belongs to
+        foreach (var p in road.PointProps)
+            if (new Vector2(p.X - local.X, p.Z - local.Z).Length() <= r)
+                GD.Print($"[roadcheck] prop {p.Type} variant {p.Variant} flags {p.Flags} at {Lv95(xf * new Vector3(p.X, p.Y, p.Z))}, heading {Mathf.RadToDeg(p.Heading):F0}°, {p.Height:F2} m");
+        foreach (var (name, faces) in parts)
+        {
+            var f = faces();
+            int near = 0, upright = 0;
+            float lo = float.MaxValue, hi = float.MinValue;
+            var spans = new List<string>();
+            for (int i = 0; i + 2 < f.Length; i += 3)
+            {
+                var c = (f[i] + f[i + 1] + f[i + 2]) / 3f;
+                if (new Vector2(c.X - local.X, c.Z - local.Z).Length() > r) continue;
+                near++;
+                var normal = (f[i + 1] - f[i]).Cross(f[i + 2] - f[i]);
+                if (normal.LengthSquared() < 1e-12f) continue;
+                normal = normal.Normalized();
+                _chunks.Ground.TryGetHeight(xf * c, out float g);
+                float up = (xf * c).Y - g;
+                lo = Mathf.Min(lo, up); hi = Mathf.Max(hi, up);
+                if (Mathf.Abs(normal.Y) > 0.3f) continue;
+                upright++;
+                if (spans.Count < 8)
+                {
+                    float y0 = Mathf.Min(f[i].Y, Mathf.Min(f[i + 1].Y, f[i + 2].Y)), y1 = Mathf.Max(f[i].Y, Mathf.Max(f[i + 1].Y, f[i + 2].Y));
+                    spans.Add($"{Lv95(xf * f[i])}..{Lv95(xf * f[i + 1])}..{Lv95(xf * f[i + 2])} (dy {y1 - y0:F2} m)");
+                }
+            }
+            if (near == 0) continue;
+            GD.Print($"[roadcheck] faces {name}: {near} near, {upright} upright, {lo:F2}..{hi:F2} m over the ground");
+            foreach (var s in spans) GD.Print($"[roadcheck]   upright {s}");
+        }
+        GD.Print("[roadcheck] RESULT: facesnear done");
+        GetTree().Quit(0);
+        SetPhysicsProcess(false);
+    }
+
+    /// <summary>
+    /// <c>--raygrid half,step</c> (with <c>--at E,N</c>, #1759): every collision surface a ray straight down meets over a square
+    /// round the point, top first, with its body: what stands above a deck or a ribbon where a car stops dead.
+    /// </summary>
+    private void RayGrid(string arg, Vector3 at)
+    {
+        var a = arg.Split(',');
+        float half = float.Parse(a[0], System.Globalization.CultureInfo.InvariantCulture);
+        float step = float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture);
+        var space = _player!.GetWorld3D().DirectSpaceState;
+        for (float dz = -half; dz <= half + 1e-3f; dz += step)
+            for (float dx = -half; dx <= half + 1e-3f; dx += step)
+            {
+                var top = (at + new Vector3(dx, 0, dz)) with { Y = 5000 };
+                var hits = new List<string>();
+                var exclude = new Godot.Collections.Array<Rid> { _player.GetRid() };
+                for (int k = 0; k < 4; k++)
+                {
+                    var q = PhysicsRayQueryParameters3D.Create(top, top with { Y = -1000 });
+                    q.Exclude = exclude;
+                    q.HitBackFaces = true;
+                    var hit = space.IntersectRay(q);
+                    if (hit.Count == 0) break;
+                    var p = hit["position"].AsVector3();
+                    var body = hit["collider"].AsGodotObject() as Node;
+                    hits.Add($"{p.Y:F2} {body?.GetParent()?.Name}/{body?.Name}");
+                    top = p - new Vector3(0, 0.02f, 0);   // the next surface below this one
+                }
+                GD.Print($"[roadcheck] raygrid {Lv95(at + new Vector3(dx, 0, dz))}: {string.Join(" | ", hits)}");
+            }
+        GD.Print("[roadcheck] RESULT: raygrid done");
+        SetPhysicsProcess(false);
+        GetTree().Quit(0);
     }
 
     private void Next()
@@ -216,7 +315,21 @@ public partial class RoadStandProbe : Node
                 if (!_chunks.Ground.HasCollisionAt(p)) continue;
                 result.Add((p, $"{s.Class}/{s.Surface}", Kind.Body));
             }
-        if (Bridges) return result;
+        if (Bridges)
+        {
+            // the junction caps on a deck (#1768): a body on each cap's widest triangle, at its centroid; the deck's
+            // segments stop at the cap's edge, so a cap without collision is a hole in the bridge
+            foreach (var j in tile.Junctions.Where(j => j.Layer > 0 && j.TriangleCount > 0).Take(8))
+            {
+                Vector3 V(int i) => new(j.Vertices[i * 3], j.Vertices[i * 3 + 1], j.Vertices[i * 3 + 2]);
+                var widest = Enumerable.Range(0, j.TriangleCount)
+                    .Select(t => (V(j.Indices[t * 3]), V(j.Indices[t * 3 + 1]), V(j.Indices[t * 3 + 2])))
+                    .MaxBy(t => (t.Item2 - t.Item1).Cross(t.Item3 - t.Item1).Length());
+                var p = basePos + (widest.Item1 + widest.Item2 + widest.Item3) / 3f + Vector3.Up * BridgeLift;
+                if (_chunks.Ground.HasCollisionAt(p)) result.Add((p, $"deck junction {j.Class}", Kind.Body));
+            }
+            return result;
+        }
         // turn lane widenings (#123): a body on the strip's widest triangle, at its centroid
         foreach (var strip in tile.AreaProps.Where(a => a.Type == AreaPropType.Pavement).Take(4))
         {

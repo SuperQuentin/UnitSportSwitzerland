@@ -36,6 +36,20 @@ public static class SpectatorSpeed
     /// <summary>One notch faster: the speed asked for may pass the altitude's cap, so climbing then speeds up by itself.</summary>
     public static float Faster(float speed) => Math.Min(speed * Notch, MaxSpeed);
 
+    /// <summary>The top between bodies (#1850): light.</summary>
+    public const float LightSpeed = 299_792_458f;
+
+    /// <summary>
+    /// Between bodies (#1850, docs/plans/planets.md section 8): the cap is half the distance to the nearest surface of any
+    /// body (<c>Frames.NearestSurface</c>), with no top but light, so the ground slides by at the same angular rate
+    /// everywhere and a trip's time grows with the logarithm of its length: from a 400 km orbit to the Moon in well under
+    /// a minute at the wheel's top, slowing by itself as the Moon's ground comes up.
+    /// </summary>
+    public static float SurfaceCap(double distance) => (float)Math.Clamp(distance * CapPerMetre, GroundCap, LightSpeed);
+
+    /// <summary>One notch faster between bodies: up to <see cref="MaxSpeed"/>, or to the cap where the cap is higher (far out).</summary>
+    public static float Faster(float speed, float cap) => Math.Min(speed * Notch, Math.Max(MaxSpeed, cap));
+
     /// <summary>One notch slower, from what is flown: past the cap a notch down is felt at once.</summary>
     public static float Slower(float speed, float cap) => Math.Max(Math.Min(speed, cap) / Notch, MinSpeed);
 
@@ -48,7 +62,8 @@ public static class SpectatorSpeed
             < 9.95f => metresPerSecond.ToString("0.0", inv) + " m/s",
             < 999.5f => metresPerSecond.ToString("0", inv) + " m/s",
             < 99_950f => (metresPerSecond / 1000f).ToString("0.0", inv) + " km/s",
-            _ => (metresPerSecond / 1000f).ToString("0", inv) + " km/s",
+            < 99_950_000f => (metresPerSecond / 1000f).ToString("0", inv) + " km/s",
+            _ => (metresPerSecond / LightSpeed).ToString("0.00", inv) + " c",
         };
     }
 }

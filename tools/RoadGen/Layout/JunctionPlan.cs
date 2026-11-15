@@ -31,6 +31,8 @@ public sealed class ArmPlan
     public double MouthShift { get; set; }
     /// <summary>How far the final core moved the mouth from where the transitions were planned from (m; a check).</summary>
     public double MouthDrift { get; set; }
+    /// <summary>The fit gave up more than it would have without the room the street's sidewalk keeps along the transition (#1879).</summary>
+    public bool SidewalkHeld { get; set; }
 
     private ArmWants? _keptWants;
 
@@ -68,6 +70,11 @@ public sealed class ArmPlan
     public double Split { get; set; }
     /// <summary>The arm each move leaves by (as the signal plans name the turns).</summary>
     public Dictionary<Terrain.Format.SignalMoves, int> Toward { get; } = new();
+    /// <summary>
+    /// Every arm each move leaves by: two exits may make one move (two rights at a skewed or merged junction, #1903), and the
+    /// car paths go into each (<see cref="Toward"/> names the first, for the pockets and bike crossings).
+    /// </summary>
+    public Dictionary<Terrain.Format.SignalMoves, List<int>> TowardAll { get; } = new();
     /// <summary>The arm the through lane leaves by (-1 none).</summary>
     public int Exit { get; init; } = -1;
     /// <summary>The street is too short for this pocket and the exit at its other end apart: one transition holds both (#325).</summary>
@@ -228,6 +235,7 @@ public sealed class JunctionPlan
             + "steps taken: " + string.Join(", ", steps) + "\n"
             + string.Create(inv, $"      against the pocket layout: left pockets in both {both:N0}, planner only {newOnly:N0} (at {Where(a => a.HasLeft && !a.BuiltLeft)}), ")
             + string.Create(inv, $"pocket layout only {oldOnly:N0} (at {Where(a => !a.HasLeft && a.BuiltLeft)}); right pockets in both {rBoth:N0}, planner only {rNew:N0}, pocket layout only {rOld:N0}")
+            + string.Create(inv, $"\n      fitted along their length beside the street's sidewalk (#1879): {arms.Count(a => a.SidewalkHeld):N0} transitions narrowed or shortened for it (at {Where(a => a.SidewalkHeld)})")
             + (arms.Any(a => a.FitSteps.Contains("does not fit")) ? "\n      does not fit at " + Where(a => a.FitSteps.Contains("does not fit")) : "");
     }
 
@@ -318,6 +326,9 @@ public sealed class JunctionPlan
         foreach (var a in Arms)
         {
             sb.Append(inv, $"  arm {a.Arm} {Compass(a.Heading)} (link {a.LinkId}, {a.Length:F0} m, exit arm {a.Exit}), room L {Fmt(a.Room.Left)} R {Fmt(a.Room.Right)}\n");
+            if (a.Room.Stations.Length > 1)
+                sb.Append("    room    ").Append(string.Join(" ", a.Room.Stations.Select((s, k) =>
+                    string.Create(inv, $"{s:F0}:{Fmt(a.Room.FreeLeft(k))}/{Fmt(a.Room.FreeRight(k))}")))).Append(" (m out from the mouth: left/right, less the street's sidewalk)\n");
             sb.Append("    normal  ").Append(a.Normal).Append('\n');
             sb.Append("    wanted  ").Append(a.Wanted).Append('\n');
             sb.Append("    mouth   ").Append(a.Mouth).Append('\n');
