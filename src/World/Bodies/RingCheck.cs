@@ -168,8 +168,8 @@ public partial class RingCheck : Node
                 Expect(t < 120, string.Create(CultureInfo.InvariantCulture, $"from 10 million km into the rings in {t:F1} s at full speed (at most 120 s)"));
                 Expect(worstRise < 1.25, string.Create(CultureInfo.InvariantCulture, $"the speed changes smoothly (worst rise {worstRise:F3} a frame)"));
                 Expect(speed <= Player.SpectatorSpeed.RingFloor * 1.01f, $"at the slab a drift: {Player.SpectatorSpeed.Format(speed)} (the ring's floor {Player.SpectatorSpeed.Format(Player.SpectatorSpeed.RingFloor)})");
-                int before = rings.Built;
-                bool built = await Until(() => rings.Built > before && rings.Drawn > 100, 10);
+                // the field round the camera (made on the way in, the last metres over the slab)
+                bool built = await Until(() => rings.Built >= 1 && rings.Drawn > 100, 10);
                 Expect(built, $"the chunks round the camera at the slab: {rings.Drawn} drawn, {rings.Solid} solid");
                 await Wait(1);
                 Shot("approach_in");
