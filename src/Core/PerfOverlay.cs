@@ -235,16 +235,20 @@ public partial class PerfOverlay : CanvasLayer
         // from true north at the camera (#1504), not the world's −Z
         double bearing = (TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
         string facing = Compass[(int)Math.Round(bearing / 45) % 8];
-        // on another body (#1985): its latitude, longitude and the height over its reference; LV95 means nothing there
-        if (origin.Frame.Axes is { Body: not BodyId.Earth } axes)
+        // the place as HudPlace writes it (#2033): LV95 only in Switzerland near the ground, latitude, longitude and the
+        // true height elsewhere (abroad, in orbit; the frame's Y froze at 10000 m in space), the distance far out
+        var at = origin.ToGlobal(p);
+        var body = CelestialBody.Of(at.Body);
+        var g = at.Geodetic;
+        // LV95 asked only low on the Earth, near Switzerland's longitudes (the projection is meaningless far round)
+        (double, double, double)? lv95 = null;
+        if (at.Body == BodyId.Earth && g.H < HudPlace.Lv95Ceiling && Math.Abs(g.LonDeg - 8) < 30)
         {
-            var g = CelestialBody.Of(axes.Body).Shape.ToGeodetic(axes.ToEcef(p.X, p.Y, p.Z));
-            double lat = g.LatDeg, lon = g.LonDeg;
-            return string.Format(CultureInfo.InvariantCulture, "{0} {1:F3}°{2} {3:F3}°{4}  h {5:F0} m  facing {6} {7:F0}°",
-                axes.Body, Math.Abs(lat), lat >= 0 ? 'N' : 'S', Math.Abs(lon), lon >= 0 ? 'E' : 'W', g.H, facing, bearing);
+            var (e, n) = origin.ToLv95(p);
+            lv95 = (e, n, at.Alt);
         }
-        var (e, n) = origin.ToLv95(p);
-        return string.Format(CultureInfo.InvariantCulture, "LV95 {0:F0},{1:F0}  alt {2:F0} m  facing {3} {4:F0}°",
-            e, n, p.Y, facing, bearing);
+        var ecef = at.Ecef;
+        double fromCentre = Math.Sqrt(ecef.X * ecef.X + ecef.Y * ecef.Y + ecef.Z * ecef.Z);
+        return string.Format(CultureInfo.InvariantCulture, "{0}  facing {1} {2:F0}°", HudPlace.Place(body, g, lv95, fromCentre), facing, bearing);
     }
 }
