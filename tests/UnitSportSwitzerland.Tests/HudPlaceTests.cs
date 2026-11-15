@@ -70,11 +70,29 @@ public class HudPlaceTests
     }
 
     [Theory]
-    [InlineData(2_480_000, 1_070_000, 0, true)]
-    [InlineData(2_479_999, 1_100_000, 0, false)]
-    [InlineData(2_600_000, 1_300_001, 0, false)]
+    [InlineData(2_500_100, 1_117_900, true)]   // Geneva
+    [InlineData(2_600_000, 1_200_000, true)]   // Bern
+    [InlineData(2_683_000, 1_248_000, true)]   // Zurich
+    [InlineData(2_717_000, 1_096_000, true)]   // Lugano
+    [InlineData(2_611_000, 1_267_000, true)]   // Basel
+    [InlineData(2_830_000, 1_181_000, true)]   // Val Müstair's Scuol side
+    [InlineData(2_556_000, 1_086_000, false)]  // Chamonix
+    [InlineData(2_532_000, 1_120_000, false)]  // Thonon, across the lake
+    [InlineData(2_560_000, 1_265_000, false)]  // past the Jura's tip
+    [InlineData(2_700_000, 1_070_000, false)]  // Como's side
+    [InlineData(2_770_000, 1_250_000, false)]  // Vorarlberg
+    public void The_border(double e, double n, bool inside) => Assert.Equal(inside, HudPlace.InSwitzerland(e, n));
+
+    [Fact]
+    public void Chamonix_on_the_ground_is_latitude_longitude_and_height()
+    {
+        var s = HudPlace.Place(Earth, new Geodetic(45.9237, 6.8694, 2_000), (2_555_836, 1_085_950, 1_947), Earth.Shape.A + 2_000);
+        Assert.Equal("Earth 45.924°N 6.869°E  h 2000 m", s);
+    }
+
+    [Theory]
     [InlineData(2_600_000, 1_200_000, 19_999, true)]
     [InlineData(2_600_000, 1_200_000, 20_000, false)]
-    public void The_LV95_box_and_ceiling(double e, double n, double h, bool inside) =>
+    public void The_LV95_ceiling(double e, double n, double h, bool inside) =>
         Assert.Equal(inside, HudPlace.InLv95(e, n, h));
 }

@@ -233,7 +233,8 @@ public partial class PerfOverlay : CanvasLayer
         var p = cam.GlobalPosition;
         var forward = -cam.GlobalBasis.Z;
         // from true north at the camera (#1504), not the world's −Z
-        double bearing = (TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
+        // rounded before the wrap, or 359.6° read "360°"
+        double bearing = Math.Round(TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
         string facing = Compass[(int)Math.Round(bearing / 45) % 8];
         // the place as HudPlace writes it (#2033): LV95 only in Switzerland near the ground, latitude, longitude and the
         // true height elsewhere (abroad, in orbit; the frame's Y froze at 10000 m in space), the distance far out
