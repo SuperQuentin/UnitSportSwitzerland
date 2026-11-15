@@ -101,5 +101,13 @@ through it (#1798).
   middle to 0.00001°, satellites before dawn and the lock on one; windowed `test_output/sky_*.png`).
   Unit: `EphemerisTests` (planets, faces, big moons), `Sgp4Tests`. Screenshots of the sky with the
   shot queue: `--sun real --date ... --occasion none` (December's snowfall hides everything).
+- **The Moon's look by where you are** (#2047): its enlargement (`MoonDisc.ScreenShare`) and halo are for the Earth's
+  sky, kept whole out to the Earth's sphere of influence (`MoonDisc.BoostFullM`, 925,000 km from its centre) and gone
+  at twice that (`BoostGoneM`). Past it the Moon has its true angular size and a point by its true magnitude from the
+  camera (`StarField.Look`, none fainter than the 7th), as the planets: from Mars a 3rd-magnitude star beside the Earth,
+  from Saturn none. In space every point's magnitude is from the camera (`Ephemeris.MagnitudeAt`: the phase at the
+  body, its distances from the Sun and the eye; the Moon's law added), and the Earth has a point of its own
+  (`SkyBodies.PlaceEarth`, `Ephemeris.EarthMagnitudeAt`, Mallama 2018): from Mars it was not drawn at all.
+  `--moonlookcheck` (windowed): the ground as before, Mars, Saturn and 1 AU out; pictures `test_output/bodies/moonlook_*.png`.
 - Not yet: Saturn's shadow on its rings, the ISS as a model in the telescope, a cloudy sky when it
   snows, proper motion, Pluto and the asteroids.

@@ -172,6 +172,9 @@ src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real -
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/MoonDisc       full   --moonlookcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets --time 22
+src/World/SkyBodies      full   --moonlookcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets --time 22
+src/World/Bodies/MoonLook full  --moonlookcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets --time 22
 shaders/moon_halo        quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
