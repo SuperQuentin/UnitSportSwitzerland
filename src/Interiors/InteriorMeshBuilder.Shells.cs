@@ -19,13 +19,13 @@ public static partial class InteriorMeshBuilder
         return Palette(r.Type);
     }
 
-    /// <summary>A colony theme's shell colours (#2000): its frame grey underfoot, its shell's white round, its band overhead.</summary>
+    /// <summary>A colony theme's shell colours (#2000): its frame grey underfoot (the kit's deck, #2003), its shell's white round, its band overhead.</summary>
     private static (Color, Color, Color)? ShellLookFor(InteriorLayout l)
     {
         if (l.Colony is not int theme) return null;
         var p = World.Moon.ColonyKit.Of((Terrain.Bodies.ColonyTheme)theme);
         static Color Lin(Color c) => new Color(c.R, c.G, c.B).SrgbToLinear() with { A = 1 };
-        return ((Lin(p.Frame) * 0.85f) with { A = 1 }, Lin(p.Shell), Lin(p.Band));
+        return (Lin(p.Frame), Lin(p.Shell), Lin(p.Band));
     }
 
     private static void ShellRoom(Scratch s, RoomPlan r, float y0)
@@ -112,7 +112,11 @@ public static partial class InteriorMeshBuilder
         for (int i = 0; i + 1 < az.Count; i++)
         {
             float a = az[i], b = az[i + 1], m = (a + b) / 2;
-            s.Tri(centre, At(a, 0), At(b, 0), floorCol, true);
+            // the floor, with a darker walkway ring round the middle between 0.42 and 0.62 of the radius (#2003's hub deck)
+            Vector3 F(float ang, float k) => centre + (At(ang, 0) - centre) * k;
+            s.Tri(centre, F(a, 0.42f), F(b, 0.42f), floorCol, true);
+            s.Quad(F(a, 0.42f), F(a, 0.62f), F(b, 0.62f), F(b, 0.42f), (floorCol * 0.78f) with { A = floorCol.A });
+            s.Quad(F(a, 0.62f), At(a, 0), At(b, 0), F(b, 0.62f), floorCol);
             s.Tri(centre + Vector3.Up * top, At(b, top), At(a, top), ceilCol, true);
             float from = 0;
             foreach (var c in cuts)
