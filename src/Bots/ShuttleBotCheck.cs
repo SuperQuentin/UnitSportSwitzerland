@@ -92,25 +92,6 @@ public partial class ShuttleBotCheck : Node
             me.DebugLaunch(parked.GlobalPosition + parked.GlobalBasis.X * 40f + Vector3.Up * 2f, Vector3.Zero);
             if (!await Until(() => me.IsOnFloor(), 30)) { Expect(false, "the player stands beside the shuttle"); return; }
         }
-        if (CmdArgs.Has("--asplayer"))
-        {
-            // the same taxi flown by the player (a diagnosis: the bot's body or the shuttle's ground?)
-            var shuttle = ParkedShuttle()!;
-            me.DebugLaunch(shuttle.ToGlobal(shuttle.Ride.EntryPoint) + Vector3.Up, Vector3.Zero);
-            await Seconds(1);
-            for (int i = 0; i < 20 && me.Vehicle == null; i++) { me.TryGetIn(); await Seconds(0.5); }
-            if (me.Vehicle is not Airliner own) { Expect(false, "the player got in"); return; }
-            var solo = new ShuttlePilot(ShuttleBrain.MissionFor(me, new ShuttleBrain.Ask(false, 200)));
-            _followed = me;
-            for (int i = 0; i < 1200 && solo.Now == ShuttlePilot.Stage.Taxi; i++)
-            {
-                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-                if (me.Vehicle is not Airliner jet2) { Expect(false, $"the player's shuttle crashed taxiing at frame {i}"); return; }
-                solo.Step(me, jet2, me.Origin!.Frame, me.Clearance, (float)GetPhysicsProcessDeltaTime());
-            }
-            Expect(solo.Now != ShuttlePilot.Stage.Taxi, $"the player taxied out ({solo.Now})");
-            return;
-        }
         string said = BotDirector.Instance!.Command(1, ask, true, _ => me);
         GD.Print($"{Log} /bot {ask}: {said}");
         var bot = BotDirector.Instance.All.FirstOrDefault(b => b.Brain is ShuttleBrain);
@@ -135,12 +116,6 @@ public partial class ShuttleBotCheck : Node
             Expect(brain.Pilot != null, $"the bot walked to the shuttle and got in ({brain.Failure ?? "ok"})");
         }
         if (brain.Pilot is not { } pilot) return;
-        if (CmdArgs.Has("--trace"))
-            for (int i = 0; i < 20; i++)
-            {
-                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-                GD.Print(FormattableString.Invariant($"{Log} trace {i}: at {body.GlobalPosition} v {body.Velocity} real {body.GetRealVelocity()} floor {body.IsOnFloor()} wall {body.IsOnWall()} ride {body.Ride} stage {pilot.Now} scale {Engine.TimeScale} want {pilot.WantScale}"));
-            }
 
         double report = 0;
         var shot = new System.Collections.Generic.HashSet<ShuttlePilot.Stage>();

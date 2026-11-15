@@ -603,8 +603,12 @@ public sealed class ShuttlePilot
             ?? toward.Direction;
     }
 
-    /// <summary>The line along <paramref name="aim"/> from the craft passes within 200 km of the surface of the body the world is on.</summary>
-    private bool Blocked(Vector3 aim)
+    /// <summary>
+    /// The line along <paramref name="aim"/> from the craft passes within <paramref name="margin"/> (200 km) of the surface of
+    /// the body the world is on. The hold gives up a turn only past a smaller margin (50 km): at the limit, the same one
+    /// both ways flipped the two stages every frame.
+    /// </summary>
+    private bool Blocked(Vector3 aim, double margin = 200_000)
     {
         if (_frame.Axes is not { } axes) return false;
         var p = _p.GlobalPosition;
@@ -615,7 +619,7 @@ public sealed class ShuttlePilot
             axes.X.Z * aim.X + axes.Y.Z * aim.Y + axes.Z.Z * aim.Z).Normalized();
         double t = -(at.X * dir.X + at.Y * dir.Y + at.Z * dir.Z);
         if (t <= 0) return false;
-        return (at + dir * t).Length < CelestialBody.Of(axes.Body).Shape.A + 200_000;
+        return (at + dir * t).Length < CelestialBody.Of(axes.Body).Shape.A + margin;
     }
 
     /// <summary>
@@ -651,7 +655,7 @@ public sealed class ShuttlePilot
         if (TangentFor(_target) is not { } aim) { Fail("lost the frame between bodies"); return; }
         _jet.Aim = aim;
         Fly(Vector2.Zero, 0f);
-        if (Blocked(aim)) { Next(Stage.Clear, Fast); return; }
+        if (Blocked(aim, 50_000)) { Next(Stage.Clear, Fast); return; }
         if (_jet.Nose.AngleTo(aim) < Mathf.DegToRad(1f))
         {
             if (!_p.ShuttleDrive(_jet)) { Fail("the drive would not switch on for the trip"); return; }
@@ -757,7 +761,8 @@ public sealed class ShuttlePilot
             if (StageTime > 120 && !_jet.DriveOn) Fail("could not turn toward the pad in 2 min");
             return;
         }
-        float speed = diving ? Mathf.Clamp(dist / 25f, 100f, 2_000f) : Mathf.Clamp(flat.Length() / 25f, 300f, 100_000f);
+        // slow enough at the drop-out (~100-150 m/s some kilometres short) for the jets' slide to stop it over the pad
+        float speed = diving ? Mathf.Clamp(dist / 40f, 80f, 1_500f) : Mathf.Clamp(flat.Length() / 25f, 300f, 100_000f);
         Fly(Vector2.Zero, ShuttleFlight.DriveLever(speed, alt));
         if (StageTime > 1800) Fail("not down to the pad after 30 min in the drive");
     }
