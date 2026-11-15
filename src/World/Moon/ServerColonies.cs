@@ -61,7 +61,8 @@ public partial class ServerColonies : Node
             double near = double.MaxValue;
             foreach (var a in _ground.Anchors)
             {
-                if (!IsInstanceValid(a) || !a.IsInsideTree()) continue;
+                // a colony is an anchor of its own (its ground): only bodies keep one built
+                if (!IsInstanceValid(a) || !a.IsInsideTree() || a is not Player.FootPlayer) continue;
                 var g = a.GlobalPosition;
                 var p = axes.ToEcef(g.X, g.Y, g.Z);
                 var n = _heights.NormalUnder(p);
@@ -74,6 +75,7 @@ public partial class ServerColonies : Node
             {
                 _built.Remove(c.Id, out var node);
                 _parked.Remove(c.Id);
+                _ground.RemoveAnchor(node!);
                 node!.QueueFree();
                 GD.Print($"[colonies] the server's {c.Name}: dropped ({near:F0} m from every body)");
             }
@@ -115,6 +117,8 @@ public partial class ServerColonies : Node
             return (float)y;
         }
         var root = ColonyBuilder.Build(c, ColonyPlan.For(c), GroundY, (_origin, Eyes));
+        // the ground solid round it (the region's squares follow its solid anchors): its rovers' slots, its EVA spots
+        _ground.AddAnchor(root, collision: true);
         // its crew wait for its rovers (Park), so the first EVA finds one
         foreach (var crew in ColonyColonists.In(root)) crew.CrewReady = false;
         AddChild(root);
