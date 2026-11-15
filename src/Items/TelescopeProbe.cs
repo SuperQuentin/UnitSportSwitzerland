@@ -39,10 +39,10 @@ public partial class TelescopeProbe : Node
         await Seconds(2.0);
         string arg = CmdArgs.Value("--telescopecheck") ?? "";
         bool moon = arg.StartsWith("moon");
-        // abroad (#1995): the Earth outside Switzerland (Chamonix), where LV95 is only notation; needs the earth leaves there
+        // abroad (#1995): the Earth outside Switzerland, LV95 only notation there: started there with --at (Ferney-Voltaire,
+        // France, by Geneva airport: --at 2497404,1123579, with leaves there); /goto's body ground would stand in for the leaves
         bool abroad = arg.StartsWith("abroad");
         if (moon && !await GoTo("Moon 17 59 1")) return;
-        if (abroad && !await GoTo("Earth 45.924 6.870 3")) return;
         if (Me == null) GetParent<ClientWorld>().ToggleMode();
         if (!await Until(() => Me is { } m && m.IsOnFloor() && PlacedObjects.Instance != null && Telescopes.Instance != null, 120))
         {
@@ -361,7 +361,7 @@ public partial class TelescopeProbe : Node
     }
 
     /// <summary>
-    /// <c>abroad</c> (#1995): on the Earth outside Switzerland a telescope and a Swiss flag are set up, kept as Earth places
+    /// <c>abroad</c> (#1995): on the Earth outside Switzerland (Ferney-Voltaire) a telescope and a Swiss flag are set up, kept as Earth places
     /// (no LV95 in the record), looked through and packed up.
     /// </summary>
     private async Task RunAbroad(FootPlayer me, PlacedObjects placed)
@@ -369,10 +369,10 @@ public partial class TelescopeProbe : Node
         if (await SetUpAndLook(me, placed) is not { } set) return;
         var (scope, _, _, view, _) = set;
         var g = scope.At.Geodetic;
-        // Chamonix, in France: within a few km of where /goto put it
-        bool there = Math.Abs(g.LatDeg - 45.924) < 0.03 && Math.Abs(g.LonDeg - 6.870) < 0.04;
+        // Ferney-Voltaire, in France: within a kilometre or so of where --at put it
+        bool there = Math.Abs(g.LatDeg - 46.2558) < 0.01 && Math.Abs(g.LonDeg - 6.1081) < 0.015;
         Expect(scope.At.Body == BodyId.Earth && there,
-            System.FormattableString.Invariant($"kept as an Earth place in Chamonix, outside Switzerland ({g.LatDeg:F3}, {g.LonDeg:F3})"));
+            System.FormattableString.Invariant($"kept as an Earth place in Ferney-Voltaire (France) ({g.LatDeg:F3}, {g.LonDeg:F3})"));
         Expect(view.SelectTarget(SkyBody.Jupiter) || view.SelectTarget(SkyBody.Moon), "a target followed");
         view.Close();
         Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
