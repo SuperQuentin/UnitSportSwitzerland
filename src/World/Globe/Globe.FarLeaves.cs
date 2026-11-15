@@ -133,7 +133,14 @@ public partial class Globe
         {
             double fps = Engine.GetFramesPerSecond();
             double target = Engine.MaxFps > 0 ? Engine.MaxFps : XR.XrSession.Active ? 72 : 60;
-            if (fps > 0) changed |= _farBand.Step(delta, 1000.0 / fps, 1000.0 / target);
+            if (fps > 0)
+            {
+                // the frame's work, not its vsync-paced wall time (#1987: at 60 Hz the band could never grow back)
+                var (gpu, renderCpu) = Core.PerfRecorder.RenderTimes(GetViewport());
+                double work = FarBandGovernor.WorkMs(1000.0 / fps, Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000,
+                    Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000, renderCpu, gpu);
+                changed |= _farBand.Step(delta, work, 1000.0 / target);
+            }
         }
         if (!changed && _farBandLogged == _farBand.Scale) return;
         _farBandLogged = _farBand.Scale;

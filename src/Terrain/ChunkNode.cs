@@ -235,7 +235,14 @@ public partial class ChunkNode : Node3D
     public void SetMesh(TerrainMeshBuilder.MeshData data, Material material) =>
         SetMesh(ToArrayMesh(data, material));
 
-    public void SetMesh(ArrayMesh mesh)
+    /// <summary>The terrain body's facet size (#1987): metres between the ground mesh's vertices.</summary>
+    private static readonly StringName FacetParam = "facet_m";
+
+    /// <summary>
+    /// The ground's mesh, <paramref name="facetM"/> metres between its vertices (its stride): the terrain body lights
+    /// facets smaller than a pixel by the smoothed normal, so the far ground does not alias into speckles (#1987).
+    /// </summary>
+    public void SetMesh(ArrayMesh mesh, float facetM = 1f)
     {
         if (_meshInstance == null)
         {
@@ -244,8 +251,15 @@ public partial class ChunkNode : Node3D
             _meshInstance = new MeshInstance3D { Name = "Ground", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Ground) };
             AddChild(_meshInstance);
         }
+        if (!Mathf.IsEqualApprox(_facetM, facetM))
+        {
+            _facetM = facetM;
+            _meshInstance.SetInstanceShaderParameter(FacetParam, facetM);
+        }
         Swap(_meshInstance, mesh);
     }
+
+    private float _facetM = 1f;
 
     public void SetRoads(ArrayMesh mesh)
     {

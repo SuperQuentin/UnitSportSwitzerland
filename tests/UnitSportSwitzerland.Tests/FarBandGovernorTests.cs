@@ -56,4 +56,23 @@ public class FarBandGovernorTests
         g.Pin(1);
         Assert.Equal(1, g.Scale, 6);
     }
+
+    [Fact]
+    public void Under_vsync_the_work_not_the_wall_time_lets_it_grow_back()
+    {
+        // #1987: a 60 Hz display holds every frame at 16.7 ms; 8 ms of work there is room to grow
+        double wall = 1000.0 / 60;
+        double work = FarBandGovernor.WorkMs(wall, processMs: 5, physicsMs: 1, renderCpuMs: 2, gpuMs: 7);
+        Assert.Equal(8, work, 6);
+        var g = new FarBandGovernor();
+        Run(g, 60, Budget * 2);
+        Assert.Equal(0, g.Scale, 6);
+        Run(g, 600, wall);
+        Assert.Equal(0, g.Scale, 6);
+        Run(g, 600, work);
+        Assert.Equal(1, g.Scale, 6);
+        // the GPU the longer, it counts; nothing measured, the wall time
+        Assert.Equal(20, FarBandGovernor.WorkMs(wall, 5, 1, 2, 20), 6);
+        Assert.Equal(wall, FarBandGovernor.WorkMs(wall, 5, 1, 0, 0), 6);
+    }
 }
