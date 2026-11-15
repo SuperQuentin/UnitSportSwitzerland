@@ -170,6 +170,10 @@ public partial class SkyBodies : Node3D
         _entries.TryGetValue(id, out var e) && e.Disc.GetViewport()?.GetCamera3D() is { } cam && e.ComputedAt > double.NegativeInfinity
             ? (e.WorldPosition - cam.GlobalPosition).Normalized() : null;
 
+    /// <summary>Where a body was last placed, in world space (a check reads it as drawn, after the frame's last placing).</summary>
+    internal Vector3? PlacedAt(SkyBody id) =>
+        _entries.TryGetValue(id, out var e) && e.ComputedAt > double.NegativeInfinity ? e.WorldPosition : null;
+
     /// <summary>The body whose place is nearest <paramref name="direction"/>, and how far off it is, degrees.</summary>
     public (SkyBody Id, float OffDeg)? Nearest(Vector3 direction)
     {
@@ -216,7 +220,6 @@ public partial class SkyBodies : Node3D
         foreach (var id in Bodies)
         {
             var e = _entries[id];
-            if (HiddenByGlobe.Contains(id)) { Hide(e); continue; }
             var parent = _entries.GetValueOrDefault(Ephemeris.ParentOf(id), e);
             bool zoomed = e.DiscPixels > 0.5f || parent.DiscPixels > 0.5f;
             // in space every frame from the frame tree, as the body's globe has it (#1998): the sky's reading counts its
@@ -252,6 +255,14 @@ public partial class SkyBodies : Node3D
             var (re, rp) = Ephemeris.Radii(id);
             e.Radius = (float)(re * scale);
             e.DiscPixels = (float)(re / e.Distance) * pixelsPerRadian;
+            // its globe draws it (#1998): the disc and the point step aside, but its place is still kept every frame. The
+            // telescope follows it through DirectionOf, and skipped here it froze where the globe took over: zoomed in on a
+            // planet from the Moon, the globe drifted off while the tube held still (#2028)
+            if (HiddenByGlobe.Contains(id))
+            {
+                Hide(e);
+                continue;
+            }
             var face = stars * e.Face;
 
             // the body itself, once it is more than about a pixel wide
