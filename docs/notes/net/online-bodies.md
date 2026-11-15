@@ -48,3 +48,7 @@ bots there on its own ground. Protocol 97 (on top of D2's 96).
   Moon region and ground, both clients see the bots stand. Unit: `OnlineBodiesTests`.
 - **Not yet**: the shuttle's HUD target cue lists no players; vehicles in a Moon region on the server fall at
   `Rideable.Gravity` (the anchor's, the Earth's on the server); bots' brains sense with the Earth's systems.
+  Object containers: nothing off the Earth sleeps (#2014); keyed by body later. The same gap, `LeafTileName.At` of a place
+  on another body read as an Earth leaf: `ObjectContainers.CellAt` (the entity's cell, hence the fix) and `PlayerTiles`
+  (a player on the Moon counts as near the Earth leaf its Moon ECEF falls in, so that Earth cell's sleepers may wake),
+  `ContainerRecord.Leaf` (only for records filed, none off the Earth now).
