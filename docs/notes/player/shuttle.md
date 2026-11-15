@@ -4,7 +4,7 @@
 # The space shuttle (#1492, #1430 C2)
 
 Plan: `docs/plans/ellipsoid-handover.md` section 9 ("A spaceplane"). The orbit under it: `player/orbits`.
-The model: `avatar/shuttle-model`. Walkable decks and zero-g aboard are a follow-up (#1493).
+The model: `avatar/shuttle-model`. Walking and floating aboard: `shuttle-aboard` (#1493).
 
 ## What it is
 
@@ -12,7 +12,8 @@ The model: `avatar/shuttle-model`. Walkable decks and zero-g aboard are a follow
   RideKind **205**, an `Airliner` on `AirlinerCatalog.Shuttle`: 100 t, 250 m² of double delta, three
   700 kN rockets (2.1 g), unlimited propellant, the real orbiter's brick of a glide (L/D ~5.4 clean, ~4 with
   the gear), stall ~150 kt, touchdown ~200 kt, tail strike 15.5°, pitch rate 0.17 rad/s. Seven seats
-  (commander flies, pilot, two behind them, three on the mid deck), not walkable, one hatch on the left.
+  (commander flies, pilot, two behind them, three on the mid deck), the crew module walkable (`shuttle-aboard`), one
+  hatch on the left.
 - **Parked at Geneva and at Zurich**: `StandUse.Space`, the next roomiest cargo stand after the AN-124 and
   the freighter (`AirportPlanner.Choose`); refilled like the others (`world/airports`). The fixture airport
   has a third cargo stand, C3, for it.
@@ -89,7 +90,7 @@ velocity there reads up to ~17x its speed). Piloted craft are client-authoritati
 
 ## Bots
 
-Passengers only (seats, as any vehicle's); the drive switch is `AirlinerCommand.Drive` on the aircraft, so a
+Passengers only (seats, as any vehicle's; floating aboard: `shuttle-aboard`); the drive switch is `AirlinerCommand.Drive` on the aircraft, so a
 bot pilot can come later. Row in `bots/bot-capability-map`.
 
 ## The scripted pilot (`ShuttlePilot`, #1497)

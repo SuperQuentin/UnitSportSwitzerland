@@ -103,9 +103,9 @@ public sealed partial class Airliner : Flyer
 
     /// <summary>
     /// The orbiter (#1492): the hull the fuselage's constant section short of the nose and the base, the
-    /// main wing's box (the glove is inside the hull), no deck yet (walkable decks are #1493), seven seats:
-    /// the commander (flies), the pilot, two specialists behind them, three on the mid deck; one door, the
-    /// side hatch on the left, which G works.
+    /// main wing's box (the glove is inside the hull), the crew module's two decks to walk and float in (#1493,
+    /// <see cref="ShuttleDeck"/>), seven seats: the commander (flies), the pilot, two specialists behind them,
+    /// three on the mid deck, each taken from where one stands; one door, the side hatch on the left, which G works.
     /// </summary>
     private static Shape ShuttleShape()
     {
@@ -118,18 +118,9 @@ public sealed partial class Airliner : Flyer
         float wingFront = ShuttleLayout.KinkZ, wingRear = ShuttleLayout.RootTrailingZ;
         var wing = (new Vector3(0, ShuttleLayout.BellyY + 0.6f, -(wingFront + wingRear) * 0.5f),
             new Vector3(ShuttleLayout.WingTipX * 2f, 1.0f, wingFront - wingRear));
-        var seats = new List<SeatAnchor>
-        {
-            new(0, AircraftMeshBuilder.Flip(ShuttleLayout.CommanderHip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY),
-            new(0, AircraftMeshBuilder.Flip(ShuttleLayout.PilotHip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY),
-        };
-        foreach (var hip in ShuttleLayout.SpecialistHips)
-            seats.Add(new SeatAnchor(0, AircraftMeshBuilder.Flip(hip), AirlinerRig.PilotRecline, ShuttleLayout.FlightDeckY));
-        foreach (var hip in ShuttleLayout.MidDeckHips)
-            seats.Add(new SeatAnchor(0, AircraftMeshBuilder.Flip(hip), AirlinerRig.PilotRecline, ShuttleLayout.MidDeckY));
-        return new Shape(fuselage, parked, wing, System.Array.Empty<VehicleDeck>(), seats.ToArray(),
+        return new Shape(fuselage, parked, wing, new[] { ShuttleDeck.Deck }, ShuttleDeck.Seats,
             AircraftMeshBuilder.Flip(new Vector3(ShuttleLayout.HalfWidth, 0f, ShuttleLayout.HatchZ)), ShuttleLayout.DoorCount,
-            1, "hatch", _ => null);
+            1, "hatch", ShuttleDeck.StandSpot);
     }
 
     private static Shape A320Shape()
@@ -228,6 +219,12 @@ public sealed partial class Airliner : Flyer
 
     /// <summary>The captain's seat flies; the first officer's, then the cabin row by row or the troop seats (#416, #420).</summary>
     public override SeatAnchor[] Seats => Body.Seats;
+
+    /// <summary>
+    /// The shuttle is got into from outside whatever the setting (#1493): its hatch is 3.45 m up the hull and a metre
+    /// round, no way to walk in. Its decks are walked once aboard (stood up from a seat).
+    /// </summary>
+    public override bool DrivenFromInside => Kind != RideKind.Shuttle && Walkable;
 
     /// <summary>Where one stands for seat <paramref name="i"/>: the aisle beside it, behind a pilot's seat.</summary>
     public override Vector3? StandSpot(int i) => Body.Stand(i);
@@ -381,6 +378,7 @@ public sealed partial class Airliner : Flyer
         if (Space is { } low && LanderStep(low, input, c.GearToggle, env, dt, ref m)) return FlightEvent.None;
         var ev = AirlinerFlight.Step(Spec, ref State, c, new AirlinerFlight.Env(env.OnFloor, env.Altitude), dt);
         AirHeat(env.Altitude);
+        MeasureFelt(UpHere(), Rideable.Gravity, dt);
         ToMotion(ref m);
         return ev == AirlinerFlight.Event.Crashed ? FlightEvent.Crashed : FlightEvent.None;
     }

@@ -726,6 +726,10 @@ src/Avatar/AirlinerRig   quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --cabincheck --world fixture --traffic 0
 src/Player/CabinCheck    quick  --cabincheck --world fixture --traffic 0
+src/Player/ShuttleAboardCheck quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.ZeroG quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Avatar/ShuttleDeck   quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --shuttleaboardcheck --world fixture --traffic 0
 src/Player/Airliner      quick  --cabincheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
 src/Avatar/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade

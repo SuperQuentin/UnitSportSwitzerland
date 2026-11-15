@@ -34,7 +34,8 @@
   yoke stand-in, `Sidestick: false`). `DriveSwitch` (a red-guarded toggle on the centre console, rig
   frame (−0.10, 5.80, −23.50); its `Toggle` child thrown forward when `Drive` is on) is the VR drive
   switch's grip point. `--cockpitcheck`: reach 0 mm, 12/15 rays out of the windscreen each pilot.
-- **Shape** (`Airliner.ShuttleShape`): no deck yet (walkable decks are #1493), seven seats (commander,
+- **Shape** (`Airliner.ShuttleShape`): the crew module's deck (`Avatar/ShuttleDeck`, #1493: the interdeck opening on the
+  right with its ladder, drawn by `ShuttleMeshBuilder.Ladder`, see the player note `shuttle-aboard`), seven seats (commander,
   pilot, two specialists, three on the mid deck), the hatch the one door G works ("hatch").
 - **Model viewer**: the parked one through the Rides set, plus "Space shuttle, main engines firing /
   re-entry / cruise drive / landing (speedbrake open)" and the parts (plume, drive glow, plasma).
