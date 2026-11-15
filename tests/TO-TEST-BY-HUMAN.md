@@ -1299,6 +1299,9 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 In a window on a real map, Cartoon, first and third person.
 
+- [ ] Third person, open the phone (Y twice): the camera comes over the right shoulder onto the phone in about a quarter of a second, the phone is big and face-on in the lower left, the horizon still above it; walk with WASD and the picture stays steady (no shake from the arms); fold (Esc) and the normal camera and the corner phone come back.
+- [ ] Open, hold the right button and look around: the shoulder camera turns with the mouse; the cursor works the phone's tiles again on release. Walk into a wall or a tree behind you: the camera does not go through it.
+- [ ] First person, open: the phone is still the small one in the lower right, no shoulder view.
 - [ ] Walk with the cursor on a real mouse: open the phone on the Map, WASD to walk, move the cursor over a row, click it; hold the right button and turn the view → the cursor hides while held and comes back at the same place on release; does the hold-to-look feel right (no jump of the view on press or release)?
 - [ ] On a real gamepad with the phone out (folded, then open): left stick walks, right stick looks, D-pad picks, A presses → A never jumps; hold B puts the phone away; the emote wheel does not open from D-pad ↑.
 - [ ] Press Y three times → folded (about 0.15 s), open on the app you used last, put away; a digit on the cover opens its app; Y typed in the Map search types. Does it feel quick, not abrupt? In a car, Y is still the cruise control.
