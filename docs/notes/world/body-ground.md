@@ -106,4 +106,4 @@ anchor's body has a near ground you can stand on. Plan: `docs/plans/planets.md` 
     `2026-11-28 --time 4` (9°), `2026-11-15 --time 22` (far side, starlight); `--at 26.13,3.63 --date 2026-11-15`
     (Hadley, earthshine); `--moonsites moonvillage:close` (`--date 2027-07-15 --time 13`, sun 30°: modules' shadows).
     Artemis Base, at the pole, stands in a grazing sun: its flat ground is near black by physics.
-
+- **The fly camera's top between bodies** (#2026): half the distance to the nearest surface a second up to `SpectatorSpeed.DeepCap` (10¹² m/s, ~3,300 c, past ~13 AU from every surface), no longer light: Earth → Neptune in 75 s at full speed (`--spectatorcrosscheck neptune|neptunehome`), the wheel's top notch being full speed (`SpectatorSpeed.Flown`: the cap wherever it is). The Mars trip above (860 s at light) now takes about a minute.
