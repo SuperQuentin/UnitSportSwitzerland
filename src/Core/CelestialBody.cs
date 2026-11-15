@@ -133,6 +133,18 @@ public sealed class CelestialBody
     public Ellipsoid Shape { get; }
 
     /// <summary>
+    /// Its mean radius, metres (#1848, docs/plans/planets.md section 4): the Earth's IUGG 6,371,008.8 m (what the fill's
+    /// domain and the courses measured arcs with as constants), another body's (2a + b) / 3 of its ellipsoid.
+    /// </summary>
+    public double MeanRadius => Id == BodyId.Earth ? EarthMeanRadius : (2 * Shape.A + Shape.B) / 3;
+
+    /// <summary>The Earth's mean radius (IUGG), metres.</summary>
+    public const double EarthMeanRadius = 6_371_008.8;
+
+    /// <summary>The Earth's leaf level (<see cref="LeafLevel"/> of the Earth; <c>LeafFrames.LeafLevel</c> is this).</summary>
+    public const int EarthLeafLevel = 14;
+
+    /// <summary>
     /// Its cube tiling (#1848): the Earth's (face 0 on Bern, twisted) or, for any other body, face 0 on its
     /// 0° N 0° E with its poles at the centres of faces 4 and 5.
     /// </summary>

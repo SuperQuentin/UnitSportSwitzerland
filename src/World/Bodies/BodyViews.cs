@@ -48,7 +48,7 @@ public partial class BodyViews : Node
         if (!TerrainPaths.GlobeOff)
             foreach (var body in CelestialBody.All)
             {
-                if (BodyData.For(body) is not { Count: > 0 } chain) continue;
+                if (BodySurface.Of(body.Id).Pyramid is not { Count: > 0 } chain) continue;
                 var g = new BodyGlobe(body, chain, chain.Describe(), _origin);
                 AddChild(g);
                 _globes.Add(g);

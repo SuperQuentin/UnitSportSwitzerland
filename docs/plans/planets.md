@@ -317,6 +317,14 @@ What the Earth does today, made per body. A body's terrain is one `BodySurface` 
 near or in view): its pyramid, its leaves, its fill, its datum and its sea. The client holds the anchor's body near
 and the others far; the server holds every body that has a player on or near it.
 
+**Built (#1848)**: `World/Bodies/BodySurface`, one per body, the Earth included: its pyramid chain (the Earth's
+`GlobeData.Earth`, another body's `BodyData`), its leaves (the Earth's; another body's ground is its near square,
+`BodyGround`), its profile kind, its datum (LHN95's geoid, or the ellipsoid), its sea and its leaf level
+(`CelestialBody.LeafLevel`: Earth 14, Moon 12, Mars 13; `LeafFrames.LeafLevel` is the Earth's), its point heights
+(`BodyGround.HeightsOf`). The globes and the Earth's `Globe.DataSource` read it. The mean radius the fill and the courses
+used as a constant is `CelestialBody.MeanRadius`; `Curvature`'s radius (the curve at Switzerland) and the globe's round
+cell estimate stay the Earth's own, as their meaning is.
+
 ### The chain, from best to fallback
 
 1. **Leaves from fine data** (`CubeKey` at the body's leaf level, `.cubl` sections): the Earth's regions (Switzerland,
@@ -381,6 +389,15 @@ new.
 | `MarsProfile` | Mars | craters (softened by wind), dune fields in low basins, layered mesas on steep ground | ochre dust, dark basalt sand, polar ice caps by latitude and season | rocks by a thermal-inertia guess |
 | `IcyProfile` | Europa, Ganymede, Titan's highlands | ridges and cracks (Europa), grooved terrain (Ganymede), few craters | ice, the mosaic's albedo | ice blocks |
 | `VolcanicProfile` | Io, Venus | lava plains, shields, flows | sulphur colours (Io), basalt (Venus) | |
+
+**Built (#1848, #1849, #1853, #1854)**: two kinds, not one interface. The Earth's profile is its fill, which makes
+whole leaves (heights, cover, water, trees, villages: `PyramidFill` on `GeneratedLeaves`); another body's is a height
+at a point (`Terrain/Bodies/BodyHeights`: its data, `CraterField` by the size-frequency law with `Freshness`, the Moon's
+`SurfaceStamps`, and its `SurfaceProfile` family: `Dunes` for Mars and Titan, `Ridges` for Europa, `Grooves` for
+Ganymede, `LavaFlows` for Io and Venus), with `BoulderField` round fresh craters. `BodySurface.Profile` says which.
+The table's names were the design's: `CrateredProfile` is `CraterField` + `BoulderField`, `IcyProfile` is `Ridges` /
+`Grooves`, `VolcanicProfile` is `LavaFlows`, `MarsProfile` is craters + `Dunes`; cover and scatter beyond boulders
+come with leaves on other bodies (not yet).
 
 The relief of a profile is band-limited to below the finest data level, so a leaf never contradicts its pyramid tile (the
 same rule the Earth's fill follows). Where a body has no heights at all, its albedo map gives a low relief (a coarse,

@@ -148,17 +148,25 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// </summary>
     private BodyHeights MakeHeights(BodyGlobe globe)
     {
-        var cube = globe.Body.Cube;
-        int level = globe.MaxLevel;
-        HeightsLevel = level;
-        var pyramid = globe.Pyramid;
+        HeightsLevel = globe.MaxLevel;
+        return HeightsOf(globe.Body, globe.Pyramid, globe.MaxLevel);
+    }
+
+    /// <summary>
+    /// A body's heights at a point, the same wherever they are asked (#1848, #1852: the clients' ground and the server's,
+    /// <c>ServerBodyGround</c>): the chain's <paramref name="level"/> (a missing tile from its ancestor; none at all: the
+    /// generated relief alone, on its datum), its craters, the Moon's sites and colonies, its relief family.
+    /// </summary>
+    public static BodyHeights HeightsOf(CelestialBody body, Terrain.Leaves.PyramidSource? pyramid, int level)
+    {
+        var cube = body.Cube;
         return new BodyHeights(cube, level,
-            key => pyramid.Heights(key) ?? FromAncestor(pyramid, key),
-            globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null,
+            key => pyramid == null ? null : pyramid.Heights(key) ?? FromAncestor(pyramid, key),
+            body.CraterDensity > 0 ? new CraterField((ulong)body.Id, cube.Shape.A, body.CraterDensity) : null,
             // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
-            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
+            body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
             // the body's relief family under its data (#1853, #1854): dunes, ridges, grooves, lava flows
-            SurfaceProfile.For(globe.Body.Id, cube.Shape.A));
+            SurfaceProfile.For(body.Id, cube.Shape.A));
     }
 
     /// <summary>A tile the chain lacks, from its deepest ancestor (65², bilinear); null where it has none at all.</summary>
