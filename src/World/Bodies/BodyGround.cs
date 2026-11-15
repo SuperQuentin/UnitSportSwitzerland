@@ -148,17 +148,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// </summary>
     private BodyHeights MakeHeights(BodyGlobe globe)
     {
-        var cube = globe.Body.Cube;
-        int level = globe.MaxLevel;
-        HeightsLevel = level;
-        var pyramid = globe.Pyramid;
-        return new BodyHeights(cube, level,
-            key => pyramid.Heights(key) ?? FromAncestor(pyramid, key),
-            globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null,
-            // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
-            globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
-            // the body's relief family under its data (#1853, #1854): dunes, ridges, grooves, lava flows
-            SurfaceProfile.For(globe.Body.Id, cube.Shape.A));
+        HeightsLevel = globe.MaxLevel;
+        return HeightsOf(globe.Body, globe.Pyramid, globe.MaxLevel);
     }
 
     /// <summary>A tile the chain lacks, from its deepest ancestor (65², bilinear); null where it has none at all.</summary>
@@ -171,6 +162,27 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         GlobeGround.FillFromAncestors(hs, n, key, bits, 1, pyramid.Heights);
         return System.Array.TrueForAll(hs, float.IsNaN) ? null : new CubeTile { Key = key, Bits = bits, Heights = hs };
     }
+
+    /// <summary>
+    /// A body's heights at a point, the same wherever they are asked (#1848, #1852: the clients' ground and the server's,
+    /// <see cref="ServerBodyGround"/>): the chain's <paramref name="level"/> (a missing tile from its ancestor; none at all: the
+    /// generated relief alone, on its datum), its craters, the Moon's sites and colonies, its relief family.
+    /// </summary>
+    public static BodyHeights HeightsOf(CelestialBody body, Terrain.Leaves.PyramidSource? pyramid, int level)
+    {
+        var cube = body.Cube;
+        return new BodyHeights(cube, level,
+            key => pyramid == null ? null : pyramid.Heights(key) ?? FromAncestor(pyramid, key),
+            body.CraterDensity > 0 ? new CraterField((ulong)body.Id, cube.Shape.A, body.CraterDensity) : null,
+            // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
+            body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
+            // the body's relief family under its data (#1853, #1854): dunes, ridges, grooves, lava flows
+            SurfaceProfile.For(body.Id, cube.Shape.A));
+    }
+
+    /// <summary>The near square's heights round <paramref name="near"/> (on a worker): what the walker stands on, eased into the medium ground.</summary>
+    public static (EnuFrame Frame, float[] Y) NearGrid(BodyHeights heights, EcefPos near) =>
+        heights.Grid(near, Cells, CellM, BlendM, n => heights.At(n, MediumCraterM), 0);
 
     /// <summary>This body's ground is the one everything asks while the anchor is on it.</summary>
     private void Claim()
@@ -262,7 +274,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         {
             var near = _near;
             near.HeightsVersion = _heightsVersion;
-            near.Task = Task.Run(() => Build(heights, globe, p, near, n => heights.At(n, MediumCraterM)));
+            near.Task = Task.Run(() => Build(heights, globe, p, near, null));
         }
         else if (_near.Node != null && Wants(_medium, p))
         {
@@ -321,11 +333,12 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     }
 
     /// <summary>A square round <paramref name="near"/>: the heights, the mesh and the colour under it; on a worker.</summary>
-    private static Square Build(BodyHeights heights, BodyGlobe globe, EcefPos near, Layer l, Func<EcefPos, double> edge)
+    private static Square Build(BodyHeights heights, BodyGlobe globe, EcefPos near, Layer l, Func<EcefPos, double>? edge)
     {
         int cells = l.Cells;
         float cellM = l.CellM;
-        var (frame, y) = heights.Grid(near, cells, cellM, l.BlendM, edge, l.SmallestCrater);
+        // the near square is the server's too (NearGrid): one call, so both stand on the same ground
+        var (frame, y) = edge == null ? NearGrid(heights, near) : heights.Grid(near, cells, cellM, l.BlendM, edge, l.SmallestCrater);
         int n = cells + 1;
         var pos = new Vector3[n * n];
         for (int j = 0; j < n; j++)

@@ -48,12 +48,17 @@ public sealed class ServerRegion
     /// The anchor of its frame as an Earth position: an ENU frame's origin (on the ellipsoid, #1513), or a flat frame's
     /// whole-km LV95 corner at altitude 0.
     /// </summary>
-    public GlobalPos Anchor => Origin.Frame.Axes is { } axes ? GlobalPos.FromEcef(axes.Origin) : GlobalPos.FromLv95(Origin.E, Origin.N, 0);
+    public GlobalPos Anchor => Origin.Frame.Axes is { } axes ? GlobalPos.On(axes.Body, axes.Origin) : GlobalPos.FromLv95(Origin.E, Origin.N, 0);
+
+    /// <summary>The body its frame is on (#1852): the Earth, or the Moon's (another body's) ground under a region of its own.</summary>
+    public BodyId Body => Origin.Body;
 
     /// <summary>Whether its frame is an ENU anchor frame (true north, true metres, its own up) rather than the flat LV95 one.</summary>
     public bool IsEnu => Origin.Frame.IsAnchor;
 
-    public override string ToString() => IsEnu
+    public override string ToString() => Body != BodyId.Earth
+        ? $"region {Id} ({Body} ENU at {Anchor.Geodetic.LatDeg:F4}N {Anchor.Geodetic.LonDeg:F4}E)"
+        : IsEnu
         ? $"region {Id} (ENU at {Anchor.Geodetic.LatDeg:F4}N {Anchor.Geodetic.LonDeg:F4}E, LV95 {Origin.E:F0}/{Origin.N:F0})"
         : $"region {Id} (LV95 {Origin.E:F0}/{Origin.N:F0})";
 }

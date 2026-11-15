@@ -55,6 +55,9 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
     `--shuttlemooncheck` from a 400 km Earth orbit to a closed lunar one;
   - PR #1960: the belly jets (landing and take-off on an airless body), the Moon round trip in `--shuttlemooncheck`;
   - this branch: the UFO's cruise drive and target hold (`--ufomooncheck`).
+- **C3b** (#1852), PR #1975, stacked on D2 (#1727, merges after it): the body on the wire (protocol 97), interest and
+  server regions per body, the server's Moon ground and gravity, `/goto` online, the far-marker list and the
+  telescope's labels (`tools/moonnetcheck.sh`, `docs/notes/net/online-bodies.md`).
 
 - **H7b** (#1848), #1998: one look per body from space (`World/Bodies/BodyLook`): the globe or the sky's sphere by the
   body's size on screen (1 % of the view's height, in space only; from inside the air always the sky's), the sky's
@@ -64,7 +67,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   one class.
 
 **Still to come**:
-- C3b online (after D2, #1727);
+- C3b merges after D2 (#1727); its follow-ups: the RPCs' places off the Earth, the shuttle's cue on players, vehicles'
+  gravity in a server region off the Earth;
 - Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);
 - the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,

@@ -74,10 +74,12 @@ public static class RegionPlanner
         {
             var a = bodies[i];
             double home = a.Region == Main ? HomeReleaseM : HomeM;
-            if (a.At.HorizontalDistanceSquaredTo(mainAnchor) <= home * home) Union(parent, i, n);
+            // home is on the main anchor's body (the Earth); a body on another one never links to it nor to anyone there (#1852)
+            if (a.At.Body == mainAnchor.Body && a.At.HorizontalDistanceSquaredTo(mainAnchor) <= home * home) Union(parent, i, n);
             for (int j = i + 1; j < n; j++)
             {
                 var b = bodies[j];
+                if (b.At.Body != a.At.Body) continue;
                 double link = a.Region == b.Region && a.Region != None ? SplitM : LinkM;
                 if (a.At.HorizontalDistanceSquaredTo(b.At) <= link * link) Union(parent, i, j);
             }
@@ -129,7 +131,7 @@ public static class RegionPlanner
         foreach (int i in members)
         {
             int r = bodies[i].Region;
-            if (r == None || claimed.Contains(r) || !anchors.ContainsKey(r)) continue;
+            if (r == None || claimed.Contains(r) || !anchors.TryGetValue(r, out var anchor) || anchor.Body != bodies[i].At.Body) continue;
             int c = counts[r] = counts.GetValueOrDefault(r) + 1;
             if (c > bestCount || c == bestCount && r < best) { best = r; bestCount = c; }
         }
@@ -151,15 +153,25 @@ public static class RegionPlanner
     /// </summary>
     public static GlobalPos Centre(IReadOnlyList<Body> bodies, List<int> members, Anchoring anchoring = Anchoring.Lv95Km)
     {
-        if (anchoring == Anchoring.Earth)
+        // on another body (#1852): the mean of their body-fixed positions on that body's ellipsoid, whatever the anchoring
+        var on = bodies[members[0]].At.Body;
+        if (anchoring == Anchoring.Earth || on != BodyId.Earth)
         {
             double x = 0, y = 0, z = 0;
             foreach (int i in members) { var p = bodies[i].At.Ecef; x += p.X; y += p.Y; z += p.Z; }
-            return EarthMean(new Terrain.Format.EcefPos(x / members.Count, y / members.Count, z / members.Count));
+            return BodyMean(on, new Terrain.Format.EcefPos(x / members.Count, y / members.Count, z / members.Count));
         }
         double e = 0, nn = 0;
         foreach (int i in members) { var l = bodies[i].At.Lv95; e += l.E; nn += l.N; }   // the anchor is an LV95 km (a flat frame)
         return GlobalPos.FromLv95(Math.Round(e / members.Count / 1000) * 1000, Math.Round(nn / members.Count / 1000) * 1000, 0);
+    }
+
+    /// <summary>A body-fixed point (a mean, below the ground) put on that body's ellipsoid along its normal: height 0 there.</summary>
+    public static GlobalPos BodyMean(BodyId body, Terrain.Format.EcefPos mean)
+    {
+        if (body == BodyId.Earth) return EarthMean(mean);
+        var shape = CelestialBody.Of(body).Shape;
+        return GlobalPos.On(body, shape.ToEcef(shape.ToGeodetic(mean) with { H = 0 }));
     }
 
     /// <summary>An ECEF point (a mean, below the ground) put on the ellipsoid along its normal: height 0 there.</summary>

@@ -1,5 +1,7 @@
 using System;
 using System.Globalization;
+using UnitSport.Core;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Adventure.Rewards;
 
@@ -61,12 +63,42 @@ public static class RewardRules
     /// <summary>Claims a peer may make each second (the plan's rate limit).</summary>
     public const int ClaimsPerSecond = 4;
 
+    /// <summary>The cube level of a spot's Earth cell (~2.4 m): two 10 m placement cells never share one.</summary>
+    public const int SpotLevel = 22;
+
     /// <summary>
-    /// The id of a spot anchored to the world: the kind's prefix and its 10 m cell's LV95 corner
-    /// (<c>ch:2600150_1200340</c>), so it survives a reshuffle of anything else on the tile.
+    /// The id of a spot anchored to the world: the kind's prefix and an Earth cell (#1726, G2 D2), the level-22 cube cell
+    /// (<see cref="SpotLevel"/>) under the centre of the spot's 10 m placement cell at height 0
+    /// (<c>ch:F4_L22_1834512_3021887</c>), so it survives a reshuffle of anything else on the tile and names no LV95
+    /// place. The placement cell is the placer's (an LV95 source, the plan's section 3); before D2 the id was its corner
+    /// (<c>ch:2600150_1200340</c>), which <see cref="ToEarthId"/> converts to exactly this.
     /// </summary>
     public static string CellId(string prefix, double e, double n) =>
-        string.Create(CultureInfo.InvariantCulture, $"{prefix}:{(long)Math.Floor(e / 10) * 10}_{(long)Math.Floor(n / 10) * 10}");
+        $"{prefix}:{SpotCell(Math.Floor(e / 10) * 10, Math.Floor(n / 10) * 10).FileStem}";
+
+    /// <summary>The Earth cell of the 10 m placement cell whose south-west corner is LV95 <paramref name="e0"/> / <paramref name="n0"/>.</summary>
+    private static CubeKey SpotCell(double e0, double n0) => CubeKey.FromEcef(GlobalPos.FromLv95(e0 + 5, n0 + 5, 0).Ecef, SpotLevel);
+
+    /// <summary>
+    /// A spot id saved before D2 (#1726): a cell id's LV95 corner (<c>ch:2600150_1200340</c>, a Luxurious chest's
+    /// <c>#edition</c> kept) as its Earth cell id (<see cref="CellId"/>); any other id (a POI chest, a cairn, one already
+    /// converted) comes back as it is, so converting twice changes nothing.
+    /// </summary>
+    public static string ToEarthId(string id)
+    {
+        int colon = id.IndexOf(':');
+        if (colon != 2) return id;
+        string prefix = id[..2];
+        if (prefix is not (ChestPrefix or EdelweissPrefix)) return id;
+        int hash = id.LastIndexOf('#');
+        string rest = hash > colon ? id[(colon + 1)..hash] : id[(colon + 1)..], tail = hash > colon ? id[hash..] : "";
+        int us = rest.IndexOf('_');
+        if (us <= 0 || rest.IndexOf('_', us + 1) >= 0
+            || !long.TryParse(rest[..us], NumberStyles.Integer, CultureInfo.InvariantCulture, out long e)
+            || !long.TryParse(rest[(us + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long n))
+            return id;
+        return $"{prefix}:{SpotCell(e, n).FileStem}{tail}";
+    }
 
     /// <summary>The id of a chest standing at a POI: <c>ch:&lt;poiId&gt;:&lt;slot&gt;</c> (a re-run of the preprocessor that moves the POI keeps it).</summary>
     public static string PoiChestId(string poiId, int slot) => string.Create(CultureInfo.InvariantCulture, $"ch:{poiId}:{slot}");
@@ -99,6 +131,18 @@ public static class RewardRules
         if (colon != 2 || id.Length < 6) return false;
         string prefix = id[..2], rest = id[3..];
         if (prefix is not (ChestPrefix or EdelweissPrefix or CairnPrefix)) return false;
+        // an Earth cell id (#1726): the tile under the cell's centre, which lies within 2 m of the placement cell's
+        if (rest.StartsWith('F') && rest.IndexOf(':') < 0)
+        {
+            try
+            {
+                var key = CubeKey.Parse(rest);
+                var (ce, cn, _) = GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(key.Centre with { H = 0 })).Lv95;
+                tile = ((int)Math.Floor(ce / 1000), (int)Math.Floor(cn / 1000));
+                return true;
+            }
+            catch (Exception ex) when (ex is FormatException or OverflowException) { return false; }
+        }
         int us = rest.IndexOf('_');
         if (us > 0 && rest.IndexOf(':') < 0
             && long.TryParse(rest[..us], NumberStyles.Integer, CultureInfo.InvariantCulture, out long e)

@@ -87,7 +87,8 @@ public partial class LootService : Node
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.SavePath("user://loot"));
+        // under earth (#1726, G2 D2) at user://earth/loot, by leaf and BuildingId: the flat masks are dropped (they reset each restock epoch)
+        _storeDir = ProjectSettings.GlobalizePath(Core.WorldChoice.StorePath("user://loot"));
         // "--lootepoch N" pretends N restock periods have passed, to test a refill
         if (long.TryParse(CmdArgs.Value("--lootepoch")?.TrimStart('+'), out long offset))
             LootTables.EpochOffset = offset;
@@ -960,7 +961,7 @@ public partial class LootService : Node
         if (!BuildingKey.TryParse(key, out var k)) return;
         long epoch = LootTables.Epoch(key, Now);
         var open = new List<int>();
-        if (TileFor(k).Buildings.TryGetValue(k.Index.ToString(), out var b))
+        if (TileFor(k).Buildings.TryGetValue(BuildingName(k), out var b))
             foreach (var (fi, e) in b)
                 if (Current(e, epoch) && (e[1] & UnlockedBit) != 0 && int.TryParse(fi, out int idx))
                     open.Add(idx);
@@ -1112,7 +1113,7 @@ public partial class LootService : Node
             return _matchMasks.TryGetValue((key, furniture), out var m) && m.Epoch == epoch ? m.Mask : 0;
         if (!BuildingKey.TryParse(key, out var k)) return 0;
         var tile = TileFor(k);
-        return tile.Buildings.TryGetValue(k.Index.ToString(), out var b)
+        return tile.Buildings.TryGetValue(BuildingName(k), out var b)
             && b.TryGetValue(furniture.ToString(), out var e) && Current(e, epoch)
             ? (int)e[1] : 0;
     }
@@ -1126,17 +1127,21 @@ public partial class LootService : Node
         }
         if (!BuildingKey.TryParse(key, out var k)) return;
         var tile = TileFor(k);
-        if (!tile.Buildings.TryGetValue(k.Index.ToString(), out var b))
-            tile.Buildings[k.Index.ToString()] = b = new();
+        if (!tile.Buildings.TryGetValue(BuildingName(k), out var b))
+            tile.Buildings[BuildingName(k)] = b = new();
         b[furniture.ToString()] = new[] { epoch, mask, InteriorLayout.CurrentVersion };
         Save(k, tile);
     }
 
-    private string PathFor(BuildingKey k) => Path.Combine(_storeDir, $"{k.TileE}_{k.TileN}.json");
+    private string PathFor(BuildingKey k) => Path.Combine(_storeDir, $"{Terrain.Leaves.LeafTileName.FileStem(k.Tile)}.json");
+
+    /// <summary>A building's entry in its file: its index in an LV95 tile, its Earth identity on a leaf (#1726, <see cref="Core.EarthStores.Building"/>).</summary>
+    private static string BuildingName(BuildingKey k) =>
+        Terrain.Leaves.LeafTileName.TryLeaf(k.Tile, out _) ? Core.EarthStores.Building(k.ToString()) : k.Index.ToString();
 
     private TileState TileFor(BuildingKey k)
     {
-        string name = $"{k.TileE}_{k.TileN}";
+        string name = Terrain.Leaves.LeafTileName.FileStem(k.Tile);
         if (_tiles.TryGetValue(name, out var t)) return t;
         t = new TileState();
         try

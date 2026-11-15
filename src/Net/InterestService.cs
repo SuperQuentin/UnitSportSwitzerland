@@ -56,6 +56,12 @@ public partial class InterestService : Node
     /// </summary>
     public Func<GlobalPos, GlobalPos, bool>? Sight { get; set; }
 
+    /// <summary>
+    /// Server (#1852): the ground's height over its reference surface under a place on another body (the server's own
+    /// ground of that body, <c>ServerBodies</c>), for a target's height above ground there; null where unknown.
+    /// </summary>
+    public Func<GlobalPos, double?>? BodyGround { get; set; }
+
     /// <summary>Server: true when two peers race each other; always relevant then.</summary>
     public Func<long, long, bool>? Together { get; set; }
 
@@ -87,6 +93,9 @@ public partial class InterestService : Node
     private readonly List<RideKind> _ride = new();
     /// <summary>Per round, parallel to <see cref="_targets"/>: how far each one's place may be off, m (a fast body's way in <see cref="SlackSeconds"/>).</summary>
     private readonly List<float> _slack = new();
+    // the pair a viewer off the Earth tests (#1852): the sight round its body's sphere reads them
+    private GlobalPos _sightFrom, _sightTo;
+    private Func<Vector3, Vector3, bool>? _bodySight;
 
     /// <summary>
     /// How much of a fast body's travel the interest test forgives, s: what the server knows of two saucers flying 16 m
@@ -194,9 +203,11 @@ public partial class InterestService : Node
                 _byId[id] = p;
                 var to = Where(p);
                 _at.Add(to);
-                _lv95.Add(to.Lv95);
-                // height above ground does not depend on the viewer's frame
-                _agl.Add(Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f);
+                bool earth = to.Body == BodyId.Earth;
+                _lv95.Add(earth ? to.Lv95 : default);
+                // height above ground does not depend on the viewer's frame; on another body over that body's ground (#1852)
+                _agl.Add(earth ? Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f
+                    : BodyGround?.Invoke(to) is { } bg ? (float)Math.Max(to.Geodetic.H + 1 - bg, 0) : 0f);
                 _ride.Add(p.Ride);
                 // a fast body is known only to a latency: the way it flies in a second (#1869)
                 float speed = p.NetVel.Length();
@@ -213,10 +224,12 @@ public partial class InterestService : Node
             var view = _views.TryGetValue(viewer, out var v) ? v : Interest.View.Default;
             // someone inside a building is 3 km under it: seen, and seeing, from where the building is
             var from = _lv95[_viewerIndex[vi]];
+            var fromAt = _at[_viewerIndex[vi]];
+            bool offEarth = fromAt.Body != BodyId.Earth;
             // the rules work in floats: in a frame at this viewer, whatever the server's origin is
             _frameE = Math.Round(from.E / 1000) * 1000;
             _frameN = Math.Round(from.N / 1000) * 1000;
-            var eye = Local(from) + Vector3.Up * 1.7f;
+            var eye = offEarth ? Vector3.Up * 1.7f : Local(from) + Vector3.Up * 1.7f;
             if (Sight is { } sight && _sight == null)
                 // --frame earth (#1513): the ray between the two Earth positions, the curve in its geometry
                 _sight = (a, b) => sight(GlobalPos.FromLv95(_frameE + a.X, _frameN - a.Z, a.Y), GlobalPos.FromLv95(_frameE + b.X, _frameN - b.Z, b.Y));
@@ -233,10 +246,24 @@ public partial class InterestService : Node
                 if (target == viewer) continue;
                 bool was = set.Contains(target);
                 if (first) _changed.Add(target);
-                bool withheld = Withheld?.Invoke(viewer, target) == true;
+                // on another body (#1852): never in each other's interest (the far-marker list has them)
+                bool apart = _at[ti].Body != fromAt.Body;
+                bool withheld = apart || Withheld?.Invoke(viewer, target) == true;
                 bool together = !withheld && Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
-                bool now_ = !withheld && Interest.Relevant(eye, Local(_lv95[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                bool now_;
+                if (withheld) now_ = false;
+                else if (offEarth)
+                {
+                    // on one other body: in the viewer's own east-up-south there, the body's sphere the only occluder
+                    var (e, n, u) = fromAt.OffsetTo(_at[ti]);
+                    _sightFrom = fromAt;
+                    _sightTo = _at[ti];
+                    _bodySight ??= (_, _) => BodySight.Clear(_sightFrom, _sightTo);
+                    now_ = Interest.Relevant(eye, new Vector3((float)e, (float)u, (float)-n) + Vector3.Up, _ride[ti], _agl[ti], view, was,
+                        together, _bodySight, _slack[ti] + _slack[_viewerIndex[vi]]);
+                }
+                else now_ = Interest.Relevant(eye, Local(_lv95[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
                     together, Ground == null && Sight == null ? null : _sight, _slack[ti] + _slack[_viewerIndex[vi]]);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
@@ -245,7 +272,7 @@ public partial class InterestService : Node
                 _flipped[(viewer, target)] = now;
                 if (_ride[ti] == RideKind.Ufo || _ride[ti] == RideKind.Shuttle)
                     GD.Print(FormattableString.Invariant(
-                        $"[interest] {viewer} {(now_ ? "sees" : "loses")} {target} ({_ride[ti]}) at {_at[_viewerIndex[vi]].DistanceTo(_at[ti]):F0} m"));
+                        $"[interest] {viewer} {(now_ ? "sees" : "loses")} {target} ({_ride[ti]}) at {Apart(_at[_viewerIndex[vi]], _at[ti]):F0} m"));
                 if (now_) { set.Add(target); _leaving.Remove((viewer, target)); }
                 else { set.Remove(target); _leaving[(viewer, target)] = now + DespawnDelay; }
                 _changed.Add(target);
@@ -274,7 +301,7 @@ public partial class InterestService : Node
                 if (viewer == target || !_sets.TryGetValue(viewer, out var set) || !set.Contains(target)) continue;
                 float radius = lastNear != null && lastNear.Contains(viewer) ? NearRadius * 1.2f : NearRadius;
                 bool near = _together.Contains((viewer, target))
-                    || _at[_viewerIndex[vi]].DistanceTo(at) < radius
+                    || Apart(_at[_viewerIndex[vi]], at) < radius
                     // an orbit (#1430 H5): 1.3 km between two 6 Hz states is no picture
                     || targetNode.NetVel.LengthSquared() > RemoteInterpolator.FastSpeed * RemoteInterpolator.FastSpeed;
                 (near ? _near : _far).Add(viewer);
@@ -303,7 +330,10 @@ public partial class InterestService : Node
     /// Where a player is for interest, from what it published: up in the world, even inside a
     /// building (<see cref="Interiors.InteriorManager.SurfacePoint(GlobalPos, Func{GlobalPos, float?})"/>).
     /// </summary>
-    private GlobalPos Where(FootPlayer player) => Interiors.InteriorManager.SurfacePoint(Now(player), Ground);
+    private GlobalPos Where(FootPlayer player) => Now(player) is { Body: BodyId.Earth } at ? Interiors.InteriorManager.SurfacePoint(at, Ground) : Now(player);
+
+    /// <summary>The chord between two places, or infinity on two bodies (#1852: a pair never compared in one frame).</summary>
+    private static double Apart(GlobalPos a, GlobalPos b) => a.Body == b.Body ? a.DistanceTo(b) : double.PositiveInfinity;
 
     /// <summary>
     /// Where a body is now, from its last state: a body faster than <see cref="RemoteInterpolator.FastSpeed"/> carried

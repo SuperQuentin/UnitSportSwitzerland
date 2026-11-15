@@ -46,3 +46,4 @@ Since protocol 93 (#1503, G2 A2 of `docs/plans/global-tiling-g2.md`). Before it:
   crane's slew), zone offsets in metres from an area centre.
 - A new networked feature: ECEF, ENU and true north in its payload from the start; a new synchronized body gets a
   `NetPlace`. Any change to what goes on the wire bumps `Handshake.Protocol`. Unit tests: `WireFrameTests`.
+- **The body** (#1852, protocol 97, `net/online-bodies`): `NetBody` before the three doubles on `FootPlayer` and `NetPlace`, `<key>_b` in `GlobalPos.Write` off the Earth; the RPCs' `double x, y, z` are still the Earth's.
