@@ -54,6 +54,21 @@ public partial class PhoneProbe : Node
         if (Rendered && !Platform.IsTouch) GetWindow().Size = new Vector2I(1280, 720);
         await Wait(1.0);
         Shot("phone_0_before.png");
+        if (CmdArgs.Has("--shoulderchecks"))
+        {
+            await FramingChecks(me, phone);
+            await ShoulderChecks(me, phone);
+            Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
+            GetTree().Quit(_failed == 0 ? 0 : 1);
+            return;
+        }
+        if (CmdArgs.Has("--shouldershots"))
+        {
+            await ShoulderShots(me, phone);
+            Log("RESULT: ok");
+            GetTree().Quit(0);
+            return;
+        }
 
         // the camera's own zoom (#1149, #1369): the plain wheel zooms whatever is held (Shift too: it is sprint),
         // in to the face, the hotbar left as it was; - back out
@@ -119,8 +134,8 @@ public partial class PhoneProbe : Node
         var atWindow = WindowAt(me, new Vector2(0.5f, 0.5f), false);
         Input.ParseInputEvent(new InputEventMouseMotion { Position = atWindow, GlobalPosition = atWindow });
         await Wait(0.4);
-        Check(Platform.IsTouch || phone.CursorUv is { } cu && cu.DistanceTo(new Vector2(0.5f, 0.5f)) < 0.03f && me.PhonePointTip == null,
-            $"the cursor on the screen's middle: the ray lands there, no finger on the viewmodel (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
+        Check(Platform.IsTouch || phone.CursorUv is { } cu && cu.DistanceTo(new Vector2(0.5f, 0.5f)) < 0.03f && (me.PhonePointTip == null) == !me.ZoomsView,
+            $"the cursor on the screen's middle: the ray lands there; a finger on the in-world phone in third person, none on the viewmodel in first (cursor at {phone.CursorUv?.ToString() ?? "none"}, mouse {mid})");
         Log($"finger: tip {me.PhonePointTip}, built {me.DrawnPoint}, body {me.GlobalPosition}, phone {me.PhoneModel?.GlobalPosition}");
         Shot("phone_5_open.png");
         Save(phone.Screens.Inner, "phone_5_open_screen.png");
@@ -281,6 +296,7 @@ public partial class PhoneProbe : Node
 
         await FoldedFirstChecks(me, phone);
         await FramingChecks(me, phone);
+        await ShoulderChecks(me, phone);
         await PhoneKeyChecks(me, phone);
         await WalkingChecks(me, phone);
         await FingerChecks(me, phone);
@@ -499,23 +515,27 @@ public partial class PhoneProbe : Node
         await Wait(1.5);
         float moved = cam.GlobalTransform.Origin.DistanceTo(before.Origin);
         float turned = cam.GlobalTransform.Basis.GetRotationQuaternion().AngleTo(before.Basis.GetRotationQuaternion());
-        Check(moved < 0.02f && turned < 0.01f && Mathf.Abs(cam.Fov - fovBefore) < 0.01f,
-            $"{name}: the gameplay camera is the same with the phone open ({moved:F3} m, {Mathf.RadToDeg(turned):F2} degrees, fov {fovBefore:F1} to {cam.Fov:F1})");
+        // third person: the camera comes over the shoulder onto the in-world phone (ShoulderChecks); first person keeps the corner phone and the same camera
+        bool shoulder = me.ZoomsView;
+        if (!shoulder)
+            Check(moved < 0.02f && turned < 0.01f && Mathf.Abs(cam.Fov - fovBefore) < 0.01f,
+                $"{name}: the gameplay camera is the same with the phone open ({moved:F3} m, {Mathf.RadToDeg(turned):F2} degrees, fov {fovBefore:F1} to {cam.Fov:F1})");
         var view = GetViewport().GetVisibleRect().Size;
         var home = ProjectScreen(me, cover: false);
         Log($"{name} open Home: width {home.W:P0}, left {home.Left:P0}, right {home.Right:P0}, top {home.Top:P0}, bottom {home.Bottom:P0}");
         bool centreClear = !(home.Left <= 0.5f && home.Right >= 0.5f && home.Top <= 0.5f && home.Bottom >= 0.5f);
-        Check(home.Inside && centreClear && (strict ? home.W is > 0.38f and < 0.47f && home.Left > 0.5f : home.W is > 0.30f and < 0.47f),
+        if (shoulder) Check(home.Inside && centreClear && home.W * view.X >= 300f, $"{name}: open over the shoulder the screen is wholly in view, {home.W * view.X:F0} px wide ({home.W:P0}), the view's centre clear");
+        else Check(home.Inside && centreClear && (strict ? home.W is > 0.38f and < 0.47f && home.Left > 0.5f : home.W is > 0.30f and < 0.47f),
             $"{name}: open the screen is wholly in view at {home.W:P0} of the width, from {home.Left:P0}, the view's centre clear");
         var hud = new List<PromptBar>();
         FindAll(GetTree().Root, hud);
-        Check(hud.Count == 0 || hud.All(b => b.GetChildCount() == 0 || b.GetChild(0) is not Control c || !c.IsVisibleInTree()), "open, the corner key list is hidden");
+        if (!shoulder) Check(hud.Count == 0 || hud.All(b => b.GetChildCount() == 0 || b.GetChild(0) is not Control c || !c.IsVisibleInTree()), "open, the corner key list is hidden");
         await RayCheck(me, phone, false, name + " open");
-        Shot("phone_1825/framing_open_home_" + name.Replace(':', 'x') + ".png");
+        if (!shoulder) Shot("phone_1825/framing_open_home_" + name.Replace(':', 'x') + ".png");
         phone.Open(PhoneScreens.Page.Map);
         await Wait(0.8);
         var map = ProjectScreen(me, cover: false);
-        Check(map.Inside && map.Left > 0.4f, $"{name}: open on the Map the screen is wholly in view ({map.W:P0}, from {map.Left:P0})");
+        Check(map.Inside && (shoulder || map.Left > 0.4f), $"{name}: open on the Map the screen is wholly in view ({map.W:P0}, from {map.Left:P0})");
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
         // a click through real window coordinates on the focused tile opens its app
