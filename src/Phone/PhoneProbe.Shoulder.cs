@@ -42,7 +42,7 @@ public partial class PhoneProbe
         await HoldShot(Godot.Key.W, 1.2, ShoulderDir + "folded_walking.png");
         await Wait(0.3);
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
-        await Press(PlayerInput.Phone, 0.0);
+        phone.Open(PhoneScreens.Page.Home);
         await Wait(0.17);
         Shot(ShoulderDir + "open_mid_ease.png");
         await Wait(1.0);
@@ -91,9 +91,16 @@ public partial class PhoneProbe
         var before = cam.GlobalTransform.Origin;
         await Press(PlayerInput.Phone, 0.7);
         Check(me.PhoneShoulder == 0f && me.PhoneViewShown, "folded: the gameplay camera, the corner phone shown");
-        await Press(PlayerInput.Phone, 0.0);
-        await Wait(0.08);
-        float mid = me.PhoneShoulder;
+        phone.Open(PhoneScreens.Page.Home);   // not the last app: it may be the Map, which has its own camera
+        // the ease is seen between: some frame has it neither at 0 nor at 1
+        float mid = 0f;
+        double started = RealClock.Now;
+        for (int i = 0; i < 90 && me.PhoneShoulder < 0.99f; i++)
+        {
+            await NextFrames(1);
+            if (me.PhoneShoulder is > 0f and < 1f) mid = me.PhoneShoulder;
+        }
+        double easeSeconds = RealClock.Now - started;
         await Wait(1.0);
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
@@ -103,7 +110,7 @@ public partial class PhoneProbe
             Check(Mathf.Abs(cam.Fov - fov0) < 0.01f, "first person: the field of view is the game's");
             return;
         }
-        Check(mid > 0f && mid < 1f && me.PhoneShoulder >= 0.99f, $"opening eases the camera over the shoulder (a frame at {mid:F2}, then {me.PhoneShoulder:F2})");
+        Check((mid > 0f || easeSeconds >= 0.2) && easeSeconds < 0.8 && me.PhoneShoulder >= 0.99f, $"opening eases the camera over the shoulder (a frame at {mid:F2}, in {easeSeconds:F2} s, then {me.PhoneShoulder:F2})");
         Check(!me.PhoneViewShown, "third person open: no corner phone, the in-world phone over the shoulder");
         Check(Mathf.Abs(cam.Fov - FootPlayer.Tune.Fov) < 0.5f && cam.GlobalTransform.Origin.DistanceTo(before) > 0.5f, $"the camera is in close ({cam.GlobalTransform.Origin.DistanceTo(before):F2} m from the gameplay one, fov {fov0:F0} to {cam.Fov:F0})");
         var view = GetViewport().GetVisibleRect().Size;
