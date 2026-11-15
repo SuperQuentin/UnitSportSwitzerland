@@ -79,3 +79,6 @@ The shuttle itself: `player/shuttle`. The scripted pilot under it: `ShuttlePilot
 - `--shuttlebotcheck moon --frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none`:
   `/bot shuttle moon orbit`. The trip, down on a pad (within its radius), back to an Earth orbit near 100 km.
 - `shots` (windowed): `test_output/shuttlebot/{earth,moon}-<stage>.png`.
+- `tools/shuttlebotnetcheck.sh` (full tier; a server and one client on the fixture airport, `SPEED=4`): the client asks
+  `/bot shuttle 200` and sees the server's bot take the shuttle, take off, climb into Space and switch the drive on;
+  today's main stops there online.
