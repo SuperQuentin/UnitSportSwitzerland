@@ -27,6 +27,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>The ground this world stands on: the earth world's leaves, or the flat world's tiles.</summary>
     private IWorldGround? Ground => _earth?.Ground ?? _chunks?.Ground;
+
+    /// <summary>The ground the world asks, for the checks (<c>--bodytravelcheck</c>).</summary>
+    internal IWorldGround? GroundForChecks => Ground;
     private Audio.Ambience? _ambience;
     private SpectatorCamera? _spectator;
     private FootPlayer? _player;
