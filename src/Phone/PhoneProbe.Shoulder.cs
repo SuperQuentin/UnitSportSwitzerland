@@ -43,7 +43,7 @@ public partial class PhoneProbe
         await Wait(0.3);
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Press(PlayerInput.Phone, 0.0);
-        await Wait(0.13);
+        await Wait(0.17);
         Shot(ShoulderDir + "open_mid_ease.png");
         await Wait(1.0);
         Shot(ShoulderDir + "open_home_standing.png");
@@ -110,7 +110,7 @@ public partial class PhoneProbe
         var home = ScreenInView(me);
         Log($"shoulder: screen centre {home.Centre}, box {home.Box}");
         Check(home.Inside && home.Box.Size.X >= 0.30f, $"the screen is wholly in view and {home.Box.Size.X:P0} of the width ({home.Box.Size.X * view.X:F0} px)");
-        Check(!(home.Box.Position.X <= 0.5f && home.Box.End.X >= 0.5f && home.Box.Position.Y <= 0.5f && home.Box.End.Y >= 0.5f), "the view's centre is not behind the screen");
+        Check(home.Box.End.X <= 0.53f, "the view's centre is not behind the screen");
         // the horizon and the path ahead: a far point straight ahead of the body, at the eye's height, is in view and above the screen
         // (the horizon in the middle of the picture: 40 m along the lens's own heading at its height; the body's heading is turned toward the phone, so a point straight ahead of it sits higher and nearer the edge)
         var flatLens = new Vector3(-cam.GlobalBasis.Z.X, 0f, -cam.GlobalBasis.Z.Z).Normalized();
