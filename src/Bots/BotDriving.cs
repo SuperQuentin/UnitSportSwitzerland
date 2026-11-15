@@ -29,7 +29,7 @@ public sealed class BotDrive
     public Vector3? Direct;
     /// <summary>The top speed of a drive across, m/s.</summary>
     public float DirectSpeed = 4f;
-    /// <summary>A drive across's nearest yet to its point, and when: no nearer in 10 s and it gives up (circling it).</summary>
+    /// <summary>A drive across's nearest yet to its point, and when: no nearer in 20 s and it gives up (circling it).</summary>
     public float DirectBest = float.MaxValue;
     public double DirectBestAt;
 }
@@ -195,10 +195,11 @@ public static class BotDriving
             drive.DirectBest = dist;
             drive.DirectBestAt = now;
         }
-        else if (now - drive.DirectBestAt > 10)
+        // 20 s: a 6 t rover facing away turns round before it gains a metre (10 s gave up mid-turn)
+        else if (now - drive.DirectBestAt > 20)
         {
             drive.Direct = null;
-            return Stop(drive, Progress.Failed, $"no nearer in 10 s ({dist:F0} m off)");
+            return Stop(drive, Progress.Failed, $"no nearer in 20 s ({dist:F0} m off)");
         }
         if (body.RideSpeed > StuckSpeed) drive.StillSince = now;
         else if (now - drive.StillSince > StuckSeconds)

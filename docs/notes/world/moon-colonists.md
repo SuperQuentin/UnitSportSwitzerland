@@ -35,6 +35,14 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
     Moon, 7 m short of the spot; round the colony on a ring 14 m past its modules when the straight line crosses it,
     `ColonistBrain.Ring`: straight across, the rover met the modules), `GetOut`; on the way home driven back to its slot. A parked rover keeps its name
     (`VehicleManager.Kept`), so the depot does not park a second one;
+  - **the pressurised rover** (decision 5: bots drive both rovers; #1938 audit): every other colonist with an EVA spot
+    120 m or more from the hangar's door (or `--colonisteva cabin`) goes by the hangar's cabin rover: to the wait before
+    the hangar's inner door (`ToDoor`), the hangar cycled in, its landing, `GetIn` (the helmet off in the cabin,
+    `MoonSuit`), to a point 3 m before the rolling door, the hangar cycled out (the door rolls up), out down the lane
+    to a point past the open rovers parked either side of the road (`LaneFar`: a ring drive back cut across them and
+    stuck), round the colony to the spot; back the same way, parked in its lane, out, the hangar cycled back to air,
+    and on foot inside. A drive that gains no metre in 20 s (a 6 t rover turning round) tries again from where it
+    stands, twice; then the colonist parks there and walks home through an airlock (`WalkHome`).
   - **asleep**: walks to the bunk, and the colony takes the body away once nobody sees it; it comes back at its next
     awake window's spot, unseen;
   - **the suit**: `MoonSuit.Dress(body)` each thought (the player's is `OccasionHats`);

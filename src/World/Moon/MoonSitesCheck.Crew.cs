@@ -111,6 +111,7 @@ public partial class MoonSitesCheck
     private bool _evaDrove, _evaCycled, _shotRover, _shotLock, _shotEva;
     private string? _evaRover;
     private float _evaParked = -1;
+    private bool _evaDroveBack;
 
     private void EvaStep(ColonyColonists crew, Node3D colonyNode, MoonColony colony)
     {
@@ -207,7 +208,9 @@ public partial class MoonSitesCheck
                 break;
             case 12:
                 // the rover where it left it, as soon as it is on foot again (another colonist may take it out next)
-                if (_evaParked < 0 && brain.Status.StartsWith("Outdoors back") && _evaRover != null
+                // (on either route: as soon as it is out of the rover it drove back)
+                if (brain.Driving) _evaDroveBack = true;
+                if (_evaParked < 0 && _evaDroveBack && !brain.Driving && _evaRover != null
                     && Vehicles.VehicleManager.Instance!.GetNodeOrNull(_evaRover) is Vehicles.VehicleBody rv)
                 {
                     _evaParked = float.MaxValue;
