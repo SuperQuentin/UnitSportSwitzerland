@@ -1268,8 +1268,9 @@ Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (
 - [ ] Zoomed on the Earth → its phase matches the "lit %" line (a gibbous Earth when the Moon is a crescent from the Earth).
 - [ ] Right / Left through the planets → each centred; Use → the drive holds the stars while the Moon's short day turns the sky.
 - [ ] Quit and restart, `/goto Moon 17 59` again → the telescope is still there and works; pack it up with an empty hand.
-- [ ] Online: A sets one up on the Moon, B (also on the Moon) sees it and is refused while A looks; a player on the Earth never sees it in Switzerland.
-- [ ] On the Moon try a zipline or a campfire → "That cannot be set up here."; a flag → planted.
+- [ ] Online on the Moon: setting up → "works offline only for now" (until C3b, #1852); nothing appears on the Earth.
+- [ ] On the Moon offline: a Swiss flag, a campfire, a photo card, a trampoline → each set down and still there after a restart; a zipline, a farm stand or a travel flag → its own refusal.
+- [ ] Back on the Earth after placing on the Moon → nothing of the Moon's shows in Switzerland; the Earth's own flags are where they were.
 
 ## The sun as a body (PR [#1834](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1834), [#1479](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1479))
 

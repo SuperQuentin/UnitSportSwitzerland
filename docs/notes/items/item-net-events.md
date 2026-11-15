@@ -32,11 +32,16 @@ Server-owned list of `PlacedObject(long Id, PlacedKind Kind, string Owner, Globa
 string Payload)` — a place on its body, so it means the same place to every peer, whatever their origin (#185);
 `o.WorldTransform(placed.Origin)` converts. Until #1995 it was LV95 + altitude: a telescope set up on the Moon was read
 as an Earth point inside the Earth, never in reach. `E`/`N`/`Altitude` are now LV95 notation of `At`, for the
-Earth-only kinds' maths (a zipline's other end). The rotation is the LV95 grid's on the Earth (as saved since A2b) and
-the place's east-up-south on another body (`PlacedObject.RecordTurn`/`EnuTurn`). The body goes on the wire
-(`AskPlace`, `Add`, `Snapshot`: protocol 96) and in the save (`GlobalPosJson`'s `b`). Off the Earth only the kinds of
-`PlacedObjects.OffEarth` (telescope, flag) are accepted: "That cannot be set up here."; reach checks compare places on
-one body only (`InReach`, `Telescopes.InReach`).
+Earth-only kinds' maths (a zipline's other end). The rotation is the turn in the place's east-up-south on every body
+(what the wire and the save carry since A2b; the LV95 grid's axes, kept until #1995, are no rotation far from
+Switzerland). The save keeps the body (`GlobalPosJson`'s `b`). **The wire stays the Earth's ECEF** (protocol 95, no
+body) until C3b (#1852) carries it: online, placing off the Earth is refused ("works offline only for now") and the
+server sends only Earth objects. Offline every kind stands on any body but `PlacedObjects.OffEarthProblem`'s (a zipline:
+its far end is LV95; a farm stand: a road and houses; a travel flag: the Earth's travel network). Only the anchor's
+body's objects are drawn, redrawn after a body change's shift (drawn in the relabelled frame, ~384,000 km off the Moon's
+ground, they kept float32's ~12 m error). Reach checks never measure across bodies (`GlobalPos.DistanceTo` throws there).
+`--placedsavecheck [N]` loads a copy of `placed/offline.json` (scratch user folder) and compares every object with its
+file (place and turn exact; the old LV95 record's difference logged).
 
 - Place: `PlacedObjects.Instance.RequestPlace(PlacedKind kind, Transform3D worldAt, string payload, Action<PlacedResult>? done)`.
 - Remove: `RequestRemove(long id, Action<PlacedResult>? done)`.
