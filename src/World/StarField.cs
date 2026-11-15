@@ -34,8 +34,8 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
     /// up over an airless ground. Then only the brightest stars show (<c>sky_point.gdshader</c>'s <c>dazzle</c>): the
     /// eye on the sunlit ground of the Moon does not see the faint ones, as a camera's short exposure does not.
     /// </summary>
-    public static float DazzleOf(bool airless, float sunElevationDeg) =>
-        airless ? Mathf.SmoothStep(-2f, 4f, sunElevationDeg) : 0f;
+    public static float DazzleOf(bool airless, float sunElevationDeg, float nearGround = 1f) =>
+        airless ? Mathf.SmoothStep(-2f, 4f, sunElevationDeg) * nearGround : 0f;
 
     /// <summary>How many stars the catalogue gave (0 when it could not be read).</summary>
     public int Count { get; private set; }
@@ -140,7 +140,8 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
         }
         Visible = true;
         _material.SetShaderParameter(Sky, sky.Stars);
-        float dazzle = DazzleOf(Atmosphere.Airless, DayNight.Instance.SunElevationDeg);
+        // only near the ground (Atmosphere.NearGround): 68,000 km off the Moon the field was thin by day (#1989 follow-up)
+        float dazzle = DazzleOf(Atmosphere.Airless, DayNight.Instance.SunElevationDeg, Atmosphere.NearGround);
         if (dazzle != _dazzle) _material.SetShaderParameter(Dazzle, _dazzle = dazzle);
         float distance = cam.Far * 0.95f * DistanceScale;
         if (distance != _distance)

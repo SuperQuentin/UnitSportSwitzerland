@@ -30,7 +30,7 @@ public partial class Atmosphere : Node3D
     private const float ShellBoxM = 1e9f;
 
     private static readonly StringName PlanetCentre = "planet_centre", PlanetR = "planet_r", AtmoR = "atmo_r",
-        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", SkyFloor = "world_sky_floor", TrueSunParam = "world_true_sun",
+        SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", SkyFloor = "world_sky_floor", SkyDown = "world_sky_down", TrueSunParam = "world_true_sun",
         BetaR = "beta_r", BetaM = "beta_m", HeightR = "h_r", HeightM = "h_m", GM = "g_m", MExt = "m_ext",
         AbsorbR = "absorb_r", SunPower = "sun_power", MaxMarch = "max_march";
 
@@ -145,7 +145,17 @@ public partial class Atmosphere : Node3D
         var sun = TrueSun(axes);
         Space = space;
         Airless = !home && air == null;
-        WriteSkyFloor(home ? -1f : HorizonDipSine(body.Shape.A, altitude));
+        // the body's disc hides the sky behind it (#1989): its centre from the camera, its angular radius; near its ground
+        // the eye is dazzled by it by day (StarField), not from far out (#1989 follow-up: thin stars 68,000 km off the Moon)
+        if (home) WriteSkyFloor(-1f, Vector3.Down);
+        else
+        {
+            var (bx, by, bz) = axes.FromEcef(new EcefPos(0, 0, 0));
+            var toCentre = new Vector3((float)(bx - c.X), (float)(by - c.Y), (float)(bz - c.Z));
+            double d = toCentre.Length();
+            WriteSkyFloor(d > 1 ? DiscRadius(body.Shape.A, d) : -1f, d > 1 ? toCentre / (float)d : Vector3.Down);
+        }
+        NearGround = home ? 0f : 1f - Mathf.SmoothStep(0.05f, 0.5f, (float)(Math.Max(altitude, 0) / body.Shape.A));
         DimSky(home ? space : 1f);
         // the stars by day up here (sky_point.gdshader)
         if (space != _space) RenderingServer.GlobalShaderParameterSet(WorldSpace, space);
@@ -185,24 +195,38 @@ public partial class Atmosphere : Node3D
     }
 
     private float _skyFloor = float.NaN;
+    private Vector3 _skyDown = Vector3.Zero;
 
     /// <summary>
-    /// The sine of how far the horizon dips under the horizontal at <paramref name="altitude"/> over a body of radius
-    /// <paramref name="radius"/> (#1989): acos(R / (R + h)); 3.4° at 3 km over the Moon. What is lower is the body's ground.
+    /// How near the anchor's body's ground the camera is (#1989): 1 up to 5 % of its radius, 0 from half of it, 0 on the
+    /// Earth. The stars' daytime dazzle follows it (<see cref="StarField.DazzleOf"/>): far out the sunlit ground is small.
     /// </summary>
-    public static float HorizonDipSine(double radius, double altitude)
-    {
-        double h = Math.Max(altitude, 0);
-        double c = radius / (radius + h);
-        return -(float)Math.Sqrt(Math.Max(0, 1 - c * c));
-    }
+    public static float NearGround { get; private set; }
 
-    /// <summary><c>world_sky_floor</c> (<c>sky_point.gdshader</c>), written when it moves by more than a hundredth of a degree.</summary>
-    private void WriteSkyFloor(float floor)
+    /// <summary>
+    /// A body's angular radius from <paramref name="distance"/> metres off its centre, radians (#1989): what is within that
+    /// of the direction to its centre is its ground (asin(R/d): the horizon 3.4° under the horizontal at 3 km over the Moon,
+    /// a disc 1.5° across from 68,000 km).
+    /// </summary>
+    public static float DiscRadius(double radius, double distance) =>
+        (float)Math.Asin(Math.Min(1, radius / Math.Max(distance, radius)));
+
+    /// <summary>
+    /// <c>world_sky_floor</c> and <c>world_sky_down</c> (<c>sky_point.gdshader</c>), written when they move by more than
+    /// about a hundredth of a degree.
+    /// </summary>
+    private void WriteSkyFloor(float floor, Vector3 down)
     {
-        if (Mathf.Abs(floor - _skyFloor) < 2e-4f) return;
-        _skyFloor = floor;
-        RenderingServer.GlobalShaderParameterSet(SkyFloor, floor);
+        if (Mathf.Abs(floor - _skyFloor) >= 2e-4f)
+        {
+            _skyFloor = floor;
+            RenderingServer.GlobalShaderParameterSet(SkyFloor, floor);
+        }
+        if (down.DistanceSquaredTo(_skyDown) >= 3e-8f)
+        {
+            _skyDown = down;
+            RenderingServer.GlobalShaderParameterSet(SkyDown, down);
+        }
     }
 
     /// <summary>The shell's intensity written last (-1: none yet).</summary>

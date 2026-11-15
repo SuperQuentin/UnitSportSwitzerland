@@ -13,9 +13,11 @@ global uniform float world_night;
 // 0 in the air, 1 above it (#1430 H4, World/Globe/Atmosphere): no sky to hide the stars by day, and
 // the horizon far below the horizontal (the Earth hides what is behind it, by depth)
 global uniform float world_space;
-// off the Earth (#1989, World/Globe/Atmosphere): the sine of the body's horizon dip from the camera (-1: none). Its
-// ground past the far plane hides nothing by depth, so what is below that is under the ground
+// off the Earth (#1989, World/Globe/Atmosphere): the body's disc seen from the camera, toward world_sky_down (the
+// direction to its centre) out to its angular radius, radians (-1: none, on the Earth). Its ground past the far plane
+// hides nothing by depth, so what is inside the disc is the ground
 global uniform float world_sky_floor;
+global uniform vec3 world_sky_down;
 // toward the real sun, world axes (World/Globe/Atmosphere keeps it current): its glare hides what is near it (#1479)
 global uniform vec3 world_true_sun;
 
@@ -47,7 +49,8 @@ void vertex() {
 	float px = (instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x) * size_scale;
 	clip.xy += corner * px * 2.0 / VIEWPORT_SIZE * clip.w;
 	POSITION = sky_depth(clip);
-	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), smoothstep(world_sky_floor - 0.004, world_sky_floor + 0.004, dir.y), world_space);
+	float behind = smoothstep(world_sky_floor - 0.002, world_sky_floor + 0.002, acos(clamp(dot(dir, world_sky_down), -1.0, 1.0)));
+	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), behind, world_space);
 	float dark = max(max(smoothstep(0.35, 0.95, world_night), daylight), world_space);
 	vec4 c = single ? point_color : COLOR;
 	if (!single && !instanced) c.a *= mix(1.0, 0.8 * smoothstep(0.75, 1.0, c.a), dazzle);
