@@ -16,7 +16,7 @@ public static class TargetList
     /// <summary>The order a tap steps through: home and the near ones first, then the Sun, the planets, their moons.</summary>
     public static readonly BodyId[] Order =
     [
-        BodyId.Earth, BodyId.Moon, BodyId.Mars, BodyId.Sun, BodyId.Mercury, BodyId.Venus, BodyId.Jupiter, BodyId.Io,
+        BodyId.Earth, BodyId.Moon, BodyId.Mars, BodyId.Phobos, BodyId.Deimos, BodyId.Sun, BodyId.Mercury, BodyId.Venus, BodyId.Jupiter, BodyId.Io,
         BodyId.Europa, BodyId.Ganymede, BodyId.Callisto, BodyId.Saturn, BodyId.Titan, BodyId.Uranus, BodyId.Neptune,
     ];
 

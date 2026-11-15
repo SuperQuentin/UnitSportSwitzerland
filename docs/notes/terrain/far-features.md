@@ -38,9 +38,12 @@ Under `--frame earth` the globe past the leaves drew bare ground: a streaming cl
   leaves' reach (`FarReachM`, `StreamedReachM`, `BuildingsReachM`), the baked features past it:
   - the detail preset caps it (`Globe.FarCap`: Very low 0, the baked features alone past the near leaves; Low half);
     the buildings' reach is the preset's own (`BuildingMaxDist`), so it takes the budget's share alone;
-  - in `auto` (the default) the frame budget moves it under the cap: the engine's frame rate against the target (the
-    frame cap, else 60, 72 in a headset); over 115 % of the budget for 2 s takes 20 % off, under 75 % for 6 s gives
-    10 % back;
+  - in `auto` (the default) the frame budget moves it under the cap: the frame's work against the target frame time
+    (the frame cap, else 60, 72 in a headset); over 115 % of the budget for 2 s takes 20 % off, under 75 % for 6 s gives
+    10 % back. The work (`FarBandGovernor.WorkMs`, #1987) is the longer of the GPU's render and the CPU's process,
+    physics and render (`PerfRecorder.RenderTimes`), never the engine's frame rate: with vsync on a 60 Hz display every
+    frame is 16.7 ms, never under 75 % of the budget, so a loading spell took the band to 0 % and it never grew back
+    (a user in the Sahara, Nov 15 2026: `100% ... 80% ... 0%` within seconds of arriving, then nothing);
   - `--farband auto|full|off`; a test run (`GameSettings.TestRun`) defaults to `full`, so a loaded PC's frame times do
     not move what its shots see;
   - each change re-plans at once and logs `[globe] far band at N% ...`; the morph's near band follows the reach.

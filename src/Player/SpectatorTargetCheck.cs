@@ -69,8 +69,12 @@ public partial class SpectatorTargetCheck : Node
         Expect(targets.Target == BodyId.Moon, $"] tapped: the Moon (got {targets.Target})");
         await Wait(0.6);
         Shot("target_moon");
-        await Tap(Pad);
-        Expect(targets.Target == BodyId.Mars, $"the pad's D-pad right tapped: Mars (got {targets.Target})");
+        // the pad's tap with its press and release in one frame (#1920: a hitch while the world loaded did that, and a
+        // tap read from the action's held state was lost)
+        Pad(true);
+        Pad(false);
+        await Wait(0.2);
+        Expect(targets.Target == BodyId.Mars, $"the pad's D-pad right tapped, press and release in one frame: Mars (got {targets.Target})");
         Expect(targets.Toward is { Distance: > 5e10 }, $"Mars' distance read ({targets.Toward?.Distance / 1e9:F1} million km)");
 
         // hold: the view turns onto Mars (a quarter turn a second, so three seconds turn it anywhere)

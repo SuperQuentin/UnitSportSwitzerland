@@ -101,11 +101,15 @@ public sealed class Bot
 /// </summary>
 public sealed class BotWorld
 {
-    public BotWorld(Node3D players, FootPlayer body)
+    public BotWorld(Node3D players, FootPlayer body, System.Func<FootPlayer?>? local = null)
     {
         Players = players;
         Body = body;
+        _local = local;
     }
+
+    /// <summary>Offline, the player: outside the <c>Players</c> container, and a body every bot sees.</summary>
+    private readonly System.Func<FootPlayer?>? _local;
 
     public Node3D Players { get; }
     public FootPlayer Body { get; }
@@ -114,6 +118,7 @@ public sealed class BotWorld
     public System.Collections.Generic.IEnumerable<FootPlayer> Bodies()
     {
         foreach (var n in Players.GetChildren()) if (n is FootPlayer p && p.Region == Body.Region) yield return p;
+        if (_local?.Invoke() is { } me && GodotObject.IsInstanceValid(me)) yield return me;
     }
 }
 

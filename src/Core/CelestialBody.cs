@@ -7,11 +7,11 @@ namespace UnitSport.Core;
 /// <summary>
 /// The bodies of the world (#1847, docs/plans/planets.md section 1). A byte: it travels with a position
 /// (<see cref="GlobalPos.Body"/>). <b>The Earth is 0</b>, so a default position, every key, file, record and wire
-/// value of today means the Earth. Phobos and Deimos come with Mars (H7e).
+/// value of today means the Earth.
 /// </summary>
 public enum BodyId : byte
 {
-    Earth = 0, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan,
+    Earth = 0, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan, Phobos, Deimos,
 }
 
 /// <summary>
@@ -50,28 +50,32 @@ public sealed class CelestialBody
         landable: true, spaceEnterM: 40_000, spaceExitM: 30_000, craterDensity: 0.15, air: BodyAir.Mars);
 
     public static readonly CelestialBody Mercury = new(BodyId.Mercury, "Mercury", SkyBody.Mercury,
-        Ellipsoid.FromRadii(2_440_530, 2_438_260), 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
+        Ellipsoid.Mercury, 2.2032e13, DegPerDay(6.1385108), BodyId.Sun, 0.38709927 * Au,
         landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 1);
 
-    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Sphere(6_051_800),
+    public static readonly CelestialBody Venus = new(BodyId.Venus, "Venus", SkyBody.Venus, Ellipsoid.Venus,
         3.24859e14, DegPerDay(-1.4813688), BodyId.Sun, 0.72333566 * Au, landable: true, spaceEnterM: 120_000,
-        spaceExitM: 100_000);
+        spaceExitM: 100_000, air: BodyAir.Venus);
 
     public static readonly CelestialBody Jupiter = new(BodyId.Jupiter, "Jupiter", SkyBody.Jupiter,
         Ellipsoid.FromRadii(71_492_000, 66_854_000), 1.26686534e17, DegPerDay(870.536), BodyId.Sun, 5.20288700 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Jupiter);
 
     public static readonly CelestialBody Saturn = new(BodyId.Saturn, "Saturn", SkyBody.Saturn,
         Ellipsoid.FromRadii(60_268_000, 54_364_000), 3.7931187e16, DegPerDay(810.7939024), BodyId.Sun, 9.53667594 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Saturn);
 
     public static readonly CelestialBody Uranus = new(BodyId.Uranus, "Uranus", SkyBody.Uranus,
         Ellipsoid.FromRadii(25_559_000, 24_973_000), 5.793939e15, DegPerDay(-501.1600928), BodyId.Sun, 19.18916464 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Uranus);
 
     public static readonly CelestialBody Neptune = new(BodyId.Neptune, "Neptune", SkyBody.Neptune,
         Ellipsoid.FromRadii(24_764_000, 24_341_000), 6.836529e15, DegPerDay(541.1397757), BodyId.Sun, 30.06992276 * Au,
-        landable: false);
+        landable: false,
+        spaceEnterM: 1_000_000, spaceExitM: 800_000, air: BodyAir.Neptune);
 
     // the big moons turn once an orbit (they keep a face to their planet)
     public static readonly CelestialBody Io = new(BodyId.Io, "Io", SkyBody.Io, Ellipsoid.Sphere(1_821_600), 5.959916e12,
@@ -79,11 +83,11 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Europa = new(BodyId.Europa, "Europa", SkyBody.Europa, Ellipsoid.Sphere(1_560_800),
         3.202739e12, DegPerDay(360 / 3.551181041), BodyId.Jupiter, 671_034_000, landable: true, spaceEnterM: 10_000,
-        spaceExitM: 8_000);
+        spaceExitM: 8_000, craterDensity: 0.03);
 
     public static readonly CelestialBody Ganymede = new(BodyId.Ganymede, "Ganymede", SkyBody.Ganymede,
         Ellipsoid.Sphere(2_634_100), 9.887834e12, DegPerDay(360 / 7.15455296), BodyId.Jupiter, 1_070_412_000,
-        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000);
+        landable: true, spaceEnterM: 10_000, spaceExitM: 8_000, craterDensity: 0.5);
 
     public static readonly CelestialBody Callisto = new(BodyId.Callisto, "Callisto", SkyBody.Callisto,
         Ellipsoid.Sphere(2_410_300), 7.179289e12, DegPerDay(360 / 16.6890184), BodyId.Jupiter, 1_882_709_000,
@@ -91,10 +95,18 @@ public sealed class CelestialBody
 
     public static readonly CelestialBody Titan = new(BodyId.Titan, "Titan", SkyBody.Titan, Ellipsoid.Sphere(2_574_730),
         8.978138e12, DegPerDay(360 / 15.945421), BodyId.Saturn, 1_221_870_000, landable: true, spaceEnterM: 200_000,
-        spaceExitM: 180_000);
+        spaceExitM: 180_000, craterDensity: 0.02, air: BodyAir.Titan);
+
+    // Mars' two moons (#1853), from their shape models (Ernst et al. 2023): heights over the spheres of their DEMs (Phobos'
+    // 11.1 km of DLR's HRSC model, Deimos' 6.2 km mean); GM from Jacobson (2010). Each a few km, pulling a few mm/s².
+    public static readonly CelestialBody Phobos = new(BodyId.Phobos, "Phobos", SkyBody.Phobos, Ellipsoid.Sphere(11_100), 7.087e5,
+        DegPerDay(360 / 0.31891023), BodyId.Mars, 9_376_000, landable: true, spaceEnterM: 1_000, spaceExitM: 800, craterDensity: 1);
+
+    public static readonly CelestialBody Deimos = new(BodyId.Deimos, "Deimos", SkyBody.Deimos, Ellipsoid.Sphere(6_200), 9.615e4,
+        DegPerDay(360 / 1.26244), BodyId.Mars, 23_458_000, landable: true, spaceEnterM: 1_000, spaceExitM: 800, craterDensity: 0.3);
 
     private static readonly CelestialBody[] ById =
-        [Earth, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan];
+        [Earth, Moon, Mars, Sun, Mercury, Venus, Jupiter, Saturn, Uranus, Neptune, Io, Europa, Ganymede, Callisto, Titan, Phobos, Deimos];
 
     /// <summary>Every body, in <see cref="BodyId"/> order.</summary>
     public static System.ReadOnlySpan<CelestialBody> All => ById;
@@ -129,6 +141,19 @@ public sealed class CelestialBody
         BodyId.Earth => CubeShape.Earth,
         BodyId.Moon => CubeShape.Moon,
         BodyId.Mars => CubeShape.Mars,
+        BodyId.Mercury => CubeShape.Mercury,
+        BodyId.Venus => CubeShape.Venus,
+        BodyId.Io => CubeShape.Io,
+        BodyId.Europa => CubeShape.Europa,
+        BodyId.Ganymede => CubeShape.Ganymede,
+        BodyId.Callisto => CubeShape.Callisto,
+        BodyId.Titan => CubeShape.Titan,
+        BodyId.Phobos => CubeShape.Phobos,
+        BodyId.Deimos => CubeShape.Deimos,
+        BodyId.Jupiter => CubeShape.Jupiter,
+        BodyId.Saturn => CubeShape.Saturn,
+        BodyId.Uranus => CubeShape.Uranus,
+        BodyId.Neptune => CubeShape.Neptune,
         _ => new CubeShape(Shape),
     };
 
@@ -174,9 +199,9 @@ public sealed class CelestialBody
 
     /// <summary>
     /// How cratered its ground is under its data (#1850, the cratered profile of docs/plans/planets.md section 5): a
-    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.15 on Mars
-    /// (wind and dust have filled most of its small craters), 0 where nothing is generated (the Earth's own fill, the
-    /// icy and volcanic bodies, the giants).
+    /// share of the lunar maria's equilibrium (<c>CraterField</c>): 1 on the Moon, Mercury and Callisto, 0.5 on
+    /// Ganymede, 0.3 on Deimos (its smooth regolith), 0.15 on Mars (wind and dust have filled most of its small craters), 0.03 on young Europa, 0.02 on Titan
+    /// (its rain and dunes), 0 where nothing is generated (the Earth's own fill, volcanic Io, Venus, the giants).
     /// </summary>
     public double CraterDensity { get; }
 
@@ -214,6 +239,7 @@ public sealed class CelestialBody
         BodyId.Earth => 3.986004418e14,
         BodyId.Jupiter => 1.26686534e17,
         BodyId.Saturn => 3.7931187e16,
+        BodyId.Mars => 4.282837e13,
         _ => throw new System.ArgumentOutOfRangeException(nameof(p)),
     };
 
@@ -227,6 +253,20 @@ public sealed class CelestialBody
     /// <c>Curvature.SpaceRegime</c>).
     /// </summary>
     public bool SpaceRegime(bool inSpace, double altitude) => inSpace ? altitude >= SpaceExitM : altitude > SpaceEnterM;
+
+    /// <summary>
+    /// How close a camera may come to a body one cannot stand on (#1854), metres over its reference: a giant with air is
+    /// flown into (<see cref="GasFloorM"/>, deep under its 1-bar level), the Sun stops the camera at 0.2 radii (139,000 km
+    /// over the photosphere); 0 for a body with ground.
+    /// </summary>
+    public double FloorM => Landable ? 0 : Id == BodyId.Sun ? 0.2 * Shape.A : Air != null ? GasFloorM : 50_000;
+
+    /// <summary>
+    /// How deep a camera may dive into a giant (#1854, the spectator): 500 km under the 1-bar level, past where Galileo's
+    /// probe went silent (150 km, 23 bar), where it is already black and the gas hundreds of bars; deeper is no more to
+    /// see. Negative: under the reference.
+    /// </summary>
+    public const double GasFloorM = -500_000;
 
     /// <summary>Its air (#1853): what drags a craft and what its sky scatters; null where there is none (the Moon).</summary>
     public BodyAir? Air { get; }

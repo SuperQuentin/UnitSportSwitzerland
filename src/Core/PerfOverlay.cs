@@ -231,11 +231,20 @@ public partial class PerfOverlay : CanvasLayer
     {
         if (_chunks.Origin is not { } origin || GetViewport().GetCamera3D() is not { } cam) return "";
         var p = cam.GlobalPosition;
-        var (e, n) = origin.ToLv95(p);
         var forward = -cam.GlobalBasis.Z;
         // from true north at the camera (#1504), not the world's −Z
         double bearing = (TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
+        string facing = Compass[(int)Math.Round(bearing / 45) % 8];
+        // on another body (#1985): its latitude, longitude and the height over its reference; LV95 means nothing there
+        if (origin.Frame.Axes is { Body: not BodyId.Earth } axes)
+        {
+            var g = CelestialBody.Of(axes.Body).Shape.ToGeodetic(axes.ToEcef(p.X, p.Y, p.Z));
+            double lat = g.LatDeg, lon = g.LonDeg;
+            return string.Format(CultureInfo.InvariantCulture, "{0} {1:F3}°{2} {3:F3}°{4}  h {5:F0} m  facing {6} {7:F0}°",
+                axes.Body, Math.Abs(lat), lat >= 0 ? 'N' : 'S', Math.Abs(lon), lon >= 0 ? 'E' : 'W', g.H, facing, bearing);
+        }
+        var (e, n) = origin.ToLv95(p);
         return string.Format(CultureInfo.InvariantCulture, "LV95 {0:F0},{1:F0}  alt {2:F0} m  facing {3} {4:F0}°",
-            e, n, p.Y, Compass[(int)Math.Round(bearing / 45) % 8], bearing);
+            e, n, p.Y, facing, bearing);
     }
 }

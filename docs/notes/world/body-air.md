@@ -14,6 +14,18 @@ Every body's air is data: `Core/BodyAir` on `CelestialBody.Air` (null for the ai
   - the fine part scatters red over blue and absorbs blue: the butterscotch day, a redder horizon;
   - the coarse part is forward (g 0.85) and bluer: the blue round the setting sun.
   - Vertical optical depth ~0.33 in red. Colours tuned by eye against the rovers' sky; sun power 7.
+- **Venus'** (#1854): CO2 at 65 kg/m3 and 15.9 km scale height; the opaque deck cannot be drawn by single scattering,
+  so a thick bright yellow haze that still lets the radar-mapped ground read from orbit: a dim amber sky from the
+  ground, as Venera's pictures. Sun power 9.
+- **Titan's** (#1854): N2 at 5.4 kg/m3, ~20 km scale height near the ground, an orange organic haze to hundreds of km
+  (shell top 600 km): dim and orange from the ground and from orbit.
+- **The giants'** (#1854): air all the way down, heights over the 1-bar radius (negative inside). The hydrogen's
+  Rayleigh blue as the fine part (Uranus' and Neptune's methane takes the red: `FineAbsorption` on red), the cloud decks
+  as the coarse part (Jupiter's beige ammonia at 20 km scale height), so a dive goes from a blue-grey sky over the white
+  deck, into a bright fog, and on into the dark. The globe (the deck) steps aside 2 km under the 1-bar level
+  (`BodyGlobe.CloudDeckM`), and the march stops 15 cloud scale heights along while the camera is inside (`max_march`:
+  20 steps over hundreds of km of dense gas showed their jitter as grain). The shell quad's culling box is 10⁶ km: the
+  Earth-sized one left the camera outside it over Jupiter, and the shell was culled.
 - **`World/Globe/Atmosphere`**: the shell round the anchor's body when it has air.
   - The Earth's fades in over the style's sky from 15 km, as before.
   - Another body's paints its whole sky from the ground up (the style's sky is the Earth's: dimmed to black there).
@@ -25,3 +37,21 @@ Every body's air is data: `Core/BodyAir` on `CelestialBody.Air` (null for the ai
   sun 90 − DEG up.
 - **Not yet**: the Earth's limb seen from the Moon (the shell draws round the anchor's body only); a dust storm
   (raise the fine and coarse parts); Mars' sound and its thin air on a parachute or a wing.
+
+## The sunlight on the ground, Titan's colour, the airless sun (#1854)
+
+- **The ground's sunlight takes the air's hue** (`BodyGlobe.AirTauOf`, `BodyAir.VerticalDepth`, `body_globe.gdshader`'s
+  `air_tau`): Mars, Venus and Titan (landable with air; not the Earth, nor the giants whose globe is their cloud deck).
+  The light is exp(-(τ - its least channel) / cos zenith): the least-dimmed channel at full strength (the ground stays
+  playable under Titan's haze), the others falling away, more with a low sun.
+- **Titan's haze takes green and blue far more than red** (vertical depths 0.76, 1.16, 1.72): the first values took
+  red about as much as green, and the sun and the sky from the ground came out olive green. Its ground near the
+  equator stays dark: Cassini's mosaic has the dune seas dark.
+- **No air, no sunrise colour**: on a body with no air the figures' tint (`DayNight`'s palette) is the day's white
+  whenever the sun is up, however low; the Earth's sunrise pink had tinted the Moon's south pole.
+- **The giants' terminator** (`terminator_wrap` 0.3, `night_floor` 0.015): the light wraps past the line through
+  their deep air and their night is space-dark. With the Moon's playable night floor (0.06) the falling light
+  stopped on a flat floor, a kink that read as a hard line across Jupiter seen from Io.
+- **A globe tile keeps the sun it was given** (`BodyGlobe.Tile.Sun`): a tile hidden while the sun moved or the frame
+  turned is given the sun again when shown.
+

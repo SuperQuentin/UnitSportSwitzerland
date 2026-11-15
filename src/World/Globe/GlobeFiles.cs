@@ -6,13 +6,13 @@ namespace UnitSport.World;
 
 /// <summary>
 /// A cube region's files for the globe (#1430 H4): a folder on disk (the local install) or the levels the game ships,
-/// <c>res://assets/globe</c>, which in an export live inside the pack, where .NET's file API cannot reach: <c>res://</c>
+/// <c>res://assets/bodies/earth</c>, which in an export live inside the pack, where .NET's file API cannot reach: <c>res://</c>
 /// goes through Godot's <see cref="Godot.FileAccess"/>. The bundles are named from the manifest (each level's bundle
 /// levels), so no folder is ever listed. Read as a layer of the pyramid's chain (<see cref="PyramidSource"/>, #1656).
 /// </summary>
 public sealed class GlobeFiles
 {
-    public const string Shipped = "res://assets/globe";
+    public const string Shipped = "res://assets/bodies/earth";
 
     public string Dir { get; }
 

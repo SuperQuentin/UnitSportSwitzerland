@@ -147,10 +147,12 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>
     /// The name a parked vehicle keeps: a Battle Royale match's (<c>br_v…</c>, #837), so the match still clears
     /// it at the end and the containers never keep it for good. Renamed <c>veh_…</c>, a match car a player
-    /// had driven outlived the match as a permanent world car. Null for any other, or one already taken.
+    /// had driven outlived the match as a permanent world car. A Moon colony's rover too (<c>moonrover_…</c>, #1976):
+    /// its depot knows it by that name, and a colonist parks it again after a drive. Null for any other, or one
+    /// already taken.
     /// </summary>
     private string? Kept(string name) =>
-        name.StartsWith(BattleRoyale.BrLoot.VehiclePrefix) && GetNodeOrNull(name) == null ? name : null;
+        (name.StartsWith(BattleRoyale.BrLoot.VehiclePrefix) || name.StartsWith(World.Moon.MoonRoverDepot.Prefix)) && GetNodeOrNull(name) == null ? name : null;
 
     /// <summary>
     /// Server: a vehicle for a body the server runs (a bot, #837), with the claim's checks and none of its

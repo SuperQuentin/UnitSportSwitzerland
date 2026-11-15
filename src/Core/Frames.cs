@@ -24,9 +24,21 @@ public readonly record struct DMat3(DVec3 C0, DVec3 C1, DVec3 C2)
 /// turned (Greenwich's sidereal angle, radians). Real time has them in step (<see cref="At"/>); the game's 24-minute
 /// day turns the Earth by its hour while the bodies keep their own pace, so they are two numbers. Both come from the
 /// server-owned clocks, so every peer has the same moment.
+///
+/// <para>
+/// <b>The local day</b> (#1992, docs/plans/planets.md section 2): standing on another body, that body takes the extra
+/// turn the game's day gives the Earth (<see cref="LocalTurn"/>, radians about <see cref="Local"/>'s pole, in its own
+/// spin's sense), so every body has a short day as the Earth has. A moon's orbit round its parent turns with it, so the
+/// parent hangs still in its sky (tidal lock). It is this peer's view only: places on a body are body-fixed, the same on
+/// every peer whatever its turn, and it fades to nothing before the body's sphere of influence ends
+/// (<see cref="SkyClock.LocalWeight"/>), where a crossing re-expresses positions.
+/// </para>
 /// </summary>
-public readonly record struct SkyMoment(DateTime Utc, double EarthAngle)
+public readonly record struct SkyMoment(DateTime Utc, double EarthAngle, BodyId Local = BodyId.Earth, double LocalTurn = 0)
 {
+    /// <summary>Whether <paramref name="body"/> takes the local day's turn at this moment.</summary>
+    public bool Turns(BodyId body) => body == Local && LocalTurn != 0 && body != BodyId.Earth;
+
     /// <summary>The sky at a real instant: the bodies and the Earth's turn both at <paramref name="utc"/>.</summary>
     public static SkyMoment At(DateTime utc) => new(utc, Ephemeris.SiderealTime(utc));
 
@@ -68,8 +80,25 @@ public static class Frames
         _ => Ephemeris.FromParent(CelestialBody.Of(body).Sky!.Value, utc),
     };
 
-    /// <summary><paramref name="to"/>'s centre seen from <paramref name="from"/>'s, ICRF axes, metres.</summary>
-    public static DVec3 Offset(BodyId from, BodyId to, DateTime utc)
+    /// <summary>
+    /// <paramref name="body"/>'s centre from its parent's at a sky moment (#1992): a moon taking the local day's turn has
+    /// its orbit turned with it about its own pole, so its parent stays where it was in its sky.
+    /// </summary>
+    public static DVec3 FromParent(BodyId body, SkyMoment m)
+    {
+        var v = FromParent(body, m.Utc);
+        if (!m.Turns(body) || CelestialBody.Of(body).Parent is not { } parent || parent == BodyId.Sun) return v;
+        var (pole, _, _) = Ephemeris.IcrfAxes(CelestialBody.Of(body).Sky!.Value, m.Utc);
+        return Turn(v, pole, SignedTurn(body, m.LocalTurn));
+    }
+
+    /// <summary><paramref name="to"/>'s centre seen from <paramref name="from"/>'s, ICRF axes, metres, at a sky moment (the local day's turn included, #1992).</summary>
+    public static DVec3 Offset(BodyId from, BodyId to, SkyMoment m) => Offset(from, to, m.Utc, m);
+
+    /// <summary><paramref name="to"/>'s centre seen from <paramref name="from"/>'s, ICRF axes, metres: the true one (no local day's turn).</summary>
+    public static DVec3 Offset(BodyId from, BodyId to, DateTime utc) => Offset(from, to, utc, null);
+
+    private static DVec3 Offset(BodyId from, BodyId to, DateTime utc, SkyMoment? m)
     {
         if (from == to) return DVec3.Zero;
         var up = Ancestry(from);
@@ -78,13 +107,23 @@ public static class Frames
         int common = down.FindIndex(up.Contains);
         var meet = down[common];
         var sum = DVec3.Zero;
-        for (int i = 0; i < common; i++) sum += FromParent(down[i], utc);
+        for (int i = 0; i < common; i++) sum += m is { } a ? FromParent(down[i], a) : FromParent(down[i], utc);
         foreach (var b in up)
         {
             if (b == meet) break;
-            sum -= FromParent(b, utc);
+            sum -= m is { } a ? FromParent(b, a) : FromParent(b, utc);
         }
         return sum;
+    }
+
+    /// <summary>The local day's turn in <paramref name="body"/>'s own spin's sense (#1992): Venus and Uranus turn backward.</summary>
+    private static double SignedTurn(BodyId body, double turn) => CelestialBody.Of(body).Spin < 0 ? -turn : turn;
+
+    /// <summary><paramref name="v"/> turned by <paramref name="angle"/> about the unit axis <paramref name="k"/> (Rodrigues).</summary>
+    private static DVec3 Turn(DVec3 v, DVec3 k, double angle)
+    {
+        double c = Math.Cos(angle), s = Math.Sin(angle);
+        return v * c + k.Cross(v) * s + k * (k.Dot(v) * (1 - c));
     }
 
     /// <summary>
@@ -109,7 +148,14 @@ public static class Frames
             var (x, y, z) = Ephemeris.CelestialAt(m.Utc, m.EarthAngle);
             return new DMat3(new DVec3(x.X, y.X, z.X), new DVec3(x.Y, y.Y, z.Y), new DVec3(x.Z, y.Z, z.Z));
         }
-        var (pole, prime, east) = Ephemeris.IcrfAxes(CelestialBody.Of(body).Sky!.Value, m.Utc);
+        var (pole, prime0, east0) = Ephemeris.IcrfAxes(CelestialBody.Of(body).Sky!.Value, m.Utc);
+        DVec3 prime = prime0, east = east0;
+        if (m.Turns(body))
+        {
+            // the local day (#1992): the body turned on about its pole, eastward in its own spin's sense
+            double a = SignedTurn(body, m.LocalTurn), c = Math.Cos(a), s = Math.Sin(a);
+            (prime, east) = (prime * c + east * s, east * c - prime * s);
+        }
         return new DMat3(prime, east, pole);
     }
 
@@ -117,7 +163,7 @@ public static class Frames
     public static DVec3 Convert(BodyId from, DVec3 p, BodyId to, SkyMoment m)
     {
         if (from == to) return p;
-        var icrf = Orientation(from, m).Apply(p) - Offset(from, to, m.Utc);
+        var icrf = Orientation(from, m).Apply(p) - Offset(from, to, m);
         return Orientation(to, m).ApplyInverse(icrf);
     }
 

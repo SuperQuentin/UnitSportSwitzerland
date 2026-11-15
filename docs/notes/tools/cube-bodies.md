@@ -59,6 +59,64 @@ LOLA" and "NASA/GSFC/ASU LROC, NASA SVS CGI Moon Kit" in the credits.
 MD5s checked; from `asc-pds-services.s3.us-west-2.amazonaws.com/mosaic/` and PDS Geosciences' MEGDR), `work/` (the
 JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and "NASA Viking, USGS Astrogeology".
 
+## Mercury and Venus (#1854)
+
+- **Mercury**: USGS's `Mercury_Messenger_USGS_DEM_Global_665m_v2_32bit_clon0.tif`. Despite the name it is int16 in
+  metres, LZW in 256 px tiles; `CylRaster` reads strips only, so GDAL makes an uncompressed strip copy first
+  (`gdal.Translate(..., creationOptions=['TILED=NO','COMPRESS=NONE','BLOCKYSIZE=16'])`). The heights are over a
+  2,439.4 km sphere, which becomes Mercury's reference (`Ellipsoid.Mercury`, `CubeShape.Mercury`). Colour: the greyscale
+  250 m mosaic of 2013 (61,324 px across), averaged to 21,600 by GDAL first. The "EnhancedColor" mosaics are false
+  colour (blue and orange): not used.
+- **Venus**: Magellan's `Venus_Magellan_Topography_Global_4641m_v02.tif` (8,192 × 4,096, int16 metres over 6,051.0 km,
+  `Ellipsoid.Venus`), levels 0-2; colour: the colourised radar mosaic `Venus_Magellan_C3-MDIR_Colorized_Global_Mosaic_4641m.tif`.
+- `--globealbedo --body NAME` takes any body of the registry but the Earth.
+
+## Bodies with no global heights: `--dem flat` (#1854)
+
+Io, Europa, Ganymede, Callisto and Titan have global mosaics (Voyager/Galileo SSI 0.5-1.4 km; Titan's Cassini ISS
+4 km) but no global DEM. `--cube-body NAME --dem flat` writes the pyramid's tiles at the reference sphere (levels 0-3, 0-2
+for Titan, a few seconds); the colour carries the body from orbit, and the near ground's relief is its profile's
+(`CelestialBody.CraterDensity`: Callisto 1, Ganymede 0.5, Europa 0.03, Titan 0.02, Io none). Sources, all -180..180 and
+2:1 within a pixel: `Io_GalileoSSI-Voyager_Global_Mosaic_ClrMerge_1km.tif`, `Europa_Voyager_GalileoSSI_global_mosaic_500m.tif`,
+`Ganymede_Voyager_GalileoSSI_Global_ClrMosaic_1435m.tif`, `Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif`,
+`Titan_ISS_P19658_Mosaic_Global_4km.tif`; their colour bakes take 1-21 s.
+
+## The giants (#1854)
+
+Jupiter, Saturn, Uranus and Neptune are globes too: `--cube-body NAME --dem flat --cube-levels 0-1` on their IAU 1-bar
+ellipsoids (`CubeShape.Jupiter`...), coloured from the sky's own 2k maps (`--colour res://assets/space/NAME_2k.jpg`, ~220
+km a pixel on Jupiter). A giant's globe always hangs from its centre under `BodyGlobe`'s root, shrunk past the far plane
+(its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane; no ground to
+hold to the millimetre). Saturn's rings are a slab drawn over the whole screen under the same root (`BodyGlobe.AddRings`,
+`shaders/ring_slab.gdshader`), with ice chunks round the camera (`world/saturn-rings`). Finer maps (Cassini's, Juno's) are a later
+swap of the colour alone.
+
+## Phobos and Deimos: shape models (#1853)
+
+Neither is a sphere (Phobos 8 to 14 km from its centre), and only Phobos has a georeferenced DEM (DLR's HRSC, 100 m, 699
+× 349, not 2:1). Both come from Ernst et al. (2023)'s shape models, as Celestia ships them (`CelestiaContent/models/
+{phobos,deimos}.cmod`, 25k vertices, 49k triangles, km, CC-BY-4.0: credit them).
+
+```
+dotnet <tp>/TerrainPreprocessor.dll --shape-dem phobos.cmod --shape-radius 11100 --shape-out phobos_shape_dem.tif
+dotnet <tp>/TerrainPreprocessor.dll --cube-body phobos --dem phobos_shape_dem.tif --credit "Ernst et al. 2023 shape model via Celestia, CC-BY-4.0" --cube-levels 0-3
+python tools/body_colour.py Phobos_ME_SRC_Mosaic_Global_16ppd.tif phobos_colour.jpg --floor 0.55
+python tools/body_colour.py --flat 128,118,108 deimos_colour.jpg
+```
+
+- **`--shape-dem`** (`ShapeModel`, `ShapeModelTests`): each pixel of a 1440 × 720 simple cylindrical grid is the farthest
+  hit of the ray from the centre (triangles binned by 1° round their directions: 0.5 s), less the reference sphere
+  (Phobos 11.1 km, DLR's; Deimos 6.2 km, its mean). An int16 strip TIFF `CylRaster` reads. So the moons are heights
+  over spheres like every body: the pyramid, the globe and the near ground take them unchanged.
+- **Axes**: Celestia's x, y, z are the IAU's −X, Z, Y. Checked on Phobos against the HRSC DEM: 0.21 km rms over a 7.5°
+  grid, three times better than the other five orientations, the prime meridian within 2°; Stickney at 49° W. On Deimos
+  a crater stands at Swift's IAU place and a depression at Voltaire's.
+- **Levels**: Phobos 0-3 (the heights are 48 m pixels, but the colour wants level 3's 4 m), Deimos 0-1; a few seconds.
+- **Colour**: Phobos' HRSC/SRC mosaic (16 px/°, 12 m, greyscale) with `--floor 0.55` lifting its low sun's shadows
+  (median 148, under 81 raised). Deimos has only an airbrushed USGS relief with blank areas: one flat grey-brown, its
+  relief the game's light on its heights.
+- Data: `E:/UnitSportSwitzerland/planets/{phobos,deimos}/` (`src/`, `work/`, `cube/`).
+
 ## Numbers (2026-11-14, this PC, 4 jobs, below normal priority)
 
 | Run | Tiles | Size | Heights | Time | Peak |
@@ -69,6 +127,10 @@ JPEG), `cube/` (the pyramid). Public domain; credit "NASA/JPL/GSFC MGS MOLA" and
 
 | Mars, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 319.5 MB (L4: 219 MB) | −7,643 to +22,923 m over the ellipsoid (Hellas, Olympus Mons) | 164 s | 5.3 GB |
 | Mars colour, levels 0-4 | 2,046 | 6.4 MB WebP | | 32 s | |
+
+| Mercury, levels 0-4 `--cube-check`, 8 jobs | 2,046 | 222 MB | −5,382 to +4,490 m | 55 s | 4.2 GB |
+| Venus, levels 0-2 `--cube-check` | 126 | 28 MB | −2,886 to +11,589 m (Maxwell Montes) | 4 s | 0.4 GB |
+| Mercury colour / Venus colour | 2,046 / 126 | 46.5 / 2.9 MB WebP | | 45 / 2 s | |
 
 Mars' `--cube-check`: 4,198,392 edge vertices, 0 differ. `--cube-check` on levels 0-2: 128,904 shared edge points, 0 differ. Shipping levels 0-1 would be ~10 MB of heights, 0-2
 ~36 MB (with ~1.3 MB of colour): what ships is #1656's call.

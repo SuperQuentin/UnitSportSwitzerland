@@ -9,5 +9,5 @@ assets/**/*.ogg filter=lfs diff=lfs merge=lfs -text
 assets/**/*.xm filter=lfs diff=lfs merge=lfs -text
 assets/**/*.mod filter=lfs diff=lfs merge=lfs -text
 # the globe's shipped levels 0-2 (#1430 H4), heights and colour bundles: rebaked whole, so never in plain history
-assets/globe/*.cubb filter=lfs diff=lfs merge=lfs -text
-assets/globe/*.cuba filter=lfs diff=lfs merge=lfs -text
+assets/bodies/**/*.cubb filter=lfs diff=lfs merge=lfs -text
+assets/bodies/**/*.cuba filter=lfs diff=lfs merge=lfs -text

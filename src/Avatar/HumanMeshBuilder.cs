@@ -163,6 +163,8 @@ public enum Headwear
     CakeHat = 24,
     PropellerCap = 25,
     BalloonHat = 26,
+    // 31-40 are the Moon's (#1941): the suit's helmet, worn outside a colony's pressurised modules
+    SpaceHelmet = 31,
 }
 
 /// <summary>
@@ -1022,6 +1024,9 @@ public static partial class HumanMeshBuilder
                 break;
             case >= Headwear.PartyHat and <= Headwear.BalloonHat:
                 AppendBirthdayHat(s, hat, top, side, up, fwd, k, frame);
+                break;
+            case Headwear.SpaceHelmet:
+                AppendSpaceHelmet(s, centre, side, up, fwd, k, frame);
                 break;
         }
     }

@@ -685,6 +685,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games, shown on its lanes (#1323)
         Net.ClockSync.Create(this);
+        // group rides on the home trainer (#1467): the open ones, the one joined, its standings
+        Trainer.GroupRides.Create(this).Said += Toast;
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
         {
@@ -759,6 +761,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 vehicles.Visible = shown;
             };
         }
+        // bots offline as on a server: after the interiors, which see their bodies (#1330 phase B's (a))
+        if (!Launch.Networked) SetUpOfflineBots(origin);
         // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the server is given the same
         Farming.FarmMarket.StandInFromArgs(source, origin);
 
@@ -1252,9 +1256,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var inventory = placedByTool || Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Net.TransferProbe.Role != null || Items.SwissNetProbe.Role != null || Player.AuraNetProbe.Role != null || Items.BeatFieldProbe.Requested || Player.TractorCheck.Role != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null || Net.IdsNetProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.OrbitNetProbe.Role != null || Player.ShuttleNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.OrbitNetProbe.Role != null || Trainer.GroupRideNetProbe.Role != null || Player.ShuttleNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
-            || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
+            || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || Bots.BotIndoorProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Items.TelescopeProbe.Requested || Items.TelescopeNetProbe.Role != null || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
@@ -1320,6 +1324,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
         if (Player.UfoNetProbe.Role != null) AddChild(new Player.UfoNetProbe(items));
         if (Player.OrbitNetProbe.Role != null) AddChild(new Player.OrbitNetProbe(items));
+        if (Trainer.GroupRideNetProbe.Role != null && _chunks != null && _worldOrigin != null)
+            AddChild(new Trainer.GroupRideNetProbe(items, () => LocalPlayer, _chunks, _worldOrigin));
         if (Player.ShuttleNetProbe.Role != null) AddChild(new Player.ShuttleNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
@@ -1339,6 +1345,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PlantProbe.Role != null) AddChild(new Items.PlantProbe(items));
         if (Items.PvpProbe.Role != null) AddChild(new Items.PvpProbe(items));
         if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
+        if (Bots.BotIndoorProbe.Role != null) AddChild(new Bots.BotIndoorProbe(items));
+        if (Bots.BotIndoorSolo.Requested) AddChild(new Bots.BotIndoorSolo(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
@@ -1401,6 +1409,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chat = ChatManager.CreateClient();
         _chat.Teleporter = _teleporter;
         _chat.PutInOrbit = km => LocalPlayer?.PutInOrbit(km) ?? "No player to put in orbit.";
+        _chat.GoTo = GoToBody;
         _chat.Inventory = inventory;
         _chat.GiveOrDrop = items.Give;
         _chat.PlaceSearch = _places;
@@ -2284,10 +2293,44 @@ public partial class ClientWorld : Node3D, IOriginContainer
         else Ground?.AddAnchor(anchor);
     }
 
+    /// <summary>
+    /// Offline, the server's bot system (bots run offline too): a <c>Players</c> container for the bots' bodies (the
+    /// player stays outside it, as offline always), this world's <see cref="PlayerReplication"/> spawner and a
+    /// <see cref="Bots.BotDirector"/>. Every bot mode then runs here as on a dedicated server, on the client's own
+    /// ground and collision (a body is a collision anchor) and the interiors' bot collision. Torn down if a network game
+    /// starts in this world (<see cref="TearDownOfflineBots"/>): the server runs its own.
+    /// </summary>
+    private void SetUpOfflineBots(WorldOrigin origin)
+    {
+        if (_players != null) return;
+        _players = new Node3D { Name = "Players" };
+        _players.AddToGroup(OriginShifter.ContainerGroup);
+        AddChild(_players);
+        _offlineSpawner = PlayerReplication.CreateSpawner(origin);
+        AddChild(_offlineSpawner);
+        AddChild(Bots.BotDirector.CreateOffline(_offlineSpawner, _players, () => _onFoot ? LocalPlayer : null));
+        if (Interiors.InteriorManager.Instance is { } interiors) interiors.Players = _players;
+    }
+
+    private MultiplayerSpawner? _offlineSpawner;
+
+    /// <summary>The offline bots go before a network game starts in this world: its server runs the bots.</summary>
+    private void TearDownOfflineBots()
+    {
+        if (_offlineSpawner == null) return;
+        if (GetNodeOrNull(Bots.BotDirector.NodeName) is { } director) { RemoveChild(director); director.QueueFree(); }
+        RemoveChild(_offlineSpawner);
+        _offlineSpawner.QueueFree();
+        _offlineSpawner = null;
+        if (_players != null) { RemoveChild(_players); _players.QueueFree(); _players = null; }
+        if (Interiors.InteriorManager.Instance is { } interiors) interiors.Players = null;
+    }
+
     private void StartNetworking(string host)
     {
         if (_networked) return;
         if (!Systems.On(Systems.Network)) { Fail("The network is off for this run (--systems)."); return; }
+        TearDownOfflineBots();
         _networked = true;
 
         // The chat node (World/Chat, made at boot) is already where the server's RPCs route.
@@ -2377,6 +2420,32 @@ public partial class ClientWorld : Node3D, IOriginContainer
                         globe.RefreshLeaves();
                     }
                 }).CallDeferred();
+        }
+        // and the other bodies' pyramids (#1849): each body's index, then its tiles by key through the tile cache, the body's
+        // number in the request; its globe and the ground on it read again what changed
+        if (_earth != null && _chunkSource is { } bodyCache)
+        {
+            var wanted = new List<int>();
+            foreach (var body in CelestialBody.All)
+                if (World.Bodies.BodyData.HasGlobe(body)) wanted.Add((int)body.Id);
+            _terrainSync.WantsBodies = wanted;
+            _terrainSync.BodyPyramidIndexSettled += (body, index) =>
+            {
+                if (index == null) return;
+                Callable.From(() =>
+                {
+                    var celestial = CelestialBody.Of((BodyId)body);
+                    if (World.Bodies.BodyData.For(celestial) is not { } chain) return;
+                    var changed = chain.UseRemote(index, (k, e, s) => bodyCache.FetchPyramid(k, e, s, body));
+                    GD.Print($"[bodies] the server's pyramid for {celestial.Name}: {index.Count} tiles, {changed.Count} changed");
+                    if (GetNodeOrNull<World.Bodies.BodyViews>("BodyViews")?.GlobeOf(celestial.Id) is { } globe)
+                    {
+                        globe.RefreshPyramid(changed);
+                        globe.Ground?.Refresh();
+                    }
+                    if (World.Bodies.BodyFetchProbe.Wants(celestial)) AddChild(new World.Bodies.BodyFetchProbe(celestial, chain));
+                }).CallDeferred();
+            };
         }
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
@@ -2497,6 +2566,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         GD.PushError("[world] connection failed");
         // a dead ENet peer makes every IsServer() on it an error, every frame: go offline instead
         Multiplayer.MultiplayerPeer = new OfflineMultiplayerPeer();
+        Net.NetLink.Invalidate();
         Fail($"Could not connect to {Launch.Endpoint}. Is the server running, and its port open?");
     }
 
@@ -2554,8 +2624,28 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>My own networked player node, once the server has spawned it.</summary>
     // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
-    private FootPlayer? GetLocalNetPlayer() =>
-        Net.NetLink.Ready(this) ? _players?.GetNodeOrNull<FootPlayer>(Multiplayer.GetUniqueId().ToString()) : null;
+    /// <summary>
+    /// This peer's own player among the spawned ones (named by its peer id), kept once found (#1910): asked many times a
+    /// frame through <see cref="LocalPlayer"/>, the lookup by a path made from a string was ~6 % of a client's main thread.
+    /// Dropped when it is freed, moved out of the players, or another id is ours.
+    /// </summary>
+    private FootPlayer? GetLocalNetPlayer()
+    {
+        // asked many times a frame: answered once a frame (a player freed meanwhile is gone at the frame's end)
+        long tick = Net.NetLink.Tick;
+        if (tick >= 0 && tick == _localNetTick) return _localNet is { } same && IsInstanceValid(same) ? same : null;
+        _localNetTick = tick;
+        if (!Net.NetLink.Ready(this) || _players == null) return _localNet = null;
+        int id = Net.NetLink.UniqueId(this);
+        if (_localNet is { } held && IsInstanceValid(held) && held.GetParent() == _players && _localNetId == id) return held;
+        _localNet = _players.GetNodeOrNull<FootPlayer>(id.ToString());
+        _localNetId = id;
+        return _localNet;
+    }
+
+    private FootPlayer? _localNet;
+    private int _localNetId;
+    private long _localNetTick = -1;
 
     public override void _UnhandledInput(InputEvent @event)
     {
@@ -3069,6 +3159,30 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (node is Camera3D cam) cam.Far = far;
     }
 
+    /// <summary>
+    /// <c>/goto &lt;body&gt; &lt;lat&gt; &lt;lon&gt; [km]</c> (#1850, <see cref="BodyGoto"/>): the fly camera there, under
+    /// <c>--frame earth</c>. On foot it takes the fly camera first; the anchor is relabelled to the body (nothing moves), then
+    /// the world shifted to the place's tangent frame and the camera put over it, looking along the horizon. T steps in where
+    /// the body has ground. The line to show.
+    /// </summary>
+    public string GoToBody(string args)
+    {
+        if (!BodyGoto.TryParse(args, out var body, out double lat, out double lon, out double height, out string error)) return error;
+        if (GameSettings.Current.Frame != WorldFrame.Earth || _worldOrigin is not { } origin || OriginShifter.Instance is not { } shifter)
+            return "/goto needs the earth world (--frame earth).";
+        if (_spectator == null) return "No camera to move here.";
+        if (_onFoot) ToggleMode();
+        if (_onFoot) return "Take the fly camera first (Shift+T).";
+        var sky = SkyClock.Now;
+        origin.Rebase(body.Id, sky);
+        shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(body.Shape.ToEcef(new Terrain.Format.Geodetic(lat, lon, 0)), body.Id));
+        _spectator.GlobalPosition = new Vector3(0, (float)height, 0);
+        _spectator.Rotation = new Vector3(0, _spectator.Rotation.Y, 0);
+        GD.Print(System.FormattableString.Invariant($"[goto] {body.Name} at {lat:F2}, {lon:F2}, {height / 1000:F1} km over its reference"));
+        return System.FormattableString.Invariant($"Off to {body.Name}: {lat:F2}°, {lon:F2}°, {height / 1000:F0} km up.")
+            + (body.Landable ? " Fly down, T steps in." : "");
+    }
+
     /// <summary>Switches between the free spectator camera and the on-foot player (T key).</summary>
     public void ToggleMode()
     {
@@ -3095,6 +3209,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         if (!_onFoot)
         {
+            // a body one cannot stand on (#1854): a giant, or the Sun's space between the planets; the camera stays
+            if (_worldOrigin is { } origin && !CelestialBody.Of(origin.Body).Landable)
+            {
+                Toast(origin.Body == BodyId.Sun ? "No ground out here: fly to a planet or a moon to step out."
+                    : $"{CelestialBody.Of(origin.Body).Name} is gas all the way down: no ground to stand on. Its moons have.");
+                return;
+            }
             FootPlayer? player = LocalPlayer;
             // a server without teleporting (#799): the fly camera looks around, it does not carry you
             if (player != null && _networked && !Permissions.CanTeleport)

@@ -331,8 +331,9 @@ public partial class ChunkStreamer : Node
         };
         // the pyramid's index (#1656) is built off the main thread once (every heights entry read for its stamp): the
         // worker that prepares the answer waits for it
+        // another body's (#1849) is asked with the body in the tile's E (AssetStream.CubeSection)
         var pyramidIndex = assetKind == AssetKind.PyramidIndex
-            ? tile.E == 0 ? PyramidIndexTask : System.Threading.Tasks.Task.FromResult<byte[]?>(null) : null;
+            ? tile.E == 0 ? PyramidIndexTask : BodyIndexTask(tile.E) : null;
         var digestManifest = ManifestOverride;
         var digestLandings = LandingsOverride;
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(assetKind == AssetKind.Digest
@@ -373,6 +374,37 @@ public partial class ChunkStreamer : Node
 
     private Terrain.Leaves.PyramidSource? _pyramid;
     private System.Threading.Tasks.Task<byte[]?>? _pyramidIndex;
+
+    /// <summary>
+    /// Server (#1849): another body's pyramid it serves, by the body's number (<c>BodyId</c>), the tiles on its own disk only
+    /// (every client has the shipped base); its index starts building as it is set. The Earth's is <see cref="Pyramid"/>.
+    /// </summary>
+    public void ServeBody(int body, Terrain.Leaves.PyramidSource source)
+    {
+        lock (_bodies)
+            _bodies[body] = (source, System.Threading.Tasks.Task.Run(() =>
+            {
+                var index = Terrain.Leaves.PyramidIndex.Of(source);
+                // the tiles on this server's own disk: the shipped base every client has is not served
+                if (index.Count == 0) return (byte[]?)null;
+                var bytes = index.ToBytes();
+                GD.Print($"[stream] body {body}'s pyramid index: {index.Count} tiles, {bytes.Length / 1024} KB");
+                return bytes;
+            }));
+    }
+
+    private readonly Dictionary<int, (Terrain.Leaves.PyramidSource Source, System.Threading.Tasks.Task<byte[]?> Index)> _bodies = new();
+
+    private System.Threading.Tasks.Task<byte[]?> BodyIndexTask(int body)
+    {
+        lock (_bodies) return _bodies.TryGetValue(body, out var b) ? b.Index : System.Threading.Tasks.Task.FromResult<byte[]?>(null);
+    }
+
+    private Terrain.Leaves.PyramidSource? BodyPyramid(int body)
+    {
+        if (body == 0) return _pyramid;
+        lock (_bodies) return _bodies.TryGetValue(body, out var b) ? b.Source : null;
+    }
     private System.Threading.Tasks.Task<byte[]?> PyramidIndexTask => _pyramidIndex ?? System.Threading.Tasks.Task.FromResult<byte[]?>(null);
 
     /// <summary>The served leaves' index, built on the first ask; null with no leaves.</summary>
@@ -395,10 +427,12 @@ public partial class ChunkStreamer : Node
         long peer = Multiplayer.GetRemoteSenderId();
         var key = new CubeKey(face, level, x, y);
         var cubeKind = (AssetKind)kind;
-        // the body rides in the section's high bits (AssetStream.CubeSection): this server serves the Earth's (0) alone
+        // the body rides in the section's high bits (AssetStream.CubeSection): the Earth's leaves, and every body's pyramid
+        // this server has on its disk (#1849)
         (int body, section) = AssetStream.CubeSection.Unpack(section);
+        var source = cubeKind == AssetKind.Pyramid ? BodyPyramid(body) : null;
         bool leaf = body == 0 && cubeKind == AssetKind.Leaf && key.IsValid && Leaves is { } l && l.IsLocal(key);
-        bool pyramid = body == 0 && cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= Terrain.Leaves.PyramidSource.FeaturesSection && _pyramid is { } p && p.IsLocal(key);
+        bool pyramid = cubeKind == AssetKind.Pyramid && key.IsValid && section is >= 0 and <= Terrain.Leaves.PyramidSource.FeaturesSection && source != null && source.IsLocal(key);
         if (!leaf && !pyramid)
         {
             RpcId(peer, MethodName.AssetMissing, requestId, true);
@@ -415,8 +449,8 @@ public partial class ChunkStreamer : Node
         queue.Preparing++;
         if (pyramid)
         {
-            var source = _pyramid!;
-            System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PreparePyramid(peer, requestId, source, key, section)));
+            var served = source!;
+            System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(PreparePyramid(peer, requestId, served, key, section)));
         }
         else
         {

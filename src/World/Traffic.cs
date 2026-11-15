@@ -178,6 +178,29 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
                 yield return new CarView(c.Head, c.Vel, c.Path, c.Holding);
     }
 
+    /// <summary>
+    /// Every moving body of the traffic within <paramref name="range"/> (flat) of <paramref name="at"/>, into
+    /// <paramref name="into"/> (cleared first): cars, trains, trams, walkers and riders. A trainer's ride ghosts through
+    /// them (#1467); no allocation, it is asked a few times a second.
+    /// </summary>
+    public void MovingBodiesNear(Vector3 at, float range, List<PhysicsBody3D> into)
+    {
+        into.Clear();
+        float r2 = range * range;
+        foreach (var list in (ReadOnlySpan<List<Vehicle>>)[_cars, _trains, _trams])
+            foreach (var v in list)
+            {
+                if (new Vector2(v.Head.X - at.X, v.Head.Z - at.Z).LengthSquared() >= r2) continue;
+                foreach (var u in v.Units)
+                    if (u is PhysicsBody3D body && IsInstanceValid(body)) into.Add(body);
+            }
+        foreach (var list in (ReadOnlySpan<List<SlowMover>>)[_walkers, _riders])
+            foreach (var m in list)
+                if (IsInstanceValid(m.Body) && m.Body.IsInsideTree()
+                    && new Vector2(m.Body.GlobalPosition.X - at.X, m.Body.GlobalPosition.Z - at.Z).LengthSquared() < r2)
+                    into.Add(m.Body);
+    }
+
     /// <summary>Whether the traffic car with this body is making way for someone (pulled over, slowing): a racer may pass it anywhere it fits.</summary>
     public bool Yielding(ulong body) => _byBody.TryGetValue(body, out var v) && v.Yield;
     private readonly Dictionary<ulong, Vehicle> _byBody = new();
@@ -1983,7 +2006,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// </summary>
     internal static float KeepRight(LaneEdge e, bool forward, uint habit)
     {
-        if (e.OneWay != 0) return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0 ? e.RightLane - e.LaneWidth : e.RightLane;
+        // the next lane in only where it lies on the carriageway (#1937): a one-way of two lanes narrower than them has its line
+        // on the centre (RightLaneOffset 0), and a lane in from there stood 3.3 m left, on the twin carriageway beside it
+        if (e.OneWay != 0)
+            return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0
+                && e.RightLane - e.LaneWidth * 1.5f >= -e.Width * 0.5f - 0.05f ? e.RightLane - e.LaneWidth : e.RightLane;
         if ((e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp) return 0f;
         float right = forward ? e.RightLaneFwd : e.RightLaneBwd;
         int lanes = forward ? e.LanesFwd : e.LanesBwd;

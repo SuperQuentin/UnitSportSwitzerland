@@ -131,6 +131,9 @@ public partial class ChatManager : Node
     /// <summary>Client-side: <c>/orbit &lt;km&gt;</c> for the own player's saucer (#1430 H5); the line to show.</summary>
     public Func<double, string>? PutInOrbit { get; set; }
 
+    /// <summary><c>/goto &lt;body&gt; &lt;lat&gt; &lt;lon&gt; [km]</c> offline (#1850): the fly camera there; the line to show.</summary>
+    public Func<string, string>? GoTo { get; set; }
+
     /// <summary>Client-side: where this player is, for the nearest venue offline (<c>/stadium</c>).</summary>
     public Func<GlobalPos?>? Here { get; set; }
 
@@ -625,6 +628,11 @@ public partial class ChatManager : Node
 
         switch (verb)
         {
+            // bots offline (single-player has the server's bot system): you are the admin
+            case "bot" or "bots":
+                if (Bots.BotDirector.Instance is not { } offlineBots) Show("Bots are not available here.", ChatKind.Error);
+                else Show(offlineBots.Command(OfflineSelf, rest, admin: true, _ => offlineBots.Local?.Invoke()), ChatKind.Private);
+                return;
             case "help":
                 if (rest.Length > 0)
                 {
@@ -705,6 +713,11 @@ public partial class ChatManager : Node
 
             case "orbit":
                 Show(OrbitLine(rest), ChatKind.Admin);
+                return;
+
+            // the fly camera to a place on any body (#1850)
+            case "goto":
+                Show(GoTo?.Invoke(rest) ?? "No camera to move here.", ChatKind.Admin);
                 return;
 
             case "spawn":
@@ -1500,6 +1513,8 @@ public partial class ChatManager : Node
                     ReplyTo(sender, "Usage: /orbit <km>, e.g. /orbit 400", ChatKind.Error);
                 else RpcId(sender, MethodName.OrbitForced, orbitKm);
                 return;
+            // another body online is C3b's (#1852, after D2): offline only for now
+            case "goto": ReplyTo(sender, "/goto is offline only until online play reaches other bodies.", ChatKind.Error); return;
             case "kick": CommandKick(sender, parts); return;
             case "mute": CommandMute(sender, parts); return;
             case "unmute": CommandUnmute(sender, parts); return;

@@ -155,6 +155,13 @@ public sealed class AutoPilot
 
     /// <summary>A runner on foot waits for this (a vehicle gets it through <see cref="Drive"/>).</summary>
     public bool Go = true;
+    /// <summary>
+    /// A rider that rides through the traffic (a trainer's ride, #1467, as in Zwift): a car stopped in the way is still
+    /// ridden round where the road has room (#1729), but no car slows it, queued or moving: a queued car stopped the bike
+    /// dead. The rider's body is excepted from the traffic's (<c>Trainer.TrainingSession</c>). Players still count.
+    /// </summary>
+    public bool Ghost;
+
     /// <summary>A top speed in m/s it never goes past, whatever the line allows (a probe's drive on open roads, #1710); none by default.</summary>
     public float MaxSpeed = float.MaxValue;
 
@@ -1109,14 +1116,17 @@ public sealed class AutoPilot
             float across = rel.Dot(new Vector3(travel.Z, 0, -travel.X));
             float along = q.Velocity.X * travel.X + q.Velocity.Z * travel.Z;
             if (a < 1.5f || a > 25f || Mathf.Abs(across) > 1.6f) continue;
+            bool through = Ghost && q.Civil;   // a ghost slows for no traffic: it rides round, or through
             if (along < 1f && !Finished)
             {
                 var (theirs, qi) = Side(q.Position);
                 float l = theirs + 1.6f, r = theirs - 1.6f;
-                side = (l <= RoomL(qi) && (RoomL(qi) - l >= -RoomR(qi) - r) ? l : r) - line.Offset[qi];
-                want = Mathf.Min(want, 6f + a * 0.3f);
+                float stepTo = l <= RoomL(qi) && (RoomL(qi) - l >= -RoomR(qi) - r) ? l : r;
+                // a ghost steps round only where it fits on the road; otherwise it holds its line, through the car
+                if (!through || (stepTo <= RoomL(qi) && stepTo >= -RoomR(qi))) side = stepTo - line.Offset[qi];
+                if (!through) want = Mathf.Min(want, 6f + a * 0.3f);
             }
-            else if (a < 15f) want = Mathf.Min(want, Mathf.Max(along, 0f) + (a - 5f) * 0.4f);
+            else if (a < 15f && !through) want = Mathf.Min(want, Mathf.Max(along, 0f) + (a - 5f) * 0.4f);
         }
         D.Lateral = Mathf.MoveToward(D.Lateral, side, 2f * dt);
         if (Finished) want = 0f;

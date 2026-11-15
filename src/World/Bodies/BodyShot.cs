@@ -13,6 +13,8 @@ namespace UnitSport.World.Bodies;
 /// <c>test_output/bodies/BODY_LAT_LON_HEIGHTkm[_earth].png</c>, then quits (it waits 8 s for the world first). Windowed (a headless run draws nothing). Pass
 /// <c>--frame earth --bodies DIR --sun real --date ...</c>; the RESULT line says what it drew. <c>sun,DLON</c> in place of
 /// LAT,LON is the point under the sun then, DLON degrees east of it (the log names that point either way).
+/// <c>later:H</c> (#1992) then moves the game's clock H hours on and saves a second picture (<c>..._later.png</c>): the
+/// local day's sky moved (the log gives the subsolar point and the Earth's direction in the body's axes both times).
 /// </summary>
 public partial class BodyShot : Node
 {
@@ -46,12 +48,31 @@ public partial class BodyShot : Node
                 int drawn = _globe()?.DrawnTiles ?? 0;
                 _quiet = drawn == _last ? _quiet + 1 : 0;
                 _last = drawn;
-                if ((_quiet > 120 && _t > 4) || _t > 15) { Save(drawn); _stage = 2; }
+                if ((_quiet > 120 && _t > 4) || _t > 15)
+                {
+                    Save(drawn, quit: _laterHours == 0);
+                    _stage = 2;
+                    _t = 0;
+                    if (_laterHours != 0)
+                    {
+                        // online the world's clock; offline the sky's own (a check's profile holds it still)
+                        if (WorldClock.Active) WorldClock.AddHours(_laterHours);
+                        else if (DayNight.Instance is { } dn) dn.Hour = TimeCommand.Wrap(dn.Hour + _laterHours);
+                        GD.Print(string.Create(CultureInfo.InvariantCulture, $"[bodyshot] the clock {_laterHours} h on"));
+                    }
+                }
+                break;
+            case 2 when _laterHours != 0 && _t > 3:
+                _file = _file.Replace(".png", "_later.png");
+                Save(_globe()?.DrawnTiles ?? 0, quit: true);
+                _stage = 3;
                 break;
         }
     }
 
     private int _last = -1;
+    private double _laterHours;
+    private BodyId _body;
 
     private void Go()
     {
@@ -70,7 +91,10 @@ public partial class BodyShot : Node
         double lon = bySun ? Math.IEEERemainder(sunLon + double.Parse(parts[2], CultureInfo.InvariantCulture), 360) : double.Parse(parts[2], CultureInfo.InvariantCulture);
         double km = double.Parse(parts[3], CultureInfo.InvariantCulture);
         bool earth = parts.Contains("earth");
-        var numbers = parts.Skip(4).Where(p => p != "earth").Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
+        if (parts.FirstOrDefault(p => p.StartsWith("later:")) is { } later)
+            _laterHours = double.Parse(later[6..], CultureInfo.InvariantCulture);
+        _body = body.Id;
+        var numbers = parts.Skip(4).Where(p => p != "earth" && !p.StartsWith("later:")).Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
         double pitch = numbers.Length > 0 ? numbers[0] : 20, yaw = numbers.Length > 1 ? numbers[1] : 0;
         _origin.Rebase(body.Id, sky);
         var at = body.Shape.ToEcef(new Geodetic(lat, lon, km * 1000));
@@ -91,8 +115,16 @@ public partial class BodyShot : Node
         GD.Print($"[bodyshot] on {body.Name} at {lat}, {lon}, {km} km up{(earth ? ", toward the Earth" : $", {pitch}° down toward {yaw}°")}");
     }
 
-    private void Save(int drawn)
+    private void Save(int drawn, bool quit = true)
     {
+        // where the sun stands overhead and where the Earth is, in the body's own axes (#1992: the local day moves the one)
+        var sky = SkyClock.Now;
+        static (double Lat, double Lon) LatLon(DVec3 v) =>
+            (Math.Atan2(v.Z, Math.Sqrt(v.X * v.X + v.Y * v.Y)) * 180 / Math.PI, Math.Atan2(v.Y, v.X) * 180 / Math.PI);
+        var (sLat, sLon) = LatLon(Frames.Convert(BodyId.Sun, DVec3.Zero, _body, sky));
+        var (eLat, eLon) = _body == BodyId.Earth ? (0.0, 0.0) : LatLon(Frames.Convert(BodyId.Earth, DVec3.Zero, _body, sky));
+        GD.Print(string.Create(CultureInfo.InvariantCulture,
+            $"[bodyshot] at {WorldClock.CurrentHour:F2} h: the sun over {sLat:F2}, {sLon:F2}; the Earth over {eLat:F2}, {eLon:F2}; local turn {sky.LocalTurn * 180 / Math.PI:F2}°"));
         var path = ProjectSettings.GlobalizePath(_file);
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
         var image = GetViewport().GetTexture().GetImage();
@@ -101,7 +133,7 @@ public partial class BodyShot : Node
         GD.Print(string.Create(CultureInfo.InvariantCulture,
             $"[bodyshot] the sun {Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(sun.Y, -1f, 1f))):F1}° over the camera's horizon"));
         GD.Print($"[bodyshot] RESULT: ok — {drawn} tiles drawn, saved {path}");
-        GetTree().Quit();
+        if (quit) GetTree().Quit();
     }
 
     private void Fail(string why)

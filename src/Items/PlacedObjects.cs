@@ -41,22 +41,38 @@ public enum PlacedKind
 }
 
 /// <summary>
-/// One object in the world. The position is LV95 plus altitude, not world space, so it survives an
+/// One object in the world. The position is a place on its body (<see cref="At"/>, #1995: it was LV95 plus altitude,
+/// and a telescope set up on the Moon was read as an Earth point, inside the Earth), not world space, so it survives an
 /// origin rebase and a server restart with another origin; <see cref="WorldTransform"/> converts.
 /// <see cref="Owner"/> is the placing player's id on a server (#1359), "local" offline, <see cref="PlacedObjects.MatchOwner"/>
 /// for a match's; what a client holds is the owner's name as the server sent it, for display only.
 /// </summary>
-public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, double E, double N, double Altitude,
-    Quaternion Rotation, string Payload)
+public sealed record PlacedObject(long Id, PlacedKind Kind, string Owner, GlobalPos At, Quaternion Rotation, string Payload)
 {
     /// <summary>
-    /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's, in the LV95 grid's axes
-    /// (what is saved); the world's turn of it is the same in a flat frame (#1503).
+    /// Where it stands in <paramref name="origin"/>'s world. <see cref="Rotation"/> is a record's: on the Earth in the LV95
+    /// grid's axes (what is saved; the world's turn of it is the same in a flat frame, #1503), on another body in the local
+    /// east-up-south (#1995: the grid is the Earth's).
     /// </summary>
-    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(origin.Frame.WorldTurnOfGrid(At, Rotation)), origin.ToWorld(At));
+    public Transform3D WorldTransform(WorldOrigin origin) => new(new Basis(OnEarth
+        ? origin.Frame.WorldTurnOfGrid(At, Rotation) : origin.Frame.WorldTurn(At, Rotation)), origin.ToWorld(At));
 
-    /// <summary>Where it stands, as a place: what is saved and sent (#1503).</summary>
-    public GlobalPos At => GlobalPos.FromLv95(E, N, Altitude);
+    private bool OnEarth => At.Body == BodyId.Earth;
+
+    /// <summary>The turn in the local east-up-south at the object: what is sent and saved (#1503, G2 A2b).</summary>
+    public Quaternion EnuTurn => OnEarth ? Lv95Grid.Axes(At).ToEnu(Rotation) : Rotation;
+
+    /// <summary>A turn in the local east-up-south at <paramref name="at"/> as a record keeps it (the grid's on the Earth, #1995).</summary>
+    public static Quaternion RecordTurn(GlobalPos at, Quaternion enu) => at.Body == BodyId.Earth ? Lv95Grid.Axes(at).FromEnu(enu) : enu;
+
+    /// <summary>LV95 notation of <see cref="At"/>, for the Earth-only kinds' own maths (a zipline's ends); never a key.</summary>
+    public double E => At.Lv95.E;
+
+    /// <summary><see cref="E"/>'s northing.</summary>
+    public double N => At.Lv95.N;
+
+    /// <summary>The height <see cref="At"/> has over its body's reference (the Earth's: as it was saved).</summary>
+    public double Altitude => At.Alt;
 }
 
 /// <summary>The server's answer to a request: the object on success, else why not.</summary>
@@ -227,11 +243,11 @@ public partial class PlacedObjects : Node
         {
             // ECEF; the turn in the local east-up-south at the place (#1503)
             var (x, y, z) = g.ToWire();
-            RpcId(1, MethodName.AskPlace, req, (int)kind, x, y, z, _origin.EnuTurn(at.Origin, rot),
+            RpcId(1, MethodName.AskPlace, req, (int)kind, x, y, z, (int)g.Body, _origin.EnuTurn(at.Origin, rot),
                 kind == PlacedKind.Zipline ? Core.EarthSaves.ZipToEarth(payload) : payload);
         }
-        // a record turns about GlobalPos's axes, as saved
-        else ServePlace(1, req, (int)kind, g.Lv95.E, g.Lv95.N, g.Alt, _origin.Frame.GridTurnOf(at.Origin, rot), payload);
+        // a record turns about GlobalPos's axes, as saved (the grid's on the Earth, the place's east-up-south elsewhere)
+        else ServePlace(1, req, (int)kind, g, g.Body == BodyId.Earth ? _origin.Frame.GridTurnOf(at.Origin, rot) : _origin.EnuTurn(at.Origin, rot), payload);
     }
 
     /// <summary>Asks to remove an object. <paramref name="done"/> gets the removed object, or the reason it stays.</summary>
@@ -259,28 +275,33 @@ public partial class PlacedObjects : Node
     // ---- client: from the server ----------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Add(long id, int kind, string owner, double x, double y, double z, Quaternion enuRot, string payload)
+    private void Add(long id, int kind, string owner, double x, double y, double z, int body, Quaternion enuRot, string payload)
     {
-        // ECEF and the turn in the local east-up-south, as a record keeps it in GlobalPos's axes (#1503)
-        var at = GlobalPos.FromWire(x, y, z);
-        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.Axes(at).FromEnu(enuRot),
+        // body-fixed metres on its body and the turn in the local east-up-south, as a record keeps it (#1503, #1995)
+        if (WireBody(body) is not { } b) return;
+        var at = GlobalPos.On(b, new UnitSport.Terrain.Format.EcefPos(x, y, z));
+        Spawned(Put(new PlacedObject(id, (PlacedKind)kind, owner, at, PlacedObject.RecordTurn(at, enuRot),
             kind == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payload) : payload)));
     }
+
+    /// <summary>A body as the wire carries it (#1995), or null for one this build does not know.</summary>
+    private static BodyId? WireBody(int body) => Enum.IsDefined((BodyId)body) ? (BodyId)body : null;
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Remove(long id) => Drop(id);
 
     /// <summary>The whole list, on joining: replaces whatever this client showed before.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void Snapshot(long[] ids, int[] kinds, string[] owners, double[] pos, float[] rot, string[] payloads)
+    private void Snapshot(long[] ids, int[] kinds, string[] owners, double[] pos, int[] bodies, float[] rot, string[] payloads)
     {
         foreach (long id in _objects.Keys.ToList()) Drop(id);
         for (int i = 0; i < ids.Length; i++)
         {
-            // three ECEF doubles and a turn in the local east-up-south each (#1503)
-            var at = GlobalPos.FromWire(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
-            Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], at.Lv95.E, at.Lv95.N, at.Alt,
-                Lv95Grid.Axes(at).FromEnu(new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3])),
+            // three body-fixed doubles on its body and a turn in the local east-up-south each (#1503, #1995)
+            if (WireBody(bodies[i]) is not { } b) continue;
+            var at = GlobalPos.On(b, new UnitSport.Terrain.Format.EcefPos(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]));
+            Put(new PlacedObject(ids[i], (PlacedKind)kinds[i], owners[i], at,
+                PlacedObject.RecordTurn(at, new Quaternion(rot[4 * i], rot[4 * i + 1], rot[4 * i + 2], rot[4 * i + 3])),
                 kinds[i] == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payloads[i]) : payloads[i]));
         }
         GD.Print($"[placed] snapshot: {ids.Length} object(s)");
@@ -374,27 +395,28 @@ public partial class PlacedObjects : Node
             list.Select(o => (int)o.Kind).ToArray(),
             list.Select(o => OwnerShown(o.Owner)).ToArray(),
             list.SelectMany(o => { var (x, y, z) = o.At.ToWire(); return new[] { x, y, z }; }).ToArray(),
+            list.Select(o => (int)o.At.Body).ToArray(),
             list.SelectMany(o => { var q = WireTurn(o); return new[] { q.X, q.Y, q.Z, q.W }; }).ToArray(),
             list.Select(WirePayload).ToArray());
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void AskPlace(int req, int kind, double x, double y, double z, Quaternion enuRot, string payload)
+    private void AskPlace(int req, int kind, double x, double y, double z, int body, Quaternion enuRot, string payload)
     {
         long peer = Multiplayer.GetRemoteSenderId();
-        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(z) || !enuRot.IsFinite())
+        if (!double.IsFinite(x) || !double.IsFinite(y) || !double.IsFinite(z) || !enuRot.IsFinite() || WireBody(body) is not { } b)
         {
             Reply(peer, req, 0, "Bad position.");
             return;
         }
-        // ECEF and a turn in the local east-up-south -> the record's LV95 and GlobalPos axes (#1503)
-        var at = GlobalPos.FromWire(x, y, z);
-        ServePlace(peer, req, kind, at.Lv95.E, at.Lv95.N, at.Alt, Lv95Grid.Axes(at).FromEnu(enuRot),
+        // body-fixed metres and a turn in the local east-up-south -> the record's place and axes (#1503, #1995)
+        var at = GlobalPos.On(b, new UnitSport.Terrain.Format.EcefPos(x, y, z));
+        ServePlace(peer, req, kind, at, PlacedObject.RecordTurn(at, enuRot),
             kind == (int)PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(payload) : payload);
     }
 
     /// <summary>A record's turn in the local east-up-south at its place: what goes on the wire.</summary>
-    private static Quaternion WireTurn(PlacedObject o) => Lv95Grid.Axes(o.At).ToEnu(o.Rotation);
+    private static Quaternion WireTurn(PlacedObject o) => o.EnuTurn;
 
     /// <summary>The turn as saved: <see cref="WireTurn"/>'s, the local east-up-south at the object (#1503, G2 A2b).</summary>
     private static float[] SavedTurn(PlacedObject o)
@@ -442,7 +464,7 @@ public partial class PlacedObjects : Node
         GD.Print($"[placed] {mine.Count} object(s) of {name} now kept under {id}");
     }
 
-    private void ServePlace(long peer, int req, int kind, double e, double n, double alt, Quaternion rot, string payload)
+    private void ServePlace(long peer, int req, int kind, GlobalPos at, Quaternion rot, string payload)
     {
         if (OwnerKey(peer) is not { } owner)
         {
@@ -452,14 +474,16 @@ public partial class PlacedObjects : Node
         string? refused =
             !Enum.IsDefined((PlacedKind)kind) || kind == 0 ? "Unknown object."
             : payload.Length > MaxPayload ? "Too much data."
-            : !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !rot.IsFinite() ? "Bad position."
-            : !InReachOfEnd(peer, (PlacedKind)kind, e, n, alt, payload) ? "Too far away."
+            : !rot.IsFinite() ? "Bad position."
+            // the Earth-only kinds (a zipline's ends are LV95 notation, the farm's stands) stay on the Earth
+            : at.Body != BodyId.Earth && !OffEarth((PlacedKind)kind) ? "That cannot be set up here."
+            : !InReachOfEnd(peer, (PlacedKind)kind, at, payload) ? "Too far away."
             : _objects.Values.Count(o => o.Owner == owner) >= MaxPerOwner ? $"You already placed {MaxPerOwner} things."
             // one travel flag a player (#1227): it is that player's one portable travel point
             : (PlacedKind)kind == PlacedKind.TravelFlag && _objects.Values.Any(o => o.Kind == PlacedKind.TravelFlag && o.Owner == owner)
                 ? "Your travel flag already stands: take it up first."
             // a kind's own rules (a zipline's length and slope): Build.Gadgets
-            : Build.Gadgets.Check(new PlacedObject(0, (PlacedKind)kind, owner, e, n, alt, rot, payload), _origin);
+            : Build.Gadgets.Check(new PlacedObject(0, (PlacedKind)kind, owner, at, rot, payload), _origin);
         if (refused != null)
         {
             Reply(peer, req, 0, refused);
@@ -468,30 +492,59 @@ public partial class PlacedObjects : Node
 
         // a campfire is lit now, by the server's clock: what the client sent does not count
         if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(World.WorldClock.EnvNow);
-        var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
+        var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, at, rot.Normalized(), payload);
         RememberOwner(owner);
         Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();
         ServedByPeer?.Invoke(peer, o, true);
-        GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {OwnerShown(owner)} at LV95 {e:F1}/{n:F1}"));
+        GD.Print(FormattableString.Invariant($"[placed] {o.Kind} #{o.Id} by {OwnerShown(owner)} at {Where(o.At)}"));
         var (wx, wy, wz) = o.At.ToWire();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, WireTurn(o), WirePayload(o));
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, (int)o.At.Body, WireTurn(o), WirePayload(o));
         Reply(peer, req, o.Id, "");
     }
 
     /// <summary>Server: sets something down on its own authority (a match's gadgets): no checks, told to everyone.</summary>
     public PlacedObject ServerPlace(PlacedKind kind, Transform3D at, string payload, string owner)
     {
-        var (e, n) = _origin.ToLv95(at.Origin);
-        var o = Put(new PlacedObject(_nextId++, kind, owner, e, n, at.Origin.Y, at.Basis.Orthonormalized().GetRotationQuaternion(), payload));
+        var rot = at.Basis.Orthonormalized().GetRotationQuaternion();
+        PlacedObject o;
+        if (_origin.Body == BodyId.Earth)
+        {
+            var (e, n) = _origin.ToLv95(at.Origin);
+            o = Put(new PlacedObject(_nextId++, kind, owner, GlobalPos.FromLv95(e, n, at.Origin.Y), rot, payload));
+        }
+        else
+        {
+            // another body (#1995): its place, the turn in its east-up-south
+            o = Put(new PlacedObject(_nextId++, kind, owner, _origin.ToGlobal(at.Origin), _origin.EnuTurn(at.Origin, rot), payload));
+        }
         if (owner != MatchOwner) Save();
         var (wx, wy, wz) = o.At.ToWire();
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
-                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, WireTurn(o), WirePayload(o));
+                RpcId(p, MethodName.Add, o.Id, (int)o.Kind, OwnerShown(o.Owner), wx, wy, wz, (int)o.At.Body, WireTurn(o), WirePayload(o));
         return o;
+    }
+
+    /// <summary>
+    /// The kinds that may stand off the Earth (#1995): the telescope and the flag, whose rules are a place and a turn. A
+    /// zipline's other end, a farm stand, a hay hideout and the gadgets keep LV95 maths (the Earth's notation), a campfire
+    /// needs air, a travel flag the Earth's map: refused there until each is looked at.
+    /// </summary>
+    public static bool OffEarth(PlacedKind kind) => kind is PlacedKind.Telescope or PlacedKind.Flag;
+
+    /// <summary>A place for the log: LV95 on the Earth, the body and its latitude and longitude elsewhere.</summary>
+    private static string Where(GlobalPos at)
+    {
+        if (at.Body == BodyId.Earth)
+        {
+            var l = at.Lv95;
+            return FormattableString.Invariant($"LV95 {l.E:F1}/{l.N:F1}");
+        }
+        var g = at.Geodetic;
+        return FormattableString.Invariant($"{at.Body} {g.LatDeg:F4}, {g.LonDeg:F4}");
     }
 
     /// <summary>Server: takes one object away on its own authority (a birthday cake eaten up, #1423), told to everyone.</summary>
@@ -523,7 +576,7 @@ public partial class PlacedObjects : Node
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
             : !AnyoneMayRemove(o) && key == null ? Unproven
             : !AnyoneMayRemove(o) && o.Owner != key ? "That is not yours."
-            : !InReachOfEnd(peer, o.Kind, o.E, o.N, o.Altitude, o.Payload) ? "Too far away."
+            : !InReachOfEnd(peer, o.Kind, o.At, o.Payload) ? "Too far away."
             : Farming.FarmStands.RemoveProblem(o) ?? Telescopes.RemoveProblem(o);
         if (refused != null)
         {
@@ -550,17 +603,18 @@ public partial class PlacedObjects : Node
     }
 
     /// <summary>Within reach of the object; a zipline has two ends, standing by either one will do.</summary>
-    private bool InReachOfEnd(long peer, PlacedKind kind, double e, double n, double alt, string payload) =>
-        InReach(peer, e, n, alt)
-        || (kind == PlacedKind.Zipline && Build.Gadgets.ZipStart(payload) is { } s && InReach(peer, s.E, s.N, s.Alt));
+    private bool InReachOfEnd(long peer, PlacedKind kind, GlobalPos at, string payload) =>
+        InReach(peer, at)
+        || (kind == PlacedKind.Zipline && Build.Gadgets.ZipStart(payload) is { } s && InReach(peer, GlobalPos.FromLv95(s.E, s.N, s.Alt)));
 
     /// <summary>Within reach of the requester's body; offline there is nobody to doubt.</summary>
-    private bool InReach(long peer, double e, double n, double alt, float reach = Reach)
+    private bool InReach(long peer, GlobalPos at, float reach = Reach)
     {
         if (!Online) return true;
         if (GetNodeOrNull<Player.FootPlayer>("../Players/" + peer) is not { } body) return false;
-        // in LV95, from what the player published: the server's origin may be far away (#185)
-        return body.Global.DistanceTo(GlobalPos.FromLv95(e, n, alt)) <= reach;
+        // from what the player published, as places: the server's origin may be far away (#185); another body is never near
+        var me = body.Global;
+        return me.Body == at.Body && me.DistanceTo(at) <= reach;
     }
 
     // ---- a flare sets a hay hideout alight (#359) --------------------------------------------------
@@ -580,7 +634,7 @@ public partial class PlacedObjects : Node
 
     private void ServeBurn(long peer, long id)
     {
-        if (!_objects.TryGetValue(id, out var o) || o.Kind != PlacedKind.HayHideout || !InReach(peer, o.E, o.N, o.Altitude, BurnReach)) return;
+        if (!_objects.TryGetValue(id, out var o) || o.Kind != PlacedKind.HayHideout || !InReach(peer, o.At, BurnReach)) return;
         GD.Print($"[placed] HayHideout #{id} set alight by {(OwnerKey(peer) is { } who ? OwnerShown(who) : peer.ToString())}");
         if (Online)
             foreach (int p in Multiplayer.GetPeers())
@@ -636,9 +690,10 @@ public partial class PlacedObjects : Node
             foreach (var en in store.Objects)
             {
                 // by name, so a reordered enum does not turn flags into photos
-                if (!Enum.TryParse<PlacedKind>(en.Kind, out var kind) || Core.SavedPlace.GridTurn(en.At, en.Turn) is not { } rot) continue;
-                var (e, n, h) = en.At.Lv95;
-                Put(new PlacedObject(en.Id, kind, en.Owner, e, n, h, rot,
+                // the turn as saved is the place's east-up-south: a record keeps the grid's on the Earth (#1995)
+                if (!Enum.TryParse<PlacedKind>(en.Kind, out var kind) || en.Turn is not { Length: 4 } t || !t.All(float.IsFinite)) continue;
+                var rot = PlacedObject.RecordTurn(en.At, new Quaternion(t[0], t[1], t[2], t[3]));
+                Put(new PlacedObject(en.Id, kind, en.Owner, en.At, rot,
                     kind == PlacedKind.Zipline ? Core.EarthSaves.ZipFromEarth(en.Payload) : en.Payload));
             }
             foreach (var (id, name) in store.OwnerNames) _ownerNames[id] = name;

@@ -376,6 +376,13 @@ public sealed class OriginFrame
     /// <summary>An ECEF point in this world (#1430 H5), the inverse of <see cref="ToEcef(Vector3)"/>.</summary>
     public Vector3 FromEcef(EcefPos p)
     {
+        // off the Earth (#1851) the point is the anchor body's own: a GlobalPos is the Earth's, and read as one a point
+        // round the Moon landed 400,000 km away (the shuttle's first orbit step after the drive off)
+        if (Axes is { } axes && axes.Body != BodyId.Earth)
+        {
+            var (x, y, z) = axes.FromEcef(p);
+            return new Vector3((float)x, (float)y, (float)z);
+        }
         return ToWorld(GlobalPos.FromEcef(p));
     }
 

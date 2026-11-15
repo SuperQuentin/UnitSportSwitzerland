@@ -302,14 +302,18 @@ public sealed class NetworkChunkSource : IChunkSource
     /// (<see cref="AssetStream.PyramidCacheName"/>), else the stream, with the leaves' retries, slots and memory of what the
     /// server lacks; written into the cache. Called on a worker: blocks for the transfer. Null when it did not come.
     /// </summary>
-    public byte[]? FetchPyramid(CubeKey key, Leaves.PyramidIndex.Entry entry, int section)
+    public byte[]? FetchPyramid(CubeKey key, Leaves.PyramidIndex.Entry entry, int section) => FetchPyramid(key, entry, section, 0);
+
+    /// <summary>Another body's pyramid tile (#1849): <paramref name="body"/> its number, in the cache's name and the request.</summary>
+    public byte[]? FetchPyramid(CubeKey key, Leaves.PyramidIndex.Entry entry, int section, int body)
     {
-        string path = Path.Combine(_cacheDirectory, AssetStream.PyramidCacheName(key, entry.Stamp, section));
+        string path = Path.Combine(_cacheDirectory, AssetStream.PyramidCacheName(key, entry.Stamp, section, body));
         if (ReadCache(path) is { } cached && Fits(cached)) return cached;
         if (key.Level > LowDataPyramidLevel && Core.GameSettings.Current.LowDataActive) return null;
 
         // through the pyramid's own slots: the near leaves keep theirs
-        var ask = new Ask(AssetKind.Pyramid, default, key, section);
+        // the body in the ask's tile (E), so two bodies' same key are two asks
+        var ask = new Ask(AssetKind.Pyramid, new TileId(body, 0), key, section);
         lock (_gate)
         {
             if (_knownMissing.Contains(ask)) return null;
@@ -510,7 +514,7 @@ public sealed class NetworkChunkSource : IChunkSource
             if (_inFlight.TryGetValue(key, out var existing)) return existing;
 
             var task = key.Kind is AssetKind.Leaf or AssetKind.Pyramid
-                ? _streamer.FetchCubeAsync(key.Kind, key.Cube, key.Section, ct)
+                ? _streamer.FetchCubeAsync(key.Kind, key.Cube, key.Section, ct, body: key.Kind == AssetKind.Pyramid ? key.Tile.E : 0)
                 : _streamer.FetchAsync(key.Kind, key.Tile, ct);
             _inFlight[key] = task;
 

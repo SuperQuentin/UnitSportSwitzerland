@@ -41,6 +41,8 @@ public static class CockpitCheck
         foreach (var spec in CarCatalog.All)
         {
             if (spec.Body.Shape == BodyShape.Kart) { failed += CheckKart(spec); continue; }
+            // a Moon rover's seat is its own (MoonRoverMeshBuilder.SeatFor), checked in the model viewer and --moonrovercheck
+            if (spec.Body.Shape.IsRover()) continue;
             var d = CarMeshBuilder.For(spec.Body, spec.Wheelbase);
             var seat = CarMeshBuilder.SeatFor(d, spec.Body.LeftHandDrive);
             var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);

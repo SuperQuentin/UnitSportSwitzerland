@@ -103,7 +103,8 @@ public partial class PhoneScreens : Node
     // the Training app (#901)
     private Control _training = null!;
     private Label _trCourse = null!, _trStatus = null!, _trTrainer = null!;
-    private VBoxContainer _trActions = null!, _trRecent = null!, _trDevices = null!;
+    private VBoxContainer _trActions = null!, _trRecent = null!, _trDevices = null!, _trGroups = null!;
+    private Label _trGroupTitle = null!, _trGroupText = null!;
     private string _trShown = "";
     private double _actRefreshAt;
     private RaceManager? _races;
@@ -1071,6 +1072,15 @@ public partial class PhoneScreens : Node
         list.AddChild(_trActions);
         _trRecent = UiKit.VBox(6);
         list.AddChild(_trRecent);
+        // group rides (#1467): online, the rides others host, one to host on this course, the standings
+        list.AddChild(UiKit.Spacer(6));
+        _trGroupTitle = Big("Group rides", 26, InkDim);
+        list.AddChild(_trGroupTitle);
+        _trGroupText = Big("", 22);
+        _trGroupText.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        list.AddChild(_trGroupText);
+        _trGroups = UiKit.VBox(6);
+        list.AddChild(_trGroups);
         list.AddChild(UiKit.Spacer(6));
         list.AddChild(Big("Trainer", 26, InkDim));
         _trTrainer = Big("", 24);
@@ -1108,7 +1118,16 @@ public partial class PhoneScreens : Node
             : link.Devices.Count > 0 ? $"{devices}\nNo power yet: pedal. Difficulty {link.Difficulty}%"
             : $"No trainer: the keys pedal. Difficulty {link.Difficulty}%");
 
-        string shape = $"{phase}|{session.CanStart}|{session.OnCourse}|{link.Erg}|{link.ErgWhyNot}|{string.Join(",", link.Prefs.Recent)}|{link.Scanning}|{link.Difficulty}|{link.Prefs.Devices.Count}|"
+        var groups = Trainer.GroupRides.Instance;
+        bool online = groups != null && Net.NetLink.Online(groups);
+        _trGroupTitle.Visible = _trGroupText.Visible = _trGroups.Visible = online;
+        if (online)
+            SetText(_trGroupText, groups!.Joined != 0
+                ? (groups.Standings.Count > 0 ? groups.StandingsText((float)session.Along) : "In a group ride: the others' places come once you ride.")
+                : groups.Open.Count == 0 ? "None open. Host one on your course: others join from their Training app." : "Join one, or host one on your course.");
+        string groupShape = online ? $"{groups!.Joined}|" + string.Join(",", groups.Open.Select(g => $"{g.Id}:{g.Riders}")) : "";
+
+        string shape = $"{groupShape}|{phase}|{session.CanStart}|{session.OnCourse}|{link.Erg}|{link.ErgWhyNot}|{string.Join(",", link.Prefs.Recent)}|{link.Scanning}|{link.Difficulty}|{link.Prefs.Devices.Count}|"
             + string.Join(",", link.Found.Select(f => f.Id)) + "|" + string.Join(",", link.Devices.Keys);
         if (shape == _trShown && !force) return;
         _trShown = shape;
@@ -1147,6 +1166,24 @@ public partial class PhoneScreens : Node
             var b = Row("Ride again: " + System.IO.Path.GetFileNameWithoutExtension(path));
             b.Pressed += () => session.Load(path);
             _trRecent.AddChild(b);
+        }
+
+        Clear(_trGroups);
+        if (online)
+        {
+            if (groups!.Joined != 0) _trGroups.AddChild(Small("Leave the group", grey, groups.Leave));
+            else
+            {
+                if (session.CoursePath != null && session.State != Trainer.TrainingSession.Phase.Loading)
+                    _trGroups.AddChild(Small("Host a group ride", go, () => groups.Host(session)));
+                foreach (var g in groups.Open)
+                {
+                    var open = g;
+                    var b = Row(FormattableString.Invariant($"Join: {open.Name} · {open.Km:0.0} km · {open.Host} · {open.Riders} riding"));
+                    b.Pressed += () => groups.Join(open.Id);
+                    _trGroups.AddChild(b);
+                }
+            }
         }
 
         Clear(_trDevices);

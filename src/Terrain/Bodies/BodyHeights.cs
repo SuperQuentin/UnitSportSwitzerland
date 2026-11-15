@@ -26,6 +26,14 @@ public sealed class BodyHeights
     private readonly int _level;
     private readonly Func<CubeKey, CubeTile?> _load;
     private readonly CraterField? _craters;
+
+    /// <summary>The generated craters (null where the body has none): the boulders read their fresh ones.</summary>
+    public CraterField? Craters => _craters;
+    private readonly SurfaceStamps? _stamps;
+    private readonly SurfaceProfile? _profile;
+
+    /// <summary>The profile's relief under the data (Mars' dunes, Europa's ridges...), or null.</summary>
+    public SurfaceProfile? Profile => _profile;
     private readonly Dictionary<CubeKey, CubeTile?> _tiles = new();
     private readonly object _lock = new();
 
@@ -33,22 +41,34 @@ public sealed class BodyHeights
     /// <param name="level">The pyramid's finest level (the Moon's 5: 167 m cells).</param>
     /// <param name="load">A tile of that level, or null where the pyramid has none (called once a tile, on any thread).</param>
     /// <param name="craters">The profile's craters under the data, or null for the data alone.</param>
-    public BodyHeights(CubeShape cube, int level, Func<CubeKey, CubeTile?> load, CraterField? craters)
+    /// <param name="stamps">Where the ground is made ready for a site (#1939: craters calmed under a lander, a colony's
+    /// level plateau), or null for none.</param>
+    /// <param name="profile">The body's relief family under the data (<see cref="SurfaceProfile.For"/>), or null.</param>
+    public BodyHeights(CubeShape cube, int level, Func<CubeKey, CubeTile?> load, CraterField? craters, SurfaceStamps? stamps = null,
+        SurfaceProfile? profile = null)
     {
+        _profile = profile;
         _cube = cube;
         _level = level;
         _load = load;
         _craters = craters;
+        _stamps = stamps;
     }
+
+    /// <summary>The sites' stamps on this ground, or null.</summary>
+    public SurfaceStamps? Stamps => _stamps;
 
     public CubeShape Cube => _cube;
 
-    /// <summary>The height over the reference surface at a unit normal (body-fixed), metres: the data and the craters.</summary>
-    public double At(EcefPos n) => Data(n) + (_craters?.At(n.X, n.Y, n.Z) ?? 0);
+    /// <summary>The height over the reference surface at a unit normal (body-fixed), metres: the data, the craters and the stamps.</summary>
+    public double At(EcefPos n) => Stamped(n, Data(n), (_craters?.At(n.X, n.Y, n.Z) ?? 0) + (_profile?.At(n.X, n.Y, n.Z) ?? 0));
 
-    /// <summary>The data and the craters from <paramref name="smallestCrater"/> metres up (a coarser mesh's ground).</summary>
+    /// <summary>The data, the craters from <paramref name="smallestCrater"/> metres up (a coarser mesh's ground) and the stamps.</summary>
     public double At(EcefPos n, double smallestCrater) =>
-        Data(n) + (_craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0);
+        Stamped(n, Data(n), (_craters?.At(n.X, n.Y, n.Z, smallest: smallestCrater) ?? 0) + (_profile?.At(n.X, n.Y, n.Z, smallestCrater) ?? 0));
+
+    private double Stamped(EcefPos n, double data, double craters) =>
+        _stamps == null ? data + craters : _stamps.Apply(n, data, craters, Data);
 
     /// <summary>The data's height alone at a unit normal: the finest tile, bilinear; 0 where there is none.</summary>
     public double Data(EcefPos n)
@@ -69,15 +89,20 @@ public sealed class BodyHeights
 
     /// <summary>
     /// The globe's own surface at a unit normal: the finest tile's every <paramref name="stride"/>th height, flat between
-    /// them in the two triangles a quad of the globe's mesh is cut into (its diagonal from (i+1, j) to (i, j+1)). The
+    /// them in the two triangles a quad of the globe's mesh is cut into (its diagonal from (i+1, j) to (i, j+1)). With
+    /// <paramref name="ofFullLattice"/> the stride is the globe's for a 513² tile, scaled to a coarser one's lattice (it
+    /// draws every tile at 512 / stride cells: the shipped base's 65² at stride 1, #1849). The
     /// near ground's edge eases into it, so the two meet without a step.
     /// </summary>
-    public double Coarse(EcefPos n, int stride)
+    public double Coarse(EcefPos n, int stride, bool ofFullLattice = false)
     {
         var (face, u, v) = _cube.FromNormal(n);
         var key = CubeKey.FromFace(face, u, v, _level);
         if (Tile(key) is not { } tile) return 0;
-        int bits = tile.Bits, side = 1 << bits, cells = side / stride;
+        // the globe draws a tile at 512 / stride cells, whatever its lattice (the shipped base's 65² at every height)
+        int bits = tile.Bits, side = 1 << bits;
+        if (ofFullLattice) stride = Math.Max(1, side * stride / 512);
+        int cells = side / stride;
         double scale = Math.Pow(2, _level + bits);
         double gx = Math.Clamp(((u + 1) * 0.5 * scale - ((long)key.X << bits)) / stride, 0, cells);
         double gy = Math.Clamp(((v + 1) * 0.5 * scale - ((long)key.Y << bits)) / stride, 0, cells);

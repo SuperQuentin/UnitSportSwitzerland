@@ -1400,6 +1400,8 @@ public partial class Globe : Node
             // drawn into a frame that turns with the Earth: no fill to stand behind
             globe.SetShaderParameter(FillPush, false);
             node.MaterialOverride = MaterialFor(key);
+            // the terrain body reads its colours flat where a cell is under a pixel (#1987)
+            if (DrawnCellM(key, arrays) is > 0 and var cell) node.SetInstanceShaderParameter(FacetParam, cell);
         }
         if (trees != null) AddTrees(node, trees);
         // a leaf patch read again (#1655) takes the old one's place and its visibility
@@ -1445,6 +1447,20 @@ public partial class Globe : Node
             material.SetShaderParameter(UvRect, new Vector4(rect.X + sub.X * rect.Z, rect.Y + sub.Y * rect.W, sub.Z * rect.Z, sub.W * rect.W));
             return;
         }
+    }
+
+    private static readonly StringName FacetParam = "facet_m";
+
+    /// <summary>
+    /// A patch's drawn cell, metres (#1987), as <see cref="Build"/> works it out: <c>n</c>² lattice vertices and 4 (<c>n</c> - 1)
+    /// skirt ones, so <c>n</c> - 1 cells a side, whatever the stride (a globe tile's <see cref="Cells"/>, a far leaf's
+    /// <c>LeafStride</c>). 0 for a mesh of another shape.
+    /// </summary>
+    internal static float DrawnCellM(CubeKey key, Godot.Collections.Array arrays)
+    {
+        int count = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length;
+        int n = (int)Math.Round(Math.Sqrt(count + 8.0)) - 2;
+        return n > 1 && n * n + 4 * (n - 1) == count ? (float)(EarthR * Math.PI / 2 / key.Side / (n - 1)) : 0f;
     }
 
     /// <summary>A tile's drawn patch: its mesh and its colour, in its anchor frame.</summary>

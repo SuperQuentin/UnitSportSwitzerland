@@ -264,6 +264,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
+        // group rides on the home trainer (#1467): who rides which course, and how far along
+        Trainer.GroupRides.Create(this, peer => _chat?.NameOfPeer(peer) ?? $"Player {peer}");
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
         // the fun world's sky is held at dusk (#1396): its clock stopped there
@@ -617,6 +619,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (_earth != null) _streamer.Leaves = _earth.Store;
         // and the globe's pyramid on its disk (#1656), streamed by key to clients for every level they draw and the fill stands on
         if (_earth != null && World.GlobeData.HasLocal) _streamer.Pyramid = World.GlobeData.Earth;
+        // and every other body's pyramid on its disk (#1849), by the body's number: clients beyond the shipped base stream it
+        if (_earth != null)
+            foreach (var body in CelestialBody.All)
+                if (World.Bodies.BodyData.HasGlobe(body) && World.Bodies.BodyData.LocalDir(body) != null && World.Bodies.BodyData.For(body) is { } chain)
+                    _streamer.ServeBody((int)body.Id, chain);
         _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)

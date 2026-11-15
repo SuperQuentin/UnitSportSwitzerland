@@ -46,7 +46,7 @@ public static class TerrainPaths
     /// The globe's pyramid on this copy's disk, the local install (#1656; no drive letter in the code): <c>--globe DIR</c>,
     /// else the chunk folder's <c>_globe</c> sibling (as <c>_cube</c> is the leaves'), else <c>cube_global</c> beside the
     /// chunk folder (where <c>--cube-global</c>/<c>--cube-swiss</c> write it today); null where none has a manifest, or
-    /// with <c>--globe off</c> (then no globe is drawn at all, <see cref="GlobeOff"/>). <c>--globe res://assets/globe</c>
+    /// with <c>--globe off</c> (then no globe is drawn at all, <see cref="GlobeOff"/>). <c>--globe res://assets/bodies/earth</c>
     /// names the shipped base alone: no local layer.
     /// </summary>
     public static string? FindGlobeDir()
@@ -57,6 +57,24 @@ public static class TerrainPaths
         var chunks = FindChunkDir().TrimEnd('/', '\\');
         foreach (var dir in new[] { chunks + "_globe", Path.Combine(Path.GetDirectoryName(chunks) ?? ".", "cube_global") })
             if (HasCubeManifest(dir)) return dir;
+        return null;
+    }
+
+    /// <summary>
+    /// The other bodies' data on this copy's disk, the local install (each body's pyramid in <c>&lt;dir&gt;/&lt;body&gt;/cube</c>):
+    /// <c>--bodies DIR</c>, else the "bodies" of a <c>terrain_location.json</c> (next to the executable, then the project's),
+    /// else <c>planets</c> or <c>bodies</c> beside the chunk folder. Null where none is there: the server's and the shipped
+    /// base serve then (World/Bodies/BodyData).
+    /// </summary>
+    public static string? FindBodiesDir()
+    {
+        if (CmdArgs.Value("--bodies") is { Length: > 0 } explicitDir) return explicitDir;
+        string exeDir = Path.GetDirectoryName(OS.GetExecutablePath()) ?? ".";
+        foreach (string dir in new[] { exeDir, ProjectSettings.GlobalizePath("res://") })
+            if (ReadLocation(Path.Combine(dir, LocationFileName), "bodies") is { } saved && Directory.Exists(saved)) return saved;
+        var parent = Path.GetDirectoryName(FindChunkDir().TrimEnd('/', '\\')) ?? ".";
+        foreach (var name in new[] { "planets", "bodies" })
+            if (Directory.Exists(Path.Combine(parent, name))) return Path.Combine(parent, name);
         return null;
     }
 

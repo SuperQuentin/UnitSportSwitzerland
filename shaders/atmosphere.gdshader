@@ -32,6 +32,9 @@ uniform float g_m = 0.76;
 uniform float m_ext = 1.1;
 // what the fine part absorbs besides (Mars' dust takes blue); the Earth's molecules none
 uniform vec3 absorb_r = vec3(0.0, 0.0, 0.0);
+// inside a giant's clouds (#1854): the march stops this far along the ray, metres, past where nothing comes back (20
+// steps spread over hundreds of km of dense gas showed their jitter as grain); 0: to the shell's edge
+uniform float max_march = 0.0;
 const int STEPS = 20;
 // the Earth's shadow fades over this much height at its edge instead of cutting the light off a
 // sample at a time (that banded near the terminator)
@@ -104,6 +107,7 @@ void fragment() {
 	vec2 ground = sphere(o, dir, planet_r);
 	if (ground.x > 0.0) t1 = min(t1, ground.x);
 	t1 = min(t1, scene);
+	if (max_march > 0.0) t1 = min(t1, t0 + max_march);
 	// no air on the way: the sun alone (added: alpha 0 keeps what lies behind)
 	if (air.y <= 0.0 || t1 <= t0) {
 		if (dot(sun, sun) <= 0.0) discard;

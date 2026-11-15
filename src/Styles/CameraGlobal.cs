@@ -1,3 +1,4 @@
+using System;
 using Godot;
 
 namespace UnitSport.Styles;
@@ -198,6 +199,13 @@ public partial class CameraGlobal : Node
         }
     }
 
+    /// <summary>
+    /// True while something stands round the camera high up (#1854: Saturn's ring chunks, 40,000 km over its clouds), set
+    /// by what draws it: the far plane comes back to the game's own and the near plane down with it (by altitude it was 4
+    /// km, past every chunk). The bodies far off are shrunk to any far plane (<c>BodyGlobe</c>'s scaled space).
+    /// </summary>
+    public static Func<bool>? CloseContent { get; set; }
+
     /// <summary>The near plane is at least the camera's distance from the world's origin over this (#1497).</summary>
     public const float NearOfDistance = 200_000;
 
@@ -214,7 +222,8 @@ public partial class CameraGlobal : Node
     private void Planes(Camera3D camera, double altitude)
     {
         float far = Core.GameSettings.Current.CameraFar;
-        if (altitude > 5_000) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
+        bool close = CloseContent?.Invoke() == true;
+        if (altitude > 5_000 && !close) far = Mathf.Max(far, (float)(Core.Curvature.HorizonM(altitude) + 200_000));
         if (Mathf.Abs(camera.Far - far) > far * 0.01f) camera.Far = far;
         // past 1,000 km (the spectator only: the UFO and the shuttle fly lower) the near plane follows the
         // altitude: at 12,000 km a 17,400 km far over a 1 m near broke the light culler's frustum
@@ -224,7 +233,7 @@ public partial class CameraGlobal : Node
         // 0.08 m near plane's corners fell within a few steps of the eye: the frustum degenerated and nothing
         // drew, the shuttle 50 m ahead included. 1/200,000 of its distance from the origin: 2 m at 400 km.
         float floor = camera.GlobalPosition.Length() / NearOfDistance;
-        float raised = Mathf.Max(altitude > RaisedNearFromM ? (float)(altitude / 10_000) : 0f, floor);
+        float raised = Mathf.Max(altitude > RaisedNearFromM && !close ? (float)(altitude / 10_000) : 0f, floor);
         // and never so near under the far plane that the frustum's planes degenerate (#1811)
         float deepest = camera.Far / MaxFarOverNear;
         if (deepest > raised)

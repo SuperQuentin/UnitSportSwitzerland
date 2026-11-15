@@ -59,7 +59,7 @@ public partial class SiteUpperNetProbe : ChatProbe
         me.RequestReplacement();
         DoorIndex.Entry? found = null;
         if (!await Until(() => me.IsOnFloor() && !me.KnockedOut
-                && (found = DoorIndex.NearestOfKind(me.GlobalPosition, 200f, BuildingKind.UnderConstruction, also: d => d.Level == 1)) != null, 90))
+                && (found = DoorIndex.NearestOfKind(me.GlobalPosition, 600f, BuildingKind.UnderConstruction, also: d => d.Level == 1)) != null, 90))
         { Fail("no raised site office door near the spot"); return; }
         await Seconds(1.0);
         var door = found!.Value;

@@ -28,9 +28,15 @@ more than 30 m from the sender's body.
 
 ## Placed objects — `src/Items/PlacedObjects.cs`, `World/Placed`
 
-Server-owned list of `PlacedObject(long Id, PlacedKind Kind, string Owner, double E, double N,
-double Altitude, Quaternion Rotation, string Payload)` — LV95 + altitude, so it means the same place
-to every peer, whatever their origin (#185); `o.WorldTransform(placed.Origin)` converts.
+Server-owned list of `PlacedObject(long Id, PlacedKind Kind, string Owner, GlobalPos At, Quaternion Rotation,
+string Payload)` — a place on its body, so it means the same place to every peer, whatever their origin (#185);
+`o.WorldTransform(placed.Origin)` converts. Until #1995 it was LV95 + altitude: a telescope set up on the Moon was read
+as an Earth point inside the Earth, never in reach. `E`/`N`/`Altitude` are now LV95 notation of `At`, for the
+Earth-only kinds' maths (a zipline's other end). The rotation is the LV95 grid's on the Earth (as saved since A2b) and
+the place's east-up-south on another body (`PlacedObject.RecordTurn`/`EnuTurn`). The body goes on the wire
+(`AskPlace`, `Add`, `Snapshot`: protocol 96) and in the save (`GlobalPosJson`'s `b`). Off the Earth only the kinds of
+`PlacedObjects.OffEarth` (telescope, flag) are accepted: "That cannot be set up here."; reach checks compare places on
+one body only (`InReach`, `Telescopes.InReach`).
 
 - Place: `PlacedObjects.Instance.RequestPlace(PlacedKind kind, Transform3D worldAt, string payload, Action<PlacedResult>? done)`.
 - Remove: `RequestRemove(long id, Action<PlacedResult>? done)`.

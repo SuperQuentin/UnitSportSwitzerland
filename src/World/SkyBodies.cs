@@ -25,7 +25,7 @@ public partial class SkyBodies : Node3D
     public static readonly SkyBody[] Bodies =
     [
         SkyBody.Mercury, SkyBody.Venus, SkyBody.Mars, SkyBody.Jupiter, SkyBody.Saturn, SkyBody.Uranus, SkyBody.Neptune,
-        SkyBody.Io, SkyBody.Europa, SkyBody.Ganymede, SkyBody.Callisto, SkyBody.Titan,
+        SkyBody.Io, SkyBody.Europa, SkyBody.Ganymede, SkyBody.Callisto, SkyBody.Titan, SkyBody.Phobos, SkyBody.Deimos,
     ];
 
     /// <summary>Saturn's rings, inner and outer edge (m): the C ring's inside to the F ring.</summary>
@@ -125,7 +125,7 @@ public partial class SkyBodies : Node3D
     }
 
     /// <summary>The map of a body (Solar System Scope, CC BY 4.0), or null for a plain tinted ball.</summary>
-    private static string? MapOf(SkyBody id) => id switch
+    internal static string? MapOf(SkyBody id) => id switch
     {
         SkyBody.Mercury => "res://assets/space/mercury_2k.jpg",
         SkyBody.Venus => "res://assets/space/venus_2k.jpg",
@@ -138,7 +138,7 @@ public partial class SkyBodies : Node3D
     };
 
     /// <summary>A body's colour as a point, and a moon's whole colour.</summary>
-    private static Color TintOf(SkyBody id) => id switch
+    internal static Color TintOf(SkyBody id) => id switch
     {
         SkyBody.Mars => new Color(1f, 0.72f, 0.55f),
         SkyBody.Jupiter or SkyBody.Saturn => new Color(1f, 0.95f, 0.85f),
@@ -148,6 +148,7 @@ public partial class SkyBodies : Node3D
         SkyBody.Ganymede => new Color(0.8f, 0.75f, 0.7f),
         SkyBody.Callisto => new Color(0.6f, 0.56f, 0.5f),
         SkyBody.Titan => new Color(1f, 0.75f, 0.42f),
+        SkyBody.Phobos or SkyBody.Deimos => new Color(0.55f, 0.5f, 0.46f),
         _ => new Color(1f, 0.98f, 0.94f),
     };
 

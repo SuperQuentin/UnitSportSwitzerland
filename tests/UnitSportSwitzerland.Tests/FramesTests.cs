@@ -44,7 +44,8 @@ public class CelestialBodyTests
     [Theory]
     [InlineData(BodyId.Moon, 12, 1.63)]
     [InlineData(BodyId.Mars, 13, 3.72)]
-    [InlineData(BodyId.Mercury, 13, 3.70)]
+    // Mercury on MESSENGER's 2,439.4 km sphere (#1854): GM/r² 3.702, the tuned scale makes it 3.71
+    [InlineData(BodyId.Mercury, 13, 3.71)]
     public void Leaves_stay_about_six_hundred_metres_and_gravity_scales(BodyId body, int leafLevel, double g)
     {
         var b = CelestialBody.Of(body);

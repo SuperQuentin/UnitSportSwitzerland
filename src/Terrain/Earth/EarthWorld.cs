@@ -811,6 +811,9 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
 
     private const string BuildingBodyName = "Buildings";
 
+    // its path, made once (#1910): asked every frame for the walkers by an open doorway, a path from a string each time
+    private static readonly NodePath BuildingBodyPath = BuildingBodyName;
+
     /// <summary>
     /// The buildings' collision bodies of the patches within <paramref name="radius"/> m of a world point (#1704): what an
     /// open doorway lets a walker through (<c>InteriorManager.BuildingBodies</c>), as a flat tile's <c>BuildingBody</c>.
@@ -818,7 +821,7 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     public void BuildingBodiesNear(Vector3 world, List<StaticBody3D> into, double radius = 30)
     {
         foreach (var key in CollisionPatches.Near(Origin.ToEcef(world), radius).Keys)
-            if (_bodies.TryGetValue(key, out var body) && body.GetNodeOrNull<StaticBody3D>(BuildingBodyName) is { } shells) into.Add(shells);
+            if (_bodies.TryGetValue(key, out var body) && body.GetNodeOrNull<StaticBody3D>(BuildingBodyPath) is { } shells) into.Add(shells);
     }
 
     /// <summary>A leaf's anchor frame in the world: one rigid transform, composed in doubles.</summary>
@@ -1035,6 +1038,15 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
     private bool Locate(Vector3 worldPos, out Near leaf, out LeafView? view, out double x, out double y, out double z, out double i, out double j)
     {
         var axes = Origin.Frame.Axes;
+        // off the Earth (#1854) no leaf of the Earth's is under any point: another body's place read as an Earth one found
+        // a leaf, and its sea (Titan's ground at 0 m was the Earth's sea level: the walker waded and could not jump)
+        if (OffEarth)
+        {
+            leaf = default!;
+            view = null;
+            x = y = z = i = j = double.NaN;
+            return false;
+        }
         var recent = t_recent ??= new Near?[RecentLeaves];
         if (axes != null)
         {

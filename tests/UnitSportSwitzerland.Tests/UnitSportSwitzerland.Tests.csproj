@@ -201,11 +201,23 @@
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CelestialBody.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\BodyGoto.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\BodyAir.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1849: the Moon's generated craters -->
     <Compile Include="..\..\src\Terrain\Bodies\CraterField.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\BoulderField.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\SurfaceProfile.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\RingField.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\BodyHeights.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\SurfaceStamps.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\MoonSites.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\MoonColonies.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\ColonyPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\ColonyPlan.Pit.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\ColonyCrew.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\MoonOutposts.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\MoonPads.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Atmosphere.cs" Link="Game\%(Filename)%(Extension)" />
@@ -292,6 +304,7 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\CylRaster.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\tools\TerrainPreprocessor\CubeBodyHeights.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\tools\TerrainPreprocessor\Areoid.cs" Link="Tools\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\ShapeModel.cs" Link="Tools\%(Filename)%(Extension)" />
     <!-- adventure places (#1224): PoiStage's pure rules and the runtime catalogue -->
     <Compile Include="..\..\tools\TerrainPreprocessor\PoiPick.cs" Link="Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Adventure\Places\PoiCatalogue.cs" Link="Game\%(Filename)%(Extension)" />

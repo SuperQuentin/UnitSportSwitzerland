@@ -802,7 +802,9 @@ public static partial class TileRewriter
                 // the junctions the planner writes (#818 phase 3): the old passes lay out the others only
                 var writtenNodes = layouts is not null && options.WriteJunctions ? WritableLayouts(layouts, result, layoutSegmentOf, netStats.LayoutWrite) : [];
                 var oldPriority = WithoutWritten(priority, writtenNodes);
-                EmitPriority(oldPriority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
+                // the written cores' car paths: no old-layout sign stands on one (#1929)
+                var carPaths = layouts is null ? null : new CarPaths(layouts.Where(p => writtenNodes.Contains(p.Node)));
+                EmitPriority(oldPriority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority, carPaths);
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pendingGuides = new List<(TileId Home, RoadPaint Guide, Widening Exit, int Node, int ExitArm)>();   // through guides, drawn past an island only (#711)

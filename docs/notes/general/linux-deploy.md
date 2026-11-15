@@ -3,7 +3,7 @@
 - One Git Bash command builds the Linux x86_64 **dedicated server** and deploys it to a Debian/Ubuntu host over SSH:
   `tools/deploy-linux.sh` (everything), or pick steps: `--setup`, `--build` (export + upload), `--chunks`, `--leaves`, `--restart`;
   `--check` reports and changes nothing; `--dry-run` prints every change instead of making it; `--no-chunks`/`--no-leaves` skip
-  the tiles or the leaves. The earth flip (D2, protocol 96): the runbook at the end.
+  the tiles or the leaves. The earth flip (D2, protocol 97): the runbook at the end.
 - **One-time setup:** `cp tools/deploy.env.example tools/deploy.env` (gitignored) and set `DEPLOY_HOST=user@host`; env vars override
   the file. Key auth is required: `ssh-keygen` once, then `ssh-copy-id user@host`. The user needs sudo (with a password is fine,
   the setup step asks for it through `ssh -t`, so run it from a real terminal; `--check`/`--dry-run` without a terminal report without root). Linux export templates must be installed (Godot editor > Manage Export Templates).
@@ -101,13 +101,13 @@
     `start-server.sh`.
 - **Not the `cube_global` pyramid.** The fill outside the leaves must stand on the same base on the server and every
   client (`GameLeaves`: a client and the server make the same fill leaf). A release has only the shipped levels 0-2
-  (`res://assets/globe`), on which `PyramidBase.Open` gives null, so the fill stands on the generator's relief.
+  (`res://assets/bodies/earth`), on which `PyramidBase.Open` gives null, so the fill stands on the generator's relief.
   - Measured with `--fillagree` at B4's south-west edge (20 fill points, 5 real): the shipped globe on both sides agreed
     to 0.000 m. The full pyramid on one side only was off by 20.5 m on the fill on average, 32.3 m at worst, whichever side had it.
-  - So the server gets no `--globe`. The deploy preset includes `assets/globe/*`, as the CI one does, which is for the
+  - So the server gets no `--globe`. The deploy preset includes `assets/bodies/earth/*`, as the CI one does, which is for the
     server's line of sight only.
   - The user's own PC finds `D:/UnitSportSwitzerland/cube_global` by itself, so on that PC the fill is ~20 m off from the server's
-    outside the region. `--globe res://assets/globe` matches the server. The fix is #1656 (the server streams the pyramid).
+    outside the region. `--globe res://assets/bodies/earth` matches the server. The fix is #1656 (the server streams the pyramid).
 - **What an earth client gets online** (D2 at `daf0751d3`, Nov 13 2026, one PC over loopback):
   - The setup: a server with the default frame, `--chunks` the full flat set, `--leaves` B4 and the shipped globe; a
     release-like client with no tiles, no leaves, an empty cache and the shipped globe, `--earthcheck` at the default
@@ -131,15 +131,17 @@
   script reads it in a subshell or the mDNS TXT would advertise "13 (trixie)". A server started before the tiles arrive exits
   with `no terrain data` - expected; `--chunks --restart` brings it up.
 
-### Runbook: the D2 flip, protocol 95 -> 96 (#1727)
+### Runbook: the D2 flip, protocol 96 -> 97 (#1727)
+
+D2 was 96 until main took 96 for the placed objects' body (#1999, Nov 15); D2 is 97 since, and C3b (#1975) on top of it 98.
 
 The release has no terrain: CI has no data, so a player's earth ground is the server's leaves (streamed) and
-the generated fill. A 95 client and a 96 server refuse each other, both ways: "This server runs a newer (older) version of the
-game (protocol 96, yours 95)". A refused newer client also reads that the server updates itself, and the refusal makes a
+the generated fill. A 96 client and a 97 server refuse each other, both ways: "This server runs a newer (older) version of the
+game (protocol 97, yours 96)". A refused newer client also reads that the server updates itself, and the refusal makes a
 release server check for the new release at once. The mismatch lasts from D2's release to the server's restart on it.
 The steps below keep it to the `/update` download (1-2 min).
 
-**Before merging (any day; harmless to the 95 server):**
+**Before merging (any day; harmless to the 96 server):**
 0. Build the leaves on the NAS (`tools/cube-nas-run`, #1794), from the repo on `main`, with `NAS` and `NAS_ROOT` in
    `tools/deploy.env` (the example's last block) if they differ from the defaults:
    `tools/build-swiss-nas.sh cube check` (every source there, or what to fetch), `cube test` (Geneva, ~10-15 min), then
@@ -153,9 +155,9 @@ The steps below keep it to the `/update` download (1-2 min).
 
    `/home` was full in Nov 2026. If the space check fails, set `DEPLOY_LEAVES_DIR=/srv/unitsport-tiles/leaves`
    (the SSD; 775 MB plus the 2 GB margin). That disk mounts `nofail`, so a missing SSD means a server on the fill alone.
-3. `tools/deploy-linux.sh --leaves`. 775 MB at your upload speed: about 1 min at 100 Mbit/s, 5 min at 20. The 95 server keeps running.
+3. `tools/deploy-linux.sh --leaves`. 775 MB at your upload speed: about 1 min at 100 Mbit/s, 5 min at 20. The 96 server keeps running.
 4. When nobody plays (the status page): `tools/deploy-linux.sh --restart`, about 1 min. It installs `start-server.sh` with
-   `--leaves <dir>`; the 95 server ignores it.
+   `--leaves <dir>`; the 96 server ignores it.
 5. `tools/deploy-linux.sh --check` again: `start-server.sh: --leaves ...` and `cube_manifest.json present`.
 
 **The switch:**
@@ -167,7 +169,7 @@ The steps below keep it to the `/update` download (1-2 min).
 7. Once the release is published, an admin types `/update` in game, or `update` in the server console
    (`ssh -t <host> tmux attach -t unitsport`). It downloads the Linux archive (~185 MB) and kicks everyone with "update your
    game". The server restarts on D2 with the same `start-server.sh`, so `--leaves` comes along. This takes 1-2 min.
-   - Without `/update`, a release server fetches the new release within 10 min (at once on a refused 96 client), but
+   - Without `/update`, a release server fetches the new release within 10 min (at once on a refused 97 client), but
      restarts only once nobody is connected.
    - A deploy build never updates itself: use `/update`, or `tools/deploy-linux.sh --build --restart` from `main` at the release.
 8. Check:
@@ -176,10 +178,10 @@ The steps below keep it to the `/update` download (1-2 min).
    - a fresh client's log says `[stream] leaf index received: 2412 leaves`.
 
 **Rollback:**
-- **The leaves:** nothing to undo; they cost a 95 server nothing. To free the 775 MB, delete `DEPLOY_LEAVES_DIR`.
+- **The leaves:** nothing to undo; they cost a 96 server nothing. To free the 775 MB, delete `DEPLOY_LEAVES_DIR`.
 - **The server alone cannot go back to flat for players.** D2 clients play earth by default, and the handshake does not
   compare frames. `FRAME=flat` (then `--restart`) is only for a server whose clients also run `--frame flat`.
-- **D2's own rollback** (G2 D plan §6): a PR setting the default back (protocol stays 96), merged and released, then
+- **D2's own rollback** (G2 D plan §6): a PR setting the default back (protocol stays 97), merged and released, then
   `/update` on the server. About 20 min with a dispatched release, or up to 1.5 h with the hourly gap.
-- **Back to 95:** `ln -sfn releases/v0.251.0 current` in `DEPLOY_DIR`, plus `--no-auto-update` in `server-args.local`,
-  plus a restart. Every 96 client is then refused, so this is only for when D2's server itself is broken.
+- **Back to 96:** `ln -sfn releases/<the last release before D2> current` (protocol 96: the first release after #1999, `gh release list`) in `DEPLOY_DIR`, plus `--no-auto-update` in `server-args.local`,
+  plus a restart. Every 97 client is then refused, so this is only for when D2's server itself is broken.

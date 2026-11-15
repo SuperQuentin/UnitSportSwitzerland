@@ -175,6 +175,11 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | dig_mode as the roller's vibration (#614) | C / B | ok: the **red button on the console right of the wheel** (`XrCabControls` "roller", `Kind.Poke`) | keep |
 | dig_mode (#611, excavator) | C / B | ok: B, or the **button on the left console** (`XrCabControls` "excavator", `Kind.Poke`) | keep |
 | crane: climb the mast / take the remote / let go (#618) | E / Y at the ladder's foot or the remote's box | ok: Y, or grip there (as E) | **grip the rungs** hand over hand |
+| Moon airlock: cycle it in or out (#1941) | E / Y at a shut airlock door (2.2 m) | ok: Y, or reach out and grip (as E) | **grip the door's wheel** or press its panel with a finger |
+| Moon hangar: its rolling door (#1943) | drive a rover at it: it opens by itself; on foot E / Y within reach of a shut hangar door ("Open the hangar: out", "Cycle the hangar: in") | ok: drive at it, or Y | drive at it, or **grip the door** as at an airlock |
+| Moon rovers: drive (#1943) | the car's controls (they are cars: the open rover and the pressurised rover) | ok: the car's | the car's (wheel or the hand controller held like the wheel) |
+| Moon terminal: read its log (#1944) | E / Y within 1.7 m of a terminal: the next page on its screen | ok: Y, or reach out and grip (as E) | **grip or poke the terminal**; the text is on the screen in the world, readable in the headset |
+| Moon suit and helmet (#1941) | none: worn automatically on the Moon, the helmet off inside a colony's air | ok: nothing to do | the helmet's rim at the edge of the view outside |
 | crane: slew, trolley (#618, hold; `arm_slew_*`, `arm_stick_*`) | A D, W S / left stick | new: cab: the **left joystick** as two `Kind.Hold` levers (`XrCabControls` "crane"); remote: the left stick, not turned by the head | one two-axis grip per joystick |
 | crane: hoist (#618, hold; `arm_boom_*`) | ↑ ↓ / right stick Y | new: cab: the **right joystick** (aft raises); remote: the right stick's Y as the axis (`XrPad`, while `CraneWorking`) | keep |
 | crane: hook on / set down (#618, `couple`) | H / D-pad ← | new: cab: a **poke on the left console**; remote: right stick ← | keep |
@@ -216,10 +221,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 | shuttle cruise drive on / off, above 60 km (#1492) | Z / D-pad ↑ (`engine_toggle`; below 60 km the engines' switch) | ok: R stick ↑, or grip the guarded switch on the centre console and throw it forward (`XrCabControls` "shuttle") | keep |
+| shuttle's target in Space: next body (tap), its hold turns the nose onto the arrival orbit (#1851) | ] / D-pad → (the lights' D-pad → up there) | ok: the right stick → (`XrPad`'s D-pad → when mounted) | new: a target knob on the centre console to grip and turn |
+| shuttle's belly jets below the Space exit of an airless body: lift, slide, gear (#1851) | the levers (the rockets' keys) lift it, the stick slides it, G the gear | ok: the levers by hand, the stick, as the airliner's | keep |
 | shuttle rockets, pitch / roll, gear, brakes, speedbrake (#1492) | the airliner's (levers = rockets) | ok: as the airliner's, its levers by hand | keep |
 | UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
 | UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |
 | UFO space drive, above 60 km (#1480) | the hover's own: WASD / L stick along the heading, Space Ctrl / RT LT up and down, boost for three g | ok: the same as the hover (no new action) | keep |
+| UFO cruise drive and target between bodies, above the Space handover (#1851) | Z / D-pad ↑ (`engine_toggle`: the saucer has no engine) the drive on / off, Space Ctrl / RT LT its lever, boost full, the look its way; ] / D-pad → the target, held its way onto the arrival orbit | ok: R stick ↑ the drive, R stick → the target (`XrPad`'s D-pad when mounted) | keep |
 | UFO tractor beam (#861) | H / D-pad ← (`tractor_beam`) | ok: R stick ← | gap: a beam switch to grip on the dome's console (`XrCabControls` "ufo") |
 | UFO ramp (landed) / legs (flying) (#861) | G / X (`car_door`) | ok: X | gap: a lever on the console, as the airliner's gear |
 | UFO rim lights (#861) | L / D-pad → | ok: R stick → | keep |
