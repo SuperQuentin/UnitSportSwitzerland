@@ -74,6 +74,7 @@ public partial class RingCheck : Node
         var cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as Camera3D;
         if (cam == null || OriginShifter.Instance is not { } shifter) { Finish("no spectator camera or shifter"); return; }
         if (RingChunks.Active is not { } rings) { Finish("no ring chunks (--bodies with Saturn's pyramid)"); return; }
+        if (CmdArgs.Value("--ringcheck") == "approach") { await Approach(cam as Player.SpectatorCamera, shifter, rings); return; }
 
         // in the B ring's mid-plane, 100,000 km from Saturn's centre
         const double R = 100_000_000;
@@ -122,6 +123,64 @@ public partial class RingCheck : Node
         await Wait(1.5);
         Shot("afar");
         Finish(_failed == 0 ? null : $"{_failed} expectation(s) failed");
+    }
+
+    /// <summary>
+    /// <c>--ringcheck approach</c> (#2030): from 10 million km over the B ring straight down at the fly camera's own full
+    /// speed (the wheel's top: the cap), into the slab. The rings are a surface for the speed rule: the cap falls with the
+    /// distance to the slab, smoothly (no frame's speed over 1.25 times the last), to the ring's drift floor in the slab,
+    /// where the chunks are drawn round the camera. Timed; windowed, pictures on the way (<c>test_output/rings/approach_*.png</c>).
+    /// </summary>
+    private async Task Approach(Player.SpectatorCamera? cam, OriginShifter shifter, RingChunks rings)
+    {
+        if (cam == null) { Finish("no fly camera"); return; }
+        const double R = 100_000_000, Start = 10_000_000_000;
+        Put(cam, shifter, R, Start, 89);
+        cam.Speed = Player.SpectatorSpeed.MaxSpeed;   // the wheel's top: full speed
+        await Wait(0.5);
+        var target = new EcefPos(R, 0, 0);   // the slab's mid-plane under the start, Saturn-fixed
+        double t0 = GameClock.Now, nextLog = 0, worstRise = 1;
+        float last = float.NaN;
+        int shot = 0;
+        double[] shotsAt = { 1e9, 1e7, 1e5, 2_000 };
+        while (true)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            float dt = (float)GetProcessDeltaTime();
+            if (_origin.Frame.Axes is not { } axes || _origin.Body != BodyId.Saturn) { Finish($"the anchor left Saturn ({_origin.Body})"); return; }
+            var (tx, ty, tz) = axes.FromEcef(target);
+            var to = new Vector3((float)tx, (float)ty, (float)tz) - cam.GlobalPosition;
+            var e = axes.ToEcef(cam.GlobalPosition.X, cam.GlobalPosition.Y, cam.GlobalPosition.Z);
+            double over = CelestialBody.SaturnRingSlab.Distance(new DVec3(e.X, e.Y, e.Z));
+            float speed = cam.FlownSpeed;
+            if (!float.IsNaN(last) && last > 0) worstRise = System.Math.Max(worstRise, speed / last);
+            last = speed;
+            double t = GameClock.Now - t0;
+            if (t >= nextLog)
+            {
+                nextLog = t + 5;
+                Log(string.Create(CultureInfo.InvariantCulture, $"{t:F0} s: {over / 1000:F1} km over the slab, {Player.SpectatorSpeed.Format(speed)}"));
+            }
+            if (shot < shotsAt.Length && over < shotsAt[shot]) Shot($"approach_{shot++}");
+            if (over <= 0)
+            {
+                Log(string.Create(CultureInfo.InvariantCulture, $"in the slab after {t:F1} s at {Player.SpectatorSpeed.Format(speed)}; the worst frame-to-frame rise {worstRise:F3}"));
+                Expect(t < 120, string.Create(CultureInfo.InvariantCulture, $"from 10 million km into the rings in {t:F1} s at full speed (at most 120 s)"));
+                Expect(worstRise < 1.25, string.Create(CultureInfo.InvariantCulture, $"the speed changes smoothly (worst rise {worstRise:F3} a frame)"));
+                Expect(speed <= Player.SpectatorSpeed.RingFloor * 1.01f, $"at the slab a drift: {Player.SpectatorSpeed.Format(speed)} (the ring's floor {Player.SpectatorSpeed.Format(Player.SpectatorSpeed.RingFloor)})");
+                int before = rings.Built;
+                bool built = await Until(() => rings.Built > before && rings.Drawn > 100, 10);
+                Expect(built, $"the chunks round the camera at the slab: {rings.Drawn} drawn, {rings.Solid} solid");
+                await Wait(1);
+                Shot("approach_in");
+                Finish(_failed == 0 ? null : $"{_failed} expectation(s) failed");
+                return;
+            }
+            if (t > 300) { Finish(string.Create(CultureInfo.InvariantCulture, $"still {over / 1000:F0} km over the slab after 300 s")); return; }
+            // straight down at the camera's own speed, never past the slab's mid-plane
+            float step = (float)System.Math.Min(speed * dt, to.Length());
+            cam.GlobalPosition += to.Normalized() * step;
+        }
     }
 
     private void Shot(string name)
