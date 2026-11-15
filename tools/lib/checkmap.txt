@@ -1462,6 +1462,10 @@ src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home -
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Bodies/BodyPlace     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Bodies/BodyGlobe     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Globe/Atmosphere     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/atmosphere            full      --bodyshot saturn,-14.365,138.540,75200,30,204 --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 # the planets' bars (#1430 close-out, docs/plans/planets.md section 12), on the shipped bodies' base, no --bodies
 src/World/Bodies/MoonCheck     quick  --mooncheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyGround    quick  --mooncheck --frame earth --chunks fixture:straight

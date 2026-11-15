@@ -26,5 +26,12 @@ sky (`World/MoonDisc` for the Moon, `World/SkyBodies` for the planets and big mo
   handover (68,000 km, the Moon's anchor then the Earth's) and a pair at the globe's size edge (142,000 km, the globe
   forced on then off, `BodyLook.ForceGlobe`), each compared inside the Moon's disc. Pictures in
   `test_output/bodies/bodyview_*.png`.
+- **Placed just before drawing** (#2036): whatever is put about the camera (another body's globe shrunk under its root,
+  Saturn's rings' slab and the camera's height over it, the sky's spheres, the Moon's disc, the stars, the sky floor) is
+  placed again on `RenderingServer.FramePreDraw`, after every node moved. In `_Process` alone the globe and its rings
+  were a frame of the fly camera's own step behind while the air (world axes) was not: at full speed by Saturn the
+  parts came apart by a third of the view and snapped back on a stop. `--bodyplacecheck` (windowed) strafes past
+  Saturn (2.3 million and 250,000 km), Jupiter and the Moon (from the Earth's side) at full speed and holds every
+  part within 1 px of the true centre; pictures `test_output/bodies/bodyplace_*.png`.
 - **Not yet**: a cross-fade between the two (they match, so the hard swap does not show); the stars thin while the
   anchor is the Moon (the Moon sky session's `StarField`).
