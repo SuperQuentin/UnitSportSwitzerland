@@ -117,6 +117,9 @@ public static partial class InteriorGenerator
                 Barrel(room, r - 0.2f, h - 0.2f, 0);
                 room.Openings.Add(Arch(Side.Front, 0, 2 * dh, 0, Kit.HangarDoorH - ColonyFloorLift));
                 room.Openings.Add(Arch(Side.Back, 0, Kit.DoorW, sill, sill + Kit.DoorH));
+                // the slab under the floor, the kit's, solid to its ends: a rover coming up the ramp meets its top, not the
+                // edge of a floor 0.62 m over the plateau (#2000: the rovers stopped at the door, driving back in)
+                Solid(l, 0, 0, w, len, -lift, Kit.HangarSlab);
                 // the landing at the sill and its steps, drawn by the kit: walked on
                 Solid(l, 0, end - 0.8f, 2.4f, 2.0f, 0, sill);
                 const int steps = 5;
