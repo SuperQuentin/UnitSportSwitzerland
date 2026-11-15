@@ -85,7 +85,10 @@ public static class BotDriving
     public static bool GetIn(Bot bot, VehicleBody car, PhysicsDirectSpaceState3D space, double now)
     {
         if (!GodotObject.IsInstanceValid(car)) return false;
-        var entry = bot.Body.FromFrame(car.Origin, car.Ride.EntryPoint != Vector3.Zero ? car.ToGlobal(car.Ride.EntryPoint) : car.GlobalPosition);
+        // a vehicle off the Earth (#2000: a Moon colony's rover, parked in the server's main frame) is where its exact place
+        // says, in the bot's frame (its main-frame position means nothing there): its middle, not its door
+        var entry = car.Global.Body != Core.BodyId.Earth ? bot.Body.WhereIs(car)
+            : bot.Body.FromFrame(car.Origin, car.Ride.EntryPoint != Vector3.Zero ? car.ToGlobal(car.Ride.EntryPoint) : car.GlobalPosition);
         if (entry.DistanceTo(bot.Body.GlobalPosition) > Reach + car.Ride.ParkedBox.Size.X * 0.5f)
         {
             BotSkills.MoveTo(bot, entry, run: true, 1.5f, space, now);
