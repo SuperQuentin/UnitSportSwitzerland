@@ -154,7 +154,6 @@ public partial class ColonyNetProbe : ChatProbe
         var wasIn = new HashSet<FootPlayer>();
         FootPlayer? eva = null;
         bool doorSeen = false;
-        int heard0 = ColonyDoors.CyclesHeard;
         bool outside = await Until(() =>
         {
             doorSeen |= ColonyAirlocks.Of(Base.Id)?.AnyOuterOpen == true;
@@ -163,7 +162,8 @@ public partial class ColonyNetProbe : ChatProbe
                 bool air = ColonyAirlocks.Pressurised(b.GlobalPosition + colony.GlobalBasis.Y * 1.6f);
                 if (air) wasIn.Add(b);
                 // out of the air, off the stairs, on the plateau: through an airlock
-                else if (wasIn.Contains(b) && Mathf.Abs(Over(colony, b)) < 0.5f && b.IsOnFloor() && !ColonyAirlocks.NearChamber(b.GlobalPosition, 4f))
+                // (a remote copy is not simulated: its height over the plateau, not IsOnFloor)
+                else if (wasIn.Contains(b) && Mathf.Abs(Over(colony, b)) < 0.5f && !ColonyAirlocks.NearChamber(b.GlobalPosition, 4f))
                 {
                     eva = b;
                     return true;
@@ -171,9 +171,10 @@ public partial class ColonyNetProbe : ChatProbe
             }
             return false;
         }, 300);
-        GD.Print(FormattableString.Invariant($"{Log} EVA: {(eva != null ? eva.Name + " outside, " + Over(colony, eva).ToString("F2") + " m over the plateau" : "nobody out")}, an outer door seen open {doorSeen}, cycles heard {ColonyDoors.CyclesHeard - heard0}"));
+        GD.Print(FormattableString.Invariant($"{Log} EVA: {(eva != null ? eva.Name + " outside, " + Over(colony, eva).ToString("F2") + " m over the plateau" : "nobody out")}, an outer door seen open {doorSeen}, cycles heard {ColonyDoors.CyclesHeard}"));
         Expect(outside, "a colonist goes out through an airlock and stands on the plateau");
         Expect(doorSeen, "this client saw the airlock's outer door open (the server's cycle)");
-        Expect(ColonyDoors.CyclesHeard - heard0 >= 2, "the server's cycles reached this client");
+        // the inner door shut and the outer one open: at least the cycle out (the one in may come before this client is near)
+        Expect(ColonyDoors.CyclesHeard >= 1, "the server's cycles reached this client");
     }
 }

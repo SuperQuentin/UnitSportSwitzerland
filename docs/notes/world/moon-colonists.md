@@ -56,9 +56,15 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
   `PoseStride` at 15 Hz within 15 m, 5 Hz beyond; a figure faces its node's −Z. A change that is not a walk (asleep,
   awake, out on an EVA, back) waits while the place left or reached is in view (60 m, in the frustum), as `VenuePatrons`
   does. The window's plan is read once at its start (the path allocated once a window), nothing else allocates per frame.
-- **On a server hosting the Moon** (C3b #1852), the bots run unchanged, but the server needs what offline has from the
-  client: the colonies built there (collision, `ColonyAirlocks` with their state sent to clients), "near" and "seen" from
-  the players rather than a camera, and the body ground solid round bots (`BodyGround` builds round the camera only).
+- **On a server hosting the Moon** (C3b #1852, #2000): `ServerColonies` (a child of each Moon region's `ServerBodyGround`)
+  builds each colony within 700 m of the region's bodies with `ColonyBuilder.Build` (its interiors solid for the bots),
+  dropped past 1,100 m; the crew are the server's bots, watched by the region's players (`ColonyColonists.Eyes`: near is
+  seen, no view) in the region's frame (`OriginOverride`); an online client draws no figures. The airlocks are the
+  server's (`ColonyDoors`, `World/ColonyDoors` on every peer): a client's E asks it, it runs the cycle and sends it to every
+  client, which runs it on its own doors; a client building a colony settles its doors on the server's table. The
+  server parks no rovers yet: an EVA walks out. Check: `tools/colonynetcheck.sh` (net, ~8 min: A sees the crew stand on
+  floors, walk 20-30 m through the rooms and never leave the air but at an airlock; B sees the `--colonisteva` colonist
+  go out through an airlock whose outer door it sees open).
 - **Check**: `--moonsites artemis:close --colonistcheck` (~60 s; windowed `crew_hub.png`, `crew_eva.png` when one is out):
   the crew's clock set 3 s into a window (`ColonyColonists.ClockOffset`, the check's), 25 s of looks: every shown figure
   inside stands in the colony's air, every EVA one outside it. Artemis: 6 shown, 1.1 walking, 1.0 outside on average. With bots, only those standing
