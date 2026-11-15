@@ -52,3 +52,5 @@ bots there on its own ground. Protocol 97 (on top of D2's 96).
   on another body read as an Earth leaf: `ObjectContainers.CellAt` (the entity's cell, hence the fix) and `PlayerTiles`
   (a player on the Moon counts as near the Earth leaf its Moon ECEF falls in, so that Earth cell's sleepers may wake),
   `ContainerRecord.Leaf` (only for records filed, none off the Earth now).
+  Vehicles off the Earth are never cleared as lonely (`VehicleManager._Process`, #2014): its players are in their regions'
+  frames and a Moon rover read as 3 km from all of them; body-aware distances later.

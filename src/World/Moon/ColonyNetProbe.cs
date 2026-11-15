@@ -70,6 +70,11 @@ public partial class ColonyNetProbe : ChatProbe
             Say("done");
             await Heard(_role == "A" ? "B" : "A", "done", 300);
         }
+        catch (Exception e)
+        {
+            // a throw ends the run as a failure, never as a pass with half the looks
+            Fail($"the check threw: {e.GetType().Name}: {e.Message}");
+        }
         finally
         {
             await Finish(3);
@@ -165,8 +170,10 @@ public partial class ColonyNetProbe : ChatProbe
         bool crew = await Until(() => BotCopies().Count >= 4, 60);
         Expect(crew, "the server's crew here");
         if (!crew || Colony() is not { } colony) return;
-        var wasIn = new HashSet<FootPlayer>();
-        FootPlayer? eva = null;
+        // by name: a copy is freed when the server takes its bot away (asleep, out of reach)
+        var wasIn = new HashSet<string>();
+        string? eva = null;
+        float evaOver = 0;
         bool doorSeen = false, rode = false;
         bool outside = await Until(() =>
         {
@@ -176,15 +183,19 @@ public partial class ColonyNetProbe : ChatProbe
                 // the EVA colonist drives the depot's open rover out (the server parks them, #2000)
                 if (b.Ride == MoonRovers.Open.Kind) rode = true;
                 bool air = ColonyAirlocks.Pressurised(b.GlobalPosition + colony.GlobalBasis.Y * 1.6f);
-                if (air) wasIn.Add(b);
+                string name = b.Name;
+                if (air) wasIn.Add(name);
                 // out of the air, off the stairs, on the plateau: through an airlock
                 // (a remote copy is not simulated: its height over the plateau, not IsOnFloor)
-                else if (wasIn.Contains(b) && Mathf.Abs(Over(colony, b)) < 0.5f && !ColonyAirlocks.NearChamber(b.GlobalPosition, 4f))
-                    eva = b;
+                else if (eva == null && wasIn.Contains(name) && Mathf.Abs(Over(colony, b)) < 0.5f && !ColonyAirlocks.NearChamber(b.GlobalPosition, 4f))
+                {
+                    eva = name;
+                    evaOver = Over(colony, b);
+                }
             }
             return eva != null && rode;
         }, 420);
-        GD.Print(FormattableString.Invariant($"{Log} EVA: {(eva != null ? eva.Name + " outside, " + Over(colony, eva).ToString("F2") + " m over the plateau" : "nobody out")}, an outer door seen open {doorSeen}, cycles heard {ColonyDoors.CyclesHeard}"));
+        GD.Print(FormattableString.Invariant($"{Log} EVA: {(eva != null ? eva + " outside, " + evaOver.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " m over the plateau" : "nobody out")}, an outer door seen open {doorSeen}, cycles heard {ColonyDoors.CyclesHeard}"));
         Expect(eva != null, "a colonist goes out through an airlock and stands on the plateau");
         Expect(rode, "the EVA colonist drives a depot rover (parked by the server)");
         Expect(doorSeen, "this client saw the airlock's outer door open (the server's cycle)");
