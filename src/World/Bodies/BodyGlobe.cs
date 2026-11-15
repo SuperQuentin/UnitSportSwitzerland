@@ -52,7 +52,51 @@ public partial class BodyGlobe : Node
     public bool Drawn { get; private set; }
 
     /// <summary>Where its centre is drawn (shrunk about the camera past the far plane: the direction from it is true), while drawn.</summary>
-    public Vector3? DrawnCentre => Drawn ? _root.GlobalPosition : null;
+    public Vector3? DrawnCentre => Drawn ? _ownPlaced ? _centreWorld : _root.GlobalPosition : null;
+
+    /// <summary>The rings' slab as last written to its shader (centre, pole, the camera's height over it), while drawn (#2036's check).</summary>
+    internal (Vector3 Centre, Vector3 Pole, float Height)? RingsDrawn =>
+        _ring is { Visible: true } ? (_ringsWritten.Centre, _ringsWritten.Pole, _ringsWritten.Height) : null;
+
+    // the placing of this frame: on the anchor's own body (tiles in the anchor's world), or under the root at the body's
+    // centre in world axes (_centreWorld) turned by _rootBasis and shrunk about the camera
+    private bool _ownPlaced;
+    private Vector3 _centreWorld;
+    private Basis _rootBasis = Basis.Identity;
+
+    public override void _EnterTree() => RenderingServer.FramePreDraw += OnPreDraw;
+
+    public override void _ExitTree() => RenderingServer.FramePreDraw -= OnPreDraw;
+
+    /// <summary>
+    /// The root shrunk about the camera (another body's globe): its centre at the true direction from the camera, at
+    /// <c>s</c> of its distance, so it is drawn inside the far plane.
+    /// </summary>
+    private void PlaceRoot(Camera3D cam)
+    {
+        var camWorld = cam.GlobalPosition;
+        double reach = (ToD(_centreWorld) - ToD(camWorld)).Length + Body.Shape.A;
+        float s = reach > cam.Far * 0.9 ? (float)(cam.Far * 0.85 / reach) : 1f;
+        _root.Transform = new Transform3D(_rootBasis.Scaled(Vector3.One * s), camWorld + (_centreWorld - camWorld) * s);
+    }
+
+    /// <summary>
+    /// Just before the frame is drawn, after every node has moved (#2036): the shrunk root and the rings' slab from the
+    /// camera where it is drawn from. Placed in <c>_Process</c> only, the globe and its rings were put about the camera
+    /// where it was before the fly camera's own step, a frame's travel off: at full speed by Saturn (half the distance a
+    /// second) a third of the way across the view, the rings' plane off another way and the air (in world axes) not at all,
+    /// so the parts came apart while moving and snapped back on a stop.
+    /// </summary>
+    private void OnPreDraw()
+    {
+        if (!Drawn || _ownPlaced || GetViewport()?.GetCamera3D() is not { } cam || _origin.Frame.Axes is not { } axes
+            || axes.Body != _placedIn) return;
+        PlaceRoot(cam);
+        if (_ring == null) return;
+        var e = axes.ToEcef(cam.GlobalPosition.X, cam.GlobalPosition.Y, cam.GlobalPosition.Z);
+        _eyeHere = Frames.Convert(axes.Body, new DVec3(e.X, e.Y, e.Z), Body.Id, SkyClock.Now);
+        KeepRings(true);
+    }
 
     /// <summary>Whether to draw it at all this frame: the owner's call (<see cref="BodyViews"/>).</summary>
     public bool Wanted { get; set; }
@@ -224,14 +268,14 @@ public partial class BodyGlobe : Node
         var camWorld = cam.GlobalPosition;
         var centreWorld = w.ApplyInverse(c - o);
         WriteCentre(own ? ToVector(centreWorld) : null);
+        _ownPlaced = own;
+        _centreWorld = ToVector(centreWorld);
         if (!own)
         {
-            // basis W R, origin W (c - O); shrunk about the camera past the far plane
-            var basis = BasisOf(w, r);
-            var origin = ToVector(centreWorld);
-            double reach = (ToD(origin) - ToD(camWorld)).Length + Body.Shape.A;
-            float s = reach > cam.Far * 0.9 ? (float)(cam.Far * 0.85 / reach) : 1f;
-            _root.Transform = new Transform3D(basis.Scaled(Vector3.One * s), camWorld + (origin - camWorld) * s);
+            // basis W R, origin W (c - O); shrunk about the camera past the far plane. Again just before the frame is drawn,
+            // from the camera where it is drawn from (OnPreDraw)
+            _rootBasis = BasisOf(w, r);
+            PlaceRoot(cam);
         }
 
         // the sun from the body, into world axes

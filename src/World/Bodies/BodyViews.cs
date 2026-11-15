@@ -102,6 +102,7 @@ public partial class BodyViews : Node
         if (GotoCheck.Requested) AddChild(new GotoCheck(_origin));
         if (SpectatorCrossCheck.Requested) AddChild(new SpectatorCrossCheck(_origin));
         if (BodyViewCheck.Requested) AddChild(new BodyViewCheck(_origin));
+        if (BodyPlaceCheck.Requested) AddChild(new BodyPlaceCheck(_origin));
         if (UfoMoonCheck.Requested) AddChild(new UfoMoonCheck(_origin, _local, () => _moon?.Ground));
         if (ShuttleMoonCheck.Requested) AddChild(new ShuttleMoonCheck(_origin, _local, () => _moon?.Ground));
         if (Moon.MoonSitesCheck.Requested) AddChild(new Moon.MoonSitesCheck(_origin, () => _moon?.Ground, _local));
