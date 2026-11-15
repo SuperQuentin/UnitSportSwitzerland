@@ -97,5 +97,6 @@ profile's craters, dunes or ridges under it: the right altitude (Gale's floor âˆ
 4) and the right look up close, without the data's own 0.1-1 km relief (the Moon's crater rims, Olympus' scarps). A tile
 the chain lacks at the finest level is its deepest ancestor's, resampled (`BodyGround.FromAncestor`), never 0 m.
 Checks: `--mooncheck [body] --fromorbit` with no body data (`--mooncheck mars --fromorbit` lands at Gale crater, `--at
-LAT,LON` elsewhere); `tools/bodystreamcheck.sh` (a server with the data, a client with none, the Moon's ground read past
-level 2).
+LAT,LON` elsewhere); `tools/bodystreamcheck.sh` (a server with the data, a client with none: the Moon's index, its ground
+read at level 5, and `--bodyfetch moon,LAT,LON` streaming the finest tile under Apollo 11 into the cache; standing on another
+body online waits for C3b, #1975).

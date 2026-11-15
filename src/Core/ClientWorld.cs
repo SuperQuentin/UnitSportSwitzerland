@@ -2443,6 +2443,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                         globe.RefreshPyramid(changed);
                         globe.Ground?.Refresh();
                     }
+                    if (World.Bodies.BodyFetchProbe.Wants(celestial)) AddChild(new World.Bodies.BodyFetchProbe(celestial, chain));
                 }).CallDeferred();
             };
         }
