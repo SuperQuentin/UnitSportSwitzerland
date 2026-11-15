@@ -332,6 +332,18 @@ public partial class BodyGlobe : Node
         if (_tiles.ContainsKey(key)) _show.Add(key);
     }
 
+    private ImageTexture? _meanTexture;
+
+    /// <summary>One pixel of the body's photo's mean grey (its faces' means; 0.3 before they are known).</summary>
+    private ImageTexture MeanTexture()
+    {
+        if (_meanTexture != null) return _meanTexture;
+        float grey = _faceMeans.Count > 0 ? _faceMeans.Values.Average() : 0.3f;
+        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
+        image.SetPixel(0, 0, new Color(grey, grey, grey));
+        return _meanTexture = ImageTexture.CreateFromImage(image);
+    }
+
     private void Request(CubeKey key)
     {
         if (_running >= Workers || !_loading.Add(key)) return;
@@ -395,6 +407,8 @@ public partial class BodyGlobe : Node
     {
         _exposed = true;
         Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
+        // its sphere in the sky takes the same (#1998): the hand-over between the two never shows
+        BodyLook.SetExposure(Body.Id, Exposure);
         foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure);
         GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
             $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2} ({how})"));
@@ -418,7 +432,9 @@ public partial class BodyGlobe : Node
             var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, r.Arrays);
             var material = new ShaderMaterial { Shader = _shader };
-            if (r.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(r.Colour));
+            // a tile with no colour of its own (a coarse level the data left out) takes the body's mean, not the shader's
+            // white at full sun: the Moon from 140,000 km glared as a white blob (#1998)
+            material.SetShaderParameter(AlbedoTex, r.Colour != null ? ImageTexture.CreateFromImage(r.Colour) : MeanTexture());
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
             SetHole(material);
             if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;

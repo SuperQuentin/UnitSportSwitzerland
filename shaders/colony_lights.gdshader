@@ -23,7 +23,11 @@ void vertex() {
 	float near = smoothstep(6000.0, 14000.0, metres);
 	// brighter nearer: full under 300 km, a third at the Earth's distance
 	float far = clamp(300000.0 / max(metres, 1.0), 0.33, 1.0);
-	strength = COLOR.a * night * near * far;
+	// over the horizon from the camera, on the far side: never (#1998: the screen-sized points showed through the globe
+	// round its limb, and swamped a Moon a few pixels across); the up against the way to the camera, in view space
+	vec3 up_view = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	float facing = smoothstep(-0.02, 0.05, dot(up_view, normalize(-v.xyz)));
+	strength = COLOR.a * night * near * far * facing;
 	// a little toward the camera: 0.4 % of the way (400 m at 100 km), over the globe's coarse cells
 	v.xyz *= 0.996;
 	VERTEX = v.xyz;

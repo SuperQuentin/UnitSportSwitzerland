@@ -91,6 +91,7 @@ public partial class BodyViews : Node
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (GotoCheck.Requested) AddChild(new GotoCheck(_origin));
         if (SpectatorCrossCheck.Requested) AddChild(new SpectatorCrossCheck(_origin));
+        if (BodyViewCheck.Requested) AddChild(new BodyViewCheck(_origin));
         if (UfoMoonCheck.Requested) AddChild(new UfoMoonCheck(_origin, _local, () => _moon?.Ground));
         if (ShuttleMoonCheck.Requested) AddChild(new ShuttleMoonCheck(_origin, _local, () => _moon?.Ground));
         if (Moon.MoonSitesCheck.Requested) AddChild(new Moon.MoonSitesCheck(_origin, () => _moon?.Ground, _local));
@@ -136,12 +137,15 @@ public partial class BodyViews : Node
             SkyClock.Local = new SkyClock.LocalDay(anchor, weight);
         var sky = SkyClock.Now;
         SkyBodies.HiddenByGlobe.Clear();
+        // the view's vertical field, radians: a body's radius as a share of it picks its globe or its sky sphere (#1998)
+        float fov = cam != null ? Mathf.DegToRad(Core.CameraLens.FovOf(cam)) : 1.2f;
         foreach (var g in _globes)
         {
             if (g == _earth) { g.Wanted = anchor != BodyId.Earth; continue; }
-            bool near = g.Body.Id == anchor
-                || eye is { } p && Frames.Convert(anchor, p, g.Body.Id, sky).Length < NearRadii * g.Body.Shape.A;
-            g.Wanted = near;
+            // by its size on screen in space, not by which body the anchor counts from: the handover between the Moon
+            // and the Earth used to swap the crisp globe for the sky disc in one frame (BodyLook)
+            float share = eye is { } p ? (float)(g.Body.Shape.A / Math.Max(Frames.Convert(anchor, p, g.Body.Id, sky).Length, 1)) / fov : 0f;
+            g.Wanted = BodyLook.WantsGlobe(g.Body.Id == anchor, share, g.Drawn);
             // the sky's disc of a body its globe draws steps aside (the Moon's own disc, a planet's in SkyBodies)
             // and the anchor's own body is never a disc in its own sky (inside a giant its globe steps aside, #1854)
             if ((g.Drawn || g.Body.Id == anchor) && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);

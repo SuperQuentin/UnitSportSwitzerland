@@ -43,6 +43,13 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## One look per body from space ([#1998](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1998))
+
+In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
+
+- [ ] Fly the spectator from the Moon to the Earth and back, looking at the Moon now and then → it stays the same grey Moon at every distance, through the handover and where it gets small; no glow taking its place, no white flash at its edge.
+- [ ] Fly out to Mars (or `/goto mars`) and away → Mars looks the same as it shrinks into a dot.
+
 ## The spectator between the Moon and the Earth ([#1988](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1988))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
