@@ -29,6 +29,8 @@ public partial class ServerColonies : Node
     private readonly BodyHeights _heights;
     private readonly WorldOrigin _origin;
     private readonly Dictionary<string, Node3D> _built = new();
+    // the colonies whose rovers are parked (once each build, when the ground's collision is under their slots)
+    private readonly HashSet<string> _parked = new();
     private readonly List<Vector3> _eyes = new();
     private double _scan;
 
@@ -66,14 +68,33 @@ public partial class ServerColonies : Node
                 near = Math.Min(near, Math.Acos(Math.Clamp(Dot(n, c.Normal), -1, 1)) * Ellipsoid.Moon.A);
             }
             bool have = _built.ContainsKey(c.Id);
+            if (have && !_parked.Contains(c.Id)) Park(c);
             if (!have && near < ReachM) Build(c, axes);
             else if (have && near > DropM)
             {
                 _built.Remove(c.Id, out var node);
+                _parked.Remove(c.Id);
                 node!.QueueFree();
                 GD.Print($"[colonies] the server's {c.Name}: dropped ({near:F0} m from every body)");
             }
         }
+    }
+
+    /// <summary>
+    /// The colony's depot rovers (<see cref="MoonRoverDepot"/>) put down by the server once the region's ground is solid
+    /// under every slot (its squares follow the bodies), so its colonists drive them on their EVAs and players take them.
+    /// </summary>
+    private void Park(MoonColony c)
+    {
+        var root = _built[c.Id];
+        var plan = ColonyPlan.For(c);
+        var slots = MoonRoverDepot.Slots(c, plan);
+        if (slots.Count == 0) { _parked.Add(c.Id); return; }
+        foreach (var s in slots)
+            if (!_ground.HasCollisionAt(root.GlobalTransform * s.At)) return;
+        int n = MoonRoverDepot.Park(c, plan, root.GlobalTransform, _origin);
+        _parked.Add(c.Id);
+        GD.Print($"[colonies] the server's {c.Name}: {n} rover(s) parked");
     }
 
     private static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;

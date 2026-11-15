@@ -9,6 +9,7 @@ using UnitSport.Net;
 using UnitSport.Player;
 using UnitSport.Terrain.Bodies;
 using UnitSport.Terrain.Format;
+using UnitSport.Vehicles;
 using UnitSport.World.Bodies;
 
 namespace UnitSport.World.Moon;
@@ -51,8 +52,21 @@ public partial class ColonyNetProbe : ChatProbe
         {
             if (!await LogIn("test")) return;
             if (!await ToTheBase(Me!, _role == "A" ? 24 : 30)) return;
-            if (_role == "A") await WatchCrew(Me!);
-            else await WatchEva(Me!);
+            if (_role == "A")
+            {
+                await WatchCrew(Me!);
+                await AirlockByHand(Me!);
+                // a rover once the EVA colonist has taken its own (B says so)
+                await Heard("B", "eva", 420);
+                await RoverByHand(Me!);
+            }
+            else
+            {
+                await WatchEva(Me!);
+                Say("eva");
+                await SeeAirlock();
+                await SeeRover();
+            }
             Say("done");
             await Heard(_role == "A" ? "B" : "A", "done", 300);
         }
@@ -153,28 +167,108 @@ public partial class ColonyNetProbe : ChatProbe
         if (!crew || Colony() is not { } colony) return;
         var wasIn = new HashSet<FootPlayer>();
         FootPlayer? eva = null;
-        bool doorSeen = false;
+        bool doorSeen = false, rode = false;
         bool outside = await Until(() =>
         {
             doorSeen |= ColonyAirlocks.Of(Base.Id)?.AnyOuterOpen == true;
             foreach (var b in BotCopies())
             {
+                // the EVA colonist drives the depot's open rover out (the server parks them, #2000)
+                if (b.Ride == MoonRovers.Open.Kind) rode = true;
                 bool air = ColonyAirlocks.Pressurised(b.GlobalPosition + colony.GlobalBasis.Y * 1.6f);
                 if (air) wasIn.Add(b);
                 // out of the air, off the stairs, on the plateau: through an airlock
                 // (a remote copy is not simulated: its height over the plateau, not IsOnFloor)
                 else if (wasIn.Contains(b) && Mathf.Abs(Over(colony, b)) < 0.5f && !ColonyAirlocks.NearChamber(b.GlobalPosition, 4f))
-                {
                     eva = b;
-                    return true;
-                }
             }
-            return false;
-        }, 300);
+            return eva != null && rode;
+        }, 420);
         GD.Print(FormattableString.Invariant($"{Log} EVA: {(eva != null ? eva.Name + " outside, " + Over(colony, eva).ToString("F2") + " m over the plateau" : "nobody out")}, an outer door seen open {doorSeen}, cycles heard {ColonyDoors.CyclesHeard}"));
-        Expect(outside, "a colonist goes out through an airlock and stands on the plateau");
+        Expect(eva != null, "a colonist goes out through an airlock and stands on the plateau");
+        Expect(rode, "the EVA colonist drives a depot rover (parked by the server)");
         Expect(doorSeen, "this client saw the airlock's outer door open (the server's cycle)");
         // the inner door shut and the outer one open: at least the cycle out (the one in may come before this client is near)
         Expect(ColonyDoors.CyclesHeard >= 1, "the server's cycles reached this client");
+    }
+
+    // ---- A: my own E, at an airlock and at a rover -----------------------------------------------------------------
+
+    /// <summary>A, outside an airlock whose outer door is shut, presses E (<see cref="FootPlayer.TryInteract"/>): the door opens.</summary>
+    private async Task AirlockByHand(FootPlayer me)
+    {
+        if (ColonyAirlocks.Of(Base.Id) is not { } set) { Fail("no airlocks here"); return; }
+        // a spine's airlock (the hangar's is the last) with its outer door shut and no colonist on its stairs
+        int index = -1;
+        for (int i = 0; i < set.Count - 1 && index < 0; i++)
+            if (!set.OuterOpen(i) && !BotCopies().Any(b => b.GlobalPosition.DistanceTo(set.OutsideOf(i).At) < 4)) index = i;
+        if (index < 0) { Fail("no shut airlock free"); return; }
+        var (at, into) = set.OutsideOf(index);
+        me.GlobalPosition = at + Vector3.Up * 0.5f;
+        me.Velocity = Vector3.Zero;
+        me.LookYaw = Mathf.Atan2(-into.X, -into.Z);
+        await Seconds(1.5);
+        bool used = me.TryInteract();
+        Expect(used, $"my E at airlock {index}'s outer door is taken");
+        bool opened = await Until(() => set.OuterOpen(index), 15);
+        Expect(opened, $"airlock {index}'s outer door opens for my E (the server's cycle)");
+        Say($"airlock {index}");
+        await Seconds(1);
+    }
+
+    /// <summary>A, beside a free depot rover, presses E: it rides it, and drives it 4 s.</summary>
+    private async Task RoverByHand(FootPlayer me)
+    {
+        VehicleBody? Free() => Enumerable.Range(0, 2)
+            .Select(i => VehicleManager.Instance?.GetNodeOrNull<VehicleBody>($"{MoonRoverDepot.Prefix}{Base.Id}_{i}"))
+            .FirstOrDefault(v => v != null && IsInstanceValid(v) && VehicleManager.Instance!.Enterable(v));
+        bool any = await Until(() => Free() != null, 120);
+        Expect(any, "a free open rover of the depot here (parked by the server)");
+        if (!any) return;
+        var rover = Free()!;
+        var side = rover.GlobalBasis.X.Normalized();
+        me.GlobalPosition = rover.GlobalPosition + side * 2.0f + Vector3.Up * 0.5f;
+        me.Velocity = Vector3.Zero;
+        var to = rover.GlobalPosition - me.GlobalPosition;
+        me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
+        await Seconds(1.5);
+        me.TryInteract();
+        bool riding = await Until(() => me.Ride == MoonRovers.Open.Kind, 10);
+        Expect(riding, $"my E at the rover: riding it (ride {me.Ride})");
+        if (!riding) return;
+        Say("rover");
+        var start = me.GlobalPosition;
+        me.RideControls = () => new RideInput(1f, 0f, 0f, false);
+        await Seconds(4);
+        me.RideControls = () => new RideInput(0f, 1f, 0f, false);
+        GD.Print(FormattableString.Invariant($"{Log} drove the rover {me.GlobalPosition.DistanceTo(start):F1} m"));
+        await Seconds(2);
+    }
+
+    // ---- B: A's E seen here ----------------------------------------------------------------------------------------
+
+    private FootPlayer? OtherCopy() => GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
+        .FirstOrDefault(p => IsInstanceValid(p) && !p.Npc && !p.IsMultiplayerAuthority() && FootPlayer.NetId(p.Name) is > 0);
+
+    private async Task SeeAirlock()
+    {
+        var line = await HeardStarting("A", "airlock ", 240);
+        if (line == null) { Fail("A never worked an airlock"); return; }
+        int index = int.Parse(line[(line.LastIndexOf(' ') + 1)..]);
+        bool open = await Until(() => ColonyAirlocks.Of(Base.Id)?.OuterOpen(index) == true, 15);
+        Expect(open, $"A's E at airlock {index}: its outer door open here too");
+    }
+
+    private async Task SeeRover()
+    {
+        if (!await Heard("A", "rover", 240)) { Fail("A never took a rover"); return; }
+        bool rides = await Until(() => OtherCopy() is { } a && a.Ride == MoonRovers.Open.Kind, 15);
+        Expect(rides, $"A's copy rides the open rover (sees {OtherCopy()?.Ride})");
+        if (!rides) return;
+        var a = OtherCopy()!;
+        var start = a.GlobalPosition;
+        bool moved = await Until(() => IsInstanceValid(a) && a.GlobalPosition.DistanceTo(start) > 3f, 15);
+        GD.Print(FormattableString.Invariant($"{Log} A's rover moved {(IsInstanceValid(a) ? a.GlobalPosition.DistanceTo(start) : 0):F1} m here"));
+        Expect(moved, "A's rover drives here");
     }
 }

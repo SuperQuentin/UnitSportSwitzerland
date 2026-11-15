@@ -107,6 +107,22 @@ public partial class ColonyAirlocks : Node3D
         return false;
     }
 
+    /// <summary>Whether airlock <paramref name="index"/>'s outer door stands open (the net check's).</summary>
+    public bool OuterOpen(int index) => index >= 0 && index < _locks.Count && _locks[index].Outer.Open > 0.9f;
+
+    /// <summary>
+    /// Where to stand outside airlock <paramref name="index"/> to work its outer door (the net check's): on its stairs'
+    /// top, 0.8 m out from the door, and the way in (world, horizontal).
+    /// </summary>
+    public (Vector3 At, Vector3 In) OutsideOf(int index)
+    {
+        var l = _locks[index];
+        var o = l.Outer.Node.GlobalPosition;
+        var into = (l.Inner.Node.GlobalPosition - o) with { Y = 0 };
+        into = into.Normalized();
+        return (o - into * 0.8f, into);
+    }
+
     /// <summary>A colony's airlocks built on this peer, if it has built it.</summary>
     public static ColonyAirlocks? Of(string colony)
     {
