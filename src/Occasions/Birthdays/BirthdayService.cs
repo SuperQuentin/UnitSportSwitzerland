@@ -406,7 +406,7 @@ public partial class BirthdayService : Node
         string? why = o == null ? "The cake is gone."
             : CakeLeft(cake) <= 0 ? "Not a crumb left."
             : body == null ? "Not here."
-            : body.Global.DistanceTo(o.At) > BirthdayRules.SliceReach + 1.5f ? "Too far from the cake."
+            : body.Global.Body != o.At.Body || body.Global.DistanceTo(o.At) > BirthdayRules.SliceReach + 1.5f ? "Too far from the cake."
             : null;
         if (why != null)
         {

@@ -37,8 +37,12 @@ public partial class TelescopeProbe : Node
         // offline starts as the spectator high up: wait for the world, then walk (T)
         await Until(() => GetViewport().GetCamera3D() != null, 60);
         await Seconds(2.0);
-        bool moon = CmdArgs.Value("--telescopecheck") == "moon";
-        if (moon && !await ToTheMoon()) return;
+        string arg = CmdArgs.Value("--telescopecheck") ?? "";
+        bool moon = arg.StartsWith("moon");
+        // abroad (#1995): the Earth outside Switzerland (Chamonix), where LV95 is only notation; needs the earth leaves there
+        bool abroad = arg.StartsWith("abroad");
+        if (moon && !await GoTo("Moon 17 59 1")) return;
+        if (abroad && !await GoTo("Earth 45.924 6.870 3")) return;
         if (Me == null) GetParent<ClientWorld>().ToggleMode();
         if (!await Until(() => Me is { } m && m.IsOnFloor() && PlacedObjects.Instance != null && Telescopes.Instance != null, 120))
         {
@@ -47,13 +51,15 @@ public partial class TelescopeProbe : Node
         }
         await Seconds(1.0);
         // across a restart: "place" sets one up and quits leaving it saved, "reload" looks through it in the next run
-        string? restart = CmdArgs.Value("--telescopecheck") is "place" or "reload" ? CmdArgs.Value("--telescopecheck") : null;
+        // (moonplace / moonreload: the same on the Moon, a Swiss flag beside it, #1995)
+        string? restart = arg is "place" or "moonplace" or "abroadplace" ? "place" : arg is "reload" or "moonreload" or "abroadreload" ? "reload" : null;
         if (restart == null) await ClearLeftovers(Me!, PlacedObjects.Instance!);
         try
         {
             if (restart == "place") await PlaceForRestart(Me!, PlacedObjects.Instance!);
             else if (restart == "reload") await LookAfterRestart(Me!, PlacedObjects.Instance!);
             else if (moon) await RunOnTheMoon(Me!, PlacedObjects.Instance!);
+            else if (abroad) await RunAbroad(Me!, PlacedObjects.Instance!);
             else await Run(Me!, PlacedObjects.Instance!);
         }
         catch (Exception e) { Expect(false, $"threw: {e.Message}"); }
@@ -261,15 +267,25 @@ public partial class TelescopeProbe : Node
         Expect(inv.CountPlain(ItemId.Telescope) == 1, "and back in the pack");
     }
 
-    /// <summary><c>moon</c>: the fly camera to Mare Crisium with <c>/goto</c>'s own path, then 3 m over the near ground once it is in.</summary>
-    private async Task<bool> ToTheMoon()
+    /// <summary>
+    /// <c>moon</c> / <c>abroad</c>: the fly camera there with <c>/goto</c>'s own path (<paramref name="where"/>: its arguments),
+    /// then 3 m over the ground once it is in (the Moon's near square; the Earth's ground through the sky's height probe).
+    /// </summary>
+    private async Task<bool> GoTo(string where)
     {
-        string said = GetParent<ClientWorld>().GoToBody("Moon 17 59 1");
+        string said = GetParent<ClientWorld>().GoToBody(where);
         GD.Print($"[telescopecheck] {said}");
         float height = 0;
-        if (!await Until(() => World.Bodies.BodyGround.Active is { Built: > 0 } g && g.TryGetHeight(Vector3.Zero, out height), 90))
+        bool Ground()
         {
-            Fail("no ground under the camera on the Moon");
+            if (World.Bodies.BodyGround.Active is { Built: > 0 } g && g.TryGetHeight(Vector3.Zero, out height)) return true;
+            if (PlacedObjects.Instance?.Origin.Body != BodyId.Earth || World.DayNight.Instance?.GroundHeight?.Invoke(Vector3.Zero) is not { } h) return false;
+            height = h;
+            return true;
+        }
+        if (!await Until(Ground, 120))
+        {
+            Fail($"no ground under the camera at {where}");
             return false;
         }
         if (GetViewport().GetCamera3D() is { } cam) cam.GlobalPosition = new Vector3(0, height + 3, 0);
@@ -292,6 +308,13 @@ public partial class TelescopeProbe : Node
 
         // the Earth: the menu's first entry here, centred, and the menu says so
         Expect(view.EarthForMoon, "the view knows it stands on the Moon");
+        view.Close();
+        Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back to plant a flag");
+        await PlantFlag(me, placed);
+        Expect(Telescopes.TryInteract(me) && await Until(() => TelescopeView.Current != null, 3), "looked through again");
+        if (TelescopeView.Current is not { } again) return;
+        view = again;
+        cam = GetViewport().GetCamera3D();
         Expect(TelescopeView.MenuText(null, earth: true).Contains("Earth") && !TelescopeView.MenuText(null, earth: true).Contains("Moon"),
             "the menu lists the Earth, not the Moon");
         Expect(view.SelectTarget(SkyBody.Moon) && view.FollowsBody, "the first target follows the Earth");
@@ -332,6 +355,28 @@ public partial class TelescopeProbe : Node
         // step back and pack it up
         view.Close();
         Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
+        PlacedResult? taken = null;
+        placed.RequestRemove(scope.Id, r => taken = r);
+        Expect(await Until(() => taken != null, 3) && taken!.Value.Ok, $"packed up ({taken?.Refused})");
+    }
+
+    /// <summary>
+    /// <c>abroad</c> (#1995): on the Earth outside Switzerland a telescope and a Swiss flag are set up, kept as Earth places
+    /// (no LV95 in the record), looked through and packed up.
+    /// </summary>
+    private async Task RunAbroad(FootPlayer me, PlacedObjects placed)
+    {
+        if (await SetUpAndLook(me, placed) is not { } set) return;
+        var (scope, _, _, view, _) = set;
+        var g = scope.At.Geodetic;
+        // Chamonix, in France: within a few km of where /goto put it
+        bool there = Math.Abs(g.LatDeg - 45.924) < 0.03 && Math.Abs(g.LonDeg - 6.870) < 0.04;
+        Expect(scope.At.Body == BodyId.Earth && there,
+            System.FormattableString.Invariant($"kept as an Earth place in Chamonix, outside Switzerland ({g.LatDeg:F3}, {g.LonDeg:F3})"));
+        Expect(view.SelectTarget(SkyBody.Jupiter) || view.SelectTarget(SkyBody.Moon), "a target followed");
+        view.Close();
+        Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
+        await PlantFlag(me, placed);
         PlacedResult? taken = null;
         placed.RequestRemove(scope.Id, r => taken = r);
         Expect(await Until(() => taken != null, 3) && taken!.Value.Ok, $"packed up ({taken?.Refused})");
@@ -403,7 +448,39 @@ public partial class TelescopeProbe : Node
         await Seconds(0.3);
         _items.UseSlot(me, slot);
         Expect(await Until(() => New(placed, before) != null, 4), "the telescope is set up, left for the next run");
+        if (placed.Origin.Body != BodyId.Earth)
+        {
+            var flag = await PlantFlag(me, placed, leave: true);
+            if (New(placed, before) is { } scope && flag != null)
+                GD.Print($"[telescopecheck] left on the {placed.Origin.Body}: telescope #{scope.Id}, flag #{flag.Id}");
+        }
         await Seconds(1.5);   // the save is written in the background
+    }
+
+    /// <summary>
+    /// A Swiss flag planted through its item's path (#1995: "can't place swiss flags either", on the Moon): the ghost valid on
+    /// the ground, planted, kept on the anchor's body and drawn. <paramref name="leave"/>: left for the next run.
+    /// </summary>
+    private async Task<PlacedObject?> PlantFlag(FootPlayer me, PlacedObjects placed, bool leave = false)
+    {
+        var before = placed.All.Keys.ToHashSet();
+        _items.Inventory.Add(ItemId.SwissFlag, 1);
+        int slot = Hold(ItemId.SwissFlag);
+        me.LookYaw = Mathf.Pi / 2;   // away from the telescope
+        me.LookPitch = -0.6f;
+        await Seconds(0.4);
+        var aim = FlagGhost.Aim(me, Placeables.ForItem(ItemId.SwissFlag));
+        Expect(aim is { Kind: FlagAimKind.Plant, Valid: true }, $"the flag's ghost on the {placed.Origin.Body}'s ground ({aim.Kind}, {aim.Reason})");
+        _items.UseSlot(me, slot);
+        PlacedObject? flag = null;
+        Expect(await Until(() => (flag = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Flag && !before.Contains(o.Id))) != null, 5),
+            "a Swiss flag planted");
+        if (flag == null) return null;
+        if (!leave) _placedHere.Add(flag.Id);
+        float off = flag.WorldTransform(placed.Origin).Origin.DistanceTo(me.GlobalPosition);
+        Expect(flag.At.Body == placed.Origin.Body && placed.GetNodeOrNull<Node3D>($"P{flag.Id}") != null && off < 6f,
+            $"the flag kept on the {flag.At.Body} and drawn {off:0.0} m from the player");
+        return flag;
     }
 
     /// <summary>
@@ -433,6 +510,18 @@ public partial class TelescopeProbe : Node
         Expect(TelescopeView.Current != null, $"looked through it after a restart ({Telescopes.Instance!.LastRefused})");
         TelescopeView.Current?.Close();
         await Seconds(0.3);
+        if (placed.Origin.Body == BodyId.Earth) return;
+        // on another body (#1995): both kept there across the restart, and drawn on its ground once the anchor is there
+        Expect(scope.At.Body == placed.Origin.Body, $"the telescope loaded on the {scope.At.Body}");
+        var flag = placed.All.Values.Where(o => o.Kind == PlacedKind.Flag && o.At.Body == placed.Origin.Body)
+            .OrderBy(o => o.WorldTransform(placed.Origin).Origin.DistanceTo(at)).FirstOrDefault();
+        Expect(flag != null, $"the Swiss flag loaded on the {placed.Origin.Body}");
+        if (flag == null) return;
+        _placedHere.Add(flag.Id);
+        float apart = flag.WorldTransform(placed.Origin).Origin.DistanceTo(at);
+        var node = placed.GetNodeOrNull<Node3D>($"P{flag.Id}");
+        Expect(node != null && apart < 8f && node.GlobalPosition.DistanceTo(flag.WorldTransform(placed.Origin).Origin) < 0.05f,
+            $"the flag drawn beside it ({apart:0.0} m from the telescope, node {(node == null ? "missing" : "on its record")})");
     }
 
     /// <summary>The worst jump of the drawn moon on screen from one frame to the next less the mean (px), and the mean (px), over 2 s.</summary>
