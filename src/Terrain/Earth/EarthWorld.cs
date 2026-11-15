@@ -148,9 +148,6 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         Reread($"{changed.Count} leaves changed ({Store.RemoteCount} from the server)");
     }
 
-    /// <summary>Ticks whenever a leaf is drawn, rebuilt or dropped (<see cref="IWorldGround.Version"/>, #2031).</summary>
-    public int GroundVersion { get; private set; }
-
     /// <summary>
     /// Every loaded leaf read again in place, its collision rebuilt (the old ones stay until the new ones land): the leaves
     /// changed (<see cref="Refresh"/>), or the base the fill stands on did (#1656, <c>EarthLeaves.UsePyramid</c>). Main thread.
@@ -573,7 +570,6 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         }
         _spent.LeafMesh += Ms(t);
         t = Stopwatch.GetTimestamp();
-        GroundVersion++;
         TileEntered?.Invoke(GroundTile.FromLeaf(leaf.Key));
         _spent.LeafEntered += Ms(t);
         t = Stopwatch.GetTimestamp();
@@ -595,7 +591,6 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         if (_collisionSource.PinnedOf(key) == leaf.Prepared) _collisionSource.Unpin(key);
         leaf.Mesh?.QueueFree();
         if (leaf.Node != null) Unfurnish(key, leaf.Node);
-        GroundVersion++;
         TileUnloaded?.Invoke(GroundTile.FromLeaf(key));
         _spent.LeafDrop += Ms(t);
     }
@@ -1257,7 +1252,6 @@ public sealed partial class EarthWorld : Node3D, IOriginContainer, IOriginShiftA
         public void RemoveAnchor(Node3D anchor) => w.RemoveAnchor(anchor);
         public bool HasAnchor(Node3D anchor) => w.HasAnchor(anchor);
         public IReadOnlyList<Node3D> Anchors => w._anchors;
-        public int Version => w.GroundVersion;
 
         public event Action<GroundTile>? TileEntered
         {

@@ -18,9 +18,6 @@ namespace UnitSport.Terrain;
 /// </summary>
 public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 {
-    /// <summary>Ticks whenever a tile's ground is drawn, rebuilt or dropped (<see cref="IWorldGround.Version"/>, #2031).</summary>
-    public int GroundVersion { get; private set; }
-
     /// <summary>The ground gameplay asks (#1532): this streamer's tiles, in the flat world.</summary>
     public IWorldGround Ground => _ground ??= new FlatGround(this);
 
@@ -972,7 +969,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _sinceEval = double.MaxValue;
         FitHorizonCoverage();
         Horizon?.Reload();
-        GroundVersion++;
         _terrainReplaced?.Invoke(tile => affected(tile.FlatId));
     }
 
@@ -1610,7 +1606,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (result.Mesh != null)
             {
                 EnsureNode(result.Id, state).SetMesh(result.Mesh, (float)(Math.Max(result.Stride, 1) * ChunkFormat.SpacingM));
-                GroundVersion++;
                 Horizon?.SetCovered(result.Id, true);
             }
             // collision is only queued here; a newer piece replaces a queued older one
@@ -2202,7 +2197,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         _chunks.Remove(id);
         Horizon?.SetCovered(id, false);
         Interiors.DoorIndex.ClearTile(id);
-        GroundVersion++;
         _tileUnloaded?.Invoke(GroundTile.Flat(id));
     }
 

@@ -38,22 +38,14 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     private float UpdateCap()
     {
         _capFrame = Engine.GetProcessFrames();
-        if (!Core.OriginShifter.CrossBodies) _cap = SpectatorSpeed.AltitudeCap(Altitude);
-        else
-        {
-            // a ring's slab is a surface too (#2030), its floor a drift among the chunks
-            double d = SurfaceDistance(out bool ring);
-            _cap = SpectatorSpeed.SurfaceCap(d, ring ? SpectatorSpeed.RingFloor : SpectatorSpeed.GroundCap);
-        }
+        _cap = Core.OriginShifter.CrossBodies ? SpectatorSpeed.SurfaceCap(SurfaceDistance()) : SpectatorSpeed.AltitudeCap(Altitude);
         return _cap;
     }
 
     /// <summary>How far the nearest surface of any body is (#1850, <see cref="SurfaceReach"/>).</summary>
-    private double SurfaceDistance(out bool ring)
-    {
-        ring = false;
-        return Core.OriginShifter.Instance?.Origin.Frame is { } frame ? SurfaceReach.Of(frame, Position, Altitude, out ring) : Altitude;
-    }
+    private double SurfaceDistance() => Core.OriginShifter.Instance?.Origin.Frame is { } frame
+        ? SurfaceReach.Of(frame, Position, Altitude)
+        : Altitude;
 
     private SpectatorSpeedHud? _hud;
     private bool _boosted;

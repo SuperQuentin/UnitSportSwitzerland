@@ -19,6 +19,12 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
 
     private static readonly StringName Sky = "sky", Distance = "distance", Dazzle = "dazzle";
 
+    /// <summary>The cull box's half side, m: round the node, which keeps near the camera (<see cref="FollowM"/>).</summary>
+    public const float BoxM = 1e7f;
+
+    /// <summary>The node goes to the camera once it is this far from it, m (#2035).</summary>
+    public const float FollowM = 1e6f;
+
     private readonly ShaderMaterial _material;
     private float _distance = -1f, _dazzle = -1f;
 
@@ -49,7 +55,7 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
         IgnoreOcclusionCulling = true;   // the sky: depth hides it, never the occlusion buffer (SkyBodies)
         GIMode = GIModeEnum.Disabled;
         // placed by the shader at the far plane: never culled by where the node is
-        CustomAabb = new Aabb(-Vector3.One * 1e7f, Vector3.One * 2e7f);
+        CustomAabb = new Aabb(-Vector3.One * BoxM, Vector3.One * 2 * BoxM);
         _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sky_point.gdshader") };
         MaterialOverride = _material;
         Mesh = Build(Load(), out int count);
@@ -139,6 +145,11 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
             return;
         }
         Visible = true;
+        // the cull box goes with the camera (#2035): the shader places every star from the camera, but Godot culls the node
+        // by its box. At the spectator's top speed (#2027) the camera flies 2e7 m from the origin between re-anchors (in
+        // Space the origin does not follow it vertically) and out of the box: "when moving toward a planet, all stars
+        // disappear". Moved when the camera is a tenth of the box's half side away, not every frame
+        if (GlobalPosition.DistanceSquaredTo(cam.GlobalPosition) > FollowM * FollowM) GlobalPosition = cam.GlobalPosition;
         _material.SetShaderParameter(Sky, sky.Stars);
         // only near the ground (Atmosphere.NearGround): 68,000 km off the Moon the field was thin by day (#1989 follow-up)
         float dazzle = DazzleOf(Atmosphere.Airless, DayNight.Instance.SunElevationDeg, Atmosphere.NearGround);

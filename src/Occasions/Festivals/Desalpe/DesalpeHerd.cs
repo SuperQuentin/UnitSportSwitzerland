@@ -21,9 +21,7 @@ public partial class DesalpeHerd : Node3D
     private const float DrawRange = 1500f;
 
     private readonly Func<WorldOrigin?> _origin;
-    // the world's ground (the earth world's leaves, the flat tiles): the flat streamer's alone answered nothing under --frame earth (#2031)
-    private readonly Func<IWorldGround?> _world;
-    private int _groundVersion = -1;
+    private readonly Func<ChunkManager?> _chunks;
     private readonly Random _rng = new();
     private FestivalService? _svc;
     private ResolvedSite? _site;
@@ -50,10 +48,10 @@ public partial class DesalpeHerd : Node3D
         public float[] Buffer = [];
     }
 
-    public DesalpeHerd(Func<WorldOrigin?> origin, Func<IWorldGround?> ground)
+    public DesalpeHerd(Func<WorldOrigin?> origin, Func<ChunkManager?> chunks)
     {
         _origin = origin;
-        _world = ground;
+        _chunks = chunks;
         Name = "DesalpeHerd";
     }
 
@@ -230,10 +228,10 @@ public partial class DesalpeHerd : Node3D
 
     private float GroundAt(double e, double n)
     {
-        if (_world() is not { } ground || _origin() is not { } origin) return float.NaN;
+        if (_chunks() is not { } chunks || _origin() is not { } origin) return float.NaN;
         var at = origin.ToWorld(e, n, 0);
-        if (ground.TryGetSurface(at, out float s)) return s;
-        return ground.TryGetHeight(at, out float h) ? h : float.NaN;
+        if (chunks.Ground.TryGetSurface(at, out float s)) return s;
+        return chunks.Ground.TryGetHeight(at, out float h) ? h : float.NaN;
     }
 
     public override void _Process(double delta)
@@ -259,23 +257,8 @@ public partial class DesalpeHerd : Node3D
         _bodies!.Visible = _heads!.Visible = _bells!.Visible = true;
         foreach (var g in _groups.Values) g.Node.Visible = g.Cows.Length > 0;
 
-        // the ground changed since the heights were read: read again (#2031, as Farming.Herds)
-        int version = _world()?.Version ?? 0;
-        if (version != _groundVersion)
-        {
-            _groundVersion = version;
-            _anchorGround = float.NaN;
-            Array.Fill(_ground, float.NaN);
-        }
         if (float.IsNaN(_anchorGround)) _anchorGround = GroundAt(_site.E, _site.N);
-        // no ground there yet: not drawn (it stood at the camera's own height, #2031)
-        if (float.IsNaN(_anchorGround))
-        {
-            _bodies.Visible = _heads.Visible = _bells.Visible = false;
-            foreach (var g in _groups.Values) g.Node.Visible = false;
-            return;
-        }
-        float anchorY = _anchorGround;
+        float anchorY = float.IsNaN(_anchorGround) ? eye.Y : _anchorGround;
         var anchor = origin.ToWorld(_site.E, _site.N, anchorY);
         if (!_bodies.Position.IsEqualApprox(anchor)) _bodies.Position = _heads.Position = _bells.Position = anchor;
         foreach (var g in _groups.Values) if (!g.Node.Position.IsEqualApprox(anchor)) g.Node.Position = anchor;

@@ -209,27 +209,13 @@ public static class Frames
     /// </summary>
     public static (BodyId Body, double Distance) NearestSurface(BodyId body, DVec3 p, SkyMoment m)
     {
-        var r = NearestReach(body, p, m);
-        return (r.Body, r.Distance);
-    }
-
-    /// <summary>
-    /// <see cref="NearestSurface"/> with the rings one can reach (#2030): Saturn's slab is a surface too, and
-    /// <c>Ring</c> says the nearest is a ring (the fly camera's floor there is a drift, not a planet's 3 km/s).
-    /// </summary>
-    public static (BodyId Body, double Distance, bool Ring) NearestReach(BodyId body, DVec3 p, SkyMoment m)
-    {
         var self = CelestialBody.Of(body);
-        var best = (body, Math.Max(0, self.Shape.ToGeodetic(p.AsEcef).H), false);
-        if (self.Rings is { } ownRings && ownRings.Distance(p) is var own && own < best.Item2) best = (body, own, true);
+        var best = (body, Math.Max(0, self.Shape.ToGeodetic(p.AsEcef).H));
         void Try(BodyId other)
         {
             if (other == body) return;
-            var there = Convert(body, p, other, m);
-            var b = CelestialBody.Of(other);
-            double d = Math.Max(0, there.Length - b.Shape.A);
-            if (d < best.Item2) best = (other, d, false);
-            if (b.Rings is { } rings && rings.Distance(there) is var dr && dr < best.Item2) best = (other, dr, true);
+            double d = Math.Max(0, Convert(body, p, other, m).Length - CelestialBody.Of(other).Shape.A);
+            if (d < best.Item2) best = (other, d);
         }
         foreach (var b in CelestialBody.All)
             if (b.Parent == body || (self.Parent is { } parent && (b.Id == parent || b.Parent == parent)))
