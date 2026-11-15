@@ -48,6 +48,7 @@ public partial class MoonDisc : MeshInstance3D
     private readonly ShaderMaterial _material, _haloMaterial;
     private readonly MeshInstance3D _halo;
     private (float Disc, float Width, float Strength, Vector2 Centre) _haloShown = (-1, -1, -1, Vector2.Zero);
+    private (float, float, float, float) _lookShown = (-1f, -1f, -1f, -1f);
 
     public MoonDisc()
     {
@@ -114,30 +115,44 @@ public partial class MoonDisc : MeshInstance3D
             _halo.Visible = false;
             return;
         }
+        // where it is and how it is lit: the sky's reading, or in space the frame tree's from the camera, as its globe has it
+        // (#1998: the sky counts its observer from the Earth, 90° off for the Moon from 140,000 km out sunward)
+        var moonDir = sky.Moon;
+        double moonDistance = sky.MoonDistance;
+        var sunDir = sky.Sun;
+        var face = sky.MoonFace;
+        if (Bodies.BodyLook.Seen(Core.BodyId.Moon, cam.GlobalPosition, out var seenDir, out double seenDistance, out var seenFace, out var seenSun))
+            (moonDir, moonDistance, face, sunDir) = (seenDir, seenDistance, seenFace, seenSun);
         // just inside the far plane at its true angular radius, at least ScreenShare of the view's height (#1842)
         float distance = cam.Far * 0.9f;
         float fov = Mathf.DegToRad(Core.CameraLens.FovOf(cam));
-        float angular = Mathf.Max((float)(RadiusMetres / sky.MoonDistance), fov * ScreenShare);
+        float angular = Mathf.Max((float)(RadiusMetres / moonDistance), fov * ScreenShare);
         float radius = distance * angular;
-        GlobalTransform = new Transform3D(Basis.Identity.Scaled(Vector3.One * radius), cam.GlobalPosition + sky.Moon * distance);
+        GlobalTransform = new Transform3D(Basis.Identity.Scaled(Vector3.One * radius), cam.GlobalPosition + moonDir * distance);
         Visible = true;
-        _material.SetShaderParameter(SunDir, sky.Sun);
-        _material.SetShaderParameter(Face, sky.MoonFace);
+        _material.SetShaderParameter(SunDir, sunDir);
+        _material.SetShaderParameter(Face, face);
         // above the air the sky behind it is black whatever the hour below: the night's brightness (#1798)
         float night = Mathf.Max(day.Night, Atmosphere.Space);
         _material.SetShaderParameter(Brightness, Mathf.Lerp(0.5f, 1.8f, night));
-        PlaceHalo(cam, sky, distance, angular, fov, night);
+        // from space its globe's own look (#1998, Bodies.BodyLook): the globe takes it over past a size with no change
+        float space = Bodies.BodyLook.InSpace;
+        Bodies.BodyLook.Write(_material, Core.CelestialBody.Moon, space, ref _lookShown);
+        PlaceHalo(cam, sunDir, moonDir, distance, angular, fov, night, space);
     }
 
-    private void PlaceHalo(Camera3D cam, DayNight.RealSky sky, float distance, float angular, float fov, float night)
+    private void PlaceHalo(Camera3D cam, Vector3 sunDir, Vector3 moonDir, float distance, float angular, float fov, float night, float space)
     {
-        float strength = HaloOn ? HaloStrength * night * PhaseGlow(sky.Sun, sky.Moon) * (1f - Mathf.SmoothStep(0.03f, 0.1f, angular / fov)) : 0f;
+        // in space the halo stands for a disc too small to read; one a few pixels wide is the globe's look, no glow over it
+        // (#1998: past the handover from the Moon it read as a glow, not the Moon)
+        float resolved = Mathf.Lerp(1f, 1f - Mathf.SmoothStep(0.3f * Bodies.BodyLook.GlobeShare, 0.8f * Bodies.BodyLook.GlobeShare, angular / fov), space);
+        float strength = HaloOn ? HaloStrength * night * PhaseGlow(sunDir, moonDir) * (1f - Mathf.SmoothStep(0.03f, 0.1f, angular / fov)) * resolved : 0f;
         _halo.Visible = strength > 0.002f;
         if (!_halo.Visible) return;
         float width = fov * HaloShare;
         float reach = angular + width * 16f;
         // a quad square to the moon's direction, its up from the camera's; drawn over the disc too (moon_halo.gdshader)
-        var toMoon = sky.Moon.Normalized();
+        var toMoon = moonDir.Normalized();
         var up = cam.GlobalBasis.Y;
         if (Mathf.Abs(up.Dot(toMoon)) > 0.99f) up = cam.GlobalBasis.X;
         var right = up.Cross(toMoon).Normalized();
@@ -151,7 +166,7 @@ public partial class MoonDisc : MeshInstance3D
         _halo.GlobalTransform = new Transform3D(new Basis(right * half, up * half, -toMoon), cam.GlobalPosition + toMoon * at);
         // the glow comes from the lit part: off the disc's centre toward the sun as the phase thins (a crescent's dark
         // disc ringed by a centred glow read as an eclipse)
-        var toSun = sky.Sun.Normalized();
+        var toSun = sunDir.Normalized();
         float lit = (1f - toSun.Dot(toMoon)) * 0.5f;
         var side = new Vector2(toSun.Dot(right), toSun.Dot(up));
         var centre = side.LengthSquared() > 1e-8f ? side.Normalized() * angular * 0.6f * (1f - lit) : Vector2.Zero;
