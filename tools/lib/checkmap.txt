@@ -1455,3 +1455,24 @@ src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home -
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+# the planets' bars (#1430 close-out, docs/plans/planets.md section 12), on the shipped bodies' base, no --bodies
+src/World/Bodies/MoonCheck     quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyGround    quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyGround    quick  --mooncheck mars --frame earth --chunks fixture:straight
+src/World/Bodies/BodyData      quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodySurface   quick  --mooncheck --frame earth --chunks fixture:straight
+src/Terrain/Bodies/            quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/BodyAir               quick  --mooncheck mars --frame earth --chunks fixture:straight
+src/Core/Frames                quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/BodyGravity           quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/Orbit                 quick  --orbitcheck --frame earth --world flat
+src/Player/SpaceOrbit          quick  --orbitcheck --frame earth --world flat
+src/Player/ShuttleFlight       quick  --shuttlecheck --frame earth --world flat
+src/Player/Airliner.Shuttle    quick  --shuttlecheck --frame earth --world flat
+src/World/Bodies/ShuttleMoon   full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/Player/Airliner.Shuttle    full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/Player/ShuttleFlight       full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/World/Bodies/UfoMoonCheck  full   --ufomooncheck --frame earth --chunks fixture:straight
+src/Player/Ufo                 full   --ufomooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/Ring          full   --ringcheck --frame earth --chunks fixture:straight
+src/World/Bodies/SaturnRings   full   --ringcheck --frame earth --chunks fixture:straight

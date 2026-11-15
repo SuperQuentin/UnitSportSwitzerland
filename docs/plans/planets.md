@@ -63,10 +63,16 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   (a hard swap at the size edge does not show), and the sky's sphere is kept as the small stage rather than folded into
   one class.
 
-**Still to come**:
-- C3b online (after D2, #1727);
-- Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);
-- the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
+**Still to come** (audited against main on 2026-11-15 for #1430's close-out; every other phase's bar is met under
+`--frame earth` with no other flag, the bodies' base shipping in `assets/bodies/`):
+- **C3b online** (#1852): PR #1975, stacked on D2 (#1727, the earth frame by default), merges after it: the body on the
+  wire, interest and server regions per body, the server's Moon ground, `/goto` online, the far markers in the telescope,
+  `tools/moonnetcheck.sh`. C3a's online check (the net check seeing the shuttle land on the Moon) comes with it.
+- **Deferred to issues**: the shuttle's bot pilot (#1498); cover, scatter and leaves on other bodies (#2016).
+- **Decided: the Earth keeps its own `Globe`** rather than being folded onto `BodyGlobe` (section 6). The Earth's globe
+  is the anchor world's (its leaves' holes, geomorphing, the Swiss column, the far fill over it); `BodyGlobe` draws the
+  Earth from another body from the same chain (`BodySurface.Earth.Pyramid`), and `BodyLook` gives every body one look
+  from space (#1998). Folding the two would rewrite the Earth's drawing for no change on screen.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
 flat LV95 world, which D3 deletes.
