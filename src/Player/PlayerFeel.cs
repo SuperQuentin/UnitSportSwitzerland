@@ -101,9 +101,6 @@ public partial class PlayerFeel : Node3D
     /// <summary>Whether this player's feel layer (its HUD lines and popups) is on screen (#2036's check).</summary>
     internal bool ScreenShown => _screen != null && _screen.Visible && (_popup.Visible || _speedLabel.Visible);
 
-    /// <summary>The layer up as while this player is the view (#2036's check: a run's fly camera and --nohud keep it down).</summary>
-    internal void ShowForCheck() => _screen.Visible = true;
-
     public override void _Notification(int what)
     {
         if (what != NotificationDisabled || _screen == null) return;

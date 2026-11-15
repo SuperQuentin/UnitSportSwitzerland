@@ -26,7 +26,8 @@ namespace UnitSport.World.Bodies;
 /// </list>
 /// Each must stay within <see cref="MaxPx"/>. Saturn far is the user's picture (2.3 million km up); near, its globe fills the
 /// view; Jupiter is another giant; the Moon is seen from the Earth's side (another body's globe under the root).
-/// Pictures in <c>test_output/bodies/bodyplace_*.png</c>.
+/// First the AIR readout (the jump's airtime popup): up on foot, gone once the fly camera parks the walker. Without
+/// <c>--nohud</c> (it hides every layer). Pictures in <c>test_output/bodies/bodyplace_*.png</c>.
 /// </summary>
 public partial class BodyPlaceCheck : Node
 {
@@ -90,21 +91,19 @@ public partial class BodyPlaceCheck : Node
         _air = Find<Atmosphere>(GetTree().Root);
         _moonDisc = Find<MoonDisc>(GetTree().Root);
         string which = CmdArgs.Value("--bodyplacecheck") is { Length: > 0 } v && !v.StartsWith("--", StringComparison.Ordinal) ? v : "all";
-        // the AIR readout (#2036): the walker's layer up with a landing's popup, then parked as the fly camera parks it
-        // (ProcessMode disabled, ClientWorld.SetBodyParked): the layer must go. In one frame, the walker put back after
-        // (a run's fly camera has it parked from the start, and --nohud hides the layers each frame)
-        bool shownOnFoot = false, goneParked = false;
-        if (Find<Player.PlayerFeel>(GetTree().Root) is { } feel && feel.GetParent() is Node walker)
-        {
-            var mode = walker.ProcessMode;
-            walker.ProcessMode = ProcessModeEnum.Inherit;
-            feel.ShowForCheck();
-            feel.Popup("AIR  0.9 s", true);
-            shownOnFoot = feel.ScreenShown;
-            walker.ProcessMode = ProcessModeEnum.Disabled;
-            goneParked = !feel.ScreenShown;
-            walker.ProcessMode = mode;
-        }
+        // the AIR readout (#2036): on foot (a run starts in the fly camera: the spectator key), a landing's popup up, then
+        // the fly camera again, which parks the walker (ClientWorld.SetBodyParked): the popup must go with its layer.
+        // Run without --nohud (it hides every layer)
+        await Toggle();
+        await Wait(3);
+        var feel = Find<Player.PlayerFeel>(GetTree().Root);
+        feel?.Popup("AIR  0.9 s", true);
+        await Frame();
+        bool shownOnFoot = feel?.ScreenShown == true;
+        await Toggle();
+        await Wait(0.5);
+        bool goneParked = feel != null && !feel.ScreenShown;
+        Log($"the walker {(feel == null ? "never came" : "came")}; the fly camera {(GetViewport()?.GetCamera3D() is Player.SpectatorCamera ? "is" : "is not")} the view again");
         RenderingServer.FramePreDraw += Measure;
         try
         {
@@ -119,6 +118,15 @@ public partial class BodyPlaceCheck : Node
             Input.ActionRelease(PlayerInput.FlyBoost);
         }
         Finish(_failed == 0 ? null : $"{_failed} expectation(s) failed");
+    }
+
+    /// <summary>The spectator key (Shift+T): the fly camera to the walker or back, through ClientWorld's own input.</summary>
+    private async Task Toggle()
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.Spectator, Pressed = true });
+        await Frame();
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.Spectator, Pressed = false });
+        await Frame();
     }
 
     private static T? Find<T>(Node n) where T : class
