@@ -26,7 +26,7 @@ Body-agnostic: another body's pyramid is another `PyramidSource` (H7).
   section (the Earth 0: the same bytes as before), and the index asks name it by their tile's E. A server answers
   "missing" for a body it does not serve. `CubeKey` stays body-free. See "Other bodies" below.
 - An older server answers "missing" to both: the client keeps its local data and the shipped base. An older client
-  never asks. So D2's protocol 97 is untouched.
+  never asks. So D2's protocol 96 is untouched.
 - Client: `NetworkChunkSource.FetchPyramid`: cache `pyr_<stem>_<stamp>.s<section>.cubt` in the tile cache (cap, Clear,
   trim), the leaves' retries and "the server has none" memory, through **three slots of its own** (`_pyramidSlots`, none
   of the near ground's six or the two section slots). Through the section slots (shared with the leaves' far heights) a

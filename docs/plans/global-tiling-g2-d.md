@@ -24,7 +24,7 @@ Planned 2026-11-10 from a survey of `main` at `862ddb3e`.
 - **The cube build still reads the LV95 build's output**: buildings `.bldg`, `places.json`, region files, the test
   region. MapSetup's cube layer runs the LV95 layers first. The tools must be made independent of LV95 before the
   LV95 build can be deleted.
-- **A protocol bump is needed (97; 96 went to #1999)**: RPCs carry LV95 tile ints (farm fields, fog, the flat tile request), tile keys
+- **A protocol bump is needed (96)**: RPCs carry LV95 tile ints (farm fields, fog, the flat tile request), tile keys
   inside cow ids, and `BuildingKey` text (about 60 RPC sites).
 - **The ratchet can't reach 0 and be retired.** About 4,000 `.E`/`.N` reads are authored LV95 catalogues (festivals,
   adventure, BR, the trailer) and the generator's LV95 source. D turns the ratchet into a **fence**: LV95 only in
@@ -191,9 +191,8 @@ and travel, movies, ghosts. Nothing to do but the yaws.
 
 ### The protocol: a bump is needed
 
-`Handshake.Protocol` was 95. RPCs carry LV95 tiles or LV95 keys, so D bumps in D2 (the stores' keys) and again in D3 if
-`RequestAsset` goes in a separate release. Main took 96 for the placed objects' body (#1999), so D2 is **97**, C3b (#1975)
-98, and D3 takes the next free number.
+`Handshake.Protocol` is 95. RPCs carry LV95 tiles or LV95 keys, so D bumps to **96** in D2 (the stores' keys) and
+**97** in D3 if `RequestAsset` goes in a separate release.
 - **Tile as (E, N) km ints**: `FarmField.Net.cs:54` `Subscribe(e, n)`, `:64` `Unsubscribe`, `:92` `Work`, `:153` `Cells`; `ChunkStreamer.cs:291` `RequestAsset(…, tileE, tileN)`; `PlacesService.cs:388` `FogDelta(int[] tiles, …)` and `:379` `FogFull`.
 - **A tile inside a long**: `Herds.cs:463` `CowAir`, `:466` `CowAirSync`, `:478` `CowDown(long key, …)`.
 - **Tile-name strings**: `DormantVehicles.cs:293` `Woke`, `:299` `AwakeSet`, `:402` `Slept`, `:1082` `RequestWake`; the `veh_slot_E_N_ord` names in `VehicleManager.cs:356, 389, 426, 433`.
@@ -230,7 +229,7 @@ D can't be one PR, for three reasons:
 | **D0** the bar's tools | `TEST_FRAME=earth` in `tools/test.sh` (every row takes `--frame earth`; `coords` and `net` included); the re-anchor pop probe; the long-drive probe (autopilot on the lane graph, re-anchoring); the Geneva → Brest flight probe (an A320 on autopilot over the pyramid); a dry run of all tiers under earth with the failures filed | now, in parallel with C6/C7; no behaviour change | — |
 | **G1-G3** the gaps (C7 additions, #1682-#1684) | G1 the earth server builds the fill and the generated world (`EarthLeaves.WithFill` on the server; `--generated-world`); G2 a fixture course online on leaves, client and server (`ClientWorld.cs:469`, `ServerWorld.cs:123`); G3 the server's dormant fleets, steamer, airports, herds and slopes off the flat streamer (`ServerWorld.cs:160-163`) and the 32 escape hatches to 0 | G1, G2 before D2; G3 before D3 | G2 before the earth `net` tier means anything |
 | **D1** tools independent of LV95 | 1.3's first list: network, cover and region files from sources and leaves; `SignalTestRegion` writes leaves; MapSetup's cube layer standalone. Byte-identical leaves against today's cube build where the inputs are the same | before D4; parallel with D2 | with #1650's MapSetup defaults |
-| **D2** the flip | `WorldFrame.Earth` the default (settings, server, test profile); the stores of section 2 re-keyed at new paths with their migrations; the records' yaws to true north; protocol 97; `--frame flat` still works (hidden) as the rollback; **the bar run and recorded here** (section 5) against flat on the same commit | C6, C7, G1-G3 and D0 done | the stores' keys and the protocol bump (a client and a server must agree on the keys) |
+| **D2** the flip | `WorldFrame.Earth` the default (settings, server, test profile); the stores of section 2 re-keyed at new paths with their migrations; the records' yaws to true north; protocol 96; `--frame flat` still works (hidden) as the rollback; **the bar run and recorded here** (section 5) against flat on the same commit | C6, C7, G1-G3 and D0 done | the stores' keys and the protocol bump (a client and a server must agree on the keys) |
 | **D3** the flat runtime deleted (game) | everything in 1.1 and 1.2's LV95 members; protocol 97 if `RequestAsset`'s removal ships apart; the fence test; flat-only probes and checkmap rows | D2 has run a full tier on `main` and the user has played it (one playtest) | the switch, `ChunkManager`'s streaming, `FallbackChunkSource`'s LV95 path, `NetworkChunkSource`/`ClientTerrainSync`'s flat half, the `.terr` readers and `HorizonLayer`: deleting any one alone leaves a `--frame flat` that crashes |
 | **D4** the LV95 build deleted (tools) | 1.3's deletions; scripts; tests | D1 and D3 merged (`ChunkFormat`/`HorizonFormat` are shared with the game) | the game's `TerrainFormat` users gone first |
 | **D5** the tile name | `TileId` → a leaf tile name holding a `CubeKey` across the 193 files; RoadGen's stage key renamed; `Lv95SourceTile` in the sources | after D3; by area, mechanical; may be several PRs | — |
@@ -267,7 +266,7 @@ clients' (measured, `general/linux-deploy`) until #1656 streams it.
 - **A wrong drop**: dropping loot masks, shop counts, farm cells and contracts loses a few days' state. That's accepted; it's listed in the release notes.
   - Pinball high scores are the one dropped store a player might mind. If the user objects, D2 can convert them through the leaf buildings' `BuildingId` at the old key's tile centre plus the building index, while LV95 tiles still exist on the server.
 - **Shipping**: from D2 on, a fresh install's real ground is what a server streams (#1662, the leaves deployed with
-  `tools/deploy-linux.sh --leaves`, #1792); the release ships none. The protocol 97 rollout (leaves and `--leaves`
+  `tools/deploy-linux.sh --leaves`, #1792); the release ships none. The protocol 96 rollout (leaves and `--leaves`
   first, then the merge, then `/update` on the server) is the runbook in `general/linux-deploy`. D3 doesn't merge before #1650.
 - **The net tier on fixtures**: until G2 lands, `--frame earth` online on a fixture is silently flat. A green earth net tier would then prove nothing. D0's dry run asserts the frame in each net check's log.
 - **Performance**: an earth client is measured against flat (`--perfcheck` on the D: region, phone build too), because flat's ring policy and `HorizonLayer` were tuned for years. To record in D2.

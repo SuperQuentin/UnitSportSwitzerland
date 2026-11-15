@@ -171,7 +171,7 @@ The rest of the determinism rules:
 
 - **Arithmetic**: the biome decision uses +, -, *, / and floor only, on doubles. A tree's or farm's keep/drop is a
   hash of its lattice cell, not a random draw.
-- **Protocol**: no protocol change here. D2 (#1727) bumps to 97. If this lands before D2, D2's bump covers it; if
+- **Protocol**: no protocol change here. D2 (#1727) bumps to 96. If this lands before D2, D2's bump covers it; if
   after, the change in fill content needs the next bump, noted in the PR.
 
 ## Coordination
