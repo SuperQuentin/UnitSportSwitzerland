@@ -145,6 +145,7 @@ public partial class Atmosphere : Node3D
         var sun = TrueSun(axes);
         Space = space;
         Airless = !home && air == null;
+        OnSun = body.Id == BodyId.Sun;
         // the body's disc hides the sky behind it (#1989): its centre from the camera, its angular radius; near its ground
         // the eye is dazzled by it by day (StarField), not from far out (#1989 follow-up: thin stars 68,000 km off the Moon)
         if (home) WriteSkyFloor(-1f, Vector3.Down);
@@ -215,8 +216,19 @@ public partial class Atmosphere : Node3D
     /// <c>world_sky_floor</c> and <c>world_sky_down</c> (<c>sky_point.gdshader</c>), written when they move by more than
     /// about a hundredth of a degree.
     /// </summary>
+    /// <summary>
+    /// Off the Earth (#2035): the direction to the anchor body's centre and its angular radius (rad; -1 on the Earth): what is
+    /// within it is behind the body. <see cref="SunDisc"/> hides the sun by it there, never by world Y (anchored on the Sun,
+    /// the Sun is "down": it was faded to a grey glow 5 AU out).
+    /// </summary>
+    public static (Vector3 Down, float Radius) BodyDisc { get; private set; } = (Vector3.Down, -1f);
+
+    /// <summary>The anchor's body is the Sun (between the planets, #2035): its own sun is never behind it.</summary>
+    public static bool OnSun { get; private set; }
+
     private void WriteSkyFloor(float floor, Vector3 down)
     {
+        BodyDisc = (down, floor);
         if (Mathf.Abs(floor - _skyFloor) >= 2e-4f)
         {
             _skyFloor = floor;

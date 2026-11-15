@@ -19,8 +19,17 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
 
     private static readonly StringName Sky = "sky", Distance = "distance", Dazzle = "dazzle";
 
-    /// <summary>The cull box's half side, m: round the node, which keeps near the camera (<see cref="FollowM"/>).</summary>
+    /// <summary>The cull box's least half side, m: round the node, which keeps near the camera (<see cref="FollowM"/>).</summary>
     public const float BoxM = 1e7f;
+
+    /// <summary>
+    /// The cull box's half side for a camera with this far plane (#2035): past the far plane, so the box always reaches past
+    /// the near plane into the view. 5 AU out the near plane is 7.5e7 m: a 1e7 m box round the camera lay wholly in front
+    /// of it, out of the frustum, and every star was culled ("far enough, all stars disappear").
+    /// </summary>
+    public static float BoxFor(float far) => Mathf.Max(BoxM, far * 1.5f);
+
+    private float _box = BoxM;
 
     /// <summary>The node goes to the camera once it is this far from it, m (#2035).</summary>
     public const float FollowM = 1e6f;
@@ -150,6 +159,12 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
         // Space the origin does not follow it vertically) and out of the box: "when moving toward a planet, all stars
         // disappear". Moved when the camera is a tenth of the box's half side away, not every frame
         if (GlobalPosition.DistanceSquaredTo(cam.GlobalPosition) > FollowM * FollowM) GlobalPosition = cam.GlobalPosition;
+        float box = BoxFor(cam.Far);
+        if (box > _box * 1.05f || box < _box * 0.5f)
+        {
+            _box = box;
+            CustomAabb = new Aabb(-Vector3.One * box, Vector3.One * 2 * box);
+        }
         _material.SetShaderParameter(Sky, sky.Stars);
         // only near the ground (Atmosphere.NearGround): 68,000 km off the Moon the field was thin by day (#1989 follow-up)
         float dazzle = DazzleOf(Atmosphere.Airless, DayNight.Instance.SunElevationDeg, Atmosphere.NearGround);
