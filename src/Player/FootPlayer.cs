@@ -4137,6 +4137,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Bots.BodyProfiler.CountFrame();
         using var profile = Bots.BodyProfiler.Time(Bots.BodyProfiler.Slot.Physics, Bot);
         using var water = World.WaterField.In(RegionTerrain);
+        // the gravity of the body this one stands on (#2000: a server's Moon bots and their rovers, by its Earth's)
+        using var gravity = Core.BodyGravity.For(Origin?.Body);
         if (_camera != null) KeepFinite();
         PhysicsStep(delta);
     }
