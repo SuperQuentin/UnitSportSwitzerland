@@ -1348,6 +1348,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
         if (Bots.BotIndoorProbe.Role != null) AddChild(new Bots.BotIndoorProbe(items));
         if (Bots.BotIndoorSolo.Requested) AddChild(new Bots.BotIndoorSolo(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }));
+        if (Bots.ShuttleBotCheck.Requested) AddChild(new Bots.ShuttleBotCheck(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }, () => { if (_onFoot) ToggleMode(); }));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }

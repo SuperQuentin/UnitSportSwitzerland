@@ -4935,8 +4935,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 // what a bot's craft met (#837: bots crashing in the air during a big drop)
                 if (Bot)
                 {
-                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n
+                        ? FormattableString.Invariant($"{n.Name} ({n.GetClass()}, under {n.GetParent()?.Name}) at {ToLocal(GetSlideCollision(0).GetPosition())} normal {GetSlideCollision(0).GetNormal()}, flight {_flight.Velocity.Length():F1} real {real.Length():F1}")
+                        : "nothing";
                     GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
+                    for (int k = 0; k < GetSlideCollisionCount(); k++)
+                    {
+                        var c = GetSlideCollision(k);
+                        GD.Print(FormattableString.Invariant($"[bots]   contact {k}: {(c.GetCollider() as Node)?.Name} shape {c.GetLocalShape()} at {ToLocal(c.GetPosition())} normal {c.GetNormal()} depth {c.GetDepth():F3} travel {c.GetTravel()} remainder {c.GetRemainder()}"));
+                    }
+                    GD.Print(FormattableString.Invariant($"[bots]   at {GlobalPosition} real {real} flight {_flight.Velocity}"));
                 }
             }
             else

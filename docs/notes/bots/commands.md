@@ -8,6 +8,8 @@
   - `/bot arm <weapon> [rounds]`: every bot takes the weapon.
   - `/bot drive [metres]`: every bot to a point that far ahead of you, by car or bike if one is in sight (`vehicles`).
   - `/bot fire`: every bot in its weapon's reach shoots once at your chest.
+  - `/bot shuttle [moon] [orbit] [km] [turns] [pad=<id>]`: the nearest bot (or a new one) flies the space shuttle's
+    mission from the nearest parked one (`shuttle-pilot`, #1498).
   - `/bot clear`, and `/bot list` (anyone).
   - `/br bots [n|off] [easy|normal|hard]`: the BR field size (`battle-royale`).
 - **Server flags**:
