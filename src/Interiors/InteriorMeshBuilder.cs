@@ -175,6 +175,8 @@ public static partial class InteriorMeshBuilder
     public static MeshData Build(InteriorLayout l)
     {
         Core.ShowcaseTrace.Mark();
+        _colony = ColonyColoursOf(l.Colony);
+        _shellLook = ShellLookFor(l);
         var s = new Scratch();
         float h = l.StoreyHeight;
         float clear = h - InteriorGenerator.Slab;
@@ -308,6 +310,8 @@ public static partial class InteriorMeshBuilder
 
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
     {
+        // a curved shell (#2000, a Moon colony's modules) in place of the four walls
+        if (r.Shell != ShellKind.None) { ShellRoom(s, r, y0); return; }
         if (r.Shape != null) { ShapedRoom(s, r, y0, clear); return; }
         var (floorCol, wallCol, ceilCol) = Palette(r.Type);
         const float t = InteriorGenerator.WallInset;
@@ -1008,6 +1012,7 @@ public static partial class InteriorMeshBuilder
     /// <param name="load">A pallet's load byte (<see cref="Items.Pallets"/>), drawn instead of its plan's own roll; -1 for none.</param>
     private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures, int load = -1)
     {
+        if (ColonyPiece(s, p, y0)) return;
         // authored with its back to -Z, centred on the origin, then turned and moved
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
         var at = new Vector3(p.X, y0, p.Z);

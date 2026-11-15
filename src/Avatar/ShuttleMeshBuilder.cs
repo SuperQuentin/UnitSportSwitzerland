@@ -137,7 +137,7 @@ public static class ShuttleMeshBuilder
         (26.4f, 5.65f), (27.4f, 5.05f), (28.4f, 4.45f), (NoseZ, 3.95f),
     };
 
-    private static float TopAt(float z)
+    internal static float TopAt(float z)
     {
         if (z <= Crown[0].Z) return TopY;
         for (int i = 1; i < Crown.Length; i++)
@@ -170,7 +170,7 @@ public static class ShuttleMeshBuilder
     }
 
     /// <summary>The section's half width at height <paramref name="y"/> (shrunk by <paramref name="inset"/>); 0 above or below it.</summary>
-    private static float XAt(float z, float y, float inset = 0f)
+    internal static float XAt(float z, float y, float inset = 0f)
     {
         var (a, yb, ym, yt) = Section(z);
         a -= inset; yb += inset; yt -= inset;
@@ -354,8 +354,14 @@ public static class ShuttleMeshBuilder
 
     private static void CrewModule(MeshScratch m)
     {
-        Floor(m, CabinRearZ + 0.02f, 24.0f, FlightDeckY, PanelGrey);
+        // the flight deck's floor, whole ahead of the interdeck opening (#1493) and either side of it behind
+        Floor(m, LadderTopZ, 24.0f, FlightDeckY, PanelGrey);
+        float fw = XAt(LadderTopZ, FlightDeckY, ShuttleLayout.Skin) - 0.01f;
+        foreach (var (x0, x1) in new[] { (LadderInX, fw), (-fw, LadderOutX) })
+            m.Box(new Vector3((x0 + x1) * 0.5f, FlightDeckY - 0.05f, (CabinRearZ + 0.02f + LadderTopZ) * 0.5f),
+                new Vector3(x1 - x0, 0.1f, LadderTopZ - CabinRearZ - 0.02f), PanelGrey);
         Floor(m, CabinRearZ + 0.02f, MidDeckFrontZ, MidDeckY, PanelGrey);
+        Ladder(m);
 
         // the mid deck's forward lockers, a wall of cream boxes
         float lw = XAt(MidDeckFrontZ, 4.0f, ShuttleLayout.Skin) - 0.05f;
@@ -382,6 +388,28 @@ public static class ShuttleMeshBuilder
         m.Box(new Vector3(0, OverheadY + 0.06f, OverheadZ), new Vector3(0.9f, 0.12f, 0.9f), PanelGrey);
         // the panel's kick plate down to the floor under it, between the pedals
         m.Box(new Vector3(0, (FlightDeckY + PanelY - 0.35f) * 0.5f, PanelZ + 0.2f), new Vector3(0.3f, PanelY - 0.35f - FlightDeckY, 0.3f), PanelGrey);
+    }
+
+    /// <summary>
+    /// The ladder up the interdeck opening (#1493): two stringers along the walk's slope (<c>ShuttleDeck</c>) from the mid
+    /// deck's floor to the flight deck's edge, rungs every 0.3 m, and the rail along the opening's inboard side.
+    /// </summary>
+    private static void Ladder(MeshScratch m)
+    {
+        float footZ = LadderFootZ + 0.3f, rise = FlightDeckY - MidDeckY, run = LadderTopZ - footZ;
+        float length = Mathf.Sqrt(rise * rise + run * run);
+        var tilt = new Basis(Vector3.Right, -Mathf.Atan2(rise, run));
+        var along = new Vector3(0, rise, run) / length;
+        float x = (LadderInX + LadderOutX) * 0.5f, half = (LadderInX - LadderOutX) * 0.5f - 0.05f;
+        var mid = new Vector3(x, (MidDeckY + FlightDeckY) * 0.5f, (footZ + LadderTopZ) * 0.5f);
+        foreach (float s in new[] { -1f, 1f })
+            m.Box(mid + new Vector3(s * half, 0f, 0f), new Vector3(0.05f, 0.08f, length), UpholsteryDark, tilt);
+        for (float d = 0.25f; d < length - 0.1f; d += 0.3f)
+            m.Box(new Vector3(x, MidDeckY, footZ) + along * d + new Vector3(0, 0.03f, 0), new Vector3(half * 2f, 0.03f, 0.05f), PanelGrey, tilt);
+        // the rail along the opening's inboard side, open at the ladder's top
+        m.Box(new Vector3(LadderInX + 0.025f, FlightDeckY + 1.0f, (CabinRearZ + LadderTopZ - 0.3f) * 0.5f), new Vector3(0.04f, 0.04f, LadderTopZ - 0.3f - CabinRearZ), UpholsteryDark);
+        foreach (float z in new[] { CabinRearZ + 0.15f, LadderTopZ - 0.35f })
+            m.Box(new Vector3(LadderInX + 0.025f, FlightDeckY + 0.5f, z), new Vector3(0.04f, 1.0f, 0.04f), UpholsteryDark);
     }
 
     /// <summary>

@@ -189,7 +189,10 @@ public static class ColonyKit
     {
         const int panels = 20;
         s.Tube(new(0, 0, 0), new(0, FloorY - 0.15f, 0), r + 0.4f, p.Frame, panels);
-        s.Tube(new(0, FloorY - 0.15f, 0), new(0, FloorY, 0), r - 0.05f, p.Band, panels);
+        // the deck: the cans' grey-blue, not the band's near-white (the hall read as one pale blur, #1938), with a darker
+        // walkway round the middle, where the hub's map table stands
+        s.Tube(new(0, FloorY - 0.15f, 0), new(0, FloorY, 0), r - 0.05f, p.Frame, panels);
+        s.Ring(new(0, FloorY + 0.006f, 0), Vector3.Up, r * 0.42f, r * 0.62f, 0.012f, p.Frame.Darkened(0.22f), panels);
         float pw = 2 * r * Mathf.Sin(Mathf.Pi / panels) * 1.04f;
         for (int i = 0; i < panels; i++)
         {

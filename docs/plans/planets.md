@@ -56,6 +56,13 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   - PR #1960: the belly jets (landing and take-off on an airless body), the Moon round trip in `--shuttlemooncheck`;
   - this branch: the UFO's cruise drive and target hold (`--ufomooncheck`).
 
+- **H7b** (#1848), #1998: one look per body from space (`World/Bodies/BodyLook`): the globe or the sky's sphere by the
+  body's size on screen (1 % of the view's height, in space only; from inside the air always the sky's), the sky's
+  spheres lit as the globe at its exposure and placed by the frame tree from the camera, the colonies' lights only on
+  the side facing the camera; `--bodyviewcheck`. Built differently from section 6: no cross-fade, since the two match
+  (a hard swap at the size edge does not show), and the sky's sphere is kept as the small stage rather than folded into
+  one class.
+
 **Still to come**:
 - C3b online (after D2, #1727);
 - Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);

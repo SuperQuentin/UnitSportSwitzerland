@@ -726,6 +726,10 @@ src/Avatar/AirlinerRig   quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --cabincheck --world fixture --traffic 0
 src/Player/CabinCheck    quick  --cabincheck --world fixture --traffic 0
+src/Player/ShuttleAboardCheck quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.ZeroG quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Avatar/ShuttleDeck   quick  --shuttleaboardcheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --shuttleaboardcheck --world fixture --traffic 0
 src/Player/Airliner      quick  --cabincheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
 src/Avatar/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
@@ -1450,3 +1454,4 @@ src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home -
 src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
