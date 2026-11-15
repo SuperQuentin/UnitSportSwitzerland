@@ -1,7 +1,8 @@
 # The ground on another body (#1850)
 
-Under `--frame earth` with a body's pyramid (`--bodies DIR`, `DIR/<body>/cube`), the anchor's body has a near ground
-you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
+Under `--frame earth` every body but the Sun has a pyramid (`World/Bodies/BodyData`, #1849: the local install, the
+server's, the shipped base `assets/bodies/<body>`, else generated; `net/pyramid-streaming` "Other bodies"), and the
+anchor's body has a near ground you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
 
 - **Heights**: `Terrain/Bodies/BodyHeights` (plain C#, `BodyHeightsTests`): the pyramid's finest level (the Moon's L5,
   167 m cells) bilinear, plus `CraterField` (2.5-320 m craters). A missing tile is the reference surface with its craters.
@@ -72,8 +73,8 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   (nothing moves), the world shifted to the place's tangent frame, the camera over it (30 km over a body with ground by
   default, never under a body's floor), T steps in after flying down. Planetocentric latitude, east longitude (−180..360).
   `--gotocheck` (quick, no body data): the Apollo 15 site, Gale crater, back over Bern, an unknown body refused.
-- **Check**: `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --bodies
-  E:/UnitSportSwitzerland/planets --mooncheck [mars|phobos|deimos|...] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
+- **Check**: `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none [--bodies
+  E:/UnitSportSwitzerland/planets] --mooncheck [mars|phobos|deimos|...] [--fromorbit]` (~50 s headless for the Moon): the flight, then down,
   T, standing, a 120 m sprint over a new square, the body's jump (5.4 m on the Moon, 2.4 m on Mars). `mars` flies Earth →
   Sun → Mars at light speed (~860 game s, ~13 min headless); `--fromorbit` skips the flight (27 s). Windowed: `test_output/moon/{arrival,ground,apex}.png`. 2027-07-24 puts the landing near
   the terminator (low sun, the craters show). A small moon: the flight ends (and `--fromorbit` starts) well inside its

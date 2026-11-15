@@ -101,13 +101,13 @@
     `start-server.sh`.
 - **Not the `cube_global` pyramid.** The fill outside the leaves must stand on the same base on the server and every
   client (`GameLeaves`: a client and the server make the same fill leaf). A release has only the shipped levels 0-2
-  (`res://assets/globe`), on which `PyramidBase.Open` gives null, so the fill stands on the generator's relief.
+  (`res://assets/bodies/earth`), on which `PyramidBase.Open` gives null, so the fill stands on the generator's relief.
   - Measured with `--fillagree` at B4's south-west edge (20 fill points, 5 real): the shipped globe on both sides agreed
     to 0.000 m. The full pyramid on one side only was off by 20.5 m on the fill on average, 32.3 m at worst, whichever side had it.
-  - So the server gets no `--globe`. The deploy preset includes `assets/globe/*`, as the CI one does, which is for the
+  - So the server gets no `--globe`. The deploy preset includes `assets/bodies/earth/*`, as the CI one does, which is for the
     server's line of sight only.
   - The user's own PC finds `D:/UnitSportSwitzerland/cube_global` by itself, so on that PC the fill is ~20 m off from the server's
-    outside the region. `--globe res://assets/globe` matches the server. The fix is #1656 (the server streams the pyramid).
+    outside the region. `--globe res://assets/bodies/earth` matches the server. The fix is #1656 (the server streams the pyramid).
 - **What an earth client gets online** (D2 at `daf0751d3`, Nov 13 2026, one PC over loopback):
   - The setup: a server with the default frame, `--chunks` the full flat set, `--leaves` B4 and the shipped globe; a
     release-like client with no tiles, no leaves, an empty cache and the shipped globe, `--earthcheck` at the default

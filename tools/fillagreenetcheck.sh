@@ -60,7 +60,7 @@ if [[ " $RUNS " == *" edge "* ]]; then
 fi
 if [[ " $RUNS " == *" pyramid "* ]]; then
   if [ -d "$LEAVES" ] && [ -f "$PYRAMID/cube_manifest.json" ]; then
-    SERVER_EXTRA=(--globe "$PYRAMID"); CLIENT_EXTRA=(--globe res://assets/globe --cache "$OUT/fillagree_pyramid_cache")
+    SERVER_EXTRA=(--globe "$PYRAMID"); CLIENT_EXTRA=(--globe res://assets/bodies/earth --cache "$OUT/fillagree_pyramid_cache")
     rm -rf "$OUT/fillagree_pyramid_cache"; mkdir -p "$OUT/fillagree_pyramid_cache"
     run pyramid "$EDGE" "${NOTERRAIN[@]}" --leaves "$LEAVES"
     SERVER_EXTRA=(); CLIENT_EXTRA=()

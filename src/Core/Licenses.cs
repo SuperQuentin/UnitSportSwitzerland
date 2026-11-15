@@ -85,7 +85,7 @@ public static class Licenses
             "https://github.com/quickjs-ng/quickjs/blob/master/LICENSE",
             "Fabrice Bellard, Charlie Gordon, QuickJS-ng contributors"),
         new("NASA Blue Marble Next Generation (topography and bathymetry, 2004)",
-            "The globe's ground colour (assets/globe), and the statistics the earth fill guesses its biomes from outside Switzerland (src/Terrain/Biomes/photo_stats.bin.gz)",
+            "The globe's ground colour (assets/bodies/earth), and the statistics the earth fill guesses its biomes from outside Switzerland (src/Terrain/Biomes/photo_stats.bin.gz)",
             "Public domain (NASA); credit requested",
             "https://visibleearth.nasa.gov/collection/1484/blue-marble",
             "NASA Earth Observatory"),

@@ -10,9 +10,9 @@ namespace UnitSport.World.Bodies;
 /// body (the Earth seen from the Moon: the Earth's <see cref="Globe"/>, built round the Earth's leaves, steps aside then).
 ///
 /// <para>
-/// <b>Where the bodies' data is</b>: <c>--bodies DIR</c>, each body's pyramid in <c>DIR/&lt;body&gt;/cube</c> (the Moon's:
-/// <c>DIR/moon/cube</c>, built by <c>--cube-body moon</c>, coloured by <c>--globealbedo --body moon</c>). No path is
-/// built in; #1656's delivery (the server, the local install, the shipped base) takes over from it.
+/// <b>Where the bodies' data is</b>: each body's chain (<see cref="BodyData"/>): the local install (<c>DIR/&lt;body&gt;/cube</c>,
+/// built by <c>--cube-body moon</c>, coloured by <c>--globealbedo --body moon</c>; <c>--bodies DIR</c> overrides where it is
+/// looked for), the server's once its index comes, the base the game ships (levels 0-2), else generated from the sky map.
 /// </para>
 ///
 /// <para>
@@ -30,8 +30,11 @@ public partial class BodyViews : Node
     private readonly List<BodyGlobe> _globes = new();
     private BodyGlobe? _earth, _moon;
 
-    /// <summary>The root of the bodies' data (<c>--bodies</c>), or null.</summary>
-    public static string? DataRoot => CmdArgs.Value("--bodies");
+    /// <summary>The root of the bodies' local install (<see cref="TerrainPaths.FindBodiesDir"/>), or null.</summary>
+    public static string? DataRoot => TerrainPaths.FindBodiesDir();
+
+    /// <summary>A body's globe, or null where it has none.</summary>
+    public BodyGlobe? GlobeOf(BodyId id) => _globes.Find(g => g.Body.Id == id);
 
     public BodyViews(WorldOrigin origin, Func<Player.FootPlayer?> local)
     {
@@ -42,13 +45,11 @@ public partial class BodyViews : Node
 
     public override void _Ready()
     {
-        if (DataRoot is { } root)
+        if (!TerrainPaths.GlobeOff)
             foreach (var body in CelestialBody.All)
             {
-                if (body.Id == BodyId.Earth) continue;
-                string dir = System.IO.Path.Combine(root, body.Name.ToLowerInvariant(), "cube");
-                if (!GlobeFiles.HasManifest(dir)) continue;
-                var g = new BodyGlobe(body, dir, _origin);
+                if (BodyData.For(body) is not { Count: > 0 } chain) continue;
+                var g = new BodyGlobe(body, chain, chain.Describe(), _origin);
                 AddChild(g);
                 _globes.Add(g);
                 if (body.Id == BodyId.Moon) _moon = g;

@@ -2421,6 +2421,31 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     }
                 }).CallDeferred();
         }
+        // and the other bodies' pyramids (#1849): each body's index, then its tiles by key through the tile cache, the body's
+        // number in the request; its globe and the ground on it read again what changed
+        if (_earth != null && _chunkSource is { } bodyCache)
+        {
+            var wanted = new List<int>();
+            foreach (var body in CelestialBody.All)
+                if (World.Bodies.BodyData.HasGlobe(body)) wanted.Add((int)body.Id);
+            _terrainSync.WantsBodies = wanted;
+            _terrainSync.BodyPyramidIndexSettled += (body, index) =>
+            {
+                if (index == null) return;
+                Callable.From(() =>
+                {
+                    var celestial = CelestialBody.Of((BodyId)body);
+                    if (World.Bodies.BodyData.For(celestial) is not { } chain) return;
+                    var changed = chain.UseRemote(index, (k, e, s) => bodyCache.FetchPyramid(k, e, s, body));
+                    GD.Print($"[bodies] the server's pyramid for {celestial.Name}: {index.Count} tiles, {changed.Count} changed");
+                    if (GetNodeOrNull<World.Bodies.BodyViews>("BodyViews")?.GlobeOf(celestial.Id) is { } globe)
+                    {
+                        globe.RefreshPyramid(changed);
+                        globe.Ground?.Refresh();
+                    }
+                }).CallDeferred();
+            };
+        }
         // the sync runs its continuations on the thread pool, and the chat log is UI
         _terrainSync.Status += line =>
             Callable.From(() =>

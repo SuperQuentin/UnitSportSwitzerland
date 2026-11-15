@@ -27,7 +27,7 @@ tc_client 900 "$OUT/farband_A.log" --windowed --connect 127.0.0.1:$PORT --name O
   "${LOOK[@]}" --shot-queue "$SHOTS/A/queue.txt"
 ( tc_userdata "$(mkdir -p "$OUT/userdata_farband_B" && cd "$OUT/userdata_farband_B" && pwd)"
   tc_client 900 "$OUT/farband_B.log" --windowed --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES" \
-    --globe res://assets/globe --cache "$CACHE" "${LOOK[@]}" --shot-queue "$SHOTS/B/queue.txt" )
+    --globe res://assets/bodies/earth --cache "$CACHE" "${LOOK[@]}" --shot-queue "$SHOTS/B/queue.txt" )
 tc_stop
 fail=
 for c in A B; do
