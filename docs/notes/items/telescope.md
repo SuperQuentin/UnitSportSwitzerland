@@ -66,4 +66,17 @@
 - Not yet: the tube's aim replicated (others see it level), planets and far markers (H7, C3),
   lunar elevation and finer moon levels, the POI viewpoint telescopes (`Adventure/Places`) opening
   this view.
+- **Following a planet at the longest end, on any body** (#2028: "it simply loses tracking and the planet drifts fast off
+  screen", on the Moon). Two causes. (1) Past ~1 % of the view a planet is drawn as its globe (`BodyLook`, #1998) and
+  `SkyBodies.Place` skipped its entry (`HiddenByGlobe`), so `DirectionOf` froze where the globe took over while the globe
+  went on turning with the Moon's short day (#1992): it is now kept every frame, only its disc and point hidden. (2) The
+  view aimed before the sky and the globes were placed in the frame, and `SkyClock.Now` (`WorldClock.Sky`, cached 10 ms of
+  wall time) is not one moment per frame: a frame of sky at normal speed is ~15″, wider than the 9.9″ field. The view
+  runs late (`ProcessPriority` 900) and follows a body's globe as drawn (`BodyGlobe.DrawnCentre`, the Earth from the Moon
+  too) before the sky's place. The Earth's ground never draws a planet's globe, so it never showed there.
+  **Check**: `--telescopecheck`, `moon` and `mars` (`--frame earth --bodies DIR`, Gale crater) follow Jupiter at 500,000 mm
+  for `--tracksecs` (60) s at normal speed and at the true rate, the clock running, measuring the body as drawn (its globe
+  when that shows it) against the middle every frame: worst < 0.25 of the half field (seen: 0.01; before, 1,856 on the
+  Moon). Windowed it saves `test_output/telescope_track_<body>_<speed>_start|end.png`. The "steady at 500,000 mm" moon
+  step on the Earth (< 0.5 px a frame) fails windowed on this PC with or without the change (1.1-1.3 px).
 - **Steady at the longest end** (#1835): while something aims it (a body, the drive), the camera is turned straight from the aim vector (`Basis.LookingAt`) and set directly, never through yaw and pitch as floats (they stepped 2.4e-7 rad, ~3 px at 500,000 mm: the followed moon shook 1 px a frame). Following: 0.00 px. The drive holds a point of the stars' float frame while the moon is placed from its own float vector: ~1 px at a 10″ view, the 32-bit floor (the stars stay on it). Measured windowed by `--telescopecheck` (the moon as drawn, every frame for 2 s).

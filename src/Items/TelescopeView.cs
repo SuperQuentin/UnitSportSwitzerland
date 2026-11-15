@@ -69,6 +69,9 @@ public partial class TelescopeView : CanvasLayer
     public override void _Ready()
     {
         Current = this;
+        // after everything that places what it follows this frame: the day's hour, the sky's bodies, the bodies' globes
+        // (#2028: aimed before them, it held last frame's place, 15″ off at normal speed, wider than the field at the end)
+        ProcessPriority = 900;
         UiFocus.Set(this, true);
         _tube = _scope.GetNodeOrNull<Node3D>(TelescopeVisual.TubeName);
         // start where the tripod was set facing, a little up
@@ -213,8 +216,22 @@ public partial class TelescopeView : CanvasLayer
 
     /// <summary>Where the tube is held this frame: the tracked spot of the sky, or <see cref="Target"/>, if the sky shows it.</summary>
     private Vector3? TargetDirection() => !FollowsBody ? (World.DayNight.Instance?.Sky is { } sky ? (sky.Stars * _skyDir).Normalized() : null)
-        : Target == SkyBody.Moon ? (EarthForMoon ? EarthDirection() : World.DayNight.Instance?.Sky?.Moon)
-        : World.SkyBodies.Instance?.DirectionOf(Target);
+        : Target == SkyBody.Moon ? (EarthForMoon ? GlobeDirection(BodyId.Earth) ?? EarthDirection() : GlobeDirection(BodyId.Moon) ?? World.DayNight.Instance?.Sky?.Moon)
+        : GlobeDirection(Target) ?? World.SkyBodies.Instance?.DirectionOf(Target);
+
+    /// <summary>
+    /// Toward a body's globe as drawn this frame, while its globe (not the sky's disc) shows it (#1998): zoomed on a planet
+    /// from the Moon, or the Earth from the Moon. Followed as drawn, not as worked out again: the globe is placed at its
+    /// own reading of the sky's moment, which may be a frame apart from another's at the longest end (#2028).
+    /// </summary>
+    private Vector3? GlobeDirection(SkyBody body) =>
+        Towards(World.Bodies.BodyViews.Instance?.DrawnGlobeOf(body)?.DrawnCentre);
+
+    private Vector3? GlobeDirection(BodyId body) =>
+        Towards(World.Bodies.BodyViews.Instance?.GlobeOf(body)?.DrawnCentre);
+
+    private Vector3? Towards(Vector3? point) =>
+        point is { } p && (_cam?.GlobalPosition ?? _scope.GlobalPosition) is var eye && p.DistanceSquaredTo(eye) > 1f ? (p - eye).Normalized() : null;
 
     /// <summary>The target's name for the readout.</summary>
     private string TargetName => !FollowsBody ? "the sky" : Target == SkyBody.Moon ? (EarthForMoon ? "the Earth" : "the moon") : Target.ToString();

@@ -51,6 +51,9 @@ public partial class BodyGlobe : Node
     /// <summary>Drawn this frame (the sky's own picture of the body steps aside, <see cref="MoonDisc"/>).</summary>
     public bool Drawn { get; private set; }
 
+    /// <summary>Where its centre is drawn (shrunk about the camera past the far plane: the direction from it is true), while drawn.</summary>
+    public Vector3? DrawnCentre => Drawn ? _root.GlobalPosition : null;
+
     /// <summary>Whether to draw it at all this frame: the owner's call (<see cref="BodyViews"/>).</summary>
     public bool Wanted { get; set; }
 
