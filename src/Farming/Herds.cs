@@ -302,6 +302,9 @@ public partial class Herds : Node3D, IOriginContainer
     private int GroundVersion => _terrain?.Version ?? 0;
 
     /// <summary>The terrain's height at an LV95 point on this peer, NaN where it is not loaded.</summary>
+    /// <summary>The ground under a herd's place, or <paramref name="offset"/> metres from it (east, north on its tile's grid).</summary>
+    private float GroundAt(Herd plan, Vector2 offset = default) => GroundAt(plan.E + offset.X, plan.N + offset.Y);
+
     private float GroundAt(double e, double n)
     {
         if (_terrain == null) return float.NaN;

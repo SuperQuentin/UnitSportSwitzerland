@@ -119,7 +119,7 @@ public partial class Herds
             {
                 if (h.WasAir[i] || float.IsNaN(h.Ground[i])) continue;
                 // at the very point the cow's height was read (it reads again only after walking 0.4 m): staleness alone, not slope
-                float fresh = GroundAt(h.Plan.E + h.GroundAt[i].X, h.Plan.N + h.GroundAt[i].Y);
+                float fresh = GroundAt(h.Plan, h.GroundAt[i]);
                 if (float.IsNaN(fresh)) continue;
                 worst = Mathf.Max(worst, Mathf.Abs(fresh - h.Ground[i]));
                 cows++;
@@ -170,18 +170,18 @@ public partial class Herds
         if (version != h.GroundVersion)
         {
             h.GroundVersion = version;
-            if (!float.IsNaN(h.AnchorGround) && GroundAt(plan.E, plan.N) is var again && !float.IsNaN(again) && Math.Abs(again - h.AnchorGround) > 0.3f)
+            if (!float.IsNaN(h.AnchorGround) && GroundAt(plan) is var again && !float.IsNaN(again) && Math.Abs(again - h.AnchorGround) > 0.3f)
             {
                 // a visible herd that moves is a snap the player sees (--herdgroundcheck counts them)
                 bool seen = h.Bodies!.Visible;
                 if (seen) _checkSnaps++;
                 GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"[herds] a herd at {plan.E:F0},{plan.N:F0}: its ground moved {again - h.AnchorGround:F1} m, read again{(seen ? " (in view: a snap)" : "")}"));
+                    $"[herds] herd {plan.Index} of tile {plan.Tile}: its ground moved {again - h.AnchorGround:F1} m, read again{(seen ? " (in view: a snap)" : "")}"));
             }
             h.AnchorGround = float.NaN;
             System.Array.Fill(h.Ground, float.NaN);
         }
-        if (float.IsNaN(h.AnchorGround)) h.AnchorGround = GroundAt(plan.E, plan.N);
+        if (float.IsNaN(h.AnchorGround)) h.AnchorGround = GroundAt(plan);
         // no ground answered there yet (on the earth world only the loaded leaves answer: a herd drawn before its leaf landed):
         // not drawn until it does. It was drawn at the camera's own height meanwhile, a herd standing in the air (#2031)
         bool known = !float.IsNaN(h.AnchorGround);
