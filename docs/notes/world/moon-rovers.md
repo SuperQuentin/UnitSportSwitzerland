@@ -35,5 +35,7 @@ Plan: `docs/plans/moon-surface.md` section 7. The colonies: `moon-colonies`, `mo
   radius, occupied) and the runway (both ends, half width); `NearestFree`. For the planets session's shuttle landing.
 - **Check**: `--moonsites artemis --moonrovercheck open|cabin|kart` (headless ~70 s): the open rover on the road (17 km/h
   after 8 s, stops in 5 s), the pressurised one from the hangar (the rolling door up after 6.4 s with the rover 8 m from
-  it, down the ramp), out with E, parked, and the depot's three rovers there. Windowed `rover_drive.png`. Run two
+  it, down the ramp), out with E, parked, and the depot's three rovers there; then (#2000) back in from 19 m out on the door's line, up the
+  ramp, through the rolling door, 4 m inside within 25 s (since #2005 the hangar's slab and ramp were not solid and the
+  rover stopped 2.6 m short, at the floor's edge). Windowed `rover_drive.png`. Run two
   checks at once only in different modes (they share a scratch user:// per mode).

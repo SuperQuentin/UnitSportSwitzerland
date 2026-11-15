@@ -1312,3 +1312,12 @@ In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date
 
 - [ ] Walk in through an airlock and through every module and tube of Artemis Base (hub, each can, a moondust dome by a can's side door, the hangar down its steps) → no gap or hole in the walls, floors or doorways, no step at a doorway's sill, nothing to walk through; the rooms lit evenly, not washed out, screens and lamps glowing.
 - [ ] The same at Moon Village (`--moonsites moonvillage:close`, its glazed alleys and stacks) and the Cold War biodome (`--moonsites coldwar:close`) → the alleys' walls and the biodome's ring wall solid, the garden walkable, the trees' trunks solid.
+
+## A bot flies the shuttle ([#1498](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1498))
+
+Offline, in a window (Cartoon), `--date 2027-07-15`, on foot at Geneva's or Zurich's cargo apron by the parked shuttle.
+
+- [ ] `/bot shuttle 300` → a bot walks to the shuttle, gets in, taxis without hitting the other parked aircraft, takes off; the taxi from the real stand to the runway looks sane (no lawn crossing through a building).
+- [ ] Watch the take-off and, an hour or so later in game time (`/speed`), the landing on the same runway; the bot parks and climbs out by the hatch.
+- [ ] `--frame earth`, free camera on the bot (`/bot shuttle moon orbit`, then follow it): the trip, the drop onto a colony's pad (inside its 60 m), the lift-off, home; the descent and touchdown look like a lander, not a crash.
+- [ ] Online (server + client): `/bot shuttle 300` at Geneva → the bot flies round the Earth and lands home, seen from the ground.

@@ -38,11 +38,14 @@ through it (#1798).
   **The node stays at the origin** (#1989): `StarField` and `Satellites` reset to identity on `OnOriginShifted`. They
   are top-level with a 1e7 m cull box; every shift moved them, and the shift to the Moon's tangent frame left the field
   ~4e8 m away: every star culled (as after ~10,000 km of flight on the Earth). **Off the Earth** (`Atmosphere`):
-  `world_sky_floor` is the sine of the body's horizon dip from the camera (-1 on the Earth), and points under it are
-  hidden: the body's ground past the far plane hides nothing by depth. **On an airless ground by day** the eye is
-  dazzled (`StarField.DazzleOf`, the `dazzle` uniform, by the sun's elevation from -2° to 4°): only the stars of
-  magnitude 2.5 and brighter, at 80 %; at night all of them (decided for #1989: the sky black by day with the brightest
-  stars, as the eye sees it shielded from the sun, not a camera's starless exposure; nothing changes where there is air).
+  the body's disc hides the sky behind it: `world_sky_down` (toward its centre) and `world_sky_floor` (its angular
+  radius, asin(R/d); -1 on the Earth); its ground past the far plane hides nothing by depth. A dip under the world's
+  horizontal was only right near the anchor's point. **On an airless ground by day** the eye is dazzled
+  (`StarField.DazzleOf`, the `dazzle` uniform, by the sun's elevation from -2° to 4°, times `Atmosphere.NearGround`: full
+  to 5 % of the body's radius, none from half of it): only the stars of magnitude 2.5 and brighter, at 80 %; at night and
+  far out all of them (decided for #1989: the sky black by day with the brightest stars, as the eye sees it shielded from
+  the sun, not a camera's starless exposure; nothing changes where there is air). Without `NearGround` the field was thin
+  68,000 km off the Moon, where the sunlit ground is a small disc (found by the planets session's `--bodyviewcheck`).
 - **Planets** (`Ephemeris.Planets.cs`): JPL's approximate Keplerian elements (table 1, 1800-2050), the
   Earth as the barycentre less the moon's share, light time, annual aberration, precession to the date.
   Against Horizons from Bern: Mercury 0.006°, Venus and Mars 0.010°, Jupiter 0.028°, **Saturn 0.080°**

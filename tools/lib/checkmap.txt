@@ -1395,6 +1395,10 @@ src/Player/ShuttleCheck        quick  --shuttlecheck --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck europe --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck glide --world flat
+src/Bots/ShuttleBrain     quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
+src/Bots/ShuttleBotCheck  quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
+src/Bots/ShuttleBotNetPro full   tools/shuttlebotnetcheck.sh
+src/Player/ShuttlePilot   quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
 src/Player/Airliner            quick  --shuttlecheck --world flat
 src/Player/AirlinerFlight      quick  --shuttlecheck --world flat
 src/Avatar/Shuttle             quick  --cockpitcheck
