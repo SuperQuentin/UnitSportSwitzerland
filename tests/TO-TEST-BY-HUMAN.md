@@ -19,7 +19,7 @@ In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, over Geneva.
 
 In a window, Cartoon, `--frame earth --date 2027-07-15 --time 12`, the spectator (Shift+T).
 
-- [ ] Offline, `--globe res://assets/globe` (the 1.5 MB base alone), climb from Lavaux to orbit and fly over Asia → the Earth from orbit looks as before; tile edges at 60-250 km as before (no worse).
+- [ ] Offline, `--globe res://assets/bodies/earth` (the 1.5 MB base alone), climb from Lavaux to orbit and fly over Asia → the Earth from orbit looks as before; tile edges at 60-250 km as before (no worse).
 - [ ] Join a server that has the pyramid (`--globe <dir>` on the server) from a copy with none and an empty cache, then climb slowly from the ground to 500 km over Switzerland → the globe sharpens as tiles arrive, no tile jumps in height when it splits or merges; note how long it takes to catch up after a fast climb (the check measured it lagging at 7 fps).
 - [ ] With the pyramid on this PC (D:), climb and dive between 2 km and 300 km at full speed, watching the mountains on the horizon → no ground popping between levels (each level eases into the next).
 
@@ -362,7 +362,7 @@ With the `--cube-global` region on D: (`D:/UnitSportSwitzerland/cube_global`, or
 
 - [ ] Desktop, live: the spectator from a Lausanne street (`--origin 2538300,1151200`) straight up to ~12,000 km and back, boost held → the globe fades in above 15 km with no pop; the sky darkens to black by 40 km; the generated fill dissolves at 50-80 km and every flat tile at 150-250 km without a hole; nothing jumps at 60 or 50 km; the whole Earth sits under you with the stars; coming down, the flat world comes back in the same order.
 - [ ] VR, live (PC VR, then the Quest standalone with the shipped levels 0-2 only): the same climb as far as the headset's flight allows → no flicker or swimming of the globe in either eye; on the Quest the flat world sinks out of sight at its half-way heights instead of dissolving; frame rate holds.
-- [ ] A clean clone with Git LFS, no D: data: the globe still draws from `assets/globe` (levels 0-2), softer below ~1,000 km.
+- [ ] A clean clone with Git LFS, no D: data: the globe still draws from `assets/bodies/earth` (levels 0-2), softer below ~1,000 km.
 - [ ] At 120 km by day, then at dusk and at night → stars by day up there; the limb is a blue band over black; the terminator lies where the real sun puts it (not where the moon is at night).
 - [ ] Frame time at 120 km looking at the horizon, and while climbing fast (tiles streaming) → no hitch over ~30 ms.
 - [ ] The same on a phone or the Quest (Mobile renderer, maybe a 24-bit depth buffer) → no flicker between globe tiles or against the flat tiles far out.

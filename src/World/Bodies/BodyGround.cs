@@ -70,8 +70,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
 
     public CelestialBody Body => _globe.Body;
 
-    /// <summary>The ground's heights (the checks read them too).</summary>
-    public BodyHeights Heights { get; }
+    /// <summary>The ground's heights (the checks read them too); made again when the pyramid deepens (<see cref="Refresh"/>).</summary>
+    public BodyHeights Heights { get; private set; }
+
+    /// <summary>The level <see cref="Heights"/> reads (the chain's finest when they were made).</summary>
+    public int HeightsLevel { get; private set; }
+
+    // bumped as the heights are made again: a square of older heights is rebuilt where it stands
+    private int _heightsVersion;
 
     /// <summary>The near square in place, with its frame (x east, y up, z south, its origin on the ground under its centre).</summary>
     public EnuFrame? Frame => _near.Frame;
@@ -105,7 +111,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public double LampsAge;
         public EnuFrame? Frame;
         public Task<Square>? Task;
-        public int Epoch = -1, Built;
+        public int Epoch = -1, Built, HeightsVersion;
         public (Vector3 Centre, Vector3 Up, Vector3 East, float Half) HoleWritten;
 
         public float Half => Cells * CellM / 2;
@@ -118,18 +124,52 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         _globe = globe;
         _origin = origin;
         Name = $"{globe.Body.Name}Ground";
+        Heights = MakeHeights(globe);
+        _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
+        _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
+    }
+
+    /// <summary>
+    /// The chain deepened (the server's pyramid for this body came, #1849): the heights are made again at its new finest
+    /// level, and each square rebuilt where it stands (the old one stays under the walker until the new one is in).
+    /// </summary>
+    public void Refresh()
+    {
+        if (_globe.MaxLevel == HeightsLevel) return;
+        Heights = MakeHeights(_globe);
+        _heightsVersion++;
+        GD.Print($"[bodies] {Body.Name}'s ground now reads level {HeightsLevel}");
+    }
+
+    /// <summary>
+    /// The heights at the chain's finest level. A tile missing there (a streamed one that did not come, past the data) is its
+    /// deepest ancestor's, resampled (<see cref="GlobeGround.FillFromAncestors"/>): never the reference surface's 0, a step
+    /// of kilometres where the data stands high or low (the shipped base alone reaches level 2).
+    /// </summary>
+    private BodyHeights MakeHeights(BodyGlobe globe)
+    {
         var cube = globe.Body.Cube;
         int level = globe.MaxLevel;
+        HeightsLevel = level;
         var pyramid = globe.Pyramid;
-        Heights = new BodyHeights(cube, level,
-            key => pyramid.Heights(key),
+        return new BodyHeights(cube, level,
+            key => pyramid.Heights(key) ?? FromAncestor(pyramid, key),
             globe.Body.CraterDensity > 0 ? new CraterField((ulong)globe.Body.Id, cube.Shape.A, globe.Body.CraterDensity) : null,
             // the Moon's sites (#1939): craters calmed under the landers, the S-IVBs' fresh craters; the colonies' plateaus (#1940)
             globe.Body.Id == BodyId.Moon ? new SurfaceStamps(MoonSites.Stamps().Concat(MoonColonies.Stamps()), cube.Shape.A) : null,
             // the body's relief family under its data (#1853, #1854): dunes, ridges, grooves, lava flows
             SurfaceProfile.For(globe.Body.Id, cube.Shape.A));
-        _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
-        _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
+    }
+
+    /// <summary>A tile the chain lacks, from its deepest ancestor (65², bilinear); null where it has none at all.</summary>
+    private static CubeTile? FromAncestor(Terrain.Leaves.PyramidSource pyramid, CubeKey key)
+    {
+        const int bits = 6;
+        int n = (1 << bits) + 1;
+        var hs = new float[n * n];
+        System.Array.Fill(hs, float.NaN);
+        GlobeGround.FillFromAncestors(hs, n, key, bits, 1, pyramid.Heights);
+        return System.Array.TrueForAll(hs, float.IsNaN) ? null : new CubeTile { Key = key, Bits = bits, Heights = hs };
     }
 
     /// <summary>This body's ground is the one everything asks while the anchor is on it.</summary>
@@ -221,12 +261,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         if (Wants(_near, p))
         {
             var near = _near;
+            near.HeightsVersion = _heightsVersion;
             near.Task = Task.Run(() => Build(heights, globe, p, near, n => heights.At(n, MediumCraterM)));
         }
         else if (_near.Node != null && Wants(_medium, p))
         {
             var mediumLayer = _medium;
-            mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride)));
+            mediumLayer.HeightsVersion = _heightsVersion;
+            mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride, ofFullLattice: true)));
         }
     }
 
@@ -260,10 +302,10 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     }
 
     /// <summary>A layer needs a new square round <paramref name="p"/>: none yet, or the camera past its move distance.</summary>
-    private static bool Wants(Layer l, EcefPos p)
+    private bool Wants(Layer l, EcefPos p)
     {
         if (l.Task != null) return false;
-        if (l.Frame is not { } f) return true;
+        if (l.Frame is not { } f || l.HeightsVersion != _heightsVersion) return true;
         var (x, _, z) = f.ToLocal(p);
         return x * x + z * z >= l.MoveM * l.MoveM;
     }

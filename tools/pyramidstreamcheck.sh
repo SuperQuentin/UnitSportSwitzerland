@@ -25,12 +25,12 @@ tc_server 900 180 "$OUT/pyramidstream_server.log" --server --port $PORT --no-que
 tc_client 900 "$OUT/pyramidstream_A.log" --connect 127.0.0.1:$PORT --name Owner "${EARTH[@]}" --leaves "$LEAVES" --globe "$PYRAMID" "${LOOK[@]}"
 ( tc_userdata "$(mkdir -p "$OUT/userdata_pyramidstream_B" && cd "$OUT/userdata_pyramidstream_B" && pwd)"
   tc_client 900 "$OUT/pyramidstream_B.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES" \
-    --globe res://assets/globe --cache "$CACHE" "${LOOK[@]}" )
+    --globe res://assets/bodies/earth --cache "$CACHE" "${LOOK[@]}" )
 # a pyramid with far features (#1657): B again from its cache, hovering 40 s at 3 km over the start, so its deep levels
 # (9-13, where the features are) come in: their section-13 entries must
 if grep -q '"features"' "$PYRAMID/cube_manifest.json"; then
   ( tc_userdata "$OUT/userdata_pyramidstream_B"
-    tc_client 900 "$OUT/pyramidstream_B2.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES"       --globe res://assets/globe --cache "$CACHE" "${LOOK[@]/$CLIMB/3000,3000,1,40}" )
+    tc_client 900 "$OUT/pyramidstream_B2.log" --connect 127.0.0.1:$PORT --name Streamer "${EARTH[@]}" --leaves "$NOLEAVES"       --globe res://assets/bodies/earth --cache "$CACHE" "${LOOK[@]/$CLIMB/3000,3000,1,40}" )
 fi
 tc_stop
 grep -h "\[stream\] pyramid index" "$OUT/pyramidstream_server.log" | head -1 | sed 's/^/server: /'

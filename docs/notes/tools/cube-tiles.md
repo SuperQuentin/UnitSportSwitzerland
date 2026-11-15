@@ -235,8 +235,8 @@ tools/TerrainPreprocessor/bin/Release/net8.0/TerrainPreprocessor.exe --cube-glob
   `.cubf` bundles beside the heights (`terrain/far-features`).
 - **What ships since #1656**: `--globebase` (`net/pyramid-streaming`), 1.5 MB. Before it:
 - **What shipped** (`--cube-subset`, `CubeSubset`): levels 0-2 rebundled on their own (the full region bundles 0-3
-  together under each face) into `assets/globe` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
-  assets/globe --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
+  together under each face) into `assets/bodies/earth` (`--cube-in D:/UnitSportSwitzerland/cube_global --cube-out
+  assets/bodies/earth --cube-levels 0-2`): 126 tiles, 23.5 MB, in Git LFS (`.gitattributes`), packed by every client
   export preset's `include_filter` (no Godot resources). The game reads them through `World/Globe/GlobeFiles`
   (`res://` by Godot's FileAccess: inside a pack .NET's file API sees nothing); the local install wins where it has a tile (`PyramidSource`). The leaves are G1's local region (825 km² of swissALTI3D
   0.5 m, all the 0.5 m on D:, plus RGE ALTI samples): the rest of Switzerland's 0.5 m is on the NAS

@@ -5,10 +5,10 @@ places in one chain, `Terrain/Leaves/PyramidSource` (Godot-free; the game's copy
 
 1. **The local install**: `TerrainPaths.FindGlobeDir`: `--globe DIR`, else the chunk folder's `_globe` sibling, else
    `cube_global` beside the chunk folder (the PC with D: finds `D:/UnitSportSwitzerland/cube_global` through its
-   `terrain_location.json`; nothing names a drive). `--globe res://assets/globe` means the shipped base alone,
+   `terrain_location.json`; nothing names a drive). `--globe res://assets/bodies/earth` means the shipped base alone,
    `--globe off` no globe.
 2. **The server's**, once its index arrives (`UseRemote`).
-3. **The shipped base**, `res://assets/globe`.
+3. **The shipped base**, `res://assets/bodies/earth`.
 
 Per tile the **finest copy wins** (most lattice bits), ties to the earlier layer. A layer is a manifest and its tiles
 (`PyramidSource.Layer`/`Tile`: bits, heights reader, colour reader); `GlobeFiles.Layer` reads a folder or the pack.
@@ -22,10 +22,9 @@ Body-agnostic: another body's pyramid is another `PyramidSource` (H7).
   is set (`ServerWorld`, earth servers with a local pyramid), the answer's worker waits for it.
 - `AssetKind.Pyramid` (23) by key through `RequestCubeAsset` (protocol 95's RPC): section 0 the heights (`CUBT` as
   stored), 1-12 one month's colour (a one-image `CUBC`, `PyramidSource.ColourEntry`). Sent as stored (both compressed).
-- **Room for a body** (H7's planets): `AssetStream.CubeSection` packs the body in the high bits of `RequestCubeAsset`'s
+- **A body** (H7's planets): `AssetStream.CubeSection` packs the body in the high bits of `RequestCubeAsset`'s
   section (the Earth 0: the same bytes as before), and the index asks name it by their tile's E. A server answers
-  "missing" for a body it does not serve (all but the Earth today). `CubeKey` stays body-free; a body's local install
-  is meant to live at `<root>/<body>/cube_global` (and `<body>/leaves`), the Earth's keeping today's paths.
+  "missing" for a body it does not serve. `CubeKey` stays body-free. See "Other bodies" below.
 - An older server answers "missing" to both: the client keeps its local data and the shipped base. An older client
   never asks. So D2's protocol 96 is untouched.
 - Client: `NetworkChunkSource.FetchPyramid`: cache `pyr_<stem>_<stamp>.s<section>.cubt` in the tile cache (cap, Clear,
@@ -69,3 +68,35 @@ tile and a 513² one draw the same vertices. Needs a pyramid built with `--cube-
   altitudes ahead at the top, and pops no more. The levels on the way show the stream's lag.
 - `tools/fillagreenetcheck.sh` run `pyramid`: the client with no pyramid builds the server's fill to the centimetre.
 - `--globeclimb FROM,TO,SECONDS` (`World/GlobeClimb`): pops on a climb, `--nomorph` for the before (`globe-geomorph`).
+
+## Other bodies (#1849)
+
+Every body but the Earth and the Sun has the same chain, `World/Bodies/BodyData.For(body)`, finest copy first:
+
+1. **The local install**: `<dir>/<body>/cube` under `TerrainPaths.FindBodiesDir`: `--bodies DIR` (an override now, never
+   needed), else the "bodies" of a `terrain_location.json`, else `planets` or `bodies` beside the chunk folder. This PC's
+   data is `E:/UnitSportSwitzerland/planets` (add `"bodies": "E:\UnitSportSwitzerland\planets"` to the main checkout's
+   `terrain_location.json`, or pass `--bodies`).
+2. **The server's**: on join the client asks each body's index (`PyramidIndex` with the body in the tile's E, cached as
+   `body<N>_pyramid_index`), then its tiles by key with the body in the section's high bits, cached as
+   `pyr<N>_<key>_<stamp>.s<section>.cubt`. `ChunkStreamer.ServeBody` (set by `ServerWorld` for each body on the server's
+   disk) builds the index on a worker. `BodyGlobe.RefreshPyramid` deepens the globe and reads changed tiles again (the
+   old drawn until the new one is in); `BodyGround.Refresh` makes the heights again at the new finest level and
+   rebuilds each square where it stands.
+3. **The shipped base**: `res://assets/bodies/<body>` (Git LFS), levels 0-2 (126 tiles; 30 for Deimos and the giants,
+   whose pyramids stop at 1), 65² heights, one colour image: 256² for the Moon and Mars, 128² for the rest (four tiles a
+   face at level 2: the 2k sky maps' resolution). 7.1 MB for the fifteen bodies (Mercury 1.0, Venus 1.2, Moon 1.8, Mars
+   1.0, the moons 0.1-0.4, the giants 40-80 KB) beside the Earth's 1.6. Rebuilt with
+   `--globebase assets/bodies/<body> --globe <dir>/<body>/cube --bits 6 --albedo 256|128 --months 1 --levels 0-2 --albedo-levels 0-2`.
+4. **Generated** (`BodyData.Generated`), for a body none of these has: levels 0-1 on the reference surface coloured from
+   its 2k sky map (`GlobeAlbedoBake.Pixels`), or its sky tint where it has no map; the profile's craters and relief come
+   under it as everywhere. No body needs it today (each has a base); no albedo-to-height guess yet.
+
+**On the shipped base alone** the near ground reads level 2 (the Moon's cells ~10 km, Mars' ~13 km), bilinear, with the
+profile's craters, dunes or ridges under it: the right altitude (Gale's floor −4,852 m against −4,900 m from MOLA's level
+4) and the right look up close, without the data's own 0.1-1 km relief (the Moon's crater rims, Olympus' scarps). A tile
+the chain lacks at the finest level is its deepest ancestor's, resampled (`BodyGround.FromAncestor`), never 0 m.
+Checks: `--mooncheck [body] --fromorbit` with no body data (`--mooncheck mars --fromorbit` lands at Gale crater, `--at
+LAT,LON` elsewhere); `tools/bodystreamcheck.sh` (a server with the data, a client with none: the Moon's index, its ground
+read at level 5, and `--bodyfetch moon,LAT,LON` streaming the finest tile under Apollo 11 into the cache; standing on another
+body online waits for C3b, #1975).
