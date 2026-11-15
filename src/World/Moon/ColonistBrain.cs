@@ -233,7 +233,7 @@ public sealed class ColonistBrain : IBotBrain
             Add(new Leg { Kind = LegKind.ToRover, What = _rover });
             Add(new Leg { Kind = LegKind.Drive, Points = [.. Ring((from.X, from.Y, from.Z), hb.LaneFar), hb.LaneOut], What = "back to the hangar" });
             Add(new Leg { Kind = LegKind.Cycle, Lock = hb.Index, Outward = true, What = "the rolling door, from outside" });
-            Add(new Leg { Kind = LegKind.Drive, Points = [hb.LaneIn, hb.Slot], What = "into its lane" });
+            Add(new Leg { Kind = LegKind.Drive, Points = [hb.LaneIn, hb.LaneDeep, hb.Slot], What = "into its lane" });
             Add(new Leg { Kind = LegKind.LeaveRover });
             Add(new Leg { Kind = LegKind.Cycle, Lock = hb.Index, Outward = false, What = "the hangar back to air" });
             Add(new Leg { Kind = LegKind.Walk, Points = crew.Path(hb.Landing, hb.Module, (crew.Spots[target].X, crew.Spots[target].Y, crew.Spots[target].Z), crew.Spots[target].Module), What = "inside" });
@@ -369,7 +369,8 @@ public sealed class ColonistBrain : IBotBrain
     /// </summary>
     private readonly record struct HangarWay(int Index, int Module, (double X, double Y, double Z) Inner, double InnerOut,
         (double X, double Y, double Z) Wait, (double X, double Y, double Z) Landing, (double X, double Y, double Z) Slot,
-        (double X, double Y, double Z) LaneIn, (double X, double Y, double Z) LaneOut, (double X, double Y, double Z) LaneFar);
+        (double X, double Y, double Z) LaneIn, (double X, double Y, double Z) LaneOut, (double X, double Y, double Z) LaneFar,
+        (double X, double Y, double Z) LaneDeep);
 
     private HangarWay? Hangar()
     {
@@ -383,14 +384,16 @@ public sealed class ColonistBrain : IBotBrain
         var (ix, iz) = ColonyPlan.Along(inner.Out);
         var sl = slots[cabin];
         double fx = sl.Facing.X, fz = sl.Facing.Z;
-        // how far the slot is behind the rolling door's plane, along the lane
-        double ahead = (outer.X - sl.At.X) * fx + (outer.Z - sl.At.Z) * fz;
+        // the way in and out runs on the rolling door's centre line (3 m clear of each jamb for the cabin rover); only the
+        // parking slot is in the right-hand lane. On the lane's own line, a rover coming back at a slant caught the jamb
         return new HangarWay(plan.Airlocks.Count, h.Module, (inner.X, 1.55, inner.Z), inner.Out,
             (inner.X + ix * ColonyCrew.WaitBack, 1.55, inner.Z + iz * ColonyCrew.WaitBack), (inner.X - ix * 2.4, 0.6, inner.Z - iz * 2.4),
-            (sl.At.X, sl.At.Y, sl.At.Z), (sl.At.X + fx * (ahead - 3), 0.6, sl.At.Z + fz * (ahead - 3)),
-            (sl.At.X + fx * (ahead + 13), 0, sl.At.Z + fz * (ahead + 13)),
+            (sl.At.X, sl.At.Y, sl.At.Z), (outer.X - fx * 3, 0.6, outer.Z - fz * 3),
+            (outer.X + fx * 13, 0, outer.Z + fz * 13),
             // past the open rovers parked either side of the road (8 m off it, 23 m out): the way on and off the lane
-            (sl.At.X + fx * (ahead + ColonyKit.RampLen + 36), 0, sl.At.Z + fz * (ahead + ColonyKit.RampLen + 36)));
+            (outer.X + fx * (ColonyKit.RampLen + 36), 0, outer.Z + fz * (ColonyKit.RampLen + 36)),
+            // well inside on the same line before it turns for its slot: turning at the doorway caught the jamb
+            (outer.X - fx * 12, 0.6, outer.Z - fz * 12));
     }
 
     /// <summary>From an inside spot to the wait before a module's door (the hangar's inner one), in the tube.</summary>
