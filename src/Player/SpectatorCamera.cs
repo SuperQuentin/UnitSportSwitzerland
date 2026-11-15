@@ -23,7 +23,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     private double Altitude => Core.OriginShifter.Instance?.Origin.AltitudeOf(Position) ?? Position.Y;
 
     /// <summary>The speed flown now, without boost: <see cref="Speed"/> held to <see cref="Cap"/>.</summary>
-    public float FlownSpeed => Mathf.Min(Speed, Cap);
+    public float FlownSpeed => SpectatorSpeed.Flown(Speed, Cap);   // the wheel's top: full speed, the cap (#2026)
 
     /// <summary>
     /// The fastest the wheel's speed is flown here: <see cref="SpectatorSpeed.AltitudeCap"/> by the altitude; between
@@ -219,7 +219,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     {
         if (_hud == null) AddChild(_hud = new SpectatorSpeedHud());
         float cap = Cap;
-        _hud.Show(Mathf.Min(Speed, cap) * (_boosted ? BoostMultiplier : 1f), _boosted, limited: Speed > cap);
+        _hud.Show(SpectatorSpeed.Flown(Speed, cap) * (_boosted ? BoostMultiplier : 1f), _boosted, limited: Speed > cap && Speed < SpectatorSpeed.MaxSpeed);
     }
 
     /// <summary>A held key or button repeats its notch: a pad has no wheel (2 m/s to 100 km/s in about 4 s).</summary>
