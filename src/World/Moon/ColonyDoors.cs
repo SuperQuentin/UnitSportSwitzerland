@@ -19,6 +19,9 @@ public partial class ColonyDoors : Node
 
     public static ColonyDoors? Instance { get; private set; }
 
+    /// <summary>How many of the server's cycles this client has heard (the net check's).</summary>
+    public static int CyclesHeard { get; private set; }
+
     /// <summary>Which way each colony's airlocks last cycled (true: out), on the server; a client's copy as it was sent.</summary>
     private readonly Dictionary<string, bool[]> _table = new();
 
@@ -97,6 +100,7 @@ public partial class ColonyDoors : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Cycle(string colony, int index, bool outward)
     {
+        CyclesHeard++;
         TableOf(colony, index + 1)[index] = outward;
         ColonyAirlocks.Of(colony)?.Run(index, outward);
     }

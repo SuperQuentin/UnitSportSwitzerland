@@ -1463,3 +1463,6 @@ src/Items/TelescopeView         net    tools/moonnetcheck.sh
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Moon/ServerColonies     net    tools/colonynetcheck.sh
+src/World/Moon/ColonyDoors        net    tools/colonynetcheck.sh
+src/World/Moon/ColonyNetProbe     net    tools/colonynetcheck.sh

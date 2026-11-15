@@ -74,6 +74,39 @@ public partial class ColonyAirlocks : Node3D
     /// <summary>The colony these airlocks are (#2000: its id names them on the wire).</summary>
     public readonly string ColonyId;
 
+    /// <summary>Whether any of these airlocks' outer doors stands open (the net check's).</summary>
+    public bool AnyOuterOpen
+    {
+        get
+        {
+            foreach (var l in _locks)
+                if (l.Outer.Open > 0.9f) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether a world point is within <paramref name="m"/> metres (on the ground) of an airlock's way through: the line from
+    /// its inner door to its outer door, the stairs below it included (the net check's: the air is left only there).
+    /// </summary>
+    public static bool NearChamber(Vector3 world, float m)
+    {
+        foreach (var set in All)
+            foreach (var l in set._locks)
+            {
+                var a = l.Inner.Node.GlobalPosition;
+                var b = l.Outer.Node.GlobalPosition;
+                var ab = b - a;
+                // on past the outer door down the stairs
+                var end = b + ab.Normalized() * (ColonyKit.Steps * ColonyKit.Tread + 1);
+                var seg = end - a;
+                float t = Mathf.Clamp((world - a).Dot(seg) / Mathf.Max(seg.LengthSquared(), 1e-4f), 0, 1);
+                var q = a + seg * t;
+                if (((world - q) with { Y = 0 }).Length() < m) return true;
+            }
+        return false;
+    }
+
     /// <summary>A colony's airlocks built on this peer, if it has built it.</summary>
     public static ColonyAirlocks? Of(string colony)
     {
