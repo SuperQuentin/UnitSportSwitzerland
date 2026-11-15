@@ -54,6 +54,13 @@
   Across a restart (#1835): `--telescopecheck place`, then `--telescopecheck reload` in the same user folder
   (a `PlacedObjects.Redraw` used to leave the telescope's node renamed, so `NodeOf` found nothing).
   Unit: `TelescopeOpticsTests`, `TelescopeTargetsTests`, `EphemerisTests.The_moons_face_matches_Horizons`.
+- **On the Moon** (#1995): the telescope is placed and kept on the Moon (`PlacedObject.At` with its body; it was an
+  LV95 place, read as an Earth point inside the Earth, never in reach: "when i place a telescope, it doesn't work").
+  The menu's first entry is the Earth there (`TelescopeView.EarthForMoon`, `EarthDirection` through the frame tree; the
+  sky's Moon pointed into the ground), with its own info (`TelescopeTargets.ReadEarth`: about −17 full, its lit share
+  from the Sun and the observer); planets and the drive as on the Earth. `--telescopecheck moon` (`--frame earth
+  --bodies DIR --date 2026-11-15 --time 22 --systems ui,physics,sky`, windowed:
+  `test_output/telescope_earth_from_moon.png`). Other bodies: the Moon entry is still the Moon.
 - Not yet: the tube's aim replicated (others see it level), planets and far markers (H7, C3),
   lunar elevation and finer moon levels, the POI viewpoint telescopes (`Adventure/Places`) opening
   this view.

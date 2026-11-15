@@ -70,17 +70,38 @@ public static class TelescopeTargets
         return new Info(mag, dist, arcsec, lit, waxing);
     }
 
+    /// <summary>The Earth's equatorial radius, metres (WGS84): its size seen from the Moon.</summary>
+    public const double EarthRadiusM = 6_378_137;
+
+    /// <summary>
+    /// The Earth seen from another body (#1995: from the Moon it takes the menu's first entry): <paramref name="toEarth"/>
+    /// from the observer to the Earth's centre and <paramref name="earthToSun"/> from the Earth's centre to the Sun's, in
+    /// any one frame, metres. Its magnitude from its absolute magnitude (−3.99) at the Sun's 1 AU and a linear phase law
+    /// (0.013 a degree, near Allen's for the Earth): about −17 full from the Moon.
+    /// </summary>
+    public static Info ReadEarth(DVec3 toEarth, DVec3 earthToSun)
+    {
+        double dist = toEarth.Length;
+        double cos = (-toEarth).Dot(earthToSun) / (dist * earthToSun.Length);
+        double lit = (1 + Math.Clamp(cos, -1, 1)) / 2;
+        double phase = Math.Acos(Math.Clamp(cos, -1, 1)) * 180 / Math.PI;
+        double mag = -3.99 + 5 * Math.Log10(dist / Ephemeris.AuMetres * earthToSun.Length / Ephemeris.AuMetres) + 0.013 * phase;
+        double arcsec = 2 * Math.Atan(EarthRadiusM / dist) * 180 / Math.PI * 3600;
+        return new Info(mag, dist, arcsec, lit, null);
+    }
+
     /// <summary>
     /// The info HUD's text: six or seven short lines. <paramref name="horizon"/> is the target's place
-    /// (<see cref="Horizon"/>), or null when the sky shows none (the line then says so).
+    /// (<see cref="Horizon"/>), or null when the sky shows none (the line then says so). <paramref name="name"/> in place of
+    /// the body's (the Earth, #1995).
     /// </summary>
-    public static string Format(SkyBody body, Info i, (double Azimuth, double Altitude)? horizon)
+    public static string Format(SkyBody body, Info i, (double Azimuth, double Altitude)? horizon, string? name = null)
     {
         var c = CultureInfo.InvariantCulture;
         string distance = i.DistanceM < 1e10 ? $"{(i.DistanceM / 1000).ToString("#,0", c)} km" : $"{(i.DistanceM / Ephemeris.AuMetres).ToString("0.000", c)} AU";
         string size = i.ArcSec >= 120 ? $"{(i.ArcSec / 60).ToString("0.0", c)}'" : $"{i.ArcSec.ToString("0.0", c)}\"";
         string lit = $"lit {(i.Lit * 100).ToString("0", c)} %{(i.Waxing is { } w ? (w ? ", waxing" : ", waning") : "")}";
-        return $"{Name(body)}\nmagnitude {i.Magnitude.ToString("+0.0;-0.0", c)}\ndistance {distance}\nsize {size}\n{lit}\n{Where(horizon)}";
+        return $"{name ?? Name(body)}\nmagnitude {i.Magnitude.ToString("+0.0;-0.0", c)}\ndistance {distance}\nsize {size}\n{lit}\n{Where(horizon)}";
     }
 
     /// <summary>The altitude / azimuth lines, or "not in the sky".</summary>

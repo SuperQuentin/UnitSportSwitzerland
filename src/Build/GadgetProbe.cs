@@ -67,13 +67,13 @@ public partial class GadgetProbe : Node
         {
             var (e, n) = origin.ToLv95(high);
             var (le, ln) = origin.ToLv95(low);
-            return new PlacedObject(0, PlacedKind.Zipline, "x", le, ln, low.Y, Quaternion.Identity, Gadgets.ZipPayload(e, n, high.Y));
+            return new PlacedObject(0, PlacedKind.Zipline, "x", GlobalPos.FromLv95(le, ln, low.Y), Quaternion.Identity, Gadgets.ZipPayload(e, n, high.Y));
         }
         Expect(Gadgets.Check(Zip(home + new Vector3(0, 3, 0), home + new Vector3(5, 0, 0)), origin) is { } s1 && s1.Contains("short"), "a 6 m zipline is too short");
         Expect(Gadgets.Check(Zip(home, home + new Vector3(30, 4, 0)), origin) is { } s2 && s2.Contains("downhill"), "an uphill zipline is refused");
         Expect(Gadgets.Check(Zip(home + new Vector3(0, 25, 0), home + new Vector3(10, 0, 0)), origin) is { } s3 && s3.Contains("steep"), "a 68° zipline is refused");
         Expect(Gadgets.Check(Zip(home + new Vector3(0, 8, 0), home + new Vector3(30, 0, 0)), origin) == null, "8 m down over 30 m is fine");
-        Expect(Gadgets.Check(new PlacedObject(0, PlacedKind.RopeLadder, "x", 0, 0, 0, Quaternion.Identity, "12"), origin) != null, "a 12 m ladder is refused");
+        Expect(Gadgets.Check(new PlacedObject(0, PlacedKind.RopeLadder, "x", GlobalPos.FromLv95(0, 0, 0), Quaternion.Identity, "12"), origin) != null, "a 12 m ladder is refused");
 
         // ---- the real item path: trampoline, net, hideout --------------------------------------
         me.LookPitch = -0.6f;

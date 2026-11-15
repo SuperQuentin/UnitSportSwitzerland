@@ -120,4 +120,22 @@ public class TelescopeTargetsTests
         Assert.Contains("below the horizon", down);
         Assert.EndsWith("not in the sky", none);
     }
+
+    [Fact]
+    public void The_earth_from_the_moon_full_and_new()
+    {
+        // the Sun behind the observer: a full Earth, 384,400 km away, ~1.9° across, about magnitude -17
+        var toEarth = new DVec3(384_400_000, 0, 0);
+        var full = TelescopeTargets.ReadEarth(toEarth, new DVec3(-Ephemeris.AuMetres, 0, 0));
+        Assert.Equal(1, full.Lit, 3);
+        Assert.InRange(full.Magnitude, -17.2, -16.6);
+        Assert.InRange(full.ArcSec / 3600, 1.85, 1.95);
+        Assert.Equal(384_400_000, full.DistanceM, 0);
+        // the Sun beyond the Earth: new, unlit, dimmer
+        var dark = TelescopeTargets.ReadEarth(toEarth, new DVec3(Ephemeris.AuMetres, 0, 0));
+        Assert.Equal(0, dark.Lit, 3);
+        Assert.True(dark.Magnitude > full.Magnitude + 2);
+        Assert.StartsWith("Earth
+", TelescopeTargets.Format(SkyBody.Moon, full, (90, 30), "Earth"));
+    }
 }
