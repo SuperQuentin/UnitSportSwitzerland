@@ -261,7 +261,10 @@ public partial class PlaceSearchUi : CanvasLayer
         _mapColumn.Visible = !earth;
         _panel.OffsetLeft = earth ? -240 : -450;
         _panel.OffsetRight = earth ? 240 : 450;
+        // shrunk to what it holds, once laid out (its first open came up the height of the screen)
+        _panel.OffsetBottom = _panel.OffsetTop;
         _panel.ResetSize();
+        Callable.From(_panel.ResetSize).CallDeferred();
         if (!earth) _map.SetBody(body);
         _mapNote.Text = MapNote();
         _hint.Text = HintText();
