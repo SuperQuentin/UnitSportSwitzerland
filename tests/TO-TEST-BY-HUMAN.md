@@ -1294,3 +1294,10 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 - [ ] Offline (`--frame earth`, Geneva): set up a telescope, quit, start again, E at it → the view opens and stays.
 - [ ] At the longest end (500,000 mm), follow the moon from the menu → its surface holds still; on the drive (Use) it may tremble by a pixel.
+
+## Moon colonies' rooms on the interiors system ([#2005](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2005))
+
+In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date 2027-07-15 --time 10 --occasion none --moonsites artemis:close`, on foot.
+
+- [ ] Walk in through an airlock and through every module and tube of Artemis Base (hub, each can, a moondust dome by a can's side door, the hangar down its steps) → no gap or hole in the walls, floors or doorways, no step at a doorway's sill, nothing to walk through; the rooms lit evenly, not washed out, screens and lamps glowing.
+- [ ] The same at Moon Village (`--moonsites moonvillage:close`, its glazed alleys and stacks) and the Cold War biodome (`--moonsites coldwar:close`) → the alleys' walls and the biodome's ring wall solid, the garden walkable, the trees' trunks solid.
