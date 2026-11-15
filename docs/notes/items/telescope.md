@@ -61,7 +61,7 @@
   from the Sun and the observer); planets and the drive as on the Earth. `--telescopecheck moon` (`--frame earth
   --bodies DIR --date 2026-11-15 --time 22 --systems ui,physics,sky`, windowed:
   `test_output/telescope_earth_from_moon.png`; a Swiss flag planted beside it). `moonplace` then `moonreload` in one user
-  folder: both still there and drawn after a restart; `abroad`/`abroadplace`/`abroadreload` the same in Chamonix (France,
+  folder: both still there and drawn after a restart; `abroad`/`abroadplace`/`abroadreload` the same in Annemasse (France,
   with the earth leaves). Offline only off the Earth until C3b (#1852). Other bodies: the Moon entry is still the Moon.
 - Not yet: the tube's aim replicated (others see it level), planets and far markers (H7, C3),
   lunar elevation and finer moon levels, the POI viewpoint telescopes (`Adventure/Places`) opening
