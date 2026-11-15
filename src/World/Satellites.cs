@@ -240,8 +240,9 @@ public partial class Satellites : MultiMeshInstance3D, IOriginShiftAware
         // the cull box round the camera (#2035, as StarField's): the instances stand at their directions from the origin, so
         // the node stays there and its box follows the camera instead, which flies far from the origin at the top speed
         var centre = CustomAabb.GetCenter();
-        if (centre.DistanceSquaredTo(cam.GlobalPosition) > StarField.FollowM * StarField.FollowM)
-            CustomAabb = new Aabb(cam.GlobalPosition - Vector3.One * StarField.BoxM, Vector3.One * 2 * StarField.BoxM);
+        float box = StarField.BoxFor(cam.Far), half = CustomAabb.Size.X / 2;
+        if (centre.DistanceSquaredTo(cam.GlobalPosition) > StarField.FollowM * StarField.FollowM || box > half * 1.05f || box < half * 0.5f)
+            CustomAabb = new Aabb(cam.GlobalPosition - Vector3.One * box, Vector3.One * 2 * box);
         var utc = SwissTime.ToUtc(sky.Date, sky.Hour);
         if (_job is { IsCompleted: true } done)
         {

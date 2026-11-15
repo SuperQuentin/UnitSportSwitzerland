@@ -102,7 +102,7 @@ public partial class SunDisc : MeshInstance3D
         // above the air the atmosphere's own sun takes over; well under the horizon nothing shows. With no air at all
         // (#1989: the Moon) there is no shell to draw it: this one, the vacuum's sun, white, its full starburst
         bool vacuum = Atmosphere.Airless;
-        float bright = (vacuum ? 1f : 1f - Atmosphere.Space) * Mathf.SmoothStep(-0.06f, -0.01f, toSun.Y);
+        float bright = (vacuum ? 1f : 1f - Atmosphere.Space) * Horizon(toSun);
         if (bright <= 0.001f)
         {
             Visible = false;
@@ -140,6 +140,20 @@ public partial class SunDisc : MeshInstance3D
         _material.SetShaderParameter(Spikes, spikes);
         _material.SetShaderParameter(Glare, glare);
         _material.SetShaderParameter(ReachP, reach);
+    }
+
+    /// <summary>
+    /// How much of the sun is over the horizon, 0..1: on the Earth by world Y (the ground frame's up); off it (#2035) outside the
+    /// anchor body's disc (<see cref="Atmosphere.BodyDisc"/>), and always on the Sun itself. 5 AU out, anchored on the Sun,
+    /// the Sun was "under the horizon" by world Y and faded to a grey glow.
+    /// </summary>
+    private static float Horizon(Vector3 toSun)
+    {
+        if (Atmosphere.OnSun) return 1f;
+        var (down, radius) = Atmosphere.BodyDisc;
+        if (radius < 0f) return Mathf.SmoothStep(-0.06f, -0.01f, toSun.Y);
+        float angle = Mathf.Acos(Mathf.Clamp(toSun.Dot(down), -1f, 1f));
+        return Mathf.SmoothStep(radius - 0.01f, radius + 0.04f, angle);
     }
 
     private void PlaceShafts(Vector3 toSun, float warm, float bright)
