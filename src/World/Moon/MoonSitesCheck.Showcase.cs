@@ -91,10 +91,26 @@ public partial class MoonSitesCheck
         behind = behind.Normalized();
         var want = body.GlobalPosition + behind * back + Vector3.Up * (1.5f + up);
         var look = body.GlobalPosition + Vector3.Up * (near ? 1.4f : 1.0f);
+        // pulled in short of the first wall between the colonist and where it would stand (a player's chase camera does
+        // the same): 2.6 m back in a 4 m airlock it stood in the walls and the rings (#1938)
+        var ray = PhysicsRayQueryParameters3D.Create(look, want);
+        ray.Exclude = new Godot.Collections.Array<Rid> { body.GetRid() };
+        if (body.GetWorld3D().DirectSpaceState.IntersectRay(ray) is { Count: > 0 } hit)
+        {
+            var at = hit["position"].AsVector3();
+            var dir = (want - look).Normalized();
+            want = at - dir * 0.3f;
+            if ((want - look).Length() < 0.6f) want = look + dir * 0.6f;
+        }
         float f = _chaseSet ? 1 - Mathf.Exp(-(float)delta * 2.5f) : 1;
         _chaseAt = _chaseAt.Lerp(want, f);
         _chaseLook = _chaseLook.Lerp(look, f);
         _chaseSet = true;
+        // and the eased place too: easing toward a pulled-in spot it would cross the wall on the way
+        var eased = PhysicsRayQueryParameters3D.Create(look, _chaseAt);
+        eased.Exclude = new Godot.Collections.Array<Rid> { body.GetRid() };
+        if (body.GetWorld3D().DirectSpaceState.IntersectRay(eased) is { Count: > 0 } wall)
+            _chaseAt = wall["position"].AsVector3() - (_chaseAt - look).Normalized() * 0.3f;
         _airCam ??= new Camera3D { Name = "AirlockShot", Fov = 70 };
         if (_airCam.GetParent() == null) AddChild(_airCam);
         _airCam.GlobalPosition = _chaseAt;

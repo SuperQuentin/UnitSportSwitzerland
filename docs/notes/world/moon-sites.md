@@ -45,8 +45,10 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938). Phase 1 of 8.
   clip (`test_output/clips/show_NN_<id>`); with `--colonistcheck --colonisteva` it films the EVA colonist's parts (the
   airlock out, the drive, the way back) with a chase camera eased after it, and the check's own pictures are skipped (they
   moved the camera for a frame). Run the console exe with `--resolution 1920x1080 --fixed-fps 30` before `--`, `--clip-hq`
-  after, and a user:// of its own (no test profile: it renders at half scale). Seen: a chase camera 2.6 m back crosses the
-  airlock's walls and rings while the colonist waits in the chamber, and the ground darkens in one frame when a square
+  after, and a user:// of its own (no test profile: it renders at half scale). The chase camera is pulled in short of the first wall
+  between the colonist and its spot (a ray, as a player's chase camera; the eased spot too), so the helmet is seen going
+  on in the chamber and off in the tube. Seen before that: a chase camera 2.6 m back crossed the
+  airlock's walls and rings while the colonist waited in the chamber, and the ground darkens in one frame when a square
   finishes building (Apollo 11, ~1.4 s in): cut round both.
 - **Trailer moves** (dev, `MoonSitesCheck.Trailer`): `--moonsites a,b,... --moontrailer <file>`, one line a site in order:
   `name|sun°|eye e,n,u>e,n,u|look e,n,u>e,n,u|seconds|fov|flags`: metres east and north of the site's main part and up

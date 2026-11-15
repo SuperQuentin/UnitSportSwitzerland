@@ -23,6 +23,10 @@ Plan: `docs/plans/moon-surface.md` section 9. The colonies: `moon-colonies`, `mo
   when the zoom shows more. Only the near side's are ever seen: Moon Village in the earthshine, Artemis Base on the south
   limb; ILRS is on the far side.
 - **Check**: `--moonsites artemis:night,moonvillage:night` (the bodies' clock at a night there, the sun ~20° down; the
-  camera 40 km off and 18 km up; `site_<id>_night.png`). From the Earth: `--telescopecheck --systems ui,physics,sky --sun
+  camera 40 km off and 18 km up; `site_<id>_night.png`). **The poles have no night**: at Artemis Base (89° S) the sun
+  never sinks more than ~1.6° under the horizon, so its "night" is the lowest sun of the month, the ground round it
+  half lit, and its lights show only where the sun is just down. A film that swung the camera 25 km round that view
+  crossed lit and shadowed ground and read as the lights pumping (#1938, Nov 15); at Moon Village's real night the
+  frame's mean and the lights' peak hold within 1 % over 6 s. From the Earth: `--telescopecheck --systems ui,physics,sky --sun
   real --date 2027-08-06 --time 21.5` (a waxing crescent, Moon Village just past the terminator; the probe's "moon well
   up" and steadiness bars fail on that low evening Moon: they are the probe's, not the sparks').
