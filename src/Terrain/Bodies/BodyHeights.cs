@@ -89,15 +89,20 @@ public sealed class BodyHeights
 
     /// <summary>
     /// The globe's own surface at a unit normal: the finest tile's every <paramref name="stride"/>th height, flat between
-    /// them in the two triangles a quad of the globe's mesh is cut into (its diagonal from (i+1, j) to (i, j+1)). The
+    /// them in the two triangles a quad of the globe's mesh is cut into (its diagonal from (i+1, j) to (i, j+1)). With
+    /// <paramref name="ofFullLattice"/> the stride is the globe's for a 513² tile, scaled to a coarser one's lattice (it
+    /// draws every tile at 512 / stride cells: the shipped base's 65² at stride 1, #1849). The
     /// near ground's edge eases into it, so the two meet without a step.
     /// </summary>
-    public double Coarse(EcefPos n, int stride)
+    public double Coarse(EcefPos n, int stride, bool ofFullLattice = false)
     {
         var (face, u, v) = _cube.FromNormal(n);
         var key = CubeKey.FromFace(face, u, v, _level);
         if (Tile(key) is not { } tile) return 0;
-        int bits = tile.Bits, side = 1 << bits, cells = side / stride;
+        // the globe draws a tile at 512 / stride cells, whatever its lattice (the shipped base's 65² at every height)
+        int bits = tile.Bits, side = 1 << bits;
+        if (ofFullLattice) stride = Math.Max(1, side * stride / 512);
+        int cells = side / stride;
         double scale = Math.Pow(2, _level + bits);
         double gx = Math.Clamp(((u + 1) * 0.5 * scale - ((long)key.X << bits)) / stride, 0, cells);
         double gy = Math.Clamp(((v + 1) * 0.5 * scale - ((long)key.Y << bits)) / stride, 0, cells);

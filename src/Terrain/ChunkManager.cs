@@ -1605,7 +1605,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             meshCommits++;
             if (result.Mesh != null)
             {
-                EnsureNode(result.Id, state).SetMesh(result.Mesh);
+                EnsureNode(result.Id, state).SetMesh(result.Mesh, (float)(Math.Max(result.Stride, 1) * ChunkFormat.SpacingM));
                 Horizon?.SetCovered(result.Id, true);
             }
             // collision is only queued here; a newer piece replaces a queued older one

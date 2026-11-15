@@ -5,7 +5,7 @@ namespace UnitSport.Tools.Preprocessor;
 
 /// <summary>
 /// A pyramid's coarsest levels on their own (#1430 H4): the levels the game ships
-/// (<c>assets/globe</c>, levels 0-2), taken from a full <c>--cube-global</c> region, heights and colour,
+/// (<c>assets/bodies/earth</c>, levels 0-2), taken from a full <c>--cube-global</c> region, heights and colour,
 /// rebundled with only those levels in (the full region bundles levels 0-3 together under each face)
 /// and a manifest of them alone. The tiles' bytes are copied unchanged.
 ///

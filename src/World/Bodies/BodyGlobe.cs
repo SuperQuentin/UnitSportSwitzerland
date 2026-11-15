@@ -63,8 +63,23 @@ public partial class BodyGlobe : Node
     /// <summary>How far under a giant's 1-bar level its globe (the cloud deck) still draws, metres (#1854): inside the clouds.</summary>
     public const double CloudDeckM = 2_000;
 
-    /// <summary>The pyramid's finest level.</summary>
+    /// <summary>The pyramid's finest level (deeper once the server's comes, <see cref="RefreshPyramid"/>).</summary>
     public int MaxLevel => _maxLevel;
+
+    /// <summary>
+    /// The chain changed (the server's pyramid for this body came, #1849): the finest level follows it, and every drawn tile
+    /// whose best copy changed is read again, the old one drawn until its new one is in.
+    /// </summary>
+    public void RefreshPyramid(IReadOnlyCollection<CubeKey> changed)
+    {
+        _maxLevel = Math.Max(_pyramid.MaxLevel, 0);
+        foreach (var key in changed)
+            if (_tiles.ContainsKey(key)) _stale.Add(key);
+        GD.Print($"[bodies] {Body.Name}'s pyramid now: {_pyramid.Describe()}, to level {_maxLevel}; {_stale.Count} drawn tiles read again");
+    }
+
+    // drawn tiles whose best copy changed: asked again, drawn as they were until the new one commits
+    private readonly HashSet<CubeKey> _stale = new();
 
     /// <summary>The body's pyramid (#1656's chain; any thread may read it).</summary>
     public Terrain.Leaves.PyramidSource Pyramid => _pyramid;
@@ -75,7 +90,7 @@ public partial class BodyGlobe : Node
     private readonly WorldOrigin _origin;
     // the body's pyramid (#1656's chain): its folder, or for the Earth the game's own (local, the server's, the shipped base)
     private readonly Terrain.Leaves.PyramidSource _pyramid;
-    private readonly int _maxLevel;
+    private int _maxLevel;
     private readonly Node3D _root = new() { Name = "Frame" };
     private readonly Dictionary<CubeKey, Tile> _tiles = new();
     private readonly HashSet<CubeKey> _loading = new();
@@ -300,6 +315,7 @@ public partial class BodyGlobe : Node
         var judged = eye - up * Math.Min(centre.Length, eye.Length - ReliefM);
         if (key.Level > 0 && up.Dot(judged.Normalized()) < -0.15 - edge / Body.Shape.A) return;
         if (!_tiles.ContainsKey(key)) { Request(key); if (key.Level > 0) return; }
+        else if (_stale.Contains(key)) Request(key);
         double cell = edge / (512.0 / Stride);
         bool split = key.Level < _maxLevel && cell / distance * focal > SplitPixels;
         if (split)
@@ -422,6 +438,9 @@ public partial class BodyGlobe : Node
                 // a tile's own box is near its centre; the scaled root and the frame tree's turn carry it far: never culled by Godot's guess
                 ExtraCullMargin = 16384,
             };
+            // a finer copy of a drawn tile (the server's): it takes the old one's place
+            if (_tiles.Remove(r.Key, out var old)) { node.Visible = old.Node.Visible; old.Node.QueueFree(); }
+            _stale.Remove(r.Key);
             _tiles[r.Key] = new Tile(node, material);
             Place(r.Key, node);
         }

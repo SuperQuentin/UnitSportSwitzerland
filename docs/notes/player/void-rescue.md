@@ -19,3 +19,4 @@
   under the terrain on foot and on a bike, 600 m down where no tile is loaded, and under an
   interior floor; non-zero exit if any does not end back on the ground. On `main` before #150 the
   void and interior cases fail. Works offline on the generated terrain, no chunks needed.
+- **Never in Space** (#1982): the "no height known, world Y under -500 m" branch skips a body in the Earth's Space band (over 50 km), as it skips every other body (#1850). The deep-space frame keeps its origin half a threshold under the camera and moves it once a frame; at 30 fps a craft driven home from the Moon started a frame's second physics tick 105 km under it and was "rescued" to its last safe spot, the Moon, 69,000 km away.

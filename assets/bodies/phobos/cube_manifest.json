@@ -1,0 +1,1045 @@
+{
+  "version": 2,
+  "leafLevel": 2,
+  "bits": 6,
+  "bundleLevel": 0,
+  "levels": [
+    {
+      "level": 0,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    },
+    {
+      "level": 1,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    },
+    {
+      "level": 2,
+      "bits": 6,
+      "bundleLevel": 0,
+      "albedo": 128,
+      "albedoBundleLevel": 0
+    }
+  ],
+  "orientation": "face 0 at 0N 0E, twist 0",
+  "sources": [
+    "phobos_shape_dem.tif: heights above the body\u0027s reference sphere (Ernst et al. 2023 shape model via Celestia, CC-BY-4.0)",
+    "colour: phobos_colour.jpg (NASA, public domain)",
+    "the shipped base (#1656): 6-bit lattices, colour 128\u00B2 for months 1 on levels 0-2"
+  ],
+  "tiles": [
+    {
+      "key": "F0/L0/0_0",
+      "min": -1061,
+      "max": 2918,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1876
+    },
+    {
+      "key": "F1/L0/0_0",
+      "min": -1681,
+      "max": 669,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1779
+    },
+    {
+      "key": "F2/L0/0_0",
+      "min": -882,
+      "max": 2627,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1800
+    },
+    {
+      "key": "F3/L0/0_0",
+      "min": -1629,
+      "max": 2194,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1884
+    },
+    {
+      "key": "F4/L0/0_0",
+      "min": -1839,
+      "max": 47,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1709
+    },
+    {
+      "key": "F5/L0/0_0",
+      "min": -3072,
+      "max": 1256,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1686
+    },
+    {
+      "key": "F0/L1/0_0",
+      "min": -99,
+      "max": 2880,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1403
+    },
+    {
+      "key": "F0/L1/1_0",
+      "min": -745,
+      "max": 1705,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1341
+    },
+    {
+      "key": "F0/L1/0_1",
+      "min": -1036,
+      "max": 2921,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1432
+    },
+    {
+      "key": "F0/L1/1_1",
+      "min": -1062,
+      "max": 1260,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1347
+    },
+    {
+      "key": "F1/L1/0_0",
+      "min": -1681,
+      "max": 263,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1299
+    },
+    {
+      "key": "F1/L1/1_0",
+      "min": -1170,
+      "max": 581,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1250
+    },
+    {
+      "key": "F1/L1/0_1",
+      "min": -1160,
+      "max": 547,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1322
+    },
+    {
+      "key": "F1/L1/1_1",
+      "min": -999,
+      "max": 672,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1366
+    },
+    {
+      "key": "F2/L1/0_0",
+      "min": -585,
+      "max": 1642,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1200
+    },
+    {
+      "key": "F2/L1/1_0",
+      "min": 533,
+      "max": 2600,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1386
+    },
+    {
+      "key": "F2/L1/0_1",
+      "min": -889,
+      "max": 1676,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1304
+    },
+    {
+      "key": "F2/L1/1_1",
+      "min": -431,
+      "max": 2629,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1347
+    },
+    {
+      "key": "F3/L1/0_0",
+      "min": -1464,
+      "max": 2156,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1322
+    },
+    {
+      "key": "F3/L1/1_0",
+      "min": -1629,
+      "max": 1583,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1404
+    },
+    {
+      "key": "F3/L1/0_1",
+      "min": -1456,
+      "max": 2197,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1400
+    },
+    {
+      "key": "F3/L1/1_1",
+      "min": -1376,
+      "max": 1702,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1428
+    },
+    {
+      "key": "F4/L1/0_0",
+      "min": -1768,
+      "max": -79,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1301
+    },
+    {
+      "key": "F4/L1/1_0",
+      "min": -1840,
+      "max": -677,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1240
+    },
+    {
+      "key": "F4/L1/0_1",
+      "min": -1635,
+      "max": 47,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1303
+    },
+    {
+      "key": "F4/L1/1_1",
+      "min": -1448,
+      "max": -413,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1246
+    },
+    {
+      "key": "F5/L1/0_0",
+      "min": -3067,
+      "max": 1256,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1334
+    },
+    {
+      "key": "F5/L1/1_0",
+      "min": -3074,
+      "max": 671,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1296
+    },
+    {
+      "key": "F5/L1/0_1",
+      "min": -3026,
+      "max": 464,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1248
+    },
+    {
+      "key": "F5/L1/1_1",
+      "min": -3026,
+      "max": 122,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1228
+    },
+    {
+      "key": "F0/L2/0_0",
+      "min": -20,
+      "max": 2313,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1093
+    },
+    {
+      "key": "F0/L2/1_0",
+      "min": -99,
+      "max": 2151,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1151
+    },
+    {
+      "key": "F0/L2/2_0",
+      "min": -468,
+      "max": 1578,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1083
+    },
+    {
+      "key": "F0/L2/3_0",
+      "min": -745,
+      "max": 724,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1089
+    },
+    {
+      "key": "F0/L2/0_1",
+      "min": 692,
+      "max": 2880,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1116
+    },
+    {
+      "key": "F0/L2/1_1",
+      "min": 1260,
+      "max": 2331,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1092
+    },
+    {
+      "key": "F0/L2/2_1",
+      "min": 258,
+      "max": 1707,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1099
+    },
+    {
+      "key": "F0/L2/3_1",
+      "min": -164,
+      "max": 878,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1112
+    },
+    {
+      "key": "F0/L2/0_2",
+      "min": 742,
+      "max": 2926,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1117
+    },
+    {
+      "key": "F0/L2/1_2",
+      "min": 312,
+      "max": 2313,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1109
+    },
+    {
+      "key": "F0/L2/2_2",
+      "min": 347,
+      "max": 1260,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1069
+    },
+    {
+      "key": "F0/L2/3_2",
+      "min": 171,
+      "max": 959,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1052
+    },
+    {
+      "key": "F0/L2/0_3",
+      "min": -794,
+      "max": 2153,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1163
+    },
+    {
+      "key": "F0/L2/1_3",
+      "min": -1036,
+      "max": 951,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1055
+    },
+    {
+      "key": "F0/L2/2_3",
+      "min": -1063,
+      "max": 594,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1067
+    },
+    {
+      "key": "F0/L2/3_3",
+      "min": -1056,
+      "max": 583,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1060
+    },
+    {
+      "key": "F1/L2/0_0",
+      "min": -1681,
+      "max": -164,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1012
+    },
+    {
+      "key": "F1/L2/1_0",
+      "min": -1681,
+      "max": -197,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1067
+    },
+    {
+      "key": "F1/L2/2_0",
+      "min": -1170,
+      "max": 44,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1021
+    },
+    {
+      "key": "F1/L2/3_0",
+      "min": -900,
+      "max": -34,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1002
+    },
+    {
+      "key": "F1/L2/0_1",
+      "min": -596,
+      "max": 219,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1043
+    },
+    {
+      "key": "F1/L2/1_1",
+      "min": -567,
+      "max": 263,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1064
+    },
+    {
+      "key": "F1/L2/2_1",
+      "min": -308,
+      "max": 581,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1071
+    },
+    {
+      "key": "F1/L2/3_1",
+      "min": -571,
+      "max": 450,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1000
+    },
+    {
+      "key": "F1/L2/0_2",
+      "min": -74,
+      "max": 533,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1029
+    },
+    {
+      "key": "F1/L2/1_2",
+      "min": -74,
+      "max": 547,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1056
+    },
+    {
+      "key": "F1/L2/2_2",
+      "min": -82,
+      "max": 604,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1055
+    },
+    {
+      "key": "F1/L2/3_2",
+      "min": -205,
+      "max": 672,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1037
+    },
+    {
+      "key": "F1/L2/0_3",
+      "min": -1160,
+      "max": 405,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1107
+    },
+    {
+      "key": "F1/L2/1_3",
+      "min": -1116,
+      "max": 419,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1078
+    },
+    {
+      "key": "F1/L2/2_3",
+      "min": -999,
+      "max": 137,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1030
+    },
+    {
+      "key": "F1/L2/3_3",
+      "min": -990,
+      "max": 537,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1098
+    },
+    {
+      "key": "F2/L2/0_0",
+      "min": -580,
+      "max": 431,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 955
+    },
+    {
+      "key": "F2/L2/1_0",
+      "min": 10,
+      "max": 736,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1017
+    },
+    {
+      "key": "F2/L2/2_0",
+      "min": 542,
+      "max": 1486,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1074
+    },
+    {
+      "key": "F2/L2/3_0",
+      "min": 533,
+      "max": 1814,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1075
+    },
+    {
+      "key": "F2/L2/0_1",
+      "min": -586,
+      "max": 489,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1004
+    },
+    {
+      "key": "F2/L2/1_1",
+      "min": -113,
+      "max": 1642,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1016
+    },
+    {
+      "key": "F2/L2/2_1",
+      "min": 736,
+      "max": 2421,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1049
+    },
+    {
+      "key": "F2/L2/3_1",
+      "min": 1464,
+      "max": 2600,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1159
+    },
+    {
+      "key": "F2/L2/0_2",
+      "min": 205,
+      "max": 844,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 997
+    },
+    {
+      "key": "F2/L2/1_2",
+      "min": 96,
+      "max": 1676,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1103
+    },
+    {
+      "key": "F2/L2/2_2",
+      "min": 608,
+      "max": 2527,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1103
+    },
+    {
+      "key": "F2/L2/3_2",
+      "min": 901,
+      "max": 2633,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1145
+    },
+    {
+      "key": "F2/L2/0_3",
+      "min": -889,
+      "max": 549,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1066
+    },
+    {
+      "key": "F2/L2/1_3",
+      "min": -874,
+      "max": 608,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1070
+    },
+    {
+      "key": "F2/L2/2_3",
+      "min": -431,
+      "max": 1212,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1028
+    },
+    {
+      "key": "F2/L2/3_3",
+      "min": -129,
+      "max": 1570,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1040
+    },
+    {
+      "key": "F3/L2/0_0",
+      "min": -862,
+      "max": 1464,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1032
+    },
+    {
+      "key": "F3/L2/1_0",
+      "min": -1464,
+      "max": -248,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1055
+    },
+    {
+      "key": "F3/L2/2_0",
+      "min": -1630,
+      "max": 90,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1034
+    },
+    {
+      "key": "F3/L2/3_0",
+      "min": -1539,
+      "max": 1586,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1118
+    },
+    {
+      "key": "F3/L2/0_1",
+      "min": -248,
+      "max": 2156,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1097
+    },
+    {
+      "key": "F3/L2/1_1",
+      "min": -715,
+      "max": 1077,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1069
+    },
+    {
+      "key": "F3/L2/2_1",
+      "min": -756,
+      "max": 1226,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1100
+    },
+    {
+      "key": "F3/L2/3_1",
+      "min": -104,
+      "max": 1260,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1123
+    },
+    {
+      "key": "F3/L2/0_2",
+      "min": 316,
+      "max": 2198,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1126
+    },
+    {
+      "key": "F3/L2/1_2",
+      "min": 187,
+      "max": 1251,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1064
+    },
+    {
+      "key": "F3/L2/2_2",
+      "min": 465,
+      "max": 1384,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1079
+    },
+    {
+      "key": "F3/L2/3_2",
+      "min": 77,
+      "max": 1447,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1108
+    },
+    {
+      "key": "F3/L2/0_3",
+      "min": -396,
+      "max": 1570,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1060
+    },
+    {
+      "key": "F3/L2/1_3",
+      "min": -1456,
+      "max": 465,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1095
+    },
+    {
+      "key": "F3/L2/2_3",
+      "min": -1379,
+      "max": 757,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1150
+    },
+    {
+      "key": "F3/L2/3_3",
+      "min": -615,
+      "max": 1702,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1160
+    },
+    {
+      "key": "F4/L2/0_0",
+      "min": -1215,
+      "max": -79,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1100
+    },
+    {
+      "key": "F4/L2/1_0",
+      "min": -1770,
+      "max": -794,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1010
+    },
+    {
+      "key": "F4/L2/2_0",
+      "min": -1846,
+      "max": -960,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1047
+    },
+    {
+      "key": "F4/L2/3_0",
+      "min": -1785,
+      "max": -677,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1064
+    },
+    {
+      "key": "F4/L2/0_1",
+      "min": -1587,
+      "max": -615,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1049
+    },
+    {
+      "key": "F4/L2/1_1",
+      "min": -1693,
+      "max": -1120,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 961
+    },
+    {
+      "key": "F4/L2/2_1",
+      "min": -1744,
+      "max": -1161,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 976
+    },
+    {
+      "key": "F4/L2/3_1",
+      "min": -1766,
+      "max": -904,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1008
+    },
+    {
+      "key": "F4/L2/0_2",
+      "min": -1635,
+      "max": -364,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1079
+    },
+    {
+      "key": "F4/L2/1_2",
+      "min": -1473,
+      "max": -645,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1040
+    },
+    {
+      "key": "F4/L2/2_2",
+      "min": -1444,
+      "max": -995,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1034
+    },
+    {
+      "key": "F4/L2/3_2",
+      "min": -1448,
+      "max": -948,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 953
+    },
+    {
+      "key": "F4/L2/0_3",
+      "min": -925,
+      "max": 47,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 994
+    },
+    {
+      "key": "F4/L2/1_3",
+      "min": -1574,
+      "max": -88,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1059
+    },
+    {
+      "key": "F4/L2/2_3",
+      "min": -1384,
+      "max": -431,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1038
+    },
+    {
+      "key": "F4/L2/3_3",
+      "min": -1207,
+      "max": -413,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 979
+    },
+    {
+      "key": "F5/L2/0_0",
+      "min": -1071,
+      "max": 1256,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1143
+    },
+    {
+      "key": "F5/L2/1_0",
+      "min": -1355,
+      "max": 658,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1072
+    },
+    {
+      "key": "F5/L2/2_0",
+      "min": -1363,
+      "max": 671,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1075
+    },
+    {
+      "key": "F5/L2/3_0",
+      "min": -950,
+      "max": 417,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1002
+    },
+    {
+      "key": "F5/L2/0_1",
+      "min": -2028,
+      "max": -651,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1077
+    },
+    {
+      "key": "F5/L2/1_1",
+      "min": -3067,
+      "max": -984,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1023
+    },
+    {
+      "key": "F5/L2/2_1",
+      "min": -3074,
+      "max": -521,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1071
+    },
+    {
+      "key": "F5/L2/3_1",
+      "min": -2279,
+      "max": -662,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1047
+    },
+    {
+      "key": "F5/L2/0_2",
+      "min": -2346,
+      "max": -1464,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1002
+    },
+    {
+      "key": "F5/L2/1_2",
+      "min": -3027,
+      "max": -2028,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 964
+    },
+    {
+      "key": "F5/L2/2_2",
+      "min": -3029,
+      "max": -2279,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 941
+    },
+    {
+      "key": "F5/L2/3_2",
+      "min": -2695,
+      "max": -1170,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 997
+    },
+    {
+      "key": "F5/L2/0_3",
+      "min": -2347,
+      "max": 464,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1036
+    },
+    {
+      "key": "F5/L2/1_3",
+      "min": -2726,
+      "max": 102,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1066
+    },
+    {
+      "key": "F5/L2/2_3",
+      "min": -2642,
+      "max": 122,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1006
+    },
+    {
+      "key": "F5/L2/3_3",
+      "min": -2516,
+      "max": -468,
+      "roads": 0,
+      "buildings": 0,
+      "bytes": 1044
+    }
+  ]
+}

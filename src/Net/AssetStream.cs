@@ -233,8 +233,8 @@ public static class AssetStream
     /// The client's cache file for a streamed pyramid tile (#1656), beside the leaves in the tile cache: its key, its stamp
     /// (a rebuilt tile misses and is fetched again), and the section (0 heights, 1-12 a month's colour).
     /// </summary>
-    public static string PyramidCacheName(CubeKey key, uint stamp, int section) =>
-        $"pyr_{key.FileStem}_{stamp:x8}.s{section}.cubt";
+    public static string PyramidCacheName(CubeKey key, uint stamp, int section, int body = 0) =>
+        body == 0 ? $"pyr_{key.FileStem}_{stamp:x8}.s{section}.cubt" : $"pyr{body}_{key.FileStem}_{stamp:x8}.s{section}.cubt";
 
     /// <summary>
     /// The body a cube request is for (#1656, room for H7's planets): <c>RequestCubeAsset</c>'s section argument carries it in

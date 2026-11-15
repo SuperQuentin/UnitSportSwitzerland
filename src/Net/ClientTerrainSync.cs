@@ -109,6 +109,41 @@ public sealed partial class ClientTerrainSync : Node
         }
     }
 
+    /// <summary>
+    /// Under <c>--frame earth</c> (#1849): the other bodies whose pyramid index to ask the server for on join (their numbers,
+    /// <c>BodyId</c>), each raising <see cref="BodyPyramidIndexSettled"/> once it came or did not. An older server answers
+    /// "missing" for a body: the shipped base stays.
+    /// </summary>
+    public IReadOnlyList<int> WantsBodies { get; set; } = [];
+
+    /// <summary>A body's index from the server came (or null: none, or it did not come); on the sync task's thread.</summary>
+    public event Action<int, Terrain.Leaves.PyramidIndex?>? BodyPyramidIndexSettled;
+
+    private async Task SyncBodyIndexAsync(int body, CancellationToken ct)
+    {
+        Terrain.Leaves.PyramidIndex? got = null;
+        try
+        {
+            // the body in the ask's tile E (AssetStream.CubeSection), its own cached copy
+            await SyncFileAsync(AssetKind.PyramidIndex, $"body{body}_{Terrain.Leaves.PyramidIndex.FileName}", $"body {body}'s pyramid index",
+                $"the server holds no pyramid for body {body}", ct,
+                bytes =>
+                {
+                    if (Terrain.Leaves.PyramidIndex.FromBytes(bytes) is not { } index)
+                    {
+                        GD.PushWarning($"[stream] the server's pyramid index for body {body} did not read");
+                        return;
+                    }
+                    GD.Print($"[stream] body {body}'s pyramid index received: {index.Count} tiles, {bytes.Length / 1024} KB");
+                    got = index;
+                }, tile: new TileId(body, 0)).ConfigureAwait(false);
+        }
+        finally
+        {
+            BodyPyramidIndexSettled?.Invoke(body, got);
+        }
+    }
+
     /// <summary>True once the server manifest has been merged.</summary>
     public bool Synced { get; private set; }
 
@@ -141,6 +176,8 @@ public sealed partial class ClientTerrainSync : Node
         var leaves = WantsLeaves ? SyncLeafIndexAsync(ct) : Task.CompletedTask;
         // and its globe's pyramid (#1656), beside it: the far view and the fill
         var pyramid = WantsPyramid ? SyncPyramidIndexAsync(ct) : Task.CompletedTask;
+        // and the other bodies' (#1849): the far globes and the ground on them
+        var bodies = Task.WhenAll(WantsBodies.Select(b => SyncBodyIndexAsync(b, ct)));
         bool merged;
         try { merged = await SyncIndex(digest, ct); }
         finally { IndexFinished = true; }
@@ -148,6 +185,7 @@ public sealed partial class ClientTerrainSync : Node
         await http.ConfigureAwait(false);
         await leaves.ConfigureAwait(false);
         await pyramid.ConfigureAwait(false);
+        await bodies.ConfigureAwait(false);
         if (!merged) return;
         await Task.WhenAll(
             SyncPlacesAsync(digest, ct), SyncLandingsAsync(digest, ct), SyncRopewaysAsync(digest, ct),
@@ -400,7 +438,7 @@ public sealed partial class ClientTerrainSync : Node
     /// digest does not list is not asked for.
     /// </summary>
     private async Task SyncFileAsync(AssetKind kind, string fileName, string what, string missingMsg,
-        CancellationToken ct, Action<byte[]> onDone, AssetDigest? digest = null, bool readAtBoot = false)
+        CancellationToken ct, Action<byte[]> onDone, AssetDigest? digest = null, bool readAtBoot = false, TileId tile = default)
     {
         string dir = Core.TerrainPaths.FindCacheDir();
         string path = Path.Combine(dir, fileName);
@@ -431,7 +469,7 @@ public sealed partial class ClientTerrainSync : Node
         AssetResult result = default;
         for (int attempt = 1; attempt <= 3; attempt++)
         {
-            result = await _streamer.FetchAsync(kind, new TileId(0, 0), ct).ConfigureAwait(false);
+            result = await _streamer.FetchAsync(kind, tile, ct).ConfigureAwait(false);
             if (result.Data != null || result.PermanentlyMissing || ct.IsCancellationRequested) break;
             try { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
