@@ -33,6 +33,13 @@ you can stand on. Plan: `docs/plans/planets.md` sections 4, 5 and 7.
   3 s); `BodyGround` puts no square in before (`ExposureSettled`). Waiting for the six to stream in lit the first seconds at
   the shader's 1.6 and then dropped every tile and square to the photo's exposure in one frame (the Moon: 1.6 to 0.94, mean
   luma 86 to 71 at Apollo 11, filmed). A streamed pyramid with no level-0 colour here still sets it as its tiles come.
+- **The globe's horizon test starts under the eye** (#1985): a tile is dropped as turned away when its up looks away
+  from the eye, judged from its centre lowered to 25 km under the eye's radius (`BodyGlobe.ReliefM`), never at the
+  reference height. From the reference height, the tiles round an eye down in a basin (Mare Crisium, 3.5 km under it)
+  seemed to face away and were dropped: a black band past the medium square, the far globe floating above it. From
+  orbit nothing changes (the centre is the lower of the two).
+- **The spectator's place line off the Earth** (#1985, `PerfOverlay.Where`): the body, its latitude and longitude and the
+  height over its reference (`Moon 17.000°N 59.000°E  h -3046 m`), never LV95.
 - **One ground a body, the anchor's answers**: every landable body with a pyramid has its `BodyGround`; the one whose
   body the anchor is on claims `BodyGround.Active` and `EarthWorld.OtherBody`. `Covers` is the square's true ground
   (192 m each way), twice the 96 m at which the next is built.

@@ -278,6 +278,12 @@ public partial class BodyGlobe : Node
         DrawnTiles = 0;
     }
 
+    /// <summary>
+    /// How far under the eye a tile's horizon test starts, metres: deeper than any basin and higher than any peak is over
+    /// the eye (Hellas 8 km under Mars' reference, Olympus 22 km over it), so a tile near the eye never seems turned away.
+    /// </summary>
+    private const double ReliefM = 25_000;
+
     /// <summary>The tiles to draw: a tile splits when its drawn cells would be big on screen and its four are loaded.</summary>
     private void Select(CubeKey key, DVec3 eye, double focal)
     {
@@ -287,8 +293,12 @@ public partial class BodyGlobe : Node
         double edge = Body.Shape.A * Math.PI / 2 / key.Side;
         var toEye = eye - centre;
         double distance = Math.Max(toEye.Length - edge, 1);
-        // turned away past the body's horizon: a tile whose up looks away from the eye by more than its own size
-        if (key.Level > 0 && centre.Normalized().Dot(toEye.Normalized()) < -0.15 - edge / Body.Shape.A) return;
+        // turned away past the body's horizon: a tile whose up looks away from the eye by more than its own size. Judged from
+        // the tile's centre lowered under the eye (#1985): at the reference height, a tile round an eye down in a basin
+        // (Mare Crisium, 3.5 km under it) seemed to look away from it and was dropped, a black band past the ground squares
+        var up = centre.Normalized();
+        var judged = eye - up * Math.Min(centre.Length, eye.Length - ReliefM);
+        if (key.Level > 0 && up.Dot(judged.Normalized()) < -0.15 - edge / Body.Shape.A) return;
         if (!_tiles.ContainsKey(key)) { Request(key); if (key.Level > 0) return; }
         double cell = edge / (512.0 / Stride);
         bool split = key.Level < _maxLevel && cell / distance * focal > SplitPixels;
