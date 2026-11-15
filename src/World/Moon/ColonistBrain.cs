@@ -61,6 +61,8 @@ public sealed class ColonistBrain : IBotBrain
         public double Since = -1;
         public double AskedAt = -1;
         public int Stalls;
+        /// <summary>A drive's top speed, m/s (inside the hangar it creeps: at full pace it rolled 10 m past its slot).</summary>
+        public float Speed = DriveSpeed;
         public string What = "";
     }
 
@@ -233,10 +235,14 @@ public sealed class ColonistBrain : IBotBrain
             Add(new Leg { Kind = LegKind.ToRover, What = _rover });
             Add(new Leg { Kind = LegKind.Drive, Points = [.. Ring((from.X, from.Y, from.Z), hb.LaneFar), hb.LaneOut], What = "back to the hangar" });
             Add(new Leg { Kind = LegKind.Cycle, Lock = hb.Index, Outward = true, What = "the rolling door, from outside" });
-            Add(new Leg { Kind = LegKind.Drive, Points = [hb.LaneIn, hb.LaneDeep, hb.Slot], What = "into its lane" });
+            Add(new Leg { Kind = LegKind.Drive, Points = [hb.LaneIn, hb.LaneDeep, hb.Slot], Speed = 1.5f, What = "into its lane" });
             Add(new Leg { Kind = LegKind.LeaveRover });
             Add(new Leg { Kind = LegKind.Cycle, Lock = hb.Index, Outward = false, What = "the hangar back to air" });
-            Add(new Leg { Kind = LegKind.Walk, Points = crew.Path(hb.Landing, hb.Module, (crew.Spots[target].X, crew.Spots[target].Y, crew.Spots[target].Z), crew.Spots[target].Module), What = "inside" });
+            // out of the cab onto the hangar's middle line first, then to its inner door: straight from the cab's side it
+            // clipped the parked rover's rear corner
+            // (the left lane: the mirror of the slot, clear of the cab however near its slot it stopped)
+            var mid = _host.Plan.Modules[hb.Module];
+            Add(new Leg { Kind = LegKind.Walk, Points = [(2 * mid.X - hb.Slot.X, 0.6, 2 * mid.Z - hb.Slot.Z), .. crew.Path(hb.Landing, hb.Module, (crew.Spots[target].X, crew.Spots[target].Y, crew.Spots[target].Z), crew.Spots[target].Module)], What = "inside" });
             Log(bot, $"back in from spot {Spot} by the pressurised rover {_rover}, through the hangar");
             _rover = null;
             _cabin = false;
@@ -390,8 +396,9 @@ public sealed class ColonistBrain : IBotBrain
             (inner.X + ix * ColonyCrew.WaitBack, 1.55, inner.Z + iz * ColonyCrew.WaitBack), (inner.X - ix * 2.4, 0.6, inner.Z - iz * 2.4),
             (sl.At.X, sl.At.Y, sl.At.Z), (outer.X - fx * 3, 0.6, outer.Z - fz * 3),
             (outer.X + fx * 13, 0, outer.Z + fz * 13),
-            // past the open rovers parked either side of the road (8 m off it, 23 m out): the way on and off the lane
-            (outer.X + fx * (ColonyKit.RampLen + 36), 0, outer.Z + fz * (ColonyKit.RampLen + 36)),
+            // well past the open rovers parked either side of the road (8 m off it, 23 m out): the way on and off the lane,
+            // straight between them. Joined nearer, the arc back crossed one and the 6 t cab shoved it into the hangar
+            (outer.X + fx * 60, 0, outer.Z + fz * 60),
             // well inside on the same line before it turns for its slot: turning at the doorway caught the jamb
             (outer.X - fx * 12, 0.6, outer.Z - fz * 12));
     }
@@ -526,7 +533,7 @@ public sealed class ColonistBrain : IBotBrain
     private bool Drive(Bot bot, Leg leg, double now)
     {
         if (!BotDriving.Mounted(bot)) return true;
-        var p = BotDriving.Across(bot, World(bot, leg.Points[leg.At]), DriveSpeed, now);
+        var p = BotDriving.Across(bot, World(bot, leg.Points[leg.At]), leg.Speed, now);
         if (p == BotDriving.Progress.Driving) return false;
         if (p == BotDriving.Progress.Arrived && leg.At + 1 < leg.Points.Length)
         {

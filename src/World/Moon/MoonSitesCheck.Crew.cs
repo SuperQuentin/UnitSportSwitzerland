@@ -161,6 +161,9 @@ public partial class MoonSitesCheck
                 var spot = colonyNode.GlobalTransform * new Vector3((float)eva.X, (float)eva.Y, (float)eva.Z);
                 CrewLog(string.Create(CultureInfo.InvariantCulture,
                     $"EVA colonist {who.Index} {bot.Profile.Name} ({body.Name}): spot {who.Eva} {spot.DistanceTo(colonyNode.GlobalPosition):F0} m from the hub, airlock {crew.Crew.LockFor(who.Eva)}; {brain.Status}"));
+                foreach (var v in Vehicles.VehicleManager.Instance!.GetChildren())
+                    if (v is Vehicles.VehicleBody vb)
+                        CrewLog(string.Create(CultureInfo.InvariantCulture, $"  vehicle {vb.Name} ({vb.Kind}) at {colonyNode.ToLocal(vb.GlobalPosition)}"));
                 _crewStage = 11;
                 _crewT = 0;
                 break;
