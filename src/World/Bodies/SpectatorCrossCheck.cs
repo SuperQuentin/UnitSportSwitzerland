@@ -9,7 +9,7 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.World.Bodies;
 
 /// <summary>
-/// <c>--spectatorcrosscheck [all|moonback|moonahead|earthback|earthahead]</c> (#1988, offline, no body data needed): the
+/// <c>--spectatorcrosscheck [all|moonback|moonahead|earthback|earthahead|neptune|neptunehome]</c> (#1988, offline, no body data needed): the
 /// fly camera from 10 km over one body to 100 km over the other, between the Moon and the Earth both ways, looking back at
 /// the body it leaves or ahead at the one it goes to, through the sphere-of-influence handover and every re-anchor on
 /// the way. The look is set once at the start and never touched; the camera is moved by the check along the straight
@@ -33,7 +33,7 @@ public partial class SpectatorCrossCheck : Node
     private readonly WorldOrigin _origin;
     private int _failed;
 
-    private sealed record Leg(string Name, BodyId From, BodyId To, bool Back);
+    private sealed record Leg(string Name, BodyId From, BodyId To, bool Back, int Handovers = 1, double MaxSeconds = 90);
 
     private static readonly Leg[] Legs =
     [
@@ -41,6 +41,9 @@ public partial class SpectatorCrossCheck : Node
         new("moonahead", BodyId.Moon, BodyId.Earth, false),
         new("earthback", BodyId.Earth, BodyId.Moon, true),
         new("earthahead", BodyId.Earth, BodyId.Moon, false),
+        // across the solar system at full speed (#2026): out of the Earth's sphere into the Sun's, then Neptune's
+        new("neptune", BodyId.Earth, BodyId.Neptune, false, Handovers: 2, MaxSeconds: 150),
+        new("neptunehome", BodyId.Neptune, BodyId.Earth, false, Handovers: 2, MaxSeconds: 150),
     ];
 
     public SpectatorCrossCheck(WorldOrigin origin)
@@ -143,12 +146,14 @@ public partial class SpectatorCrossCheck : Node
             cam.GlobalPosition += toward.Normalized() * (float)step;
             last = (axes.Body, here, sky, step);
             frames++;
-            if (GameClock.Now - t0 > 600) { Expect(false, $"{leg.Name}: still {over / 1000:F0} km from {to.Name} after 600 s"); return; }
+            if (GameClock.Now - t0 > 2 * leg.MaxSeconds + 60) { Expect(false, $"{leg.Name}: still {over / 1000:F0} km from {to.Name} after {GameClock.Now - t0:F0} s"); return; }
             await Frame();
         }
         Log(string.Create(CultureInfo.InvariantCulture,
             $"{leg.Name}: {from.Name} → {to.Name} watching {watched} in {GameClock.Now - t0:F1} s ({frames} frames, {crossings} handover(s)): on screen at most {maxRate:F3}°/frame, the worst jump {worstJump:F4}° ({worstAt}), the camera's place at worst {Math.Max(worstPop, 0):F2} m past its step"));
-        Expect(crossings == 1, $"{leg.Name}: one handover ({crossings})");
+        Expect(crossings == leg.Handovers, $"{leg.Name}: {leg.Handovers} handover(s) ({crossings})");
+        Expect(GameClock.Now - t0 <= leg.MaxSeconds, string.Create(CultureInfo.InvariantCulture,
+            $"{leg.Name}: there in {GameClock.Now - t0:F1} s at full speed (at most {leg.MaxSeconds:F0} s)"));
         Expect(worstJump <= JumpDeg, string.Create(CultureInfo.InvariantCulture, $"{leg.Name}: the watched body never jumps on screen ({worstJump:F4}° of {JumpDeg}°)"));
         Expect(worstPop <= 1, string.Create(CultureInfo.InvariantCulture, $"{leg.Name}: no pop in the camera's place ({Math.Max(worstPop, 0):F2} m)"));
     }
