@@ -62,4 +62,8 @@
   under `--frame earth`.
 - **Check**: `--herdgroundcheck` (with any shot or play run): every 2 s each drawn standing cow's height against the
   ground read afresh under it, and the herds in range still waiting for their ground; after 40 s `RESULT ok` when no
-  cow was over 0.3 m off after the first 20 s. On the fill at Riddes 0.01 m, on B4's leaves near Lavaux 0.08 m.
+  cow was over 0.3 m off after the first 20 s (compared at the point its height was read: a cow reads again only after
+  walking 0.4 m) and no herd in view moved over 0.3 m on a re-read (a snap). On the fill at Riddes 0.01 m, on B4's
+  leaves near Lavaux 0.08 m. Flying in at ~300 m/s from 3 km and hovering: up to 9 herds wait hidden while the leaves
+  stream, each appears on its ground (0.00 m), 0 snaps (#2031 follow-up; main before it showed herds at the camera's
+  height that dropped as their leaf landed).

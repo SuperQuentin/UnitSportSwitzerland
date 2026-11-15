@@ -99,6 +99,7 @@ public partial class Herds
     private float _checkWorst;
     private int _checkCows, _checkHidden, _checkSamples;
     private bool _checkDone;
+    private int _checkSnaps;
 
     /// <summary>
     /// Every 2 s: each drawn standing cow's height against the ground read afresh under it, and the herds in range whose ground
@@ -117,8 +118,8 @@ public partial class Herds
             for (int i = 0; i < h.Cows.Length; i++)
             {
                 if (h.WasAir[i] || float.IsNaN(h.Ground[i])) continue;
-                var (e, n, _, _, _, _) = Where(h, i, Now);
-                float fresh = GroundAt(e, n);
+                // at the very point the cow's height was read (it reads again only after walking 0.4 m): staleness alone, not slope
+                float fresh = GroundAt(h.Plan.E + h.GroundAt[i].X, h.Plan.N + h.GroundAt[i].Y);
                 if (float.IsNaN(fresh)) continue;
                 worst = Mathf.Max(worst, Mathf.Abs(fresh - h.Ground[i]));
                 cows++;
@@ -127,10 +128,10 @@ public partial class Herds
         _checkWorst = Mathf.Max(_checkWorst, _checkT > 20 ? worst : 0);
         _checkCows += cows; _checkHidden += hidden; _checkSamples++;
         GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"[herdgroundcheck] {_checkT:F0} s: {cows} cows drawn, worst {worst:F2} m off the ground; {hidden} herds waiting for their ground"));
+            $"[herdgroundcheck] {_checkT:F0} s: {cows} cows drawn, worst {worst:F2} m off the ground; {hidden} herds waiting for their ground; {_checkSnaps} snaps so far"));
         if (_checkT > 40 && !_checkDone && (_checkDone = true))
             GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"[herdgroundcheck] RESULT: {(_checkWorst <= 0.3f && _checkCows > 0 ? "ok" : "FAILED")} (worst after 20 s {_checkWorst:F2} m, {_checkCows} cow samples)"));
+                $"[herdgroundcheck] RESULT: {(_checkWorst <= 0.3f && _checkCows > 0 && _checkSnaps == 0 ? "ok" : "FAILED")} (worst after 20 s {_checkWorst:F2} m, {_checkCows} cow samples, {_checkSnaps} visible herds moved over 0.3 m)"));
     }
 
     private void Build(Live h)
@@ -169,9 +170,14 @@ public partial class Herds
         if (version != h.GroundVersion)
         {
             h.GroundVersion = version;
-            if (!float.IsNaN(h.AnchorGround) && GroundAt(plan.E, plan.N) is var again && !float.IsNaN(again) && Math.Abs(again - h.AnchorGround) > 0.5f)
+            if (!float.IsNaN(h.AnchorGround) && GroundAt(plan.E, plan.N) is var again && !float.IsNaN(again) && Math.Abs(again - h.AnchorGround) > 0.3f)
+            {
+                // a visible herd that moves is a snap the player sees (--herdgroundcheck counts them)
+                bool seen = h.Bodies!.Visible;
+                if (seen) _checkSnaps++;
                 GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"[herds] a herd at {plan.E:F0},{plan.N:F0}: its ground moved {again - h.AnchorGround:F1} m, read again"));
+                    $"[herds] a herd at {plan.E:F0},{plan.N:F0}: its ground moved {again - h.AnchorGround:F1} m, read again{(seen ? " (in view: a snap)" : "")}"));
+            }
             h.AnchorGround = float.NaN;
             System.Array.Fill(h.Ground, float.NaN);
         }
