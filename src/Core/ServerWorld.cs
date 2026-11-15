@@ -294,6 +294,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(Ground!));
+        // the Moon colonies' airlocks online: the server owns their cycles (#2000), at World/ColonyDoors on every peer
+        AddChild(new World.Moon.ColonyDoors());
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);

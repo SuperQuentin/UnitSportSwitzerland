@@ -706,6 +706,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // jetskis and speedboats along the harbour jetties (#383): likewise
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(Ground!));
+        // the Moon colonies' airlocks online: the server owns their cycles (#2000), at World/ColonyDoors on every peer
+        AddChild(new World.Moon.ColonyDoors());
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.

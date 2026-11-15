@@ -20,9 +20,9 @@ namespace UnitSport.World.Moon;
 /// </para>
 ///
 /// <para>
-/// <b>Offline in this phase</b>: the state is this client's. Online play on the Moon waits for D2 (#1727) and C3b
-/// (#1852); then the server owns each airlock's state (the doors' pattern) and a cycle is a request to it, the same
-/// <see cref="Request"/> a bot calls.
+/// <b>Online</b> (#2000) the server owns each airlock's cycle (<see cref="ColonyDoors"/>): a client's <see cref="Request"/>
+/// asks it, the server runs it (the same <see cref="Request"/> a bot calls) and sends it to every client, which runs it on
+/// its own doors. Offline the state is the game's own.
 /// </para>
 /// </summary>
 public partial class ColonyAirlocks : Node3D
@@ -71,9 +71,21 @@ public partial class ColonyAirlocks : Node3D
     private readonly List<(Transform3D At, Vector3 Half, bool Round)> _volumes = new();
     private static readonly StringName Albedo = "albedo_color";
 
+    /// <summary>The colony these airlocks are (#2000: its id names them on the wire).</summary>
+    public readonly string ColonyId;
+
+    /// <summary>A colony's airlocks built on this peer, if it has built it.</summary>
+    public static ColonyAirlocks? Of(string colony)
+    {
+        foreach (var set in All)
+            if (set.ColonyId == colony) return set;
+        return null;
+    }
+
     public ColonyAirlocks(MoonColony colony, ColonyPlan plan)
     {
         Name = "Airlocks";
+        ColonyId = colony.Id;
         _dead = colony.Theme == ColonyTheme.Abandoned;
         var pal = ColonyKit.Of(colony.Theme);
         foreach (var a in plan.Airlocks)
@@ -148,7 +160,17 @@ public partial class ColonyAirlocks : Node3D
 
     private static readonly Color Green = new(0.3f, 1f, 0.45f), Amber = new(1f, 0.62f, 0.15f);
 
-    public override void _EnterTree() => All.Add(this);
+    public override void _EnterTree()
+    {
+        All.Add(this);
+        // online (#2000): the doors as the server last cycled them, on the server from its table, on a client asked of it
+        if (ColonyDoors.Serves)
+        {
+            for (int k = 0; k < _locks.Count; k++)
+                if (ColonyDoors.Last(ColonyId, k) is bool outward) Settle(k, outward);
+        }
+        else if (ColonyDoors.Routes) ColonyDoors.AskStateOf(ColonyId);
+    }
 
     public override void _ExitTree() => All.Remove(this);
 
@@ -266,9 +288,47 @@ public partial class ColonyAirlocks : Node3D
         }
     }
 
-    /// <summary>Asks a cycle toward the outside (<paramref name="outward"/>) or the inside: refused while one runs or that door is open already.</summary>
+    /// <summary>
+    /// Asks a cycle toward the outside (<paramref name="outward"/>) or the inside: refused while one runs or that door is open
+    /// already. Online (#2000) a client asks the server (<see cref="ColonyDoors"/>), which runs it and sends it to everyone; the
+    /// server tells every client of each cycle it runs.
+    /// </summary>
     public bool Request(int index, bool outward)
     {
+        if (index < 0 || index >= _locks.Count) return false;
+        if (ColonyDoors.Routes)
+        {
+            var l0 = _locks[index];
+            if (_dead || l0.Pump >= 0 || (outward ? l0.Outer : l0.Inner).Target > 0) return false;
+            ColonyDoors.Ask(ColonyId, index, outward);
+            return true;
+        }
+        if (!Run(index, outward)) return false;
+        ColonyDoors.Started(ColonyId, index, outward);
+        return true;
+    }
+
+    /// <summary>
+    /// The doors settled as after a cycle toward <paramref name="outward"/> (#2000: a colony built online takes the server's
+    /// table): the far door shut, the near one open, no pump.
+    /// </summary>
+    public void Settle(int index, bool outward)
+    {
+        if (_dead || index < 0 || index >= _locks.Count) return;
+        var l = _locks[index];
+        l.Pump = -1;
+        l.WantOuter = outward;
+        (outward ? l.Inner : l.Outer).Open = (outward ? l.Inner : l.Outer).Target = 0;
+        (outward ? l.Outer : l.Inner).Open = (outward ? l.Outer : l.Inner).Target = 1;
+        Pose(l.Inner);
+        Pose(l.Outer);
+        Light(l, Green);
+    }
+
+    /// <summary>Runs a cycle here: what <see cref="Request"/> does on its own peer, and a client on the server's word.</summary>
+    internal bool Run(int index, bool outward)
+    {
+        if (index < 0 || index >= _locks.Count) return false;
         var l = _locks[index];
         if (_dead || l.Pump >= 0) return false;
         var opening = outward ? l.Outer : l.Inner;
