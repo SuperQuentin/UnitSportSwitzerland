@@ -164,5 +164,5 @@
 - **Getting into a vehicle leaves the decks at once** (`LeaveDecksNow` in `ApplyRide`): the deck bodies
   used to go at the next frame, and for a physics step the steamer just taken from its own deck had its
   hull inside that deck's boxes (and the walker's mask was still the deck layer): the solver shot it into the sky.
-- **Limits**: buses, the steamer, the A320 and the military freighter (#420: its ramp is a `DoorStep` slope to the ground, its troop seats face across with `SeatAnchor.Yaw`, see `airliners`); no hand on a pole is drawn; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
+- **Limits**: buses, the steamer, the A320, the shuttle (#1493, floating in free fall: `shuttle-aboard`) and the military freighter (#420: its ramp is a `DoorStep` slope to the ground, its troop seats face across with `SeatAnchor.Yaw`, see `airliners`); no hand on a pole is drawn; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
 - **Vehicles in holds** (#418): a deck's `CargoBays` carry ground vehicles driven into them the same way (decks built for drivers too, `DeckOn`/`DeckPos` for the vehicle): see the vehicles note `vehicles-in-holds`.

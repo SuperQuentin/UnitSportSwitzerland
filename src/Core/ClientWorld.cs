@@ -1241,6 +1241,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ClimbCheck.Requested) AddChild(new Player.ClimbCheck(() => LocalPlayer));   // #1225
         if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
+        if (Player.ShuttleAboardCheck.Requested) AddChild(new Player.ShuttleAboardCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
         if (Player.An124Check.Requested) AddChild(new Player.An124Check(() => LocalPlayer));
         if (Player.HoldCheck.Requested) AddChild(new Player.HoldCheck(() => LocalPlayer));
@@ -2914,6 +2915,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (p.Aboard)
             {
                 if (p.DeckHint is { } deckHint) yield return (PlayerInput.InteractMount, deckHint);
+                // floating aboard the shuttle (#1493): the stick pushes off toward the look, Jump / Crouch up and down
+                foreach (var floatHint in p.FloatHints()) yield return floatHint;
                 yield return (PlayerInput.CameraToggle, "Camera");
                 yield return (PlayerInput.Inventory, "Inventory");
             }

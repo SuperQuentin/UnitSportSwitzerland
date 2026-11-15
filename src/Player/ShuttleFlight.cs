@@ -212,4 +212,33 @@ public static class ShuttleFlight
         if (angle < 1e-6f) return new Basis(target);
         return new Basis(from.Slerp(target, Mathf.Min(1f, maxAngle / angle))).Orthonormalized();
     }
+
+    /// <summary>
+    /// What a loose body aboard feels in the orbit seam (#1493): the rockets' <paramref name="thrust"/> (m/s², along
+    /// <paramref name="nose"/>) pushes the cabin ahead of it, so it is felt aft; the air's drag (the seam's ballistic
+    /// coefficient) slows the cabin, felt forward along <paramref name="velocity"/>. Gravity is felt by neither.
+    /// </summary>
+    public static Vector3 FeltInOrbit(Vector3 nose, float thrust, Vector3 velocity, float density)
+    {
+        float v2 = velocity.LengthSquared();
+        var drag = v2 > 1f ? velocity / Mathf.Sqrt(v2) * (density * v2 / (2f * (float)BallisticCoefficient)) : Vector3.Zero;
+        return -nose * thrust + drag;
+    }
+
+    /// <summary>Felt less than this (m/s²) is weightless; more than <see cref="StandAbove"/> toward the floor stands one up (#1493).</summary>
+    public const float FloatBelow = 0.8f, StandAbove = 1.2f;
+
+    /// <summary>What is felt must lie this close to the cabin's down (a cosine, 45°) to stand on its floor.</summary>
+    public const float FloorCos = 0.7f;
+
+    /// <summary>
+    /// Whether one aboard floats (#1493): what is <paramref name="felt"/> is small (free fall), or not toward the cabin's
+    /// floor (the rockets' push in orbit lies along the cabin, and one falls aft, onto the floor that makes); one stands
+    /// once it is toward the floor and big enough, with a little hysteresis between (<paramref name="floating"/> now).
+    /// </summary>
+    public static bool Floats(Vector3 felt, Vector3 up, bool floating)
+    {
+        float size = felt.Length();
+        return !(size > (floating ? StandAbove : FloatBelow) && felt.Dot(-up) >= FloorCos * size);
+    }
 }

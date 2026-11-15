@@ -31,6 +31,39 @@ public sealed partial class Airliner : ISpacecraft, IAimable
     public float Heat { get; private set; }
     public float HeatPeak { get; private set; }
 
+    /// <summary>
+    /// What a loose body aboard feels last step (#1493), world axes, m/s²: the acceleration it has relative to the craft,
+    /// the craft's own non-gravitational acceleration turned round. In the orbit seam it is computed (the rockets push the
+    /// cabin forward, so one feels pushed aft; the air's drag, forward), in the drive it is nothing (the arcade drive carries
+    /// all aboard alike); in the air, on the belly jets and on the ground it is measured: the body's gravity less the craft's
+    /// acceleration (standing on the runway one feels the Earth's g down, hovering on the jets the Moon's, falling free nothing).
+    /// <c>FootPlayer.ZeroG</c> floats the people walking aboard when it is small or not toward the floor.
+    /// </summary>
+    public Vector3 Felt { get; private set; } = new(0, -Rideable.Gravity, 0);
+
+    /// <summary>The velocity last measured for <see cref="Felt"/>, the acceleration smoothed, and whether they are this regime's.</summary>
+    private Vector3 _feltV, _feltAccel;
+    private bool _feltValid;
+
+    /// <summary>
+    /// <see cref="Felt"/> measured (#1493): <paramref name="up"/>'s body's gravity <paramref name="g"/> less the craft's
+    /// acceleration from its velocity, smoothed over a few tenths of a second (the runway's bumps, the solver's pushes).
+    /// </summary>
+    private void MeasureFelt(Vector3 up, float g, float dt)
+    {
+        if (!Spec.Spacecraft || dt <= 0f) return;
+        var v = State.Velocity;
+        if (!_feltValid) { _feltV = v; _feltAccel = Vector3.Zero; _feltValid = true; }
+        var a = (v - _feltV) / dt;
+        _feltV = v;
+        // a jump of the velocity (a teleport, /orbit, a regime's hand-over) is not an acceleration
+        if (a.LengthSquared() < 200f * 200f) _feltAccel = _feltAccel.Lerp(a, Core.MathX.Damp(4f, dt));
+        Felt = -up * g - _feltAccel;
+    }
+
+    /// <summary>The way up here: the world's frame's at the craft (the earth world turns it round the Earth), else +Y.</summary>
+    private Vector3 UpHere() => Space?.Place is { } p ? p.Frame.UpAt(p.At) : Vector3.Up;
+
     /// <summary>Altitude above sea level last step, m (from <see cref="SpaceOrbit.Place"/>; NaN with none).</summary>
     public double Altitude { get; private set; } = double.NaN;
 
@@ -117,6 +150,8 @@ public sealed partial class Airliner : ISpacecraft, IAimable
             var nose = -State.Attitude.Z;
             State.Velocity = nose * ShuttleFlight.DriveSpeed(State.Lever, DriveDistance);
             Air(place.Altitude, State.Velocity.Length());
+            // the arcade drive carries everyone aboard alike: nothing is felt (#1493)
+            Felt = Vector3.Zero;
         }
         else
         {
@@ -129,9 +164,11 @@ public sealed partial class Airliner : ISpacecraft, IAimable
             ShuttleFlight.Jets(ref State, input.Piloted ? input.Stick : Vector2.Zero, drive: false, dt);
             State.Velocity = step.Velocity;
             Air(place.Altitude, step.Track.Length());
+            Felt = ShuttleFlight.FeltInOrbit(-State.Attitude.Z, thrust / State.Mass, step.Velocity, AirlinerFlight.Density((float)place.Altitude));
         }
         InSpace = true;
         Lander = false;
+        _feltValid = false;
         State.OnGround = false;
         if (gearToggle) State.GearDown = !State.GearDown;
         State.Gear = Mathf.MoveToward(State.Gear, State.GearDown ? 1f : 0f, dt / Spec.GearTransit);
@@ -193,9 +230,11 @@ public sealed partial class Airliner : ISpacecraft, IAimable
         State.Tas = v.Length();
         State.Ias = 0f;
         State.Alpha = 0f;
+        MeasureFelt(up, g, dt);
         ToMotion(ref m);
         return true;
     }
+
 
     /// <summary>The read-outs the air gives in Space: the airspeed it has there, and the heat.</summary>
     private void Air(double altitude, float speed)
@@ -262,6 +301,9 @@ public sealed partial class Airliner : ISpacecraft, IAimable
         State.Attitude = shift.Transform.Basis * State.Attitude;
         if (Aim is { } aim) Aim = shift.Direction(aim);
         State.Velocity = shift.Direction(State.Velocity);
+        _feltV = shift.Direction(_feltV);
+        _feltAccel = shift.Direction(_feltAccel);
+        Felt = shift.Direction(Felt);
         State.Yaw += shift.Yaw;
         if (_up != Vector3.Zero) _up = shift.Direction(_up);
     }

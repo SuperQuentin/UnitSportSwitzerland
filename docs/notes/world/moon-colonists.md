@@ -54,8 +54,8 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
     out): turned to face the can (`ColonyPlan`, yaw + π), with a sill box under the doorway;
   - the can a dome's tube joins had no side doorway: `ColonyPlan.SideDoor(module)` (+1/-1 on the node's X), the shell cut
     there (`ColonyKit.SideCut`, `SideDoorway`: the shell either side, panels round it, a collar, a landing, the frame;
-    viewer "Can, side door"), its collision cut the same way (`ColonyBuilder.Hollow`), the furniture kept clear
-    (`ColonyInteriors.Furnish(..., sideDoor)`: pieces in front of it left out, counters cut either side); a walk through a
+    viewer "Can, side door"), its interior's doorway on that side (#2000: `InteriorGenerator.Colony`), the furniture kept clear
+    (`InteriorGenerator.ColonyFurniture`: pieces in front of it left out, counters cut either side); a walk through a
     side door goes by the can's aisle (`ColonyCrew.Aisle`), never across its bunks;
   - each of the airlock's outer steps was a 0.22 m wall to a body coming back up: the stairs are solid as one ramp along
     the treads' noses (drawn as steps still).

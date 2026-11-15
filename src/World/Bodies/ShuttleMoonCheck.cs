@@ -51,7 +51,7 @@ public partial class ShuttleMoonCheck : Node
     private BodyId _bodyWas = BodyId.Earth;
     private DVec3 _exitAt, _walkFrom;
     private Vector2 _stick;
-    private bool _left, _upDone, _atHatch;
+    private bool _left, _upDone, _atHatch, _outByHatch;
 
     /// <summary>The walk on the Moon, metres.</summary>
     private const double WalkM = 50;
@@ -446,6 +446,16 @@ public partial class ShuttleMoonCheck : Node
     private void Walk(FootPlayer p)
     {
         if (p.Vehicle != null) { Finish("still aboard after stepping out"); return; }
+        // up from the seat into the cabin (#1493): out by the hatch, as E there does
+        if (!_outByHatch)
+        {
+            if (!p.Aboard) { if (_stageT > 10) Finish("not standing in the cabin 10 s after getting up"); return; }
+            if (!p.OutByShuttleHatch()) { Finish("could not get out by the hatch"); return; }
+            _outByHatch = true;
+            Log("out by the hatch");
+            _stageT = 0;
+            return;
+        }
         if (_exitAt == default)
         {
             if (_stageT < 1 || !p.IsOnFloor()) { if (_stageT > 30) Finish("not standing 30 s after stepping out"); return; }
