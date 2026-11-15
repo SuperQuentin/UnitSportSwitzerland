@@ -158,7 +158,45 @@ public partial class MoonSitesCheck
                     if (c2 is Node n2 && n2.Name.ToString().StartsWith("moonrover_" + colony.Id)) depot++;
                 RoverLog($"{depot} rover(s) parked at the colony by its depot");
                 if (depot < MoonRoverDepot.Slots(colony, plan).Count) { Finish($"only {depot} of the colony's rovers parked"); return; }
+                // and back in (#2000): from the road on the door's line, up the ramp, through the rolling door
+                if (hangar) { RoverNext(9); break; }
                 Finish(null);
+                break;
+            }
+            case 9:
+            {
+                if (_roverT < 1.0 || me == null || !me.IsOnFloor() || ColonyAirlocks.Sets.Count == 0) break;
+                var set = ColonyAirlocks.Sets[0];
+                int hl = set.Count - 1;
+                var door = set.DoorAt(hl, true);
+                var outDir = set.DoorOut(hl, true);
+                me.PlaceAt(door + outDir * (ColonyKit.RampLen + 14) + Vector3.Up * 0.5f, Mathf.Atan2(outDir.X, outDir.Z));
+                RoverNext(10);
+                break;
+            }
+            case 10:
+                if (_roverT < 1.5 || me == null || !me.IsOnFloor()) break;
+                if (!me.SetRide(RoverKind())) { Finish("the mount for the way back in was refused"); return; }
+                me.RideControls = () => new RideInput(1f, 0f, 0f, false);
+                RoverLog("back in: from the road on the door's line, at full throttle");
+                RoverNext(11);
+                break;
+            case 11:
+            {
+                var set = ColonyAirlocks.Sets[0];
+                int hl = set.Count - 1;
+                var p = me!.GlobalPosition;
+                float d = (p - set.DoorAt(hl, true)).Dot(set.DoorOut(hl, true));
+                _roverCam!.GlobalPosition = p + (me.GlobalBasis.Z with { Y = 0 }).Normalized() * 7 + Vector3.Up * 3;
+                _roverCam.LookAt(p + Vector3.Up * 0.8f, Vector3.Up);
+                if (d < -4)
+                {
+                    RoverLog(string.Create(CultureInfo.InvariantCulture, $"back in the hangar after {_roverT:F1} s, {-d:F1} m inside its rolling door"));
+                    me.RideControls = () => new RideInput(0f, 1f, 0f, false);
+                    Finish(null);
+                }
+                else if (_roverT > 25)
+                    Finish(string.Create(CultureInfo.InvariantCulture, $"the rover could not drive back into the hangar: {d:F1} m out from its rolling door after 25 s"));
                 break;
             }
         }
