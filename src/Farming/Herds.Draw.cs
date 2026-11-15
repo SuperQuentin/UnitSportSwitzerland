@@ -79,7 +79,8 @@ public partial class Herds
             }
             bool fresh = h.Bodies == null;
             if (fresh) Build(h);
-            if (!h.Bodies!.Visible) h.Bodies.Visible = h.Heads!.Visible = true;
+            // shown once its ground answered (Pose hides a herd whose ground does not yet, #2031)
+            if (!h.Bodies!.Visible && !float.IsNaN(h.AnchorGround)) h.Bodies.Visible = h.Heads!.Visible = true;
             // far herds a few times a second, staggered so they do not all land on one frame (NearEvery, FarEvery)
             int every = dist > NearRange ? FarEvery : NearEvery;
             if (!fresh && !any && every > 1 && (_frame + h.Plan.Index) % every != 0) continue;
@@ -87,7 +88,49 @@ public partial class Herds
             Pose(h, now, eye, ee, en, dist <= NearRange && (fresh || any) ? dt : dt * every);
         }
 
+        if (GroundCheck) CheckGround(delta);
         Sounds(delta, ee, en, now);
+    }
+
+    // ---- --herdgroundcheck (#2031): the cows stand on the ground as drawn ------------------------------------------
+
+    private static readonly bool GroundCheck = Core.CmdArgs.Has("--herdgroundcheck");
+    private double _checkT, _checkNext = 2;
+    private float _checkWorst;
+    private int _checkCows, _checkHidden, _checkSamples;
+    private bool _checkDone;
+
+    /// <summary>
+    /// Every 2 s: each drawn standing cow's height against the ground read afresh under it, and the herds in range whose ground
+    /// does not answer (hidden). After 20 s of samples, RESULT ok when no drawn cow was more than 0.3 m off.
+    /// </summary>
+    private void CheckGround(double delta)
+    {
+        _checkT += delta;
+        if (_checkT < _checkNext) return;
+        _checkNext += 2;
+        float worst = 0; int cows = 0, hidden = 0;
+        foreach (var h in _all)
+        {
+            if (h.Bodies == null) continue;
+            if (!h.Bodies.Visible) { if (float.IsNaN(h.AnchorGround) && h.Ground.Length > 0) hidden++; continue; }
+            for (int i = 0; i < h.Cows.Length; i++)
+            {
+                if (h.WasAir[i] || float.IsNaN(h.Ground[i])) continue;
+                var (e, n, _, _, _, _) = Where(h, i, Now);
+                float fresh = GroundAt(e, n);
+                if (float.IsNaN(fresh)) continue;
+                worst = Mathf.Max(worst, Mathf.Abs(fresh - h.Ground[i]));
+                cows++;
+            }
+        }
+        _checkWorst = Mathf.Max(_checkWorst, _checkT > 20 ? worst : 0);
+        _checkCows += cows; _checkHidden += hidden; _checkSamples++;
+        GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[herdgroundcheck] {_checkT:F0} s: {cows} cows drawn, worst {worst:F2} m off the ground; {hidden} herds waiting for their ground"));
+        if (_checkT > 40 && !_checkDone && (_checkDone = true))
+            GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"[herdgroundcheck] RESULT: {(_checkWorst <= 0.3f && _checkCows > 0 ? "ok" : "FAILED")} (worst after 20 s {_checkWorst:F2} m, {_checkCows} cow samples)"));
     }
 
     private void Build(Live h)
@@ -120,8 +163,25 @@ public partial class Herds
     private void Pose(Live h, double now, Vector3 eye, double ee, double en, float dt)
     {
         var plan = h.Plan;
+        // the ground changed since the heights were read (a leaf drawn or rebuilt, the fill on its pyramid, #2031): read
+        // them again, or a herd read on a stand-in stood in the air over the ground drawn later
+        int version = GroundVersion;
+        if (version != h.GroundVersion)
+        {
+            h.GroundVersion = version;
+            if (!float.IsNaN(h.AnchorGround) && GroundAt(plan.E, plan.N) is var again && !float.IsNaN(again) && Math.Abs(again - h.AnchorGround) > 0.5f)
+                GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"[herds] a herd at {plan.E:F0},{plan.N:F0}: its ground moved {again - h.AnchorGround:F1} m, read again"));
+            h.AnchorGround = float.NaN;
+            System.Array.Fill(h.Ground, float.NaN);
+        }
         if (float.IsNaN(h.AnchorGround)) h.AnchorGround = GroundAt(plan.E, plan.N);
-        float anchorY = float.IsNaN(h.AnchorGround) ? eye.Y : h.AnchorGround;
+        // no ground answered there yet (on the earth world only the loaded leaves answer: a herd drawn before its leaf landed):
+        // not drawn until it does. It was drawn at the camera's own height meanwhile, a herd standing in the air (#2031)
+        bool known = !float.IsNaN(h.AnchorGround);
+        if (h.Bodies!.Visible != known) h.Bodies.Visible = h.Heads!.Visible = known;
+        if (!known) return;
+        float anchorY = h.AnchorGround;
         var anchor = _origin.ToWorld(plan.E, plan.N, anchorY);
         if (!h.Bodies!.Position.IsEqualApprox(anchor)) h.Bodies.Position = h.Heads!.Position = anchor;
 
@@ -149,6 +209,8 @@ public partial class Herds
                 }
                 y = float.IsNaN(h.Ground[i]) ? anchorY : h.Ground[i];
             }
+            // a cow on ground that does not answer yet (past its herd's leaf): not drawn, never at the anchor's height (#2031)
+            bool unplaced = !air && float.IsNaN(h.Ground[i]);
             var local = new Vector3((float)(e - plan.E), y - anchorY, (float)(plan.N - n));
             if (air)
             {
@@ -182,6 +244,7 @@ public partial class Herds
             else if (gait > 0.5f)
                 local.Y += Mathf.Abs(Mathf.Sin((float)now * 4.2f + i)) * 0.035f;   // the walk's gentle bob
 
+            if (unplaced) basis = basis.Scaled(Vector3.Zero);
             MultiMeshPack.Transform(h.BodyBuffer, i * 12, new Transform3D(basis, local));
             var headBasis = basis * new Basis(Vector3.Up, h.HeadYaw[i] + headShake) * new Basis(Vector3.Right, -h.HeadPitch[i]);
             MultiMeshPack.Transform(h.HeadBuffer, i * 12, new Transform3D(headBasis, local + basis * CowMeshBuilder.Neck));

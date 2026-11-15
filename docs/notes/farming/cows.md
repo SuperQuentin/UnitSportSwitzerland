@@ -46,3 +46,20 @@
   (`Herds.Stage`, negative keys, never on the wire), taken away at the next shot.
 - **Désalpe** (#1269 part 7): the festival's herd is not a field herd; it draws the same meshes (`CowMeshBuilder.BodyWithoutBell` leaves out the little cowbell, a Treichel replaces it) in its own MultiMeshes, driven by the server (`festival-desalpe`).
 - **Bots**: n/a (a cow is scenery a bot walks past; nothing to do with one yet).
+
+## Standing on the ground as drawn (#2031)
+
+- **A height read is not kept for good**: `IWorldGround.Version` ticks whenever the drawn ground changes (a flat tile's
+  mesh committed or dropped, `TerrainReplaced`; an earth leaf drawn, rebuilt in place by `EarthWorld.Reread`, or
+  dropped). `Herds` and `DesalpeHerd` keep the version their heights were read at and read them again when it moves.
+  Before, a herd's anchor and each cow's ground were read once: a height read on a stand-in (the fill before its
+  pyramid came, a coarser mesh) stood for good, and the cows stood in the air ("flying cows" on the earth fill).
+- **No ground, no herd**: under `--frame earth` only the loaded leaves answer a height (900 m round the camera, filling
+  in after an arrival); a herd whose anchor does not answer yet is not drawn, and a cow whose own ground does not is
+  hidden. Both used to be drawn at the camera's own height. Measured on arrival at Riddes: 29 then 9 herd poses with no
+  ground in the first seconds, 0 once the leaves landed.
+- **`DesalpeHerd`** reads the world's ground (`ClientWorld.Ground`), not the flat streamer's, which answers nothing
+  under `--frame earth`.
+- **Check**: `--herdgroundcheck` (with any shot or play run): every 2 s each drawn standing cow's height against the
+  ground read afresh under it, and the herds in range still waiting for their ground; after 40 s `RESULT ok` when no
+  cow was over 0.3 m off after the first 20 s. On the fill at Riddes 0.01 m, on B4's leaves near Lavaux 0.08 m.
