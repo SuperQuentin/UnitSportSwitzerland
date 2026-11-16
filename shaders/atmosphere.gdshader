@@ -83,7 +83,8 @@ vec2 sphere(vec3 o, vec3 d, float r) {
 // faded out as the camera climbs (World/SunDisc), is the one below. The ground's look (#1479): its core, corona and
 // a full starburst; p is the offset from the sun on the screen's axes, radians.
 vec3 sun_disc(vec3 o, vec3 dir, float depth, vec2 p, float aa) {
-	if (depth > 1e-7) return vec3(0.0);
+	// anything drawn hides it (#2051: a threshold of 1e-7 let it through ground whose depth rounded under it)
+	if (depth > 0.0) return vec3(0.0);
 	float c = dot(dir, sun_dir);
 	if (c <= 0.0) return vec3(0.0);
 	if (sphere(o, dir, planet_r).x > 0.0) return vec3(0.0);

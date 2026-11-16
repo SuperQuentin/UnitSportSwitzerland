@@ -91,8 +91,16 @@ public partial class SunDisc : MeshInstance3D
 
     public override void _ExitTree() => RenderingServer.FramePreDraw -= Place;
 
+    /// <summary>Hidden for a check's comparison picture (#2051's <c>--skyordercheck</c>).</summary>
+    internal static bool CheckHide { get; set; }
+
     private void Place()
     {
+        if (CheckHide)
+        {
+            Visible = false;
+            return;
+        }
         if (DayNight.Instance is not { Sky: { } sky } || GetViewport()?.GetCamera3D() is not { } cam)
         {
             Visible = false;

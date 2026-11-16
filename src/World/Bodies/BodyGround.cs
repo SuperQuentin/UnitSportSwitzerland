@@ -29,6 +29,13 @@ namespace UnitSport.World.Bodies;
 /// </summary>
 public partial class BodyGround : Node, Terrain.IBodyGround
 {
+    /// <summary>Its meshes shown or hidden (#2051's <c>--skyordercheck</c>: its comparison pictures).</summary>
+    internal void SetShown(bool shown)
+    {
+        foreach (var child in GetChildren())
+            if (child is Node3D n) n.Visible = shown;
+    }
+
     /// <summary>The near square's cells a side.</summary>
     public const int Cells = 256;
 

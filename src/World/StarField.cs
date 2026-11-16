@@ -146,8 +146,16 @@ public partial class StarField : MeshInstance3D, IOriginShiftAware
     /// <summary>A debugging aid (<c>--shuttlefilm drive,stardist=0.5</c>): the stars' distance, as a share of the usual.</summary>
     public static float DistanceScale = 1f;
 
+    /// <summary>Hidden for a check's comparison picture (#2051's <c>--skyordercheck</c>).</summary>
+    internal static bool CheckHide { get; set; }
+
     private void Place()
     {
+        if (CheckHide)
+        {
+            Visible = false;
+            return;
+        }
         if (Count == 0 || DayNight.Instance is not { Sky: { } sky } || GetViewport()?.GetCamera3D() is not { } cam)
         {
             Visible = false;

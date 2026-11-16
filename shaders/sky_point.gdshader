@@ -71,7 +71,12 @@ void vertex() {
 	tint = vec4(c.rgb, c.a * horizon * dark * glare);
 }
 
+// the scene's opaque depth (#2051): a point of light is behind everything drawn, whatever depth a ridge near the far
+// plane rounded to (the pinned depth above lost to it high up)
+uniform sampler2D scene_depth : hint_depth_texture, filter_nearest;
+
 void fragment() {
+	if (texture(scene_depth, SCREEN_UV).r > 0.0) discard;
 	float r = length(UV * 2.0 - 1.0);
 	ALBEDO = tint.rgb * tint.a * (1.0 - smoothstep(0.35, 1.0, r));
 }
