@@ -63,7 +63,8 @@ public partial class Atmosphere : Node3D
 
     public override void _Ready()
     {
-        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/atmosphere.gdshader") };
+        // drawn after the stand-ins of far bodies (#2051): the air is in front of them
+        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/atmosphere.gdshader"), RenderPriority = Bodies.BodyLook.AirPriority };
         _shell = new MeshInstance3D
         {
             Name = "Shell",
@@ -141,6 +142,7 @@ public partial class Atmosphere : Node3D
         if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam)
         {
             _floorOf = null;
+            WriteAnchor(null, 0);
             return;
         }
         var c = cam.GlobalPosition;
@@ -162,9 +164,13 @@ public partial class Atmosphere : Node3D
         OnSun = body.Id == BodyId.Sun;
         // the body's disc hides the sky behind it (#1989): its centre from the camera, its angular radius; near its ground
         // the eye is dazzled by it by day (StarField), not from far out (#1989 follow-up: thin stars 68,000 km off the Moon)
-        _floorOf = home ? null : (axes, body.Shape.A);
-        if (home) WriteSkyFloor(-1f, Vector3.Down);
-        else WriteSkyFloor(axes, body.Shape.A, c);
+        // the Earth's too once in space (#2051): its bulk hides the stars wherever its depth rounds to nothing high up
+        bool floor = !home || space >= 0.5f;
+        _floorOf = floor ? (axes, body.Shape.A) : null;
+        if (floor) WriteSkyFloor(axes, body.Shape.A, c);
+        else WriteSkyFloor(-1f, Vector3.Down);
+        // what stands in for a far body steps aside behind the anchor's bulk (shaders/common/sky_cover.gdshaderinc)
+        WriteAnchor(axes, body.Shape.B * AnchorShrink);
         NearGround = home ? 0f : 1f - Mathf.SmoothStep(0.05f, 0.5f, (float)(Math.Max(altitude, 0) / body.Shape.A));
         DimSky(home ? space : 1f);
         // the stars by day up here (sky_point.gdshader)
@@ -243,6 +249,29 @@ public partial class Atmosphere : Node3D
         var toCentre = new Vector3((float)(bx - c.X), (float)(by - c.Y), (float)(bz - c.Z));
         double d = toCentre.Length();
         WriteSkyFloor(d > 1 ? DiscRadius(radius, d) : -1f, d > 1 ? toCentre / (float)d : Vector3.Down);
+    }
+
+    /// <summary>
+    /// The anchor's sphere for the sky's stand-ins (#2051) as a share of its polar radius: under its lowest basins (the
+    /// Moon's 9 km, the Earth's seabed), so the camera is always outside it.
+    /// </summary>
+    public const double AnchorShrink = 0.995;
+
+    private static readonly StringName AnchorSphere = "world_anchor_sphere";
+    private Vector4 _anchorWritten = new(float.NaN, 0, 0, 0);
+
+    /// <summary><c>world_anchor_sphere</c>: the anchor body's centre in world space and a radius under its least, or none.</summary>
+    private void WriteAnchor(FrameAxes? axes, double radius)
+    {
+        var v = Vector4.Zero;
+        if (axes != null)
+        {
+            var (x, y, z) = axes.FromEcef(new EcefPos(0, 0, 0));
+            v = new Vector4((float)x, (float)y, (float)z, (float)radius);
+        }
+        if (v == _anchorWritten) return;
+        _anchorWritten = v;
+        RenderingServer.GlobalShaderParameterSet(AnchorSphere, v);
     }
 
     /// <summary>The air shell's centre in world space while it is drawn (the placement check, #2036).</summary>

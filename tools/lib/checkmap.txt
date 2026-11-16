@@ -1465,6 +1465,14 @@ src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home -
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Bodies/SkyOrder      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/common/sky_cover      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/common/body_globe     full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/body_globe            full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/moon.gdshader         full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/planet                full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/sky_point             full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/sun.gdshader          full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 src/World/Bodies/BodyPlace     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 src/World/Bodies/BodyGlobe     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 src/World/Globe/Atmosphere     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets

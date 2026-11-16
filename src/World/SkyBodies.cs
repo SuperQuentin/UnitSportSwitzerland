@@ -33,7 +33,7 @@ public partial class SkyBodies : Node3D
 
     private static readonly StringName PSky = "sky", PDistance = "distance", PDaylight = "daylight", PSingle = "single",
         PColor = "point_color", PSize = "point_size", PSun = "sun_dir", PBright = "brightness", POccluder = "occluder",
-        PPole = "pole", PFade = "fade";
+        PPole = "pole", PFade = "fade", PTrueDistance = "true_distance";
 
     /// <summary>The body a sky body is (null for none).</summary>
     private static CelestialBody? BodyOf(SkyBody id)
@@ -104,7 +104,8 @@ public partial class SkyBodies : Node3D
         foreach (var id in Bodies)
         {
             var e = new Entry { Id = id, Tint = TintOf(id), Body = BodyOf(id) };
-            e.DiscMaterial = new ShaderMaterial { Shader = discShader };
+            // drawn after the stars, covering them where the sky is dark (#2051)
+            e.DiscMaterial = new ShaderMaterial { Shader = discShader, RenderPriority = World.Bodies.BodyLook.StandinPriority };
             if (MapOf(id) is { } map)
                 e.DiscMaterial.SetShaderParameter("albedo", GD.Load<Texture2D>(map));
             else e.DiscMaterial.SetShaderParameter("textured", false);
@@ -116,7 +117,7 @@ public partial class SkyBodies : Node3D
             e.Point = Instance3D(quad, e.PointMaterial, $"{id}Point");
             if (id == SkyBody.Saturn)
             {
-                e.RingMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/planet_rings.gdshader") };
+                e.RingMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/planet_rings.gdshader"), RenderPriority = World.Bodies.BodyLook.HaloPriority };
                 e.RingMaterial.SetShaderParameter("rings", GD.Load<Texture2D>("res://assets/space/saturn_ring_2k.png"));
                 e.RingMaterial.SetShaderParameter("inner", (float)(RingInner / RingOuter));
                 e.Rings = Instance3D(quad, e.RingMaterial, "SaturnRings");
@@ -260,9 +261,12 @@ public partial class SkyBodies : Node3D
                 e.Magnitude = (float)Ephemeris.Magnitude(id, utc);
                 e.ComputedAt = now;
             }
-            // the whole planetary system at one scale: its planet just inside the far plane
-            double scale = far / parent.Distance;
-            if (parent == e || parent.Distance <= 0) scale = far / e.Distance;
+            // the whole planetary system at one scale: its planet inside the far plane at the stand-ins' share for its
+            // distance (#2051: the stand-ins are drawn in order, so they sort as the bodies do)
+            var (parentRadius, _) = Ephemeris.Radii(parent.Id);
+            double scale = cam.Far * World.Bodies.BodyLook.StandinShare(parent.Distance, parentRadius) / parent.Distance;
+            if (parent == e || parent.Distance <= 0)
+                scale = cam.Far * World.Bodies.BodyLook.StandinShare(e.Distance, Ephemeris.Radii(id).Item1) / e.Distance;
             var worldDir = (stars * e.Direction).Normalized();
             e.WorldPosition = camPos + worldDir * (float)(e.Distance * scale);
             var (re, rp) = Ephemeris.Radii(id);
@@ -289,6 +293,7 @@ public partial class SkyBodies : Node3D
                 e.DiscMaterial.SetShaderParameter(PBright, discFade * Mathf.Lerp(0.5f, 1.4f, night));
                 // from space the body's globe's own look (#1998): the globe takes it over past a size with no change
                 e.DiscMaterial.SetShaderParameter(PFade, discFade);
+                e.DiscMaterial.SetShaderParameter(PTrueDistance, (float)e.Distance);
                 if (e.Body != null) World.Bodies.BodyLook.Write(e.DiscMaterial, e.Body, World.Bodies.BodyLook.InSpace, ref e.LookShown);
                 e.DiscMaterial.SetShaderParameter(POccluder, parent == e ? Vector4.Zero
                     : new Vector4(parent.WorldPosition.X, parent.WorldPosition.Y, parent.WorldPosition.Z, parent.Radius));
@@ -302,6 +307,7 @@ public partial class SkyBodies : Node3D
                     rings.GlobalTransform = new Transform3D(new Basis(face.Column0 * outer, face.Column1 * outer, face.Column2 * outer), e.WorldPosition);
                     ringMaterial.SetShaderParameter(PSun, e.TreeSun ?? SunFrom(sunWorld, worldDir, e.Distance));
                     ringMaterial.SetShaderParameter(PPole, face.Column2.Normalized());
+                    ringMaterial.SetShaderParameter(PTrueDistance, (float)e.Distance);
                     ringMaterial.SetShaderParameter(PBright, discFade * Mathf.Lerp(0.5f, 1.4f, night));
                     ringMaterial.SetShaderParameter(POccluder, new Vector4(e.WorldPosition.X, e.WorldPosition.Y, e.WorldPosition.Z, e.Radius));
                 }
@@ -331,6 +337,9 @@ public partial class SkyBodies : Node3D
     private ShaderMaterial? _earthPointMaterial;
     private double _earthSunAu = 1, _earthSunAt = double.NegativeInfinity;
 
+    /// <summary>The Earth's point hidden for a check's comparison picture (#2051's <c>--skyordercheck</c>).</summary>
+    internal static bool CheckHideEarth { get; set; }
+
     /// <summary>The Earth's magnitude from space this frame, NaN when it has no point (#2047's check).</summary>
     internal float EarthMagnitude { get; private set; } = float.NaN;
 
@@ -349,7 +358,7 @@ public partial class SkyBodies : Node3D
         EarthMagnitude = float.NaN;
         EarthPointAlpha = 0f;
         if (_earthPoint == null || _earthPointMaterial == null) return;
-        if (!World.Bodies.BodyLook.Seen(BodyId.Earth, camPos, out var dir, out double distance, out _, out var sunAtEarth))
+        if (CheckHideEarth || !World.Bodies.BodyLook.Seen(BodyId.Earth, camPos, out var dir, out double distance, out _, out var sunAtEarth))
         {
             _earthPoint.Visible = false;
             return;

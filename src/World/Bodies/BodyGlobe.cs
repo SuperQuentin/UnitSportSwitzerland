@@ -75,8 +75,10 @@ public partial class BodyGlobe : Node
     private void PlaceRoot(Camera3D cam)
     {
         var camWorld = cam.GlobalPosition;
-        double reach = (ToD(_centreWorld) - ToD(camWorld)).Length + Body.Shape.A;
-        float s = reach > cam.Far * 0.9 ? (float)(cam.Far * 0.85 / reach) : 1f;
+        double distance = (ToD(_centreWorld) - ToD(camWorld)).Length;
+        double reach = distance + Body.Shape.A;
+        // past the far plane, its centre at a share of it that grows with its distance (#2051: the stand-ins sort as the bodies do)
+        float s = reach > cam.Far * 0.9 ? (float)(cam.Far * BodyLook.StandinShare(distance, Body.Shape.A) / distance) : 1f;
         _root.Transform = new Transform3D(_rootBasis.Scaled(Vector3.One * s), camWorld + (_centreWorld - camWorld) * s);
     }
 
@@ -178,6 +180,21 @@ public partial class BodyGlobe : Node
     public bool ExposureSettled => _exposed || _heldFor >= ExposureWait || _faceMeanTask.IsCompleted && _faceMeanTask is not { IsCompletedSuccessfully: true, Result: not null };
     private readonly HashSet<CubeKey> _show = new();
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
+
+    // another body's globe in the sky (#2051): drawn after the stars, stepping aside for the scene in front of it
+    private readonly Shader _standinShader = GD.Load<Shader>("res://shaders/body_globe_standin.gdshader");
+    private bool _standin = true;
+    private static readonly StringName LocalCentre = "local_centre";
+
+    /// <summary>The whole globe shown or hidden (#2051's <c>--skyordercheck</c>: its comparison pictures).</summary>
+    internal void SetShown(bool shown) => _root.Visible = shown;
+
+    /// <summary>A tile's material as the globe is placed: the anchor's own ground (opaque, true place) or a stand-in in the sky.</summary>
+    private void Dress(ShaderMaterial material)
+    {
+        material.Shader = _standin ? _standinShader : _shader;
+        material.RenderPriority = _standin ? BodyLook.StandinPriority : 0;
+    }
     private readonly int _month;
     private int _epoch = int.MinValue, _running;
     private BodyId _placedIn = (BodyId)255;
@@ -546,7 +563,15 @@ public partial class BodyGlobe : Node
             if (r.Arrays == null) continue;
             var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, r.Arrays);
-            var material = new ShaderMaterial { Shader = _shader };
+            var material = new ShaderMaterial();
+            Dress(material);
+            // the body's centre in the tile's own axes (east, up, south from its anchor): its far half is culled as a stand-in
+            {
+                var a = r.Key.AnchorOn(Body.Cube);
+                double Dot(EcefPos u, EcefPos v) => u.X * v.X + u.Y * v.Y + u.Z * v.Z;
+                var o = new EcefPos(-a.Origin.X, -a.Origin.Y, -a.Origin.Z);
+                material.SetShaderParameter(LocalCentre, new Vector3((float)Dot(o, a.East), (float)Dot(o, a.Up), (float)-Dot(o, a.North)));
+            }
             // a tile with no colour of its own (a coarse level the data left out) takes the body's mean, not the shader's
             // white at full sun: the Moon from 140,000 km glared as a white blob (#1998)
             material.SetShaderParameter(AlbedoTex, r.Colour != null ? ImageTexture.CreateFromImage(r.Colour) : MeanTexture());
@@ -656,6 +681,11 @@ public partial class BodyGlobe : Node
         _placedIn = axes.Body;
         _epoch = _origin.Epoch;
         if (own) _root.Transform = Transform3D.Identity;
+        if (_standin == own)
+        {
+            _standin = !own;
+            foreach (var tile in _tiles.Values) Dress(tile.Material);
+        }
         foreach (var (key, tile) in _tiles) Place(key, tile.Node);
         foreach (var n in _bodyFixed) PlaceBodyFixed(n, axes, own);
     }

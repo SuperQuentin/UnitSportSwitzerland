@@ -79,7 +79,8 @@ public partial class MoonDisc : MeshInstance3D
         _material = NewMaterial();
         MaterialOverride = _material;
         // its brightness: a glow round the disc, its size a share of the screen as a star's (#1842)
-        _haloMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon_halo.gdshader") };
+        // over the disc, which no longer writes a depth (#2051)
+        _haloMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon_halo.gdshader"), RenderPriority = Bodies.BodyLook.HaloPriority };
         _halo = new MeshInstance3D
         {
             Name = "MoonHalo",
@@ -119,7 +120,8 @@ public partial class MoonDisc : MeshInstance3D
     public static ShaderMaterial NewMaterial()
     {
         // drawn before the stars, which its depth then hides behind it (moon.gdshader)
-        var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon.gdshader"), RenderPriority = -1 };
+        // drawn after the stars, covering them where the sky is dark (#2051)
+        var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/moon.gdshader"), RenderPriority = Bodies.BodyLook.StandinPriority };
         material.SetShaderParameter("albedo", GD.Load<Texture2D>(MapPath));
         // the colonies' lights as sparks on the dark part (#1946): each one's direction in the moon's own axes, its strength
         var colonies = new Vector4[8];
@@ -143,9 +145,12 @@ public partial class MoonDisc : MeshInstance3D
     /// <summary>The Moon's own globe draws it this frame (#1848, World/Bodies/BodyViews): the sky's picture steps aside.</summary>
     public static bool HiddenByGlobe { get; set; }
 
+    /// <summary>Hidden for a check's comparison picture (#2051's <c>--skyordercheck</c>).</summary>
+    internal static bool CheckHide { get; set; }
+
     private void Place()
     {
-        if (HiddenByGlobe || DayNight.Instance is not { Sky: { } sky } day || GetViewport()?.GetCamera3D() is not { } cam)
+        if (HiddenByGlobe || CheckHide || DayNight.Instance is not { Sky: { } sky } day || GetViewport()?.GetCamera3D() is not { } cam)
         {
             Visible = false;
             _halo.Visible = false;
@@ -164,7 +169,8 @@ public partial class MoonDisc : MeshInstance3D
         // just inside the far plane at its true angular radius, at least ScreenShare of the view's height (#1842) near the
         // Earth only (#2047): from other planets its true size
         float near = NearEarthOf(cam);
-        float distance = cam.Far * 0.9f;
+        // inside the far plane at the stand-ins' share for its distance (#2051: they sort as the bodies do)
+        float distance = cam.Far * (float)Bodies.BodyLook.StandinShare(moonDistance, RadiusMetres);
         float fov = Mathf.DegToRad(Core.CameraLens.FovOf(cam));
         float trueAngular = (float)(RadiusMetres / moonDistance);
         float angular = Mathf.Max(trueAngular, fov * ScreenShare * near);
@@ -173,6 +179,7 @@ public partial class MoonDisc : MeshInstance3D
         Visible = true;
         _material.SetShaderParameter(SunDir, sunDir);
         _material.SetShaderParameter(Face, face);
+        _material.SetShaderParameter(TrueDistance, (float)moonDistance);
         // above the air the sky behind it is black whatever the hour below: the night's brightness (#1798)
         float night = Mathf.Max(day.Night, Atmosphere.Space);
         _material.SetShaderParameter(Brightness, Mathf.Lerp(0.5f, 1.8f, night));
@@ -224,6 +231,8 @@ public partial class MoonDisc : MeshInstance3D
         _point.Visible = alpha > 0.01f;
         return (_point.Visible ? alpha : 0f, magnitude);
     }
+
+    private static readonly StringName TrueDistance = "true_distance";
 
     private static readonly StringName PointSky = "sky", PointDistance = "distance", PointColor = "point_color", PointSize = "point_size",
         PointDaylight = "daylight";

@@ -30,13 +30,21 @@ bool occluded(vec3 world, vec3 cam) {
 
 #include "res://shaders/common/sky_depth.gdshaderinc"
 
+// the scene in front of them (#2051, shaders/common/sky_cover.gdshaderinc); their true distance, metres
+#include "res://shaders/common/sky_cover.gdshaderinc"
+uniform float true_distance = 1e12;
+varying vec3 cover_world;
+
 void vertex() {
+	cover_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
 	flat_pos = VERTEX.xy;
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
+	vec3 cover_cam = INV_VIEW_MATRIX[3].xyz;
+	if (sky_covered(SCREEN_UV, cover_cam, normalize(cover_world - cover_cam), true_distance, INV_PROJECTION_MATRIX)) discard;
 	float r = length(flat_pos);
 	if (r < inner || r > 1.0 || occluded(world_pos, INV_VIEW_MATRIX[3].xyz)) discard;
 	vec4 c = texture(rings, vec2((r - inner) / (1.0 - inner), 0.5));
