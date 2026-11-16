@@ -133,7 +133,8 @@ public partial class SpectatorCrossCheck : Node
             if (last is { } l)
             {
                 var before = Frames.Convert(l.Body, l.P, axes.Body, l.Sky);
-                double pop = (here - before).Length - (l.Step * 1.05 + 1);
+                // past its own step and the frame's drift (#2053: the body's spin undone, the rest frame)
+                double pop = (here - before).Length - (l.Step * 1.05 + cam.LastDrift * 1.05 + 1);
                 worstPop = Math.Max(worstPop, pop);
             }
 
