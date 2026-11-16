@@ -1464,6 +1464,9 @@ src/Core/SpaceLandingCheck quick @realtime --frame earth --spacelandcheck home -
 src/Player/FootPlayer.Sane quick @realtime --frame earth --spacelandcheck home --chunks fixture:straight --traffic 0
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/Player/SpectatorCamera       quick  --spectatorframecheck --frame earth --chunks fixture:straight
+src/Player/SpectatorFrame        quick  --spectatorframecheck --frame earth --chunks fixture:straight
+src/World/Bodies/SpectatorFrame  quick  --spectatorframecheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 src/World/Bodies/SkyOrder      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 shaders/common/sky_cover      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
