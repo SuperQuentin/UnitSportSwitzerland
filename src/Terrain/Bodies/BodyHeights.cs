@@ -150,7 +150,15 @@ public sealed class BodyHeights
     /// <paramref name="smallestCrater"/> up (a coarser grid's).
     /// </summary>
     public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM, Func<EcefPos, double>? edge,
-        double smallestCrater = 0)
+        double smallestCrater = 0) => Grid(near, cells, cellM, blendM, edge, smallestCrater, null);
+
+    /// <summary>
+    /// <see cref="Grid(EcefPos, int, double, double, Func{EcefPos, double}?, double)"/>, and the ground it eases into at
+    /// every vertex in <paramref name="edgeY"/> (its height in the same frame; #2016: a drawn square's geomorph by the
+    /// camera's distance turns the one into the other, <c>body_ground.gdshader</c>). Null: not asked.
+    /// </summary>
+    public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM, Func<EcefPos, double>? edge,
+        double smallestCrater, float[]? edgeY)
     {
         var n0 = NormalUnder(near);
         var g0 = _cube.Shape.ToGeodetic(_cube.OnEllipsoid(n0, 0));
@@ -166,11 +174,17 @@ public sealed class BodyHeights
                 var n = NormalUnder(frame.ToEcef(x, 0, z));
                 double h = At(n, smallestCrater);
                 double toEdge = cells / 2.0 * cellM - Math.Max(Math.Abs(x), Math.Abs(z));
-                if (edge != null && blendM > 0 && toEdge < blendM)
+                double? round = edge != null && (edgeY != null || (blendM > 0 && toEdge < blendM)) ? edge(n) : null;
+                if (round is { } e && blendM > 0 && toEdge < blendM)
                 {
                     double t = 1 - toEdge / blendM;
                     t = t * t * (3 - 2 * t);
-                    h += (edge(n) - h) * t;
+                    h += (e - h) * t;
+                }
+                if (edgeY != null)
+                {
+                    var (_, ey, _) = frame.ToLocal(_cube.OnEllipsoid(n, round ?? h));
+                    edgeY[j * side + i] = (float)ey;
                 }
                 var (_, ly, _) = frame.ToLocal(_cube.OnEllipsoid(n, h));
                 y[j * side + i] = (float)ly;

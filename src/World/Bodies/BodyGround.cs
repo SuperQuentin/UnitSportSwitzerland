@@ -14,11 +14,20 @@ namespace UnitSport.World.Bodies;
 /// same on every peer.
 ///
 /// <para>
-/// <b>Two squares</b>: the near one (512 m of 2 m cells, every crater, solid: what the walker stands on) inside a medium
-/// one (4 km of 16 m cells, the craters from 40 m, drawn only), which reaches a walker's horizon (2.4 km on the Moon,
-/// 3.4 on Mars). Each eases at its edge into what lies round it (the near into the medium's ground, the medium into
-/// the globe's own cells), and each leaves a hole in what lies under it (the medium under the near one, the globe's
-/// tiles under the medium: <see cref="Hole"/>), so no coarser cell cuts through finer ground.
+/// <b>Three squares</b>: the near one (512 m of 2 m cells, every crater, solid: what the walker stands on) inside a fine
+/// one (#2016: 2 km of 4 m cells, the craters from 10 m, drawn only) inside a medium one (4 km of 16 m cells, the craters
+/// from 40 m, drawn only), which reaches a walker's horizon (2.4 km on the Moon, 3.4 on Mars). Each eases at its edge into
+/// what lies round it (the near into the fine's ground, the fine into the medium's, the medium into the globe's own
+/// cells), and each leaves a hole in what lies under it (the fine under the near one, the medium under the fine, the
+/// globe's tiles under the medium: <see cref="Hole"/>), so no coarser cell cuts through finer ground. The drawn squares
+/// ease by the camera's distance (a geomorph in <c>body_ground.gdshader</c>), not their own edge's: one built again where
+/// the camera is draws what the last one did, with no pop.
+/// </para>
+///
+/// <para>
+/// <b>Their cover</b> (#2016, <see cref="BodyCover"/>): per vertex the fresh craters' rays and the dune sand, which only the
+/// squares have the relief for; the rest of the colour (mottling, dust, sulphur, polar ice) is the shader's, on the
+/// squares and the globe's tiles alike (<see cref="CoverLook"/>).
 /// </para>
 ///
 /// <para>
@@ -51,20 +60,45 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>The near square's last metres, eased into the medium ground (no step where they meet).</summary>
     public const double BlendM = 64;
 
+    /// <summary>The fine square's cells (#2016): 512 of 4 m, 2 km, the craters from <see cref="FineCraterM"/>.</summary>
+    public const int FineCells = 512;
+
+    public const float FineCellM = 4f;
+
+    /// <summary>The fine square moves when the camera is this far from its centre, metres.</summary>
+    public const double FineMoveM = 256;
+
+    /// <summary>The fine square's last metres, eased into the medium's ground (behind its geomorph: a camera far off its centre).</summary>
+    public const double FineBlendM = 128;
+
+    /// <summary>The fine square holds the craters from this diameter up (two and a half of its cells across), metres.</summary>
+    public const double FineCraterM = 10;
+
+    /// <summary>The fine square's geomorph into the medium's ground, metres from the camera: its craters 10-40 m fade out between.</summary>
+    public const float FineMorphFrom = 512, FineMorphTo = 768;
+
     /// <summary>The medium square's cells: 256 of 16 m, 4 km, a walker's horizon and more.</summary>
     public const float MediumCellM = 16f;
 
     /// <summary>The medium square moves when the camera is this far from its centre, metres.</summary>
     public const double MediumMoveM = 512;
 
-    /// <summary>The medium square's last metres, eased into the globe's own cells.</summary>
-    public const double MediumBlendM = 512;
+    /// <summary>The medium square's last metres, eased into the globe's own cells (behind its geomorph).</summary>
+    public const double MediumBlendM = 256;
+
+    /// <summary>The medium square's geomorph into the globe's own cells, metres from the camera.</summary>
+    public const float MediumMorphFrom = 1024, MediumMorphTo = 1536;
+
+    /// <summary>The smallest crater whose rays the near square draws (two and a half of its cells), metres.</summary>
+    public const double NearRaysM = 5;
 
     /// <summary>The medium square holds the craters from this diameter up (two and a half of its cells across), metres.</summary>
     public const double MediumCraterM = 40;
 
     /// <summary>How far each way from the centre the near square holds the true ground (inside its eased band), metres.</summary>
     public const double TrueHalfM = Cells * CellM / 2 - BlendM;
+
+    private static readonly StringName MorphFrom = "morph_from", MorphTo = "morph_to";
 
     private static readonly StringName AirTau = "air_tau", LightStrength = "light_strength", LightTint = "light_tint", LunarParam = "lunar";
 
@@ -126,8 +160,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How many medium squares were built.</summary>
     public int MediumBuilt => _medium.Built;
 
+    /// <summary>How many fine squares were built (#2016).</summary>
+    public int FineBuilt => _fine.Built;
+
     /// <summary>Every square built so far, summed: a picture waits for it to stop changing (<see cref="BodyShot"/>).</summary>
-    public int Settled => _near.Built + _medium.Built;
+    public int Settled => _near.Built + _fine.Built + _medium.Built;
+
+    /// <summary>The cover shader's state for this body (#2016): the squares and the globe's own tiles take it.</summary>
+    public BodyCoverLook CoverLook { get; }
 
     /// <summary>The anchor body's own (one a landable body with a pyramid; the anchor's claims it), for the checks and the step-in.</summary>
     public static BodyGround? Active { get; private set; }
@@ -136,16 +176,22 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     private readonly WorldOrigin _origin;
     // lit, to take the scene's shadows (#2024): the globe's own shader is unshaded
     private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_ground.gdshader");
-    private readonly Layer _near, _medium;
+    private readonly Layer _near, _fine, _medium;
 
-    /// <summary>One square: its size, how it moves and eases, and what is in place.</summary>
-    private sealed class Layer(string name, int cells, float cellM, double moveM, double blendM, float skirtM, bool solid, double smallestCrater)
+    /// <summary>
+    /// One square: its size, how it moves and eases (statically at its edge, and by the camera's distance from
+    /// <paramref name="morphFrom"/> to <paramref name="morphTo"/>, 0: none), its craters' smallest, its rays' smallest and the
+    /// rays of the ground round it (0: none round it), and what is in place.
+    /// </summary>
+    private sealed class Layer(string name, int cells, float cellM, double moveM, double blendM, float skirtM, bool solid, double smallestCrater,
+        double raysFrom, double edgeRaysFrom, float morphFrom, float morphTo)
     {
         public readonly string Name = name;
         public readonly int Cells = cells;
-        public readonly float CellM = cellM, SkirtM = skirtM;
-        public readonly double MoveM = moveM, BlendM = blendM, SmallestCrater = smallestCrater;
+        public readonly float CellM = cellM, SkirtM = skirtM, MorphFrom = morphFrom, MorphTo = morphTo;
+        public readonly double MoveM = moveM, BlendM = blendM, SmallestCrater = smallestCrater, RaysFrom = raysFrom, EdgeRaysFrom = edgeRaysFrom;
         public readonly bool Solid = solid;
+        public int CoverVersion = -1;
         public StaticBody3D? Node;
         public ShaderMaterial? Material;
         public (float Strength, Vector3 Tint) LightWritten = (-1f, Vector3.Zero);
@@ -167,8 +213,13 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         _origin = origin;
         Name = $"{globe.Body.Name}Ground";
         Heights = MakeHeights(globe);
-        _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0);
-        _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM);
+        CoverLook = new BodyCoverLook(globe.Body);
+        _near = new Layer("Square", Cells, CellM, MoveM, BlendM, 30f, solid: true, smallestCrater: 0,
+            raysFrom: NearRaysM, edgeRaysFrom: FineCraterM, 0, 0);
+        _fine = new Layer("Fine", FineCells, FineCellM, FineMoveM, FineBlendM, 60f, solid: false, smallestCrater: FineCraterM,
+            raysFrom: FineCraterM, edgeRaysFrom: MediumCraterM, FineMorphFrom, FineMorphTo);
+        _medium = new Layer("Medium", Cells, MediumCellM, MediumMoveM, MediumBlendM, 200f, solid: false, smallestCrater: MediumCraterM,
+            raysFrom: MediumCraterM, edgeRaysFrom: 0, MediumMorphFrom, MediumMorphTo);
     }
 
     /// <summary>
@@ -255,7 +306,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// before it), its centre, up, east and half side; null while there is none.
     /// </summary>
     public (Vector3 Centre, Vector3 Up, Vector3 East, float Half)? Hole =>
-        _origin.Body != Body.Id ? null : HoleOf(_medium) ?? HoleOf(_near);
+        _origin.Body != Body.Id ? null : HoleOf(_medium) ?? HoleOf(_fine) ?? HoleOf(_near);
 
     private static (Vector3 Centre, Vector3 Up, Vector3 East, float Half)? HoleOf(Layer l) =>
         l.Node is { } s ? (s.GlobalPosition, s.GlobalBasis.Y.Normalized(), s.GlobalBasis.X.Normalized(), l.Half - 0.25f) : null;
@@ -275,12 +326,15 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     public override void _Process(double delta)
     {
         Finish(_near);
+        Finish(_fine);
         Finish(_medium);
         if (_origin.Body != Body.Id || _origin.Frame.Axes is not { } axes)
         {
             Drop(_near);
+            Drop(_fine);
             Drop(_medium);
             _globe.SetGroundShare(1f);
+            CoverLook.Update(null, 0, default, default);
             return;
         }
         Claim();
@@ -290,21 +344,15 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         _globe.SetGroundShare(share);
         var dn = DayNight.Instance;
         _light = Light(dn?.Light ?? DayNight.SceneLight.Sun, dn?.PlanetLit ?? 0f, _globe.Exposure * share);
+        // the cover's body-fixed noise and the season's ice edges (#2016), from the camera
+        if (GetViewport()?.GetCamera3D() is { } coverCam) CoverLook.Update(axes, _origin.Epoch, coverCam.GlobalPosition, _globe.Sun);
         Keep(_near, axes);
+        Keep(_fine, axes);
         Keep(_medium, axes);
-        // the medium square steps aside under the near one: its hole follows the near square (moved, or shifted)
-        if (_medium.Material is { } medium)
-        {
-            var hole = HoleOf(_near) ?? default;
-            if (hole != _medium.HoleWritten)
-            {
-                _medium.HoleWritten = hole;
-                medium.SetShaderParameter(HoleCentre, hole.Centre);
-                medium.SetShaderParameter(HoleUp, hole.Up);
-                medium.SetShaderParameter(HoleEast, hole.East);
-                medium.SetShaderParameter(HoleHalf, hole.Half);
-            }
-        }
+        // each drawn square steps aside under the one inside it: the fine under the near, the medium under the fine (or
+        // the near before the fine is in); its hole follows that square (moved, or shifted)
+        StepAside(_fine, HoleOf(_near));
+        StepAside(_medium, HoleOf(_fine) ?? HoleOf(_near));
 
         var cam = GetViewport()?.GetCamera3D();
         if (cam == null) return;
@@ -313,20 +361,39 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var p = axes.ToEcef(at.X, at.Y, at.Z);
         var heights = Heights;
         var globe = _globe;
-        // the near square first (what the walker stands on), its edge on the medium's ground; the medium once the near
-        // one is in, its edge on the globe's own cells
+        // the near square first (what the walker stands on), its edge on the fine's ground; the fine once the near one is
+        // in, its edge on the medium's; the medium once the fine is in, its edge on the globe's own cells
         if (Wants(_near, p))
         {
             var near = _near;
             near.HeightsVersion = _heightsVersion;
-            near.Task = Task.Run(() => Build(heights, globe, p, near, n => heights.At(n, MediumCraterM)));
+            near.Task = Task.Run(() => Build(heights, globe, p, near, n => heights.At(n, FineCraterM)));
         }
-        else if (_near.Node != null && Wants(_medium, p))
+        else if (_near.Node != null && Wants(_fine, p))
+        {
+            var fine = _fine;
+            fine.HeightsVersion = _heightsVersion;
+            fine.Task = Task.Run(() => Build(heights, globe, p, fine, n => heights.At(n, MediumCraterM)));
+        }
+        else if (_fine.Node != null && Wants(_medium, p))
         {
             var mediumLayer = _medium;
             mediumLayer.HeightsVersion = _heightsVersion;
             mediumLayer.Task = Task.Run(() => Build(heights, globe, p, mediumLayer, n => heights.Coarse(n, BodyGlobe.Stride, ofFullLattice: true)));
         }
+    }
+
+    /// <summary>A drawn square's hole over the square inside it, written when that one moves (or shifts).</summary>
+    private static void StepAside(Layer l, (Vector3 Centre, Vector3 Up, Vector3 East, float Half)? inside)
+    {
+        if (l.Material is not { } m) return;
+        var hole = inside ?? default;
+        if (hole == l.HoleWritten) return;
+        l.HoleWritten = hole;
+        m.SetShaderParameter(HoleCentre, hole.Centre);
+        m.SetShaderParameter(HoleUp, hole.Up);
+        m.SetShaderParameter(HoleEast, hole.East);
+        m.SetShaderParameter(HoleHalf, hole.Half);
     }
 
     /// <summary>A square in place: placed again at a re-anchor, lit by the body's sun.</summary>
@@ -343,6 +410,11 @@ public partial class BodyGround : Node, Terrain.IBodyGround
             l.Material.SetShaderParameter(LightTint, _light.Tint);
         }
         if (l.Material != null) WriteLamps(l);
+        if (l.Material != null && l.CoverVersion != CoverLook.Version)
+        {
+            l.CoverVersion = CoverLook.Version;
+            CoverLook.Write(l.Material);
+        }
     }
 
     /// <summary>The nearest lamps into a square's shader (#1942): on a change of the set, a re-anchor, or once a second.</summary>
@@ -386,12 +458,21 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     {
         int cells = l.Cells;
         float cellM = l.CellM;
-        var (frame, y) = heights.Grid(near, cells, cellM, l.BlendM, edge, l.SmallestCrater);
         int n = cells + 1;
+        // a drawn square also keeps the ground round it at every vertex: its geomorph's target (#2016)
+        var edgeY = l.MorphTo > 0 ? new float[n * n] : null;
+        var (frame, y) = heights.Grid(near, cells, cellM, l.BlendM, edge, l.SmallestCrater, edgeY);
         var pos = new Vector3[n * n];
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
                 pos[j * n + i] = new Vector3((i - cells / 2) * cellM, y[j * n + i], (j - cells / 2) * cellM);
+        Vector3[]? edgePos = null;
+        if (edgeY != null)
+        {
+            edgePos = new Vector3[n * n];
+            for (int k = 0; k < n * n; k++) edgePos[k] = pos[k] with { Y = edgeY[k] };
+        }
+        var cover = Cover(heights, globe.Body, frame, l);
 
         // the colour: the finest coloured tile over the centre that holds the whole square (on a moon of a few km, #1853,
         // the finest tile is smaller than the 4 km square, whose edges read past it), its UVs from each vertex's place on
@@ -436,11 +517,46 @@ public partial class BodyGround : Node, Terrain.IBodyGround
                     double side = 1 << ck.Level;
                     uvs[j * n + i] = new Vector2((float)((u + 1) * 0.5 * side - ck.X), (float)((v + 1) * 0.5 * side - ck.Y));
                 }
-        return new Square(frame, y, Mesh(pos, uvs, cells, l.SkirtM), colour);
+        return new Square(frame, y, Mesh(pos, uvs, cells, l.SkirtM, edgePos, cover), colour);
     }
 
-    /// <summary>A square's mesh: the grid, its normals, and a skirt round it (no gap against lower ground round it).</summary>
-    private static Godot.Collections.Array Mesh(Vector3[] pos, Vector2[] uv, int m, float skirtM)
+    /// <summary>
+    /// A square's cover per vertex (#2016): its own rays and sand (eased at its edge into the ground round it, as its
+    /// heights are), and the ground round it's (the geomorph's target): rays of the craters it has, sand only where the
+    /// ground round it is a square too. On the worker.
+    /// </summary>
+    private static Color[] Cover(BodyHeights heights, CelestialBody body, EnuFrame frame, Layer l)
+    {
+        int cells = l.Cells, n = cells + 1;
+        var cover = new Color[n * n];
+        if (BodyCover.For(body.Id) == BodyCover.Kind.None) return cover;
+        double half = cells / 2.0 * l.CellM, radius = heights.Cube.Shape.A;
+        var region = new BodyCover.Region(heights.Craters, heights.Profile, heights.NormalUnder(frame.Origin), half * 1.5, l.RaysFrom);
+        bool edgeIsSquare = l.EdgeRaysFrom > 0;
+        System.Threading.Tasks.Parallel.For(0, n, j =>
+        {
+            double z = (j - cells / 2.0) * l.CellM;
+            for (int i = 0; i < n; i++)
+            {
+                double x = (i - cells / 2.0) * l.CellM;
+                var nn = heights.NormalUnder(frame.ToEcef(x, 0, z));
+                var own = region.At(nn, radius);
+                var round = edgeIsSquare ? region.At(nn, radius, l.EdgeRaysFrom) : default;
+                double toEdge = half - Math.Max(Math.Abs(x), Math.Abs(z));
+                float t = 0;
+                if (l.BlendM > 0 && toEdge < l.BlendM)
+                {
+                    t = (float)(1 - toEdge / l.BlendM);
+                    t = t * t * (3 - 2 * t);
+                }
+                cover[j * n + i] = new Color(Mathf.Lerp(own.Rays, round.Rays, t), Mathf.Lerp(own.Sand, round.Sand, t), round.Rays, round.Sand);
+            }
+        });
+        return cover;
+    }
+
+    /// <summary>A grid's normals (up, whichever way its triangles wind).</summary>
+    private static Vector3[] Normals(Vector3[] pos, int m)
     {
         int n = m + 1;
         var normals = new Vector3[n * n];
@@ -453,6 +569,19 @@ public partial class BodyGround : Node, Terrain.IBodyGround
                 normals[j * n + i] = nn.LengthSquared() > 0 ? nn.Normalized() : Vector3.Up;
                 if (normals[j * n + i].Y < 0) normals[j * n + i] = -normals[j * n + i];
             }
+        return normals;
+    }
+
+    /// <summary>
+    /// A square's mesh: the grid, its normals, and a skirt round it (no gap against lower ground round it); its cover per
+    /// vertex (COLOR), and for a drawn square the ground round it (#2016: UV2.x its height less the square's, CUSTOM0 its
+    /// normal), which the shader's geomorph turns it into by the camera's distance.
+    /// </summary>
+    private static Godot.Collections.Array Mesh(Vector3[] pos, Vector2[] uv, int m, float skirtM, Vector3[]? edgePos, Color[] cover)
+    {
+        int n = m + 1;
+        var normals = Normals(pos, m);
+        var edgeNormals = edgePos != null ? Normals(edgePos, m) : normals;
         var edge = new System.Collections.Generic.List<int>(4 * m);
         for (int i = 0; i < m; i++) edge.Add(i);
         for (int j = 0; j < m; j++) edge.Add(j * n + m);
@@ -462,15 +591,28 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         var verts = new Vector3[total];
         var norms = new Vector3[total];
         var uvs = new Vector2[total];
+        var uv2 = new Vector2[total];
+        var custom = new float[total * 4];
+        var colours = new Color[total];
         System.Array.Copy(pos, verts, n * n);
         System.Array.Copy(normals, norms, n * n);
         System.Array.Copy(uv, uvs, n * n);
+        System.Array.Copy(cover, colours, n * n);
+        for (int k = 0; k < n * n; k++)
+        {
+            uv2[k] = new Vector2(edgePos != null ? edgePos[k].Y - pos[k].Y : 0, 0);
+            custom[k * 4] = edgeNormals[k].X; custom[k * 4 + 1] = edgeNormals[k].Y; custom[k * 4 + 2] = edgeNormals[k].Z;
+        }
         for (int e = 0; e < edge.Count; e++)
         {
             int v = edge[e];
-            verts[n * n + e] = pos[v] - Vector3.Up * skirtM;
-            norms[n * n + e] = normals[v];
-            uvs[n * n + e] = uv[v];
+            int k = n * n + e;
+            verts[k] = pos[v] - Vector3.Up * skirtM;
+            norms[k] = normals[v];
+            uvs[k] = uv[v];
+            uv2[k] = uv2[v];
+            colours[k] = cover[v];
+            custom[k * 4] = custom[v * 4]; custom[k * 4 + 1] = custom[v * 4 + 1]; custom[k * 4 + 2] = custom[v * 4 + 2];
         }
         var idx = new int[m * m * 6 + edge.Count * 6];
         int w = 0;
@@ -493,6 +635,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         arrays[(int)Godot.Mesh.ArrayType.Vertex] = verts;
         arrays[(int)Godot.Mesh.ArrayType.Normal] = norms;
         arrays[(int)Godot.Mesh.ArrayType.TexUV] = uvs;
+        arrays[(int)Godot.Mesh.ArrayType.TexUV2] = uv2;
+        arrays[(int)Godot.Mesh.ArrayType.Color] = colours;
+        arrays[(int)Godot.Mesh.ArrayType.Custom0] = custom;
         arrays[(int)Godot.Mesh.ArrayType.Index] = idx;
         return arrays;
     }
@@ -502,8 +647,14 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     {
         if (_origin.Body != Body.Id || _origin.Frame.Axes is not { } axes) return;
         var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, sq.Arrays);
+        mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, sq.Arrays, flags:
+            (Godot.Mesh.ArrayFormat)((long)Godot.Mesh.ArrayCustomFormat.RgbaFloat << (int)Godot.Mesh.ArrayFormat.FormatCustom0Shift));
         var material = new ShaderMaterial { Shader = _shader };
+        // the geomorph by the camera's distance (#2016): the drawn squares only
+        material.SetShaderParameter(MorphFrom, l.MorphFrom);
+        material.SetShaderParameter(MorphTo, l.MorphTo);
+        CoverLook.Write(material);
+        l.CoverVersion = CoverLook.Version;
         if (sq.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(sq.Colour));
         material.SetShaderParameter(LightStrength, _light.Strength);
         material.SetShaderParameter(LightTint, _light.Tint);
