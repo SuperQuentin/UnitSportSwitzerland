@@ -12,6 +12,7 @@ public partial class PauseScreen : Screen
 {
     private Button _resume = null!;
     private Button? _accept;
+    private Control? _panel;   // the column: what springs, not the dim
 
     public static PauseScreen Create() => new() { Name = "Pause" };
 
@@ -28,6 +29,7 @@ public partial class PauseScreen : Screen
         scroll.OffsetLeft = 72; scroll.OffsetRight = 72 + 360;
         scroll.OffsetTop = 12; scroll.OffsetBottom = -56;   // above the footer's line
         AddChild(scroll);
+        _panel = scroll;
         var column = UiKit.VBox(6);
         column.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         column.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -87,11 +89,15 @@ public partial class PauseScreen : Screen
         AddChild(foot);
     }
 
+    public override bool Springy => true;
+    public override Control MotionTarget => _panel ?? this;
+
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
     {
         var b = UiKit.MenuButton(text, dim ? 17 : 21);
         if (dim) UiKit.DimFont(b);
         b.Pressed += pressed;
+        b.ButtonDown += () => UiMotion.Press(b);
         into.AddChild(b);
         return b;
     }

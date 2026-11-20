@@ -41,6 +41,11 @@ public partial class GameShell : Node
     private ControlsHelp _help = null!;
     private TitleDiorama? _diorama;
     private readonly List<Screen> _stack = new();
+    private readonly List<Screen> _retiring = new();   // springy pages still fading out, no longer on the stack
+    private static readonly StringName FadeKey = "shell_page_fade";
+
+    /// <summary>True while the menu layer is shown (a page up, or one still fading out).</summary>
+    internal bool MenuLayerUp => _menuLayer.Visible;
     private ClientWorld? _world;
     private WorldLaunch? _launch;
     private HostedServer? _hosted;
@@ -97,7 +102,7 @@ public partial class GameShell : Node
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--menuskin", "--character", "--account", "--welcome", "--welcomecheck", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--mobile", "--quest", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--xrload", "--xrstats", "--vrhz", "--vrdetail", "--vrmsaa", "--vrscale", "--vrfoveation", "--shadows", "--rendercensus", "--hidenodes", "--hidetoggle", "--xrhole", "--xrhandlog", "--xrpopup", "--soakcheck", "--replayminutes", "--perflevel", "--foveation", "--nosky", "--overdraw", "--hideui", "--plainterrain", "--litterrain", "--terrainvariant", "--vrmult", "--vrfloor", "--verticallod", "--noverticallod", "--buildingrings", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands", "--xrring", "--xrspace",
-            "--bubblecheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
+            "--bubblecheck", "--motioncheck", "--worldpickcheck", "--consolelinkcheck", "--fakeprotocol",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -208,6 +213,7 @@ public partial class GameShell : Node
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
+        if (MotionCheck.Requested()) AddChild(new MotionCheck());
         if (WelcomeCheck.Requested()) AddChild(new WelcomeCheck(this));
         if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
@@ -373,7 +379,8 @@ public partial class GameShell : Node
         if (Modal.Current != null || Top is not { } top || !top.OnBack()) return;
         _stack.RemoveAt(_stack.Count - 1);
         top.OnHidden();
-        top.QueueFree();
+        if (top.Springy && top.IsInsideTree()) Retire(top);
+        else top.QueueFree();
         if (Top is { } under)
         {
             under.Visible = true;
@@ -381,6 +388,50 @@ public partial class GameShell : Node
             under.OnShown();
         }
         UpdateMenuState();
+    }
+
+    /// <summary>
+    /// A springy page leaves the stack at once (so keys and the pointer belong to what is under it, or to the game) and
+    /// only its picture takes <see cref="UiMotion.CloseSeconds"/>: it stops catching the mouse, the menu layer stays up
+    /// until it is gone, then it is freed.
+    /// </summary>
+    private void Retire(Screen page)
+    {
+        _retiring.Add(page);
+        InertTree(page);
+        bool done = false;
+        // however the page ends (its fade, ClearStack, the world or the shell freed), it leaves the list once
+        void Done()
+        {
+            if (done) return;
+            done = true;
+            _retiring.Remove(page);
+            if (IsInstanceValid(_menuLayer) && !_menuLayer.IsQueuedForDeletion()) _menuLayer.Visible = _stack.Count > 0 || _retiring.Count > 0;
+        }
+        page.TreeExiting += Done;
+        var target = page.MotionTarget;
+        if (target != page) FadePage(page, 0f, UiMotion.CloseSeconds);
+        UiMotion.Close(target, () =>
+        {
+            Done();
+            if (IsInstanceValid(page)) page.QueueFree();
+        });
+    }
+
+    /// <summary>A plain alpha tween on a page whose panel scales on its own (<see cref="Screen.MotionTarget"/>): the dim and the shade fade, never scale.</summary>
+    private static void FadePage(Screen page, float to, float seconds)
+    {
+        if (page.HasMeta(FadeKey) && page.GetMeta(FadeKey).As<Tween>() is { } old && IsInstanceValid(old)) old.Kill();
+        if (!page.IsInsideTree()) { page.Modulate = new Color(1, 1, 1, to); return; }
+        var tw = page.CreateTween().SetIgnoreTimeScale(true);
+        page.SetMeta(FadeKey, tw);
+        tw.TweenProperty(page, "modulate:a", to, UiMotion.Reduced ? UiMotion.ReducedSeconds : seconds);
+    }
+
+    private static void InertTree(Node n)
+    {
+        if (n is Control c) c.MouseFilter = Control.MouseFilterEnum.Ignore;
+        foreach (var child in n.GetChildren()) InertTree(child);
     }
 
     /// <summary>Every page closed at once: straight back into the game (the movie editor's "Back to game").</summary>
@@ -391,12 +442,21 @@ public partial class GameShell : Node
         Modal.Current?.CloseModal();
         foreach (var s in _stack) { s.OnHidden(); s.QueueFree(); }
         _stack.Clear();
+        foreach (var r in _retiring.ToArray()) r.QueueFree();
+        _retiring.Clear();
         UpdateMenuState();
     }
 
-    /// <summary>Fade in and settle up from a few pixels lower.</summary>
-    private void Reveal(Control c)
+    /// <summary>Fade in and settle up from a few pixels lower; a springy page (<see cref="Screen.Springy"/>) opens with <see cref="UiMotion"/>.</summary>
+    private void Reveal(Screen c)
     {
+        if (c.Springy)
+        {
+            var target = c.MotionTarget;
+            if (target != c) { c.Modulate = new Color(1, 1, 1, 0); FadePage(c, 1f, UiMotion.OpenSeconds); }
+            UiMotion.Open(target);
+            return;
+        }
         c.Modulate = new Color(1, 1, 1, 0);
         c.Position = new Vector2(0, 12);
         var tw = c.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
@@ -408,7 +468,7 @@ public partial class GameShell : Node
     private void UpdateMenuState()
     {
         bool open = _stack.Count > 0;
-        _menuLayer.Visible = open;
+        _menuLayer.Visible = open || _retiring.Count > 0;
         UiFocus.Set(this, open);
         if (open) MouseCapture.Mode = Input.MouseModeEnum.Visible;
         else if (_state == State.InWorld) _world?.ResumeControl();
