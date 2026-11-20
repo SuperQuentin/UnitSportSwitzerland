@@ -502,6 +502,9 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
             if (v.Wrecked && v.WreckAge > WreckLifetime) { v.QueueFree(); continue; }
             // the object containers put it to sleep instead (#689)
             if (Keeps?.Invoke(v) == true) { v.LonelyFor = 0; continue; }
+            // off the Earth (#2000): the players stand in their bodies' regions, not this frame; a Moon colony's depot rovers
+            // read as alone and were cleared after LonelyTime (body-aware distances later, net/online-bodies)
+            if (v.Global.Body != Core.BodyId.Earth) { v.LonelyFor = 0; continue; }
             var at = Interiors.InteriorManager.SurfacePoint(v.GlobalPosition, Ground);
             bool near = players.Any(p => p.DistanceTo(at) < LonelyDistance);
             v.LonelyFor = near ? 0 : v.LonelyFor + step;

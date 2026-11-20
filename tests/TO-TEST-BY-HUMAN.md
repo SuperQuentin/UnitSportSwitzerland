@@ -1341,6 +1341,13 @@ In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date
 - [ ] Walk in through an airlock and through every module and tube of Artemis Base (hub, each can, a moondust dome by a can's side door, the hangar down its steps) → no gap or hole in the walls, floors or doorways, no step at a doorway's sill, nothing to walk through; the rooms lit evenly, not washed out, screens and lamps glowing.
 - [ ] The same at Moon Village (`--moonsites moonvillage:close`, its glazed alleys and stacks) and the Cold War biodome (`--moonsites coldwar:close`) → the alleys' walls and the biodome's ring wall solid, the garden walkable, the trees' trunks solid.
 
+## Moon colonies on a server ([#2014](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2014))
+
+A server with `--bodies`, a client in a window, Cartoon, `--date 2027-07-15 --time 10 --occasion none`, `/goto moon -89.384 -150.055 0.3` (admin).
+
+- [ ] In a window, walk to an airlock's top step and press E, go through the chamber and press E again → the doors move as offline, and a second client sees them move at the same time (the headless check presses E; a look by eye is left).
+- [ ] Watch the colonists in the hub and the cans → they walk the rooms without passing through furniture or walls, and come through the airlocks on their EVAs.
+
 ## A bot flies the shuttle ([#1498](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1498))
 
 Offline, in a window (Cartoon), `--date 2027-07-15`, on foot at Geneva's or Zurich's cargo apron by the parked shuttle.

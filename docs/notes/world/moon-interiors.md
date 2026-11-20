@@ -51,8 +51,8 @@ Plan: `docs/plans/moon-surface.md` sections 5 and 6. The kit and the plans: `moo
   door is shut. **The suit** (`MoonSuit.Wanted`, read by `OccasionHats` every 0.25 s on the owner): on the Moon the
   silver space suit (`ItemId.SilverSuit`) always, `Headwear.SpaceHelmet` (31, gold visor, hides face and hair) outside
   the air. Replicated like any outfit and headwear. No oxygen timer (the user's choice).
-- **Offline in this phase**: the airlocks' state is the client's; the server's (the doors' pattern) comes when a server
-  hosts the Moon (D2 #1727, C3b #1852). `Request` is the method a bot would call.
+- **Online** (#2000): the server owns the airlocks' cycles (`ColonyDoors`, see `moon-colonists`); offline the state is the
+  game's own. `Request` is the method a bot calls.
 - **Check**: `--moonsites artemis:close --airlockcheck` (headless ~40 s; windowed: `airlock_outside.png`,
   `airlock_inside.png`, `colony_hub.png`): outside with the helmet, E on the top step, the outer door open in 4.8 s,
   into the chamber, E, the inner door open in 4.8 s with the helmet off, the hub (off), the plateau (on); fails if the

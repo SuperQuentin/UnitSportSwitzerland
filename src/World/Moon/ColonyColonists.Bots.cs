@@ -52,7 +52,16 @@ public partial class ColonyColonists
     }
 
     /// <summary>The frame the colony's nodes are placed in (the bots' bodies may be in their own: <c>FromFrame</c>).</summary>
-    public WorldOrigin? Origin => MoonSurface.Active?.Origin;
+    public WorldOrigin? Origin => OriginOverride ?? MoonSurface.Active?.Origin;
+
+    /// <summary>The frame a server's colony is placed in (#2000: its Moon region's), where no <see cref="MoonSurface"/> is.</summary>
+    public WorldOrigin? OriginOverride { get; init; }
+
+    /// <summary>
+    /// Whether the crew may become bots yet (#2000): a server's colony holds them back until its depot rovers are parked,
+    /// or the first EVA, planned at once, finds no rover and walks out.
+    /// </summary>
+    public bool CrewReady { get; set; } = true;
 
     /// <summary>The colony's airlocks (a sibling node).</summary>
     public ColonyAirlocks? Airlocks => GetParentOrNull<Node>()?.GetNodeOrNull<ColonyAirlocks>("Airlocks");
@@ -84,8 +93,8 @@ public partial class ColonyColonists
     private void RunBots(Camera3D? cam)
     {
         bool can = BotDirector.Instance != null && Multiplayer.MultiplayerPeer != null && Multiplayer.IsServer()
-            && MoonSurface.Active is { OnMoon: true } && Origin != null;
-        float d = cam == null ? float.MaxValue : (cam.GlobalPosition - GlobalPosition) with { Y = 0 } is var flat ? flat.Length() : 0;
+            && (OriginOverride != null || MoonSurface.Active is { OnMoon: true }) && Origin != null && CrewReady;
+        float d = WatchedFrom(cam);
         bool want = can && (_botsOn ? d < BotsFarM : d < BotsNearM);
         if (want != _botsOn)
         {
