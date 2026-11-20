@@ -134,7 +134,11 @@ public partial class Handshake : Node
     /// 95: World/ChunkStream RequestCubeAsset (#1655, G2 C7: a cube tile's asset by its key and section), AssetKind.LeafIndex 20 and Leaf 21.
     /// 96: G2 D2's flip (#1726): earth the default; the stores re-keyed off LV95 tiles (containers by cube cell, woken
     /// slots v3, the adventure's chests/collect/fog by Earth cells), so a client and a server agree on the new keys.
-    public const int Protocol = 96;
+    /// 97: online between bodies (#1852, C3b of #1430; the next free number after D2's 96, taken again at merge if one came
+    /// first): FootPlayer.NetBody and NetPlace.NetBody (a BodyId sent before the three doubles), GlobalPos.Write's _b off
+    /// the Earth, World/FarMarkers Markers (every player out of a peer's interest, once a second), World/Chat SentToBody (an
+    /// admin's /goto).
+    public const int Protocol = 97;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

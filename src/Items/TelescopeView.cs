@@ -194,9 +194,33 @@ public partial class TelescopeView : CanvasLayer
         return true;
     }
 
+    /// <summary>
+    /// While <see cref="FollowsBody"/>: the player followed instead of <see cref="Target"/> (#1852), a peer from the far-marker
+    /// list (<see cref="Net.FarMarkers"/>), listed in the menu after the bodies.
+    /// </summary>
+    public long? TargetPeer { get; private set; }
+
+    /// <summary>The target menu (#1852): follows a player out of this client's interest (on the Moon, say), as a body.</summary>
+    public bool SelectPlayer(long peer)
+    {
+        TargetPeer = peer;
+        FollowsBody = true;
+        Locked = true;
+        if (TargetDirection() is not { } d)
+        {
+            Locked = false;
+            TargetPeer = null;
+            ItemController.Instance?.Toast("That player is out of sight.");
+            return false;
+        }
+        Aim(d);
+        return true;
+    }
+
     /// <summary>The target menu (#1530): slews to <paramref name="body"/> and keeps it centred, the moon, a planet or a big moon.</summary>
     public bool SelectTarget(SkyBody body)
     {
+        TargetPeer = null;
         Target = body;
         FollowsBody = true;
         Locked = true;
@@ -210,12 +234,33 @@ public partial class TelescopeView : CanvasLayer
         return true;
     }
 
-    /// <summary>The next (<paramref name="by"/> 1) or previous menu entry, from the one locked on (none: the first).</summary>
-    public bool StepTarget(int by) =>
-        SelectTarget(TelescopeTargets.Step(Locked && FollowsBody ? Target : null, by));
+    /// <summary>
+    /// The next (<paramref name="by"/> 1) or previous menu entry, from the one locked on (none: the first): the bodies, then
+    /// the players of the far-marker list (#1852), wrapping round.
+    /// </summary>
+    public bool StepTarget(int by)
+    {
+        var peers = MenuPeers();
+        int count = TelescopeTargets.Menu.Length + peers.Count;
+        int at = !(Locked && FollowsBody) ? -1
+            : TargetPeer is { } peer ? (peers.IndexOf(peer) is int k and >= 0 ? TelescopeTargets.Menu.Length + k : -1)
+            : System.Array.IndexOf(TelescopeTargets.Menu, Target);
+        int next = at < 0 ? (by >= 0 ? 0 : count - 1) : ((at + by) % count + count) % count;
+        return next < TelescopeTargets.Menu.Length ? SelectTarget(TelescopeTargets.Menu[next]) : SelectPlayer(peers[next - TelescopeTargets.Menu.Length]);
+    }
+
+    /// <summary>The far-marker list's players, by peer id (the menu's order after the bodies).</summary>
+    private static List<long> MenuPeers()
+    {
+        var peers = new List<long>();
+        foreach (var m in Net.FarMarkers.Current) peers.Add(m.Peer);
+        peers.Sort();
+        return peers;
+    }
 
     /// <summary>Where the tube is held this frame: the tracked spot of the sky, or <see cref="Target"/>, if the sky shows it.</summary>
     private Vector3? TargetDirection() => !FollowsBody ? (World.DayNight.Instance?.Sky is { } sky ? (sky.Stars * _skyDir).Normalized() : null)
+        : TargetPeer is { } peer ? (Net.FarMarkers.Of(peer) is { } m ? MarkerSight(m.At)?.Direction : null)
         : Target == SkyBody.Moon ? (EarthForMoon ? GlobeDirection(BodyId.Earth) ?? EarthDirection() : GlobeDirection(BodyId.Moon) ?? World.DayNight.Instance?.Sky?.Moon)
         : GlobeDirection(Target) ?? World.SkyBodies.Instance?.DirectionOf(Target);
 
@@ -234,7 +279,8 @@ public partial class TelescopeView : CanvasLayer
         point is { } p && (_cam?.GlobalPosition ?? _scope.GlobalPosition) is var eye && p.DistanceSquaredTo(eye) > 1f ? (p - eye).Normalized() : null;
 
     /// <summary>The target's name for the readout.</summary>
-    private string TargetName => !FollowsBody ? "the sky" : Target == SkyBody.Moon ? (EarthForMoon ? "the Earth" : "the moon") : Target.ToString();
+    private string TargetName => !FollowsBody ? "the sky" : TargetPeer is { } peer ? PlayerName(peer)
+        : Target == SkyBody.Moon ? (EarthForMoon ? "the Earth" : "the moon") : Target.ToString();
 
     /// <summary>
     /// Standing on the Moon (#1995): the menu's first entry is the Earth, not the Moon (the ground there; its direction from
@@ -257,6 +303,79 @@ public partial class TelescopeView : CanvasLayer
         var eye = _cam?.GlobalPosition ?? _scope.GlobalPosition;
         // from the world's origin in doubles, then the eye taken off: the Earth is 3.8e8 m away
         return new Vector3((float)(x - eye.X), (float)(y - eye.Y), (float)(z - eye.Z)).Normalized();
+    }
+
+    private static string PlayerName(long peer) => Net.FarMarkers.Client?.NameOf(peer) ?? $"player {peer}";
+
+    /// <summary>
+    /// Where a far place is seen from the eyepiece (#1852): the world direction and the distance, in doubles through the
+    /// frame tree at the sky moment (a place on the Moon converted to the Earth's frame there), the floats only at the end.
+    /// </summary>
+    private (Vector3 Direction, double DistanceM)? MarkerSight(GlobalPos at)
+    {
+        if (_player?.Origin is not { } origin || _cam == null || origin.Frame.Axes is not { } axes) return null;
+        var eye = _cam.GlobalPosition;
+        var e = axes.ToEcef(eye.X, eye.Y, eye.Z);
+        var p = (at.Body == axes.Body ? at : at.In(axes.Body, SkyClock.Now)).Ecef;
+        var d = new Terrain.Format.EcefPos(p.X - e.X, p.Y - e.Y, p.Z - e.Z);
+        double len = System.Math.Sqrt(d.X * d.X + d.Y * d.Y + d.Z * d.Z);
+        if (!(len > 1)) return null;
+        var dir = new Vector3((float)(FrameAxes.Dot(d, axes.X) / len), (float)(FrameAxes.Dot(d, axes.Y) / len), (float)(FrameAxes.Dot(d, axes.Z) / len));
+        return (dir.Normalized(), len);
+    }
+
+    /// <summary>A distance for a label: metres, km, or AU past a tenth of one.</summary>
+    public static string Distance(double m) => m < 10_000 ? System.FormattableString.Invariant($"{m:0} m")
+        : m < 0.1 * 149_597_870_700 ? System.FormattableString.Invariant($"{m / 1000:#,0} km")
+        : System.FormattableString.Invariant($"{m / 149_597_870_700:0.00} AU");
+
+    // ---- the far markers' labels (#1852) ------------------------------------------------------------
+
+    /// <summary>A marker labelled in the eyepiece this frame: its peer, its place on screen, its words (for the checks).</summary>
+    public readonly record struct Labelled(long Peer, Vector2 Screen, Vector3 Direction, string Text);
+
+    /// <summary>The markers in the eyepiece's circle this frame.</summary>
+    public IReadOnlyList<Labelled> Labels => _labelled;
+    private readonly List<Labelled> _labelled = new();
+    private readonly List<Label> _labelPool = new();
+    private Control? _labelLayer;
+
+    /// <summary>
+    /// Each far marker in the round picture gets a label beside its place: the name, the body, the distance. Placed by the
+    /// frame tree (a player on the Moon lands on the Moon's disc); not in VR, whose eyepiece is a panel before the eyes.
+    /// </summary>
+    private void UpdateLabels()
+    {
+        _labelled.Clear();
+        if (_vr || _cam == null || _labelLayer == null) return;
+        var size = GetViewport().GetVisibleRect().Size;
+        var centre = size / 2;
+        float radius = 0.47f * size.Y;
+        foreach (var m in Net.FarMarkers.Current)
+        {
+            if (MarkerSight(m.At) is not { } sight) continue;
+            var ahead = _cam.GlobalPosition + sight.Direction * 1000f;
+            if (_cam.IsPositionBehind(ahead)) continue;
+            var screen = _cam.UnprojectPosition(ahead);
+            if (screen.DistanceTo(centre) > radius) continue;
+            string text = $"{PlayerName(m.Peer)} · {CelestialBody.Of(m.At.Body).Name} · {Distance(sight.DistanceM)}";
+            _labelled.Add(new Labelled(m.Peer, screen, sight.Direction, text));
+        }
+        while (_labelPool.Count < _labelled.Count)
+        {
+            var l = HudLabel(15);
+            _labelLayer.AddChild(l);
+            _labelPool.Add(l);
+        }
+        for (int i = 0; i < _labelPool.Count; i++)
+        {
+            var l = _labelPool[i];
+            l.Visible = i < _labelled.Count;
+            if (!l.Visible) continue;
+            if (l.Text != _labelled[i].Text) l.Text = _labelled[i].Text;
+            // a ring's worth right of the place, so the point itself stays clear
+            l.Position = _labelled[i].Screen + new Vector2(10, -10);
+        }
     }
 
     /// <summary>The tube's direction in world axes.</summary>
@@ -397,6 +516,9 @@ public partial class TelescopeView : CanvasLayer
             Visible = !_vr,
         };
         AddChild(_mask);
+        // the far markers' labels (#1852), under the HUD's words
+        _labelLayer = new Control { AnchorRight = 1, AnchorBottom = 1, MouseFilter = Control.MouseFilterEnum.Ignore };
+        AddChild(_labelLayer);
         _readout = HudLabel(20);
         _readout.AnchorLeft = _readout.AnchorRight = 0.5f;
         _readout.AnchorTop = _readout.AnchorBottom = 1;
@@ -445,12 +567,23 @@ public partial class TelescopeView : CanvasLayer
         if (hint != _hintShown) _hint.Text = _hintShown = hint;
         UpdateMenu();
         UpdateInfo();
+        UpdateLabels();
     }
 
     /// <summary>The target list, the locked one marked: text set only when it changes.</summary>
     private void UpdateMenu()
     {
-        string text = MenuText(Locked && FollowsBody ? Target : null, EarthForMoon);
+        string text = MenuText(Locked && FollowsBody && TargetPeer == null ? Target : null, EarthForMoon);
+        // the far-marker list's players after the bodies (#1852)
+        if (Net.FarMarkers.Current.Count > 0)
+        {
+            var sb = new System.Text.StringBuilder(text);
+            foreach (long peer in MenuPeers())
+                if (Net.FarMarkers.Of(peer) is { } m)
+                    sb.Append('\n').Append(Locked && FollowsBody && TargetPeer == peer ? "▶ " : "   ").Append(PlayerName(peer))
+                        .Append(" (").Append(CelestialBody.Of(m.At.Body).Name).Append(')');
+            text = sb.ToString();
+        }
         if (text != _menuShown) _menu.Text = _menuShown = text;
     }
 
@@ -483,6 +616,11 @@ public partial class TelescopeView : CanvasLayer
             horizon = ((h.Azimuth - Mathf.RadToDeg(_north.World(origin.Frame, _scope.GlobalPosition)) + 360) % 360, h.Altitude);
         // tracking the sky: where the tube points, no body's readings
         if (!(Locked && FollowsBody)) text = "Tracking the sky" + nl + TelescopeTargets.Where(horizon);
+        // a player (#1852): who, on which body, how far
+        else if (TargetPeer is { } peer)
+            text = Net.FarMarkers.Of(peer) is { } m && MarkerSight(m.At) is { } sight
+                ? PlayerName(peer) + nl + "on the " + CelestialBody.Of(m.At.Body).Name + nl + Distance(sight.DistanceM) + nl + TelescopeTargets.Where(horizon)
+                : PlayerName(peer) + nl + "out of sight";
         else if (body == SkyBody.Moon && EarthForMoon && EarthInfo() is { } earth) text = TelescopeTargets.Format(body, earth, horizon, "Earth");
         else text = TelescopeTargets.Format(body, TelescopeTargets.Read(body, sky.Moment.Utc), horizon);
         if (text != _infoShown) _info.Text = _infoShown = text;

@@ -66,7 +66,8 @@ internal sealed class RegionMirrors
         var live = new HashSet<int>();
         foreach (var region in regions)
         {
-            if (region.IsMain) continue;
+            // the main frame's solid things are the Earth's: nothing to copy to another body (#1852)
+            if (region.IsMain || region.Body != Core.BodyId.Earth) continue;
             live.Add(region.Id);
             _bots.Clear();
             foreach (var g in botsOf(region)) _bots.Add(main.Origin.ToWorld(g));

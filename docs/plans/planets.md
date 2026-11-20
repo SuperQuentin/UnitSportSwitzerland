@@ -55,6 +55,9 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
     `--shuttlemooncheck` from a 400 km Earth orbit to a closed lunar one;
   - PR #1960: the belly jets (landing and take-off on an airless body), the Moon round trip in `--shuttlemooncheck`;
   - this branch: the UFO's cruise drive and target hold (`--ufomooncheck`).
+- **C3b** (#1852), PR #1975, stacked on D2 (#1727, merges after it): the body on the wire (protocol 97), interest and
+  server regions per body, the server's Moon ground and gravity, `/goto` online, the far-marker list and the
+  telescope's labels (`tools/moonnetcheck.sh`, `docs/notes/net/online-bodies.md`).
 
 - **H7b** (#1848), #1998: one look per body from space (`World/Bodies/BodyLook`): the globe or the sky's sphere by the
   body's size on screen (1 % of the view's height, in space only; from inside the air always the sky's), the sky's
@@ -67,7 +70,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 `--frame earth` with no other flag, the bodies' base shipping in `assets/bodies/`):
 - **C3b online** (#1852): PR #1975, stacked on D2 (#1727, the earth frame by default), merges after it: the body on the
   wire, interest and server regions per body, the server's Moon ground, `/goto` online, the far markers in the telescope,
-  `tools/moonnetcheck.sh`. C3a's online check (the net check seeing the shuttle land on the Moon) comes with it.
+  `tools/moonnetcheck.sh`. C3a's online check (the net check seeing the shuttle land on the Moon) comes with it. Its
+  follow-ups: the RPCs' places off the Earth, the shuttle's cue on players, vehicles' gravity in a server region off the Earth.
 - **Deferred to issues**: the shuttle's bot pilot (#1498); cover, scatter and leaves on other bodies (#2016).
 - **Decided: the Earth keeps its own `Globe`** rather than being folded onto `BodyGlobe` (section 6). The Earth's globe
   is the anchor world's (its leaves' holes, geomorphing, the Swiss column, the far fill over it); `BodyGlobe` draws the

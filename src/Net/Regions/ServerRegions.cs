@@ -55,6 +55,12 @@ public partial class ServerRegions : Node
     /// (#1513), the only ground an ENU region can stand on.
     /// </summary>
     public Func<WorldOrigin, (Node Terrain, IWorldGround Ground)>? MakeGround { get; set; }
+
+    /// <summary>
+    /// Makes a region's ground on another body (#1852: the frame's <see cref="WorldOrigin.Body"/>): collision generated round
+    /// its bots from that body's heights, the same the clients stand on (<c>ServerBodyGround</c>). Null: no region off the Earth.
+    /// </summary>
+    public Func<WorldOrigin, (Node Terrain, IWorldGround Ground)?>? MakeBodyGround { get; set; }
     /// <summary>Whatever else a region holds beside its terrain (its trunks), or null.</summary>
     public Func<Node, WorldOrigin, Node?>? MakeExtras { get; set; }
 
@@ -114,9 +120,12 @@ public partial class ServerRegions : Node
     /// </summary>
     public ServerRegion For(GlobalPos at)
     {
-        if (Off || at.HorizontalDistanceTo(Main.Anchor) <= RegionPlanner.HomeM) return Main;
+        if (Off || at.Body == Main.Anchor.Body && at.HorizontalDistanceTo(Main.Anchor) <= RegionPlanner.HomeM) return Main;
+        // another body with no ground the server can make: the main region, as a body in Space (#1852)
+        if (!Grounded(at.Body)) return Main;
         foreach (var body in Bodies())
-            if (body.Region is { } r && !_inSpace.Contains(body) && Global(body).HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
+            if (body.Region is { } r && r.Body == at.Body && !_inSpace.Contains(body) && Global(body) is var g && g.Body == at.Body
+                && g.HorizontalDistanceTo(at) <= RegionPlanner.LinkM) return r;
         return Create(RegionPlanner.Centre(new[] { new RegionPlanner.Body(0, at, RegionPlanner.None) }, new() { 0 }, Anchoring));
     }
 
@@ -137,6 +146,9 @@ public partial class ServerRegions : Node
         if (target == body.Region) body.GlobalPosition = target.Origin.ToWorld(at);
         else regions.Finish(body, target, at);
     }
+
+    /// <summary>Whether a body on <paramref name="body"/> gets a region of its own (#1852): the main one's, or a landable one the server makes ground for.</summary>
+    private bool Grounded(BodyId body) => body == Main.Anchor.Body || MakeBodyGround != null && CelestialBody.Of(body).Landable;
 
     /// <summary>Where a body is, exactly: what a proxy's owner published, or the frame's reading of a body the server runs.</summary>
     private static GlobalPos Global(FootPlayer body) => body.IsMultiplayerAuthority() ? body.Global : body.NetGlobal;
@@ -207,7 +219,10 @@ public partial class ServerRegions : Node
         var planned = new List<FootPlayer>(bodies.Count);
         foreach (var body in bodies)
         {
-            bool space = Core.Curvature.SpaceRegime(_inSpace.Contains(body), Global(body).Alt);
+            var where = Global(body);
+            bool space = Core.Curvature.SpaceRegime(_inSpace.Contains(body), where.Alt)
+                // on a body the server makes no ground for (#1852): parked in main as in Space
+                || !Grounded(where.Body);
             if (space) _inSpace.Add(body); else _inSpace.Remove(body);
             if (!space) { planned.Add(body); continue; }
             var at = _pending.TryGetValue(body, out var ph) ? ph.Target : body.Region ?? Main;
@@ -252,8 +267,10 @@ public partial class ServerRegions : Node
     {
         if (id < 0) id = _nextId++;
         // an ENU frame at the anchor (#1513): true north, true metres, its gravity down its own up (a space's default
-        // gravity is -Y, and Y is the anchor's up); or the flat LV95 frame on the anchor's whole km
-        var origin = Enu ? new WorldOrigin(FrameAxes.Enu(anchor.Ecef)) : new WorldOrigin(anchor.Lv95.E, anchor.Lv95.N);
+        // gravity is -Y, and Y is the anchor's up); or the flat LV95 frame on the anchor's whole km. On another body (#1852)
+        // an ENU frame on that body's ellipsoid, whatever the main world is.
+        bool offEarth = anchor.Body != BodyId.Earth;
+        var origin = Enu || offEarth ? new WorldOrigin(FrameAxes.Enu(anchor.Ecef, anchor.Body)) : new WorldOrigin(anchor.Lv95.E, anchor.Lv95.N);
         // a world of its own, so a physics space of its own (OwnWorld3D would keep it out of reach: World3D null)
         var world = new World3D();
         var root = new SubViewport
@@ -265,9 +282,11 @@ public partial class ServerRegions : Node
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
         };
         AddChild(root);
-        var (terrain, ground) = MakeGround!(origin);
+        var (terrain, ground) = offEarth ? MakeBodyGround!(origin)!.Value : MakeGround!(origin);
         root.AddChild(terrain);
-        if (MakeExtras?.Invoke(terrain, origin) is { } extras) root.AddChild(extras);
+        if (!offEarth && MakeExtras?.Invoke(terrain, origin) is { } extras) root.AddChild(extras);
+        // the body's own gravity in its space (#1852): what falls there (a prop, a ragdoll) falls as on that body
+        if (offEarth) PhysicsServer3D.AreaSetParam(world.Space, PhysicsServer3D.AreaParameter.Gravity, (float)CelestialBody.Of(anchor.Body).GroundGravity);
         var region = new ServerRegion(id, origin, terrain, ground, world, root);
         _regions[id] = region;
         GD.Print($"[regions] made {region}");
@@ -331,12 +350,13 @@ public partial class ServerRegions : Node
         var from = body.Region ?? Main;
         body.EnterRegion(target, at);
         GD.Print($"[regions] {body.Name} from {from.Id} to {target}");
-        if (target.IsMain && _shadows.Remove(body, out var shadow))
+        // a shadow keeps the main terrain's tiles loaded round a body on the Earth; none off it (#1852)
+        if ((target.IsMain || target.Body != BodyId.Earth) && _shadows.Remove(body, out var shadow))
         {
             Main.Ground.RemoveAnchor(shadow);
             shadow.QueueFree();
         }
-        else if (!target.IsMain) EnsureShadow(body);
+        else if (!target.IsMain && target.Body == BodyId.Earth) EnsureShadow(body);
     }
 
     /// <summary>The main terrain keeps the tiles round a body in another region loaded, as for every body before regions.</summary>
@@ -351,7 +371,7 @@ public partial class ServerRegions : Node
 
     private void Shadow(FootPlayer body)
     {
-        if (GodotObject.IsInstanceValid(body) && body.IsInsideTree() && body.Region is { IsMain: false }) EnsureShadow(body);
+        if (GodotObject.IsInstanceValid(body) && body.IsInsideTree() && body.Region is { IsMain: false, Body: BodyId.Earth }) EnsureShadow(body);
     }
 
     /// <summary>Each shadow where its body is, in the main frame (float precision is no matter for which tiles load).</summary>

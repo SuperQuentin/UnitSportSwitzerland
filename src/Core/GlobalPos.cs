@@ -260,7 +260,8 @@ public readonly record struct GlobalPos
     /// <summary>The square of <see cref="HorizontalDistanceTo"/>, for comparisons that skip the root.</summary>
     public double HorizontalDistanceSquaredTo(GlobalPos other)
     {
-        Same(other);
+        // two bodies (#1852): never near; a distance across them is no arithmetic, the frame tree's (In)
+        if (other._body != _body) return double.PositiveInfinity;
         double dx = other._x - _x, dy = other._y - _y, dz = other._z - _z;
         var (ux, uy, uz) = Normal(_x, _y, _z, _body);
         var (vx, vy, vz) = Normal(other._x, other._y, other._z, _body);
@@ -288,10 +289,14 @@ public readonly record struct GlobalPos
         return (gx / l, gy / l, gz / l);
     }
 
-    /// <summary>The straight-line distance to <paramref name="other"/> (the chord through the Earth, metres).</summary>
+    /// <summary>
+    /// The straight-line distance to <paramref name="other"/> (the chord through the Earth, metres); infinite to a place on
+    /// another body (#1852: "is it near" asked by a server with players on the Earth and the Moon is "no").
+    /// </summary>
     public double DistanceTo(GlobalPos other)
     {
-        Same(other);
+        // two bodies (#1852): never near, as for a level distance
+        if (other._body != _body) return double.PositiveInfinity;
         double dx = other._x - _x, dy = other._y - _y, dz = other._z - _z;
         return System.Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
@@ -368,8 +373,14 @@ public readonly record struct GlobalPos
     /// <summary>This place as it crosses the network (#1503, protocol 93): its ECEF doubles.</summary>
     public (double X, double Y, double Z) ToWire() => (_x, _y, _z);
 
-    /// <summary>The place <see cref="ToWire"/> sent.</summary>
-    public static GlobalPos FromWire(double x, double y, double z) => new(x, y, z);
+    /// <summary>The place <see cref="ToWire"/> sent, on the body sent beside it (#1852: <c>NetBody</c>; the Earth by default).</summary>
+    public static GlobalPos FromWire(double x, double y, double z, BodyId body = BodyId.Earth) => new(x, y, z, body);
+
+    /// <summary>
+    /// The body as it crosses the network beside <see cref="ToWire"/> (#1852, protocol 97): a synchronizer's <c>NetBody</c>,
+    /// a dictionary's <c>_b</c> (<see cref="Write"/>, only off the Earth).
+    /// </summary>
+    public int WireBody => (int)_body;
 
     /// <summary>Puts this position in a network dictionary under <paramref name="key"/>, as three ECEF doubles (<see cref="ToWire"/>).</summary>
     public void Write(Godot.Collections.Dictionary d, string key = "pos")
@@ -377,6 +388,8 @@ public readonly record struct GlobalPos
         d[key + "_x"] = _x;
         d[key + "_y"] = _y;
         d[key + "_z"] = _z;
+        // the body (#1852): only off the Earth, so every Earth record stays as it was
+        if (_body != BodyId.Earth) d[key + "_b"] = (int)_body;
     }
 
     /// <summary>
@@ -384,7 +397,8 @@ public readonly record struct GlobalPos
     /// object containers saved before G2 A2b (LV95 <c>_e</c>, <c>_n</c>, <c>_alt</c>): read for its migration only.
     /// </summary>
     public static GlobalPos Read(Godot.Collections.Dictionary d, string key = "pos") => d.ContainsKey(key + "_x")
-        ? FromWire(d[key + "_x"].AsDouble(), d[key + "_y"].AsDouble(), d[key + "_z"].AsDouble())
+        ? FromWire(d[key + "_x"].AsDouble(), d[key + "_y"].AsDouble(), d[key + "_z"].AsDouble(),
+            d.TryGetValue(key + "_b", out var b) ? (BodyId)b.AsInt32() : BodyId.Earth)
         : FromLv95(d[key + "_e"].AsDouble(), d[key + "_n"].AsDouble(), d[key + "_alt"].AsDouble());
 
     /// <summary>Whether <paramref name="d"/> holds a position as <see cref="Write"/> puts it (the wire, and saves since A2b), not an older saved record's.</summary>
