@@ -181,5 +181,5 @@ The steps below keep it to the `/update` download (1-2 min).
   compare frames. `FRAME=flat` (then `--restart`) is only for a server whose clients also run `--frame flat`.
 - **D2's own rollback** (G2 D plan §6): a PR setting the default back (protocol stays 96), merged and released, then
   `/update` on the server. About 20 min with a dispatched release, or up to 1.5 h with the hourly gap.
-- **Back to 95:** `ln -sfn releases/v0.251.0 current` in `DEPLOY_DIR`, plus `--no-auto-update` in `server-args.local`,
+- **Back to 95:** `ln -sfn releases/<the last release before D2> current` (protocol 95, `gh release list`) in `DEPLOY_DIR`, plus `--no-auto-update` in `server-args.local`,
   plus a restart. Every 96 client is then refused, so this is only for when D2's server itself is broken.

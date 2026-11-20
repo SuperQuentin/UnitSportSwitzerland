@@ -149,8 +149,17 @@ internal sealed partial class XrMap : Node3D
         {
             // map metres to the ground: east is the map's +X, north its −Z, as the world's: grid metres, and the
             // map is drawn from world positions, so the step is made on the LV95 grid, not in true east and north
-            var l = player.Global.Lv95;
-            teleporter.TeleportTo(l.E + go.X / Size * Span, l.N - go.Y / Size * Span);
+            if (player.Global.Body != Core.BodyId.Earth)
+            {
+                // another body (#2039): the step in true east and north from here, on that body
+                var g = player.Global.Geodetic;
+                teleporter.TeleportTo(player.Global.Body, g.LatDeg, g.LonDeg, null, (go.X / Size * Span, -go.Y / Size * Span));
+            }
+            else
+            {
+                var l = player.Global.Lv95;
+                teleporter.TeleportTo(l.E + go.X / Size * Span, l.N - go.Y / Size * Span);
+            }
             Visible = false;
         }
         _triggerWas = trigger;

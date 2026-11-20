@@ -15,6 +15,9 @@ namespace UnitSport.World.Bodies;
 /// LAT,LON is the point under the sun then, DLON degrees east of it (the log names that point either way).
 /// <c>later:H</c> (#1992) then moves the game's clock H hours on and saves a second picture (<c>..._later.png</c>): the
 /// local day's sky moved (the log gives the subsolar point and the Earth's direction in the body's axes both times).
+/// <c>fly:V</c> (#2035) then flies the camera toward the body's centre at V m/s for 6 s (as the spectator's top speed
+/// does, the origin following it), saves <c>..._fly.png</c> in flight, stops, and saves <c>..._stopped.png</c> 3 s later
+/// (with <c>--starwatch</c>: the stars counted all along).
 /// </summary>
 public partial class BodyShot : Node
 {
@@ -31,6 +34,8 @@ public partial class BodyShot : Node
         _origin = origin;
         _globe = globe;
         Name = "BodyShot";
+        // first in the frame, as the spectator's own input: what places itself by the camera (the globes, the air) follows
+        ProcessPriority = -1000;
     }
 
     public override void _Process(double delta)
@@ -50,7 +55,7 @@ public partial class BodyShot : Node
                 _last = drawn;
                 if ((_quiet > 120 && _t > 4) || _t > 15)
                 {
-                    Save(drawn, quit: _laterHours == 0);
+                    Save(drawn, quit: _laterHours == 0 && _flySpeed == 0);
                     _stage = 2;
                     _t = 0;
                     if (_laterHours != 0)
@@ -67,11 +72,40 @@ public partial class BodyShot : Node
                 Save(_globe()?.DrawnTiles ?? 0, quit: true);
                 _stage = 3;
                 break;
+            case 2 when _flySpeed != 0:
+                Fly(delta);
+                if (_t > 5.5 && !_flySaved)
+                {
+                    _flySaved = true;
+                    var file = _file;
+                    _file = file.Replace(".png", "_fly.png");
+                    Save(_globe()?.DrawnTiles ?? 0, quit: false);
+                    _file = file;
+                }
+                if (_t > 6) { _stage = 3; _t = 0; GD.Print("[bodyshot] stopped"); }
+                break;
+            case 3 when _flySpeed != 0 && _t > 3:
+                _file = _file.Replace(".png", "_stopped.png");
+                Save(_globe()?.DrawnTiles ?? 0, quit: true);
+                _stage = 4;
+                break;
         }
     }
 
     private int _last = -1;
-    private double _laterHours;
+    private double _laterHours, _flySpeed;
+    private bool _flySaved;
+
+    /// <summary><c>fly:V</c>: the camera toward the body's centre at V m/s, never nearer than two of its radii.</summary>
+    private void Fly(double delta)
+    {
+        if (GetViewport()?.GetCamera3D() is not { } cam || _origin.Frame.Axes is not { } axes) return;
+        var (x, y, z) = axes.FromEcef(new EcefPos(0, 0, 0));
+        var to = new Vector3((float)(x - cam.GlobalPosition.X), (float)(y - cam.GlobalPosition.Y), (float)(z - cam.GlobalPosition.Z));
+        double left = to.Length() - 2 * CelestialBody.Of(_body).Shape.A;
+        if (left <= 0) return;
+        cam.GlobalPosition += to.Normalized() * (float)Math.Min(_flySpeed * delta, left);
+    }
     private BodyId _body;
 
     private void Go()
@@ -93,8 +127,10 @@ public partial class BodyShot : Node
         bool earth = parts.Contains("earth");
         if (parts.FirstOrDefault(p => p.StartsWith("later:")) is { } later)
             _laterHours = double.Parse(later[6..], CultureInfo.InvariantCulture);
+        if (parts.FirstOrDefault(p => p.StartsWith("fly:")) is { } fly)
+            _flySpeed = double.Parse(fly[4..], CultureInfo.InvariantCulture);
         _body = body.Id;
-        var numbers = parts.Skip(4).Where(p => p != "earth" && !p.StartsWith("later:")).Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
+        var numbers = parts.Skip(4).Where(p => p != "earth" && !p.StartsWith("later:") && !p.StartsWith("fly:")).Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
         double pitch = numbers.Length > 0 ? numbers[0] : 20, yaw = numbers.Length > 1 ? numbers[1] : 0;
         _origin.Rebase(body.Id, sky);
         var at = body.Shape.ToEcef(new Geodetic(lat, lon, km * 1000));

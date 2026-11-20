@@ -30,6 +30,14 @@ public interface IWorldGround
     bool TryGetHeight(Vector3 worldPos, out float height);
 
     /// <summary>
+    /// Changes whenever what <see cref="TryGetHeight"/> and <see cref="TryGetSurface"/> answer may have changed anywhere (a tile
+    /// or leaf drawn or rebuilt, one dropped, the world replaced). What caches a height it read (a herd's cows, #2031) keeps
+    /// the version it read at and reads again when it moves: a height read while a leaf stood in for its later self (the
+    /// fill before its pyramid came, a coarser mesh) was kept for good, and the cows stood in the air.
+    /// </summary>
+    int Version => 0;
+
+    /// <summary>
     /// Where something put down here rests (#299): the ground, or the still water surface where there is
     /// water over it. Spawns, respawns, drops, birds and the void rescue want this one.
     /// </summary>

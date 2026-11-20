@@ -34,6 +34,9 @@ src/Core/ClientWorld.cs   quick  --spectatorcheck --world fixture
 src/Player/SpectatorTargets quick --frame earth --chunks fixture:straight --targetcheck
 src/Core/BodyGoto         quick  --frame earth --chunks fixture:straight --gotocheck
 src/World/Bodies/GotoCheck quick --frame earth --chunks fixture:straight --gotocheck
+src/Core/Teleporter       quick  --frame earth --chunks fixture:straight --bodytravelcheck
+src/Core/PlaceSearchUi    quick  --frame earth --chunks fixture:straight --bodytravelcheck
+src/World/Bodies/BodyTravelCheck quick --frame earth --chunks fixture:straight --bodytravelcheck
 src/Player/SpectatorCamera quick --frame earth --chunks fixture:straight --orbitonlycheck
 src/World/Bodies/OrbitOnlyCheck quick --frame earth --chunks fixture:straight --orbitonlycheck
 src/Player/TargetList     quick  --frame earth --chunks fixture:straight --targetcheck
@@ -169,6 +172,9 @@ src/World/Satellites     quick  --skycheck --systems ui,physics,sky --sun real -
 src/Core/Ephemeris       quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/Core/Sgp4            quick  --skycheck --systems ui,physics,sky --sun real --date 2026-12-11 --occasion none
 src/World/MoonDisc       quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
+src/World/MoonDisc       full   --moonlookcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets --time 22
+src/World/SkyBodies      full   --moonlookcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets --time 22
+src/World/Bodies/MoonLook full  --moonlookcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets --time 22
 shaders/moon_halo        quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Core/CameraLens      quick  --telescopecheck --systems ui,physics,sky --sun real --date 2026-12-23 --time 23
 src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
@@ -1395,6 +1401,10 @@ src/Player/ShuttleCheck        quick  --shuttlecheck --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck europe --world flat
 src/Player/ShuttlePilot        quick  --shuttlecheck glide --world flat
+src/Bots/ShuttleBrain     quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
+src/Bots/ShuttleBotCheck  quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
+src/Bots/ShuttleBotNetPro full   tools/shuttlebotnetcheck.sh
+src/Player/ShuttlePilot   quick  --shuttlebotcheck --chunks fixture:airport --traffic 0
 src/Player/Airliner            quick  --shuttlecheck --world flat
 src/Player/AirlinerFlight      quick  --shuttlecheck --world flat
 src/Avatar/Shuttle             quick  --cockpitcheck
@@ -1462,4 +1472,40 @@ src/Net/NetPlace                net    tools/moonnetcheck.sh
 src/Items/TelescopeView         net    tools/moonnetcheck.sh
 src/World/Bodies/SpectatorCross  quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
 src/Player/SpectatorCamera       quick  --spectatorcrosscheck --frame earth --chunks fixture:straight
+src/Player/SpectatorCamera       quick  --spectatorframecheck --frame earth --chunks fixture:straight
+src/Player/SpectatorFrame        quick  --spectatorframecheck --frame earth --chunks fixture:straight
+src/World/Bodies/SpectatorFrame  quick  --spectatorframecheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Bodies/SkyOrder      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/common/sky_cover      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/common/body_globe     full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/body_globe            full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/moon.gdshader         full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/planet                full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/sky_point             full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/sun.gdshader          full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Bodies/BodyPlace     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Bodies/BodyGlobe     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Globe/Atmosphere     full      --bodyplacecheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+shaders/atmosphere            full      --bodyshot saturn,-14.365,138.540,75200,30,204 --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+# the planets' bars (#1430 close-out, docs/plans/planets.md section 12), on the shipped bodies' base, no --bodies
+src/World/Bodies/MoonCheck     quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyGround    quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodyGround    quick  --mooncheck mars --frame earth --chunks fixture:straight
+src/World/Bodies/BodyData      quick  --mooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/BodySurface   quick  --mooncheck --frame earth --chunks fixture:straight
+src/Terrain/Bodies/            quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/BodyAir               quick  --mooncheck mars --frame earth --chunks fixture:straight
+src/Core/Frames                quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/BodyGravity           quick  --mooncheck --frame earth --chunks fixture:straight
+src/Core/Orbit                 quick  --orbitcheck --frame earth --world flat
+src/Player/SpaceOrbit          quick  --orbitcheck --frame earth --world flat
+src/Player/ShuttleFlight       quick  --shuttlecheck --frame earth --world flat
+src/Player/Airliner.Shuttle    quick  --shuttlecheck --frame earth --world flat
+src/World/Bodies/ShuttleMoon   full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/Player/Airliner.Shuttle    full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/Player/ShuttleFlight       full   --shuttlemooncheck --fromorbit --frame earth --chunks fixture:straight
+src/World/Bodies/UfoMoonCheck  full   --ufomooncheck --frame earth --chunks fixture:straight
+src/Player/Ufo                 full   --ufomooncheck --frame earth --chunks fixture:straight
+src/World/Bodies/Ring          full   --ringcheck --frame earth --chunks fixture:straight
+src/World/Bodies/SaturnRings   full   --ringcheck --frame earth --chunks fixture:straight

@@ -43,6 +43,13 @@ public static class ColonyBuilder
             // system, placed in the module's node frame on its floor
             var layout = InteriorGenerator.Colony(m, plan.Rooms[m.Id], c.Theme, side, $"{c.Id}/m{m.Id}");
             root.AddChild(Inside(layout, t * Up(InteriorGenerator.FloorOf(m.Kind)), $"Inside{m.Id}"));
+            // the hangar's ramp down from its vehicle door to the plateau (#1943), outside the interior (its node's -Z)
+            if (m.Kind == ModuleKind.Hangar)
+            {
+                float slab = ColonyKit.HangarSlab, rampA = Mathf.Atan2(slab, ColonyKit.RampLen), dh = ColonyKit.HangarDoorHalf((float)m.Width);
+                Solid(t * new Transform3D(new Basis(Vector3.Right, -rampA), new Vector3(0, slab / 2 - 0.15f, -(float)m.Length / 2 - 0.3f - ColonyKit.RampLen / 2)),
+                    new Vector3(2 * dh, 0.3f, ColonyKit.RampLen / Mathf.Cos(rampA) + 0.3f));
+            }
         }
         var links = new List<(Vector3, Vector3, bool)>();
         foreach (var l in plan.Links)

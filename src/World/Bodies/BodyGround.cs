@@ -29,6 +29,13 @@ namespace UnitSport.World.Bodies;
 /// </summary>
 public partial class BodyGround : Node, Terrain.IBodyGround
 {
+    /// <summary>Its meshes shown or hidden (#2051's <c>--skyordercheck</c>: its comparison pictures).</summary>
+    internal void SetShown(bool shown)
+    {
+        foreach (var child in GetChildren())
+            if (child is Node3D n) n.Visible = shown;
+    }
+
     /// <summary>The near square's cells a side.</summary>
     public const int Cells = 256;
 
@@ -59,7 +66,38 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How far each way from the centre the near square holds the true ground (inside its eased band), metres.</summary>
     public const double TrueHalfM = Cells * CellM / 2 - BlendM;
 
-    private static readonly StringName AirTau = "air_tau";
+    private static readonly StringName AirTau = "air_tau", LightStrength = "light_strength", LightTint = "light_tint", LunarParam = "lunar";
+
+    /// <summary>
+    /// The earthshine's colour (#2024): the sunlight the Earth sends back, bluish (its oceans and air); its strength a share
+    /// of the day's, <see cref="PlanetshineMin"/> to <see cref="PlanetshineMax"/> from a new to a full Earth.
+    /// </summary>
+    private static readonly Vector3 PlanetshineTint = new(0.72f, 0.82f, 1f);
+
+    public const float PlanetshineMin = 0.03f, PlanetshineMax = 0.35f;
+
+    /// <summary>The starlight on a night with no planet up (#2024: the Moon's far side), a share of the day's, and its colour.</summary>
+    public const float Starlight = 0.06f;
+
+    private static readonly Vector3 StarlightTint = new(0.8f, 0.85f, 1f);
+
+    /// <summary>The scene's light on the ground this frame: how strong, what colour (<see cref="Light"/>).</summary>
+    private (float Strength, Vector3 Tint) _light = (1f, Vector3.One);
+
+    /// <summary>
+    /// The scene's directional light as the ground takes it (#2024): the sun at the ground's exposure, the planet's light at
+    /// night (the Moon's earthshine: bluish, a share of the day's by how much of the Earth is lit), the stars' faint light on
+    /// a night with no planet up (the far side).
+    /// </summary>
+    public static (float Strength, Vector3 Tint) Light(DayNight.SceneLight light, float planetLit, float exposure) => light switch
+    {
+        DayNight.SceneLight.Sun => (exposure, Vector3.One),
+        DayNight.SceneLight.Planet => (exposure * Mathf.Lerp(PlanetshineMin, PlanetshineMax, planetLit), PlanetshineTint),
+        DayNight.SceneLight.Stars => (exposure * Starlight, StarlightTint),
+        // the Earth's own night (a ground square under /goto Earth): the moonlight's shading, as dim as the far side's stars
+        DayNight.SceneLight.Moon => (exposure * Starlight, StarlightTint),
+        _ => (0f, Vector3.One),
+    };
     private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex", SunStrength = "sun_strength",
         HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half",
         LampPos = "lamp_pos", LampDir = "lamp_dir", LampCol = "lamp_col", LampCount = "lamp_count";
@@ -93,7 +131,8 @@ public partial class BodyGround : Node, Terrain.IBodyGround
 
     private readonly BodyGlobe _globe;
     private readonly WorldOrigin _origin;
-    private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
+    // lit, to take the scene's shadows (#2024): the globe's own shader is unshaded
+    private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_ground.gdshader");
     private readonly Layer _near, _medium;
 
     /// <summary>One square: its size, how it moves and eases, and what is in place.</summary>
@@ -106,7 +145,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public readonly bool Solid = solid;
         public StaticBody3D? Node;
         public ShaderMaterial? Material;
-        public float ExposureWritten;
+        public (float Strength, Vector3 Tint) LightWritten = (-1f, Vector3.Zero);
         public int LampsVersion = -1, LampsEpoch = -1;
         public double LampsAge;
         public EnuFrame? Frame;
@@ -242,9 +281,16 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         {
             Drop(_near);
             Drop(_medium);
+            _globe.SetGroundShare(1f);
             return;
         }
         Claim();
+        // the light on the ground this frame (#2024): the exposure grey near it, the sun or the planet's light
+        var eye = GetViewport()?.GetCamera3D() is { } c ? (double?)_origin.AltitudeOf(c.GlobalPosition) : null;
+        float share = BodyGlobe.GroundShareAt(eye ?? 0);
+        _globe.SetGroundShare(share);
+        var dn = DayNight.Instance;
+        _light = Light(dn?.Light ?? DayNight.SceneLight.Sun, dn?.PlanetLit ?? 0f, _globe.Exposure * share);
         Keep(_near, axes);
         Keep(_medium, axes);
         // the medium square steps aside under the near one: its hole follows the near square (moved, or shifted)
@@ -288,11 +334,15 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     private void Keep(Layer l, FrameAxes axes)
     {
         if (l.Node != null && _origin.Epoch != l.Epoch) Place(l, axes);
-        if (l.Material != null && _globe.Sun != Vector3.Zero) l.Material.SetShaderParameter(SunDir, _globe.Sun);
-        // the globe's exposure comes once its six faces' colour is in: a square made before kept the shader's default
-        // (Phobos' near square at 1.6 in a globe at 0.9, a bright patch, #1853)
-        if (l.Material != null && l.ExposureWritten != _globe.Exposure)
-            l.Material.SetShaderParameter(SunStrength, l.ExposureWritten = _globe.Exposure);
+        // the light: the sun at the ground's exposure, or the planet's at night (#2024), written on a change. The globe's
+        // exposure comes once its six faces' colour is in: a square made before kept the shader's default (Phobos' near
+        // square at 1.6 in a globe at 0.9, a bright patch, #1853)
+        if (l.Material != null && l.LightWritten != _light)
+        {
+            l.LightWritten = _light;
+            l.Material.SetShaderParameter(LightStrength, _light.Strength);
+            l.Material.SetShaderParameter(LightTint, _light.Tint);
+        }
         if (l.Material != null) WriteLamps(l);
     }
 
@@ -457,9 +507,11 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, sq.Arrays);
         var material = new ShaderMaterial { Shader = _shader };
         if (sq.Colour != null) material.SetShaderParameter(AlbedoTex, ImageTexture.CreateFromImage(sq.Colour));
-        material.SetShaderParameter(SunDir, _globe.Sun == Vector3.Zero ? Vector3.Up : _globe.Sun);
-        material.SetShaderParameter(SunStrength, _globe.Exposure);
+        material.SetShaderParameter(LightStrength, _light.Strength);
+        material.SetShaderParameter(LightTint, _light.Tint);
         material.SetShaderParameter(AirTau, BodyGlobe.AirTauOf(_globe.Body));
+        // the regolith's own light on an airless body's ground (#2024): lunar-Lambert
+        material.SetShaderParameter(LunarParam, _globe.LunarAt(BodyGlobe.GroundGrey));
         var body = new StaticBody3D { Name = l.Name };
         if (l.Solid)
         {
@@ -480,7 +532,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         body.AddChild(new MeshInstance3D
         {
             Name = "Mesh", Mesh = mesh, MaterialOverride = material,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // the near square casts (#2024): crater rims and slopes shade the ground beyond them, within the sun's shadow
+            // distance; the medium square, kilometres out, no
+            CastShadow = l.Solid ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off,
             // its box is round its centre: ground all round a camera inside it is never culled
             ExtraCullMargin = l.Half,
         });

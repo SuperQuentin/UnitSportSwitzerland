@@ -39,10 +39,13 @@ public partial class TelescopeProbe : Node
         await Seconds(2.0);
         string arg = CmdArgs.Value("--telescopecheck") ?? "";
         bool moon = arg.StartsWith("moon");
-        // abroad (#1995): the Earth outside Switzerland (Chamonix), where LV95 is only notation; needs the earth leaves there
+        // abroad (#1995): the Earth outside Switzerland, LV95 only notation there: started there with --at (Ferney-Voltaire,
+        // France, by Geneva airport: --at 2497404,1123579, with leaves there); /goto's body ground would stand in for the leaves
         bool abroad = arg.StartsWith("abroad");
+        // mars (#2028): a planet followed at the longest end standing in Gale crater
+        bool mars = arg == "mars";
         if (moon && !await GoTo("Moon 17 59 1")) return;
-        if (abroad && !await GoTo("Earth 45.924 6.870 3")) return;
+        if (mars && !await GoTo("Mars -5.4 137.8 1")) return;
         if (Me == null) GetParent<ClientWorld>().ToggleMode();
         if (!await Until(() => Me is { } m && m.IsOnFloor() && PlacedObjects.Instance != null && Telescopes.Instance != null, 120))
         {
@@ -59,6 +62,7 @@ public partial class TelescopeProbe : Node
             if (restart == "place") await PlaceForRestart(Me!, PlacedObjects.Instance!);
             else if (restart == "reload") await LookAfterRestart(Me!, PlacedObjects.Instance!);
             else if (moon) await RunOnTheMoon(Me!, PlacedObjects.Instance!);
+            else if (mars) await RunOnMars(Me!, PlacedObjects.Instance!);
             else if (abroad) await RunAbroad(Me!, PlacedObjects.Instance!);
             else await Run(Me!, PlacedObjects.Instance!);
         }
@@ -72,6 +76,9 @@ public partial class TelescopeProbe : Node
         await Seconds(0.5);
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }
+
+    /// <summary>How long a planet is followed at the longest end, each speed (<c>--tracksecs N</c>; a minute by default).</summary>
+    private static double TrackSeconds => CmdArgs.Int("--tracksecs") ?? 60;
 
     /// <summary>What this run set up: taken away at the end whatever happened.</summary>
     private readonly List<long> _placedHere = new();
@@ -163,6 +170,8 @@ public partial class TelescopeProbe : Node
         await Seconds(1.0);
         float jupiterOff = World.SkyBodies.Instance?.DirectionOf(SkyBody.Jupiter) is { } jd ? Mathf.RadToDeg(view.Direction.AngleTo(jd)) : 99f;
         Expect(jupiterOff < 0.02f, $"Jupiter stays in the middle ({jupiterOff:0.0000}° off)");
+        await TrackAtTheLongestEnd(view, SkyBody.Jupiter, TrackSeconds, "on the Earth");
+        while (view.Focal > 2400f) view.Zoom(-1);
         Expect(!System.Array.Exists(TelescopeTargets.Menu, b => b == SkyBody.Sun), "the sun is not a target");
         view.SelectTarget(SkyBody.Moon);
         await Seconds(0.3);
@@ -345,6 +354,7 @@ public partial class TelescopeProbe : Node
         await Seconds(1.0);
         float jupiterOff = World.SkyBodies.Instance?.DirectionOf(SkyBody.Jupiter) is { } jd ? Mathf.RadToDeg(view.Direction.AngleTo(jd)) : 99f;
         Expect(jupiterOff < 0.02f, $"Jupiter stays in the middle ({jupiterOff:0.0000}° off)");
+        await TrackAtTheLongestEnd(view, SkyBody.Jupiter, TrackSeconds, "on the Moon");
         view.ToggleLock();
         Expect(view.ToggleLock() && view.Locked && !view.FollowsBody, "Use: the drive tracks the Moon's sky");
         var held = view.Direction;
@@ -360,8 +370,22 @@ public partial class TelescopeProbe : Node
         Expect(await Until(() => taken != null, 3) && taken!.Value.Ok, $"packed up ({taken?.Refused})");
     }
 
+    /// <summary><c>mars</c> (#2028): set up in Gale crater, Jupiter followed at the longest end with the clock running, packed up.</summary>
+    private async Task RunOnMars(FootPlayer me, PlacedObjects placed)
+    {
+        Expect(placed.Origin.Body == BodyId.Mars, $"standing on Mars ({placed.Origin.Body})");
+        if (await SetUpAndLook(me, placed) is not { } set) return;
+        var (scope, _, _, view, _) = set;
+        await TrackAtTheLongestEnd(view, SkyBody.Jupiter, TrackSeconds, "on Mars");
+        view.Close();
+        Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
+        PlacedResult? taken = null;
+        placed.RequestRemove(scope.Id, r => taken = r);
+        Expect(await Until(() => taken != null, 3) && taken!.Value.Ok, $"packed up ({taken?.Refused})");
+    }
+
     /// <summary>
-    /// <c>abroad</c> (#1995): on the Earth outside Switzerland a telescope and a Swiss flag are set up, kept as Earth places
+    /// <c>abroad</c> (#1995): on the Earth outside Switzerland (Ferney-Voltaire) a telescope and a Swiss flag are set up, kept as Earth places
     /// (no LV95 in the record), looked through and packed up.
     /// </summary>
     private async Task RunAbroad(FootPlayer me, PlacedObjects placed)
@@ -369,10 +393,10 @@ public partial class TelescopeProbe : Node
         if (await SetUpAndLook(me, placed) is not { } set) return;
         var (scope, _, _, view, _) = set;
         var g = scope.At.Geodetic;
-        // Chamonix, in France: within a few km of where /goto put it
-        bool there = Math.Abs(g.LatDeg - 45.924) < 0.03 && Math.Abs(g.LonDeg - 6.870) < 0.04;
+        // Ferney-Voltaire, in France: within a kilometre or so of where --at put it
+        bool there = Math.Abs(g.LatDeg - 46.2558) < 0.01 && Math.Abs(g.LonDeg - 6.1081) < 0.015;
         Expect(scope.At.Body == BodyId.Earth && there,
-            System.FormattableString.Invariant($"kept as an Earth place in Chamonix, outside Switzerland ({g.LatDeg:F3}, {g.LonDeg:F3})"));
+            System.FormattableString.Invariant($"kept as an Earth place in Ferney-Voltaire (France) ({g.LatDeg:F3}, {g.LonDeg:F3})"));
         Expect(view.SelectTarget(SkyBody.Jupiter) || view.SelectTarget(SkyBody.Moon), "a target followed");
         view.Close();
         Expect(await Until(() => TelescopeView.Current == null, 2), "stepped back");
@@ -522,6 +546,81 @@ public partial class TelescopeProbe : Node
         var node = placed.GetNodeOrNull<Node3D>($"P{flag.Id}");
         Expect(node != null && apart < 8f && node.GlobalPosition.DistanceTo(flag.WorldTransform(placed.Origin).Origin) < 0.05f,
             $"the flag drawn beside it ({apart:0.0} m from the telescope, node {(node == null ? "missing" : "on its record")})");
+    }
+
+    /// <summary>
+    /// A planet followed at the longest end with the clock running (#2028: "it simply loses tracking and the planet drifts
+    /// fast off screen"): the planet as drawn against the middle of the view, every frame for <paramref name="seconds"/>,
+    /// at normal speed and then at <c>/time speed real</c>. The worst offset, as a share of the half field; windowed, after
+    /// the frame's last placing (headless, at the next frame's start).
+    /// </summary>
+    private async Task TrackAtTheLongestEnd(TelescopeView view, SkyBody body, double seconds, string where)
+    {
+        if (World.DayNight.Instance is not { } day) return;
+        var hour = day.HourOverride;
+        var length = day.DayLengthOverride;
+        day.HourOverride = null;
+        while (view.Focal < TelescopeOptics.FocalMax) view.Zoom(1);
+        foreach (var (speed, minutes) in new[] { ("normal", World.TimeCommand.NormalMinutesPerDay), ("real", World.TimeCommand.RealMinutesPerDay) })
+        {
+            day.DayLengthOverride = minutes;
+            if (!view.SelectTarget(body))
+            {
+                Expect(false, $"{body} is in the sky {where}");
+                break;
+            }
+            await Seconds(0.5);
+            string shot = $"telescope_track_{where.Replace("on the ", "").Replace("on ", "").ToLowerInvariant()}_{speed}";
+            Shot($"{shot}_start");
+            var (worst, frames) = await TrackedOff(body, seconds);
+            Shot($"{shot}_end");
+            Expect(frames > 10 && worst < 0.25f,
+                $"{body} stays centred at {view.Focal:0} mm {where}, {speed} speed, {seconds:0} s: worst {worst:0.000} of the half field over {frames} frames");
+        }
+        day.DayLengthOverride = length;
+        day.HourOverride = hour;
+    }
+
+    /// <summary>Windowed: the view now as <c>test_output/NAME.png</c> (nothing is drawn headless).</summary>
+    private void Shot(string name)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("res://test_output"));
+        GetViewport().GetTexture().GetImage().SavePng($"res://test_output/{name}.png");
+        GD.Print($"[telescopecheck] wrote test_output/{name}.png");
+    }
+
+    /// <summary>The worst offset of a body as drawn from the view's middle, as a share of the half field, and the frames seen.</summary>
+    private async Task<(float Worst, int Frames)> TrackedOff(SkyBody body, double seconds)
+    {
+        float worst = 0f;
+        int frames = 0, globe = 0, outside = 0;
+        float sum = 0f;
+        void Sample()
+        {
+            // as drawn: its globe once that takes over from the sky's disc (#1998), else the sky's place
+            var drawnGlobe = World.Bodies.BodyViews.Instance?.DrawnGlobeOf(body)?.DrawnCentre;
+            if (drawnGlobe != null) globe++;
+            if ((drawnGlobe ?? World.SkyBodies.Instance?.PlacedAt(body)) is not { } at || GetViewport().GetCamera3D() is not { } c) return;
+            float off = (-c.GlobalBasis.Z).AngleTo((at - c.GlobalPosition).Normalized());
+            float half = Mathf.DegToRad(CameraLens.FovOf(c)) * 0.5f;
+            worst = Mathf.Max(worst, off / half);
+            sum += off / half;
+            if (off / half > 1f) outside++;
+            frames++;
+        }
+        bool drawn = DisplayServer.GetName() != "headless";
+        var start = World.SkyBodies.Instance?.DirectionOf(body);
+        double startHour = World.DayNight.Instance?.Hour ?? 0;
+        if (drawn) RenderingServer.FramePostDraw += Sample;
+        else GetTree().ProcessFrame += Sample;
+        await Seconds(seconds);
+        if (drawn) RenderingServer.FramePostDraw -= Sample;
+        else GetTree().ProcessFrame -= Sample;
+        float moved = start is { } s0 && World.SkyBodies.Instance?.DirectionOf(body) is { } s1 ? Mathf.RadToDeg(s0.AngleTo(s1)) : -1f;
+        GD.Print(System.FormattableString.Invariant(
+            $"[telescopecheck] {body} followed for {seconds:0} s: worst {worst:0.000} of the half field (mean {(frames > 0 ? sum / frames : 0):0.000}, {outside} frames out of the view) over {frames} frames ({globe} as its globe); it moved {moved:0.0000}° in the view's axes, the clock {(World.DayNight.Instance?.Hour ?? 0) - startHour:0.00000} h, {World.DayNight.Instance?.MinutesPerDay} min a day"));
+        return (worst, frames);
     }
 
     /// <summary>The worst jump of the drawn moon on screen from one frame to the next less the mean (px), and the mean (px), over 2 s.</summary>

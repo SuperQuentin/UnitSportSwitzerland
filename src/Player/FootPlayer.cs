@@ -4939,7 +4939,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 // what a bot's craft met (#837: bots crashing in the air during a big drop)
                 if (Bot)
                 {
-                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()}, under {n.GetParent()?.Name})" : "nothing";
                     GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
                 }
             }

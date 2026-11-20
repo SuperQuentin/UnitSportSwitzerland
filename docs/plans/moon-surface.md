@@ -31,6 +31,12 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
 - Phase 8 (#1946): the colonies' lights from orbit on the night side (`ColonyLights`, one mesh of screen-sized points in
   the Moon's fixed frame, `BodyGlobe.AddBodyFixed`) and in the telescope from the Earth (sparks on the sky disc's dark
   part, `moon.gdshader`), `--moonsites <colony>:night`. **The Moon surface feature is complete (phases 1-8).**
+- After the phases: the colonists real bots offline (#1976: airlocks cycled, the open rover driven), the colonies walkable
+  end to end (domes facing their tubes, side doorways, stairs climbable), the hub's deck, the lights' polar night noted
+  (#2003), and the audit against the user's decisions as a player gets the game (#1938, Nov 15): every Moon check
+  passes on the shipped base alone (levels 0-2, no `--bodies`); the colonists drive the pressurised rover too, out of the
+  hangar; the colony lights are seen from orbit and in the telescope; the shuttle's pilot lands on the pads
+  (`MoonPads`, the shuttle session's #1498). The interiors move onto the normal interiors system (Standby-4, #2000).
 
 ## The user's decisions (fixed)
 

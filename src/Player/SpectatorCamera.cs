@@ -23,7 +23,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     private double Altitude => Core.OriginShifter.Instance?.Origin.AltitudeOf(Position) ?? Position.Y;
 
     /// <summary>The speed flown now, without boost: <see cref="Speed"/> held to <see cref="Cap"/>.</summary>
-    public float FlownSpeed => Mathf.Min(Speed, Cap);
+    public float FlownSpeed => SpectatorSpeed.Flown(Speed, Cap);   // the wheel's top: full speed, the cap (#2026)
 
     /// <summary>
     /// The fastest the wheel's speed is flown here: <see cref="SpectatorSpeed.AltitudeCap"/> by the altitude; between
@@ -38,14 +38,22 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     private float UpdateCap()
     {
         _capFrame = Engine.GetProcessFrames();
-        _cap = Core.OriginShifter.CrossBodies ? SpectatorSpeed.SurfaceCap(SurfaceDistance()) : SpectatorSpeed.AltitudeCap(Altitude);
+        if (!Core.OriginShifter.CrossBodies) _cap = SpectatorSpeed.AltitudeCap(Altitude);
+        else
+        {
+            // a ring's slab is a surface too (#2030), its floor a drift among the chunks
+            double d = SurfaceDistance(out bool ring);
+            _cap = SpectatorSpeed.SurfaceCap(d, ring ? SpectatorSpeed.RingFloor : SpectatorSpeed.GroundCap);
+        }
         return _cap;
     }
 
     /// <summary>How far the nearest surface of any body is (#1850, <see cref="SurfaceReach"/>).</summary>
-    private double SurfaceDistance() => Core.OriginShifter.Instance?.Origin.Frame is { } frame
-        ? SurfaceReach.Of(frame, Position, Altitude)
-        : Altitude;
+    private double SurfaceDistance(out bool ring)
+    {
+        ring = false;
+        return Core.OriginShifter.Instance?.Origin.Frame is { } frame ? SurfaceReach.Of(frame, Position, Altitude, out ring) : Altitude;
+    }
 
     private SpectatorSpeedHud? _hud;
     private bool _boosted;
@@ -123,6 +131,8 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
                 double cx = a.Y * b.Z - a.Z * b.Y, cy = a.Z * b.X - a.X * b.Z, cz = a.X * b.Y - a.Y * b.X;
                 double sin = Math.Sqrt(cx * cx + cy * cy + cz * cz), cos = a.X * b.X + a.Y * b.Y + a.Z * b.Z;
                 double turn = Math.Atan2(sin, cos);
+                // as far as up is the vertical (#2053): none in free space
+                turn *= UpWeight;
                 if (turn > 1e-9 && turn < TravelTurnMax)
                 {
                     var k = new Terrain.Format.EcefPos(cx / sin, cy / sin, cz / sin);
@@ -144,7 +154,9 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         want = want.Normalized();
         float roll = Basis.X.SignedAngleTo(want, forward);
         if (Mathf.Abs(roll) < 1e-5f) return;
-        float step = Mathf.Max(RollRate, Mathf.Abs(roll) * RollEase) * dt;
+        // eased out as far as there is a vertical (#2053): in free space the roll is the player's
+        float step = Mathf.Max(RollRate, Mathf.Abs(roll) * RollEase) * dt * (float)UpWeight;
+        if (step <= 0) return;
         Basis = (new Basis(forward, Mathf.Clamp(roll, -step, step)) * Basis).Orthonormalized();
         SyncLook();
     }
@@ -166,6 +178,17 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         if (direction.LengthSquared() < 1e-12f) return;
         SyncLook();
         var d = direction.Normalized();
+        if (UpWeight < UpWhole)
+        {
+            // no vertical to keep (#2053): the shortest turn from the view's middle toward it
+            var forward = -Basis.Z;
+            var axis = forward.Cross(d);
+            float angle = Mathf.Atan2(axis.Length(), forward.Dot(d));
+            if (axis.LengthSquared() < 1e-12f || angle < 1e-6f) return;
+            Basis = (new Basis(axis.Normalized(), Mathf.Min(angle, maxStep)) * Basis).Orthonormalized();
+            SyncLook();
+            return;
+        }
         float yaw = Mathf.Atan2(-d.X, -d.Z), pitch = Mathf.Asin(Mathf.Clamp(d.Y, -1f, 1f));
         float dy = Mathf.Wrap(yaw - _yaw, -Mathf.Pi, Mathf.Pi), dp = pitch - _pitch;
         _yaw += Mathf.Clamp(dy, -maxStep, maxStep);
@@ -173,13 +196,115 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         Rotation = new Vector3(_pitch, _yaw, _roll);
     }
 
-    public void Look(Vector2 relative)
+    public void Look(Vector2 relative) => TurnView(-relative.X * MouseSensitivity, -relative.Y * MouseSensitivity);
+
+    /// <summary>
+    /// The view turned by a look (#2053): yaw about the vertical and the pitch held off it while up is whole (as before:
+    /// the view's angles), about a blend of the vertical and the camera's own up as up fades in space, and about the
+    /// camera's own axes once free (no vertical to hold the pitch off: a full loop is a look).
+    /// </summary>
+    private void TurnView(float yaw, float pitch)
     {
         SyncLook();
-        _yaw -= relative.X * MouseSensitivity;
-        _pitch = Mathf.Clamp(_pitch - relative.Y * MouseSensitivity, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
-        Rotation = new Vector3(_pitch, _yaw, _roll);
+        float w = (float)UpWeight;
+        if (w >= UpWhole)
+        {
+            _yaw += yaw;
+            _pitch = Mathf.Clamp(_pitch + pitch, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
+            Rotation = new Vector3(_pitch, _yaw, _roll);
+            return;
+        }
+        var axis = (Vector3.Up * w + Basis.Y * (1 - w)).Normalized();
+        var turned = new Basis(axis, yaw) * Basis;
+        var pitched = turned * new Basis(Vector3.Right, pitch);
+        // held off the vertical as far as there is one: at w 1 a hundredth of a radian short of it, at 0 not at all
+        float limit = Mathf.Lerp(Mathf.Pi, Mathf.Pi / 2 - 0.01f, w);
+        float before = Mathf.Asin(Mathf.Clamp(-turned.Z.Dot(Vector3.Up), -1f, 1f));
+        float after = Mathf.Asin(Mathf.Clamp(-pitched.Z.Dot(Vector3.Up), -1f, 1f));
+        bool past = Mathf.Abs(after) > limit && Mathf.Abs(after) > Mathf.Abs(before);
+        Basis = (past ? turned : pitched).Orthonormalized();
+        SyncLook();
     }
+
+    /// <summary>Up counts as whole past this weight: the view's angles as before, bit for bit near the ground.</summary>
+    private const double UpWhole = 0.9999;
+
+    /// <summary>How much the camera turns with the body under it this frame (#2053, <see cref="SpectatorFrame.SpinWeight"/>; 1 off the earth frame).</summary>
+    public double SpinWeight { get; private set; } = 1;
+
+    /// <summary>How much up is the local vertical this frame (#2053, <see cref="SpectatorFrame.UpWeight"/>; 1 off the earth frame).</summary>
+    public double UpWeight { get; private set; } = 1;
+
+    /// <summary>How far the blended frame moved the camera this frame (the co-rotation undone, the rest frame), metres: a check's step allowance.</summary>
+    public double LastDrift { get; private set; }
+
+    // the sky moment the frame was last read at
+    private Core.SkyMoment? _frameAt;
+
+    /// <summary>The sky moment this frame's drift was worked out at (#2053's check reads the camera's place at it).</summary>
+    public Core.SkyMoment? FrameMoment => _frameAt;
+
+    /// <summary>The turn this frame's drift gave the camera's place and view, about an axis in the anchor body's fixed frame (radians; 0: none).</summary>
+    public (Core.DVec3 Axis, double Angle) LastUnspin { get; private set; }
+
+    /// <summary>
+    /// The camera's frame blended by distance (#2053, <see cref="SpectatorFrame"/>), before the keys move it: the body's
+    /// turn since last frame undone for as much as the camera no longer turns with it (its place and its view turned back
+    /// about the body's axis), and the camera carried by the rest frame (the bodies' motions by their spheres) less the
+    /// anchor's own. Every weight comes from the camera's place and the bodies', never from the anchor: a handover changes
+    /// nothing. Near the ground every weight is 1 and nothing moves.
+    /// </summary>
+    private void Drift()
+    {
+        LastDrift = 0;
+        LastUnspin = (new Core.DVec3(0, 0, 1), 0);
+        if (!Core.OriginShifter.CrossBodies || Core.OriginShifter.Instance?.Origin.Frame.Axes is not { } axes)
+        {
+            _frameAt = null;
+            SpinWeight = UpWeight = 1;
+            return;
+        }
+        var m1 = Core.SkyClock.Now;
+        var m0 = _frameAt;
+        _frameAt = m1;
+        var body = Core.CelestialBody.Of(axes.Body);
+        var e = axes.ToEcef(Position.X, Position.Y, Position.Z);
+        var p = new Core.DVec3(e.X, e.Y, e.Z);
+        double height = body.Shape.ToGeodetic(e).H;
+        SpinWeight = SpectatorFrame.SpinWeight(body, height, p);
+        UpWeight = SpectatorFrame.UpWeight(body, height);
+        // a jump of the clock (/time set, a new sky moment): no frame's motion to carry
+        if (m0 is not { } before || Math.Abs((m1.Utc - before.Utc).TotalSeconds) > MaxFrameSky
+            || Math.Abs(m1.EarthAngle - before.EarthAngle) > MaxFrameTurn) return;
+
+        var moved = p;
+        var (axis, angle) = SpectatorFrame.Unspin(axes.Body, before, m1);
+        double unspin = (1 - SpinWeight) * angle;
+        if (Math.Abs(angle) < MaxFrameTurn && unspin != 0) moved = SpectatorFrame.Turn(moved, axis, unspin);
+        else unspin = 0;
+        LastUnspin = (axis, unspin);
+        var r1 = Core.Frames.Orientation(axes.Body, m1);
+        var rest = SpectatorFrame.RestStep(axes.Body, r1.Apply(p), before, m1);
+        moved += r1.ApplyInverse(rest);
+        LastDrift = (moved - p).Length;
+        if (LastDrift <= 0) return;
+        var (wx, wy, wz) = axes.FromEcef(new Terrain.Format.EcefPos(moved.X, moved.Y, moved.Z));
+        Position = new Vector3((float)wx, (float)wy, (float)wz);
+        if (unspin != 0)
+        {
+            // the view turned as the place was: still against the stars
+            var k = new Terrain.Format.EcefPos(axis.X, axis.Y, axis.Z);
+            var kw = new Vector3((float)Core.FrameAxes.Dot(k, axes.X), (float)Core.FrameAxes.Dot(k, axes.Y), (float)Core.FrameAxes.Dot(k, axes.Z));
+            Basis = (new Basis(kw.Normalized(), (float)unspin) * Basis).Orthonormalized();
+            SyncLook();
+        }
+    }
+
+    /// <summary>A sky step longer than this between frames is a jump of the clock, not a frame's, seconds.</summary>
+    private const double MaxFrameSky = 600;
+
+    /// <summary>A turn larger than this between frames is a jump of the clock, radians.</summary>
+    private const double MaxFrameTurn = 0.2;
 
     public override void _UnhandledInput(InputEvent @event)
     {
@@ -219,7 +344,7 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
     {
         if (_hud == null) AddChild(_hud = new SpectatorSpeedHud());
         float cap = Cap;
-        _hud.Show(Mathf.Min(Speed, cap) * (_boosted ? BoostMultiplier : 1f), _boosted, limited: Speed > cap);
+        _hud.Show(SpectatorSpeed.Flown(Speed, cap) * (_boosted ? BoostMultiplier : 1f), _boosted, limited: Speed > cap && Speed < SpectatorSpeed.MaxSpeed);
     }
 
     /// <summary>A held key or button repeats its notch: a pad has no wheel (2 m/s to 100 km/s in about 4 s).</summary>
@@ -256,14 +381,11 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         }
 
         // right stick: a rate, integrated here; the mouse arrives as events above
+        // the blended frame (#2053): the body's turn undone as far as the camera no longer turns with it, the rest frame
+        Drift();
+
         var look = UnitSport.Core.PlayerInput.LookRate;
-        if (look != Vector2.Zero)
-        {
-            SyncLook();
-            _yaw -= look.X * dt;
-            _pitch = Mathf.Clamp(_pitch - look.Y * dt, -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);
-            Rotation = new Vector3(_pitch, _yaw, _roll);
-        }
+        if (look != Vector2.Zero) TurnView(-look.X * dt, -look.Y * dt);
 
         // PlayerInput returns neutral while a text field has the keyboard, so typing in chat
         // does not fly the camera. Space/Shift match the on-foot and mounted controls, so the
@@ -273,11 +395,21 @@ public partial class SpectatorCamera : Camera3D, Core.IOriginShiftAware
         // whatever the pitch, so looking down while flying forward does not dive; off, forward
         // follows the look.
         var stick = UnitSport.Core.PlayerInput.Move;
+        float rise = UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyUp)
+            - UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyDown);
         var dir = Core.GameSettings.Current.LevelFlight
             ? new Basis(Vector3.Up, Rotation.Y) * new Vector3(stick.X, 0, stick.Y)
             : Basis * new Vector3(stick.X, 0, stick.Y);
-        dir += Vector3.Up * (UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyUp)
-            - UnitSport.Core.PlayerInput.Strength(UnitSport.Core.PlayerInput.FlyDown));
+        dir += Vector3.Up * rise;
+        if (UpWeight < UpWhole && dir.LengthSquared() > 1e-6f)
+        {
+            // as up fades in space (#2053): along the camera's own axes, left and right a straight strafe, up its own up
+            float w = (float)UpWeight;
+            var free = Basis * new Vector3(stick.X, 0, stick.Y) + Basis.Y * rise;
+            float asked = dir.Length();
+            var blend = dir * w + free * (1 - w);
+            if (blend.LengthSquared() > 1e-10f) dir = blend.Normalized() * asked;
+        }
 
         if (dir.LengthSquared() > 1e-6f)
         {

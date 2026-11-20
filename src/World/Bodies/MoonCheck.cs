@@ -13,7 +13,8 @@ namespace UnitSport.World.Bodies;
 /// frame shifts, turns and, at 66,000 km from the Moon, is counted from the Moon (<see cref="WorldOrigin.Rebase"/>).
 ///
 /// <para>
-/// With the Moon's data (<c>--bodies DIR</c>) it goes on: down to 150 m over the ground there, T into the body once the
+/// With the body's ground (always since #1996: the shipped base, a local install or <c>--bodies DIR</c> finer) it goes on:
+/// down to 150 m over the ground there, T into the body once the
 /// near ground (<see cref="BodyGround"/>) is under it, standing on it, sprinting 120 m (the ground moves under the walker
 /// at least once), and a jump that must reach about six times the Earth's (<c>JumpVelocity</c>² / 2g at the Moon's
 /// 1.63 m/s²: 5.4 m against 0.9).
@@ -282,7 +283,7 @@ public partial class MoonCheck : Node
         Shot("arrival");
         if (_ground() is not { } ground || _cam == null || _origin.Frame.Axes is not { } axes)
         {
-            Log("no ground data (--bodies): the trip alone");
+            Log("no ground data (no shipped base, no local install): the trip alone");
             Finish(null);
             return;
         }

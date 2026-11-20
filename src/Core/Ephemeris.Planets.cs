@@ -162,8 +162,32 @@ public static partial class Ephemeris
         // the phase angle at the planet, degrees
         double cos = Dot(p, p - earth) / (r * delta);
         double a = Math.Acos(Math.Clamp(cos, -1, 1)) / Deg;
+        return MagnitudeAt(body, a, r, delta, utc);
+    }
+
+    /// <summary>
+    /// The Earth's apparent magnitude from space (#2047): <paramref name="phaseDeg"/> the angle at the Earth between the Sun
+    /// and the eye, <paramref name="rAu"/> its distance from the Sun and <paramref name="deltaAu"/> from the eye, AU
+    /// (Mallama 2018: H −3.99, its phase law to 160°; −2.5 from Mars at its best).
+    /// </summary>
+    public static double EarthMagnitudeAt(double phaseDeg, double rAu, double deltaAu)
+    {
+        double a = phaseDeg;
+        return -3.99 - 1.060e-3 * a + 2.054e-4 * a * a + 5 * Math.Log10(rAu * deltaAu);
+    }
+
+    /// <summary>
+    /// A body's apparent magnitude from anywhere (#2047): <paramref name="phaseDeg"/> the angle at the body between the Sun
+    /// and the eye, <paramref name="rAu"/> its distance from the Sun and <paramref name="deltaAu"/> from the eye, AU. The
+    /// same laws as from the Earth (Mallama and Hilton 2018), and the Moon's (H +0.21, Allen's phase law: −12.7 full from
+    /// the Earth). From the Earth <see cref="Magnitude"/>; from space the camera's own distance and phase.
+    /// </summary>
+    public static double MagnitudeAt(SkyBody body, double phaseDeg, double rAu, double deltaAu, DateTime utc)
+    {
+        double a = phaseDeg;
         double h = body switch
         {
+            SkyBody.Moon => 0.21 + 0.026 * a + 4.0e-9 * a * a * a * a,
             SkyBody.Mercury => -0.613 + 0.06328 * a - 0.0016336 * a * a + 3.3644e-5 * a * a * a - 3.4265e-7 * a * a * a * a,
             SkyBody.Venus => -4.384 - 0.001044 * a + 3.687e-4 * a * a - 2.814e-6 * a * a * a + 8.938e-9 * a * a * a * a,
             SkyBody.Mars => -1.601 + 0.02267 * a - 1.302e-4 * a * a,
@@ -175,7 +199,7 @@ public static partial class Ephemeris
             SkyBody.Phobos => 11.8, SkyBody.Deimos => 12.89,
             _ => -1.28,   // Titan
         };
-        return h + 5 * Math.Log10(r * delta);
+        return h + 5 * Math.Log10(rAu * deltaAu);
     }
 
     /// <summary>|sin| of the Earth's latitude over Saturn's equator: how open its rings are, 0..1.</summary>
