@@ -464,6 +464,59 @@ The spectator camera is the first way between bodies (the user's order: online p
   gravity. Offline at once; online the server agrees and the body is published with its body (C3b).
 - `/goto <body> <lat> <lon>` stays as the admin's and the checks' shortcut.
 
+### The spectator's frame, blended by distance (#2053)
+
+The user: "Rotating with the planet should gradually disappear as altitude increases, and so does the anchoring (and
+pretty fast) ... a composite of the closest planets, scaled with distance ... there isn't a noticeable switch between two
+bodies references when flying as it's gradual"; and "the fully free cam should start being available pretty fast once
+space is reached. Way before deep space".
+
+Until now the fly camera stood still in the anchor body's fixed frame. Out in space it turned with the body (the game's
+24-minute day: the stars wheel round once in 24 minutes over the Earth), it moved with the anchor, and both switched at a
+sphere-of-influence handover. Its up, its level and its level flight followed the local vertical everywhere, so left and
+right circled the body even 100,000 km out.
+
+Three layers, each a weight from 1 (near the body) to 0, blended continuously (`Player/SpectatorFrame`, pure):
+
+| layer | what it does near the body | gone by | weight |
+|---|---|---|---|
+| **co-rotation** | the ground stays still under a stopped camera | a short height over the ground or the air | `1 − smoothstep(top + 0.002 R, top + 0.02 R, h)` |
+| **up and level** | up is the local vertical, the view kept level, level flight and the look's yaw about the vertical: left and right circle the body | soon after space is reached | `1 − smoothstep(top + 0.005 R, top + 0.04 R, h)` |
+| **the rest frame** | "standing still" is moving with the body | its sphere of influence, slowest | `s = 1 − smoothstep(0.6, 1.4, d / SOI)` per body |
+
+`h` is the height over the body's reference surface. `top` is its air's top (`BodyAir.ThicknessM`: the Earth's 100 km,
+Mars' 120 km), 0 without air. `R` is its equatorial radius.
+
+| body | co-rotation gone | up and level gone | rest frame its own within, gone past |
+|---|---|---|---|
+| the Earth | 113 to 227 km | 132 to 355 km (the ISS's 400 km is free) | 555,000 km, 1,295,000 km |
+| the Moon | 3.5 to 35 km | 8.7 to 69 km | 40,000 km, 92,000 km |
+| Mars | 127 to 188 km | 137 to 256 km | 347,000 km, 810,000 km |
+
+- **Co-rotation**: each frame the body's own turn since the last frame (its axes' change in the frame tree,
+  `Frames.Orientation`, the local day included) is undone for `1 − w` of it: the camera's place and view are turned
+  back about the body's axis. At 0 the camera stays still against the stars and the body turns under it.
+- **Up and level**: `Level` (the view turned with the local up, the roll eased out) is weighted by `w`. The keys move
+  along a blend of the level directions (the ground plane, the vertical) and the camera's own (its forward, right
+  and up). The look turns about a blend of the vertical and the camera's own up. Its pitch is held off the vertical
+  only while there is a vertical to hold to. At 0 the camera is fully free: it looks about its own axes, moves along
+  them, and no roll is taken away. There is no "up" in space.
+- **The rest frame**: nested from the Sun down. Its inertial frame, then each child's motion as far as `s` of the
+  child whose sphere the camera is near (the Earth's, then within it the Moon's). Each frame the camera moves by that
+  composite's displacement less the anchor's own. Near a body it is that body's alone (on the Moon, the Moon's), so
+  nothing drifts. Between the Earth and the Moon it passes from one to the other over 40,000 to 92,000 km of the
+  Moon. In deep space it is the Sun's.
+- **The anchor still re-anchors in steps** underneath (precision, the handover's relabelling): every weight is a
+  function of the camera's place and the bodies', not of the anchor, so nothing changes at a handover.
+- **Near the ground everything is as before** (every weight 1): no drift, the same keys, the same look.
+- **Controls**: no new key, button or VR way. VR: no horizon lock in free space. The head turns the view as it is,
+  and the rig is never rolled by the game. Near a body the roll is eased out as before.
+- **Checks** (`--spectatorframecheck`, headless): a flight from 1 km over Geneva to low orbit, to the Moon, out to deep
+  space and back, the camera's velocity in the Sun's frame and its view's turn rate read every frame, with no step
+  between frames past a small share of the speed (and m/s² near the ground). Hovers by the Earth, the Moon and between
+  them, the body held in view within a degree over 10 s. Strafes: low over the Moon a circle (the height kept), in space
+  a straight line (the height grows as a line's). `--spectatorcrosscheck`, `--spectatorturncheck`, `--targetcheck`.
+
 ### Then: craft (C3a, after online play)
 
 - **The cruise drive between bodies**: v = lever · d / τ (τ = 10 s), **d the distance to the nearest surface of any

@@ -36,3 +36,8 @@
   `VacuumReach`, faded from a tenth of it: against black the faintest glow showed the quad's edge), no light shafts
   (they are the air's). Before, it faded out with `Atmosphere.Space` (1 off the Earth) and nothing drew a sun on the Moon.
   A body with air (Mars) keeps the shell's sun as before.
+- **Its horizon off the Earth** (#2035): `SunDisc` hides the sun only inside the anchor body's disc
+  (`Atmosphere.BodyDisc`: the direction to its centre and its angular radius, as the stars' `world_sky_floor`), never by
+  world Y, and never with the anchor on the Sun itself (`Atmosphere.OnSun`): between the planets, counted from the Sun,
+  the Sun is "down", and 5 AU out it was faded to a grey glow with no core or glare.
+

@@ -2,10 +2,10 @@ shader_type spatial;
 
 // The real moon in the sky (#1440, src/World/MoonDisc.cs): its face from NASA's LROC colour map,
 // turned by its own axes (libration included) and lit by the real sun, so its phase is right.
-// Added onto the sky: its unlit part lets the sky through, as the real one does by day.
-// It writes its depth a step nearer than the stars and is drawn before them (MoonDisc: render priority -1), so the
-// stars behind it, its dark part's too, fail the depth test (#1798: they shone through it).
-render_mode unshaded, fog_disabled, blend_add, depth_draw_always, cull_back, shadows_disabled;
+// Added onto the sky by day: its unlit part lets the sky through, as the real one does. Drawn after the stars and
+// covering them where the sky is dark (#2051; it wrote its depth a step nearer than the stars, #1798, but high up a
+// depth that near the far plane rounded to the stars' own and they shone through it again).
+render_mode unshaded, fog_disabled, blend_premul_alpha, depth_draw_never, cull_back, shadows_disabled;
 
 uniform sampler2D albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 // world axes, toward the sun
@@ -41,15 +41,32 @@ vec3 globe_lit(vec3 photo, vec3 n, vec3 sun) {
 
 varying vec3 world_normal;
 
+// a stand-in for a far body (#2051, shaders/common/sky_cover.gdshaderinc): drawn after the stars, it covers them as far
+// as the sky is dark (in space, at night); by day it is added onto the sky as before. It steps aside for the scene in
+// front of it; its true distance (metres) decides against the anchor's own body
+#include "res://shaders/common/sky_cover.gdshaderinc"
+uniform float true_distance = 1e12;
+global uniform float world_night;
+global uniform float world_space;
+varying vec3 cover_world;
+
+float sky_dark() {
+	return max(smoothstep(0.35, 0.95, world_night), world_space);
+}
+
 #include "res://shaders/common/sky_depth.gdshaderinc"
 
 void vertex() {
 	world_normal = (MODEL_MATRIX * vec4(VERTEX, 0.0)).xyz;
+	cover_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
 	POSITION.z = max(POSITION.z, POSITION.w * SKY_MIN_DEPTH * 2.0);
 }
 
 void fragment() {
+	vec3 cam = INV_VIEW_MATRIX[3].xyz;
+	if (sky_covered(SCREEN_UV, cam, normalize(cover_world - cam), true_distance, INV_PROJECTION_MATRIX)) discard;
+	ALPHA = sky_dark();
 	vec3 n = normalize(world_normal);
 	vec3 b = vec3(dot(n, face[0]), dot(n, face[1]), dot(n, face[2]));
 	vec2 uv = vec2(0.5 + atan(b.y, b.x) / (2.0 * PI), 0.5 - asin(clamp(b.z, -1.0, 1.0)) / PI);

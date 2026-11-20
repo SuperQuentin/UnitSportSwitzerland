@@ -54,4 +54,7 @@ Every body's air is data: `Core/BodyAir` on `CelestialBody.Air` (null for the ai
   stopped on a flat floor, a kink that read as a hard line across Jupiter seen from Io.
 - **A globe tile keeps the sun it was given** (`BodyGlobe.Tile.Sun`): a tile hidden while the sun moved or the frame
   turned is given the sun again when shown.
-
+- **A giant's shell is its ellipsoid** (#2036, `Atmosphere.SquashFlattening` 1 %): the shader marches in the space where
+  the body's ellipsoid is a sphere (the pole stretched by A/B, `pole`/`squash`), its steps counted back in metres. A
+  sphere at the radius under the camera stood 6,000 km proud of Saturn's poles, a pale band over them. Every body
+  flatter than 1 % (the Earth, Mars, Venus, Titan) keeps the sphere bit for bit (`squash` 1).

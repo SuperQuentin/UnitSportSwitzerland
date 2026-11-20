@@ -9,13 +9,14 @@ namespace UnitSport.World.Bodies;
 /// </summary>
 public static class SaturnRings
 {
-    public const double Inner = 74_500_000, Outer = 140_220_000;
+    // one slab for the drawing and the distances (#2030: the fly camera slows into it), Core's
+    public static readonly double Inner = Core.CelestialBody.SaturnRingSlab.Inner, Outer = Core.CelestialBody.SaturnRingSlab.Outer;
 
     /// <summary>
     /// Half the slab's thickness, metres. The real main rings are ~10 m to 1 km thick; 200 m reads as a slab from a few
     /// km and keeps the chunks' field (and the shrunk system's floats) comfortable.
     /// </summary>
-    public const double HalfThickness = 200;
+    public static readonly double HalfThickness = Core.CelestialBody.SaturnRingSlab.HalfThickness;
 
     public const string MapPath = "res://assets/space/saturn_ring_2k.png";
 

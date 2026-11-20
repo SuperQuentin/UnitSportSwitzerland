@@ -32,7 +32,17 @@ public partial class Atmosphere : Node3D
     private static readonly StringName PlanetCentre = "planet_centre", PlanetR = "planet_r", AtmoR = "atmo_r",
         SunDir = "sun_dir", Intensity = "intensity", WorldSpace = "world_space", SkyFloor = "world_sky_floor", SkyDown = "world_sky_down", TrueSunParam = "world_true_sun",
         BetaR = "beta_r", BetaM = "beta_m", HeightR = "h_r", HeightM = "h_m", GM = "g_m", MExt = "m_ext",
-        AbsorbR = "absorb_r", SunPower = "sun_power", MaxMarch = "max_march";
+        AbsorbR = "absorb_r", SunPower = "sun_power", MaxMarch = "max_march", Pole = "pole", Squash = "squash";
+
+    /// <summary>
+    /// A body flatter than this has its shell an ellipsoid of its own shape (#2036: the giants; Saturn 9.8 %, Jupiter 6.5 %,
+    /// Uranus 2.3 %, Neptune 1.7 %). A sphere at the radius under the camera stood 6,000 km proud of Saturn's poles from its
+    /// equator, a pale band over them; the Earth (0.34 %), Mars (0.59 %), Venus and Titan keep it.
+    /// </summary>
+    public const double SquashFlattening = 0.01;
+
+    private Vector3 _pole = new(float.NaN, 0, 0);
+    private float _squash = -1;
 
     /// <summary>The march's cap written last (0: none).</summary>
     private float _maxMarch;
@@ -53,7 +63,8 @@ public partial class Atmosphere : Node3D
 
     public override void _Ready()
     {
-        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/atmosphere.gdshader") };
+        // drawn after the stand-ins of far bodies (#2051): the air is in front of them
+        _material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/atmosphere.gdshader"), RenderPriority = Bodies.BodyLook.AirPriority };
         _shell = new MeshInstance3D
         {
             Name = "Shell",
@@ -128,7 +139,12 @@ public partial class Atmosphere : Node3D
 
     public override void _Process(double delta)
     {
-        if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam) return;
+        if (Origin == null || GetViewport()?.GetCamera3D() is not { } cam)
+        {
+            _floorOf = null;
+            WriteAnchor(null, 0);
+            return;
+        }
         var c = cam.GlobalPosition;
         // the anchor body's air (#1853): the Earth's fades in over the style's sky from 15 km; another body with air (Mars)
         // has its sky from the shell at every height (the style's sky is the Earth's), its stars by day above its own
@@ -145,16 +161,16 @@ public partial class Atmosphere : Node3D
         var sun = TrueSun(axes);
         Space = space;
         Airless = !home && air == null;
+        OnSun = body.Id == BodyId.Sun;
         // the body's disc hides the sky behind it (#1989): its centre from the camera, its angular radius; near its ground
         // the eye is dazzled by it by day (StarField), not from far out (#1989 follow-up: thin stars 68,000 km off the Moon)
-        if (home) WriteSkyFloor(-1f, Vector3.Down);
-        else
-        {
-            var (bx, by, bz) = axes.FromEcef(new EcefPos(0, 0, 0));
-            var toCentre = new Vector3((float)(bx - c.X), (float)(by - c.Y), (float)(bz - c.Z));
-            double d = toCentre.Length();
-            WriteSkyFloor(d > 1 ? DiscRadius(body.Shape.A, d) : -1f, d > 1 ? toCentre / (float)d : Vector3.Down);
-        }
+        // the Earth's too once in space (#2051): its bulk hides the stars wherever its depth rounds to nothing high up
+        bool floor = !home || space >= 0.5f;
+        _floorOf = floor ? (axes, body.Shape.A) : null;
+        if (floor) WriteSkyFloor(axes, body.Shape.A, c);
+        else WriteSkyFloor(-1f, Vector3.Down);
+        // what stands in for a far body steps aside behind the anchor's bulk (shaders/common/sky_cover.gdshaderinc)
+        WriteAnchor(axes, body.Shape.B * AnchorShrink);
         NearGround = home ? 0f : 1f - Mathf.SmoothStep(0.05f, 0.5f, (float)(Math.Max(altitude, 0) / body.Shape.A));
         DimSky(home ? space : 1f);
         // the stars by day up here (sky_point.gdshader)
@@ -173,8 +189,24 @@ public partial class Atmosphere : Node3D
         _shell.GlobalPosition = centre;
         var eye = axes.ToEcef(c.X, c.Y, c.Z);
         var shape = axes.Shape;
-        var nadir = shape.ToEcef(shape.ToGeodetic(eye) with { H = 0 });
-        double r = Math.Sqrt(FrameAxes.Dot(nadir, nadir));
+        // a giant's shell is its ellipsoid (the shader stretches its pole to the equator's radius); any other body's a
+        // sphere at the radius under the camera
+        bool squashed = 1 - shape.B / shape.A > SquashFlattening;
+        double r;
+        if (squashed) r = shape.A;
+        else
+        {
+            var nadir = shape.ToEcef(shape.ToGeodetic(eye) with { H = 0 });
+            r = Math.Sqrt(FrameAxes.Dot(nadir, nadir));
+        }
+        float squash = squashed ? (float)(shape.A / shape.B) : 1f;
+        if (squash != _squash) _material.SetShaderParameter(Squash, _squash = squash);
+        if (squashed)
+        {
+            // the body's axis (its fixed Z) in world axes
+            var pole = new Vector3((float)axes.X.Z, (float)axes.Y.Z, (float)axes.Z.Z).Normalized();
+            if (!pole.IsEqualApprox(_pole)) _material.SetShaderParameter(Pole, _pole = pole);
+        }
 
         // written on change only (perf-no-per-frame-allocations): the centre moves with a shift, the
         // radius and the sun slowly, the far plane with the altitude
@@ -193,6 +225,57 @@ public partial class Atmosphere : Node3D
         if (march != _maxMarch) _material.SetShaderParameter(MaxMarch, _maxMarch = march);
         _space = space;
     }
+
+    // the body whose disc hides the sky, its axes and radius this frame; again from the camera where it is drawn from
+    private (FrameAxes Axes, double Radius)? _floorOf;
+
+    public override void _EnterTree() => RenderingServer.FramePreDraw += OnPreDraw;
+
+    public override void _ExitTree() => RenderingServer.FramePreDraw -= OnPreDraw;
+
+    /// <summary>
+    /// The sky's floor again from the camera after every node moved (#2036): written in <c>_Process</c> only it was a frame's
+    /// travel of the fly camera behind, the stars hidden off the body's disc at full speed.
+    /// </summary>
+    private void OnPreDraw()
+    {
+        if (_floorOf is not { } f || GetViewport()?.GetCamera3D() is not { } cam) return;
+        WriteSkyFloor(f.Axes, f.Radius, cam.GlobalPosition);
+    }
+
+    private void WriteSkyFloor(FrameAxes axes, double radius, Vector3 c)
+    {
+        var (bx, by, bz) = axes.FromEcef(new EcefPos(0, 0, 0));
+        var toCentre = new Vector3((float)(bx - c.X), (float)(by - c.Y), (float)(bz - c.Z));
+        double d = toCentre.Length();
+        WriteSkyFloor(d > 1 ? DiscRadius(radius, d) : -1f, d > 1 ? toCentre / (float)d : Vector3.Down);
+    }
+
+    /// <summary>
+    /// The anchor's sphere for the sky's stand-ins (#2051) as a share of its polar radius: under its lowest basins (the
+    /// Moon's 9 km, the Earth's seabed), so the camera is always outside it.
+    /// </summary>
+    public const double AnchorShrink = 0.995;
+
+    private static readonly StringName AnchorSphere = "world_anchor_sphere";
+    private Vector4 _anchorWritten = new(float.NaN, 0, 0, 0);
+
+    /// <summary><c>world_anchor_sphere</c>: the anchor body's centre in world space and a radius under its least, or none.</summary>
+    private void WriteAnchor(FrameAxes? axes, double radius)
+    {
+        var v = Vector4.Zero;
+        if (axes != null)
+        {
+            var (x, y, z) = axes.FromEcef(new EcefPos(0, 0, 0));
+            v = new Vector4((float)x, (float)y, (float)z, (float)radius);
+        }
+        if (v == _anchorWritten) return;
+        _anchorWritten = v;
+        RenderingServer.GlobalShaderParameterSet(AnchorSphere, v);
+    }
+
+    /// <summary>The air shell's centre in world space while it is drawn (the placement check, #2036).</summary>
+    internal Vector3? ShellCentre => _shell.Visible ? _shell.GlobalPosition : null;
 
     private float _skyFloor = float.NaN;
     private Vector3 _skyDown = Vector3.Zero;
@@ -215,8 +298,19 @@ public partial class Atmosphere : Node3D
     /// <c>world_sky_floor</c> and <c>world_sky_down</c> (<c>sky_point.gdshader</c>), written when they move by more than
     /// about a hundredth of a degree.
     /// </summary>
+    /// <summary>
+    /// Off the Earth (#2035): the direction to the anchor body's centre and its angular radius (rad; -1 on the Earth): what is
+    /// within it is behind the body. <see cref="SunDisc"/> hides the sun by it there, never by world Y (anchored on the Sun,
+    /// the Sun is "down": it was faded to a grey glow 5 AU out).
+    /// </summary>
+    public static (Vector3 Down, float Radius) BodyDisc { get; private set; } = (Vector3.Down, -1f);
+
+    /// <summary>The anchor's body is the Sun (between the planets, #2035): its own sun is never behind it.</summary>
+    public static bool OnSun { get; private set; }
+
     private void WriteSkyFloor(float floor, Vector3 down)
     {
+        BodyDisc = (down, floor);
         if (Mathf.Abs(floor - _skyFloor) >= 2e-4f)
         {
             _skyFloor = floor;

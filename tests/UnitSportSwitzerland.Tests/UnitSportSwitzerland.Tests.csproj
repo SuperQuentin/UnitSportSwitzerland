@@ -31,6 +31,7 @@
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\World\LocalHours.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\SpectatorSpeed.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\SpectatorFrame.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\TargetList.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- #1851: an orbit carried across a sphere of influence -->
     <Compile Include="..\..\src\Player\SpaceOrbit.cs" Link="Game\%(Filename)%(Extension)" />
@@ -199,6 +200,7 @@
     <Compile Include="..\..\src\Bots\BrTactics.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CelestialBody.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\HudPlace.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\BodyGoto.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\BodyAir.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Frames.cs" Link="Game\%(Filename)%(Extension)" />
@@ -216,6 +218,7 @@
     <Compile Include="..\..\src\Terrain\Bodies\ColonyCrew.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\MoonOutposts.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Bodies\MoonPads.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Bodies\BodyPlaces.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SkyClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Ephemeris.Frames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Atmosphere.cs" Link="Game\%(Filename)%(Extension)" />

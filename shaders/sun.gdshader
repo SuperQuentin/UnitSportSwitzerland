@@ -26,7 +26,12 @@ void vertex() {
 	POSITION = sky_depth(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)));
 }
 
+// the scene's opaque depth (#2051): the sun is behind everything drawn, whatever depth a ridge near the far plane
+// rounded to (the pinned depth lost to it high up)
+uniform sampler2D scene_depth : hint_depth_texture, filter_nearest;
+
 void fragment() {
+	if (texture(scene_depth, SCREEN_UV).r > 0.0) discard;
 	// the offset from the sun on the quad's tangent plane: radians at these sizes, x right and y up as the screen
 	vec2 t = vec2(UV.x * 2.0 - 1.0, 1.0 - UV.y * 2.0) * tan(reach);
 	float a = length(t);

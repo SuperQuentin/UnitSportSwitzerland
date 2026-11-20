@@ -3,8 +3,9 @@ shader_type spatial;
 // A planet or a big moon at its true size in the sky (#1444, src/World/SkyBodies.cs). The mesh is a
 // unit sphere whose local X, Y, Z the node's basis turns onto the body's own 0° / 90° E / north
 // pole (and squashes along the pole: Jupiter, Saturn), so the map is read from the vertex itself.
-// Lit by the real sun: Venus and Mercury show their phases. Added onto the sky, as the moon.
-render_mode unshaded, fog_disabled, blend_add, depth_draw_never, cull_back, shadows_disabled;
+// Lit by the real sun: Venus and Mercury show their phases. Added onto the sky by day, as the moon, and covering the
+// stars where the sky is dark (#2051: drawn after them; added, the stars shone through its dark side).
+render_mode unshaded, fog_disabled, blend_premul_alpha, depth_draw_never, cull_back, shadows_disabled;
 
 uniform sampler2D albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform bool textured = true;
@@ -51,6 +52,20 @@ bool occluded(vec3 world, vec3 cam) {
 	return length(off) < occluder.w;
 }
 
+
+// a stand-in for a far body (#2051, shaders/common/sky_cover.gdshaderinc): drawn after the stars, it covers them as far
+// as the sky is dark (in space, at night); by day it is added onto the sky as before. It steps aside for the scene in
+// front of it; its true distance (metres) decides against the anchor's own body
+#include "res://shaders/common/sky_cover.gdshaderinc"
+uniform float true_distance = 1e12;
+global uniform float world_night;
+global uniform float world_space;
+varying vec3 cover_world;
+
+float sky_dark() {
+	return max(smoothstep(0.35, 0.95, world_night), world_space);
+}
+
 #include "res://shaders/common/sky_depth.gdshaderinc"
 
 void vertex() {
@@ -63,6 +78,9 @@ void vertex() {
 
 void fragment() {
 	if (occluded(world_pos, INV_VIEW_MATRIX[3].xyz)) discard;
+	vec3 cam = INV_VIEW_MATRIX[3].xyz;
+	if (sky_covered(SCREEN_UV, cam, normalize(world_pos - cam), true_distance, INV_PROJECTION_MATRIX)) discard;
+	ALPHA = sky_dark() * fade;
 	vec3 b = normalize(local_dir);
 	vec2 uv = vec2(0.5 + atan(b.y, b.x) / (2.0 * PI), 0.5 - asin(clamp(b.z, -1.0, 1.0)) / PI);
 	vec3 surface = textured ? texture(albedo, uv).rgb : vec3(1.0);
