@@ -21,7 +21,7 @@
   address's (the GWR join is spatial, `tools/buildings`). A building with EGID 0 cannot be claimed.
 - **Model (`tools/TerrainFormat/HouseLayout.cs`, version 2, unit tested):** drawn in `BuildingOutline`'s frame: x along the
   long side of the footprint's minimum-area rectangle, z across it, metres from its centre (LV95 `e`/`n`, `yawDeg`
-  counter-clockwise from east). The base outline comes from the floor triangles' boundary, else a hull. Per storey: rooms
+  counter-clockwise from east). The base outline comes from the floor triangles' boundary (for a building stepped down a slope, the union of its floors at every height, #1574; soffits and eaves, under less than 2 m of solid, stay out), else a hull. Per storey: rooms
   are **polygons** (`points`, 3 to 64 corners, a `RoomType` name) whose edges are the walls. Doors, windows and arches are
   segments on a wall, at any angle. Stairs are a rectangle square to the frame and the direction they climb.
   `Validate` is shared by the page (through save), the service (save, submit, approve) and the game:
