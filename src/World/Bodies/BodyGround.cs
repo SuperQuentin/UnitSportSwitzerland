@@ -118,6 +118,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>The scene's light on the ground this frame: how strong, what colour (<see cref="Light"/>).</summary>
     private (float Strength, Vector3 Tint) _light = (1f, Vector3.One);
 
+    /// <summary>The scene's light on the ground this frame (#2016: the stones on it take the same, <see cref="BodyScatter"/>).</summary>
+    public (float Strength, Vector3 Tint) SceneLight => _light;
+
     /// <summary>
     /// The scene's directional light as the ground takes it (#2024): the sun at the ground's exposure, the planet's light at
     /// night (the Moon's earthshine: bluish, a share of the day's by how much of the Earth is lit), the stars' faint light on

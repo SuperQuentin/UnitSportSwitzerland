@@ -11,8 +11,9 @@ namespace UnitSport.World.Bodies;
 /// The boulders round fresh craters near the camera (#1849, <see cref="BoulderField"/>), on a body with generated craters
 /// whose ground is built (the Moon, Mercury, Callisto, Phobos...): made on a worker within <see cref="Reach"/> of the camera
 /// when it has moved <see cref="MoveM"/>, each laid on the ground's height there a third sunk, drawn as one MultiMesh a rock
-/// shape (<see cref="RingRocks"/>'s lumps, flattened, the body's grey), solid within <see cref="ColliderReach"/>. The same on
-/// every peer: the field is a function of the craters, the ground of the data and the seed.
+/// shape (<see cref="RingRocks"/>'s lumps, flattened, the body's grey), solid within <see cref="ColliderReach"/>, lit as the
+/// ground and the other stones (#2016: <c>body_rock.gdshader</c>, the ground's light and shadows). The same on every peer:
+/// the field is a function of the craters, the ground of the data and the seed.
 /// </summary>
 public partial class BodyBoulders : Node
 {
@@ -28,7 +29,8 @@ public partial class BodyBoulders : Node
     /// <summary>Made only while the camera is this close to the ground, metres.</summary>
     public const double NearM = 3_000;
 
-    private static readonly StringName SunDir = "sun_dir", Shine = "ring_shine", Strength = "sun_strength";
+    private static readonly StringName LightStrength = "light_strength", LightTint = "light_tint", AirTau = "air_tau",
+        LunarParam = "lunar", SkyFill = "sky_fill";
 
     /// <summary>The live ones, by body (for the checks).</summary>
     public static readonly Dictionary<BodyId, BodyBoulders> Active = new();
@@ -39,15 +41,14 @@ public partial class BodyBoulders : Node
 
     private readonly BodyGlobe _globe;
     private readonly WorldOrigin _origin;
-    private readonly ShaderMaterial _material = new() { Shader = GD.Load<Shader>("res://shaders/ring_chunk.gdshader") };
+    private readonly ShaderMaterial _material = new() { Shader = GD.Load<Shader>("res://shaders/body_rock.gdshader") };
     private BoulderField? _field;
     private Node3D? _node;
     private DVec3 _centre;
     private bool _has;
     private int _epoch = -1;
     private Task<Made>? _task;
-    private Vector3 _sunWritten;
-    private float _exposureWritten;
+    private (float Strength, Vector3 Tint) _lightWritten = (-1f, Vector3.Zero);
 
     private sealed record Made(DVec3 Centre, List<Transform3D>[] Instances, List<Color>[] Tints, List<(Vector3 At, float Radius)> Solid);
 
@@ -56,7 +57,9 @@ public partial class BodyBoulders : Node
         _globe = globe;
         _origin = origin;
         Name = $"Boulders_{globe.Body.Name}";
-        _material.SetShaderParameter(Shine, 0.04f);
+        _material.SetShaderParameter(AirTau, BodyGlobe.AirTauOf(globe.Body));
+        _material.SetShaderParameter(LunarParam, globe.LunarAt(BodyGlobe.GroundGrey));
+        _material.SetShaderParameter(SkyFill, BodyScatter.SkyFillOf(globe.Body));
     }
 
     public override void _EnterTree() => Active[_globe.Body.Id] = this;
@@ -83,8 +86,13 @@ public partial class BodyBoulders : Node
         _field ??= heights.Craters is { } craters ? new BoulderField(craters, (ulong)_globe.Body.Id * 7_919 + 3) : null;
         if (_field == null) return;
         if (_node != null && _origin.Epoch != _epoch) Place(axes);
-        if (_node != null && _globe.Sun != Vector3.Zero && _globe.Sun != _sunWritten) _material.SetShaderParameter(SunDir, _sunWritten = _globe.Sun);
-        if (_globe.Exposure != _exposureWritten) _material.SetShaderParameter(Strength, _exposureWritten = _globe.Exposure);
+        // the ground's light (#2024, #2016), written on a change
+        if (_globe.Ground is { } g && g.SceneLight != _lightWritten)
+        {
+            _lightWritten = g.SceneLight;
+            _material.SetShaderParameter(LightStrength, _lightWritten.Strength);
+            _material.SetShaderParameter(LightTint, _lightWritten.Tint);
+        }
 
         var c = cam.GlobalPosition;
         var e = axes.ToEcef(c.X, c.Y, c.Z);
@@ -190,7 +198,6 @@ public partial class BodyBoulders : Node
         AddChild(node);
         Place(axes);
         old?.QueueFree();
-        _material.SetShaderParameter(SunDir, _sunWritten = _globe.Sun == Vector3.Zero ? Vector3.Up : _globe.Sun);
         Built++;
         Drawn = drawn;
         Solid = m.Solid.Count;

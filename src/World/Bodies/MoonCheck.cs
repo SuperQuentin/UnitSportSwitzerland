@@ -133,6 +133,7 @@ public partial class MoonCheck : Node
                 break;
             case Stage.Settle when _stageT > 1.5:
                 if (Boulders() is { } stones) { Finish(stones); return; }
+                if (Scatter() is { } scatter) { Finish(scatter); return; }
                 _jumpFrom = Over(_local()!);
                 _apex = _jumpFrom;
                 Input.ActionPress(PlayerInput.Jump);
@@ -366,6 +367,50 @@ public partial class MoonCheck : Node
         float off = hit.Count > 0 ? ((Vector3)hit["position"]).DistanceTo(near.At) : float.NaN;
         Log(string.Create(CultureInfo.InvariantCulture, $"a ray down on the nearest solid boulder ({near.Radius:F1} m): {(hit.Count > 0 ? $"hit {off:F2} m from its centre" : "no hit")}"));
         return hit.Count > 0 && off <= near.Radius * 1.1f ? null : "the nearest boulder is not solid";
+    }
+
+    /// <summary>
+    /// #2016: the fine square is in round the walker, the cover is on, and the body's scatter (Mars' rocks, the regolith's
+    /// pebbles, ice blocks, cobbles) is laid; where a field has solid stones, a ray down onto the nearest hits it and a box
+    /// the size of a car (what a rover or the walker's capsule meets) set on it touches its collider on the layer both
+    /// collide with. Null when fine.
+    /// </summary>
+    private string? Scatter()
+    {
+        var ground = _ground()!;
+        Log($"fine squares built: {ground.FineBuilt}, medium {ground.MediumBuilt}; the cover {ground.CoverLook.Kind} {(ground.CoverLook.On ? "on" : "off")}");
+        if (ground.FineBuilt == 0) return "no fine square round the walker";
+        if (!BodyScatter.Active.TryGetValue(Target.Id, out var scatter)) return null;
+        bool solidField = false;
+        foreach (var (name, built, drawn, solid) in scatter.Counts())
+        {
+            Log($"scatter {name}: {drawn} drawn, {solid} solid (laid {built} times)");
+            if (built == 0 || drawn == 0) return $"no {name} laid round the walker";
+            solidField |= solid > 0;
+        }
+        if (!solidField) return null;
+        if (scatter.NearestSolid(_local()!.GlobalPosition) is not { } near) return "no solid stone round the walker";
+        var space = GetViewport().World3D.DirectSpaceState;
+        var up = _origin.Frame.UpAt(near.At);
+        var from = near.At + up * (near.Radius + 20f);
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, near.At - up * near.Radius * 2f));
+        float off = hit.Count > 0 ? ((Vector3)hit["position"]).DistanceTo(near.At) : float.NaN;
+        Log(string.Create(CultureInfo.InvariantCulture,
+            $"a ray down on the nearest solid {near.Field} stone ({near.Radius:F2} m): {(hit.Count > 0 ? $"hit {off:F2} m from its centre" : "no hit")}"));
+        if (hit.Count == 0 || off > near.Radius * 1.6f) return $"the nearest {near.Field} stone is not solid";
+        // a car-sized box (2 x 1 x 4 m) resting its underside at the stone's top: a vehicle's body (layer 1, its mask) meets it
+        var box = new PhysicsShapeQueryParameters3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(2f, 1f, 4f) },
+            Transform = new Transform3D(Basis.Identity, near.At + up * (near.Radius + 0.45f)),
+            CollisionMask = 1,
+        };
+        var touching = space.IntersectShape(box, 8);
+        bool stone = false;
+        foreach (var t in touching)
+            if (t["collider"].AsGodotObject() is StaticBody3D { Name: var n } && n == "Solid") stone = true;
+        Log($"a car-sized box set on it touches {touching.Count} collider(s){(stone ? ", the stone's among them" : "")}");
+        return stone ? null : $"a car-sized box on the nearest {near.Field} stone does not touch it";
     }
 
     private void Stand()

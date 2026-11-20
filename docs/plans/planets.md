@@ -68,7 +68,8 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
 - **C3b online** (#1852): PR #1975, stacked on D2 (#1727, the earth frame by default), merges after it: the body on the
   wire, interest and server regions per body, the server's Moon ground, `/goto` online, the far markers in the telescope,
   `tools/moonnetcheck.sh`. C3a's online check (the net check seeing the shuttle land on the Moon) comes with it.
-- **Deferred to issues**: the shuttle's bot pilot (#1498); cover, scatter and leaves on other bodies (#2016).
+- **Deferred to issues**: the shuttle's bot pilot (#1498); cover, scatter and leaves on other bodies (#2016, built
+  without cube leaves: section 5).
 - **Decided: the Earth keeps its own `Globe`** rather than being folded onto `BodyGlobe` (section 6). The Earth's globe
   is the anchor world's (its leaves' holes, geomorphing, the Swiss column, the far fill over it); `BodyGlobe` draws the
   Earth from another body from the same chain (`BodySurface.Earth.Pyramid`), and `BodyLook` gives every body one look
@@ -402,8 +403,15 @@ at a point (`Terrain/Bodies/BodyHeights`: its data, `CraterField` by the size-fr
 `SurfaceStamps`, and its `SurfaceProfile` family: `Dunes` for Mars and Titan, `Ridges` for Europa, `Grooves` for
 Ganymede, `LavaFlows` for Io and Venus), with `BoulderField` round fresh craters. `BodySurface.Profile` says which.
 The table's names were the design's: `CrateredProfile` is `CraterField` + `BoulderField`, `IcyProfile` is `Ridges` /
-`Grooves`, `VolcanicProfile` is `LavaFlows`, `MarsProfile` is craters + `Dunes`; cover and scatter beyond boulders
-come with leaves on other bodies (not yet).
+`Grooves`, `VolcanicProfile` is `LavaFlows`, `MarsProfile` is craters + `Dunes`.
+
+**Built (#2016)**: cover and scatter beyond boulders, and fine ground past the near square, without leaves on other bodies:
+`BodyCover` (the families; fresh craters' rays and the dune sand per square vertex; the mottling, Mars' dust, Io's sulphur
+and the polar ice by latitude and season in the shader, on the squares and the globe alike), `ScatterField` (Mars' rocks by
+a thermal-inertia guess, pebbles, Europa's and Ganymede's ice blocks, Titan's cobbles; solid on the client), and a fine
+square (2 km of 4 m cells) between the near and the medium one, the drawn squares eased by the camera's distance (a
+geomorph, no pop). Cube-keyed leaves on other bodies stay for when the server collides there (#1975): the squares are their
+stand-in (`docs/notes/world/body-cover.md`).
 
 The relief of a profile is band-limited to below the finest data level, so a leaf never contradicts its pyramid tile (the
 same rule the Earth's fill follows). Where a body has no heights at all, its albedo map gives a low relief (a coarse,

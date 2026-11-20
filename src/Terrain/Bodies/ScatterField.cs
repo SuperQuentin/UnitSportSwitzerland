@@ -67,11 +67,12 @@ public sealed class ScatterField
         switch (body)
         {
             case BodyId.Mars:
-                // the rock abundance from a thermal-inertia guess (ThermalInertia): the dusty mantles bare, the rocky plains strewn
+                // the rock abundance from a thermal-inertia guess (ThermalInertia): the dusty mantles bare, the rocky plains strewn.
+                // Solid from 0.4 m: a walker steps over the rest (0.35 m solid ones every few metres stopped a sprint on a rocky plain)
                 double Rocky(double x, double y, double z) => RockAbundance(ThermalInertia(x, y, z, dunes, noise));
                 return new[]
                 {
-                    new ScatterField(seed, radius, new Spec(Kind.Rock, "rocks", 0.12, 1.4, 0.35, 6, 180, 50, 0.3, 60, Rocky)),
+                    new ScatterField(seed, radius, new Spec(Kind.Rock, "rocks", 0.12, 1.4, 0.2, 6, 180, 50, 0.4, 60, Rocky)),
                     new ScatterField(seed + 1, radius, new Spec(Kind.Rock, "pebbles", 0.03, 0.12, 3.0, 2, 30, 10, 0, 0,
                         (x, y, z) => 0.3 + 0.7 * Rocky(x, y, z))),
                 };
