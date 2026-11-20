@@ -99,13 +99,13 @@ public partial class PhoneProbe
         phone.Open(PhoneScreens.Page.Home);   // not the last app: it may be the Map, which has its own camera
         // the ease is seen between: some frame has it neither at 0 nor at 1
         float mid = 0f;
-        double started = RealClock.Now;
+        double started = GameClock.Now;
         for (int i = 0; i < 90 && me.PhoneShoulder < 0.99f; i++)
         {
             await NextFrames(1);
             if (me.PhoneShoulder is > 0f and < 1f) mid = me.PhoneShoulder;
         }
-        double easeSeconds = RealClock.Now - started;
+        double easeSeconds = GameClock.Now - started;
         await Wait(1.0);
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         await Wait(0.3);
