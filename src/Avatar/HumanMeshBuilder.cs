@@ -1821,9 +1821,41 @@ public static partial class HumanMeshBuilder
     private static Rig DanceVariant(in Rig rig, DanceMove prev, DanceMove move, float flow, in Beat t, float we, bool mv, in DanceParams d)
     {
         var ch = Channels(move, t, mv, d.Bpm, d.Style, d.Move);
-        if (flow < 1f) ch = Mix(Channels(prev, t, mv, d.Bpm, d.Style, d.PrevMove), ch, flow);
+        if (flow < 1f)
+        {
+            var before = Channels(prev, t, mv, d.Bpm, d.Style, d.PrevMove);
+            // two kinds of arm aim cannot be mixed as numbers (the hand would jump at the half way point): mix the finished rigs
+            if (before.ArmL.Kind != ch.ArmL.Kind || before.ArmR.Kind != ch.ArmR.Kind)
+            {
+                Feel(ref before, d);
+                Feel(ref ch, d);
+                return ClearArms(MixRigs(Compose(rig, before, we, mv), Compose(rig, ch, we, mv), flow));
+            }
+            ch = Mix(before, ch, flow);
+        }
         Feel(ref ch, d);
         return Compose(rig, ch, we, mv);
+    }
+
+    /// <summary>A mixed rig's wrists, out of the body and within reach again (what <see cref="SolveArm"/> does for a mixed aim).</summary>
+    private static Rig ClearArms(in Rig r)
+    {
+        var wl = ClearReach(r.ShoulderL, ClearOfBody(r.WristL, r.Hip, r.Neck, r.HeadBase, r.HeadTop));
+        var wr = ClearReach(r.ShoulderR, ClearOfBody(r.WristR, r.Hip, r.Neck, r.HeadBase, r.HeadTop));
+        return r with
+        {
+            WristL = wl, ElbowL = Limb.SolveSmooth(r.ShoulderL, wl, UpperArmLength, ForearmLength, r.ElbowL - r.ShoulderL, ArmFallback(-1f)),
+            WristR = wr, ElbowR = Limb.SolveSmooth(r.ShoulderR, wr, UpperArmLength, ForearmLength, r.ElbowR - r.ShoulderR, ArmFallback(1f)),
+        };
+    }
+
+    /// <summary>Where an elbow goes when its hint says nothing: out, down and a little back (<see cref="Limb.SolveSmooth"/>).</summary>
+    private static Vector3 ArmFallback(float s) => new(s * 0.6f, -0.6f, -0.4f);
+
+    private static Vector3 ClearReach(Vector3 shoulder, Vector3 wrist)
+    {
+        var reach = wrist - shoulder;
+        return reach.Length() > 0.50f ? shoulder + reach.Normalized() * 0.50f : wrist;
     }
 
     private static DanceCh Channels(DanceMove move, in Beat t, bool mv, float bpm, Audio.Cd.MusicStyle style, int index)
@@ -1944,6 +1976,8 @@ public static partial class HumanMeshBuilder
         public float Px, Py, Pz, Tilt;
         public float Theta, Phi, Psi, ThN, PhH, ShL, ShR;
         public float ArmBlend;
+        /// <summary>A hand never closer than this to its shoulder, m (0: no rule): a folded arm swings its elbow wildly (#2055, generated moves).</summary>
+        public float MinReach;
         public ArmAim ArmL, ArmR;
         public Vector3 AnkleL, AnkleR, ToeL, ToeR;
     }
@@ -1957,18 +1991,33 @@ public static partial class HumanMeshBuilder
         r.Psi = Mathf.Lerp(a.Psi, b.Psi, t); r.ThN = Mathf.Lerp(a.ThN, b.ThN, t);
         r.PhH = Mathf.Lerp(a.PhH, b.PhH, t); r.ShL = Mathf.Lerp(a.ShL, b.ShL, t);
         r.ShR = Mathf.Lerp(a.ShR, b.ShR, t); r.ArmBlend = Mathf.Lerp(a.ArmBlend, b.ArmBlend, t);
-        r.ArmL = MixArm(a.ArmL, b.ArmL, t); r.ArmR = MixArm(a.ArmR, b.ArmR, t);
+        r.MinReach = Mathf.Lerp(a.MinReach, b.MinReach, t);
+        float swing = Mathf.Clamp(Mathf.Max(a.MinReach, b.MinReach) / 0.14f, 0f, 1f);
+        r.ArmL = MixArm(a.ArmL, b.ArmL, t, swing); r.ArmR = MixArm(a.ArmR, b.ArmR, t, swing);
         r.AnkleL = a.AnkleL.Lerp(b.AnkleL, t); r.AnkleR = a.AnkleR.Lerp(b.AnkleR, t);
         r.ToeL = a.ToeL.Lerp(b.ToeL, t); r.ToeR = a.ToeR.Lerp(b.ToeR, t);
         return r;
     }
 
-    private static ArmAim MixArm(in ArmAim a, in ArmAim b, float t)
+    /// <summary>
+    /// A hand's offset from its shoulder blended between two moves: round the shoulder (direction and length blended, a little
+    /// bulge forward when they are opposed), not straight through it, so a crossfade from raised arms to lowered ones does not fold the elbow.
+    /// </summary>
+    private static Vector3 SwingOff(Vector3 a, Vector3 b, float t)
+    {
+        float la = a.Length(), lb = b.Length();
+        if (la < 1e-3f || lb < 1e-3f) return a.Lerp(b, t);
+        var da = a / la; var db = b / lb;
+        var v = da.Lerp(db, t) + new Vector3(0f, 0f, 0.5f * (1f - da.Dot(db)) * Mathf.Sin(Mathf.Pi * t));
+        return v.Normalized() * Mathf.Lerp(la, lb, t);
+    }
+
+    private static ArmAim MixArm(in ArmAim a, in ArmAim b, float t, float swing)
     {
         if (a.Kind != b.Kind) return t < 0.5f ? a : b;
         ArmAim r;
         r.Kind = a.Kind;
-        r.Off = a.Off.Lerp(b.Off, t); r.Hint = a.Hint.Lerp(b.Hint, t);
+        r.Off = a.Kind == AimKind.Shoulder && swing > 0f ? a.Off.Lerp(b.Off, t).Lerp(SwingOff(a.Off, b.Off, t), swing) : a.Off.Lerp(b.Off, t); r.Hint = a.Hint.Lerp(b.Hint, t);
         r.A1 = Mathf.Lerp(a.A1, b.A1, t); r.G1 = Mathf.Lerp(a.G1, b.G1, t);
         r.A2 = Mathf.Lerp(a.A2, b.A2, t); r.G2 = Mathf.Lerp(a.G2, b.G2, t);
         return r;
@@ -2055,8 +2104,11 @@ public static partial class HumanMeshBuilder
         if (h <= 0f) return;
         ref Vector3 a = ref (s < 0f ? ref ch.AnkleL : ref ch.AnkleR);
         ref Vector3 toe = ref (s < 0f ? ref ch.ToeL : ref ch.ToeR);
+        float stood = a.Y + toe.Y;                       // where the toe was before the heel came up
         a.Y += h;
-        toe = new Vector3(0f, 0.040f - a.Y, 0.13f);
+        // the toe goes to the ground and straight ahead over the first 2 cm of heel, not at once (#2055: it snapped sideways)
+        float k = DSm(h / 0.02f);
+        toe = new Vector3(Mathf.Lerp(toe.X, 0f, k), Mathf.Lerp(stood, 0.040f, k) - a.Y, Mathf.Lerp(toe.Z, 0.13f, k));
     }
 
     /// <summary>The whole foot off the ground.</summary>
@@ -2149,9 +2201,9 @@ public static partial class HumanMeshBuilder
 
         float bl = we * ch.ArmBlend;
         SolveArm(ch.ArmL, -1f, sp, shoulderL, kneeL, hip, neck, headBase, headTop,
-            rig.ShoulderL, rig.ElbowL, rig.WristL, bl, out var elbowL, out var wristL);
+            rig.ShoulderL, rig.ElbowL, rig.WristL, bl, ch.MinReach, out var elbowL, out var wristL);
         SolveArm(ch.ArmR, 1f, sp, shoulderR, kneeR, hip, neck, headBase, headTop,
-            rig.ShoulderR, rig.ElbowR, rig.WristR, bl, out var elbowR, out var wristR);
+            rig.ShoulderR, rig.ElbowR, rig.WristR, bl, ch.MinReach, out var elbowR, out var wristR);
 
         return new Rig(
             HeadTop: headTop, HeadBase: headBase, Neck: neck,
@@ -2168,9 +2220,17 @@ public static partial class HumanMeshBuilder
     /// shoulder (so the two always have the same length), clamped to what the arm can reach, and the
     /// elbow is re-solved toward the preferred bend, like <see cref="ApplyArms"/>.
     /// </summary>
+    /// <summary>The elbow: <see cref="Limb.Solve"/> for the hand-written moves, <see cref="Limb.SolveSmooth"/> for a generated one (<paramref name="minReach"/> &gt; 0), blended in a crossfade.</summary>
+    private static Vector3 Elbow(Vector3 shoulder, Vector3 wrist, Vector3 pole, Vector3 fallback, float minReach)
+    {
+        var plain = Limb.Solve(shoulder, wrist, UpperArmLength, ForearmLength, pole);
+        float k = Mathf.Clamp(minReach / 0.14f, 0f, 1f);
+        return k <= 0f ? plain : plain.Lerp(Limb.SolveSmooth(shoulder, wrist, UpperArmLength, ForearmLength, pole, fallback), k);
+    }
+
     private static void SolveArm(in ArmAim aim, float s, in Spine sp, Vector3 shoulder, Vector3 knee,
         Vector3 hip, Vector3 neck, Vector3 headBase, Vector3 headTop,
-        Vector3 restShoulder, Vector3 restElbow, Vector3 restWrist, float bl,
+        Vector3 restShoulder, Vector3 restElbow, Vector3 restWrist, float bl, float minReach,
         out Vector3 elbow, out Vector3 wrist)
     {
         var restW = shoulder + (restWrist - restShoulder);
@@ -2190,14 +2250,33 @@ public static partial class HumanMeshBuilder
             var to = wd - shoulder;
             float len = to.Length();
             if (len > 0.50f) wd = shoulder + to * (0.50f / len);   // 0.515 m of arm, never ask for all of it
-            ed = Limb.Solve(shoulder, wd, UpperArmLength, ForearmLength, sp.Rot(aim.Hint));
+            ed = Elbow(shoulder, wd, sp.Rot(aim.Hint), sp.Rot(new Vector3(s * 0.6f, -0.6f, -0.4f)), minReach);
         }
 
+        // a generated move's hand swings round its shoulder between the gait arm and the target (a straight line would pass through it)
+        float swing = Mathf.Clamp(minReach / 0.14f, 0f, 1f);   // 0 for the hand-written moves, 1 for a generated one, between in a crossfade
         wrist = restW.Lerp(wd, bl);
+        if (swing > 0f) wrist = wrist.Lerp(shoulder + SwingOff(restW - shoulder, wd - shoulder, bl), swing);
         wrist = ClearOfBody(wrist, hip, neck, headBase, headTop);
         var reach = wrist - shoulder;
         if (reach.Length() > 0.50f) wrist = shoulder + reach.Normalized() * 0.50f;   // pushing it out must not stretch the arm
-        elbow = Limb.Solve(shoulder, wrist, UpperArmLength, ForearmLength, restE.Lerp(ed, bl) - shoulder);
+        if (minReach > 0f)
+        {
+            // a hand drawn in to its shoulder is pushed back out, fading in so that nothing jumps; the elbow's side is hardly defined there
+            var near = wrist - shoulder;
+            float dist = near.Length();
+            if (dist < minReach)
+            {
+                float k = 1f - dist / minReach;
+                wrist += sp.Rot(new Vector3(s * 0.6f, -0.6f, -0.4f)).Normalized() * (minReach * k);
+            }
+            // the bend toward where the hand really is, not where it was aimed before the body and the reach moved it
+            if (aim.Kind != AimKind.Chain)
+                ed = ed.Lerp(Elbow(shoulder, wrist, sp.Rot(aim.Hint), sp.Rot(new Vector3(s * 0.6f, -0.6f, -0.4f)), minReach), swing);
+        }
+        var pole = restE.Lerp(ed, bl) - shoulder;
+        if (swing > 0f) pole = pole.Lerp(SwingOff(restE - shoulder, ed - shoulder, bl), swing);
+        elbow = Elbow(shoulder, wrist, pole, sp.Rot(new Vector3(s * 0.6f, -0.6f, -0.4f)), minReach);
     }
 
     /// <summary>
@@ -2248,8 +2327,8 @@ public static partial class HumanMeshBuilder
             HeadTop: Mx(a.HeadTop, b.HeadTop, t), HeadBase: Mx(a.HeadBase, b.HeadBase, t),
             Neck: Mx(a.Neck, b.Neck, t), Chest: Mx(a.Chest, b.Chest, t),
             Waist: Mx(a.Waist, b.Waist, t), Hip: Mx(a.Hip, b.Hip, t),
-            ShoulderL: shL, ElbowL: Limb.Solve(shL, wrL, UpperArmLength, ForearmLength, Mx(a.ElbowL, b.ElbowL, t) - shL), WristL: wrL,
-            ShoulderR: shR, ElbowR: Limb.Solve(shR, wrR, UpperArmLength, ForearmLength, Mx(a.ElbowR, b.ElbowR, t) - shR), WristR: wrR,
+            ShoulderL: shL, ElbowL: Limb.SolveSmooth(shL, wrL, UpperArmLength, ForearmLength, Mx(a.ElbowL, b.ElbowL, t) - shL, ArmFallback(-1f)), WristL: wrL,
+            ShoulderR: shR, ElbowR: Limb.SolveSmooth(shR, wrR, UpperArmLength, ForearmLength, Mx(a.ElbowR, b.ElbowR, t) - shR, ArmFallback(1f)), WristR: wrR,
             HipL: hipL, KneeL: Limb.Solve(hipL, anL, ThighLength, ShinLength, Mx(a.KneeL, b.KneeL, t) - hipL),
             AnkleL: anL, ToeL: Mx(a.ToeL, b.ToeL, t),
             HipR: hipR, KneeR: Limb.Solve(hipR, anR, ThighLength, ShinLength, Mx(a.KneeR, b.KneeR, t) - hipR),

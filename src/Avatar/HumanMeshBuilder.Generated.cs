@@ -19,6 +19,9 @@ public static partial class HumanMeshBuilder
     /// <summary>The energy class of each generated move of a style, for <see cref="DancePick"/>.</summary>
     public static System.ReadOnlySpan<byte> GeneratedEnergy(Audio.Cd.MusicStyle style) => DanceGen.Energy(DanceStyleIndex(style));
 
+    /// <summary>A dance frame's joints (the order of <see cref="PoseJoints"/>), author space, for <c>--emotecheck</c>'s continuity check (#2055).</summary>
+    public static Vector3[] DanceJoints(in DanceParams d, float speed, float phase = 0f) => JointsOf(GaitWithDance(speed, phase, d));
+
     private static void EvalGenerated(Audio.Cd.MusicStyle style, int index, in Beat t, bool mv, ref DanceCh ch)
     {
         var g = DanceGen.Get(DanceStyleIndex(style), index);
@@ -32,6 +35,7 @@ public static partial class HumanMeshBuilder
         SetArm(ref ch, 1f, new Vector3(f.ArmR.X, f.ArmR.Y, f.ArmR.Z), new Vector3(f.ArmR.HX, f.ArmR.HY, f.ArmR.HZ));
         GenFoot(ref ch, -1f, f.FootL);
         GenFoot(ref ch, 1f, f.FootR);
+        ch.MinReach = 0.14f;
         if (mv) MovingScale(ref ch, g.KMov, g.ArmBlend);
     }
 

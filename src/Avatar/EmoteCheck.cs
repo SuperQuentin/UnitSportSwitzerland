@@ -21,6 +21,15 @@ public static class EmoteCheck
             GD.Print($"[emotecheck] FAIL {why}");
         }
 
+        // EMOTE_ONLY=<text>: only the continuity check, only the moves whose name holds the text (a debugging aid)
+        string only = OS.GetEnvironment("EMOTE_ONLY");
+        if (only != "")
+        {
+            int jumps = Continuity(only);
+            GD.Print($"[emotecheck] RESULT: {(jumps == 0 ? "ok" : "FAILED")} (continuity of '{only}' only)");
+            return jumps == 0 ? 0 : 1;
+        }
+
         int count = HumanMeshBuilder.EmoteCount;
         if (count > HumanMeshBuilder.EmotePages.Length * HumanMeshBuilder.EmotesPerPage)
             Fail($"{count} emotes do not fit on {HumanMeshBuilder.EmotePages.Length} pages");
@@ -160,12 +169,154 @@ public static class EmoteCheck
             auraSigs.Add((pose, sig));
         }
 
+        failed += Continuity();
+
         int generated = 0;
         foreach (var gs in System.Enum.GetValues<Audio.Cd.MusicStyle>()) generated += HumanMeshBuilder.GeneratedCount(gs);
         GD.Print(failed == 0
             ? $"[emotecheck] RESULT: ok ({count} emotes, {generated} generated moves, {auraPoses.Count} aura poses, {built} figures)"
             : $"[emotecheck] RESULT: FAILED — {failed} problems");
         return failed == 0 ? 0 : 1;
+    }
+
+    // ---- continuity (#2055): no joint teleports -------------------------------------------
+
+    /// <summary>
+    /// The most a joint may move in 1/64 of a beat, m: 6.4 m per beat, 21 m/s at 200 bpm. The hand-written moves' real hits
+    /// (air guitar's strum, the robot's snaps) peak at 0.10 to 0.12; everything above that in them is an elbow flipping or a
+    /// gesture swapping kinds mid-crossfade, listed in <see cref="KnownJumps"/>.
+    /// </summary>
+    private const float StepLimit = 0.10f;
+
+    private static readonly string[] JointNames = { "head", "hip", "wrist L", "wrist R", "elbow L", "elbow R", "knee L", "knee R", "ankle L", "ankle R", "toe L", "toe R" };
+    private static readonly int[] JointIndex = { 0, 5, 8, 11, 7, 10, 13, 17, 14, 18, 15, 19 };
+
+    /// <summary>
+    /// Hand-written moves that already jump on <c>main</c> (known, reported, not failed): the allowance in m per 1/64 beat.
+    /// Generated moves have none.
+    /// </summary>
+    private static readonly Dictionary<string, float> KnownJumps = new()
+    {
+        ["Chill ArmWave"] = 0.18f,
+        ["Chill BodyRoll"] = 0.17f,
+        ["Chill SwimDance"] = 0.13f,
+        ["Electronic ArmWave"] = 0.18f,
+        ["Electronic Robot"] = 0.13f,
+        ["Electronic Sprinkler"] = 0.12f,
+        ["Folk ChickenDance"] = 0.12f,
+        ["Folk GangnamStyle"] = 0.14f,
+        ["Folk Macarena"] = 0.37f,
+        ["HipHop BodyRoll"] = 0.17f,
+        ["HipHop Dab"] = 0.35f,
+        ["HipHop Floss"] = 0.18f,
+        ["HipHop Griddy"] = 0.20f,
+        ["Pop BodyRoll"] = 0.17f,
+        ["Pop Carlton"] = 0.31f,
+        ["Pop GangnamStyle"] = 0.27f,
+        ["Pop Macarena"] = 0.37f,
+        ["Pop OrangeJustice"] = 0.29f,
+        ["Pop Ymca"] = 0.14f,
+        ["RatDance RatArmPump"] = 0.19f,
+        ["RatDance RatSwing"] = 0.19f,
+        ["Rock AirDrums"] = 0.41f,
+        ["Rock AirGuitar"] = 0.11f,
+        ["Rock ArmWave"] = 0.18f,
+    };
+
+    /// <summary>
+    /// Every style's moves (the table's and the generated pool's, not the floor sets), standing and walking,
+    /// stepped in 1/64 beat over a whole loop and across the crossfade from the move before: no joint (head,
+    /// hip, wrists, elbows, knees, ankles, toes) may move more than <see cref="StepLimit"/> in a step.
+    /// Prints the worst of each kind; returns the number of failures.
+    /// </summary>
+    private static int Continuity(string only = "")
+    {
+        int failures = 0;
+        var worstGen = (D: 0f, Why: "");
+        var worstTable = (D: 0f, Why: "");
+        var known = new List<string>();
+        foreach (var style in System.Enum.GetValues<Audio.Cd.MusicStyle>())
+        {
+            var all = new List<int>();
+            for (int m = 0; m < HumanMeshBuilder.MoveCount(style); m++) all.Add(m);
+            for (int m = 0; m < HumanMeshBuilder.GeneratedCount(style); m++) all.Add(HumanMeshBuilder.GeneratedMoves + m);
+            for (int k = 0; k < all.Count; k++)
+            {
+                int move = all[k], prev = all[(k + all.Count - 1) % all.Count];
+                bool gen = move >= HumanMeshBuilder.GeneratedMoves;
+                string name = $"{style} {HumanMeshBuilder.MoveName(style, move)}";
+                if (only != "" && !name.Contains(only)) continue;
+                var worst = (D: 0f, Why: "");
+                foreach (float speed in new[] { 0f, 1.4f })
+                {
+                    // a whole loop in the slot's own clock, then the crossfade in from the move before
+                    var last = HumanMeshBuilder.DanceJoints(Frame(style, move, 0f, -1, 1f), speed);
+                    for (int i = 1; i <= 16 * 64; i++)
+                    {
+                        float t = i / 64f;
+                        var j = HumanMeshBuilder.DanceJoints(Frame(style, move, t, -1, 1f), speed);
+                        Step(last, j, $"{name} speed {speed} beat {t:F3}", ref worst);
+                        last = j;
+                    }
+                    // the clock keeps running over the change: the mix from the move before, a beat of it (it is complete in 0.9)
+                    last = HumanMeshBuilder.DanceJoints(Frame(style, move, 4f, prev, 0f), speed);
+                    for (int i = 1; i <= 64; i++)
+                    {
+                        float t = 4f + i / 64f, into = t - 4f;
+                        var d = Frame(style, move, t, prev, Mathf.Min(1f, into / 0.9f));
+                        var j = HumanMeshBuilder.DanceJoints(d, speed);
+                        Step(last, j, $"{name} crossfade from the move before, speed {speed}, {into:F3} beats in", ref worst);
+                        last = j;
+                    }
+                }
+                ref var kind = ref (gen ? ref worstGen : ref worstTable);
+                if (worst.D > kind.D) kind = worst;
+                if (only != "" && worst.D > 0f) Trace(style, move, prev, worst.Why);
+                float allowed = KnownJumps.TryGetValue(name, out float a) ? a : StepLimit;
+                if (worst.D > StepLimit) known.Add($"{name}: {worst.D:F3} m ({worst.Why})");
+                if (worst.D > allowed)
+                {
+                    failures++;
+                    GD.Print($"[emotecheck] FAIL jump {worst.D:F3} m in 1/64 beat (limit {allowed:F3}): {worst.Why}");
+                }
+            }
+        }
+        GD.Print($"[emotecheck] continuity: worst generated step {worstGen.D:F3} m ({worstGen.Why}); worst hand-written {worstTable.D:F3} m ({worstTable.Why}); limit {StepLimit:F3}");
+        foreach (var k in known) GD.Print($"[emotecheck] jump over the limit: {k}");
+        return failures;
+    }
+
+    /// <summary>Prints the joints round the worst step of a move (the text of <see cref="Step"/>'s report names the beat).</summary>
+    private static void Trace(Audio.Cd.MusicStyle style, int move, int prev, string why)
+    {
+        // "... speed S beat B" or "... speed S, X beats in"
+        float speed = why.Contains("speed 1") ? 1.4f : 0f;
+        int at = why.LastIndexOf(" beat ");
+        bool cross = why.Contains("crossfade");
+        float t;
+        if (cross) { int a = why.LastIndexOf(", ") + 2; t = 4f + float.Parse(why.Substring(a, why.IndexOf(" beats in") - a)); }
+        else t = float.Parse(why.Substring(at + 6));
+        for (int i = -3; i <= 2; i++)
+        {
+            float tt = t + i / 64f, into = tt - 4f;
+            var d = !cross ? Frame(style, move, tt, -1, 1f) : into < 0f ? Frame(style, prev, tt, -1, 1f) : Frame(style, move, tt, prev, Mathf.Min(1f, into / 0.9f));
+            var j = HumanMeshBuilder.DanceJoints(d, speed);
+            GD.Print($"[emotecheck]   {tt:F3} shL {Fmt(j[6])} elL {Fmt(j[7])} wrL {Fmt(j[8])} | shR {Fmt(j[9])} elR {Fmt(j[10])} wrR {Fmt(j[11])} | hip {Fmt(j[5])} head {Fmt(j[0])}");
+        }
+    }
+
+    private static string Fmt(Vector3 v) => $"({v.X:F2},{v.Y:F2},{v.Z:F2})";
+
+    private static DanceParams Frame(Audio.Cd.MusicStyle style, int move, float beats, int prev, float blend) =>
+        new(style, move, beats % 1f, (beats / 4f) % 1f, (int)(beats / 4f), 1f, prev, blend);
+
+    private static void Step(Vector3[] a, Vector3[] b, string where, ref (float D, string Why) worst)
+    {
+        for (int k = 0; k < JointIndex.Length; k++)
+        {
+            float d = a[JointIndex[k]].DistanceTo(b[JointIndex[k]]);
+            if (d > worst.D) worst = (d, $"{JointNames[k]}, {where}");
+        }
     }
 
     private static Vector3[] Vertices(ArrayMesh mesh) =>
