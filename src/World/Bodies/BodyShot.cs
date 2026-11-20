@@ -57,7 +57,9 @@ public partial class BodyShot : Node
                 int settled = drawn + (_globe()?.Ground is { } ground ? ground.Settled : 0);
                 _quiet = settled == _last ? _quiet + 1 : 0;
                 _last = settled;
-                if ((_quiet > 120 && _t > 4) || _t > 15)
+                // under the squares' height, the outermost square in too (it comes last, after the near and the fine one)
+                bool squares = _globe()?.Ground is not { } gr || gr.MediumBuilt > 0 || !gr.Wanted;
+                if ((_quiet > 120 && _t > 4 && squares) || _t > 40)
                 {
                     Save(drawn, quit: _laterHours == 0 && _flySpeed == 0);
                     _stage = 2;

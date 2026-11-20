@@ -172,6 +172,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>Every square built so far, summed: a picture waits for it to stop changing (<see cref="BodyShot"/>).</summary>
     public int Settled => _near.Built + _fine.Built + _medium.Built;
 
+    /// <summary>Whether the camera is low enough over this body, the anchor's, for its squares (a picture waits for them).</summary>
+    public bool Wanted => _origin.Body == Body.Id && GetViewport()?.GetCamera3D() is { } c && _origin.AltitudeOf(c.GlobalPosition) <= NearM;
+
     /// <summary>The cover shader's state for this body (#2016): the squares and the globe's own tiles take it.</summary>
     public BodyCoverLook CoverLook { get; }
 
@@ -211,7 +214,11 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         public float Half => Cells * CellM / 2;
     }
 
-    private sealed record Square(EnuFrame Frame, float[] Y, Godot.Collections.Array Arrays, Image? Colour);
+    private sealed record Square(EnuFrame Frame, float[] Y, Godot.Collections.Array Arrays, Image? Colour)
+    {
+        /// <summary>How long its worker took, milliseconds (the log).</summary>
+        public double BuildMs { get; init; }
+    }
 
     public BodyGround(BodyGlobe globe, WorldOrigin origin)
     {
@@ -462,6 +469,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>A square round <paramref name="near"/>: the heights, the mesh and the colour under it; on a worker.</summary>
     private static Square Build(BodyHeights heights, BodyGlobe globe, EcefPos near, Layer l, Func<EcefPos, double> edge)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         int cells = l.Cells;
         float cellM = l.CellM;
         int n = cells + 1;
@@ -523,7 +531,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
                     double side = 1 << ck.Level;
                     uvs[j * n + i] = new Vector2((float)((u + 1) * 0.5 * side - ck.X), (float)((v + 1) * 0.5 * side - ck.Y));
                 }
-        return new Square(frame, y, Mesh(pos, uvs, cells, l.SkirtM, edgePos, cover), colour);
+        return new Square(frame, y, Mesh(pos, uvs, cells, l.SkirtM, edgePos, cover), colour) { BuildMs = clock.Elapsed.TotalMilliseconds };
     }
 
     /// <summary>
@@ -703,7 +711,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         old?.QueueFree();
         l.Built++;
         GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"[bodies] {Body.Name}'s {l.Name.ToLowerInvariant()} ground: {l.Built} at {Body.Shape.ToGeodetic(sq.Frame.Origin).H:F0} m over the reference, {l.Cells * l.CellM:F0} m a side"));
+            $"[bodies] {Body.Name}'s {l.Name.ToLowerInvariant()} ground: {l.Built} at {Body.Shape.ToGeodetic(sq.Frame.Origin).H:F0} m over the reference, {l.Cells * l.CellM:F0} m a side, built in {sq.BuildMs:F0} ms"));
     }
 
     /// <summary>A square from its frame into world space, in doubles from the anchor (once a re-anchor).</summary>
