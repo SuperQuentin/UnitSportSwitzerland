@@ -475,7 +475,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         int n = cells + 1;
         // a drawn square also keeps the ground round it at every vertex: its geomorph's target (#2016)
         var edgeY = l.MorphTo > 0 ? new float[n * n] : null;
-        var (frame, y) = heights.Grid(near, cells, cellM, l.BlendM, edge, l.SmallestCrater, edgeY);
+        var (frame, y) = heights.Grid(near, cells, cellM, l.BlendM, edge, l.SmallestCrater, edgeY, Threads(l));
         var pos = new Vector3[n * n];
         for (int j = 0; j < n; j++)
             for (int i = 0; i < n; i++)
@@ -535,6 +535,12 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     }
 
     /// <summary>
+    /// The workers a square's build takes: the solid near one every core, a drawn one half of them (#2016), so the fine
+    /// square's long build (several seconds on the Moon) never holds back the near square the walker needs next.
+    /// </summary>
+    private static int Threads(Layer l) => l.Solid ? -1 : Math.Max(1, System.Environment.ProcessorCount / 2);
+
+    /// <summary>
     /// A square's cover per vertex (#2016): its own rays and sand (eased at its edge into the ground round it, as its
     /// heights are), and the ground round it's (the geomorph's target): rays of the craters it has, sand only where the
     /// ground round it is a square too. On the worker.
@@ -547,7 +553,7 @@ public partial class BodyGround : Node, Terrain.IBodyGround
         double half = cells / 2.0 * l.CellM, radius = heights.Cube.Shape.A;
         var region = new BodyCover.Region(heights.Craters, heights.Profile, heights.NormalUnder(frame.Origin), half * 1.5, l.RaysFrom);
         bool edgeIsSquare = l.EdgeRaysFrom > 0;
-        System.Threading.Tasks.Parallel.For(0, n, j =>
+        System.Threading.Tasks.Parallel.For(0, n, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Threads(l) }, j =>
         {
             double z = (j - cells / 2.0) * l.CellM;
             for (int i = 0; i < n; i++)

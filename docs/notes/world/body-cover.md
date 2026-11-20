@@ -13,6 +13,9 @@ What lies below another body's data past the near square (`docs/plans/planets.md
   craters reach as far as its old static edge showed them: a first try at 1024-1536 lost them from 3 km up). A square built again where the camera is draws what the
   last one did. A short static ease at the very edge (128 m fine, 256 m medium) stays for a camera far off a square's centre
   while the next one builds. The near square has none: its collision is its drawn ground.
+- **Build times** (each square's commit logs it): on the Moon the near square ~2.2-2.7 s, the fine ~10 s, the medium ~1 s
+  (Mars about half). The drawn squares take half the cores (`BodyGround.Threads`): sharing them all, the fine square's
+  build stretched the near one to 6 s, a fast rover's whole margin (it is built 96 m before the walker reaches its edge).
 - **Cover** (`Terrain/Bodies/BodyCover`, `shaders/common/body_cover.gdshaderinc`, `World/Bodies/BodyCoverLook`): the families
   (regolith, Mars, ice, sulphur, basalt, Titan; `cover_kind`). Per square vertex (COLOR): the fresh craters' rays
   (`Freshness` ≥ 0.6, floor 0.7, blanket to 1.6 radii, 8-14 rays to 5 radii, from 5 m near, 10 m fine, 40 m medium; rg the

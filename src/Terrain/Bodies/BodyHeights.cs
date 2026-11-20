@@ -156,16 +156,17 @@ public sealed class BodyHeights
     /// <see cref="Grid(EcefPos, int, double, double, Func{EcefPos, double}?, double)"/>, and the ground it eases into at
     /// every vertex in <paramref name="edgeY"/> (its height in the same frame; #2016: a drawn square's geomorph by the
     /// camera's distance turns the one into the other, <c>body_ground.gdshader</c>). Null: not asked.
+    /// <paramref name="threads"/> caps the workers (-1: all the cores; a drawn square takes half, the solid one the rest).
     /// </summary>
     public (EnuFrame Frame, float[] Y) Grid(EcefPos near, int cells, double cellM, double blendM, Func<EcefPos, double>? edge,
-        double smallestCrater, float[]? edgeY)
+        double smallestCrater, float[]? edgeY, int threads = -1)
     {
         var n0 = NormalUnder(near);
         var g0 = _cube.Shape.ToGeodetic(_cube.OnEllipsoid(n0, 0));
         var frame = new EnuFrame(g0 with { H = At(n0) }, _cube.Shape);
         int side = cells + 1;
         var y = new float[side * side];
-        System.Threading.Tasks.Parallel.For(0, side, j =>
+        System.Threading.Tasks.Parallel.For(0, side, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = threads }, j =>
         {
             double z = (j - cells / 2.0) * cellM;
             for (int i = 0; i < side; i++)
