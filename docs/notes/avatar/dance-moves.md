@@ -570,10 +570,36 @@ generated dance travels as nothing on the wire like any other pick, and every mo
   shapes sine, hold, snap, saw), a 4-key arm cycle (keys of 1 or 2 beats, drawn from 16 anchors: hang, akimbo,
   clap, forward, out, up-out, up, cross, ear, chest, forward-low, forward-up, side-low, back, punch, wide; both
   arms mirror, one runs two keys behind, or each has its own keys; a snap fraction is the share of a key spent
-  travelling), a leg kind (planted, step-touch, heel lift, march, kick) with a stance width, squat and lean,
-  and the moving variant's `KMov` and arm blend. `DanceGen.Sample` evaluates it with no allocation;
+  travelling), a leg pattern (below) with a stance width, squat and lean, and the moving variant's `KMov`
+  and arm blend. `DanceGen.Sample` evaluates it with no allocation;
   `HumanMeshBuilder.Generated.cs` lays the frame on a `DanceCh`, so `Groove`, `Feel`, `Compose`, `ClearOfBody`
   and LegFit apply as to any move.
+- **Legs drive the body** (#2055). Every move has a leg rhythm: six kinds, each a table of stations per foot (one per
+  beat, the march and the heel-toe tap one per half beat) that a foot lands on **on the beat**, leaving in the last
+  0.6 of the beat before; a foot travels in x/z only while it is clear of the floor (a 4.5 cm arc between two grounded
+  stations; a tap or knee lift moves late on the way up and early on the way down), so a planted foot never slides.
+  Kinds: 0 knee bounce with heel rise (the calmest only), 1 step-touch to the side, 2 step-touch forward and back,
+  3 alternating knee lift (march, skank, a forward swing), 4 heel-toe tap, 5 cross-step; `LegRate` 1 or 0.5 (a step every
+  beat or every other). Each foot carries a **load** (0 in the air, 0.3 touching, 1 standing). The pelvis comes from the
+  feet: `Px`/`Pz` go over the foot that carries the weight (7 cm inside it; halfway when both do), averaged over the
+  third of a beat around now so the weight shifts smoothly as the other foot lifts; `Tilt` lifts the free hip; `Py` dips
+  on each landing (`Dip`, on top of `Groove`). The old independent `Px`/`Py`/`Tilt` waves ride on top at half
+  amplitude. The squat is deepened by what the widest step needs (`FitSquat`) so LegFit never pulls the hip down to
+  follow a foot; step sizes keep the feet within 0.24 m of the midline. The moving variant keeps only the `Py` dip.
+  `HeelUp` blends the toe from the turned-out flat foot to the heel-up toe over the first 2 cm of heel (it snapped
+  5 cm sideways at every heel lift).
+- **No teleporting** (`DanceGen.Jumps`, in `Check`; `--emotecheck` for the real rig): nothing in a frame jumps between two
+  samples 1/64 beat apart (feet 3.5 cm, pelvis 1.2 cm, a hand's target 7 cm, ...). A hand swings round its shoulder
+  between two anchors, two moves' offsets, and the gait arm and the target (`SwingOff`: direction and length blended,
+  not a straight line through the shoulder, which folded the elbow); a generated hand stays 14 cm from its shoulder
+  (`DanceCh.MinReach`); its elbow uses `Limb.SolveSmooth`, which fades a hint lying along the arm into a fallback
+  instead of flipping. A crossfade between two different kinds of arm aim mixes the finished rigs (it used to snap
+  at the half way point). **`--emotecheck` continuity**: every style's table and generated moves, standing and
+  walking, over 16 beats and across the crossfade from the move before, in 1/64 beat steps; no head, hip, wrist,
+  elbow, knee, ankle or toe may move more than 0.10 m in a step. The hand-written moves that already break it on
+  `main` (twenty-odd: elbow flips in Macarena, OrangeJustice, Carlton, Gangnam; BodyRoll and ArmWave wrists; AirDrums)
+  are listed with their allowance in `EmoteCheck.KnownJumps`, and reported, not failed. `EMOTE_ONLY=<text>`
+  runs just the continuity of the moves whose name holds the text and prints the joints round the worst step.
 - **Per style** (`Profiles`): Chill slow sines and big gentle arcs, Electronic snaps and holds with the arms high,
   HipHop low and wide with the hips and shoulders leading, Rock deep nods and fists, Folk claps and hands on hips,
   Pop a bit of everything. Each pool is graded calm/middle/big (indices in that order; the counts are per style)

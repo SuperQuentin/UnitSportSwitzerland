@@ -73,6 +73,64 @@ public class DanceGenTests
     }
 
     [Fact]
+    public void Every_move_has_a_leg_rhythm_and_only_the_calmest_just_bounce()
+    {
+        foreach (int style in Styles)
+            foreach (var m in DanceGen.Pool(style))
+            {
+                if (m.LegKind == 0) Assert.Equal(0, m.Energy);
+                // the feet visibly step, lift or tap: not the same pose all through the loop
+                float x0 = 9f, x1 = -9f, z0 = 9f, z1 = -9f, lift = 0f, heel = 0f;
+                var f = default(GenFrame);
+                for (int i = 0; i < 64; i++)
+                {
+                    DanceGen.Sample(m, i / 8f, ref f);
+                    x0 = Math.Min(x0, f.FootR.X); x1 = Math.Max(x1, f.FootR.X);
+                    z0 = Math.Min(z0, f.FootL.Z); z1 = Math.Max(z1, f.FootL.Z);
+                    lift = Math.Max(lift, Math.Max(f.FootL.Y, f.FootR.Y)); heel = Math.Max(heel, Math.Max(f.FootL.Heel, f.FootR.Heel));
+                }
+                Assert.True((x1 - x0) + (z1 - z0) + lift + heel > 0.03f, $"{DanceGen.Name(style, m.Index)}: legs do not move");
+            }
+    }
+
+    [Fact]
+    public void The_pelvis_goes_over_the_foot_that_carries_the_weight()
+    {
+        foreach (int style in Styles)
+            foreach (var m in DanceGen.Pool(style))
+            {
+                if (m.LegKind == 0) continue;
+                var f = default(GenFrame);
+                for (int i = 0; i < 128; i++)
+                {
+                    DanceGen.Sample(m, i / 16f, ref f);
+                    // one foot up (it carries nothing): the pelvis is within a stride of the other
+                    if (f.FootL.Load < 0.15f && f.FootR.Load > 0.9f) Assert.True(Math.Abs(f.Px - f.FootR.X) < 0.20f, $"{DanceGen.Name(style, m.Index)} at {i / 16f}");
+                    if (f.FootR.Load < 0.15f && f.FootL.Load > 0.9f) Assert.True(Math.Abs(f.Px - f.FootL.X) < 0.20f, $"{DanceGen.Name(style, m.Index)} at {i / 16f}");
+                }
+            }
+    }
+
+    [Fact]
+    public void Nothing_in_the_frame_jumps_and_a_planted_foot_never_slides()
+    {
+        foreach (int style in Styles)
+            foreach (var m in DanceGen.Pool(style))
+                Assert.Null(DanceGen.Jumps(m) is { } why ? $"{DanceGen.Name(style, m.Index)}: {why}" : null);
+    }
+
+    [Fact]
+    public void The_pools_come_from_early_draws_not_from_the_shrunken_last_resort()
+    {
+        foreach (int style in Styles)
+        {
+            float salts = 0f;
+            foreach (var m in DanceGen.Pool(style)) salts += m.Salt;
+            Assert.True(salts / DanceGen.PoolSize < 25f, $"style {style}: mean re-roll {salts / DanceGen.PoolSize}");
+        }
+    }
+
+    [Fact]
     public void The_generator_uses_no_system_random_and_no_get_hash_code()
     {
         string dir = AppContext.BaseDirectory;

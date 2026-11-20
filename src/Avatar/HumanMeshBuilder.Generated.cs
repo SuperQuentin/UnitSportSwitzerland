@@ -27,7 +27,7 @@ public static partial class HumanMeshBuilder
         var g = DanceGen.Get(DanceStyleIndex(style), index);
         if (g == null) return;
         var f = default(GenFrame);
-        DanceGen.Sample(g, t.Par * 4f + t.C, ref f);
+        DanceGen.Sample(g, t.Par * 4f + t.C, mv, ref f);
         ch.Px = f.Px; ch.Py = f.Py; ch.Pz = f.Pz; ch.Tilt = f.Tilt;
         ch.Theta = f.Theta; ch.Phi = f.Phi; ch.Psi = f.Psi; ch.ThN = f.ThN; ch.PhH = f.PhH;
         ch.ShL = f.ShL; ch.ShR = f.ShR;
