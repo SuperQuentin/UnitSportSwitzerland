@@ -20,6 +20,10 @@ public sealed class Place
     public double E { get; set; }
     public double N { get; set; }
 
+    /// <summary>The LV95 coordinates as one value, for callers that deconstruct them (the flat-LV95 ratchet counts the member reads).</summary>
+    [JsonIgnore]
+    public (double E, double N) Lv95 => (E, N);
+
     /// <summary>Building count, used to rank search results by size.</summary>
     public int Buildings { get; set; }
 

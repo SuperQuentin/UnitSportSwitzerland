@@ -20,6 +20,24 @@ public interface IMapOverlay
 }
 
 /// <summary>
+/// What a <see cref="AdventureMap.MapCanvasView"/> asks of the screen it sits in (#1826): the adventure's map
+/// (<see cref="AdventureMap"/>) and the phone's Map app (<c>Phone/PhoneMap</c>) both host the one canvas.
+/// </summary>
+public interface IMapHost
+{
+    /// <summary>The adventure's places and this player's fog; null while the adventure is off (no fog, no found or seen state).</summary>
+    PlacesService? Places { get; }
+    /// <summary>The place search's places, drawn instead of the adventure's when <see cref="Places"/> is null.</summary>
+    IReadOnlyList<Place>? Index { get; }
+    /// <summary>The adventure place selected, if any.</summary>
+    Poi? Selected { get; }
+    /// <summary>The place-search place selected, if any.</summary>
+    Place? SelectedPlace { get; }
+    void Select(Poi poi, bool centre);
+    void Select(Place place, bool centre);
+}
+
+/// <summary>
 /// The adventure map (#1224, places plan 6), on an oblique stereographic projection centred on the view
 /// (<see cref="EarthMapView"/>, #1514): M while the adventure is on for the player (the place search
 /// otherwise, the Battle Royale map in a round). The relief of <see cref="MapRelief"/>, this player's fog
@@ -28,7 +46,7 @@ public interface IMapOverlay
 /// panel searches the places and shows the selected one's card (Track, Show in Atlas). Redrawn only when
 /// something changes (<c>general/perf-no-per-frame-allocations</c>). Docs: <c>docs/notes/adventure/map.md</c>.
 /// </summary>
-public partial class AdventureMap : Screen
+public partial class AdventureMap : Screen, IMapHost
 {
     public const double LatticeE = FogMask.MinE, LatticeN = FogMask.MinN;
 
@@ -63,6 +81,10 @@ public partial class AdventureMap : Screen
 
     /// <summary>The place selected (checks).</summary>
     public Poi? Selected { get; private set; }
+    PlacesService? IMapHost.Places => _places;
+    IReadOnlyList<Place>? IMapHost.Index => null;
+    Place? IMapHost.SelectedPlace => null;
+    void IMapHost.Select(Place place, bool centre) { }
 
     public static AdventureMap Create(Poi? focus = null) => new() { Name = "AdventureMap", _focus = focus };
 
@@ -250,18 +272,63 @@ public partial class AdventureMap : Screen
         private static readonly int[] Steps = [2, 4, 8, 16, 32, 64, 128];
 
         public readonly EarthMapView View = new(Steps);
-        private readonly AdventureMap _map;
+        private readonly IMapHost _map;
         private readonly Control _fog, _top;
         private static CountryData? _country;
         private Vector2 _last;
         private Vector2? _press, _rightPress;
         private bool _dragging;
         private int _fogVersion = -1;
-        private bool _reliefDrawn;
+        private bool _reliefDrawn, _linesDrawn;
         private readonly List<(Poi Poi, Vector2 At)> _drawn = new();
         private readonly List<(Vector2 At, float Width)> _labels = new();
+        private readonly List<(Place Place, Vector2 At)> _drawnPlaces = new();
+        private readonly List<IMapOverlay> _extras = new();
+        private readonly List<Place> _visible = new();
 
-        public MapCanvasView(AdventureMap map)
+        /// <summary>
+        /// Embedded in the phone (#1826): the host drives it (<see cref="PanBy"/>, <see cref="ZoomStep"/>, <see cref="PickAtCentre"/>),
+        /// so it does not read the arrow keys, the sticks or Enter itself.
+        /// </summary>
+        public bool Driven { get; set; }
+        /// <summary>Where the player is, when the world's own <see cref="AdventureMap.Me"/> is not set (a check, a world without the adventure).</summary>
+        public Func<(GlobalPos At, float Yaw)?>? MeOverride { get; set; }
+
+        /// <summary>Layers only this canvas draws (the phone's nearby players), after the shared overlays.</summary>
+        public void AddExtra(IMapOverlay overlay) => _extras.Add(overlay);
+
+        private float _fillAlpha = 1f;
+        /// <summary>
+        /// How opaque the fills are (#1826): the background and the relief, and the fog on it; the borders, labels and
+        /// markers stay crisp. A modulate on the fills alone, set by the caller only when it changes.
+        /// </summary>
+        public float FillAlpha
+        {
+            get => _fillAlpha;
+            set
+            {
+                _fillAlpha = value;
+                SelfModulate = new Color(1, 1, 1, value);
+                _fog.SelfModulate = new Color(1, 1, 1, value);
+            }
+        }
+
+        /// <summary>
+        /// The relief and background through a brightening shader (#1826): over a see-through fill the relief's dark ramp would read as
+        /// a murky blur, so the phone's map lifts and spreads its tones. The fog child has its own material and is not touched.
+        /// </summary>
+        public bool Boosted
+        {
+            set
+            {
+                if (!value) { Material = null; return; }
+                Material = new ShaderMaterial { Shader = GD.Load<Shader>("res://src/Adventure/Places/map_boost.gdshader") };
+            }
+        }
+
+        private (GlobalPos At, float Yaw)? Me() => MeOverride?.Invoke() ?? AdventureMap.Me?.Invoke();
+
+        public MapCanvasView(IMapHost map)
         {
             _map = map;
             FocusMode = FocusModeEnum.All;
@@ -274,7 +341,7 @@ public partial class AdventureMap : Screen
             _top.SetAnchorsPreset(LayoutPreset.FullRect);
         }
 
-        public MapCanvasView() : this(null!) { }
+        public MapCanvasView() : this((IMapHost)null!) { }
 
         public override void _Ready()
         {
@@ -300,11 +367,15 @@ public partial class AdventureMap : Screen
             _top.QueueRedraw();
         }
 
+        /// <summary>Redraws only the top layer (borders, places, the arrow, the overlays): the player moved or turned, the relief did not change.</summary>
+        public void RedrawMarkers() => _top.QueueRedraw();
+
         public override void _Draw()
         {
             View.Size = Size;
             DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.05f, 0.06f, 0.08f));
             if (MapRelief.TryGet() is { } relief) View.DrawSampled(this, relief, MapRelief.Lattice());
+            if (!Driven && MapLines.TryGet()) MapLines.DrawRivers(View, this);
         }
 
         private sealed partial class FogLayer : Control
@@ -340,10 +411,24 @@ public partial class AdventureMap : Screen
 
         private void DrawTop(CanvasItem on)
         {
-            View.DrawBorders(on, _country, new Color(1, 1, 1, 0.22f));
+            // rivers and borders as smooth lines, not cells (#1826); the straight tile borders until the lines are built
+            if (MapLines.TryGet())
+            {
+                // the phone's map keeps its rivers crisp in the top layer; the adventure's lie under the fog, so unexplored land shows none
+                if (Driven) MapLines.DrawRivers(View, on);
+                if (Driven) MapLines.DrawBorders(View, on, new Color(1, 0.97f, 0.85f, 0.95f), 1.6f, halo: true);
+                else MapLines.DrawBorders(View, on, new Color(1, 1, 1, 0.35f), 1.2f, halo: false);
+            }
+            else if (Driven) View.DrawBorders(on, _country, new Color(1, 0.97f, 0.85f, 0.9f), 1.8f);
+            else View.DrawBorders(on, _country, new Color(1, 1, 1, 0.22f));
             DrawPlaces(on);
             DrawMe(on);
             foreach (var overlay in Overlays)
+            {
+                try { overlay.Draw(View, on); }
+                catch (Exception e) { GD.PushWarning($"[map] overlay {overlay.GetType().Name}: {e.Message}"); }
+            }
+            foreach (var overlay in _extras)
             {
                 try { overlay.Draw(View, on); }
                 catch (Exception e) { GD.PushWarning($"[map] overlay {overlay.GetType().Name}: {e.Message}"); }
@@ -357,8 +442,13 @@ public partial class AdventureMap : Screen
         private void DrawPlaces(CanvasItem on)
         {
             _drawn.Clear();
+            _drawnPlaces.Clear();
             _labels.Clear();
-            if (_map._places is not { } places) return;
+            if (_map.Places is not { } places)
+            {
+                DrawIndexPlaces(on);
+                return;
+            }
             var cat = places.Catalogue;
             var fog = places.MyFog;
             var mine = AdventureService.Instance?.Mine.Get(PlacesProgress.Section);
@@ -401,6 +491,126 @@ public partial class AdventureMap : Screen
             }
         }
 
+        /// <summary>
+        /// The place search's places, with the adventure off (#1826): no fog, nothing found or sighted. Towns outrank summits and
+        /// passes, bigger first; a mark is drawn only when its name fits at this zoom (to its right, else its left) and its mark
+        /// touches no other, so there are never bare dots crowding the labels. A town is a disc, a summit a triangle, a pass a
+        /// diamond (<see cref="DrawPlaceMarker"/>); the colours repeat it.
+        /// </summary>
+        private void DrawIndexPlaces(CanvasItem on)
+        {
+            if (_map.Index is not { Count: > 0 } index) return;
+            var (w, s, e, n) = View.Bounds();
+            int ppk = View.PxPerKm;
+            var font = UiTheme.Font;
+            // the smallest rank worth a mark at this zoom: a town's rank is its buildings, a summit's or pass's its height
+            int minTown = ppk >= 64 ? 0 : ppk >= 32 ? 120 : ppk >= 16 ? 700 : ppk >= 8 ? 3000 : ppk >= 4 ? 10000 : 40000;
+            int minHeight = ppk >= 64 ? 0 : ppk >= 32 ? 2400 : ppk >= 16 ? 2900 : ppk >= 8 ? 3400 : 3900;
+            var picked = _map.SelectedPlace;
+            _visible.Clear();
+            foreach (var place in index)
+            {
+                var (pe, pn) = place.Lv95;
+                if (pe < w || pe > e || pn < s || pn > n) continue;
+                if (place != picked && place.Rank < (place.Kind == PlaceKind.Town ? minTown : minHeight)) continue;
+                _visible.Add(place);
+            }
+            // the picked one first (it always shows), then every town, then the summits and passes, each the biggest first
+            var chosen = picked;
+            _visible.Sort((a, b) =>
+            {
+                if (a == chosen) return b == chosen ? 0 : -1;
+                if (b == chosen) return 1;
+                int ka = a.Kind == PlaceKind.Town ? 0 : 1, kb = b.Kind == PlaceKind.Town ? 0 : 1;
+                return ka != kb ? ka.CompareTo(kb) : b.Rank.CompareTo(a.Rank);
+            });
+            _boxes.Clear();
+            foreach (var place in _visible)
+            {
+                var (placeE, placeN) = place.Lv95;
+                var at = View.ToScreen(placeE, placeN);
+                bool selected = place == picked;
+                float r = place.Kind == PlaceKind.Town ? (ppk >= 16 ? 5f : 4f) : 5f;
+                float width = font.GetStringSize(place.Name, HorizontalAlignment.Left, -1, 12).X;
+                var right = new Rect2(at.X - r - 1, at.Y - 8, r * 2 + 8 + width, 16);
+                var left = new Rect2(at.X - r - 8 - width, at.Y - 8, r * 2 + 8 + width, 16);
+                Rect2 box;
+                bool onLeft = false;
+                if (!Overlaps(right)) box = right;
+                else if (!Overlaps(left)) { box = left; onLeft = true; }
+                else if (selected) box = right;
+                else continue;   // no room for its name: no mark either
+                _boxes.Add(box);
+                DrawPlaceMarker(on, place.Kind, at, r, selected);
+                _drawnPlaces.Add((place, at));
+                var text = onLeft ? new Vector2(at.X - r - 5 - width, at.Y + 5) : at + new Vector2(r + 5, 5);
+                on.DrawString(font, text + new Vector2(1, 1), place.Name, HorizontalAlignment.Left, -1, 12, new Color(0, 0, 0, 0.85f));
+                on.DrawString(font, text, place.Name, HorizontalAlignment.Left, -1, 12, new Color(1, 1, 1, 0.97f));
+            }
+        }
+
+        private readonly List<Rect2> _boxes = new();
+
+        private bool Overlaps(Rect2 box)
+        {
+            // a name cut by the map's edge is no name: that side does not fit
+            if (box.Position.X < 2 || box.End.X > Size.X - 2 || box.Position.Y < 2 || box.End.Y > Size.Y - 2) return true;
+            var grown = box.Grow(1.5f);
+            foreach (var other in _boxes)
+                if (grown.Intersects(other)) return true;
+            return false;
+        }
+
+        private static readonly Vector2[] Triangle = new Vector2[3], Diamond = new Vector2[4];
+
+        /// <summary>
+        /// A place's mark (#1826): a town a disc, a summit a triangle, a pass a diamond, with a dark rim, in the kind's colour (red, brown, blue);
+        /// amber when selected. Also drawn by the phone map's legend.
+        /// </summary>
+        public static void DrawPlaceMarker(CanvasItem on, PlaceKind kind, Vector2 at, float r, bool selected)
+        {
+            var dark = new Color(0, 0, 0, 0.7f);
+            var fill = selected ? UiTheme.Amber : kind switch
+            {
+                PlaceKind.Summit => new Color(0.62f, 0.40f, 0.22f),
+                PlaceKind.Pass => new Color(0.25f, 0.52f, 0.86f),
+                _ => new Color(0.86f, 0.20f, 0.18f),
+            };
+            switch (kind)
+            {
+                case PlaceKind.Summit:
+                    Tri(at, r + 2.5f); on.DrawColoredPolygon(Triangle, dark);
+                    Tri(at, r + 0.5f); on.DrawColoredPolygon(Triangle, new Color(0.97f, 0.95f, 0.90f));
+                    Tri(at, r - 1.8f); on.DrawColoredPolygon(Triangle, fill);
+                    break;
+                case PlaceKind.Pass:
+                    Dia(at, r + 2.5f); on.DrawColoredPolygon(Diamond, dark);
+                    Dia(at, r + 0.5f); on.DrawColoredPolygon(Diamond, new Color(0.97f, 0.95f, 0.90f));
+                    Dia(at, r - 1.8f); on.DrawColoredPolygon(Diamond, fill);
+                    break;
+                default:
+                    on.DrawCircle(at, r + 2, dark);
+                    on.DrawCircle(at, r + 0.5f, new Color(0.97f, 0.95f, 0.90f));
+                    on.DrawCircle(at, r - 1.8f, fill);
+                    break;
+            }
+        }
+
+        private static void Tri(Vector2 at, float r)
+        {
+            Triangle[0] = at + new Vector2(0, -r * 1.1f);
+            Triangle[1] = at + new Vector2(r * 1.05f, r * 0.8f);
+            Triangle[2] = at + new Vector2(-r * 1.05f, r * 0.8f);
+        }
+
+        private static void Dia(Vector2 at, float r)
+        {
+            Diamond[0] = at + new Vector2(0, -r * 1.15f);
+            Diamond[1] = at + new Vector2(r * 1.15f, 0);
+            Diamond[2] = at + new Vector2(0, r * 1.15f);
+            Diamond[3] = at + new Vector2(-r * 1.15f, 0);
+        }
+
         private bool Collides(Vector2 at, float width)
         {
             foreach (var (other, ow) in _labels)
@@ -410,7 +620,7 @@ public partial class AdventureMap : Screen
 
         private void DrawMe(CanvasItem on)
         {
-            if (Me?.Invoke() is not { } me) return;
+            if (Me() is not { } me) return;
             var at = View.ToScreen(me.At);
             // off the view (or far round the Earth): no arrow; a polygon thousands of km off screen is drawn as a sliver across it
             if (!float.IsFinite(at.X) || !float.IsFinite(at.Y) || at.X < -40 || at.Y < -40 || at.X > Size.X + 40 || at.Y > Size.Y + 40) return;
@@ -497,14 +707,49 @@ public partial class AdventureMap : Screen
                 float d = p.DistanceSquaredTo(at);
                 if (d < bd) { bd = d; best = poi; }
             }
-            if (best != null) _map.Select(best, centre: false);
+            if (best != null) { _map.Select(best, centre: false); return; }
+            Place? bestPlace = null;
+            bd = 14 * 14;
+            foreach (var (place, p) in _drawnPlaces)
+            {
+                float d = p.DistanceSquaredTo(at);
+                if (d < bd) { bd = d; bestPlace = place; }
+            }
+            if (bestPlace != null) _map.Select(bestPlace, centre: false);
+        }
+
+        /// <summary>The host's pan (#1826): <paramref name="dir"/> is the arrows or the D-pad (-1..1), the map moves 620 px a second.</summary>
+        public void PanBy(Vector2 dir, float dt)
+        {
+            if (dir == Vector2.Zero) return;
+            View.Pan(-dir * (620f * dt));
+            Redraw();
+        }
+
+        /// <summary>One zoom step about the centre cross (a key, the shoulders, the on-map buttons). False at the end of the range.</summary>
+        public bool ZoomStep(int steps)
+        {
+            if (!View.ZoomAt(Size / 2, steps)) return false;
+            Redraw();
+            return true;
+        }
+
+        /// <summary>A on the pad, Enter: selects what is nearest the centre cross (or an overlay's point there).</summary>
+        public void PickAtCentre() => ClickAt(Size / 2, MouseButton.Left);
+
+        /// <summary>Centres on a point, at least at <paramref name="pxPerKm"/> pixels to the kilometre.</summary>
+        public void CentreOn(GlobalPos at, int pxPerKm)
+        {
+            View.FocusOn(at, pxPerKm);
+            Redraw();
         }
 
         public override void _Process(double delta)
         {
             if (!_reliefDrawn && MapRelief.TryGet() != null) { _reliefDrawn = true; Redraw(); }
+            if (!_linesDrawn && MapLines.Ready) { _linesDrawn = true; QueueRedraw(); _top.QueueRedraw(); }
             if (FogTexture.Version != _fogVersion) { _fogVersion = FogTexture.Version; _fog.QueueRedraw(); _top.QueueRedraw(); }
-            if (!HasFocus()) return;
+            if (Driven || !HasFocus()) return;
             var pan = Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");
             if (pan != Vector2.Zero)
             {

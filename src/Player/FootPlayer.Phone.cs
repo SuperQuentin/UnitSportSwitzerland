@@ -248,6 +248,16 @@ public partial class FootPlayer
     public Phone.PhoneModel? PhoneViewmodel => _phoneView;
 
     /// <summary>
+    /// The phone's Map app has the big map up (#1826): the viewmodel eases to a small pose in the lower right, wholly outside the map's
+    /// rectangle (the right fifth of the view), and back when it closes. Set by <c>PhoneMap</c>; posed on the same node, nothing rebuilt.
+    /// </summary>
+    public bool PhoneMapAway { get; set; }
+    private float _mapAway;
+
+    /// <summary>The share of the view's width the phone has while the map is up.</summary>
+    internal const float ViewMapShare = 0.16f;
+
+    /// <summary>
     /// The owner's phone is open and the camera should come over the shoulder onto it (#1825: third person only, open only; the controller
     /// sets it). The camera is the gameplay one pulled in over the shoulder (<see cref="UpdateThirdPersonCamera"/>), so it follows the
     /// walking body, looks with the mouse and keeps the gameplay camera's collision; folded, nothing changes.
@@ -286,7 +296,8 @@ public partial class FootPlayer
         bool want = IsMultiplayerAuthority() && !Npc && !XR.XrSession.Active && !Core.Platform.IsTouch
             && PhoneState is PhoneFoldedState or PhoneOpenState && PhoneCover <= 0.001f && PhoneCameraApp <= 0.001f && PhoneBackdrop <= 0.001f
             // third person, open: the in-world phone over the shoulder replaces the corner one (#1825); first person keeps it
-            && !(PhoneState == PhoneOpenState && _thirdPerson && !_borrowedThird);
+            // (with the big map up it is back, small, once the camera has eased home, #1826)
+            && !(PhoneState == PhoneOpenState && _thirdPerson && !_borrowedThird && (PhoneShoulderOn || PhoneShoulder > 0.02f));
         // in first person the in-world copy would show twice (and float where the hidden body's hand is)
         HideWorldPhone(want && !_thirdPerson);
         if (!want)
@@ -307,6 +318,8 @@ public partial class FootPlayer
         // by width, but never taller than the view allows
         float openW = Mathf.Min(ViewOpenShare, 0.58f * (Phone.PhoneModel.InnerW / Phone.PhoneModel.InnerH) / aspect);
         float coverW = Mathf.Min(ViewCoverShare, 0.46f * (Phone.PhoneModel.CoverSize.X / Phone.PhoneModel.CoverSize.Y) / aspect);
+        _mapAway = Mathf.MoveToward(_mapAway, PhoneMapAway ? 1f : 0f, dt / (Ui.UiMotion.Reduced ? 0.08f : 0.28f));
+        openW = Mathf.Lerp(openW, Mathf.Min(openW, ViewMapShare), Mathf.SmoothStep(0f, 1f, _mapAway));
         float w = Mathf.Lerp(coverW, openW, open);
         var refSize = new Vector2(Mathf.Lerp(Phone.PhoneModel.CoverSize.X, Phone.PhoneModel.InnerW, open), Mathf.Lerp(Phone.PhoneModel.CoverSize.Y, Phone.PhoneModel.InnerH, open));
         float scale = w * 2f * ViewDepth * tanH / refSize.X;
