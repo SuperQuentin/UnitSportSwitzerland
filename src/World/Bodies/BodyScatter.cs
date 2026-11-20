@@ -115,8 +115,12 @@ public partial class BodyScatter : Node
         var heights = ground.Heights;
         var c = cam.GlobalPosition;
         var e = axes.ToEcef(c.X, c.Y, c.Z);
-        double over = _globe.Body.Shape.ToGeodetic(e).H - heights.At(heights.NormalUnder(e));
-        var p = new DVec3(e.X, e.Y, e.Z);
+        var geo = _globe.Body.Shape.ToGeodetic(e);
+        double groundH = heights.At(heights.NormalUnder(e));
+        double over = geo.H - groundH;
+        // the build's centre is the ground under the camera: a camera 150 m up still gets the stones solid round its foot
+        var foot = _globe.Body.Shape.ToEcef(geo with { H = groundH });
+        var p = new DVec3(foot.X, foot.Y, foot.Z);
         foreach (var l in _layers)
         {
             if (l.Node != null && _origin.Epoch != l.Epoch) Place(l, axes);
