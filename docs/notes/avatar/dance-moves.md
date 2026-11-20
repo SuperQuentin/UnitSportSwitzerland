@@ -556,6 +556,41 @@ Authored like the others, numbers against the bone lengths; joint values are in 
 - **Shrug** (gesture): once a bar, shoulders up 7 cm and hands out at the waist over beat 1, held,
   let go over beats 3-4, the head tilting.
 
+## Generated moves (#2055)
+
+Beside the hand-written table, each style (not the rat dance) owns a **fixed pool of 32 generated moves**,
+numbered `HumanMeshBuilder.GeneratedMoves` (8000) + the pool index; `Resolve` checks that range before the
+Sword one. They are built once from FNV hashes of (style, index, salt) (`src/Avatar/DanceGen.cs`, plain C#,
+tier 0 tested in `DanceGenTests`): no `System.Random`, no `GetHashCode`, the same bytes on every machine, so a
+generated dance travels as nothing on the wire like any other pick, and every move a player can get is in
+`--emotecheck` and `--dancesheet`.
+
+- **A move** is a few numbers: ten body channels (`Px Py Pz Tilt Theta Phi Psi ThN PhH Sh`) each a wave
+  `Base + Amp * shape` of period 1/2, 1, 2 or 4 beats (all divide the 8-beat two-bar loop, so it has no seam;
+  shapes sine, hold, snap, saw), a 4-key arm cycle (keys of 1 or 2 beats, drawn from 16 anchors: hang, akimbo,
+  clap, forward, out, up-out, up, cross, ear, chest, forward-low, forward-up, side-low, back, punch, wide; both
+  arms mirror, one runs two keys behind, or each has its own keys; a snap fraction is the share of a key spent
+  travelling), a leg kind (planted, step-touch, heel lift, march, kick) with a stance width, squat and lean,
+  and the moving variant's `KMov` and arm blend. `DanceGen.Sample` evaluates it with no allocation;
+  `HumanMeshBuilder.Generated.cs` lays the frame on a `DanceCh`, so `Groove`, `Feel`, `Compose`, `ClearOfBody`
+  and LegFit apply as to any move.
+- **Per style** (`Profiles`): Chill slow sines and big gentle arcs, Electronic snaps and holds with the arms high,
+  HipHop low and wide with the hips and shoulders leading, Rock deep nods and fists, Folk claps and hands on hips,
+  Pop a bit of everything. Each pool is graded calm/middle/big (indices in that order; the counts are per style)
+  and the grade scales amplitudes and picks the periods (`DanceGen.Energy` feeds `DancePick`).
+- **`DanceGen.Check`** (the approximate validator, sampled every eighth beat with the music layer at 1.12 x):
+  wrist within 0.50 m of the shoulder, 0.21 m from the Hip..Neck axis, 0.15 m from the head's, wrists 0.085 m
+  apart, the hip never pulled down by LegFit, the centre of mass over the grounded feet, and the move must move.
+  A failing move is re-rolled with the next salt (later salts shrink the amplitudes, so it always converges); a
+  duplicate signature re-rolls too. `--emotecheck` runs the exact rig on every `8000 + 0..31` of every style,
+  standing and walking, flowing in from the previous move, under peak music, with the clearance limits of the
+  hand-written moves.
+- **Phrases** (`DancePick`): four slots (eight bars) play **A A B A**, slots 0, 1, 3 asking for the phrase's A and
+  slot 2 for its B (a new section is still a new pick). About a quarter of the A/B slots are generated, within
+  the section's energy limits; crowd moves and break sets are decided first.
+- **Judge them**: `--dancesheet gen:<style>[,first,count]` (same options as the table sheets).
+- Changing a table or a hash in `DanceGen` changes every dancer's generated moves: a decision, not a tweak.
+
 ## Implementation hints
 
 - **Frame flow:** compute `c = 4r`, `b = frac(c)`, `k = floor(c)`; pick the move function by `(Style, Move mod MoveCount)`; it returns the channels (`P, t, theta, phi, psi, thN, phH, shL, shR`, wrist/elbow targets, ankle targets); blend with `we = Smooth(Weight)` against the rest rig (the gait rig when walking); build the spine chain; aim the arms (`Limb.Solve` for `o/O/H` targets, directly for `ArmChain`); clamp wrists to 0.50 m of the shoulder and push them out of the torso (clearance rule); solve the legs after `LegFit` when `m < 1`.

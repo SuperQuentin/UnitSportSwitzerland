@@ -1348,3 +1348,12 @@ Offline, in a window, `--frame earth --bodies <planets>`, real terrain (`--chunk
 - [ ] From Bern, M, Page Down to Mars, click Olympus Mons on the map → the fly camera arrives 220 m over the volcano (on foot: you stand on it).
 - [ ] With a pad: LB / RB step the bodies, the D-pad and A pick a place; in VR the ‹ › buttons with the ray do the same.
 - [ ] Online (a server): the stepper still browses, but another body's place says it waits for online play and nothing moves.
+
+## Generated dance moves ([#2055](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2055), PR [#2056](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2056))
+
+In a window with a radio or CD playing, one style at a time (Pop, Rock, Electronic, HipHop, Chill, Folk), dancing near the music for about 2 minutes each.
+
+- [ ] Dance two minutes to each CD style → the moves read as dancing (no arm through the body, no floating foot, nothing frozen); about every fourth move is new to you.
+- [ ] Listen for the shape of the dance over eight bars → the first move comes back (A A B A): twice, a different one, then the first again.
+- [ ] Two clients next to each other, same music → they show the same move on the same bar (a pick is per dancer, so each sees the other's own move, identical on both screens).
+- [ ] Walk while dancing → generated moves keep the upper body and the arms, legs keep the walk, no popping when you start or stop.
