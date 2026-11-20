@@ -56,6 +56,9 @@ public partial class PhoneController : Node
     /// <summary>The open phone's viewmodel sits where the corner key list and the hand chip are: they hide meanwhile (#1825).</summary>
     public static bool HidesHud { get; private set; }
 
+    /// <summary>The over-the-shoulder view is on: the chat's idle hint line steps aside (real chat lines keep showing).</summary>
+    public static bool HidesHint { get; private set; }
+
     private readonly Func<FootPlayer?> _player;
     private readonly Func<bool> _blocked;
     private PhoneScreens _screens = null!;
@@ -175,7 +178,7 @@ public partial class PhoneController : Node
 
     public override void _ExitTree()
     {
-        if (Instance == this) { Instance = null; HidesHud = false; }
+        if (Instance == this) { Instance = null; HidesHud = false; HidesHint = false; }
         if (Teleporter.Curtain == Curtain) Teleporter.Curtain = null;
         Teleporter.Arrived -= OnArrived;
         if (_invites != null) _invites.Arrived -= OnCall;
@@ -362,6 +365,7 @@ public partial class PhoneController : Node
         _stowWhenFolded = false;
         _cursorUv = null;
         HidesHud = false;
+        HidesHint = false;
         _pressed = _dragging = _lookHeld = false;
         _map.PointerEnabled = true;
         SyncMap();
@@ -530,11 +534,14 @@ public partial class PhoneController : Node
         var view = GetViewport().GetVisibleRect().Size;
         _pxPerMm = TouchControls.MeasureScreen(GetViewport(), view).PxPerMm;
         _screens.SetTouch(Platform.IsTouch && !XR.XrSession.Active, view.Y / Mathf.Max(_pxPerMm, 0.01f));
+        _screens.SetShoulder(p.PhoneShoulderOn);
         _screens.Fit(GetWindow().Size);
         if (p.PhoneModel is { HasLiveScreens: false } model) model.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
         if (p.PhoneViewmodel is { HasLiveScreens: false } vm) vm.SetScreens(_screens.Cover.GetTexture(), _screens.Inner.GetTexture());
         // the viewmodel fills the lower right while open: the corner's key list and hand chip step aside
-        HidesHud = p.PhoneViewShown && _stage == Stage.Open;
+        // the corner phone covers the corner key list and the hand chip; the shoulder view has no corner phone but wants the picture clean as on main
+        HidesHud = p.PhoneViewShown && _stage == Stage.Open || p.PhoneShoulderOn;
+        HidesHint = p.PhoneShoulderOn;
         if (_screens.Shown == PhoneScreens.Page.Camera) AimLens(p, dt);
         _screens.Tick(ClockText(), DateText(), dt);
         RefreshQuick();
@@ -617,6 +624,8 @@ public partial class PhoneController : Node
             uv = cover ? _screens.CoverCardUv() : _screens.FocusUv();
         }
         else if (_cursorUv is { } c && c.X is > -0.2f and < 1.2f && c.Y is > -0.2f and < 1.2f) uv = c;
+        // not on the screen (or no cursor): the finger rests just below its bottom edge, off the content (#1825)
+        else if (_stage == Stage.Open && p.PhoneShoulderOn) { uv = new Vector2(0.18f, 1.16f); cover = false; }
         bool down = _pressed || RealClock.Now < _tapUntil;
         _touch = Mathf.MoveToward(_touch, down ? 1f : 0f, dt / 0.08f);
         p.PhonePointTip = hands && uv is { } at ? p.PhoneScreenToWorld(at, cover, Mathf.Lerp(Hover, Touching, _touch)) : null;

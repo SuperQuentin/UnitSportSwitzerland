@@ -25,6 +25,9 @@ public sealed class ShuttlePilot
     /// <summary>A runway: its threshold (LV95), heading (clockwise from grid north, rad), length, half width and height.</summary>
     public sealed record Runway(double E, double N, float Heading, float Length, float HalfWidth, double Elevation)
     {
+        /// <summary>Its threshold as a place, <paramref name="alt"/> m over the sea (the record is LV95: the airports' own grid).</summary>
+        public GlobalPos Place(double alt) => GlobalPos.FromLv95(E, N, alt);
+
         /// <summary>The grid direction along it (east, north).</summary>
         public (double E, double N) Dir => (Math.Sin(Heading), Math.Cos(Heading));
 

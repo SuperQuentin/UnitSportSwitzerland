@@ -129,7 +129,7 @@ public partial class PhoneProbe : Node
         await Press(PlayerInput.Phone, 0);
         for (int i = 0; i < 100 && !phone.IsCovering; i++) await Wait(0.01);
         double opened = GameClock.Now - pressed;
-        Check(phone.IsCovering && opened < 0.45, $"the second press ends open in {opened:F2} s (#1825)");
+        Check(phone.IsCovering && opened < 0.75, $"the second press ends open in {opened:F2} s (#1825)");
         Shot("phone_4_opening.png");
         await Wait(1.0);
         Check(phone.IsCovering, "Up again opens it and the screen covers the view");
@@ -394,7 +394,7 @@ public partial class PhoneProbe : Node
         await Press(PlayerInput.Phone, 0);
         for (int i = 0; i < 100 && !phone.IsCovering; i++) await Wait(0.01);
         double opened = GameClock.Now - t0;
-        Check(phone.IsCovering && phone.Screens.Shown == PhoneScreens.Page.Contacts && opened < 0.45, $"the second press opens on the last app, the Contacts ({phone.Screens.Shown}, {opened:F2} s)");
+        Check(phone.IsCovering && phone.Screens.Shown == PhoneScreens.Page.Contacts && opened < 0.75, $"the second press opens on the last app, the Contacts ({phone.Screens.Shown}, {opened:F2} s)");
         await Key(Godot.Key.Escape, 0.3);
         await Key(Godot.Key.Escape, 0.8);
         Check(phone.IsFolded, "Esc on Home folds it again");
@@ -537,7 +537,7 @@ public partial class PhoneProbe : Node
         var home = ProjectScreen(me, cover: false);
         Log($"{name} open Home: width {home.W:P0}, left {home.Left:P0}, right {home.Right:P0}, top {home.Top:P0}, bottom {home.Bottom:P0}");
         bool centreClear = !(home.Left <= 0.5f && home.Right >= 0.5f && home.Top <= 0.5f && home.Bottom >= 0.5f);
-        if (shoulder) Check(home.Inside && centreClear && home.W * view.X >= 300f, $"{name}: open over the shoulder the screen is wholly in view, {home.W * view.X:F0} px wide ({home.W:P0}), the view's centre clear");
+        if (shoulder) Check(home.Inside && home.W * view.X >= 250f, $"{name}: open over the shoulder the screen is wholly in view, {home.W * view.X:F0} px wide ({home.W:P0})");
         else Check(home.Inside && centreClear && (strict ? home.W is > 0.38f and < 0.47f && home.Left > 0.5f : home.W is > 0.30f and < 0.47f),
             $"{name}: open the screen is wholly in view at {home.W:P0} of the width, from {home.Left:P0}, the view's centre clear");
         var hud = new List<PromptBar>();

@@ -24,6 +24,25 @@ public static class BodyLook
     /// <summary>A body's radius past this share of the view's height (in space) is drawn by its globe.</summary>
     public const float GlobeShare = 0.01f;
 
+    /// <summary>
+    /// The draw order of what stands in for a far body in the sky (#2051): above the stars' (0), so it covers them, under
+    /// the moon's halo (<see cref="HaloPriority"/>) and the air (<see cref="AirPriority"/>), which are in front of it.
+    /// </summary>
+    public const int StandinPriority = 1, HaloPriority = 2, AirPriority = 3;
+
+    /// <summary>
+    /// Where a stand-in for a body <paramref name="distance"/> metres off (radius <paramref name="radius"/>) is put, as a
+    /// share of the far plane (#2051): farther bodies farther, so the stand-ins, drawn in order and not by depth, sort
+    /// as the bodies do (Io in front of Jupiter, the Moon across the Earth); 0.45 at 1,000 km to 0.85 at 10 billion km
+    /// and past, never so far that the body's near side passes 95 % of the far plane.
+    /// </summary>
+    public static double StandinShare(double distance, double radius)
+    {
+        double t = Math.Clamp((Math.Log10(Math.Max(distance, 1)) - 6) / 7, 0, 1);
+        double share = 0.45 + 0.4 * t;
+        return Math.Min(share, 0.95 / (1 + radius / Math.Max(distance, 1)));
+    }
+
     /// <summary>The globe keeps it down to this share of <see cref="GlobeShare"/> (no flicker at the edge).</summary>
     public const float KeepFactor = 0.8f;
 

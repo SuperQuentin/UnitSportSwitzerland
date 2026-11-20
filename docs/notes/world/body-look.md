@@ -26,5 +26,32 @@ sky (`World/MoonDisc` for the Moon, `World/SkyBodies` for the planets and big mo
   handover (68,000 km, the Moon's anchor then the Earth's) and a pair at the globe's size edge (142,000 km, the globe
   forced on then off, `BodyLook.ForceGlobe`), each compared inside the Moon's disc. Pictures in
   `test_output/bodies/bodyview_*.png`.
+- **Placed just before drawing** (#2036): whatever is put about the camera (another body's globe shrunk under its root,
+  Saturn's rings' slab and the camera's height over it, the sky's spheres, the Moon's disc, the stars, the sky floor) is
+  placed again on `RenderingServer.FramePreDraw`, after every node moved. In `_Process` alone the globe and its rings
+  were a frame of the fly camera's own step behind while the air (world axes) was not: at full speed by Saturn the
+  parts came apart by a third of the view and snapped back on a stop. `--bodyplacecheck` (windowed) strafes past
+  Saturn (2.3 million and 250,000 km), Jupiter and the Moon (from the Earth's side) at full speed and holds every
+  part within 1 px of the true centre; pictures `test_output/bodies/bodyplace_*.png`.
+- **Ordered by drawing, not by depth** (#2051): what stands in for a far body (another body's globe shrunk past the
+  far plane, `body_globe_standin.gdshader`; the Moon's disc; the planets' discs and rings; the sun) cannot be ordered
+  by depth. High up the view is 1 : 10 million from near to far, and at 85 % of the far plane a depth rounds under the
+  24-bit step, under the stars' pinned one: the stars shone through the Earth's night side, and under 5 km (the far
+  plane the view distance) the Earth was drawn over ridges past 85 % of it. So:
+  - the stars draw first (priority 0), then the stand-ins (`BodyLook.StandinPriority`), then the Moon's halo and the
+    rings (`HaloPriority`), then the air (`AirPriority`). A stand-in covers the stars as far as the sky is dark
+    (premultiplied, alpha = the stars' own darkness), and is added onto the sky by day as before;
+  - every stand-in, star and sun steps aside where the scene's opaque depth has anything
+    (`shaders/common/sky_cover.gdshaderinc`, `sky_covered`). The one exception is the anchor's own globe past the
+    far body (the Moon across the Earth), decided by the body's true distance against the anchor's sphere
+    (`world_anchor_sphere`, 0.995 of its polar radius). That sphere also hides the stand-ins where the depth is empty;
+  - a shrunk globe culls its far half (`local_centre`), and stand-ins sit at a share of the far plane that grows with
+    their true distance (`BodyLook.StandinShare`), so they sort as the bodies do;
+  - the Earth has a sky floor in space as the other bodies have.
+
+  `--skyordercheck` (windowed) draws each view with one part hidden and compares the pictures:
+  - the Earth from the Moon and Jupiter from Io near their horizons, and the sun from the Moon: never on the ground;
+  - the stars never on the ground or inside a drawn disc;
+  - the Earth and the Moon from their night side at each distance band (a 6° view): solid.
 - **Not yet**: a cross-fade between the two (they match, so the hard swap does not show); the stars thin while the
   anchor is the Moon (the Moon sky session's `StarField`).

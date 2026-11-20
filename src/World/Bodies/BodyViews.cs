@@ -33,8 +33,14 @@ public partial class BodyViews : Node
     /// <summary>The root of the bodies' local install (<see cref="TerrainPaths.FindBodiesDir"/>), or null.</summary>
     public static string? DataRoot => TerrainPaths.FindBodiesDir();
 
+    /// <summary>The one in the world (a check finds a globe through it), null outside one.</summary>
+    public static BodyViews? Instance { get; private set; }
+
     /// <summary>A body's globe, or null where it has none.</summary>
     public BodyGlobe? GlobeOf(BodyId id) => _globes.Find(g => g.Body.Id == id);
+
+    /// <summary>The globe drawn for a sky body this frame, or null while the sky's disc shows it.</summary>
+    public BodyGlobe? DrawnGlobeOf(SkyBody sky) => _globes.Find(g => g.Drawn && g.Body.Sky == sky);
 
     public BodyViews(WorldOrigin origin, Func<Player.FootPlayer?> local)
     {
@@ -45,6 +51,7 @@ public partial class BodyViews : Node
 
     public override void _Ready()
     {
+        Instance = this;
         if (!TerrainPaths.GlobeOff)
             foreach (var body in CelestialBody.All)
             {
@@ -93,8 +100,13 @@ public partial class BodyViews : Node
         if (RingCheck.Requested) AddChild(new RingCheck(_origin));
         if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
         if (GotoCheck.Requested) AddChild(new GotoCheck(_origin));
+        if (BodyTravelCheck.Requested) AddChild(new BodyTravelCheck(_origin));
         if (SpectatorCrossCheck.Requested) AddChild(new SpectatorCrossCheck(_origin));
+        if (SpectatorFrameCheck.Requested) AddChild(new SpectatorFrameCheck(_origin));
         if (BodyViewCheck.Requested) AddChild(new BodyViewCheck(_origin));
+        if (BodyPlaceCheck.Requested) AddChild(new BodyPlaceCheck(_origin));
+        if (SkyOrderCheck.Requested) AddChild(new SkyOrderCheck(_origin));
+        if (MoonLookCheck.Requested) AddChild(new MoonLookCheck(_origin));
         if (UfoMoonCheck.Requested) AddChild(new UfoMoonCheck(_origin, _local, () => _moon?.Ground));
         if (ShuttleMoonCheck.Requested) AddChild(new ShuttleMoonCheck(_origin, _local, () => _moon?.Ground));
         if (Moon.MoonSitesCheck.Requested) AddChild(new Moon.MoonSitesCheck(_origin, () => _moon?.Ground, _local));
@@ -103,6 +115,7 @@ public partial class BodyViews : Node
 
     public override void _ExitTree()
     {
+        if (Instance == this) Instance = null;
         _origin.BodyChanged -= OnBodyChanged;
         BodyGravity.On(BodyId.Earth);
         SkyClock.Local = null;

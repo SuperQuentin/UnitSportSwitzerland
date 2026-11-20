@@ -196,6 +196,8 @@ public partial class ChatUi : CanvasLayer
         _chat.NamesReceived += () => Callable.From(() => { if (IsTyping) RefreshSuggestions(); }).CallDeferred();
 
         Append(Platform.IsTouch ? "CHAT (top right) to chat, / for commands." : "Press Enter to chat, / for commands; /help opens the command list.", ChatKind.System);
+        // the idle hint is the one line the phone open over the shoulder steps aside for (it lay across the phone); chat lines keep showing
+        if (_floating.Count > 0) _hintView = _floating[^1].View;
         // "--chatdemo" alone floats a line of each kind, for a screenshot of the closed chat's look
         if (CmdArgs.Has("--chatdemo") && !CmdArgs.Has("--chatopen"))
             GetTree().CreateTimer(18).Timeout += DemoLines;
@@ -1321,8 +1323,15 @@ public partial class ChatUi : CanvasLayer
 
     // ---- floating lines --------------------------------------------------------------------
 
+    private Control? _hintView;
+
     public override void _Process(double delta)
     {
+        if (_hintView != null)
+        {
+            if (!IsInstanceValid(_hintView)) _hintView = null;
+            else if (_hintView.Visible == Phone.PhoneController.HidesHint) _hintView.Visible = !Phone.PhoneController.HidesHint;
+        }
         // the ghost follows the caret: arrows and clicks move it without changing the text
         if (_panel.Visible && _input.CaretColumn != _lastCaret)
         {

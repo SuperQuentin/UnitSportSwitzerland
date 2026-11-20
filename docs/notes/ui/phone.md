@@ -377,36 +377,31 @@
   by the edge, never touching another), a disc / triangle / diamond for town / summit / pass (`MapCanvasView.DrawPlaceMarker`) and a legend.
   The pad has no recentre key: R3 is the camera toggle on foot, so "Where I am" in the drawer stays the pad's way.
 
-### Over the shoulder again, open only (#1825, the owner's decision: "keep the over shoulder effect to look to the phone")
+### Over the shoulder again, open only (#1825, the owner's decision: main's angle and opening, "i love the angle and the animation")
 
 - **When**: only while the phone is **open** (an app other than the camera app and the travel curtain), on desktop and pad, in **third person**.
   Folded keeps the gameplay camera, the free mouse look and the corner viewmodel exactly as above. **First person keeps the corner
   viewmodel** when open (there is no shoulder). VR and touch are unchanged.
-- **The camera is the gameplay one pulled in**, not a second camera: `FootPlayer.PhoneShoulder` (0..1, eased 0.26 s, 0.1 s with Reduce motion,
-  set from `PhoneShoulderWant`) blends `UpdateThirdPersonCamera`'s height, shoulder offset and distance to `Tune` (`Height` 1.60 m, `Offset`
-  0.25 m, `Distance` -0.05 m: beside the head, level with the shoulder tops, a hair ahead of the pivot). So it follows the walking body, orbits
-  with the mouse look, and keeps the gameplay camera's collision (`ArmReach`: a wall behind the player pulls it in; the phone is held in front,
-  so there is none to clip). The body squares to the view as for the camera app (`_throwBlend`).
-- **The lens is turned to a steady anchor, not the hand**: `PhoneLensView` turns the lens (not the view, the aim or the walking) so a fixed point
-  in the body's frame (`PhoneAnchor`, where the phone is held) lands at 29 % across, 52 % down the picture at any window shape. The anchor is body-fixed, so
-  the hand's walk bob does not move the picture: the phone's centre moves 0.5 px rms frame to frame while walking (asserted under 3).
-  The field of view is 84° (`Tune.Fov`): wide enough that the horizon (and the path ahead) stay in the upper part while the phone sits in the lower left.
-- **The phone is read at a glance**: the in-world phone (the viewmodel is hidden in third person) is drawn **2.4 times its size for its owner**
-  (`Tune.Scale`, a node scale, never sent: other players see the true phone; a little less in a narrower or wider window, `ShoulderFit`)
-  and turned 50° toward the lens, so the screen is seen nearly face-on instead of edge-on and the tile labels read (about 30 % of the
-  view's width, over 400 px at 1280x720). The hand and the pointing finger are the existing in-world ones (`StepFinger`).
-- **Input**: unchanged. The cursor is projected onto the in-world phone (`PhoneScreenPoint` uses it when no viewmodel is drawn); holding the
-  right button captures the mouse and the shoulder camera **looks with it** (the view yaw and pitch move the camera as in any third person);
-  it stays where you looked on release (no snap back). Y toggles, Back as before, typing stands the body, sprint puts the phone away.
-- **Not changed for others**: `PhoneState` and the arm poses; other peers see the same small phone in the same walking body.
-- **Gameplay code**: the lens is turned up to about 40° off the player's view while open, so anything that aims from `_camera` sees that turn;
-  the interaction and item code read the view (`_viewYaw`, `_pitch`), and items do not fire with the phone out.
-- **Tuning**: `--shoulder height,offset,distance,screenX,screenY,fov,scale,turnDeg` overrides `FootPlayer.Tune` for a run; `--phonecheck
-  --shouldershots` writes the frames to `test_output/phone_shoulder/` and `--shoulderchecks` runs the framing and shoulder checks alone.
-- **Checks**: `--phonecheck` (`PhoneProbe.Shoulder`): folded the gameplay camera and the corner phone; open in third person the camera eases
-  over the shoulder (a frame in between), no corner phone, the screen whole in the view and 300 px wide at 16:9, 4:3 and 21:9, the
-  centre of the view clear, the horizon and the path ahead in view, the ray lands on the screen, the picture steady while walking, and back to the gameplay
-  camera when folded; first person: no shoulder, the corner phone as before.
+- **It is main's camera, unchanged** (`PhoneShoulderView`, as of #889/the iPhone Duo pass): behind and above the shoulder (0.6 m up, 0.42 m aside,
+  0.2 m back of the phone's screen, times 0.68 once open), looking down at the phone, 32 degrees, near 0.01, the phone's long side up the picture. The
+  **opening is main's too**: the hinge unfolds in 0.42 s (`PhoneModel.UnfoldSeconds`), the arms blend into the pose in 0.18 s, and the camera moves
+  over the shoulder in 0.5 s (`FootPlayer.ShoulderSeconds`, main's `LookSeconds`, smoothed), the lens coming in with the unfold. `--phonecheck
+  --shouldershots` writes `branch_open_*` frames of the opening; the `main_open_*` frames beside them are `origin/main` itself.
+- **The one change walking forces**: main framed the phone itself, damped in the world (`_phoneSeen`), which was fine for a body that stood. Walking,
+  a damped copy trails the body by its speed times the delay, and the phone slides out of the picture; the hand's bob comes through. The
+  phone is now taken **in the body's frame** and only its sway is damped there (`PhoneSteady`): the lens goes with the walking body exactly, the
+  bob is filtered (the screen's centre moves 0.8 px rms frame to frame while walking, asserted under 3). The body squares to the view while open
+  (as for the camera app), so the shoulder side stays the shoulder side. The gameplay camera is eased into main's view (`InterpolateWith`).
+- **Legible**: the open phone is laid out for 560 units high instead of 800 (`PhoneScreens.SetShoulder`, the touch layout's sizes: three-column Home,
+  bigger tiles and text), so the labels are 1.4 times bigger on the glass; Contacts rows likewise. The finger comes in nearly square to the glass
+  from the side (`PhoneFingerWay`) so the hand stays beside the phone and only the fingertip is over the page; with the cursor off the screen it
+  rests below the screen's bottom edge. The corner key list, the hand chip and the chat's idle hint line (not real chat lines) step aside
+  (`PhoneController.HidesHud`, `HidesHint`).
+- **Input**: unchanged. The cursor is projected onto the in-world phone; holding the right button captures the mouse and the camera looks with it;
+  Y toggles, Back as before, typing stands the body, sprint puts the phone away. Other peers see the same small phone: nothing replicated changes.
+- **Checks**: `--phonecheck` (`PhoneProbe.Shoulder`): folded the gameplay camera and the corner phone; open in third person the ease (0.3 to 1 s), no
+  corner phone, the lens at 32 degrees, the screen whole in view and 250 px wide at 16:9, 4:3 and 21:9, the ray lands on the screen, steady while walking,
+  back to the gameplay camera when folded; first person unchanged. `--shouldershots` / `--shoulderchecks` run them alone.
 
 ### The Map app and the shoulder camera (#1826 with #1825's over-the-shoulder view)
 

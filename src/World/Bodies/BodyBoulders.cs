@@ -172,7 +172,8 @@ public partial class BodyBoulders : Node
             node.AddChild(new MultiMeshInstance3D
             {
                 Name = $"Shape{i}", Multimesh = mm, MaterialOverride = _material,
-                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // they cast on the lit ground (#2024): the Moon's hard black shadows behind every stone
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
                 // the instances' box is round the field's centre: never culled by Godot's guess
                 ExtraCullMargin = (float)Reach,
             });

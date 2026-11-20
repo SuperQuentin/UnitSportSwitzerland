@@ -1258,6 +1258,17 @@ Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (
 - [ ] Fly up from the Moon to 60,000 km (spectator) → the sun and stars swing back over the climb, the Earth does not move; no jump when the crossing into the Earth's sphere happens.
 - [ ] `/goto Mars 0 0`, T → Mars' sun moves at the same pace; Phobos rises and sets.
 
+## The Moon's ground light ([#2024](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2024))
+
+Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon).
+
+- [ ] By day on the Moon (any sunlit site) → the ground reads grey, not white; the walker, boulders and a colony's modules cast hard black shadows.
+- [ ] At a low sun (shortly after sunrise) → long shadows, bright sunlit slopes, black hollows; the relief reads strongly.
+- [ ] At night on the near side (e.g. Hadley, `/goto Moon 26.13 3.63` on a night) → a dim bluish light from where the Earth hangs, relief readable, the walker's shadow pointing away from the Earth.
+- [ ] At night on the far side (`/goto Moon -24.15 -126.15`) → a dim cool light from the north: not a flat grey; the horizon no brighter than the ground.
+- [ ] Flying up from the ground to orbit → the ground brightens smoothly to the globe's look, no jump; from orbit the Moon looks as before.
+- [ ] On the Earth (Switzerland) → nothing changed: shadows, ambient, the night.
+
 ## The sky on an airless body ([#1989](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1989))
 
 Offline, in a window, `--frame earth --bodies E:/UnitSportSwitzerland/planets` (Cartoon), `--date 2026-11-15`.
@@ -1299,7 +1310,7 @@ Offline, in a window, `--frame earth` in Geneva (Cartoon), `--date 2027-07-15`.
 
 In a window on a real map, Cartoon, first and third person.
 
-- [ ] Third person, open the phone (Y twice): the camera comes over the right shoulder onto the phone in about a quarter of a second, the phone is big and face-on in the lower left, the horizon still above it; walk with WASD and the picture stays steady (no shake from the arms); fold (Esc) and the normal camera and the corner phone come back.
+- [ ] Third person, open the phone (Y twice): the unfold and the camera over the right shoulder are the old ones (about half a second), the phone seen from above and behind, its labels readable; walk with WASD and the picture stays steady and the phone stays in view; fold (Esc) and the normal camera and the corner phone come back. The idle chat hint and the key list are gone while it is open; the finger is only a fingertip over the page.
 - [ ] Open, hold the right button and look around: the shoulder camera turns with the mouse; the cursor works the phone's tiles again on release. Walk into a wall or a tree behind you: the camera does not go through it.
 - [ ] First person, open: the phone is still the small one in the lower right, no shoulder view.
 - [ ] Walk with the cursor on a real mouse: open the phone on the Map, WASD to walk, move the cursor over a row, click it; hold the right button and turn the view → the cursor hides while held and comes back at the same place on release; does the hold-to-look feel right (no jump of the view on press or release)?
@@ -1360,3 +1371,19 @@ Offline, in a window (Cartoon), `--date 2027-07-15`, on foot at Geneva's or Zuri
 - [ ] Watch the take-off and, an hour or so later in game time (`/speed`), the landing on the same runway; the bot parks and climbs out by the hatch.
 - [ ] `--frame earth`, free camera on the bot (`/bot shuttle moon orbit`, then follow it): the trip, the drop onto a colony's pad (inside its 60 m), the lift-off, home; the descent and touchdown look like a lander, not a crash.
 - [ ] Online (server + client): `/bot shuttle 300` at Geneva → the bot flies round the Earth and lands home, seen from the ground.
+
+## A planet followed at the longest end on any body (PR [#2029](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2029), [#2028](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2028))
+
+`--frame earth`, on the Moon (`/goto moon 17 59`), a telescope set up, normal speed.
+
+- [ ] Pick Jupiter in the target menu and zoom all the way in (wheel), then wait a minute → Jupiter's globe stays in the middle; the same with `/time speed real`.
+- [ ] The same with a pad (D-pad up to zoom, X / LB to pick the target) and in VR (the eyepiece picture before the eyes) → it stays centred.
+
+## Travel between bodies and the place search by body (PR [#2040](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2040), [#2039](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2039))
+
+Offline, in a window, `--frame earth --bodies <planets>`, real terrain (`--chunks D:/...`), `--date 2027-07-15`.
+
+- [ ] On the Moon (`/goto moon 0.67 23.47`, then T), M → the search opens on the Moon with its map; type `bern` after Page Up to the Earth, Enter → you land in Bern on your feet, the Earth round you.
+- [ ] From Bern, M, Page Down to Mars, click Olympus Mons on the map → the fly camera arrives 220 m over the volcano (on foot: you stand on it).
+- [ ] With a pad: LB / RB step the bodies, the D-pad and A pick a place; in VR the ‹ › buttons with the ray do the same.
+- [ ] Online (a server): the stepper still browses, but another body's place says it waits for online play and nothing moves.

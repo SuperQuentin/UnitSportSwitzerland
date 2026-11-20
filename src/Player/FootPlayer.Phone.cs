@@ -57,7 +57,9 @@ public partial class FootPlayer
     {
         if (_phoneModel is not { Visible: true }) return null;
         var b = _phoneModel.GlobalBasis.Orthonormalized();
-        return (-b.Z * 0.3f + b.Y * 0.8f + b.X * 0.5f).Normalized();
+        // into the glass and up it, from below and only a little from the side: the hand stays under the screen and the finger lies over what is
+        // below the fingertip (the 0.5 / 0.35 of before swept it across the page, #1825)
+        return (-b.Z * 0.93f + b.Y * 0.3f + b.X * 0.12f).Normalized();
     }
 
     /// <summary>The fingertip the figure was last built pointing at (its mesh frame), for the checks.</summary>
@@ -77,6 +79,7 @@ public partial class FootPlayer
     private float _phoneNear = float.NaN, _phoneFov;
     /// <summary>The lens's field of view on the phone: narrower than the game's, so it stands back and still fills the view.</summary>
     private const float PhoneFov = 32f;
+    internal const float PhoneShoulderFov = PhoneFov;
     /// <summary>The smoothed phone the lens follows (global); NaN origin = take the next as it is.</summary>
     private Transform3D _phoneSeen = new(Basis.Identity, new Vector3(float.NaN, 0, 0));
     private Vector2 _phoneTiltShown;
@@ -110,58 +113,7 @@ public partial class FootPlayer
         // in VR the owner holds it in the real hand (#920); everyone else sees it in the figure's
         if (IsMultiplayerAuthority() && XR.XrSession.Active && PhoneVrPose is { } real) _phoneModel.GlobalTransform = real;
         else _phoneModel.Transform = PhoneInHands();
-        // the owner reading it over the shoulder sees it a little larger than it is (others see the true size): a screen at an arm's length behind must be legible
-        if (IsMultiplayerAuthority() && PhoneShoulder > 0f)
-            _phoneModel.Transform = _phoneModel.Transform with { Basis = _phoneModel.Transform.Basis.Scaled(Vector3.One * Mathf.Lerp(1f, Tune.Scale * ShoulderFit(), PhoneShoulder)) };
         _phoneModel.Visible = true;
-    }
-
-    /// <summary>
-    /// Where the open phone is held, in the body's frame (right, up, back is +Z): the same every frame, so the camera is framed on a
-    /// steady point and not on the hand, which the walk moves.
-    /// </summary>
-    /// <summary>The magnified phone's size for the window's shape: a little smaller than at 16:9 in a narrower or a wider window, so it stays whole in the view.</summary>
-    private float ShoulderFit()
-    {
-        var size = GetViewport().GetVisibleRect().Size;
-        float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
-        return Mathf.Clamp(1f - 0.28f * Mathf.Abs(aspect - 16f / 9f), 0.8f, 1f);
-    }
-
-    private static readonly Vector3 PhoneAnchor = new(0f, 1.36f, -0.23f);
-
-    /// <summary>
-    /// The lens's orientation over the shoulder: turned from the player's view just far enough that the phone's anchor lands at
-    /// <see cref="Tune.ScreenX"/>, <see cref="Tune.ScreenY"/> of the picture, at any window shape; the horizon and the path ahead stay in the
-    /// rest of it. The view, the aim and the walking stay the player's: only the lens turns, and it eases in with <paramref name="blend"/>.
-    /// </summary>
-    private Basis PhoneLensView(Basis view, Vector3 lensAt, float blend)
-    {
-        var bodyYaw = new Basis(Vector3.Up, _viewYaw);
-        var d = bodyYaw.Inverse() * (GlobalPosition + bodyYaw * PhoneAnchor - lensAt);
-        float flat = Mathf.Sqrt(d.X * d.X + d.Z * d.Z);
-        float phi = Mathf.Atan2(-d.X, -d.Z), psi = Mathf.Atan2(d.Y, flat);
-        var size = GetViewport().GetVisibleRect().Size;
-        float aspect = size.Y > 0f ? size.X / size.Y : 16f / 9f;
-        float tanV = Mathf.Tan(Mathf.DegToRad(Tune.Fov) * 0.5f), tanH = tanV * aspect;
-        float yaw = phi - Mathf.Atan((1f - 2f * Tune.ScreenX) * tanH);
-        float pitch = psi - Mathf.Atan((0.5f - Tune.ScreenY) * 2f * tanV);
-        return new Basis(Vector3.Up, _viewYaw + yaw * blend) * new Basis(Vector3.Right, Mathf.Lerp(_pitch + _punch, pitch, blend));
-    }
-
-    /// <summary>The over-the-shoulder view's numbers (<c>--shoulder height,offset,distance,screenX,screenY,fov,scale,turnDeg</c> overrides them while tuning).</summary>
-    internal static class Tune
-    {
-        public static float Height = 1.60f, Offset = 0.25f, Distance = -0.05f, ScreenX = 0.29f, ScreenY = 0.52f, Fov = 84f, Scale = 2.4f, Turn = 0.873f;
-
-        static Tune()
-        {
-            if (Core.CmdArgs.Value("--shoulder") is not { } v) return;
-            var p = v.Split(',');
-            if (p.Length < 8) return;
-            float F(int i) => float.Parse(p[i], System.Globalization.CultureInfo.InvariantCulture);
-            (Height, Offset, Distance, ScreenX, ScreenY, Fov, Scale, Turn) = (F(0), F(1), F(2), F(3), F(4), F(5), F(6), Mathf.DegToRad(F(7)));
-        }
     }
 
     private static bool IsPhonePose(Avatar.ItemArmPose pose) =>
@@ -194,8 +146,6 @@ public partial class FootPlayer
         // the hand at the right edge, a little below the middle: the phone's centre is up and across from it,
         // in front of the fingers, which hold it from behind and at the edges
         var origin = hand - x * 0.034f + y * 0.02f + z * 0.075f;
-        // read over the shoulder (#1825) it is turned a little to the lens on the right, so the screen is not seen edge-on
-        if (IsMultiplayerAuthority() && !Npc && PhoneShoulder > 0f) basis = new Basis(Vector3.Up, Tune.Turn * PhoneShoulder * _shoulderSide) * basis;
         var held = new Transform3D(basis, origin);
         if (_phoneTurn <= 0f) return held;
         // a selfie (#889): turned half round about the open phone's middle, the camera island and the cover
@@ -224,18 +174,21 @@ public partial class FootPlayer
         float shoulder = PhoneShoulder;
         if (shoulder > 0f && _phoneModel is { Visible: true } && !XR.XrSession.Active && cover <= 0f && camApp <= 0f)
         {
-            // over the shoulder (#1825): the gameplay camera's own placement (UpdateThirdPersonCamera) did the work; the lens narrows and comes in close
+            // open in third person (#1825): the camera is main's over the shoulder, high and close onto the phone (PhoneShoulderView, 32 degrees), eased in
             if (float.IsNaN(_phoneNear))
             {
                 _phoneNear = _camera.Near;
                 _phoneFov = _camera.Fov;
             }
-            _camera.Near = Mathf.Lerp(_phoneNear, 0.03f, shoulder);
-            _camera.Fov = Mathf.Lerp(_phoneFov, Tune.Fov, shoulder);
+            var seen = PhoneSteady(dt);
+            _camera.GlobalTransform = _camera.GlobalTransform.InterpolateWith(PhoneShoulderView(seen), shoulder);
+            _camera.Near = Mathf.Lerp(_phoneNear, 0.01f, shoulder);
+            _camera.Fov = Mathf.Lerp(_phoneFov, PhoneFov, shoulder);
             _phoneSeen.Origin = new Vector3(float.NaN, 0, 0);
             ShowBackdrop(0f, dt);
             return;
         }
+        _steadyLocal.Origin = new Vector3(float.NaN, 0, 0);
         if (look <= 0f || _phoneModel is not { Visible: true } || XR.XrSession.Active || cover <= 0f && camApp <= 0f)
         {
             if (!float.IsNaN(_phoneNear))
@@ -313,15 +266,18 @@ public partial class FootPlayer
 
     private float _shoulderT;
 
+    /// <summary>The camera's way over the shoulder: main's <c>LookSeconds</c> (a linear 0.5 s, smoothed by <see cref="PhoneShoulder"/>).</summary>
+    internal const float ShoulderSeconds = 0.5f;
+
     /// <summary>The shoulder view is in force: wanted, in third person, on desktop or pad, on foot (VR, touch, first person keep the rest).</summary>
     internal bool PhoneShoulderOn => PhoneShoulderWant && _thirdPerson && !_borrowedThird && !XR.XrSession.Active && !Core.Platform.IsTouch
         && PhoneState == PhoneOpenState && Ride == RideKind.OnFoot;
 
-    /// <summary>0..1, eased (about 0.26 s, 0.1 s when Reduce motion is on): how far the camera is over the shoulder.</summary>
+    /// <summary>0..1, eased (0.5 s as on main, 0.1 s when Reduce motion is on): how far the camera is over the shoulder.</summary>
     public float PhoneShoulder => Mathf.SmoothStep(0f, 1f, _shoulderT);
 
     private void StepPhoneShoulder(float dt) =>
-        _shoulderT = Mathf.MoveToward(_shoulderT, PhoneShoulderOn ? 1f : 0f, dt / (Core.GameSettings.Current.ReduceMotion ? 0.1f : 0.26f));
+        _shoulderT = Mathf.MoveToward(_shoulderT, PhoneShoulderOn ? 1f : 0f, dt / (Core.GameSettings.Current.ReduceMotion ? 0.1f : ShoulderSeconds));
 
     /// <summary>The viewmodel is on screen now (the pointing finger and the in-world phone's screen yield to it).</summary>
     public bool PhoneViewShown { get; private set; }
@@ -400,6 +356,43 @@ public partial class FootPlayer
 
     /// <summary>The camera app's lens: wide enough that the world shows round the raised phone.</summary>
     private const float CameraAppFov = 52f;
+
+    /// <summary>The phone as the lens sees it while open: the hand's sway filtered in the body's frame (see <see cref="PhoneSteady"/>).</summary>
+    private Transform3D _steadyLocal = new(Basis.Identity, new Vector3(float.NaN, 0, 0));
+
+    /// <summary>
+    /// The phone the shoulder lens follows. Main followed the phone itself a beat late (damped in the world), which framed a body
+    /// that stood still; walking, the damped copy would trail the body by its speed times the delay and slide out of the picture, and the
+    /// hand's bob came through. So the phone is taken in the body's frame and only its sway is damped there: the lens goes with the
+    /// body exactly and the hand's bob and breath are filtered, as they were for a standing body.
+    /// </summary>
+    private Transform3D PhoneSteady(float dt)
+    {
+        var body = _walker?.GlobalTransform ?? GlobalTransform;
+        var local = (body.AffineInverse() * _phoneModel!.GlobalTransform).Orthonormalized();
+        if (float.IsNaN(_steadyLocal.Origin.X) || _steadyLocal.Origin.DistanceTo(local.Origin) > 1f) _steadyLocal = local;
+        else _steadyLocal = _steadyLocal.InterpolateWith(local, MathX.Damp(6f, dt)).Orthonormalized();
+        return body * _steadyLocal;
+    }
+
+    /// <summary>
+    /// Behind and above the right shoulder (the left, over that one), looking down at the phone: the folded phone's cover, or closer in,
+    /// the open phone with the hand working it. As it was on main (#889), unchanged.
+    /// </summary>
+    private Transform3D PhoneShoulderView(Transform3D phone)
+    {
+        // the body's facing (the figure is built facing -Z), not the phone's, which leans toward the eyes
+        var ahead = MathX.Flat(-(_walker?.GlobalBasis.Z ?? GlobalBasis.Z));
+        ahead = ahead.LengthSquared() > 1e-4f ? ahead.Normalized() : Vector3.Forward;
+        var right = ahead.Cross(Vector3.Up);
+        float open = _phoneModel != null ? Mathf.SmoothStep(0f, 1f, _phoneModel.Fold) : 0f;
+        var at = phone * Phone.PhoneModel.CoverScreenCentre.Lerp(Phone.PhoneModel.InnerScreenCentre, open);
+        // open, a third closer: the phone and the finger on it fill the middle of the picture
+        float k = Mathf.Lerp(1f, 0.68f, open);
+        var lens = at + (Vector3.Up * 0.6f + right * (0.42f * _shoulderSide) - ahead * 0.2f) * k;
+        // the phone's long side up the picture: it reads upright, as a phone held up to read does
+        return new Transform3D(Basis.LookingAt(at - lens, phone.Basis.Y), lens);
+    }
 
     /// <summary>
     /// Square onto the open phone, as close as keeps all of it in view with a little room round its

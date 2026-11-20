@@ -94,6 +94,22 @@ public partial class PlayerFeel : Node3D
         Name = "Feel";
     }
 
+    /// <summary>
+    /// The body parked by the fly camera stops processing (#2036): its screen goes with it. Left as it was, the layer stayed
+    /// up with a landing's "AIR 0.9 s" frozen on it over the whole flight, out to Saturn.
+    /// </summary>
+    /// <summary>Whether this player's feel layer (its HUD lines and popups) is on screen (#2036's check).</summary>
+    internal bool ScreenShown => _screen != null && _screen.Visible && (_popup.Visible || _speedLabel.Visible);
+
+    public override void _Notification(int what)
+    {
+        if (what != NotificationDisabled || _screen == null) return;
+        _screen.Visible = false;
+        _popupLife = 0;
+        _popup.Visible = false;
+        _airTime = 0;
+    }
+
     public override void _Ready()
     {
         _hiss = Loop(SfxSynth.Hiss);

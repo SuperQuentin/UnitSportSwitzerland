@@ -25,9 +25,10 @@ public class TargetListTests
     [Fact]
     public void The_trip_takes_what_the_flight_checks_measured()
     {
-        // --mooncheck: 400 km over the Earth to 100 km over the Moon in 27.5 s; --mooncheck mars: 860 s
+        // --mooncheck: 400 km over the Earth to 100 km over the Moon in 27.5 s; Mars (1.67 AU) took 860 s under light's
+        // top, a minute without it (#2026)
         Assert.InRange(TargetList.TripSeconds(384_400_000 - 6_371_000 - 1_737_400), 20, 35);
-        Assert.InRange(TargetList.TripSeconds(249.46e9 - 6_371_000 - 3_396_000), 800, 920);
+        Assert.InRange(TargetList.TripSeconds(249.46e9 - 6_371_000 - 3_396_000), 40, 70);
         Assert.Equal(0, TargetList.TripSeconds(300_000));
     }
 

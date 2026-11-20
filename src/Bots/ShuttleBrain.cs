@@ -90,35 +90,38 @@ public sealed class ShuttleBrain : IBotBrain
     {
         var origin = body.Origin!;
         var g = origin.ToGlobal(body.GlobalPosition);
-        var (e, n) = (g.Lv95.E, g.Lv95.N);
+        var (e, n, _) = g.Lv95;
         float yaw = body.Vehicle is Airliner jet ? jet.State.Yaw : body.Rotation.Y;
         float heading = -(origin.Frame.IsAnchor ? TrueNorth.WorldYawToGrid(origin.Frame, body.GlobalPosition, yaw) : yaw);
-        var runway = RunwayNear(body, e, n) ?? new ShuttlePilot.Runway(e, n, heading, 3_000f, 30f, g.Alt);
-        GD.Print(FormattableString.Invariant($"[bots] {body.Name} flies the shuttle from a runway at {runway.E:F0}/{runway.N:F0}, heading {Mathf.RadToDeg(runway.Heading):F0}°, {runway.Length:F0} m, {runway.Elevation:F0} m up"));
+        var runway = RunwayNear(body, g, e, n) ?? new ShuttlePilot.Runway(e, n, heading, 3_000f, 30f, g.Alt);
+        var threshold = runway.Place(runway.Elevation).Geodetic;
+        GD.Print(FormattableString.Invariant($"[bots] {body.Name} flies the shuttle from a runway at {threshold.LatDeg:F5}, {threshold.LonDeg:F5}, heading {Mathf.RadToDeg(runway.Heading):F0}°, {runway.Length:F0} m, {runway.Elevation:F0} m up"));
         return ask.Moon
             ? new ShuttlePilot.Mission(runway, runway, Start: (e, n, heading), OrbitKm: ask.Km, RoundTheEarth: false, CoastSeconds: 10,
                 Moon: true, Pad: ask.Pad, LandHome: !ask.FromOrbit)
             : new ShuttlePilot.Mission(runway, runway, Start: (e, n, heading), OrbitKm: ask.Km, RoundTheEarth: true, Turns: ask.Turns);
     }
 
-    /// <summary>The nearest airport's longest usable runway within 5 km of (e, n), oriented with more of it ahead; null without one.</summary>
-    private static ShuttlePilot.Runway? RunwayNear(FootPlayer body, double e, double n)
+    /// <summary>The longest usable runway with an end within 5 km of (e, n), oriented with more of it ahead; null without one.</summary>
+    private static ShuttlePilot.Runway? RunwayNear(FootPlayer body, GlobalPos at, double e, double n)
     {
         if (World.AirportStands.Instance?.Index is not { } index) return null;
-        var best = index.Airports.Where(a => Math.Sqrt((a.E - e) * (a.E - e) + (a.N - n) * (a.N - n)) < FindRange)
-            .SelectMany(a => a.Runways).Where(r => r.Usable).OrderByDescending(r => r.Length).FirstOrDefault();
+        // the runways are LV95 records (Geneva, Zurich): one with an end within reach, measured on the grid they are kept on
+        var best = index.Airports.SelectMany(a => a.Runways)
+            .Where(r => r.Usable && Math.Min(GlobalPos.HorizontalDistance(r.E1, r.N1, e, n), GlobalPos.HorizontalDistance(r.E2, r.N2, e, n)) < FindRange)
+            .OrderByDescending(r => r.Length).FirstOrDefault();
         if (best == null) return null;
         var forward = new ShuttlePilot.Runway(best.E1, best.N1, (float)Math.Atan2(best.E2 - best.E1, best.N2 - best.N1), (float)best.Length, (float)best.Width * 0.5f, 0);
         var way = forward.Of(e, n).Along <= best.Length * 0.5 ? forward
             : new ShuttlePilot.Runway(best.E2, best.N2, (float)Math.Atan2(best.E1 - best.E2, best.N1 - best.N2), (float)best.Length, (float)best.Width * 0.5f, 0);
-        return way with { Elevation = GroundAt(body, way.E, way.N) };
+        return way with { Elevation = GroundAt(body, way.Place(at.Alt)) };
     }
 
-    /// <summary>The ground's height over the sea at LV95 (e, n), m: the terrain there if this peer has it, else the body's own.</summary>
-    private static double GroundAt(FootPlayer body, double e, double n)
+    /// <summary>The ground's height over the sea at a place, m: the terrain there if this peer has it, else the body's own.</summary>
+    private static double GroundAt(FootPlayer body, GlobalPos place)
     {
         var origin = body.Origin!;
-        var at = origin.ToWorld(e, n, 0);
+        var at = origin.ToWorld(place);
         if (body.Terrain is { } t && t.TryGetHeight(at, out float y)) return origin.AltitudeOf(at with { Y = y });
         return origin.AltitudeOf(body.GlobalPosition);
     }
