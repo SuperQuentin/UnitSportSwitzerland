@@ -92,6 +92,7 @@
     <Compile Include="..\..\src\Core\EarthSaves.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\TrueNorth.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\DanceGen.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioFocus.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Concert\ConcertAcoustics.cs" Link="Game\%(Filename)%(Extension)" />

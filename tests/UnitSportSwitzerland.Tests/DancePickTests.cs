@@ -95,4 +95,71 @@ public class DancePickTests
                 differ++;
         Assert.True(differ > 50, $"{differ} of 100 slots changed");
     }
+    // a generated pool of nine moves: three of each energy class
+    private static readonly byte[] GenEnergy = { 0, 0, 0, 1, 1, 1, 2, 2, 2 };
+
+    private static (DanceSlotKind Kind, int Index) Gen(int slot, uint seed, DanceSlotMusic m, bool crowd = false) =>
+        DancePick.Pick(slot, Rock, seed, crowd, m, m, m, Energy, GenEnergy);
+
+    [Fact]
+    public void A_phrase_is_A_A_B_A_over_four_slots()
+    {
+        for (uint seed = 1; seed < 40; seed++)
+            for (int phrase = 0; phrase < 25; phrase++)
+            {
+                int s0 = phrase * 4;
+                var a = Gen(s0, seed, Groove);
+                Assert.Equal(a, Gen(s0 + 1, seed, Groove));
+                Assert.Equal(a, Gen(s0 + 3, seed, Groove));
+            }
+        // and B is a move of its own often enough to hear the form
+        int differs = 0;
+        for (int phrase = 0; phrase < 200; phrase++)
+            if (Gen(phrase * 4 + 2, 5u, Groove) != Gen(phrase * 4, 5u, Groove)) differs++;
+        Assert.InRange(differs, 100, 200);
+    }
+
+    [Fact]
+    public void About_a_quarter_of_the_slots_are_generated_within_the_sections_limits()
+    {
+        int gen = 0, total = 0;
+        for (uint seed = 1; seed < 30; seed++)
+            for (int slot = 0; slot < 400; slot++)
+                foreach (var m in new[] { Calm, Groove, Peak })
+                {
+                    var (kind, index) = Gen(slot, seed, m);
+                    total++;
+                    if (kind != DanceSlotKind.Generated) continue;
+                    gen++;
+                    Assert.InRange(index, 0, GenEnergy.Length - 1);
+                    if (m.SectionKind == 0) Assert.True(GenEnergy[index] <= 1);
+                    if (m.SectionKind == 2) Assert.True(GenEnergy[index] >= 1);
+                }
+        Assert.InRange(gen / (double)total, 0.20, 0.30);
+    }
+
+    [Fact]
+    public void No_generated_move_without_a_pool_and_crowd_and_break_slots_stay_first()
+    {
+        for (int slot = 0; slot < 300; slot++)
+            Assert.NotEqual(DanceSlotKind.Generated, At(slot, Rock, 9u, false, Groove).Kind);
+        for (int slot = 0; slot < 300; slot++)
+        {
+            var a = DancePick.Pick(slot, HipHop, 11u, true, Peak, Peak, Peak, Energy, GenEnergy);
+            var b = DancePick.Pick(slot, HipHop, 999u, true, Peak, Peak, Peak, Energy, GenEnergy);
+            if (a.Kind is DanceSlotKind.CrowdJump or DanceSlotKind.CrowdPogo && b.Kind is DanceSlotKind.CrowdJump or DanceSlotKind.CrowdPogo)
+                Assert.Equal(a.Kind, b.Kind);
+        }
+        for (uint seed = 0; seed < 30; seed++)
+        {
+            var prevKind = DancePick.Pick(-1, HipHop, seed, false, Peak, Peak, Peak, Energy, GenEnergy).Kind;
+            for (int slot = 0; slot < 200; slot++)
+            {
+                var kind = DancePick.Pick(slot, HipHop, seed, false, Peak, Peak, Peak, Energy, GenEnergy).Kind;
+                bool power = kind is DanceSlotKind.BreakWindmill or DanceSlotKind.BreakHeadspin;
+                Assert.Equal(prevKind == DanceSlotKind.BreakDown, power);
+                prevKind = kind;
+            }
+        }
+    }
 }

@@ -17,6 +17,8 @@ public enum DanceSlotKind : byte
     BreakWindmill,
     /// <summary>The second half of a break set with a headspin, then the freeze and back up.</summary>
     BreakHeadspin,
+    /// <summary>A generated move (#2055) of the style's pool, <see cref="DancePick.Index"/> into it (<c>DanceGen</c>).</summary>
+    Generated,
 }
 
 /// <summary>
@@ -36,6 +38,10 @@ public readonly record struct DanceSlotMusic(int SectionKind, int SectionIndex, 
 /// same hash with no dancer in it, so they all land on it together.</item>
 /// <item>Otherwise each dancer picks from the style's table, weighted by the section: a calm part
 /// keeps to the calm and middle moves, a peak or chorus to the middle and big ones.</item>
+/// <item>Phrases (#2055): four slots (eight bars) go <b>A A B A</b>, the move of slot 0 three times
+/// around the one of slot 2, so a dance has a shape a watcher can follow. About one phrase slot in
+/// <see cref="GeneratedOdds"/> is a generated move (<c>DanceGen</c>), graded by the same section limits;
+/// crowd moves and break sets are decided first and a style with no generated pool never gets one.</item>
 /// <item>A new section is a new pick (the hash has its number in it), so moves change with the music.</item>
 /// <item>Breakdance is rare: only for a style that breaks, in a peak or chorus long enough for a
 /// whole set (two slots), one eligible slot in <see cref="BreakOdds"/> per dancer. The slot after
@@ -47,6 +53,9 @@ public static class DancePick
     /// <summary>One eligible slot in this many starts a break set, per dancer.</summary>
     public const uint BreakOdds = 5;
 
+    /// <summary>One phrase slot in this many is a generated move (#2055), where the style has some.</summary>
+    public const uint GeneratedOdds = 4;
+
     /// <summary>Styles that break (by <c>MusicStyle</c> number): Electronic and HipHop.</summary>
     public static bool StyleBreaks(int style) => style is 2 or 3;
 
@@ -54,10 +63,12 @@ public static class DancePick
     /// The pick for <paramref name="slot"/>. <paramref name="now"/>, <paramref name="prev"/> and
     /// <paramref name="prev2"/> describe the music at the start of this slot and the two before
     /// (a set's second half looks back one slot, and that one back another).
-    /// <paramref name="energy"/> grades the style's table moves: 0 calm, 1 middle, 2 big.
+    /// <paramref name="energy"/> grades the style's table moves: 0 calm, 1 middle, 2 big;
+    /// <paramref name="genEnergy"/> does the same for its generated pool (empty: none, the default).
     /// </summary>
     public static (DanceSlotKind Kind, int Index) Pick(int slot, int style, uint seed, bool crowd,
-        in DanceSlotMusic now, in DanceSlotMusic prev, in DanceSlotMusic prev2, ReadOnlySpan<byte> energy)
+        in DanceSlotMusic now, in DanceSlotMusic prev, in DanceSlotMusic prev2, ReadOnlySpan<byte> energy,
+        ReadOnlySpan<byte> genEnergy = default)
     {
         if (StartsBreak(slot - 1, style, seed, crowd, prev, prev2))
             return ((Own(slot - 1, style, seed, prev) >> 5 & 1u) == 0u ? DanceSlotKind.BreakWindmill : DanceSlotKind.BreakHeadspin, 0);
@@ -65,7 +76,12 @@ public static class DancePick
         if (crowd && shared % 3u == 1u)
             return ((shared >> 8) % 2u == 0u ? DanceSlotKind.CrowdJump : DanceSlotKind.CrowdPogo, 0);
         if (StartsBreak(slot, style, seed, crowd, now, prev)) return (DanceSlotKind.BreakDown, 0);
-        return (DanceSlotKind.Table, TableIndex(Own(slot, style, seed, now), now.SectionKind, energy));
+        // A A B A over four slots: slots 0, 1 and 3 ask for the phrase's A, slot 2 for its B
+        int es = (slot & ~3) + ((slot & 3) == 2 ? 2 : 0);
+        uint own = Own(es, style, seed, now);
+        if (genEnergy.Length > 0 && Hash(own ^ 0x85ebca6bu) % GeneratedOdds == 0u)
+            return (DanceSlotKind.Generated, TableIndex(Hash(own ^ 0x9e3779b9u), now.SectionKind, genEnergy));
+        return (DanceSlotKind.Table, TableIndex(own, now.SectionKind, energy));
     }
 
     /// <summary>A break set starts in this slot: its own pick says so, and the slot before did not want one too.</summary>
