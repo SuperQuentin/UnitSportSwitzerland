@@ -63,10 +63,16 @@ one per phase (section 12). Planned from `main` at `0ab431fd6`.
   (a hard swap at the size edge does not show), and the sky's sphere is kept as the small stage rather than folded into
   one class.
 
-**Still to come**:
-- C3b online (after D2, #1727);
-- Mars' thin air (drag, the butterscotch sky), Phobos and Deimos, and the flight there (H7e); the rest (H7f);
-- the Earth's own `Globe` folded onto `BodyGlobe` after #1846.
+**Still to come** (audited against main on 2026-11-15 for #1430's close-out; every other phase's bar is met under
+`--frame earth` with no other flag, the bodies' base shipping in `assets/bodies/`):
+- **C3b online** (#1852): PR #1975, stacked on D2 (#1727, the earth frame by default), merges after it: the body on the
+  wire, interest and server regions per body, the server's Moon ground, `/goto` online, the far markers in the telescope,
+  `tools/moonnetcheck.sh`. C3a's online check (the net check seeing the shuttle land on the Moon) comes with it.
+- **Deferred to issues**: the shuttle's bot pilot (#1498); cover, scatter and leaves on other bodies (#2016).
+- **Decided: the Earth keeps its own `Globe`** rather than being folded onto `BodyGlobe` (section 6). The Earth's globe
+  is the anchor world's (its leaves' holes, geomorphing, the Swiss column, the far fill over it); `BodyGlobe` draws the
+  Earth from another body from the same chain (`BodySurface.Earth.Pyramid`), and `BodyLook` gives every body one look
+  from space (#1998). Folding the two would rewrite the Earth's drawing for no change on screen.
 Parent plan: `docs/plans/ellipsoid-handover.md` (sections 3-9). The Earth world under it: `docs/plans/global-tiling-g2.md`,
 `global-tiling-g2-d.md`. Everything here runs only under `--frame earth` (`WorldFrame.Earth`); nothing is built for the
 flat LV95 world, which D3 deletes.
@@ -317,6 +323,14 @@ What the Earth does today, made per body. A body's terrain is one `BodySurface` 
 near or in view): its pyramid, its leaves, its fill, its datum and its sea. The client holds the anchor's body near
 and the others far; the server holds every body that has a player on or near it.
 
+**Built (#1848)**: `World/Bodies/BodySurface`, one per body, the Earth included: its pyramid chain (the Earth's
+`GlobeData.Earth`, another body's `BodyData`), its leaves (the Earth's; another body's ground is its near square,
+`BodyGround`), its profile kind, its datum (LHN95's geoid, or the ellipsoid), its sea and its leaf level
+(`CelestialBody.LeafLevel`: Earth 14, Moon 12, Mars 13; `LeafFrames.LeafLevel` is the Earth's), its point heights
+(`BodyGround.HeightsOf`). The globes and the Earth's `Globe.DataSource` read it. The mean radius the fill and the courses
+used as a constant is `CelestialBody.MeanRadius`; `Curvature`'s radius (the curve at Switzerland) and the globe's round
+cell estimate stay the Earth's own, as their meaning is.
+
 ### The chain, from best to fallback
 
 1. **Leaves from fine data** (`CubeKey` at the body's leaf level, `.cubl` sections): the Earth's regions (Switzerland,
@@ -382,6 +396,15 @@ new.
 | `IcyProfile` | Europa, Ganymede, Titan's highlands | ridges and cracks (Europa), grooved terrain (Ganymede), few craters | ice, the mosaic's albedo | ice blocks |
 | `VolcanicProfile` | Io, Venus | lava plains, shields, flows | sulphur colours (Io), basalt (Venus) | |
 
+**Built (#1848, #1849, #1853, #1854)**: two kinds, not one interface. The Earth's profile is its fill, which makes
+whole leaves (heights, cover, water, trees, villages: `PyramidFill` on `GeneratedLeaves`); another body's is a height
+at a point (`Terrain/Bodies/BodyHeights`: its data, `CraterField` by the size-frequency law with `Freshness`, the Moon's
+`SurfaceStamps`, and its `SurfaceProfile` family: `Dunes` for Mars and Titan, `Ridges` for Europa, `Grooves` for
+Ganymede, `LavaFlows` for Io and Venus), with `BoulderField` round fresh craters. `BodySurface.Profile` says which.
+The table's names were the design's: `CrateredProfile` is `CraterField` + `BoulderField`, `IcyProfile` is `Ridges` /
+`Grooves`, `VolcanicProfile` is `LavaFlows`, `MarsProfile` is craters + `Dunes`; cover and scatter beyond boulders
+come with leaves on other bodies (not yet).
+
 The relief of a profile is band-limited to below the finest data level, so a leaf never contradicts its pyramid tile (the
 same rule the Earth's fill follows). Where a body has no heights at all, its albedo map gives a low relief (a coarse,
 honest guess) and the profile does the rest.
@@ -440,6 +463,59 @@ The spectator camera is the first way between bodies (the user's order: online p
 - **Stepping in** (`StepInFromSpectator`) works on any body: the walker lands under the camera with that body's ground
   gravity. Offline at once; online the server agrees and the body is published with its body (C3b).
 - `/goto <body> <lat> <lon>` stays as the admin's and the checks' shortcut.
+
+### The spectator's frame, blended by distance (#2053)
+
+The user: "Rotating with the planet should gradually disappear as altitude increases, and so does the anchoring (and
+pretty fast) ... a composite of the closest planets, scaled with distance ... there isn't a noticeable switch between two
+bodies references when flying as it's gradual"; and "the fully free cam should start being available pretty fast once
+space is reached. Way before deep space".
+
+Until now the fly camera stood still in the anchor body's fixed frame. Out in space it turned with the body (the game's
+24-minute day: the stars wheel round once in 24 minutes over the Earth), it moved with the anchor, and both switched at a
+sphere-of-influence handover. Its up, its level and its level flight followed the local vertical everywhere, so left and
+right circled the body even 100,000 km out.
+
+Three layers, each a weight from 1 (near the body) to 0, blended continuously (`Player/SpectatorFrame`, pure):
+
+| layer | what it does near the body | gone by | weight |
+|---|---|---|---|
+| **co-rotation** | the ground stays still under a stopped camera | a short height over the ground or the air | `1 − smoothstep(top + 0.002 R, top + 0.02 R, h)` |
+| **up and level** | up is the local vertical, the view kept level, level flight and the look's yaw about the vertical: left and right circle the body | soon after space is reached | `1 − smoothstep(top + 0.005 R, top + 0.04 R, h)` |
+| **the rest frame** | "standing still" is moving with the body | its sphere of influence, slowest | `s = 1 − smoothstep(0.6, 1.4, d / SOI)` per body |
+
+`h` is the height over the body's reference surface. `top` is its air's top (`BodyAir.ThicknessM`: the Earth's 100 km,
+Mars' 120 km), 0 without air. `R` is its equatorial radius.
+
+| body | co-rotation gone | up and level gone | rest frame its own within, gone past |
+|---|---|---|---|
+| the Earth | 113 to 227 km | 132 to 355 km (the ISS's 400 km is free) | 555,000 km, 1,295,000 km |
+| the Moon | 3.5 to 35 km | 8.7 to 69 km | 40,000 km, 92,000 km |
+| Mars | 127 to 188 km | 137 to 256 km | 347,000 km, 810,000 km |
+
+- **Co-rotation**: each frame the body's own turn since the last frame (its axes' change in the frame tree,
+  `Frames.Orientation`, the local day included) is undone for `1 − w` of it: the camera's place and view are turned
+  back about the body's axis. At 0 the camera stays still against the stars and the body turns under it.
+- **Up and level**: `Level` (the view turned with the local up, the roll eased out) is weighted by `w`. The keys move
+  along a blend of the level directions (the ground plane, the vertical) and the camera's own (its forward, right
+  and up). The look turns about a blend of the vertical and the camera's own up. Its pitch is held off the vertical
+  only while there is a vertical to hold to. At 0 the camera is fully free: it looks about its own axes, moves along
+  them, and no roll is taken away. There is no "up" in space.
+- **The rest frame**: nested from the Sun down. Its inertial frame, then each child's motion as far as `s` of the
+  child whose sphere the camera is near (the Earth's, then within it the Moon's). Each frame the camera moves by that
+  composite's displacement less the anchor's own. Near a body it is that body's alone (on the Moon, the Moon's), so
+  nothing drifts. Between the Earth and the Moon it passes from one to the other over 40,000 to 92,000 km of the
+  Moon. In deep space it is the Sun's.
+- **The anchor still re-anchors in steps** underneath (precision, the handover's relabelling): every weight is a
+  function of the camera's place and the bodies', not of the anchor, so nothing changes at a handover.
+- **Near the ground everything is as before** (every weight 1): no drift, the same keys, the same look.
+- **Controls**: no new key, button or VR way. VR: no horizon lock in free space. The head turns the view as it is,
+  and the rig is never rolled by the game. Near a body the roll is eased out as before.
+- **Checks** (`--spectatorframecheck`, headless): a flight from 1 km over Geneva to low orbit, to the Moon, out to deep
+  space and back, the camera's velocity in the Sun's frame and its view's turn rate read every frame, with no step
+  between frames past a small share of the speed (and m/s² near the ground). Hovers by the Earth, the Moon and between
+  them, the body held in view within a degree over 10 s. Strafes: low over the Moon a circle (the height kept), in space
+  a straight line (the height grows as a line's). `--spectatorcrosscheck`, `--spectatorturncheck`, `--targetcheck`.
 
 ### Then: craft (C3a, after online play)
 

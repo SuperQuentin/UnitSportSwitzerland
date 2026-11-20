@@ -16,3 +16,9 @@
   `-Clean` rebuilds `--no-incremental`, `-Scratch` keeps user:// out of the real save, `-- <args>` go to the game.
 - Simple tasks (docs/notes tweaks, one-line fixes) need no branch or worktree: commit straight on
   `main` in the main checkout and push.
+- **Never squash with `git reset --soft origin/main`** (#2035's PR #2041 reverted #2032, #2034 and #2038 that way):
+  `refs/remotes/origin/main` is shared by every worktree, and another session's fetch moves it under you. A soft reset
+  keeps your working tree (your old base plus your change) and records it on the new main: everything merged in between
+  is silently undone. Squash onto your own base (`git reset --soft $(git merge-base HEAD origin/main)`), or merge or
+  rebase onto main; and before merging, `git diff origin/main...HEAD --stat` must list only the files you meant.
+

@@ -13,7 +13,7 @@ public sealed class LeafFillDomain
     /// <summary>The fill's reach: <c>FallbackChunkSource.FillRadiusTiles</c>' 40 km.</summary>
     public const double RadiusM = 40_000;
 
-    private const double EarthRadiusM = 6_371_008.8;
+    private const double EarthRadiusM = Core.CelestialBody.EarthMeanRadius;   // the body's mean radius (#1848)
 
     /// <summary>A disc: its centre's unit normal and its angular radius (radians).</summary>
     public readonly record struct Disc(double X, double Y, double Z, double Angle)

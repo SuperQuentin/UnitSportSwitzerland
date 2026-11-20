@@ -28,7 +28,7 @@ public partial class Globe : Node
     /// The pyramid to draw (#1656, <see cref="GlobeData.Earth"/>): the local install, the server's once it is known, the
     /// shipped base; null with <c>--globe off</c>, which leaves the globe out.
     /// </summary>
-    public static Terrain.Leaves.PyramidSource? DataSource => GlobeData.Earth;
+    public static Terrain.Leaves.PyramidSource? DataSource => Bodies.BodySurface.Earth.Pyramid;   // the Earth's chain (#1848)
 
     /// <summary>
     /// Drawn above this camera altitude, metres: where the far plane starts reaching past the flat world's

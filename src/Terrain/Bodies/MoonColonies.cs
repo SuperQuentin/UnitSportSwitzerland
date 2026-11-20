@@ -97,7 +97,7 @@ public static class MoonColonies
                 double ce = i * stepM, cn = j * stepM;
                 if (ce * ce + cn * cn > searchM * searchM) continue;
                 // the disc's heights on a 9 x 9 grid inside the circle; a plane h = a + b e + c n by least squares
-                var pts = new List<(double E, double N, double H)>();
+                var pts = new List<(double East, double North, double H)>();
                 for (int b = -4; b <= 4; b++)
                     for (int a = -4; a <= 4; a++)
                     {
@@ -109,7 +109,7 @@ public static class MoonColonies
                 double ss = 0;
                 foreach (var p in pts)
                 {
-                    double d = p.H - (pa + pb * p.E + pc * p.N);
+                    double d = p.H - (pa + pb * p.East + pc * p.North);
                     ss += d * d;
                 }
                 double rms = Math.Sqrt(ss / pts.Count);
@@ -168,14 +168,14 @@ public static class MoonColonies
         return found.GetRange(0, Math.Min(keep, found.Count));
     }
 
-    private static (double A, double B, double C) Plane(List<(double E, double N, double H)> pts)
+    private static (double A, double B, double C) Plane(List<(double East, double North, double H)> pts)
     {
         // centred sums (the grid is symmetric about 0, so the cross terms vanish but are kept for the clipped disc)
         double se = 0, sn = 0, sh = 0, see = 0, snn = 0, sen = 0, seh = 0, snh = 0;
         foreach (var p in pts)
         {
-            se += p.E; sn += p.N; sh += p.H;
-            see += p.E * p.E; snn += p.N * p.N; sen += p.E * p.N; seh += p.E * p.H; snh += p.N * p.H;
+            se += p.East; sn += p.North; sh += p.H;
+            see += p.East * p.East; snn += p.North * p.North; sen += p.East * p.North; seh += p.East * p.H; snh += p.North * p.H;
         }
         double k = pts.Count;
         double me = se / k, mn = sn / k, mh = sh / k;

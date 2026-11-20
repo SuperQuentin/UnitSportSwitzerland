@@ -223,6 +223,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | shuttle cruise drive on / off, above 60 km (#1492) | Z / D-pad ↑ (`engine_toggle`; below 60 km the engines' switch) | ok: R stick ↑, or grip the guarded switch on the centre console and throw it forward (`XrCabControls` "shuttle") | keep |
 | shuttle's target in Space: next body (tap), its hold turns the nose onto the arrival orbit (#1851) | ] / D-pad → (the lights' D-pad → up there) | ok: the right stick → (`XrPad`'s D-pad → when mounted) | new: a target knob on the centre console to grip and turn |
 | shuttle's belly jets below the Space exit of an airless body: lift, slide, gear (#1851) | the levers (the rockets' keys) lift it, the stick slides it, G the gear | ok: the levers by hand, the stick, as the airliner's | keep |
+| floating aboard the shuttle: push off toward the look, up / down, hold on (#1493) | the move stick (view yaw and pitch), Jump / Crouch (Space / Ctrl; pad A / B), let go near something to hold on | ok: the left stick (head's direction), A / B through `XrPad` | new: grip any surface and pull (zero-g hand locomotion) |
+| out of the shuttle by its hatch, inside (#1493) | E (`interact_mount`) by the hatch on the mid deck | ok: Y through `XrPad` | new: grip the hatch's handle |
 | shuttle rockets, pitch / roll, gear, brakes, speedbrake (#1492) | the airliner's (levers = rockets) | ok: as the airliner's, its levers by hand | keep |
 | UFO up / down, move, turn (#861) | Space Ctrl, WASD, mouse / RT LT, L stick, R stick | ok: R / L trigger, L stick; turns like the helicopter | keep |
 | UFO boost (#861) | Shift or Q / L3 or LB | ok: L stick click, or the left grip | keep |
@@ -239,6 +241,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | menu | Esc / Start | ok: Menu tap | keep |
 | accept an invite (#840) | tap F2 / Start › first entry | ok: Menu tap › first entry, wrist menu › Invites | keep |
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
+| the place search's body (#2039) | Page Up / Page Down, the ‹ › buttons / LB / RB | ok: the ‹ › buttons with the ray, LB / RB through `XrPad`; the hand map steps on the body you are on | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
 | traffic endpoints (#971) | debug menu (F9): mouse / — | gap, as the rest of the debug menu | with the debug menu |
 | playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |

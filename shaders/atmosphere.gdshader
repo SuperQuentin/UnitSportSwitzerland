@@ -35,6 +35,10 @@ uniform vec3 absorb_r = vec3(0.0, 0.0, 0.0);
 // inside a giant's clouds (#1854): the march stops this far along the ray, metres, past where nothing comes back (20
 // steps spread over hundreds of km of dense gas showed their jitter as grain); 0: to the shell's edge
 uniform float max_march = 0.0;
+// a giant's flattening (#2036): the shell is its ellipsoid, the pole stretched by squash (its equator radius over its
+// polar one) so the ellipsoid is a sphere of planet_r; 1 for every other body (a sphere at the radius under the camera)
+uniform vec3 pole = vec3(0.0, 0.0, 1.0);
+uniform float squash = 1.0;
 const int STEPS = 20;
 // the Earth's shadow fades over this much height at its edge instead of cutting the light off a
 // sample at a time (that banded near the terminator)
@@ -79,7 +83,8 @@ vec2 sphere(vec3 o, vec3 d, float r) {
 // faded out as the camera climbs (World/SunDisc), is the one below. The ground's look (#1479): its core, corona and
 // a full starburst; p is the offset from the sun on the screen's axes, radians.
 vec3 sun_disc(vec3 o, vec3 dir, float depth, vec2 p, float aa) {
-	if (depth > 1e-7) return vec3(0.0);
+	// anything drawn hides it (#2051: a threshold of 1e-7 let it through ground whose depth rounded under it)
+	if (depth > 0.0) return vec3(0.0);
 	float c = dot(dir, sun_dir);
 	if (c <= 0.0) return vec3(0.0);
 	if (sphere(o, dir, planet_r).x > 0.0) return vec3(0.0);
@@ -98,16 +103,31 @@ void fragment() {
 	float scene = depth > 1e-7 ? length(at.xyz) : 1e12;
 
 	vec3 o = CAMERA_POSITION_WORLD - planet_centre;
+	// a giant: in the space where its ellipsoid is a sphere (the pole stretched). Lengths along the ray there are
+	// stretch times the true ones; the march below counts its steps back in metres
+	float stretch = 1.0;
+	vec3 sun_s = sun_dir;
+	float sun_stretch = 1.0;
+	if (squash != 1.0) {
+		o += pole * (dot(o, pole) * (squash - 1.0));
+		vec3 ds_dir = dir + pole * (dot(dir, pole) * (squash - 1.0));
+		stretch = length(ds_dir);
+		vec3 ss = sun_dir + pole * (dot(sun_dir, pole) * (squash - 1.0));
+		sun_stretch = length(ss);
+		sun_s = ss / sun_stretch;
+		scene *= stretch;
+	}
+	vec3 dir_s = squash != 1.0 ? (dir + pole * (dot(dir, pole) * (squash - 1.0))) / stretch : dir;
 	// the offset from the sun on the screen's axes, radians (the view's tangent plane: the spikes stand on the screen)
 	vec3 vd = (VIEW_MATRIX * vec4(dir, 0.0)).xyz, vs = (VIEW_MATRIX * vec4(sun_dir, 0.0)).xyz;
 	vec2 p = vd.z < 0.0 && vs.z < 0.0 ? vd.xy / -vd.z - vs.xy / -vs.z : vec2(1.0);
-	vec3 sun = sun_disc(o, dir, depth, p, max(fwidth(length(p)), 1e-5));
-	vec2 air = sphere(o, dir, atmo_r);
+	vec3 sun = sun_disc(o, dir_s, depth, p, max(fwidth(length(p)), 1e-5));
+	vec2 air = sphere(o, dir_s, atmo_r);
 	float t0 = max(air.x, 0.0), t1 = air.y;
-	vec2 ground = sphere(o, dir, planet_r);
+	vec2 ground = sphere(o, dir_s, planet_r);
 	if (ground.x > 0.0) t1 = min(t1, ground.x);
 	t1 = min(t1, scene);
-	if (max_march > 0.0) t1 = min(t1, t0 + max_march);
+	if (max_march > 0.0) t1 = min(t1, t0 + max_march * stretch);
 	// no air on the way: the sun alone (added: alpha 0 keeps what lies behind)
 	if (air.y <= 0.0 || t1 <= t0) {
 		if (dot(sun, sun) <= 0.0) discard;
@@ -122,24 +142,27 @@ void fragment() {
 	float phase_m = 3.0 / (8.0 * PI) * ((1.0 - g2) * (1.0 + mu * mu)) / ((2.0 + g2) * pow(1.0 + g2 - 2.0 * g_m * mu, 1.5));
 
 	float ds = (t1 - t0) / float(STEPS);
+	// a step's true length (the stretched space's over the stretch); the same as ds for a sphere
+	float ds_m = ds / stretch;
 	float jitter = ign(FRAGCOORD.xy);
 	float od_r = 0.0, od_m = 0.0;
 	vec3 sum_r = vec3(0.0), sum_m = vec3(0.0);
 	for (int i = 0; i < STEPS; i++) {
-		vec3 p = o + dir * (t0 + (float(i) + jitter) * ds);
+		vec3 p = o + dir_s * (t0 + (float(i) + jitter) * ds);
 		float h = length(p) - planet_r;
-		float dr = exp(-h / h_r) * ds, dm = exp(-h / h_m) * ds;
+		float dr = exp(-h / h_r) * ds_m, dm = exp(-h / h_m) * ds_m;
 		od_r += dr;
 		od_m += dm;
 		// the light's way in from the sun: none when the ground is in the way
-		float lit = sunlit(p, sun_dir);
+		float lit = sunlit(p, sun_s);
 		if (lit <= 0.0) continue;
-		vec2 out_air = sphere(p, sun_dir, atmo_r);
+		vec2 out_air = sphere(p, sun_s, atmo_r);
 		float ls = out_air.y / float(LIGHT_STEPS), lr = 0.0, lm = 0.0;
+		float ls_m = ls / sun_stretch;
 		for (int j = 0; j < LIGHT_STEPS; j++) {
-			float lh = length(p + sun_dir * ((float(j) + 0.5) * ls)) - planet_r;
-			lr += exp(-lh / h_r) * ls;
-			lm += exp(-lh / h_m) * ls;
+			float lh = length(p + sun_s * ((float(j) + 0.5) * ls)) - planet_r;
+			lr += exp(-lh / h_r) * ls_m;
+			lm += exp(-lh / h_m) * ls_m;
 		}
 		vec3 tau = (beta_r + absorb_r) * (od_r + lr) + beta_m * m_ext * (od_m + lm);
 		vec3 att = exp(-tau);

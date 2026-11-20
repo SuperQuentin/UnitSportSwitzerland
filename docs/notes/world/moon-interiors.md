@@ -5,19 +5,40 @@
 
 Plan: `docs/plans/moon-surface.md` sections 5 and 6. The kit and the plans: `moon-colonies`.
 
-- **Hollow modules** (`ColonyKit`): shells are `MeshScratch.Skirt`s (no caps, seen from both sides), end walls are a
+- **Hollow modules** (`ColonyKit`, the outside): shells are `MeshScratch.Skirt`s (no caps, seen from both sides), end walls are a
   `Ring` with the doorway's surround filling its hole, ribs are `Ring`s. A `Tube` anywhere a walker passes would put
   its end-cap discs across the way. Every doorway is 1.3 x 2.1 m at `FloorY` (1.55 m over the plateau), every tube's
   axis at `TubeY` (2.6 m), tubes 2.8 m across, so any door meets any tube. The hangar's floor is its slab (0.6 m); a
   landing and five steps at its doorway climb to the sill.
-- **Collision** (`ColonyBuilder.Hollow`): boxes in each module's node frame: floors at the sill (a can's no wider than
-  its chord, or the floor box stood out of the shell as an invisible ledge outside), walls round, end walls with the
-  doorway left open, ceilings; tubes a floor, two walls and a roof. Asymmetric pieces are flipped for
-  `MeshScratch.Build`'s half turn (the hangar's landing, the dome's entrance, every furniture box: `Furnisher.Box`).
-- **Rooms** (`ColonyPlan.Rooms`, `ColonyInteriors`, viewer "Moon rooms"): the hub a control room (consoles 30° off
-  the diagonals, clear of the doorways; a lit map table), the cans shuffled by seed (quarters with bunks, galley, lab,
-  medbay, gym with the runner's harness, workshop, storage), domes a greenhouse or storage, the hangar a workshop with
-  bays painted on its floor, airlocks the suits on their racks. Screens and lamps on the glass surface (unshaded).
+- **The insides are interiors** (#2000), as any building's: each module, each tube and each glazed alley is an
+  `InteriorLayout` (`InteriorGenerator.Colony`, `ColonyLink`) built where it stands (`InPlace`: no street doors, no 3 km
+  drop, no door portal: the colony is walked into through its airlocks and its windows and glass look out), placed by
+  `ColonyBuilder` as an `InteriorNode` in the module's node frame on its floor (`FloorOf`: the sill, the hangar's slab,
+  the biodome's garden, plus `ColonyFloorLift` 2 cm so the floor never fights the kit's deck). The plan's frame is the
+  node frame (x across, z along, the first door at -Z), so the kit's authored points (turned half a turn by
+  `MeshScratch.Build`) are negated in x and z there.
+  - **Curved rooms** (`RoomPlan.Shell`, `ShellKind`; `InteriorMeshBuilder.Shells`): a barrel vault along Z (a can, an
+    airlock, a tube, the hangar's flattened half cylinder: `ShellR`, `ShellRy`, its axis `ShellY` over the floor; flat end
+    walls in strips), a drum (the hub, a stack: a flat ceiling at `Clear`, the #2003 walkway ring on its floor), a dome
+    (the moondust dome: an ellipsoid round a centre under the floor), or glazed (the biodome, an alley: collision only,
+    the kit draws the glass and the garden). Panels break on every opening's edges, so doorways are cut exactly; every
+    panel is collision too. Doorways on a round shell carry `OpeningPlan.Angle` (`atan2(x, z)`); on a barrel's side,
+    `Side.Left`/`Right` at a Z. An opening wider than the disc leaves no end wall (a tube's open ends). The inner shell
+    stands 5 cm inside the kit's double-sided one, so the rooms are lit by `RoomLights` (lamps always on: no windows in
+    the plan) in the interior material, not by the Moon's sun on the kit's inside faces.
+  - **The dome's entrance** is a plain rectangular room (`RoomType.Tube`) from inside the floor's edge out to its door.
+  - **Fittings** (`InteriorGenerator.ColonyFurniture`, `InteriorMeshBuilder.Colony`): the colony `FurnitureType`s (bunks,
+    galley, lab benches, medbay, gym, workshop, storage racks, suit racks, consoles at `FurniturePlan.Angle`, the map
+    table, hydroponic racks, hangar benches and bay paint, ceiling lamps, screens) in the theme's colours (`l.Colony`),
+    screens and lamps self-lit (vertex alpha 0.3), dead in the abandoned colony. A wall piece against +X has Turns 0,
+    against -X Turns 2 (drawn mirrored); Turns bit 4 (`ColonyAlt`) picks a piece's second colour. `FurnitureType.Solid`
+    is collision only: what the kit draws (the hangar's landing and steps, the biodome's landing and tree trunks).
+    In front of a can's side doorway a piece is left out, a run cut either side of it.
+  - **Rooms by module** (`ColonyPlan.Rooms`): the hub a control room (consoles 30° off the diagonals, clear of the
+    doorways; a lit map table), the cans shuffled by seed (quarters, galley, lab, medbay, gym, workshop, storage), domes
+    a greenhouse or storage, the hangar a workshop with bays painted on its floor, airlocks the suits on their racks.
+  - **Viewer**: "Moon rooms" (`ColonyRooms`): each room in the kit's shell, the hub, a stack, the domes, the hangar, a
+    tube. Look inside with `--modelslook 0,2.4,0,3.5 --modelspitch -15`.
 - **Airlocks** (`ColonyAirlocks`): one at the end of every spine but the hangar's, 4 m, 5 m on from the last can, seven
   steps down to the plateau. Two sliding leaves a door (the elevator doors' pattern: positions moved, the shut box
   disabled past 0.7 open), never both doors open: a cycle shuts the open one (0.9 s), pumps 3 s (amber lamp, the

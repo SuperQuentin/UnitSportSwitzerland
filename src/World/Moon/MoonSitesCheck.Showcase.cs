@@ -137,6 +137,8 @@ public partial class MoonSitesCheck
         string? next = brain.Status switch
         {
             var st when st.StartsWith("Walk into the chamber") && !_evaFilmed.Contains("show_eva_out") => "show_eva_out",
+            // the pressurised rover's way (#1938): the rolling door going up before it
+            var st when st.StartsWith("Cycle the rolling door") && !st.Contains("outside") && !_evaFilmed.Contains("show_eva_hangar") => "show_eva_hangar",
             var st when st.StartsWith("Drive to the EVA") && !_evaFilmed.Contains("show_eva_drive") => "show_eva_drive",
             var st when st.StartsWith("Cycle open from outside") && !_evaFilmed.Contains("show_eva_in") => "show_eva_in",
             _ => null,

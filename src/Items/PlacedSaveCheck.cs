@@ -41,8 +41,8 @@ public static class PlacedSaveCheck
             worstDeg = System.Math.Max(worstDeg, deg);
             // the record before #1995: its place through LV95, its grid turn read at that place
             if (o.At.Body != BodyId.Earth) continue;
-            var l = o.At.Lv95;
-            var old = GlobalPos.FromLv95(l.E, l.N, o.At.Alt);
+            var (le, ln, _) = o.At.Lv95;
+            var old = GlobalPos.FromLv95(le, ln, o.At.Alt);
             // (it read the saved turn into the grid's axes at the file's place, and turned it back out at the round-tripped one)
             var oldRot = Lv95Grid.Axes(saved).FromEnu(savedTurn);
             double om = old.DistanceTo(saved), od = Degrees(Lv95Grid.Axes(old).ToEnu(oldRot), savedTurn);

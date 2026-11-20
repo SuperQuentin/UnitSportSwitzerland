@@ -80,3 +80,30 @@ anchor's body has a near ground you can stand on. Plan: `docs/plans/planets.md` 
   the terminator (low sun, the craters show). A small moon: the flight ends (and `--fromorbit` starts) well inside its
   sphere (12 km over Phobos, not 100), the settling waits for its slow fall, no sprint, and the jump is judged on its
   first 5 s (v t − g t²/2); ~40 s headless each.
+- **The ground's light** (#2024; the user: "unified grey at night ... very white during the day ... no shadows on the moon"):
+  the squares take `shaders/body_ground.gdshader`, lit (the globe's `body_globe.gdshader` is unshaded, so they never
+  received a shadow). Its `light()` takes the scene's directional light only, ignoring the style's colour and energy:
+  `light_strength`/`light_tint` (`BodyGround.Light`) and the shadow's `ATTENUATION`; ambient off; the night floor
+  (0.012) and the colony lamps as emission. `NORMAL` is set from the mesh's own (two-sided, the squares' tops are what
+  the engine takes for back faces: the first try was black). The near square and the boulders cast shadows; the medium
+  square does not (kilometres out).
+  - **Photometry**: lunar-Lambert on an airless body (`BodyGlobe.LunarShare` 0.6 of Lommel-Seeliger, 2 cos i /
+    (cos i + cos e)): a grazing sun on ground seen obliquely stays bright, black behind every bump: the Apollo look at a
+    low sun. The globe's tiles take it on the ground only (`LunarAt`, 0 from orbit, where `globe_look` matches them).
+  - **Exposure**: `BodyGlobe.GroundShare`, `GroundGrey` 0.5 from 10 km down to full from 200 km
+    (`GroundShareAt`): the photo's mean comes out at 0.3 on the ground (the regolith grey, sRGB ~150 at a high sun)
+    instead of 0.6 (the disc from space). The globe's tiles of the anchor's body take the same share, its night floor
+    (`NightFloorGround` 0.012 to `NightFloorSpace` 0.06) too.
+  - **Night**: `DayNight.Light` (`SceneLight`): off the Earth the sun down to the horizon (no twilight hand-over: its
+    long shadows), then the planet the body turns round if it is up (`Planetshine`: the Moon's earthshine, bluish,
+    `BodyGround.PlanetshineMin`..`Max` 0.03-0.35 of the day's by the Earth's lit share), else the stars (`Starlight`
+    0.06, from 50° up in the north: the far side). Directional, so the relief and shadows read; never a flat fill.
+  - **Ambient**: `DayNight.AirlessAmbient` 0.3 of the style's on an airless body: the figures' and colonies' shadow sides
+    near black, as the ground's.
+  - **The globe past the terminator**: `horizon_shade` and `body_centre` on the anchor's body's tiles: a slope with the
+    sun under its own horizon stays in the night (a ridge at Hadley lit by a sun 10° down, over a dark plain).
+  - **Shots**: `--mooncheck --fromorbit --at -24.15,-126.15` with `--date 2026-12-04 --time 22` (sun 67°),
+    `2026-11-28 --time 4` (9°), `2026-11-15 --time 22` (far side, starlight); `--at 26.13,3.63 --date 2026-11-15`
+    (Hadley, earthshine); `--moonsites moonvillage:close` (`--date 2027-07-15 --time 13`, sun 30°: modules' shadows).
+    Artemis Base, at the pole, stands in a grazing sun: its flat ground is near black by physics.
+- **The fly camera's top between bodies** (#2026): half the distance to the nearest surface a second up to `SpectatorSpeed.DeepCap` (10¹² m/s, ~3,300 c, past ~13 AU from every surface), no longer light: Earth → Neptune in 75 s at full speed (`--spectatorcrosscheck neptune|neptunehome`), the wheel's top notch being full speed (`SpectatorSpeed.Flown`: the cap wherever it is). The Mars trip above (860 s at light) now takes about a minute.

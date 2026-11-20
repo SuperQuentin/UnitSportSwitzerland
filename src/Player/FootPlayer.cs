@@ -2252,6 +2252,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (Sitting) { DanceId = 0; PublishSitPose(); return; }
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (Floating) { PublishFloatPose(dt); return; }   // #1493
         if (_climbing) { PublishClimbPose(dt); return; }   // #1225
         if (CreativeFlying) { PublishFlyPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
@@ -2995,7 +2996,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a bus door's button within reach, inside or out (#162), before anything else here
         if (TryDoorButton()) return true;
         // walking about in a vehicle: a seat, or the wheel (#162)
-        if (Aboard) return TryDeckSeat();
+        if (Aboard) return TryShuttleHatch() || TryDeckSeat();
 
         // the radio pointed at (#725): a tap switches it on or off, a hold opens its panel (play a
         // CD, burn one, pick it up); a VR hand gripping it opens the panel straight away
@@ -4216,6 +4217,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // floating aboard the shuttle in free fall (#1493, FootPlayer.ZeroG.cs)
+        if (Aboard && ZeroGPhysics(dt)) return;
+
         // on a face (#1225, FootPlayer.Climb.cs)
         if (ClimbPhysics(dt, onFloor)) return;
         // in the water (#301, FootPlayer.Swim.cs)
@@ -4542,6 +4546,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var n = GetFloorNormal();
         downhill = new Vector3(n.X, 0, n.Z);
         if (n.Y >= SteepNormalY) return false;
+        // a deck's slopes are its stairs and ladders, built to be climbed (the shuttle's is 59°, #1493): only the floor's limit
+        if (Aboard) return false;
         var p = GlobalPosition;
         float r = SteepReachM;
         if (Terrain != null && Terrain.TryGetHeight(p, out float g) && Mathf.Abs(p.Y - g) < 0.6f
@@ -4929,7 +4935,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 // what a bot's craft met (#837: bots crashing in the air during a big drop)
                 if (Bot)
                 {
-                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()})" : "nothing";
+                    var hit = GetSlideCollisionCount() > 0 && GetSlideCollision(0).GetCollider() is Node n ? $"{n.Name} ({n.GetClass()}, under {n.GetParent()?.Name})" : "nothing";
                     GD.Print(FormattableString.Invariant($"[bots] {Name} crashed into {hit} at {impact:F1} m/s, {GlobalPosition.Y:F0} m, floor {IsOnFloor()}"));
                 }
             }

@@ -1499,11 +1499,13 @@ public partial class InteriorNode : Node3D
     public static ArrayMesh BuildMesh(InteriorMeshBuilder.MeshData data, Material material)
     {
         Core.ShowcaseTrace.Mark();
+        var mesh = new ArrayMesh();
+        // a room that is collision only (#2000: a glazed alley, the building draws its glass) has nothing to draw
+        if (data.Vertices.Length == 0) return mesh;
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
         arrays[(int)Mesh.ArrayType.Color] = data.Colors;
-        var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         mesh.SurfaceSetMaterial(0, material);
         return mesh;

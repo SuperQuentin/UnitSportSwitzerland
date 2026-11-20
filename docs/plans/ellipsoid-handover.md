@@ -5,6 +5,12 @@
 
 Status: **H2 built (PR #1435); H6's ground sky built (PR #1436), and from space (PR #1855: the sky read at the camera itself, the terminator against NOAA); C1 the telescope built (PR #1441); C1b the solar system and satellites in the sky built (PR #1445); H1 the curvature at altitude built (PR #1458)**; #187's curvature merged (PR #1432); the rest planned, H3 next.
 Issue: #1430.
+
+**Close-out (2026-11-15)**: every phase's bar is met on main under `--frame earth` with no other flag (the bodies' base
+ships in `assets/bodies/`, the real sun and crossing between bodies are the earth frame's defaults); the bar checks run
+in `tools/test.sh` (`tools/lib/checkmap.txt`, the planets' rows). Left, all waiting on D2 (#1727): the earth frame as the
+default, and C3's online part (C3b #1852, PR #1975 stacked on D2). The planets' own close-out: `docs/plans/planets.md`
+("Still to come").
 Prerequisites: the floating origin (#185, `docs/plans/floating-origin.md`, done), the round world
 near the ground (#187, `docs/plans/spherical-world.md`) and its regression net (#1429).
 
