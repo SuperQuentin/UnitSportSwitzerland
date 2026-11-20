@@ -126,6 +126,9 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>How many medium squares were built.</summary>
     public int MediumBuilt => _medium.Built;
 
+    /// <summary>Every square built so far, summed: a picture waits for it to stop changing (<see cref="BodyShot"/>).</summary>
+    public int Settled => _near.Built + _medium.Built;
+
     /// <summary>The anchor body's own (one a landable body with a pyramid; the anchor's claims it), for the checks and the step-in.</summary>
     public static BodyGround? Active { get; private set; }
 

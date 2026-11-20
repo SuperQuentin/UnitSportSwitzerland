@@ -18,6 +18,8 @@ namespace UnitSport.World.Bodies;
 /// <c>fly:V</c> (#2035) then flies the camera toward the body's centre at V m/s for 6 s (as the spectator's top speed
 /// does, the origin following it), saves <c>..._fly.png</c> in flight, stops, and saves <c>..._stopped.png</c> 3 s later
 /// (with <c>--starwatch</c>: the stars counted all along).
+/// HEIGHT_KM ending in <c>g</c> (#2016, <c>0.002g</c>) is over the ground there (its heights: data, craters, relief), not the
+/// reference: a walker's eye on Mars' ground kilometres under its datum; the picture then also waits for the ground's squares.
 /// </summary>
 public partial class BodyShot : Node
 {
@@ -51,8 +53,10 @@ public partial class BodyShot : Node
             case 1:
                 // settled: no tile drawn more or fewer for two seconds, or fifteen at most
                 int drawn = _globe()?.DrawnTiles ?? 0;
-                _quiet = drawn == _last ? _quiet + 1 : 0;
-                _last = drawn;
+                // the ground's squares too (#2016): a picture from the ground waits for its near, fine and medium squares
+                int settled = drawn + (_globe()?.Ground is { } ground ? ground.Settled : 0);
+                _quiet = settled == _last ? _quiet + 1 : 0;
+                _last = settled;
                 if ((_quiet > 120 && _t > 4) || _t > 15)
                 {
                     Save(drawn, quit: _laterHours == 0 && _flySpeed == 0);
@@ -123,7 +127,8 @@ public partial class BodyShot : Node
         bool bySun = parts[1].Trim() == "sun";
         double lat = bySun ? sunLat : double.Parse(parts[1], CultureInfo.InvariantCulture);
         double lon = bySun ? Math.IEEERemainder(sunLon + double.Parse(parts[2], CultureInfo.InvariantCulture), 360) : double.Parse(parts[2], CultureInfo.InvariantCulture);
-        double km = double.Parse(parts[3], CultureInfo.InvariantCulture);
+        bool overGround = parts[3].Trim().EndsWith('g');
+        double km = double.Parse(parts[3].Trim().TrimEnd('g'), CultureInfo.InvariantCulture);
         bool earth = parts.Contains("earth");
         if (parts.FirstOrDefault(p => p.StartsWith("later:")) is { } later)
             _laterHours = double.Parse(later[6..], CultureInfo.InvariantCulture);
@@ -133,7 +138,10 @@ public partial class BodyShot : Node
         var numbers = parts.Skip(4).Where(p => p != "earth" && !p.StartsWith("later:") && !p.StartsWith("fly:")).Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
         double pitch = numbers.Length > 0 ? numbers[0] : 20, yaw = numbers.Length > 1 ? numbers[1] : 0;
         _origin.Rebase(body.Id, sky);
-        var at = body.Shape.ToEcef(new Geodetic(lat, lon, km * 1000));
+        double h = km * 1000;
+        if (overGround && _globe()?.Ground is { } g)
+            h += g.Heights.At(CubeSphere.NormalAt(lat, lon));
+        var at = body.Shape.ToEcef(new Geodetic(lat, lon, h));
         OriginShifter.Instance?.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(at, body.Id));
         var cam = GetTree().Root.FindChild("SpectatorCamera", recursive: true, owned: false) as Camera3D;
         if (cam == null) { Fail("no spectator camera"); return; }
@@ -146,7 +154,7 @@ public partial class BodyShot : Node
             cam.LookAt(new Vector3((float)x, (float)y, (float)z).Normalized() * 1000, Vector3.Up);
         }
         else cam.Rotation = new Vector3(Mathf.DegToRad(-(float)pitch), Mathf.DegToRad(-(float)yaw), 0);
-        string tag = string.Create(CultureInfo.InvariantCulture, $"{name}_{lat:0.#}_{lon:0.#}_{km:0.#}km{(earth ? "_earth" : "")}");
+        string tag = string.Create(CultureInfo.InvariantCulture, $"{name}_{lat:0.#}_{lon:0.#}_{km:0.###}km{(overGround ? "g" : "")}{(earth ? "_earth" : "")}");
         _file = $"res://test_output/bodies/{tag}.png";
         GD.Print($"[bodyshot] on {body.Name} at {lat}, {lon}, {km} km up{(earth ? ", toward the Earth" : $", {pitch}° down toward {yaw}°")}");
     }
