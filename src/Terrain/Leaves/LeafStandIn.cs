@@ -23,29 +23,11 @@ public static class LeafStandIn
 
     private const int N = ChunkFormat.GridSize;
 
-    /// <summary>The stand-in tiles' first kilometre east: far past LV95's 2,480-2,840 (and a leaf's X fits under 20,000).</summary>
-    private const int BaseE = 100_000, FaceStrideE = 20_000, BaseN = 100_000;
-
     /// <summary>A leaf's tile name: unique, the same every run (interior layouts and loot are stored under it).</summary>
-    public static TileId Id(CubeKey leaf)
-    {
-        if (leaf.Level != LeafFrames.LeafLevel) throw new ArgumentException($"{leaf} is not a level-{LeafFrames.LeafLevel} leaf");
-        int e = BaseE + leaf.Face * FaceStrideE + leaf.X, n = BaseN + leaf.Y;
-        return new TileId(e, n);
-    }
+    public static TileId Id(CubeKey leaf) => LeafTileName.Id(leaf);
 
     /// <summary>The leaf a stand-in tile names; false for a real LV95 tile.</summary>
-    public static bool TryLeaf(TileId id, out CubeKey leaf)
-    {
-        leaf = default;
-        var (tileE, tileN) = id;
-        int e = tileE - BaseE, n = tileN - BaseN;
-        if (e < 0 || n < 0) return false;
-        int face = e / FaceStrideE, x = e % FaceStrideE, side = 1 << LeafFrames.LeafLevel;
-        if (face > 5 || x >= side || n >= side) return false;
-        leaf = new CubeKey(face, LeafFrames.LeafLevel, x, n);
-        return true;
-    }
+    public static bool TryLeaf(TileId id, out CubeKey leaf) => LeafTileName.TryLeaf(id, out leaf);
 
     public static bool IsStandIn(TileId id) => TryLeaf(id, out _);
 
@@ -53,7 +35,7 @@ public static class LeafStandIn
     /// The first E a stand-in tile's records are named by (metres, its kilometre times 1000): no LV95 place comes near it,
     /// so a place named at or past it is a stand-in record (<c>GlobalPos.FromLv95</c>, <c>OriginFrame.ToWorld</c>, #1704).
     /// </summary>
-    public const double FirstPlaceE = BaseE * 1000.0;
+    public const double FirstPlaceE = LeafTileName.BaseE * 1000.0;
 
     /// <summary>
     /// The 1 m grid of a leaf's ground (its lattice vertices in its anchor frame, x y z a vertex, row-major, NaN where

@@ -92,10 +92,20 @@ public class ErrandTests
     [Fact]
     public void ACardIdSaysEverything()
     {
-        string id = Postkarte.IdOf(20261027, 517, 102, 3);
-        Assert.Equal("pk:20261027:517_102:3", id);
+        // an Earth cell names the 5 km lottery cell (#1726, G2 D2), never LV95, and parses back to exactly it
+        string id = Postkarte.IdOf(20261027, 520, 240, 3);
+        Assert.Matches(@"^pk:20261027:F\d_L13_\d+_\d+:3$", id);
         Assert.True(Postkarte.TryParse(id, out int day, out int ce, out int cn, out int slot));
-        Assert.Equal((20261027, 517, 102, 3), (day, ce, cn, slot));
+        Assert.Equal((20261027, 520, 240, 3), (day, ce, cn, slot));
+        for (int e = 496; e < 568; e += 7)
+            for (int n = 214; n < 260; n += 5)
+            {
+                Assert.True(Postkarte.TryParse(Postkarte.IdOf(20261027, e, n, 0), out _, out int pe, out int pn, out _));
+                Assert.Equal((e, n), (pe, pn));
+            }
+        // a card taken before the flip still reads (it expires as every card does)
+        Assert.True(Postkarte.TryParse("pk:20261027:517_102:3", out _, out ce, out cn, out _));
+        Assert.Equal((517, 102), (ce, cn));
         foreach (string bad in new[] { "", "pk:", "pk:20261027:517_102", "pk:20261027:517_102:9", "pk:1:517_102:1", "pk:20261027:x_102:1", "quest:a", "pk:20261027:517_102:1:2" })
             Assert.False(Postkarte.TryParse(bad, out _, out _, out _, out _), bad);
     }

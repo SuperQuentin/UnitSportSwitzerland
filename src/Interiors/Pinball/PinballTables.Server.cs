@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Net;
 
 namespace UnitSport.Interiors.Pinball;
@@ -213,7 +214,7 @@ public partial class PinballTables
         var screen = m.Rules != null && (m.Rules.State != PinballRules.Phase.Attract)
             ? PinballScreen.Of(m.Rules).Pack() : PinballScreen.Idle(PinballLayouts.Get(m.Table)).Pack();
         var players = m.Players.ToArray();
-        var highs = Book.Of(key, index, m.Table).Pack(NameOfId);
+        var highs = Book.Of(Core.EarthStores.Building(key), index, m.Table).Pack(NameOfId);
         if (Online)
             foreach (long peer in PeersInside(key)) RpcId(peer, MethodName.State, key, index, m.Table, players, m.Runner, screen, highs);
         if (!Online || !DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase)) State(key, index, m.Table, players, m.Runner, screen, highs);
@@ -221,7 +222,8 @@ public partial class PinballTables
 
     // ---- high scores -------------------------------------------------------------------------------
 
-    private const string ScoresFile = "user://pinball_scores.json";
+    /// <summary>The flat file, or under earth (#1726, G2 D2) a world-scoped one keyed by the stand-in's Earth identity (the flat scores dropped: their key needs the old tile's buildings).</summary>
+    private static string ScoresFile => GameSettings.Current.Frame == WorldFrame.Earth ? WorldChoice.StorePath("user://pinball_scores.json") : "user://pinball_scores.json";
     private PinballScoreBook? _book;
 
     /// <summary>The server's high scores of every machine, read from its saved state on first use.</summary>
@@ -270,7 +272,7 @@ public partial class PinballTables
     private void Record(string key, int index, Machine m)
     {
         var rules = m.Rules!;
-        var highs = Book.Of(key, index, m.Table);
+        var highs = Book.Of(Core.EarthStores.Building(key), index, m.Table);
         bool any = false;
         for (int i = 0; i < rules.Players.Count && i < m.Players.Count; i++)
         {
@@ -332,7 +334,7 @@ public partial class PinballTables
         {
             if (k != key) continue;
             var screen = m.Rules != null ? PinballScreen.Of(m.Rules).Pack() : PinballScreen.Idle(PinballLayouts.Get(m.Table)).Pack();
-            RpcId(peer, MethodName.State, key, index, m.Table, m.Players.ToArray(), m.Runner, screen, Book.Of(key, index, m.Table).Pack(NameOfId));
+            RpcId(peer, MethodName.State, key, index, m.Table, m.Players.ToArray(), m.Runner, screen, Book.Of(Core.EarthStores.Building(key), index, m.Table).Pack(NameOfId));
         }
         // machines nobody played since the server started: their saved high scores
         foreach (var (index, table, highs) in Book.In(key).ToList())

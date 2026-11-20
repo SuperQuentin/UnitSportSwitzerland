@@ -448,7 +448,13 @@ public partial class FarmSales : Node
         ContractsChanged?.Invoke();
     }
 
-    private string ContractsPath => Path.Combine(StoreDir, _server ? "contracts.json" : "contracts_offline.json");
+    /// <summary>
+    /// The contracts: beside the stands, or under earth (#1726, G2 D2) at <c>user://earth/farm</c>, the flat ones dropped (their
+    /// co-op is a flat building key, and a contract lasts four days at most). The stands stay where they are: their key is
+    /// a placed object's id, whatever the frame.
+    /// </summary>
+    private string ContractsPath => Path.Combine(CmdArgs.Value("--selldir") != null ? StoreDir : ProjectSettings.GlobalizePath(Core.WorldChoice.StorePath("user://farm")),
+        _server ? "contracts.json" : "contracts_offline.json");
 
     private void LoadContracts()
     {

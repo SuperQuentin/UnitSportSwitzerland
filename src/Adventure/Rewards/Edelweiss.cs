@@ -17,7 +17,15 @@ public sealed record EdelweissOffered(long Peer, string Key, string ShrineId, in
 /// </summary>
 public sealed class CollectProgress
 {
-    public static readonly SectionKey<CollectProgress> Section = new("collect", Version: 1);
+    /// <summary>Version 2 (#1726, G2 D2): the edelweiss ids are Earth cells (<see cref="RewardRules.ToEarthId"/>), no LV95 corner.</summary>
+    public static readonly SectionKey<CollectProgress> Section = new("collect", Version: 2, Migrate);
+
+    private static CollectProgress? Migrate(System.Text.Json.Nodes.JsonNode data, int version)
+    {
+        var p = System.Text.Json.JsonSerializer.Deserialize<CollectProgress>(data, AdventureJson.Options);
+        if (p != null) p.Taken = new HashSet<string>(p.Taken.Select(RewardRules.ToEarthId), StringComparer.Ordinal);
+        return p;
+    }
 
     /// <summary>Edelweiss and cairn ids taken.</summary>
     public HashSet<string> Taken { get; set; } = new(StringComparer.Ordinal);

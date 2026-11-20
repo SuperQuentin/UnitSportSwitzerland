@@ -56,11 +56,17 @@ public sealed class ShopLedger
         _version = planVersion;
     }
 
-    /// <summary>"E_N_I" → ("E_N", "I"); any other key is its own tile with building "0".</summary>
+    /// <summary>
+    /// "E_N_I" → ("E_N", "I"); a leaf's building (a stand-in tile, #1726, G2 D2) → (the leaf's file stem, its Earth identity,
+    /// <see cref="Core.EarthStores.Building"/>), the earth store's keys; any other key is its own tile with building "0".
+    /// </summary>
     public static (string Tile, string Building) Split(string key)
     {
         int at = key.LastIndexOf('_');
-        return at > 0 ? (key[..at], key[(at + 1)..]) : (key, "0");
+        if (at <= 0) return (key, "0");
+        if (Terrain.Leaves.LeafTileName.TryParseStem(key[..at], out var tile) && Terrain.Leaves.LeafTileName.TryLeaf(tile, out var leaf))
+            return (leaf.FileStem, Core.EarthStores.Building(key));
+        return (key[..at], key[(at + 1)..]);
     }
 
     private TileState Tile(string name)
