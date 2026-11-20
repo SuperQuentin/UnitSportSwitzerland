@@ -87,7 +87,7 @@ public sealed class ScatterField
                 // ice blocks in the chaos patches (a third of the ground), a few between them
                 return new[]
                 {
-                    new ScatterField(seed, radius, new Spec(Kind.IceBlock, "ice blocks", 0.25, 2.5, 0.04, 10, 260, 70, 0.3, 90,
+                    new ScatterField(seed, radius, new Spec(Kind.IceBlock, "ice blocks", 0.25, 2.5, 0.025, 10, 260, 70, 0.3, 90,
                         (x, y, z) => 0.08 + 0.92 * Smooth(0.0, 0.3, noise.At(x, y, z, 900, 2)))),
                 };
             case BodyId.Titan:

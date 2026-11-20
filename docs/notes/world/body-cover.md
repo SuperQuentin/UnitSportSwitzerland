@@ -9,7 +9,8 @@ What lies below another body's data past the near square (`docs/plans/planets.md
 - **No pop at an edge: a geomorph by the camera's distance** (`body_ground.gdshader`): a drawn square carries per vertex
   the ground round it (UV2.x its height less the square's, CUSTOM0 its normal: `BodyHeights.Grid(..., edgeY)`), and the
   vertex shader turns the one into the other from `morph_from` to `morph_to` metres from the camera (fine 512-768 into the
-  medium's ground, medium 1024-1536 into the globe's `Coarse`). A square built again where the camera is draws what the
+  medium's ground, medium 1536-1792 into the globe's `Coarse`; the medium square moves at 256 m, not 512, so its
+  craters reach as far as its old static edge showed them: a first try at 1024-1536 lost them from 3 km up). A square built again where the camera is draws what the
   last one did. A short static ease at the very edge (128 m fine, 256 m medium) stays for a camera far off a square's centre
   while the next one builds. The near square has none: its collision is its drawn ground.
 - **Cover** (`Terrain/Bodies/BodyCover`, `shaders/common/body_cover.gdshaderinc`, `World/Bodies/BodyCoverLook`): the families

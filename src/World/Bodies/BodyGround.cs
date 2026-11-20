@@ -80,14 +80,17 @@ public partial class BodyGround : Node, Terrain.IBodyGround
     /// <summary>The medium square's cells: 256 of 16 m, 4 km, a walker's horizon and more.</summary>
     public const float MediumCellM = 16f;
 
-    /// <summary>The medium square moves when the camera is this far from its centre, metres.</summary>
-    public const double MediumMoveM = 512;
+    /// <summary>
+    /// The medium square moves when the camera is this far from its centre, metres: half its old 512 (#2016), so its
+    /// geomorph can reach to <see cref="MediumMorphTo"/> and its craters show as far out as its static edge showed them.
+    /// </summary>
+    public const double MediumMoveM = 256;
 
     /// <summary>The medium square's last metres, eased into the globe's own cells (behind its geomorph).</summary>
     public const double MediumBlendM = 256;
 
     /// <summary>The medium square's geomorph into the globe's own cells, metres from the camera.</summary>
-    public const float MediumMorphFrom = 1024, MediumMorphTo = 1536;
+    public const float MediumMorphFrom = 1536, MediumMorphTo = 1792;
 
     /// <summary>The smallest crater whose rays the near square draws (two and a half of its cells), metres.</summary>
     public const double NearRaysM = 5;
