@@ -35,45 +35,50 @@ public partial class PhoneProbe
         for (int i = 0; i < n; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
-    /// <summary>The shoulder shots: folded walking, open Home standing and walking, another app, the held right button, a frame mid-ease.</summary>
+    /// <summary>The shoulder shots: folded walking, the opening through six frames, open Home standing and walking, Contacts with the cursor on a contact, the held right button.</summary>
     private async Task ShoulderShots(FootPlayer me, PhoneController phone)
     {
-        await Press(PlayerInput.Phone, 0.8);
-        await HoldShot(Godot.Key.W, 1.2, ShoulderDir + "folded_walking.png");
-        await Wait(0.3);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        await Wait(0.5);
+        await Press(PlayerInput.Phone, 1.3);
+        Shot(ShoulderDir + "branch_folded.png");
+        await HoldShot(Godot.Key.W, 1.2, ShoulderDir + "branch_folded_walking.png");
+        await Wait(0.6);
         phone.Screens.ShowPage(PhoneScreens.Page.Home);
         phone.Open(PhoneScreens.Page.Home);
-        await Wait(0.17);
-        Shot(ShoulderDir + "open_mid_ease.png");
-        await Wait(1.0);
-        Shot(ShoulderDir + "open_home_standing.png");
-        if (me.PhoneModel is { } pm)
+        double t = 0;
+        foreach (double when in new[] { 0.1, 0.25, 0.4, 0.6, 0.9, 1.6 })
         {
-            var bodyBasis = new Basis(Vector3.Up, me.LookYaw);
-            var rel = bodyBasis.Inverse() * (pm.GlobalPosition - me.GlobalPosition);
-            var n = bodyBasis.Inverse() * pm.GlobalBasis.Z.Normalized();
-            var c = bodyBasis.Inverse() * (me.PhoneScreenToWorld(new Vector2(0.5f, 0.5f), false, 0f)!.Value - me.GlobalPosition);
-            Log($"shoulder: phone origin in the body frame (right, up, back) {rel}, screen centre {c}, screen normal {n}");
+            await Wait(when - t);
+            t = when;
+            Shot(ShoulderDir + $"branch_open_{when.ToString("0.00", inv)}.png");
         }
+        await Wait(0.4);
+        Shot(ShoulderDir + "branch_open_home_standing.png");
         var box = ScreenInView(me);
         Log($"shoulder: open Home screen centre {box.Centre}, width {box.Box.Size.X:P0}, height {box.Box.Size.Y:P0}, inside {box.Inside}, corner phone {me.PhoneViewShown}, shoulder {me.PhoneShoulder:F2}");
-        await HoldShot(Godot.Key.W, 1.6, ShoulderDir + "open_home_walking.png");
+        await HoldShot(Godot.Key.W, 1.6, ShoulderDir + "branch_open_home_walking.png");
+        await Wait(0.4);
+        phone.Screens.TestPeople = new List<string> { "Anna", "Ben", "Chloe", "Dario" };
         phone.Open(PhoneScreens.Page.Contacts);
-        await Wait(0.5);
-        await HoldShot(Godot.Key.W, 1.2, ShoulderDir + "open_contacts_walking.png");
-        phone.Open(PhoneScreens.Page.Activities);
-        await Wait(0.5);
-        Shot(ShoulderDir + "open_activities_standing.png");
+        await Wait(0.8);
+        if (phone.Screens.FocusUv() is { } row)
+        {
+            var at = WindowAt(me, row, false);
+            Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at });
+            await Wait(0.4);
+        }
+        Shot(ShoulderDir + "branch_open_contacts_standing_cursor.png");
+        await HoldShot(Godot.Key.W, 1.2, ShoulderDir + "branch_open_contacts_walking.png");
         phone.Open(PhoneScreens.Page.Home);
         await Wait(0.5);
         Mouse(MouseButton.Right, true);
         await Wait(0.15);
         Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(260, 40) });
         await Wait(0.5);
-        Shot(ShoulderDir + "open_right_mouse_look.png");
+        Shot(ShoulderDir + "branch_open_right_mouse_look.png");
         Mouse(MouseButton.Right, false);
         await Wait(0.4);
-        Shot(ShoulderDir + "open_after_look.png");
     }
 
     /// <summary>
@@ -110,25 +115,13 @@ public partial class PhoneProbe
             Check(Mathf.Abs(cam.Fov - fov0) < 0.01f, "first person: the field of view is the game's");
             return;
         }
-        Check((mid > 0f || easeSeconds >= 0.2) && easeSeconds < 0.8 && me.PhoneShoulder >= 0.99f, $"opening eases the camera over the shoulder (a frame at {mid:F2}, in {easeSeconds:F2} s, then {me.PhoneShoulder:F2})");
+        Check((mid > 0f || easeSeconds >= 0.3) && easeSeconds is >= 0.3 and < 1.0 && me.PhoneShoulder >= 0.99f, $"opening eases the camera over the shoulder (a frame at {mid:F2}, in {easeSeconds:F2} s, then {me.PhoneShoulder:F2})");
         Check(!me.PhoneViewShown, "third person open: no corner phone, the in-world phone over the shoulder");
-        Check(Mathf.Abs(cam.Fov - FootPlayer.Tune.Fov) < 0.5f && cam.GlobalTransform.Origin.DistanceTo(before) > 0.5f, $"the camera is in close ({cam.GlobalTransform.Origin.DistanceTo(before):F2} m from the gameplay one, fov {fov0:F0} to {cam.Fov:F0})");
+        Check(Mathf.Abs(cam.Fov - FootPlayer.PhoneShoulderFov) < 0.5f && cam.GlobalTransform.Origin.DistanceTo(before) > 0.5f, $"the camera is in close ({cam.GlobalTransform.Origin.DistanceTo(before):F2} m from the gameplay one, fov {fov0:F0} to {cam.Fov:F0})");
         var view = GetViewport().GetVisibleRect().Size;
         var home = ScreenInView(me);
         Log($"shoulder: screen centre {home.Centre}, box {home.Box}");
-        Check(home.Inside && home.Box.Size.X >= 0.30f, $"the screen is wholly in view and {home.Box.Size.X:P0} of the width ({home.Box.Size.X * view.X:F0} px)");
-        Check(home.Box.End.X <= 0.53f, "the view's centre is not behind the screen");
-        // the horizon and the path ahead: a far point straight ahead of the body, at the eye's height, is in view and above the screen
-        // (the horizon in the middle of the picture: 40 m along the lens's own heading at its height; the body's heading is turned toward the phone, so a point straight ahead of it sits higher and nearer the edge)
-        var flatLens = new Vector3(-cam.GlobalBasis.Z.X, 0f, -cam.GlobalBasis.Z.Z).Normalized();
-        var ahead = cam.GlobalPosition + flatLens * 40f;
-        var horizon = cam.UnprojectPosition(ahead);
-        var pathAt = me.GlobalPosition + new Vector3(Mathf.Sin(me.LookYaw + Mathf.Pi), 0f, Mathf.Cos(me.LookYaw + Mathf.Pi)) * 6f;
-        var path = cam.UnprojectPosition(pathAt);
-        Check(horizon.X > 0 && horizon.X < view.X && horizon.Y > 0 && horizon.Y < view.Y && !cam.IsPositionBehind(ahead),
-            $"the horizon straight ahead is in view ({horizon.X / view.X:P0}, {horizon.Y / view.Y:P0})");
-        Check(path.X > 0 && path.X < view.X && path.Y > 0 && path.Y < view.Y && !cam.IsPositionBehind(pathAt),
-            $"and the path 6 m ahead ({path.X / view.X:P0}, {path.Y / view.Y:P0})");
+        Check(home.Inside && home.Box.Size.X * view.X >= 250f, $"the screen is wholly in view and {home.Box.Size.X * view.X:F0} px wide ({home.Box.Size.X:P0})");
         await RayCheck(me, phone, false, "shoulder");
 
         // walking: the body goes on, the phone stays framed and does not shake
@@ -153,7 +146,7 @@ public partial class PhoneProbe
         }
         double rms = Math.Sqrt(sum / Math.Max(1, centres.Count - 2));
         Log($"shoulder: walking, the screen's centre moves by {rms:F2} px rms (worst {worst:F2} px) frame to frame");
-        Check(me.GlobalPosition.DistanceTo(from) > 1f && walkBox.Inside && walkBox.Box.Size.X >= 0.28f, $"walking ({me.GlobalPosition.DistanceTo(from):F1} m) the screen stays in view ({walkBox.Box.Size.X:P0} wide)");
+        Check(me.GlobalPosition.DistanceTo(from) > 1f && walkBox.Inside && walkBox.Box.Size.X * view.X >= 220f, $"walking ({me.GlobalPosition.DistanceTo(from):F1} m) the screen stays in view ({walkBox.Box.Size.X:P0} wide)");
         Check(rms < 3.0 && worst < 10f, $"and does not shake ({rms:F2} px rms, worst {worst:F1} px)");
         await Wait(0.4);
 

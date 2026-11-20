@@ -2236,7 +2236,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (want != _itemArmCur && _itemArmBlend > 0.02f) target = 0f;   // leave the old pose first
         else if (want != _itemArmCur) _itemArmCur = want;
         // the phone comes and goes quickly (#1825): a pocket to the hands in a tenth of a second
-        _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / (IsPhonePose(want) || IsPhonePose(_itemArmCur) ? 0.1f : 0.18f));
+        _itemArmBlend = Mathf.MoveToward(_itemArmBlend, target, dt / (0.18f));
         if (_itemArmBlend <= 0f && want == Avatar.ItemArmPose.None) _itemArmCur = Avatar.ItemArmPose.None;
     }
 
@@ -2773,14 +2773,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A throw pulls the lens in close over the right shoulder (#206); lent from first person,
         // the arm grows out of the eye instead of shrinking from the chase distance.
         float tb = _throwBlend;
-        float ps = PhoneShoulder;   // the phone read over the shoulder (#1825): close, beside the head, a little toward the phone
         // the player's zoom (#1149): closer than the usual arm, the pivot climbs to the eyes and the
         // shoulder offset goes, so the last metres close in on the face
         _zoom = Mathf.Lerp(_zoom, _zoomWant, MathX.Damp(10f, dt));
         float face = _borrowedThird ? 0f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp((ArmLength - _zoom) / (ArmLength - ZoomFace), 0f, 1f));
         float height = Mathf.Lerp(_borrowedThird ? EyeHeight : (Sitting ? _sitDrop + 0.55f : Mathf.Lerp(ShoulderHeight, 0.95f, _slideBlend))
             + (EyeHeight - ShoulderHeight) * face, ThrowCamHeight, tb);
-        height = Mathf.Lerp(height, Tune.Height, ps);
         float pivotTarget = GlobalPosition.Y + height;
         _pivotY = float.IsNaN(_pivotY) || Mathf.Abs(pivotTarget - _pivotY) > 6f
             ? pivotTarget
@@ -2801,11 +2799,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float speed = MathX.FlatLength(Velocity);
         float distance = Mathf.Lerp(_borrowedThird ? 0f : _zoom + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f * (1f - face),
             GunAim ? GunCamDistance : ThrowCamDistance, tb);
-        distance = Mathf.Lerp(distance, Tune.Distance, ps);
 
         // over the right shoulder, or the left once swapped (#460): the swap slides across in an eighth of a second
         float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset * (1f - face), GunAim ? GunCamOffset : ThrowCamOffset, tb);
-        offset = Mathf.Lerp(offset, Tune.Offset, ps);
         var shoulder = pivot + view.X * (offset * _shoulderSide);
         var wanted = shoulder + view.Z * distance;
 
@@ -2821,9 +2817,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         DebugArm = (want, _armBlend, through);
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
-        // the lens turns a little toward the phone held in front of the body (the view, the aim and the walking stay the player's)
-        var lensView = ps > 0f ? PhoneLensView(view, position, ps) : view;
-        var lens = new Transform3D(lensView, position);
+        var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
     }
 
