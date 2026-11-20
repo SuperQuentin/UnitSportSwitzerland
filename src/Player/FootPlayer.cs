@@ -2417,7 +2417,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var prev = m.SectionOfBar((slot - 1) * per, (slot - 1) * per, out _);
         var prev2 = m.SectionOfBar((slot - 2) * per, (slot - 2) * per, out _);
         var (kind, index) = Avatar.DancePick.Pick(slot, (int)style, DanceSeed(), _danceCrowd >= 2, now, prev, prev2,
-            Avatar.HumanMeshBuilder.MoveEnergy(style));
+            Avatar.HumanMeshBuilder.MoveEnergy(style), Avatar.HumanMeshBuilder.GeneratedEnergy(style));   // #2055: none for the rat dance
         bool rat = style == Audio.Cd.MusicStyle.RatDance;
         return kind switch
         {
@@ -2427,6 +2427,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Avatar.DanceSlotKind.BreakDown => Avatar.HumanMeshBuilder.BreakDown,
             Avatar.DanceSlotKind.BreakWindmill => Avatar.HumanMeshBuilder.BreakPowerWindmill,
             Avatar.DanceSlotKind.BreakHeadspin => Avatar.HumanMeshBuilder.BreakPowerHeadspin,
+            Avatar.DanceSlotKind.Generated => Avatar.HumanMeshBuilder.GeneratedMoves + index,
             _ => index,
         };
     }

@@ -1657,6 +1657,8 @@ public static partial class HumanMeshBuilder
         Toprock, BreakDown, BreakWindmill, BreakHeadspin,
         // #728: more standing moves (HumanMeshBuilder.MoreMoves.cs)
         BodyRoll, Charleston, Skank, AirDrums, Shuffle, Wop,
+        // #2055: a move of the style's generated pool (HumanMeshBuilder.Generated.cs, DanceGen); the pool index travels in the move number
+        Generated,
         // #495: fist fights (HumanMeshBuilder.Fight.cs); keep them last, Channels skips the groove from FightStand on
         FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
         FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
@@ -1734,7 +1736,8 @@ public static partial class HumanMeshBuilder
     public static ReadOnlySpan<byte> MoveEnergy(Audio.Cd.MusicStyle style) => DanceEnergy[DanceStyleIndex(style)];
 
     /// <summary>The name of the move a <see cref="DanceParams.Move"/> stands for (the dance sheet's labels, #728).</summary>
-    public static string MoveName(Audio.Cd.MusicStyle style, int move) => Resolve(style, move).ToString();
+    public static string MoveName(Audio.Cd.MusicStyle style, int move) =>
+        move >= GeneratedMoves ? DanceGen.Name(DanceStyleIndex(style), move - GeneratedMoves) : Resolve(style, move).ToString();
 
     /// <summary>Number of moves a style has; <see cref="DanceParams.Move"/> is taken modulo this.</summary>
     public static int MoveCount(Audio.Cd.MusicStyle style) => DanceTable[DanceStyleIndex(style)].Length;
@@ -1769,7 +1772,8 @@ public static partial class HumanMeshBuilder
         // the move it is flowing out of, for the crossfade on a change (#261)
         float flow = d.PrevMove >= 0 && d.MoveBlend < 0.999f ? DSm(d.MoveBlend) : 1f;
         var prev = flow < 1f ? Resolve(d.Style, d.PrevMove) : move;
-        if (prev == move) flow = 1f;
+        // two generated moves are the same DanceMove but not the same move (the pool index is the move number)
+        if (prev == move && !(move == DanceMove.Generated && d.PrevMove != d.Move)) flow = 1f;
         var beat = new Beat(d.BarPhase, d.Bar);
         float we = DSm(d.Weight);
         float m = DSm(moving);
@@ -1791,7 +1795,7 @@ public static partial class HumanMeshBuilder
         // a set's halves run into each other by themselves; anything else crossfades as usual
         if (flow < 1f && !(prev == DanceMove.BreakDown && IsFloor(move)))
         {
-            var before = IsFloor(prev) ? FloorRig(prev, rig, 8f, beat) : DanceVariant(rig, prev, prev, 1f, beat, 1f, false, d);
+            var before = IsFloor(prev) ? FloorRig(prev, rig, 8f, beat) : DanceVariant(rig, prev, prev, 1f, beat, 1f, false, d with { Move = d.PrevMove });
             now = MixRigs(before, now, flow);
         }
         if (m > 0.001f) now = MixRigs(now, DanceVariant(rig, DanceMove.Toprock, DanceMove.Toprock, 1f, beat, 1f, true, d), m);
@@ -1803,6 +1807,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= GeneratedMoves) return DanceMove.Generated;
         if (index >= SwordMoves) return DanceMove.SwordPose;
         if (index >= SchwingMoves) return SchwingResolve(index - SchwingMoves);
         if (index >= AuraMoves) return AuraResolve(index - AuraMoves);
@@ -1815,18 +1820,19 @@ public static partial class HumanMeshBuilder
 
     private static Rig DanceVariant(in Rig rig, DanceMove prev, DanceMove move, float flow, in Beat t, float we, bool mv, in DanceParams d)
     {
-        var ch = Channels(move, t, mv, d.Bpm);
-        if (flow < 1f) ch = Mix(Channels(prev, t, mv, d.Bpm), ch, flow);
+        var ch = Channels(move, t, mv, d.Bpm, d.Style, d.Move);
+        if (flow < 1f) ch = Mix(Channels(prev, t, mv, d.Bpm, d.Style, d.PrevMove), ch, flow);
         Feel(ref ch, d);
         return Compose(rig, ch, we, mv);
     }
 
-    private static DanceCh Channels(DanceMove move, in Beat t, bool mv, float bpm)
+    private static DanceCh Channels(DanceMove move, in Beat t, bool mv, float bpm, Audio.Cd.MusicStyle style, int index)
     {
         var ch = default(DanceCh);
         ch.ArmBlend = 1f;
         Planted(ref ch, 0.098f, 0f);
-        EvalMove(move, t, mv, ref ch);
+        if (move == DanceMove.Generated) EvalGenerated(style, index - GeneratedMoves, t, mv, ref ch);
+        else EvalMove(move, t, mv, ref ch);
         if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute) && move < DanceMove.FightStand) Groove(ref ch, t, mv, bpm);
         return ch;
     }

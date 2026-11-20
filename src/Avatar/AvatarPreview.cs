@@ -323,7 +323,7 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
-        // "--dancesheet <style>[,first,count]": a contact sheet of a style's moves (#728), a row per
+        // "--dancesheet <style|gen:style>[,first,count]": a contact sheet of a style's moves (#728), a row per
         // move and eight moments across its two bars, to judge and compare them in one picture
         if (CmdArgs.Value("--dancesheet") is { } sheet)
         {
@@ -467,14 +467,18 @@ public partial class AvatarPreview : Node3D
     private void DanceSheet(string spec, Material material)
     {
         var parts = spec.Split(',');
-        bool emotes = parts[0].Equals("emotes", StringComparison.OrdinalIgnoreCase);
+        // "gen:<style>[,first,count]": the style's generated moves (#2055), numbered from 0 in its pool
+        bool generated = parts[0].StartsWith("gen:", StringComparison.OrdinalIgnoreCase);
+        if (generated) parts[0] = parts[0].Substring(4);
+        bool emotes = !generated && parts[0].Equals("emotes", StringComparison.OrdinalIgnoreCase);
         // "break": the two halves of a break set (both power moves) and toprock on its own
         int[]? only = parts[0].Equals("break", StringComparison.OrdinalIgnoreCase)
             ? new[] { HumanMeshBuilder.BreakDown, HumanMeshBuilder.BreakPowerWindmill, HumanMeshBuilder.BreakPowerHeadspin }
             : null;
         var style = Audio.Cd.MusicStyle.Pop;
         if (!emotes && !Enum.TryParse(parts[0], ignoreCase: true, out style)) style = Audio.Cd.MusicStyle.Pop;
-        int total = only?.Length ?? (emotes ? HumanMeshBuilder.EmoteCount : HumanMeshBuilder.MoveCount(style));
+        int total = only?.Length ?? (emotes ? HumanMeshBuilder.EmoteCount : generated ? HumanMeshBuilder.GeneratedCount(style) : HumanMeshBuilder.MoveCount(style));
+        if (total <= 0) { GD.PrintErr($"[dancesheet] no moves for {style}"); return; }
         int first = parts.Length > 1 && int.TryParse(parts[1], out int f) ? Mathf.Clamp(f, 0, total - 1) : 0;
         int count = parts.Length > 2 && int.TryParse(parts[2], out int c) ? c : 4;
         count = Mathf.Clamp(count, 1, total - first);
@@ -484,7 +488,7 @@ public partial class AvatarPreview : Node3D
         float yaw = Mathf.Pi - Mathf.DegToRad(_viewDegrees);
         for (int row = 0; row < count; row++)
         {
-            int move = only?[first + row] ?? (emotes ? HumanMeshBuilder.EmoteMoves : 0) + first + row;
+            int move = only?[first + row] ?? (emotes ? HumanMeshBuilder.EmoteMoves : generated ? HumanMeshBuilder.GeneratedMoves : 0) + first + row;
             float y = (count - 1 - row) * Dy;
             AddChild(new Label3D
             {

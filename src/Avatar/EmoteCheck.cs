@@ -77,12 +77,14 @@ public static class EmoteCheck
             int moves = HumanMeshBuilder.MoveCount(style);
             var all = new List<int>();
             for (int m = 0; m < moves; m++) all.Add(m);
+            // #2055: the style's whole generated pool, each flowing in from the one before it (the first from the last table move)
+            for (int m = 0; m < HumanMeshBuilder.GeneratedCount(style); m++) all.Add(HumanMeshBuilder.GeneratedMoves + m);
             if (style == Audio.Cd.MusicStyle.HipHop)
                 all.AddRange(new[] { HumanMeshBuilder.BreakDown, HumanMeshBuilder.BreakPowerWindmill, HumanMeshBuilder.BreakPowerHeadspin });
             for (int k = 0; k < all.Count; k++)
             {
                 int move = all[k];
-                bool floor = move >= HumanMeshBuilder.BreakMoves;
+                bool floor = move >= HumanMeshBuilder.BreakMoves && move < HumanMeshBuilder.GeneratedMoves;
                 int prev = move == HumanMeshBuilder.BreakDown ? 0 : floor ? HumanMeshBuilder.BreakDown : all[(k + all.Count - 1) % all.Count];
                 float torso = float.MaxValue, head = float.MaxValue, hands = float.MaxValue;
                 for (int f = 0; f < 32; f++)
@@ -158,8 +160,10 @@ public static class EmoteCheck
             auraSigs.Add((pose, sig));
         }
 
+        int generated = 0;
+        foreach (var gs in System.Enum.GetValues<Audio.Cd.MusicStyle>()) generated += HumanMeshBuilder.GeneratedCount(gs);
         GD.Print(failed == 0
-            ? $"[emotecheck] RESULT: ok ({count} emotes, {auraPoses.Count} aura poses, {built} figures)"
+            ? $"[emotecheck] RESULT: ok ({count} emotes, {generated} generated moves, {auraPoses.Count} aura poses, {built} figures)"
             : $"[emotecheck] RESULT: FAILED — {failed} problems");
         return failed == 0 ? 0 : 1;
     }
