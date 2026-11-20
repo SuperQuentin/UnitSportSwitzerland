@@ -134,7 +134,10 @@ public partial class FasnachtNetProbe : ChatProbe
             Say("ready");
             // forged: from 150 m away
             Teleport((stall.E + 150, stall.N + 150));
-            await Seconds(1.0);
+            // the server learns the body's place from its movement packets: standing there, and a moment more, before asking
+            // (#1787: on earth one second was not enough, the far stall was paid)
+            await Until(() => Me!.IsOnFloor() && Me.Global.HorizontalDistanceTo(GlobalPos.FromLv95(stall.E + 150, stall.N + 150, 0)) < 5, 10);
+            await Seconds(2.0);
             Svc.AskFasnacht(FestivalService.FasnachtStall);
             Expect(await Until(() => refused?.Contains("Larven stall") == true, 10), $"the stall from 150 m away is refused ({refused})");
             refused = null;

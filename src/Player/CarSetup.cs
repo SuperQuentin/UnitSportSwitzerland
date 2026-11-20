@@ -78,7 +78,7 @@ public sealed record CarSetup(string Name, string Blurb)
         // the army: the same car in olive drab (a kart wears its own army skin, KartMeshBuilder.Army)
         if (Paint is { } paint) return spec with { SetupId = Id, Body = spec.Body with { Paint = paint } };
         // a kart has no suspension to raise and no body to lift: the road and off-road presets are for cars
-        if (spec.Body.Shape == BodyShape.Kart) return spec;
+        if (spec.Body.Shape.OwnBuilder()) return spec;
         var tyre = Tyre ?? TyreType.Road;
         var body = spec.Body;
         // bigger wheels need the body up at least by their growth, or the tyre tops go through the arches

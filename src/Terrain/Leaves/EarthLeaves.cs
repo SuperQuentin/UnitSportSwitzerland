@@ -25,12 +25,42 @@ public sealed class EarthLeaves : ILeafSource
     public LeafStore Real { get; }
 
     /// <summary>The blend of the fill into the real leaves; null without a fill.</summary>
-    public LeafBlend? Blend { get; }
+    public LeafBlend? Blend { get; private set; }
 
     /// <summary>Told what failed while a leaf was produced (the leaf is then left out).</summary>
     public Action<string>? Log { get; set; }
 
-    private readonly GeneratedLeaves? _generated;
+    private volatile GeneratedLeaves? _generated;
+
+    // a client online until the server's pyramid settles (#1656): no fill leaf is made on a base the server may not share
+    private volatile bool _awaitingPyramid;
+
+    /// <summary>
+    /// A client joining a server (#1656): the fill waits for the server's pyramid index (<see cref="UsePyramid"/>), so it is
+    /// never built on another base than the server's (the 20 m of #1793). Until then only real leaves are served.
+    /// </summary>
+    public void AwaitPyramid()
+    {
+        if (_generated != null) _awaitingPyramid = true;
+    }
+
+    /// <summary>
+    /// The fill stands on <paramref name="pyramid"/> from now on (#1656: the server's, or null when it has none: the
+    /// generator's ground, as the server's): every produced leaf and the blend are dropped; whoever holds leaves reads them
+    /// again (<c>EarthWorld.Refresh</c>). Any thread.
+    /// </summary>
+    public void UsePyramid(PyramidBase? pyramid)
+    {
+        if (_generated is { } g)
+        {
+            var next = new GeneratedLeaves(g.World, pyramid: pyramid);
+            Blend = new LeafBlend(Real.IsReal, Real.HeightsOf, pyramid: pyramid);
+            _generated = next;
+            _made.Clear();
+            _heightsMade.Clear();
+        }
+        _awaitingPyramid = false;
+    }
     private readonly GeneratedLeafRoads? _roads;
     private readonly Func<bool> _fillOn;
     private readonly Func<CubeKey, bool>? _fixtureHas;
@@ -127,7 +157,7 @@ public sealed class EarthLeaves : ILeafSource
     public bool IsFixture => _fixtureHas != null;
 
     /// <summary>Whether the fill answers for a leaf (the region may hold part of it).</summary>
-    public bool Filled(CubeKey key) => _generated != null && _domain is { } d && _fillOn() && d.Contains(key);
+    public bool Filled(CubeKey key) => _generated != null && !_awaitingPyramid && _domain is { } d && _fillOn() && d.Contains(key);
 
     public bool Has(CubeKey key) => Real.Has(key) || _fixtureHas?.Invoke(key) == true || Filled(key);
 

@@ -492,8 +492,11 @@ public static class CorePlanner
             var sec = a.Mouth;
             var inCars = sec.CarLanes(StripWay.In).ToList();
             foreach (var move in (ReadOnlySpan<SignalMoves>)[SignalMoves.Left, SignalMoves.Through, SignalMoves.Right])
+            // every exit the move leaves by: two rights (a skewed or merged junction) each get their paths (#1903)
+            foreach (int to in a.TowardAll.TryGetValue(move, out var all) ? all
+                     : a.Toward.TryGetValue(move, out int first) ? [first] : [])
             {
-                if (!a.Toward.TryGetValue(move, out int to) || !index.TryGetValue(to, out int bi)) continue;
+                if (!index.TryGetValue(to, out int bi)) continue;
                 var b = arms[bi];
                 // the exit's departing lanes from its centre line out
                 var outs = b.Mouth.CarLanes(StripWay.Out).Reverse().ToList();

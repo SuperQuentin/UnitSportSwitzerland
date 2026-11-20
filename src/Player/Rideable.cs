@@ -165,7 +165,11 @@ public struct RideMotion
 /// </summary>
 public abstract class Rideable
 {
-    public const float Gravity = 9.81f;
+    /// <summary>
+    /// The pull a ride's tyres, brakes and slopes feel, m/s²: the ground game's gravity on the anchor's body
+    /// (<see cref="Core.BodyGravity"/>: the Earth's tuned 9.81, the Moon's 1.62 for a rover, #1943).
+    /// </summary>
+    public static float Gravity => Core.BodyGravity.Ground;
 
     /// <summary>
     /// The origin moved (#185): a ride that keeps world-space state of its own (a position, a velocity,

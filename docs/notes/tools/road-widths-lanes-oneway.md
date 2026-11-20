@@ -31,6 +31,17 @@
   whose outward heading is most nearly parallel (< 45 deg: alongside; it lies on that line's
   right = diverging/merging ramp = same sense, on its left = the other carriageway = opposite)
   or anti-parallel (> 135 deg: carries on, opposite sense). Repeated until stable.
+- **Carriageway chains** (#1876, `AlignCarriageways`, after the partner rule and connectivity): a carriageway never
+  changes direction where it carries straight on. Pieces of divided roads (not ramps) that continue each other at a node
+  (each the other's most nearly opposite outward heading, within 20 deg, mutual) form one chain; it runs the way its
+  pieces say, weighted by length (source or ring directions x10), and a piece the partner rule or connectivity set the
+  other way is turned (`Origin.Chain`; the log lists each turn with whether OSM agrees, and the chain). Why: TLM draws
+  some pairs crossing over (Chambesy, 2500521/1121460: the southbound line east of the northbound's first 32 m), so a
+  short piece's own partner vote is wrong; that piece made a signalised core's only northbound exit southbound. A piece
+  whose own OSM one-way confirms its direction is never turned (the one contradiction on the corridor: a chain of small
+  Lane pieces). Geneva-Nyon corridor (221 tiles): 64 of 2,446 divided pieces turned; of the 40 logged, OSM agrees with
+  21 and has no row for 19 (a 928 m A1 piece among them: the overlay had dropped OSM's direction there as contradicting
+  the old vote); the long drive's route still keeps every one-way to Nyon.
 - **Median measurement** (`osm_overlay_report.txt`, "carriageway median probe", Martigny-Sion,
   5 m stations): TLM Autobahn partner distance p10/median/p90 **1.8/2.3/4.1 m**; the OSM way of
   the same direction lies **3.8 m** outward of TLM's line (p10 3.2, p90 4.4), OSM carriageways

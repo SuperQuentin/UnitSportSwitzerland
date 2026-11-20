@@ -16,6 +16,7 @@ namespace UnitSport.Trainer;
 /// bike rides on the rig's watts, stays on the road without anyone steering, and the trainer is
 /// sent the road's grade halved by the 50% difficulty. Read the <c>[trainingcheck]</c> lines.
 /// <c>--trainingcheck junctions</c> on <c>fixture:junction</c>: the turns, the way back and ERG (<see cref="RunJunctions"/>).
+/// <c>--trainingcheck traffic</c> on <c>fixture:junction</c> with <c>--traffic 60</c>: through the traffic (<see cref="RunTraffic"/>).
 /// </summary>
 public partial class TrainingProbe : Node
 {
@@ -85,6 +86,11 @@ public partial class TrainingProbe : Node
         if (CmdArgs.Value("--trainingcheck", notFlag: true) == "junctions")
         {
             await RunJunctions(me, session, link, source);
+            return;
+        }
+        if (CmdArgs.Value("--trainingcheck", notFlag: true) == "traffic")
+        {
+            await RunTraffic(me, session, link, source);
             return;
         }
 
@@ -275,6 +281,79 @@ public partial class TrainingProbe : Node
         }
         Check(session.State == TrainingSession.Phase.Finished, $"finished: {session.Status}");
         Check(worst < 4f, $"held on the way throughout: worst {worst:0.0} m off it");
+        Finish();
+    }
+
+    /// <summary>
+    /// <c>--trainingcheck traffic --trainer-sim --world fixture --chunks fixture:junction --traffic 60</c> (#1467): down
+    /// the side road to the T, where its cars queue to give way to the main road, then east on the main road, in dense
+    /// traffic. A queued car stopped the bike dead there; now the ride goes through the traffic, as in Zwift: it never
+    /// stalls, it meets the traffic and passes through or beside it, and the traffic is solid to it again after the ride.
+    /// </summary>
+    private async Task RunTraffic(FootPlayer me, TrainingSession session, TrainerLink link, IChunkSource source)
+    {
+        var at = _origin.ToGlobal(me.GlobalPosition);
+        var net = await Gpx.RoadNetwork.LoadAsync(source, at.Lv95.E - 2500, at.Lv95.N - 2500, at.Lv95.E + 2500, at.Lv95.N + 2500, pad: 0);
+        var main = net.Edges.Where(e => e.Class == RoadClass.Major).ToList();
+        if (main.Count == 0) { Finish("no main road on the junction fixture"); return; }
+        double e0 = main.Min(e => e.E.Min()), n0 = main[0].N[0];
+        string path = ProjectSettings.GlobalizePath("res://test_output/training/traffic.gpx");
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        var gpx = new StringBuilder("<?xml version=\"1.0\"?>\n<gpx version=\"1.1\" creator=\"trainingcheck\"><trk><name>Fixture traffic</name><type>cycling</type><trkseg>\n");
+        // down the side road to the T, where its cars queue to give way, then left onto the main road east
+        const double Tee = 700;
+        var pts = new List<(double X, double Y)>();
+        for (double y = 240; y > 8; y -= 8) pts.Add((Tee, y));
+        for (double x = Tee + 8; x <= Tee + 400; x += 8) pts.Add((x, 0));
+        foreach (var (x, y) in pts)
+        {
+            var (lat, lon) = SwissGeodesy.ToLatLon(e0 + x, n0 + y, main[0].Height[0]);
+            gpx.Append(CultureInfo.InvariantCulture, $"<trkpt lat=\"{lat:0.0000000}\" lon=\"{lon:0.0000000}\"><ele>{main[0].Height[0]:0.0}</ele></trkpt>\n");
+        }
+        gpx.Append("</trkseg></trk></gpx>\n");
+        System.IO.File.WriteAllText(path, gpx.ToString());
+
+        link.Scan(2);
+        await Wait(3);
+        foreach (var d in link.Found.ToList()) link.Connect(d);
+        for (int i = 0; i < 100 && !(link.PowerLive && link.HasTrainer); i++) await Wait(0.1);
+        Check(link.PowerLive && link.HasTrainer, $"the rig connected ({link.Watts} W)");
+        session.Load(path);
+        for (int i = 0; i < 300 && session.State == TrainingSession.Phase.Loading; i++) await Wait(0.1);
+        Check(session.State == TrainingSession.Phase.Ready, $"the course loaded: {session.Status}");
+        session.Start();
+        for (int i = 0; i < 300 && session.State != TrainingSession.Phase.Riding; i++) await Wait(0.1);
+        Check(session.State == TrainingSession.Phase.Riding, $"riding ({session.State})");
+
+        var near = new List<PhysicsBody3D>();
+        float slowest = float.MaxValue, closest = float.MaxValue;
+        int passes = 0, ghostedMost = 0;
+        bool rolling = false, shot = false;
+        for (int i = 0; i < 1500 && session.State == TrainingSession.Phase.Riding; i++)
+        {
+            await Wait(0.1);
+            float v = me.RideSpeed;
+            // from the first time it is up to speed until 50 m before the end (where it slows to stop)
+            if (v > 20f / 3.6f) rolling = true;
+            if (rolling && session.CourseKm * 1000 - session.Along > 50) slowest = Mathf.Min(slowest, v);
+            ghostedMost = Math.Max(ghostedMost, session.Ghosted);
+            World.Traffic.Current?.MovingBodiesNear(me.GlobalPosition, 6f, near);
+            foreach (var b in near)
+            {
+                float d = RaceRoute.Flat(b.GlobalPosition - me.GlobalPosition).Length();
+                closest = Mathf.Min(closest, d);
+                if (d < 2.5f) passes++;
+                // windowed: the bike in the queue, through a car (once, the first time it is that close)
+                if (d < 1.5f && !shot) { shot = true; Shot("training_traffic_through.png"); }
+            }
+            if (i % 50 == 0) Log(FormattableString.Invariant($"  at {session.Along:0} m, {v * 3.6f:0} km/h, {session.Ghosted} traffic bodies ridden through"));
+        }
+        Check(session.State == TrainingSession.Phase.Finished, $"finished: {session.Status}");
+        // the turn onto the main road is the slowest place a free rider takes (~12-15 km/h); a queue held it at 0
+        Check(rolling && slowest > 6f / 3.6f, $"never stopped by the traffic: slowest {slowest * 3.6f:0} km/h once rolling");
+        Check(ghostedMost > 0 && closest < 2.5f, $"met the traffic on the way: up to {ghostedMost} bodies near, closest {closest:0.0} m ({passes} samples within 2.5 m)");
+        await Wait(7);   // pulled over and stopped, the controls given back
+        Check(session.Ghosted == 0, $"the traffic is solid to the rider again after the ride ({session.Ghosted} left excepted)");
         Finish();
     }
 }

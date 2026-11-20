@@ -141,6 +141,28 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// <summary>Whether a door's doorway is shown with a live picture this frame (for probes).</summary>
     public bool IsShown(DoorLink link) => _shown.Contains(link);
 
+    /// <summary>
+    /// Why a door is or is not shown from the current camera (for probes): its swing, plan, side,
+    /// distance and whether it is in view, as <see cref="Seen"/> judges them.
+    /// </summary>
+    public string Why(DoorLink link)
+    {
+        var cam = GetViewport().GetCamera3D();
+        if (cam == null) return "no camera";
+        var eye = cam.GlobalPosition;
+        bool inside = eye.Y < InteriorManager.InteriorBaseY + 1000f;
+        var frame = inside ? link.Inside : link.Outside;
+        var local = frame.AffineInverse() * eye;
+        bool inView = InView(cam, cam.GlobalTransform, frame, inside ? link.InsideWidth : link.OutsideWidth,
+            inside ? link.InsideHeight : link.OutsideHeight);
+        var mid = frame * new Vector3(0, (inside ? link.InsideHeight : link.OutsideHeight) / 2, 0);
+        float off = Mathf.RadToDeg((-cam.GlobalBasis.Z).AngleTo(mid - eye));
+        return $"{link.Door}: swing {link.Swing:F2}, plan {link.Plan} (eye's {(inside ? _planAt(eye) : "outside")}), "
+            + $"local ({local.X:F1}, {local.Y:F1}, {local.Z:F1}), {local.Length():F1} m of {Range}, in view {inView} "
+            + $"({off:F0}° off the view's middle, fov {cam.Fov:F0} {cam.KeepAspect}, screen {GetViewport().GetVisibleRect().Size}, "
+            + $"near {cam.Near:F3} far {cam.Far:F0}), shown {IsShown(link)}";
+    }
+
     /// <summary>Whether a door is seen through another door this frame (for probes).</summary>
     public bool IsShownThrough(DoorLink link) => _views.Any(v => v.Nested?.Link == link);
 

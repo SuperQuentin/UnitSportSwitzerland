@@ -13,3 +13,6 @@
   user's request — shaped noise reads as hiss, not air; wind needs a real recording. Shake goes through `Camera3D.HOffset/VOffset` (trauma², decaying),
   which no camera placement code writes, so it never fights the rigs. Speed lines are
   `shaders/speed_lines.gdshader` on a CanvasLayer at 4; never in an `Airliner` (cruise is calm). Settings → Feel: volume, shake, speed lines.
+- **The parked body hides its screen** (#2036): the fly camera parks the walker (`ProcessMode` disabled), so `PlayerFeel` stops
+  processing; `NotificationDisabled` hides its layer and clears the popup and the air time. Before, a landing's "AIR 0.9 s"
+  stayed frozen on screen over the whole flight.

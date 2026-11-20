@@ -103,6 +103,15 @@ public sealed class LaneFollower : ILongDriveDriver
         }
         float moved = dt > 0f ? RaceRoute.Flat(pos - _lastPos).Length() / dt : 0f;
         _lastPos = pos;
+        // still rolling backwards after backing off (#1916): the box is in reverse, where the brake pedal DRIVES. Braking it
+        // toward the crawl ran the car backwards to 62 km/h into a tree and threw the driver. The pedal against the motion
+        // in reverse is the gas: it stops the car, and at a standstill selects first
+        if (Backwards(m) && _go)
+        {
+            _lastSteer = steer;
+            Said = System.FormattableString.Invariant($"stopping its backward roll at {v * 3.6f:F0} km/h, then on");
+            return new RideInput(1f, 0f, 0f, false);
+        }
         _heldS = _go && throttle > 0.3f && moved < 0.5f ? _heldS + dt : 0f;
         if (_heldS > HeldS)
         {
@@ -116,6 +125,9 @@ public sealed class LaneFollower : ILongDriveDriver
             $"off the line {Mathf.Sqrt(bestD):F1} m, its way {Mathf.RadToDeg(angle):F0}°, want {want * 3.6f:F0} km/h, throttle {throttle:F2} brake {brake:F2} steer {steer:F2}");
         return new RideInput(throttle, brake, steer, false);
     }
+
+    /// <summary>Moving backwards (its motion's way more than 90° off its heading), faster than a creep.</summary>
+    internal static bool Backwards(RideMotion m) => m.Speed > 0.5f && Mathf.Cos(m.Slip) < 0f;
 
     /// <summary>The last step's numbers, for the log.</summary>
     public string Said { get; private set; } = "";

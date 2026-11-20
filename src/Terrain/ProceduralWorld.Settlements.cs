@@ -651,7 +651,7 @@ public sealed partial class ProceduralWorld
 
     /// <summary>
     /// A closed solid in the tile's frame: walls from 0.8 m below the lowest footprint corner, a
-    /// gable roof with a short overhang (or a flat one, or a spire on a tower). Each triangle is
+    /// gable roof ending on the walls (or a flat one, or a spire on a tower). Each triangle is
     /// wound by checking its normal against the side it must be seen from, not by bookkeeping
     /// the vertex order — the lesson from FranceBuildings' roofs.
     /// </summary>
@@ -749,20 +749,21 @@ public sealed partial class ProceduralWorld
         }
         else
         {
-            // ridge along u; overhang 0.5 m past every wall
-            const double over = 0.5;
+            // ridge along u; the slopes end on the walls, as a surveyed solid's do: the eaves
+            // and verges past them are the style's overhang slab (RoofOverhangs, with a soffit
+            // under it), never a one-sided lip of the solid's own that shows the sky from below
+            // (#1832)
             double tan = Math.Tan(plan.Pitch * Math.PI / 180);
             double ridge = eave + f.HalfWidth * tan;
-            double lip = eave - over * tan;
-            double l = f.HalfLength + over, w = f.HalfWidth + over;
+            double l = f.HalfLength, w = f.HalfWidth;
             var r0 = At(-l, 0);
             var r1 = At(l, 0);
             // gable ends, flush with the walls
-            Tri(ring[1], eave, ring[2], eave, At(f.HalfLength, 0), ridge, u.E, 0, u.N);
-            Tri(ring[3], eave, ring[0], eave, At(-f.HalfLength, 0), ridge, -u.E, 0, -u.N);
+            Tri(ring[1], eave, ring[2], eave, r1, ridge, u.E, 0, u.N);
+            Tri(ring[3], eave, ring[0], eave, r0, ridge, -u.E, 0, -u.N);
             // the two slopes
-            Quad(At(-l, -w), lip, At(l, -w), lip, r1, ridge, r0, ridge, -v.E, 1, -v.N);
-            Quad(At(l, w), lip, At(-l, w), lip, r0, ridge, r1, ridge, v.E, 1, v.N);
+            Quad(At(-l, -w), eave, At(l, -w), eave, r1, ridge, r0, ridge, -v.E, 1, -v.N);
+            Quad(At(l, w), eave, At(-l, w), eave, r0, ridge, r1, ridge, v.E, 1, v.N);
             top = ridge;
         }
 

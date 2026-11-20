@@ -277,9 +277,12 @@ public partial class BrCrates : Node3D, IOriginContainer
     /// <summary>Whether <paramref name="at"/> stands at the crate: horizontally, and in height when the crate has one.</summary>
     private static bool Near(Crate c, GlobalPos at, float reach)
     {
-        // in Earth positions (#1456): the body may be in another server region's frame than this world
+        // in Earth positions (#1456): the body may be in another server region's frame than this world. A crate on the
+        // ground has no altitude (Ground, -99999 m): measured there, 100 km down LV95's Bessel normal, it lay 5 m aside of
+        // the body standing on it, past the reach (#1787: a bot at a crate's foot gave it up, a dogtag box among them)
+        if (c.Alt == Ground) return at.HorizontalDistanceSquaredTo(GlobalPos.FromLv95(c.E, c.N, at.Alt)) <= reach * reach;
         if (at.HorizontalDistanceSquaredTo(c.At) > reach * reach) return false;
-        return c.Alt == Ground || System.Math.Abs(c.At.OffsetTo(at).Up) < 4f;
+        return System.Math.Abs(c.At.OffsetTo(at).Up) < 4f;
     }
 
     // ------------------------------------------------------------------------------------

@@ -12,14 +12,22 @@ namespace UnitSport.Player;
 /// runway, the take-off, a rocket climb into Space, the drive to orbit height, round the Earth or back over home,
 /// the drive off onto a circular orbit, a retro burn, re-entry, back up into Space and the drive home, out of it
 /// up the landing runway's line, and the orbiter's straight-in approach to a stop on that runway.
-/// Client-side: it steps the body it is given (a server-run bot pilot is #1498, after #1443 G2). The host
-/// (the check, the film) reads <see cref="Now"/>, applies <see cref="WantScale"/> and judges the result.
+/// With <see cref="Mission.Moon"/> (#1498) the orbit is followed by the trip to the Moon (the target hold and the cruise
+/// drive, as a player flies it), a belly-jet landing on a colony's pad, a while there, the climb back into Space and the
+/// trip home to an Earth orbit, then the drive home and the landing as before.
+/// It steps the body it is given wherever that body is simulated: a check's or the film's (it sets their
+/// <see cref="FootPlayer.FlyControls"/>), or a bot's, offline or on a server (<c>Bots/ShuttleBrain</c>, #1498: the bot's
+/// controls read <see cref="Input"/>, <see cref="OwnsControls"/> false). The host reads <see cref="Now"/>, may apply
+/// <see cref="WantScale"/> (a check, the film; never a bot) and judges the result.
 /// </summary>
 public sealed class ShuttlePilot
 {
     /// <summary>A runway: its threshold (LV95), heading (clockwise from grid north, rad), length, half width and height.</summary>
     public sealed record Runway(double E, double N, float Heading, float Length, float HalfWidth, double Elevation)
     {
+        /// <summary>Its threshold as a place, <paramref name="alt"/> m over the sea (the record is LV95: the airports' own grid).</summary>
+        public GlobalPos Place(double alt) => GlobalPos.FromLv95(E, N, alt);
+
         /// <summary>The grid direction along it (east, north).</summary>
         public (double E, double N) Dir => (Math.Sin(Heading), Math.Cos(Heading));
 
@@ -56,11 +64,33 @@ public sealed class ShuttlePilot
     /// toward home: the drive first goes that far out along <paramref name="From"/>'s heading, so the orbit, the
     /// burn and re-entry pass over home and stay within about that reach of it.
     /// </summary>
+    /// <param name="Turns">Round the Earth this many times in the drive (#1498).</param>
+    /// <param name="Moon">After the orbit, to the Moon and down on a pad, then home (#1498).</param>
+    /// <param name="Pad">The Moon pad to land on (<see cref="Terrain.Bodies.MoonPads"/>'s id); null: the nearest free one.</param>
+    /// <param name="MoonStay">Seconds on the Moon before lifting off.</param>
+    /// <param name="LandHome">Back from the Moon, the drive home and the landing; false: it stops in the Earth orbit.</param>
     public sealed record Mission(Runway From, Runway To, (double E, double N, float Heading)? Start = null,
         double OrbitKm = 400, bool RoundTheEarth = true, double CoastSeconds = 120, double PerigeeKm = 45,
-        double AirSeconds = 60, double EntryOut = 80_000, double TurnOutKm = 0);
+        double AirSeconds = 60, double EntryOut = 80_000, double TurnOutKm = 0, int Turns = 1, bool Moon = false,
+        string? Pad = null, double MoonStay = 30, bool LandHome = true);
 
-    public enum Stage { Taxi, LineUp, Roll, Climb, DriveUp, Round, TurnHome, Orbit, Retro, Entry, Air, BackUp, DriveHome, Fall, Glide, Rollout, Stopped, Failed }
+    public enum Stage
+    {
+        Taxi, LineUp, Roll, Climb, DriveUp, Round, TurnHome, Orbit, Retro, Entry, Air, BackUp, DriveHome, Fall, Glide, Rollout,
+        // between bodies and on the Moon (#1498)
+        Clear, AimFor, Cruise, LunarOrbit, Approach, Jets, OnMoon, LiftOff, MoonUp, HomeOrbit,
+        Stopped, Failed,
+    }
+
+    /// <summary>The controls this step, for a host that reads them itself (a bot's <c>FlyControls</c>, #1498).</summary>
+    public FlightInput Input { get; private set; }
+
+    /// <summary>The pilot sets the body's <see cref="FootPlayer.FlyControls"/> itself (the checks, the film); false for a bot, which reads <see cref="Input"/>.</summary>
+    public bool OwnsControls { get; init; } = true;
+
+    /// <summary>The Moon pad it lands on (#1498), once chosen, and how far from its centre it came down, m.</summary>
+    public Terrain.Bodies.MoonPad? LandedPad { get; private set; }
+    public double PadMiss { get; private set; } = double.NaN;
 
     public readonly Mission Plan;
     public Stage Now { get; private set; }
@@ -100,6 +130,9 @@ public sealed class ShuttlePilot
         Now = plan.Start == null ? Stage.LineUp : Stage.Taxi;
         WantScale = 1.0;
     }
+
+    /// <summary>Starts in the orbit it was put in (<c>/orbit</c>, a bot's <c>orbit</c> mission, #1498): the coast, then on.</summary>
+    public void StartInOrbit() => Next(Stage.Orbit, Fast);
 
     /// <summary>Starts at the Fall stage (the landing alone), from where the drive leaves it.</summary>
     public void SkipToLanding() => Next(Stage.Fall, Fast);
@@ -181,7 +214,8 @@ public sealed class ShuttlePilot
     {
         float now = _jet.State.Lever;
         float up = Mathf.Clamp((lever - now) * 6f, 0f, 1f), down = Mathf.Clamp((now - lever) * 6f, 0f, 1f);
-        _p.FlyControls = () => new FlightInput(stick, 0f, 0f, up, down, false, false, 0f, Brake: brake);
+        var input = Input = new FlightInput(stick, 0f, 0f, up, down, false, false, 0f, Brake: brake);
+        if (OwnsControls) _p.FlyControls = () => input;
     }
 
     /// <summary>
@@ -243,7 +277,9 @@ public sealed class ShuttlePilot
                 {
                     Say(FormattableString.Invariant($"{Plan.OrbitKm:F0} km reached in the drive, {s.Tas / 1000:F1} km/s, after {StageTime:F0} s"));
                     _last = Here;
-                    Next(Plan.RoundTheEarth ? Stage.Round : Stage.TurnHome, Fast);
+                    // to the Moon (#1498): off into the orbit first, the trip from there
+                    if (Plan.Moon) DriveOff();
+                    else Next(Plan.RoundTheEarth ? Stage.Round : Stage.TurnHome, Fast);
                 }
                 if (StageTime > 600) Fail(FormattableString.Invariant($"not at {Plan.OrbitKm:F0} km after 10 min of drive: {alt / 1000:F0} km"));
                 return;
@@ -257,9 +293,9 @@ public sealed class ShuttlePilot
                 _travel += Angle(_last, here);
                 _last = here;
                 if (Math.Abs(alt - top) > 20_000) { Fail(FormattableString.Invariant($"the drive strayed to {alt / 1000:F0} km")); return; }
-                if (_travel >= 2 * Math.PI)
+                if (_travel >= 2 * Math.PI * Math.Max(1, Plan.Turns))
                 {
-                    Say(FormattableString.Invariant($"round the Earth in the drive in {StageTime:F0} s at {s.Tas / 1000:F1} km/s; now at {alt / 1000:F1} km"));
+                    Say(FormattableString.Invariant($"round the Earth {Math.Max(1, Plan.Turns)} time(s) in the drive in {StageTime:F0} s at {s.Tas / 1000:F1} km/s; now at {alt / 1000:F1} km"));
                     DriveOff();
                 }
                 if (StageTime > 3600) Fail("not round the Earth after an hour");
@@ -292,14 +328,19 @@ public sealed class ShuttlePilot
             {
                 Fly(Vector2.Zero, 0f);
                 if (jet.DriveOn || jet.Space!.Orbit is not { } o) { if (StageTime > 2) Fail("no orbit after the drive went off"); return; }
-                var (peri, apo, _) = Orbit.Apsides(Planet.Earth, o);
+                var (peri, apo, _) = Orbit.Apsides(CelestialBody.Earth, o);
                 if (OrbitApsides == null && StageTime >= 0.5)
                 {
                     OrbitApsides = (peri, apo);
-                    double r0 = Planet.Earth.Shape.A;
+                    double r0 = CelestialBody.Earth.Shape.A;
                     Say(FormattableString.Invariant($"in orbit: perigee {(peri - r0) / 1000:F1} km, apogee {(apo - r0) / 1000:F1} km, {o.V.Length:F0} m/s"));
                 }
-                if (StageTime > Plan.CoastSeconds) Next(Stage.Retro, Fast);
+                if (StageTime > Plan.CoastSeconds)
+                {
+                    // to the Moon first (#1498), once
+                    if (Plan.Moon && !_moonDone) Travel(BodyId.Moon, Stage.LunarOrbit);
+                    else Next(Stage.Retro, Fast);
+                }
                 return;
             }
             case Stage.Retro:
@@ -316,7 +357,7 @@ public sealed class ShuttlePilot
                 float rollErr = off > 0.2f ? Mathf.Atan2(t.X, Mathf.Abs(t.Y) + 1e-3f) * Mathf.Sign(t.Y == 0 ? 1f : t.Y) : 0f;
                 var o = jet.Space!.Orbit;
                 double target = Plan.PerigeeKm * 1000;
-                double perigee = o is { } orbit ? Orbit.Apsides(Planet.Earth, orbit).Periapsis - Planet.Earth.Shape.A : double.NaN;
+                double perigee = o is { } orbit ? Orbit.Apsides(CelestialBody.Earth, orbit).Periapsis - CelestialBody.Earth.Shape.A : double.NaN;
                 bool burn = off < 0.05f && perigee > target;
                 Fly(off > 0.03f ? new Vector2(Mathf.Clamp(rollErr, -0.4f, 0.4f), Mathf.Clamp(pitchErr * 0.8f, -0.4f, 0.4f)) : Vector2.Zero, burn ? 1f : 0f);
                 if (o != null && perigee <= target && s.Spool <= jet.Spec.IdleSpool + 0.02f)
@@ -357,6 +398,19 @@ public sealed class ShuttlePilot
                 if (StageTime > 900) Fail("not back in Space");
                 return;
             case Stage.DriveHome: DriveHome(alt, elev, bank); return;
+            case Stage.Clear: Clear(); return;
+            case Stage.AimFor: AimFor(); return;
+            case Stage.Cruise: Cruise(); return;
+            case Stage.LunarOrbit: LunarOrbit(); return;
+            case Stage.Approach: Approach(alt); return;
+            case Stage.Jets: Jets(); return;
+            case Stage.OnMoon:
+                Fly(Vector2.Zero, 0f, brake: 1f);
+                if (StageTime > Plan.MoonStay) { Say("lifting off the Moon"); Next(Stage.LiftOff, 1.0); }
+                return;
+            case Stage.LiftOff: LiftOff(); return;
+            case Stage.MoonUp: MoonUp(alt); return;
+            case Stage.HomeOrbit: HomeOrbit(alt); return;
             case Stage.Fall: Fall(alt, elev, bank); return;
             case Stage.Glide: Glide(alt, agl, bank, dt); return;
             case Stage.Rollout: Rollout(); return;
@@ -501,5 +555,309 @@ public sealed class ShuttlePilot
         StoppedAt = Plan.To.Of(g);
         Say(FormattableString.Invariant($"stopped {StoppedAt.Along:F0} m past the threshold, {StoppedAt.Across:F1} m off the centreline"));
         Next(Stage.Stopped, 1.0);
+    }
+
+    // ---- between bodies and on the Moon (#1498) ---------------------------------------------------
+
+    private BodyId _target;
+    private Stage _arrive;
+    private double _closest = double.MaxValue;
+    private bool _moonDone, _upDone;
+
+    /// <summary>How high over its pad the descent in the drive aims (under the Moon's 8 km Space exit, so it drops out on the way), m.</summary>
+    public const float ApproachHeightM = 5_000f;
+
+    /// <summary>The descent turns from level to straight at its aim point once that lies this far under the horizon, rad (35°).</summary>
+    private const float DiveAngle = 0.61f;
+
+    /// <summary>The trip to <paramref name="target"/>'s arrival orbit, as a player flies it (the target hold, the drive), then <paramref name="arrive"/>.</summary>
+    private void Travel(BodyId target, Stage arrive)
+    {
+        _target = target;
+        _arrive = arrive;
+        _closest = double.MaxValue;
+        Say($"off to {CelestialBody.Of(target).Name}");
+        Next(Stage.Clear, Fast);
+    }
+
+    /// <summary>
+    /// The direction to a body's centre (world) and the distance to its surface, m, from the craft, in the frame of the body
+    /// the world is on; null without one (the flat LV95 frame has no other bodies).
+    /// </summary>
+    private (Vector3 Direction, double Distance)? Toward(BodyId target)
+    {
+        if (_frame.Axes is not { } axes) return null;
+        var centre = Frames.Convert(target, DVec3.Zero, axes.Body, SkyClock.Now);
+        var c = _p.GlobalPosition;
+        var e = axes.ToEcef(c.X, c.Y, c.Z);
+        var to = centre - new DVec3(e.X, e.Y, e.Z);
+        double length = to.Length;
+        var dir = length > 0 ? to / length : new DVec3(0, 0, -1);
+        var world = new Vector3((float)FrameAxes.Dot(dir.AsEcef, axes.X), (float)FrameAxes.Dot(dir.AsEcef, axes.Y), (float)FrameAxes.Dot(dir.AsEcef, axes.Z));
+        return (world.Normalized(), Math.Max(0, length - CelestialBody.Of(target).Shape.A));
+    }
+
+    /// <summary>What the target hold aims at: the tangent of the target's arrival orbit (<see cref="ShuttleFlight.TangentAim"/>), or its centre.</summary>
+    private Vector3? TangentFor(BodyId target)
+    {
+        if (Toward(target) is not { } toward) return null;
+        var body = CelestialBody.Of(target);
+        return ShuttleFlight.TangentAim(toward.Direction, toward.Distance + body.Shape.A, body.Shape.A + ShuttleFlight.ArrivalM(body), _jet.Nose)
+            ?? toward.Direction;
+    }
+
+    /// <summary>
+    /// The line along <paramref name="aim"/> from the craft passes within <paramref name="margin"/> (200 km) of the surface of
+    /// the body the world is on. The hold gives up a turn only past a smaller margin (50 km): at the limit, the same one
+    /// both ways flipped the two stages every frame.
+    /// </summary>
+    private bool Blocked(Vector3 aim, double margin = 200_000)
+    {
+        if (_frame.Axes is not { } axes) return false;
+        var p = _p.GlobalPosition;
+        var e = axes.ToEcef(p.X, p.Y, p.Z);
+        var at = new DVec3(e.X, e.Y, e.Z);
+        var dir = new DVec3(axes.X.X * aim.X + axes.Y.X * aim.Y + axes.Z.X * aim.Z,
+            axes.X.Y * aim.X + axes.Y.Y * aim.Y + axes.Z.Y * aim.Z,
+            axes.X.Z * aim.X + axes.Y.Z * aim.Y + axes.Z.Z * aim.Z).Normalized();
+        double t = -(at.X * dir.X + at.Y * dir.Y + at.Z * dir.Z);
+        if (t <= 0) return false;
+        return (at + dir * t).Length < CelestialBody.Of(axes.Body).Shape.A + margin;
+    }
+
+    /// <summary>
+    /// The way to the target clear of the body it is round: on to the hold. Else straight up in the drive until it is (a
+    /// player coasts round until the target rises; the drive up is quicker, and a bot keeps real time).
+    /// </summary>
+    private void Clear()
+    {
+        if (TangentFor(_target) is not { } aim) { Fail("no frame between bodies here (an earth world is needed)"); return; }
+        var up = _frame.UpAt(_p.GlobalPosition);
+        if (!Blocked(aim))
+        {
+            // the drive off out here: a circular orbit to turn in
+            if (_jet.DriveOn && !_p.ShuttleDrive(_jet)) { Fail("the drive would not switch off"); return; }
+            _jet.Aim = null;
+            Say(FormattableString.Invariant($"{CelestialBody.Of(_target).Name} clear of {CelestialBody.Of(_frame.Axes!.Body).Name} at {_frame.AltitudeOf(_p.GlobalPosition) / 1000:F0} km"));
+            Next(Stage.AimFor, Fast);
+            return;
+        }
+        _jet.Aim = up;
+        if (!_jet.DriveOn)
+        {
+            Fly(Vector2.Zero, 0f);
+            if (_jet.Nose.AngleTo(up) < 0.035f && !_p.ShuttleDrive(_jet)) Fail("the drive would not switch on to climb clear");
+        }
+        else Fly(Vector2.Zero, 1f);
+        if (StageTime > 900) Fail("not clear of the body after 15 min");
+    }
+
+    /// <summary>The target hold turns the nose onto the arrival orbit's tangent; within 1° the drive goes on.</summary>
+    private void AimFor()
+    {
+        if (TangentFor(_target) is not { } aim) { Fail("lost the frame between bodies"); return; }
+        _jet.Aim = aim;
+        Fly(Vector2.Zero, 0f);
+        if (Blocked(aim, 50_000)) { Next(Stage.Clear, Fast); return; }
+        if (_jet.Nose.AngleTo(aim) < Mathf.DegToRad(1f))
+        {
+            if (!_p.ShuttleDrive(_jet)) { Fail("the drive would not switch on for the trip"); return; }
+            Say($"aligned on {CelestialBody.Of(_target).Name}: the drive on, full lever");
+            Next(Stage.Cruise, Fast);
+        }
+        if (StageTime > 180) Fail("could not turn onto the trip in 3 min");
+    }
+
+    /// <summary>The drive at full lever along the held tangent; off where it passes the arrival height: an orbit round the target.</summary>
+    private void Cruise()
+    {
+        if (!_jet.DriveOn) { if (StageTime > 0.5) Fail("the drive went off on the trip"); return; }
+        _jet.Aim = TangentFor(_target);
+        Fly(Vector2.Zero, 1f);
+        double d = _jet.DriveDistance, arrival = ShuttleFlight.ArrivalM(CelestialBody.Of(_target));
+        bool inSphere = _frame.Axes?.Body == _target;
+        if (inSphere) _closest = Math.Min(_closest, d);
+        bool there = inSphere && (d <= arrival * 1.02 || d < 2 * arrival && d > _closest + 50);
+        if (!there)
+        {
+            if (StageTime > 900) Fail(FormattableString.Invariant($"still {d / 1000:F0} km out after 15 min in the drive"));
+            return;
+        }
+        _jet.Aim = null;
+        if (!_p.ShuttleDrive(_jet)) { Fail("the drive would not switch off at the arrival"); return; }
+        Say(FormattableString.Invariant($"at {CelestialBody.Of(_target).Name}: the drive off {d / 1000:F0} km over it after {StageTime:F0} s"));
+        Next(_arrive, Fast);
+    }
+
+    /// <summary>The craft's unit normal on the body the world is on (body-fixed).</summary>
+    private EcefPos NormalHere()
+    {
+        var e = _frame.ToEcef(_p.GlobalPosition);
+        double l = Math.Sqrt(e.X * e.X + e.Y * e.Y + e.Z * e.Z);
+        return new EcefPos(e.X / l, e.Y / l, e.Z / l);
+    }
+
+    /// <summary>The Moon's heights here (the client's ground: a server has none before C3b), or null.</summary>
+    private static Terrain.Bodies.BodyHeights? MoonHeights => World.Bodies.BodyGround.Active is { Body.Id: BodyId.Moon } g ? g.Heights : null;
+
+    /// <summary>The pad's ground point, world (the Moon's heights there when this peer has them, else its sphere).</summary>
+    private Vector3 PadWorld()
+    {
+        var n = LandedPad!.Value.Centre;
+        if (MoonHeights is { } h) return _frame.FromEcef(h.Ground(n));
+        double a = CelestialBody.Moon.Shape.A;
+        return _frame.FromEcef(new EcefPos(n.X * a, n.Y * a, n.Z * a));
+    }
+
+    /// <summary>The craft's height over the Moon's ground under it, m (its sphere's when there are no heights here).</summary>
+    private double OverGround()
+    {
+        double ground = MoonHeights?.At(NormalHere()) ?? 0;
+        return _frame.AltitudeOf(_p.GlobalPosition) - ground;
+    }
+
+    private void LunarOrbit()
+    {
+        _moonDone = true;
+        Fly(Vector2.Zero, 0f);
+        if (StageTime < 3) return;
+        if (_jet.Space?.Orbit is null || _frame.Axes?.Body != BodyId.Moon) { Fail("no lunar orbit after the trip"); return; }
+        var pad = Plan.Pad != null ? Terrain.Bodies.MoonPads.Find(Plan.Pad) : Terrain.Bodies.MoonPads.NearestFree(NormalHere())?.Pad;
+        if (pad == null) { Fail($"no pad '{Plan.Pad ?? "free"}' on the Moon"); return; }
+        LandedPad = pad;
+        double away = Math.Acos(Math.Clamp(Dot(NormalHere(), pad.Value.Centre), -1, 1)) * CelestialBody.Moon.Shape.A;
+        Say(FormattableString.Invariant($"in lunar orbit: down to {pad.Value.Id} ({pad.Value.Colony}), {away / 1000:F0} km round the Moon"));
+        Next(Stage.Approach, Fast);
+    }
+
+    private static double Dot(EcefPos a, EcefPos b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+
+    /// <summary>
+    /// Down toward the pad in the drive: level over the Moon toward it, then, once its aim point (5 km over it) lies 35°
+    /// under the horizon, straight at that point, the speed by the distance; the drive drops out at the Space exit (8 km)
+    /// on the way, and the belly jets take it.
+    /// </summary>
+    private void Approach(double alt)
+    {
+        var pos = _p.GlobalPosition;
+        var up = _frame.UpAt(pos);
+        var pad = PadWorld();
+        var point = pad + _frame.UpAt(pad) * ApproachHeightM;
+        var to = point - pos;
+        float dist = to.Length();
+        var flat = to - up * to.Dot(up);
+        float dive = Mathf.Asin(Mathf.Clamp(-to.Dot(up) / Mathf.Max(dist, 1f), -1f, 1f));
+        bool diving = dive > DiveAngle || flat.Length() < 1f;
+        var aim = diving ? to / Mathf.Max(dist, 1f) : flat.Normalized();
+        _jet.Aim = aim;
+        if (_jet.Lander)
+        {
+            _jet.Aim = null;
+            Say(FormattableString.Invariant($"on the belly jets at {OverGround() / 1000:F1} km, {_jet.State.Velocity.Length():F0} m/s, {(pad - pos).Length() / 1000:F1} km from the pad"));
+            Next(Stage.Jets, Near);
+            return;
+        }
+        if (!_jet.DriveOn)
+        {
+            Fly(Vector2.Zero, 0f);
+            if (_jet.Nose.AngleTo(aim) < 0.03f && !_p.ShuttleDrive(_jet)) Fail("the drive would not switch on for the descent");
+            if (StageTime > 120 && !_jet.DriveOn) Fail("could not turn toward the pad in 2 min");
+            return;
+        }
+        // slow enough at the drop-out (~100-150 m/s some kilometres short) for the jets' slide to stop it over the pad
+        float speed = diving ? Mathf.Clamp(dist / 40f, 80f, 1_500f) : Mathf.Clamp(flat.Length() / 25f, 300f, 100_000f);
+        Fly(Vector2.Zero, ShuttleFlight.DriveLever(speed, alt));
+        if (StageTime > 1800) Fail("not down to the pad after 30 min in the drive");
+    }
+
+    /// <summary>
+    /// The belly jets to the pad: the slide toward it (at most 40 m/s, slowing within 500 m), the height held to 0.4 of the
+    /// distance left (and at least 150 m over the ground under it), then straight down at a tenth of the height.
+    /// </summary>
+    private void Jets()
+    {
+        if (!_jet.Lander) { if (StageTime > 1) Fail("off the belly jets on the way down"); return; }
+        var pos = _p.GlobalPosition;
+        var up = _frame.UpAt(pos);
+        var pad = PadWorld();
+        var r = pad - pos;
+        float h = -r.Dot(up);
+        var rh = r + up * h;
+        float dist = rh.Length();
+        var v = _jet.State.Velocity;
+        float vs = v.Dot(up);
+        var vh = v - up * vs;
+        var want = dist > 0.5f ? rh / dist * Mathf.Min(dist / 12f, 40f) : Vector3.Zero;
+        var dv = want - vh;
+        var nose = _jet.Nose;
+        var ahead = (nose - up * nose.Dot(up)).Normalized();
+        var right = ahead.Cross(up).Normalized();
+        var stick = new Vector2(Mathf.Clamp(dv.Dot(right) / 3f, -1f, 1f), Mathf.Clamp(-dv.Dot(ahead) / 3f, -1f, 1f));
+        var moon = CelestialBody.Moon;
+        double rr = moon.Shape.A + _frame.AltitudeOf(pos);
+        float g = (float)(moon.GM / (rr * rr));
+        float vsWant = dist > 40f
+            ? Mathf.Clamp((Mathf.Clamp(dist * 0.4f, 40f, 6_000f) - h) / 8f, -40f, 15f)
+            : -Mathf.Clamp(h / 10f, 1.2f, 40f);
+        if (dist > 40f && OverGround() < 150) vsWant = Mathf.Max(vsWant, 5f);
+        float lever = Mathf.Clamp((g + (vsWant - vs) * 1.2f) / ShuttleFlight.BellyAccel, 0f, 1f);
+        if (h < 1_500 && !_jet.State.GearDown) _jet.Command(AirlinerCommand.Gear);
+        Fly(stick, lever);
+        if (_jet.State.OnGround)
+        {
+            PadMiss = dist;
+            Say(FormattableString.Invariant($"down on the Moon at {LandedPad!.Value.Id}: {_jet.TouchSink:F2} m/s, {dist:F1} m from its centre (radius {LandedPad.Value.RadiusM:F0} m) after {StageTime:F0} s on the jets"));
+            Next(Stage.OnMoon, 1.0);
+        }
+        if (StageTime > 900) Fail(FormattableString.Invariant($"not down after 15 min on the jets: {h:F0} m up, {dist:F0} m from the pad"));
+    }
+
+    /// <summary>The belly jets up into Space (the Moon's 10 km), the gear up past 200 m.</summary>
+    private void LiftOff()
+    {
+        Fly(Vector2.Zero, 0.8f);
+        if (OverGround() > 200 && _jet.State.GearDown) _jet.Command(AirlinerCommand.Gear);
+        if (!_jet.Lander && _jet.InSpace)
+        {
+            _upDone = false;
+            Next(Stage.MoonUp, Fast);
+        }
+        if (StageTime > 300) Fail("not in Space 5 min after lifting off the Moon");
+    }
+
+    /// <summary>The nose up, the drive to 100 km, then home.</summary>
+    private void MoonUp(double alt)
+    {
+        var up = _frame.UpAt(_p.GlobalPosition);
+        _jet.Aim = up;
+        if (!_jet.DriveOn && !_upDone)
+        {
+            Fly(Vector2.Zero, 0f);
+            if (_jet.Nose.AngleTo(up) < 0.035f)
+            {
+                if (!_p.ShuttleDrive(_jet)) { Fail("the drive would not switch on over the Moon"); return; }
+                _upDone = true;
+            }
+            if (StageTime > 120) Fail("could not turn the nose up over the Moon");
+            return;
+        }
+        Fly(Vector2.Zero, 0.3f);
+        if (alt >= 100_000) Travel(BodyId.Earth, Stage.HomeOrbit);
+        if (StageTime > 600) Fail("not at 100 km over the Moon after 10 min");
+    }
+
+    /// <summary>Home in an Earth orbit: the drive home and the landing, or stopped there.</summary>
+    private void HomeOrbit(double alt)
+    {
+        Fly(Vector2.Zero, 0f);
+        if (StageTime < 2) return;
+        if (_jet.Space?.Orbit is not { } o || _frame.Axes?.Body != BodyId.Earth) { Fail("no Earth orbit after the trip home"); return; }
+        var earth = CelestialBody.Earth;
+        var (peri, apo, _) = Orbit.Apsides(earth, o);
+        OrbitApsides = (peri, apo);
+        Say(FormattableString.Invariant($"home in an Earth orbit: {(peri - earth.Shape.A) / 1000:F1} x {(apo - earth.Shape.A) / 1000:F1} km at {alt / 1000:F0} km"));
+        if (!Plan.LandHome) { Next(Stage.Stopped, 1.0); return; }
+        if (!_p.ShuttleDrive(_jet)) { Fail("the drive would not switch on to come home"); return; }
+        Next(Stage.DriveHome, Fast);
     }
 }

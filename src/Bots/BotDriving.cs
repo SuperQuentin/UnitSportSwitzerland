@@ -22,6 +22,24 @@ public sealed class BotDrive
     public bool Stopping;
     /// <summary>Since when it has made no headway (a car on its nose, in a hedge): it gets out and walks.</summary>
     public double StillSince;
+    /// <summary>
+    /// A drive straight across open ground (<see cref="BotDriving.Across"/>, #1976: the Moon has no roads): the point it
+    /// steers for, in the body's frame, set again every thought (the world is re-anchored now and then); null on a road.
+    /// </summary>
+    public Vector3? Direct;
+    /// <summary>The top speed of a drive across, m/s.</summary>
+    public float DirectSpeed = 4f;
+    /// <summary>A drive across's nearest yet to its point, and when: no nearer in 20 s and it gives up (circling it).</summary>
+    public float DirectBest = float.MaxValue;
+    public double DirectBestAt;
+    /// <summary>
+    /// A drive across caught on something it cannot see (a boulder round a fresh crater, a jamb): backing out, the wheel
+    /// turned, until this clock; the side alternates each time.
+    /// </summary>
+    public double UnstickUntil;
+    public float UnstickSteer = 1f;
+    public Vector3 HeadwayFrom;
+    public double HeadwayAt;
 }
 
 /// <summary>
@@ -148,6 +166,103 @@ public static class BotDriving
         return how;
     }
 
+    /// <summary>Within this of the point a drive across steers for, it has arrived, metres.</summary>
+    public const float AcrossArrive = 6f;
+
+    /// <summary>
+    /// In a vehicle, straight across open ground to <paramref name="goal"/> (#1976): no roads to plan along (the Moon's
+    /// colonies), the wheel turned at the point and the speed eased as it nears it, at most <paramref name="speed"/> m/s.
+    /// Call it every thought with the goal in the body's frame now. <see cref="Progress.Arrived"/> within
+    /// <see cref="AcrossArrive"/>, <see cref="Progress.Failed"/> stuck under 1 m/s for 6 s; either way the caller gets out
+    /// (<see cref="GetOut"/>). Nothing on its way is steered round: what the brain asks for is a clear line.
+    /// </summary>
+    public static Progress Across(Bot bot, Vector3 goal, float speed, double now)
+    {
+        var body = bot.Body;
+        var drive = bot.Drive;
+        if (drive.Direct == null)
+        {
+            drive.StillSince = now;
+            drive.DirectBest = float.MaxValue;
+            drive.DirectBestAt = now;
+        }
+        drive.Direct = goal;
+        drive.DirectSpeed = speed;
+        float dist = Flat(goal - body.GlobalPosition);
+        var fwd = -body.GlobalBasis.Z;
+        var to = goal - body.GlobalPosition;
+        bool behind = new Vector2(fwd.X, fwd.Z).Dot(new Vector2(to.X, to.Z)) < 0;
+        // there, or close by with it behind (a turn round it would circle it)
+        if (dist < AcrossArrive || dist < AcrossArrive * 2.5f && behind)
+        {
+            drive.Direct = null;
+            return Stop(drive, Progress.Arrived, "at the goal");
+        }
+        if (dist < drive.DirectBest - 1f)
+        {
+            drive.DirectBest = dist;
+            drive.DirectBestAt = now;
+        }
+        // 20 s: a 6 t rover facing away turns round before it gains a metre (10 s gave up mid-turn)
+        else if (now - drive.DirectBestAt > 20)
+        {
+            drive.Direct = null;
+            return Stop(drive, Progress.Failed, $"no nearer in 20 s ({dist:F0} m off)");
+        }
+        // caught (the wheels turning, the body not moving: a boulder, a jamb): back out with the wheel turned, then on
+        if (now >= drive.UnstickUntil)
+        {
+            if ((body.GlobalPosition - drive.HeadwayFrom).Length() > 0.5f || drive.HeadwayAt == 0)
+            {
+                drive.HeadwayFrom = body.GlobalPosition;
+                drive.HeadwayAt = now;
+            }
+            else if (now - drive.HeadwayAt > 3)
+            {
+                drive.UnstickUntil = now + 2.5;
+                drive.UnstickSteer = -drive.UnstickSteer;
+                drive.HeadwayAt = now + 2.5;
+                var hits = new System.Text.StringBuilder();
+                for (int i = 0; i < body.GetSlideCollisionCount(); i++)
+                {
+                    var c = body.GetSlideCollision(i);
+                    if (c.GetNormal().Y > 0.7f) continue;
+                    hits.Append($" {(c.GetCollider() as Node)?.GetPath()} n{c.GetNormal()}");
+                }
+                GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" caught {dist:F0} m short: backing out;{hits}");
+            }
+        }
+        if (body.RideSpeed > StuckSpeed) drive.StillSince = now;
+        else if (now - drive.StillSince > StuckSeconds && now >= drive.UnstickUntil)
+        {
+            drive.Direct = null;
+            return Stop(drive, Progress.Failed, "stuck");
+        }
+        return Progress.Driving;
+    }
+
+    /// <summary>A drive across's controls: the wheel at the point (+ right), gas up to the speed it wants there, else the brake.</summary>
+    private static RideInput AcrossControls(Bot bot, Vector3 goal)
+    {
+        var body = bot.Body;
+        // backing out: the brake at a standstill is reverse, the wheel to one side
+        if (BotDirector.Clock < bot.Drive.UnstickUntil) return new RideInput(0f, 1f, bot.Drive.UnstickSteer, false);
+        var fwd = -body.GlobalBasis.Z;
+        fwd.Y = 0;
+        var to = goal - body.GlobalPosition;
+        to.Y = 0;
+        float dist = to.Length();
+        if (dist < 0.1f || fwd.LengthSquared() < 1e-4f) return new RideInput(0f, 1f, 0f, false);
+        float err = fwd.SignedAngleTo(to, Vector3.Up);   // + the point is to the left
+        float steer = Mathf.Clamp(-err * 1.6f, -1f, 1f);
+        // slow for a turn and for the stop: a third of the speed with the point abeam, easing to it 2 m short
+        float want = Mathf.Min(bot.Drive.DirectSpeed * Mathf.Lerp(1f, 0.35f, Mathf.Min(Mathf.Abs(err) / 1.2f, 1f)), 0.5f + (dist - 2f) * 0.5f);
+        float v = body.RideSpeed;
+        float throttle = v < want ? Mathf.Clamp((want - v) * 0.6f + 0.3f, 0f, 1f) : 0f;
+        float brake = v > want + 0.8f ? Mathf.Clamp((v - want) * 0.4f, 0f, 1f) : 0f;
+        return new RideInput(throttle, brake, steer, false);
+    }
+
     /// <summary>Brakes (the pilot's finish), then gets out once slow. True once on foot.</summary>
     public static bool GetOut(Bot bot)
     {
@@ -168,11 +283,14 @@ public static class BotDriving
         bot.Drive.Planning = null;
         bot.Drive.Stopping = false;
         bot.Drive.Why = "";
+        bot.Drive.Direct = null;
     }
 
     /// <summary>What the body's <c>RideControls</c> read: the pilot when there is one, else the handbrake.</summary>
     public static RideInput Controls(Bot bot, float dt) =>
-        bot.Drive.Pilot is { } pilot ? pilot.Drive(dt, true, World.RaceManager.Others(bot.Body)) : new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        bot.Drive.Pilot is { } pilot ? pilot.Drive(dt, true, World.RaceManager.Others(bot.Body))
+        : bot.Drive.Direct is { } goal ? AcrossControls(bot, goal)
+        : new RideInput(0f, 0f, 0f, false, Handbrake: true);
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
 }

@@ -94,6 +94,22 @@ public partial class PlayerFeel : Node3D
         Name = "Feel";
     }
 
+    /// <summary>
+    /// The body parked by the fly camera stops processing (#2036): its screen goes with it. Left as it was, the layer stayed
+    /// up with a landing's "AIR 0.9 s" frozen on it over the whole flight, out to Saturn.
+    /// </summary>
+    /// <summary>Whether this player's feel layer (its HUD lines and popups) is on screen (#2036's check).</summary>
+    internal bool ScreenShown => _screen != null && _screen.Visible && (_popup.Visible || _speedLabel.Visible);
+
+    public override void _Notification(int what)
+    {
+        if (what != NotificationDisabled || _screen == null) return;
+        _screen.Visible = false;
+        _popupLife = 0;
+        _popup.Visible = false;
+        _airTime = 0;
+    }
+
     public override void _Ready()
     {
         _hiss = Loop(SfxSynth.Hiss);
@@ -911,13 +927,15 @@ public partial class PlayerFeel : Node3D
     /// A saucer in Space (#1430 H5): its speed in space, its height, and the orbit's lowest and highest
     /// points over the ground under it (the periapsis under the ground: it is falling back).
     /// </summary>
-    private static void AppendOrbit(System.Text.StringBuilder sb, OrbitState orbit)
+    private static void AppendOrbit(System.Text.StringBuilder sb, OrbitState orbit, CelestialBody? body = null)
     {
-        var earth = Planet.Earth;
+        var earth = body ?? CelestialBody.Earth;
         double h = earth.Shape.ToGeodetic(orbit.R.AsEcef).H;
         double ground = orbit.R.Length - h;
         var (peri, apo, _) = Orbit.Apsides(earth, orbit);
-        sb.Append(System.FormattableString.Invariant($"ORBIT {orbit.V.Length / 1000:0.00} km/s    {h / 1000:0.0} km    Pe {(peri - ground) / 1000:0} km"));
+        // another body's name in front of the line (#1851): ORBIT Moon 1.63 km/s ...
+        string name = earth.Id == BodyId.Earth ? "" : earth.Name + " ";
+        sb.Append(System.FormattableString.Invariant($"ORBIT {name}{orbit.V.Length / 1000:0.00} km/s    {h / 1000:0.0} km    Pe {(peri - ground) / 1000:0} km"));
         sb.Append(double.IsFinite(apo) ? System.FormattableString.Invariant($"    Ap {(apo - ground) / 1000:0} km") : "    ESCAPE");
     }
 
@@ -932,11 +950,17 @@ public partial class PlayerFeel : Node3D
             if (a.DriveOn)
                 sb.Append(System.FormattableString.Invariant($"DRIVE {s.Velocity.Length() / 1000f:0.00} km/s    {altitude / 1000f:0.0} km    LEVER {s.Lever * 100f:0}%"));
             else if (a.Space?.Orbit is { } orbit)
-                AppendOrbit(sb, orbit);
+                AppendOrbit(sb, orbit, a.Space.Body);
+        }
+        else if (a.Lander)
+        {
+            // the belly jets over an airless body (#1851): the radar height, the way down and the slide, the jets' lever
+            float across = Mathf.Sqrt(Mathf.Max(0f, s.Velocity.LengthSquared() - a.VerticalSpeed * a.VerticalSpeed));
+            sb.Append(System.FormattableString.Invariant($"JETS {s.Lever * 100f:0}%    RADAR {a.Clearance:0} m    V/S {a.VerticalSpeed:+0.0;-0.0;0.0}    SLIDE {across:0.0}"));
         }
         else
             sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
-        if (!a.DriveOn) sb.Append(a.Spec.Rocket ? "    THRUST " : "    N1 ").Append((int)(s.Spool * 100f + 0.5f)).Append('%');
+        if (!a.DriveOn && !a.Lander) sb.Append(a.Spec.Rocket ? "    THRUST " : "    N1 ").Append((int)(s.Spool * 100f + 0.5f)).Append('%');
         if (s.Reverse > 0.05f) sb.Append(" REV");
         // the configuration on a line of its own: one line ran under the corner's key hints (#420)
         sb.Append('\n');
@@ -949,6 +973,13 @@ public partial class PlayerFeel : Node3D
         // re-entry's glow, and the drive's switch where it may be thrown (#1492)
         if (a.Heat > 0.02f) sb.Append("HEAT ").Append((int)(a.Heat * 100f + 0.5f)).Append("%    ");
         if (a.DriveAvailable) sb.Append(a.DriveOn ? "DRIVE ON [" : "DRIVE OFF [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]    ");
+        // the target cue in Space (#1851): a tap the next body, a hold turns the nose onto its arrival orbit
+        if (a.InSpace)
+        {
+            sb.Append("TARGET ");
+            if (SpectatorTargets.Instance?.Target is { } t) sb.Append(Core.CelestialBody.Of(t).Name).Append(' ');
+            sb.Append('[').Append(Core.InputHints.Label(Core.PlayerInput.SpectatorTarget)).Append("]    ");
+        }
         sb.Append(s.GearBroken ? "GEAR DAMAGED" : s.Gear >= 1f ? "GEAR DOWN" : s.Gear <= 0f ? "GEAR UP" : "GEAR MOVING");
         if (s.SpeedBrake > 0) sb.Append(s.SpeedBrake == 1 ? "    SPD BRK ½" : "    SPD BRK FULL");
         if (s.ParkingBrake) sb.Append("    PARK BRK");
@@ -1043,8 +1074,16 @@ public partial class PlayerFeel : Node3D
             }
             else if (_player.Vehicle is Airliner jetliner)
                 AppendAirliner(sb, jetliner);
-            else if (_player.Vehicle is Ufo { Orbit: { } orbit })
-                AppendOrbit(sb, orbit);
+            else if (_player.Vehicle is Ufo { InSpace: true } saucer)
+            {
+                // the cruise drive or the orbit (#1851), the drive's switch, the target cue
+                float alt = _player.Origin is { } o ? (float)o.AltitudeOf(_player.GlobalPosition) : 0f;
+                if (saucer.DriveOn) sb.Append(System.FormattableString.Invariant($"DRIVE {saucer.State.Velocity.Length() / 1000f:0.00} km/s    {alt / 1000f:0.0} km    LEVER {saucer.DriveLever * 100f:0}%"));
+                else if (saucer.Orbit is { } orbit) AppendOrbit(sb, orbit, saucer.Space.Body);
+                sb.Append('\n').Append(saucer.DriveOn ? "DRIVE ON [" : "DRIVE OFF [").Append(Core.InputHints.Label(Core.PlayerInput.EngineToggle)).Append("]    TARGET ");
+                if (SpectatorTargets.Instance?.Target is { } t) sb.Append(Core.CelestialBody.Of(t).Name).Append(' ');
+                sb.Append('[').Append(Core.InputHints.Label(Core.PlayerInput.SpectatorTarget)).Append(']');
+            }
             else if (_player.IsFlying)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");

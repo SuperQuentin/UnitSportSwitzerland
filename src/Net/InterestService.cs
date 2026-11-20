@@ -85,6 +85,14 @@ public partial class InterestService : Node
     private readonly List<Lv95Coord> _lv95 = new();
     private readonly List<float> _agl = new();
     private readonly List<RideKind> _ride = new();
+    /// <summary>Per round, parallel to <see cref="_targets"/>: how far each one's place may be off, m (a fast body's way in <see cref="SlackSeconds"/>).</summary>
+    private readonly List<float> _slack = new();
+
+    /// <summary>
+    /// How much of a fast body's travel the interest test forgives, s: what the server knows of two saucers flying 16 m
+    /// apart in orbit came through two latencies, up to a second apart on a loaded server, 3-8 km at 7.7 km/s (#1869).
+    /// </summary>
+    private const float SlackSeconds = 1f;
     private readonly List<int> _viewerIndex = new();
     /// <summary>The pairs that race each other this round, asked once per pair.</summary>
     private readonly HashSet<(long Viewer, long Target)> _together = new();
@@ -177,7 +185,7 @@ public partial class InterestService : Node
         _scratch.Clear();
         _targets.Clear();
         _byId.Clear();
-        _at.Clear(); _lv95.Clear(); _agl.Clear(); _ride.Clear(); _viewerIndex.Clear(); _together.Clear();
+        _at.Clear(); _lv95.Clear(); _agl.Clear(); _ride.Clear(); _slack.Clear(); _viewerIndex.Clear(); _together.Clear();
         foreach (var child in Players!.GetChildren())
             if (child is FootPlayer p && FootPlayer.NetId(p.Name) is long id)
             {
@@ -190,6 +198,9 @@ public partial class InterestService : Node
                 // height above ground does not depend on the viewer's frame
                 _agl.Add(Ground?.Invoke(to) is { } g ? (float)(to.Alt + 1 - g) : 0f);
                 _ride.Add(p.Ride);
+                // a fast body is known only to a latency: the way it flies in a second (#1869)
+                float speed = p.NetVel.Length();
+                _slack.Add(speed > RemoteInterpolator.FastSpeed ? speed * SlackSeconds : 0f);
             }
 
         for (int vi = 0; vi < _scratch.Count; vi++)
@@ -226,12 +237,15 @@ public partial class InterestService : Node
                 bool together = !withheld && Together?.Invoke(viewer, target) == true;
                 if (together) _together.Add((viewer, target));
                 bool now_ = !withheld && Interest.Relevant(eye, Local(_lv95[ti]) + Vector3.Up, _ride[ti], _agl[ti], view, was,
-                    together, Ground == null && Sight == null ? null : _sight);
+                    together, Ground == null && Sight == null ? null : _sight, _slack[ti] + _slack[_viewerIndex[vi]]);
                 if (now_ == was) continue;
                 if (first) { if (now_) set.Add(target); continue; }
                 // an edge case must not blink: each pair flips at most once a second (a withholding is never held back)
                 if (!withheld && _flipped.TryGetValue((viewer, target), out double last) && now - last < MinFlipSeconds) continue;
                 _flipped[(viewer, target)] = now;
+                if (_ride[ti] == RideKind.Ufo || _ride[ti] == RideKind.Shuttle)
+                    GD.Print(FormattableString.Invariant(
+                        $"[interest] {viewer} {(now_ ? "sees" : "loses")} {target} ({_ride[ti]}) at {_at[_viewerIndex[vi]].DistanceTo(_at[ti]):F0} m"));
                 if (now_) { set.Add(target); _leaving.Remove((viewer, target)); }
                 else { set.Remove(target); _leaving[(viewer, target)] = now + DespawnDelay; }
                 _changed.Add(target);
@@ -289,7 +303,25 @@ public partial class InterestService : Node
     /// Where a player is for interest, from what it published: up in the world, even inside a
     /// building (<see cref="Interiors.InteriorManager.SurfacePoint(GlobalPos, Func{GlobalPos, float?})"/>).
     /// </summary>
-    private GlobalPos Where(FootPlayer player) => Interiors.InteriorManager.SurfacePoint(player.Global, Ground);
+    private GlobalPos Where(FootPlayer player) => Interiors.InteriorManager.SurfacePoint(Now(player), Ground);
+
+    /// <summary>
+    /// Where a body is now, from its last state: a body faster than <see cref="RemoteInterpolator.FastSpeed"/> carried
+    /// on its velocity for the time since that state came in (at most <see cref="FastCarry"/>). Two saucers flying 16 m
+    /// apart in orbit were compared from states taken up to a second apart, 7.7 km at 7.7 km/s, and a sender's
+    /// hitch took each out of the other's view (#1869). A slower body is measured where it was: a hitch moves it metres.
+    /// </summary>
+    private static GlobalPos Now(FootPlayer player)
+    {
+        var at = player.Global;
+        var v = player.NetVel;
+        if (v.LengthSquared() <= RemoteInterpolator.FastSpeed * RemoteInterpolator.FastSpeed) return at;
+        double age = Math.Clamp(Core.RealClock.Now - player.LastNetState, 0, FastCarry);
+        return at + v * (float)age;
+    }
+
+    /// <summary>The longest a fast body is carried past its last state, s: a sender silent for longer has stalled or left.</summary>
+    private const double FastCarry = 2.0;
 
     /// <summary>Client → server: the lens this client views the world through.</summary>
     public void ReportView(float far, float fovDeg)

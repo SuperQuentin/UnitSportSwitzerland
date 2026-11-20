@@ -37,6 +37,7 @@ public static class CubeSwiss
         string? relief = File.Exists(DefaultRelief) ? DefaultRelief : null;
         int minLevel = 5, maxLevel = 13, jobs = Environment.ProcessorCount;
         bool check = false;
+        (double MinLat, double MinLon, double MaxLat, double MaxLon, int MaxLevel)? cover = null;
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
@@ -54,6 +55,11 @@ public static class CubeSwiss
                 case "--cube-check": check = true; break;
                 case "--tlm": tlm = args[++i]; break;
                 case "--relief": relief = args[++i] is var r2 && r2 == "none" ? null : r2; break;
+                case "--cube-country":
+                    // minLat,minLon,maxLat,maxLon[,maxLevel]: every tile over the box too, down to maxLevel (default 8)
+                    var c = args[++i].Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+                    cover = (c[0], c[1], c[2], c[3], c.Length > 4 ? (int)c[4] : 8);
+                    break;
                 default: Console.Error.WriteLine($"--cube-swiss: unknown option {args[i]}"); return 2;
             }
         }
@@ -114,7 +120,11 @@ public static class CubeSwiss
         // wall tens of metres high along a straight tile edge in the fill built on it, and a ledge under the globe
         var leafKeys = finer.Keys.ToList();
         if (maxLevel + 1 == leafLevel) leafKeys = BlendReach(leafKeys, maxLevel);
-        manifest.Tiles.RemoveAll(t => CubeKey.Parse(t.Key).Level is var l && l >= minLevel && l <= maxLevel);
+        // the levels --cube-global built for the whole Earth (0-4) are merged (#1656: every level from the finest data the
+        // builder has): only the tiles over the leaves (and the cover box) are rebuilt, the rest of the level stays ETOPO's;
+        // the finer levels are rebuilt whole, as before
+        bool Merged(int level) => level < GlobalLevels;
+        manifest.Tiles.RemoveAll(t => CubeKey.Parse(t.Key).Level is var l && l >= minLevel && l <= maxLevel && !Merged(l));
         // each level's colour before the rebuild: it depends on the footprint alone, so it carries over (#1659)
         var colourBefore = manifest.Levels.Where(l => l.Level >= minLevel && l.Level <= maxLevel).ToDictionary(l => l.Level);
         manifest.Levels.RemoveAll(l => l.Level >= minLevel && l.Level <= maxLevel);
@@ -128,6 +138,11 @@ public static class CubeSwiss
             foreach (var leaf in leafKeys)
                 foreach (var sibling in leaf.AncestorAt(level).Parent.Children())
                     keys.Add(sibling);
+            // a coarse country past the leaves (#1656: the shipped base's Switzerland), its siblings too so it splits
+            if (cover is { } box && level <= box.MaxLevel)
+                foreach (var key in CoverKeys(box.MinLat, box.MinLon, box.MaxLat, box.MaxLon, level))
+                    if (level > 0) foreach (var sibling in key.Parent.Children()) keys.Add(sibling);
+                    else keys.Add(key);
             int bits = CubeKey.LatticeBits(level), finerBits = CubeKey.LatticeBits(level + 1);
             var source = finer;
             var made = new ConcurrentDictionary<CubeKey, CubeTile>();
@@ -141,10 +156,27 @@ public static class CubeSwiss
                 // what the file holds feeds the next level and the check, so all agree on the stored bits
                 made[key] = CubeTileCodec.Decode(CubeTileCodec.Encode(tile));
             });
+            if (Merged(level)) manifest.Tiles.RemoveAll(t => made.ContainsKey(CubeKey.Parse(t.Key)));
             foreach (var bundle in made.Keys.GroupBy(k => k.AncestorAt(CubeKey.PyramidBundleLevel(k.Level))))
             {
                 var list = bundle.OrderBy(k => k.Y).ThenBy(k => k.X).Select(k => (k, CubeTileCodec.Encode(made[k]))).ToList();
-                CubeBundle.Write(Path.Combine(outDir, CubeBundle.FileName(bundle.Key)), bundle.Key, list);
+                string bundlePath = Path.Combine(outDir, CubeBundle.FileName(bundle.Key));
+                // a bundle shared with what is not rebuilt (levels 0-3 under their face, the merged levels' other tiles,
+                // a finer level rebuilt before): those entries carried over as they are
+                var kept = new List<(CubeKey, byte[])>();
+                if (File.Exists(bundlePath))
+                {
+                    using var fs = File.OpenRead(bundlePath);
+                    foreach (var (key, at) in CubeBundle.ReadIndex(fs))
+                    {
+                        if (made.ContainsKey(key) || key.Level >= minLevel && key.Level <= level && !Merged(key.Level)) continue;
+                        fs.Position = at.Offset;
+                        var b = new byte[at.Length];
+                        fs.ReadExactly(b);
+                        kept.Add((key, b));
+                    }
+                }
+                CubeBundle.Write(bundlePath, bundle.Key, [.. kept, .. list]);
                 foreach (var (key, bb) in list)
                 {
                     var (_, _, min, max) = CubeTileCodec.ReadHeader(bb);
@@ -178,6 +210,21 @@ public static class CubeSwiss
             Console.WriteLine($"cube-swiss: {uncoloured} tiles and {colourless} levels without colour: run the colour bake (--globealbedo {outDir}), or the globe draws them white");
         Console.WriteLine($"cube-swiss: {bytes / 1e6:F1} MB in levels {minLevel}-{maxLevel}, {sw.Elapsed.TotalSeconds:F0} s, peak {Process.GetCurrentProcess().PeakWorkingSet64 / 1e9:F1} GB");
         return check ? CubeGlobal.CheckEdges(built) : 0;
+    }
+
+    /// <summary>The levels <c>--cube-global</c> builds for the whole Earth: merged, never replaced whole (#1656).</summary>
+    public const int GlobalLevels = 5;
+
+    /// <summary>The tiles of a level over a latitude/longitude box: a probe every quarter tile over it.</summary>
+    private static HashSet<CubeKey> CoverKeys(double minLat, double minLon, double maxLat, double maxLon, int level)
+    {
+        var keys = new HashSet<CubeKey>();
+        // a level's tile is ~10,000 km / 2^level a side: four probes a tile
+        double step = 90.0 / (1 << level) / 4;
+        for (double lat = minLat; lat <= maxLat + step; lat += step)
+            for (double lon = minLon; lon <= maxLon + step; lon += step)
+                keys.Add(CubeKey.FromLatLon(Math.Min(lat, maxLat), Math.Min(lon, maxLon), level));
+        return keys;
     }
 
     /// <summary>A region's leaves at their surface (<see cref="CubeSurface"/>): heights, the water over them; G1's <c>.cubb</c> as they are.</summary>

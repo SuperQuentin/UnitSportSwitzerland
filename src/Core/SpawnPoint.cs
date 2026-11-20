@@ -71,6 +71,24 @@ public partial class SpawnPoint : Node
     }
 
     /// <summary>
+    /// The same at a world point (#2039, a place on another body, whose frame the teleporter has just centred on it):
+    /// the target starts <see cref="PreloadAltitude"/> over it and settles on the ground there.
+    /// </summary>
+    public SpawnPoint(Node3D target, IWorldGround ground, Vector3 world, float arrivalHeight = ViewHeight)
+    {
+        _target = target;
+        _ground = ground;
+        _arrivalHeight = arrivalHeight;
+        Name = "SpawnPoint";
+        target.GlobalPosition = new Vector3(world.X, PreloadAltitude, world.Z);
+        if (target is CharacterBody3D body)
+        {
+            body.Velocity = Vector3.Zero;
+            if (body is UnitSport.Player.FootPlayer player) player.RequestReplacement();
+        }
+    }
+
+    /// <summary>
     /// Where this session starts, in LV95 metres: <c>--at E,N</c> wins (every probe and screenshot
     /// run depends on that), then the landing the player picked on the map screen (#515), then
     /// Riddes. <c>--enter</c>'s building stands for a missing <c>--at</c> (#1244).

@@ -13,11 +13,17 @@ global uniform float world_night;
 // 0 in the air, 1 above it (#1430 H4, World/Globe/Atmosphere): no sky to hide the stars by day, and
 // the horizon far below the horizontal (the Earth hides what is behind it, by depth)
 global uniform float world_space;
+// off the Earth (#1989, World/Globe/Atmosphere): the body's disc seen from the camera, toward world_sky_down (the
+// direction to its centre) out to its angular radius, radians (-1: none, on the Earth). Its ground past the far plane
+// hides nothing by depth, so what is inside the disc is the ground
+global uniform float world_sky_floor;
+global uniform vec3 world_sky_down;
 // toward the real sun, world axes (World/Globe/Atmosphere keeps it current): its glare hides what is near it (#1479)
 global uniform vec3 world_true_sun;
 
 // world axes: the celestial sphere's (stars), or a body's direction in its first column (a planet)
 uniform mat3 sky = mat3(1.0);
+// unused since #2035 (the points stand at infinity); kept so the nodes that set it need no change
 uniform float distance = 1000.0;
 // how much daylight lets through: 0 for the stars, Venus' brilliance by day
 uniform float daylight = 0.0;
@@ -28,6 +34,9 @@ uniform bool single = false;
 uniform bool instanced = false;
 uniform vec4 point_color : source_color = vec4(1.0);
 uniform float point_size = 2.0;
+// the stars on an airless body by day (#1989, World/StarField.DazzleOf): the eye dazzled by the sunlit ground sees
+// only the brightest (alpha 1: magnitude 2.5 and brighter), dimmed a little; 0 at night and wherever there is air
+uniform float dazzle = 0.0;
 // every point this many times its size: a debugging aid (--shuttlefilm drive,bigstars: what crops the stars?)
 uniform float size_scale = 1.0;
 
@@ -35,20 +44,25 @@ varying vec4 tint;
 
 void vertex() {
 	vec3 dir = instanced ? normalize(MODEL_MATRIX[3].xyz) : single ? normalize(sky[0]) : normalize(sky * VERTEX);
-	vec3 cam = INV_VIEW_MATRIX[3].xyz;
-	vec4 clip = PROJECTION_MATRIX * (VIEW_MATRIX * vec4(cam + dir * distance, 1.0));
+	// at infinity (#2035): the direction projected (w 0), its depth pinned just inside the far plane. Placed at 95 % of the
+	// far plane from the CPU, a star fell past it whenever the far plane shrank more than 5 % in a frame (the spectator's
+	// top speed toward a planet: "when moving toward a planet, all stars disappear ... all re-appears when stopping")
+	vec4 clip = PROJECTION_MATRIX * vec4((VIEW_MATRIX * vec4(dir, 0.0)).xyz, 1.0);
+	clip = vec4(clip.xy, 0.0, clip.w);
 	vec2 corner = UV * 2.0 - 1.0;
 	float px = (instanced ? INSTANCE_CUSTOM.x : single ? point_size : UV2.x) * size_scale;
 	clip.xy += corner * px * 2.0 / VIEWPORT_SIZE * clip.w;
 	POSITION = sky_depth(clip);
-	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), 1.0, world_space);
+	float behind = smoothstep(world_sky_floor - 0.002, world_sky_floor + 0.002, acos(clamp(dot(dir, world_sky_down), -1.0, 1.0)));
+	float horizon = mix(smoothstep(-0.01, 0.1, dir.y), behind, world_space);
 	float dark = max(max(smoothstep(0.35, 0.95, world_night), daylight), world_space);
 	vec4 c = single ? point_color : COLOR;
+	if (!single && !instanced) c.a *= mix(1.0, 0.8 * smoothstep(0.75, 1.0, c.a), dazzle);
 	// a satellite shows only while it is sunlit over a dark sky: the node hides the rest
 	if (instanced) dark = 1.0;
 	// the sun's glare (#1479): nothing within about a twentieth of the view's height of it, back by a quarter, on screen
 	// (a telescope's narrow view brings what is near it out), while the sun is in front of the camera
-	vec4 sun_clip = PROJECTION_MATRIX * (VIEW_MATRIX * vec4(cam + normalize(world_true_sun) * distance, 1.0));
+	vec4 sun_clip = PROJECTION_MATRIX * vec4((VIEW_MATRIX * vec4(normalize(world_true_sun), 0.0)).xyz, 1.0);
 	float glare = 1.0;
 	if (sun_clip.w > 0.0 && clip.w > 0.0) {
 		vec2 off = (clip.xy / clip.w - sun_clip.xy / sun_clip.w) * vec2(VIEWPORT_SIZE.x / VIEWPORT_SIZE.y, 1.0) * 0.5;
@@ -57,7 +71,12 @@ void vertex() {
 	tint = vec4(c.rgb, c.a * horizon * dark * glare);
 }
 
+// the scene's opaque depth (#2051): a point of light is behind everything drawn, whatever depth a ridge near the far
+// plane rounded to (the pinned depth above lost to it high up)
+uniform sampler2D scene_depth : hint_depth_texture, filter_nearest;
+
 void fragment() {
+	if (texture(scene_depth, SCREEN_UV).r > 0.0) discard;
 	float r = length(UV * 2.0 - 1.0);
 	ALBEDO = tint.rgb * tint.a * (1.0 - smoothstep(0.35, 1.0, r));
 }

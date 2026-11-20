@@ -264,6 +264,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Interiors.Games.TableGames.Create(this);   // pool, darts, table football, the arcade's games (#1324, #1326)
         Interiors.BowlingLanes.Create(this);   // every bowling centre's games (#1323)
         Net.ClockSync.Create(this);
+        // group rides on the home trainer (#1467): who rides which course, and how far along
+        Trainer.GroupRides.Create(this, peer => _chat?.NameOfPeer(peer) ?? $"Player {peer}");
         // the time of day, one for everyone (#452): sent to each joiner and on every /time
         World.WorldClock.StartServer();
         // the fun world's sky is held at dusk (#1396): its clock stopped there
@@ -615,6 +617,13 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _streamer = ChunkStreamer.CreateServer(chunkDir);
         // --frame earth (#1655): the leaves on this server's disk, streamed by key to clients that lack them
         if (_earth != null) _streamer.Leaves = _earth.Store;
+        // and the globe's pyramid on its disk (#1656), streamed by key to clients for every level they draw and the fill stands on
+        if (_earth != null && World.GlobeData.HasLocal) _streamer.Pyramid = World.GlobeData.Earth;
+        // and every other body's pyramid on its disk (#1849), by the body's number: clients beyond the shipped base stream it
+        if (_earth != null)
+            foreach (var body in CelestialBody.All)
+                if (World.Bodies.BodyData.HasGlobe(body) && World.Bodies.BodyData.LocalDir(body) != null && World.Bodies.BodyData.For(body) is { } chain)
+                    _streamer.ServeBody((int)body.Id, chain);
         _streamer.CdDirectory = Audio.Cd.CdLibrary.Directory;
         // no manifest.json to serve, but the clients still need the origin to adopt
         if (manifest.Tiles.Count == 0)
@@ -909,7 +918,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
     /// <summary>
     /// The interest of an earth server (#1513, G2 C4): the ground's ellipsoidal height from the main earth world's loaded
-    /// leaves (round every body, shadows included), else the <c>cube_global</c> pyramid (<see cref="World.Globe.DataDir"/>);
+    /// leaves (round every body, shadows included), else the pyramid on its disk (<see cref="World.GlobeData.Earth"/>);
     /// line of sight by <see cref="EarthSight.Clear"/>, heights above ground in LHN95 as <see cref="GlobalPos.Alt"/>.
     /// With no pyramid, sight is free (as a flat server with no horizon file).
     /// </summary>
@@ -929,7 +938,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private InterestService CreateEarthInterest(Terrain.Earth.EarthWorld earth)
     {
         // a fixture course is all the ground there is: the real pyramid's mountains round it would hide it from itself
-        var pyramid = !earth.Leaves.IsFixture && World.Globe.DataDir is { } dir ? new PyramidGround(dir) : null;
+        var pyramid = !earth.Leaves.IsFixture && World.Globe.DataSource is { Count: > 0 } source ? new PyramidGround(source) : null;
         GD.Print($"[interest] earth: line of sight over the leaves and {(pyramid != null ? $"the pyramid in {pyramid.Dir} ({pyramid.Count} tiles, level {pyramid.Level})" : "no pyramid")}");
         double? Ellipsoidal(EcefPos p) => earth.EllipsoidalHeightAt(p, out double h) ? h : pyramid?.HeightAt(p);
         var interest = InterestService.CreateServer(this, _players!, at =>

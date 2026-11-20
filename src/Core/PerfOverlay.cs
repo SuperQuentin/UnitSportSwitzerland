@@ -231,11 +231,25 @@ public partial class PerfOverlay : CanvasLayer
     {
         if (_chunks.Origin is not { } origin || GetViewport().GetCamera3D() is not { } cam) return "";
         var p = cam.GlobalPosition;
-        var (e, n) = origin.ToLv95(p);
         var forward = -cam.GlobalBasis.Z;
         // from true north at the camera (#1504), not the world's −Z
-        double bearing = (TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
-        return string.Format(CultureInfo.InvariantCulture, "LV95 {0:F0},{1:F0}  alt {2:F0} m  facing {3} {4:F0}°",
-            e, n, p.Y, Compass[(int)Math.Round(bearing / 45) % 8], bearing);
+        // rounded before the wrap, or 359.6° read "360°"
+        double bearing = Math.Round(TrueNorth.Bearing(origin.Frame, p, forward) * 180 / Math.PI + 360) % 360;
+        string facing = Compass[(int)Math.Round(bearing / 45) % 8];
+        // the place as HudPlace writes it (#2033): LV95 only in Switzerland near the ground, latitude, longitude and the
+        // true height elsewhere (abroad, in orbit; the frame's Y froze at 10000 m in space), the distance far out
+        var at = origin.ToGlobal(p);
+        var body = CelestialBody.Of(at.Body);
+        var g = at.Geodetic;
+        // LV95 asked only low on the Earth, near Switzerland's longitudes (the projection is meaningless far round)
+        (double, double, double)? lv95 = null;
+        if (at.Body == BodyId.Earth && g.H < HudPlace.Lv95Ceiling && Math.Abs(g.LonDeg - 8) < 30)
+        {
+            var (e, n) = origin.ToLv95(p);
+            lv95 = (e, n, at.Alt);
+        }
+        var ecef = at.Ecef;
+        double fromCentre = Math.Sqrt(ecef.X * ecef.X + ecef.Y * ecef.Y + ecef.Z * ecef.Z);
+        return string.Format(CultureInfo.InvariantCulture, "{0}  facing {1} {2:F0}°", HudPlace.Place(body, g, lv95, fromCentre), facing, bearing);
     }
 }

@@ -65,17 +65,18 @@ public partial class FootPlayer
         if (_ride is not (Ufo or Airliner { Space: not null })) return "Fly a UFO or the space shuttle first (R, Mounts): only they reach orbit.";
         if (Origin is not { } origin) return "No orbit in this world: it has no place on the Earth.";
         if (!(km >= OrbitMinKm && km <= OrbitMaxKm)) return FormattableString.Invariant($"An orbit is {OrbitMinKm:F0} to {OrbitMaxKm:F0} km up.");
-        var earth = Planet.Earth;
+        // round the body the anchor is on (#1851)
+        var earth = CelestialBody.Of(origin.Body);
         var frame = origin.Frame;
         var g = earth.Shape.ToGeodetic(frame.ToEcef(GlobalPosition));
         var at = earth.Shape.ToEcef(g with { H = km * 1000 });
         double angle = Orbit.RotationAngle(earth, Net.ClockSync.SimNow);
         var heading = frame.EcefDirection(GlobalPosition, UfoFlight.Heading(_flight.Yaw));
         var state = Orbit.Circular(earth, Orbit.ToEci(at, angle), Orbit.ToEci(heading, angle));
-        if (_ride is Ufo ufo) ufo.SetOrbit(state);
+        if (_ride is Ufo ufo) ufo.SetOrbit(state, earth);
         else if (_ride is Airliner shuttle)
         {
-            shuttle.SetOrbit(state);
+            shuttle.SetOrbit(state, earth);
             // level along its track, gear up: flying, not standing (#1492)
             shuttle.Aloft(new Vector3(0f, _flight.Yaw, 0f), Vector3.Zero);
         }

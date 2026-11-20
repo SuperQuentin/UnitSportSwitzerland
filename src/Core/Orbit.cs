@@ -38,7 +38,7 @@ public readonly record struct DVec3(double X, double Y, double Z)
 public readonly record struct OrbitState(DVec3 R, DVec3 V)
 {
     /// <summary>Specific orbital energy, J/kg: v²/2 − GM/r. Constant on a coast; what the drift test measures.</summary>
-    public double Energy(Planet p) => V.LengthSquared / 2 - p.GM / R.Length;
+    public double Energy(CelestialBody p) => V.LengthSquared / 2 - p.GM / R.Length;
 }
 
 /// <summary>
@@ -51,10 +51,10 @@ public readonly record struct OrbitState(DVec3 R, DVec3 V)
 public static class Orbit
 {
     /// <summary>The Earth rotation angle at a sim time, radians (one sidereal turn in 86,164 s).</summary>
-    public static double RotationAngle(Planet p, double simSeconds) => Math.IEEERemainder(p.RotationRate * simSeconds, 2 * Math.PI);
+    public static double RotationAngle(CelestialBody p, double simSeconds) => Math.IEEERemainder(p.Spin * simSeconds, 2 * Math.PI);
 
     /// <summary>Gravity at an inertial (or Earth-fixed: it is radial) position, m/s².</summary>
-    public static DVec3 Gravity(Planet p, DVec3 r)
+    public static DVec3 Gravity(CelestialBody p, DVec3 r)
     {
         double r2 = r.LengthSquared;
         double rl = Math.Sqrt(r2);
@@ -65,7 +65,7 @@ public static class Orbit
     /// One velocity-Verlet step of <paramref name="dt"/> seconds under gravity plus a constant
     /// <paramref name="thrust"/> acceleration (m/s², inertial axes) held over the step.
     /// </summary>
-    public static OrbitState Step(Planet p, in OrbitState s, DVec3 thrust, double dt)
+    public static OrbitState Step(CelestialBody p, in OrbitState s, DVec3 thrust, double dt)
     {
         var a0 = Gravity(p, s.R) + thrust;
         var r = s.R + s.V * dt + a0 * (0.5 * dt * dt);
@@ -91,16 +91,16 @@ public static class Orbit
     /// The state seen from the turning Earth: position, and the velocity relative to the ground (the
     /// inertial one less ω × r: 317 m/s eastward at Bern's latitude for a craft standing still on it).
     /// </summary>
-    public static (DVec3 R, DVec3 V) ToEcef(Planet p, in OrbitState s, double angle)
+    public static (DVec3 R, DVec3 V) ToEcef(CelestialBody p, in OrbitState s, double angle)
     {
-        var spin = new DVec3(0, 0, p.RotationRate);
+        var spin = new DVec3(0, 0, p.Spin);
         return (ToEcef(s.R, angle), ToEcef(s.V - spin.Cross(s.R), angle));
     }
 
     /// <summary>An Earth-fixed position and ground-relative velocity as an inertial state (adds ω × r).</summary>
-    public static OrbitState FromEcef(Planet p, DVec3 r, DVec3 v, double angle)
+    public static OrbitState FromEcef(CelestialBody p, DVec3 r, DVec3 v, double angle)
     {
-        var spin = new DVec3(0, 0, p.RotationRate);
+        var spin = new DVec3(0, 0, p.Spin);
         var ri = ToEci(r, angle);
         return new OrbitState(ri, ToEci(v, angle) + spin.Cross(ri));
     }
@@ -109,7 +109,7 @@ public static class Orbit
     /// A circular orbit through <paramref name="r"/> (inertial), flying along <paramref name="toward"/> as
     /// projected on the horizontal: speed √(GM/r). Prograde (east) is the cheap way round.
     /// </summary>
-    public static OrbitState Circular(Planet p, DVec3 r, DVec3 toward)
+    public static OrbitState Circular(CelestialBody p, DVec3 r, DVec3 toward)
     {
         var up = r.Normalized();
         var along = toward - up * toward.Dot(up);
@@ -120,13 +120,13 @@ public static class Orbit
     }
 
     /// <summary>Orbital period of a circular or elliptic orbit of semi-major axis <paramref name="a"/>, s: 5,554 at 400 km.</summary>
-    public static double Period(Planet p, double a) => 2 * Math.PI * Math.Sqrt(a * a * a / p.GM);
+    public static double Period(CelestialBody p, double a) => 2 * Math.PI * Math.Sqrt(a * a * a / p.GM);
 
     /// <summary>
     /// The orbit's lowest and highest distances from the centre, metres (apoapsis infinite when it escapes),
     /// and its semi-major axis (negative on an escape).
     /// </summary>
-    public static (double Periapsis, double Apoapsis, double A) Apsides(Planet p, in OrbitState s)
+    public static (double Periapsis, double Apoapsis, double A) Apsides(CelestialBody p, in OrbitState s)
     {
         double energy = s.Energy(p);
         double a = -p.GM / (2 * energy);

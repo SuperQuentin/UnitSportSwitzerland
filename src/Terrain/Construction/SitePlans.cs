@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Leaves;
 
 namespace UnitSport.Terrain.Construction;
 
@@ -47,9 +48,11 @@ public static class SitePlans
         var key = new BuildingKey(tile.Id.E, tile.Id.N, index).ToString();
         var street = BuildingFootprint.StreetNear(roads, box.Center);
         var obstacles = new SiteObstacles(map.Boxes, index, roads, Clearance);
-        // a pit (#619) keeps off a road's sidewalks too, the yard off its carriageway
-        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable);
+        // a pit (#619) keeps off a road's sidewalks too, the yard off its carriageway; on a leaf inside the leaf (#1685)
+        var inside = LeafStandIn.TryLeaf(tile.Id, out var leaf) ? ConstructionSites.LeafPitInside(leaf) : null;
+        return ConstructionSites.Plan(key, b, box, street, obstacles.Blocked, obstacles.Undiggable, inside);
     }
+
 
     /// <summary>
     /// A site's pallets of bricks and cement (#615), as its dressing lays them out
@@ -69,6 +72,17 @@ public static class SitePlans
             var (e, n) = tile.Id.Global(at.X, at.Z);
             yield return new YardPallet(site.Key, p.Slot, e, n, at.Y, yaw, p.Load, Site: true);
         }
+    }
+
+    /// <summary>
+    /// Whether a site's materials have a way in a machine can drive (#1926): <see cref="ConstructionSites.MaterialsWayIn"/>
+    /// against the site's own obstacles, so a way kept across the street (a yard reaching over its road) is none.
+    /// </summary>
+    public static bool MaterialsReachable(BuildingTile tile, RoadTile? roads, ConstructionSite site)
+    {
+        if (!BuildingKey.TryParse(site.Key, out var key) || key.Index < 0 || key.Index >= tile.Buildings.Count) return false;
+        var obstacles = new SiteObstacles(BuildingTypes.For(tile).Boxes, key.Index, roads, Clearance);
+        return ConstructionSites.MaterialsWayIn(site, obstacles.Blocked);
     }
 
     /// <summary>A tile's buildings, its roads (null when it has no site: never read) and its building sites.</summary>

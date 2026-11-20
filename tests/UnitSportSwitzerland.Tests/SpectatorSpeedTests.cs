@@ -1,3 +1,4 @@
+using System;
 using UnitSport.Player;
 using Xunit;
 
@@ -32,6 +33,53 @@ public class SpectatorSpeedTests
         Assert.Equal(SpectatorSpeed.MinSpeed, speed);
     }
 
+    [Theory]
+    [InlineData(1500, 3000)]                 // on the ground as ever
+    [InlineData(400_000, 200_000)]           // an orbit: no 100 km/s top between bodies
+    [InlineData(190_000_000, 95_000_000)]    // half way to the Moon
+    [InlineData(1e12, 5e11)]                 // 6.7 AU out: past light (#2026)
+    [InlineData(1e14, SpectatorSpeed.DeepCap)]
+    public void BetweenBodiesTheCapIsHalfTheNearestSurfaceUpToTheDeepCap(double distance, float cap) =>
+        Assert.Equal(cap, SpectatorSpeed.SurfaceCap(distance), 0);
+
+    [Fact]
+    public void BetweenBodiesTheWheelsTopIsFullSpeed()
+    {
+        // #2026: the wheel's top flies the cap wherever it is, with no climb of notches past it
+        float cap = SpectatorSpeed.SurfaceCap(190_000_000);
+        Assert.Equal(SpectatorSpeed.MaxSpeed, SpectatorSpeed.Faster(SpectatorSpeed.MaxSpeed, cap));
+        Assert.Equal(cap, SpectatorSpeed.Flown(SpectatorSpeed.MaxSpeed, cap));
+        // below the top the wheel's own speed, held to the cap
+        Assert.Equal(50_000f, SpectatorSpeed.Flown(50_000f, cap));
+        Assert.Equal(3000f, SpectatorSpeed.Flown(50_000f, SpectatorSpeed.SurfaceCap(1500)));
+        // near the ground the top is the cap there, as before
+        Assert.Equal(3000f, SpectatorSpeed.Flown(SpectatorSpeed.MaxSpeed, SpectatorSpeed.SurfaceCap(1500)));
+        // a notch down from full speed far out: a notch under the wheel's top
+        Assert.Equal(SpectatorSpeed.MaxSpeed / SpectatorSpeed.Notch, SpectatorSpeed.Slower(SpectatorSpeed.MaxSpeed, cap));
+    }
+
+    [Fact]
+    public void ToNeptuneInAboutAMinuteAtFullSpeed()
+    {
+        // #2026: 30 AU from a 400 km orbit to 100 km over Neptune's cloud tops: about a minute (four hours at light)
+        double t = TargetList.TripSeconds(30 * TargetList.Au);
+        Assert.InRange(t, 50, 120);
+    }
+
+    [Fact]
+    public void FromEarthOrbitToTheMoonInUnderAMinuteAtTheTop()
+    {
+        // the wheel at the cap all the way: out at half the distance a second, in again as the Moon's ground comes up
+        double from = 400_000, to = 100_000, gap = 384_400_000 - 6_378_137 - 1_737_400, x = 0, t = 0;
+        while (x < gap - from - to && t < 600)
+        {
+            double d = Math.Min(from + x, gap - x);
+            x += SpectatorSpeed.SurfaceCap(d) * 0.1;
+            t += 0.1;
+        }
+        Assert.InRange(t, 10, 60);
+    }
+
     [Fact]
     public void ANotchDownPastTheCapIsFeltAtOnce()
     {
@@ -43,6 +91,8 @@ public class SpectatorSpeedTests
     [Theory]
     [InlineData(2f, "2.0 m/s")]
     [InlineData(2.5f, "2.5 m/s")]
+    [InlineData(95_000_000f, "95000 km/s")]
+    [InlineData(299_792_458f, "1.00 c")]
     [InlineData(150f, "150 m/s")]
     [InlineData(999f, "999 m/s")]
     [InlineData(1000f, "1.0 km/s")]

@@ -36,6 +36,22 @@
   with the vertex colours extrapolated past the triangle. Godot has no `centroid` qualifier. The
   distant ground is sub-pixel triangles with different cover colours, so it sparkles in a band
   along the horizon. Clamping the colour does not help; a constant colour removes it. FXAA is clean.
+- **The terrain reads its varyings flat under a pixel (#1987)**: the band came back for a player who
+  chose MSAA 2x (the Sahara's fill, rings 10, a 150 km horizon): white, black and blue speckles
+  along the horizon, the same every still frame. A triangle many times smaller than the pixel puts
+  the centre many triangle widths away, so even sand's ±3 % colour jitter (`CoverPalette.Hash`)
+  came out white or black, and the pattern code in alpha a random pattern. The terrain body now
+  keeps the colour (with its pattern code) and the smoothed normal also as `flat` varyings (the
+  provoking vertex's, never extrapolated) and reads them where a pixel spans more than a quarter
+  to half a cell: `cells` = the pixel's longer footprint (`dFdx`/`dFdy` of `world_pos`, exact even
+  when extrapolated) over `facet_m`, the mesh's cell (an instance uniform: a flat tile's stride from
+  `ChunkNode.SetMesh`, a globe patch's drawn cell from `Globe.DrawnCellM`, an earth leaf's ~1.2 m
+  lattice the default 1). A cell over a pixel shows no difference; a coarse tile keeps its smooth
+  gradients until its cells really are sub-pixel. Not the cause: the facet light (lit ridges,
+  shaded backs): a facet → smoothed → up normal fade measured the same speckle energy and motion
+  change, and was left out. Bisect for such bugs: emission of the raw `COLOR` still speckled
+  (so not lighting), `--aa off` clean (so MSAA). Other bodies (roads, buildings, props) still
+  extrapolate under MSAA; their triangles are seldom sub-pixel with a varying colour.
 - **`--aa off|fxaa|msaa2x|msaa4x|msaa8x`**: this run's anti-aliasing, not saved, for comparison shots.
 - **Checks**: J2 close-ups at 13:00 (`-1512.5,g3.0,9,12,-135`) in Cartoon with `--aa off` and
   `--aa msaa4x`, in Realistic- and PS1, and a Geneva street and aerial view at 13:00 and 17:00.

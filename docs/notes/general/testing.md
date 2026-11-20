@@ -226,14 +226,20 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
     starts Godot itself adds the offset (`buildnetcheck`, netsmoke).
   - **`tools/test.sh net|full`** runs the heavy checks up to `TEST_JOBS` at once (default `GUARD_SLOTS`; in
     `test.sh` one slot per 8 GB, 1 to 4, since #1702 admits each job by its peak), each job in its own slot.
-    A job starts when its need (last peak and a quarter, else `TEST_HEAVY_RAM_GB`, 6) is free over the floor,
+    A job starts when its need (peak and a quarter, else `TEST_HEAVY_RAM_GB`, 6) is free over the floor,
     counting every job started less than `TEST_JOB_STAGGER` (40) s ago at its full need: it has not grown to
     its size yet. **Machine-wide**: every job started leaves `start grow_s need_mb` in
     `$TEMP/unitsport-check-peaks-reserved/<runner pid>.<n>` (`TEST_RESERVED_DIR`), and `admit` also subtracts the
     jobs of other runners (worktrees, sessions) still inside their grow time; a runner with nothing running waits
     only while such a job grows. Without it, a Player net run beside another session's checks had 11 of 36 checks
     fail or stop at the floor (some run alone), 3,666 s instead of ~2,900 s serial (Nov 10). A job the RAM
-    watchdog stopped runs again alone at the end. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
+    watchdog stopped runs again alone at the end; a **TIMEOUT** is not run again (its own budget ran out, which
+    load does not explain: a 3700 s flight timed out twice in a row, #1761) unless it also hit the floor.
+    **The peak** is the median of the check's last 5 nonzero peaks, so one bloated run (21 GB beside 2-3 GB)
+    does not lock a row out. **The need is capped** at `guard_ram_cap_mb`: total RAM less the floor and
+    `GUARD_RAM_RESERVE_MB` (total/4, at least 3 GB; ~22 GB on 32 GB). A row at the cap runs **alone**, as soon as
+    this runner's other jobs are done, without waiting for free RAM it would never see (a 27 GB need waited
+    1800 s twice, #1761); the watchdog's floor still guards it. A first try at 4 GB and no stagger had 10 checks killed at the floor beside
     another session's run, a qemu VM (8 GB) and an idle dotnet build server (3 GB). The table keeps the map's
     order. Two scripts logging under one twoclient name never run together (`rampalongnetcheck` execs
     `rampnetcheck`), and `loadtest.sh` / `trailer.sh` run alone.
@@ -249,7 +255,7 @@ row uses `--car 4` (BNR32, grip). `narrow` puts the AE86 out against the trunks 
     nothing) held 361 s in a row, and dropping the rule took the Avatar area from 1,363 s to 835 s (4 jobs).
     Flags whose rows must not overlap go in `TEST_QUICK_SERIAL`. `@netsmoke`
     (ports) and the quick `tools/` scripts run one at a time after. A check that fails beside others runs
-    again alone; a pass alone says "passed alone, failed beside others": that is how a clash shows.
+    again alone (a TIMEOUT does not); a pass alone says "passed alone, failed beside others": that is how a clash shows.
   - **Longest first**: each check starts in the order of its last seconds in the peak store (never run:
     `TEST_UNKNOWN_SECONDS`, 120), the first one the RAM admits; the net tier likewise, so a long check never
     starts last and runs on alone (`orbitnetcheck`, 250 s, came last in map order). The store's path goes to

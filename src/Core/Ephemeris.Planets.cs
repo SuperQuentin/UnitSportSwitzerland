@@ -53,15 +53,19 @@ public static partial class Ephemeris
     /// models (2015; the gas giants' prime meridians are their System III), taken at the moment the
     /// light we see left the planet (Jupiter turns 26° in its 43 light-minutes).
     /// </summary>
-    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc)
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, DateTime utc) =>
+        Axes(body, SkyMoment.At(utc));
+
+    /// <summary>A body's axes in the Earth-fixed frame at a sky moment (#1850), as <see cref="Axes(SkyBody, DateTime)"/>.</summary>
+    public static (Terrain.Format.EcefPos Pole, Terrain.Format.EcefPos Prime, Terrain.Format.EcefPos East) Axes(SkyBody body, SkyMoment m)
     {
-        if (body == SkyBody.Moon) return MoonAxes(utc);
+        if (body == SkyBody.Moon) return MoonAxes(m);
         body = ParentOf(body);   // a big moon: its planet's frame (it keeps a face to it)
-        double d = JulianDay(utc) + DeltaT / 86400.0 - 2451545.0;
-        if (body != SkyBody.Sun) d -= Equatorial(body, utc).Distance / AuMetres / LightAuPerDay;
+        double d = JulianDay(m.Utc) + DeltaT / 86400.0 - 2451545.0;
+        if (body != SkyBody.Sun) d -= Equatorial(body, m.Utc).Distance / AuMetres / LightAuPerDay;
         double t = d / 36525.0;
         var (a0, d0, w) = Rotation(body, d, t);
-        return Frame(a0, d0, w, utc, t);
+        return Frame(a0, d0, w, m.EarthAngle, t);
     }
 
     /// <summary>The IAU pole (ICRF right ascension, declination) and prime meridian angle, degrees, at <paramref name="d"/> days and <paramref name="t"/> centuries from J2000.</summary>
@@ -85,7 +89,8 @@ public static partial class Ephemeris
     /// The big moons (#1444) as circles in their planet's equator: the semi-major axis (m), their
     /// longitude from the node of that equator on the ICRF's (degrees, fitted to JPL Horizons on
     /// 2026-01-01 0h TDB), their mean motion (degrees a day) and their radius (m). Good to a few
-    /// percent of their orbit: their eccentricities (Titan's 0.03) and resonances are left out.
+    /// percent of their orbit: their eccentricities (Titan's 0.03) and resonances are left out. Mars' two (#1853): fitted
+    /// the same way, Phobos within 2° (its 0.015 eccentricity), Deimos within 0.05°; their 1° inclinations left out.
     /// </summary>
     private static readonly (SkyBody Parent, double A, double Lambda0, double Rate, double Radius)[] Satellites =
     [
@@ -94,6 +99,8 @@ public static partial class Ephemeris
         (SkyBody.Jupiter, 1_070_412_000, 343.003, 360 / 7.15455296, 2_634_100),
         (SkyBody.Jupiter, 1_882_709_000, 91.443, 360 / 16.6890184, 2_410_300),
         (SkyBody.Saturn, 1_221_870_000, 209.374, 360 / 15.945421, 2_574_730),
+        (SkyBody.Mars, 9_376_000, 210.4, 360 / 0.31891023, 11_080),
+        (SkyBody.Mars, 23_458_000, 18.56, 360 / 1.26244, 6_200),
     ];
 
     private const double SatelliteEpoch = 2461041.5;
@@ -129,6 +136,9 @@ public static partial class Ephemeris
     /// The ICRF (J2000 equator and equinox) axes in the Earth-fixed frame at <paramref name="utc"/>:
     /// precessed to the date and turned by sidereal time. The stars' catalogue places go through it.
     /// </summary>
+    public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(SkyMoment m) =>
+        CelestialAt(m.Utc, m.EarthAngle);
+
     public static (Terrain.Format.EcefPos X, Terrain.Format.EcefPos Y, Terrain.Format.EcefPos Z) Celestial(DateTime utc)
     {
         double t = (JulianDay(utc) + DeltaT / 86400.0 - 2451545.0) / 36525.0;
@@ -152,8 +162,32 @@ public static partial class Ephemeris
         // the phase angle at the planet, degrees
         double cos = Dot(p, p - earth) / (r * delta);
         double a = Math.Acos(Math.Clamp(cos, -1, 1)) / Deg;
+        return MagnitudeAt(body, a, r, delta, utc);
+    }
+
+    /// <summary>
+    /// The Earth's apparent magnitude from space (#2047): <paramref name="phaseDeg"/> the angle at the Earth between the Sun
+    /// and the eye, <paramref name="rAu"/> its distance from the Sun and <paramref name="deltaAu"/> from the eye, AU
+    /// (Mallama 2018: H −3.99, its phase law to 160°; −2.5 from Mars at its best).
+    /// </summary>
+    public static double EarthMagnitudeAt(double phaseDeg, double rAu, double deltaAu)
+    {
+        double a = phaseDeg;
+        return -3.99 - 1.060e-3 * a + 2.054e-4 * a * a + 5 * Math.Log10(rAu * deltaAu);
+    }
+
+    /// <summary>
+    /// A body's apparent magnitude from anywhere (#2047): <paramref name="phaseDeg"/> the angle at the body between the Sun
+    /// and the eye, <paramref name="rAu"/> its distance from the Sun and <paramref name="deltaAu"/> from the eye, AU. The
+    /// same laws as from the Earth (Mallama and Hilton 2018), and the Moon's (H +0.21, Allen's phase law: −12.7 full from
+    /// the Earth). From the Earth <see cref="Magnitude"/>; from space the camera's own distance and phase.
+    /// </summary>
+    public static double MagnitudeAt(SkyBody body, double phaseDeg, double rAu, double deltaAu, DateTime utc)
+    {
+        double a = phaseDeg;
         double h = body switch
         {
+            SkyBody.Moon => 0.21 + 0.026 * a + 4.0e-9 * a * a * a * a,
             SkyBody.Mercury => -0.613 + 0.06328 * a - 0.0016336 * a * a + 3.3644e-5 * a * a * a - 3.4265e-7 * a * a * a * a,
             SkyBody.Venus => -4.384 - 0.001044 * a + 3.687e-4 * a * a - 2.814e-6 * a * a * a + 8.938e-9 * a * a * a * a,
             SkyBody.Mars => -1.601 + 0.02267 * a - 1.302e-4 * a * a,
@@ -162,9 +196,10 @@ public static partial class Ephemeris
             SkyBody.Uranus => -7.110 + 0.00009 * a,
             SkyBody.Neptune => -7.00,
             SkyBody.Io => -1.68, SkyBody.Europa => -1.41, SkyBody.Ganymede => -2.09, SkyBody.Callisto => -1.05,
+            SkyBody.Phobos => 11.8, SkyBody.Deimos => 12.89,
             _ => -1.28,   // Titan
         };
-        return h + 5 * Math.Log10(r * delta);
+        return h + 5 * Math.Log10(rAu * deltaAu);
     }
 
     /// <summary>|sin| of the Earth's latitude over Saturn's equator: how open its rings are, 0..1.</summary>

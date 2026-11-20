@@ -1,0 +1,171 @@
+using Godot;
+using UnitSport.Core;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.World.Bodies;
+
+/// <summary>
+/// The other bodies' globes (#1848, docs/plans/planets.md section 6), under <c>--frame earth</c>: a
+/// <see cref="BodyGlobe"/> for each body whose pyramid is there, and the Earth's own one for when the anchor is on another
+/// body (the Earth seen from the Moon: the Earth's <see cref="Globe"/>, built round the Earth's leaves, steps aside then).
+///
+/// <para>
+/// <b>Where the bodies' data is</b>: each body's chain (<see cref="BodyData"/>): the local install (<c>DIR/&lt;body&gt;/cube</c>,
+/// built by <c>--cube-body moon</c>, coloured by <c>--globealbedo --body moon</c>; <c>--bodies DIR</c> overrides where it is
+/// looked for), the server's once its index comes, the base the game ships (levels 0-2), else generated from the sky map.
+/// </para>
+///
+/// <para>
+/// <b>When a body is drawn as a globe</b>: always when the anchor is on it (its ground); from elsewhere within ten of its
+/// radii (from the Earth the Moon stays the sky's <see cref="MoonDisc"/>, which steps aside while the globe draws it).
+/// </para>
+/// </summary>
+public partial class BodyViews : Node
+{
+    /// <summary>Another body is drawn as a globe within this many of its radii.</summary>
+    public const double NearRadii = 10;
+
+    private readonly WorldOrigin _origin;
+    private readonly Func<Player.FootPlayer?> _local;
+    private readonly List<BodyGlobe> _globes = new();
+    private BodyGlobe? _earth, _moon;
+
+    /// <summary>The root of the bodies' local install (<see cref="TerrainPaths.FindBodiesDir"/>), or null.</summary>
+    public static string? DataRoot => TerrainPaths.FindBodiesDir();
+
+    /// <summary>The one in the world (a check finds a globe through it), null outside one.</summary>
+    public static BodyViews? Instance { get; private set; }
+
+    /// <summary>A body's globe, or null where it has none.</summary>
+    public BodyGlobe? GlobeOf(BodyId id) => _globes.Find(g => g.Body.Id == id);
+
+    /// <summary>The globe drawn for a sky body this frame, or null while the sky's disc shows it.</summary>
+    public BodyGlobe? DrawnGlobeOf(SkyBody sky) => _globes.Find(g => g.Drawn && g.Body.Sky == sky);
+
+    public BodyViews(WorldOrigin origin, Func<Player.FootPlayer?> local)
+    {
+        _origin = origin;
+        _local = local;
+        Name = "BodyViews";
+    }
+
+    public override void _Ready()
+    {
+        Instance = this;
+        if (!TerrainPaths.GlobeOff)
+            foreach (var body in CelestialBody.All)
+            {
+                // never the Earth's here: its ground is its leaves and Globe, its far view from another body is _earth below. A
+                // second Earth globe (and a near square, the Earth being landable) drawn under the leaves fought them: a dark
+                // and white checkerboard over Valais (#2022, from #2013's switch to BodySurface, whose Earth chain is not null)
+                if (!BodyData.HasGlobe(body) || BodySurface.Of(body.Id).Pyramid is not { Count: > 0 } chain) continue;
+                var g = new BodyGlobe(body, chain, chain.Describe(), _origin);
+                AddChild(g);
+                _globes.Add(g);
+                if (body.Id == BodyId.Moon) _moon = g;
+                // Saturn's rings round its globe (#1854): the sky's ring map, its radii (SkyBodies')
+                if (body.Id == BodyId.Saturn)
+                {
+                    g.AddRings(SaturnRings.Inner, SaturnRings.Outer, SaturnRings.HalfThickness, GD.Load<Texture2D>(SaturnRings.MapPath));
+                    // and their ice chunks round the camera, solid (#1854)
+                    AddChild(new RingChunks(g, _origin));
+                }
+                // the ground under your feet where one can stand (#1850)
+                if (body.Landable)
+                {
+                    g.Ground = new BodyGround(g, _origin);
+                    AddChild(g.Ground);
+                    // boulders round its fresh craters, where it has generated craters (#1849)
+                    if (body.CraterDensity > 0) AddChild(new BodyBoulders(g, _origin));
+                    // the Moon's historic and invented sites near the camera (#1939)
+                    if (body.Id == BodyId.Moon) AddChild(new Moon.MoonSurface(g.Ground, _origin));
+                    // and the colonies' lights from afar, on the night side (#1946)
+                    if (body.Id == BodyId.Moon) AddChild(new Moon.ColonyLights(g));
+                }
+            }
+        // the ground game's gravity follows the anchor's body: the walker's fall, and the physics space's
+        _origin.BodyChanged += OnBodyChanged;
+        OnBodyChanged(BodyId.Earth, _origin.Body);
+        // the Earth seen from another body: its pyramid as the Earth's globe has it
+        if (Globe.DataSource is { Count: > 0 } earthPyramid)
+        {
+            _earth = new BodyGlobe(CelestialBody.Earth, earthPyramid, earthPyramid.Describe(), _origin);
+            AddChild(_earth);
+            _globes.Add(_earth);
+        }
+        // the spectator's target cue (#1850): any body, with or without its data
+        AddChild(new Player.SpectatorTargets(_origin, _local));
+        if (Player.SpectatorTargetCheck.Requested) AddChild(new Player.SpectatorTargetCheck());
+        if (OrbitOnlyCheck.Requested) AddChild(new OrbitOnlyCheck(_origin));
+        if (RingCheck.Requested) AddChild(new RingCheck(_origin));
+        if (BodyShot.Requested) AddChild(new BodyShot(_origin, () => _globes.Find(g => g.Body.Id == _origin.Body)));
+        if (GotoCheck.Requested) AddChild(new GotoCheck(_origin));
+        if (BodyTravelCheck.Requested) AddChild(new BodyTravelCheck(_origin));
+        if (SpectatorCrossCheck.Requested) AddChild(new SpectatorCrossCheck(_origin));
+        if (SpectatorFrameCheck.Requested) AddChild(new SpectatorFrameCheck(_origin));
+        if (BodyViewCheck.Requested) AddChild(new BodyViewCheck(_origin));
+        if (BodyPlaceCheck.Requested) AddChild(new BodyPlaceCheck(_origin));
+        if (SkyOrderCheck.Requested) AddChild(new SkyOrderCheck(_origin));
+        if (MoonLookCheck.Requested) AddChild(new MoonLookCheck(_origin));
+        if (UfoMoonCheck.Requested) AddChild(new UfoMoonCheck(_origin, _local, () => _moon?.Ground));
+        if (ShuttleMoonCheck.Requested) AddChild(new ShuttleMoonCheck(_origin, _local, () => _moon?.Ground));
+        if (Moon.MoonSitesCheck.Requested) AddChild(new Moon.MoonSitesCheck(_origin, () => _moon?.Ground, _local));
+        if (MoonCheck.Requested) AddChild(new MoonCheck(_origin, _local, () => _globes.Find(g => g.Body.Id == MoonCheck.Target.Id)?.Ground));
+    }
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+        _origin.BodyChanged -= OnBodyChanged;
+        BodyGravity.On(BodyId.Earth);
+        SkyClock.Local = null;
+    }
+
+    private void OnBodyChanged(BodyId from, BodyId to)
+    {
+        // a body one cannot stand on (the Sun, crossed on the way to Mars) has no ground game: the last one's stays
+        if (!CelestialBody.Of(to).Landable) return;
+        BodyGravity.On(to);
+        // the space's own gravity (props, wrecks, a ragdoll): the project's on the Earth, untouched there
+        if (from == to && to == BodyId.Earth) return;
+        float space = to == BodyId.Earth ? (float)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8f) : BodyGravity.Ground;
+        if (GetViewport()?.World3D is { } world)
+            PhysicsServer3D.AreaSetParam(world.Space, PhysicsServer3D.AreaParameter.Gravity, space);
+        if (from != to) GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[bodies] on {to}: the ground's gravity {BodyGravity.Ground:F2} m/s²"));
+    }
+
+    public override void _Process(double delta)
+    {
+        var anchor = _origin.Body;
+        var cam = GetViewport()?.GetCamera3D();
+        DVec3? eye = null;
+        if (cam != null && _origin.Frame.Axes is { } axes)
+        {
+            var e = axes.ToEcef(cam.GlobalPosition.X, cam.GlobalPosition.Y, cam.GlobalPosition.Z);
+            eye = new DVec3(e.X, e.Y, e.Z);
+        }
+        // the local day (#1992): the body under the camera takes the game's short day, fading out toward its sphere's edge
+        double weight = eye is { } at ? SkyClock.LocalWeight(anchor, at.Length) : 0;
+        // (a new record only when it moves by a thousandth: none a frame on the ground or far out)
+        if (SkyClock.Local is not { } was || was.Body != anchor || Math.Abs(was.Weight - weight) > 1e-3
+            || (weight is 0 or 1 && was.Weight != weight))
+            SkyClock.Local = new SkyClock.LocalDay(anchor, weight);
+        var sky = SkyClock.Now;
+        SkyBodies.HiddenByGlobe.Clear();
+        // the view's vertical field, radians: a body's radius as a share of it picks its globe or its sky sphere (#1998)
+        float fov = cam != null ? Mathf.DegToRad(Core.CameraLens.FovOf(cam)) : 1.2f;
+        foreach (var g in _globes)
+        {
+            if (g == _earth) { g.Wanted = anchor != BodyId.Earth; continue; }
+            // by its size on screen in space, not by which body the anchor counts from: the handover between the Moon
+            // and the Earth used to swap the crisp globe for the sky disc in one frame (BodyLook)
+            float share = eye is { } p ? (float)(g.Body.Shape.A / Math.Max(Frames.Convert(anchor, p, g.Body.Id, sky).Length, 1)) / fov : 0f;
+            g.Wanted = BodyLook.WantsGlobe(g.Body.Id == anchor, share, g.Drawn);
+            // the sky's disc of a body its globe draws steps aside (the Moon's own disc, a planet's in SkyBodies)
+            // and the anchor's own body is never a disc in its own sky (inside a giant its globe steps aside, #1854)
+            if ((g.Drawn || g.Body.Id == anchor) && g.Body.Sky is { } skyBody) SkyBodies.HiddenByGlobe.Add(skyBody);
+        }
+        MoonDisc.HiddenByGlobe = _moon is { Drawn: true };
+    }
+}

@@ -11,6 +11,8 @@ render_mode unshaded, cull_back;
 #include "res://shaders/common/globe_light.gdshaderinc"
 // facet_normal, style_lake: what the terrain body draws with at the handover
 #include "res://shaders/common/style.gdshaderinc"
+// the morph into the parent level's shape (#1656)
+#include "res://shaders/common/geomorph.gdshaderinc"
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
 // the part of albedo_tex over this tile: a tile with no colour of its own (the leaves' level) takes its
@@ -31,6 +33,7 @@ uniform bool fill_push = true;
 uniform bool cartoon = false;
 
 void vertex() {
+	VERTEX = globe_geomorph(VERTEX, CUSTOM0, MODELVIEW_MATRIX);
 	vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	float d = max(length(view.xyz), 1.0);
 	float fill = fill_push ? min(d * FILL_PUSH, FILL_PUSH_MAX) * (1.0 - world_fill_hide) : 0.0;

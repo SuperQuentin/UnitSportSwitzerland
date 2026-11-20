@@ -107,7 +107,8 @@ public sealed class LeafStand
                     pits = shells.Pits;
                 }
             }
-            doors = BuildingFootprint.ComputeDoors(buildings, roads, grid, sites);
+            // a door its plan has no doorway for is not there (#1766)
+            doors = DoorWarden.Openable(buildings, BuildingFootprint.ComputeDoors(buildings, roads, grid, sites));
             // a garage door's access road is drivable ground (#558), a stoop's steps are climbed (#1417)
             extra.AddRange(BuildingMeshBuilder.LinkFaces(doors));
             extra.AddRange(BuildingMeshBuilder.StoopFaces(doors));

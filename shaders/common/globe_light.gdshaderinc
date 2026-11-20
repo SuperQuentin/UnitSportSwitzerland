@@ -19,11 +19,16 @@ global uniform vec3 world_globe_sun;
 global uniform float world_globe_band;
 global uniform float world_globe_palette;
 
+// The twilight's half-width, sin 6° (civil twilight): the ambient goes from full with the sun 6° up to none with it
+// 6° down, its middle where the sun's centre is on the horizon, 90° from the subsolar point (#1845: the ramp was
+// -4.6° to +14.5°, its middle 5° (550 km) into the day side; --terminatorcheck measures the drawn one)
+const float GLOBE_TWILIGHT = 0.1045;
+
 // A colour lit as the globe lights the Earth: a soft terminator (twilight), the ambient and the sun on the
 // day side, the night side all but black. n is a world-space normal.
 vec3 globe_lit(vec3 col, vec3 n) {
 	float ndl = dot(n, world_true_sun);
-	float day = smoothstep(-0.08, 0.25, ndl);
+	float day = smoothstep(-GLOBE_TWILIGHT, GLOBE_TWILIGHT, ndl);
 	return col * max(world_globe_ambient * day + world_globe_sun * max(ndl, 0.0), vec3(0.015));
 }
 #endif

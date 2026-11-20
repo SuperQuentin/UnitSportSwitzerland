@@ -7,18 +7,56 @@ Everything here is drawn only under the real sun (`SunPath.Model == Real`: not i
 screenshots or the fun world unless `--sun real`), placed just inside the camera's far plane at its
 true angular size, and read from `DayNight.Sky` (the date, hour and camera place, the celestial
 sphere's axes `Stars`, the sun and the moon). The moon itself: `items/telescope`; it is drawn at least
-`MoonDisc.MinScreenShare` of the view's height in angular radius (24 px across at 1080p and 70°; true, it was 7 px, a
-star among stars, and a 4-day crescent a one-pixel sliver), the telescope's narrow views at the true size, with
+`MoonDisc.DefaultShare` of the view's height in angular radius (#1842: 12 px across at 1080p and 70°, 1.5 times the
+true 8 px; the true size from a 47° view down; the user chose this halfway one over the true size side by side), its brightness a halo round it as a star's glow is (`MoonHalo`,
+`shaders/moon_halo.gdshader`): its width a share of the view (`MoonDisc.HaloShare`), its strength by the phase
+(`MoonDisc.PhaseGlow`, Allen's magnitude law mapped 0.25-1) and the night, centred on the lit part and drawn over the
+disc (a crescent's dark disc ringed by a centred glow read as an eclipse), gone once the disc is big on screen. It was
+boosted to 1.1 % (#1798), which zooming took back: the moon shrank against the land as one
+zoomed in. `--sky-disc-share <f>` (the moon's and sun's least radius as a share of the view) and `--moon-halo 0`
+make the comparison shots. With
 earthshine 0.04 (0.012 vanished into the night sky), at night's brightness above the air (`Atmosphere.Space`), and
 it writes its depth a step nearer than the stars and is drawn before them (render priority -1): no star shows
 through it (#1798).
 
+- **From space** (#1845, PR #1855): in an anchor frame (the earth world, Space) `DayNight.Sky` is read at the camera's
+  own ECEF place (`RealSky.At`, a `GlobalPos`, its height included, no LV95: `SunPath.Toward/Face/SkyFrame/EarthFrame`
+  take a `GlobalPos`); the flat ground frame keeps its LV95 kilometre cell. From the ground cell under it the moon was
+  0.06° off at 400 km and up to 3.1° at 20,000 km, and satellites were drawn as seen from the ground. Satellites from
+  50 km up are hidden only behind the Earth's ball (`Satellites.BehindEarth`) and show by day above the air
+  (`Atmosphere.Space` ≥ 0.5). The stars' sphere and true north read 0.0000° off the Earth-fixed truth at any anchor.
+  **The moon's halo is drawn over its disc** (`MoonDisc.PlaceHalo`: its quad two radii in front of the disc's centre):
+  pushed 1 % in clip z near the far plane it was ~0.1 % of the distance nearer, the disc bulges by its angular radius,
+  and the unlit part hid the glow, a black moon in a bright ring, worst from space over the night side (the user's
+  report). `--terminatorcheck` (`world/day-night`) checks all of it.
 - **Stars** (`World/StarField`, `shaders/sky_point.gdshader`): the Yale Bright Star Catalogue's 9,096
   stars (`assets/space/stars_bsc5.json`, J2000 RA/Dec, V, B-V), one mesh of quads built once, each
   vertex its catalogue direction, turned each frame by `Sky.Stars` (`SunPath.SkyFrame`:
   `Ephemeris.Celestial`, precession and sidereal time). A fixed size in pixels by magnitude
   (`StarField.Look`, 1.2-4.6 px), tinted by B-V, fading in with `world_night` and out near the horizon.
   Proper motion and nutation are left out.
+  **At any speed** (#2035; "when moving toward a planet, all stars disappear ... all re-appears when stopping"): the
+  points stand at infinity (`sky_point.gdshader`: the direction projected with w 0, depth pinned just inside the far
+  plane by `sky_depth`), no longer at 95 % of a far plane read before the camera's planes move (approaching a planet it
+  shrank more than 5 % a frame and the stars fell past it); and `StarField`'s cull box follows the camera (moved when 1e6
+  m off, `StarField.FollowM`) and is sized past the far plane (`StarField.BoxFor`: 5 AU out the near plane is 7.5e7 m,
+  and a 1e7 m box round the camera lay wholly in front of it, out of the frustum: "far enough, all stars disappear"),
+  `Satellites`' box re-centred and sized the same: at the top speed the camera is 2-6e7 m from the origin
+  between re-anchors (in Space the origin does not follow it vertically). Check: `--starwatch` (the stars counted every
+  10th frame, low frames saved, RESULT) beside `--bodyshot saturn,-14,-167,2000000,-10,194,fly:1e9` (6 s toward the body
+  at V m/s, `_fly.png`, then `_stopped.png`). Seen there and not the stars': a black frame (the sun gone too) at a hitch of
+  3-4e7 m, the planets session's (body globes, Saturn's air shell).
+  **The node stays at the origin** (#1989): `StarField` and `Satellites` reset to identity on `OnOriginShifted`. They
+  are top-level with a 1e7 m cull box; every shift moved them, and the shift to the Moon's tangent frame left the field
+  ~4e8 m away: every star culled (as after ~10,000 km of flight on the Earth). **Off the Earth** (`Atmosphere`):
+  the body's disc hides the sky behind it: `world_sky_down` (toward its centre) and `world_sky_floor` (its angular
+  radius, asin(R/d); -1 on the Earth); its ground past the far plane hides nothing by depth. A dip under the world's
+  horizontal was only right near the anchor's point. **On an airless ground by day** the eye is dazzled
+  (`StarField.DazzleOf`, the `dazzle` uniform, by the sun's elevation from -2° to 4°, times `Atmosphere.NearGround`: full
+  to 5 % of the body's radius, none from half of it): only the stars of magnitude 2.5 and brighter, at 80 %; at night and
+  far out all of them (decided for #1989: the sky black by day with the brightest stars, as the eye sees it shielded from
+  the sun, not a camera's starless exposure; nothing changes where there is air). Without `NearGround` the field was thin
+  68,000 km off the Moon, where the sunlit ground is a small disc (found by the planets session's `--bodyviewcheck`).
 - **Planets** (`Ephemeris.Planets.cs`): JPL's approximate Keplerian elements (table 1, 1800-2050), the
   Earth as the barycentre less the moon's share, light time, annual aberration, precession to the date.
   Against Horizons from Bern: Mercury 0.006°, Venus and Mars 0.010°, Jupiter 0.028°, **Saturn 0.080°**
@@ -63,5 +101,13 @@ through it (#1798).
   middle to 0.00001°, satellites before dawn and the lock on one; windowed `test_output/sky_*.png`).
   Unit: `EphemerisTests` (planets, faces, big moons), `Sgp4Tests`. Screenshots of the sky with the
   shot queue: `--sun real --date ... --occasion none` (December's snowfall hides everything).
+- **The Moon's look by where you are** (#2047): its enlargement (`MoonDisc.ScreenShare`) and halo are for the Earth's
+  sky, kept whole out to the Earth's sphere of influence (`MoonDisc.BoostFullM`, 925,000 km from its centre) and gone
+  at twice that (`BoostGoneM`). Past it the Moon has its true angular size and a point by its true magnitude from the
+  camera (`StarField.Look`, none fainter than the 7th), as the planets: from Mars a 3rd-magnitude star beside the Earth,
+  from Saturn none. In space every point's magnitude is from the camera (`Ephemeris.MagnitudeAt`: the phase at the
+  body, its distances from the Sun and the eye; the Moon's law added), and the Earth has a point of its own
+  (`SkyBodies.PlaceEarth`, `Ephemeris.EarthMagnitudeAt`, Mallama 2018): from Mars it was not drawn at all.
+  `--moonlookcheck` (windowed): the ground as before, Mars, Saturn and 1 AU out; pictures `test_output/bodies/moonlook_*.png`.
 - Not yet: Saturn's shadow on its rings, the ISS as a model in the telescope, a cloudy sky when it
   snows, proper motion, Pluto and the asteroids.

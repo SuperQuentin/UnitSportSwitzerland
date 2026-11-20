@@ -1,0 +1,842 @@
+using System.Collections.Concurrent;
+using Godot;
+using UnitSport.Core;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.World.Bodies;
+
+/// <summary>
+/// A body's globe (#1848, docs/plans/planets.md section 6): its pyramid's tiles (heights and colour, G1's format, built
+/// by <c>--cube-body</c> or <c>--cube-global</c>) drawn on its own cube (<see cref="CubeShape"/>) wherever the body is
+/// from the anchor, the Moon from lunar orbit and the Earth from the Moon alike: the same renderer for every body.
+///
+/// <para>
+/// <b>Placed through the frame tree</b> (<see cref="Frames"/>, at <see cref="SkyClock.Now"/>):
+/// <list type="bullet">
+/// <item>on the anchor's own body each tile is placed in doubles from the anchor (as <see cref="Globe"/> places the
+/// Earth's), once a shift: the ground under the camera holds to the millimetre;</item>
+/// <item>another body hangs under one root node whose transform is that body's frame in world space, worked out every
+/// frame (it turns and moves against the anchor's), its tiles placed from its centre (0.1 m at the Moon's radius:
+/// nothing from where it is seen); past the far plane the root also shrinks it about the camera, the same angular
+/// size and the same occlusion (scaled space).</item>
+/// </list>
+/// </para>
+///
+/// <para>
+/// <b>Levels by size on screen</b>, as the Earth's globe: a tile splits into its four when one of its drawn cells would
+/// cover more than <see cref="SplitPixels"/> pixels, once all four are loaded; a tile turned away past the body's
+/// horizon is not drawn. Meshes are built once on workers (<c>no-mesh-rebuild-per-frame</c>), 65² vertices a tile with
+/// skirts against the cracks between levels; a move only rewrites transforms.
+/// </para>
+///
+/// <para>
+/// <b>Lit by its own sun</b> (<c>body_globe.gdshader</c>): the direction from the body to the Sun, so the Moon's
+/// terminator stands where the ephemeris has it, with a floor on the night side (earthshine, starlight).
+/// </para>
+/// </summary>
+public partial class BodyGlobe : Node
+{
+    /// <summary>Every 8th height of a tile's 513²: 64 cells a side.</summary>
+    public const int Stride = 8;
+
+    /// <summary>A tile splits when one of its drawn cells would cover more than this many pixels.</summary>
+    public const float SplitPixels = 6;
+
+    /// <summary>Tiles loaded at once.</summary>
+    private const int Workers = 2;
+
+    public CelestialBody Body { get; }
+    public string Dir { get; }
+
+    /// <summary>Drawn this frame (the sky's own picture of the body steps aside, <see cref="MoonDisc"/>).</summary>
+    public bool Drawn { get; private set; }
+
+    /// <summary>Where its centre is drawn (shrunk about the camera past the far plane: the direction from it is true), while drawn.</summary>
+    public Vector3? DrawnCentre => Drawn ? _ownPlaced ? _centreWorld : _root.GlobalPosition : null;
+
+    /// <summary>The rings' slab as last written to its shader (centre, pole, the camera's height over it), while drawn (#2036's check).</summary>
+    internal (Vector3 Centre, Vector3 Pole, float Height)? RingsDrawn =>
+        _ring is { Visible: true } ? (_ringsWritten.Centre, _ringsWritten.Pole, _ringsWritten.Height) : null;
+
+    // the placing of this frame: on the anchor's own body (tiles in the anchor's world), or under the root at the body's
+    // centre in world axes (_centreWorld) turned by _rootBasis and shrunk about the camera
+    private bool _ownPlaced;
+    private Vector3 _centreWorld;
+    private Basis _rootBasis = Basis.Identity;
+
+    public override void _EnterTree() => RenderingServer.FramePreDraw += OnPreDraw;
+
+    public override void _ExitTree() => RenderingServer.FramePreDraw -= OnPreDraw;
+
+    /// <summary>
+    /// The root shrunk about the camera (another body's globe): its centre at the true direction from the camera, at
+    /// <c>s</c> of its distance, so it is drawn inside the far plane.
+    /// </summary>
+    private void PlaceRoot(Camera3D cam)
+    {
+        var camWorld = cam.GlobalPosition;
+        double distance = (ToD(_centreWorld) - ToD(camWorld)).Length;
+        double reach = distance + Body.Shape.A;
+        // past the far plane, its centre at a share of it that grows with its distance (#2051: the stand-ins sort as the bodies do)
+        float s = reach > cam.Far * 0.9 ? (float)(cam.Far * BodyLook.StandinShare(distance, Body.Shape.A) / distance) : 1f;
+        _root.Transform = new Transform3D(_rootBasis.Scaled(Vector3.One * s), camWorld + (_centreWorld - camWorld) * s);
+    }
+
+    /// <summary>
+    /// Just before the frame is drawn, after every node has moved (#2036): the shrunk root and the rings' slab from the
+    /// camera where it is drawn from. Placed in <c>_Process</c> only, the globe and its rings were put about the camera
+    /// where it was before the fly camera's own step, a frame's travel off: at full speed by Saturn (half the distance a
+    /// second) a third of the way across the view, the rings' plane off another way and the air (in world axes) not at all,
+    /// so the parts came apart while moving and snapped back on a stop.
+    /// </summary>
+    private void OnPreDraw()
+    {
+        if (!Drawn || _ownPlaced || GetViewport()?.GetCamera3D() is not { } cam || _origin.Frame.Axes is not { } axes
+            || axes.Body != _placedIn) return;
+        PlaceRoot(cam);
+        if (_ring == null) return;
+        var e = axes.ToEcef(cam.GlobalPosition.X, cam.GlobalPosition.Y, cam.GlobalPosition.Z);
+        _eyeHere = Frames.Convert(axes.Body, new DVec3(e.X, e.Y, e.Z), Body.Id, SkyClock.Now);
+        KeepRings(true);
+    }
+
+    /// <summary>Whether to draw it at all this frame: the owner's call (<see cref="BodyViews"/>).</summary>
+    public bool Wanted { get; set; }
+
+    /// <summary>The direction to the Sun from the body, world axes, last frame (the shots' log).</summary>
+    public Vector3 Sun => _sun;
+
+    /// <summary>Tiles drawn last frame (the shots' log).</summary>
+    public int DrawnTiles { get; private set; }
+
+    /// <summary>How far under a giant's 1-bar level its globe (the cloud deck) still draws, metres (#1854): inside the clouds.</summary>
+    public const double CloudDeckM = 2_000;
+
+    /// <summary>The pyramid's finest level (deeper once the server's comes, <see cref="RefreshPyramid"/>).</summary>
+    public int MaxLevel => _maxLevel;
+
+    /// <summary>
+    /// The chain changed (the server's pyramid for this body came, #1849): the finest level follows it, and every drawn tile
+    /// whose best copy changed is read again, the old one drawn until its new one is in.
+    /// </summary>
+    public void RefreshPyramid(IReadOnlyCollection<CubeKey> changed)
+    {
+        _maxLevel = Math.Max(_pyramid.MaxLevel, 0);
+        foreach (var key in changed)
+            if (_tiles.ContainsKey(key)) _stale.Add(key);
+        GD.Print($"[bodies] {Body.Name}'s pyramid now: {_pyramid.Describe()}, to level {_maxLevel}; {_stale.Count} drawn tiles read again");
+    }
+
+    // drawn tiles whose best copy changed: asked again, drawn as they were until the new one commits
+    private readonly HashSet<CubeKey> _stale = new();
+
+    /// <summary>The body's pyramid (#1656's chain; any thread may read it).</summary>
+    public Terrain.Leaves.PyramidSource Pyramid => _pyramid;
+
+    /// <summary>The near ground on this body (#1850): its own tiles step aside under it.</summary>
+    public BodyGround? Ground { get; set; }
+
+    private readonly WorldOrigin _origin;
+    // the body's pyramid (#1656's chain): its folder, or for the Earth the game's own (local, the server's, the shipped base)
+    private readonly Terrain.Leaves.PyramidSource _pyramid;
+    private int _maxLevel;
+    private readonly Node3D _root = new() { Name = "Frame" };
+    private readonly Dictionary<CubeKey, Tile> _tiles = new();
+    private readonly HashSet<CubeKey> _loading = new();
+    private readonly ConcurrentQueue<(CubeKey Key, Godot.Collections.Array? Arrays, Image? Colour, float Mean)> _done = new();
+
+    /// <summary>
+    /// What ground square to the sun comes out at on average (#1853), after the shader's Cartoon lift (the photo to the
+    /// power 0.8): every body's photo is exposed to it, whatever its source's own scale. Six-face means of the level-0
+    /// colour: the Moon's CGI Moon Kit 0.567 (exposed 0.94), Mars' Viking mosaic 0.332 (1.45), the Earth's Blue Marble
+    /// 0.172 (2.2, mostly ocean, at the cap).
+    /// </summary>
+    public const float LitMean = 0.6f;
+
+    /// <summary>
+    /// The sun's strength on this body's photo (<c>sun_strength</c>), from its level-0 colour's mean brightness over all
+    /// six faces (<see cref="LitMean"/> over that mean lifted as the shader lifts it, 0.7 to 2.2); the shader's 1.6 until
+    /// the six have come.
+    /// </summary>
+    public float Exposure { get; private set; } = 1.6f;
+
+    private bool _exposed;
+    private readonly Dictionary<int, float> _faceMeans = new();
+
+    /// <summary>
+    /// The six level-0 faces' mean brightness, read on a worker as soon as the globe is made (#1983): its exposure is then
+    /// known before anything is drawn. Waiting for the six to come in with the streamed tiles lit the first seconds at the
+    /// shader's 1.6 and dropped every tile and ground square to the photo's exposure in one frame (the Moon: 1.6 to 0.94, a
+    /// dip filmed at Apollo 11). Null when a face has no colour here (a streamed pyramid): the old way then.
+    /// </summary>
+    private readonly Task<float?> _faceMeanTask;
+
+    /// <summary>How long the first tiles have been held for the exposure, seconds (at most <see cref="ExposureWait"/>).</summary>
+    private double _heldFor;
+
+    private const double ExposureWait = 3;
+
+    /// <summary>Whether the exposure is the one the globe keeps (or the wait for it is over): what the ground squares wait for.</summary>
+    public bool ExposureSettled => _exposed || _heldFor >= ExposureWait || _faceMeanTask.IsCompleted && _faceMeanTask is not { IsCompletedSuccessfully: true, Result: not null };
+    private readonly HashSet<CubeKey> _show = new();
+    private readonly Shader _shader = GD.Load<Shader>("res://shaders/body_globe.gdshader");
+
+    // another body's globe in the sky (#2051): drawn after the stars, stepping aside for the scene in front of it
+    private readonly Shader _standinShader = GD.Load<Shader>("res://shaders/body_globe_standin.gdshader");
+    private bool _standin = true;
+    private static readonly StringName LocalCentre = "local_centre";
+
+    /// <summary>The whole globe shown or hidden (#2051's <c>--skyordercheck</c>: its comparison pictures).</summary>
+    internal void SetShown(bool shown) => _root.Visible = shown;
+
+    /// <summary>A tile's material as the globe is placed: the anchor's own ground (opaque, true place) or a stand-in in the sky.</summary>
+    private void Dress(ShaderMaterial material)
+    {
+        material.Shader = _standin ? _standinShader : _shader;
+        material.RenderPriority = _standin ? BodyLook.StandinPriority : 0;
+    }
+    private readonly int _month;
+    private int _epoch = int.MinValue, _running;
+    private BodyId _placedIn = (BodyId)255;
+    private Vector3 _sun = Vector3.Zero;
+
+    private sealed class Tile(MeshInstance3D node, ShaderMaterial material)
+    {
+        public readonly MeshInstance3D Node = node;
+        public readonly ShaderMaterial Material = material;
+
+        /// <summary>The sun last written into this tile's material (a hidden tile misses the sun's moves: written when shown again).</summary>
+        public Vector3 Sun;
+    }
+
+    private static readonly StringName AirTau = "air_tau", TerminatorWrap = "terminator_wrap", NightFloor = "night_floor",
+        HorizonShade = "horizon_shade", BodyCentre = "body_centre", Lunar = "lunar";
+
+    /// <summary>
+    /// How much of an airless body's ground light follows Lommel-Seeliger (#2024: the regolith's law, bright to a grazing sun
+    /// seen obliquely), the rest Lambert; a lunar-Lambert model. On its ground only: from orbit its tiles stay as its sky
+    /// sphere is lit.
+    /// </summary>
+    public const float LunarShare = 0.6f;
+
+    /// <summary>The body's lunar share at a share of the exposure: <see cref="LunarShare"/> on its ground, 0 from orbit; 0 with air.</summary>
+    public float LunarAt(float share) => Body.Air != null ? 0f
+        : LunarShare * (1f - Mathf.Clamp((share - GroundGrey) / (1f - GroundGrey), 0f, 1f));
+
+    /// <summary>The night floor of a solid body's tiles (the shader's default) and on its ground (#2024: the squares' own).</summary>
+    public const float NightFloorSpace = 0.06f, NightFloorGround = 0.012f;
+
+    /// <summary>The body's centre written to its tiles last (#2024: the horizon's shade, while the anchor is on it).</summary>
+    private Vector3? _centreWritten;
+
+    /// <summary>
+    /// The air's vertical depth the ground's sunlight goes through (#1854): a landable body with air (Mars, Venus, Titan); none
+    /// for the airless, the Earth (its own look, tuned elsewhere) and the giants (their globe is their cloud deck).
+    /// </summary>
+    public static Vector3 AirTauOf(CelestialBody body) =>
+        body is { Landable: true, Air: { } air } && body.Id != BodyId.Earth
+            ? new Vector3((float)air.VerticalDepth.R, (float)air.VerticalDepth.G, (float)air.VerticalDepth.B) : Vector3.Zero;
+
+    private static readonly StringName SunDir = "sun_dir", AlbedoTex = "albedo_tex",
+        SunStrength = "sun_strength", HoleCentre = "hole_centre", HoleUp = "hole_up", HoleEast = "hole_east", HoleHalf = "hole_half";
+
+    /// <summary>The hole every tile has now (half side 0: none), set on a tile only when it changes.</summary>
+    private (Vector3 Centre, Vector3 Up, Vector3 East, float Half) _hole;
+
+    public BodyGlobe(CelestialBody body, string dir, WorldOrigin origin)
+        : this(body, new Terrain.Leaves.PyramidSource([new GlobeFiles(dir).Layer(dir, local: true)]), dir, origin)
+    {
+    }
+
+    /// <summary>A body's globe on a pyramid chain (#1656: the Earth's is <see cref="GlobeData.Earth"/>).</summary>
+    public BodyGlobe(CelestialBody body, Terrain.Leaves.PyramidSource pyramid, string describe, WorldOrigin origin)
+    {
+        Body = body;
+        Dir = describe;
+        _origin = origin;
+        Name = $"{body.Name}Globe";
+        _pyramid = pyramid;
+        _maxLevel = Math.Max(pyramid.MaxLevel, 0);
+        _month = Calendar.Month;
+        int month = _month;
+        _faceMeanTask = Task.Run(() => FaceMean(pyramid, month));
+        AddChild(_root);
+        GD.Print($"[bodies] {body.Name}'s globe: {pyramid.Count} tiles to level {_maxLevel}, from {describe}");
+    }
+
+    public override void _Process(double delta)
+    {
+        Commit();
+        var cam = GetViewport()?.GetCamera3D();
+        if (!Wanted || cam == null || _origin.Frame.Axes is not { } axes)
+        {
+            if (Drawn) Hide();
+            return;
+        }
+        var sky = SkyClock.Now;
+        bool own = OwnPlacing(axes);
+        if (axes.Body != _placedIn || (own && _origin.Epoch != _epoch)) Replace(axes, own);
+
+        // the body's frame in world space (doubles): a point p of the body is W (R p + c - O) in world
+        var w = Rows(axes);
+        var r = own ? DMat3.Identity : Columns(Body.Id, axes.Body, sky);
+        var c = own ? DVec3.Zero : Frames.Convert(Body.Id, DVec3.Zero, axes.Body, sky);
+        var o = new DVec3(axes.Origin.X, axes.Origin.Y, axes.Origin.Z);
+        var camWorld = cam.GlobalPosition;
+        var centreWorld = w.ApplyInverse(c - o);
+        WriteCentre(own ? ToVector(centreWorld) : null);
+        _ownPlaced = own;
+        _centreWorld = ToVector(centreWorld);
+        if (!own)
+        {
+            // basis W R, origin W (c - O); shrunk about the camera past the far plane. Again just before the frame is drawn,
+            // from the camera where it is drawn from (OnPreDraw)
+            _rootBasis = BasisOf(w, r);
+            PlaceRoot(cam);
+        }
+
+        // the sun from the body, into world axes
+        var sunIcrf = Frames.Offset(Body.Id, BodyId.Sun, sky);
+        var sunAnchor = Frames.Orientation(axes.Body, sky).ApplyInverse(sunIcrf);
+        var sun = ToVector(w.ApplyInverse(sunAnchor).Normalized());
+        _sun = sun;
+
+        // the eye in the body's own frame, for the levels
+        var eyeAnchor = new DVec3(0, 0, 0);
+        {
+            var (ex, ey, ez) = (camWorld.X, camWorld.Y, camWorld.Z);
+            var e = axes.ToEcef(ex, ey, ez);
+            eyeAnchor = new DVec3(e.X, e.Y, e.Z);
+        }
+        var eye = own ? eyeAnchor : Frames.Convert(axes.Body, eyeAnchor, Body.Id, sky);
+        _eyeHere = eye;
+        // inside a giant (#1854): its globe is the cloud deck at 1 bar, a picture to see from above; once the camera is
+        // under it the air is the view (the shell's clouds and the dark below), so the deck steps aside
+        if (!Body.Landable && Body.Shape.ToGeodetic(eye.AsEcef).H < -CloudDeckM)
+        {
+            if (Drawn) Hide();
+            return;
+        }
+        float fov = Mathf.DegToRad(CameraLens.FovOf(cam));
+        double focal = GetViewport().GetVisibleRect().Size.Y / (2 * Math.Tan(fov / 2));
+        _show.Clear();
+        for (int f = 0; f < CubeSphere.Faces; f++) Select(new CubeKey(f, 0, 0, 0), eye, focal);
+
+        // the near ground's hole (own body only): moved with the square and at each re-anchor, so rarely
+        var hole = own && Ground?.Hole is { } h ? h : default;
+        bool holeMoved = hole != _hole;
+        _hole = hole;
+
+        int shown = 0;
+        foreach (var (key, tile) in _tiles)
+        {
+            bool on = _show.Contains(key);
+            if (tile.Node.Visible != on) tile.Node.Visible = on;
+            if (on)
+            {
+                shown++;
+                // per tile: one hidden while the sun moved (or the frame turned) kept its old sun, and two neighbours were lit
+                // as two halves (Jupiter from Io split down a meridian)
+                if (tile.Sun.DistanceSquaredTo(sun) > 1e-8f) tile.Material.SetShaderParameter(SunDir, tile.Sun = sun);
+            }
+            if (holeMoved) SetHole(tile.Material);
+        }
+        DrawnTiles = shown;
+        Drawn = shown > 0;
+        KeepRings(Drawn);
+    }
+
+    /// <summary>A colour image's mean brightness (Rec. 709 luma of a 32 × 32 sample), 0 to 1.</summary>
+    private static float MeanBrightness(Image image)
+    {
+        int w = image.GetWidth(), h = image.GetHeight();
+        double sum = 0;
+        for (int j = 0; j < 32; j++)
+            for (int i = 0; i < 32; i++)
+            {
+                var c = image.GetPixel((int)((i + 0.5) * w / 32), (int)((j + 0.5) * h / 32));
+                sum += 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+            }
+        return (float)(sum / 1024);
+    }
+
+    private void SetHole(ShaderMaterial m)
+    {
+        m.SetShaderParameter(HoleCentre, _hole.Centre);
+        m.SetShaderParameter(HoleUp, _hole.Up);
+        m.SetShaderParameter(HoleEast, _hole.East);
+        m.SetShaderParameter(HoleHalf, _hole.Half);
+    }
+
+    private void Hide()
+    {
+        KeepRings(false);
+        foreach (var t in _tiles.Values) t.Node.Visible = false;
+        Drawn = false;
+        DrawnTiles = 0;
+    }
+
+    /// <summary>
+    /// How far under the eye a tile's horizon test starts, metres: deeper than any basin and higher than any peak is over
+    /// the eye (Hellas 8 km under Mars' reference, Olympus 22 km over it), so a tile near the eye never seems turned away.
+    /// </summary>
+    private const double ReliefM = 25_000;
+
+    /// <summary>The tiles to draw: a tile splits when its drawn cells would be big on screen and its four are loaded.</summary>
+    private void Select(CubeKey key, DVec3 eye, double focal)
+    {
+        if (!_pyramid.Has(key)) return;
+        var cube = Body.Cube;
+        var centre = (DVec3)cube.ToEcef(key.Face, CubeSphere.Lattice(key.Level + 1, 2L * key.X + 1), CubeSphere.Lattice(key.Level + 1, 2L * key.Y + 1), 0);
+        double edge = Body.Shape.A * Math.PI / 2 / key.Side;
+        var toEye = eye - centre;
+        double distance = Math.Max(toEye.Length - edge, 1);
+        // turned away past the body's horizon: a tile whose up looks away from the eye by more than its own size. Judged from
+        // the tile's centre lowered under the eye (#1985): at the reference height, a tile round an eye down in a basin
+        // (Mare Crisium, 3.5 km under it) seemed to look away from it and was dropped, a black band past the ground squares
+        var up = centre.Normalized();
+        var judged = eye - up * Math.Min(centre.Length, eye.Length - ReliefM);
+        if (key.Level > 0 && up.Dot(judged.Normalized()) < -0.15 - edge / Body.Shape.A) return;
+        if (!_tiles.ContainsKey(key)) { Request(key); if (key.Level > 0) return; }
+        else if (_stale.Contains(key)) Request(key);
+        double cell = edge / (512.0 / Stride);
+        bool split = key.Level < _maxLevel && cell / distance * focal > SplitPixels;
+        if (split)
+        {
+            bool all = true;
+            foreach (var child in key.Children())
+                if (!_tiles.ContainsKey(child)) { all = false; if (_pyramid.Has(child)) Request(child); }
+            if (all)
+            {
+                foreach (var child in key.Children()) Select(child, eye, focal);
+                return;
+            }
+        }
+        if (_tiles.ContainsKey(key)) _show.Add(key);
+    }
+
+    private ImageTexture? _meanTexture;
+
+    /// <summary>One pixel of the body's photo's mean grey (its faces' means; 0.3 before they are known).</summary>
+    private ImageTexture MeanTexture()
+    {
+        if (_meanTexture != null) return _meanTexture;
+        float grey = _faceMeans.Count > 0 ? _faceMeans.Values.Average() : 0.3f;
+        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgb8);
+        image.SetPixel(0, 0, new Color(grey, grey, grey));
+        return _meanTexture = ImageTexture.CreateFromImage(image);
+    }
+
+    private void Request(CubeKey key)
+    {
+        if (_running >= Workers || !_loading.Add(key)) return;
+        _running++;
+        bool coloured = _pyramid.HasColour(key);
+        var cube = Body.Cube;
+        int month = _month;
+        Task.Run(() =>
+        {
+            Godot.Collections.Array? arrays = null;
+            Image? colour = null;
+            float mean = float.NaN;
+            try
+            {
+                // a streamed tile not come yet: none this time, asked again
+                if (_pyramid.Heights(key) is { } tile) arrays = Build(tile, cube);
+                if (arrays != null && coloured && _pyramid.Colour(key, month) is { } webp)
+                {
+                    colour = new Image();
+                    if (colour.LoadWebpFromBuffer(webp) != Error.Ok) colour = null;
+                    else
+                    {
+                        if (key.Level == 0) mean = MeanBrightness(colour);
+                        colour.GenerateMipmaps();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[bodies] {key}: {ex.Message}");
+            }
+            _done.Enqueue((key, arrays, colour, mean));
+        });
+    }
+
+    /// <summary>The mean brightness of the six level-0 faces' colour, or null when one has none here (on a worker).</summary>
+    private static float? FaceMean(Terrain.Leaves.PyramidSource pyramid, int month)
+    {
+        try
+        {
+            float sum = 0;
+            for (int f = 0; f < CubeSphere.Faces; f++)
+            {
+                var key = new CubeKey(f, 0, 0, 0);
+                if (!pyramid.HasColour(key) || pyramid.Colour(key, month) is not { } webp) return null;
+                var image = new Image();
+                if (image.LoadWebpFromBuffer(webp) != Error.Ok) return null;
+                sum += MeanBrightness(image);
+            }
+            return sum / CubeSphere.Faces;
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[bodies] the faces' mean: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The share of <see cref="Exposure"/> its tiles take now (#2024): <see cref="GroundGrey"/> with the camera on or near its
+    /// ground (the regolith grey, not blown out: the photo's exposure is for the whole disc from space), 1 from orbit.
+    /// Set by its ground (<see cref="BodyGround"/>) while the anchor is on it.
+    /// </summary>
+    public float GroundShare { get; private set; } = 1f;
+
+    /// <summary>The exposure on its ground (#2024): the photo's mean comes out at <see cref="LitMean"/> times this.</summary>
+    public const float GroundGrey = 0.5f;
+
+    /// <summary>The share of the exposure at a camera <paramref name="altitude"/> over the body (#2024): grey from 10 km down, full from 200 km.</summary>
+    public static float GroundShareAt(double altitude) =>
+        Mathf.Lerp(GroundGrey, 1f, Mathf.SmoothStep(10_000f, 200_000f, (float)altitude));
+
+    /// <summary>Its tiles take <paramref name="share"/> of the exposure (written when it moves by half a percent).</summary>
+    public void SetGroundShare(float share)
+    {
+        if (Mathf.Abs(share - GroundShare) < 0.005f && (share == 1f) == (GroundShare == 1f)) return;
+        GroundShare = share;
+        foreach (var t in _tiles.Values)
+        {
+            t.Material.SetShaderParameter(SunStrength, Exposure * GroundShare);
+            if (Body.Landable) t.Material.SetShaderParameter(NightFloor, NightFloorOf(GroundShare));
+            if (Body.Landable) t.Material.SetShaderParameter(Lunar, LunarAt(GroundShare));
+        }
+    }
+
+    /// <summary>A solid body's night floor at a share of the exposure (#2024): the squares' dark night on the ground, space's from orbit.</summary>
+    private static float NightFloorOf(float share) =>
+        Mathf.Lerp(NightFloorGround, NightFloorSpace, Mathf.Clamp((share - GroundGrey) / (1f - GroundGrey), 0f, 1f));
+
+    /// <summary>
+    /// The body's centre to its tiles while the anchor is on it (#2024: a slope past the terminator stays dark), written when
+    /// it moves by a metre (an origin shift); off when the anchor leaves.
+    /// </summary>
+    private void WriteCentre(Vector3? centre)
+    {
+        if (centre is { } c && _centreWritten is { } w && c.DistanceSquaredTo(w) < 1f) return;
+        if (centre == null && _centreWritten == null) return;
+        _centreWritten = centre;
+        foreach (var t in _tiles.Values) WriteCentre(t.Material, centre);
+    }
+
+    private static void WriteCentre(ShaderMaterial m, Vector3? centre)
+    {
+        m.SetShaderParameter(HorizonShade, centre != null);
+        if (centre is { } c) m.SetShaderParameter(BodyCentre, c);
+    }
+
+    /// <summary>The exposure from a six-face mean, on every tile there is.</summary>
+    private void Expose(float mean, string how)
+    {
+        _exposed = true;
+        Exposure = Mathf.Clamp(LitMean / Mathf.Pow(Mathf.Max(mean, 0.01f), 0.8f), 0.7f, 2.2f);
+        // its sphere in the sky takes the same (#1998): the hand-over between the two never shows
+        BodyLook.SetExposure(Body.Id, Exposure);
+        foreach (var t in _tiles.Values) t.Material.SetShaderParameter(SunStrength, Exposure * GroundShare);
+        GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"[bodies] {Body.Name}'s photo: mean {mean:F3} over its six faces, exposed at {Exposure:F2} ({how})"));
+    }
+
+    /// <summary>Main thread: the tiles the workers made, a few a frame.</summary>
+    private void Commit()
+    {
+        // the exposure first: no tile is drawn at the provisional one (held up to ExposureWait)
+        if (!_exposed && _faceMeanTask.IsCompletedSuccessfully && _faceMeanTask.Result is { } known) Expose(known, "read up front");
+        if (!ExposureSettled)
+        {
+            _heldFor += GetProcessDeltaTime();
+            return;
+        }
+        for (int n = 0; n < 8 && _done.TryDequeue(out var r); n++)
+        {
+            _running--;
+            _loading.Remove(r.Key);
+            if (r.Arrays == null) continue;
+            var mesh = new ArrayMesh();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, r.Arrays);
+            var material = new ShaderMaterial();
+            Dress(material);
+            // the body's centre in the tile's own axes (east, up, south from its anchor): its far half is culled as a stand-in
+            {
+                var a = r.Key.AnchorOn(Body.Cube);
+                double Dot(EcefPos u, EcefPos v) => u.X * v.X + u.Y * v.Y + u.Z * v.Z;
+                var o = new EcefPos(-a.Origin.X, -a.Origin.Y, -a.Origin.Z);
+                material.SetShaderParameter(LocalCentre, new Vector3((float)Dot(o, a.East), (float)Dot(o, a.Up), (float)-Dot(o, a.North)));
+            }
+            // a tile with no colour of its own (a coarse level the data left out) takes the body's mean, not the shader's
+            // white at full sun: the Moon from 140,000 km glared as a white blob (#1998)
+            material.SetShaderParameter(AlbedoTex, r.Colour != null ? ImageTexture.CreateFromImage(r.Colour) : MeanTexture());
+            material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
+            SetHole(material);
+            if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
+            if (!_exposed && _faceMeans.Count == CubeSphere.Faces) Expose(_faceMeans.Values.Sum() / CubeSphere.Faces, "as its tiles came");
+            material.SetShaderParameter(SunStrength, Exposure * GroundShare);
+            material.SetShaderParameter(AirTau, AirTauOf(Body));
+            if (Body.Landable) material.SetShaderParameter(NightFloor, NightFloorOf(GroundShare));
+            if (Body.Landable) material.SetShaderParameter(Lunar, LunarAt(GroundShare));
+            if (_centreWritten != null) WriteCentre(material, _centreWritten);
+            // a giant: a soft terminator through its deep air, and a night side as dark as space's (no ground to play on)
+            if (!Body.Landable && Body.Air != null)
+            {
+                material.SetShaderParameter(TerminatorWrap, 0.3f);
+                material.SetShaderParameter(NightFloor, 0.015f);
+            }
+            var node = new MeshInstance3D
+            {
+                Name = r.Key.FileStem, Mesh = mesh, MaterialOverride = material, Visible = false,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // a tile's own box is near its centre; the scaled root and the frame tree's turn carry it far: never culled by Godot's guess
+                ExtraCullMargin = 16384,
+            };
+            // a finer copy of a drawn tile (the server's): it takes the old one's place
+            if (_tiles.Remove(r.Key, out var old)) { node.Visible = old.Node.Visible; old.Node.QueueFree(); }
+            _stale.Remove(r.Key);
+            _tiles[r.Key] = new Tile(node, material);
+            Place(r.Key, node);
+        }
+    }
+
+    /// <summary>
+    /// Tiles placed one by one from the anchor in doubles (the ground holds to the millimetre): on the anchor's own body
+    /// when it has ground. A giant (#1854) always hangs from its centre under the root, shrunk with it past the far plane:
+    /// its sphere of influence is millions of km, so it is the anchor where its tiles would pass the far plane, and it has
+    /// no ground to hold (4 m in a float at Jupiter's cloud tops, 0.005° from the camera's floor 50 km over them).
+    /// </summary>
+    private bool OwnPlacing(FrameAxes axes) => axes.Body == Body.Id && Body.Landable;
+
+    private MeshInstance3D? _ring;
+    private ShaderMaterial? _ringMaterial;
+    private double _ringOuter, _ringHalf;
+    private DVec3 _eyeHere;
+    private (Vector3 Sun, Vector3 Pole, Vector3 Centre, float Shrink, float Height) _ringsWritten;
+    private static readonly StringName RingSun = "sun_dir", RingPole = "pole", RingCentre = "centre", RingShrink = "shrink",
+        RingOuter = "outer_world", RingHalf = "half_thick", RingHeight = "cam_height", RingPlanet = "planet_r";
+
+    /// <summary>
+    /// Rings in the body's equator (Saturn's, #1854): a slab from <paramref name="inner"/> to <paramref name="outer"/> metres
+    /// from the centre, <paramref name="halfThickness"/> each side of the equator, drawn by one pass over the screen
+    /// (<c>ring_slab.gdshader</c>: each pixel's ray through the slab, measured from the camera in the globe's shrunk
+    /// units), its radial strip from <paramref name="map"/>. The sky's rings step aside with its disc while the globe draws.
+    /// </summary>
+    public void AddRings(double inner, double outer, double halfThickness, Texture2D map)
+    {
+        _ringOuter = outer;
+        _ringHalf = halfThickness;
+        _ringMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/ring_slab.gdshader") };
+        _ringMaterial.SetShaderParameter("rings", map);
+        _ringMaterial.SetShaderParameter("inner", (float)(inner / outer));
+        _ring = new MeshInstance3D
+        {
+            Name = "Rings", Mesh = new QuadMesh { Size = new Vector2(2f, 2f) }, MaterialOverride = _ringMaterial, Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // the shader lays the quad over the whole screen: never culled. Under the root (placed every frame): a node
+            // under this plain Node was carried off by the origin's shifts (10^12 m by the one to Saturn) out of its box
+            CustomAabb = new Aabb(new Vector3(-1e9f, -1e9f, -1e9f), new Vector3(2e9f, 2e9f, 2e9f)),
+            IgnoreOcclusionCulling = true,
+        };
+        _root.AddChild(_ring);
+    }
+
+    /// <summary>The rings with the globe: what the slab's shader measures from (written when it changes), shown while it draws.</summary>
+    private void KeepRings(bool drawn)
+    {
+        if (_ring == null || _ringMaterial == null) return;
+        if (_ring.Visible != drawn) _ring.Visible = drawn;
+        if (!drawn) return;
+        float shrink = _root.Transform.Basis.X.Length();
+        // the camera's height over the equator from doubles (the body-fixed Z of the eye), shrunk as the system is
+        var written = (_sun, _root.GlobalBasis.Z.Normalized(), _root.GlobalPosition, shrink, (float)(_eyeHere.Z * shrink));
+        if (written == _ringsWritten) return;
+        _ringsWritten = written;
+        WriteRing(_ringMaterial, written, shrink);
+    }
+
+    private void WriteRing(ShaderMaterial m, (Vector3 Sun, Vector3 Pole, Vector3 Centre, float Shrink, float Height) w, float shrink)
+    {
+        m.SetShaderParameter(RingSun, w.Sun);
+        m.SetShaderParameter(RingPole, w.Pole);
+        m.SetShaderParameter(RingCentre, w.Centre);
+        m.SetShaderParameter(RingShrink, shrink);
+        m.SetShaderParameter(RingHeight, w.Height);
+        m.SetShaderParameter(RingOuter, (float)(_ringOuter * shrink));
+        m.SetShaderParameter(RingHalf, (float)(_ringHalf * shrink));
+        m.SetShaderParameter(RingPlanet, (float)(Body.Shape.A * shrink));
+    }
+
+    /// <summary>The camera's body-fixed place (this body's frame), as this frame's selection read it.</summary>
+    public DVec3 Eye => _eyeHere;
+
+    /// <summary>Every tile moved to the anchor's way of placing them (its own body, or another's under the root).</summary>
+    private void Replace(FrameAxes axes, bool own)
+    {
+        _placedIn = axes.Body;
+        _epoch = _origin.Epoch;
+        if (own) _root.Transform = Transform3D.Identity;
+        if (_standin == own)
+        {
+            _standin = !own;
+            foreach (var tile in _tiles.Values) Dress(tile.Material);
+        }
+        foreach (var (key, tile) in _tiles) Place(key, tile.Node);
+        foreach (var n in _bodyFixed) PlaceBodyFixed(n, axes, own);
+    }
+
+    private readonly List<Node3D> _bodyFixed = new();
+
+    /// <summary>
+    /// A node whose children are in this body's fixed frame (metres from its centre, its own axes): under the root, which is
+    /// that frame when the body is another's (and shrinks it about the camera), or turned from it into the anchor's world on
+    /// its own body, again at each shift (#1946: the colonies' lights).
+    /// </summary>
+    public void AddBodyFixed(Node3D node)
+    {
+        _bodyFixed.Add(node);
+        _root.AddChild(node);
+        if (_origin.Frame.Axes is { } axes && _placedIn == axes.Body) PlaceBodyFixed(node, axes, OwnPlacing(axes));
+    }
+
+    private static void PlaceBodyFixed(Node3D node, FrameAxes axes, bool own)
+    {
+        if (!own)
+        {
+            node.Transform = Transform3D.Identity;
+            return;
+        }
+        Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
+        var (ox, oy, oz) = axes.FromEcef(new EcefPos(0, 0, 0));
+        node.Transform = new Transform3D(new Basis(Turn(new EcefPos(1, 0, 0)), Turn(new EcefPos(0, 1, 0)), Turn(new EcefPos(0, 0, 1))),
+            new Vector3((float)ox, (float)oy, (float)oz));
+    }
+
+    /// <summary>A tile's node: from the anchor in doubles on its own body, from the body's centre under the root elsewhere.</summary>
+    private void Place(CubeKey key, MeshInstance3D node)
+    {
+        var a = key.AnchorOn(Body.Cube);
+        if (node.GetParent() == null) _root.AddChild(node);
+        if (_origin.Frame.Axes is { } axes && OwnPlacing(axes))
+        {
+            Vector3 Turn(EcefPos v) => new((float)FrameAxes.Dot(v, axes.X), (float)FrameAxes.Dot(v, axes.Y), (float)FrameAxes.Dot(v, axes.Z));
+            var (ox, oy, oz) = axes.FromEcef(a.Origin);
+            var south = new EcefPos(-a.North.X, -a.North.Y, -a.North.Z);
+            node.Transform = new Transform3D(new Basis(Turn(a.East), Turn(a.Up), Turn(south)), new Vector3((float)ox, (float)oy, (float)oz));
+        }
+        else
+        {
+            Vector3 V(EcefPos v) => new((float)v.X, (float)v.Y, (float)v.Z);
+            var south = new EcefPos(-a.North.X, -a.North.Y, -a.North.Z);
+            node.Transform = new Transform3D(new Basis(V(a.East), V(a.Up), V(south)), V(a.Origin));
+        }
+    }
+
+    /// <summary>
+    /// A tile's mesh in its anchor's east-up-south (floats round its centre): every <see cref="Stride"/>th height, the
+    /// normals from the grid, the colour's UVs (row 0 the south edge, as the colour is baked) and skirts a cell deep.
+    /// </summary>
+    public static Godot.Collections.Array Build(CubeTile tile, CubeShape cube)
+    {
+        var key = tile.Key;
+        // 64 cells whatever the lattice (#1656: the Earth's shipped base holds 65² tiles)
+        int bits = tile.Bits, stride = Globe.StrideOf(bits), m = (1 << bits) / stride, n = m + 1;
+        var anchor = key.AnchorOn(cube);
+        var pos = new Vector3[n * n];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                float h = tile.HeightAt(i * stride, j * stride);
+                if (!float.IsFinite(h)) h = 0;
+                var p = key.VertexOn(cube, bits, i * stride, j * stride, h);
+                var (x, y, z) = anchor.ToLocal(p);
+                pos[j * n + i] = new Vector3((float)x, (float)y, (float)z);
+            }
+        var normals = new Vector3[n * n];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                var dx = pos[j * n + Math.Min(i + 1, m)] - pos[j * n + Math.Max(i - 1, 0)];
+                var dy = pos[Math.Min(j + 1, m) * n + i] - pos[Math.Max(j - 1, 0) * n + i];
+                var nn = dy.Cross(dx);
+                normals[j * n + i] = nn.LengthSquared() > 0 ? nn.Normalized() : Vector3.Up;
+                if (normals[j * n + i].Dot(Vector3.Up) < 0) normals[j * n + i] = -normals[j * n + i];
+            }
+
+        // the grid, then a skirt round it: each edge vertex again, a cell lower along the local up
+        double cellM = cube.Shape.A * Math.PI / 2 / key.Side / m;
+        float skirt = (float)Math.Max(cellM, 50);
+        var edge = new List<int>(4 * m);
+        for (int i = 0; i < m; i++) edge.Add(i);                       // south, west to east
+        for (int j = 0; j < m; j++) edge.Add(j * n + m);               // east, south to north
+        for (int i = m; i > 0; i--) edge.Add(m * n + i);               // north, east to west
+        for (int j = m; j > 0; j--) edge.Add(j * n);                   // west, north to south
+        int total = n * n + edge.Count;
+        var verts = new Vector3[total];
+        var norms = new Vector3[total];
+        var uvs = new Vector2[total];
+        for (int k = 0; k < n * n; k++)
+        {
+            verts[k] = pos[k];
+            norms[k] = normals[k];
+            uvs[k] = new Vector2((float)(k % n) / m, (float)(k / n) / m);
+        }
+        for (int e = 0; e < edge.Count; e++)
+        {
+            int v = edge[e];
+            verts[n * n + e] = pos[v] - Vector3.Up * skirt;
+            norms[n * n + e] = normals[v];
+            uvs[n * n + e] = uvs[v];
+        }
+        var idx = new List<int>(m * m * 6 + edge.Count * 6);
+        for (int j = 0; j < m; j++)
+            for (int i = 0; i < m; i++)
+            {
+                int a = j * n + i, b = a + 1, c = a + n, d = c + 1;
+                // counter-clockwise seen from above (+Y up, +Z south): front faces outward
+                idx.Add(a); idx.Add(c); idx.Add(b);
+                idx.Add(b); idx.Add(c); idx.Add(d);
+            }
+        for (int e = 0; e < edge.Count; e++)
+        {
+            int top0 = edge[e], top1 = edge[(e + 1) % edge.Count];
+            int bot0 = n * n + e, bot1 = n * n + (e + 1) % edge.Count;
+            // both sides: a skirt is seen from wherever the crack is
+            idx.Add(top0); idx.Add(bot0); idx.Add(top1);
+            idx.Add(top1); idx.Add(bot0); idx.Add(bot1);
+            idx.Add(top0); idx.Add(top1); idx.Add(bot0);
+            idx.Add(top1); idx.Add(bot1); idx.Add(bot0);
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = verts;
+        arrays[(int)Mesh.ArrayType.Normal] = norms;
+        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
+        arrays[(int)Mesh.ArrayType.Index] = idx.ToArray();
+        return arrays;
+    }
+
+    /// <summary>The anchor's world axes as the rows of a rotation: <c>ApplyInverse(v)</c> is a body-fixed vector in world axes.</summary>
+    private static DMat3 Rows(FrameAxes axes) => new(Of(axes.X), Of(axes.Y), Of(axes.Z));
+
+    private static DVec3 Of(EcefPos p) => new(p.X, p.Y, p.Z);
+
+    /// <summary>Another body's fixed axes in the anchor body's (columns), at a sky moment.</summary>
+    private static DMat3 Columns(BodyId body, BodyId anchor, SkyMoment sky) => new(
+        Frames.ConvertDirection(body, new DVec3(1, 0, 0), anchor, sky),
+        Frames.ConvertDirection(body, new DVec3(0, 1, 0), anchor, sky),
+        Frames.ConvertDirection(body, new DVec3(0, 0, 1), anchor, sky));
+
+    /// <summary>W R as a Godot basis: the body's axes in world axes.</summary>
+    private static Basis BasisOf(DMat3 w, DMat3 r) =>
+        new(ToVector(w.ApplyInverse(r.C0)), ToVector(w.ApplyInverse(r.C1)), ToVector(w.ApplyInverse(r.C2)));
+
+    private static Vector3 ToVector(DVec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
+
+    private static DVec3 ToD(Vector3 v) => new(v.X, v.Y, v.Z);
+}

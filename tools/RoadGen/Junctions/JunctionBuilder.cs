@@ -380,9 +380,13 @@ public sealed class JunctionBuilder
             return;
         }
 
-        var ears = EarClip.Triangulate(junction.Boundary);
+        // a point every couple of metres along the ring and Delaunay flips (#1771): plain ear clipping fanned slivers out of
+        // one boundary vertex across the whole cap. The heights come per vertex later (TileRewriter.ToJunction)
+        var ring = EarClip.Densified(junction.Boundary, EarClip.CapMaxEdge);
+        var ears = EarClip.TriangulateDelaunay(ring);
+        if (ears.Count < 3) (ring, ears) = (junction.Boundary, EarClip.Triangulate(junction.Boundary));
         junction.Vertices.Clear();
-        junction.Vertices.AddRange(junction.Boundary);
+        junction.Vertices.AddRange(ring);
         junction.Triangles.AddRange(ears);
     }
 

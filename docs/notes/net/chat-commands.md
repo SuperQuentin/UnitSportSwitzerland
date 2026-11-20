@@ -73,7 +73,10 @@
 - **Flood gate** (`ChatManager.AcceptLine`, before parsing): five lines in a burst, then a refill of
   0.6/s; going past it silences the peer for 3 s, doubling to 60 s if they keep hammering. The refusal
   warning is itself rate-limited, so an error line cannot become the flood. The server console and
-  bodiless console players are exempt; bots call `Say` directly.
+  bodiless console players are exempt; bots call `Say` directly. **A test run's server has no gate**
+  (`GameSettings.TestRun`, #1857): the net probes speak their steps and commands faster than the refill, and
+  the gate dropped them without a word (movespeednet, sword `/pvp`, `/time`); `--chat-flood` keeps it on for a
+  check of the gate over the network. Never pace a probe around it.
 - **Text boundary**: `Scrub` walks code points and replaces controls, newlines and Unicode format
   characters (RTL overrides, zero-width spaces) that could reverse or hide a line; emoji survive,
   joiners and all.

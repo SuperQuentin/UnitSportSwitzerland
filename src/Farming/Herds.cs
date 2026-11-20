@@ -67,6 +67,8 @@ public partial class Herds : Node3D, IOriginContainer
         /// <summary>Where a cow in the air is drawn: eased toward the server's ~10 updates a second.</summary>
         public Vector3[] AirAt = [];
         public float AnchorGround = float.NaN;
+        /// <summary>The ground's version its heights were read at (<see cref="IWorldGround.Version"/>, #2031).</summary>
+        public int GroundVersion = -1;
         /// <summary>The time its cows' walk is read from (<see cref="CowMotion.At"/> at now minus this): 0, or a staged herd's go (<see cref="Rewind"/>).</summary>
         public double Epoch;
     }
@@ -296,7 +298,13 @@ public partial class Herds : Node3D, IOriginContainer
         return (e, n, float.NaN, yaw, w < 1f ? 0.15f : pure.Head, w < 1f ? 1f : pure.Gait);
     }
 
+    /// <summary>The ground's version (<see cref="IWorldGround.Version"/>): a cached height is read again once it moves (#2031).</summary>
+    private int GroundVersion => _terrain?.Version ?? 0;
+
     /// <summary>The terrain's height at an LV95 point on this peer, NaN where it is not loaded.</summary>
+    /// <summary>The ground under a herd's place, or <paramref name="offset"/> metres from it (east, north on its tile's grid).</summary>
+    private float GroundAt(Herd plan, Vector2 offset = default) => GroundAt(plan.E + offset.X, plan.N + offset.Y);
+
     private float GroundAt(double e, double n)
     {
         if (_terrain == null) return float.NaN;
@@ -316,6 +324,7 @@ public partial class Herds : Node3D, IOriginContainer
         public readonly long Key;
         private float _ground = float.NaN;
         private double _groundE = double.NaN, _groundN;
+        private int _groundVersion = -1;
 
         public Cow(Herds owner, Live herd, int index, long key)
         {
@@ -330,8 +339,10 @@ public partial class Herds : Node3D, IOriginContainer
 
         private float Ground(double e, double n)
         {
-            if (Math.Abs(e - _groundE) > 0.5 || Math.Abs(n - _groundN) > 0.5 || float.IsNaN(_ground))
+            int version = _owner.GroundVersion;
+            if (Math.Abs(e - _groundE) > 0.5 || Math.Abs(n - _groundN) > 0.5 || float.IsNaN(_ground) || version != _groundVersion)
             {
+                _groundVersion = version;
                 _ground = _owner.GroundAt(e, n);
                 _groundE = e;
                 _groundN = n;

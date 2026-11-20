@@ -85,6 +85,12 @@ per site. Measured: all 569 real sites in 21.8 s, **38 ms a site on average, 320
 not finish in 10 minutes. It runs off the main thread with the tile; if a busy tile ever shows,
 the grid sort is the lever.
 
+**Junction caps are road** (#1918): RoadGen trims every segment back to its junction cap, so a site that knew roads only
+by their segments' ribbons put hoarding in the caps (a panel at the corner south of Place des Nations stopped a car
+turning there, `RoadBody` 1.3 m up). `SiteObstacles` takes the at-grade caps (`Layer` 0) and flush `Pavement` strips as
+carriageway (`Blocked`), and a pit also keeps off the street areas laid as areas: corner sidewalks, paths, verges, kerbs
+(`Undiggable`). Sites are planned in the game: no rebuild. A thin post (hoarding, a board) needs `--raygrid` at 0.1 m.
+
 ## Checks
 
 `ConstructionSiteTests` (tier 0, 20 tests): determinism, the phase on the measured cases, the site
@@ -472,7 +478,11 @@ a topped-out site has none.
   machines keep their room first; and every site gets the way, pit or not**, since the dressing
   turns every site's pallets to the yard (a topped-out site's materials used to face the hoarding a
   metre off, with the rebar between them and the building). `MaterialsWayIn` checks the hoarding
-  line and the scaffolding too. Measured over the 159 real
+  line and the scaffolding too. **#1926**: the way is checked against roads all over (`SiteRect.Grid`, 1 m), not at its
+  corners (a yard 14-22 m deep toward its street reaches over a near one, and `fixture:site`'s shell site kept a way across
+  the carriageway); it reaches `MaterialsWayPast` (0.7 m) past both ends of the materials (a telehandler centred on the
+  end pallet overhung a way only as wide as them and was pushed 0.5 m aside, its tines off the pallet);
+  `SitePlans.MaterialsReachable` asks it with the site's own obstacles. Measured over the 159 real
   pits (`MaterialsWayIn`): machines first then materials anywhere left 28 of 532 machines without
   room, 19 sites without materials and 21 with materials no machine can come at; this order, 28, 19
   and 17; materials first with their way, 54 machines (42 sites), 4 and 14. `tools/sitepalletnetcheck.sh`

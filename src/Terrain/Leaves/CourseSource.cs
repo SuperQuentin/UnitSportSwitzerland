@@ -13,7 +13,7 @@ namespace UnitSport.Terrain.Leaves;
 public sealed class CourseSource : ISourceProjection
 {
     /// <summary>The Earth's mean radius, for the height's scale (another radius changes it by under a ppm).</summary>
-    private const double EarthRadiusM = 6_371_008.8;
+    private const double EarthRadiusM = Core.CelestialBody.EarthMeanRadius;   // the body's mean radius (#1848)
 
     private readonly WorkPlane _plane;
     private readonly double _scale;
