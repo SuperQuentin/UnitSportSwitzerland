@@ -90,7 +90,7 @@ public partial class PhoneScreens : Node
     private readonly List<(Label Label, string Accept, string Back)> _hints = new();
     /// <summary>Extra key lines of a page (the photo pager's), named for the device in hand.</summary>
     private readonly List<(Label Label, Func<string> Text)> _keyLines = new();
-    private bool _vr, _touch;
+    private bool _vr, _touch, _shoulder;
     private float _touchUnits = TouchUnitsDefault;
     private Vector2 _fitWindow;
     // inner
@@ -186,7 +186,7 @@ public partial class PhoneScreens : Node
         var size = new Vector2I(Mathf.RoundToInt(h * PhoneModel.InnerW / PhoneModel.InnerH), h);
         // laid out for a screen 800 units high, drawn at the pixels it covers; in VR for 640, so every
         // target is a quarter bigger at arm's length (#920)
-        float k = h / (_vr ? VrUnits : _touch ? _touchUnits : 800f);
+        float k = h / (_vr ? VrUnits : _touch ? _touchUnits : _shoulder ? ShoulderUnits : 800f);
         if (Inner.Size == size && Mathf.IsEqualApprox(_innerRoot.Scale.Y, k)) return;
         Inner.Size = size;
         _innerRoot.Scale = new Vector2(k, k);
@@ -195,6 +195,8 @@ public partial class PhoneScreens : Node
     }
 
     private const float VrUnits = 640f;
+    /// <summary>Read over the shoulder (#1825) the screen is a third of the picture, so it is laid out for 560 units high: every label 1.4 times bigger on the glass.</summary>
+    private const float ShoulderUnits = 560f;
     /// <summary>Touch lays the inner screen out for this many units high at most; the real number follows the phone's height (8.2 units a millimetre).</summary>
     private const float TouchUnitsDefault = 560f, TouchUnitsPerMm = 8.2f;
     /// <summary>The smallest a touch target is on the glass: 7 mm, 9 mm for the primary ones (<see cref="TouchLayout.MinTargetMm"/>).</summary>
@@ -232,20 +234,31 @@ public partial class PhoneScreens : Node
         Relayout();
     }
 
+    /// <summary>
+    /// The over-the-shoulder layout (#1825): the touch layout's sizes (three-column Home, bigger labels and rows) for a phone seen from behind and
+    /// above, about a third of the picture wide; the hints keep the keyboard's and the pad's words.
+    /// </summary>
+    public void SetShoulder(bool on)
+    {
+        if (on == _shoulder) return;
+        _shoulder = on;
+        Relayout();
+    }
+
     /// <summary>Whether the touch layout is on, for the checks.</summary>
     internal bool Touch => _touch;
 
     private void Relayout()
     {
-        bool compact = _vr || _touch;
+        bool compact = _vr || _touch || _shoulder;
         _homeGrid.Columns = compact ? 3 : 6;
         foreach (var tile in _homeTiles)
         {
-            tile.CustomMinimumSize = _vr ? new Vector2(196, 196) : compact ? new Vector2(180, 120) : new Vector2(152, 152);
+            tile.CustomMinimumSize = _vr ? new Vector2(196, 196) : compact ? new Vector2(180, _shoulder ? 150 : 120) : new Vector2(152, 152);
             tile.AddThemeFontSizeOverride("font_size", compact ? 30 : 24);
         }
-        _homeClock.AddThemeFontSizeOverride("font_size", _vr ? 72 : _touch ? 48 : 120);
-        _grid.Columns = _vr || _touch ? 4 : 6;
+        _homeClock.AddThemeFontSizeOverride("font_size", _vr || _shoulder ? 72 : _touch ? 48 : 120);
+        _grid.Columns = _vr || _touch || _shoulder ? 4 : 6;
         foreach (var (label, accept, back) in _hints) label.Text = HintText(accept, back);
         foreach (var (label, text) in _keyLines) label.Text = text();
         if (_touch) GrowTargets(_innerRoot);
@@ -555,6 +568,9 @@ public partial class PhoneScreens : Node
 
     /// <summary>Puts the keys in the Map's search box ("/").</summary>
     public void FocusSearch() => _query.GrabFocus();
+
+    /// <summary>What the Map's search box holds, for the checks.</summary>
+    internal string SearchText => _query.Text;
 
     /// <summary>Where the player stands (LV95), for "Near you"; set by the controller.</summary>
     public Func<GlobalPos?>? Here;
