@@ -27,6 +27,9 @@ public partial class ColonyColonists
     /// <summary><c>--colonisteva</c> (the check's): the first colonist with an EVA spot goes out there by rover now.</summary>
     public static bool ForceEva = CmdArgs.Has("--colonisteva");
 
+    /// <summary><c>--colonisteva cabin</c>: that EVA goes by the hangar's pressurised rover.</summary>
+    public static bool ForceCabinEva = CmdArgs.Value("--colonisteva") == "cabin";
+
     public MoonColony Colony { get; }
     public ColonyPlan Plan { get; }
 
@@ -150,7 +153,7 @@ public partial class ColonyColonists
             bot.Body.AppearanceBits = 0;
             bot.Body.OutfitBits = 0;
         }
-        var brain = new ColonistBrain(this, _members.IndexOf(m), spot) { ForceRoverEva = force };
+        var brain = new ColonistBrain(this, _members.IndexOf(m), spot) { ForceRoverEva = force, ForceCabin = force && ForceCabinEva };
         bot.Brain = brain;
         m.Bot = bot;
         m.Brain = brain;

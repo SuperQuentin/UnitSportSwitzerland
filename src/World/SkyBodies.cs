@@ -33,7 +33,7 @@ public partial class SkyBodies : Node3D
 
     private static readonly StringName PSky = "sky", PDistance = "distance", PDaylight = "daylight", PSingle = "single",
         PColor = "point_color", PSize = "point_size", PSun = "sun_dir", PBright = "brightness", POccluder = "occluder",
-        PPole = "pole", PFade = "fade";
+        PPole = "pole", PFade = "fade", PTrueDistance = "true_distance";
 
     /// <summary>The body a sky body is (null for none).</summary>
     private static CelestialBody? BodyOf(SkyBody id)
@@ -64,6 +64,8 @@ public partial class SkyBodies : Node3D
         public double ComputedAt = double.NegativeInfinity;
         // this frame, in world axes
         public Vector3 WorldPosition;
+        // its distance from the Sun (AU) for its brightness from space, and when it was worked out
+        public double SunAu = 1, SunAuAt = double.NegativeInfinity;
         public float Radius;
         public float DiscPixels;
     }
@@ -102,7 +104,8 @@ public partial class SkyBodies : Node3D
         foreach (var id in Bodies)
         {
             var e = new Entry { Id = id, Tint = TintOf(id), Body = BodyOf(id) };
-            e.DiscMaterial = new ShaderMaterial { Shader = discShader };
+            // drawn after the stars, covering them where the sky is dark (#2051)
+            e.DiscMaterial = new ShaderMaterial { Shader = discShader, RenderPriority = World.Bodies.BodyLook.StandinPriority };
             if (MapOf(id) is { } map)
                 e.DiscMaterial.SetShaderParameter("albedo", GD.Load<Texture2D>(map));
             else e.DiscMaterial.SetShaderParameter("textured", false);
@@ -114,13 +117,16 @@ public partial class SkyBodies : Node3D
             e.Point = Instance3D(quad, e.PointMaterial, $"{id}Point");
             if (id == SkyBody.Saturn)
             {
-                e.RingMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/planet_rings.gdshader") };
+                e.RingMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/planet_rings.gdshader"), RenderPriority = World.Bodies.BodyLook.HaloPriority };
                 e.RingMaterial.SetShaderParameter("rings", GD.Load<Texture2D>("res://assets/space/saturn_ring_2k.png"));
                 e.RingMaterial.SetShaderParameter("inner", (float)(RingInner / RingOuter));
                 e.Rings = Instance3D(quad, e.RingMaterial, "SaturnRings");
             }
             _entries[id] = e;
         }
+        _earthPointMaterial = new ShaderMaterial { Shader = pointShader };
+        _earthPointMaterial.SetShaderParameter(PSingle, true);
+        _earthPoint = Instance3D(quad, _earthPointMaterial, "EarthPoint");
     }
 
     private MeshInstance3D Instance3D(Mesh mesh, Material material, string name)
@@ -170,6 +176,13 @@ public partial class SkyBodies : Node3D
         _entries.TryGetValue(id, out var e) && e.Disc.GetViewport()?.GetCamera3D() is { } cam && e.ComputedAt > double.NegativeInfinity
             ? (e.WorldPosition - cam.GlobalPosition).Normalized() : null;
 
+    /// <summary>A body's magnitude as the sky has it this frame (#2047's check).</summary>
+    internal float? MagnitudeOf(SkyBody id) => _entries.TryGetValue(id, out var e) && e.ComputedAt > double.NegativeInfinity ? e.Magnitude : null;
+
+    /// <summary>Where a body was last placed, in world space (a check reads it as drawn, after the frame's last placing).</summary>
+    internal Vector3? PlacedAt(SkyBody id) =>
+        _entries.TryGetValue(id, out var e) && e.ComputedAt > double.NegativeInfinity ? e.WorldPosition : null;
+
     /// <summary>The body whose place is nearest <paramref name="direction"/>, and how far off it is, degrees.</summary>
     public (SkyBody Id, float OffDeg)? Nearest(Vector3 direction)
     {
@@ -194,6 +207,7 @@ public partial class SkyBodies : Node3D
         if (DayNight.Instance is not { Sky: { } sky } day || GetViewport()?.GetCamera3D() is not { } cam)
         {
             foreach (var e in _entries.Values) Hide(e);
+            if (_earthPoint != null) _earthPoint.Visible = false;
             return;
         }
         double now = GameClock.Now;
@@ -216,7 +230,6 @@ public partial class SkyBodies : Node3D
         foreach (var id in Bodies)
         {
             var e = _entries[id];
-            if (HiddenByGlobe.Contains(id)) { Hide(e); continue; }
             var parent = _entries.GetValueOrDefault(Ephemeris.ParentOf(id), e);
             bool zoomed = e.DiscPixels > 0.5f || parent.DiscPixels > 0.5f;
             // in space every frame from the frame tree, as the body's globe has it (#1998): the sky's reading counts its
@@ -229,11 +242,15 @@ public partial class SkyBodies : Node3D
                 e.Face = fromWorld * seenFace;
                 e.Distance = seenDistance;
                 e.TreeSun = seenSun;
-                if (now - e.ComputedAt > 0.5)
+                // its brightness from here (#2047): the phase at the body and the distances from the Sun and the camera
+                // (Jupiter from Saturn, the Earth's numbers were 4 AU off)
+                if (now - e.SunAuAt > 0.5)
                 {
-                    e.Magnitude = (float)Ephemeris.Magnitude(id, utc);
-                    e.ComputedAt = now;
+                    e.SunAu = Frames.Offset(e.Body.Id, BodyId.Sun, sky.Moment).Length / Ephemeris.AuMetres;
+                    e.SunAuAt = now;
                 }
+                e.Magnitude = (float)MagnitudeSeen(id, e.SunAu, seenSun, seenDir, seenDistance, utc);
+                e.ComputedAt = now;
             }
             else if (now - e.ComputedAt > (zoomed ? 0.0 : 0.5))
             {
@@ -244,14 +261,25 @@ public partial class SkyBodies : Node3D
                 e.Magnitude = (float)Ephemeris.Magnitude(id, utc);
                 e.ComputedAt = now;
             }
-            // the whole planetary system at one scale: its planet just inside the far plane
-            double scale = far / parent.Distance;
-            if (parent == e || parent.Distance <= 0) scale = far / e.Distance;
+            // the whole planetary system at one scale: its planet inside the far plane at the stand-ins' share for its
+            // distance (#2051: the stand-ins are drawn in order, so they sort as the bodies do)
+            var (parentRadius, _) = Ephemeris.Radii(parent.Id);
+            double scale = cam.Far * World.Bodies.BodyLook.StandinShare(parent.Distance, parentRadius) / parent.Distance;
+            if (parent == e || parent.Distance <= 0)
+                scale = cam.Far * World.Bodies.BodyLook.StandinShare(e.Distance, Ephemeris.Radii(id).Item1) / e.Distance;
             var worldDir = (stars * e.Direction).Normalized();
             e.WorldPosition = camPos + worldDir * (float)(e.Distance * scale);
             var (re, rp) = Ephemeris.Radii(id);
             e.Radius = (float)(re * scale);
             e.DiscPixels = (float)(re / e.Distance) * pixelsPerRadian;
+            // its globe draws it (#1998): the disc and the point step aside, but its place is still kept every frame. The
+            // telescope follows it through DirectionOf, and skipped here it froze where the globe took over: zoomed in on a
+            // planet from the Moon, the globe drifted off while the tube held still (#2028)
+            if (HiddenByGlobe.Contains(id))
+            {
+                Hide(e);
+                continue;
+            }
             var face = stars * e.Face;
 
             // the body itself, once it is more than about a pixel wide
@@ -265,6 +293,7 @@ public partial class SkyBodies : Node3D
                 e.DiscMaterial.SetShaderParameter(PBright, discFade * Mathf.Lerp(0.5f, 1.4f, night));
                 // from space the body's globe's own look (#1998): the globe takes it over past a size with no change
                 e.DiscMaterial.SetShaderParameter(PFade, discFade);
+                e.DiscMaterial.SetShaderParameter(PTrueDistance, (float)e.Distance);
                 if (e.Body != null) World.Bodies.BodyLook.Write(e.DiscMaterial, e.Body, World.Bodies.BodyLook.InSpace, ref e.LookShown);
                 e.DiscMaterial.SetShaderParameter(POccluder, parent == e ? Vector4.Zero
                     : new Vector4(parent.WorldPosition.X, parent.WorldPosition.Y, parent.WorldPosition.Z, parent.Radius));
@@ -278,6 +307,7 @@ public partial class SkyBodies : Node3D
                     rings.GlobalTransform = new Transform3D(new Basis(face.Column0 * outer, face.Column1 * outer, face.Column2 * outer), e.WorldPosition);
                     ringMaterial.SetShaderParameter(PSun, e.TreeSun ?? SunFrom(sunWorld, worldDir, e.Distance));
                     ringMaterial.SetShaderParameter(PPole, face.Column2.Normalized());
+                    ringMaterial.SetShaderParameter(PTrueDistance, (float)e.Distance);
                     ringMaterial.SetShaderParameter(PBright, discFade * Mathf.Lerp(0.5f, 1.4f, night));
                     ringMaterial.SetShaderParameter(POccluder, new Vector4(e.WorldPosition.X, e.WorldPosition.Y, e.WorldPosition.Z, e.Radius));
                 }
@@ -299,6 +329,73 @@ public partial class SkyBodies : Node3D
                 e.PointMaterial.SetShaderParameter(PDaylight, e.Magnitude < -3.5f ? 0.7f : 0f);
             }
         }
+        PlaceEarth(camPos, far, pixelsPerRadian, sky.Moment);
+    }
+
+    // the Earth from space (#2047): no sky body of its own (its globe draws its disc), a point as the planets' once small
+    private MeshInstance3D? _earthPoint;
+    private ShaderMaterial? _earthPointMaterial;
+    private double _earthSunAu = 1, _earthSunAt = double.NegativeInfinity;
+
+    /// <summary>The Earth's point hidden for a check's comparison picture (#2051's <c>--skyordercheck</c>).</summary>
+    internal static bool CheckHideEarth { get; set; }
+
+    /// <summary>The Earth's magnitude from space this frame, NaN when it has no point (#2047's check).</summary>
+    internal float EarthMagnitude { get; private set; } = float.NaN;
+
+    /// <summary>The Earth's point's alpha this frame (#2047's check).</summary>
+    internal float EarthPointAlpha { get; private set; }
+
+    private static readonly Color EarthTint = new(0.8f, 0.88f, 1f);
+
+    /// <summary>
+    /// The Earth from space as the planets are from it (#2047): too small for its globe to read (under 1.5 to 4 px), a point
+    /// sized and lit by its true magnitude from the camera (<see cref="Ephemeris.EarthMagnitudeAt"/>), none fainter than
+    /// the 7th. From Mars it was not drawn at all, the Moon a glowing disc beside nothing.
+    /// </summary>
+    private void PlaceEarth(Vector3 camPos, float far, float pixelsPerRadian, SkyMoment m)
+    {
+        EarthMagnitude = float.NaN;
+        EarthPointAlpha = 0f;
+        if (_earthPoint == null || _earthPointMaterial == null) return;
+        if (CheckHideEarth || !World.Bodies.BodyLook.Seen(BodyId.Earth, camPos, out var dir, out double distance, out _, out var sunAtEarth))
+        {
+            _earthPoint.Visible = false;
+            return;
+        }
+        double now = GameClock.Now;
+        if (now - _earthSunAt > 0.5)
+        {
+            _earthSunAu = Frames.Offset(BodyId.Earth, BodyId.Sun, m).Length / Ephemeris.AuMetres;
+            _earthSunAt = now;
+        }
+        double phase = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(sunAtEarth.Dot(-dir), -1f, 1f)));
+        float magnitude = (float)Ephemeris.EarthMagnitudeAt(phase, _earthSunAu, distance / Ephemeris.AuMetres);
+        float discPixels = (float)(CelestialBody.Earth.Shape.A / distance) * pixelsPerRadian;
+        var (px, a) = StarField.Look(magnitude);
+        float alpha = magnitude < 7f ? a * (1f - Mathf.SmoothStep(1.5f, 4f, discPixels)) : 0f;
+        _earthPoint.Visible = alpha > 0.01f;
+        EarthMagnitude = magnitude;
+        if (!_earthPoint.Visible) return;
+        EarthPointAlpha = alpha;
+        _earthPoint.GlobalPosition = camPos + dir * far;
+        _earthPointMaterial.SetShaderParameter(PSky, new Basis(dir, Vector3.Up, Vector3.Back));
+        _earthPointMaterial.SetShaderParameter(PDistance, far);
+        _earthPointMaterial.SetShaderParameter(PColor, EarthTint with { A = alpha });
+        _earthPointMaterial.SetShaderParameter(PSize, px);
+        _earthPointMaterial.SetShaderParameter(PDaylight, 0f);
+    }
+
+    /// <summary>
+    /// A body's magnitude from the camera (#2047): <paramref name="sunAtBody"/> the Sun's direction at the body and
+    /// <paramref name="toBody"/> the body's from the camera (any one set of axes), <paramref name="distance"/> metres off,
+    /// <paramref name="sunAu"/> the body's distance from the Sun.
+    /// </summary>
+    public static double MagnitudeSeen(SkyBody id, double sunAu, Vector3 sunAtBody, Vector3 toBody, double distance, System.DateTime utc)
+    {
+        double r = sunAu;
+        double phase = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(sunAtBody.Normalized().Dot(-toBody.Normalized()), -1f, 1f)));
+        return Ephemeris.MagnitudeAt(id, phase, r, distance / Ephemeris.AuMetres, utc);
     }
 
     /// <summary>The direction to the sun from a body <paramref name="distance"/> metres away along <paramref name="direction"/>.</summary>

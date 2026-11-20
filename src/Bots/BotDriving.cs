@@ -29,9 +29,17 @@ public sealed class BotDrive
     public Vector3? Direct;
     /// <summary>The top speed of a drive across, m/s.</summary>
     public float DirectSpeed = 4f;
-    /// <summary>A drive across's nearest yet to its point, and when: no nearer in 10 s and it gives up (circling it).</summary>
+    /// <summary>A drive across's nearest yet to its point, and when: no nearer in 20 s and it gives up (circling it).</summary>
     public float DirectBest = float.MaxValue;
     public double DirectBestAt;
+    /// <summary>
+    /// A drive across caught on something it cannot see (a boulder round a fresh crater, a jamb): backing out, the wheel
+    /// turned, until this clock; the side alternates each time.
+    /// </summary>
+    public double UnstickUntil;
+    public float UnstickSteer = 1f;
+    public Vector3 HeadwayFrom;
+    public double HeadwayAt;
 }
 
 /// <summary>
@@ -198,13 +206,37 @@ public static class BotDriving
             drive.DirectBest = dist;
             drive.DirectBestAt = now;
         }
-        else if (now - drive.DirectBestAt > 10)
+        // 20 s: a 6 t rover facing away turns round before it gains a metre (10 s gave up mid-turn)
+        else if (now - drive.DirectBestAt > 20)
         {
             drive.Direct = null;
-            return Stop(drive, Progress.Failed, $"no nearer in 10 s ({dist:F0} m off)");
+            return Stop(drive, Progress.Failed, $"no nearer in 20 s ({dist:F0} m off)");
+        }
+        // caught (the wheels turning, the body not moving: a boulder, a jamb): back out with the wheel turned, then on
+        if (now >= drive.UnstickUntil)
+        {
+            if ((body.GlobalPosition - drive.HeadwayFrom).Length() > 0.5f || drive.HeadwayAt == 0)
+            {
+                drive.HeadwayFrom = body.GlobalPosition;
+                drive.HeadwayAt = now;
+            }
+            else if (now - drive.HeadwayAt > 3)
+            {
+                drive.UnstickUntil = now + 2.5;
+                drive.UnstickSteer = -drive.UnstickSteer;
+                drive.HeadwayAt = now + 2.5;
+                var hits = new System.Text.StringBuilder();
+                for (int i = 0; i < body.GetSlideCollisionCount(); i++)
+                {
+                    var c = body.GetSlideCollision(i);
+                    if (c.GetNormal().Y > 0.7f) continue;
+                    hits.Append($" {(c.GetCollider() as Node)?.GetPath()} n{c.GetNormal()}");
+                }
+                GD.Print($"[bots] {body.Name} \"{bot.Profile.Name}\" caught {dist:F0} m short: backing out;{hits}");
+            }
         }
         if (body.RideSpeed > StuckSpeed) drive.StillSince = now;
-        else if (now - drive.StillSince > StuckSeconds)
+        else if (now - drive.StillSince > StuckSeconds && now >= drive.UnstickUntil)
         {
             drive.Direct = null;
             return Stop(drive, Progress.Failed, "stuck");
@@ -216,6 +248,8 @@ public static class BotDriving
     private static RideInput AcrossControls(Bot bot, Vector3 goal)
     {
         var body = bot.Body;
+        // backing out: the brake at a standstill is reverse, the wheel to one side
+        if (BotDirector.Clock < bot.Drive.UnstickUntil) return new RideInput(0f, 1f, bot.Drive.UnstickSteer, false);
         var fwd = -body.GlobalBasis.Z;
         fwd.Y = 0;
         var to = goal - body.GlobalPosition;

@@ -11,7 +11,7 @@ namespace UnitSport.Terrain.Leaves;
 public sealed class LeafFrames(ISeaLevel seaLevel)
 {
     /// <summary>The leaves' level (~610 m), the build's.</summary>
-    public const int LeafLevel = 14;
+    public const int LeafLevel = Core.CelestialBody.EarthLeafLevel;   // the Earth's (#1848: Body.LeafLevel per body)
 
     /// <summary>Transforms held before the cache starts over (~30 KB each).</summary>
     public const int Kept = 512;

@@ -61,6 +61,8 @@ public sealed class ColonistBrain : IBotBrain
         public double Since = -1;
         public double AskedAt = -1;
         public int Stalls;
+        /// <summary>A drive's top speed, m/s (inside the hangar it creeps: at full pace it rolled 10 m past its slot).</summary>
+        public float Speed = DriveSpeed;
         public string What = "";
     }
 
@@ -83,6 +85,15 @@ public sealed class ColonistBrain : IBotBrain
     public bool Driving { get; private set; }
     /// <summary>The window's plan is forced to its EVA, by rover (the check's: <c>--colonisteva</c>).</summary>
     public bool ForceRoverEva;
+
+    /// <summary>The forced EVA goes by the pressurised rover from the hangar (the check's: <c>--colonisteva cabin</c>).</summary>
+    public bool ForceCabin;
+
+    /// <summary>The trip under way uses the hangar's pressurised rover (back the same way, through the hangar).</summary>
+    private bool _cabin;
+
+    /// <summary>An EVA spot this far from the hangar's door goes by the pressurised rover, for every other colonist, metres.</summary>
+    public const double CabinM = 120;
 
     private bool _forceHome;
 
@@ -199,6 +210,44 @@ public sealed class ColonistBrain : IBotBrain
             Add(new Leg { Kind = LegKind.Walk, Points = crew.Path(Spot, target), What = "inside" });
             return;
         }
+        if (!fromOut && toOut && CabinFor(target) is { } cabin && Hangar() is { } hw)
+        {
+            // by the pressurised rover (decision 5, #1938): through the hangar, a vehicle airlock, and back the same way
+            _rover = cabin;
+            _cabin = true;
+            var s = crew.Spots[target];
+            Add(new Leg { Kind = LegKind.Walk, Points = ToDoor(Spot, hw.Module, hw.Inner, hw.InnerOut, hw.Wait), What = "to the hangar" });
+            Add(new Leg { Kind = LegKind.Cycle, Lock = hw.Index, Outward = false, What = "the hangar's inner door" });
+            Add(new Leg { Kind = LegKind.Walk, Points = [hw.Wait, hw.Inner, hw.Landing], What = "into the hangar" });
+            Add(new Leg { Kind = LegKind.ToRover, What = cabin });
+            Add(new Leg { Kind = LegKind.Drive, Points = [hw.LaneIn], What = "to the rolling door" });
+            Add(new Leg { Kind = LegKind.Cycle, Lock = hw.Index, Outward = true, What = "the rolling door" });
+            var out_ = Ring(hw.LaneFar, Short(hw.LaneFar, (s.X, s.Y, s.Z), ParkShort));
+            Add(new Leg { Kind = LegKind.Drive, Points = [hw.LaneOut, hw.LaneFar, .. out_], What = "to the EVA" });
+            Add(new Leg { Kind = LegKind.LeaveRover });
+            Add(new Leg { Kind = LegKind.Outdoors, Goal = (to.X, to.Y, to.Z), Arrive = 0.8f, What = "to the EVA spot" });
+            Log(bot, $"out on an EVA to spot {target} by the pressurised rover {cabin}, through the hangar");
+            return;
+        }
+        if (fromOut && !toOut && _cabin && _rover != null && Hangar() is { } hb)
+        {
+            var from = crew.Spots[Spot];
+            Add(new Leg { Kind = LegKind.ToRover, What = _rover });
+            Add(new Leg { Kind = LegKind.Drive, Points = [.. Ring((from.X, from.Y, from.Z), hb.LaneFar), hb.LaneOut], What = "back to the hangar" });
+            Add(new Leg { Kind = LegKind.Cycle, Lock = hb.Index, Outward = true, What = "the rolling door, from outside" });
+            Add(new Leg { Kind = LegKind.Drive, Points = [hb.LaneIn, hb.LaneDeep, hb.Slot], Speed = 1.5f, What = "into its lane" });
+            Add(new Leg { Kind = LegKind.LeaveRover });
+            Add(new Leg { Kind = LegKind.Cycle, Lock = hb.Index, Outward = false, What = "the hangar back to air" });
+            // out of the cab onto the hangar's middle line first, then to its inner door: straight from the cab's side it
+            // clipped the parked rover's rear corner
+            // (the left lane: the mirror of the slot, clear of the cab however near its slot it stopped)
+            var mid = _host.Plan.Modules[hb.Module];
+            Add(new Leg { Kind = LegKind.Walk, Points = [(2 * mid.X - hb.Slot.X, 0.6, 2 * mid.Z - hb.Slot.Z), .. crew.Path(hb.Landing, hb.Module, (crew.Spots[target].X, crew.Spots[target].Y, crew.Spots[target].Z), crew.Spots[target].Module)], What = "inside" });
+            Log(bot, $"back in from spot {Spot} by the pressurised rover {_rover}, through the hangar");
+            _rover = null;
+            _cabin = false;
+            return;
+        }
         if (!fromOut && toOut)
         {
             int i = crew.LockFor(target);
@@ -250,6 +299,31 @@ public sealed class ColonistBrain : IBotBrain
 
     private void Add(Leg l) => _legs.Enqueue(l);
 
+    /// <summary>
+    /// The drive given up: out of the rover where it stands, then on foot to the airlock nearest the spot it was going to
+    /// and in. The rover stays parked there, free for anyone.
+    /// </summary>
+    private void WalkHome(Bot bot)
+    {
+        var crew = _host.Crew;
+        int target = _target;
+        _legs.Clear();
+        // the placeholder the caller dequeues, then out
+        Add(new Leg { Kind = LegKind.Walk });
+        Add(new Leg { Kind = LegKind.LeaveRover });
+        _rover = null;
+        _cabin = false;
+        if (target < 0 || crew.Spots[target].Module < 0) return;
+        int i = crew.LockFor(target);
+        if (i < 0) return;
+        var way = crew.Lock(i);
+        Add(new Leg { Kind = LegKind.Outdoors, Goal = way.Outside, Arrive = 0.6f, What = $"on foot to airlock {i}" });
+        Add(new Leg { Kind = LegKind.Cycle, Lock = i, Outward = true, What = "open from outside" });
+        Add(new Leg { Kind = LegKind.Walk, Points = [way.Outside, way.Outer, way.Centre], What = "up into the chamber" });
+        Add(new Leg { Kind = LegKind.Cycle, Lock = i, Outward = false, What = "in" });
+        Add(new Leg { Kind = LegKind.Walk, Points = crew.FromLock(i, target), What = "inside" });
+    }
+
     /// <summary>A point <paramref name="back"/> metres short of <paramref name="to"/> on the way from <paramref name="from"/>.</summary>
     private static (double X, double Y, double Z) Short((double X, double Y, double Z) from, (double X, double Y, double Z) to, double back)
     {
@@ -273,6 +347,77 @@ public sealed class ColonistBrain : IBotBrain
             if (vehicles.GetNodeOrNull(name) is VehicleBody v && vehicles.Enterable(v) && !ColonyColonists.RoverTaken(name, this)) return name;
         }
         return null;
+    }
+
+    /// <summary>The hangar's pressurised rover for a far EVA spot (every other colonist, or forced): its name, or null.</summary>
+    private string? CabinFor(int spot)
+    {
+        if (Hangar() is not { } hw || VehicleManager.Instance is not { } vehicles) return null;
+        var s = _host.Crew.Spots[spot];
+        double d = Math.Sqrt((s.X - hw.LaneOut.X) * (s.X - hw.LaneOut.X) + (s.Z - hw.LaneOut.Z) * (s.Z - hw.LaneOut.Z));
+        var who = _host.Crew.Crew[_member];
+        bool wants = ForceCabin || !ForceRoverEva && d >= CabinM && who.Index % 2 == 1;
+        if (!wants) return null;
+        var slots = MoonRoverDepot.Slots(_host.Colony, _host.Plan);
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i].Kind != Player.MoonRovers.Cabin.Kind) continue;
+            string name = $"{MoonRoverDepot.Prefix}{_host.Colony.Id}_{i}";
+            if (vehicles.GetNodeOrNull(name) is VehicleBody v && vehicles.Enterable(v) && !ColonyColonists.RoverTaken(name, this)) return name;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The hangar's way for a colonist (colony frame): its airlock index, the inner door and its way out, the wait in the
+    /// tube before it, the landing inside it, and the pressurised rover's lane: the slot, a point before the rolling door,
+    /// one past the ramp.
+    /// </summary>
+    private readonly record struct HangarWay(int Index, int Module, (double X, double Y, double Z) Inner, double InnerOut,
+        (double X, double Y, double Z) Wait, (double X, double Y, double Z) Landing, (double X, double Y, double Z) Slot,
+        (double X, double Y, double Z) LaneIn, (double X, double Y, double Z) LaneOut, (double X, double Y, double Z) LaneFar,
+        (double X, double Y, double Z) LaneDeep);
+
+    private HangarWay? Hangar()
+    {
+        var plan = _host.Plan;
+        if (plan.Hangar is not { } h) return null;
+        var slots = MoonRoverDepot.Slots(_host.Colony, plan);
+        int cabin = slots.FindIndex(sl => sl.Kind == Player.MoonRovers.Cabin.Kind);
+        if (cabin < 0) return null;
+        var inner = plan.Doors[h.Inner];
+        var outer = plan.Doors[h.Outer];
+        var (ix, iz) = ColonyPlan.Along(inner.Out);
+        var sl = slots[cabin];
+        double fx = sl.Facing.X, fz = sl.Facing.Z;
+        // the way in and out runs on the rolling door's centre line (3 m clear of each jamb for the cabin rover); only the
+        // parking slot is in the right-hand lane. On the lane's own line, a rover coming back at a slant caught the jamb
+        return new HangarWay(plan.Airlocks.Count, h.Module, (inner.X, 1.55, inner.Z), inner.Out,
+            (inner.X + ix * ColonyCrew.WaitBack, 1.55, inner.Z + iz * ColonyCrew.WaitBack), (inner.X - ix * 2.4, 0.6, inner.Z - iz * 2.4),
+            (sl.At.X, sl.At.Y, sl.At.Z), (outer.X - fx * 3, 0.6, outer.Z - fz * 3),
+            (outer.X + fx * 13, 0, outer.Z + fz * 13),
+            // well past the open rovers parked either side of the road (8 m off it, 23 m out): the way on and off the lane,
+            // straight between them. Joined nearer, the arc back crossed one and the 6 t cab shoved it into the hangar
+            (outer.X + fx * 60, 0, outer.Z + fz * 60),
+            // well inside on the same line before it turns for its slot: turning at the doorway caught the jamb
+            (outer.X - fx * 12, 0.6, outer.Z - fz * 12));
+    }
+
+    /// <summary>From an inside spot to the wait before a module's door (the hangar's inner one), in the tube.</summary>
+    private (double X, double Y, double Z)[] ToDoor(int from, int module, (double X, double Y, double Z) door, double doorOut, (double X, double Y, double Z) wait)
+    {
+        var crew = _host.Crew;
+        var a = crew.Spots[from];
+        var m = _host.Plan.Modules[module];
+        var through = crew.Path((a.X, a.Y, a.Z), a.Module, (m.X, 1.55, m.Z), module);
+        var pts = new List<(double X, double Y, double Z)>();
+        foreach (var p in through)
+        {
+            if (Math.Abs(p.X - door.X) < 1e-6 && Math.Abs(p.Z - door.Z) < 1e-6) break;
+            pts.Add(p);
+        }
+        pts.Add(wait);
+        return pts.ToArray();
     }
 
     /// <summary>A depot rover's slot (colony frame), to bring it back.</summary>
@@ -388,11 +533,24 @@ public sealed class ColonistBrain : IBotBrain
     private bool Drive(Bot bot, Leg leg, double now)
     {
         if (!BotDriving.Mounted(bot)) return true;
-        var p = BotDriving.Across(bot, World(bot, leg.Points[leg.At]), DriveSpeed, now);
+        var p = BotDriving.Across(bot, World(bot, leg.Points[leg.At]), leg.Speed, now);
         if (p == BotDriving.Progress.Driving) return false;
         if (p == BotDriving.Progress.Arrived && leg.At + 1 < leg.Points.Length)
         {
             leg.At++;
+            return false;
+        }
+        // stuck on the way: again from where it stands, twice; then it parks and walks home through an airlock (the
+        // next drive leg would set off straight across from here, through the modules)
+        if (p == BotDriving.Progress.Failed)
+        {
+            if (++leg.Stalls < 3)
+            {
+                Log(bot, $"drove {leg.What}: {bot.Drive.Why}, point {leg.At + 1}/{leg.Points.Length}: again");
+                return false;
+            }
+            Log(bot, $"drove {leg.What}: {bot.Drive.Why}: parks here and walks");
+            WalkHome(bot);
             return false;
         }
         Log(bot, $"drove {leg.What}: {p} ({bot.Drive.Why}), point {leg.At + 1}/{leg.Points.Length}");

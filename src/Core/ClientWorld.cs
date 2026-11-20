@@ -27,6 +27,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>The ground this world stands on: the earth world's leaves, or the flat world's tiles.</summary>
     private IWorldGround? Ground => _earth?.Ground ?? _chunks?.Ground;
+
+    /// <summary>The ground the world asks, for the checks (<c>--bodytravelcheck</c>).</summary>
+    internal IWorldGround? GroundForChecks => Ground;
     private Audio.Ambience? _ambience;
     private SpectatorCamera? _spectator;
     private FootPlayer? _player;
@@ -843,6 +846,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new World.SunDisc());
             // the stars (#1444), the real sky's too
             AddChild(new World.StarField());
+            if (World.StarWatch.Requested) AddChild(new World.StarWatch());
             AddChild(new World.SkyBodies());
             // the other bodies' globes, and the Earth's from them (#1848): the earth world only
             if (_earth != null) AddChild(new World.Bodies.BodyViews(origin, () => LocalPlayer));
@@ -1175,7 +1179,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _teleporter = new Teleporter(Ground!, origin)
         {
             ActiveTarget = () => _onFoot && LocalPlayer is { } player ? player : _spectator,
+            Networked = () => _networked,
+            StillLoading = EarthLoading,
         };
+        _teleporter.Refused += Toast;
         AddChild(_teleporter);
 
         // home-trainer trainings (#901): the hardware link, and the session the phone's Training app starts
@@ -1261,7 +1268,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null || Net.IdsNetProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.UfoNetProbe.Role != null || Player.OrbitNetProbe.Role != null || World.Bodies.MoonNetProbe.Role != null || World.Moon.ColonyNetProbe.Role != null || Trainer.GroupRideNetProbe.Role != null || Player.ShuttleNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Loot.YardLootNetProbe.Role != null || Terrain.Construction.CraneNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
-            || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || Bots.BotIndoorProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
+            || Items.PvpProbe.Role != null || Bots.BotProbe.Role != null || Bots.BotIndoorProbe.Role != null || BattleRoyale.BrBotProbe.Requested || Bots.BotFilmProbe.Requested || Bots.ShuttleBotNetProbe.Requested || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Items.TelescopeProbe.Requested || Items.TelescopeNetProbe.Role != null || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || SpectatorSwitchCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.ClimbNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             || World.ContainerNetProbe.Role != null || Adventure.AdventureCheck.Requested || Adventure.AdventureNetProbe.Role != null
             || Adventure.Alcohol.AlcoholCheck.Requested || Adventure.Alcohol.AlcoholNetProbe.Role != null
@@ -1352,6 +1359,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Bots.BotProbe.Role != null) AddChild(new Bots.BotProbe(items));
         if (Bots.BotIndoorProbe.Role != null) AddChild(new Bots.BotIndoorProbe(items));
         if (Bots.BotIndoorSolo.Requested) AddChild(new Bots.BotIndoorSolo(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }));
+        if (Bots.ShuttleBotCheck.Requested) AddChild(new Bots.ShuttleBotCheck(() => _onFoot ? LocalPlayer : null, () => { if (!_onFoot) ToggleMode(); }, () => { if (_onFoot) ToggleMode(); }));
         if (Build.BuildProbe.Requested) AddChild(new Build.BuildProbe(items));
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
@@ -1365,6 +1373,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (BattleRoyale.BrBotProbe.Requested) AddChild(new BattleRoyale.BrBotProbe(items));
         if (Bots.BotFilmProbe.Requested) AddChild(new Bots.BotFilmProbe(items));
+        if (Bots.ShuttleBotNetProbe.Requested) AddChild(new Bots.ShuttleBotNetProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
         if (Items.TelescopeProbe.Requested) AddChild(new Items.TelescopeProbe(items));
         if (World.SkyProbe.Requested) AddChild(new World.SkyProbe());
@@ -1547,7 +1556,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (Occasions.Festivals.SteinNetProbe.Role != null) AddChild(new Occasions.Festivals.SteinNetProbe(items));
             AddChild(new Occasions.Festivals.Horn.HornGame(() => LocalPlayer, () => _worldOrigin, () => _chunks));
             // the Désalpe's herd and its game (#1269 part 7): dress the cows, drive them down, vote at the fair
-            AddChild(new Occasions.Festivals.Desalpe.DesalpeHerd(() => _worldOrigin, () => _chunks));
+            AddChild(new Occasions.Festivals.Desalpe.DesalpeHerd(() => _worldOrigin, () => Ground));
             AddChild(new Occasions.Festivals.Desalpe.DesalpeGame(() => _onFoot ? LocalPlayer : null));
             if (Occasions.Festivals.Desalpe.DesalpeCheck.Requested) AddChild(new Occasions.Festivals.Desalpe.DesalpeCheck(items, () => LocalPlayer));
             if (Occasions.Festivals.Desalpe.DesalpeNetProbe.Role != null) AddChild(new Occasions.Festivals.Desalpe.DesalpeNetProbe(items));
@@ -2691,7 +2700,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             // in a Battle Royale match M is the match map, and there is no teleporting anyway
             if (BattleRoyale.BrManager.Instance?.ToggleMap() == true) return;
             // adventuring (#1224): the adventure map; its side panel still reaches the town search
-            if (Adventure.Places.AdventureMap.Available && _places is not { IsOpen: true })
+            // on another body (#2039) M is the place search, on that body's map: the adventure map is the Earth's
+            if (Adventure.Places.AdventureMap.Available && _places is not { IsOpen: true } && _worldOrigin is not { Body: not BodyId.Earth })
             {
                 GetViewport().SetInputAsHandled();
                 Adventure.Places.AdventureMap.Toggle();
@@ -3182,9 +3192,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_spectator == null) return "No camera to move here.";
         if (_onFoot) ToggleMode();
         if (_onFoot) return "Take the fly camera first (Shift+T).";
-        var sky = SkyClock.Now;
-        origin.Rebase(body.Id, sky);
-        shifter.ShiftTo(0, 0, exact: true, axes: FrameAxes.Enu(body.Shape.ToEcef(new Terrain.Format.Geodetic(lat, lon, 0)), body.Id));
+        BodyHandover.To(origin, shifter, body.Id, BodyHandover.At(body.Id, lat, lon));
         _spectator.GlobalPosition = new Vector3(0, (float)height, 0);
         _spectator.Rotation = new Vector3(0, _spectator.Rotation.Y, 0);
         GD.Print(System.FormattableString.Invariant($"[goto] {body.Name} at {lat:F2}, {lon:F2}, {height / 1000:F1} km over its reference"));

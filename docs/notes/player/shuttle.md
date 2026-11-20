@@ -90,8 +90,8 @@ velocity there reads up to ~17x its speed). Piloted craft are client-authoritati
 
 ## Bots
 
-Passengers only (seats, as any vehicle's; floating aboard: `shuttle-aboard`); the drive switch is `AirlinerCommand.Drive` on the aircraft, so a
-bot pilot can come later. Row in `bots/bot-capability-map`.
+Passengers (seats, as any vehicle's; floating aboard: `shuttle-aboard`), and a bot pilot (#1498, `/bot shuttle`,
+`bots/shuttle-pilot`). Rows in `bots/bot-capability-map`.
 
 ## The scripted pilot (`ShuttlePilot`, #1497)
 
@@ -101,8 +101,9 @@ bot pilot can come later. Row in `bots/bot-capability-map`.
   heading and back over home; the coast; the retro burn's perigee; the time in the air), it flies stage by stage
   (`Taxi`, `LineUp`, `Roll`, `Climb`, `DriveUp`, `Round`/`TurnHome`, `Orbit`, `Retro`, `Entry`, `Air`, `BackUp`,
   `DriveHome`, `Fall`, `Glide`, `Rollout`) and says what it wants of the time scale; the host judges and films.
-- Client-side only: a server-run bot pilot is #1498, after #1443 G2 (on the server a body above 60 km stays in
-  the main region's flat LV95 frame), with a long orbital path.
+- A bot flies it too (#1498, `bots/shuttle-pilot`): `ShuttleBrain` steps it from the bot body's `FlyControls`
+  (`OwnsControls` false, `Input`), with `Turns` round the Earth, or `Moon`: the trip between bodies (`Clear`, `AimFor`,
+  `Cruise`), down on a colony pad (`Approach`, `Jets`), up and home (`LiftOff`, `MoonUp`, `HomeOrbit`); `StartInOrbit`.
 - **Calm in space** (#1528, the user: the acrobatics looked stupid on film): the drive banks at most 20° to turn
   (`ShuttlePilot.DriveBank`, was 57°), the dive out of the drive is 25° (was 45°), and the retro burn's turn takes
   the retrograde direction in the craft's own axes: a roll brings it into the pitch plane, a pitch closes on it, both
