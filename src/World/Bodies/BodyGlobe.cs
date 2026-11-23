@@ -229,6 +229,9 @@ public partial class BodyGlobe : Node
     /// <summary>The body's centre written to its tiles last (#2024: the horizon's shade, while the anchor is on it).</summary>
     private Vector3? _centreWritten;
 
+    // the cover's state last written to the tiles (#2016, BodyGround.CoverLook): its version
+    private int _coverWritten = -1;
+
     /// <summary>
     /// The air's vertical depth the ground's sunlight goes through (#1854): a landable body with air (Mars, Venus, Titan); none
     /// for the airless, the Earth (its own look, tuned elsewhere) and the giants (their globe is their cloud deck).
@@ -326,6 +329,10 @@ public partial class BodyGlobe : Node
         var hole = own && Ground?.Hole is { } h ? h : default;
         bool holeMoved = hole != _hole;
         _hole = hole;
+        // the cover below the data (#2016): the anchor body's tiles take its noise, dust, sulphur and polar ice
+        var cover = Ground?.CoverLook;
+        bool coverMoved = cover != null && cover.Version != _coverWritten;
+        if (coverMoved) _coverWritten = cover!.Version;
 
         int shown = 0;
         foreach (var (key, tile) in _tiles)
@@ -340,6 +347,7 @@ public partial class BodyGlobe : Node
                 if (tile.Sun.DistanceSquaredTo(sun) > 1e-8f) tile.Material.SetShaderParameter(SunDir, tile.Sun = sun);
             }
             if (holeMoved) SetHole(tile.Material);
+            if (coverMoved) cover!.Write(tile.Material);
         }
         DrawnTiles = shown;
         Drawn = shown > 0;
@@ -577,6 +585,7 @@ public partial class BodyGlobe : Node
             material.SetShaderParameter(AlbedoTex, r.Colour != null ? ImageTexture.CreateFromImage(r.Colour) : MeanTexture());
             material.SetShaderParameter(SunDir, _sun == Vector3.Zero ? Vector3.Up : _sun);
             SetHole(material);
+            Ground?.CoverLook.Write(material);
             if (float.IsFinite(r.Mean)) _faceMeans[r.Key.Face] = r.Mean;
             if (!_exposed && _faceMeans.Count == CubeSphere.Faces) Expose(_faceMeans.Values.Sum() / CubeSphere.Faces, "as its tiles came");
             material.SetShaderParameter(SunStrength, Exposure * GroundShare);

@@ -77,6 +77,10 @@ public partial class BodyViews : Node
                     AddChild(g.Ground);
                     // boulders round its fresh craters, where it has generated craters (#1849)
                     if (body.CraterDensity > 0) AddChild(new BodyBoulders(g, _origin));
+                    // the stones beyond them (#2016): Mars' rocks, pebbles, ice blocks, cobbles
+                    var scatter = new BodyScatter(g, _origin);
+                    if (scatter.Any) AddChild(scatter);
+                    else scatter.Free();
                     // the Moon's historic and invented sites near the camera (#1939)
                     if (body.Id == BodyId.Moon) AddChild(new Moon.MoonSurface(g.Ground, _origin));
                     // and the colonies' lights from afar, on the night side (#1946)
