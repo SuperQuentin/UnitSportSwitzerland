@@ -170,7 +170,15 @@ public static class ChestLoot
 /// </summary>
 public sealed class ChestsProgress
 {
-    public static readonly SectionKey<ChestsProgress> Section = new("chests", Version: 1);
+    /// <summary>Version 2 (#1726, G2 D2): the cell chests' ids are Earth cells (<see cref="RewardRules.ToEarthId"/>), no LV95 corner.</summary>
+    public static readonly SectionKey<ChestsProgress> Section = new("chests", Version: 2, Migrate);
+
+    private static ChestsProgress? Migrate(System.Text.Json.Nodes.JsonNode data, int version)
+    {
+        var p = System.Text.Json.JsonSerializer.Deserialize<ChestsProgress>(data, AdventureJson.Options);
+        if (p != null) p.Opened = new HashSet<string>(p.Opened.Select(RewardRules.ToEarthId), StringComparer.Ordinal);
+        return p;
+    }
 
     public HashSet<string> Opened { get; set; } = new(StringComparer.Ordinal);
     /// <summary>Openings without a cosmetic, per <see cref="ChestTier"/>.</summary>

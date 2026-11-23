@@ -132,7 +132,9 @@ public partial class Handshake : Node
     /// 94: saves in Earth positions (#1503, G2 A2b): the adventure's pins and travel sections (version 2) hold their place as
     /// "at": {x, y, z} ECEF in the section's JSON, which SectionSync carries as it is (93 flattened it to x, y, z at the edge).
     /// 95: World/ChunkStream RequestCubeAsset (#1655, G2 C7: a cube tile's asset by its key and section), AssetKind.LeafIndex 20 and Leaf 21.
-    public const int Protocol = 95;
+    /// 96: G2 D2's flip (#1726): earth the default; the stores re-keyed off LV95 tiles (containers by cube cell, woken
+    /// slots v3, the adventure's chests/collect/fog by Earth cells), so a client and a server agree on the new keys.
+    public const int Protocol = 96;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

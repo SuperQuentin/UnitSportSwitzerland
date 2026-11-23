@@ -104,7 +104,8 @@ keep_caches() { # profile dir
 
 read -r -a render <<< "$RENDER"
 extra=(); [ -n "${ARGS:-}" ] && read -r -a extra <<< "$ARGS"
-[ "$FRAME" = earth ] && extra+=(--frame earth --leaves "$LEAVES")
+# the frame always named: earth is the game's default since G2 D2 (#1726), flat the rollback a flat library needs
+if [ "$FRAME" = earth ]; then extra+=(--frame earth --leaves "$LEAVES"); else extra+=(--frame flat); fi
 [ -n "${GLOBE:-}" ] && extra+=(--globe "$GLOBE")
 style_flag() { case $1 in real-) echo real- ;; real+) echo real+ ;; *) echo "$1" ;; esac; }
 t_all=$SECONDS
