@@ -61,6 +61,7 @@ anchor's body has a near ground you can stand on. Plan: `docs/plans/planets.md` 
   8 m steps). Waves of one direction per cell blended over eight cells (their phase from the body's centre in a constant
   direction: no stretch). In the near and medium squares only: the far globe stays the data's, the squares' blend band
   easing the relief in (km-scale features from orbit would be baked into the pyramid: a follow-up).
+- **Cover, scatter and the fine square** (#2016): `world/body-cover`.
 - **Boulders round fresh craters** (#1849, `Terrain/Bodies/BoulderField`, `World/Bodies/BodyBoulders`): the craters of the
   `CraterField` 10 m and up and fresh (depth over diameter: `CraterField.Freshness` ≥ 0.55, ~7 % of them) throw
   0.3 m to D/15 boulders from the rim to two radii (0.3 a metre of diameter when fully fresh, most small), a function of

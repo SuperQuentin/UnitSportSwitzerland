@@ -1372,3 +1372,13 @@ Offline, in a window, `--frame earth --bodies <planets>`, real terrain (`--chunk
 - [ ] From Bern, M, Page Down to Mars, click Olympus Mons on the map → the fly camera arrives 220 m over the volcano (on foot: you stand on it).
 - [ ] With a pad: LB / RB step the bodies, the D-pad and A pick a place; in VR the ‹ › buttons with the ray do the same.
 - [ ] Online (a server): the stepper still browses, but another body's place says it waits for online play and nothing moves.
+
+## Cover, scatter and fine ground on other bodies (PR [#2057](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2057), [#2016](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/2016))
+
+In a window, Cartoon, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none`, once with `--bodies E:/UnitSportSwitzerland/planets` and once without.
+
+- [ ] `/goto mars 18.7 37.9`, T, walk and sprint a few hundred metres over the rocks → rocks from knee height stop you (step round or jump), smaller ones you walk over; the rocks never float or rebuild in view; the ground meets the horizon with no band or step.
+- [ ] Spectator (Shift+T) low over the Moon and Mars at medium speed for a minute → no crater or patch pops in or out a few hundred metres to 2 km away as the squares follow you.
+- [ ] Drive a Moon rover (`--moonrovercheck open` area, or one from a colony depot) into a boulder → it stops or rides over it, never through.
+- [ ] `/goto mars 81 -40 4` and look round, then `/goto mars 72 -40 6` → frost to the horizon at 81°N, bare dust at 72°N (the cap's edge is ~77°N in July 2027); the cap's edge ragged, not a circle.
+- [ ] `/goto europa 0 -87`, T → ice blocks, solid from about knee size; their sunny faces glint at a low sun.

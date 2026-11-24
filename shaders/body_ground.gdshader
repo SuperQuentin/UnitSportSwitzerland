@@ -33,12 +33,32 @@ uniform vec4 lamp_pos[16];
 uniform vec4 lamp_dir[16];
 uniform vec4 lamp_col[16];
 
+// the geomorph (#2016): a drawn-only square (the fine and the medium one) eases from its own ground into what lies round it
+// by the distance from the camera, not from its centre, so a square built again where the camera is draws the same: no
+// pop. Per vertex UV2.x is the height of the ground round it less its own, CUSTOM0.xyz that ground's normal; from
+// morph_from to morph_to metres (horizontal, in the square's frame) the one turns into the other. 0: no morph (the near
+// square, whose collision is its drawn ground)
+uniform float morph_from = 0.0;
+uniform float morph_to = 0.0;
+
 varying vec3 world_normal;
 varying vec3 world_pos;
+// the square's per-vertex cover (#2016, BodyCover): the fresh craters' rays, the dune sand
+varying vec2 cover;
+
+#include "res://shaders/common/body_cover.gdshaderinc"
 
 void vertex() {
-	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	vec3 n = NORMAL;
+	if (morph_to > 0.0) {
+		vec3 eye = transpose(mat3(MODEL_MATRIX)) * (INV_VIEW_MATRIX[3].xyz - MODEL_MATRIX[3].xyz);
+		float t = smoothstep(morph_from, morph_to, length(VERTEX.xz - eye.xz));
+		VERTEX.y += UV2.x * t;
+		n = normalize(mix(NORMAL, CUSTOM0.xyz, t));
+	}
+	world_normal = normalize((MODEL_MATRIX * vec4(n, 0.0)).xyz);
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	cover = COLOR.rg;
 }
 
 void fragment() {
@@ -49,6 +69,7 @@ void fragment() {
 	}
 	vec3 photo = texture(albedo_tex, UV).rgb;
 	vec3 col = cartoon ? pow(max(photo, vec3(0.0)), vec3(0.8)) : photo;
+	col = cover_apply(col, world_pos, world_normal, cover.x, cover.y, length(world_pos - INV_VIEW_MATRIX[3].xyz));
 	vec3 lamps = vec3(0.0);
 	for (int i = 0; i < lamp_count; i++) {
 		vec3 to = world_pos - lamp_pos[i].xyz;
