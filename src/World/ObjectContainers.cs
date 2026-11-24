@@ -349,7 +349,9 @@ public partial class ObjectContainers : Node
             var at = ((Net.IInterestEntity)node).InterestAt;
             var tile = CellAt(at);
             if (!_watch.TryGetValue(id, out var w)) w = (0, 0, at);
-            double lonely = ContainerRules.Lonely(w.Lonely, step, tile, _playerTiles);
+            // off the Earth nothing sleeps (#2000): the containers' cells are the Earth's leaves, and a Moon colony's rovers
+            // 80 m from its players were filed away as alone (a place on another body read as an Earth leaf)
+            double lonely = at.Body != BodyId.Earth ? 0 : ContainerRules.Lonely(w.Lonely, step, tile, _playerTiles);
             double still = ContainerRules.Still(w.Still, step, at.DistanceTo(w.At));
             _watch[id] = (lonely, still, at);
         }

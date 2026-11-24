@@ -1,3 +1,4 @@
+using UnitSport.Core;
 using UnitSport.Player;
 
 namespace UnitSport.World.Moon;
@@ -13,7 +14,8 @@ public static class MoonSuit
     /// <summary>The suit a walker wears now, or null off the Moon.</summary>
     public static (bool Helmet, bool Suit)? Wanted(FootPlayer p)
     {
-        if (MoonSurface.Active is not { OnMoon: true }) return null;
+        // on the Moon: the client's anchor, or (on a server, #2000) the body's own region
+        if (MoonSurface.Active is not { OnMoon: true } && p.Origin?.Body != BodyId.Moon) return null;
         // in the pressurised rover's cabin (#1943) the helmet is off too
         if (p.Ride == MoonRovers.Cabin.Kind) return (false, true);
         var head = p.GlobalPosition + Godot.Vector3.Up * 1.6f;

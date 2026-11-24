@@ -46,6 +46,8 @@ public static class ServerBodies
     {
         if (Heights(frame.Body) is not { } heights) return null;
         var g = new ServerBodyGround(CelestialBody.Of(frame.Body), heights, frame);
+        // the Moon's colonies round the region's bodies, solid for its bots, their crew and airlocks the server's (#2000)
+        if (frame.Body == BodyId.Moon) g.AddChild(new Moon.ServerColonies(g, heights, frame));
         return (g, g);
     }
 

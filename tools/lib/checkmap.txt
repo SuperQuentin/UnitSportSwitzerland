@@ -1476,6 +1476,9 @@ src/Player/SpectatorCamera       quick  --spectatorframecheck --frame earth --ch
 src/Player/SpectatorFrame        quick  --spectatorframecheck --frame earth --chunks fixture:straight
 src/World/Bodies/SpectatorFrame  quick  --spectatorframecheck --frame earth --chunks fixture:straight
 src/World/Bodies/BodyLook      full      --bodyviewcheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
+src/World/Moon/ServerColonies     net    tools/colonynetcheck.sh
+src/World/Moon/ColonyDoors        net    tools/colonynetcheck.sh
+src/World/Moon/ColonyNetProbe     net    tools/colonynetcheck.sh
 src/World/Bodies/SkyOrder      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 shaders/common/sky_cover      full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets
 shaders/common/body_globe     full      --skyordercheck --frame earth --chunks fixture:straight --bodies E:/UnitSportSwitzerland/planets

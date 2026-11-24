@@ -46,5 +46,12 @@ bots there on its own ground. Protocol 97 (on top of D2's 96).
   the Moon by `/goto` and T; B's marker for A within 0.1 m of A's own place, the lock holding A's label in the middle,
   on the Moon's disc; B beside A; each sees the other walk (place within 1 m) and jump; `/bot add 2` there: the server's
   Moon region and ground, both clients see the bots stand. Unit: `OnlineBodiesTests`.
-- **Not yet**: the shuttle's HUD target cue lists no players; vehicles in a Moon region on the server fall at
-  `Rideable.Gravity` (the anchor's, the Earth's on the server); bots' brains sense with the Earth's systems.
+- **Not yet**: the shuttle's HUD target cue lists no players; a parked vehicle in a Moon region on the server falls at
+  `Rideable.Gravity` (the Earth's: it is simulated in the main frame); a body's own step and its ride run under its body's
+  gravity (`BodyGravity.For`, #2014: a Moon colonist's rover stalled at 9.81); bots' brains sense with the Earth's systems.
+  Object containers: nothing off the Earth sleeps (#2014); keyed by body later. The same gap, `LeafTileName.At` of a place
+  on another body read as an Earth leaf: `ObjectContainers.CellAt` (the entity's cell, hence the fix) and `PlayerTiles`
+  (a player on the Moon counts as near the Earth leaf its Moon ECEF falls in, so that Earth cell's sleepers may wake),
+  `ContainerRecord.Leaf` (only for records filed, none off the Earth now).
+  Vehicles off the Earth are never cleared as lonely (`VehicleManager._Process`, #2014): its players are in their regions'
+  frames and a Moon rover read as 3 km from all of them; body-aware distances later.
