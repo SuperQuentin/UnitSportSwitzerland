@@ -43,6 +43,9 @@ uniform vec4 lamp_col[16];
 varying vec3 world_normal;
 varying vec3 world_pos;
 
+// the cover below the data (#2016): the anchor's body only (cover_kind 0 elsewhere)
+#include "res://shaders/common/body_cover.gdshaderinc"
+
 #ifdef SKY_STANDIN
 #include "res://shaders/common/sky_cover.gdshaderinc"
 // the body's centre in this tile's own axes (World/Bodies/BodyGlobe.cs, set once): the far half of the body faces away
@@ -78,6 +81,7 @@ void fragment() {
 	vec3 photo = texture(albedo_tex, UV).rgb;
 	// the Moon's real albedo is ~0.12: lifted by a gentle power so its maria and highlands both read
 	vec3 col = cartoon ? pow(max(photo, vec3(0.0)), vec3(0.8)) : photo;
+	col = cover_apply(col, world_pos, world_normal, 0.0, 0.0, length(world_pos - INV_VIEW_MATRIX[3].xyz));
 	// plain Lambert: the relief reads by its slopes, and a wall turned from the sun falls to the floor (the Moon's
 	// shadows are black, there is no sky to fill them)
 	float lambert = max((dot(normalize(world_normal), normalize(sun_dir)) + terminator_wrap) / (1.0 + terminator_wrap), 0.0);
