@@ -286,6 +286,9 @@ if [ -n "$last" ]; then
 fi
 # On CI, a skipped platform is a run annotation, not only a log line: v0.28-v0.31.1 shipped no APK unnoticed
 [ $CI = 1 ] && [ -n "${APK_OVER:-}" ] && echo "::warning title=Android APK over budget::v$V: $APK_OVER"
+# ::error, not ::warning: GitHub keeps 10 warnings per step and the C# build's fill them (v0.214-v0.290 shipped
+# no APK under a dropped warning); the job summary says it on the run's page too
 if [ $CI = 1 ] && [ ${#SKIPPED[@]} -gt 0 ]; then
-  echo "::warning title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
+  echo "::error title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] && echo "**v$V shipped without ${SKIPPED[*]}** (see the export log)" >> "$GITHUB_STEP_SUMMARY"
 fi

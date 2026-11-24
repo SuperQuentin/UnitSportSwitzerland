@@ -90,8 +90,18 @@ jobs:
         if: steps.settle.outputs.skip != '1'
         run: cp tools/ci/export_presets.cfg export_presets.cfg
 
+      # JDK 17 for Godot's Android Gradle build (8.11.1 runs on 17-23). Pinned, not the image default:
+      # ubuntu-latest moved to Ubuntu 26 (JDK 25, "Unsupported class file major version 69") and
+      # v0.214-v0.290 shipped no APK. Godot seeds its java_sdk_path from JAVA_HOME, which this sets.
+      - name: Set up JDK 17
+        if: steps.settle.outputs.skip != '1'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       # The APK's signing key (#544), from repo secrets; without them release.sh skips the APK.
-      # The runner image already has the Android SDK (ANDROID_HOME) and JDK 17 (JAVA_HOME).
+      # The runner image has the Android SDK (ANDROID_HOME).
       - name: Android release keystore
         if: steps.settle.outputs.skip != '1'
         env:
