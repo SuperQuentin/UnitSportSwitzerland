@@ -36,7 +36,7 @@ public static class ColonyKit
 
     private static readonly Color Regolith = C("8d8a84"), RegolithDark = C("77746e"), Sinter = C("6e6b66"),
         Paint = C("e8e6df"), PadLight = C("ff5a3c"), Glass = C("bfe3ff"), Leaf = C("3f8f3a"), LeafDark = C("2c6b2c"),
-        Bark = C("6b4a2c"), Grass = C("5aa344"), Soil = C("5a4632"), Lamp = C("f4f1e6"), AmberLamp = C("ffb347");
+        Bark = C("6b4a2c"), Grass = C("5aa344"), Soil = C("5a4632"), Lamp = C("f4f1e6");
 
     /// <summary>A tube's axis over the plateau, metres: every door's centre is at this height.</summary>
     public const float TubeY = 2.6f;
@@ -189,10 +189,8 @@ public static class ColonyKit
     {
         const int panels = 20;
         s.Tube(new(0, 0, 0), new(0, FloorY - 0.15f, 0), r + 0.4f, p.Frame, panels);
-        // the deck: the cans' grey-blue, not the band's near-white (the hall read as one pale blur, #1938), with a darker
-        // walkway round the middle, where the hub's map table stands
+        // the deck at the doorways' sill; the interior's floor, its #2003 walkway ring and its lamps are the interior's (#2000)
         s.Tube(new(0, FloorY - 0.15f, 0), new(0, FloorY, 0), r - 0.05f, p.Frame, panels);
-        s.Ring(new(0, FloorY + 0.006f, 0), Vector3.Up, r * 0.42f, r * 0.62f, 0.012f, p.Frame.Darkened(0.22f), panels);
         float pw = 2 * r * Mathf.Sin(Mathf.Pi / panels) * 1.04f;
         for (int i = 0; i < panels; i++)
         {
@@ -222,17 +220,11 @@ public static class ColonyKit
                 var n = new Vector3(Mathf.Sin(a), 0, Mathf.Cos(a));
                 Window(s, n * (r + 0.1f) + Vector3.Up * (FloorY + (k + 0.55f) * storey), n, Vector3.Up, 1.0f, 0.7f, p.Window);
             }
-        // the ceiling (its underside seen from the hall), the roof over it, the mast and flag
+        // the ceiling's band, the roof over it, the mast and flag
         s.Tube(new(0, h - 0.15f, 0), new(0, h, 0), r + 0.1f, p.Band, panels);
         s.Tube(new(0, h, 0), new(0, h + r * 0.35f, 0), r + 0.1f, r * 0.45f, ribbed ? p.Shell : p.Band, panels);
         s.Tube(new(0, h + r * 0.35f, 0), new(0, h + r * 0.35f + 3.5f, 0), 0.06f, p.Frame, 5);
         s.Box(new(0.6f, h + r * 0.35f + 3.0f, 0), new(1.0f, 0.6f, 0.02f), p.Trim);
-        // the hall's lamps: a ring of panes under the ceiling
-        for (int i = 0; i < 8; i++)
-        {
-            float a = Mathf.Tau * i / 8;
-            Window(s, new Vector3(Mathf.Sin(a) * r * 0.55f, h - 0.16f, Mathf.Cos(a) * r * 0.55f), Vector3.Down, Vector3.Forward, 0.8f, 0.3f, p.LampColour);
-        }
     }
 
     /// <summary>A doorway's frame on a wall at <paramref name="at"/> (its floor-level centre), turned by <paramref name="b"/>: posts, lintel, a sill strip.</summary>
@@ -247,8 +239,8 @@ public static class ColonyKit
 
     /// <summary>
     /// A can: a double-sided shell 4.6 m across lying on legs and cradles (you walk in), end walls with a doorway at the
-    /// floor, a floor, lamps along the ceiling, trim rings, portholes, a radiator on top. An airlock is a short one in
-    /// hazard colours (its two door leaves are nodes: <see cref="ColonyAirlocks"/>).
+    /// floor, a deck at the sill, trim rings, portholes, a radiator on top (its lamps and fittings are the interior's, #2000).
+    /// An airlock is a short one in hazard colours (its two door leaves are nodes: <see cref="ColonyAirlocks"/>).
     /// </summary>
     private static void Can(MeshScratch s, Palette p, float l, float r, bool airlock = false, int sideDoor = 0)
     {
@@ -291,21 +283,19 @@ public static class ColonyKit
                 var nrm = new Vector3(side, 0.25f, 0).Normalized();
                 Window(s, new Vector3(0, y, z) + nrm * (r + 0.01f), nrm, Vector3.Forward, 0.55f, 0.55f, p.Window);
             }
-            // a lamp on the ceiling
-            Window(s, new Vector3(0, y + r - 0.03f, z), Vector3.Down, Vector3.Forward, 0.4f, 1.2f, airlock ? p.LampColour == Lamp ? AmberLamp : p.LampColour : p.LampColour);
         }
         s.Box(new(0, y + r + 0.3f, 0), new(1.6f, 0.08f, l * 0.6f), p.Band);
         s.Tube(new(0, y + r, l * 0.3f), new(0, y + r + 0.4f, l * 0.3f), 0.05f, p.Frame, 4);
     }
 
     /// <summary>Half the length of a can's shell opened for a side doorway, metres.</summary>
-    public const float SideGap = DoorW / 2 + 0.25f;
+    private const float SideGap = DoorW / 2 + 0.25f;
 
     /// <summary>
     /// Whether a can shell's panel round its axis (angle from the side, + up) is cut for a side doorway: the panels from
     /// under the floor's edge to over the lintel, on the door's side.
     /// </summary>
-    public static bool SideCut(float y0, float r, float angle) =>
+    private static bool SideCut(float y0, float r, float angle) =>
         Mathf.Cos(angle) > 0.2f && y0 + r * Mathf.Sin(angle) is var py && py > FloorY - 0.35f && py < FloorY + DoorH + 0.45f;
 
     /// <summary>
@@ -567,7 +557,8 @@ public static class ColonyKit
             float yaw = Mathf.Atan2(dir.X, dir.Z);
             if (alley) continue;   // glazed: Alleys
             {
-                // a walk-in tube: a double-sided shell 2.8 m across, ribs, a floor at the doors' sill, legs, lamps
+                // a walk-in tube: a double-sided shell 2.8 m across, ribs, a floor at the doors' sill, legs (its lamps are
+                // the interior's, #2000)
                 const float y = TubeY;
                 s.Skirt(a + Vector3.Up * y, b + Vector3.Up * y, TubeR, TubeR, p.Band, 14);
                 int n = Math.Max(1, (int)(len / 3));
@@ -578,7 +569,6 @@ public static class ColonyKit
                     if (i % 2 == 1)
                         foreach (float sd in new[] { -0.7f, 0.7f })
                             s.Tube(c + side * sd, c + side * sd + Vector3.Up * (y - TubeR + 0.1f), 0.08f, p.Frame, 5);
-                    if (i < n) Window(s, a.Lerp(b, (i + 0.5f) / n) + Vector3.Up * (y + TubeR - 0.03f), Vector3.Down, dir, 0.3f, 0.8f, p.LampColour);
                 }
                 float chord = 2 * Mathf.Sqrt(TubeR * TubeR - (y - FloorY) * (y - FloorY));
                 s.Box((a + b) / 2 + Vector3.Up * (FloorY - 0.05f), new(chord, 0.1f, len), p.Frame, Yaw(yaw));

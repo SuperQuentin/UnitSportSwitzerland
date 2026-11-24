@@ -36,7 +36,8 @@ Moon's pyramid and ground, #1849/#1850). Planned from `main` at `6935956c9`.
   (#2003), and the audit against the user's decisions as a player gets the game (#1938, Nov 15): every Moon check
   passes on the shipped base alone (levels 0-2, no `--bodies`); the colonists drive the pressurised rover too, out of the
   hangar; the colony lights are seen from orbit and in the telescope; the shuttle's pilot lands on the pads
-  (`MoonPads`, the shuttle session's #1498). The interiors move onto the normal interiors system (Standby-4, #2000).
+  (`MoonPads`, the shuttle session's #1498). The interiors moved onto the normal interiors system (#2000: rooms #2005, the server's colonies and airlocks #2014, the
+  clean-up and notes in phase 3).
 
 ## The user's decisions (fixed)
 

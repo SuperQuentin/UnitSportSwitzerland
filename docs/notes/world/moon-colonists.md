@@ -70,9 +70,11 @@ Plan: `docs/plans/moon-surface.md` section 8. The colonies: `moon-colonies`, `mo
   seen, no view) in the region's frame (`OriginOverride`); an online client draws no figures. The airlocks are the
   server's (`ColonyDoors`, `World/ColonyDoors` on every peer): a client's E asks it, it runs the cycle and sends it to every
   client, which runs it on its own doors; a client building a colony settles its doors on the server's table. The
-  server parks no rovers yet: an EVA walks out. Check: `tools/colonynetcheck.sh` (net, ~8 min: A sees the crew stand on
-  floors, walk 20-30 m through the rooms and never leave the air but at an airlock; B sees the `--colonisteva` colonist
-  go out through an airlock whose outer door it sees open).
+  server parks the depot's rovers (`ServerColonies.Park`, once the ground under their slots is solid) and the crew waits
+  for them (`ColonyColonists.CrewReady`); a body off the Earth steps under its own gravity (`BodyGravity.For`). Check:
+  `tools/colonynetcheck.sh` (net, ~8 min: A sees the crew stand on floors, walk 20-30 m through the rooms and never leave
+  the air but at an airlock, and E at an airlock and at a depot rover; B sees the `--colonisteva` colonist go out through
+  an airlock whose outer door it sees open and drive the depot's rover).
 - **Check**: `--moonsites artemis:close --colonistcheck` (~60 s; windowed `crew_hub.png`, `crew_eva.png` when one is out):
   the crew's clock set 3 s into a window (`ColonyColonists.ClockOffset`, the check's), 25 s of looks: every shown figure
   inside stands in the colony's air, every EVA one outside it. Artemis: 6 shown, 1.1 walking, 1.0 outside on average. With bots, only those standing
