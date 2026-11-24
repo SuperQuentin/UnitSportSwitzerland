@@ -52,6 +52,14 @@ In a window, `--frame earth --sun real --date 2027-07-24 --time 10 --occasion no
 - [ ] Fly the spectator down into Jupiter (and Saturn, Uranus, Neptune) → a blue-grey sky over the white cloud deck, then a bright fog inside the clouds, darker and darker below; it stops 500 km under the clouds; T there says there is no ground. In VR, check the fog reads and is not nauseating.
 - [ ] On Mars (PR [#1907](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/1907)), stand through a morning and an evening (`/time speed` up) → a butterscotch sky by day, a blue glow round the sun as it sets, black with stars at night; from orbit a thin tan haze on the limb. Note anything that reads wrong in VR.
 
+## Online between bodies ([#1852](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1852))
+
+A server and two clients, all with `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`, the server with `--admin-password`.
+
+- [ ] Player A flies the spectator to the Moon (or `/goto moon 26.13 3.63 4` as admin), down to the ground, T → standing on the Moon; player B on the Earth sets a telescope up, looks through it and steps through the target menu (] / D-pad →) past the planets → "A (Moon)" is listed, the lock swings to the Moon and A's label sits on its disc with the name, "Moon" and ~400,000 km. Same with the pad.
+- [ ] B flies there too and steps in beside A → each sees the other walk, run and jump (six times as high) with no stutter; name tags over the heads.
+- [ ] As admin on the Moon, `/bot add 3` → the bots stand and wander on the Moon's ground, never sinking or floating; they jump high.
+- [ ] In VR, through the telescope: no labels yet (known); the target menu still lists A.
 ## One look per body from space ([#1998](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1998))
 
 In a window, `--frame earth --sun real --date 2027-07-15 --time 10 --occasion none --bodies E:/UnitSportSwitzerland/planets`.
@@ -1332,6 +1340,13 @@ In a window, Cartoon, `--frame earth --chunks fixture:straight --sun real --date
 
 - [ ] Walk in through an airlock and through every module and tube of Artemis Base (hub, each can, a moondust dome by a can's side door, the hangar down its steps) → no gap or hole in the walls, floors or doorways, no step at a doorway's sill, nothing to walk through; the rooms lit evenly, not washed out, screens and lamps glowing.
 - [ ] The same at Moon Village (`--moonsites moonvillage:close`, its glazed alleys and stacks) and the Cold War biodome (`--moonsites coldwar:close`) → the alleys' walls and the biodome's ring wall solid, the garden walkable, the trees' trunks solid.
+
+## Moon colonies on a server ([#2014](https://github.com/SuperQuentin/UnitSportSwitzerland/pull/2014))
+
+A server with `--bodies`, a client in a window, Cartoon, `--date 2027-07-15 --time 10 --occasion none`, `/goto moon -89.384 -150.055 0.3` (admin).
+
+- [ ] In a window, walk to an airlock's top step and press E, go through the chamber and press E again → the doors move as offline, and a second client sees them move at the same time (the headless check presses E; a look by eye is left).
+- [ ] Watch the colonists in the hub and the cans → they walk the rooms without passing through furniture or walls, and come through the airlocks on their EVAs.
 
 ## A bot flies the shuttle ([#1498](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/1498))
 

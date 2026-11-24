@@ -81,8 +81,15 @@ public partial class ColonyColonists : Node3D
     {
         double t = CrewClock;
         double hour = Hour;
-        var cam = GetViewport()?.GetCamera3D();
+        var cam = Eyes != null ? null : GetViewport()?.GetCamera3D();
         RunBots(cam);
+        // a client online (#2000): the server runs the crew as bots and sends them; no figure of its own
+        if (ColonyDoors.Routes)
+        {
+            foreach (var m in _members)
+                if (m.Figure.Visible) m.Figure.Visible = false;
+            return;
+        }
         foreach (var m in _members)
         {
             // a colonist the bots run (#1976): the bot is the colonist, the figure stays hidden
@@ -149,8 +156,35 @@ public partial class ColonyColonists : Node3D
         return new Vector3((float)s.X, (float)s.Y, (float)s.Z);
     }
 
-    private static bool Seen(Camera3D? cam, Vector3 world) =>
-        cam != null && cam.GlobalPosition.DistanceTo(world) < SeenM && !cam.IsPositionBehind(world) && cam.IsPositionInFrustum(world);
+    /// <summary>
+    /// Whether a point is seen: by the camera (near, in view), or on a server (#2000) by any player within
+    /// <see cref="SeenM"/> of it (the server has no view to ask: near is seen).
+    /// </summary>
+    private bool Seen(Camera3D? cam, Vector3 world)
+    {
+        if (cam != null && cam.GlobalPosition.DistanceTo(world) < SeenM && !cam.IsPositionBehind(world) && cam.IsPositionInFrustum(world))
+            return true;
+        if (Eyes?.Invoke() is { } eyes)
+            foreach (var e in eyes)
+                if (e.DistanceTo(world) < SeenM) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// On a server hosting the Moon (#2000, <see cref="ServerColonies"/>): the players' places (world, this region's frame)
+    /// that stand in for the camera, for how near the crew is watched and what is seen. Null on a client.
+    /// </summary>
+    public System.Func<IReadOnlyList<Vector3>>? Eyes { get; init; }
+
+    /// <summary>The nearest watcher's ground distance to the colony's middle: the camera, or the server's players.</summary>
+    private float WatchedFrom(Camera3D? cam)
+    {
+        float d = cam == null ? float.MaxValue : ((cam.GlobalPosition - GlobalPosition) with { Y = 0 }).Length();
+        if (Eyes?.Invoke() is { } eyes)
+            foreach (var e in eyes)
+                d = Mathf.Min(d, ((e - GlobalPosition) with { Y = 0 }).Length());
+        return d;
+    }
 
     // ---- for the checks ---------------------------------------------------------------------------------------------
 

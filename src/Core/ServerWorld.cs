@@ -218,6 +218,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 return (c, c.Ground);
             },
             MakeExtras = (terrain, frame) => terrain is ChunkManager c ? new World.TreeColliders(c, frame) : null,
+            // a region on another body (#1852, under --frame earth): collision generated from that body's heights
+            MakeBodyGround = _earth != null ? World.Bodies.ServerBodies.Ground : null,
         });
         // who may see whom: decided here for everyone, before any player node exists (each
         // player's synchronizer looks it up in _Ready). Line of sight from the 100 m horizon lattice.
@@ -294,6 +296,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(Ground!));
+        // the Moon colonies' airlocks online: the server owns their cycles (#2000), at World/ColonyDoors on every peer
+        AddChild(new World.Moon.ColonyDoors());
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);
@@ -487,6 +491,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _placed.NameOf = _chat.NameOfPeer;
         // one player at a time at each set-up telescope (#1440)
         Items.Telescopes.Create(this, server: true);
+        // every player out of a peer's interest, once a second: the telescope's labels (#1852)
+        if (_interest != null && _players != null) FarMarkers.CreateServer(this, _interest, _players);
         // player birthdays (#1423): who celebrates today, the wishes, the cakes' slices, the birthday fireworks
         _birthdays = Occasions.Birthdays.BirthdayService.Create(this, origin, server: true, networked: true);
         _birthdays.BodyOf = peer => _players?.GetNodeOrNull<Player.FootPlayer>(Net.PlayerReplication.NodeName(peer));
@@ -948,6 +954,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 ? (float)GlobalPos.FromEcef(Ellipsoid.Wgs84.ToEcef(g with { H = h })).Alt : null;
         });
         if (pyramid != null) interest.Sight = (a, b) => EarthSight.Clear(a.Ecef, b.Ecef, Ellipsoidal);
+        // on another body (#1852): a target's height above that body's ground
+        interest.BodyGround = World.Bodies.ServerBodies.HeightUnder;
         return interest;
     }
 
