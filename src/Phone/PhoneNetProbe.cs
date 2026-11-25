@@ -43,11 +43,18 @@ public partial class PhoneNetProbe : ChatProbe
         await Seconds(1.0);
         Say("out");
         Expect(await Heard("B", "seen out", 12), "B saw the phone out");
+        // the body walks with the phone folded (#1825): B sees the copy's legs go on while the arms hold the phone
+        await WalkAround("walk-folded", "walked-folded", new Vector3(0, 0, -1));
+        Expect(await Heard("B", "seen walk-folded", 15), "B saw the copy walk with the folded phone");
+        await Seconds(ChatCalm);
         phone.Open();
         await Until(() => phone.IsCovering, 3);
         Expect(phone.IsCovering, "A's screen covers the view");
         Say("open");
         Expect(await Heard("B", "seen open", 12), "B saw the phone open");
+        await WalkAround("walk-open", "walked-open", new Vector3(0, 0, 1));
+        Expect(await Heard("B", "seen walk-open", 15), "B saw the copy walk with the open phone");
+        await Seconds(ChatCalm);
         phone.PutAway();
         await Until(() => !phone.IsOut, 4);
         Expect(!phone.IsOut, "A put it away");
@@ -68,6 +75,50 @@ public partial class PhoneNetProbe : ChatProbe
         Expect(await Heard("B", "seen redrawn", 12), "B saw the item back in A's hand");
     }
 
+    /// <summary>A pause that lets the chat's flood gate (5 lines, 0.6 a second) refill between the walks' lines and the holster's.</summary>
+    private const double ChatCalm = 3.0;
+
+    /// <summary>A walks 3 m the way given through the walk intent (the body's own seam), saying when it starts and stops.</summary>
+    private async Task WalkAround(string start, string end, Vector3 way)
+    {
+        var me = Me!;
+        var from = me.GlobalPosition;
+        Say(start);
+        await Seconds(0.3);
+        bool there = await WalkUntil(me, way, () => me.GlobalPosition.DistanceTo(from) > 3f, 6, 0.2);
+        Expect(there, $"A walked with the phone out ({me.GlobalPosition.DistanceTo(from):F1} m, state {me.PhoneState})");
+        Say(end);
+    }
+
+    /// <summary>
+    /// B watches A's copy from A's start to its end message: the phone stays in the hands the whole way (state, arms,
+    /// model), the copy's position advances, and no frame jumps it.
+    /// </summary>
+    private async Task WatchWalk(string start, string end, int state, Avatar.ItemArmPose pose)
+    {
+        if (!await Heard("A", start, 20)) { Fail($"A never said {start}"); return; }
+        var from = Copy()?.GlobalPosition ?? Vector3.Zero;
+        var last = from;
+        bool held = true;
+        float maxStep = 0f;
+        var done = Heard("A", end, 20);
+        while (!done.IsCompleted)
+        {
+            if (Copy() is { } c)
+            {
+                held &= c.PhoneState == state && c.DrawnArmPose == pose && c.PhoneModel is { Visible: true };
+                maxStep = Mathf.Max(maxStep, c.GlobalPosition.DistanceTo(last));
+                last = c.GlobalPosition;
+            }
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        float moved = Copy()?.GlobalPosition.DistanceTo(from) ?? 0f;
+        Expect(held, $"A's copy held the phone in both hands (state {state}, arms {pose}) the whole walk");
+        Expect(moved > 1.5f, $"while its position advanced ({moved:F1} m)");
+        Expect(maxStep < 1.0f, $"and nothing snapped (largest step {maxStep:F2} m in a frame)");
+        Say("seen " + start);
+    }
+
     private async Task RunB(FootPlayer me)
     {
         if (!await Heard("A", "hello", 60)) { Fail("A never said hello"); return; }
@@ -78,6 +129,7 @@ public partial class PhoneNetProbe : ChatProbe
             $"A's copy holds the folded phone in both hands (state {Copy()?.PhoneState}, arms {Copy()?.DrawnArmPose})");
         ShotOfA("B_folded");
         Say("seen out");
+        await WatchWalk("walk-folded", "walked-folded", FootPlayer.PhoneFoldedState, Avatar.ItemArmPose.Phone);
 
         if (!await Heard("A", "open", 20)) { Fail("A never opened it"); return; }
         Expect(await Until(() => Copy() is { PhoneState: FootPlayer.PhoneOpenState, DrawnArmPose: Avatar.ItemArmPose.PhoneOpen }
@@ -85,6 +137,7 @@ public partial class PhoneNetProbe : ChatProbe
             $"A's copy holds it open (state {Copy()?.PhoneState}, hinge {Copy()?.PhoneModel?.Fold:F2})");
         ShotOfA("B_open");
         Say("seen open");
+        await WatchWalk("walk-open", "walked-open", FootPlayer.PhoneOpenState, Avatar.ItemArmPose.PhoneOpen);
 
         if (!await Heard("A", "away", 20)) { Fail("A never put it away"); return; }
         // the arms go back to whatever the hotbar holds (Hold for an item, None for an empty hand)
