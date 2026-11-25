@@ -6,7 +6,8 @@
 Plan: `docs/plans/moon-surface.md` sections 5 and 6. The kit and the plans: `moon-colonies`.
 
 - **Hollow modules** (`ColonyKit`, the outside only: no lamps or fittings in a can, a tube or the hub, whose deck lies 2 cm
-  under the interior's floor; phase 3 of #2000 took out what the interior hides): shells are `MeshScratch.Skirt`s (no caps, seen from both sides), end walls are a
+  under the interior's floor; phase 3 of #2000 took out what the interior hides, and with it the cans' lamps that poked
+  through their 18-sided roofs as white stripes outside): shells are `MeshScratch.Skirt`s (no caps, seen from both sides), end walls are a
   `Ring` with the doorway's surround filling its hole, ribs are `Ring`s. A `Tube` anywhere a walker passes would put
   its end-cap discs across the way. Every doorway is 1.3 x 2.1 m at `FloorY` (1.55 m over the plateau), every tube's
   axis at `TubeY` (2.6 m), tubes 2.8 m across, so any door meets any tube. The hangar's floor is its slab (0.6 m); a
