@@ -54,6 +54,72 @@ public class HouseLayoutTests
         }
     }
 
+    /// <summary>
+    /// A flat plan polygon at height <paramref name="y"/> as a fan of triangles, wound as the tiles' solids
+    /// are: a face looking down has a negative plan winding in tile-local X east, Z south.
+    /// </summary>
+    private static void Face(List<float> tri, float y, bool down, params (float X, float Z)[] p)
+    {
+        for (int k = 1; k + 1 < p.Length; k++)
+        {
+            var (a, b, c) = (p[0], p[k], p[k + 1]);
+            if ((b.X - a.X) * (c.Z - a.Z) - (b.Z - a.Z) * (c.X - a.X) < 0 != down) (b, c) = (c, b);
+            tri.AddRange([a.X, y, a.Z, b.X, y, b.Z, c.X, y, c.Z]);
+        }
+    }
+
+    /// <summary>A wall from (x0, z0) to (x1, z1) between two heights: vertical, so seen edge-on from above.</summary>
+    private static void Wall(List<float> tri, float x0, float z0, float x1, float z1, float y0, float y1) =>
+        tri.AddRange([x0, y0, z0, x1, y0, z1, x1, y1, z1, x0, y0, z0, x1, y1, z1, x0, y1, z0]);
+
+    private static double OutlineArea(BuildingOutline o) => Math.Abs(o.LocalRings().Sum(BuildingOutline.Area));
+
+    [Fact]
+    public void Outline_of_a_building_stepped_down_a_slope_is_its_whole_base()
+    {
+        // two 10 x 8 halves under one flat roof at 9 m: the west floor at 0, the east one a storey up the
+        // slope at 3 m, with a corner of its own in the middle of the step (the halves share no corner there)
+        var tri = new List<float>();
+        Face(tri, 0, true, (490, 496), (500, 496), (500, 504), (490, 504));
+        Face(tri, 3, true, (500, 500), (500, 496), (510, 496), (510, 504), (500, 504));
+        Face(tri, 9, false, (490, 496), (510, 496), (510, 504), (490, 504));
+        Wall(tri, 490, 496, 510, 496, 0, 9);
+        Wall(tri, 510, 496, 510, 504, 3, 9);
+        Wall(tri, 510, 504, 490, 504, 0, 9);
+        Wall(tri, 490, 504, 490, 496, 0, 9);
+        Wall(tri, 500, 496, 500, 504, 0, 3);
+        var b = new Building { Kind = BuildingKind.House, Egid = 43, MinY = 0, MaxY = 9, Triangles = tri.ToArray() };
+        var o = BuildingOutline.Compute(b, new TileId(2594, 1120));
+        Assert.Single(o.Rings);
+        Assert.Equal(160, OutlineArea(o), 1);
+        Assert.Equal(20, o.Length, 1);
+        Assert.Equal(8, o.Width, 1);
+    }
+
+    [Fact]
+    public void Outline_of_a_house_with_eaves_stays_on_its_walls()
+    {
+        // a 10 x 8 box whose roof slab overhangs the walls by 0.7 m: the soffit looks down too, at 5.8 m,
+        // under 20 cm of roof, and is no floor
+        var tri = new List<float>();
+        Face(tri, 0, true, (495, 496), (505, 496), (505, 504), (495, 504));
+        Face(tri, 6, false, (494.3f, 495.3f), (505.7f, 495.3f), (505.7f, 504.7f), (494.3f, 504.7f));
+        Face(tri, 5.8f, true, (494.3f, 495.3f), (505.7f, 495.3f), (505, 496), (495, 496));
+        Face(tri, 5.8f, true, (505.7f, 495.3f), (505.7f, 504.7f), (505, 504), (505, 496));
+        Face(tri, 5.8f, true, (505.7f, 504.7f), (494.3f, 504.7f), (495, 504), (505, 504));
+        Face(tri, 5.8f, true, (494.3f, 504.7f), (494.3f, 495.3f), (495, 496), (495, 504));
+        Wall(tri, 495, 496, 505, 496, 0, 5.8f);
+        Wall(tri, 505, 496, 505, 504, 0, 5.8f);
+        Wall(tri, 505, 504, 495, 504, 0, 5.8f);
+        Wall(tri, 495, 504, 495, 496, 0, 5.8f);
+        var b = new Building { Kind = BuildingKind.House, Egid = 44, MinY = 0, MaxY = 6, Triangles = tri.ToArray() };
+        var o = BuildingOutline.Compute(b, new TileId(2594, 1120));
+        Assert.Single(o.Rings);
+        Assert.Equal(80, OutlineArea(o), 1);
+        Assert.Equal(10, o.Length, 1);
+        Assert.Equal(8, o.Width, 1);
+    }
+
     [Fact]
     public void Local_and_lv95_round_trip()
     {
