@@ -57,7 +57,6 @@ public partial class ColonyAirlocks : Node3D
         public MeshInstance3D Lamp = null!;
         public double Pump = -1;
         public bool WantOuter;
-        public Aabb Chamber;
         public Transform3D ChamberAt;
         /// <summary>The chamber's half size in its frame (a 4 m airlock's, or a whole hangar's).</summary>
         public Vector3 ChamberHalf = new(2.2f, 6, 2.05f);

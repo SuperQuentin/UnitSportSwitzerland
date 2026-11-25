@@ -27,9 +27,14 @@ Plan: `docs/plans/moon-surface.md` (tracking #1938), section 4. The sites of pha
   door's centre and every tube's axis is `TubeY` (2.6 m) over the plateau. Windows are panes on the glass surface,
   drawn unshaded by `WindowMaterial` (they glow at night; phase 8 reads them from afar). Colours per theme
   (`Palette`).
-- **Built** (`World/Moon/ColonyBuilder`): module instances turned along their axis (`-yaw`: authored +Z, built −Z), a
-  `StaticBody3D` of cylinders and boxes (phase 3 makes them hollow), the links' boxes, the pads' discs. `MoonSurface`
-  builds a colony within 8 km of the camera's ground point.
+- **Built** (`World/Moon/ColonyBuilder`): module instances turned along their axis (`-yaw`: authored +Z, built −Z), each
+  module's and each tube's inside an interior in place (#2000, `moon-interiors`: its rooms, fittings, lamps and collision),
+  a `StaticBody3D` for what is outside (the hangar's ramp, the airlocks' stairs, the pads' discs). `MoonSurface` builds a
+  colony within 8 km of the camera's ground point; a server hosting the Moon builds it for its bots (`ServerColonies`,
+  `moon-colonists`).
+- **The kit is the outside**: shells, end walls, doorways' frames, windows, roofs, legs, and the decks at the sill; inside
+  it draws only what the interior does not (the hangar's landing and steps, the biodome's garden, the moondust dome's and
+  the hangar's lamps). A kit module shown alone (the viewer's "Moon colony", an industry hut) is shut or seen from outside.
 - **Low sun**: at the pole the sun stays within ~1.5° of the horizon; the plateau is dark, the slopes facing the sun lit.
   The style kit's figure light came out pink at that sun (the Earth's sunrise tint): reported to the planets session.
 - **Check**: `--moonsites artemis,artemis:close` (the colony from above on the side away from its pads, and among its
