@@ -1,0 +1,158 @@
+"""plancues: read architectural PDFs and images into 2D plan cues (#1572).
+
+    python -I tools/plancues/plancues.py sort    <venue|all> [--vlm] [--labels sort_labels.csv]
+    python -I tools/plancues/plancues.py scale   <venue> <file> <page> [--region K]
+    python -I tools/plancues/plancues.py extract <venue> <file> <page> [--region K] [--kind building|stadium]
+    python -I tools/plancues/plancues.py place   <venue> <file> <page> [--region K]
+    python -I tools/plancues/plancues.py export  <venue> house|stadium [--cue NAME]
+    python -I tools/plancues/plancues.py review  <venue> [--cue NAME]
+    python -I tools/plancues/plancues.py footscale validate|apply [--jobs N]   scale from the footprint: check it against bars / use it where there is none
+    python -I tools/plancues/plancues.py orient  <venue|all> [<file> <page>] [--region K]   orientation plans (flat colour rooms): cue, gate, review
+    python -I tools/plancues/plancues.py run     <venue> <file> <page> [--region K]     scale + extract + place + review
+
+Pages are 1-based. Documents are read from --root (default X:/UnitSportSwitzerland), results go to --out
+(default X:/UnitSportSwitzerland/plancues/out/<venue>/). Nothing is written into the repository.
+"""
+import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import cue as cuem  # noqa: E402
+import pdfio  # noqa: E402
+
+
+def _common(p):
+    p.add_argument("--root", default=pdfio.DEFAULT_ROOT)
+    p.add_argument("--out", default=pdfio.DEFAULT_OUT)
+    p.add_argument("--chunks", default=pdfio.DEFAULT_CHUNKS)
+    p.add_argument("--at", help="E,N position hint (default: venues.json)")
+    p.add_argument("--kind", choices=["building", "stadium"])
+
+
+def find_file(root, venue, name):
+    docs = pdfio.list_documents(root, venue)
+    hits = [d for d in docs if name in pdfio.rel(d, root)]
+    if not hits:
+        raise SystemExit("no document matching %r in %s" % (name, venue))
+    return pdfio.rel(sorted(hits, key=len)[0], root)
+
+
+def region_bbox(root, out, rel_path, page, region):
+    if not region:
+        return None
+    import corpus_features as cf
+    for items in cf.load_cache(out).values():
+        for it in items:
+            if it["path"] == rel_path and it["page"] == page and it.get("regions"):
+                return tuple(it["regions"][region - 1])
+    raise SystemExit("no region %d known for %s p%d: run sort first" % (region, rel_path, page))
+
+
+def cmd_run(a, stages):
+    import pipeline
+    import place
+    import review
+    info = pipeline.venue_info(a.venue, at=[float(v) for v in a.at.split(",")] if a.at else None, kind=a.kind)
+    rel_path = find_file(a.root, a.venue, a.file)
+    box = region_bbox(a.root, a.out, rel_path, a.page, a.region)
+    name = cuem.cue_name(rel_path, a.page, a.region)
+    path = cuem.cue_path(a.out, a.venue, name)
+    raster_page = rel_path.lower().endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff"))
+    if raster_page:
+        c = pipeline.raster_stage(a.root, a.venue, rel_path, a.page, a.chunks, info, box, debug_dir=os.path.join(a.out, a.venue, "debug_" + name))
+        cuem.save(path, c)
+        print("raster:", c["status"], c["reasons"], c["placement"])
+        if c.get("placement") and "review" in stages:
+            d = os.path.join(a.out, a.venue)
+            print("review:", review.overlay_aerial(c, os.path.join(a.out, "_cache"), os.path.join(d, name + "_aerial.png")))
+            print("review:", review.overlay_page(c, a.root, os.path.join(d, name + "_page.png")))
+        return
+    c, pg = pipeline.scale_stage(a.root, a.venue, rel_path, a.page, box, kinds=("pitch", "rink") if info["kind"] == "stadium" else ())
+    print("scale:", c["status"], c["scale"] and (c["scale"]["method"], round(c["scale"]["m_per_pt"], 5)), c["reasons"])
+    if c["scale"]:
+        if "extract" in stages:
+            dbg = os.path.join(a.out, a.venue, "debug_" + name)
+            pipeline.extract_stage(c, pg, info["kind"], debug_dir=dbg)
+            print("extract:", c["status"], c["reasons"], [(f["key"], f["value"]) for f in c["facts"]])
+        if "place" in stages and c["levels"]:
+            pipeline.place_stage(c, a.chunks, os.path.join(a.out, "_cache"), info)
+            print("place:", c["status"], c["reasons"], c["placement"])
+    cuem.save(path, c)
+    print("cue:", path)
+    if "review" in stages and c.get("placement"):
+        d = os.path.join(a.out, a.venue)
+        print("review:", review.overlay_aerial(c, os.path.join(a.out, "_cache"), os.path.join(d, name + "_aerial.png")))
+        print("review:", review.overlay_page(c, a.root, os.path.join(d, name + "_page.png")))
+
+
+def main(argv=None):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # file names have accents the console code page lacks
+    ap = argparse.ArgumentParser(prog="plancues", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("sort")
+    _common(p)
+    p.add_argument("venue")
+    p.add_argument("--vlm", action="store_true", help="let a local vision model (LM Studio) vote on the pages the classifier is unsure of")
+    p.add_argument("--labels", help="hand labels CSV (path,page,type) to score the sort against")
+    p.add_argument("--only-unsure", action="store_true", help="with --labels: run the vision model only on labelled pages")
+    for name in ("scale", "extract", "place", "run"):
+        p = sub.add_parser(name)
+        _common(p)
+        p.add_argument("venue")
+        p.add_argument("file")
+        p.add_argument("page", type=int)
+        p.add_argument("--region", type=int)
+    p = sub.add_parser("orient")
+    _common(p)
+    p.add_argument("venue", help="a venue, or 'all' for every page the sort calls an orientation plan")
+    p.add_argument("file", nargs="?")
+    p.add_argument("page", nargs="?", type=int)
+    p.add_argument("--region", type=int)
+    p.add_argument("--relax", action="store_true", help="orient: relax the footprint gate to draw a near miss for looking (out/_all/orient_review), never a cue file")
+    p = sub.add_parser("export")
+    _common(p)
+    p.add_argument("venue")
+    p.add_argument("what", choices=["house", "stadium"])
+    p.add_argument("--cue", help="cue name (default: every cue of the venue)")
+    p.add_argument("--gwr", default=pdfio.DEFAULT_GWR, help="house: GWR data.sqlite, its entrance points place an inferred front door")
+    p.add_argument("--exit-snap", type=float, default=0.0, help="house: snap a door that leads out of the layout up to this many metres (default 0: off)")
+    p = sub.add_parser("review")
+    _common(p)
+    p.add_argument("venue")
+    p.add_argument("--cue")
+    p = sub.add_parser("footscale")
+    _common(p)
+    p.add_argument("what", choices=["validate", "apply", "draw"])
+    p.add_argument("file", nargs="?", help="draw: part of the file name")
+    p.add_argument("page", nargs="?", type=int)
+    p.add_argument("--region", type=int)
+    p.add_argument("--relax", action="store_true", help="draw: let the gate pass a near miss, for looking only")
+    p.add_argument("--jobs", type=int, default=6, help="pages in parallel")
+    p.add_argument("--types", default="floor_plan,site_plan,mixed_sheet", help="validate: sorter types to try")
+    p.add_argument("--all-types", action="store_true", help="apply: also pages the sorter is unsure of")
+    a = ap.parse_args(argv)
+    if a.cmd == "footscale":
+        import footscalecmd
+        return footscalecmd.main(a)
+    if a.cmd == "orient":
+        import orientcmd
+        return orientcmd.main(a)
+    if a.cmd == "sort":
+        import sortpages
+        return sortpages.main(a)
+    if a.cmd == "run":
+        return cmd_run(a, ("extract", "place", "review"))
+    if a.cmd in ("scale", "extract", "place"):
+        return cmd_run(a, {"scale": (), "extract": ("extract",), "place": ("extract", "place")}[a.cmd])
+    if a.cmd == "export":
+        import exportcmd
+        return exportcmd.main(a)
+    if a.cmd == "review":
+        import exportcmd
+        return exportcmd.review_cmd(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
